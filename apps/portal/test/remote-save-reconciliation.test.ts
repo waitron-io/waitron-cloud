@@ -10,20 +10,21 @@ const dns={installationId:id,kind:'staff',hostname,records:[{type:'CNAME',name:h
 
 for(const committed of [true,false])test(`a 503 save with Retry-After re-reads once when the name ${committed?'was':'was not'} saved`,async t=>{
  let now=1_800_000_000_000;t.mock.method(Date,'now',()=>now);
- let saves=0,current=original;const calls:Array<{path:string;body?:Record<string,unknown>}>=[];
+ const starting={...original,names:{...original.names,staff:{assigned,current:committed?assigned:'staff.previous.example'}}};
+ let saves=0,current=starting;const calls:Array<{path:string;body?:Record<string,unknown>}>=[];
  const controller=new RemoteController(()=>{},async<T>(path:string,body?:Record<string,unknown>):Promise<ApiResult<T>>=>{
   calls.push({path,body});
   if(path.endsWith('/dns'))return {ok:true,value:dns as T};
   if(path.endsWith('/apply')){
    saves++;
-   current={...original,revision:saves+1,names:{...original.names,staff:{assigned,current:saves===1?(committed?hostname:assigned):assigned}}};
+   current={...original,revision:saves+1,names:{...original.names,staff:{assigned,current:saves===1?(committed?hostname:starting.names.staff.current):assigned}}};
    return saves===1?{ok:false,status:503,code:'unavailable',retryAfterMs:1000}:{ok:true,value:current as T};
   }
   assert.equal(path,'/remote-access/status');return {ok:true,value:current as T};
  });
  controller.account('owner');await controller.open(id);controller.edit(hostname);await controller.preview();await controller.apply();
  assert.deepEqual(calls.map(c=>c.path),['/remote-access/status','/remote-access/dns','/remote-access/apply','/remote-access/status']);
- assert.equal(controller.view?.names?.staff.current,committed?hostname:assigned);
+ assert.equal(controller.view?.names?.staff.current,committed?hostname:starting.names.staff.current);
  assert.equal(controller.notice,committed?'remoteSaved':undefined);assert.equal(controller.error,committed?undefined:'remoteUncertain');
  assert.equal(controller.confirmation,undefined);assert.equal(controller.waiting,1);
  assert.deepEqual(calls[2]!.body,{installationId:id,kind:'staff',hostname,expectedRevision:'1'});

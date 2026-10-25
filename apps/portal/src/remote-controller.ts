@@ -7,6 +7,7 @@ export class RemoteController {
  #account:string|undefined;#generation=0;#changed:()=>void;#request:typeof accountRequest;
  constructor(changed:()=>void,request:typeof accountRequest=accountRequest){this.#changed=changed;this.#request=request;}
  account(id:string|undefined){if(id!==this.#account){this.#account=id;this.close();}}
+ get hostnameChanged(){return !!this.view?.names&&this.hostname.trim().toLowerCase().replace(/\.$/,'')!==this.view.names[this.kind].current;}
  get waiting(){return Math.max(0,Math.ceil((this.retryAt-Date.now())/1000));}
  close(){this.#generation++;this.installationId=undefined;this.view=undefined;this.hostname='';this.confirmation=undefined;this.pending=false;this.error=undefined;this.notice=undefined;}
  async open(id:string){if(!this.#account)return;this.close();this.installationId=id;this.kind='staff';await this.load();this.#changed();}
@@ -27,7 +28,7 @@ export class RemoteController {
   else if(!result.ok)this.#failure(result);else this.error='unavailable';this.#changed();return this.view;
  }
  async preview(){
-  if(!this.#account||!this.view?.names||this.view.revoked||!this.installationId||this.pending||this.waiting)return;
+  if(!this.#account||!this.view?.names||this.view.revoked||!this.installationId||this.pending||this.waiting||!this.hostnameChanged)return;
   const hostname=this.hostname.trim().toLowerCase().replace(/\.$/,''),kind=this.kind,revision=this.view.revision,id=this.installationId,generation=this.#generation;
   this.confirmation=undefined;this.error=undefined;this.notice=undefined;
   if(!remoteHostname(hostname)){this.error='remoteInvalid';this.#changed();return;}

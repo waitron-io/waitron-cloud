@@ -58,3 +58,22 @@ for(const input of ['staff.cafe.example..','https://staff.cafe.example.','staff.
  assert.equal(c.error,'remoteInvalid');assert.equal(c.confirmation,undefined);
  assert.deepEqual(calls,['/remote-access/status']);
 });
+
+for(const kind of ['staff','public'] as const)for(const custom of [false,true])test(`unchanged ${kind} ${custom?'custom':'assigned'} names cannot be reviewed or applied`,async()=>{
+ const current=custom?`${kind}.cafe.example`:view.names[kind].assigned;
+ const saved={...view,names:{...view.names,[kind]:{...view.names[kind],current}}};
+ const calls:string[]=[];
+ const c=new RemoteController(()=>{},async<T>(path:string):Promise<ApiResult<T>>=>{
+  calls.push(path);
+  if(path.endsWith('/status'))return {ok:true,value:saved as T};
+  if(path.endsWith('/dns'))return {ok:true,value:{installationId:id,kind,hostname:current,records:[{type:'CNAME',name:current,value:view.names[kind].assigned},{type:'CNAME',name:'_acme-challenge.'+current,value:'_acme-challenge.'+view.names[kind].assigned}]} as T};
+  return {ok:true,value:saved as T};
+ });
+ c.account('owner');await c.open(id);c.choose(kind);
+ for(const input of [current,`  ${current.toUpperCase()}.  `]){
+  c.edit(input);await c.preview();
+  assert.equal(c.confirmation,undefined,'an unchanged name has no change to confirm');
+  await c.apply();
+  assert.deepEqual(calls,['/remote-access/status'],'unchanged names cause no DNS or save request');
+ }
+});
