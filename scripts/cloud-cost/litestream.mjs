@@ -410,6 +410,7 @@ export async function createLitestreamTransport({ target, meter, phase, lifetime
   } catch { fail(); }
   let invalid = false, closing, refusal, currentPhase = phase;
   const invocations = new Map(), pending = new Set(), connections = new Set();
+  const transfers = new Map();
   const idleWaiters = new Set();
   let completed = 0, idleActionsStarted = 0;
   const runIdleAction = action => { idleActionsStarted++; return action(); };
@@ -449,6 +450,10 @@ export async function createLitestreamTransport({ target, meter, phase, lifetime
       }
     } catch { poison('request-validation'); if (id) pending.delete(id.key); source.resume(); destination.writeHead(400); destination.end(); return; }
     let bytesOut = 0, bytesIn = 0, expectedIn = 0, statusCode = null, responseHeaders, sent = false, received = false, settled = false;
+    const admittedAt = performance.now();
+    transfers.set(id.key, () => ({ operation: name, phase: requestPhase, retryOrdinal: id.ordinal,
+      elapsedMs: Math.max(0, Math.round(performance.now() - admittedAt)), bytesOut, expectedOut, bytesIn, expectedIn,
+      requestSent: sent, responseReceived: received, statusCode, clientClosed: destination.destroyed }));
     // Record the first failure's ordering; an idle callback does not freeze a separate writer process.
     const rememberTransfer = (reason, error, ioEvent) => remember(reason, error, ioEvent, name, {
       idleActionsAtAdmission,
@@ -458,6 +463,7 @@ export async function createLitestreamTransport({ target, meter, phase, lifetime
     const finish = (interrupted, reason = 'transfer-interrupted', error, ioEvent) => {
       if (settled || !interrupted && (!sent || !received)) return;
       settled = true; pending.delete(id.key); completed++;
+      transfers.delete(id.key);
       let completing = 'body-accounting', acceptedInterruption = false;
       try {
         const outcome = interrupted ? 'transport-error' : statusCode >= 500 ? 'server-error' : statusCode >= 300 ? 'client-error' : 'success';
@@ -512,7 +518,7 @@ export async function createLitestreamTransport({ target, meter, phase, lifetime
   });
   server.on('clientError', (error, socket) => { poison('client-error', error, 'client-error'); socket.destroy(); });
   server.listen(0, '127.0.0.1'); await once(server, 'listening');
-  return { url: `http://127.0.0.1:${server.address().port}`, checkpoint: () => ({ ...refusal, pending: pending.size, completed,
+  return { url: `http://127.0.0.1:${server.address().port}`, pendingTransfers: () => [...transfers.values()].map(snapshot => snapshot()), checkpoint: () => ({ ...refusal, pending: pending.size, completed,
     connections: connections.size, ...(meter.checkpoint ? { accounting: meter.checkpoint() } : {}) }), whenIdle: async action => {
     requireThat(!invalid && !closing && typeof action === 'function');
     if (pending.size === 0) return runIdleAction(action);

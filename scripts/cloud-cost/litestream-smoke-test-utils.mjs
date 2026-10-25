@@ -17,6 +17,28 @@ export function delayLitestreamPutReplies(source) {
   return source;
 }
 
+export function prepareDelayedLitestreamStop(source) {
+  source = delayLitestreamPutReplies(source);
+  // Start the stop budget with a post-sale upload committed and its delayed reply still outstanding.
+  // Otherwise periodic replication and the stop flush can incur successive 1,500 ms holds inside two seconds.
+  for (const [anchor, replacement] of [
+    ["let delayedPutReplies = 0;", "let finalPutCommit, finalSaleWritten = false; const finalPutCommitted = new Promise(resolve => finalPutCommit = resolve); let delayedPutReplies = 0;"],
+    ["await sale(2);", "await sale(2); finalSaleWritten = true;"],
+    ["let requestBytes = 0;", "const postSaleRequest = finalSaleWritten; let requestBytes = 0;"],
+    ["delayedPutReplies++; setTimeout(forward, 1500);", "delayedPutReplies++; if (postSaleRequest) finalPutCommit(); setTimeout(forward, 1500);"],
+    ["stage = 'stop';", `let finalPutTimer;
+      stage = 'final-put-readiness';
+      try { await Promise.race([finalPutCommitted, new Promise((_, reject) => {
+        finalPutTimer = setTimeout(() => reject(Error('Final synthetic PUT did not commit')), 5000);
+      })]); } finally { clearTimeout(finalPutTimer); }
+      stage = 'stop';`],
+  ]) {
+    assert.equal(source.split(anchor).length, 2, 'final PUT readiness requires one unambiguous anchor');
+    source = source.replace(anchor, replacement);
+  }
+  return source;
+}
+
 export function assertSmokeAccounting(result) {
   const subset = result.afterStop;
   const output = litestreamAfterStopOutput(subset);
