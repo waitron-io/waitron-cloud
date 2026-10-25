@@ -25,8 +25,10 @@ export function fiscalAllocationScreen(app:PortalApp){
  const importPaper=()=>{try{const input:unknown=JSON.parse(f.paperText);if(!validPaperHistory(input))throw Error();f.fieldErrors.delete('paper');void f.importPaper(input);}catch{f.fieldErrors.add('paper');f.error='fiscalInvalid';app.draw();}};
  const purposes={standard:c.fiscalStandard,full:c.fiscalFull,rectificative:c.fiscalRectificative};
  return html`<section class="fiscal-allocation"><p>${c.fiscalIntro}</p><p class="help">${c.fiscalLocalChecks}</p>
+  ${app.installations.error?html`<p role="alert">${c[app.installations.error]}</p>`:nothing}
   ${app.installations.organisations.length>1?html`<label class="business-choice">${c.recoveryOrganisation}<select aria-label=${c.recoveryOrganisation} ?disabled=${disabled} @change=${(e:Event)=>{f.open(undefined);app.installations.selectOrganisation((e.target as HTMLSelectElement).value);app.draw();}}>${app.installations.organisations.map(o=>html`<option value=${o.id} .selected=${o.id===app.installations.selectedOrganisation}>${o.name}</option>`)}</select></label>`:nothing}
   <label class="business-choice">${c.fiscalVenue}<select aria-label=${c.fiscalVenue} ?disabled=${disabled} @change=${(e:Event)=>{const id=(e.target as HTMLSelectElement).value;const venue=venues.find(v=>v.venueId===id);f.open(id||undefined);if(venue)f.start(venue.environment==='test'?'preproduction':'production');app.draw();if(id)void f.load(null);}}><option value="">${c.recoveryChooseVenue}</option>${venues.map(v=>html`<option value=${v.venueId} .selected=${v.venueId===f.venueId}>${v.overview?.businessName??v.venueId}</option>`)}</select></label>
+  <wt-button .disabled=${disabled} @click=${()=>{void app.installations.load();}}>${c.refreshStatus}</wt-button>
   ${f.venueId?html`
    <p class="help">${c.fiscalAuthorityHelp}</p>
    ${draft?html`
