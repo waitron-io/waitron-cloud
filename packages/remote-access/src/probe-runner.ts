@@ -14,7 +14,7 @@ export async function runRemoteProbes(targets:RemoteProbeTarget[],probe:RemotePr
  const signal=options.signal??new AbortController().signal;let next=0,failed=false,failure:unknown;
  const worker=async()=>{try{
   while(!signal.aborted&&!failed){const index=next++;if(index>=targets.length)return;let value:RemoteProbeResult;
-   try{value=await probe(targets[index]!,{signal});}catch{if(!signal.aborted)options.error?.();continue;}
+   try{value=await probe(targets[index]!,{signal});}catch{if(!signal.aborted&&!failed)options.error?.();continue;}
    if(signal.aborted||failed)return;await options.result(value);
   }
  }catch(error){if(!failed){failed=true;failure=error;}}};
