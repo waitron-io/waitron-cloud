@@ -5085,14 +5085,19 @@ is measured after destructive cleanup. The log does not establish which stop
 outcome fired, or prove a native caller or historical cause. The earlier list
 interruptions during the stop callback remain distinct evidence.
 
-The proposed equivalent records a validated runtime stop acknowledgement before
-allowing bounded after-stop lists and completion of an upload already in progress.
-Retain their attempts, actual bytes and outcomes separately, and state the possible
-request-cost shortfall. Keep ordinary accounting strict, refuse traffic outside
-the cap or allowed operations, and preserve required upload completion, final
-sale restore, integrity, fiscal, privacy, cleanup and deadline checks. A generic
-`active-close` is still a failure. Require exact-head Linux CI for this runtime
-change; local Docker is unavailable until 3 November.
+The after-stop allowance shipped in [PR #437](https://github.com/waitron-io/waitron-cloud/pull/437)
+at `a6aff300882ca1d03fc2465654793025226f76af`. Its
+[head CI](https://github.com/waitron-io/waitron-cloud/actions/runs/40160047703),
+[head cost checks](https://github.com/waitron-io/waitron-cloud/actions/runs/40160047686),
+[independent merge CI](https://github.com/waitron-io/waitron-cloud/actions/runs/40160687579)
+and [merge cost checks](https://github.com/waitron-io/waitron-cloud/actions/runs/40160687574)
+passed, including all six genuine smoke cases and the held-list control. Each
+head/merge pair recorded 10,167 passing tests and the same 19 optional skips.
+These runs qualify that delivery; they do not attribute every historical refusal.
+The three independent guard checks named above remain open. A generic
+`active-close` still refuses measurement publication. Preserve the official pin,
+three-attempt cap, ordinary accounting, restore and deadline checks in any repair;
+local Docker qualification remains unavailable until 3 November.
 
 ## Recovery refusal messages and pasted codes (D192)
 
