@@ -4106,6 +4106,10 @@ notifications separately.
   still show their wait message; an idle empty view explains unavailable totals, and a
   failed refresh retains earlier totals. Stubbed browser checks cover 503 and 429 replies,
   retry and empty states in both languages, light and dark, at phone and desktop widths.
+  Your heading list groups usage and each venue under “Your venues”, with the four
+  usage groups nested below “Measured Cloud usage”. Region names, heading text and
+  visual spacing remain unchanged. The stubbed usage-heading browser check covers two
+  venues in English and Spanish, light and dark, at phone and desktop widths.
   PostgreSQL and browser tests prove retry rollback, tenant isolation and fresh/incomplete
   views. This is
   observational only. A bounded watch worker now runs in the local deployment, retries
