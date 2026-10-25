@@ -3952,6 +3952,11 @@ notifications separately.
   Native ordering tests cover pending probes, concurrent writes, later success
   or failure, and an error reporter that throws. Production shutdown and real
   database-failure qualification remain separate.
+  The staff TLS check now releases its connection immediately after certificate
+  verification, even if the peer keeps its write side open. A native child-process
+  regression reproduces the former successful probe that could not exit and
+  verifies completion without waiting for the peer. Certificate, trust, hostname,
+  cancellation and deadline checks remain; production shutdown is still unqualified.
   The [D103 C39 threshold design](superpowers/specs/2026-10-22-cloud-monitoring-thresholds-design.md)
   separates existing local detection from proposed production operator alerts and
   opted-in venue mail, with worked outage and backup timelines. The owner approved
