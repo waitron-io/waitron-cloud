@@ -5422,3 +5422,40 @@ page. The notification contains no reset token; you request a fresh reset there.
 `node --test packages/registration/test/account-mail.test.ts` covers a public and a local
 origin, both languages, legacy messages and unchanged subjects. Live provider
 delivery remains part of the first working milestone's production qualification.
+
+## A way forward after every refusal (D254)
+
+The [self-service refusal audit](refusal-self-service-audit.md) traces current
+English/Spanish portal messages, public pages and account emails to their server
+causes. Native probes confirm 50 client refusal mappings and 34 rendered emails
+and HTTP pages. Database causes are source evidence, not local runtime proof.
+No current customer message asks you to contact Cloud support, and no shared
+refusal code is classified as possible only through a product bug.
+
+Cloud follow-ups, each a separate small change with tests before implementation:
+
+- R1: distinguish expired/consumed authenticator setup and absent factors from an
+  outage; preserve every proof requirement and D237's general-400 restriction.
+- R2: explain passkey ceremony expiry, duplication and verification failures with
+  an actual restart/list/password path, without disclosing another account's keys.
+- R3: explain recovery confirmation, active-operation, verification and fresh-target
+  refusals; reconcile uncertain writes before suggesting another approval.
+- R4: show the existing test-only recovery restriction beside a refused action;
+  reloading must not imply production recovery becomes available.
+- R5: separate stale request-token guidance from denied account/business authority.
+  Check-account/sign-in paths exist; membership changes need a separate real flow.
+- R6: make outside fiscal-custodian, entitlement and identity-space guidance usable;
+  record missing provisioning paths without changing fiscal authority or history.
+- R7: distinguish temporary fiscal continuity access from missing configuration,
+  uncertain history and allocation contention; retain original-request inspection.
+- R8: connect the no-eligible-business message to the existing sign-out path;
+  same-account membership/business creation remains a separate missing capability.
+- R9: make persistent public availability refusal honest while retaining retry;
+  give owners useful diagnostics without exposing private state to visitors.
+- R10: provide safe next actions for empty public-gate rejection pages and reproduce
+  browser-check failure/exhaustion before adding a bounded failure outcome.
+- R11: connect monitoring/certificate alert guidance to concrete owner actions;
+  local gateway and certificate tooling is still an unfinished operator-only path.
+
+Authentication, recovery, tenant permissions and fiscal changes keep their full
+review and owner gates. This audit does not enable services or change policy.
