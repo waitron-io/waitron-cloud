@@ -4044,9 +4044,14 @@ notifications separately.
   ends of every existing refused IPv4 subnet, adjacent allowed addresses, malformed
   and mismatched inputs, and mapped-IPv6 refusal. External IPv4-only routing remains
   unqualified; the address-policy checks do not establish network reachability.
-  IPv4-translated `::ffff:0:0:0/96` and other reserved `::/8` forms also need scoped
-  classification and routing checks: the classifier still accepts `::ffff:0:7f00:1`
-  and `::1:7f00:1`; whether either can reach loopback has not been tested.
+  IPv4-translated `::ffff:0:0:0/96` addresses now apply the same embedded IPv4
+  refusal as compatible and 6to4 addresses. Native regressions cover loopback,
+  private and reserved endpoints in hex, dotted, expanded and scoped forms;
+  public endpoints and near-prefix controls retain their existing classification.
+  Removing translated-prefix detection fails the new refusals while original
+  address-policy controls pass. Actual translated routing remains unqualified.
+  Other reserved `::/8` forms, including `::1:7f00:1`, still need classification
+  and routing checks; loopback reachability has not been tested.
   The monitor rejects
   late results after hostname changes, replacement or revocation, treats stale evidence as
   unknown, and records deduplicated route-failure, certificate-expiry and recovery

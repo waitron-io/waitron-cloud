@@ -35,7 +35,9 @@ export function isPublicProbeAddress(address:string,family:number):address is st
  const canonical=new URL(`http://[${address.split('%',1)[0]}]`).hostname.slice(1,-1);
  const [head,tail]=canonical.split('::'),leading=head?head.split(':'):[],trailing=tail?tail.split(':'):[];
  const words=[...leading,...Array<string>(8-leading.length-trailing.length).fill('0'),...trailing].map(word=>parseInt(word,16));
- const offset=words[0]===0x2002?1:words.slice(0,6).every(word=>word===0)?6:undefined;
+ // Translated addresses carry IPv4 after ::ffff:0:0:0/96, distinct from mapped addresses.
+ const translated=words.slice(0,4).every(word=>word===0)&&words[4]===0xffff&&words[5]===0;
+ const offset=words[0]===0x2002?1:translated||words.slice(0,6).every(word=>word===0)?6:undefined;
  if(offset===undefined)return true;
  const high=words[offset]!,low=words[offset+1]!,ipv4=[high>>>8,high&255,low>>>8,low&255].join('.');
  return !ipv4Blocked.check(ipv4,'ipv4');
