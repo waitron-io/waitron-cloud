@@ -13,7 +13,11 @@ const host='sol.example.test';
 for(const outcome of ['403','429','network','worker','challenge','success'])test(`served challenge script recovers from ${outcome}`,async()=>{
  const f=await fixture();try{
   const script=await(await f.send('/_cloud/challenge.js')).text();
-  const paragraph={textContent:'Please wait a moment. / Espera un momento.'};
+  const paragraph={textContent:'Please wait a moment. / Espera un momento.',
+  get innerHTML(){return this.markup;},
+  set innerHTML(value:string){this.markup=value;this.textContent=value.replace(/<[^>]*>/g,'');},
+  markup:'Please wait a moment. / Espera un momento.',
+ };
   const redirects:string[]=[],requests:{path:string;init?:RequestInit}[]=[],errors:unknown[]=[];
   let browserWorker:{onmessage?:({data}:{data:unknown})=>Promise<void>;onerror?:()=>void;terminate:()=>void};
   let terminated=false;
@@ -43,6 +47,7 @@ for(const outcome of ['403','429','network','worker','challenge','success'])test
    assert.equal(paragraph.textContent,'Please wait a moment. / Espera un momento.');
   }else{
    assert.equal(paragraph.textContent,'Please reload to try again. / Vuelve a cargar para intentarlo de nuevo.');
+   assert.match(paragraph.innerHTML,/<span lang="es">Vuelve a cargar para intentarlo de nuevo\.<\/span>/,'the reload message must preserve Spanish pronunciation');
    assert.deepEqual(redirects,[]);
   }
   assert.deepEqual(errors,[],'browser event handlers must contain request failures');
@@ -206,5 +211,21 @@ test('4096 distinct source networks still bound the table and expired buckets fr
   f.advance(60000);
   assert.equal((await f.send('/_cloud/challenge',{'x-waitron-client-ip':'2001:db9::1'})).status,200);
   assert.equal(f.gate.stats().buckets,1);
+ }finally{await f.close();}
+});
+
+for(const language of ['en-GB','es-ES, en;q=0.5'])test(`the bot-check page marks its Spanish text as Spanish (${language})`,async()=>{
+ const f=await fixture();try{
+  const response=await f.send('/public/availability',{'accept-language':language});
+  assert.equal(response.status,403);
+  assert.equal(response.headers.get('cache-control'),'no-store');
+  assert.equal(response.headers.get('content-security-policy'),"default-src 'none'; script-src 'self'; worker-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'");
+  const body=await response.text();
+  assert.match(body,/<html lang="en">/);
+  assert.match(body,/<title>Checking your browser \/ Comprobando tu navegador<\/title>/,'both languages must be available in the browser tab');
+  assert.match(body,/<h1>Checking your browser \/ <span lang="es">Comprobando tu navegador<\/span><\/h1>/);
+  assert.match(body,/<p>Please wait a moment\. \/ <span lang="es">Espera un momento\.<\/span><\/p>/);
+  assert.match(body,/<script src="\/_cloud\/challenge\.js" defer><\/script>/);
+  assert.equal(f.count(),0);
  }finally{await f.close();}
 });

@@ -15,7 +15,7 @@ function sourceBucket(ip:string):string{
  return words.slice(0,4).map(word=>word.toString(16)).join(':')+'/64';
 }
 const worker=`onmessage=async({data})=>{const encoder=new TextEncoder();for(let nonce=0;nonce<1000000000;nonce++){const hash=new DataView(await crypto.subtle.digest('SHA-256',encoder.encode(data.challenge+':'+nonce)));if(hash.getUint32(0)<2**(32-data.difficulty)){postMessage({challenge:data.challenge,nonce});return;}}};`;
-const script=`(async()=>{const reload=()=>{document.querySelector('p').textContent='Please reload to try again. / Vuelve a cargar para intentarlo de nuevo.';};try{const challenge=await(await fetch('/_cloud/challenge')).json();const worker=new Worker('/_cloud/worker.js');worker.onmessage=async({data})=>{try{worker.terminate();const reply=await fetch('/_cloud/solve',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});if(!reply.ok)throw Error();location.replace('/public/availability');}catch{reload();}};worker.onerror=reload;worker.postMessage(challenge);}catch{reload();}})();`;
+const script=`(async()=>{const reload=()=>{document.querySelector('p').innerHTML='Please reload to try again. / <span lang="es">Vuelve a cargar para intentarlo de nuevo.</span>';};try{const challenge=await(await fetch('/_cloud/challenge')).json();const worker=new Worker('/_cloud/worker.js');worker.onmessage=async({data})=>{try{worker.terminate();const reply=await fetch('/_cloud/solve',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});if(!reply.ok)throw Error();location.replace('/public/availability');}catch{reload();}};worker.onerror=reload;worker.postMessage(challenge);}catch{reload();}})();`;
 /** Bind this handler to loopback only, behind HAProxy's overwritten client-IP/SNI headers. */
 export function createPublicGate(options:Options){
  if(options.key.length!==32)throw new Error('invalid_gate_key');
@@ -54,7 +54,7 @@ export function createPublicGate(options:Options){
    }
    const cookies=(req.headers.cookie??'').split(';').map(s=>s.trim()).filter(s=>s.startsWith('__Host-waitron-public='));
    if(cookies.length!==1||!valid(cookies[0]!.slice('__Host-waitron-public='.length),'access',host!,ip)){
-    counters.challenged++;reply(403,'<!doctype html><html lang="en"><meta name="viewport" content="width=device-width"><title>Checking your browser</title><body><h1>Checking your browser / Comprobando tu navegador</h1><p>Please wait a moment. / Espera un momento.</p><script src="/_cloud/challenge.js" defer></script></body></html>','text/html; charset=utf-8');return;
+    counters.challenged++;reply(403,'<!doctype html><html lang="en"><meta name="viewport" content="width=device-width"><title>Checking your browser / Comprobando tu navegador</title><body><h1>Checking your browser / <span lang="es">Comprobando tu navegador</span></h1><p>Please wait a moment. / <span lang="es">Espera un momento.</span></p><script src="/_cloud/challenge.js" defer></script></body></html>','text/html; charset=utf-8');return;
    }
    if(active>=64){counters.rejected++;reply(429);return;}active++;counters.forwarded++;
    try{
