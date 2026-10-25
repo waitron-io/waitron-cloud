@@ -5124,9 +5124,9 @@ requests admitted before sale completion, failed PUTs and unrelated operations
 as readiness evidence. The bounded wait reports its own readiness phase on failure.
 Stop refusals also include control/exit timings and active transfer progress,
 using operation names and byte counts without paths, credentials or invocation IDs.
-Repeated real-backend CI qualification is required before landing. This fixture
-sequencing correction does not attribute the separate historical list interruptions
-or qualify production shutdown.
+The two-row restore and full accounting checks still decide whether a run passes.
+This fixture sequencing correction does not attribute the separate historical list
+interruptions or qualify production shutdown.
 
 ## Recovery refusal messages and pasted codes (D192)
 
