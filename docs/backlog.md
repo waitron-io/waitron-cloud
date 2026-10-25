@@ -5115,8 +5115,10 @@ wiring, not operating-system exit timing or production shutdown.
 A separate native HTTP case now closes the stand-in writer while one transport
 reply remains pending. The smoke must wait for that reply before admitting final
 restore; the completed-reply control starts restore without pending transfers.
-Both cases retain all three upload attempts, exact response-byte accounting and
-connection collection. Removing only the smoke's passive idle wait exposes early
+Both cases retain all three upload attempts and exact request/response-byte
+accounting. The held case observes entry into the real idle wait with one transfer
+pending, so a fixed sleep cannot replace it. Each subprocess exits after fixture
+cleanup with zero transport connections. Removing only the smoke's passive idle wait exposes early
 restore in the new held-reply case. This qualifies forwarding order with a
 controlled close notification, not actual writer-process exit or production timing.
 Genuine Linux/SeaweedFS and PostgreSQL qualification run in current-head CI before

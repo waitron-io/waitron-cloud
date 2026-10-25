@@ -27,9 +27,14 @@ function run(holdReply) {
       export const instrumentStorageClient=()=>{};`,
     '/code/litestream.mjs': `import {createLitestreamTransport as open} from ${JSON.stringify(actual)};
       export * from ${JSON.stringify(actual)};
-      export const createLitestreamTransport=async options=>options.phase==='restore'
-        ? {url:options.target,whenIdle:async action=>action(),snapshot:()=>({}),close:async()=>{}}
-        : globalThis.transport=await open(options);`,
+      export const createLitestreamTransport=async options=>{
+        if(options.phase==='restore')return {url:options.target,whenIdle:async action=>action(),snapshot:()=>({}),close:async()=>{}};
+        const transport=await open(options);
+        return globalThis.transport={...transport,whenIdle:action=>{
+          console.error(JSON.stringify({kind:'idle-admission',writerClosed:globalThis.writerClosed,pending:transport.checkpoint().pending}));
+          return transport.whenIdle(action);
+        }};
+      };`,
     'node:http': `const http=process.getBuiltinModule('http');export const createServer=http.createServer;
       export function request(...args){
         if(args[0]==='http://127.0.0.1:8333')args[0]='http://127.0.0.1:'+globalThis.backendPort;
@@ -42,7 +47,7 @@ function run(holdReply) {
         const child=new EventEmitter();child.stderr=new EventEmitter();
         if(args[0]==='restore'){
           console.error(JSON.stringify({kind:'restore-admission',writerClosed:globalThis.writerClosed,
-            pending:globalThis.transport.checkpoint().pending,replyEnded:globalThis.backendReplyEnded}));
+            pending:globalThis.transport.checkpoint().pending,replyEnded:globalThis.backendReplyEnded===true}));
           child.kill=()=>true;setImmediate(()=>child.emit('close',0));return child;
         }
         const http=process.getBuiltinModule('http'),endpoint=globalThis.writerConfig.dbs[0].replica.endpoint;
@@ -105,14 +110,17 @@ for (const held of [true, false]) test(`final smoke restore waits for the reply 
     [{ kind: 'writer-close', pending: held ? 1 : 0, replyEnded: !held }]);
   assert.deepEqual(records.filter(row => row.kind === 'restore-admission'),
     [{ kind: 'restore-admission', writerClosed: true, pending: 0, replyEnded: true }]);
+  if (held) assert.deepEqual(records.filter(row => row.kind === 'idle-admission'),
+    [{ kind: 'idle-admission', writerClosed: true, pending: 1 }]);
   assert.deepEqual(records.filter(row => row.kind === 'collected'),
     [{ kind: 'collected', writerClosed: true, pending: 0, connections: 0 }]);
   assert.equal(result.status, 0, result.stderr);
   const output = JSON.parse(result.stdout);
   assert.equal(output.restoredSales, 2);
   assert.equal(output.integrity, 'ok');
-  assert.equal(output.observed.accounting.producer.attempts, 3);
-  assert.equal(output.observed.accounting.observer.attempts, 3);
+  assert.deepEqual(output.observed.accounting.producer, { attempts: 3, bytesIn: 8, bytesOut: 12 });
+  assert.deepEqual(output.observed.accounting.observer, { attempts: 3, bytesIn: 8, bytesOut: 12 });
+  assert.deepEqual(output.observed.accounting.discrepancy, { attempts: 0, bytesIn: 0, bytesOut: 0 });
   assert.equal(output.afterStop.used, held ? 1 : 0);
   assert.equal(output.afterStop.bodiesReconciled, true);
   assert.deepEqual(output.afterStop.producer, { attempts: held ? 1 : 0, bytesIn: held ? 4 : 0, bytesOut: held ? 4 : 0 });
