@@ -5228,3 +5228,11 @@ Choosing a business now clears the resolved â€œChoose a business for this venueâ
 message and field marker. Approval still requires a business and an explicit click;
 code errors, server refusals, uncertain replies and the single-business path remain.
 English/Spanish browser checks cover both themes and phone/desktop widths.
+
+## Remote hostname field feedback (D236)
+
+When you review a malformed remote-access hostname, the Hostname field now shows
+the existing explanation beside it and is marked as required. Editing clears the
+message; server hostname refusals mark the same field. The section alert, hostname
+rules and refusal before any DNS request remain. Browser checks cover English and
+Spanish, both themes and phone/desktop widths.
