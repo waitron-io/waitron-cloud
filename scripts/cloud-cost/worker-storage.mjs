@@ -17,11 +17,12 @@ export async function openWorkerStorage(args) {
   let identity, child, done, proxy, client, meter, created = false, stopping = false, exited = false, bad = false, disposal, evidence;
   let retained, retainedInvalid = false, last = -Infinity;
   let stage = 'storage-health', reported = false;
-  const refused = () => {
+  const refused = (operation = stage) => {
     if (reported) return;
     reported = true;
     // Keep the first fixed operation code; private SDK errors and object names never leave here.
-    try { args.onDiagnostic?.({ kind: 'storage-refusal', stage }); } catch { /* Reporting cannot interrupt collection. */ }
+    try { Promise.resolve(args.onDiagnostic?.({ kind: 'storage-refusal', stage: operation })).catch(() => {}); }
+    catch { /* Reporting cannot interrupt collection. */ }
   };
   const clock = args.clock ?? (() => performance.now() / 1000);
   const now = () => {
@@ -155,7 +156,7 @@ export async function openWorkerStorage(args) {
       need(!existsSync(directory)); record({ kind: 'storage-root', state: 'removed', path: directory });
     });
     if (failures.length || retainedInvalid) fail(); return counters;
-  })();
+  })().catch(error => { refused(); throw error; });
   try {
     assertOwnedRoot(args); healthy();
     need(!existsSync(directory) && typeof sdk?.S3Client === 'function');
@@ -187,8 +188,8 @@ export async function openWorkerStorage(args) {
     healthy();
     record({ kind: 'storage-bucket', state: 'ready', bucket });
     return { target, bucket, finish: async (options = {}) => {
+      let finishStage = 'finish-input';
       try {
-        stage = 'finish-input';
         need(options && Object.getPrototypeOf(options) === Object.prototype
           && Reflect.ownKeys(options).every(k => k === 'retained'));
         const input = options.retained;
@@ -202,8 +203,8 @@ export async function openWorkerStorage(args) {
           else { need(!disposal); retained = { ...input, low: 0, high: 0, deleted: 0 }; }
         } else need(!retained);
         if (evidence) return structuredClone(evidence);
-        stage = 'storage-health'; healthy(); evidence = await dispose(); return structuredClone(evidence);
-      } catch { refused(); await dispose().catch(() => {}); fail(); }
+        finishStage = 'storage-health'; healthy(); evidence = await dispose(); return structuredClone(evidence);
+      } catch { refused(finishStage); await dispose().catch(() => {}); fail(); }
     }, close: async () => { await dispose(); } };
   } catch { await dispose().catch(() => {}); fail(); }
 }

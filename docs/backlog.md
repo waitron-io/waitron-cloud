@@ -1778,8 +1778,13 @@ notifications separately.
   stage in the worker trace, including inventory, deletion, accounting and resource
   collection. Generated failures exercise persistence and reporting containment;
   real-backend checks cover SDK refusals and retained-inventory disagreement.
+  Separate worker codes identify failure while constructing cleanup input or
+  shaping its result. All eighteen storage codes have generated fault checks.
   The historical cleanup operation and cause still need an instrumented recurrence
   and reproduction. Accounting, ownership checks and deadlines remain unchanged.
+  A generated SDK client-destruction throw also stops collection before its first
+  bucket request on both the base and candidate. Its diagnostic is retained; a
+  cleanup correction remains open. Whether the real SDK throws there is unverified.
   The successful browser journey also refused in
   [run 39890570428](https://github.com/waitron-io/waitron-cloud/actions/runs/39890570428/job/120209134728),
   while all six deliberate-fault journeys passed. Its wrapper retained only the

@@ -33,7 +33,7 @@ export function workerFailureTrace(value) {
     } else if (['replay', 'replay-refusal', 'stream', 'stream-refusal'].includes(event.kind)) {
       exact(event, ['kind', 'stage']);
       const stages = event.kind.startsWith('replay')
-        ? ['configuration', 'input', 'adapter-open', 'selection', 'stream-open', 'startup', 'workload', 'idle', 'verification', 'stream-finish', 'archive', 'restore', 'cleanup']
+        ? ['configuration', 'input', 'adapter-open', 'selection', 'stream-open', 'startup', 'workload', 'idle', 'verification', 'stream-finish', 'archive', 'restore', 'cleanup', 'storage-finish-input', 'storage-finish-result']
         : ['admission', 'measurement-open', 'version', 'replicate', 'phase', 'quiesce', 'restore', 'restore-file', 'restore-integrity', 'restore-sales', 'accounting', 'cleanup'];
       need(stages.includes(event.stage));
     } else {
