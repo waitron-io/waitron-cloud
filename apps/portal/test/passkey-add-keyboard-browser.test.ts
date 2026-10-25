@@ -56,7 +56,15 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
       await page.waitForLoadState('networkidle');
       const button = section.getByRole('button', {name: c.passkeyAdd, exact: true});
       assert.equal(await button.isDisabled(), true, 'blank password keeps Add disabled');
-      await field.fill(password); await field.press('Tab');
+      await field.pressSequentially('ac');
+      assert.equal(await button.isEnabled(), true, 'partial typing enables Add before blur');
+      await field.press('ArrowLeft'); await field.pressSequentially('b');
+      assert.equal(await field.inputValue(), 'abc');
+      assert.equal(await field.evaluate(element => (element as HTMLInputElement).selectionStart), 2, 'redraw keeps the insertion caret');
+      assert.equal(await field.evaluate(element => element.matches(':focus')), true, 'redraw keeps password focus');
+      await field.selectText(); await field.press('Backspace');
+      assert.equal(await button.isDisabled(), true, 'keyboard clearing disables Add before blur');
+      await field.pressSequentially(password); await field.press('Tab');
       assert.equal(await button.evaluate(element => element.matches(':focus')), true, 'Tab reaches Add without advancing the one-second redraw timer');
       assert.equal(await button.isEnabled(), true);
       assert.equal(writes.length, 0, 'typing and Tab do not start enrollment');
@@ -65,9 +73,9 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
         await mkdir(process.env.PASSKEY_KEYBOARD_RECEIPT_DIR, {recursive: true});
         await section.screenshot({path: `${process.env.PASSKEY_KEYBOARD_RECEIPT_DIR}/${locale}-${theme}-${width}.png`});
       }
-      await field.fill('');
+      await field.selectText(); await field.press('Backspace');
       assert.equal(await button.isDisabled(), true, 'clearing the password disables Add immediately');
-      await field.fill(password);
+      await field.pressSequentially(password);
       await page.getByRole('combobox', {name: c.language, exact: true}).selectOption(locale === 'en' ? 'es' : 'en');
       assert.equal(await field.inputValue(), password, 'language changes preserve exact password bytes');
       await page.getByRole('combobox', {name: translations[locale === 'en' ? 'es' : 'en'].language, exact: true}).selectOption(locale);

@@ -3405,7 +3405,7 @@ notifications separately.
   Typing your current password enables Add a passkey immediately, so Tab reaches
   it without waiting for the next refresh. Clearing the password disables it again.
   Frozen-clock keyboard checks cover both languages, themes and phone/desktop widths;
-  enrollment still disables pending actions, keeps password bytes across language
+  enrollment still disables Add and its password field, keeps password bytes across language
   changes and clears the password after success.
   If reading your passkeys fails, Account offers Retry and does not claim you have
   none. Only a successful empty list shows that message. Retry waits for any server
