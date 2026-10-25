@@ -449,3 +449,59 @@ test('public probe requires the final effective SameSite attribute to be Strict'
   }finally{await fixture.close();}
  });
 });
+
+
+test('public probe recognizes effective Secure and HttpOnly flag names with values',async t=>{
+ const material=await certificate('probe.example.test');
+ for(const [label,attributes,healthy,pair='__Host-waitron-public=fixture'] of [
+  ['Secure value','Secure=yes; HttpOnly',true],
+  ['HttpOnly value','Secure; HttpOnly=yes',true],
+  ['empty flag values','Secure=; HttpOnly=',true],
+  ['false-valued flags still apply','Secure=false; HttpOnly=false',true],
+  ['case and ASCII whitespace','sEcUrE = \tyes \t; hTtPoNlY = \tno \t',true],
+  ['equals inside values','Secure=a=b; HttpOnly=a=b',true],
+  ['Secure 1024-byte boundary','Secure='+'x'.repeat(1024)+'; HttpOnly',true],
+  ['HttpOnly 1024-byte boundary','Secure; HttpOnly='+'x'.repeat(1024),true],
+  ['Secure oversized value ignored','Secure='+'x'.repeat(1025)+'; HttpOnly',false],
+  ['HttpOnly oversized value ignored','Secure; HttpOnly='+'x'.repeat(1025),false],
+  ['earlier Secure survives ignored duplicate','Secure=yes; Secure='+'x'.repeat(1025)+'; HttpOnly',true],
+  ['earlier HttpOnly survives ignored duplicate','Secure; HttpOnly=yes; HttpOnly='+'x'.repeat(1025),true],
+  ['Secure 1024 raw non-ASCII bytes','Secure='+'\xe9'.repeat(1024)+'; HttpOnly',true],
+  ['Secure 1025 raw non-ASCII bytes ignored','Secure='+'\xe9'.repeat(1025)+'; HttpOnly',false],
+  ['HttpOnly 1024 raw non-ASCII bytes','Secure; HttpOnly='+'\x80'.repeat(1024),true],
+  ['HttpOnly 1025 raw non-ASCII bytes ignored','Secure; HttpOnly='+'\x80'.repeat(1025),false],
+  ['Secure 512 two-byte sequences','Secure='+'\xc3\xa9'.repeat(512)+'; HttpOnly',true],
+  ['Secure 513 two-byte sequences ignored','Secure='+'\xc3\xa9'.repeat(513)+'; HttpOnly',false],
+  ['HttpOnly 512 two-byte sequences','Secure; HttpOnly='+'\xc3\xa9'.repeat(512),true],
+  ['HttpOnly 513 two-byte sequences ignored','Secure; HttpOnly='+'\xc3\xa9'.repeat(513),false],
+  ['earlier Secure survives non-ASCII duplicate','Secure=yes; Secure='+'\xe9'.repeat(1025)+'; HttpOnly',true],
+  ['earlier HttpOnly survives non-ASCII duplicate','Secure; HttpOnly=yes; HttpOnly='+'\x80'.repeat(1025),true],
+  ['Secure trims boundary value','Secure= \t'+'x'.repeat(1024)+' \t; HttpOnly',true],
+  ['HttpOnly trims boundary value','Secure; HttpOnly= \t'+'x'.repeat(1024)+' \t',true],
+  ['bare flags remain valid','Secure; HttpOnly',true],
+  ['Secure missing','HttpOnly',false],
+  ['HttpOnly missing','Secure',false],
+  ['Secure lookalike','SecureHint=yes; HttpOnly',false],
+  ['HttpOnly lookalike','Secure; HttpOnlyHint=yes',false],
+  ['Secure no-break space name','Secure\u00a0=yes; HttpOnly',false],
+  ['HttpOnly no-break space name','Secure; \u00a0HttpOnly=yes',false],
+ ] as const)await t.test(label,async()=>{
+  let replays=0;
+  const fixture=await listenHttps(material,(req,res)=>{
+   if(req.url==='/public/availability'){
+    if(req.headers.cookie){replays++;assert.equal(req.headers.cookie,'__Host-waitron-public=fixture');res.setHeader('content-type','application/json');res.end('{}');}
+    else{res.statusCode=403;res.setHeader('content-type','text/html');res.end('<script src="/_cloud/challenge.js"></script>');}
+   }else if(req.url==='/_cloud/challenge'){
+    res.setHeader('content-type','application/json');res.end('{"challenge":"fixture-challenge","difficulty":8}');
+   }else if(req.url==='/_cloud/solve'){
+    res.statusCode=204;res.setHeader('set-cookie',pair+'; Path=/; SameSite=Strict; '+attributes);res.end();
+   }else{res.statusCode=404;res.end();}
+  });
+  try{
+   const result=await probeTarget(target(),{ca:material.cert,connect:connect(fixture.port)});
+   assert.equal(result.public.status,healthy?'healthy':'failed');
+   if(!healthy)assert.equal(result.public.status==='failed'&&result.public.failure,'challenge');
+   assert.equal(replays,healthy?1:0,'A refused cookie must not be sent to the availability endpoint');
+  }finally{await fixture.close();}
+ });
+});
