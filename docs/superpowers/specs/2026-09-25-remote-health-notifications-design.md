@@ -10,11 +10,11 @@ This remains a local integration. It sends only to Mailpit in the proof and does
 
 The existing installation overview remains the only customer status response. For a current remote-access placement it adds a `remoteChecks` object with one entry for `public` and one for `staff`. Each entry contains only the latest durable probe status, check time and certificate expiry. It excludes hostnames, fingerprints, internal addresses, route credentials and raw errors.
 
-The response also includes the six current remote incident kinds. The portal uses the durable incident state rather than inventing a second freshness threshold:
+The response also includes the six current remote incident kinds. The portal uses the latest durable observation for pass/fail and the monitor evidence for freshness:
 
 - an open probe-stale incident, a missing observation or an old overall monitor check is unknown;
-- an open route-failure incident is failed;
-- otherwise a healthy current observation is shown as recovered or working;
+- a current failed observation is failed, even before the route-failure incident opens;
+- a healthy current observation is shown as recovered or working, even before the route-failure incident closes;
 - an open certificate incident shows the verified expiry time separately from route reachability.
 
 The existing session and organisation-membership checks scope the response. A final session recheck remains after the database reads. Switching organisations therefore cannot expose another venue's evidence.
