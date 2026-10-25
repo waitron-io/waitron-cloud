@@ -3897,6 +3897,11 @@ notifications separately.
   controls cover legacy date forms, invalid dates, duplicate and oversized values,
   server clock differences and valid `Max-Age` precedence, including saturated
   signed values. Session cookies and the genuine gateway challenge still pass.
+  Cookie-part whitespace now uses only ASCII space and tab. No-break spaces
+  around the cookie name/value or required `Secure`, `HttpOnly` and
+  `SameSite=Strict` tokens refuse before replay. Real HTTPS regressions preserve
+  ordinary spaces, tabs, mixed case and unrelated attributes. Independent
+  Chromium controls reject malformed Secure cookies and retain valid controls.
   These are local protocol checks; production observation remains unqualified.
   The [D103 C39 threshold design](superpowers/specs/2026-10-22-cloud-monitoring-thresholds-design.md)
   separates existing local detection from proposed production operator alerts and

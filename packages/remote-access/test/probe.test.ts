@@ -372,3 +372,41 @@ test('public probe expiry is independent of the probing machine time zone',()=>{
   assert.match(output,/ok \d+ - asctime valid/);
  }
 });
+
+
+test('public probe does not normalize non-ASCII whitespace into required cookie parts',async t=>{
+ const material=await certificate('probe.example.test');
+ for(const [label,attributes,healthy,pair='__Host-waitron-public=fixture'] of [
+  ['cookie name leading no-break space','Path=/; Secure; HttpOnly; SameSite=Strict',false,'\u00a0__Host-waitron-public=fixture'],
+  ['cookie value trailing no-break space','Path=/; Secure; HttpOnly; SameSite=Strict',false,'__Host-waitron-public=fixture\u00a0'],
+  ['cookie name ASCII padding','Path=/; Secure; HttpOnly; SameSite=Strict',true,' \t__Host-waitron-public=fixture'],
+  ['cookie value ASCII padding','Path=/; Secure; HttpOnly; SameSite=Strict',true,'__Host-waitron-public=fixture \t'],
+  ['Secure trailing no-break space','Path=/; Secure\u00a0; HttpOnly; SameSite=Strict',false],
+  ['Secure leading no-break space','Path=/; \u00a0Secure; HttpOnly; SameSite=Strict',false],
+  ['HttpOnly trailing no-break space','Path=/; Secure; HttpOnly\u00a0; SameSite=Strict',false],
+  ['HttpOnly leading no-break space','Path=/; Secure; \u00a0HttpOnly; SameSite=Strict',false],
+  ['SameSite value trailing no-break space','Path=/; Secure; HttpOnly; SameSite=Strict\u00a0; Hint=ignored',false],
+  ['SameSite name leading no-break space','Path=/; Secure; HttpOnly; \u00a0SameSite=Strict',false],
+  ['ordinary spaces and tabs','Path=/; \tSecure \t; \tHttpOnly \t; \tSameSite=Strict \t',true],
+  ['mixed case control','Path=/; sEcUrE; hTtPoNlY; sAmEsItE=sTrIcT',true],
+  ['unrelated no-break space','Path=/; Secure; HttpOnly; SameSite=Strict; Hint=\u00a0',true],
+ ] as const)await t.test(label,async()=>{
+  let replays=0;
+  const fixture=await listenHttps(material,(req,res)=>{
+   if(req.url==='/public/availability'){
+    if(req.headers.cookie){replays++;assert.equal(req.headers.cookie,'__Host-waitron-public=fixture');res.setHeader('content-type','application/json');res.end('{}');}
+    else{res.statusCode=403;res.setHeader('content-type','text/html');res.end('<script src="/_cloud/challenge.js"></script>');}
+   }else if(req.url==='/_cloud/challenge'){
+    res.setHeader('content-type','application/json');res.end('{"challenge":"fixture-challenge","difficulty":8}');
+   }else if(req.url==='/_cloud/solve'){
+    res.statusCode=204;res.setHeader('set-cookie',pair+'; '+attributes);res.end();
+   }else{res.statusCode=404;res.end();}
+  });
+  try{
+   const result=await probeTarget(target(),{ca:material.cert,connect:connect(fixture.port)});
+   assert.equal(result.public.status,healthy?'healthy':'failed');
+   if(!healthy)assert.equal(result.public.status==='failed'&&result.public.failure,'challenge');
+   assert.equal(replays,healthy?1:0,'A refused cookie must not be sent to the availability endpoint');
+  }finally{await fixture.close();}
+ });
+});
