@@ -7,8 +7,9 @@ code when signing in with your password. Passkey sign-in remains available separ
 You can paste codes with spaces, such as `123 456`. The portal removes whitespace
 from authenticator and recovery codes, keeping recovery-code hyphens. Blank codes
 show “Enter your code.” without sending a request, so they do not spend a server
-attempt. Missing passwords show “Enter your password.” Your other entries stay in
-the form so you can correct the missing value and try again.
+attempt. Missing passwords show “Enter your password.” The missing field is marked
+with the same message beside it, while the alert or sign-in summary stays visible.
+Your other entries stay in the form so you can correct the missing value and try again.
 
 Scan the QR code or enter the setup secret in your authenticator, then confirm with
 its current code. The portal renders the QR locally. Save the ten recovery codes

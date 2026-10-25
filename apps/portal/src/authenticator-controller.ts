@@ -9,18 +9,19 @@ export class AuthenticatorController {
   status:FactorStatus|undefined;
   password='';proofKind:FactorProof['kind']='totp';proofCode='';confirmation='';
   pending=false;loaded=false;retryAt=0;error:keyof Copy|undefined;
+  requiredField:'password'|'proof'|'confirmation'|undefined;
   #account:string|undefined;#generation=0;#request:Request;#changed:()=>void;
   constructor(changed:()=>void,request:Request=accountRequest){this.#changed=changed;this.#request=request;}
   #clearInput(){this.password='';this.proofCode='';this.confirmation='';}
-  fence(){this.#generation++;this.pending=false;this.loaded=false;this.error=undefined;this.challenge=undefined;this.enrolment=undefined;this.status=undefined;this.#clearInput();}
+  fence(){this.#generation++;this.pending=false;this.loaded=false;this.error=undefined;this.requiredField=undefined;this.challenge=undefined;this.enrolment=undefined;this.status=undefined;this.#clearInput();}
   account(id:string|undefined){if(id===this.#account)return;this.#account=id;this.fence();}
   #failure(result:Extract<ApiResult<unknown>,{ok:false}>,change=false){
     this.retryAt=Date.now()+result.retryAfterMs;
     this.error=result.status===429?'limited':result.code==='credentials_invalid'?'credentials':result.status===403?'forbidden'
       :change&&(result.status===0||result.status>=500)?'factorChangeUncertain':'factorUnavailable';
   }
-  #start(){if(this.pending||Date.now()<this.retryAt)return undefined;this.pending=true;this.error=undefined;this.#changed();return this.#generation;}
-  #required(error:'requiredPassword'|'factorCodeRequired'){if(!this.pending&&Date.now()>=this.retryAt){this.error=error;this.#changed();}return false as const;}
+  #start(){if(this.pending||Date.now()<this.retryAt)return undefined;this.pending=true;this.error=undefined;this.requiredField=undefined;this.#changed();return this.#generation;}
+  #required(error:'requiredPassword'|'factorCodeRequired',field:NonNullable<AuthenticatorController['requiredField']>){if(!this.pending&&Date.now()>=this.retryAt){this.error=error;this.requiredField=field;this.#changed();}return false as const;}
   async startLogin(email:string,password:string):Promise<'authenticated'|'factor'|'reconcile'|false>{
     const generation=this.#start();if(generation===undefined)return false;
     this.challenge=undefined;this.#clearInput();
@@ -30,7 +31,7 @@ export class AuthenticatorController {
     this.#failure(result);if(this.error==='factorUnavailable')this.error=result.status===400?'invalid':'unavailable';this.#changed();return result.status===0||result.status>=500?'reconcile':false;
   }
   async completeLogin():Promise<'authenticated'|'reconcile'|false>{
-    const code=normaliseCode(this.proofCode);if(!this.challenge)return false;if(!code)return this.#required('factorCodeRequired');
+    const code=normaliseCode(this.proofCode);if(!this.challenge)return false;if(!code)return this.#required('factorCodeRequired','proof');
     const generation=this.#start();if(generation===undefined)return false;
     const body={challengeToken:this.challenge.challengeToken,proof:{kind:this.proofKind,code}};this.#clearInput();
     const result=await this.#request<{accountId:string}>('/login/factor',body);
@@ -44,8 +45,8 @@ export class AuthenticatorController {
   async load(){if(!this.#account)return;const generation=this.#start();if(generation===undefined)return;
     const result=await this.#request<FactorStatus>('/authenticator');if(generation!==this.#generation)return;
     this.pending=false;this.loaded=result.ok;if(result.ok)this.status=result.value;else this.#failure(result);this.#changed();}
-  #authority(){if(!this.password){this.#required('requiredPassword');return undefined;}
-    const code=normaliseCode(this.proofCode);if(this.status?.active&&!code){this.#required('factorCodeRequired');return undefined;}
+  #authority(){if(!this.password){this.#required('requiredPassword','password');return undefined;}
+    const code=normaliseCode(this.proofCode);if(this.status?.active&&!code){this.#required('factorCodeRequired','proof');return undefined;}
     return {password:this.password,...(this.status?.active?{proof:{kind:this.proofKind,code}}:{})};}
   async begin(){if(!this.#account)return;const body=this.#authority();if(!body)return;
     const generation=this.#start();if(generation===undefined)return;
@@ -56,7 +57,7 @@ export class AuthenticatorController {
     const code=normaliseCode(this.confirmation);
     if(!this.#account||action==='activate'&&!this.enrolment)return false;
     const authority=this.#authority();if(!authority)return false;
-    if(action==='activate'&&!code)return this.#required('factorCodeRequired');
+    if(action==='activate'&&!code)return this.#required('factorCodeRequired','confirmation');
     const generation=this.#start();if(generation===undefined)return false;
     const body={...authority,...(action==='activate'?{pendingToken:this.enrolment!.pendingToken,code}:{})};this.#clearInput();
     const result=await this.#request<FactorChange>(`/authenticator/${action}`,body);

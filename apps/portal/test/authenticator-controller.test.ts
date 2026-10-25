@@ -146,6 +146,7 @@ for(const action of ['completeLogin','begin','activate','remove','regenerate'] a
     c.password=' current password ';c.proofKind=kind;c.proofCode=' \t\u00a0\n ';c.confirmation='654321';
     assert.equal(await c[action](),action==='begin'?undefined:false);
     assert.equal(c.error,'factorCodeRequired');assert.equal(redraws,1);assert.equal(requests,0);assert.equal(c.pending,false);
+    assert.equal(c.requiredField,'proof');
     assert.equal(c.password,' current password ');assert.equal(c.proofCode,' \t\u00a0\n ');assert.equal(c.confirmation,'654321');
     assert.equal(c.enrolment,enrolment);assert.equal(c.challenge?.challengeToken,token);
   });
@@ -189,6 +190,7 @@ for(const action of ['completeLogin','begin','activate','remove','regenerate'] a
     await c[action]();assert.equal(c.error,action==='completeLogin'?'factorCodeRequired':'requiredPassword');assert.deepEqual(calls,[]);
     c.password=' current password ';c.proofCode='123 456';
     const pending=c[action]();assert.equal(c.pending,true);assert.equal(c.error,undefined);assert.equal(redraws,2);
+    assert.equal(c.requiredField,undefined);
     assert.deepEqual(calls,[{path:action==='completeLogin'?'/login/factor':`/authenticator/${action}`,body:action==='completeLogin'
       ?{challengeToken:token,proof:{kind:'totp',code:'123456'}}
       :{password:' current password ',proof:{kind:'totp',code:'123456'},...(action==='activate'?{pendingToken:token,code:'654321'}:{})}}]);
@@ -216,3 +218,15 @@ for(const context of [
     assert.equal(c.password,input==='filled'?'current':'');assert.equal(c.proofCode,input==='filled'?'123456':'');
   });
 }
+
+for(const reset of ['fence','account','load'] as const)test(`required field moves between missing inputs and clears on ${reset}`,async()=>{
+  const c=controller([ok(status)]);c.account('owner');c.status=status;c.enrolment=enrolment;
+  await c.activate();assert.equal(c.requiredField,'password');assert.equal(c.error,'requiredPassword');
+  c.password='current';await c.activate();assert.equal(c.requiredField,'proof');
+  c.proofCode='123456';await c.activate();assert.equal(c.requiredField,'confirmation');
+  c.pending=true;c.password='';await c.activate();assert.equal(c.requiredField,'confirmation');
+  c.pending=false;c.retryAt=Date.now()+60_000;await c.activate();assert.equal(c.requiredField,'confirmation');
+  c.retryAt=0;
+  if(reset==='fence')c.fence();else if(reset==='account')c.account('other');else await c.load();
+  assert.equal(c.requiredField,undefined);assert.equal(c.error,undefined);
+});

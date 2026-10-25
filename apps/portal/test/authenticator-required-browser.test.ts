@@ -25,6 +25,7 @@ const flows=[
  {action:'activate',active:false,missing:'password'},
  {action:'activate',active:false,missing:'confirmation'},
  {action:'activate',active:true,missing:'proof'},
+ {action:'activate',active:true,missing:'confirmation'},
 ] as const;
 for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as const)for(const width of [390,1280]){
  test(`${locale} ${theme} ${width}: blank authenticator input gives feedback and can be corrected`,async t=>{
@@ -65,7 +66,7 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
     const label=login?c.factorVerify:flow.action==='begin'?(flow.active?c.factorReplace:c.factorEnable):flow.action==='remove'?c.factorRemove:flow.action==='regenerate'?c.factorRegenerate:c.factorActivate;
     await page.getByRole('button',{name:label,exact:true}).click();
     const message=flow.missing==='password'?c.requiredPassword:locale==='en'?'Enter your code.':'Introduce tu código.';
-    const feedback=login?page.locator('wt-form-error-summary'):page.locator('.authenticator');
+    const feedback=login?page.locator('wt-form-error-summary'):page.locator('.authenticator > p[role=alert]');
     await feedback.getByText(message,{exact:true}).waitFor();
     assert.equal(await feedback.getByText(message,{exact:true}).count(),1);assert.deepEqual(writes,[]);
     assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
@@ -74,11 +75,23 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
      await page.screenshot({path:`${process.env.AUTHENTICATOR_REQUIRED_RECEIPT_DIR}/${locale}-${theme}-${width}-${flow.action}.png`,fullPage:true});
     }
     const field=flow.missing==='password'?'factorPassword':flow.missing==='confirmation'?'factorConfirmation':'factorProof';
+    const invalid=page.locator(`wt-input[name=${field}]`);
+    assert.equal(await invalid.evaluate(element=>(element as HTMLElement & {error:string}).error),message);
+    assert.equal(await invalid.locator('input').getAttribute('aria-invalid'),'true');
+    assert.equal(await invalid.getByText(message,{exact:true}).count(),1);
+    for(const other of ['factorPassword','factorProof','factorConfirmation'].filter(name=>name!==field)){
+     const input=page.locator(`wt-input[name=${other}]`);
+     if(await input.count())assert.equal(await input.evaluate(element=>(element as HTMLElement & {error:string}).error),'');
+    }
     await page.locator(`input[name=${field}]`).fill(flow.missing==='password'?password:flow.missing==='confirmation'?'654 321':'123 456');
     const endpoint=login?'/login/factor':`/authenticator/${flow.action}`;
     const reply=page.waitForResponse('**/api/account'+endpoint);await page.getByRole('button',{name:label,exact:true}).click();await reply;
     assert.deepEqual(writes,[{path:endpoint,body:login?{challengeToken:token,proof:{kind:'totp',code:'123456'}}:{password,...(flow.active?{proof:{kind:'totp',code:'123456'}}:{}),...(flow.action==='activate'?{pendingToken:token,code:'654321'}:{})}}]);
     await feedback.getByText(c.credentials,{exact:true}).waitFor();assert.equal(await feedback.getByText(message,{exact:true}).count(),0);
+    for(const input of await page.locator('.authenticator wt-input, wt-input[name=factorProof]').all()){
+     assert.equal(await input.evaluate(element=>(element as HTMLElement & {error:string}).error),'');
+     assert.equal(await input.locator('input').getAttribute('aria-invalid'),'false');
+    }
    }finally{await page.close();}
   });}finally{await browser.close();}
  });
