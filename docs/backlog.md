@@ -3919,6 +3919,10 @@ notifications separately.
   The [local monitor](local-monitoring.md) now records missing contact, stale snapshots
   and failed verification for configured test installations. The portal shows incident
   evidence and stale monitoring; owners can opt in to English/Spanish email alerts.
+  Alert preferences can be saved only after a choice changes from the last
+  confirmed reply. A confirmed save disables Save again; an uncertain save stays
+  retryable, even after reverting the choices. Pending requests, rate-limit waits
+  and lost account access keep their existing restrictions.
   Durable transition records prevent repeated scans from enqueueing duplicates, with
   live ownership/preference checks before delivery and recovery notices for prior
   recipients. Queued notices use the current email language. Locked installations and

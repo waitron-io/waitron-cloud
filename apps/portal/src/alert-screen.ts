@@ -10,7 +10,7 @@ export function alertScreen(app:PortalApp){
   ${!a.loaded?html`<wt-button .disabled=${disabled} @click=${()=>{void a.load();}}>${c.alertsLoad}</wt-button>`:html`
    <label class="alert-choice"><input id="service-alerts-enabled" type="checkbox" .checked=${a.enabled} ?disabled=${disabled} @change=${(e:Event)=>a.choose((e.target as HTMLInputElement).checked,a.locale)}>${c.alertsReceive}</label>
    <div class="business-choice"><label for="alert-language">${c.alertsLanguage}</label><select id="alert-language" ?disabled=${disabled} @change=${(e:Event)=>a.choose(a.enabled,(e.target as HTMLSelectElement).value==='es'?'es':'en')}><option value="en" .selected=${a.locale==='en'}>English</option><option value="es" .selected=${a.locale==='es'}>Español</option></select></div>
-   <wt-form-actions><wt-button .disabled=${disabled} @click=${()=>{void a.save();}}>${c.alertsSave}</wt-button></wt-form-actions>`}
+   <wt-form-actions><wt-button .disabled=${disabled||!a.dirty} @click=${()=>{void a.save();}}>${c.alertsSave}</wt-button></wt-form-actions>`}
  </section>`;
 }
 export function monitoringScreen(app:PortalApp,installation:AccountInstallation){
