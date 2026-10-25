@@ -27,8 +27,8 @@ button:disabled { cursor: default; opacity: .6; }
 .installation dd { margin-inline-start: 0; overflow-wrap: anywhere; }
 
 .usage { border-block: 1px solid var(--wt-color-border); margin-block: 1rem; padding-block: .75rem; }
-.usage h2 { font-size: 1.25rem; }
-.usage h3 { font-size: 1.05rem; margin-block-end: .4rem; }
+.usage h3 { font-size: 1.25rem; margin-block: .83em; }
+.usage h4 { font-size: 1.05rem; margin-block: 1em .4rem; }
 .usage-groups { display: grid; gap: .75rem; }
 .usage dl { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: .25rem 1rem; margin-block: .4rem; }
 .usage dd { font-variant-numeric: tabular-nums; margin: 0; max-width: 14rem; overflow-wrap: anywhere; text-align: end; }
