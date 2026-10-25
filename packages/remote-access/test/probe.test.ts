@@ -410,3 +410,42 @@ test('public probe does not normalize non-ASCII whitespace into required cookie 
   }finally{await fixture.close();}
  });
 });
+
+
+test('public probe requires the final effective SameSite attribute to be Strict',async t=>{
+ const material=await certificate('probe.example.test');
+ for(const [label,attributes,healthy,pair='__Host-waitron-public=fixture'] of [
+  ['later Lax overrides Strict','SameSite=Strict; SameSite=Lax',false],
+  ['later None overrides Strict','SameSite=Strict; SameSite=None',false],
+  ['later invalid overrides Strict','SameSite=Strict; SameSite=unknown',false],
+  ['later empty overrides Strict','SameSite=Strict; SameSite=',false],
+  ['later bare overrides Strict','SameSite=Strict; SameSite',false],
+  ['mixed case later Lax','SameSite=Strict; sAmEsItE = LaX',false],
+  ['later no-break space value','SameSite=Strict; SameSite=Strict\u00a0; Hint=end',false],
+  ['1024-byte value overrides Strict','SameSite=Strict; SameSite='+'x'.repeat(1024),false],
+  ['1025-byte value ignored','SameSite=Strict; SameSite='+'x'.repeat(1025),true],
+  ['oversized Strict does not restore','SameSite=Lax; SameSite='+'Strict'+'x'.repeat(1020),false],
+  ['Strict restored last','SameSite=Lax; SameSite=Strict',true],
+  ['duplicate Strict','SameSite=Strict; SameSite=Strict',true],
+  ['case and ASCII whitespace','sAmEsItE = \tsTrIcT \t',true],
+  ['unrelated attribute','SameSite=Strict; SameSiteHint=Lax',true],
+ ] as const)await t.test(label,async()=>{
+  let replays=0;
+  const fixture=await listenHttps(material,(req,res)=>{
+   if(req.url==='/public/availability'){
+    if(req.headers.cookie){replays++;assert.equal(req.headers.cookie,'__Host-waitron-public=fixture');res.setHeader('content-type','application/json');res.end('{}');}
+    else{res.statusCode=403;res.setHeader('content-type','text/html');res.end('<script src="/_cloud/challenge.js"></script>');}
+   }else if(req.url==='/_cloud/challenge'){
+    res.setHeader('content-type','application/json');res.end('{"challenge":"fixture-challenge","difficulty":8}');
+   }else if(req.url==='/_cloud/solve'){
+    res.statusCode=204;res.setHeader('set-cookie',pair+'; Path=/; Secure; HttpOnly; '+attributes);res.end();
+   }else{res.statusCode=404;res.end();}
+  });
+  try{
+   const result=await probeTarget(target(),{ca:material.cert,connect:connect(fixture.port)});
+   assert.equal(result.public.status,healthy?'healthy':'failed');
+   if(!healthy)assert.equal(result.public.status==='failed'&&result.public.failure,'challenge');
+   assert.equal(replays,healthy?1:0,'A refused cookie must not be sent to the availability endpoint');
+  }finally{await fixture.close();}
+ });
+});

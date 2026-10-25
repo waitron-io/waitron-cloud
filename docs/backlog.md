@@ -3908,6 +3908,10 @@ notifications separately.
   `SameSite=Strict` tokens refuse before replay. Real HTTPS regressions preserve
   ordinary spaces, tabs, mixed case and unrelated attributes. Independent
   Chromium controls reject malformed Secure cookies and retain valid controls.
+  The probe now requires the final effective `SameSite` value to be `Strict`.
+  A later weaker, empty or invalid value refuses before replay, even when an
+  earlier attribute says Strict. Real HTTPS regressions and independent Chromium
+  controls cover precedence, ASCII whitespace, case and oversized values.
   These are local protocol checks; production observation remains unqualified.
   The [D103 C39 threshold design](superpowers/specs/2026-10-22-cloud-monitoring-thresholds-design.md)
   separates existing local detection from proposed production operator alerts and
