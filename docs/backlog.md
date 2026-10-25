@@ -5078,7 +5078,8 @@ the existing retry-output test also catches deletion of its guard when included
 in the review matrix. A separate native child-process check now holds the stop
 reply open in the parent while the writer exits. It requires the pending control
 request to be cancelled before the next event-loop turn and refusal at the control
-step. Removing the writer-exit race fails this check while the original early-exit
+step, with the request fully received and no cleanup signal sent to the writer.
+Removing the writer-exit race fails this check while the original early-exit
 case still passes; restoring it passes. The smoke's request-complete witness and
 child-running check at acknowledgement still need independent tests. Do not claim
 those two refusal steps independently proved.

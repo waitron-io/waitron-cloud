@@ -101,10 +101,12 @@ function run({ reply, ack = 'valid', controlDelay = 0, exitDelay = 0, requireCon
           if (${JSON.stringify(ack === 'exit-held-reply')}) {
             // The parent holds the reply open so socket closure cannot stand in for the writer-exit race.
             const http=process.getBuiltinModule('http');
-            const server=http.createServer((req,res)=>{req.resume();req.on('end',()=>child.send('exit-held-reply'));});
+            let requested=false,signalled=false;
+            const kill=child.kill.bind(child);child.kill=signal=>{signalled=true;return kill(signal);};
+            const server=http.createServer((req,res)=>{req.resume();req.on('end',()=>{requested=true;child.send('exit-held-reply');});});
             server.listen(process.env.STOP_TEST_SOCKET);
             child.once('close',(code,signal)=>setImmediate(()=>{
-              console.error(JSON.stringify({kind:'held-stop-at-writer-exit',code,signal,cancelled:globalThis.heldStopControl?.destroyed===true}));
+              console.error(JSON.stringify({kind:'held-stop-at-writer-exit',code,signal,requested,signalled,cancelled:globalThis.heldStopControl?.destroyed===true}));
               server.closeAllConnections();server.close(()=>{});
             }));
           }
@@ -238,7 +240,7 @@ test('writer exit cancels a pending stop request before the next event-loop turn
   assert.equal(result.stdout, '');
   const records = result.stderr.split('\n').filter(line => line.startsWith('{')).map(line => JSON.parse(line));
   assert.deepEqual(records.filter(row => row.kind === 'held-stop-at-writer-exit'),
-    [{ kind: 'held-stop-at-writer-exit', code: 0, signal: null, cancelled: true }]);
+    [{ kind: 'held-stop-at-writer-exit', code: 0, signal: null, requested: true, signalled: false, cancelled: true }]);
   assert.equal(records.find(row => row.kind === 'litestream-stop')?.step, 'control');
   assert.doesNotMatch(result.stderr, /Synthetic Litestream phase: restore/);
 });
