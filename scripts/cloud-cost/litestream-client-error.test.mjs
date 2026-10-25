@@ -138,3 +138,22 @@ test('a socket error after settlement leaves its earlier operation unattributed'
   assert.equal(Object.hasOwn(records.at(-1).diagnostic, 'operation'), false);
   assert.throws(() => meter.snapshot(), /Invalid cloud cost meter/);
 });
+
+// New diagnostic counters must never turn an arbitrary error property into published content.
+test('socket diagnostic counters reject private values, accessors and invalid counts', async () => {
+  const fields = ['activeTransfers', 'bytesIn', 'expectedIn', 'bytesOut', 'expectedOut'];
+  let reads = 0;
+  for (const invalid of ['PRIVATE_CANARY', -1, 0.5, Number.MAX_SAFE_INTEGER + 1, undefined]) {
+    const raw = { reason: 'client-error' };
+    for (const key of fields) {
+      if (invalid === undefined) Object.defineProperty(raw, key, { get() { reads++; throw Error('PRIVATE_CANARY'); } });
+      else raw[key] = invalid;
+    }
+    const error = Object.assign(Error('PRIVATE_CANARY'), { litestreamCloseDiagnostic: raw }), records = [];
+    await assert.rejects(withLitestreamCloseDiagnostics({ stage: 'replication-transport', close: async () => { throw error; },
+      report: line => records.push(JSON.parse(line)) }), e => e === error);
+    assert.deepEqual(records.at(-1).diagnostic, { reason: 'client-error' });
+    assert.equal(JSON.stringify(records).includes('PRIVATE_CANARY'), false);
+  }
+  assert.equal(reads, 0);
+});
