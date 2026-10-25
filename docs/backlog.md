@@ -5472,7 +5472,7 @@ at the measurement close check in `scripts/cloud-cost/mail.mjs`, called from
 fixture line 65. The original generic error cannot distinguish invalid state
 from disagreement between the mailer and the independently observed SMTP replies.
 The following signup/recovery mail case passes. The cause remains unknown;
-D262's reviewed heading branch stays parked pending qualified evidence.
+D262's heading fix is merged in [PR #467](https://github.com/waitron-io/waitron-cloud/pull/467).
 
 Close errors now retain the first fixed failure label, the invalid-state flag
 and both count sets. You can distinguish an empty run, delivery disagreement,
