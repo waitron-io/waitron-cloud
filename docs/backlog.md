@@ -3892,7 +3892,12 @@ notifications separately.
   effective attribute, matching Chromium. Real HTTPS regressions and independent
   Chromium controls cover the size boundary, replacement, whitespace and equals
   signs. An earlier non-root path still refuses before replay, and a valid root
-  still succeeds. Other expiry rules, including `Expires`-only deletion, remain open.
+  still succeeds. The final effective `Expires` now also refuses before replay
+  when its parsed date has passed. Real HTTPS cases and independent Chromium
+  controls cover legacy date forms, invalid dates, duplicate and oversized values,
+  server clock differences and valid `Max-Age` precedence, including saturated
+  signed values. Session cookies and the genuine gateway challenge still pass.
+  These are local protocol checks; production observation remains unqualified.
   The [D103 C39 threshold design](superpowers/specs/2026-10-22-cloud-monitoring-thresholds-design.md)
   separates existing local detection from proposed production operator alerts and
   opted-in venue mail, with worked outage and backup timelines. The owner approved
