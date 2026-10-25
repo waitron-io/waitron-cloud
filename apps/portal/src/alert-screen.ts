@@ -22,11 +22,11 @@ export function monitoringScreen(app:PortalApp,installation:AccountInstallation)
  const remote=(['public','staff'] as const).map(kind=>{
   const check=m.remoteChecks?.[kind],stale=current.has(`${kind}_probe_stale`),failed=current.has(`${kind}_route_failed`),certificate=current.has(`${kind}_certificate_expiring`);
   const state=!fresh||!check||stale?(kind==='public'?c.monitorPublicUnknown:c.monitorStaffUnknown):failed?(kind==='public'?c.monitorPublicFailed:c.monitorStaffFailed):(kind==='public'?c.monitorPublicHealthy:c.monitorStaffHealthy);
-  return html`<section aria-label=${kind==='public'?c.monitorPublic:c.monitorStaff}><h5>${kind==='public'?c.monitorPublic:c.monitorStaff}</h5><p>${state}</p>
+  return html`<section role="group" aria-label=${kind==='public'?c.monitorPublic:c.monitorStaff}><h5>${kind==='public'?c.monitorPublic:c.monitorStaff}</h5><p>${state}</p>
    ${check?html`<p>${c.monitorRouteChecked}: <time datetime=${check.checkedAt}>${formatDateTime(check.checkedAt,app.locale)}</time></p>`:nothing}
    ${certificate?html`<p>${kind==='public'?c.monitorPublicCertificate:c.monitorStaffCertificate}</p>${check?.certificateNotAfter?html`<p>${c.monitorCertificateExpires}: <time datetime=${check.certificateNotAfter}>${formatDateTime(check.certificateNotAfter,app.locale)}</time></p>`:nothing}`:nothing}</section>`;
  });
- return html`<section aria-label=${c.monitoring}><h4>${c.monitoring}</h4>
+ return html`<section role="group" aria-label=${c.monitoring}><h4>${c.monitoring}</h4>
   ${!fresh?html`<p role="status">${c.monitorUnknown}</p>`:!m.incidents.length?html`<p>${c.monitorNoAlerts}</p>`:nothing}
   ${m.checkedAt?html`<p>${c.monitorChecked}: <time datetime=${m.checkedAt}>${formatDateTime(m.checkedAt,app.locale)}</time></p>`:nothing}
   ${m.incidents.filter(i=>Object.hasOwn(copy,i.kind)).map(i=>html`<p>${copy[i.kind as keyof typeof copy]}</p><p>${c.monitorSince}: <time datetime=${i.openedAt}>${formatDateTime(i.openedAt,app.locale)}</time></p>`)}
