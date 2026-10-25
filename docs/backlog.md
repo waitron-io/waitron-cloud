@@ -5405,11 +5405,11 @@ Server Retry-After still blocks every address for that operation across navigati
 Stubbed Chromium journeys cover both forms, languages, themes and narrow/wide views,
 with exact request bodies, independent address deadlines and refused early submits.
 
-## Password-change notification recovery link
+## Password-change notification recovery link (D261)
 
 Your password-changed email now links to the password-reset request page in
 English or Spanish. Older queued messages without a language link to the English
 page. The notification contains no reset token; you request a fresh reset there.
-`node --test packages/registration/test/account-mail.test.ts` covers both portal
-origins, both languages, legacy messages and unchanged subjects. Live provider
+`node --test packages/registration/test/account-mail.test.ts` covers a public and a local
+origin, both languages, legacy messages and unchanged subjects. Live provider
 delivery remains part of the first working milestone's production qualification.
