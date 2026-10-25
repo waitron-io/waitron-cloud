@@ -426,6 +426,12 @@ the one shown during a refresh, and sent a hidden venue after permission removal
 (the server refused it with HTTP 403). Chromium checks cover both cases, no stale
 request or stored reservation, and a subsequent permitted choice whose displayed,
 sent and stored venue agree, in English and Spanish, both themes and 390/1280 widths.
+If your venue list cannot be read, Fiscal allocations now shows the existing
+error and offers Refresh status. Refresh waits for an ongoing list read, any
+pending or uncertain fiscal operation and Retry-After delays. Stubbed Chromium
+checks cover failed and recovered reads in both languages, themes and widths,
+plus rate-limit waits and retained write evidence. Existing draft, selection,
+request and receipt rules remain covered by the fiscal browser journeys.
 Stored fiscal status reads check entitlement and custody once before returning the exact
 receipt. PostgreSQL checks cover that count and refusal after entitlement, custody or
 venue ownership is withdrawn; history reconstruction keeps its checks around database work.
