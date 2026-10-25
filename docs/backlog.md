@@ -292,6 +292,10 @@ after navigation, and recovery's own visible retry countdown and expiry.
 Recovery shows a failed session check as unavailable and lets you retry.
 English/Spanish browser checks cover HTTP and network failures, the pending
 message and retry to sign-in without exposing recovery controls.
+Connect a venue and Recover offer Retry only after the session check fails.
+While it runs, you see the checking message without an inactive retry action.
+Browser checks cover both routes in English/Spanish, light/dark and phone/desktop,
+including HTTP and network failures, retry to sign-in and Retry-After disabling.
 Installation, snapshot, monitoring and recovery dates spell out the month in
 English and Spanish. Local time and seconds are retained, including the warning
 about changes lost during recovery. Database-free browser checks cover both
