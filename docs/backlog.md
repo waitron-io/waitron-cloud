@@ -4074,7 +4074,9 @@ Cloud follow-ups, each a separate small change with tests before implementation:
   without JavaScript, the link returns to the static guidance. Reloading repeats
   the browser check and does not grant access. A script from before fallback hiding was introduced may
   leave the guidance visible during a mixed rollout. If a running check fails,
-  the existing guidance and Reload page link reappear. Pointer and keyboard
+  the existing guidance and Reload page link reappear, including general
+  JavaScript/other-browser advice. Advice specific to each failure remains open.
+  Pointer and keyboard
   checks cover restarting after challenge, worker, proof and timeout failures,
   with no automatic retry or granted access; the new attempt hides the fallback
   while it runs. The older-page
