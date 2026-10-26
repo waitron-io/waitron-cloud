@@ -57,7 +57,7 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
       const button = section.getByRole('button', {name: c.passkeyAdd, exact: true});
       assert.equal(await button.isDisabled(), true, 'blank password keeps Add disabled');
       await field.press('Enter');
-      assert.deepEqual(writes, [], 'blank password does not submit');
+      assert.equal(writes.length, 0, 'blank password does not submit');
       await field.fill(password);
       await field.press('a'); await field.press('Backspace');
       await field.press('Shift+Enter');
@@ -66,7 +66,7 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
       await field.press('Meta+Enter');
       await field.dispatchEvent('keydown', {key: 'Enter', isComposing: true});
       await field.dispatchEvent('keydown', {key: 'Enter', repeat: true});
-      assert.deepEqual(writes, [], 'modified and composing Enter do not submit');
+      assert.equal(writes.length, 0, 'modified and composing Enter do not submit');
       assert.equal(await field.inputValue(), password, 'password bytes remain exact');
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
       if (process.env.PASSKEY_ENTER_RECEIPT_DIR) {
