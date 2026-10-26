@@ -17,7 +17,7 @@ for(const [address,allowed] of [
  ['3fff:ffff:ffff:ffff:ffff:ffff:ffff:ffff',true],['6000::',false],
  ['3fff::1',false],['2001:db8::1',false],['fe00::1',false],
  ['::ffff:0:127.0.0.1',false],['fc00::1',false],
-] as const)test(`4000 refusal preserves other IPv6 address decisions: ${address}`,()=>{
+] as const)test(`address policy beside reserved 4000::/3: ${address}`,()=>{
  assert.equal(isPublicProbeAddress(address,6),allowed,address);
 });
 
