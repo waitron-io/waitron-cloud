@@ -4087,8 +4087,11 @@ Cloud follow-ups, each a separate small change with tests before implementation:
   without JavaScript, the link returns to the static guidance. Reloading repeats
   the browser check and does not grant access. A script from before fallback hiding was introduced may
   leave the guidance visible during a mixed rollout. If a running check fails,
-  the existing guidance and Reload page link reappear, including general
-  JavaScript/other-browser advice. Advice specific to each failure remains open.
+  the Reload page link reappears beside the existing failure-specific message.
+  Static download/disabled-JavaScript advice stays hidden after the script starts,
+  so a failed request offers reload guidance while blocked/unfinished checks keep
+  their browser guidance. Chromium checks cover both languages, themes and widths;
+  this wording does not diagnose why a request or check failed.
   Pointer and keyboard
   checks cover restarting after challenge, worker, proof and timeout failures,
   with no automatic retry or granted access; the new attempt hides the fallback

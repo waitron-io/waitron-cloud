@@ -67,7 +67,7 @@ for (const locale of ['en', 'es']) for (const theme of ['light', 'dark'] as cons
         releaseChallenge();
         await page.getByText('Please reload to try again.', {exact: false}).waitFor();
         assert.equal(await page.getByText('Vuelve a cargar para intentarlo de nuevo.', {exact: true}).isVisible(), true);
-        assert.equal(await guidance.isVisible(), true);
+        assert.equal(await guidance.isVisible(), false, 'a running failure uses its own guidance beside Reload page');
         assert.equal(gate.stats().forwarded, 0);
         assert.equal((await context.cookies()).length, 0);
       } finally {
