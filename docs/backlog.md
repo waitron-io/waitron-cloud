@@ -3957,6 +3957,16 @@ choose replacement, regeneration, removal, activation or cancellation. Stubbed
 API browser checks cover English/Spanish, both themes and phone/desktop widths;
 these do not qualify the backend or production.
 
+## Browser-test clock setup (D313)
+
+The alert-preferences activity fixture now installs its running clock a day before
+its intended pause, then freezes at the original instant before loading the app.
+A 100 ms setup delay reproduced CI's “Cannot fast-forward to the past” refusal;
+the corrected delayed case and all 15 original journeys pass without changing
+assertions, deadlines or application time. Other Account activity fixtures still
+install and pause at the same instant; qualify them separately if this refusal
+recurs. No failure in those fixtures is attributed here.
+
 ## Password-change notification recovery link (D261)
 
 Your password-changed email now links to the password-reset request page in
