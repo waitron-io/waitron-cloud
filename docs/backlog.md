@@ -12,6 +12,12 @@
 - Keep owner decisions you still cite under `Decisions and deliberate limits`.
   Never remove a recorded decision with finished work.
 
+## Decisions and deliberate limits
+
+- Email resend waits belong to each address and operation (owner, 2026-10-25).
+  Correcting an address allows an immediate send; returning to it keeps its wait.
+  A server Retry-After still blocks every address for that operation.
+
 ## Current state
 
 Updated 2026-10-22. The repository has a pnpm workspace and internal PostgreSQL
@@ -5439,13 +5445,6 @@ IPv6 connection accounting with HAProxy's configured `stick-table type ip`; nati
 gate checks do not qualify that separate layer.
 
 
-## Failed sign-out focus (D238)
-
-If signing out fails, the existing error summary now comes into view and receives
-focus, so you can read the failure from the bottom of a long Account page. The
-message and retry behaviour remain; sign-out stays disabled while pending. Browser
-checks cover English and Spanish, both themes and phone/desktop widths.
-
 ## Storage-authority request timeout evidence (D212)
 
 The provisioning check in [run 40120697007](https://github.com/waitron-io/waitron-cloud/actions/runs/40120697007)
@@ -5469,15 +5468,6 @@ run does not close the historical timeout. Local Docker and PostgreSQL checks
 remain unavailable until 3 November; full qualification uses GitHub CI. D152's
 separate native-writer drain decision remains open.
 
-## Correcting required security fields on Account (D239)
-
-When you enter a missing password or authenticator code on Account, its required-input
-message and field marker now clear before you submit again. Editing another field or
-leaving a code blank keeps the message. Malformed-code messages, server refusals and
-uncertain results remain visible; typing sends no request. English/Spanish browser
-checks cover both themes and phone/desktop widths, including language changes that
-keep your input. Password, proof and request rules remain unchanged.
-
 ## Authenticator code format feedback (D237)
 
 Malformed authenticator codes now stay in their field with an explanation, before
@@ -5498,31 +5488,6 @@ server codes, then map them to guidance that explains what you can do next, such
 as starting setup again. Cloud owns this follow-up across the registration,
 account HTTP and portal packages. Keep proof acceptance and account authority
 checks intact; cover each refusal with a server test and matching portal feedback.
-
-## Business choice feedback when connecting a venue (D234)
-
-Choosing a business now clears the resolved “Choose a business for this venue”
-message and field marker. Approval still requires a business and an explicit click;
-code errors, server refusals, uncertain replies and the single-business path remain.
-English/Spanish browser checks cover both themes and phone/desktop widths.
-
-## Remote hostname field feedback (D236)
-
-When you review a malformed remote-access hostname, the Hostname field now shows
-the existing explanation beside it and is marked as required. Editing clears the
-message; server hostname refusals mark the same field. The section alert, hostname
-rules and refusal before any DNS request remain. Browser checks cover English and
-Spanish, both themes and phone/desktop widths.
-
-## Clear resolved account-form feedback (D240)
-
-When you edit a field on sign-in, signup or password recovery, its old message
-and error marker clear so they describe the last submitted value only. Other
-fields keep their messages. Hiding the optional organisation field clears its
-message too. Submit still validates every required field and focuses the first
-problem before sending. Server refusals, retry limits and uncertain results stay
-visible while you type; language changes retain your values. English/Spanish
-browser checks cover all five forms, both themes and phone/desktop widths.
 
 ## Clear stale connection and recovery code feedback (D249)
 
@@ -5551,15 +5516,6 @@ checks cover both themes and phone/desktop widths.
 The passkey and authenticator password fields still need their own Enter handling.
 Cloud portal follow-up: connect each field to its existing review or submit action,
 keeping authority checks and explicit confirmations intact, with browser coverage.
-
-## Email resend waits when correcting an address (D251)
-
-Sign-up and password recovery now keep the one-minute resend wait per address and
-operation. You can correct an address and send immediately; returning to an earlier
-address keeps its remaining wait, including case and surrounding-space variations.
-Server Retry-After still blocks every address for that operation across navigation.
-Stubbed Chromium journeys cover both forms, languages, themes and narrow/wide views,
-with exact request bodies, independent address deadlines and refused early submits.
 
 ## Password-change notification recovery link (D261)
 
