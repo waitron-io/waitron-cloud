@@ -4,7 +4,7 @@ import {execFile} from 'node:child_process';
 import {randomUUID} from 'node:crypto';
 import {after, before, beforeEach, test} from 'node:test';
 import {promisify} from 'node:util';
-import {Pool} from 'pg';
+import {Pool, type PoolClient} from 'pg';
 import {createSession, decryptFactorSecret, encryptFactorSecret} from '@waitron-cloud/identity';
 import {migrate} from '../src/migrate.ts';
 import {transaction} from '../src/transaction.ts';
@@ -98,7 +98,7 @@ test('an interrupted per-account rotation rolls back that account and retry resu
   assert.deepEqual(await rotate(),{activeKeyId:'next',active:1,pending:1});
 });
 async function rotationLockWaiter(){
-  // Other schemas share this database, so only this fixture can prove rotation is waiting.
+  // Concurrent tests share this database; only sessions named for this fixture prove its wait.
   return (await admin.query<{pid:number;query:string}>("SELECT pid,query FROM pg_stat_activity WHERE application_name=$1 AND query LIKE '%cloud_accounts%' AND wait_event_type='Lock' AND pid<>pg_backend_pid()",[schema])).rows[0];
 }
 test('rotation takes the account lock before factor children and re-reads changes made while waiting',async()=>{
@@ -120,9 +120,10 @@ test('rotation takes the account lock before factor children and re-reads change
 });
 test('rotation lock probe ignores a foreign waiter before observing its own session',async()=>{
   const foreign=new Pool({connectionString:process.env.TEST_DATABASE_URL,options:`-c search_path=${schema}`,max:2,application_name:`${schema}_foreign`});
-  const blocker=await foreign.connect(),waiter=await foreign.connect();
+  let blocker:PoolClient|undefined,waiter:PoolClient|undefined;
   let waiting:Promise<unknown>|undefined,running:ReturnType<typeof rotate>|undefined;
   try{
+    blocker=await foreign.connect();waiter=await foreign.connect();
     await blocker.query('BEGIN');
     await blocker.query('SELECT id FROM cloud_accounts WHERE id=$1 FOR UPDATE',[accounts[0]]);
     const pid=(await waiter.query<{pid:number}>('SELECT pg_backend_pid() AS pid')).rows[0]!.pid;
@@ -148,9 +149,12 @@ test('rotation lock probe ignores a foreign waiter before observing its own sess
     await waiting;
     assert.deepEqual(await running,{activeKeyId:'next',active:2,pending:2});
   }finally{
-    await blocker.query('ROLLBACK');
-    await waiting?.catch(()=>{});await running?.catch(()=>{});
-    blocker.release();waiter.release();await foreign.end();
+    try{await blocker?.query('ROLLBACK');}
+    finally{
+      blocker?.release(true);
+      await waiting?.catch(()=>{});await running?.catch(()=>{});
+      waiter?.release(true);await foreign.end();
+    }
   }
 });
 test('CLI requires explicit configuration and reports only counts and key ID with fixed errors',async()=>{
