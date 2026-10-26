@@ -16,6 +16,7 @@ function sourceBucket(ip:string):string{
 }
 const worker=`onmessage=async({data})=>{try{const encoder=new TextEncoder(),until=performance.now()+20000;for(let nonce=0;nonce<1000000000&&performance.now()<until;nonce++){const hash=new DataView(await crypto.subtle.digest('SHA-256',encoder.encode(data.challenge+':'+nonce)));if(hash.getUint32(0)<2**(32-data.difficulty)){postMessage({challenge:data.challenge,nonce});return;}}postMessage({error:'exhausted'});}catch{postMessage({error:'unsupported'});}};`;
 const script=`(async()=>{
+ const guidance=document.querySelector('#browser-guidance');if(guidance)guidance.hidden=true;
  document.querySelector('div').hidden=false;
  let worker,timer,controller,finished=false;
  const stop=()=>{clearTimeout(timer);if(worker)worker.terminate();if(controller)controller.abort();};
@@ -85,7 +86,7 @@ export function createPublicGate(options:Options){
    }
    const cookies=(req.headers.cookie??'').split(';').map(s=>s.trim()).filter(s=>s.startsWith('__Host-waitron-public='));
    if(cookies.length!==1||!valid(cookies[0]!.slice('__Host-waitron-public='.length),'access',host!,ip)){
-    counters.challenged++;reply(403,'<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><meta name="color-scheme" content="light dark"><title>Checking your browser / Comprobando tu navegador</title><body><h1>Checking your browser / <span lang="es">Comprobando tu navegador</span></h1><div hidden><p>Please wait a moment. / <span lang="es">Espera un momento.</span></p></div><noscript><p>Allow JavaScript or try another browser to open this page. / <span lang="es">Permite JavaScript o prueba con otro navegador para abrir esta página.</span></p></noscript><script src="/_cloud/challenge.js" defer></script></body></html>','text/html; charset=utf-8');return;
+    counters.challenged++;reply(403,'<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><meta name="color-scheme" content="light dark"><title>Checking your browser / Comprobando tu navegador</title><body><h1>Checking your browser / <span lang="es">Comprobando tu navegador</span></h1><div hidden><p>Please wait a moment. / <span lang="es">Espera un momento.</span></p></div><p id="browser-guidance">Allow JavaScript or try another browser to open this page. / <span lang="es">Permite JavaScript o prueba con otro navegador para abrir esta página.</span></p><script src="/_cloud/challenge.js" defer></script></body></html>','text/html; charset=utf-8');return;
    }
    if(active>=64){counters.rejected++;reply(429);return;}active++;counters.forwarded++;
    try{

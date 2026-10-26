@@ -3957,6 +3957,16 @@ choose replacement, regeneration, removal, activation or cancellation. Stubbed
 API browser checks cover English/Spanish, both themes and phone/desktop widths;
 these do not qualify the backend or production.
 
+## Browser-test clock setup (D313)
+
+The alert-preferences activity fixture now installs its running clock a day before
+its intended pause, then freezes at the original instant before loading the app.
+A 100 ms setup delay reproduced CI's “Cannot fast-forward to the past” refusal;
+the corrected delayed case and all 15 original journeys pass without changing
+assertions, deadlines or application time. Other Account activity fixtures still
+install and pause at the same instant; qualify them separately if this refusal
+recurs. No failure in those fixtures is attributed here.
+
 ## Password-change notification recovery link (D261)
 
 Your password-changed email now links to the password-reset request page in
@@ -4061,13 +4071,15 @@ Cloud follow-ups, each a separate small change with tests before implementation:
   disabled JavaScript gets a static explanation. Native HTTP, executed scripts
   and browser checks cover these outcomes. A failed page attempt ignores late
   replies and does not redirect; proof and access remain server decisions.
-  With JavaScript disabled, only the static guidance appears below the heading;
-  the waiting line appears when the browser-check script runs. Native Chromium
-  checks cover both languages, themes and phone/desktop widths, with and without
-  JavaScript, and retain visible retry guidance after a failed check. Actual visitor
-  browser support and production timing remain unqualified. If JavaScript is enabled
-  but the script cannot load, only the heading appears; useful fallback guidance
-  for that load failure remains open.
+  If the browser-check script cannot load or JavaScript is disabled, bilingual
+  guidance stays visible below the heading. It disappears when the script starts
+  and reveals the waiting line, so a failed download does not leave you without
+  a next step. Native Chromium checks cover failed, disconnected and delayed
+  script downloads, recovery on reload, disabled JavaScript and later retry
+  feedback in both languages, themes and phone/desktop widths. Other browser
+  engines, screen readers and production timing remain unqualified. A new script
+  can still start on the previous page markup during a rollout. Reloading can
+  recover a failed script download; explicit reload guidance remains a follow-up.
 - R11 delivered: public/staff alerts in Account and email name the existing remote
   setup and refresh controls in English and Spanish. Failed checks ask you to
   check venue internet, the selected hostname and setup status. Unknown monitoring

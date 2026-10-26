@@ -126,7 +126,7 @@ test('a browser that cannot create a worker gets browser guidance and no proof s
 test('without JavaScript the challenge page provides a way forward',async()=>{
  const f=await fixture();try{
   const {status,body}=await f.send('/public/availability',{accept:'text/html'});
-  assert.equal(status,403);assert.match(body,/<noscript>.*JavaScript.*<span lang="es">.*JavaScript.*<\/span>.*<\/noscript>/);
+  assert.equal(status,403);assert.match(body,/<p id="browser-guidance">.*JavaScript.*<span lang="es">.*JavaScript.*<\/span>.*<\/p>/);
  }finally{await f.close();}
 });
 

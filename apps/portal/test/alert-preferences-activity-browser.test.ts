@@ -13,6 +13,8 @@ const bundle = await build({stdin: {contents: `
 `, resolveDir: new URL('..', import.meta.url).pathname}, bundle: true, write: false, format: 'iife', target: 'es2023'});
 const styles = await readFile(new URL('../src/styles.css', import.meta.url), 'utf8');
 const at = '2026-10-24T12:00:00.000Z', expiresAt = '2030-01-01T00:00:00.000Z';
+// Installation starts a running clock; pause at the intended instant before loading app timers.
+const clockStart = new Date(Date.parse(at) - 86_400_000);
 
 for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'] as const) for (const width of [390, 1280]) {
   test(`${locale} ${theme} ${width}: session activity preserves a failed alert-preferences read until explicit retry`, async () => {
@@ -23,7 +25,7 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
     try {
       const page = await browser.newPage({locale, colorScheme: theme, viewport: {width, height: 900}});
       page.setDefaultTimeout(4000);
-      await page.clock.install({time: new Date(at)}); await page.clock.pauseAt(new Date(at));
+      await page.clock.install({time: clockStart}); await page.clock.pauseAt(new Date(at));
       const c = translations[locale]; let reads = 0, sessionReads = 0;
       const writes: string[] = [];
       await page.route('https://portal.test/account', route => route.fulfill({contentType: 'text/html', body: '<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><div id="portal" class="portal"></div>'}));
@@ -89,7 +91,7 @@ for (const scenario of ['cooldown', 'new account', 'blocked startup', 'failed na
     const browser = await chromium.launch({headless: true});
     try {
       const page = await browser.newPage(); page.setDefaultTimeout(4000);
-      await page.clock.install({time: new Date(at)}); await page.clock.pauseAt(new Date(at));
+      await page.clock.install({time: clockStart}); await page.clock.pauseAt(new Date(at));
       const c = translations.en; let reads = 0, sessionReads = 0;
       await page.route('https://portal.test/account', route => route.fulfill({contentType: 'text/html', body: '<div id="portal" class="portal"></div>'}));
       await page.route('**/api/account/**', route => {
@@ -145,7 +147,7 @@ test('navigation during an alert read preserves its attempt and later failure', 
   const readReply = new Promise<void>(resolve => {releaseRead = resolve;});
   try {
     const page = await browser.newPage(); page.setDefaultTimeout(4000);
-    await page.clock.install({time: new Date(at)}); await page.clock.pauseAt(new Date(at));
+    await page.clock.install({time: clockStart}); await page.clock.pauseAt(new Date(at));
     let reads = 0, sessionReads = 0;
     await page.route('https://portal.test/account', route => route.fulfill({contentType: 'text/html', body: '<div id="portal" class="portal"></div>'}));
     await page.route('**/api/account/**', async route => {
@@ -181,7 +183,7 @@ for (const status of [401, 403]) {
     const activityReply = new Promise<void>(resolve => {releaseActivity = resolve;});
     try {
       const page = await browser.newPage(); page.setDefaultTimeout(4000);
-      await page.clock.install({time: new Date(at)}); await page.clock.pauseAt(new Date(at));
+      await page.clock.install({time: clockStart}); await page.clock.pauseAt(new Date(at));
       const c = translations.en; let reads = 0, writes = 0, sessionReads = 0;
       await page.route('https://portal.test/account', route => route.fulfill({contentType: 'text/html', body: '<div id="portal" class="portal"></div>'}));
       await page.route('**/api/account/**', async route => {
