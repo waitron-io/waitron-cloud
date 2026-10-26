@@ -11,7 +11,7 @@ import {transaction} from '../src/transaction.ts';
 
 const schema=`factor_keys_${randomUUID().replaceAll('-','')}`;
 const admin=new Pool({connectionString:process.env.TEST_DATABASE_URL});
-const pool=new Pool({connectionString:process.env.TEST_DATABASE_URL,options:`-c search_path=${schema}`,max:2});
+const pool=new Pool({connectionString:process.env.TEST_DATABASE_URL,options:`-c search_path=${schema}`,max:2,application_name:schema});
 const accounts=['10000000-0000-4000-8000-000000000001','10000000-0000-4000-8000-000000000002'] as const;
 const secret='GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ';
 const old={activeKeyId:'old',keys:{old:'01'.repeat(32)}};
@@ -98,7 +98,8 @@ test('an interrupted per-account rotation rolls back that account and retry resu
   assert.deepEqual(await rotate(),{activeKeyId:'next',active:1,pending:1});
 });
 async function rotationLockWaiter(){
-  return (await admin.query<{pid:number;query:string}>("SELECT pid,query FROM pg_stat_activity WHERE query LIKE '%cloud_accounts%' AND wait_event_type='Lock' AND pid<>pg_backend_pid()")).rows[0];
+  // Other schemas share this database, so only this fixture can prove rotation is waiting.
+  return (await admin.query<{pid:number;query:string}>("SELECT pid,query FROM pg_stat_activity WHERE application_name=$1 AND query LIKE '%cloud_accounts%' AND wait_event_type='Lock' AND pid<>pg_backend_pid()",[schema])).rows[0];
 }
 test('rotation takes the account lock before factor children and re-reads changes made while waiting',async()=>{
   const blocker=await pool.connect();await blocker.query('BEGIN');await blocker.query('SELECT id FROM cloud_accounts WHERE id=$1 FOR UPDATE',[accounts[0]]);
