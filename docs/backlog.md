@@ -2971,14 +2971,13 @@ evaluate mobile notifications separately.
   message and Retry too. Retry reads the list without sending the revoke again.
   Other failed Account startup reads may still repeat on activity; reproduce that
   sequence for alert and translation-consent reads before changing their retry
-  behaviour. Qualification also exposed an independent rotation
-  wait-observer failure in
-  `packages/registration/test/authenticator-keys.test.ts:108` (CI40057746479,
-  job120764846013): it expected an account `FOR UPDATE` wait but sampled `FOR SHARE`.
-  The test, rotation implementation, launcher and workflow match the preceding main
-  revision. Record the actual blocker/waiter IDs and test stage on Linux, reproduce
-  the cause and retain every authority assertion and deadline; a later passing run
-  does not explain this observation. The account page
+  behaviour. The authenticator-rotation lock probe now reads only this
+  fixture's uniquely named database sessions. A real competing `FOR SHARE` waiter
+  reproduces the old probe's false observation before rotation starts; the scoped
+  probe must ignore it and then observe rotation's own `FOR UPDATE` wait. The
+  account-before-child lock assertion, ciphertext reread checks and polling limits
+  are retained. Production rotation is unchanged. The earlier intermittent failures
+  did not capture session IDs, so their exact waiter remains unidentified. The account page
   now lists only your live management sessions, marks the
   current one and shows creation, last-use and effective-expiry times. You can revoke any
   session with a CSRF-protected, account-scoped action; uncertain replies reconcile from
