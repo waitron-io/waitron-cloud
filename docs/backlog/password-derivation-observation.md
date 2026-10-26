@@ -15,5 +15,3 @@ PostgreSQL qualification passes both observation cases, catches removal of the
 result barrier and an account lock moved before derivation, then passes again
 with both faults restored. Local database checks remain unavailable while Docker
 is down.
-
-
