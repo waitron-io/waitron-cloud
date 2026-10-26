@@ -204,6 +204,15 @@ refusal exercises the reporter in CI. Ownership assertions, deadlines and cleanu
 rules remain unchanged. The historical failing operation and its repair remain
 open: collect an instrumented recurrence before changing the ownership check.
 
+## Isolated replay result-boundary refusal (D297)
+
+An altered-stream control refused before reading its changed worker result in
+[cost CI](https://github.com/waitron-io/waitron-cloud/actions/runs/40281251676/job/121434888588).
+Failure-only diagnostics now retain fixed preparation, worker and host stages,
+validated worker traces and result-read status without private output. The boundary
+assertion, deadlines and cleanup stay unchanged. The historical cause remains open;
+collect an instrumented recurrence before changing behavior.
+
 ## Repository licence
 
 The root `LICENSE` is copied byte for byte from Waitron's Elastic License 2.0 text.

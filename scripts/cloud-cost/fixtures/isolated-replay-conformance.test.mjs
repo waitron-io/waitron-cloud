@@ -8,6 +8,7 @@ import { execFileSync, spawnSync } from 'node:child_process';
 import { DatabaseSync } from 'node:sqlite';
 import { openReplay } from '../waitron-adapter.mjs';
 import { withOwnershipDiagnostics } from './ownership-diagnostics.mjs';
+import { withStreamResultDiagnostics } from './stream-result-diagnostics.mjs';
 const controller = await import('../isolated-replay.mjs').catch(error => {
   if (error.code === 'ERR_MODULE_NOT_FOUND' && error.url === new URL('../isolated-replay.mjs', import.meta.url).href) return {};
   throw error;
@@ -436,18 +437,48 @@ for (const mode of ['extra', 'missing', 'counts']) test('isolatedHostRefusesAlte
       const path='/state/result.json';if(cloudCostGeneratedFs.existsSync(path)){const value=JSON.parse(cloudCostGeneratedFs.readFileSync(path,'utf8'));${change}cloudCostGeneratedFs.writeFileSync(path,JSON.stringify(value));}
     });`);
   const fs = (await import('node:fs')).default, { syncBuiltinESMExports } = await import('node:module');
-  const read = fs.readFileSync; let changed = false;
-  fs.readFileSync = (path, ...args) => {
-    const contents = read(path, ...args);
-    if (path === join(f.root, 'isolated-replay/result.json')) {
-      const value = JSON.parse(contents);
-      changed = mode === 'extra' ? value.stream?.raw === 'PRIVATE_CANARY' : mode === 'missing' ? !Object.hasOwn(value, 'stream') : value.stream?.restored.sales === 99;
-    }
-    return contents;
-  }; syncBuiltinESMExports();
-  try { await assert.rejects(controller.runIsolatedReplay(f), bad); }
-  finally { fs.readFileSync = read; syncBuiltinESMExports(); }
-  assert.equal(changed, true, 'reach the changed result at the actual host boundary'); clean(f, before);
+  const read = fs.readFileSync; let changed = false, resultRead = false, refusal;
+  const began = performance.now();
+  await withStreamResultDiagnostics(async () => {
+    fs.readFileSync = (path, ...args) => {
+      const contents = read(path, ...args);
+      if (path === join(f.root, 'isolated-replay/result.json')) {
+        resultRead = true;
+        const value = JSON.parse(contents);
+        changed = mode === 'extra' ? value.stream?.raw === 'PRIVATE_CANARY' : mode === 'missing' ? !Object.hasOwn(value, 'stream') : value.stream?.restored.sales === 99;
+      }
+      return contents;
+    }; syncBuiltinESMExports();
+    try { await assert.rejects(async () => {
+      try { return await controller.runIsolatedReplay(f); }
+      catch (error) { refusal = error; throw error; }
+    }, bad); }
+    finally { fs.readFileSync = read; syncBuiltinESMExports(); }
+    assert.equal(changed, true, 'reach the changed result at the actual host boundary'); clean(f, before);
+  }, () => readFileSync(f.journal.path, 'utf8'), () => ({elapsedMilliseconds: performance.now() - began,
+    changed, resultRead, refusal, signalAborted: false}), text => t.diagnostic(text));
+});
+
+test('streamResultReporterKeepsTheActualMissedBoundaryAssertionAfterAGenuineCopyRefusal', async t => {
+  const f = await streamedFixture(t), before = fingerprint(f.database);
+  const refused = join(f.source, 'refused-result.db'); writeFileSync(refused, Buffer.alloc(20), {mode: 0o600});
+  const messages = [], began = performance.now(); let refusal;
+  await assert.rejects(withStreamResultDiagnostics(async () => {
+    await assert.rejects(async () => {
+      try { return await controller.runIsolatedReplay({...f, database: refused}); }
+      catch (error) {refusal = error; throw error;}
+    }, bad);
+    assert.equal(false, true, 'reach the changed result at the actual host boundary');
+  }, () => readFileSync(f.journal.path, 'utf8'), () => ({elapsedMilliseconds: performance.now() - began,
+    changed: false, resultRead: false, refusal, signalAborted: false}), text => messages.push(text)),
+  error => error.code === 'ERR_ASSERTION' && error.actual === false && error.expected === true);
+  assert.equal(messages.length, 1);
+  const report = JSON.parse(messages[0].slice('isolated-stream-result-refusal '.length));
+  assert.equal(report.resultRead, false); assert.equal(report.changed, false);
+  assert.equal(report.workerStarted, false); assert.notEqual(report.lastPreparation, 'unknown');
+  assert.equal(report.refusal.reason, 'isolated-replay');
+  for (const value of [f.root, f.source, f.journal.token]) assert.equal(messages[0].includes(value), false);
+  assert.deepEqual(readFileSync(refused), Buffer.alloc(20)); clean(f, before);
 });
 
 // Refusing a link after hashing it has already read outside the admitted code boundary.
