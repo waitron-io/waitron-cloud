@@ -5682,8 +5682,19 @@ Cloud follow-ups, each a separate small change with tests before implementation:
   With JavaScript disabled, the original waiting line remains above the static
   guidance; simplifying that presentation stays open. Actual visitor browser
   support and production timing remain unqualified.
-- R11: connect monitoring/certificate alert guidance to concrete owner actions;
-  local gateway and certificate tooling is still an unfinished operator-only path.
+- R11 delivered: public/staff alerts in Account and email name the existing remote
+  setup and refresh controls in English and Spanish. Failed checks ask you to
+  check venue internet, the selected hostname and setup status. Unknown monitoring
+  asks you to look for new observations without declaring an outage; certificate
+  warnings retain their separate dates and can accompany a passing route check.
+  Native mail and stubbed-browser checks cover the guidance, read-only setup/status
+  requests and later healthy evidence. The local monitoring guide explains the
+  checks and their limits; refreshing neither starts a probe nor repairs a route.
+  Gateway assignment, renewal configuration and certificate installation remain
+  operator tooling. Owner-facing repair controls, appliance certificate delivery
+  and live provider activation remain unfinished. No monitoring, certificate,
+  gateway, permission or delivery rule changes. Real database/gateway qualification
+  remains in CI and the Docker-based local proof.
 
 Authentication, recovery, tenant permissions and fiscal changes keep their full
 review and owner gates. This audit does not enable services or change policy.

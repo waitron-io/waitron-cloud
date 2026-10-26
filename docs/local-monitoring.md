@@ -47,6 +47,48 @@ Stopping Cloud access or removing a service suppresses its incidents and queued 
 It does not send a recovery message. Missing data gets a fresh grace if you enable the
 service again; known old contact or snapshot evidence retains its age.
 
+## Check a remote-access alert
+
+Open the Account link in the email and find the venue named in the alert.
+Public website and staff access have separate check results and dates.
+
+- If a recent check failed, check the venue's internet connection. Open **Set up
+  remote access** for that venue and check **Selected hostname** and the setup
+  status. The [remote setup guide](local-remote-access.md#set-up-your-venue-in-the-account-portal)
+  explains how to review a custom name's two DNS records. Do not change a working
+  name merely because an external check failed; changing it can interrupt access.
+- If monitoring is unknown, use **Refresh status** below the venue list to look
+  for new observations. A missing recent check does not establish an outage, and
+  refreshing does not start a probe or repair the route.
+- If a certificate expires soon, compare **Last external check** with **Verified
+  certificate expiry**. Check the selected hostname in remote setup, then refresh
+  the venue list to look for a newer observed expiry date. An expiry warning can
+  appear while the latest route check still passes.
+
+In Spanish, the controls are **Configurar acceso remoto** and **Actualizar estado**.
+You must still own the organisation to open remote setup for an active venue.
+These checks show the configuration and observations available to you; they do not
+prove the cause or resolve every alert. Gateway assignment, certificate renewal
+configuration and installation still use the local
+[operator tools](local-remote-access.md#keep-a-local-gateway-configured).
+Account does not offer those operations. Automatic delivery to customer appliances
+and live provider activation remain unfinished; these are product capabilities to
+build, not a paid support path.
+
+The focused browser check exercises both languages, themes and screen widths with
+synthetic server replies. It follows the named setup and refresh controls, checks
+the hostname and pending status, and preserves the distinction between failed,
+unknown and expiring-certificate results:
+
+```sh
+node --test apps/portal/test/monitoring-action-guidance-browser.test.ts
+node --test packages/registration/test/monitoring-action-mail.test.ts
+```
+
+These checks qualify the guidance and displayed evidence. The local gateway proof
+and database suites qualify the underlying monitoring and certificate behaviour;
+they need Docker and do not run as part of these focused commands.
+
 ## Run the monitor
 
 Apply every migration through `037_monitoring_quiet_escalation.sql`. Configure `DATABASE_URL` and the
