@@ -25,7 +25,8 @@ registration state, internal password sessions, session-backed Cloud approval an
 email-verification signup backend that creates the first organisation and business.
 Cloud password recovery and an encrypted PostgreSQL email queue are implemented
 internally, with a retry worker, authenticated TLS SMTP delivery and Mailpit for local
-email capture. The account HTTP API now provides signup, login, session activity,
+email capture. SMTP capture tests select by subject and recipient because concurrent
+database fixtures share the inbox. The account HTTP API now provides signup, login, session activity,
 logout and recovery with shared request limits, Origin/CSRF checks and bounded
 network handling. The bilingual account portal now covers signup, sign-in, sign-out
 and password recovery, served by that API with real browser and Mailpit tests.
