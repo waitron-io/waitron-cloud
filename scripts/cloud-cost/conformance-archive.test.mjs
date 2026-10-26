@@ -72,7 +72,14 @@ for(const outcome of ['success','http-failure','digest-mismatch','timeout','inte
       const ended=records.at(-1);
       const headers=records.filter(record=>record.event==='headers');
       if(outcome==='timeout')assert.deepEqual(headers,[]);
-      else {assert.equal(headers.length,1);assert.equal(headers[0].status,outcome==='http-failure'?503:200);assert.ok(records.indexOf(headers[0])<records.length-1);}
+      else {
+        const attempts=['http-failure','body-failure'].includes(outcome)?3:1;
+        assert.equal(headers.length,attempts);
+        for(const [index,header] of headers.entries()){
+          assert.equal(header.attempt,index+1);assert.equal(header.status,outcome==='http-failure'?503:200);
+          assert.ok(records.indexOf(header)<records.length-1);
+        }
+      }
       if(outcome==='success'){
         assert.equal(result.code,0);assert.equal(ended.event,'complete');assert.equal(ended.bytesReceived,bytes.length);
         assert.deepEqual(readFileSync(path),bytes);
