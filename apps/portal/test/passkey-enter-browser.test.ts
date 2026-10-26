@@ -97,6 +97,9 @@ for (const blocked of ['unsupported', 'cooldown'] as const) {
       const page = await browser.newPage();
       page.setDefaultTimeout(3000);
       await page.clock.install({time: new Date(at)}); await page.clock.pauseAt(new Date(at));
+      const authenticator = await page.context().newCDPSession(page);
+      await authenticator.send('WebAuthn.enable');
+      if (blocked === 'cooldown') await authenticator.send('WebAuthn.addVirtualAuthenticator', {options: {protocol: 'ctap2', transport: 'internal', hasResidentKey: true, hasUserVerification: true, isUserVerified: true, automaticPresenceSimulation: true}});
       if (blocked === 'unsupported') await page.addInitScript(() => {
         Object.defineProperty(window, 'PublicKeyCredential', {value: undefined});
       });
@@ -119,6 +122,7 @@ for (const blocked of ['unsupported', 'cooldown'] as const) {
       await page.waitForLoadState('networkidle');
       await field.fill(password);
       if (blocked === 'cooldown') {
+        assert.equal(await section.getByRole('button', {name: translations.en.passkeyAdd, exact: true}).count(), 1, 'fixture must offer Add before exercising its cooldown');
         const reply = page.waitForResponse('**/passkeys/registration/options');
         await field.press('Enter'); await reply;
         await section.getByRole('alert').filter({hasText: translations.en.limited}).waitFor();
@@ -142,6 +146,9 @@ test('Enter adds alongside an existing passkey and submits once for two immediat
   try {
     const page = await browser.newPage(); page.setDefaultTimeout(4000);
     await page.clock.install({time: new Date(at)}); await page.clock.pauseAt(new Date(at));
+    const authenticator = await page.context().newCDPSession(page);
+    await authenticator.send('WebAuthn.enable');
+    await authenticator.send('WebAuthn.addVirtualAuthenticator', {options: {protocol: 'ctap2', transport: 'internal', hasResidentKey: true, hasUserVerification: true, isUserVerified: true, automaticPresenceSimulation: true}});
     const writes: string[] = [];
     await page.route('https://portal.test/account', route => route.fulfill({contentType: 'text/html', body: '<div id="portal" class="portal"></div>'}));
     await page.route('**/api/account/**', route => {
@@ -158,6 +165,7 @@ test('Enter adds alongside an existing passkey and submits once for two immediat
     await section.getByRole('button', {name: translations.en.passkeyRemove, exact: true}).waitFor();
     await page.waitForLoadState('networkidle');
     await field.fill(password);
+    assert.equal(await section.getByRole('button', {name: translations.en.passkeyAdd, exact: true}).count(), 1, 'fixture must offer Add beside the saved passkey');
     const reply = page.waitForResponse(r => r.request().method() === 'POST');
     await field.evaluate(input => { for (let i = 0; i < 2; i++) input.dispatchEvent(new KeyboardEvent('keydown', {key: 'Enter', bubbles: true, composed: true, cancelable: true})); });
     await reply; await page.waitForLoadState('networkidle');

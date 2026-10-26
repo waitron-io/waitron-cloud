@@ -5084,8 +5084,9 @@ completes enrollment; Enter never chooses a passkey to remove. Stubbed API and
 virtual-authenticator browser checks cover English/Spanish, both themes and
 phone/desktop widths, blank passwords, modified or composing Enter, pending
 requests, rate limits and unsupported browsers. These are portal checks, not
-provider or production qualification. The authenticator password fields still
-need their own Enter handling, keeping explicit action choices intact.
+provider or production qualification. Each supported-browser fixture supplies
+its own virtual passkey device instead of relying on the host. The authenticator
+password fields still need Enter handling, keeping explicit action choices intact.
 
 ## Password-change notification recovery link (D261)
 
