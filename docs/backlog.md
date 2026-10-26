@@ -570,6 +570,16 @@ HTTP, revision and revocation assertion. PostgreSQL and HTTP journeys are
 qualified by CI while local Docker is unavailable. The historical CI clock values
 remain unknown.
 
+**Relay worker counter fixture timing.** CI `40266435807`, registration shard
+4/5, refused the initial operator-stop submission with `relay_counter_expired`:
+the counter ended at `1792987200000`, and the final database check observed
+`1792987200001`. Worker fixtures now start their unchanged one-hour counter
+window from PostgreSQL's setup timestamp, keeping handoff and stop checks
+independent of the wall-clock hour. Nine Docker-free cases execute the actual
+fixture configuration and counter calculation across that boundary, including
+an application clock two hours ahead or behind. Production expiry, limits and
+all existing worker assertions remain unchanged. Use current-head CI for the PostgreSQL worker journeys while local Docker is down.
+
 **Short lease fixture timing.** The capture object-write and installation-lock
 fixtures, and the replacement provider-grant fixture, derive expiry from one
 issuance timestamp. A Docker-free advancing-clock probe executes their actual
