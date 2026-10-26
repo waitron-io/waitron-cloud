@@ -1897,6 +1897,19 @@ notifications separately.
   Runtime code is unchanged. The original untraced Linux event and official
   Litestream shutdown still need attribution and qualification.
 
+  The replay writer-deadline check also refused during opening in
+  [main run 40259519210, receipts job 121368783695](https://github.com/waitron-io/waitron-cloud/actions/runs/40259519210/job/121368783695),
+  before its intended finish assertion. Slow fixture storage setup reproduces
+  that boundary: opening correctly consumes the whole-run 0.7-second budget.
+  Opening failures now report elapsed milliseconds and the existing bounded
+  stage/native trace, after collection, without private paths or child output.
+  Run `node --test --test-name-pattern='^replayStreamOpeningRefusal'
+  scripts/cloud-cost/replay-stream.test.mjs` for delayed storage, native failures
+  and diagnostic-output containment. The original assertions and deadlines stay
+  unchanged. The historical Linux startup stage and delay remain unknown;
+  an owner decision is needed before splitting the original real-clock check
+  from a controlled writer-running deadline check.
+
   **Remaining work and observations.** To complete the operating total, establish
   the missing inventory quantities and regional billing terms, representative
   venue/public activity, complete retained-object forecasts, recovery/alert/email

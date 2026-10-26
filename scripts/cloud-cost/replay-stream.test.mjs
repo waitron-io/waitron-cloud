@@ -10,6 +10,7 @@ import { join } from 'node:path';
 import { randomBytes, createHash } from 'node:crypto';
 import { createRequire } from 'node:module';
 import { spawn, spawnSync, execFileSync } from 'node:child_process';
+import { workerFailureTrace } from './worker-diagnostic.mjs';
 const require = createRequire(new URL('../../packages/backups/package.json', import.meta.url));
 const sdk = require('@aws-sdk/client-s3');
 const module = await import('./replay-stream.mjs').catch(error => {
@@ -150,7 +151,21 @@ process.once('SIGTERM',()=>{
 }
 async function open(t, f) {
   assert.equal(typeof module.openReplayStream, 'function', 'run and collect the native writer around phase measurements');
-  const run = await module.openReplayStream(f);
+  const began = performance.now(), trace = [];
+  let run;
+  try {
+    run = await module.openReplayStream({ ...f, onDiagnostic: event => {
+      if (trace.length < 32) trace.push(event);
+      return f.onDiagnostic?.(event);
+    } });
+  } catch (error) {
+    // Only the closed worker trace schema may reach CI; reporting cannot replace the refusal.
+    try { t.diagnostic('replay-opening-refusal ' + JSON.stringify({
+      elapsedMilliseconds: Math.min(1000000000, Math.max(0, Math.round(performance.now() - began))),
+      trace: workerFailureTrace(trace),
+    })); } catch { /* Retain the original failure when diagnostic output is unavailable. */ }
+    throw error;
+  }
   t.after(() => run.close().catch(error => assert.equal(error.message, bad.message))); return run;
 }
 const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
@@ -577,4 +592,55 @@ test('replayStreamIdleDeadlineCollectsWithoutAnotherCallerOperation', { timeout:
   clean(f);
   await assert.rejects(fetch(endpoint), error => error.cause?.code === 'ECONNREFUSED');
   await assert.rejects(run.finish({ expectedSales: 1 }), bad);
+});
+
+// A refusal before open returns must identify the last stage without exposing fixture data.
+test('replayStreamOpeningRefusalReportsItsStageAfterSlowStorageSetup', { timeout: 10000 }, async t => {
+  const f = await fixture(t, 'held-opening'), messages = [];
+  t.mock.method(t, 'diagnostic', message => messages.push(message));
+  const opening = open(t, { ...f, windowSeconds: 0.7 });
+  const refused = assert.rejects(opening, bad);
+  await f.heldInventory;
+  await wait(800);
+  f.releaseInventory();
+  await refused;
+  clean(f);
+  assert.equal(JSON.parse(readFileSync(f.journal.path, 'utf8')).localResources, undefined,
+    'the whole-run deadline must prevent native admission after delayed setup');
+  assert.equal(messages.length, 1, 'report the opening refusal once');
+  assert.ok(messages[0].startsWith('replay-opening-refusal '));
+  const report = JSON.parse(messages[0].slice('replay-opening-refusal '.length));
+  assert.deepEqual(Object.keys(report).sort(), ['elapsedMilliseconds', 'trace']);
+  assert.ok(Number.isSafeInteger(report.elapsedMilliseconds) && report.elapsedMilliseconds >= 700);
+  assert.deepEqual(report.trace, [
+    { kind: 'stream', stage: 'measurement-open' },
+    { kind: 'stream-refusal', stage: 'measurement-open' },
+  ]);
+  for (const privateValue of [f.source, f.root, f.journal.token, f.bucket])
+    assert.equal(messages[0].includes(privateValue), false);
+});
+
+for (const [mode, stage, operation, code, signal] of [
+  ['version', 'version', 'version', 0, null],
+  ['exit', 'replicate', 'replicate', 19, null],
+  ['hangup', 'replicate', 'replicate', null, 'other'],
+]) test('replayStreamOpeningRefusalReportsCollectedNativeEvidence_' + mode, async t => {
+  const f = await fixture(t, mode), messages = [];
+  t.mock.method(t, 'diagnostic', message => messages.push(message));
+  await assert.rejects(open(t, f), bad);
+  clean(f);
+  assert.equal(messages.length, 1);
+  const report = JSON.parse(messages[0].slice('replay-opening-refusal '.length));
+  assert.ok(report.trace.some(event => event.kind === 'stream-refusal' && event.stage === stage));
+  assert.ok(report.trace.some(event => event.kind === 'native' && event.operation === operation
+    && event.code === code && event.signal === signal));
+  for (const privateValue of [f.root, f.journal.token, 'PRIVATE_CHILD_STDOUT_CANARY', 'PRIVATE_CHILD_STDERR_CANARY'])
+    assert.equal(messages[0].includes(privateValue), false);
+});
+
+test('replayStreamOpeningRefusalSurvivesDiagnosticOutputFailure', async t => {
+  const f = await fixture(t, 'version');
+  t.mock.method(t, 'diagnostic', () => { throw Error('PRIVATE_REPORTER_FAILURE'); });
+  await assert.rejects(open(t, f), bad);
+  clean(f);
 });
