@@ -1763,7 +1763,17 @@ notifications separately.
   data property, without invoking accessors; native checks cover null and undefined
   refusals, hostile proxies, circular and non-serializable diagnostics, and failed
   output. Run `node --test scripts/cloud-cost/replay-diagnostics.test.mjs` for these
-  checks. Raw output, paths and exception text stay private. Generated failures
+  checks. Raw output, paths and exception text stay private. Diagnostic traces
+  and native keyword lists now require plain dense arrays with visible own data
+  indices. Trace fields must also remain visible when copied;
+  sparse arrays, accessors, proxies, custom properties and custom prototypes
+  refuse before executable properties run. This prevents a keyword getter from
+  changing an admitted flag into private text while the validated trace is copied.
+  Native checks reproduce that substitution and preserve the existing label/count
+  bounds and independent copies. Run
+  `node --test scripts/cloud-cost/worker-trace-arrays.test.mjs`.
+  This qualifies the in-process validator; it does not establish that an external
+  caller can supply such objects through the worker's JSON files. Generated failures
   exercise the worker boundary and malformed-trace refusals. If resource cleanup
   itself refuses, its error can still be generic; preserve the private journal's
   validated trace before fixture cleanup. Both historical paced failures remain
