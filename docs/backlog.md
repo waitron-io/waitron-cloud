@@ -4372,9 +4372,11 @@ Cloud follow-ups, each a separate small change with tests before implementation:
   disabled JavaScript gets a static explanation. Native HTTP, executed scripts
   and browser checks cover these outcomes. A failed page attempt ignores late
   replies and does not redirect; proof and access remain server decisions.
-  With JavaScript disabled, the original waiting line remains above the static
-  guidance; simplifying that presentation stays open. Actual visitor browser
-  support and production timing remain unqualified.
+  With JavaScript disabled, only the static guidance appears below the heading;
+  the waiting line appears when the browser-check script runs. Native Chromium
+  checks cover both languages, themes and phone/desktop widths, with and without
+  JavaScript, and retain visible retry guidance after a failed check. Actual visitor
+  browser support and production timing remain unqualified.
 - R11 delivered: public/staff alerts in Account and email name the existing remote
   setup and refresh controls in English and Spanish. Failed checks ask you to
   check venue internet, the selected hostname and setup status. Unknown monitoring
