@@ -7,6 +7,7 @@ type Request = <T>(path: string, body?: Record<string, unknown>) => Promise<ApiR
 export class AccountSecurityController {
   sessions: AccountSessionSummary[] = [];
   loaded = false;
+  loadAttempted = false;
   pending = false;
   retryAt = 0;
   error: keyof Copy | undefined;
@@ -25,7 +26,7 @@ export class AccountSecurityController {
 
   get waiting() { return Math.max(0, Math.ceil((this.retryAt - Date.now()) / 1000)); }
 
-  fence() { this.#generation++; this.pending = false; this.loaded = false; this.error = undefined; this.notice = undefined; }
+  fence() { this.#generation++; this.pending = false; this.loaded = false; this.loadAttempted = false; this.error = undefined; this.notice = undefined; }
 
   account(id: string | undefined) {
     if (id === this.#account) return;
@@ -48,6 +49,7 @@ export class AccountSecurityController {
   async load() {
     if (!this.#account || this.pending || this.waiting) return;
     const generation = this.#generation;
+    this.loadAttempted = true;
     this.pending = true; this.error = undefined; this.notice = undefined; this.#changed();
     const result = await this.#list(generation);
     if (generation !== this.#generation) return;
