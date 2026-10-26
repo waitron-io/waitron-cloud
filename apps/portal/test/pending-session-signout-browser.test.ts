@@ -27,6 +27,12 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
   const freshRequest=new Promise<void>(resolve=>{freshEntered=resolve;});
   try {
    const page=await browser.newPage({locale,colorScheme:theme,viewport:{width,height:900}}); page.setDefaultTimeout(4000);
+   const authenticator=await page.context().newCDPSession(page);
+   await authenticator.send('WebAuthn.enable');
+   await authenticator.send('WebAuthn.addVirtualAuthenticator',{options:{
+    protocol:'ctap2',transport:'internal',hasResidentKey:true,hasUserVerification:true,
+    isUserVerified:true,automaticPresenceSimulation:true,
+   }});
    const c=translations[locale]; let reads=0,ended=false;
    if(scenario==='rate')await page.clock.install({time:new Date('2030-01-01T12:00:00Z')});
    const writes:{path:string;body:unknown}[]=[];
