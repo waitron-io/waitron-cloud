@@ -5078,9 +5078,14 @@ Malformed names still show their field message before any DNS request, and pendi
 operations and server retry waits keep review disabled. English/Spanish browser
 checks cover both themes and phone/desktop widths.
 
-The passkey and authenticator password fields still need their own Enter handling.
-Cloud portal follow-up: connect each field to its existing review or submit action,
-keeping authority checks and explicit confirmations intact, with browser coverage.
+Press Enter in the passkey password field to choose Add a passkey, using the
+same password and disabled states as its button. Browser confirmation still
+completes enrollment; Enter never chooses a passkey to remove. Stubbed API and
+virtual-authenticator browser checks cover English/Spanish, both themes and
+phone/desktop widths, blank passwords, modified or composing Enter, pending
+requests, rate limits and unsupported browsers. These are portal checks, not
+provider or production qualification. The authenticator password fields still
+need their own Enter handling, keeping explicit action choices intact.
 
 ## Password-change notification recovery link (D261)
 
