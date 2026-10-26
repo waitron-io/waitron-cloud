@@ -1,3 +1,4 @@
+import {permissionActions} from './permission-actions.ts';
 import {formatDateTime} from './dates.ts';
 import {translationConsentScreen} from './translation-consent-screen.ts';
 import {remoteScreen} from './remote-screen.ts';
@@ -13,8 +14,8 @@ export function installationScreen(app:PortalApp){
  const states={unconfigured:c.serviceUnconfigured,provisioning:c.serviceProvisioning,ready:c.serviceReady,failed:c.serviceFailed};
  const health={unknown:c.healthUnknown,healthy:c.healthHealthy,degraded:c.healthDegraded,failed:c.healthFailed};
  return html`${alertScreen(app)}<section aria-label=${c.installations}><h2>${c.installations}</h2>
-  ${controller.error?html`<p role="alert">${c[controller.error]}</p>`:nothing}
-  ${app.diagnostics.error?html`<p role="alert">${c[app.diagnostics.error]}</p>`:nothing}
+  ${controller.error?html`<p role="alert">${c[controller.error]}</p>`:nothing}${permissionActions(app,controller.error)}
+  ${app.diagnostics.error?html`<p role="alert">${c[app.diagnostics.error]}</p>`:nothing}${permissionActions(app,app.diagnostics.error)}
   ${!controller.loaded?html`<p role="status">${c.wait}</p>`:!controller.installations.length&&!controller.error?html`<p>${c.noInstallations}</p>`:nothing}
   ${controller.organisations.length>1?html`<div class="business-choice"><label for="venue-organisation">${c.chooseOrganisation}</label><select id="venue-organisation" ?disabled=${controller.pending} @change=${(e:Event)=>controller.selectOrganisation((e.target as HTMLSelectElement).value)}>${controller.organisations.map(o=>html`<option value=${o.id} .selected=${o.id===controller.selectedOrganisation}>${o.name}</option>`)}</select></div>`:controller.organisations.length?html`<p>${controller.organisations[0]!.name}</p>`:nothing}
   ${usageScreen(app)}

@@ -28,7 +28,7 @@ export async function remoteAccessResponse(c:Context,options:{pool:Pool;origin:s
   const session=await resolveSession(client,token,{csrfToken,touch:false});
   // Match revocation's account/session/membership/installation order; hold ownership through commit.
   const permission=await client.query(`SELECT m.account_id FROM organisation_memberships m JOIN venues v ON v.organisation_id=m.organisation_id JOIN installations i ON i.venue_id=v.id WHERE i.id=$1 AND m.account_id=$2 AND m.is_owner FOR SHARE OF m`,[id,session.accountId]);
-  if(!permission.rowCount)throw new AccountHttpError(403,'forbidden');return session.accountId;
+  if(!permission.rowCount)throw new AccountHttpError(403,'permission_denied');return session.accountId;
  };
  const account=await transaction(pool,authorize);
  await consume([{scope:'remote-account',subject:account,limit:30,windowSeconds:60}]);

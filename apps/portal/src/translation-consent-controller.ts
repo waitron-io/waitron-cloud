@@ -25,6 +25,6 @@ export class TranslationConsentController {
  #failure(result:Extract<ApiResult<unknown>,{ok:false}>,write:boolean){
   this.retryAt=Math.max(this.retryAt,Date.now()+result.retryAfterMs);
   if(result.status===401||result.status===403)this.#clear();
-  this.error=result.status===429?'limited':result.status===401?'pairSession':result.status===403?'forbidden':write?'translationConsentUncertain':'unavailable';
+  this.error=result.status===429?'limited':result.status===401?'pairSession':result.status===403?(result.code==='permission_denied'?'permissionBusiness':'forbidden'):write?'translationConsentUncertain':'unavailable';
  }
 }

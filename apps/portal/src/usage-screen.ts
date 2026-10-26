@@ -1,3 +1,4 @@
+import {permissionActions} from './permission-actions.ts';
 import {html,nothing} from 'lit';
 import type {PortalApp} from './app.ts';
 import type {Locale} from './locale.ts';
@@ -25,7 +26,7 @@ export function usageScreen(app:PortalApp){
  const count=(value:string)=>formatCount(value,app.locale);
  const refresh=()=>{usage.refresh();void usage.load();};
  return html`<section class="usage" aria-label=${c.usageTitle}><h3>${c.usageTitle}</h3><p>${c.usageIntro}</p>
-  ${usage.error?html`<p role="alert">${c[usage.error]}</p>`:nothing}
+  ${usage.error?html`<p role="alert">${c[usage.error]}</p>`:nothing}${permissionActions(app,usage.error)}
   ${!summary?(usage.error?nothing:html`<p role="status">${usage.pending?c.wait:c.usageUnavailable}</p>`):html`
    ${summary.measuredThrough?html`<p>${c.usageMeasuredThrough}: <time datetime=${summary.measuredThrough}>${formatDateTime(summary.measuredThrough,app.locale)}</time>. ${c.usageMayLag}</p>`:html`<p role="status">${c.usagePending}</p>`}
    ${summary.latestEventAt?html`<p>${c.usageLatestEvent}: <time datetime=${summary.latestEventAt}>${formatDateTime(summary.latestEventAt,app.locale)}</time></p>`:html`<p>${c.usageNoEvents}</p>`}

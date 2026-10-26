@@ -79,7 +79,7 @@ test('a non-owner cannot list, agree or withdraw and another owner cannot cross 
  await db.pool.query('INSERT INTO organisation_memberships(account_id,organisation_id,can_register_venues,is_owner) VALUES($1,$2,false,false)',[member,v.organisationId]);
  const memberSession=await transaction(db.pool,c=>createSession(c,member));
  assert.deepEqual(await (await consent(memberSession)).json(),{consents:[]});
- for(const actor of [memberSession,other.session])for(const body of [agree(v.venueId),{venueId:v.venueId,choice:'withdraw'}])await status(await consent(actor,body),403,'forbidden');
+ for(const actor of [memberSession,other.session])for(const body of [agree(v.venueId),{venueId:v.venueId,choice:'withdraw'}])await status(await consent(actor,body),403,'permission_denied');
  const saved=await rows(v.venueId);assert.equal(saved.length,1);assert.equal(saved[0]!.withdrawn_at,null);
 });
 test('all owned venues are returned, including those without installations',async()=>{
@@ -93,7 +93,7 @@ test('an unverified owner sees no consents and cannot change them',async()=>{
  const {v,session}=await owner();
  await db.pool.query('UPDATE cloud_credentials SET email_verified_at=NULL WHERE account_id=$1',[v.accountId]);
  assert.deepEqual(await (await consent(session)).json(),{consents:[]});
- for(const body of [agree(v.venueId),{venueId:v.venueId,choice:'withdraw'}])await status(await consent(session,body),403,'forbidden');
+ for(const body of [agree(v.venueId),{venueId:v.venueId,choice:'withdraw'}])await status(await consent(session,body),403,'permission_denied');
  assert.equal((await rows(v.venueId)).length,0);
 });
 test('disabled and ended accounts cannot read or change consent',async()=>{
@@ -111,7 +111,7 @@ test('an unknown field, invalid choice, missing or stray version and invalid ven
   {...agree(v.venueId),choice:'maybe'},{venueId:v.venueId,choice:'agree'},{venueId:v.venueId,choice:'withdraw',consentVersion:'providers-2026-10-14'},
   {...agree(v.venueId),consentVersion:'providers-2026-01-01'},agree('not-a-venue'),{...agree(v.venueId),venueId:42},{...agree(v.venueId),consentVersion:null},[],null];
  for(const body of bodies)await status(await consent(session,body),400,'invalid_input');
- await status(await consent(session,agree(randomUUID())),403,'forbidden');
+ await status(await consent(session,agree(randomUUID())),403,'permission_denied');
  assert.equal((await rows(v.venueId)).length,0);
 });
 test('the account body retains the small reader and JSON encoding limits',async()=>{

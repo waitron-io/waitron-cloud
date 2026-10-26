@@ -12,7 +12,7 @@ export class InstallationController {
  selectOrganisation(id:string){if(this.pending||!this.organisations.some(o=>o.id===id))return;this.selectedOrganisation=id;this.confirming=undefined;this.#changed();}
  get waiting(){return Math.max(0,Math.ceil((this.retryAt-Date.now())/1000));}
  choose(id?:string){if(this.pending)return;this.confirming=this.installations.some(i=>i.installationId===id&&i.canRevoke&&!i.revokedAt)?id:undefined;this.error=undefined;this.#changed();}
- #failure(result:Extract<ApiResult<unknown>,{ok:false}>,write=false){this.retryAt=Math.max(this.retryAt,Date.now()+result.retryAfterMs);this.error=result.status===429?'limited':result.status===401?'pairSession':result.status===403?'forbidden':write?'stopUncertain':'unavailable';}
+ #failure(result:Extract<ApiResult<unknown>,{ok:false}>,write=false){this.retryAt=Math.max(this.retryAt,Date.now()+result.retryAfterMs);this.error=result.status===429?'limited':result.status===401?'pairSession':result.status===403?(result.code==='permission_denied'?'permissionBusiness':'forbidden'):write?'stopUncertain':'unavailable';}
  async load(){
   if(!this.#account||this.pending||this.waiting)return;const generation=this.#generation;this.pending=true;this.error=undefined;this.#changed();
   const result=await this.#request<{installations:AccountInstallation[]}>('/installations');if(generation!==this.#generation)return;this.pending=false;this.loaded=true;

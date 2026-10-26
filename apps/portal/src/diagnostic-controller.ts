@@ -27,6 +27,6 @@ export class DiagnosticController{
  }
  #failure(result:Extract<ApiResult<unknown>,{ok:false}>){
   this.retryAt=Math.max(this.retryAt,Date.now()+result.retryAfterMs);
-  this.error=result.status===429?'limited':result.status===401?'pairSession':result.status===403?'forbidden':'diagnosticUnavailable';
+  this.error=result.status===429?'limited':result.status===401?'pairSession':result.status===403?(result.code==='permission_denied'?'permissionBusiness':'forbidden'):'diagnosticUnavailable';
  }
 }
