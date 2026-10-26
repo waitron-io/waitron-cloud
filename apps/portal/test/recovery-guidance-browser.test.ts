@@ -26,7 +26,7 @@ const scenarios=[
  {action:'approve',status:409,code:'recovery_active',key:'recoveryActive',en:/original recovery link.*close/i,es:/enlace.*recuperación.*cierra/i},
  {action:'approve',status:409,code:'conflict',key:'recoveryConflict',en:/request status.*authorised source/i,es:/estado.*origen autorizado/i},
  {action:'replace',status:400,code:'confirmation_required',key:'recoveryReplacementConfirmation',en:/installation.*old server/i,es:/instalación.*servidor anterior/i},
- {action:'replace',status:409,code:'conflict',key:'recoveryConflict',en:/request status.*authorised source/i,es:/estado.*origen autorizado/i},
+ {action:'replace',status:409,code:'conflict',key:'recoveryReplacementConflict',en:/replacement details.*request status.*complete.*connection/i,es:/datos.*sustitución.*estado.*completado.*conexión/i},
  {action:'close',status:409,code:'approval_required',key:'recoveryApprovalRequired',en:/not been authorised.*request status.*expire/i,es:/no.*autorizada.*estado.*caduque/i},
 ] as const;
 
@@ -62,6 +62,8 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
     assert.deepEqual(calls.map(call=>call.path),['/api/account/recovery/inspect','/api/account/recovery/'+scenario.action]);
     if(scenario.code==='unverified'){
      await page.getByRole('button',{name:c.latestSnapshots,exact:true}).click();await page.waitForFunction(() => !(window as any).app.backups.pending);
+     assert.match(text,locale==='en'?/verified does not always mean compatible/i:/verificada no siempre significa compatible/i);
+     assert.doesNotMatch(text,/choose a verified, compatible|elige una verificada y compatible/i);
      assert.equal(snapshotReads,2);await page.getByLabel(c.chooseSnapshot,{exact:true}).selectOption(second);
      assert.equal(await page.getByLabel(c.recoveryStopped,{exact:true}).isChecked(),false);assert.equal(await page.getByLabel(c.recoveryAcceptLoss,{exact:true}).isChecked(),false);
      assert.equal(await page.getByRole('button',{name:c.recoveryApprove,exact:true}).isDisabled(),true);assert.equal(calls.length,2);

@@ -30,7 +30,7 @@ for(const action of ['inspect','approve','close','replace'] as const)for(const {
  const c=new RecoveryController(()=>{});c.open(id);c.account('owner');c.code=' 00123456 ';c.view=action==='approve'?pending:ready;
  c.choose(venueId,pointId);c.stopped=true;c.acceptLoss=true;c.confirmReplacement=true;
  await c[action]();
- assert.equal(c.error,code==='confirmation_required'&&action==='replace'?'recoveryReplacementConfirmation':error);
+ assert.equal(c.error,action==='replace'&&code==='confirmation_required'?'recoveryReplacementConfirmation':action==='replace'&&code==='conflict'?'recoveryReplacementConflict':error);
  assert.equal(c.uncertain,false);assert.equal(c.pending,false);assert.equal(c.view?.state,action==='approve'?'awaiting_owner':'approved');
  assert.equal(calls.length,1);assert.equal(calls[0]!.url,'/api/account/recovery/'+action);
  assert.equal(calls[0]!.options?.method,'POST');assert.equal(calls[0]!.options?.credentials,'same-origin');

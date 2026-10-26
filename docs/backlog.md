@@ -5619,7 +5619,10 @@ Cloud follow-ups, each a separate small change with tests before implementation:
   another open recovery, changed request bindings and missing approval in English
   and Spanish. Check request status reads the existing request without repeating
   a write; refreshing snapshots and choosing a different source still requires
-  both confirmations. An unapproved request can be left to expire. Another open
+  both confirmations. Replacement conflicts first ask you to check for completed
+  replacement; source refusals point to setup requirements without assuming the
+  snapshot is at fault or that verification guarantees compatibility. An unapproved
+  request can be left to expire. Another open
   recovery must be closed through its original link if it is no longer needed;
   this page does not list or close another request. Unknown replies and transport
   failures retain read-after-uncertain-write reconciliation. Native API/controller

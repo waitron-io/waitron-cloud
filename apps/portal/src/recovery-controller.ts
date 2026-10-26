@@ -39,7 +39,7 @@ export class RecoveryController {
    if(!result.ok){
     const refusals:Record<number,Record<string,keyof Copy>>={
      400:{confirmation_required:action==='replace'?'recoveryReplacementConfirmation':'recoveryConfirmation',unverified:'recoveryUnverified',invalid_input:'recoveryInput'},
-     409:{approval_required:'recoveryApprovalRequired',conflict:'recoveryConflict',target_not_fresh:'recoveryFreshTarget',recovery_active:'recoveryActive'},
+     409:{approval_required:'recoveryApprovalRequired',conflict:action==='replace'?'recoveryReplacementConflict':'recoveryConflict',target_not_fresh:'recoveryFreshTarget',recovery_active:'recoveryActive'},
     };
     this.retryAt=Math.max(this.retryAt,Date.now()+result.retryAfterMs);
     this.error=result.status===429?'limited':result.status===401?'pairSession':result.status===403?(result.code==='local_integration_only'?'recoveryTestOnly':'forbidden'):result.status===410?'recoveryExpired':refusals[result.status]?.[result.code]??'unavailable';
