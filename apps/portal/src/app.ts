@@ -120,7 +120,7 @@ export class PortalApp {
     this.alerts.account(state.kind === 'authenticated' ? state.accountId : undefined);
     if (['/account','/'].includes(this.path) && state.kind === 'authenticated' && !this.alerts.loaded && !this.alerts.loadAttempted) void this.alerts.load();
     this.translationConsent.account(state.kind === 'authenticated' ? state.accountId : undefined);
-    if (['/account','/'].includes(this.path) && state.kind === 'authenticated' && !this.translationConsent.loaded) void this.translationConsent.load();
+    if (['/account','/'].includes(this.path) && state.kind === 'authenticated' && !this.translationConsent.loaded && !this.translationConsent.loadAttempted) void this.translationConsent.load();
     this.remote.account(state.kind === 'authenticated' ? state.accountId : undefined);
     this.backups.account(state.kind === 'authenticated' ? state.accountId : undefined);
     this.installations.account(state.kind === 'authenticated' ? state.accountId : undefined);
@@ -182,6 +182,7 @@ export class PortalApp {
     this.#route++; this.path = path; this.passkeys.fence(); this.security.fence(); this.authenticator.fence(); this.fiscal.fence(); this.factorCodes = [];
     // Only failed preferences need a new navigation attempt; pending work keeps its attempt.
     if(!this.alerts.pending&&!this.alerts.loaded)this.alerts.loadAttempted=false;
+    if(!this.translationConsent.pending&&!this.translationConsent.loaded)this.translationConsent.loadAttempted=false;
     if (push) history.pushState(null, '', path);
     this.link = this.#capture();
     if (this.link.recoveryId || this.link.invalid) this.recovery.open(this.link.recoveryId);
