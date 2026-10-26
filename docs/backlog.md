@@ -4030,7 +4030,12 @@ Cloud follow-ups, each a separate small change with tests before implementation:
   reload guidance in one main content region. Native Chromium checks cover
   disabled JavaScript, a failed script download and a running check that fails,
   in both languages, themes and widths. Automated landmark checks run with
-  JavaScript enabled; these checks do not qualify screen-reader announcements.
+  JavaScript enabled. The waiting message and later failure share a status
+  region so assistive software can observe the change without moving your focus.
+  Chromium exposes polite, whole-message updates before and after challenge or
+  worker failure, with both languages, themes and widths covered. The reload
+  link stays available and access still requires proof. Actual screen-reader
+  announcements, other engines and production networks remain unqualified.
 - R11 delivered: public/staff alerts in Account and email name the existing remote
   setup and refresh controls in English and Spanish. Failed checks ask you to
   check venue internet, the selected hostname and setup status. Unknown monitoring
