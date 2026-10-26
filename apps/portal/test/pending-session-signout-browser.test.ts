@@ -83,6 +83,9 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
     if(scenario==='rate'){
      await page.evaluate(async()=>{await(window as unknown as {pendingSignoutApp:App}).pendingSignoutApp.session.check({fresh:true});});
      assert.equal(reads,3,'fresh checks cannot bypass the server wait');
+     const response=page.waitForResponse('**/api/account/session');releaseOld();await response;
+     await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
+     assert.equal(await page.getByRole('status').filter({hasText:c.sessionUnavailable}).count(),1,'the older snapshot cannot replace a newer refusal');
      await page.clock.fastForward(61_000);
     }
     await page.evaluate(async()=>{await(window as unknown as {pendingSignoutApp:App}).pendingSignoutApp.session.check();});
@@ -91,7 +94,7 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
    const expected=scenario==='expired'?c.sessionExpired:['navigate','new-session','unavailable','rate'].includes(scenario)?undefined:c.signedOut;
    if(expected)await page.getByRole('status').getByText(expected,{exact:true}).waitFor();
    else assert.equal(await page.getByRole('status').count(),0,'stale intent cannot label another navigation, session or passive check');
-   const oldResponse=scenario==='older-first'?undefined:page.waitForResponse('**/api/account/session');releaseOld();if(oldResponse)await oldResponse;
+   const oldResponse=['older-first','rate'].includes(scenario)?undefined:page.waitForResponse('**/api/account/session');releaseOld();if(oldResponse)await oldResponse;
    await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
    assert.equal(new URL(page.url()).pathname,scenario==='navigate'?'/signup':'/login','the late authenticated snapshot cannot restore the account');
    assert.equal(await page.getByText(c.signedOut,{exact:true}).count(),expected===c.signedOut?1:0);
