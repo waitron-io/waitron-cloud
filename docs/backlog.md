@@ -2958,10 +2958,12 @@ evaluate mobile notifications separately.
   retains the alert after the activity reply, with the original error checks and
   four-second waits unchanged. This addresses the repeated root-route timeout in
   CI40062082033, CI40076659731 and CI40080920398; those historical runs did not capture
-  the request ordering themselves. Other failed Account startup reads can still repeat
-  on activity. Whether they erase a section's message is unverified; reproduce that
-  sequence for authenticator, session, alert and translation-consent reads before
-  changing their retry behaviour. Qualification also exposed an independent rotation
+  the request ordering themselves. A failed authenticator status read now keeps its
+  message and explicit Retry when session activity completes, instead of silently
+  restarting the read and clearing the error. Retry remains disabled during a read
+  or server wait; returning to Account refreshes status. Other failed Account
+  startup reads may still repeat on activity; reproduce that sequence for session,
+  alert and translation-consent reads before changing their retry behaviour. Qualification also exposed an independent rotation
   wait-observer failure in
   `packages/registration/test/authenticator-keys.test.ts:108` (CI40057746479,
   job120764846013): it expected an account `FOR UPDATE` wait but sampled `FOR SHARE`.

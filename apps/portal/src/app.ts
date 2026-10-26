@@ -108,7 +108,7 @@ export class PortalApp {
     // Redirect before starting reads so navigation cannot discard their replies.
     if (this.path === '/' && state.kind === 'authenticated') this.navigate('/account');
     this.authenticator.account(state.kind === 'authenticated' ? state.accountId : undefined);
-    if (['/account','/'].includes(this.path) && state.kind === 'authenticated' && !this.authenticator.loaded) void this.authenticator.load();
+    if (['/account','/'].includes(this.path) && state.kind === 'authenticated' && !this.authenticator.loadAttempted) void this.authenticator.load();
     this.diagnostics.account(state.kind === 'authenticated' ? state.accountId : undefined);
     this.usage.account(state.kind === 'authenticated' ? state.accountId : undefined);
     this.security.account(state.kind === 'authenticated' ? state.accountId : undefined);

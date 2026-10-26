@@ -9,12 +9,12 @@ export class AuthenticatorController {
   enrolment:FactorEnrolment|undefined;
   status:FactorStatus|undefined;
   password='';proofKind:FactorProof['kind']='totp';proofCode='';confirmation='';
-  pending=false;loaded=false;retryAt=0;error:keyof Copy|undefined;
+  pending=false;loaded=false;loadAttempted=false;retryAt=0;error:keyof Copy|undefined;
   requiredField:'password'|'proof'|'confirmation'|undefined;
   #account:string|undefined;#generation=0;#request:Request;#changed:()=>void;
   constructor(changed:()=>void,request:Request=accountRequest){this.#changed=changed;this.#request=request;}
   #clearInput(){this.password='';this.proofCode='';this.confirmation='';}
-  fence(){this.#generation++;this.pending=false;this.loaded=false;this.error=undefined;this.requiredField=undefined;this.challenge=undefined;this.enrolment=undefined;this.status=undefined;this.#clearInput();}
+  fence(){this.#generation++;this.pending=false;this.loaded=false;this.loadAttempted=false;this.error=undefined;this.requiredField=undefined;this.challenge=undefined;this.enrolment=undefined;this.status=undefined;this.#clearInput();}
   account(id:string|undefined){if(id===this.#account)return;this.#account=id;this.fence();}
   #failure(result:Extract<ApiResult<unknown>,{ok:false}>,change=false){
     this.retryAt=Date.now()+result.retryAfterMs;
@@ -49,6 +49,7 @@ export class AuthenticatorController {
     if(result.status===401){this.challenge=undefined;this.#changed();return 'reconcile';}this.#changed();return false;
   }
   async load(){if(!this.#account)return;const generation=this.#start();if(generation===undefined)return;
+    this.loadAttempted=true;
     const result=await this.#request<FactorStatus>('/authenticator');if(generation!==this.#generation)return;
     this.pending=false;this.loaded=result.ok;if(result.ok)this.status=result.value;else this.#failure(result);this.#changed();}
   async refresh(){
