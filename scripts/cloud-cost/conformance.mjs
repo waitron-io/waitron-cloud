@@ -10,9 +10,13 @@ export function conformanceMatrix() {
   const first='^(?:complete|tampered|refused|stack|genuine(?:StorageTraffic|ArchiveAnd|VersionAnd|LitestreamRequestLogs))';
   const second='^genuine(?:LitestreamTransport|LitestreamStorage|StorageReplacement|NativeStreamHistories|SdkBulk|NativeVersionHistories|PinnedLitestream|NativeBatchListener)';
   const patterns=[first,second,'^(?!(?:'+first+'|'+second+'))'];
+  const isolatedFirst='^isolatedController',isolatedSecond='^(?:isolatedHost|streamResultReporter)';
+  const isolatedPatterns=[isolatedFirst,isolatedSecond,'^(?!(?:'+isolatedFirst+'|'+isolatedSecond+'))'];
   // The last group includes new case names so additions cannot disappear from CI.
   return conformanceFiles().flatMap(file=>file==='stack-conformance.test.mjs'
     ?patterns.map((pattern,index)=>({file,pattern,group:`${index+1}/3`,...(index===2?{skipPattern:first+'|'+second}:{})}))
+    :file==='isolated-replay-conformance.test.mjs'
+    ?isolatedPatterns.map((pattern,index)=>({file,pattern,group:`${index+1}/3`,...(index===2?{skipPattern:isolatedFirst+'|'+isolatedSecond}:{})}))
     :[{file,pattern:'.',group:'1/1'}]);
 }
 
