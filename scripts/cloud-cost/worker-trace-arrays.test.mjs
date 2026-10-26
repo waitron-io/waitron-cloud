@@ -8,7 +8,7 @@ const native = flags => ({ kind: 'native', operation: 'replicate', code: 1,
 
 // Index accessors can change a validated keyword into private text during copying.
 for (const location of ['trace', 'flags']) {
-  for (const shape of ['sparse', 'accessor', 'extra', 'symbol', 'nonenumerable',
+  for (const shape of ['sparse', 'accessor', 'extra', 'symbol', 'nonenumerable', 'hiddenIndex',
     'prototype', 'iterator', 'every', 'proxy', 'revokedProxy']) {
     test(`workerTraceRejectsNonDataArray_${location}_${shape}`, () => {
       let calls = 0;
@@ -20,6 +20,7 @@ for (const location of ['trace', 'flags']) {
       if (shape === 'extra') array.privateText = 'PRIVATE_ARRAY_CANARY';
       if (shape === 'symbol') array[Symbol('PRIVATE_ARRAY_CANARY')] = true;
       if (shape === 'nonenumerable') Object.defineProperty(array, 'privateText', { value: 'PRIVATE_ARRAY_CANARY' });
+      if (shape === 'hiddenIndex') Object.defineProperty(array, 0, { enumerable: false });
       if (shape === 'prototype') Object.setPrototypeOf(array, Object.create(Array.prototype));
       if (shape === 'iterator') Object.defineProperty(array, Symbol.iterator, {
         value: function* () { calls++; yield location === 'trace' ? native(['error']) : 'error'; },
@@ -61,9 +62,20 @@ test('workerTraceRejectsProxyRecordsWithoutReadingThem', () => {
   assert.equal(reads, 0);
 });
 
+for (const [kind, key] of [['stream', 'kind'], ['stream', 'stage'],
+  ...['kind', 'operation', 'code', 'signal', 'stderrBytes', 'stderrFlags'].map(key => ['native', key])]) {
+  test(`workerTraceRejectsFieldsThatDisappearWhenCopied_${kind}_${key}`, () => {
+    const event = kind === 'native' ? native(['error']) : { kind: 'stream', stage: 'version' };
+    Object.defineProperty(event, key, { enumerable: false });
+    assert.throws(() => workerFailureTrace([event]), bad);
+  });
+}
+
 test('workerTraceKeepsDenseBoundaryArraysAndReturnsAnIndependentCopy', () => {
   assert.deepEqual(workerFailureTrace([]), []);
   assert.deepEqual(workerFailureTrace([native([])]), [native([])]);
+  assert.deepEqual(workerFailureTrace(Object.freeze([Object.freeze(native(Object.freeze(['error'])))])),
+    [native(['error'])]);
   const flags = ['error', 'checksum', 'sqlite', 'wal', 'snapshot', 'compaction'];
   const source = Array.from({ length: 32 }, () => native([...flags]));
   const result = workerFailureTrace(source);
@@ -73,4 +85,8 @@ test('workerTraceKeepsDenseBoundaryArraysAndReturnsAnIndependentCopy', () => {
   source[0].stderrFlags[0] = 'PRIVATE_LATER_VALUE'; source.length = 0;
   assert.equal(result.length, 32);
   assert.deepEqual(result[0].stderrFlags, ['error', 'checksum', 'sqlite', 'wal', 'snapshot', 'compaction']);
+});
+
+test('workerTraceStillRefusesDuplicateNativeKeywords', () => {
+  assert.throws(() => workerFailureTrace([native(['error', 'error'])]), bad);
 });

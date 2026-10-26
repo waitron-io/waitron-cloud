@@ -1764,7 +1764,8 @@ notifications separately.
   refusals, hostile proxies, circular and non-serializable diagnostics, and failed
   output. Run `node --test scripts/cloud-cost/replay-diagnostics.test.mjs` for these
   checks. Raw output, paths and exception text stay private. Diagnostic traces
-  and native keyword lists now require plain dense arrays with own data indices;
+  and native keyword lists now require plain dense arrays with visible own data
+  indices. Trace fields must also remain visible when copied;
   sparse arrays, accessors, proxies, custom properties and custom prototypes
   refuse before executable properties run. This prevents a keyword getter from
   changing an admitted flag into private text while the validated trace is copied.

@@ -21,14 +21,17 @@ export function workerFailureTrace(value) {
     need(value && Object.getPrototypeOf(value) === Object.prototype);
     const found = Reflect.ownKeys(value);
     need(found.length === keys.length && found.every(key => keys.includes(key)
+      && Object.getOwnPropertyDescriptor(value, key).enumerable
       && Object.getOwnPropertyDescriptor(value, key).get === undefined));
   };
   const array = (value, limit) => {
     need(!isProxy(value) && Array.isArray(value) && Object.getPrototypeOf(value) === Array.prototype);
     need(value.length <= limit && Reflect.ownKeys(value).length === value.length + 1);
-    // Dense own data indices keep validation and copying on the same fixed values.
-    for (let i = 0; i < value.length; i++)
-      need(Object.hasOwn(Object.getOwnPropertyDescriptor(value, String(i)) ?? {}, 'value'));
+    // Copying omits hidden indices; visible own data indices preserve validated values.
+    for (let i = 0; i < value.length; i++) {
+      const entry = Object.getOwnPropertyDescriptor(value, String(i));
+      need(entry?.enumerable && Object.hasOwn(entry, 'value'));
+    }
   };
   array(value, 32);
   for (const event of value) {
