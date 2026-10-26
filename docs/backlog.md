@@ -2961,9 +2961,17 @@ evaluate mobile notifications separately.
   the request ordering themselves. A failed authenticator status read now keeps its
   message and explicit Retry when session activity completes, instead of silently
   restarting the read and clearing the error. Retry remains disabled during a read
-  or server wait; returning to Account refreshes status. Other failed Account
-  startup reads may still repeat on activity; reproduce that sequence for session,
-  alert and translation-consent reads before changing their retry behaviour. Qualification also exposed an independent rotation
+  or server wait; returning to Account refreshes status.
+  A failed session-list read also keeps its alert and explicit Retry when session
+  activity completes. Retry cannot duplicate a pending read or bypass the server's
+  wait. Returning to Account and changing accounts still start a fresh list read.
+  Stubbed Chromium checks cover both languages, themes and phone/desktop widths;
+  session revocation and uncertain-reply reconciliation keep their existing checks.
+  If revocation and its follow-up list read both fail, activity keeps the uncertain
+  message and Retry too. Retry reads the list without sending the revoke again.
+  Other failed Account startup reads may still repeat on activity; reproduce that
+  sequence for alert and translation-consent reads before changing their retry
+  behaviour. Qualification also exposed an independent rotation
   wait-observer failure in
   `packages/registration/test/authenticator-keys.test.ts:108` (CI40057746479,
   job120764846013): it expected an account `FOR UPDATE` wait but sampled `FOR SHARE`.
