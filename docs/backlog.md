@@ -2973,7 +2973,9 @@ evaluate mobile notifications separately.
   when session activity completes, including after a server wait ends. Loading
   cannot duplicate a pending read or bypass the wait. Navigation can retry failed
   preferences while keeping a pending read and already loaded choices; changing
-  accounts discards old replies. Save and uncertain-save handling stay unchanged.
+  accounts discards old replies. A refused Save keeps its message after navigation
+  and activity; Load reads preferences without repeating the refused save.
+  Uncertain-save handling keeps its existing checks.
   Stubbed Chromium checks cover both languages, themes and phone/desktop widths.
   Translation-consent startup reads may still repeat on activity; reproduce that
   sequence before changing their retry behaviour. The authenticator-rotation lock probe now reads only this

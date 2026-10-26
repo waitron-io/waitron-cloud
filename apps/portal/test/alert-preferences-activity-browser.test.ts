@@ -172,3 +172,49 @@ test('navigation during an alert read preserves its attempt and later failure', 
     assert.equal(await section.getByRole('button', {name: translations.en.alertsLoad, exact: true}).isEnabled(), true);
   } finally {releaseRead(); await browser.close();}
 });
+
+
+for (const status of [401, 403]) {
+  test(`a refused alert save (${status}) after navigation stays visible until explicit Load`, async () => {
+    const browser = await chromium.launch({headless: true});
+    let releaseActivity!: () => void;
+    const activityReply = new Promise<void>(resolve => {releaseActivity = resolve;});
+    try {
+      const page = await browser.newPage(); page.setDefaultTimeout(4000);
+      await page.clock.install({time: new Date(at)}); await page.clock.pauseAt(new Date(at));
+      const c = translations.en; let reads = 0, writes = 0, sessionReads = 0;
+      await page.route('https://portal.test/account', route => route.fulfill({contentType: 'text/html', body: '<div id="portal" class="portal"></div>'}));
+      await page.route('**/api/account/**', async route => {
+        const request = route.request(), path = new URL(request.url()).pathname.replace('/api/account', '');
+        if (path === '/session') return route.fulfill({json: {accountId: 'owner', expiresAt: ++sessionReads === 1 ? expiresAt : '2030-01-03T00:00:00.000Z'}});
+        if (path === '/session/activity') {await activityReply; return route.fulfill({json: {accountId: 'owner', expiresAt: '2030-01-02T00:00:00.000Z'}});}
+        if (path === '/alerts') {
+          if (request.method() === 'POST') {writes++; return route.fulfill({status, json: {error: status === 401 ? 'unauthenticated' : 'forbidden'}});}
+          reads++; return route.fulfill({json: {enabled: true, locale: 'es'}});
+        }
+        if (path === '/installations') return route.fulfill({json: {installations: []}});
+        return route.fulfill({status: 503, json: {error: 'temporarily_unavailable'}});
+      });
+      await page.goto('https://portal.test/account'); await page.addScriptTag({content: bundle.outputFiles[0]!.text});
+      const section = page.getByRole('region', {name: c.serviceAlerts, exact: true});
+      const choice = section.getByRole('checkbox', {name: c.alertsReceive, exact: true});
+      await choice.waitFor();
+      await page.evaluate(() => (window as unknown as {alertActivityApp: {navigate(path: string): void}}).alertActivityApp.navigate('/account'));
+      await page.waitForFunction(() => (window as unknown as {alertActivityApp: {session: {state: {expiresAt?: string}}}}).alertActivityApp.session.state.expiresAt === '2030-01-03T00:00:00.000Z');
+      const activityRequest = page.waitForRequest('**/api/account/session/activity');
+      await choice.uncheck(); await activityRequest;
+      await section.getByRole('button', {name: c.alertsSave, exact: true}).click();
+      const refusal = section.getByRole('alert').getByText(status === 401 ? c.pairSession : c.forbidden, {exact: true});
+      await refusal.waitFor(); assert.equal(await choice.count(), 0, 'a refused save clears private choices');
+      const activityResponse = page.waitForResponse('**/api/account/session/activity');
+      releaseActivity(); await (await activityResponse).finished();
+      await page.waitForFunction(() => (window as unknown as {alertActivityApp: {session: {state: {expiresAt?: string}}}}).alertActivityApp.session.state.expiresAt === '2030-01-02T00:00:00.000Z');
+      await page.waitForFunction(() => !(window as unknown as {alertActivityApp: {alerts: {pending: boolean}}}).alertActivityApp.alerts.pending);
+      assert.equal(reads, 1, 'activity cannot replace a refused save with an automatic read after navigation');
+      assert.equal(await refusal.count(), 1);
+      await section.getByRole('button', {name: c.alertsLoad, exact: true}).click();
+      await choice.waitFor(); assert.equal(reads, 2); assert.equal(writes, 1, 'Load never repeats the refused save');
+      assert.equal(await section.getByRole('alert').count(), 0);
+    } finally {releaseActivity(); await browser.close();}
+  });
+}

@@ -180,8 +180,8 @@ export class PortalApp {
   navigate(path: string, push = true) {
     this.#signOutCheck = undefined;
     this.#route++; this.path = path; this.passkeys.fence(); this.security.fence(); this.authenticator.fence(); this.fiscal.fence(); this.factorCodes = [];
-    // Navigation can retry failed preferences; a pending read already owns its attempt.
-    if(!this.alerts.pending)this.alerts.loadAttempted=false;
+    // Only failed preferences need a new navigation attempt; pending work keeps its attempt.
+    if(!this.alerts.pending&&!this.alerts.loaded)this.alerts.loadAttempted=false;
     if (push) history.pushState(null, '', path);
     this.link = this.#capture();
     if (this.link.recoveryId || this.link.invalid) this.recovery.open(this.link.recoveryId);
