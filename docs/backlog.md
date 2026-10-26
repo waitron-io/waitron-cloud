@@ -4081,6 +4081,11 @@ notifications separately.
   forms. Removing, narrowing or shifting each new subnet fails these checks;
   embedded public IPv4 and other address decisions retain their classification.
   The former `100:1::1` and `1000::1` acceptance checks now require refusal.
+  The probe also refuses the returned 6bone range `3ffe::/16`, including its
+  former Teredo allocation. Native tests cover both ends, the midpoint and
+  uppercase, expanded, dotted and scoped forms. Removing or narrowing this
+  refusal fails the tests; other address decisions retain their classification.
+  See the [IANA global-unicast registry](https://www.iana.org/assignments/ipv6-unicast-address-assignments).
   Actual routing, loopback reachability and the broader policy for special-purpose
   allocations inside global unicast space remain unqualified. See the
   [IANA address-space registry](https://www.iana.org/assignments/ipv6-address-space).
