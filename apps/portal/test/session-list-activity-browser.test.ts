@@ -132,3 +132,48 @@ for (const scenario of ['cooldown', 'new account', 'blocked startup'] as const) 
     } finally { await browser.close(); }
   });
 }
+
+// Losing both replies must leave reconciliation explicit without repeating the revoke.
+test('session activity preserves an uncertain revoke when its follow-up list failed', async () => {
+  const browser = await chromium.launch({headless: true});
+  let releaseActivity!: () => void;
+  const activityReply = new Promise<void>(resolve => {releaseActivity = resolve;});
+  try {
+    const page = await browser.newPage(); page.setDefaultTimeout(4000);
+    await page.clock.install({time: new Date(at)}); await page.clock.pauseAt(new Date(at));
+    const c = translations.en; let reads = 0, revokes = 0;
+    const other = {...current, id: '22345678-1234-4234-8234-123456789abc', current: false};
+    await page.route('https://portal.test/account', route => route.fulfill({contentType: 'text/html', body: '<div id="portal" class="portal"></div>'}));
+    await page.route('**/api/account/**', async route => {
+      const path = new URL(route.request().url()).pathname.replace('/api/account', '');
+      if (path === '/session') return route.fulfill({json: {accountId: 'owner', expiresAt}});
+      if (path === '/session/activity') {await activityReply; return route.fulfill({json: {accountId: 'owner', expiresAt: '2030-01-02T00:00:00.000Z'}});}
+      if (path === '/sessions') {
+        if (++reads === 2) return route.fulfill({status: 503, json: {error: 'temporarily_unavailable'}});
+        return route.fulfill({json: {sessions: reads === 1 ? [current, other] : [current]}});
+      }
+      if (path === '/sessions/revoke') {
+        assert.deepEqual(route.request().postDataJSON(), {id: other.id}); revokes++;
+        return route.fulfill({status: 503, json: {error: 'temporarily_unavailable'}});
+      }
+      if (path === '/installations') return route.fulfill({json: {installations: []}});
+      return route.fulfill({status: 503, json: {error: 'temporarily_unavailable'}});
+    });
+    await page.goto('https://portal.test/account'); await page.addScriptTag({content: bundle.outputFiles[0]!.text});
+    const section = page.locator('.sessions'), alert = section.getByRole('alert');
+    const activityRequest = page.waitForRequest('**/api/account/session/activity');
+    await section.getByRole('button', {name: c.sessionRevoke, exact: true}).click(); await activityRequest;
+    await alert.getByText(c.sessionRevokeUncertain, {exact: true}).waitFor();
+    assert.equal(reads, 2); assert.equal(revokes, 1);
+    const activityResponse = page.waitForResponse('**/api/account/session/activity');
+    releaseActivity(); await (await activityResponse).finished();
+    await page.waitForFunction(() => (window as unknown as {sessionListApp: {session: {state: {expiresAt?: string}}}}).sessionListApp.session.state.expiresAt === '2030-01-02T00:00:00.000Z');
+    assert.equal(await alert.getByText(c.sessionRevokeUncertain, {exact: true}).count(), 1, 'activity preserves the uncertain revoke message');
+    assert.equal(reads, 2, 'activity cannot silently reconcile an uncertain revoke');
+    await section.getByRole('button', {name: c.retry, exact: true}).click();
+    await section.getByText(c.currentSession, {exact: true}).waitFor();
+    assert.equal(reads, 3); assert.equal(revokes, 1, 'explicit Retry only reads the list');
+    assert.equal(await alert.count(), 0);
+    assert.equal(await section.getByText(c.otherSession, {exact: true}).count(), 0);
+  } finally {releaseActivity(); await browser.close();}
+});

@@ -2967,6 +2967,8 @@ evaluate mobile notifications separately.
   wait. Returning to Account and changing accounts still start a fresh list read.
   Stubbed Chromium checks cover both languages, themes and phone/desktop widths;
   session revocation and uncertain-reply reconciliation keep their existing checks.
+  If revocation and its follow-up list read both fail, activity keeps the uncertain
+  message and Retry too. Retry reads the list without sending the revoke again.
   Other failed Account startup reads may still repeat on activity; reproduce that
   sequence for alert and translation-consent reads before changing their retry
   behaviour. Qualification also exposed an independent rotation
