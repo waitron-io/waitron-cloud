@@ -279,11 +279,53 @@ test('replayStreamRefusesAnEmptyReplayEvenWhenRestoreAlsoContainsZeroSales', asy
   await assert.rejects(run.finish({ expectedSales: 0 }), bad); clean(f);
 });
 
-// A deadline covers the whole measurement, rather than restarting for each native child.
-test('replayStreamDeadlineStopsTheWriterBeforeACompleteLookingResultCanEscape', async t => {
-  const f = await fixture(t), run = await open(t, { ...f, windowSeconds: 0.7 });
-  await upload(f); await wait(800);
+// Opening consumes the whole-run budget and may refuse before a writer is ready.
+test('replayStreamRealClockDeadlineRefusesDuringOpeningOrBeforeACompleteLookingResultCanEscape', async t => {
+  const f = await fixture(t), original = readFileSync(f.database), began = performance.now();
+  let run, endpoint;
+  const observedSdk = { ...sdk, S3Client: class extends sdk.S3Client {
+    constructor(options) { super(options); endpoint = options.endpoint; }
+  } };
+  try { run = await open(t, { ...f, sdk: observedSdk, windowSeconds: 0.7 }); }
+  catch (error) {
+    assert.equal(error.message, bad.message);
+    assert.ok(performance.now() - began >= 700, 'an early opening failure is not a deadline refusal');
+  }
+  if (run) {
+    await upload(f); await wait(800);
+    await assert.rejects(run.finish({ expectedSales: 1 }), bad); await run.close();
+  }
+  clean(f);
+  assert.deepEqual(readFileSync(f.database), original, 'deadline collection preserves the source database');
+  assert.equal(typeof endpoint, 'string');
+  await assert.rejects(fetch(endpoint), error => error.cause?.code === 'ECONNREFUSED');
+});
+
+// Hold only the 0.7-second callback until a real writer is ready; all other timers remain real.
+test('replayStreamDeadlineStopsTheWriterBeforeACompleteLookingResultCanEscape', { timeout: 10000 }, async t => {
+  const f = await fixture(t), original = readFileSync(f.database), realTimeout = globalThis.setTimeout;
+  let expire;
+  t.mock.method(globalThis, 'setTimeout', (callback, milliseconds, ...args) => {
+    if (milliseconds !== 700) return realTimeout(callback, milliseconds, ...args);
+    const timer = realTimeout(() => {}, milliseconds);
+    expire = () => { clearTimeout(timer); callback(...args); };
+    return timer;
+  });
+  const run = await open(t, { ...f, windowSeconds: 0.7 });
+  await upload(f);
+  const writers = JSON.parse(readFileSync(f.journal.path, 'utf8')).localResources
+    .filter(entry => entry.kind === 'stream-process' && entry.state === 'started' && entry.operation === 'replicate');
+  assert.equal(writers.length, 1); process.kill(writers[0].pid, 0);
+  const endpoint = JSON.parse(readFileSync(join(f.root, 'native-stream/stream.json'), 'utf8')).dbs[0].replica.endpoint;
+  assert.equal(typeof expire, 'function', 'the unchanged 0.7-second deadline must be armed');
+  expire();
+  for (let n = 0; n < 500 && existsSync(join(f.root, 'native-stream')); n++)
+    await new Promise(resolve => realTimeout(resolve, 10));
+  // Check before finish or close, which would otherwise hide missing deadline collection.
+  clean(f);
+  await assert.rejects(fetch(endpoint), error => error.cause?.code === 'ECONNREFUSED');
   await assert.rejects(run.finish({ expectedSales: 1 }), bad); await run.close(); clean(f);
+  assert.deepEqual(readFileSync(f.database), original, 'deadline collection preserves the source database');
 });
 
 test('replayStreamCleanupRefusesAReplacedScratchDirectory', async t => {
