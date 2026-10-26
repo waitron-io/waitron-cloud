@@ -64,7 +64,8 @@ export class PortalApp {
     this.security = new AccountSecurityController(() => this.draw(), async reason => {
       const session = this.session;
       if (reason === 'signedOut') this.#signOutCheck = session;
-      try { await session.check(); }
+      // Revocation needs a read started after the write, not an older session snapshot.
+      try { await session.check({fresh: reason === 'signedOut'}); }
       finally { if (this.#signOutCheck === session) this.#signOutCheck = undefined; }
     });
     void this.passkeys.checkSupport();

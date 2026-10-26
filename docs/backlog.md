@@ -2876,8 +2876,13 @@ implementation or production evidence.
   and browser tab. If the check fails, that heading stays above the retry message.
   Stubbed Chromium checks cover both languages, themes and phone/desktop widths,
   retries and the existing redirects to sign-in or Account.
-  Whether an already pending session check can suppress this notice is unverified;
-  reproduce that request ordering before changing how session reads share a reply. Passkey rows
+  Revoking your current session starts a fresh session check even if an older
+  read is pending. That older snapshot cannot replace the newer result or hide
+  the sign-out notice. Ordinary passive checks still share a pending read; server
+  waits, expiry feedback, navigation and new-session fences stay in force.
+  Stubbed Chromium checks cover held replies and lost revocation replies in both
+  languages, themes and phone/desktop widths. Database authority runs in CI.
+  Passkey rows
   show their nullable last-use time. English and Spanish Chromium checks cover phone and
   desktop layouts, stale authority, concurrent logout/revocation, account isolation and
   lost replies. The [bounded history cleanup command](history-cleanup.md) now previews and

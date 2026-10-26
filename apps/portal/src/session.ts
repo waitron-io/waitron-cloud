@@ -34,9 +34,9 @@ export class PortalSession {
     this.#set(result.ok ? {kind: 'authenticated', ...result.value}
       : result.status === 401 ? {kind: 'anonymous', ...(result.code === 'session_expired' ? {expired: true as const} : {})} : {kind: 'unavailable'});
   }
-  check(): Promise<void> {
+  check({fresh = false}: {fresh?: boolean} = {}): Promise<void> {
     if (this.#disposed || Date.now() < this.retryAt) return Promise.resolve();
-    if (this.#pending) return this.#pending;
+    if (this.#pending && !fresh) return this.#pending;
     const generation = this.#generation; const sequence = ++this.#sequence;
     const pending = accountRequest<Session>('/session').then(result => {
       if (generation === this.#generation) this.#accept(result, sequence);
