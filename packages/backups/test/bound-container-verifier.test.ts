@@ -20,9 +20,21 @@ let image:string,directory:string;
 const key={version:1,reference:'key-1',secret:'private-fixture-key'};
 before(async()=>{
  directory=await mkdtemp(join(tmpdir(),'cloud-bound-docker-'));
- image= docker('build','-q','-t',tag,'-f',join(root,'packages/backups/test/container-fixture/Bound.Dockerfile'),root);
+ const args=['build','--progress=plain','--iidfile',join(directory,'image-id'),'-t',tag,'-f',join(root,'packages/backups/test/container-fixture/Bound.Dockerfile'),root],started=performance.now();
+ try{docker(...args);image=(await readFile(join(directory,'image-id'),'utf8')).trim();}
+ catch(error){
+  const failure=error as {status?:number;signal?:string;code?:string;stderr?:string};
+  // The runner can hit its job deadline before printing the hook's final error summary.
+  process.stderr.write('backup fixture build failed: '+JSON.stringify({command:['docker',...args],elapsedMs:Math.round(performance.now()-started),status:failure.status,signal:failure.signal,code:failure.code,stderrTail:String(failure.stderr??'').slice(-8192)})+'\n');
+  throw error;
+ }
 },{timeout:150000});
-after(async()=>{docker('image','rm',tag);await rm(directory,{recursive:true,force:true});});
+after(async()=>{
+ try{
+  // A failed build may have tagged its image; try only our unique tag without another two-minute wait.
+  execFileSync('docker',['image','rm',tag],{encoding:'utf8',timeout:image?120000:1000,stdio:['pipe','pipe','pipe']});
+ }finally{if(directory)await rm(directory,{recursive:true,force:true});}
+});
 async function setup(extra:object={}){
  assert.equal(typeof factory.createBoundContainerWaitronVerifier,'function','bound container factory is missing');
  const controlDirectory=join(directory,randomUUID()),controller=await openVerifierController({directory:controlDirectory,owner,image});
