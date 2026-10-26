@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import {randomBytes, randomUUID} from 'node:crypto';
 import {test} from 'node:test';
+import type {Request} from 'playwright';
 import {hashSecret} from '@waitron-cloud/identity';
 import {addVirtualAuthenticator, startPortalFixture} from './fixtures.ts';
 import {translations} from '../src/locale.ts';
@@ -90,7 +91,7 @@ test('lost session-revoke replies reconcile the list and current-session state',
   } finally { await f.close(); }
 });
 
-test('sign out remains available while a passkey prompt is open', async () => {
+test('sign out remains available while a passkey prompt is open', async t => {
   const f = await startPortalFixture();
   try {
     const account = {id: randomUUID(), email: `security-pending-${randomUUID()}@example.test`};
@@ -99,27 +100,52 @@ test('sign out remains available while a passkey prompt is open', async () => {
       [account.id, account.email, await hashSecret(password)]);
     const context = await f.browser.newContext({locale: 'en'});
     await context.addInitScript(() => {
-      Object.defineProperty(navigator.credentials, 'create', {configurable: true, value: () => new Promise(() => {})});
+      Object.defineProperty(navigator.credentials, 'create', {configurable: true, value: () => {
+        (window as unknown as {accountSecurityPromptOpen: boolean}).accountSecurityPromptOpen = true;
+        return new Promise(() => {});
+      }});
     });
     try {
       const login = await context.request.post(`${f.origin}/api/account/login`,
         {headers: {origin: f.origin}, data: {email: account.email, password}});
       assert.equal(login.status(), 200);
       const page = await context.newPage(); page.setDefaultTimeout(5000);
+      const pending = new Map<Request, string>(), trace: {path: string; phase: string; ms: number}[] = [];
+      const started = performance.now();
+      const paths = new Set(['/api/account/session', '/api/account/session/activity', '/api/account/authenticator',
+        '/api/account/sessions', '/api/account/installations', '/api/account/usage/read', '/api/account/passkeys',
+        '/api/account/passkeys/registration/options']);
+      const record = (request: Request, phase: string) => {
+        const path = new URL(request.url()).pathname;
+        if (!paths.has(path)) return;
+        if (phase === 'request') pending.set(request, path); else pending.delete(request);
+        trace.push({path, phase, ms: Math.round(performance.now() - started)});
+        if (trace.length > 32) trace.shift();
+      };
+      page.on('request', request => record(request, 'request'));
+      page.on('requestfinished', request => record(request, 'finished'));
+      page.on('requestfailed', request => record(request, 'failed'));
       const authenticator = await addVirtualAuthenticator(context, page);
       const c = translations.en;
       try {
         await page.goto(`${f.origin}/account`);
+        const signOut = page.getByRole('button', {name: c.signout, exact: true});
+        // Startup work has its own sign-out guards; isolate the browser prompt after it settles.
+        await signOut.and(page.locator(':enabled')).waitFor();
         await page.locator('input[name=passkeyPassword]').fill(password);
         const options = page.waitForResponse('**/passkeys/registration/options');
         await page.getByRole('button', {name: c.passkeyAdd, exact: true}).click();
         assert.equal((await options).status(), 200);
+        await page.waitForFunction(() => (window as unknown as {accountSecurityPromptOpen: boolean}).accountSecurityPromptOpen);
         const revokeCurrent = page.getByRole('button', {name: c.sessionSignOut, exact: true});
-        const signOut = page.getByRole('button', {name: c.signout, exact: true});
+        t.diagnostic(JSON.stringify({pending: [...pending.values()], trace}));
         assert.equal(await revokeCurrent.isDisabled(), false);
         assert.equal(await signOut.isDisabled(), false);
         await signOut.click();
         await page.getByRole('heading', {name: c.login, exact: true}).waitFor();
+      } catch (error) {
+        t.diagnostic(JSON.stringify({pending: [...pending.values()], trace}));
+        throw error;
       } finally { await authenticator.close(); }
     } finally { await context.close(); }
   } finally { await f.close(); }

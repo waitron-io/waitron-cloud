@@ -2977,6 +2977,15 @@ evaluate mobile notifications separately.
   and activity; Load reads preferences without repeating the refused save.
   Uncertain-save handling keeps its existing checks.
   Stubbed Chromium checks cover both languages, themes and phone/desktop widths.
+  Sign-out browser checks now wait for startup to settle before opening a passkey
+  prompt and retain both enabled-button assertions. Held authenticator and
+  installation replies reproduce an open prompt with Sign out correctly disabled;
+  after those replies settle, the prompt alone permits sign-out. Direct handler
+  calls cannot bypass pending startup, and sign-out fences the unfinished prompt.
+  The real-server check records a bounded trace of fixed request paths and phases,
+  without bodies or credentials, for another failure. The exact pending operation
+  in CI40331684104 was not captured; its historical cause remains unconfirmed.
+  Production pending guards and the original five-second browser wait are unchanged.
   Translation-consent startup reads may still repeat on activity; reproduce that
   sequence before changing their retry behaviour. The authenticator-rotation lock probe now reads only this
   fixture's uniquely named database sessions. A real competing `FOR SHARE` waiter
