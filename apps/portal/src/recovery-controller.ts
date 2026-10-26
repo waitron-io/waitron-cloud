@@ -36,7 +36,15 @@ export class RecoveryController {
   const returned=result.ok?result.value.operation:null;
   if(result.ok&&result.value.requestId===this.requestId&&(action!=='approve'||(!!returned&&returned.venueId===venue&&returned.source.kind===source&&(source==='continuous'?returned.pointId===null:returned.pointId===point)))&&(action!=='replace'||(result.value.replacement?.state==='complete'&&replacement&&result.value.replacement.oldInstallationId===replacement.oldInstallationId&&result.value.replacement.publicKey===replacement.publicKey&&result.value.replacement.peerPublicKey===replacement.peerPublicKey&&result.value.replacement.localVenueId===replacement.localVenueId&&result.value.replacement.nodeId===replacement.nodeId))){this.view=result.value;if(this.#proposal()!==proposal)this.#confirmedReplacement=undefined;this.uncertain=false;}
   else{
-   if(!result.ok){this.retryAt=Math.max(this.retryAt,Date.now()+result.retryAfterMs);this.error=result.status===429?'limited':result.status===401?'pairSession':result.status===403?(result.code==='local_integration_only'?'recoveryTestOnly':'forbidden'):result.status===410?'recoveryExpired':'unavailable';if(result.status===401||result.status===403){this.view=undefined;this.#confirmedReplacement=undefined;this.choose(undefined,undefined);}}
+   if(!result.ok){
+    const refusals:Record<number,Record<string,keyof Copy>>={
+     400:{confirmation_required:action==='replace'?'recoveryReplacementConfirmation':'recoveryConfirmation',unverified:'recoveryUnverified',invalid_input:'recoveryInput'},
+     409:{approval_required:'recoveryApprovalRequired',conflict:action==='replace'?'recoveryReplacementConflict':'recoveryConflict',target_not_fresh:'recoveryFreshTarget',recovery_active:'recoveryActive'},
+    };
+    this.retryAt=Math.max(this.retryAt,Date.now()+result.retryAfterMs);
+    this.error=result.status===429?'limited':result.status===401?'pairSession':result.status===403?(result.code==='local_integration_only'?'recoveryTestOnly':'forbidden'):result.status===410?'recoveryExpired':refusals[result.status]?.[result.code]??'unavailable';
+    if(result.status===401||result.status===403){this.view=undefined;this.#confirmedReplacement=undefined;this.choose(undefined,undefined);}
+   }
    else this.error='unavailable';
    if(action!=='inspect'&&(result.ok||result.status===0||result.status>=500||result.code==='unexpected_response')){this.#confirmedReplacement=undefined;this.uncertain=true;this.error='recoveryUncertain';this.#changed();await this.inspect();}
   }

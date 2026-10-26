@@ -77,7 +77,7 @@ for(const field of ['pointId','venueId'] as const)test(`a successful approval re
 
 for(const action of ['approve','close','replace'] as const)for(const {status,code,error}of [
  {status:429,code:'rate_limited',error:'limited'},
- {status:400,code:'invalid_input',error:'unavailable'},
+ {status:400,code:'invalid_input',error:'recoveryInput'},
  {status:410,code:'link_unavailable',error:'recoveryExpired'},
  {status:401,code:'unauthenticated',error:'pairSession'},
  {status:403,code:'forbidden',error:'forbidden'},
