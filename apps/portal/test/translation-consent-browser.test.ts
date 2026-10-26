@@ -42,11 +42,12 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
   const allowed=locale==='en'?'Menu translation is allowed for this venue.':'La traducción del menú está permitida en este local.';
   await section.getByText(c.unavailable,{exact:true}).waitFor();
   assert.equal(await section.getByRole('button',{name:allow,exact:true}).isEnabled(),false);
-  // Settle the first activity result before advancing time, so it cannot reload consent during manual retry.
+  // Settle activity before the explicit warm-up read, then test the separate rate-limit response.
   record('initial activity settling');
   const initialActivity=page.waitForResponse(response=>response.url().endsWith('/api/account/session/activity')&&response.request().method()==='POST'&&response.status()===200);
   const initialReload=page.waitForResponse(response=>response.url().endsWith('/api/account/translation-consent')&&response.request().method()==='GET'&&response.status()===503);
-  await Promise.all([initialActivity,initialReload,section.getByText(c.unavailable,{exact:true}).click()]);
+  await Promise.all([initialActivity,section.getByText(c.unavailable,{exact:true}).click()]);
+  await Promise.all([initialReload,section.getByRole('button',{name:c.translationConsentRefresh,exact:true}).click()]);
   await section.getByText(c.unavailable,{exact:true}).waitFor();
   primingActivity=false;record('initial activity and consent settled');
   await section.getByRole('button',{name:c.translationConsentRefresh,exact:true}).click();
