@@ -1,5 +1,19 @@
 # Waitron Cloud backlog
 
+## How to keep this file honest
+
+- Delete finished entries after checking main, the named pull requests and the code.
+  Name the delivery pull requests in your commit body; keep each remaining open point
+  as a short entry.
+- For an entry longer than about ten lines, keep its title, status and one to three
+  sentences here. Move the full detail to an area file under `docs/backlog/` and link it.
+- Remove proof-of-work such as test counts, run IDs, signed commits and measurement
+  narratives. Keep what is still open and why; receipts belong with the delivery.
+- Keep owner decisions you still cite under `Decisions and deliberate limits`.
+  Never remove a recorded decision with finished work.
+
+## Current state
+
 Updated 2026-10-22. The repository has a pnpm workspace and internal PostgreSQL
 registration state, internal password sessions, session-backed Cloud approval and an
 email-verification signup backend that creates the first organisation and business.
@@ -5388,63 +5402,11 @@ keeps its real clock. All runtime timers, budgets and isolation checks remain.
 Local Docker-backed checks are unavailable while Docker is down; GitHub CI
 supplies that evidence.
 
-## Account stop-access prompt refresh (D165)
+## Public browser and network qualification
 
-When a refresh removes your permission to stop an installation or moves it out
-of your selected organisation, Account now closes the Stop access prompt. A
-refresh that changes the selected organisation also clears confirmation, so
-you must choose the action again in that organisation. An unchanged, permitted
-prompt stays open and sends the same installation ID when you confirm.
-
-Controller and stubbed Chromium checks cover permission loss, organisation
-changes and the unchanged action. The browser checks cover English and Spanish,
-light and dark, at 390 and 1280 pixels. Removing each new reconciliation guard
-in a disposable copy makes its regression fail. PostgreSQL suites run in GitHub
-CI while Docker is down locally.
-
-A refused installation refresh (HTTP 401 or 403) now clears your rows, selected
-organisation and Stop access confirmation, so stale actions disappear before a
-later session check redirects you. Controller and stubbed Chromium checks reach
-the GET `/api/account/installations` failure while the session stays signed in;
-the 403 is a defensive response fixture. Temporary failures retain your list,
-and a successful retry restores rows without restoring confirmation (D174).
-
-## Venue actions during installation refresh (D166)
-
-Recovery now waits for an installation refresh before you change its venue,
-recovery source or confirmations, or approve recovery. Account also waits before
-you open or update snapshots and remote access, change translation consent or
-download installation diagnostics. Closing an open panel remains available.
-
-Stubbed Chromium checks hold the refresh and prove that Approve sends no request.
-Removing the chosen venue clears its recovery source and open Account panels;
-retaining it restores the controls. A failed refresh restores Recovery's controls
-and shows the error. Both languages, themes and widths are covered. These screen
-checks use supplied server responses; PostgreSQL checks run in GitHub CI while
-local Docker is down. Server permission checks and request contents are unchanged.
-
-## Public browser challenge feedback (D213)
-
-If your browser's bot-check answer is refused or its request fails, the public
-page now asks you to reload in English and Spanish. A worker error shows the
-same message; a successful answer still opens `/public/availability`. Native
-checks execute the served script for 403, 429, network and worker failures, an
-initial request failure and success. Token checks, proof difficulty, lifetimes,
-paths and the content security policy are unchanged. Production browser and
-network qualification remains part of public deployment.
-
-## Public browser challenge language marking (D252)
-
-Your public bot-check tab now names the check in English and Spanish. Spanish
-heading, waiting and reload text carries its own language marking so assistive
-technology can choose Spanish pronunciation. The page keeps English as its base
-language and retains the bilingual reload instruction.
-
-Native HTTP and served-script checks cover both request languages and all five
-failure paths. Controlled Chromium checks cover both languages, light and dark,
-and 390- and 1280-pixel widths, including waiting and reload states. Challenge
-status, script path, security policy, proofs and lifetimes are unchanged.
-Production browser and network qualification remains part of public deployment.
+Qualify the public browser check against the supported browsers and production
+networks before public exposure. Local HTTP, script and Chromium checks do not
+discharge that deployment gate.
 
 ## Public gateway source limits (D191)
 
