@@ -2858,8 +2858,15 @@ evaluate mobile notifications separately.
   without bodies or credentials, for another failure. The exact pending operation
   in CI40331684104 was not captured; its historical cause remains unconfirmed.
   Production pending guards and the original five-second browser wait are unchanged.
-  Translation-consent startup reads may still repeat on activity; reproduce that
-  sequence before changing their retry behaviour. The authenticator-rotation lock probe now reads only this
+  A failed translation-consent read keeps its message and explicit Refresh when
+  session activity completes, including after a server wait ends. Refresh cannot
+  duplicate a pending read or bypass the wait, and never repeats a consent change.
+  Navigation retries failed reads while keeping pending and successful reads.
+  A navigation read blocked by a server wait may start on later activity after
+  the wait ends. Changing accounts discards old replies. Refused consent changes
+  retain their message until an explicit read. Consent authority still requires a successful
+  read. Stubbed Chromium checks cover both languages, themes and phone/desktop
+  widths; provider and real database behavior still require their separate checks. The authenticator-rotation lock probe now reads only this
   fixture's uniquely named database sessions. A real competing `FOR SHARE` waiter
   reproduces the old probe's false observation before rotation starts; the scoped
   probe must ignore it and then observe rotation's own `FOR UPDATE` wait. The

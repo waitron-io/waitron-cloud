@@ -30,7 +30,7 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
   let failedReads=0,primingActivity=true,heldWrite=false,writeEntered!:()=>void,releaseWrite!:()=>void;
   const entered=new Promise<void>(resolve=>{writeEntered=resolve;}),released=new Promise<void>(resolve=>{releaseWrite=resolve;});
   await page.route('**/api/account/translation-consent',async route=>{
-   // The warm-up reload stays unavailable; the following manual read owns the rate-limit case.
+   // The warm-up read stays unavailable; the following manual read owns the rate-limit case.
    if(route.request().method()==='GET'&&primingActivity&&failedReads===1){await route.fulfill({status:503,json:{error:'temporarily_unavailable'}});return;}
    if(route.request().method()==='GET'&&failedReads<2){failedReads++;await route.fulfill(failedReads===1?{status:503,json:{error:'temporarily_unavailable'}}:{status:429,headers:{'retry-after':'60'},json:{error:'rate_limited'}});return;}
    if(route.request().method()==='POST'&&!heldWrite){heldWrite=true;writeEntered();await released;}
@@ -42,17 +42,18 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
   const allowed=locale==='en'?'Menu translation is allowed for this venue.':'La traducción del menú está permitida en este local.';
   await section.getByText(c.unavailable,{exact:true}).waitFor();
   assert.equal(await section.getByRole('button',{name:allow,exact:true}).isEnabled(),false);
-  // Settle the first activity result before advancing time, so it cannot reload consent during manual retry.
+  // Settle activity before the explicit warm-up read, then test the separate rate-limit response.
   record('initial activity settling');
   const initialActivity=page.waitForResponse(response=>response.url().endsWith('/api/account/session/activity')&&response.request().method()==='POST'&&response.status()===200);
   const initialReload=page.waitForResponse(response=>response.url().endsWith('/api/account/translation-consent')&&response.request().method()==='GET'&&response.status()===503);
-  await Promise.all([initialActivity,initialReload,section.getByText(c.unavailable,{exact:true}).click()]);
+  await Promise.all([initialActivity,section.getByText(c.unavailable,{exact:true}).click()]);
+  await Promise.all([initialReload,section.getByRole('button',{name:c.translationConsentRefresh,exact:true}).click()]);
   await section.getByText(c.unavailable,{exact:true}).waitFor();
   primingActivity=false;record('initial activity and consent settled');
   await section.getByRole('button',{name:c.translationConsentRefresh,exact:true}).click();
   await section.getByText(c.limited,{exact:true}).waitFor();
   assert.equal(await section.getByRole('button',{name:c.translationConsentRefresh,exact:true}).isEnabled(),false);
-  // A session reply can reload consent and replace its retry button between pointerdown and click.
+  // Hold activity so the successful manual read completes before its session reply.
   record('manual retry starts');holdActivity=true;
   await page.clock.fastForward(61_000);record('manual clock returned');
   const retryReply=page.waitForResponse(response=>response.url().endsWith('/api/account/translation-consent')&&response.request().method()==='GET'&&response.status()===200);
