@@ -58,10 +58,13 @@ export async function remoteAccessResponse(c:Context,options:{pool:Pool;origin:s
   await store.setHostname(id,kind,body.hostname!,Number(body.expectedRevision),name=>boundedResolve(name,options.resolve),authorize);
   return c.json(await status());
  }catch(error){
+  if(error instanceof AccountHttpError)throw error;
   if(error instanceof Error){
    if(['invalid_hostname','hostname_conflict','dns_not_verified','invalid_placement'].includes(error.message))throw new AccountHttpError(400,error.message);
    if(error.message==='revision_conflict')throw new AccountHttpError(409,error.message);
-   if(['revoked','permission_denied'].includes(error.message))throw new AccountHttpError(403,'forbidden');
+   if(error.message==='revoked')throw new AccountHttpError(403,'revoked');
+   if(error.message==='permission_denied')throw new AccountHttpError(403,
+    error.cause==='test_venue_required'?'remote_test_only':error.cause==='remote_plan_required'||error.cause==='remote_setup_required'?error.cause:'forbidden');
    if(error.message==='installation_unavailable')throw new AccountHttpError(409,'remote_not_placed');
   }
   throw error;

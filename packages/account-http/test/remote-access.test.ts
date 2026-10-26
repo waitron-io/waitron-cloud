@@ -128,3 +128,35 @@ test('DNS instructions recheck ownership after a blocked metadata lookup',async(
   await db.pool.query('UPDATE organisation_memberships SET is_owner=false');await blocker.query('COMMIT');assert.equal((await response).status,403);
  }finally{await blocker.query('ROLLBACK');blocker.release();await response;}
 });
+
+for(const [condition,code] of [['free','remote_plan_required'],['unconfigured','remote_setup_required'],['production','remote_test_only'],['revoked','revoked']] as const)
+ test(`real database: ${condition} explains the remote refusal without changing setup`,async()=>{
+  app=createAccountApp({...options(),planMode:'test-free-paid'});
+  await db.pool.query("UPDATE organisations SET service_plan=$1",[condition==='free'?'free':'paid']);
+  if(condition==='unconfigured')await db.pool.query("UPDATE installation_services SET state='unconfigured' WHERE service='remote_access'");
+  if(condition==='production')await db.pool.query("UPDATE venues SET environment='production'");
+  if(condition==='revoked')await db.pool.query('UPDATE installations SET revoked_at=clock_timestamp()');
+  const before=(await db.pool.query('SELECT * FROM installations')).rows;
+  for(const action of ['dns','apply']){
+   const response=await request(action,{kind:'staff',hostname:'staff.cafe.example',...(action==='apply'?{expectedRevision:'1'}:{})});
+   assert.equal(response.status,403);assert.deepEqual(await response.json(),{error:code});
+  }
+  assert.deepEqual((await db.pool.query('SELECT * FROM installations')).rows,before);
+  assert.equal((await db.pool.query("SELECT hostname FROM remote_hostnames WHERE kind='staff'")).rows[0].hostname,assigned);
+  assert.equal((await db.pool.query('SELECT count(*) FROM remote_hostname_changes')).rows[0].count,'0');
+ });
+
+for(const condition of ['free','unconfigured','revoked'] as const)test(`real database: ${condition} during DNS is refused with its current cause`,async()=>{
+ app=createAccountApp({...options(),planMode:'test-free-paid'});
+ await db.pool.query("UPDATE organisations SET service_plan='paid'");
+ resolve=async name=>{
+  if(condition==='free')await db.secondPool.query("UPDATE organisations SET service_plan='free'");
+  if(condition==='unconfigured')await db.secondPool.query("UPDATE installation_services SET state='unconfigured' WHERE service='remote_access'");
+  if(condition==='revoked')await db.secondPool.query('UPDATE installations SET revoked_at=clock_timestamp()');
+  return [name.startsWith('_acme')?'_acme-challenge.'+assigned:assigned];
+ };
+ const response=await request('apply',{kind:'staff',hostname:'staff.cafe.example',expectedRevision:'1'});
+ assert.equal(response.status,403);assert.deepEqual(await response.json(),{error:condition==='free'?'remote_plan_required':condition==='unconfigured'?'remote_setup_required':'revoked'});
+ assert.equal((await db.pool.query("SELECT hostname FROM remote_hostnames WHERE kind='staff'")).rows[0].hostname,assigned);
+ assert.equal((await db.pool.query('SELECT count(*) FROM remote_hostname_changes')).rows[0].count,'0');
+});

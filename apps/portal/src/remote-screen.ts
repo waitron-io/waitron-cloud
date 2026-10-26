@@ -10,8 +10,10 @@ export function remoteScreen(app:PortalApp,id:string){
  const v=r.view,disabled=app.installations.pending||r.pending||!!r.waiting,ready=remoteReady(v);
  return html`<section class="remote-setup" aria-label=${c.remoteSetupTitle}><h4>${c.remoteSetupTitle}</h4>
   ${r.error?html`<p role="alert">${c[r.error]}</p>`:nothing}${permissionActions(app,r.error)}${r.notice?html`<p role="status">${c[r.notice]}</p>`:nothing}
+  ${r.error&&['remotePlanRequired','remoteSetupRequired','remoteTestOnly','remoteRevoked'].includes(r.error)?html`<a href="/account" @click=${(event:MouseEvent)=>app.follow(event,'/account')}>${c.permissionBack}</a>`:nothing}
+  ${r.error==='remoteRevoked'?html`<wt-button .disabled=${disabled||!!app.installations.waiting} @click=${()=>{void app.installations.load();}}>${c.remoteRefreshInstallations}</wt-button>`:nothing}
   ${r.pending?html`<p role="status">${c.wait}</p>`:nothing}
-  ${v?html`<p role="status">${v.revoked?c.accessStopped:ready?c.remoteReady:v.names?c.remotePending:c.remoteNotPlaced}</p>`:nothing}
+  ${v?html`<p role="status">${v.revoked?c.remoteRevoked:ready?c.remoteReady:v.names?c.remotePending:c.remoteNotPlaced}</p>`:nothing}
   ${v?html`<section aria-label=${c.forwardTitle}><h5>${c.forwardTitle}</h5>
    <p>${!v.publicForward?c.forwardUnknown:v.publicForward.category===null?c.forwardSuccess:c[forwardCopy[v.publicForward.category]]}</p>
    ${v.publicForward?html`<dl><dt>${c.forwardObserved}</dt><dd><time datetime=${v.publicForward.observedAt}>${new Date(v.publicForward.observedAt).toLocaleString(app.locale)}</time></dd><dt>${c.forwardExpires}</dt><dd><time datetime=${v.publicForward.expiresAt}>${new Date(v.publicForward.expiresAt).toLocaleString(app.locale)}</time></dd></dl>${v.publicForward.category!==null?html`<p>${c.forwardCheck}</p>`:nothing}`:nothing}

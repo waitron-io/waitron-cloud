@@ -21,6 +21,7 @@ export function installationScreen(app:PortalApp){
   ${controller.visible.map(i=>html`<article class="installation"><h3>${i.overview?.businessName??i.legalBusinessId} · ${i.venueId.slice(0,8)}</h3><p>${i.environment==='test'?c.pairTest:c.pairProduction}${i.overview?.countryCode?html` · ${i.overview.countryCode}`:nothing}</p>
     <dl><dt>${c.pairVenue}</dt><dd class="venue-id">${i.venueId}</dd></dl>
     <p role="status">${i.revokedAt?c.accessStopped:!i.lastContactAt?c.accessPending:!i.leaseExpiresAt||Date.parse(i.leaseExpiresAt)<=Date.now()||Date.parse(i.lastContactAt)<Date.now()-300000?c.accessStale:c.accessActive}</p>
+    ${i.revokedAt?html`<p>${c.remoteRevoked}</p>`:nothing}
     <dl><dt>${c.lastContact}</dt><dd>${date(i.lastContactAt)}</dd><dt>${c.accessExpires}</dt><dd>${date(i.leaseExpiresAt)}</dd>
       ${i.services.map(s=>html`<dt>${labels[s.service]}</dt><dd>${states[s.state]} · ${health[!i.revokedAt&&s.observedAt&&Date.parse(s.observedAt)>Date.now()-300000?s.health:'unknown']}</dd>`)}</dl>
     ${i.overview?html`<dl><dt>${c.latestSnapshot}</dt><dd>${i.overview.latestSnapshotAt?date(i.overview.latestSnapshotAt):c.noSnapshot}</dd><dt>${c.verifiedSnapshot}</dt><dd>${i.overview.verifiedSnapshotAt?date(i.overview.verifiedSnapshotAt):c.noVerifiedSnapshot}</dd></dl>

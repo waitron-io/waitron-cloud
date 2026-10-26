@@ -4453,8 +4453,15 @@ Cloud follow-ups, each a separate small change with tests before implementation:
   in CI. Permission checks and transaction boundaries remain unchanged. Shared
   backup/installation reads on recovery/fiscal pages inherit the wording; their
   request-specific guidance stays in R3/R6/R7. Pairing keeps its existing guidance.
-  Shared remote plan/setup refusals and revoked installations still need their own
-  explanations. Membership changes need a real product path and remain open.
+  Remote setup now explains a missing paid trial plan, missing gateway setup,
+  a production venue outside the test-only trial and stopped installation access
+  in English and Spanish. Account overview and a read-only installation refresh
+  give you current context; plan changes, gateway provisioning and restoring stopped
+  access are unavailable here. Shared callers keep `permission_denied`; Account
+  exposes only a known refusal cause after its ownership check. Native SQL-boundary,
+  API/controller and browser checks cover the mapping; real database and late-DNS
+  rechecks run in CI. Customer plan/setup/restart controls and membership changes
+  still need real product paths and remain open.
 - R6: make outside fiscal-custodian, entitlement and identity-space guidance usable;
   record missing provisioning paths without changing fiscal authority or history.
 - R7: distinguish temporary fiscal continuity access from missing configuration,

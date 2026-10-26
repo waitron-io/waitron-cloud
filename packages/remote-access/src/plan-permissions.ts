@@ -7,8 +7,8 @@ export async function requireRemotePlan(client:PoolClient,id:string,mode:PlanMod
  if(mode==='existing')return;
  const row=(await client.query('SELECT venue_id FROM installations WHERE id=$1',[id])).rows[0];
  if(!row)throw new Error('installation_unavailable');
- if(await readVenuePlan(client,row.venue_id,mode)!=='paid')throw new Error('permission_denied');
- if(setup&&!(await client.query("SELECT 1 FROM installation_services WHERE installation_id=$1 AND service='remote_access' AND state<>'unconfigured'",[id])).rowCount)throw new Error('permission_denied');
+ if(await readVenuePlan(client,row.venue_id,mode)!=='paid')throw new Error('permission_denied',{cause:'remote_plan_required'});
+ if(setup&&!(await client.query("SELECT 1 FROM installation_services WHERE installation_id=$1 AND service='remote_access' AND state<>'unconfigured'",[id])).rowCount)throw new Error('permission_denied',{cause:'remote_setup_required'});
 }
 
 // A route publication spans several organisations. Lock their policies in UUID

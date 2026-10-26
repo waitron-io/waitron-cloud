@@ -27,7 +27,7 @@ export function parsePlanMode(value: string | undefined): PlanMode {
 // Callers supply the stored venue environment after authenticating its binding.
 export function requireTestPlanVenue(environment: string, mode: PlanMode): void {
   requireMode(mode);
-  if (mode === 'test-free-paid' && environment !== 'test') throw new Error('permission_denied');
+  if (mode === 'test-free-paid' && environment !== 'test') throw new Error('permission_denied', {cause: 'test_venue_required'});
 }
 export function planAllows(plan: OrganisationPlan, service: PlanService): boolean {
   if (plan !== 'free' && plan !== 'paid') return false;
