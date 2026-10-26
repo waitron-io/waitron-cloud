@@ -28,7 +28,7 @@ export async function remoteAccessResponse(c:Context,options:{pool:Pool;origin:s
   const session=await resolveSession(client,token,{csrfToken,touch:false});
   // Match revocation's account/session/membership/installation order; hold ownership through commit.
   const permission=await client.query(`SELECT m.account_id FROM organisation_memberships m JOIN venues v ON v.organisation_id=m.organisation_id JOIN installations i ON i.venue_id=v.id WHERE i.id=$1 AND m.account_id=$2 AND m.is_owner FOR SHARE OF m`,[id,session.accountId]);
-  if(!permission.rowCount)throw new AccountHttpError(403,'forbidden');return session.accountId;
+  if(!permission.rowCount)throw new AccountHttpError(403,'permission_denied');return session.accountId;
  };
  const account=await transaction(pool,authorize);
  await consume([{scope:'remote-account',subject:account,limit:30,windowSeconds:60}]);
@@ -57,7 +57,8 @@ export async function remoteAccessResponse(c:Context,options:{pool:Pool;origin:s
   if(error instanceof Error){
    if(['invalid_hostname','hostname_conflict','dns_not_verified','invalid_placement'].includes(error.message))throw new AccountHttpError(400,error.message);
    if(error.message==='revision_conflict')throw new AccountHttpError(409,error.message);
-   if(['revoked','permission_denied'].includes(error.message))throw new AccountHttpError(403,'forbidden');
+   if(error.message==='permission_denied')throw new AccountHttpError(403,'permission_denied');
+   if(error.message==='revoked')throw new AccountHttpError(403,'forbidden');
    if(error.message==='installation_unavailable')throw new AccountHttpError(409,'remote_not_placed');
   }
   throw error;

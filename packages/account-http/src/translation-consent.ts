@@ -26,7 +26,7 @@ export async function translationConsentResponse(c:Context,options:{pool:Pool;or
    await resolveSession(client,token,proof);return {consents};
   }));
  }catch(error){
-  if(error instanceof TranslationError)throw new AccountHttpError(error.code==='forbidden'?403:400,error.code==='forbidden'?'forbidden':'invalid_input');
+  if(error instanceof TranslationError)throw new AccountHttpError(error.code==='forbidden'?403:400,error.code==='forbidden'?'permission_denied':'invalid_input');
   throw error;
  }
 }

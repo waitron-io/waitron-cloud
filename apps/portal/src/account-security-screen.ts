@@ -1,3 +1,4 @@
+import {permissionActions} from './permission-actions.ts';
 import {authenticatorAccountScreen} from './authenticator-screen.ts';
 import {html, nothing} from 'lit';
 import '@waitron-io/ui-core/components/wt-button';
@@ -14,7 +15,7 @@ export function accountSecurityScreen(app: PortalApp) {
     <section class="sessions" aria-labelledby="sessions-heading">
       <h3 id="sessions-heading">${c.activeSessions}</h3>
       <p class="help">${c.sessionsIntro}</p>
-      ${message ? html`<p role=${app.security.error ? 'alert' : 'status'}>${c[message]}</p>` : nothing}
+      ${message ? html`<p role=${app.security.error ? 'alert' : 'status'}>${c[message]}</p>` : nothing}${permissionActions(app,app.security.error)}
       ${app.security.error && !app.security.loaded ? html`<wt-button .disabled=${app.security.pending || !!app.security.waiting}
         @click=${() => {void app.security.load();}}>${c.retry}</wt-button>` : nothing}
       <ul class="session-list">${app.security.sessions.map(session => html`<li>

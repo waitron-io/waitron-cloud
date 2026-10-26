@@ -33,7 +33,7 @@ export async function backupResponse(c:Context,options:{pool:Pool;origin:string;
   const session=await resolveSession(client,token,{csrfToken,touch:false});
   // Hold ownership through the metadata read so a concurrent revocation cannot pass unnoticed.
   const permission=await client.query(`SELECT m.account_id FROM organisation_memberships m JOIN venues v ON v.organisation_id=m.organisation_id WHERE v.id=$1 AND m.account_id=$2 AND m.is_owner FOR SHARE OF m`,[venueId,session.accountId]);
-  if(!permission.rowCount)throw new AccountHttpError(403,'forbidden');
+  if(!permission.rowCount)throw new AccountHttpError(403,'permission_denied');
   // Tombstoned points retain their ordering key, so a cleanup between pages cannot skip history.
   if(after&&!(await client.query('SELECT 1 FROM backup_points WHERE id=$1 AND venue_id=$2',[after,venueId])).rowCount)throw new AccountHttpError(400,'invalid_input');
   const result=await client.query(`SELECT p.id,p.captured_at,COALESCE(qualification.current_verification,'pending') AS verification,p.retention,

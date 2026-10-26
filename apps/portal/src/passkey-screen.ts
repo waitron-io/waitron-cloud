@@ -1,3 +1,4 @@
+import {permissionActions} from './permission-actions.ts';
 import {html, nothing} from 'lit';
 import '@waitron-io/ui-core/components/wt-input';
 import '@waitron-io/ui-core/components/wt-button';
@@ -23,7 +24,7 @@ export function passkeyAccountScreen(app: PortalApp) {
   return html`<section class="passkeys" aria-labelledby="passkeys-heading">
     <h3 id="passkeys-heading">${c.passkeys}</h3>
     <p>${c.passkeyIntro}</p>
-    ${message ? html`<p role=${app.passkeys.error ? 'alert' : 'status'}>${c[message]}</p>` : nothing}
+    ${message ? html`<p role=${app.passkeys.error ? 'alert' : 'status'}>${c[message]}</p>` : nothing}${permissionActions(app,app.passkeys.error)}
     ${check ? html`<wt-button .disabled=${app.passkeys.pending || !!app.passkeys.waiting}
       @click=${() => {void app.refreshPasskeys();}}>${c.passkeyRefresh}</wt-button>` : nothing}
     ${app.passkeys.listLoaded && !app.passkeys.passkeys.length ? html`<p>${c.passkeyNone}</p>` : nothing}

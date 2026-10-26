@@ -60,7 +60,8 @@ function publicError(error: unknown): AccountHttpError {
   if(error instanceof FactorError)return new AccountHttpError(error.code==='temporarily_unavailable'?503:401,error.code,error.code==='temporarily_unavailable'?1:undefined);
   if (error instanceof IdentityError) {
     if (error.code === 'credentials_invalid') return new AccountHttpError(401, 'credentials_invalid');
-    if (error.code === 'csrf_invalid' || error.code === 'permission_denied') return new AccountHttpError(403, 'forbidden');
+    if (error.code === 'csrf_invalid') return new AccountHttpError(403, 'forbidden');
+    if (error.code === 'permission_denied') return new AccountHttpError(403, 'permission_denied');
     if (error.code === 'session_expired') return new AccountHttpError(401, 'session_expired');
     return new AccountHttpError(401, 'unauthenticated');
   }

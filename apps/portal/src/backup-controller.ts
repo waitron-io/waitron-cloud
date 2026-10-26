@@ -21,7 +21,7 @@ export class BackupController {
    this.selectedSource=previousSource==='snapshot'&&this.selected?'snapshot':this.page.continuousRecovery?'continuous':this.selected?'snapshot':undefined;
   }else if(!result.ok){
    this.retryAt=Math.max(this.retryAt,Date.now()+result.retryAfterMs);
-   this.error=result.status===429?'limited':result.status===401?'pairSession':result.status===403?'forbidden':'unavailable';
+   this.error=result.status===429?'limited':result.status===401?'pairSession':result.status===403?(result.code==='permission_denied'?'permissionBusiness':'forbidden'):'unavailable';
    if(result.status===401||result.status===403){this.page=undefined;this.selected=undefined;this.selectedSource=undefined;}
   }else this.error='unavailable';
   this.#changed();

@@ -1,3 +1,4 @@
+import {permissionActions} from './permission-actions.ts';
 import {html,nothing} from 'lit';
 import {submitOnEnter} from '@waitron-io/ui-core/submit-on-enter';
 import type {PortalApp} from './app.ts';
@@ -7,7 +8,7 @@ export function remoteScreen(app:PortalApp,id:string){
  if(r.installationId!==id)return html`<wt-button .disabled=${app.installations.pending} @click=${()=>{void r.open(id);}}>${c.remoteSetup}</wt-button>`;
  const v=r.view,disabled=app.installations.pending||r.pending||!!r.waiting,ready=remoteReady(v);
  return html`<section class="remote-setup" aria-label=${c.remoteSetupTitle}><h4>${c.remoteSetupTitle}</h4>
-  ${r.error?html`<p role="alert">${c[r.error]}</p>`:nothing}${r.notice?html`<p role="status">${c[r.notice]}</p>`:nothing}
+  ${r.error?html`<p role="alert">${c[r.error]}</p>`:nothing}${permissionActions(app,r.error)}${r.notice?html`<p role="status">${c[r.notice]}</p>`:nothing}
   ${r.pending?html`<p role="status">${c.wait}</p>`:nothing}
   ${v?html`<p role="status">${v.revoked?c.accessStopped:ready?c.remoteReady:v.names?c.remotePending:c.remoteNotPlaced}</p>`:nothing}
   ${v?.names?html`<p>${c.remotePrivacy}</p>

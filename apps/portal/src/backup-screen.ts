@@ -1,3 +1,4 @@
+import {permissionActions} from './permission-actions.ts';
 import {formatDateTime} from './dates.ts';
 import {html,nothing} from 'lit';
 import type {PortalApp} from './app.ts';
@@ -9,7 +10,7 @@ export function backupScreen(app:PortalApp,venueId:string){
  const date=(s:string)=>formatDateTime(s,app.locale);
  return html`<section aria-label=${recover?c.recoverySource:c.snapshotHistory}>${recover?html`<h2>${c.recoverySource}</h2>`:html`<h4>${c.snapshotHistory}</h4>`}
   <p>${c.snapshotPurpose}</p>${recover?nothing:html`<p>${c.recoveryUnavailable}</p>`}
-  ${b.error?html`<p role="alert">${c[b.error]}</p>`:nothing}
+  ${b.error?html`<p role="alert">${c[b.error]}</p>`:nothing}${permissionActions(app,b.error)}
   ${b.pending?html`<p role="status">${c.wait}</p>`:nothing}
   ${b.waiting?html`<p role="status">${c.snapshotRetry}</p>`:nothing}
   ${b.page&&!b.page.points.length?html`<p>${c.noSnapshots}</p>`:nothing}

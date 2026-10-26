@@ -5609,8 +5609,16 @@ Cloud follow-ups, each a separate small change with tests before implementation:
   checks cover the 403 restriction, cleared authority, retained permission errors
   and uncertain-write reconciliation. Server scope and proof requirements stay
   unchanged; PostgreSQL scope checks run in CI.
-- R5: separate stale request-token guidance from denied account/business authority.
-  Check-account/sign-in paths exist; membership changes need a separate real flow.
+- R5 Account panels now distinguish denied permission from request verification.
+  Venue actions ask you to check your account and selected business; account security
+  and alerts ask you to check your account. Both languages offer Back to Account and
+  Sign out beside the refusal, with sign-out retry if it fails. Native HTTP/controller
+  and two-venue browser checks cover all ten Account panels and cleared private state;
+  database authority and locking checks run in CI. Permission checks and transaction
+  boundaries remain unchanged. Recovery/fiscal guidance stays in R3/R6/R7; pairing
+  keeps its existing request-specific guidance. Revoked remote installations still
+  share the request-verification response and need a separate explanation. Membership
+  changes need a real product path and remain open.
 - R6: make outside fiscal-custodian, entitlement and identity-space guidance usable;
   record missing provisioning paths without changing fiscal authority or history.
 - R7: distinguish temporary fiscal continuity access from missing configuration,
