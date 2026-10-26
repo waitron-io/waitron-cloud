@@ -97,12 +97,15 @@ test('an interrupted per-account rotation rolls back that account and retry resu
   assert.match(rows[0].secret_envelope,/^v1.next\./);assert.match(rows[1].secret_envelope,/^v1.old\./);
   assert.deepEqual(await rotate(),{activeKeyId:'next',active:1,pending:1});
 });
+async function rotationLockWaiter(){
+  return (await admin.query<{pid:number;query:string}>("SELECT pid,query FROM pg_stat_activity WHERE query LIKE '%cloud_accounts%' AND wait_event_type='Lock' AND pid<>pg_backend_pid()")).rows[0];
+}
 test('rotation takes the account lock before factor children and re-reads changes made while waiting',async()=>{
   const blocker=await pool.connect();await blocker.query('BEGIN');await blocker.query('SELECT id FROM cloud_accounts WHERE id=$1 FOR UPDATE',[accounts[0]]);
   const running=rotate();
   try{
     let query='';for(let i=0;i<100;i++){
-      query=(await admin.query("SELECT query FROM pg_stat_activity WHERE query LIKE '%cloud_accounts%' AND wait_event_type='Lock' AND pid<>pg_backend_pid()")).rows[0]?.query??'';
+      query=(await rotationLockWaiter())?.query??'';
       if(query)break;await new Promise(r=>setTimeout(r,20));
     }
     assert.match(query,/cloud_accounts.*FOR UPDATE/s);
@@ -113,6 +116,41 @@ test('rotation takes the account lock before factor children and re-reads change
     const row=(await pool.query('SELECT * FROM cloud_authenticator_factors WHERE account_id=$1',[accounts[0]])).rows[0];
     assert.equal(row.version,3);assert.equal(decryptFactorSecret(row.secret_envelope,keys,{...activeBinding(accounts[0]),version:3}),secret);
   }finally{await blocker.query('ROLLBACK');blocker.release();await running.catch(()=>{});}
+});
+test('rotation lock probe ignores a foreign waiter before observing its own session',async()=>{
+  const foreign=new Pool({connectionString:process.env.TEST_DATABASE_URL,options:`-c search_path=${schema}`,max:2,application_name:`${schema}_foreign`});
+  const blocker=await foreign.connect(),waiter=await foreign.connect();
+  let waiting:Promise<unknown>|undefined,running:ReturnType<typeof rotate>|undefined;
+  try{
+    await blocker.query('BEGIN');
+    await blocker.query('SELECT id FROM cloud_accounts WHERE id=$1 FOR UPDATE',[accounts[0]]);
+    const pid=(await waiter.query<{pid:number}>('SELECT pg_backend_pid() AS pid')).rows[0]!.pid;
+    waiting=waiter.query('SELECT id FROM cloud_accounts WHERE id=$1 FOR SHARE',[accounts[0]]);
+    void waiting.catch(()=>{});
+    let blocked=false;
+    for(let i=0;i<100;i++){
+      blocked=(await admin.query("SELECT 1 FROM pg_stat_activity WHERE pid=$1 AND wait_event_type='Lock'",[pid])).rowCount===1;
+      if(blocked)break;await new Promise(r=>setTimeout(r,20));
+    }
+    assert.equal(blocked,true,'the competing session must actually be waiting');
+    assert.equal(await rotationLockWaiter(),undefined,'a foreign waiter is not evidence that rotation reached its account lock');
+    running=rotate();void running.catch(()=>{});
+    let observed:Awaited<ReturnType<typeof rotationLockWaiter>>;
+    for(let i=0;i<100;i++){
+      observed=await rotationLockWaiter();
+      if(observed)break;await new Promise(r=>setTimeout(r,20));
+    }
+    assert.ok(observed,'rotation must reach its own account lock');
+    assert.notEqual(observed.pid,pid);
+    assert.match(observed.query,/cloud_accounts.*FOR UPDATE/s);
+    await blocker.query('ROLLBACK');
+    await waiting;
+    assert.deepEqual(await running,{activeKeyId:'next',active:2,pending:2});
+  }finally{
+    await blocker.query('ROLLBACK');
+    await waiting?.catch(()=>{});await running?.catch(()=>{});
+    blocker.release();waiter.release();await foreign.end();
+  }
 });
 test('CLI requires explicit configuration and reports only counts and key ID with fixed errors',async()=>{
   const env={...process.env,DATABASE_URL:process.env.TEST_DATABASE_URL,PGOPTIONS:`-c search_path=${schema}`,CLOUD_FACTOR_ACTIVE_KEY_ID:'next',CLOUD_FACTOR_KEYS:JSON.stringify(keys.keys)};
