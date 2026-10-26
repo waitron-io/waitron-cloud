@@ -38,7 +38,7 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
    await actions.getByRole('link',{name:c.permissionBack,exact:true}).waitFor();
    assert.equal(await actions.getByRole('button',{name:c.signout,exact:true}).isEnabled(),true);
    assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
-   if(process.env.PERMISSION_GUIDANCE_RECEIPT_DIR){await mkdir(process.env.PERMISSION_GUIDANCE_RECEIPT_DIR,{recursive:true});await alert.scrollIntoViewIfNeeded();await page.screenshot({path:`${process.env.PERMISSION_GUIDANCE_RECEIPT_DIR}/${locale}-${theme}-${width}-${target}.png`,clip:{x:0,y:Math.max(0,Math.min(650,(await alert.boundingBox())!.y-25)),width,height:250}});}
+   if(process.env.PERMISSION_GUIDANCE_RECEIPT_DIR){await mkdir(process.env.PERMISSION_GUIDANCE_RECEIPT_DIR,{recursive:true});await alert.evaluate(element=>element.scrollIntoView({block:'start'}));await page.screenshot({path:`${process.env.PERMISSION_GUIDANCE_RECEIPT_DIR}/${locale}-${theme}-${width}-${target}.png`,clip:{x:0,y:Math.max(0,Math.min(650,(await alert.boundingBox())!.y-25)),width,height:250}});}
    denied='';await actions.getByRole('link',{name:c.permissionBack,exact:true}).click();await page.waitForFunction(()=>(window as any).app?.installations.loaded);assert.equal(await page.getByRole('heading',{name:c.account,exact:true}).count(),1);
   }
   // Request verification keeps its separate guidance and does not offer an account switch as its diagnosis.
