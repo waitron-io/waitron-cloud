@@ -1,3 +1,5 @@
+import { isProxy } from 'node:util/types';
+
 const nativeSignals = ['SIGTERM', 'SIGKILL', 'SIGSEGV', 'SIGABRT', 'SIGBUS', 'SIGILL', 'SIGPIPE', 'SIGINT', 'other'];
 export const nativeFailureSignal = signal => signal === null || nativeSignals.includes(signal) ? signal : 'other';
 
@@ -21,9 +23,16 @@ export function workerFailureTrace(value) {
     need(found.length === keys.length && found.every(key => keys.includes(key)
       && Object.getOwnPropertyDescriptor(value, key).get === undefined));
   };
-  need(Array.isArray(value) && value.length <= 32);
+  const array = (value, limit) => {
+    need(!isProxy(value) && Array.isArray(value) && Object.getPrototypeOf(value) === Array.prototype);
+    need(value.length <= limit && Reflect.ownKeys(value).length === value.length + 1);
+    // Dense own data indices keep validation and copying on the same fixed values.
+    for (let i = 0; i < value.length; i++)
+      need(Object.hasOwn(Object.getOwnPropertyDescriptor(value, String(i)) ?? {}, 'value'));
+  };
+  array(value, 32);
   for (const event of value) {
-    need(event && Object.getPrototypeOf(event) === Object.prototype
+    need(event && !isProxy(event) && Object.getPrototypeOf(event) === Object.prototype
       && Object.getOwnPropertyDescriptor(event, 'kind')?.get === undefined);
     if (event.kind === 'storage-refusal') {
       exact(event, ['kind', 'stage']);
@@ -42,8 +51,8 @@ export function workerFailureTrace(value) {
       need(event.code === null || Number.isSafeInteger(event.code) && event.code >= 0 && event.code <= 255);
       need(event.signal === null || nativeSignals.includes(event.signal));
       need(Number.isSafeInteger(event.stderrBytes) && event.stderrBytes >= 0 && event.stderrBytes <= 1000000000);
-      need(Array.isArray(event.stderrFlags) && event.stderrFlags.length <= 6
-        && event.stderrFlags.every(flag => ['error', 'checksum', 'sqlite', 'wal', 'snapshot', 'compaction'].includes(flag))
+      array(event.stderrFlags, 6);
+      need(event.stderrFlags.every(flag => ['error', 'checksum', 'sqlite', 'wal', 'snapshot', 'compaction'].includes(flag))
         && new Set(event.stderrFlags).size === event.stderrFlags.length);
     }
   }
