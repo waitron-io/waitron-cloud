@@ -60,6 +60,11 @@ for (const locale of ['en', 'es']) for (const theme of ['light', 'dark'] as cons
         assert.equal(await reload.isVisible(), true, 'a failed running check must offer its reload action');
         assert.equal(await reload.getAttribute('href'), '/public/availability');
         assert.equal(await reload.locator('[lang="es"]').innerText(), 'Volver a cargar');
+        const visible = await page.locator('body').innerText();
+        assert.doesNotMatch(visible, /Allow JavaScript or try another browser|Permite JavaScript o prueba con otro navegador/,
+          'a running failure keeps its relevant message instead of repeating static script-download advice');
+        assert.match(visible, failure === 'worker' || failure === 'timeout'
+          ? /Prueba con otro navegador/ : /Vuelve a cargar para intentarlo de nuevo/);
         assert.equal(pageRequests, 1); assert.equal(challengeRequests, 1);
         assert.equal(proofRequests, failure === 'proof' ? 1 : 0);
         assert.equal(gate.stats().forwarded, 0); assert.equal((await context.cookies()).length, 0);
