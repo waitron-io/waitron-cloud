@@ -179,11 +179,15 @@ order. Remote access matters most because Waitron's customer-facing features wai
    and the D101 design lists six open lawyer questions. Missing: terms of service, the data
    processing agreement with each venue, and the promises Cloud makes about how quickly a
    venue is recovered, how much data a failure can lose, and uptime.
-5. **Roles and invitations.** Today an organisation has an owner and a yes/no "can register
-   venues", and nobody can be invited: "The exact roles and permitted actions remain to be
-   agreed" ([product and platform](product-and-platform.md)). Wanted: an owner brings in a
-   manager or an accountant with a fitting role. Organisations with several venues already
-   work; ownership transfer is deferred.
+5. **Single-owner account lifecycle.** Each customer organisation has one Cloud account
+   owner in its country, with no invitations, manager accounts or concurrent second owner
+   (owner, 2026-10-24). Two countries mean two accounts. Design verified country-scoped
+   handover that replaces exactly one owner and immediately revokes the former owner's
+   access, plus unfinished-transfer and lost-owner recovery protections against abuse.
+   Exact endpoints, evidence and recovery policy remain separately scoped here; no automatic
+   support takeover or operator, fiscal or activation permission follows from ownership.
+   The [revised P3 plan](superpowers/plans/2026-10-22-cloud-global-country-split.md)
+   records the boundary and coordinated follow-ups; this lifecycle is not built or approved.
 6. **Support and the operator console.** Time-limited support access is built but unused:
    "Nothing uses this primitive in production yet"
    ([support grants](temporary-support-grants.md)). Missing: a way for a customer to ask for
@@ -3305,16 +3309,23 @@ evaluate mobile notifications separately.
   expired storage credentials are refused, recovery restores management access and a fresh
   manifest removes a revoked route. Repeat the drill with the selected deployment database,
   gateway reconciler and provider-native storage before setting an availability promise.
-- **Global and country separation (P3).** The approved production design's
-  global account and country service boundary is described in the
-  [implementation plan](superpowers/plans/2026-10-22-cloud-global-country-split.md).
-  This is planning only. Separate databases, offline verification of global sign-in,
-  data transfer and cutover, and the independent deployment/outage rehearsal are not
-  built or proved. The owner must approve the plan before implementation, and every
-  migration task must recheck active reservations and the actual inventory, including
-  backup-verification migration 043, before allocating later migration names.
-  P1 owns the Kubernetes runtime handoff; P4 owns the action controller. Production
-  schema changes, provider resources, spending and live mail need separate authority.
+- **Global and country separation (P3).** The
+  [revised implementation plan](superpowers/plans/2026-10-22-cloud-global-country-split.md)
+  follows the owner's 24 October decisions: customer accounts, credentials, factors,
+  sessions, profiles, plans, alerts, quotas and account/box recovery stay in-country,
+  with one owner per customer organisation per country and no invitations or managers.
+  Fresh sign-in, account recovery, new box recovery and venue services must work with
+  global absent. Global keeps the separate worldwide operator console and apex routing,
+  with no customer or venue copies. Country billing is recommended, not implemented or
+  approved; global reporting needs a later privacy decision. This is planning only,
+  pending owner PLAN re-approval after landing, then separate P3 build
+  authority. Isolation, cutover and real outage acceptance remain unbuilt and unproved.
+  Every migration task must reconcile reservations, including 043, and the actual
+  manifest before reallocating provisional later names. P1's shared database remains
+  transitional; P1 owns isolated deployment and P4 country action/approval adapters.
+  Priority 5 separately designs verified owner handover and lost-owner recovery.
+  Production schema, provider resources, deployment, spending and live mail retain
+  their separate authority gates.
 - **Repair actions and Cloud controller (P4).** The approved production design's
   action-by-action automation is described in the
   [implementation plan](superpowers/plans/2026-10-22-cloud-action-controller.md).
