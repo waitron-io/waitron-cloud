@@ -79,3 +79,52 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
     } finally { releaseActivity(); releaseRetry(); await browser.close(); }
   });
 }
+
+for (const scenario of ['cooldown', 'new account', 'blocked startup'] as const) {
+  test(`authenticator status retry preserves ${scenario} behavior`, async () => {
+    const browser = await chromium.launch({headless: true});
+    try {
+      const page = await browser.newPage(); page.setDefaultTimeout(4000);
+      await page.clock.install({time: new Date(at)}); await page.clock.pauseAt(new Date(at));
+      const c = translations.en; let reads = 0, sessionReads = 0;
+      await page.route('https://portal.test/account', route => route.fulfill({contentType: 'text/html', body: '<div id="portal" class="portal"></div>'}));
+      await page.route('**/api/account/**', route => {
+        const path = new URL(route.request().url()).pathname.replace('/api/account', '');
+        if (path === '/session') return route.fulfill({json: {accountId: 'owner', expiresAt: ++sessionReads === 1 ? expiresAt : '2030-01-03T00:00:00.000Z'}});
+        if (path === '/session/activity') return route.fulfill({json: {accountId: scenario === 'new account' ? 'other' : 'owner', expiresAt: '2030-01-02T00:00:00.000Z'}});
+        if (path === '/authenticator') {
+          if (++reads === 1) return route.fulfill({status: scenario === 'new account' ? 503 : 429, headers: {'retry-after': scenario === 'new account' ? '0' : '30'}, json: {error: scenario === 'new account' ? 'temporarily_unavailable' : 'rate_limited'}});
+          return route.fulfill({json: {active: false, version: 0, recoveryCodesRemaining: 0, available: true}});
+        }
+        if (path === '/installations') return route.fulfill({json: {installations: []}});
+        return route.fulfill({status: 503, json: {error: 'temporarily_unavailable'}});
+      });
+      await page.goto('https://portal.test/account'); await page.addScriptTag({content: bundle.outputFiles[0]!.text});
+      const section = page.locator('.authenticator'), retry = section.getByRole('button', {name: c.retry, exact: true});
+      await section.getByRole('alert').getByText(scenario === 'new account' ? c.factorUnavailable : c.limited, {exact: true}).waitFor();
+      if (scenario !== 'new account') {
+        assert.equal(await retry.isDisabled(), true);
+        await retry.evaluate(button => (button as HTMLElement).click());
+        assert.equal(reads, 1, 'a programmatic retry cannot bypass the server wait');
+        if (scenario === 'blocked startup') {
+          await page.evaluate(() => (window as unknown as {statusApp: {navigate(path: string): void}}).statusApp.navigate('/account'));
+          await page.waitForFunction(() => (window as unknown as {statusApp: {session: {state: {expiresAt?: string}}}}).statusApp.session.state.expiresAt === '2030-01-03T00:00:00.000Z');
+          assert.equal(reads, 1, 'navigation cannot bypass the server wait');
+        }
+        await page.clock.runFor(31_000);
+        assert.equal(await retry.isEnabled(), true);
+      }
+      const activity = page.waitForResponse('**/api/account/session/activity');
+      await page.locator('h1').click(); await (await activity).finished();
+      await page.waitForFunction(() => (window as unknown as {statusApp: {session: {state: {expiresAt?: string}}}}).statusApp.session.state.expiresAt === '2030-01-02T00:00:00.000Z');
+      if (scenario === 'cooldown') {
+        assert.equal(reads, 1, 'activity after a completed server wait leaves retry explicit');
+        assert.equal(await section.getByRole('alert').getByText(c.limited, {exact: true}).count(), 1);
+        await retry.click();
+      }
+      await section.getByText(c.factorOff, {exact: true}).waitFor();
+      assert.equal(reads, 2, scenario === 'blocked startup' ? 'a blocked startup can run when the server wait ends' : 'a new account or explicit retry starts a fresh status read');
+      assert.equal(await section.getByRole('alert').count(), 0);
+    } finally { await browser.close(); }
+  });
+}
