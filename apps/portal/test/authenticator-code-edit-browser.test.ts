@@ -100,13 +100,13 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
 
 // Clearing every error on input would hide these actual server responses and retry waits.
 for (const locale of ['en', 'es'] as const) for (const status of [0, 400, 403, 429, 503] as const) {
- test(`${locale} ${status}: authenticator code edits preserve server feedback`, async () => {
-  const {page, c, input, submit, feedback, writes, enter} = await open('remove', locale, 'light', 390, status);
+ const uncertain = status === 0 || status === 503;
+ for (const flow of uncertain ? ['remove'] as const : ['login', 'remove', 'activate'] as const) test(`${locale} ${flow} ${status}: authenticator code edits preserve server feedback`, async () => {
+  const {page, c, input, submit, feedback, writes, enter} = await open(flow, locale, 'light', 390, status);
   try {
    await enter('123456');
-   const uncertain = status === 0 || status === 503;
    await (uncertain ? page.getByRole('button', {name: c.factorReplace, exact: true}) : submit).click();
-   const message = uncertain ? c.factorChangeUncertain : status === 400 ? c.factorCheckSettings : status === 403 ? c.credentials : c.limited;
+   const message = uncertain ? c.factorChangeUncertain : status === 400 ? (flow === 'login' ? c.factorUnavailable : c.factorCheckSettings) : status === 403 ? c.credentials : c.limited;
    await feedback.getByText(message, {exact: true}).waitFor();
    await input.fill('654321');
    assert.equal(await feedback.getByText(message, {exact: true}).count(), 1);
