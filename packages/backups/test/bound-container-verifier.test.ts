@@ -20,8 +20,8 @@ let image:string,directory:string;
 const key={version:1,reference:'key-1',secret:'private-fixture-key'};
 before(async()=>{
  directory=await mkdtemp(join(tmpdir(),'cloud-bound-docker-'));
- const args=['build','--progress=plain','-q','-t',tag,'-f',join(root,'packages/backups/test/container-fixture/Bound.Dockerfile'),root],started=performance.now();
- try{image=docker(...args);}
+ const args=['build','--progress=plain','--iidfile',join(directory,'image-id'),'-t',tag,'-f',join(root,'packages/backups/test/container-fixture/Bound.Dockerfile'),root],started=performance.now();
+ try{docker(...args);image=(await readFile(join(directory,'image-id'),'utf8')).trim();}
  catch(error){
   const failure=error as {status?:number;signal?:string;code?:string;stderr?:string};
   // The runner can hit its job deadline before printing the hook's final error summary.

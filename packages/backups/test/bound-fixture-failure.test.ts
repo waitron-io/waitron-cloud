@@ -16,7 +16,8 @@ import * as fs from 'node:fs';const args=process.argv.slice(2);
 fs.appendFileSync(${JSON.stringify(calls)},JSON.stringify(args)+'\n');
 fs.appendFileSync(${JSON.stringify(join(directory,'pids'))},String(process.pid)+'\n');
 if(args[0]==='build'){
- if(${JSON.stringify(mode)}==='success-cleanup-fails'){console.log('sha256:'+'1'.repeat(64));process.exit(0);}
+ if(args.includes('--progress=plain')&&args.includes('-q')){process.stderr.write('progress=plain and quiet cannot be used together');process.exit(44);}
+ if(${JSON.stringify(mode)}==='success-cleanup-fails'){const index=args.indexOf('--iidfile');if(index>=0)fs.writeFileSync(args[index+1],'sha256:'+'1'.repeat(64));else console.log('sha256:'+'1'.repeat(64));process.exit(0);}
  process.stderr.write((${JSON.stringify(mode)}==='tail'?'discarded-head-marker'+'x'.repeat(10000):'')+'\n#7 resolve node:26 registry stalled\nregistry-tail-marker\n');
  if(${JSON.stringify(mode)}==='timeout')setInterval(()=>{},1000);else process.exit(42);
 }else{process.stderr.write('fixture cleanup refused');if(${JSON.stringify(mode)}==='cleanup-timeout')setInterval(()=>{},1000);else process.exit(43);}
@@ -49,8 +50,8 @@ function diagnostic(stderr:string){
 }
 test('failed bound fixture build reports command, elapsed time, exit status and bounded stderr tail',async()=>{
  const result=await fixture('tail'),report=diagnostic(result.stdout+result.stderr);
- assert.deepEqual(report.command.slice(0,5),['docker','build','--progress=plain','-q','-t']);
- assert.match(report.command[5],/^cloud-bound-test:bound-/);assert.equal(report.command.at(-1),fileURLToPath(new URL('../../../',import.meta.url)));
+ assert.deepEqual(report.command.slice(0,4),['docker','build','--progress=plain','--iidfile']);
+ assert(!report.command.includes('-q'));assert.match(report.command[report.command.indexOf('-t')+1],/^cloud-bound-test:bound-/);assert.equal(report.command.at(-1),fileURLToPath(new URL('../../../',import.meta.url)));
  assert.equal(report.status,42);assert(report.elapsedMs>=0);assert(report.elapsedMs<10000);
  assert.match(report.stderrTail,/#7 resolve node:26 registry stalled/);assert.match(report.stderrTail,/registry-tail-marker/);
  assert(!report.stderrTail.includes('discarded-head-marker'));assert(report.stderrTail.length<=8192);
