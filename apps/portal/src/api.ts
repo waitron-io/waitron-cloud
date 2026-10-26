@@ -64,7 +64,11 @@ export async function accountRequest<T>(path: string, body?: Record<string, unkn
     const value: unknown = await response.json().catch(() => null);
     if (response.ok && validResult(path, value, response.status)) return {ok: true, value: value as T};
     const codes = ['entitlement_unavailable','custody_unavailable','continuity_unavailable','history_uncertain','allocation_unavailable','space_exhausted','reservation_untrusted','dns_not_verified','hostname_conflict','revision_conflict','remote_not_placed','invalid_hostname','pairing_unavailable', 'permission_denied', 'binding_conflict', 'invalid_input', 'credentials_invalid', 'unauthenticated', 'session_expired', 'forbidden', 'link_unavailable', 'password_compromised', 'rate_limited', 'temporarily_unavailable'];
-    if(response.status===403&&path.startsWith('/recovery/'))codes.push('local_integration_only');
+    if(path.startsWith('/recovery/')){
+      if(response.status===400)codes.push('confirmation_required','unverified');
+      if(response.status===409)codes.push('approval_required','conflict','target_not_fresh','recovery_active');
+      if(response.status===403)codes.push('local_integration_only');
+    }
     const code = value && typeof value === 'object' && 'error' in value && typeof value.error === 'string' && codes.includes(value.error)
       ? value.error : 'unexpected_response';
     return {ok: false, status: response.ok ? 503 : response.status, code, retryAfterMs};

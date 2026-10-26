@@ -14,7 +14,7 @@ export function recoveryScreen(app:PortalApp){
  return html`<p>${c.recoveryIntro}</p><p>${c.recoveryLocal}</p>
   ${r.error?html`<p role="alert">${c[r.error]}</p>`:nothing}
   <wt-input name="recoveryCode" .label=${c.pairCode} .value=${r.code} .error=${r.error==='pairCodeError'?c.pairCodeError:''} .required=${true} .disabled=${disabled||!!r.view} autocomplete="off" @wt-change=${(e:CustomEvent<{value:string}>)=>{r.code=e.detail.value;if(r.error==='pairCodeError')r.error=undefined;app.draw();}}></wt-input>
-  <wt-button id="submit" .disabled=${disabled} @click=${()=>{app.readFields();void r.inspect();}}>${r.view?c.retry:c.pairInspect}</wt-button>
+  <wt-button id="submit" .disabled=${disabled} @click=${()=>{app.readFields();void r.inspect();}}>${r.view?(r.error?c.recoveryCheckRequest:c.retry):c.pairInspect}</wt-button>
   ${r.view?html`<p>${c.recoveryExpires} <time datetime=${op?.expiresAt??r.view.expiresAt}>${formatDateTime(op?.expiresAt??r.view.expiresAt,app.locale)}</time></p>`:nothing}
   ${expired?html`<p role="status">${c.recoveryExpired}</p>`:nothing}
   ${op?html`${!complete?html`<p role="status">${op.status==='closed'?c.recoveryClosed:op.status==='restored'?c.recoveryRestored:op.source.kind==='continuous'?c.recoveryApprovedContinuous:c.recoveryApprovedSnapshot}</p>`:nothing}

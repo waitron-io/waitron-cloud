@@ -5614,8 +5614,20 @@ Cloud follow-ups, each a separate small change with tests before implementation:
   Request-body
   limits/formats/interruption and other browser failures keep their previous
   feedback and remain follow-ups.
-- R3: explain recovery confirmation, active-operation, verification and fresh-target
-  refusals; reconcile uncertain writes before suggesting another approval.
+- R3 delivered: recovery approval and replacement refusals now distinguish missing
+  confirmations, unverified or incompatible sources, reused replacement keys,
+  another open recovery, changed request bindings and missing approval in English
+  and Spanish. Check request status reads the existing request without repeating
+  a write; refreshing snapshots and choosing a different source still requires
+  both confirmations. An unapproved request can be left to expire. Another open
+  recovery must be closed through its original link if it is no longer needed;
+  this page does not list or close another request. Unknown replies and transport
+  failures retain read-after-uncertain-write reconciliation. Native API/controller
+  and stubbed-browser checks cover these paths; real database authority, locking
+  and compatibility checks run in CI. Finding another request without its original
+  link, displaying source compatibility before approval, and fresh replacement
+  setup remain follow-ups in their owning Cloud/Waitron surfaces. No recovery,
+  permission, proof or single-writer rule changes.
 - R4: recovery now explains a refused test-only action in English and Spanish.
   Open a new recovery link from the replacement server’s setup, then choose a test venue;
   production recovery remains unavailable. Native API/controller and browser
