@@ -213,6 +213,15 @@ validated worker traces and result-read status without private output. The bound
 assertion, deadlines and cleanup stay unchanged. The historical cause remains open;
 collect an instrumented recurrence before changing behavior.
 
+## Isolated-replay CI work groups (D301)
+
+Isolated replay now runs in three separate CI jobs: controller cases, host and
+result-reporter cases, and the remaining command and diagnostic cases. New case
+names fall into one of these groups so coverage cannot disappear. Each job keeps
+the eight-minute cap, original case assertions, runtime pins and cleanup rules.
+Check the complete case inventory and both head and merge runs before claiming
+the jobs meet the five-minute target.
+
 ## Repository licence
 
 The root `LICENSE` is copied byte for byte from Waitron's Elastic License 2.0 text.
