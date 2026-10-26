@@ -3937,6 +3937,16 @@ choose replacement, regeneration, removal, activation or cancellation. Stubbed
 API browser checks cover English/Spanish, both themes and phone/desktop widths;
 these do not qualify the backend or production.
 
+## Home redirect browser readiness (D314)
+
+The home-page browser checks wait for the existing `/account` or `/login`
+destination before checking the confirmed session's heading, title and notice.
+The Account heading also appears during session checking, so it cannot confirm
+that the redirect has finished. A delayed session reply reproduces the earlier
+URL refusal and catches omission of the destination wait. All original
+assertions and four-second page/120-second runner deadlines stay unchanged;
+this corrects test readiness without changing product authentication or routing.
+
 ## Browser-test clock setup (D313)
 
 The alert-preferences activity fixture now installs its running clock a day before

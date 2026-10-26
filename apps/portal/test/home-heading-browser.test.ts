@@ -90,6 +90,7 @@ for (const locale of ['en', 'es'] as const) for (const outcome of ['anonymous', 
       await page.goto('https://portal.test/');
       await page.addScriptTag({content: bundle.outputFiles[0]!.text});
       const title = outcome === 'authenticated' ? c.account : c.login;
+      await page.waitForURL(url => url.pathname === (outcome === 'authenticated' ? '/account' : '/login'));
       await page.getByRole('heading', {name: title, exact: true}).waitFor();
       assert.equal(new URL(page.url()).pathname, outcome === 'authenticated' ? '/account' : '/login');
       assert.equal(await page.title(), `${title} · Waitron Cloud`);
