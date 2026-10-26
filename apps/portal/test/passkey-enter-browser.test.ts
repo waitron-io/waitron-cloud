@@ -135,3 +135,32 @@ for (const blocked of ['unsupported', 'cooldown'] as const) {
     } finally { await browser.close(); }
   });
 }
+
+
+test('Enter adds alongside an existing passkey and submits once for two immediate presses', async () => {
+  const browser = await chromium.launch({headless: true});
+  try {
+    const page = await browser.newPage(); page.setDefaultTimeout(4000);
+    await page.clock.install({time: new Date(at)}); await page.clock.pauseAt(new Date(at));
+    const writes: string[] = [];
+    await page.route('https://portal.test/account', route => route.fulfill({contentType: 'text/html', body: '<div id="portal" class="portal"></div>'}));
+    await page.route('**/api/account/**', route => {
+      const request = route.request(), endpoint = new URL(request.url()).pathname.replace('/api/account', '');
+      if (endpoint === '/session' || endpoint === '/session/activity') return route.fulfill({json: {accountId: 'owner', expiresAt: '2026-10-25T12:00:00Z'}});
+      if (endpoint === '/passkeys') return route.fulfill({json: {passkeys: [{id, createdAt: at, lastUsedAt: null}]}});
+      if (endpoint === '/authenticator') return route.fulfill({json: {active: false, version: 0, recoveryCodesRemaining: 0, available: true}});
+      if (endpoint === '/installations') return route.fulfill({json: {installations: []}});
+      if (request.method() === 'POST') writes.push(endpoint);
+      return route.fulfill({status: 429, headers: {'retry-after': '60'}, json: {error: 'rate_limited'}});
+    });
+    await page.goto('https://portal.test/account'); await page.addScriptTag({content: bundle.outputFiles[0]!.text});
+    const section = page.locator('.passkeys'), field = section.locator('input[name=passkeyPassword]');
+    await section.getByRole('button', {name: translations.en.passkeyRemove, exact: true}).waitFor();
+    await page.waitForLoadState('networkidle');
+    await field.fill(password);
+    const reply = page.waitForResponse(r => r.request().method() === 'POST');
+    await field.evaluate(input => { for (let i = 0; i < 2; i++) input.dispatchEvent(new KeyboardEvent('keydown', {key: 'Enter', bubbles: true, composed: true, cancelable: true})); });
+    await reply; await page.waitForLoadState('networkidle');
+    assert.deepEqual(writes, ['/passkeys/registration/options']);
+  } finally { await browser.close(); }
+});
