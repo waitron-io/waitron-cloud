@@ -17,16 +17,16 @@ function sourceBucket(ip:string):string{
 const worker=`onmessage=async({data})=>{try{const encoder=new TextEncoder(),until=performance.now()+20000;for(let nonce=0;nonce<1000000000&&performance.now()<until;nonce++){const hash=new DataView(await crypto.subtle.digest('SHA-256',encoder.encode(data.challenge+':'+nonce)));if(hash.getUint32(0)<2**(32-data.difficulty)){postMessage({challenge:data.challenge,nonce});return;}}postMessage({error:'exhausted'});}catch{postMessage({error:'unsupported'});}};`;
 const script=`(async()=>{
  let worker,timer,controller,finished=false;
- const stop=()=>{clearTimeout(timer);worker?.terminate();controller?.abort();};
+ const stop=()=>{clearTimeout(timer);if(worker)worker.terminate();if(controller)controller.abort();};
  const fail=(browser=false)=>{if(finished)return;finished=true;stop();document.querySelector('p').innerHTML=browser?'This browser check could not finish. Try another browser, update it and check that JavaScript is allowed. / <span lang="es">No se pudo completar la comprobación. Prueba con otro navegador, actualízalo y comprueba que JavaScript esté permitido.</span>':'Please reload to try again. / <span lang="es">Vuelve a cargar para intentarlo de nuevo.</span>';};
  try{
   timer=setTimeout(()=>fail(true),30000);
   try{controller=new AbortController();}catch{fail(true);return;}
   const challenge=await(await fetch('/_cloud/challenge',{signal:controller.signal})).json();if(finished)return;
   try{worker=new Worker('/_cloud/worker.js');}catch{fail(true);return;}
-  worker.onmessage=async({data})=>{if(finished)return;if(data?.error){fail(true);return;}try{worker.terminate();const reply=await fetch('/_cloud/solve',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data),signal:controller.signal});if(finished)return;if(!reply.ok)throw Error();finished=true;stop();location.replace('/public/availability');}catch{fail();}};
+  worker.onmessage=async({data})=>{if(finished)return;if(data&&data.error){fail(true);return;}try{worker.terminate();const reply=await fetch('/_cloud/solve',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data),signal:controller.signal});if(finished)return;if(!reply.ok)throw Error();finished=true;stop();location.replace('/public/availability');}catch{fail();}};
   worker.onerror=()=>fail(true);worker.postMessage(challenge);
- }catch{fail(typeof Worker==='undefined');}
+ }catch{fail();}
 })();`;
 const rejectionText:Record<number,[string,string]>={
  421:['This venue link is unavailable. Check the original venue link and open it again.','Este enlace del local no está disponible. Comprueba el enlace original del local y ábrelo de nuevo.'],
@@ -34,7 +34,7 @@ const rejectionText:Record<number,[string,string]>={
  413:['This request is too large or uses an unsupported connection. Open the venue’s public page.','Esta solicitud es demasiado grande o usa una conexión no admitida. Abre la página pública del local.'],
  404:['This page was not found. Open the venue’s public page.','Esta página no existe. Abre la página pública del local.'],
  405:['This request is not supported. Open the venue’s public page.','Esta solicitud no está admitida. Abre la página pública del local.'],
- 400:['The browser check request could not be read. Open the venue’s public page to start again.','No se pudo leer la solicitud de comprobación del navegador. Abre la página pública del local para empezar de nuevo.'],
+ 400:['This request could not be completed. Check the venue link and try again.','Esta solicitud no se pudo completar. Comprueba el enlace del local e inténtalo de nuevo.'],
  403:['The browser check was not accepted. Open the venue’s public page to start again.','No se aceptó la comprobación del navegador. Abre la página pública del local para empezar de nuevo.'],
 };
 /** Bind this handler to loopback only, behind HAProxy's overwritten client-IP/SNI headers. */

@@ -5,8 +5,8 @@ import {randomBytes,webcrypto} from 'node:crypto';
 import {runInNewContext} from 'node:vm';
 import {createPublicGate} from '../src/public-gate.ts';
 
-async function fixture(){
- const gate=createPublicGate({key:randomBytes(32),difficulty:8,routes:()=>[{publicHostname:'sol.example.test',staffHostname:'staff.sol.example.test',address:'127.0.0.1',port:1}]});
+async function fixture(routeFailure=false){
+ const gate=createPublicGate({key:randomBytes(32),difficulty:8,routes:()=>{if(routeFailure)throw new Error('private route state unavailable');return [{publicHostname:'sol.example.test',staffHostname:'staff.sol.example.test',address:'127.0.0.1',port:1}];}});
  const server=createServer(gate.handle);
  await new Promise<void>(resolve=>server.listen(0,'127.0.0.1',resolve));
  const bound=server.address();assert.ok(bound&&typeof bound!=='string');
@@ -23,7 +23,7 @@ const refusals:{status:number;path:string;headers?:Record<string,string>;method?
  {status:413,path:'/public/availability',headers:{upgrade:'websocket'},en:/request is too large/i,es:/solicitud es demasiado grande/i},
  {status:404,path:'/private',en:/page was not found/i,es:/página no existe/i},
  {status:405,path:'/public/availability',method:'POST',en:/open the venue/i,es:/abre la página/i},
- {status:400,path:'/_cloud/solve',method:'POST',body:'{',en:/browser check/i,es:/comprobación del navegador/i},
+ {status:400,path:'/_cloud/solve',method:'POST',body:'{',en:/request could not be completed/i,es:/solicitud no se pudo completar/i},
  {status:403,path:'/_cloud/solve',method:'POST',body:'{"challenge":"forged","nonce":0}',en:/browser check/i,es:/comprobación del navegador/i},
 ];
 for(const item of refusals)test(`direct navigation gives bilingual recovery guidance for ${item.status}`,async()=>{
@@ -69,15 +69,24 @@ test('HTML fallback handles older browsers while background HTML requests stay e
  }finally{await f.close();}
 });
 
+test('an internal route failure gives general request guidance without exposing its cause',async()=>{
+ const f=await fixture(true);try{
+  const reply=await f.send('/public/availability',{accept:'text/html'});
+  assert.equal(reply.status,400);assert.match(reply.body,/request could not be completed/i);
+  assert.match(reply.body,/solicitud no se pudo completar/i);assert.doesNotMatch(reply.body,/browser check|private route|state unavailable/i);
+  assert.equal(reply.headers['set-cookie'],undefined);assert.equal(f.gate.stats().forwarded,0);
+ }finally{await f.close();}
+});
+
 test('exhausted worker time budget reports a terminal failure instead of searching indefinitely',async()=>{
  const f=await fixture();try{
   const {body}=await f.send('/_cloud/worker.js');const messages:unknown[]=[];let ticks=0,hashes=0;
   const context={TextEncoder,DataView,performance:{now:()=>ticks++*10000},crypto:{subtle:{digest:async()=>{hashes++;return new Uint8Array([255,255,255,255]).buffer;}}},postMessage:(value:unknown)=>messages.push(value),onmessage:undefined as undefined|((event:{data:unknown})=>Promise<void>)};
   runInNewContext(body,context);
-  // A second digest stalls, so only a worker that stops at its own budget can finish.
+  // A third digest stalls; the clock reaches the search budget after the first.
   context.crypto.subtle.digest=async()=>{hashes++;if(hashes>2)return new Promise<ArrayBuffer>(()=>{});return new Uint8Array([255,255,255,255]).buffer;};
   await Promise.race([context.onmessage!({data:{challenge:'clock-bound',difficulty:22}}),new Promise<void>(resolve=>setTimeout(resolve,50))]);
-  assert.deepEqual(JSON.parse(JSON.stringify(messages)),[{error:'exhausted'}]);assert.ok(hashes<=2);
+  assert.deepEqual(JSON.parse(JSON.stringify(messages)),[{error:'exhausted'}]);assert.equal(hashes,1);
  }finally{await f.close();}
 });
 
@@ -135,14 +144,16 @@ test('missing request-cancellation support gives browser guidance without starti
 for(const stall of ['challenge','worker','solve','worker-error','exhausted','unsupported'])test(`browser check ends ${stall} without accepting a late proof`,async()=>{
  const f=await fixture();try{
   const {body}=await f.send('/_cloud/challenge.js');
-  const paragraph={innerHTML:'Please wait a moment.'},redirects:string[]=[],requests:string[]=[],timers=new Map<number,()=>void>();
+  const paragraph={innerHTML:'Please wait a moment.'},redirects:string[]=[],requests:string[]=[],signals:AbortSignal[]=[],timers=new Map<number,{at:number;callback:()=>void}>();
+  let time=0;
+  const advance=(ms:number)=>{time+=ms;for(const timer of [...timers.values()])if(timer.at<=time)timer.callback();};
   let worker:{onmessage?:({data}:{data:unknown})=>Promise<void>;onerror?:()=>void;terminate:()=>void}|undefined,terminated=false;
   let finishChallenge:undefined|((value:Response)=>void),finishSolve:undefined|((value:Response)=>void);
   const pending=runInNewContext(body,{
    document:{querySelector:()=>paragraph},location:{replace:(path:string)=>redirects.push(path)},AbortController,
-   setTimeout:(callback:()=>void,ms:number)=>{assert.ok(ms>0&&ms<=30000);timers.set(1,callback);return 1;},clearTimeout:(id:number)=>timers.delete(id),
+   setTimeout:(callback:()=>void,ms:number)=>{timers.set(1,{at:time+ms,callback});return 1;},clearTimeout:(id:number)=>timers.delete(id),
    Worker:class {constructor(){worker=this;}postMessage(){}terminate(){terminated=true;}},
-   fetch:async(path:string)=>{requests.push(path);if(path==='/_cloud/challenge'){
+   fetch:async(path:string,init:RequestInit)=>{requests.push(path);signals.push(init.signal!);if(path==='/_cloud/challenge'){
     if(stall==='challenge')return new Promise<Response>(resolve=>{finishChallenge=resolve;});
     return Response.json({challenge:'late-proof',difficulty:8});
    }return new Promise<Response>(resolve=>{finishSolve=resolve;});},
@@ -152,9 +163,13 @@ for(const stall of ['challenge','worker','solve','worker-error','exhausted','uns
   if(stall==='solve')solve=worker!.onmessage!({data:{challenge:'late-proof',nonce:1}});
   if(stall==='worker-error')worker!.onerror!();
   else if(stall==='exhausted'||stall==='unsupported'){void worker!.onmessage!({data:{error:stall}});await Promise.resolve();}
-  else for(const callback of [...timers.values()])callback();
+  else{
+   advance(29999);assert.equal(paragraph.innerHTML,'Please wait a moment.');assert.equal(signals.some(signal=>signal.aborted),false);
+   advance(1);
+  }
   assert.match(paragraph.innerHTML,/another browser/i);assert.match(paragraph.innerHTML,/otro navegador/i);
   assert.doesNotMatch(paragraph.innerHTML,/Please wait a moment/);assert.deepEqual(redirects,[]);assert.equal(timers.size,0);
+  assert.ok(signals.every(signal=>signal.aborted),'terminal failure must cancel actual request signals');
   if(worker)assert.equal(terminated,true);
   if(finishChallenge){finishChallenge(Response.json({challenge:'late-proof',difficulty:8}));await pending;assert.equal(worker,undefined);}
   if(finishSolve){finishSolve(new Response(null,{status:204}));await solve;}
