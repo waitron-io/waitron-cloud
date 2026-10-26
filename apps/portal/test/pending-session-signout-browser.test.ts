@@ -13,11 +13,11 @@ const bundle = await build({stdin: {contents: `
 const styles = await readFile(new URL('../src/styles.css', import.meta.url), 'utf8');
 const current = {id: '12345678-1234-4234-8234-123456789abc', createdAt: '2026-09-26T00:00:00Z',
   lastUsedAt: '2026-09-26T00:20:00Z', expiresAt: '2099-01-01T00:00:00Z', current: true};
-type App = {session: {check(options?: {fresh?: boolean}): Promise<void>; state: {kind: string}}; navigate(path: string): void};
+type App = {session: {check(options?: {fresh?: boolean}): Promise<void>; state: {kind: string; expiresAt?: string}}; navigate(path: string): void; security: {load(): Promise<void>}; revokeSession(id: string): Promise<void>};
 // Sharing a pre-revocation read would suppress the fresh check and sign-out notice.
 for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'] as const) for (const width of [390, 1280]) {
  const scenarios = theme === 'light' && width === 390
-  ? ['current','lost-reply','expired','unavailable','navigate','new-session','older-first','rate','passive'] : ['current'];
+  ? ['current','lost-reply','expired','unavailable','navigate','new-session','older-first','rate','passive','generic'] : ['current'];
  for (const scenario of scenarios) test(`${locale} ${theme} ${width}: ${scenario} revocation with a pending session snapshot`, async () => {
   const browser = await chromium.launch({headless: true});
   let releaseOld!:()=>void, releaseFresh!:()=>void, oldEntered!:()=>void, freshEntered!:()=>void;
@@ -37,7 +37,7 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
      const read=++reads;
      if(read===2){oldEntered();await oldReply;}
      if(read===3){freshEntered();await freshReply;}
-     if(read<3)return route.fulfill({json:{accountId:'owner',expiresAt:current.expiresAt}});
+     if(read<3)return route.fulfill({json:{accountId:'owner',expiresAt:read===2?'2099-01-02T00:00:00Z':current.expiresAt}});
      if(read===3&&scenario==='rate')return route.fulfill({status:429,headers:{'retry-after':'60'},json:{error:'rate_limited'}});
      if(read===3&&scenario==='unavailable')return route.fulfill({status:503,json:{error:'temporarily_unavailable'}});
      return route.fulfill({status:401,json:{error:scenario==='expired'?'session_expired':'unauthenticated'}});
@@ -56,14 +56,18 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
    await page.goto('https://portal.test/account');await page.addStyleTag({content:styles});await page.addScriptTag({content:bundle.outputFiles[0]!.text});
    const signout=page.locator('.sessions').getByRole('button',{name:c.sessionSignOut,exact:true});await signout.waitFor();
    await page.evaluate(()=>{void(window as unknown as {pendingSignoutApp:App}).pendingSignoutApp.session.check();});await oldRequest;
-   if(scenario==='passive'){
-    await page.evaluate(()=>{void(window as unknown as {pendingSignoutApp:App}).pendingSignoutApp.session.check();});
+   if(scenario==='passive'||scenario==='generic'){
+    if(scenario==='generic'){
+     ended=true;
+     await page.evaluate(async()=>{await(window as unknown as {pendingSignoutApp:App}).pendingSignoutApp.security.load();});
+    }else await page.evaluate(()=>{void(window as unknown as {pendingSignoutApp:App}).pendingSignoutApp.session.check();});
     await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
     assert.equal(reads,2,'ordinary checks still share their pending read');
     const response=page.waitForResponse('**/api/account/session');releaseOld();await response;
     assert.equal(new URL(page.url()).pathname,'/account');assert.deepEqual(writes,[]);return;
    }
-   await signout.click();
+   if(scenario==='older-first')await page.evaluate(id=>{void(window as unknown as {pendingSignoutApp:App}).pendingSignoutApp.revokeSession(id);},current.id);
+   else await signout.click();
    await Promise.race([freshRequest,new Promise<never>((_,reject)=>{
     const timeout=setTimeout(()=>reject(new Error('No fresh session check after current-session revocation')),4000);
     void freshRequest.then(()=>clearTimeout(timeout));
@@ -71,7 +75,7 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
    assert.equal(reads,3);
    if(scenario==='older-first'){
     const response=page.waitForResponse('**/api/account/session');releaseOld();await response;
-    await page.waitForFunction(()=>(window as unknown as {pendingSignoutApp:App}).pendingSignoutApp.session.state.kind==='authenticated');
+    await page.waitForFunction(()=>(window as unknown as {pendingSignoutApp:App}).pendingSignoutApp.session.state.expiresAt==='2099-01-02T00:00:00Z');
     assert.equal(new URL(page.url()).pathname,'/account');
     assert.equal(await page.getByText(c.signedOut,{exact:true}).count(),0,'the old authenticated snapshot cannot confirm sign-out');
    }
