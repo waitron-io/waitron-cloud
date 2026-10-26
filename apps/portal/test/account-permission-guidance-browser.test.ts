@@ -13,7 +13,7 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
  const browser=await chromium.launch({headless:true});
  try{
   const page=await browser.newPage({locale,colorScheme:theme,viewport:{width,height:900}});page.setDefaultTimeout(4000);page.on('pageerror',error=>console.log('Browser fixture error:',error.message));
-  let denied='',code='permission_denied',signedIn=true,logoutFails=false,logoutCalls=0,documents=0;
+  let denied='',code='permission_denied',signedIn=true,logoutFails=false,logoutCalls=0,documents=0,scenario='';
   const writes:string[]=[];
   const c=translations[locale];
   await page.route('https://portal.test/**',async route=>{
@@ -24,16 +24,17 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
    if(endpoint==='logout'){logoutCalls++;if(logoutFails)return route.fulfill({status:503,json:{error:'temporarily_unavailable'}});signedIn=false;return route.fulfill({status:204});}
    if(r.method()==='POST')writes.push(endpoint);
    if(endpoint===denied)return route.fulfill({status:403,json:{error:code}});
+   if(endpoint==='usage/read'&&scenario==='usage'&&process.env.PERMISSION_INITIAL_USAGE_DELAY)await new Promise(resolve=>setTimeout(resolve,Number(process.env.PERMISSION_INITIAL_USAGE_DELAY)));
    const values:Record<string,unknown>={installations:{installations:[installation,{...installation,installationId:'20000000-0000-4000-8000-000000000002',venueId:'20000000-0000-4000-8000-000000000002'}]},alerts:{enabled:false,locale:'en'},'translation-consent':{consents:[{venueId:id,consented:false,consentedAt:null}]},sessions:{sessions:[{id,createdAt:new Date().toISOString(),lastUsedAt:new Date().toISOString(),expiresAt:new Date(Date.now()+3600000).toISOString(),current:true}]},passkeys:{passkeys:[]},authenticator:{active:false,version:0,recoveryCodesRemaining:0,available:false}};
    return endpoint in values?route.fulfill({json:values[endpoint]}):route.fulfill({status:503,json:{error:'temporarily_unavailable'}});
   });
-  const start=async()=>{denied='';await page.goto('https://portal.test/account');await page.waitForFunction(()=>{const a=(window as any).app;return a?.installations.loaded&&a.alerts.loaded&&a.translationConsent.loaded&&a.security.loaded&&a.passkeys.loaded&&a.authenticator.loaded;}).catch(async error=>{console.log('Fixture state',await page.evaluate(()=>{const a=(window as any).app;return a?{session:a.session.state,controllers:Object.fromEntries(['installations','alerts','translationConsent','security','passkeys','authenticator'].map(k=>[k,{loaded:a[k].loaded,error:a[k].error}]))}:document.body.innerText.slice(0,300);}));throw error;});};
+  const start=async()=>{denied='';await page.goto('https://portal.test/account');await page.waitForFunction(()=>{const a=(window as any).app;return a?.installations.loaded&&!a.usage.pending&&a.alerts.loaded&&a.translationConsent.loaded&&a.security.loaded&&a.passkeys.loaded&&a.authenticator.loaded;}).catch(async error=>{console.log('Fixture state',await page.evaluate(()=>{const a=(window as any).app;return a?{session:a.session.state,controllers:Object.fromEntries(['installations','alerts','translationConsent','security','passkeys','authenticator'].map(k=>[k,{loaded:a[k].loaded,error:a[k].error}]))}:document.body.innerText.slice(0,300);}));throw error;});};
   for(const [target,endpoint] of [
    ['installations','installations'],['backups','backups/list'],['diagnostics','diagnostics/read'],['usage','usage/read'],['remote','remote-access/status'],['translationConsent','translation-consent'],
   ] as const){
-   await start();denied=endpoint;
+   scenario=target;await start();denied=endpoint;
    await page.evaluate(async({target,id})=>{const a=(window as any).app,v=a[target];if(target==='backups'||target==='remote')await v.open(id);else if(target==='diagnostics')await v.download(id);else if(target==='usage'){v.organisation(id);v.refresh();await v.load();}else if(target==='translationConsent')await v.agree(id);else await v.load();}, {target,id});
-   const alert=page.getByRole('alert').filter({hasText:c.permissionBusiness});await alert.waitFor();assert.equal(await page.locator('.permission-actions').count(),1,'only the refused panel offers an account switch');
+   const alert=page.getByRole('alert').filter({hasText:c.permissionBusiness});await alert.waitFor().catch(async error=>{console.log('Refusal diagnostic',target,await page.evaluate(target=>{const a=(window as any).app;return {locale:a.locale,path:a.path,session:a.session.state,controller:{error:a[target].error,pending:a[target].pending,loaded:a[target].loaded,waiting:a[target].waiting}};},target));throw error;});assert.equal(await page.locator('.permission-actions').count(),1,'only the refused panel offers an account switch');
    const actions=alert.locator('..').locator('.permission-actions').filter({has:page.getByRole('link',{name:c.permissionBack,exact:true})}).first();
    await actions.getByRole('link',{name:c.permissionBack,exact:true}).waitFor();
    assert.equal(await actions.getByRole('button',{name:c.signout,exact:true}).isEnabled(),true);
