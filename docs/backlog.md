@@ -1912,18 +1912,24 @@ notifications separately.
   native cancellation/deadline journey passes three consecutive runs, alongside
   37 stream and 33 private-replay checks. Setup interruption collects its recorded
   child process group and generated directory for both supported signals.
-  The fast-exiting synthetic writer case still has an admission race: under native
-  load, one of 432 unchanged trials and one of 800 instrumented trials fail the
-  same successful-close assertion. The instrumented failure is in session
-  collection: a PUT admitted after the idle callback loses its response with
-  `ERR_STREAM_PREMATURE_CLOSE`, so strict transfer accounting refuses close.
-  The fixture queues more uploads while the held upload is pending; an idle
-  callback does not prevent another process from starting its next request.
-  This establishes a local failure mechanism, not the cause of the untraced
-  Linux occurrence. Before changing the fixture or its successful-close check,
-  decide whether this case requires a writer that stops admitting new work or
-  must explicitly expect refusal when a later upload is interrupted. Preserve
-  admitted-upload drainage, accounting, child ownership and all deadlines.
+  The generated fast-exit cancellation checks now separate two contracts. The
+  successful-close case admits only its startup upload and its held upload, so
+  it retains the original successful-close and exact child-collection assertions
+  without queuing later work. A second case keeps queuing, admits a later upload
+  after the real idle handoff signals the writer, then exits after receiving one
+  of four declared reply bytes. Close must refuse that interrupted accounting;
+  cancellation separately prevents publication while independent resource
+  collection reports completion. The check requires a successful native exit
+  without a forced-kill signal and inspects the actual listeners, backend sockets,
+  owned child identities and scratch, and never launches restore.
+  Run both with `node --test --test-timeout=10000 --test-name-pattern='^cancellation'
+  scripts/cloud-cost/replay-stream.test.mjs`.
+  Native reproduction previously found one failure in 432 unchanged trials and
+  one in 800 instrumented trials: a later PUT lost its response during session
+  collection. The controlled split qualifies that local mechanism and preserves
+  admitted-upload drainage, accounting, child ownership and every deadline.
+  Runtime code is unchanged. The original untraced Linux event and official
+  Litestream shutdown still need attribution and qualification.
 
   **Remaining work and observations.** To complete the operating total, establish
   the missing inventory quantities and regional billing terms, representative

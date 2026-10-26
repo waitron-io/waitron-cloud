@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
+import { Server } from 'node:net';
 import { once } from 'node:events';
 import { DatabaseSync } from 'node:sqlite';
 import { mkdtempSync, mkdirSync, realpathSync, writeFileSync, readFileSync, rmSync, existsSync, symlinkSync, renameSync } from 'node:fs';
@@ -18,7 +19,7 @@ const module = await import('./replay-stream.mjs').catch(error => {
 const bad = { message: 'Invalid cloud cost replay stream' };
 
 // The child performs real HTTP/SQLite I/O; the separate storage endpoint inventories its bytes.
-async function fixture(t, mode = 'normal', { holdAfterStop = false } = {}) {
+async function fixture(t, mode = 'normal', { holdAfterStop = false, interruptQueuedUpload = false } = {}) {
   const parent = realpathSync(mkdtempSync(join(tmpdir(), 'cost-replay-stream-')));
   const source = join(parent, 'source'), root = join(parent, 'owned');
   for (const path of [source, root]) mkdirSync(path, { mode: 0o700 });
@@ -32,13 +33,17 @@ async function fixture(t, mode = 'normal', { holdAfterStop = false } = {}) {
   let stored, uploaded = 0, releaseUpload, heldResponse, releaseInventory, inventoryHeld;
   const heldUpload = new Promise(resolve => { heldResponse = resolve; });
   const heldInventory = new Promise(resolve => { inventoryHeld = resolve; });
+  let interrupted; const connections = new Set();
   let readCompleted; const firstRead = new Promise(resolve => { readCompleted = resolve; });
   const provider = createServer((req, res) => {
     const url = new URL(req.url, 'http://local'), parts = [];
     req.on('data', chunk => parts.push(chunk)); req.on('end', () => {
       if (req.method === 'PUT') {
         stored = Buffer.concat(parts); uploaded++;
-        if (holdAfterStop && req.headers['x-fixture-after-stop'] === 'yes') {
+        if (interruptQueuedUpload && req.headers['x-fixture-after-stop'] === 'yes') {
+          interrupted = { request: req, response: res };
+          res.writeHead(200, { 'content-length': '4' }); res.write('x');
+        } else if (holdAfterStop && req.headers['x-fixture-after-stop'] === 'yes') {
           heldResponse();
         } else if (['held-upload','held-fast-stop','held-invalid'].includes(mode) && uploaded === 2) {
           releaseUpload = () => mode === 'held-invalid' ? res.destroy() : res.end(); heldResponse();
@@ -59,6 +64,7 @@ async function fixture(t, mode = 'normal', { holdAfterStop = false } = {}) {
       }
     });
   });
+  provider.on('connection', socket => { connections.add(socket); socket.once('close', () => connections.delete(socket)); });
   provider.listen(0, '127.0.0.1'); await once(provider, 'listening');
   t.after(() => { provider.closeAllConnections(); return new Promise(resolve => provider.close(resolve)); });
   const binary = join(root, 'synthetic-writer');
@@ -67,19 +73,30 @@ import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { request } from 'node:http';
 import { randomUUID } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
-const mode = ${JSON.stringify(mode)};
+const mode = ${JSON.stringify(mode)}, interruptQueuedUpload = ${JSON.stringify(interruptQueuedUpload)};
 if (process.argv[2] === 'version') { process.stdout.write(mode === 'version' ? 'OTHER' : '0.5.17'); process.exit(0); }
 console.log('PRIVATE_CHILD_STDOUT_CANARY'); console.error('PRIVATE_CHILD_STDERR_CANARY');
 if (process.env.PRIVATE_STREAM_ENV) process.exit(73);
 const c = JSON.parse(readFileSync(process.argv[process.argv.indexOf('-config') + 1], 'utf8')).dbs[0];
 let serial = Promise.resolve(), stopping = false, terminationRequested = false;
-const send = (method, bytes) => new Promise((resolve, reject) => {
+let uploadsStarted = 0;
+const send = async (method, bytes) => {
+  // Hold later queued work until the real idle handoff signals this generated writer.
+  if (interruptQueuedUpload && method === 'PUT' && ++uploadsStarted > 2)
+    while (!terminationRequested) await new Promise(resolve => setTimeout(resolve, 10));
+  return new Promise((resolve, reject) => {
   const r = request(c.replica.endpoint + '/' + c.replica.bucket + '/stream.ltx', { method, agent: false, headers: {
     'content-length': bytes.length, 'amz-sdk-invocation-id': randomUUID(), 'amz-sdk-request': 'attempt=1; max=1',
     'x-fixture-after-stop': terminationRequested ? 'yes' : 'no',
-  } }, res => { const chunks=[]; res.on('data', b=>chunks.push(b)); res.on('end',()=>resolve(Buffer.concat(chunks))); });
+  } }, res => {
+    if (interruptQueuedUpload && terminationRequested) {
+      res.once('data', bytes => { writeFileSync(c.path + '.interrupted-reply', bytes); process.exit(0); }); return;
+    }
+    const chunks=[]; res.on('data', b=>chunks.push(b)); res.on('end',()=>resolve(Buffer.concat(chunks)));
+  });
   r.on('error', reject); r.end(bytes);
-});
+  });
+};
 if (process.argv[2] === 'restore') {
   const bytes = await send('GET', Buffer.alloc(0));
   const output = process.argv[process.argv.indexOf('-o')+1];
@@ -96,12 +113,15 @@ if (mode === 'read-before-upload') {
   writeFileSync(c.path + '.read-complete', 'ready');
   while (!existsSync(c.path + '.allow-upload')) await new Promise(resolve => setTimeout(resolve, 10));
 }
-upload(); const timer=setInterval(upload,50);
+// The successful-close control has exactly one startup and one held upload.
+let scheduledUploads = 0;
+const nextUpload = () => { if (mode !== 'held-fast-stop' || interruptQueuedUpload || scheduledUploads < 2) { scheduledUploads++; upload(); } };
+nextUpload(); const timer=setInterval(nextUpload,50);
 process.once('SIGTERM',()=>{
   terminationRequested = true;
   if(mode === 'writing-hang') return;
   if(mode === 'hang') { process.kill(process.pid, 'SIGSTOP'); return; }
-  if(mode === 'held-fast-stop') process.exit(0);
+  if(mode === 'held-fast-stop') { if (!interruptQueuedUpload) process.exit(0); return; }
   stopping=true; clearInterval(timer); serial.then(()=>process.exit(mode === 'stop' ? 23 : 0));
 });
 `;
@@ -123,7 +143,10 @@ process.once('SIGTERM',()=>{
   return { source, root, journal, database, binary, binarySha256: createHash('sha256').update(text).digest('hex'),
     target: `http://127.0.0.1:${provider.address().port}`, sdk, bucket: 'synthetic-replay-stream', versioned: false,
     uploaded: () => uploaded, stored: () => stored, heldUpload, releaseUpload: () => releaseUpload(),
-    heldInventory, releaseInventory: () => releaseInventory(), firstRead };
+    heldInventory, releaseInventory: () => releaseInventory(), firstRead,
+    interruptedUpload: () => interrupted && { afterStop: interrupted.request.headers['x-fixture-after-stop'] === 'yes',
+      requestComplete: interrupted.request.complete, responseFinished: interrupted.response.writableFinished },
+    connections: () => connections.size, connectionsClosed: () => Promise.all([...connections].map(socket => once(socket, 'close'))) };
 }
 async function open(t, f) {
   assert.equal(typeof module.openReplayStream, 'function', 'run and collect the native writer around phase measurements');
@@ -303,7 +326,54 @@ test('cancellationDrainsAnAdmittedUploadBeforeSignallingAFastExitingWriter',asyn
   const closed=run.close().then(()=>true,()=>false);
   await wait(150);f.releaseUpload();
   assert.equal(await closed,true,'collect the writer after its admitted request finishes');
+  assert.equal(f.uploaded(), 2, 'the successful-close fixture admits no work after its held upload');
   clean(f);
+});
+
+
+// Later queued work can enter after the idle handoff; an interrupted reply cannot qualify as complete.
+test('cancellationRefusesAnInterruptedLaterUploadAndCollectsTheFastExitingWriter', { timeout: 10000 }, async t => {
+  const f = await fixture(t, 'held-fast-stop', { interruptQueuedUpload: true }), abort = new AbortController(), trace = [];
+  const listeners = [], listen = Server.prototype.listen;
+  t.mock.method(Server.prototype, 'listen', function (...args) {
+    listeners.push(this); return Reflect.apply(listen, this, args);
+  });
+  // Observe real listeners and recover them independently if a cleanup guard is removed.
+  t.after(async () => {
+    for (const server of listeners) server.closeAllConnections();
+    await Promise.all(listeners.map(server => new Promise(resolve => server.close(resolve))));
+  });
+  let adminUrl;
+  const observedSdk = { ...sdk, S3Client: class extends sdk.S3Client {
+    constructor(options) { super(options); adminUrl = options.endpoint; }
+  } };
+  const run = await open(t, { ...f, sdk: observedSdk, signal: abort.signal, onDiagnostic: event => trace.push(event) });
+  const writerUrl = JSON.parse(readFileSync(join(f.root, 'native-stream/stream.json'), 'utf8')).dbs[0].replica.endpoint;
+  await f.heldUpload; abort.abort();
+  const refused = assert.rejects(run.close(), bad, 'an interrupted later reply refuses successful close');
+  await wait(150); f.releaseUpload();
+  await refused;
+  assert.equal(f.uploaded(), 3, 'retain the admitted upload and the later interrupted upload');
+  assert.equal(existsSync(f.database + '.interrupted-reply'), true, 'the writer observes the partial reply before exiting');
+  assert.equal(readFileSync(f.database + '.interrupted-reply', 'utf8'), 'x');
+  assert.deepEqual(f.interruptedUpload(), { afterStop: true, requestComplete: true, responseFinished: false });
+  assert.deepEqual(trace.filter(event => event.kind === 'native' && event.operation === 'replicate')
+    .map(({ code, signal }) => ({ code, signal })), [{ code: 0, signal: null }], 'the writer exits itself before forced collection');
+  // Cancellation already prevents publication; close() above independently checks transfer refusal.
+  assert.deepEqual(await run.closeResources(), { measurementValid: false });
+  await assert.rejects(run.finish({ expectedSales: 1 }), bad, 'interrupted cancellation cannot publish measurement');
+  for (const url of [writerUrl, adminUrl])
+    await assert.rejects(fetch(url), error => error.cause?.code === 'ECONNREFUSED', 'collect the actual session listeners');
+  assert.equal(listeners.length, 3, 'exercise the administration, observer and writer-facing listeners');
+  for (const server of listeners) assert.equal(server.listening, false, 'collect every real session listener');
+  await f.connectionsClosed();
+  assert.equal(f.connections(), 0, 'collect all connections to the real backend');
+  clean(f);
+  const entries = JSON.parse(readFileSync(f.journal.path, 'utf8')).localResources;
+  const started = entries.filter(e => e.kind === 'stream-process' && e.state === 'started');
+  assert.deepEqual(started.map(e => e.operation), ['version', 'replicate'], 'never launch restore after cancellation');
+  assert.deepEqual(entries.filter(e => e.kind === 'stream-process' && e.state === 'collected').map(e => e.pid),
+    started.map(e => e.pid), 'collect every owned child exactly once');
 });
 
 
