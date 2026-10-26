@@ -23,6 +23,7 @@ for(const outcome of ['403','429','network','worker','challenge','success'])test
   let terminated=false;
   const proof={challenge:'browser-proof',nonce:42};
   await runInNewContext(script,{
+   AbortController,setTimeout,clearTimeout,
    document:{querySelector:()=>paragraph},location:{replace:(path:string)=>redirects.push(path)},
    Worker:class {
     constructor(path:string){assert.equal(path,'/_cloud/worker.js');browserWorker=this;}
@@ -46,8 +47,13 @@ for(const outcome of ['403','429','network','worker','challenge','success'])test
    assert.deepEqual(redirects,['/public/availability']);
    assert.equal(paragraph.textContent,'Please wait a moment. / Espera un momento.');
   }else{
-   assert.equal(paragraph.textContent,'Please reload to try again. / Vuelve a cargar para intentarlo de nuevo.');
-   assert.match(paragraph.innerHTML,/<span lang="es">Vuelve a cargar para intentarlo de nuevo\.<\/span>/,'the reload message must preserve Spanish pronunciation');
+   if(outcome==='worker'){
+    assert.equal(paragraph.textContent,'This browser check could not finish. Try another browser, update it and check that JavaScript is allowed. / No se pudo completar la comprobación. Prueba con otro navegador, actualízalo y comprueba que JavaScript esté permitido.');
+    assert.match(paragraph.innerHTML,/<span lang="es">No se pudo completar la comprobación\./);
+   }else{
+    assert.equal(paragraph.textContent,'Please reload to try again. / Vuelve a cargar para intentarlo de nuevo.');
+    assert.match(paragraph.innerHTML,/<span lang="es">Vuelve a cargar para intentarlo de nuevo\.<\/span>/,'the reload message must preserve Spanish pronunciation');
+   }
    assert.deepEqual(redirects,[]);
   }
   assert.deepEqual(errors,[],'browser event handlers must contain request failures');
