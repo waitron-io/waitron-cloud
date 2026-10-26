@@ -77,3 +77,40 @@ for (const locale of ['en', 'es']) for (const theme of ['light', 'dark'] as cons
     });
   }
 }
+
+test('an earlier challenge page can run the newer script during a rollout', async () => {
+  const gate = createPublicGate({key: randomBytes(32), difficulty: 8, routes: () => [
+    {publicHostname: 'sol.example.test', staffHostname: 'staff.sol.example.test', address: '127.0.0.1', port: 1},
+  ]});
+  const server = createServer((req, res) => {
+    req.headers.host = 'sol.example.test'; req.headers['x-waitron-sni'] = 'sol.example.test';
+    req.headers['x-waitron-client-ip'] = '192.0.2.2'; gate.handle(req, res);
+  });
+  await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
+  const address = server.address(); assert.ok(address && typeof address !== 'string');
+  const context = await browser.newContext(); let release!: () => void;
+  const held = new Promise<void>(resolve => {release = resolve;});
+  try {
+    const page = await context.newPage(); page.setDefaultTimeout(4000);
+    await page.route('**/public/availability', async route => {
+      const response = await route.fetch();
+      const body = (await response.text()).replace('<p id="browser-guidance">', '<noscript><p>')
+        .replace('</span></p><script', '</span></p></noscript><script');
+      await route.fulfill({response, body});
+    });
+    await page.route('**/_cloud/challenge', async route => {
+      await held; await route.fulfill({status: 503, contentType: 'application/json', body: 'unavailable'});
+    });
+    assert.equal((await page.goto(`http://127.0.0.1:${address.port}/public/availability`))?.status(), 403);
+    await page.getByText('Please wait a moment.', {exact: false}).waitFor();
+    assert.equal(await page.getByText('Espera un momento.', {exact: true}).isVisible(), true);
+    assert.equal(await page.locator('noscript p').isVisible(), false);
+    release();
+    await page.getByText('Please reload to try again.', {exact: false}).waitFor();
+    assert.equal(await page.getByText('Vuelve a cargar para intentarlo de nuevo.', {exact: true}).isVisible(), true);
+    assert.equal(gate.stats().forwarded, 0); assert.equal((await context.cookies()).length, 0);
+  } finally {
+    release(); await context.close(); server.closeAllConnections();
+    await new Promise<void>(resolve => server.close(() => resolve()));
+  }
+});

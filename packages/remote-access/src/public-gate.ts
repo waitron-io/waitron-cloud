@@ -16,7 +16,7 @@ function sourceBucket(ip:string):string{
 }
 const worker=`onmessage=async({data})=>{try{const encoder=new TextEncoder(),until=performance.now()+20000;for(let nonce=0;nonce<1000000000&&performance.now()<until;nonce++){const hash=new DataView(await crypto.subtle.digest('SHA-256',encoder.encode(data.challenge+':'+nonce)));if(hash.getUint32(0)<2**(32-data.difficulty)){postMessage({challenge:data.challenge,nonce});return;}}postMessage({error:'exhausted'});}catch{postMessage({error:'unsupported'});}};`;
 const script=`(async()=>{
- document.querySelector('#browser-guidance').hidden=true;
+ const guidance=document.querySelector('#browser-guidance');if(guidance)guidance.hidden=true;
  document.querySelector('div').hidden=false;
  let worker,timer,controller,finished=false;
  const stop=()=>{clearTimeout(timer);if(worker)worker.terminate();if(controller)controller.abort();};

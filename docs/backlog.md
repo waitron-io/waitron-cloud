@@ -4077,7 +4077,9 @@ Cloud follow-ups, each a separate small change with tests before implementation:
   a next step. Native Chromium checks cover failed, disconnected and delayed
   script downloads, recovery on reload, disabled JavaScript and later retry
   feedback in both languages, themes and phone/desktop widths. Other browser
-  engines, screen readers and production timing remain unqualified.
+  engines, screen readers and production timing remain unqualified. A new script
+  can still start on the previous page markup during a rollout. Reloading can
+  recover a failed script download; explicit reload guidance remains a follow-up.
 - R11 delivered: public/staff alerts in Account and email name the existing remote
   setup and refresh controls in English and Spanish. Failed checks ask you to
   check venue internet, the selected hostname and setup status. Unknown monitoring
