@@ -14,8 +14,29 @@ function sourceBucket(ip:string):string{
  if(words.slice(0,5).every(word=>word===0)&&words[5]===0xffff)return [words[6]!>>>8,words[6]!&255,words[7]!>>>8,words[7]!&255].join('.');
  return words.slice(0,4).map(word=>word.toString(16)).join(':')+'/64';
 }
-const worker=`onmessage=async({data})=>{const encoder=new TextEncoder();for(let nonce=0;nonce<1000000000;nonce++){const hash=new DataView(await crypto.subtle.digest('SHA-256',encoder.encode(data.challenge+':'+nonce)));if(hash.getUint32(0)<2**(32-data.difficulty)){postMessage({challenge:data.challenge,nonce});return;}}};`;
-const script=`(async()=>{const reload=()=>{document.querySelector('p').innerHTML='Please reload to try again. / <span lang="es">Vuelve a cargar para intentarlo de nuevo.</span>';};try{const challenge=await(await fetch('/_cloud/challenge')).json();const worker=new Worker('/_cloud/worker.js');worker.onmessage=async({data})=>{try{worker.terminate();const reply=await fetch('/_cloud/solve',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});if(!reply.ok)throw Error();location.replace('/public/availability');}catch{reload();}};worker.onerror=reload;worker.postMessage(challenge);}catch{reload();}})();`;
+const worker=`onmessage=async({data})=>{try{const encoder=new TextEncoder(),until=performance.now()+20000;for(let nonce=0;nonce<1000000000&&performance.now()<until;nonce++){const hash=new DataView(await crypto.subtle.digest('SHA-256',encoder.encode(data.challenge+':'+nonce)));if(hash.getUint32(0)<2**(32-data.difficulty)){postMessage({challenge:data.challenge,nonce});return;}}postMessage({error:'exhausted'});}catch{postMessage({error:'unsupported'});}};`;
+const script=`(async()=>{
+ let worker,timer,controller,finished=false;
+ const stop=()=>{clearTimeout(timer);if(worker)worker.terminate();if(controller)controller.abort();};
+ const fail=(browser=false)=>{if(finished)return;finished=true;stop();document.querySelector('p').innerHTML=browser?'This browser check could not finish. Try another browser, update it and check that JavaScript is allowed. / <span lang="es">No se pudo completar la comprobación. Prueba con otro navegador, actualízalo y comprueba que JavaScript esté permitido.</span>':'Please reload to try again. / <span lang="es">Vuelve a cargar para intentarlo de nuevo.</span>';};
+ try{
+  timer=setTimeout(()=>fail(true),30000);
+  try{controller=new AbortController();}catch{fail(true);return;}
+  const challenge=await(await fetch('/_cloud/challenge',{signal:controller.signal})).json();if(finished)return;
+  try{worker=new Worker('/_cloud/worker.js');}catch{fail(true);return;}
+  worker.onmessage=async({data})=>{if(finished)return;if(data&&data.error){fail(true);return;}try{worker.terminate();const reply=await fetch('/_cloud/solve',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data),signal:controller.signal});if(finished)return;if(!reply.ok)throw Error();finished=true;stop();location.replace('/public/availability');}catch{fail();}};
+  worker.onerror=()=>fail(true);worker.postMessage(challenge);
+ }catch{fail();}
+})();`;
+const rejectionText:Record<number,[string,string]>={
+ 421:['This venue link is unavailable. Check the original venue link and open it again.','Este enlace del local no está disponible. Comprueba el enlace original del local y ábrelo de nuevo.'],
+ 429:['Too many requests. Wait a minute, then try the venue’s public page again.','Demasiadas solicitudes. Espera un minuto y vuelve a abrir la página pública del local.'],
+ 413:['This request is too large or uses an unsupported connection. Open the venue’s public page.','Esta solicitud es demasiado grande o usa una conexión no admitida. Abre la página pública del local.'],
+ 404:['This page was not found. Open the venue’s public page.','Esta página no existe. Abre la página pública del local.'],
+ 405:['This request is not supported. Open the venue’s public page.','Esta solicitud no está admitida. Abre la página pública del local.'],
+ 400:['This request could not be completed. Check the venue link and try again.','Esta solicitud no se pudo completar. Comprueba el enlace del local e inténtalo de nuevo.'],
+ 403:['The browser check was not accepted. Open the venue’s public page to start again.','No se aceptó la comprobación del navegador. Abre la página pública del local para empezar de nuevo.'],
+};
 /** Bind this handler to loopback only, behind HAProxy's overwritten client-IP/SNI headers. */
 export function createPublicGate(options:Options){
  if(options.key.length!==32)throw new Error('invalid_gate_key');
@@ -29,7 +50,16 @@ export function createPublicGate(options:Options){
   }catch{return false;}
  }
  async function handle(req:IncomingMessage,res:ServerResponse){
-  const reply=(status:number,body='',type='text/plain; charset=utf-8',headers:Record<string,string>={})=>{res.writeHead(status,{'Content-Type':type,'Cache-Control':'no-store','X-Content-Type-Options':'nosniff','Content-Security-Policy':"default-src 'none'; script-src 'self'; worker-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'",...headers});res.end(body);};
+  const reply=(status:number,body='',type='text/plain; charset=utf-8',headers:Record<string,string>={})=>{
+   const mode=req.headers['sec-fetch-mode'];
+   const navigation=mode==='navigate'||(mode===undefined&&(req.headers.accept??'').split(',').some(value=>value.trim().split(';')[0]==='text/html'));
+   if(!body&&navigation&&rejectionText[status]){
+    const [en,es]=rejectionText[status];
+    body=`<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="color-scheme" content="light dark"><title>Unable to open page / No se pudo abrir la página</title></head><body><main><h1>Unable to open page / <span lang="es">No se pudo abrir la página</span></h1><p>${en}</p><p><span lang="es">${es}</span></p>${status===421?'':'<a href="/public/availability">Open public page / <span lang="es">Abrir página pública</span></a>'}</main></body></html>`;
+    type='text/html; charset=utf-8';
+   }
+   res.writeHead(status,{'Content-Type':type,'Cache-Control':'no-store','X-Content-Type-Options':'nosniff','Content-Security-Policy':"default-src 'none'; script-src 'self'; worker-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'",...headers});res.end(body);
+  };
   try{
    const ip=req.headers['x-waitron-client-ip'],sni=req.headers['x-waitron-sni'],host=req.headers.host?.split(':')[0];
    if(typeof ip!=='string'||!isIP(ip)||typeof sni!=='string'||host!==sni||![sni,sni+':443'].includes(req.headers.host??'')){counters.rejected++;reply(421);return;}
@@ -54,7 +84,7 @@ export function createPublicGate(options:Options){
    }
    const cookies=(req.headers.cookie??'').split(';').map(s=>s.trim()).filter(s=>s.startsWith('__Host-waitron-public='));
    if(cookies.length!==1||!valid(cookies[0]!.slice('__Host-waitron-public='.length),'access',host!,ip)){
-    counters.challenged++;reply(403,'<!doctype html><html lang="en"><meta name="viewport" content="width=device-width"><title>Checking your browser / Comprobando tu navegador</title><body><h1>Checking your browser / <span lang="es">Comprobando tu navegador</span></h1><p>Please wait a moment. / <span lang="es">Espera un momento.</span></p><script src="/_cloud/challenge.js" defer></script></body></html>','text/html; charset=utf-8');return;
+    counters.challenged++;reply(403,'<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><meta name="color-scheme" content="light dark"><title>Checking your browser / Comprobando tu navegador</title><body><h1>Checking your browser / <span lang="es">Comprobando tu navegador</span></h1><p>Please wait a moment. / <span lang="es">Espera un momento.</span></p><noscript>Allow JavaScript or try another browser to open this page. / <span lang="es">Permite JavaScript o prueba con otro navegador para abrir esta página.</span></noscript><script src="/_cloud/challenge.js" defer></script></body></html>','text/html; charset=utf-8');return;
    }
    if(active>=64){counters.rejected++;reply(429);return;}active++;counters.forwarded++;
    try{

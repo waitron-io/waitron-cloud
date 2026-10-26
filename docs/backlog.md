@@ -5642,8 +5642,19 @@ Cloud follow-ups, each a separate small change with tests before implementation:
   persistent 403/404/503 replies and dropped connections, then recovery, while
   preserving private upstream details. Cause-specific diagnostics for owners in
   Account remain open; visitor guidance does not diagnose or repair the cause.
-- R10: provide safe next actions for empty public-gate rejection pages and reproduce
-  browser-check failure/exhaustion before adding a bounded failure outcome.
+- R10 delivered: direct navigation to rejected public requests receives bilingual
+  guidance for 421/429/413/404/405/400 and failed-proof 403. Background refusals stay
+  empty; host, proof, quota, size and forwarding checks retain their status codes.
+  Unmatched hosts receive no retry link. The worker reports exhaustion after its
+  20-second search budget; the page stops stalled challenge, worker or proof
+  requests after 30 seconds, terminates the worker and ignores late results.
+  Unsupported/blocked workers offer another-browser and JavaScript guidance;
+  disabled JavaScript gets a static explanation. Native HTTP, executed scripts
+  and browser checks cover these outcomes. A failed page attempt ignores late
+  replies and does not redirect; proof and access remain server decisions.
+  With JavaScript disabled, the original waiting line remains above the static
+  guidance; simplifying that presentation stays open. Actual visitor browser
+  support and production timing remain unqualified.
 - R11: connect monitoring/certificate alert guidance to concrete owner actions;
   local gateway and certificate tooling is still an unfinished operator-only path.
 
