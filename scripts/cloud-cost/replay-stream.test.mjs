@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
+import { Server } from 'node:net';
 import { once } from 'node:events';
 import { DatabaseSync } from 'node:sqlite';
 import { mkdtempSync, mkdirSync, realpathSync, writeFileSync, readFileSync, rmSync, existsSync, symlinkSync, renameSync } from 'node:fs';
@@ -87,7 +88,12 @@ const send = async (method, bytes) => {
   const r = request(c.replica.endpoint + '/' + c.replica.bucket + '/stream.ltx', { method, agent: false, headers: {
     'content-length': bytes.length, 'amz-sdk-invocation-id': randomUUID(), 'amz-sdk-request': 'attempt=1; max=1',
     'x-fixture-after-stop': terminationRequested ? 'yes' : 'no',
-  } }, res => { if (interruptQueuedUpload && terminationRequested) process.exit(0); const chunks=[]; res.on('data', b=>chunks.push(b)); res.on('end',()=>resolve(Buffer.concat(chunks))); });
+  } }, res => {
+    if (interruptQueuedUpload && terminationRequested) {
+      res.once('data', bytes => { writeFileSync(c.path + '.interrupted-reply', bytes); process.exit(0); }); return;
+    }
+    const chunks=[]; res.on('data', b=>chunks.push(b)); res.on('end',()=>resolve(Buffer.concat(chunks)));
+  });
   r.on('error', reject); r.end(bytes);
   });
 };
@@ -328,6 +334,15 @@ test('cancellationDrainsAnAdmittedUploadBeforeSignallingAFastExitingWriter',asyn
 // Later queued work can enter after the idle handoff; an interrupted reply cannot qualify as complete.
 test('cancellationRefusesAnInterruptedLaterUploadAndCollectsTheFastExitingWriter', { timeout: 10000 }, async t => {
   const f = await fixture(t, 'held-fast-stop', { interruptQueuedUpload: true }), abort = new AbortController();
+  const listeners = [], listen = Server.prototype.listen;
+  t.mock.method(Server.prototype, 'listen', function (...args) {
+    listeners.push(this); return Reflect.apply(listen, this, args);
+  });
+  // Observe real listeners and recover them independently if a cleanup guard is removed.
+  t.after(async () => {
+    for (const server of listeners) server.closeAllConnections();
+    await Promise.all(listeners.map(server => new Promise(resolve => server.close(resolve))));
+  });
   let adminUrl;
   const observedSdk = { ...sdk, S3Client: class extends sdk.S3Client {
     constructor(options) { super(options); adminUrl = options.endpoint; }
@@ -339,11 +354,15 @@ test('cancellationRefusesAnInterruptedLaterUploadAndCollectsTheFastExitingWriter
   await wait(150); f.releaseUpload();
   await refused;
   assert.equal(f.uploaded(), 3, 'retain the admitted upload and the later interrupted upload');
+  assert.equal(existsSync(f.database + '.interrupted-reply'), true, 'the writer observes the partial reply before exiting');
+  assert.equal(readFileSync(f.database + '.interrupted-reply', 'utf8'), 'x');
   assert.deepEqual(f.interruptedUpload(), { afterStop: true, requestComplete: true, responseFinished: false });
   assert.deepEqual(await run.closeResources(), { measurementValid: false });
   await assert.rejects(run.finish({ expectedSales: 1 }), bad, 'interrupted cancellation cannot publish measurement');
   for (const url of [writerUrl, adminUrl])
     await assert.rejects(fetch(url), error => error.cause?.code === 'ECONNREFUSED', 'collect the actual session listeners');
+  assert.equal(listeners.length, 3, 'exercise the administration, observer and writer-facing listeners');
+  for (const server of listeners) assert.equal(server.listening, false, 'collect every real session listener');
   await f.connectionsClosed();
   assert.equal(f.connections(), 0, 'collect all connections to the real backend');
   clean(f);
