@@ -4732,8 +4732,15 @@ virtual-authenticator browser checks cover English/Spanish, both themes and
 phone/desktop widths, blank passwords, modified or composing Enter, pending
 requests, rate limits and unsupported browsers. These are portal checks, not
 provider or production qualification. Each supported-browser fixture supplies
-its own virtual passkey device instead of relying on the host. The authenticator
-password fields still need Enter handling, keeping explicit action choices intact.
+its own virtual passkey device instead of relying on the host.
+
+When your authenticator is off, Enter in its password field starts first setup
+through the existing Enable action. Empty passwords show the existing field
+message; pending requests and retry waits keep setup blocked. Enter does not
+choose replacement, regeneration, removal, activation or cancellation. Stubbed
+API browser checks cover English/Spanish, both themes and phone/desktop widths;
+these do not qualify the backend or production. Enter for authenticator sign-in
+codes remains a separate keyboard follow-up.
 
 ## Password-change notification recovery link (D261)
 

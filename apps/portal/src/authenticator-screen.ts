@@ -1,4 +1,5 @@
 import {html,nothing} from 'lit';
+import {submitOnEnter} from '@waitron-io/ui-core/submit-on-enter';
 import {ref} from 'lit/directives/ref.js';
 import QRCode from 'qrcode';
 import type {PortalApp} from './app.ts';
@@ -22,8 +23,9 @@ export function authenticatorCodesScreen(app:PortalApp){const c=app.copy;
     <wt-button id="submit" variant="primary" @click=${()=>{app.navigate('/login');}}>${c.factorCodesSaved}</wt-button>`;}
 export function authenticatorAccountScreen(app:PortalApp){const c=app.copy,f=app.authenticator;
   const password=html`<wt-input name="factorPassword" .error=${f.requiredField==='password'&&f.error==='requiredPassword'?c.requiredPassword:''} .label=${c.factorPassword} .value=${f.password} .type=${'password'} .autocomplete=${'current-password'} .disabled=${f.pending}
+    @keydown=${(event:KeyboardEvent)=>submitOnEnter(event,app.root.querySelector('#factor-enable'))}
     @wt-change=${(e:CustomEvent<{value:string}>)=>{f.password=e.detail.value;clearRequired(app,'password',f.password);}}></wt-input>`;
-  const button=(label:string,action:'begin'|'activate'|'regenerate'|'remove'|'cancel')=>html`<wt-button .disabled=${f.pending||Date.now()<f.retryAt} .loading=${f.pending}
+  const button=(label:string,action:'begin'|'activate'|'regenerate'|'remove'|'cancel')=>html`<wt-button id=${action==='begin'&&!f.status?.active?'factor-enable':nothing} .disabled=${f.pending||Date.now()<f.retryAt} .loading=${f.pending}
     @click=${()=>{void app.manageFactor(action);}}>${label}</wt-button>`;
   return html`<section class="authenticator" aria-labelledby="authenticator-heading"><h3 id="authenticator-heading">${c.factorTitle}</h3>
     <p>${c.factorIntro}</p>${f.error?html`<p role="alert">${c[f.error]}</p>`:nothing}
