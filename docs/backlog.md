@@ -4072,7 +4072,11 @@ Cloud follow-ups, each a separate small change with tests before implementation:
   offers Reload page / Volver a cargar as an ordinary link to the same public page.
   Pointer and keyboard checks cover restarting after a failed script download;
   without JavaScript, the link returns to the static guidance. Reloading repeats
-  the browser check and does not grant access.
+  the browser check and does not grant access. A script from before fallback hiding was introduced may
+  leave the guidance visible during a mixed rollout. If a running check fails,
+  its retry wording still relies on your browser's reload control. The older-page
+  browser fixture derives its markup from the current page; pinning actual
+  historical markup remains a test follow-up.
 - R11 delivered: public/staff alerts in Account and email name the existing remote
   setup and refresh controls in English and Spanish. Failed checks ask you to
   check venue internet, the selected hostname and setup status. Unknown monitoring
