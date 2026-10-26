@@ -4068,8 +4068,15 @@ Cloud follow-ups, each a separate small change with tests before implementation:
   script downloads, recovery on reload, disabled JavaScript and later retry
   feedback in both languages, themes and phone/desktop widths. Other browser
   engines, screen readers and production timing remain unqualified. A new script
-  can still start on the previous page markup during a rollout. Reloading can
-  recover a failed script download; explicit reload guidance remains a follow-up.
+  can still start on the previous page markup during a rollout. The fallback
+  offers Reload page / Volver a cargar as an ordinary link to the same public page.
+  Pointer and keyboard checks cover restarting after a failed script download;
+  without JavaScript, the link returns to the static guidance. Reloading repeats
+  the browser check and does not grant access. A script from before fallback hiding was introduced may
+  leave the guidance visible during a mixed rollout. If a running check fails,
+  its retry wording still relies on your browser's reload control. The older-page
+  browser fixture derives its markup from the current page; pinning actual
+  historical markup remains a test follow-up.
 - R11 delivered: public/staff alerts in Account and email name the existing remote
   setup and refresh controls in English and Spanish. Failed checks ask you to
   check venue internet, the selected hostname and setup status. Unknown monitoring
@@ -4111,6 +4118,15 @@ Do not rerun an unchanged red branch.
 Real PostgreSQL/Mailpit reproduction waits for local Docker or a separately
 qualified CI diagnostic change. This is separate from reset-mail capture and
 Mailpit fixture-startup failures recorded above.
+
+## Remote hostname browser-test request observation (D315)
+
+The Enter-key browser test waits for its DNS route handler to record the first
+request before checking its payload and pending-review behaviour. The browser's
+request event can arrive before that record is filled. A controlled handler delay
+reproduces the empty-array refusal; waiting for the handler preserves the existing
+request, confirmation, apply, invalid-input and rate-limit assertions and deadlines.
+No remote setup or permission behaviour changes.
 
 ## Unchanged remote hostname review (D259)
 

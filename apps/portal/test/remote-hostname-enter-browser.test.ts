@@ -28,7 +28,8 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
       const page = await browser.newPage({locale, colorScheme: theme, viewport: {width, height: 1000}});
       page.setDefaultTimeout(3000);
       const c = translations[locale], dnsRequests: unknown[] = [], applyRequests: unknown[] = [];
-      let limited = false;
+      let limited = false, dnsObserved!: () => void;
+      const firstDnsObserved = new Promise<void>(resolve => {dnsObserved = resolve;});
       const dnsHeld = new Promise<void>(resolve => {releaseDns = resolve;});
       await page.route('https://portal.test/account', route => route.fulfill({contentType: 'text/html', body: '<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><div id="portal" class="portal"></div>'}));
       await page.route('**/api/account/**', async route => {
@@ -38,7 +39,7 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
           services: ['continuous_backup', 'remote_access', 'retained_snapshots'].map(service => ({service, state: 'unconfigured', health: 'unknown', failure: null, observedAt: null}))}]}});
         if (endpoint === '/remote-access/status') return route.fulfill({json: view});
         if (endpoint === '/remote-access/dns') {
-          dnsRequests.push(request.postDataJSON());
+          dnsRequests.push(request.postDataJSON()); dnsObserved();
           if (limited) return route.fulfill({status: 429, headers: {'Retry-After': '60'}, json: {error: 'rate_limited'}});
           await dnsHeld;
           return route.fulfill({json: dns});
@@ -55,7 +56,7 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
       const review = section.getByRole('button', {name: c.remoteReview, exact: true});
       const confirmation = section.getByRole('group', {name: c.remoteConfirmTitle, exact: true});
       await input.fill('staff.cafe.example');
-      await Promise.all([page.waitForRequest(request => request.url().endsWith('/remote-access/dns')), input.press('Enter')]);
+      await Promise.all([page.waitForRequest(request => request.url().endsWith('/remote-access/dns')), firstDnsObserved, input.press('Enter')]);
       assert.deepEqual(dnsRequests, [{installationId: id, kind: 'staff', hostname: 'staff.cafe.example'}]);
       assert.equal(await input.isDisabled(), true);
       await input.dispatchEvent('keydown', {key: 'Enter'});
