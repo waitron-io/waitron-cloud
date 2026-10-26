@@ -22,7 +22,7 @@ for(const [address,family,allowed] of [
  ['8.8.8.8',4,true],['2606:4700:4700::1111',6,true],
  ['3fff:ffff:ffff:ffff:ffff:ffff:ffff:ffff',6,true],
  ['::8.8.8.8',6,true],['::ffff:0:8.8.8.8',6,true],['2002:808:808::1',6,true],
- ['1000::1',6,true],
-] as const)test(`upper reserved refusal preserves other address decisions: ${address}`,()=>{
+ ['1000::1',6,false],
+] as const)test(`address policy decisions around upper reserved ranges: ${address}`,()=>{
  assert.equal(isPublicProbeAddress(address,family),allowed,address);
 });

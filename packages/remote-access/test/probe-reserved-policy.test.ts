@@ -19,7 +19,7 @@ for(const [address,allowed] of [
  ['::ffff:0:8.8.8.8',true],['::ffff:0:808:808',true],['::ffff:0:127.0.0.1',false],
  ['::ffff:8.8.8.8',false],['64:ff9b::808:808',false],['64:ff9b:1::808:808',false],
  ['2002:808:808::1',true],['2002:7f00:1::1',false],['2606:4700:4700::1111',true],
- ['100:1::1',true],['100::1',false],
-] as const)test(`reserved ::/8 refusal preserves existing address decisions: ${address}`,()=>{
+ ['100:1::1',false],['100::1',false],
+] as const)test(`reserved address policy decisions: ${address}`,()=>{
  assert.equal(isPublicProbeAddress(address,6),allowed,address);
 });

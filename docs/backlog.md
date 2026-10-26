@@ -4074,8 +4074,15 @@ notifications separately.
   boundaries, midpoint and expanded, dotted and scoped forms. Each missing,
   narrower or shifted subnet fails these checks; public addresses and existing
   decisions outside these seven ranges retain their classification. The former
-  `6000::` acceptance check now requires refusal. Actual routing, loopback
-  reachability and lower reserved ranges remain unqualified. See the
+  `6000::` acceptance check now requires refusal. The probe also refuses the
+  five lower reserved ranges `100::/8`, `200::/7`, `400::/6`, `800::/5` and
+  `1000::/4`, including the discard-only and dummy allocations in `100::/8`.
+  Native regressions cover boundaries, midpoints, expanded, dotted and scoped
+  forms. Removing, narrowing or shifting each new subnet fails these checks;
+  embedded public IPv4 and other address decisions retain their classification.
+  The former `100:1::1` and `1000::1` acceptance checks now require refusal.
+  Actual routing, loopback reachability and the broader policy for special-purpose
+  allocations inside global unicast space remain unqualified. See the
   [IANA address-space registry](https://www.iana.org/assignments/ipv6-address-space).
   The monitor rejects
   late results after hostname changes, replacement or revocation, treats stale evidence as
