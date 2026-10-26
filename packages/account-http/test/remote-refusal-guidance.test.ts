@@ -10,17 +10,17 @@ import {AccountRateLimiter} from '../src/rate-limit.ts';
 const id='20000000-0000-4000-8000-000000000001',origin='https://cloud.example.test',token='a'.repeat(43),csrf='b'.repeat(43);
 type Condition='free'|'unconfigured'|'revoked'|'production'|'foreign'|'missing-venue'|'late-foreign';
 // Only SQL is controlled here. Session checks, plan checks, store and HTTP serialization run normally.
-function database(condition:Condition){
- const queries:string[]=[],now=new Date();let ownershipReads=0;
+function database(condition:Condition,loss?:'owner'|'session'){
+ const queries:string[]=[],now=new Date();let ownershipReads=0,sessionReads=0;
  const client={on(){},removeListener(){},release(){},async query(sql:string){
   queries.push(sql);
   const result=(rows:unknown[])=>({rows,rowCount:rows.length});
   if(['BEGIN','COMMIT','ROLLBACK'].includes(sql))return result([]);
-  if(sql==='SELECT account_id FROM cloud_sessions WHERE token_hash = $1')return result([{account_id:id}]);
+  if(sql==='SELECT account_id FROM cloud_sessions WHERE token_hash = $1')return result(loss==='session'&&++sessionReads>1?[]:[{account_id:id}]);
   if(sql.startsWith('SELECT id FROM cloud_accounts'))return result([{id}]);
   if(sql.startsWith('SELECT last_seen_at, absolute_expires_at, csrf_hash'))return result([{last_seen_at:now,absolute_expires_at:new Date(+now+3600000),csrf_hash:createHash('sha256').update(csrf).digest('hex')}]);
   if(sql==='SELECT clock_timestamp() AS now')return result([{now}]);
-  if(sql.includes('organisation_memberships'))return result(condition==='foreign'||condition==='late-foreign'&&++ownershipReads>1?[]:[{account_id:id}]);
+  if(sql.includes('organisation_memberships'))return result(condition==='foreign'||(condition==='late-foreign'||loss==='owner')&&++ownershipReads>1?[]:[{account_id:id}]);
   if(sql==='SELECT venue_id FROM installations WHERE id=$1')return result([{venue_id:id}]);
   if(sql==='SELECT organisation_id,environment FROM venues WHERE id=$1')return result(condition==='missing-venue'?[]:[{organisation_id:id,environment:condition==='production'?'production':'test'}]);
   if(sql.startsWith('SELECT id,service_plan,service_plan_revision FROM organisations'))return result([{id,service_plan:condition==='free'?'free':'paid',service_plan_revision:0}]);
@@ -70,3 +70,17 @@ test('DNS instructions keep a late ownership refusal distinct from request verif
  assert.equal(db.queries.filter(sql=>sql.includes('organisation_memberships')).length,2);
  assert.equal(db.queries.some(sql=>/^INSERT|^UPDATE|^DELETE/.test(sql)),false);
 });
+
+for(const condition of ['free','unconfigured','production','revoked'] as const)for(const loss of ['owner','session'] as const)for(const action of ['dns','apply'])
+ test(`${action}: ${condition} detail stays private after late ${loss} loss`,async t=>{
+  const db=database(condition,loss);
+  t.mock.method(AccountRateLimiter.prototype,'consume',async()=>({allowed:true,retryAfterSeconds:0}));
+  const app=createAccountApp({pool:db.pool,outbox:new EmailOutbox({activeKeyId:'test',keys:{test:'ab'.repeat(32)}}),
+   config:{portalOrigin:origin,production:true,rateKey:'cd'.repeat(32),trustedProxyIps:[]},
+   factor:{keys:null,policy:null},pairingCodeKeys:null,recoveryCodeKeys:null,planMode:'test-free-paid'});
+  const response=await app.request(origin+'/api/account/remote-access/'+action,{method:'POST',headers:{origin,'content-type':'application/json',cookie:'__Host-cloud_session='+token,'x-csrf-token':csrf},
+   body:JSON.stringify({installationId:id,kind:'staff',hostname:'staff.cafe.example',...(action==='apply'?{expectedRevision:'1'}:{})})},
+   {incoming:{socket:{remoteAddress:'192.0.2.10'}}});
+  assert.equal(response.status,loss==='owner'?403:401);assert.deepEqual(await response.json(),{error:loss==='owner'?'permission_denied':'unauthenticated'});
+  assert.equal(db.queries.some(sql=>/^INSERT|^UPDATE|^DELETE/.test(sql)),false);
+ });

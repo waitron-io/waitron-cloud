@@ -160,3 +160,22 @@ for(const condition of ['free','unconfigured','revoked'] as const)test(`real dat
  assert.equal((await db.pool.query("SELECT hostname FROM remote_hostnames WHERE kind='staff'")).rows[0].hostname,assigned);
  assert.equal((await db.pool.query('SELECT count(*) FROM remote_hostname_changes')).rows[0].count,'0');
 });
+
+for(const condition of ['free','revoked'] as const)test(`real database: late owner loss hides ${condition} remote metadata`,async()=>{
+ app=createAccountApp({...options(),planMode:'test-free-paid'});
+ await db.pool.query("UPDATE organisations SET service_plan='paid'");
+ if(condition==='revoked')await db.pool.query('UPDATE installations SET revoked_at=clock_timestamp()');
+ const blocker=await db.secondPool.connect();let response:Promise<Response>|undefined;
+ try{
+  await blocker.query('BEGIN');
+  if(condition==='free')await blocker.query("UPDATE organisations SET service_plan='free'");
+  else await blocker.query('LOCK remote_cells IN ACCESS EXCLUSIVE MODE');
+  response=request('dns',{kind:'staff',hostname:'staff.cafe.example'});
+  await untilLock(condition==='free'?'SELECT id,service_plan,service_plan_revision FROM organisations':'SELECT p.venue_id,c.suffix,i.revoked_at');
+  await db.secondPool.query('UPDATE organisation_memberships SET is_owner=false');
+  await blocker.query('COMMIT');const reply=await response;
+  assert.equal(reply.status,403);assert.deepEqual(await reply.json(),{error:'permission_denied'});
+  assert.equal((await db.pool.query("SELECT hostname FROM remote_hostnames WHERE kind='staff'")).rows[0].hostname,assigned);
+  assert.equal((await db.pool.query('SELECT count(*) FROM remote_hostname_changes')).rows[0].count,'0');
+ }finally{await blocker.query('ROLLBACK');blocker.release();await response;}
+});

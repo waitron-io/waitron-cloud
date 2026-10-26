@@ -62,9 +62,14 @@ export async function remoteAccessResponse(c:Context,options:{pool:Pool;origin:s
   if(error instanceof Error){
    if(['invalid_hostname','hostname_conflict','dns_not_verified','invalid_placement'].includes(error.message))throw new AccountHttpError(400,error.message);
    if(error.message==='revision_conflict')throw new AccountHttpError(409,error.message);
-   if(error.message==='revoked')throw new AccountHttpError(403,'revoked');
-   if(error.message==='permission_denied')throw new AccountHttpError(403,
-    error.cause==='test_venue_required'?'remote_test_only':error.cause==='remote_plan_required'||error.cause==='remote_setup_required'?error.cause:'forbidden');
+   const refusal=error.message==='revoked'?'revoked':error.message==='permission_denied'?
+    error.cause==='test_venue_required'?'remote_test_only':error.cause==='remote_plan_required'||error.cause==='remote_setup_required'?error.cause:undefined:undefined;
+   if(refusal){
+    // Store refusals can precede the post-DNS owner check; recheck before revealing their cause.
+    await transaction(pool,authorize);
+    throw new AccountHttpError(403,refusal);
+   }
+   if(error.message==='permission_denied')throw new AccountHttpError(403,'forbidden');
    if(error.message==='installation_unavailable')throw new AccountHttpError(409,'remote_not_placed');
   }
   throw error;

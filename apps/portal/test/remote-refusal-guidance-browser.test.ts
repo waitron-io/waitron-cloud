@@ -49,6 +49,7 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
       revoked=true;const before=installationReads;await section.getByRole('button',{name:locale==='en'?'Refresh installations':'Actualizar instalaciones',exact:true}).click();
       await page.waitForFunction(()=>!(window as any).app.installations.pending);
       assert(installationReads>before);await page.locator('.installation').getByText(c.remoteRevoked,{exact:true}).waitFor();
+      assert.equal(await page.getByRole('button',{name:c.refreshStatus,exact:true}).count(),1,'the revoked card guidance names the existing installation refresh');
       assert.equal(await page.locator('.installation').getByRole('button',{name:c.remoteSetup,exact:true}).count(),0);
      }else{await back.click();await page.getByRole('heading',{name:c.account,exact:true}).waitFor();}
     }
@@ -56,6 +57,7 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
    denied='';revoked=false;statusRevoked=true;await page.goto('https://portal.test/account');
    await page.getByRole('button',{name:c.remoteSetup,exact:true}).click();
    await page.locator('.remote-setup').getByRole('status').filter({hasText:c.remoteRevoked}).waitFor();
+   assert.equal(await page.locator('.remote-setup').getByRole('button',{name:c.refreshStatus,exact:true}).count(),1,'revoked status names its existing refresh control');
    assert.equal(await page.locator('.remote-setup input').count(),0);
    assert.equal(await page.locator('.remote-setup a[target=_blank]').count(),0);
    assert.equal(writes.filter(path=>path==='remote-access/apply').length,4,'one deliberate save refusal per cause; no automatic replay');

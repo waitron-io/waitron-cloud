@@ -4450,7 +4450,8 @@ Cloud follow-ups, each a separate small change with tests before implementation:
   overview without reloading and Sign out beside the refusal, with retry if sign-out
   fails. Native HTTP/controller and two-venue browser checks cover six reachable
   panels, heading focus and cleared private state; real database/locking checks run
-  in CI. Permission checks and transaction boundaries remain unchanged. Shared
+  in CI. Existing permission conditions remain; specific remote refusals get a
+  fresh session and ownership check before their cause is returned. Shared
   backup/installation reads on recovery/fiscal pages inherit the wording; their
   request-specific guidance stays in R3/R6/R7. Pairing keeps its existing guidance.
   Remote setup now explains a missing paid trial plan, missing gateway setup,
