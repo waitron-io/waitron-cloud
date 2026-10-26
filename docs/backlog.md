@@ -4119,6 +4119,15 @@ Real PostgreSQL/Mailpit reproduction waits for local Docker or a separately
 qualified CI diagnostic change. This is separate from reset-mail capture and
 Mailpit fixture-startup failures recorded above.
 
+## Remote hostname browser-test request observation (D315)
+
+The Enter-key browser test waits for its DNS route handler to record the first
+request before checking its payload and pending-review behaviour. The browser's
+request event can arrive before that record is filled. A controlled handler delay
+reproduces the empty-array refusal; waiting for the handler preserves the existing
+request, confirmation, apply, invalid-input and rate-limit assertions and deadlines.
+No remote setup or permission behaviour changes.
+
 ## Unchanged remote hostname review (D259)
 
 On Account, Review DNS settings is available only when the entered name differs
