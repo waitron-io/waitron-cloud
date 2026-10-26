@@ -24,14 +24,14 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
       const page = await browser.newPage({locale, colorScheme: theme, viewport: {width, height: 900}});
       page.setDefaultTimeout(4000);
       await page.clock.install({time: new Date(at)}); await page.clock.pauseAt(new Date(at));
-      const c = translations[locale]; let reads = 0;
+      const c = translations[locale]; let reads = 0, sessionReads = 0;
       const writes: string[] = [];
       await page.route('https://portal.test/account', route => route.fulfill({contentType: 'text/html', body: '<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><div id="portal" class="portal"></div>'}));
       await page.route('**/api/account/**', async route => {
         const request = route.request(), path = new URL(request.url()).pathname.replace('/api/account', '');
         if (request.method() === 'POST') writes.push(path);
         if (path === '/session/activity') { await activityReply; return route.fulfill({json: {accountId: 'owner', expiresAt: '2030-01-02T00:00:00.000Z'}}); }
-        if (path === '/session') return route.fulfill({json: {accountId: 'owner', expiresAt}});
+        if (path === '/session') return route.fulfill({json: {accountId: 'owner', expiresAt: ++sessionReads === 1 ? expiresAt : '2030-01-03T00:00:00.000Z'}});
         if (path === '/alerts') {
           reads++;
           if (reads === 1) return route.fulfill({status: 503, json: {error: 'temporarily_unavailable'}});
@@ -72,9 +72,12 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
       await section.getByRole('button', {name: c.alertsSave, exact: true}).waitFor();
       await page.getByRole('link', {name: c.forgot, exact: true}).click();
       await page.getByRole('link', {name: c.login, exact: true}).first().click();
+      const navigationCheck = page.waitForResponse('**/api/account/session');
       await page.getByRole('link', {name: 'Waitron Cloud', exact: true}).click();
+      await (await navigationCheck).finished();
+      await page.waitForFunction(() => (window as unknown as {alertActivityApp: {session: {state: {expiresAt?: string}}}}).alertActivityApp.session.state.expiresAt === '2030-01-03T00:00:00.000Z');
+      await page.waitForFunction(() => !(window as unknown as {alertActivityApp: {alerts: {pending: boolean}}}).alertActivityApp.alerts.pending);
       await section.getByRole('checkbox', {name: c.alertsReceive, exact: true}).waitFor();
-      await page.waitForFunction(() => (window as unknown as {alertActivityApp: {session: {state: {kind: string}}}}).alertActivityApp.session.state.kind === 'authenticated');
       assert.equal(reads, 2, 'returning to Account keeps already loaded alert preferences');
       assert.deepEqual(writes, ['/session/activity'], 'preferences retry never saves choices');
     } finally { releaseActivity(); releaseRetry(); await browser.close(); }
