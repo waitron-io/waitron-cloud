@@ -23,4 +23,3 @@ Further candidates remain in the complete inventory: loyalty and gift cards,
 e-receipts, opening-hours publishing, accounting/delivery connectors, AI-assisted
 reports, benchmarking and commercial payment-rate agreements. None is implied to
 be an initial release commitment.
-
