@@ -43,7 +43,7 @@ for (const locale of ['en', 'es']) for (const theme of ['light', 'dark'] as cons
         if (javaScriptEnabled) await challenge;
         assert.equal(await page.getByText('Please wait a moment.', {exact: false}).isVisible(), javaScriptEnabled);
         assert.equal(await page.getByText('Espera un momento.', {exact: true}).isVisible(), javaScriptEnabled);
-        assert.equal(await page.locator('noscript p').isVisible(), !javaScriptEnabled);
+        assert.equal(await page.locator('#browser-guidance').isVisible(), !javaScriptEnabled);
         if (!javaScriptEnabled) {
           const visible = await page.locator('body').innerText();
           assert.match(visible, /Allow JavaScript or try another browser/);

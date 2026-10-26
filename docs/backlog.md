@@ -4061,13 +4061,13 @@ Cloud follow-ups, each a separate small change with tests before implementation:
   disabled JavaScript gets a static explanation. Native HTTP, executed scripts
   and browser checks cover these outcomes. A failed page attempt ignores late
   replies and does not redirect; proof and access remain server decisions.
-  With JavaScript disabled, only the static guidance appears below the heading;
-  the waiting line appears when the browser-check script runs. Native Chromium
-  checks cover both languages, themes and phone/desktop widths, with and without
-  JavaScript, and retain visible retry guidance after a failed check. Actual visitor
-  browser support and production timing remain unqualified. If JavaScript is enabled
-  but the script cannot load, only the heading appears; useful fallback guidance
-  for that load failure remains open.
+  If the browser-check script cannot load or JavaScript is disabled, bilingual
+  guidance stays visible below the heading. It disappears when the script starts
+  and reveals the waiting line, so a failed download does not leave you without
+  a next step. Native Chromium checks cover failed, disconnected and delayed
+  script downloads, recovery on reload, disabled JavaScript and later retry
+  feedback in both languages, themes and phone/desktop widths. Other browser
+  engines, screen readers and production timing remain unqualified.
 - R11 delivered: public/staff alerts in Account and email name the existing remote
   setup and refresh controls in English and Spanish. Failed checks ask you to
   check venue internet, the selected hostname and setup status. Unknown monitoring
