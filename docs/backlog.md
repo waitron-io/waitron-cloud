@@ -1903,11 +1903,12 @@ notifications separately.
   that boundary: opening correctly consumes the whole-run 0.7-second budget.
   Opening failures now report elapsed milliseconds and the existing bounded
   stage/native trace, after collection, without private paths or child output.
-  The real-clock check accepts deadline refusal during opening or before a
-  complete result, and verifies source preservation, listener closure and exact
-  child collection. A separate check waits for a real writer before firing the
-  unchanged 0.7-second deadline callback, then checks collection before finish or
-  close can hide a missed abort. Only that callback is controlled; HTTP, SQLite,
+  The real-clock check requires its deadline callback to fire before accepting
+  refusal during opening or before a complete result, then verifies source
+  preservation, listener closure and final child collection. A separate check
+  waits for a real writer before firing the unchanged 0.7-second callback and
+  proves collection by that deadline before finish or close can hide a missed
+  abort. Only that callback is controlled; HTTP, SQLite,
   native children and other timers remain real. The existing 4.01-second opening
   and idle controls, drainage assertions and all runtime timers remain unchanged.
   Run `node --test scripts/cloud-cost/replay-stream.test.mjs` for these controls

@@ -279,9 +279,29 @@ test('replayStreamRefusesAnEmptyReplayEvenWhenRestoreAlsoContainsZeroSales', asy
   await assert.rejects(run.finish({ expectedSales: 0 }), bad); clean(f);
 });
 
+// Observe the real deadline's abort without changing its timing or any other timer.
+function observeDeadline(t) {
+  const realTimeout = globalThis.setTimeout, realAbort = AbortController.prototype.abort;
+  let firing = false, expired = false;
+  t.mock.method(AbortController.prototype, 'abort', function (...args) {
+    const result = Reflect.apply(realAbort, this, args);
+    if (firing && this.signal.aborted) expired = true;
+    return result;
+  });
+  t.mock.method(globalThis, 'setTimeout', (callback, milliseconds, ...args) => {
+    if (milliseconds !== 700) return realTimeout(callback, milliseconds, ...args);
+    return realTimeout(() => {
+      firing = true;
+      try { callback(...args); } finally { firing = false; }
+    }, milliseconds);
+  });
+  return () => expired;
+}
+
 // Opening consumes the whole-run budget and may refuse before a writer is ready.
 test('replayStreamRealClockDeadlineRefusesDuringOpeningOrBeforeACompleteLookingResultCanEscape', async t => {
   const f = await fixture(t), original = readFileSync(f.database), began = performance.now();
+  const expired = observeDeadline(t);
   let run, endpoint;
   const observedSdk = { ...sdk, S3Client: class extends sdk.S3Client {
     constructor(options) { super(options); endpoint = options.endpoint; }
@@ -289,10 +309,12 @@ test('replayStreamRealClockDeadlineRefusesDuringOpeningOrBeforeACompleteLookingR
   try { run = await open(t, { ...f, sdk: observedSdk, windowSeconds: 0.7 }); }
   catch (error) {
     assert.equal(error.message, bad.message);
+    assert.equal(expired(), true, 'the real deadline must fire before accepting an opening refusal');
     assert.ok(performance.now() - began >= 700, 'an early opening failure is not a deadline refusal');
   }
   if (run) {
     await upload(f); await wait(800);
+    assert.equal(expired(), true, 'the real deadline must fire before accepting a finish refusal');
     await assert.rejects(run.finish({ expectedSales: 1 }), bad); await run.close();
   }
   clean(f);
@@ -638,7 +660,7 @@ test('replayStreamIdleDeadlineCollectsWithoutAnotherCallerOperation', { timeout:
 
 // A refusal before open returns must identify the last stage without exposing fixture data.
 test('replayStreamOpeningRefusalReportsItsStageAfterSlowStorageSetup', { timeout: 10000 }, async t => {
-  const f = await fixture(t, 'held-opening'), messages = [];
+  const f = await fixture(t, 'held-opening'), messages = [], expired = observeDeadline(t);
   t.mock.method(t, 'diagnostic', message => messages.push(message));
   const opening = open(t, { ...f, windowSeconds: 0.7 });
   const refused = assert.rejects(opening, bad);
@@ -646,6 +668,7 @@ test('replayStreamOpeningRefusalReportsItsStageAfterSlowStorageSetup', { timeout
   await wait(800);
   f.releaseInventory();
   await refused;
+  assert.equal(expired(), true, 'the real deadline must fire before accepting delayed-setup refusal');
   clean(f);
   assert.equal(JSON.parse(readFileSync(f.journal.path, 'utf8')).localResources, undefined,
     'the whole-run deadline must prevent native admission after delayed setup');
