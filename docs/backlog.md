@@ -1918,8 +1918,9 @@ notifications separately.
   without queuing later work. A second case keeps queuing, admits a later upload
   after the real idle handoff signals the writer, then exits after receiving one
   of four declared reply bytes. Close must refuse that interrupted accounting;
-  measurement publication remains refused while independent resource collection
-  reports completion. The check inspects the actual listeners, backend sockets,
+  cancellation separately prevents publication while independent resource
+  collection reports completion. The check requires a successful native exit
+  without a forced-kill signal and inspects the actual listeners, backend sockets,
   owned child identities and scratch, and never launches restore.
   Run both with `node --test --test-timeout=10000 --test-name-pattern='^cancellation'
   scripts/cloud-cost/replay-stream.test.mjs`.

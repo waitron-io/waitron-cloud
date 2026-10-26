@@ -333,7 +333,7 @@ test('cancellationDrainsAnAdmittedUploadBeforeSignallingAFastExitingWriter',asyn
 
 // Later queued work can enter after the idle handoff; an interrupted reply cannot qualify as complete.
 test('cancellationRefusesAnInterruptedLaterUploadAndCollectsTheFastExitingWriter', { timeout: 10000 }, async t => {
-  const f = await fixture(t, 'held-fast-stop', { interruptQueuedUpload: true }), abort = new AbortController();
+  const f = await fixture(t, 'held-fast-stop', { interruptQueuedUpload: true }), abort = new AbortController(), trace = [];
   const listeners = [], listen = Server.prototype.listen;
   t.mock.method(Server.prototype, 'listen', function (...args) {
     listeners.push(this); return Reflect.apply(listen, this, args);
@@ -347,7 +347,7 @@ test('cancellationRefusesAnInterruptedLaterUploadAndCollectsTheFastExitingWriter
   const observedSdk = { ...sdk, S3Client: class extends sdk.S3Client {
     constructor(options) { super(options); adminUrl = options.endpoint; }
   } };
-  const run = await open(t, { ...f, sdk: observedSdk, signal: abort.signal });
+  const run = await open(t, { ...f, sdk: observedSdk, signal: abort.signal, onDiagnostic: event => trace.push(event) });
   const writerUrl = JSON.parse(readFileSync(join(f.root, 'native-stream/stream.json'), 'utf8')).dbs[0].replica.endpoint;
   await f.heldUpload; abort.abort();
   const refused = assert.rejects(run.close(), bad, 'an interrupted later reply refuses successful close');
@@ -357,6 +357,9 @@ test('cancellationRefusesAnInterruptedLaterUploadAndCollectsTheFastExitingWriter
   assert.equal(existsSync(f.database + '.interrupted-reply'), true, 'the writer observes the partial reply before exiting');
   assert.equal(readFileSync(f.database + '.interrupted-reply', 'utf8'), 'x');
   assert.deepEqual(f.interruptedUpload(), { afterStop: true, requestComplete: true, responseFinished: false });
+  assert.deepEqual(trace.filter(event => event.kind === 'native' && event.operation === 'replicate')
+    .map(({ code, signal }) => ({ code, signal })), [{ code: 0, signal: null }], 'the writer exits itself before forced collection');
+  // Cancellation already prevents publication; close() above independently checks transfer refusal.
   assert.deepEqual(await run.closeResources(), { measurementValid: false });
   await assert.rejects(run.finish({ expectedSales: 1 }), bad, 'interrupted cancellation cannot publish measurement');
   for (const url of [writerUrl, adminUrl])
