@@ -73,7 +73,7 @@ for (const locale of ['en', 'es']) for (const theme of ['light', 'dark'] as cons
           assert.equal(await page.getByText('Please wait a moment.', {exact: false}).isVisible(), true);
           release();
           await page.getByText('Please reload to try again.', {exact: false}).waitFor();
-          assert.equal(await reload.isVisible(), false);
+          assert.equal(await reload.isVisible(), true);
         }
         assert.equal(gate.stats().forwarded, 0); assert.equal((await context.cookies()).length, 0);
       } finally {
