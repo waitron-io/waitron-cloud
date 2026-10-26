@@ -4068,8 +4068,11 @@ Cloud follow-ups, each a separate small change with tests before implementation:
   script downloads, recovery on reload, disabled JavaScript and later retry
   feedback in both languages, themes and phone/desktop widths. Other browser
   engines, screen readers and production timing remain unqualified. A new script
-  can still start on the previous page markup during a rollout. Reloading can
-  recover a failed script download; explicit reload guidance remains a follow-up.
+  can still start on the previous page markup during a rollout. The fallback
+  offers Reload page / Volver a cargar as an ordinary link to the same public page.
+  Pointer and keyboard checks cover restarting after a failed script download;
+  without JavaScript, the link returns to the static guidance. Reloading repeats
+  the browser check and does not grant access.
 - R11 delivered: public/staff alerts in Account and email name the existing remote
   setup and refresh controls in English and Spanish. Failed checks ask you to
   check venue internet, the selected hostname and setup status. Unknown monitoring
