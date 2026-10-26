@@ -3206,6 +3206,16 @@ implementation or production evidence.
   including unresolved verifier failures and capacity qualification.
 
 
+## Bound verifier fixture build timeout (D312)
+
+Find why the bound verifier fixture image exceeded its two-minute build limit in CI.
+The cancelled run retained no build progress, so registry, image-pull and cache causes
+remain unproved. Build failures now print their command, elapsed time, failure reason
+and output tail before the test summary. Failed-build cleanup still attempts its
+unique image tag, with a one-second limit, and always removes temporary files.
+Reproduce the image build when local Docker is available; passing CI does not explain
+the earlier timeout. Keep every verifier assertion and the existing build and job limits.
+
 ## Parallel storage-cache fixture failure on main
 
 Main [run 39943355021](https://github.com/waitron-io/waitron-cloud/actions/runs/39943355021)
