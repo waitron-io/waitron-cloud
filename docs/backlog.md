@@ -4648,3 +4648,11 @@ existing Enter, installation-refresh and uncertain-save checks retain their
 assertions and deadlines with the three owner-approved setup changes. Server
 behaviour and the outstanding live DNS/ACME and deployment qualification are
 unchanged.
+
+## Isolated replay ownership-loss fixture
+
+Reproduce why `isolatedControllerNeverClaimsCleanupAfterLosingItsOwnership` can
+finish without its fixture observing the replay worker's started journal state.
+The cause is unknown. Keep the ownership assertion, deadlines, resource collection
+and refusal to claim cleanup after ownership loss; qualify any fix with the genuine
+runtime fixture before retrying the blocked remote-guidance branch.
