@@ -3812,80 +3812,9 @@ checks run in GitHub CI while Docker is down locally.
 
 ## Cost-stack isolation command refusal (D152)
 
-The earlier native-batch case refused during isolation, with command exit 1 after
-1,043 milliseconds. An instrumented recurrence in [D163's exact-merge cost run
-40041135283, job 120712388129](https://github.com/waitron-io/waitron-cloud/actions/runs/40041135283/job/120712388129)
-refused the Litestream body-byte case before its workload: `outbound-canary`,
-exit 1 after 2,924 milliseconds, stderr category `container-state`. That category
-covers both a missing container and one that is not running. Neither record
-identifies the affected service or explains why its state changed.
-
-A failed outbound command now inspects its previously validated container ID
-before cleanup. The report retains only the service role, a known state, running,
-exit code, out-of-memory, dead and restarting flags. Missing containers and
-unavailable or timed-out inspection have explicit categories. The extra read is
-limited to 1.5 seconds and 8 KiB; an inspection failure preserves the original
-refusal and owned cleanup. Raw errors, identifiers, paths and unknown fields
-stay private. Controlled Docker-free checks exercise these boundaries. A Linux
-case deliberately stops this invocation's storage service before its isolation
-command and checks both refusal and cleanup. Independent Linux observations
-also exercised the original eight-case group: [run 40042726726](https://github.com/waitron-io/waitron-cloud/actions/runs/40042726726)
-passed the new control and all eight original cases on each of four runners,
-36 checks in total, without a historical recurrence. The temporary investigation
-workflow is removed; the new control remains in ordinary conformance CI. A second
-Linux check exits the child abruptly after stopping its storage service. The
-parent's fallback requires recorded creation IDs plus fresh owner, project and
-name checks before removing a resource; matching labels alone cannot authorise
-removal. Native controls cover foreign identity and ownership refusals.
-
-A later instrumented recurrence in [PR362 cost run 40054514898, job
-120754852118](https://github.com/waitron-io/waitron-cloud/actions/runs/40054514898/job/120754852118)
-identifies the gateway: exited with code 1, without an out-of-memory kill, dead
-state or restart. Its binary output was discarded, so this does not explain
-why HAProxy stopped. The generated gateway now retains a private failure record
-before exiting. Only fixed categories for name resolution, socket binding,
-certificate loading, child exit, signal or process creation are retained, with
-bounded exit metadata. Raw output stays private and only its first 8 KiB are
-inspected. Failure output drains for at most 250 milliseconds after the master
-exits; an orderly stop does not wait for descendants holding stderr open.
-Synchronous and asynchronous process-creation failures retain the same fixed
-categories. The parent reads at most 1,025 bytes of a private regular file before
-cleanup, validates every field and rejects unknown fields or values. Missing
-or invalid evidence preserves the original refusal. Real child-process checks
-cover the categories, split output, large output, signal and spawn failures;
-a Linux control forces a real HAProxy name-resolution failure and checks that
-the parent retains its category and removes the owned resources. This
-controlled failure does not establish the historical recurrence's cause.
-
-A new instrumented recurrence in [PR369 cost run 40062864377, job
-120780089952](https://github.com/waitron-io/waitron-cloud/actions/runs/40062864377/job/120780089952)
-identifies a HAProxy name-resolution failure: gateway exit 1 during the outbound
-check, after 1,754 milliseconds, without an out-of-memory kill or restart.
-A controlled Linux regression starts the generated gateway first through its
-real Compose plan. Without a backend dependency, HAProxy exits with the same
-name-resolution category. The generated gateway now depends on the Waitron
-service reaching its started state, so its backend joins the private network
-before HAProxy resolves `waitron:8080`. The regression then requires all six
-services to become ready, all isolation checks and owned cleanup. This fixes
-the reproduced ordering defect; attributing the earlier intermittent event to
-that order remains an inference. The separate replication interruption remains
-open.
-
-The strict 4.01-second streamed-day control covers setup as well as later
-phases. A slow setup can consume that budget before idle begins, as observed
-in [run 40064831558](https://github.com/waitron-io/waitron-cloud/actions/runs/40064831558).
-Following the owner's 24 October decision, this control requires refusal after
-the original deadline in whichever phase it reaches, unchanged source data,
-removed private state and collection of every child actually started. It also
-checks that each recorded child has exited. A separate native control enters
-idle before firing the unchanged deadline callback; real HTTP, SQLite and
-child processes must be collected before another caller operation. An opening
-control fires that same deadline while storage setup is held. Removing the
-deadline makes both native controls fail; restoration passes. Only the deadline
-clock is controlled in these native cases; the full Linux streamed-day journey
-keeps its real clock. All runtime timers, budgets and isolation checks remain.
-Local Docker-backed checks are unavailable while Docker is down; GitHub CI
-supplies that evidence.
+Read the [isolation and deadline investigation](backlog/cost-stack-isolation.md)
+before changing the fixture guards. Historical attribution and Linux qualification
+remain limited as described there; the separate replication interruption remains open.
 
 ## Public browser and network qualification
 
