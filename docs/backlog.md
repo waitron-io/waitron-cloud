@@ -4026,6 +4026,11 @@ Cloud follow-ups, each a separate small change with tests before implementation:
   while it runs. The older-page
   browser fixture derives its markup from the current page; pinning actual
   historical markup remains a test follow-up.
+  The browser-check page groups its heading, waiting or failure message and
+  reload guidance in one main content region. Native Chromium checks cover
+  disabled JavaScript, a failed script download and a running check that fails,
+  in both languages, themes and widths. Automated landmark checks run with
+  JavaScript enabled; these checks do not qualify screen-reader announcements.
 - R11 delivered: public/staff alerts in Account and email name the existing remote
   setup and refresh controls in English and Spanish. Failed checks ask you to
   check venue internet, the selected hostname and setup status. Unknown monitoring
