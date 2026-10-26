@@ -2,10 +2,10 @@ import {accountRequest,type ApiResult} from './api.ts';
 import type {Copy,Locale} from './locale.ts';
 export interface AlertPreferences {enabled:boolean;locale:Locale;}
 export class AlertController {
- enabled=false;locale:Locale='en';loaded=false;pending=false;saved=false;error:keyof Copy|undefined;retryAt=0;
+ enabled=false;locale:Locale='en';loaded=false;loadAttempted=false;pending=false;saved=false;error:keyof Copy|undefined;retryAt=0;
  #confirmed:AlertPreferences|undefined;#account:string|undefined;#generation=0;readonly #changed:()=>void;readonly #request:typeof accountRequest;
  constructor(changed:()=>void,request:typeof accountRequest=accountRequest){this.#changed=changed;this.#request=request;}
- account(id:string|undefined){if(this.#account!==id){this.#account=id;this.#generation++;this.#clear();this.pending=false;this.error=undefined;}}
+ account(id:string|undefined){if(this.#account!==id){this.#account=id;this.#generation++;this.#clear();this.loadAttempted=false;this.pending=false;this.error=undefined;}}
  #clear(){this.#confirmed=undefined;this.enabled=false;this.locale='en';this.loaded=false;this.saved=false;}
  get dirty(){return this.loaded&&(!this.#confirmed||this.enabled!==this.#confirmed.enabled||this.locale!==this.#confirmed.locale);}
  get waiting(){return Math.max(0,Math.ceil((this.retryAt-Date.now())/1000));}
@@ -14,6 +14,7 @@ export class AlertController {
  async save(){if(this.dirty)await this.#perform(true);}
  async #perform(write:boolean){
   if(!this.#account||this.pending||this.waiting)return;
+  if(!write)this.loadAttempted=true;
   const generation=this.#generation;this.pending=true;this.error=undefined;this.saved=false;this.#changed();
   const result=await this.#request<AlertPreferences>('/alerts',write?{enabled:this.enabled?'on':'off',locale:this.locale}:undefined);
   if(generation!==this.#generation)return;this.pending=false;

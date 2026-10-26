@@ -2969,9 +2969,16 @@ evaluate mobile notifications separately.
   session revocation and uncertain-reply reconciliation keep their existing checks.
   If revocation and its follow-up list read both fail, activity keeps the uncertain
   message and Retry too. Retry reads the list without sending the revoke again.
-  Other failed Account startup reads may still repeat on activity; reproduce that
-  sequence for alert and translation-consent reads before changing their retry
-  behaviour. The authenticator-rotation lock probe now reads only this
+  A failed alert-preferences read also keeps its message and explicit Load action
+  when session activity completes, including after a server wait ends. Loading
+  cannot duplicate a pending read or bypass the wait. Navigation can retry failed
+  preferences while keeping a pending read and already loaded choices; changing
+  accounts discards old replies. A refused Save keeps its message after navigation
+  and activity; Load reads preferences without repeating the refused save.
+  Uncertain-save handling keeps its existing checks.
+  Stubbed Chromium checks cover both languages, themes and phone/desktop widths.
+  Translation-consent startup reads may still repeat on activity; reproduce that
+  sequence before changing their retry behaviour. The authenticator-rotation lock probe now reads only this
   fixture's uniquely named database sessions. A real competing `FOR SHARE` waiter
   reproduces the old probe's false observation before rotation starts; the scoped
   probe must ignore it and then observe rotation's own `FOR UPDATE` wait. The
