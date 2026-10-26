@@ -57,7 +57,7 @@ for(const locale of ['en','es'] as const)for(const colorScheme of ['light','dark
     await login();await recovery(codes[0]!);await page.getByText(c.credentials,{exact:true}).first().waitFor();await login();await recovery(codes[1]!);await page.getByText(c.accountIntro).waitFor();
     const newPassword='A changed authenticator account password';
     await page.getByRole('link',{name:c.forgot,exact:true}).click();await page.locator('input[name=email]').fill(owner.email);await page.getByRole('button',{name:c.sendReset,exact:true}).click();await page.getByText(c.emailSent,{exact:true}).waitFor();await f.drainMail();
-    const resetText=await mailFor(owner.email,locale==='en'?'Reset your Waitron Cloud password':'Restablece tu contraseña de Waitron Cloud');
+    const resetText=await mailFor(owner.email,locale==='en'?'Reset your Waitron Cloud password':'Restablece tu contraseña de Waitron Cloud',f.mailEvidence);
     const resetUrl=resetText.match(/http:\/\/localhost:[^\s]+/)?.[0];assert.ok(resetUrl,'password reset link missing');
     await page.goto(resetUrl);await page.locator('input[name=password]').fill(newPassword);await page.getByRole('button',{name:c.savePassword,exact:true}).click();await page.getByText(c.resetReady,{exact:true}).waitFor();await page.getByRole('link',{name:c.login,exact:true}).click();
     await login(newPassword);await page.getByText(c.factorLoginHelp,{exact:true}).waitFor();await recovery(codes[2]!);await page.getByText(c.accountIntro).waitFor();

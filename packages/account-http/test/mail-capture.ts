@@ -22,7 +22,7 @@ export function createMailCapture(options: {pool: Pick<Pool, 'query'>; inbox: st
       } catch (error) {record(smtpEvents, 'rejected', started, kind); throw error;}
     }) as Mailer[T];
   }
-  async function diagnostic(boundary: object) {
+  async function evidence(boundary: object = {}) {
     let outbox: unknown = 'unavailable';
     try {
       const query = {text: `SELECT kind, status, attempts, failures, last_error, transport,
@@ -38,9 +38,11 @@ export function createMailCapture(options: {pool: Pick<Pool, 'query'>; inbox: st
         transport: row.transport === null ? 'none' : allowed(row.transport, ['smtp']), hasMessageId: row.has_message_id === true,
       }));
     } catch { /* Diagnostics must preserve the lookup assertion even when the database is unavailable. */ }
-    return `Mail capture: ${JSON.stringify({...boundary, worker: workerEvents, smtp: smtpEvents, outbox})}`;
+    return {...boundary, worker: workerEvents, smtp: smtpEvents, outbox};
   }
+  const diagnostic = async (boundary: object) => `Mail capture: ${JSON.stringify(await evidence(boundary))}`;
   return {
+    evidence,
     mailer: {sendVerification: observe('sendVerification', 'verification'), sendPasswordReset: observe('sendPasswordReset', 'password_reset'),
       sendPasswordChanged: observe('sendPasswordChanged', 'password_changed'), sendServiceAlert: observe('sendServiceAlert', 'service_alert')},
     async runOnce(worker: Pick<EmailWorker, 'runOnce'>) {

@@ -3360,6 +3360,19 @@ original expiry guards, refusal assertions and deadlines remain unchanged;
 production recovery code is unchanged. This establishes an observer defect that
 can explain the historical failure, without proving that run's exact timing.
 
+## Portal reset-mail boundary reporting
+
+The authenticator journey's [missing reset email](https://github.com/waitron-io/waitron-cloud/actions/runs/40398829746)
+still needs a causal fix. A 202 response and the confirmation screen do not prove
+that Cloud queued or delivered a message. On a missing message, the portal fixture
+now reports the queue states, worker results, SMTP acceptance or rejection, and
+inbox subjects and synthetic recipients. Bodies, reset tokens, message IDs and
+raw errors stay out. The fixture reuses Account HTTP's bounded mail observer and
+keeps the original single lookup, recipient match, assertions and deadlines.
+Capture a recurrence with this evidence before changing delivery or inbox capture.
+Local PostgreSQL and SMTP reproduction waits for Docker to return; controlled
+HTTP and database stubs verify the reporting independently.
+
 ## Account HTTP reset-mail capture
 
 [CI run 39730254198](https://github.com/waitron-io/waitron-cloud/actions/runs/39730254198)
