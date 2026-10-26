@@ -5650,7 +5650,8 @@ Cloud follow-ups, each a separate small change with tests before implementation:
   requests after 30 seconds, terminates the worker and ignores late results.
   Unsupported/blocked workers offer another-browser and JavaScript guidance;
   disabled JavaScript gets a static explanation. Native HTTP, executed scripts
-  and browser checks cover these outcomes without granting access on failure.
+  and browser checks cover these outcomes. A failed page attempt ignores late
+  replies and does not redirect; proof and access remain server decisions.
   With JavaScript disabled, the original waiting line remains above the static
   guidance; simplifying that presentation stays open. Actual visitor browser
   support and production timing remain unqualified.
