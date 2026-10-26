@@ -25,8 +25,8 @@ for (const [cause, code] of [['permission_denied', 'permission_denied'], ['csrf_
 }
 
 // A controlled SQL boundary exercises the HTTP denial path; real locking remains a CI check.
-for(const path of ['backups/list','diagnostics/read','remote-access/status','translation-consent','remote-access/dns']) {
-  test(`${path}: denied authority returns a permission response without reading private data`, async t => {
+for(const path of ['backups/list','diagnostics/read','diagnostics/read-final','remote-access/status','translation-consent','remote-access/dns']) {
+  test(`${path}: ${path==='remote-access/dns'?'shared plan/setup refusal retains its response':'denied authority returns a permission response'} without exposing private data`, async t => {
     const {createHash}=await import('node:crypto');
     const id='20000000-0000-4000-8000-000000000001',token='a'.repeat(43),csrf='b'.repeat(43),now=new Date();
     const queries:string[]=[];
@@ -37,6 +37,12 @@ for(const path of ['backups/list','diagnostics/read','remote-access/status','tra
       if(sql.startsWith('SELECT id FROM cloud_accounts'))return {rows:[{id}],rowCount:1};
       if(sql.startsWith('SELECT last_seen_at, absolute_expires_at, csrf_hash'))return {rows:[{last_seen_at:now,absolute_expires_at:new Date(+now+3600000),csrf_hash:createHash('sha256').update(csrf).digest('hex')}],rowCount:1};
       if(sql==='SELECT clock_timestamp() AS now')return {rows:[{now}],rowCount:1};
+      if(path==='diagnostics/read-final'){
+       if(sql.startsWith('SELECT i.id,i.venue_id'))return {rows:[{id,venue_id:id,environment:'test',configuration_revision:0,revoked_at:null,last_contact_at:null,lease_expires_at:null,generated_at:now}],rowCount:1};
+       if(sql.startsWith('SELECT s.service')||sql.startsWith('SELECT kind,opened_at')||sql.startsWith('SELECT service.kind'))return {rows:[],rowCount:0};
+       if(sql.startsWith('SELECT m.checked_at'))return {rows:[{enabled:false,fresh:false,checked_at:null}],rowCount:1};
+       if(sql.startsWith('SELECT max(p.captured_at)'))return {rows:[{latest:null,verified:null}],rowCount:1};
+      }
       if(path==='remote-access/dns'&&sql.includes('organisation_memberships'))return {rows:[{account_id:id}],rowCount:1};
       if(sql.includes('organisation_memberships')||sql.startsWith('SELECT account_id FROM cloud_credentials'))return {rows:[],rowCount:0};
       throw Error('Unexpected private-data query: '+sql);
@@ -48,8 +54,8 @@ for(const path of ['backups/list','diagnostics/read','remote-access/status','tra
       config:{portalOrigin:'https://cloud.example.test',production:true,rateKey:'cd'.repeat(32),trustedProxyIps:[]},
       factor:{keys:null,policy:null},pairingCodeKeys:null,recoveryCodeKeys:null});
     const body=path==='translation-consent'?{venueId:id,choice:'agree',consentVersion:'providers-2026-10-14'}:path==='backups/list'?{venueId:id}:path==='remote-access/dns'?{installationId:id,kind:'staff',hostname:'staff.example.test'}:{installationId:id};
-    const response=await app.request('https://cloud.example.test/api/account/'+path,{method:'POST',headers:{origin:'https://cloud.example.test','content-type':'application/json',cookie:'__Host-cloud_session='+token,'x-csrf-token':csrf},body:JSON.stringify(body)},{incoming:{socket:{remoteAddress:'192.0.2.10'}}});
-    assert.equal(response.status,403);assert.deepEqual(await response.json(),{error:'permission_denied'});
+    const response=await app.request('https://cloud.example.test/api/account/'+path.replace('-final',''),{method:'POST',headers:{origin:'https://cloud.example.test','content-type':'application/json',cookie:'__Host-cloud_session='+token,'x-csrf-token':csrf},body:JSON.stringify(body)},{incoming:{socket:{remoteAddress:'192.0.2.10'}}});
+    assert.equal(response.status,403);assert.deepEqual(await response.json(),{error:path==='remote-access/dns'?'forbidden':'permission_denied'});
     assert(queries.includes(path==='remote-access/dns'?'COMMIT':'ROLLBACK'));assert.equal(queries.some(sql=>/^INSERT|^UPDATE|^DELETE/.test(sql)),false);
   });
 }

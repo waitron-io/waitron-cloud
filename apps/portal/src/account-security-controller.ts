@@ -84,7 +84,7 @@ export class AccountSecurityController {
 
   #failure(result: Extract<ApiResult<unknown>, {ok: false}>, write: boolean) {
     this.error = result.status === 429 ? 'limited'
-      : result.status === 403 ? (result.code === 'permission_denied' ? 'permissionAccount' : 'forbidden')
+      : result.status === 403 ? 'forbidden'
       : write ? 'sessionRevokeUncertain' : 'unavailable';
   }
 }

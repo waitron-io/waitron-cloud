@@ -76,7 +76,7 @@ export class PasskeyController {
     this.error = password && result.code === 'credentials_invalid' ? 'passkeyPasswordInvalid'
       : result.status === 429 ? 'limited'
       : result.status === 401 ? 'pairSession'
-      : result.status === 403 ? (result.code === 'permission_denied' ? 'permissionAccount' : 'forbidden')
+      : result.status === 403 ? 'forbidden'
       : result.status === 400 && result.code === 'invalid_input' && refusal ? refusal
       : 'passkeyUnavailable';
   }

@@ -59,6 +59,6 @@ export async function diagnosticsResponse(c:Context,options:{pool:Pool;origin:st
   await resolveSession(client,token,{csrfToken:csrf,touch:false});
   const permission=await client.query(`SELECT 1 FROM installations i JOIN venues v ON v.id=i.venue_id
    JOIN organisation_memberships m ON m.organisation_id=v.organisation_id WHERE i.id=$1 AND m.account_id=$2 AND m.is_owner FOR SHARE OF m`,[body.installationId,current.accountId]);
-  if(!permission.rowCount)throw new AccountHttpError(403,'forbidden');return result;
+  if(!permission.rowCount)throw new AccountHttpError(403,'permission_denied');return result;
  }));
 }

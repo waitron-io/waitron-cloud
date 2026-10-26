@@ -57,8 +57,7 @@ export async function remoteAccessResponse(c:Context,options:{pool:Pool;origin:s
   if(error instanceof Error){
    if(['invalid_hostname','hostname_conflict','dns_not_verified','invalid_placement'].includes(error.message))throw new AccountHttpError(400,error.message);
    if(error.message==='revision_conflict')throw new AccountHttpError(409,error.message);
-   if(error.message==='permission_denied')throw new AccountHttpError(403,'permission_denied');
-   if(error.message==='revoked')throw new AccountHttpError(403,'forbidden');
+   if(['revoked','permission_denied'].includes(error.message))throw new AccountHttpError(403,'forbidden');
    if(error.message==='installation_unavailable')throw new AccountHttpError(409,'remote_not_placed');
   }
   throw error;

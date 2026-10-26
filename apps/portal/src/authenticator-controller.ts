@@ -18,7 +18,7 @@ export class AuthenticatorController {
   account(id:string|undefined){if(id===this.#account)return;this.#account=id;this.fence();}
   #failure(result:Extract<ApiResult<unknown>,{ok:false}>,change=false){
     this.retryAt=Date.now()+result.retryAfterMs;
-    this.error=result.status===429?'limited':result.code==='credentials_invalid'?'credentials':result.status===403?(result.code==='permission_denied'?'permissionAccount':'forbidden')
+    this.error=result.status===429?'limited':result.code==='credentials_invalid'?'credentials':result.status===403?'forbidden'
       :change&&(result.status===0||result.status>=500)?'factorChangeUncertain':'factorUnavailable';
   }
   #managementFailure(result:Extract<ApiResult<unknown>,{ok:false}>,change=false){

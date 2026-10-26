@@ -1,4 +1,3 @@
-import {permissionActions} from './permission-actions.ts';
 import {formatDateTime} from './dates.ts';
 import {html,nothing} from 'lit';
 import type {PortalApp} from './app.ts';
@@ -6,7 +5,7 @@ import type {AccountInstallation,MonitoringIncidentKind} from './installation-ty
 export function alertScreen(app:PortalApp){
  const a=app.alerts,c=app.copy,disabled=a.pending||!!a.waiting;
  return html`<section aria-label=${c.serviceAlerts}><h2>${c.serviceAlerts}</h2><p>${c.alertsHelp}</p>
-  ${a.error?html`<p role="alert">${c[a.error]}</p>`:nothing}${permissionActions(app,a.error)}
+  ${a.error?html`<p role="alert">${c[a.error]}</p>`:nothing}
   ${a.saved?html`<p role="status">${c.alertsSaved}</p>`:nothing}
   ${!a.loaded?html`<wt-button .disabled=${disabled} @click=${()=>{void a.load();}}>${c.alertsLoad}</wt-button>`:html`
    <label class="alert-choice"><input id="service-alerts-enabled" type="checkbox" .checked=${a.enabled} ?disabled=${disabled} @change=${(e:Event)=>a.choose((e.target as HTMLInputElement).checked,a.locale)}>${c.alertsReceive}</label>
