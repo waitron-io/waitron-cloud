@@ -47,4 +47,3 @@ These fake-client checks leave one question open: whether stopping the client
 also stops Docker's own registry transfer. Qualify that with a real daemon and a
 controlled registry when local Docker is available; do not infer it from client
 termination.
-
