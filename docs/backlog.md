@@ -3669,10 +3669,12 @@ ran. Across six recent runs, 94 archive responses returned 200 and two returned
 Fixture downloads now try at most three times for HTTP 5xx or a reset connection,
 with one- and two-second pauses inside the existing shared 120-second budget.
 Each attempt starts with empty data and reports its number through
-`conformance_archive`. Refused response bodies are cancelled; only a complete
+`conformance_archive`; transport failures also report the error code. Refused
+response bodies are cancelled; only a complete
 response matching the pinned SHA-256 is written for extraction. Digest failures,
 other HTTP refusals and caller cancellation stop without another attempt.
-Local HTTP checks cover recovery, exhausted attempts, partial-body reset,
+Local HTTP checks cover recovery, exhausted attempts, both retry pauses, real TCP
+reset and partial-body reset,
 permanent refusals, checksum verification after a retry, cancellation and the
 shared deadline. Docker-backed qualification runs in CI during the local outage;
 these controls do not establish the cause of the historical upstream 504.

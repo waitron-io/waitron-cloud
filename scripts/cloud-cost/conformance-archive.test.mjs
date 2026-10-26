@@ -24,7 +24,13 @@ for(const outcome of ['success','http-failure','digest-mismatch','timeout','inte
     await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
     const url=`http://127.0.0.1:${server.address().port}/fixture.tar.gz`;
     // Accelerate the real fixed budgets only inside the disposable observer.
+    // Retry timing is covered separately; keep these observers focused on diagnostics.
     const program=`
+      import timerPromises from 'node:timers/promises';
+    import {syncBuiltinESMExports} from 'node:module';
+    const originalDelay=timerPromises.setTimeout;
+    timerPromises.setTimeout=(ms,value,options)=>originalDelay([1000,2000].includes(ms)?20:ms,value,options);
+    syncBuiltinESMExports();
       import assert from 'node:assert/strict';
       const originalInterval=globalThis.setInterval;
       globalThis.setInterval=(fn,ms,...args)=>originalInterval(fn,ms===10000?40:ms,...args);
@@ -117,6 +123,11 @@ console.log('x86_64');
   await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
   const endpoint=`http://127.0.0.1:${server.address().port}`;
   const program=`
+    import timerPromises from 'node:timers/promises';
+    import {syncBuiltinESMExports} from 'node:module';
+    const originalDelay=timerPromises.setTimeout;
+    timerPromises.setTimeout=(ms,value,options)=>originalDelay([1000,2000].includes(ms)?20:ms,value,options);
+    syncBuiltinESMExports();
     const original=globalThis.fetch;
     globalThis.fetch=(url,options)=>original(${JSON.stringify(endpoint)},options);
     const {prepareConformance}=await import(${JSON.stringify(new URL('./conformance-prepare.mjs',import.meta.url).href)});

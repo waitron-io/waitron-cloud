@@ -9,17 +9,22 @@ import {spawn} from 'node:child_process';
 import {setTimeout as delay} from 'node:timers/promises';
 
 // Removing retries, admitting damaged bytes, or restarting the deadline breaks these HTTP journeys.
-for(const scenario of ['504-then-success','500-then-success','504-twice-success','retry-digest-mismatch','connection-reset','partial-reset',
+for(const scenario of ['504-then-success','500-then-success','504-twice-success','retry-digest-mismatch','connection-reset','partial-reset','tcp-reset','tcp-partial-reset',
   'always-504','open-503-body','404','429','digest-mismatch','cancel-backoff','shared-deadline']) {
   test('archive retry: '+scenario,{timeout:9000},async()=>{
     const root=mkdtempSync(join(tmpdir(),'cost-archive-retry-')),path=join(root,'fixture.tar.gz');
     const bytes=Buffer.from('verified public fixture bytes'),digest=createHash('sha256').update(bytes).digest('hex');
-    let requests=0;
+    let requests=0;const requestTimes=[];
     const server=createServer((request,response)=>{
-      const attempt=++requests;
+      const attempt=++requests;requestTimes.push(performance.now());
       if(scenario==='shared-deadline'){
         if(attempt===1)setTimeout(()=>{response.writeHead(504);response.end();},300);
         return;
+      }
+      if(scenario==='tcp-reset'&&attempt===1){request.socket.resetAndDestroy();return;}
+      if(scenario==='tcp-partial-reset'&&attempt===1){
+        response.writeHead(200);response.write('discard reset bytes');
+        setTimeout(()=>request.socket.resetAndDestroy(),40);return;
       }
       if(scenario==='connection-reset'&&attempt===1){request.socket.destroy();return;}
       if(scenario==='partial-reset'&&attempt===1){
@@ -56,7 +61,7 @@ for(const scenario of ['504-then-success','500-then-success','504-twice-success'
     try{
       const result=await Promise.race([closed,delay(7000,null,{ref:false})]);
       assert.notEqual(result,null,'download must settle: '+output);assert.equal(result.signal,null);
-      const success=['504-then-success','500-then-success','504-twice-success','connection-reset','partial-reset'].includes(scenario);
+      const success=['504-then-success','500-then-success','504-twice-success','connection-reset','partial-reset','tcp-reset','tcp-partial-reset'].includes(scenario);
       assert.equal(result.code,success?0:1,output);
       assert.equal(requests,scenario==='504-twice-success'?3:success||['shared-deadline','retry-digest-mismatch'].includes(scenario)?2:
         ['always-504','open-503-body'].includes(scenario)?3:1,output);
@@ -70,6 +75,14 @@ for(const scenario of ['504-then-success','500-then-success','504-twice-success'
       for(const record of records){assert.equal(record.timeoutMs,120000);assert.equal(record.phase,'storage-archive');assert.equal(record.url,url);}
       assert.equal(records.at(-1).event,success?'complete':'failure');
       assert.equal(records.filter(record=>record.event==='retry').length,requests-1+(scenario==='cancel-backoff'?1:0));
+      if(['tcp-reset','tcp-partial-reset'].includes(scenario)){
+        assert.equal(records.find(record=>record.event==='retry').errorCode,'ECONNRESET');
+      }
+      if(scenario==='always-504'){
+        assert.deepEqual(records.filter(record=>record.event==='retry').map(record=>record.pauseMs),[1000,2000]);
+        assert.ok(requestTimes[1]-requestTimes[0]>=900,'pause before the second request');
+        assert.ok(requestTimes[2]-requestTimes[1]>=1900,'longer pause before the third request');
+      }
       if(['digest-mismatch','retry-digest-mismatch'].includes(scenario))assert.match(output,/Fixture archive digest mismatch/);
       if(scenario==='cancel-backoff'){assert.match(output,/owner interrupted/);assert.ok(performance.now()-started<1500);}
       if(scenario==='shared-deadline'){

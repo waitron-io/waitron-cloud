@@ -32,7 +32,7 @@ export async function downloadConformanceArchive(url,digest,path,{signal,phase})
         const reset=['ECONNRESET','UND_ERR_SOCKET'].includes(error?.cause?.code??error?.code);
         if(attempt>=3||(!retryable&&!reset))throw error;
         const pauseMs=attempt*1000;
-        report('retry',{pauseMs,errorName:error?.name??'UnknownError'});
+        report('retry',{pauseMs,errorName:error?.name??'UnknownError',errorCode:error?.cause?.code??error?.code});
         try {await delay(pauseMs,undefined,{signal:downloadSignal});}
         catch(error) {downloadSignal.throwIfAborted();throw error;}
         continue;
@@ -42,6 +42,6 @@ export async function downloadConformanceArchive(url,digest,path,{signal,phase})
       writeFileSync(path,bytes);
       report('complete');return;
     }
-  } catch(error) {report('failure',{errorName:error?.name??'UnknownError'});throw error;}
+  } catch(error) {report('failure',{errorName:error?.name??'UnknownError',errorCode:error?.cause?.code??error?.code});throw error;}
   finally {clearInterval(progress);}
 }
