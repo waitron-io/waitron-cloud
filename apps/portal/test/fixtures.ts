@@ -1,3 +1,4 @@
+import {createMailCapture} from '../../../packages/account-http/test/mail-capture.ts';
 import {TranslationFixture} from './translation-fixture.ts';
 import type {RegistryOptions} from '../../../packages/fiscal-allocation/src/policy.ts';
 import type {FactorConfig} from '../../../packages/account-http/src/config.ts';
@@ -53,9 +54,10 @@ export async function startPortalFixture(captures?:CaptureOptions,remoteResolve?
       record('request');response.on('finish',()=>record('finish'));response.on('close',()=>record('close'));
     });
     browser = await chromium.launch({headless: true});
-    const worker = new EmailWorker(db.pool, db.outbox, createLocalAccountMailer({
+    const mailCapture = createMailCapture({pool: db.pool, inbox: process.env.MAILPIT_TEST_URL!, mailer: createLocalAccountMailer({
       port: Number(process.env.MAILPIT_TEST_SMTP_PORT), portalOrigin: origin,
-    }));
+    })});
+    const worker = new EmailWorker(db.pool, db.outbox, mailCapture.mailer);
     return {origin, browser, db, issuer,trace,translation:translations,
       loseRecoveryReply(action: 'approve' | 'replace') {
         // Drop the socket after the handler commits, so reconciliation uses ordinary browser networking.
@@ -96,17 +98,35 @@ export async function startPortalFixture(captures?:CaptureOptions,remoteResolve?
         };
         server.prependListener('request',hook);
       },
-      async drainMail() { while (await worker.runOnce()) {} },
+      mailEvidence: mailCapture.evidence,
+      async drainMail() { while (await mailCapture.runOnce(worker)) {} },
       async close() { translations?.close(); await browser?.close(); await running?.close(); await db.close(); },
     };
   } catch (error) { translations?.close(); await browser?.close(); await running?.close(); await db.close(); throw error; }
 }
-export async function mailFor(email: string, subject: string): Promise<string> {
+export async function mailFor(email: string, subject: string, evidence?: () => Promise<object>): Promise<string> {
   const inbox = process.env.MAILPIT_TEST_URL!;
   const response = await fetch(`${inbox}/api/v1/messages`);
   const list = await response.json() as {messages: {ID: string; Subject: string; To: {Address: string}[]}[]};
   const found = list.messages.find(message => message.Subject === subject && message.To.some(to => to.Address === email));
-  assert.ok(found, `Missing ${subject} message`);
+  if (!found) {
+    let boundaries: object;
+    try { boundaries = await evidence?.() ?? {}; } catch { boundaries = {boundaries: 'unavailable'}; }
+    const knownSubjects = new Set(['Verify your Waitron Cloud email', 'Verifica tu correo de Waitron Cloud',
+      'Reset your Waitron Cloud password', 'Restablece tu contraseña de Waitron Cloud',
+      'Your Waitron Cloud password changed', 'Tu contraseña de Waitron Cloud ha cambiado',
+      'Waitron Cloud: a venue needs attention', 'Waitron Cloud: un local necesita atención',
+      'Waitron Cloud: venue check recovered', 'Waitron Cloud: comprobación recuperada']);
+    const metadata = list.messages.slice(0, 50).map(message => ({
+      subject: knownSubjects.has(message.Subject) ? message.Subject : 'other',
+      recipients: message.To.slice(0, 10).map(to => /^[a-zA-Z0-9_.+-]{1,100}@example\.test$/.test(to.Address) ? to.Address : 'other'),
+    }));
+    const diagnostic = { ...boundaries, inbox: {status: response.status, listed: list.messages.length,
+      subjectMatches: list.messages.filter(message => message.Subject === subject).length,
+      recipientMatches: list.messages.filter(message => message.To.some(to => to.Address === email)).length,
+      combinedMatches: 0, messages: metadata} };
+    assert.ok(found, `Missing ${subject} message. Mail capture: ${JSON.stringify(diagnostic)}`);
+  }
   const message = await (await fetch(`${inbox}/api/v1/message/${found.ID}`)).json() as {Text: string};
   return message.Text;
 }
