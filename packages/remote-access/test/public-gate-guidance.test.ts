@@ -105,7 +105,7 @@ test('a browser that cannot create a worker gets browser guidance and no proof s
  const f=await fixture();try{
   const {body}=await f.send('/_cloud/challenge.js');const paragraph={innerHTML:''},requests:string[]=[];
   await runInNewContext(body,{
-   document:{querySelector:()=>paragraph},AbortController,setTimeout,clearTimeout,
+   document:{querySelector:()=>paragraph},AbortController,setTimeout:()=>1,clearTimeout:()=>{},
    Worker:class {constructor(){throw new Error('worker blocked');}},
    fetch:async(path:string)=>{requests.push(path);return Response.json({challenge:'blocked-worker',difficulty:8});},
   });
@@ -118,6 +118,17 @@ test('without JavaScript the challenge page provides a way forward',async()=>{
  const f=await fixture();try{
   const {status,body}=await f.send('/public/availability',{accept:'text/html'});
   assert.equal(status,403);assert.match(body,/<noscript>.*JavaScript.*<span lang="es">.*JavaScript.*<\/span>.*<\/noscript>/);
+ }finally{await f.close();}
+});
+
+test('missing request-cancellation support gives browser guidance without starting a request',async()=>{
+ const f=await fixture();try{
+  const {body}=await f.send('/_cloud/challenge.js');const paragraph={innerHTML:''},requests:string[]=[];
+  await runInNewContext(body,{
+   document:{querySelector:()=>paragraph},setTimeout:()=>1,clearTimeout:()=>{},
+   Worker:class {},fetch:async(path:string)=>{requests.push(path);return Response.json({});},
+  });
+  assert.match(paragraph.innerHTML,/another browser/i);assert.match(paragraph.innerHTML,/otro navegador/i);assert.deepEqual(requests,[]);
  }finally{await f.close();}
 });
 
@@ -147,7 +158,7 @@ for(const stall of ['challenge','worker','solve','worker-error','exhausted','uns
   if(worker)assert.equal(terminated,true);
   if(finishChallenge){finishChallenge(Response.json({challenge:'late-proof',difficulty:8}));await pending;assert.equal(worker,undefined);}
   if(finishSolve){finishSolve(new Response(null,{status:204}));await solve;}
-  if(worker)await worker.onmessage!({data:{challenge:'late-proof',nonce:1}});
+  if(worker){void worker.onmessage!({data:{challenge:'late-proof',nonce:1}});await Promise.resolve();}
   assert.deepEqual(redirects,[]);assert.equal(requests.length,stall==='solve'?2:1,'late messages cannot submit another proof');
  }finally{await f.close();}
 });
