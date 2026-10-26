@@ -95,7 +95,7 @@ The normal connection journey and PostgreSQL for Cloud management data are agree
 The internal package uses one management database and tests concurrent completion
 and restart against PostgreSQL. Proof encoding and user-mediated first contact are specified and implemented on the
 Cloud side. The Waitron adapter checks live manager permission and serving-primary status before
-completion. Public deployment remains gated by the service-adapter and ingress work below. Country partitioning, database availability and per-cell storage
+completion. Public deployment remains gated by the [service-adapter and ingress work](../backlog.md#platform-work-to-scope). Country partitioning, database availability and per-cell storage
 remain deployment work; existing services must tolerate a management outage within
 the scoped credential and revocation rules defined in the installation lifecycle spec.
 
@@ -131,6 +131,6 @@ Installation, snapshot, monitoring and recovery dates spell out the month in
 English and Spanish. Local time and seconds are retained, including the warning
 about changes lost during recovery. Database-free browser checks cover both
 recovery sources and the approved continuous source, light/dark and phone/desktop.
-Next, configure live mail delivery and the deployment/account-security controls below. Pairing
+Next, configure live mail delivery and the [deployment/account-security controls](../backlog.md#platform-work-to-scope). Pairing
 remains a separate exchange requiring both Cloud and local administrator proof.
 
