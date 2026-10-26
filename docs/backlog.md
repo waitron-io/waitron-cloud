@@ -2861,9 +2861,10 @@ evaluate mobile notifications separately.
   A failed translation-consent read keeps its message and explicit Refresh when
   session activity completes, including after a server wait ends. Refresh cannot
   duplicate a pending read or bypass the wait, and never repeats a consent change.
-  Navigation retries failed reads while keeping pending and successful reads;
-  changing accounts discards old replies. Refused consent changes retain their
-  message until an explicit read. Consent authority still requires a successful
+  Navigation retries failed reads while keeping pending and successful reads.
+  A navigation read blocked by a server wait may start on later activity after
+  the wait ends. Changing accounts discards old replies. Refused consent changes
+  retain their message until an explicit read. Consent authority still requires a successful
   read. Stubbed Chromium checks cover both languages, themes and phone/desktop
   widths; provider and real database behavior still require their separate checks. The authenticator-rotation lock probe now reads only this
   fixture's uniquely named database sessions. A real competing `FOR SHARE` waiter
