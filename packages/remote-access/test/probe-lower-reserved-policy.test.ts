@@ -17,6 +17,7 @@ for(const [range,addresses] of [
 for(const address of [
  '100::ffff:ffff:ffff:ffff','100:0:0:1::','100:0:0:1::1',
  '100:0:0:1:ffff:ffff:ffff:ffff','100:0:0:2::','100:1::1',
+ '0100:0000:0000:0001:0000:0000:0000:0001','100:0:0:1::8.8.8.8','100:0:0:1::1%eth0',
 ])test(`address policy refuses non-public allocations and neighbours in 100::/8: ${address}`,()=>{
  assert.equal(isPublicProbeAddress(address,6),false,address);
 });

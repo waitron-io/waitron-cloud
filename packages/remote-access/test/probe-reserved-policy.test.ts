@@ -20,6 +20,6 @@ for(const [address,allowed] of [
  ['::ffff:8.8.8.8',false],['64:ff9b::808:808',false],['64:ff9b:1::808:808',false],
  ['2002:808:808::1',true],['2002:7f00:1::1',false],['2606:4700:4700::1111',true],
  ['100:1::1',false],['100::1',false],
-] as const)test(`reserved address policy retains embedded-IPv4 decisions: ${address}`,()=>{
+] as const)test(`reserved address policy decisions: ${address}`,()=>{
  assert.equal(isPublicProbeAddress(address,6),allowed,address);
 });
