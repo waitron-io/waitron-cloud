@@ -4376,7 +4376,9 @@ Cloud follow-ups, each a separate small change with tests before implementation:
   the waiting line appears when the browser-check script runs. Native Chromium
   checks cover both languages, themes and phone/desktop widths, with and without
   JavaScript, and retain visible retry guidance after a failed check. Actual visitor
-  browser support and production timing remain unqualified.
+  browser support and production timing remain unqualified. If JavaScript is enabled
+  but the script cannot load, only the heading appears; useful fallback guidance
+  for that load failure remains open.
 - R11 delivered: public/staff alerts in Account and email name the existing remote
   setup and refresh controls in English and Spanish. Failed checks ask you to
   check venue internet, the selected hostname and setup status. Unknown monitoring

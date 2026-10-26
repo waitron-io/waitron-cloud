@@ -2,9 +2,13 @@ import assert from 'node:assert/strict';
 import {mkdir} from 'node:fs/promises';
 import {createServer} from 'node:http';
 import {randomBytes} from 'node:crypto';
-import {test} from 'node:test';
+import {after, before, test} from 'node:test';
 import {chromium} from 'playwright';
 import {createPublicGate} from '../../../packages/remote-access/src/public-gate.ts';
+
+let browser: Awaited<ReturnType<typeof chromium.launch>>;
+before(async () => {browser = await chromium.launch({headless: true});});
+after(async () => {await browser?.close();});
 
 for (const locale of ['en', 'es']) for (const theme of ['light', 'dark'] as const) for (const width of [390, 1280]) {
   for (const javaScriptEnabled of [false, true]) {
@@ -20,11 +24,12 @@ for (const locale of ['en', 'es']) for (const theme of ['light', 'dark'] as cons
       });
       await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
       const address = server.address(); assert.ok(address && typeof address !== 'string');
-      const browser = await chromium.launch({headless: true});
+      let context: Awaited<ReturnType<typeof browser.newContext>> | undefined;
       let release!: () => void;
       const held = new Promise<void>(resolve => {release = resolve;});
       try {
-        const page = await browser.newPage({javaScriptEnabled, locale, colorScheme: theme, viewport: {width, height: 800}});
+        context = await browser.newContext({javaScriptEnabled, locale, colorScheme: theme, viewport: {width, height: 800}});
+        const page = await context.newPage();
         page.setDefaultTimeout(4000);
         let requested!: () => void;
         const challenge = new Promise<void>(resolve => {requested = resolve;});
@@ -58,7 +63,7 @@ for (const locale of ['en', 'es']) for (const theme of ['light', 'dark'] as cons
           assert.equal(gate.stats().forwarded, 0);
         }
       } finally {
-        release(); await browser.close(); server.closeAllConnections();
+        release(); await context?.close(); server.closeAllConnections();
         await new Promise<void>(resolve => server.close(() => resolve()));
       }
     });
