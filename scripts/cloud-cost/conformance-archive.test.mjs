@@ -24,7 +24,13 @@ for(const outcome of ['success','http-failure','digest-mismatch','timeout','inte
     await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
     const url=`http://127.0.0.1:${server.address().port}/fixture.tar.gz`;
     // Accelerate the real fixed budgets only inside the disposable observer.
+    // Retry timing is covered separately; keep these observers focused on diagnostics.
     const program=`
+      import timerPromises from 'node:timers/promises';
+    import {syncBuiltinESMExports} from 'node:module';
+    const originalDelay=timerPromises.setTimeout;
+    timerPromises.setTimeout=(ms,value,options)=>originalDelay([1000,2000].includes(ms)?20:ms,value,options);
+    syncBuiltinESMExports();
       import assert from 'node:assert/strict';
       const originalInterval=globalThis.setInterval;
       globalThis.setInterval=(fn,ms,...args)=>originalInterval(fn,ms===10000?40:ms,...args);
@@ -72,7 +78,14 @@ for(const outcome of ['success','http-failure','digest-mismatch','timeout','inte
       const ended=records.at(-1);
       const headers=records.filter(record=>record.event==='headers');
       if(outcome==='timeout')assert.deepEqual(headers,[]);
-      else {assert.equal(headers.length,1);assert.equal(headers[0].status,outcome==='http-failure'?503:200);assert.ok(records.indexOf(headers[0])<records.length-1);}
+      else {
+        const attempts=['http-failure','body-failure'].includes(outcome)?3:1;
+        assert.equal(headers.length,attempts);
+        for(const [index,header] of headers.entries()){
+          assert.equal(header.attempt,index+1);assert.equal(header.status,outcome==='http-failure'?503:200);
+          assert.ok(records.indexOf(header)<records.length-1);
+        }
+      }
       if(outcome==='success'){
         assert.equal(result.code,0);assert.equal(ended.event,'complete');assert.equal(ended.bytesReceived,bytes.length);
         assert.deepEqual(readFileSync(path),bytes);
@@ -110,6 +123,11 @@ console.log('x86_64');
   await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
   const endpoint=`http://127.0.0.1:${server.address().port}`;
   const program=`
+    import timerPromises from 'node:timers/promises';
+    import {syncBuiltinESMExports} from 'node:module';
+    const originalDelay=timerPromises.setTimeout;
+    timerPromises.setTimeout=(ms,value,options)=>originalDelay([1000,2000].includes(ms)?20:ms,value,options);
+    syncBuiltinESMExports();
     const original=globalThis.fetch;
     globalThis.fetch=(url,options)=>original(${JSON.stringify(endpoint)},options);
     const {prepareConformance}=await import(${JSON.stringify(new URL('./conformance-prepare.mjs',import.meta.url).href)});
