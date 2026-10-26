@@ -7,6 +7,7 @@ import { randomBytes, createHash } from 'node:crypto';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { DatabaseSync } from 'node:sqlite';
 import { openReplay } from '../waitron-adapter.mjs';
+import { withOwnershipDiagnostics } from './ownership-diagnostics.mjs';
 const controller = await import('../isolated-replay.mjs').catch(error => {
   if (error.code === 'ERR_MODULE_NOT_FOUND' && error.url === new URL('../isolated-replay.mjs', import.meta.url).href) return {};
   throw error;
@@ -93,7 +94,15 @@ test('isolatedControllerRunsTheGenuineWriterAfterIsolationThenCollectsItsOwnStat
 test('isolatedControllerCopyRefusalCollectsThePreparedWorkerAndNetwork', async t => {
   const f = await fixture(t), before = fingerprint(f.database);
   const refused = join(f.source, 'refused.db'); writeFileSync(refused, Buffer.alloc(20), { mode: 0o600 });
-  await assert.rejects(controller.runIsolatedReplay({ ...f, database: refused }), bad);
+  const messages = [], began = performance.now();
+  await assert.rejects(withOwnershipDiagnostics(() => controller.runIsolatedReplay({ ...f, database: refused }),
+    () => readFileSync(f.journal.path, 'utf8'), () => ({ elapsedMilliseconds: performance.now() - began,
+      changed: false, signalAborted: false }), text => messages.push(text)), bad);
+  assert.equal(messages.length, 1);
+  const report = JSON.parse(messages[0].slice('ownership-start-refusal '.length));
+  assert.equal(report.journalReadable, true); assert.equal(report.workerStarted, false);
+  assert.notEqual(report.lastPreparation, 'unknown');
+  for (const privateValue of [f.root, f.source, f.journal.token]) assert.equal(messages[0].includes(privateValue), false);
   const entries = JSON.parse(readFileSync(f.journal.path, 'utf8')).localResources;
   assert.ok(entries.some(e => e.kind === 'container' && e.state === 'started'), 'reach isolated setup before the copy refusal');
   assert.ok(entries.some(e => e.kind === 'network' && e.state === 'removed'));
@@ -178,6 +187,8 @@ test('isolatedControllerNeverClaimsCleanupAfterLosingItsOwnership', async t => {
   const f = await fixture(t), before = fingerprint(f.database), abort = new AbortController();
   prefixRuntime(f, 'await new Promise(resolve=>setTimeout(resolve,30000));');
   let changed = false;
+  const began = performance.now();
+  await withOwnershipDiagnostics(async () => {
   const poll = setInterval(() => {
     const entries = JSON.parse(readFileSync(f.journal.path, 'utf8')).localResources ?? [];
     if (!changed && entries.some(e => e.kind === 'replay-worker' && e.state === 'started')) {
@@ -191,6 +202,8 @@ test('isolatedControllerNeverClaimsCleanupAfterLosingItsOwnership', async t => {
   assert.equal(existsSync(join(f.root, 'isolated-replay')), true);
   assert.deepEqual(fingerprint(f.database), before);
   assert.equal(JSON.parse(readFileSync(f.journal.path, 'utf8')).localResources.some(e => e.kind === 'isolated-replay' && e.state === 'removed'), false);
+  }, () => readFileSync(f.journal.path, 'utf8'), () => ({ elapsedMilliseconds: performance.now() - began,
+    changed, signalAborted: abort.signal.aborted }), text => t.diagnostic(text));
 });
 
 // Returning clean metadata is insufficient if a private child stream reaches the caller.
