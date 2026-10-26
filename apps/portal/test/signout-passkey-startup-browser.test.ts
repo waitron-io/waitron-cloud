@@ -65,9 +65,9 @@ for (const delayed of ['/authenticator', '/installations']) test(`a passkey prom
       t.diagnostic(JSON.stringify(state));
       assert.equal(await page.getByRole('button', {name: c.sessionSignOut, exact: true}).isDisabled(), false);
       const signOut = page.getByRole('button', {name: c.signout, exact: true});
-      assert.equal(state.authenticator, delayed === '/authenticator');
-      assert.equal(state.installations, delayed === '/installations');
-      assert.equal(state.passkeys, true);
+      assert.deepEqual(state, {pending: false, waiting: 0, pairing: false, installations: delayed === '/installations',
+        remote: false, recovery: false, fiscal: false, security: false, usage: false,
+        authenticator: delayed === '/authenticator', passkeys: true}, 'the held startup reply is the only sign-out blocker');
       assert.equal(await signOut.isDisabled(), true, 'startup still guards sign-out while the passkey prompt is open');
       await signOut.evaluate(button => (button as HTMLElement).click());
       await page.evaluate(() => (window as unknown as {signoutStartupApp: import('../src/app.ts').PortalApp}).signoutStartupApp.logout());
