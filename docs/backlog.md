@@ -186,6 +186,18 @@ order. Remote access matters most because Waitron's customer-facing features wai
 
 Production email (D102: bounces and complaints) is already tracked and is not repeated here.
 
+## Isolated replay ownership fixture refusal (D294)
+
+The ownership-changing hook was not observed in [cost run 40265731418,
+job 121387722438](https://github.com/waitron-io/waitron-cloud/actions/runs/40265731418/job/121387722438).
+Failure diagnostics now distinguish recorded worker admission from an unrun
+hook and retain the last fixed preparation stage, elapsed time and cancellation
+state. Private resource IDs, paths and tokens stay out of the report. A native
+control preserves the original missed-ownership assertion; the genuine copy
+refusal exercises the reporter in CI. Ownership assertions, deadlines and cleanup
+rules remain unchanged. The historical failing operation and its repair remain
+open: collect an instrumented recurrence before changing the ownership check.
+
 ## Repository licence
 
 The root `LICENSE` is copied byte for byte from Waitron's Elastic License 2.0 text.
@@ -5711,15 +5723,3 @@ existing Enter, installation-refresh and uncertain-save checks retain their
 assertions and deadlines with the three owner-approved setup changes. Server
 behaviour and the outstanding live DNS/ACME and deployment qualification are
 unchanged.
-
-## Isolated replay ownership fixture refusal (D294)
-
-The ownership-changing hook was not observed in [cost run 40265731418,
-job 121387722438](https://github.com/waitron-io/waitron-cloud/actions/runs/40265731418/job/121387722438).
-Failure diagnostics now distinguish recorded worker admission from an unrun
-hook and retain the last fixed preparation stage, elapsed time and cancellation
-state. Private resource IDs, paths and tokens stay out of the report. A native
-control preserves the original missed-ownership assertion; the genuine copy
-refusal exercises the reporter in CI. Ownership assertions, deadlines and cleanup
-rules remain unchanged. The historical failing operation and its repair remain
-open: collect an instrumented recurrence before changing the ownership check.
