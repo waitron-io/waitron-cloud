@@ -60,9 +60,11 @@ test('a matching portal message returns its body without reading diagnostic data
   const before = process.env.MAILPIT_TEST_URL;
   process.env.MAILPIT_TEST_URL = `http://127.0.0.1:${address.port}`;
   t.after(() => {if (before === undefined) delete process.env.MAILPIT_TEST_URL; else process.env.MAILPIT_TEST_URL = before;});
+  let diagnosticReads = 0;
   assert.equal(await mailFor('owner@example.test', 'Reset your Waitron Cloud password', async () => {
-    assert.fail('successful mail capture must not read diagnostic data');
+    diagnosticReads++; return {};
   }), 'own reset link');
+  assert.equal(diagnosticReads, 0, 'successful mail capture must not read diagnostic data');
 });
 
 test('unavailable evidence preserves the mail assertion and unexpected headers are redacted', async t => {
