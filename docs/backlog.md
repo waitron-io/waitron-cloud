@@ -4277,8 +4277,7 @@ through the existing Enable action. Empty passwords show the existing field
 message; pending requests and retry waits keep setup blocked. Enter does not
 choose replacement, regeneration, removal, activation or cancellation. Stubbed
 API browser checks cover English/Spanish, both themes and phone/desktop widths;
-these do not qualify the backend or production. Enter for authenticator sign-in
-codes remains a separate keyboard follow-up.
+these do not qualify the backend or production.
 
 ## Password-change notification recovery link (D261)
 
