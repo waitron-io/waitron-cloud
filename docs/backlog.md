@@ -3684,6 +3684,11 @@ this corrects test readiness without changing product authentication or routing.
 
 ## Browser-test clock setup (D313)
 
+The passkey Add keyboard fixture reproduces the refusal with a 100 ms setup
+delay and now freezes from an earlier start. Original and delayed journeys retain
+every caret, focus, exact-password, Tab/Enter, pending-request and enrollment check
+across both languages, themes and viewport widths, with unchanged deadlines.
+
 The alert-preferences activity fixture now installs its running clock a day before
 its intended pause, then freezes at the original instant before loading the app.
 A 100 ms setup delay reproduced CI's “Cannot fast-forward to the past” refusal;
@@ -3708,6 +3713,19 @@ delay and now freezes from the earlier start. Original and delayed journeys reta
 every Enter-key, activation, unavailable-status, cooldown, request and deadline
 check. Both clock setup sites are qualified.
 No historical CI failure in these fixtures is attributed here.
+
+## Paced replay object deletion refusal (D344 qualification)
+
+The passkey keyboard qualification run also captured a paced-replay refusal at
+`storage-cleanup` / `delete-object`, after native restore, file, integrity, sales
+and accounting stages. The failure is in
+[run 40516366868, job 122231317704](https://github.com/waitron-io/waitron-cloud/actions/runs/40516366868/job/122231317704)
+at `c1c2ea77e2005e2e88c6a8da9a5b989782d55d82`; the case refused after 75.33 seconds.
+The branch changes no cost-runner code. This labels the refused operation but
+does not identify its cause. Resume D121 with this trace and reproduce the
+deletion refusal without changing ownership, accounting, cleanup or deadlines.
+Genuine local reproduction waits for Docker to return; a later passing run does
+not establish a repair.
 
 ## Password-change notification recovery link (D261)
 
