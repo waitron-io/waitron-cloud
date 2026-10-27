@@ -4358,6 +4358,16 @@ page. The notification contains no reset token; you request a fresh reset there.
 origin, both languages, legacy messages and unchanged subjects. Live provider
 delivery remains part of the first working milestone's production qualification.
 
+## Passkey keyboard browser handler observation (D373)
+
+The passkey keyboard fixture waits for the options handler to record its request
+before checking the exact password and pending controls. This closes the gap
+between the browser sending a request and the handler observing it. The wait uses
+the existing four-second page budget; a missing record fails within that budget.
+Original keyboard journeys remain, with delayed handlers across both languages,
+themes, widths and clock setups. Real passkey and database qualification stays
+with the broader browser suites.
+
 ## A way forward after every refusal (D254)
 
 The [self-service refusal audit](refusal-self-service-audit.md) traces current
