@@ -123,3 +123,16 @@ test('closing, account/venue switches and signout discard in-flight private resu
   await pending;assert.equal(c.view,undefined);
  }
 });
+test('private outcome categories have string types and revoked or unplaced views cannot carry evidence',()=>{
+ for(const patch of [{publicForward:forward(['upstream_transport'])},{publicForward:forward({toString:()=> 'upstream_transport'})},{revoked:true,publicForward:forward()},{names:null,publicForward:forward()}])assert.equal(validRemoteView({...view,...patch}),false);
+});
+test('a venue switch discards its older pending private reply',async()=>{
+ const finishes:((v:ApiResult<unknown>)=>void)[]=[];
+ const c=new RemoteController(()=>{},<T>():Promise<ApiResult<T>>=>new Promise(r=>finishes.push(r as any)));c.account('owner');
+ const old=c.open(id),next=c.open(other);finishes[1]!({ok:true,value:{...view,installationId:other,publicForward:null}});await next;
+ finishes[0]!({ok:true,value:{...view,publicForward:forward()}});await old;assert.equal(c.view?.installationId,other);assert.equal(c.view?.publicForward,null);
+});
+test('invalid DNS metadata clears private evidence before rendering its error',async()=>{
+ const c=new RemoteController(()=>{},async<T>(path:string):Promise<ApiResult<T>>=>({ok:true,value:(path.endsWith('/status')?{...view,publicForward:forward()}:{malformed:true}) as T}));
+ c.account('owner');await c.open(id);c.edit(dns.hostname);await c.preview();assert.equal(c.error,'unavailable');assert.equal(c.view?.publicForward,null);
+});

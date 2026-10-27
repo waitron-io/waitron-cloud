@@ -18,14 +18,17 @@ export class RemoteController {
   this.error=result.code==='remote_not_placed'?'remoteNotPlaced':result.status===429?'limited':result.status===401?'pairSession':result.status===403?(result.code==='permission_denied'?'permissionBusiness':'forbidden'):result.code==='dns_not_verified'?'remoteDnsWait':result.code==='hostname_conflict'?'remoteNameTaken':result.status===409?'remoteConflict':result.status===400?'remoteInvalid':'unavailable';
   if(result.status===401||result.status===403){this.view=undefined;this.confirmation=undefined;this.hostname='';}
  }
+ expireForward(now=Date.now()){if(this.view?.publicForward&&Date.parse(this.view.publicForward.expiresAt)<=now)this.view={...this.view,publicForward:null};}
+ #clearForward(){if(this.view?.publicForward)this.view={...this.view,publicForward:null};}
+ #accept(value:RemoteView){this.view={...value,publicForward:value.publicForward??null};this.expireForward();}
  async load(){return this.#load(false);}
  async #load(reconcile:boolean){
   if(!this.#account||!this.installationId||this.pending||(!reconcile&&this.waiting))return;
-  const generation=this.#generation,id=this.installationId;this.pending=true;this.error=undefined;this.confirmation=undefined;this.#changed();
+  this.#clearForward();const generation=this.#generation,id=this.installationId;this.pending=true;this.error=undefined;this.confirmation=undefined;this.#changed();
   const result=await this.#request<RemoteView>('/remote-access/status',{installationId:id});if(generation!==this.#generation)return;
   this.pending=false;
-  if(result.ok&&validRemoteView(result.value)&&result.value.installationId===id){this.view=result.value;this.hostname=this.view.names?.[this.kind].current??'';}
-  else if(!result.ok)this.#failure(result);else this.error='unavailable';this.#changed();return this.view;
+  if(result.ok&&validRemoteView(result.value)&&result.value.installationId===id){this.#accept(result.value);this.hostname=result.value.names?.[this.kind].current??'';}
+  else if(!result.ok)this.#failure(result);else {this.#clearForward();this.error='unavailable';}this.#changed();return this.view;
  }
  async preview(){
   if(!this.#account||!this.view?.names||this.view.revoked||!this.installationId||this.pending||this.waiting||!this.hostnameChanged)return;
@@ -36,15 +39,15 @@ export class RemoteController {
   if(hostname===this.view.names[kind].assigned){this.confirmation={kind,hostname,revision,records:[]};this.#changed();return;}
   this.pending=true;this.#changed();const result=await this.#request<RemoteDns>('/remote-access/dns',{installationId:id,kind,hostname});if(generation!==this.#generation)return;this.pending=false;
   if(result.ok&&validRemoteDns(result.value)&&result.value.installationId===id&&result.value.kind===kind&&result.value.hostname===hostname&&result.value.records[0]?.value===this.view?.names?.[kind].assigned)this.confirmation={kind,hostname,revision,records:result.value.records};
-  else if(!result.ok)this.#failure(result);else this.error='unavailable';this.#changed();
+  else if(!result.ok)this.#failure(result);else {this.#clearForward();this.error='unavailable';}this.#changed();
  }
  async apply(){
   const change=this.confirmation,id=this.installationId;
   if(!this.#account||!change||!id||this.pending||this.waiting||this.view?.revoked)return;
-  const generation=this.#generation;this.pending=true;this.error=undefined;this.notice=undefined;this.#changed();
+  this.#clearForward();const generation=this.#generation;this.pending=true;this.error=undefined;this.notice=undefined;this.#changed();
   const result=await this.#request<RemoteView>('/remote-access/apply',{installationId:id,kind:change.kind,hostname:change.hostname,expectedRevision:String(change.revision)});if(generation!==this.#generation)return;
   this.pending=false;this.confirmation=undefined;
-  if(result.ok&&validRemoteView(result.value)&&result.value.installationId===id&&result.value.names?.[change.kind].current===change.hostname){this.view=result.value;this.notice='remoteSaved';}
+  if(result.ok&&validRemoteView(result.value)&&result.value.installationId===id&&result.value.names?.[change.kind].current===change.hostname){this.#accept(result.value);this.notice='remoteSaved';}
   else if(!result.ok){
    this.#failure(result);
    if(result.status===0||result.status>=500||result.status===409){

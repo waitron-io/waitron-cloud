@@ -2,7 +2,8 @@ import {permissionActions} from './permission-actions.ts';
 import {html,nothing} from 'lit';
 import {submitOnEnter} from '@waitron-io/ui-core/submit-on-enter';
 import type {PortalApp} from './app.ts';
-import {remoteReady,type RemoteKind} from './remote-types.ts';
+import {remoteReady,type RemoteKind,type ForwardCause} from './remote-types.ts';
+const forwardCopy:Record<ForwardCause,'forwardNon200'|'forwardTimeout'|'forwardLimit'|'forwardTransport'|'forwardInternal'>={upstream_non_200:'forwardNon200',upstream_timeout:'forwardTimeout',upstream_response_limit:'forwardLimit',upstream_transport:'forwardTransport',forward_internal:'forwardInternal'};
 export function remoteScreen(app:PortalApp,id:string){
  const c=app.copy,r=app.remote;
  if(r.installationId!==id)return html`<wt-button .disabled=${app.installations.pending} @click=${()=>{void r.open(id);}}>${c.remoteSetup}</wt-button>`;
@@ -11,6 +12,10 @@ export function remoteScreen(app:PortalApp,id:string){
   ${r.error?html`<p role="alert">${c[r.error]}</p>`:nothing}${permissionActions(app,r.error)}${r.notice?html`<p role="status">${c[r.notice]}</p>`:nothing}
   ${r.pending?html`<p role="status">${c.wait}</p>`:nothing}
   ${v?html`<p role="status">${v.revoked?c.accessStopped:ready?c.remoteReady:v.names?c.remotePending:c.remoteNotPlaced}</p>`:nothing}
+  ${v?html`<section aria-label=${c.forwardTitle}><h5>${c.forwardTitle}</h5>
+   <p>${!v.publicForward?c.forwardUnknown:v.publicForward.category===null?c.forwardSuccess:c[forwardCopy[v.publicForward.category]]}</p>
+   ${v.publicForward?html`<dl><dt>${c.forwardObserved}</dt><dd><time datetime=${v.publicForward.observedAt}>${new Date(v.publicForward.observedAt).toLocaleString(app.locale)}</time></dd><dt>${c.forwardExpires}</dt><dd><time datetime=${v.publicForward.expiresAt}>${new Date(v.publicForward.expiresAt).toLocaleString(app.locale)}</time></dd></dl>${v.publicForward.category!==null?html`<p>${c.forwardCheck}</p>`:nothing}`:nothing}
+  </section>`:nothing}
   ${v?.names?html`<p>${c.remotePrivacy}</p>
    ${(['staff','public'] as const).map(kind=>html`<h5>${kind==='staff'?c.remoteStaff:c.remotePublic}</h5><dl><dt>${c.remoteCurrent}</dt><dd>${ready?html`<a href=${'https://'+v.names![kind].current} target="_blank" rel="noopener noreferrer">${v.names![kind].current}</a>`:v.names![kind].current}</dd><dt>${c.remoteAssigned}</dt><dd>${v.names![kind].assigned}</dd></dl>`)}
    <details><summary>${c.remoteLan}</summary><p>${c.remoteLanHelp}</p><p>${c.remoteLanTest}</p></details>

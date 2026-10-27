@@ -12,7 +12,7 @@ async function fixture(){
  const f=await forwardFixture();
  const session=await transaction(f.db.pool,c=>createSession(c,f.owner.accountId));
  const app=createAccountApp({pool:f.db.pool,outbox:f.db.outbox,planMode:'test-free-paid',config:{portalOrigin:origin,production:true,rateKey:f.db.rateKey,trustedProxyIps:[]}});
- const call=(action='remote-access/status',body:unknown={installationId:f.installed.installationId},headers:Record<string,string>={})=>app.request(origin+'/api/account/'+action,{method:'POST',headers:{origin,cookie:'__Host-cloud_session='+session.token,'x-csrf-token':session.csrfToken,'content-type':'application/json',...headers},body:JSON.stringify(body)},{incoming:{socket:{remoteAddress:'192.0.2.1'}}} as HttpBindings);
+ const call=async(action='remote-access/status',body:unknown={installationId:f.installed.installationId},headers:Record<string,string>={})=>app.request(origin+'/api/account/'+action,{method:'POST',headers:{origin,cookie:'__Host-cloud_session='+session.token,'x-csrf-token':session.csrfToken,'content-type':'application/json',...headers},body:JSON.stringify(body)},{incoming:{socket:{remoteAddress:'192.0.2.1'}}} as HttpBindings);
  return {...f,session,call};
 }
 test('owner status returns exactly the recorded outcome with no caching or session activity; apply does not export it',async()=>{
@@ -47,7 +47,7 @@ for(const change of ['missing','expiry','revision','hostname','revoked','reporte
 test('status refuses foreign, nonowner, wrong origin, missing session and CSRF without a private result',async()=>{
  const f=await fixture();try{
   await f.send();
-  for(const headers of [{origin:'https://foreign.test'},{cookie:''},{'x-csrf-token':'wrong'}]){const r=await f.call(undefined,undefined,headers);assert([401,403].includes(r.status));assert(!Object.hasOwn(await r.json(),'publicForward'));}
+  for(const headers of [{origin:'https://foreign.test'},{cookie:''},{'x-csrf-token':'wrong'}] as Record<string,string>[]){const r=await f.call(undefined,undefined,headers);assert([401,403].includes(r.status));assert(!Object.hasOwn(await r.json(),'publicForward'));}
   assert.equal((await f.call(undefined,{installationId:randomUUID()})).status,403);
   await f.db.pool.query('UPDATE organisation_memberships SET is_owner=false');const r=await f.call();assert.equal(r.status,403);assert(!Object.hasOwn(await r.json(),'publicForward'));
  }finally{await f.db.close();}
