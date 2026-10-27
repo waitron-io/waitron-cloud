@@ -136,6 +136,13 @@ with tempfile.TemporaryDirectory(prefix='cloud-browser-apt-') as directory:
         (apt / 'apt.conf.d').mkdir()
         # Match the runner image's late settings, including its real retry count.
         (apt / 'apt.conf.d/zz-retries').write_text('Acquire::Retries "1";\nAcquire::https::Timeout "15";\n')
+        if multi_component:
+            # Match ubuntu24/20261012.334's request scheduling as well as its retries.
+            (apt / 'apt.conf.d/99bad_proxy').write_text('Acquire::http::Pipeline-Depth "0";\n'
+                                                       'Acquire::http::No-Cache "true";\n'
+                                                       'Acquire::https::Pipeline-Depth "0";\n'
+                                                       'Acquire::https::No-Cache "true";\n'
+                                                       'Acquire::BrokenProxy "true";\n')
         bootstrap = root / 'apt.conf'
         bootstrap.write_text(f'Dir::Etc::parts "{apt}/apt.conf.d";\nDir::Etc::main "-";\n')
         os.environ['APT_CONFIG'] = str(bootstrap)
