@@ -5,7 +5,7 @@
   "exports": "./src/index.ts",
   "scripts": {
     "typecheck": "tsc -p ../../tsconfig.json",
-    "test": "node --test --test-timeout=30000 test/*.test.ts",
+    "test": "node --test --test-concurrency=2 --test-timeout=30000 test/*.test.ts",
     "db:migrate": "node src/migrate-cli.ts",
     "history:cleanup": "node src/history-cleanup-cli.ts",
     "usage:reconcile": "node src/usage-reconcile-cli.ts",
