@@ -12,8 +12,9 @@ after(async () => {await browser?.close();});
 
 // Hiding the retry action after failure or sending it elsewhere must break this journey.
 for (const locale of ['en', 'es']) for (const theme of ['light', 'dark'] as const) for (const width of [390, 1280]) {
-  for (const failure of ['challenge', 'worker', 'proof', 'timeout'] as const) {
-    test(`${locale} ${theme} ${width}: reload restarts a running check after ${failure} failure`, async () => {
+  for (const failure of ['challenge', 'worker', 'proof', 'timeout'] as const) for (const handler of ['normal', 'delayed', 'missing-first', 'missing-next'] as const) {
+    if (handler.startsWith('missing') && (locale !== 'en' || theme !== 'light' || width !== 390 || failure !== 'challenge')) continue;
+    test(`${locale} ${theme} ${width}${handler === 'normal' ? '' : ` with ${handler} challenge handler`}: reload restarts a running check after ${failure} failure`, async t => {
       const gate = createPublicGate({key: randomBytes(32), difficulty: 8, routes: () => [
         {publicHostname: 'sol.example.test', staffHostname: 'staff.sol.example.test', address: '127.0.0.1', port: 1},
       ]});
@@ -32,13 +33,14 @@ for (const locale of ['en', 'es']) for (const theme of ['light', 'dark'] as cons
         context = await browser.newContext({locale, colorScheme: theme, viewport: {width, height: 800}});
         const page = await context.newPage(); page.setDefaultTimeout(4000);
         let restarting = false, challengeRequests = 0, proofRequests = 0;
-        let requested!: () => void, restarted!: () => void;
-        const firstChallenge = new Promise<void>(resolve => {requested = resolve;});
-        const nextChallenge = new Promise<void>(resolve => {restarted = resolve;});
+        let firstEntered = false, nextEntered = false;
+        const requested = () => {firstEntered = true;};
+        const restarted = () => {nextEntered = true;};
         await page.route('**/_cloud/challenge', async route => {
           challengeRequests++;
-          if (restarting) {restarted(); await held; await route.abort(); return;}
-          requested();
+          if (handler === 'delayed') await new Promise(resolve => setTimeout(resolve, 100));
+          if (restarting) {if (handler !== 'missing-next') restarted(); await held; await route.abort(); return;}
+          if (handler !== 'missing-first') requested();
           if (failure === 'timeout') {await held; await route.abort();}
           else if (failure === 'challenge') await route.fulfill({status: 503, body: 'unavailable'});
           else await route.continue();
@@ -52,7 +54,17 @@ for (const locale of ['en', 'es']) for (const theme of ['light', 'dark'] as cons
         if (failure === 'timeout') await page.clock.install();
         const url = `http://127.0.0.1:${address.port}/public/availability`;
         assert.equal((await page.goto(url))?.status(), 403);
-        await firstChallenge;
+        const waitForFirstHandler = () => t.waitFor(() => {assert.equal(firstEntered, true, 'the first challenge handler must enter');}, {timeout: 4000});
+        const waitForNextHandler = () => t.waitFor(() => {assert.equal(nextEntered, true, 'the restarted challenge handler must enter');}, {timeout: 4000});
+        // Missing signals must refuse within the page budget; omitting either wait must fail.
+        const expectMissingHandler = async (wait: () => Promise<unknown>) => {
+          let timer: ReturnType<typeof setTimeout> | undefined;
+          try {
+            await assert.rejects(Promise.race([wait(), new Promise<void>(resolve => {timer = setTimeout(resolve, 5000);})]), /waitFor\(\) timed out/);
+          } finally {clearTimeout(timer);}
+        };
+        if (handler === 'missing-first') {await expectMissingHandler(waitForFirstHandler); return;}
+        await waitForFirstHandler();
         if (failure === 'timeout') await page.clock.runFor(30001);
         await page.getByText(failure === 'worker' || failure === 'timeout'
           ? 'This browser check could not finish.' : 'Please reload to try again.', {exact: false}).waitFor();
@@ -81,7 +93,8 @@ for (const locale of ['en', 'es']) for (const theme of ['light', 'dark'] as cons
           page.waitForNavigation({waitUntil: 'load'}),
           locale === 'es' ? page.keyboard.press('Enter') : reload.click(),
         ]);
-        await nextChallenge;
+        if (handler === 'missing-next') {await expectMissingHandler(waitForNextHandler); return;}
+        await waitForNextHandler();
         assert.equal(response?.status(), 403); assert.equal(page.url(), url);
         assert.equal(pageRequests, 2); assert.equal(challengeRequests, 2);
         assert.equal(await reload.isVisible(), false, 'a new running attempt hides the fallback again');
