@@ -3372,6 +3372,15 @@ a Linux recurrence before choosing a delivery or capture fix, preserving the
 original assertions, single lookup and deadline. Read the [investigation and
 bounded diagnostics](backlog/mail-capture.md#account-http-reset-mail-capture).
 
+## Passkey Enter browser handler observation (D374)
+
+The passkey Enter fixture now waits for its options handler to record the request
+before checking the exact password and pending enrollment. A browser request event
+can arrive before that record. The observation uses the existing four-second page
+budget; delayed-handler journeys and an absent-record control retain all original
+keyboard, enrollment, unsupported-browser, cooldown, clock and deadline checks.
+Historical browser failures remain unattributed.
+
 ## Portal session test startup
 
 **Open; historical cause unknown.** Capture a diagnostic recurrence before
