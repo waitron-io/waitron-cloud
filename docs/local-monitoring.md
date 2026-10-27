@@ -400,4 +400,31 @@ Reporter authority and ordering cursors remain durable, while cause rows use an
 unlogged table whose contents are lost on crash recovery. Before enabling reporting
 in P1/P3 deployments, qualify the gateway/collector mounts, primary-only reads and
 backup exclusion in that deployment. No deployment is enabled by this change;
-the owner-only Account display remains separate work.
+reporting remains disabled in deployments.
+
+### Inspect the last recorded attempt in Account
+
+If a venue page is unavailable, open **Set up remote access** for that venue in
+Account. **Last recorded forwarding attempt** shows the latest accepted gateway
+result, its observation time and its expiry. In Spanish these labels are
+**Configurar acceso remoto** and **Último intento de conexión registrado**.
+Only the current organisation owner can read it.
+
+An unsuccessful application response, a connection timeout, a response that exceeds
+the gateway limit, a lost connection and an internal forwarding failure have
+separate explanations. Check the venue application and its connection. Gateway
+configuration still requires the operator tools. A non-200 application response
+alone does not establish a Cloud routing fault.
+
+Use **Refresh status / Actualizar estado** to read the stored observation again.
+This neither probes nor repairs the route. A successful recorded attempt says
+nothing about later visitors; no current result means unknown. For example, after
+a recorded timeout, a newer successful attempt replaces that failure. If no newer
+report arrives before expiry, the panel shows no current result instead of keeping
+the timeout visible. Evidence expires on the open screen without another request.
+
+The panel clears its evidence before refresh, on account or venue changes, on
+sign-out and when permission is lost. It keeps no browser storage or download.
+Outside probes and installation service reports remain separate observations.
+Visitor responses, aggregate gateway status, diagnostics downloads, logs and
+backups do not carry this private Account record.

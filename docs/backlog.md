@@ -3843,31 +3843,15 @@ Cloud follow-ups, each a separate small change with tests before implementation:
   sign-out failure. Reloading loses the in-memory request; reopen the connection
   link from Waitron. Preserving it across reloads and same-account membership/business
   creation remain separate missing capabilities.
-- R9 visitor guidance delivered: the public availability page uses neutral English
-  and Spanish wording without promising a quick recovery. Its existing retry link
-  can show another refusal or a recovered response. Native HTTPS checks cover
-  persistent 403/404/503 replies and dropped connections, then recovery, while
-  preserving private upstream details. Cause-specific diagnostics for owners in
-  Account remain open. The owner approved the [private forwarding-cause plan](superpowers/plans/2026-10-26-private-forwarding-causes.md)
-  and authorised building it. Its first task adds an optional forwarding observer
-  and a signed report format. Completed non-200 responses, inactivity timeout,
-  response limit, transport loss and internal construction failures have distinct
-  fixed categories; success reports no failure, while visitor cancellation and local
-  refusals produce no observation. Native HTTPS checks cover classification,
-  observer failure containment and private response boundaries. The gateway can now bind observations to an applied version 2 manifest
-  and deliver a signed latest report to a dedicated private directory. The opt-in
-  writer preserves ordering and expiry across restart, batches at most once per
-  30 seconds and keeps at most 64 routes. Key or storage failure disables reporting
-  while native HTTPS forwarding continues. Version 1 forwarding remains supported;
-  deployments still leave reporting disabled. Country collection now checks signed reports against current reporter authority,
-  placement, revision, route binding and plan eligibility. Version 2 publication is
-  opt-in. Migration 044 keeps durable reporter cursors and disposable latest causes;
-  polling and database admission bound batches, while expiry and current-binding
-  reads reject stale evidence. Logical schema-upgrade backups exclude cause rows.
-  The owner-only Account view remains open. Gateway/collector container mounts,
-  primary-only reads and P1/P3 backup integration still need deployment qualification;
-  reporting remains disabled in deployments. Visitor
-  guidance does not diagnose or repair the cause.
+- R9 private forwarding diagnostics now appear in Account for the current owner.
+  The [approved plan](superpowers/plans/2026-10-26-private-forwarding-causes.md)
+  keeps five fixed failure categories, separate success and unknown states,
+  five-minute visibility and 30-second batching. Visitors retain neutral bilingual
+  guidance with no upstream details. Refresh reads stored evidence without probing
+  or repairing; Account clears it on expiry and navigation. Gateway/collector
+  container mounts, primary-only reads and P1/P3 backup integration still need
+  deployment qualification. Reporting stays disabled in deployments. See the
+  [collection and Account guide](local-monitoring.md#private-gateway-forwarding-collection).
 - R10 delivered: direct navigation to rejected public requests receives bilingual
   guidance for 421/429/413/404/405/400 and failed-proof 403. Background refusals stay
   empty; host, proof, quota, size and forwarding checks retain their status codes.

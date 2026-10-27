@@ -136,3 +136,7 @@ test('invalid DNS metadata clears private evidence before rendering its error',a
  const c=new RemoteController(()=>{},async<T>(path:string):Promise<ApiResult<T>>=>({ok:true,value:(path.endsWith('/status')?{...view,publicForward:forward()}:{malformed:true}) as T}));
  c.account('owner');await c.open(id);c.edit(dns.hostname);await c.preview();assert.equal(c.error,'unavailable');assert.equal(c.view?.publicForward,null);
 });
+test('the real API malformed-reply failure also clears private evidence during DNS preview',async()=>{
+ const c=new RemoteController(()=>{},async<T>(path:string):Promise<ApiResult<T>>=>path.endsWith('/status')?{ok:true,value:{...view,publicForward:forward()} as T}:{ok:false,status:503,code:'unexpected_response',retryAfterMs:0});
+ c.account('owner');await c.open(id);c.edit(dns.hostname);await c.preview();assert.equal(c.error,'unavailable');assert.equal(c.view?.publicForward,null);
+});

@@ -55,7 +55,7 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
   }
   saved={...original,publicForward:{category:'upstream_timeout',observedAt:new Date(now-1000).toISOString(),expiresAt:new Date(now+10000).toISOString()}};
   await page.evaluate(id=>(window as any).app.remote.open(id),id);const before=reads;
-  await page.clock.runFor(11000);await page.getByText(outcomes.unknown[language]!,{exact:true}).waitFor();assert.equal(reads,before,'expiry clears without fetching');
+  await page.clock.runFor(11000);assert((await page.locator('.remote-setup').textContent())?.includes(outcomes.unknown[language]!), 'the draw timer erases expired evidence');assert.equal(reads,before,'expiry clears without fetching');
   saved={...original,publicForward:{category:null,observedAt:new Date(now+10000).toISOString(),expiresAt:new Date(now+30000).toISOString()}};
   await page.locator('.remote-setup').getByRole('button',{name:c.refreshStatus,exact:true}).click();await page.getByText(outcomes.success[language]!,{exact:true}).waitFor();assert.equal(reads,before+1);
   await page.locator('.remote-setup').getByRole('button',{name:c.refreshStatus,exact:true}).focus();assert(await page.locator('.remote-setup').getByRole('button',{name:c.refreshStatus,exact:true}).evaluate(button=>button===document.activeElement||button===document.activeElement?.shadowRoot?.activeElement));
