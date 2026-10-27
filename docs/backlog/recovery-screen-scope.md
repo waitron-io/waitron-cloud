@@ -22,4 +22,3 @@ and stored their exact snapshot or continuous source. Capture provisioning and
 recovery retain the existing test-only server guard. These are synthetic retained
 metadata fixtures, not evidence of production backup provisioning. PostgreSQL
 checks run in GitHub CI while Docker is down locally.
-
