@@ -2638,7 +2638,13 @@ implementation or production evidence.
   stop before failure reporting and wrapper cleanup completed. The exact open
   handle remains unproved. The complete documented two-file suite then passes
   all 646 registration cases; that qualification does not close the unsplit-resource
-  or failed-setup cleanup follow-ups. Diagnostics: `~/waitron-campaign-d/receipts/d76/`.
+  or historical open-handle investigation. The shared relay-worker fixture now closes
+  both pools when schema creation, migration or its clock read fails, and drops only
+  a schema whose creation succeeded. Cleanup attempts later resources even if an
+  earlier step fails; a setup failure remains the cause when cleanup also rejects.
+  Docker-free checks exercise real pool closure with database operations replaced.
+  They do not reproduce the historical PostgreSQL hang; genuine database cleanup
+  remains for CI. Diagnostics: `~/waitron-campaign-d/receipts/d76/`.
   The migration batch-size fixture now confines its database-wide DDL trigger
   to its own schema. A second populated fixture proves that other tests can
   migrate while it is active; the original 103-recipient and 100-row batch

@@ -11,7 +11,13 @@ export async function fixture(initialise=migrate){
  const schema=`relay_worker_${randomUUID().replaceAll('-','')}`;
  const admin=new Pool({connectionString:process.env.TEST_DATABASE_URL});
  const pool=new Pool({connectionString:process.env.TEST_DATABASE_URL,application_name:schema,options:`-c search_path=${schema} -c statement_timeout=5000`});
- await admin.query(`CREATE SCHEMA ${schema}`);await initialise(pool);
+ let created=false;
+ async function close(){
+  try{await pool.end();}
+  finally{try{if(created)await admin.query(`DROP SCHEMA ${schema} CASCADE`);}finally{await admin.end();}}
+ }
+ try{
+ await admin.query(`CREATE SCHEMA ${schema}`);created=true;await initialise(pool);
  const issuer=createLeaseIssuer(generateKeyPairSync('ed25519').privateKey.export({type:'pkcs8',format:'der'}).toString('base64url'));
  const grants:RelayConfig={mode:'local-proof',consentVersion:'local-v1',policy:{version:'local-v1',units:100,periodSeconds:3600,epoch:'2026-01-01T00:00:00.000Z',excess:'refuse',debit:'retain'},verifyOrigin:async r=>({...r,domainControl:true,httpsEndpoint:true,expiresAt:new Date(Date.now()+7200000).toISOString()})};
  // Worker tests exercise handoff and stop, so their counters start with the database fixture.
@@ -45,5 +51,9 @@ export async function fixture(initialise=migrate){
   }
   return {account,organisation,installation,grant,session,submit,proof,async cancel(messageId:string){return messages.execute('email-cancel',proof('email-cancel',{version:1,messageId}));}};
  }
- return {schema,pool,issuer,config,relay,messages,venue,async row(id:string){const invariant=(await pool.query('SELECT (SELECT bytes FROM relay_queue_bytes WHERE singleton)::text AS tally,COALESCE(sum(COALESCE(octet_length(payload),0)),0)::text AS actual FROM relay_messages')).rows[0];assert.equal(invariant.tally,invariant.actual,'retained ciphertext byte invariant');return (await pool.query('SELECT * FROM relay_messages WHERE message_id=$1',[id])).rows[0];},async close(){await pool.end();await admin.query(`DROP SCHEMA ${schema} CASCADE`);await admin.end();}};
+ return {schema,pool,issuer,config,relay,messages,venue,async row(id:string){const invariant=(await pool.query('SELECT (SELECT bytes FROM relay_queue_bytes WHERE singleton)::text AS tally,COALESCE(sum(COALESCE(octet_length(payload),0)),0)::text AS actual FROM relay_messages')).rows[0];assert.equal(invariant.tally,invariant.actual,'retained ciphertext byte invariant');return (await pool.query('SELECT * FROM relay_messages WHERE message_id=$1',[id])).rows[0];},close};
+ }catch(error){
+  try{await close();}catch(cleanup){throw new AggregateError([error,cleanup],'Relay fixture setup and cleanup failed',{cause:error});}
+  throw error;
+ }
 }
