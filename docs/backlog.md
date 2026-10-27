@@ -2443,6 +2443,9 @@ implementation or production evidence.
   could not connect to Princeton at `128.112.18.21:443`. The fallback addresses
   the repeated single-host dependency. Either public archive can still fail,
   and the existing supervisor must refuse within its limits if neither works.
+  [Run 40423880234](https://github.com/waitron-io/waitron-cloud/actions/runs/40423880234)
+  later refused Princeton's expired certificate chain before browser tests.
+  The alternative retains TLS verification; an expired certificate is never trusted.
   The outside network cause and the separate browser reconnect cause remain
   unknown; those original red runs remain evidence.
   The rewrite recognises the runner's current lowercase, whitespace-delimited
