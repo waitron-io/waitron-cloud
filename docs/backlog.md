@@ -3582,6 +3582,14 @@ uncertain writes and padded codes. Real PostgreSQL recovery suites remain CI's
 gate while Docker is down locally. This does not qualify production recovery,
 prove an old server has stopped, or change the existing recovery source limits.
 
+## Recovery-choice browser handler wait (D362)
+
+The recovery-choice browser fixture refuses an absent installation-handler signal
+within its existing four-second page budget. A delayed handler still runs every
+language, theme and viewport journey. Original organisation and venue selection,
+recovery permission, source clearing, approval payload, pairing, layout and
+deadline assertions remain.
+
 ## Recovery screen scope and supplied choices (D158)
 
 Read the [recovery-screen scope detail](backlog/recovery-screen-scope.md) for the

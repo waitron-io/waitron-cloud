@@ -23,7 +23,9 @@ const bundle = await build({stdin: {contents: `
 `, resolveDir: new URL('..', import.meta.url).pathname}, bundle: true, write: false, format: 'iife', target: 'es2023'});
 const styles = await readFile(new URL('../src/styles.css', import.meta.url), 'utf8');
 
-for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'] as const) for (const width of [390, 1280]) test(`${locale} ${theme} ${width}: recovery and account choices agree with their supplied values`, async t => {
+for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'] as const) for (const width of [390, 1280]) {
+ const handlers = locale === 'en' && theme === 'light' && width === 390 ? ['ordinary', 'delayed', 'missing'] as const : ['ordinary', 'delayed'] as const;
+ for (const handler of handlers) test(`${locale} ${theme} ${width}: recovery and account choices agree with their supplied values${handler === 'ordinary' ? '' : ` (${handler} handler)`}`, async t => {
   const browser = await chromium.launch({headless: true});
   try {
     const page = await browser.newPage({locale, colorScheme: theme, viewport: {width, height: 900}}); page.setDefaultTimeout(4000);
@@ -33,7 +35,11 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
     await page.route('**/api/account/**', async route => {
       const path = new URL(route.request().url()).pathname;
       if (path.endsWith('/session') || path.endsWith('/session/activity')) return route.fulfill({json: {accountId: 'owner', expiresAt: new Date(Date.now() + 3600000).toISOString()}});
-      if (path.endsWith('/installations')) {installationRead?.(); await installationGate; return route.fulfill({json: {installations}});}
+      if (path.endsWith('/installations')) {
+        if (installationGate && handler === 'delayed') await new Promise(resolve => setTimeout(resolve, 100));
+        if (handler !== 'missing') installationRead?.();
+        await installationGate; return route.fulfill({json: {installations}});
+      }
       if (path.endsWith('/backups/list')) return route.fulfill({json: {venueId: route.request().postDataJSON().venueId, points: [{id: point, capturedAt: '2026-10-23T10:00:00.000Z', verification: 'verified', retention: 'daily', expiresAt: '2026-11-23T10:00:00.000Z', protection: 'fallback'}], nextCursor: null, defaultPointId: point, continuousRecovery: null}});
       if (path.endsWith('/recovery/approve')) approvals.push(route.request().postDataJSON());
       return route.fulfill({status: 503, json: {error: 'unavailable'}});
@@ -65,10 +71,20 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
       assert.equal(shown, second); assert.equal(name, 'Z second organisation');
     });
     await t.test('refreshing installations disables the organisation choice until the list settles', async () => {
-      const entered = new Promise<void>(resolve => {installationRead = resolve;});
+      let observed = false;
+      installationRead = () => {observed = true;};
       installationGate = new Promise<void>(resolve => {releaseInstallations = resolve;});
       try {
-        await page.getByRole('button', {name: c.refreshStatus, exact: true}).click(); await entered;
+        await page.getByRole('button', {name: c.refreshStatus, exact: true}).click();
+        const entered = t.waitFor(() => {assert.equal(observed, true, 'the installation handler must observe the refresh');}, {timeout: 4000});
+        if (handler === 'missing') {
+          let timer: ReturnType<typeof setTimeout> | undefined;
+          try {
+            await assert.rejects(Promise.race([entered, new Promise<void>(resolve => {timer = setTimeout(resolve, 5000);})]), /waitFor\(\) timed out/);
+          } finally {clearTimeout(timer);}
+          return;
+        }
+        await entered;
         assert.equal(await organisation.isDisabled(), true);
         await page.evaluate(first => (window as any).app.installations.selectOrganisation(first), first);
         assert.equal(await organisation.inputValue(), second);
@@ -76,6 +92,7 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
       } finally {releaseInstallations?.(); installationGate = undefined; installationRead = undefined; await page.waitForFunction(() => !(window as any).app.installations.pending);}
       assert.equal(await organisation.isEnabled(), true); assert.equal(await organisation.inputValue(), second);
     });
+    if (handler === 'missing') return;
     await t.test('production backups from Account are cleared before returning to recovery', async () => {
       await page.getByRole('link', {name: c.account, exact: true}).click();
       await page.evaluate(async production => {const app = (window as any).app; await app.backups.open(production); app.recovery.stopped = true; app.recovery.acceptLoss = true;}, production);
@@ -129,3 +146,4 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
     });
   } finally {await browser.close();}
 });
+}
