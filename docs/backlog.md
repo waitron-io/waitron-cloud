@@ -3796,8 +3796,10 @@ Cloud follow-ups, each a separate small change with tests before implementation:
   uncertain-write reconciliation remain available. Native and stubbed-browser
   checks cover the path; database and HTTP qualification runs in CI. The browser
   checks wait until the list handler counts the refresh before asserting its count,
-  while still holding the reply. A missing handler signal still reaches the existing
-  120-second runner timeout; concurrent background list reads remain unqualified.
+  while still holding the reply. A missing handler count now refuses within the
+  existing four-second page wait budget, with a controlled bypass case that proves
+  the bound. All original journeys and assertions remain; concurrent background
+  list reads remain unqualified.
   Request-body
   limits/formats/interruption and other browser failures keep their previous
   feedback and remain follow-ups.
