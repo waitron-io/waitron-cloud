@@ -289,8 +289,9 @@ so the historical cause remains unknown.
 
 Stop refusals now include the child's exit code, termination signal and invalid
 flag, together with the request audit's first failed validation stage and both
-request counts. A transport failure carries its request's admission number,
-retry ordinal and phase in the stop checkpoint. That number identifies a
+request counts. Separate labels distinguish request parsing from after-stop
+bookkeeping. A transport failure carries its request's admission number,
+retry ordinal and phase in both the stop checkpoint and the printed close record. That number identifies a
 request within one transport; it is not the SDK invocation ID. Request paths,
 headers and raw SDK logs stay private. Known synthetic stop errors retain their
 message and smoke-fixture stack frames; other errors keep their original thrown value internally
@@ -299,8 +300,9 @@ and publish a fixed category to avoid exposing transport metadata.
 Native controls run the actual smoke and audit with substitute external workload,
 storage and child-process boundaries. They distinguish failed exit, signal,
 audit and combined refusals, preserve the first audit failure, and exercise a
-successful control. A separate real HTTP retry identifies the interrupted second
-attempt and still refuses accounting. The stop budget, retry cap, restore and
+successful control. Separate real HTTP retry and socket-error checks identify
+the interrupted request and still refuse accounting. Diagnostic-write failures
+retain the original stop rejection and finish cleanup. The stop budget, retry cap, restore and
 measurement guards remain unchanged. Reproduce the next labelled recurrence,
 or use genuine Docker qualification when Docker returns, before repairing the
 underlying cause. Passing qualification does not explain the historical failure.

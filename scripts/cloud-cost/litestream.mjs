@@ -307,6 +307,7 @@ export function createLitestreamRequestAudit({ phase, allowBulkDeletes = false, 
       validationStage = 'request-identity';
       const id = identity(current.invocation, current.attempt);
       requireThat(!producer.has(id.key) && id.ordinal === (sequences.get(id.invocation) ?? -1) + 1 && producer.size < 100000);
+      validationStage = 'after-stop-issue';
       afterStop?.issue({ invocation: id.invocation, ordinal: id.ordinal, operation: current.operation });
       producer.set(id.key, { operation: current.operation, ordinal: id.ordinal }); sequences.set(id.invocation, id.ordinal);
       current = null; return;
@@ -330,6 +331,7 @@ export function createLitestreamRequestAudit({ phase, allowBulkDeletes = false, 
     requireThat(!ended && operations.includes(name) && (name !== 'delete-many' || allowBulkDeletes === true));
     const id = identity(headers?.['amz-sdk-invocation-id'], headers?.['amz-sdk-request']);
     requireThat(!observer.has(id.key) && observer.size < 100000);
+    validationStage = 'after-stop-admission';
     afterStop?.admit({ invocation: id.invocation, ordinal: id.ordinal, operation: name, hop: 'observer', phase });
     observer.set(id.key, { operation: name, ordinal: id.ordinal });
     return { token: id.key, phase, retryOrdinal: id.ordinal, operation: name, errorCode: null, sameAccount: null };
@@ -398,7 +400,13 @@ export async function withLitestreamCloseDiagnostics({ stage, close, report = li
     const code = own(raw, 'code'); if (networkErrors.has(code)) diagnostic.code = code;
     const ioEvent = own(raw, 'ioEvent'); if (ioEvents.has(ioEvent)) diagnostic.ioEvent = ioEvent;
     const operation = own(raw, 'operation'); if (transportOperations.has(operation)) diagnostic.operation = operation;
+    const rawAttempt = own(raw, 'attempt'), producerAttempt = own(rawAttempt, 'producerAttempt'),
+      retryOrdinal = own(rawAttempt, 'retryOrdinal'), phase = own(rawAttempt, 'phase');
+    const attempt = Number.isSafeInteger(producerAttempt) && producerAttempt > 0
+      && Number.isSafeInteger(retryOrdinal) && retryOrdinal >= 0 && phases.includes(phase)
+      ? { producerAttempt, retryOrdinal, phase } : undefined;
     emit({ ...record, status: 'rejected', error: closeReasons.has(reason) ? 'transport-refused' : 'unclassified',
+      ...(attempt ? { attempt } : {}),
       ...(Object.keys(diagnostic).length ? { diagnostic } : {}) });
     throw error;
   }

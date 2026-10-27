@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { createLitestreamRequestAudit } from './litestream.mjs';
+import { createLitestreamRequestAudit, createLitestreamAfterStop } from './litestream.mjs';
 
 // Dropping child exit details or the audit's first failure must make these smoke records incomplete.
 // Only the external workload, native process and storage are replaced; the smoke and audit are real.
@@ -16,7 +16,7 @@ function run(failure) {
       export function spawn(binary,args){ const child=new EventEmitter(); child.stderr=new EventEmitter();
         let killed=false;child.kill=()=>{if(killed)return true;killed=true;child.server?.close(()=>{});setImmediate(()=>{
           if(process.env.STOP_FAILURE==='audit'||process.env.STOP_FAILURE==='both')child.stderr.emit('data',Buffer.from('SDK 2026/10/27 03:00:00 DEBUG Request\\nPUT /PRIVATE_CANARY/key HTTP/1.1\\r\\nnot-a-header\\r\\n'));
-          child.emit('close',process.env.STOP_FAILURE==='exit'||process.env.STOP_FAILURE==='both'?7:process.env.STOP_FAILURE==='signal'?null:0,
+          child.emit('close',['exit','both','reporter'].includes(process.env.STOP_FAILURE)?7:process.env.STOP_FAILURE==='signal'?null:0,
             process.env.STOP_FAILURE==='signal'?'SIGKILL':null);
         });return true;};
         if(args[0]==='replicate'){
@@ -41,9 +41,13 @@ function run(failure) {
   };
   const code = `import {registerHooks} from 'node:module';
     const modules=${JSON.stringify(modules)};
-    registerHooks({resolve(specifier,context,next){
+    const fixture=${JSON.stringify(fixture)};
+    registerHooks({load(url,context,next){const loaded=next(url,context);if(url!==fixture||process.env.STOP_FAILURE!=='reporter')return loaded;
+      return {...loaded,source:String(loaded.source).replace("() => { console.error('Synthetic Litestream phase: ' + stage)","error => { console.error(JSON.stringify({kind:'outer-rejection',message:error.message})); console.error('Synthetic Litestream phase: ' + stage)")};
+    },resolve(specifier,context,next){
       if(Object.hasOwn(modules,specifier))return {url:'data:text/javascript,'+encodeURIComponent(modules[specifier]),shortCircuit:true};
       return next(specifier,context);}});
+    if(process.env.STOP_FAILURE==='reporter'){const report=console.error;console.error=line=>{if(String(line).includes('\"kind\":\"litestream-stop\"'))throw Error('REPORT_FAILURE');report(line);};}
     await import(${JSON.stringify(fixture)});`;
   return spawnSync(process.execPath, ['--input-type=module', '--eval', code], {
     env: { ...process.env, COST_LITESTREAM_TRANSPORT: '1', COST_LITESTREAM_LIFETIMES: '0',
@@ -69,6 +73,7 @@ for (const [failure, code, signal, invalid] of [['exit',7,null,false],['signal',
     else assert.equal(record.audit.failure,undefined);
     assert.equal(record.error.name,'Error');assert.equal(record.error.message,'Synthetic Litestream check failed');
     assert.match(record.error.stack,/Synthetic Litestream check failed/);
+    assert.match(record.error.stack,/\n    at litestream-smoke\.mjs:\d+:\d+/);
     assert.doesNotMatch(result.stderr,/PRIVATE_CANARY/);
     assert.ok(records.some(row=>row.stage==='cleanup-admin-proxy'&&row.status==='fulfilled'));
   });
@@ -120,4 +125,29 @@ test('a known synthetic message cannot carry private transport frames into the s
   assert.doesNotMatch(result.stderr,/PRIVATE_CANARY|private.mjs/);
   const records=result.stderr.split('\n').filter(line=>line.startsWith('{')).map(line=>JSON.parse(line));
   assert.equal(records.find(row=>row.kind==='litestream-stop').error.message,'Synthetic Litestream check failed');
+});
+
+test('a failed diagnostic write preserves the original stop rejection and completes cleanup',()=>{
+  const result=run('reporter');assert.equal(result.error,undefined);assert.equal(result.status,1,result.stderr);
+  const records=result.stderr.split('\n').filter(line=>line.startsWith('{')).map(line=>JSON.parse(line));
+  assert.deepEqual(records.find(row=>row.kind==='outer-rejection'),{kind:'outer-rejection',message:'Synthetic Litestream check failed'});
+  assert.ok(records.some(row=>row.stage==='cleanup-admin-proxy'&&row.status==='fulfilled'));
+  assert.doesNotMatch(result.stderr,/REPORT_FAILURE/);
+});
+
+// A valid request rejected by the real after-stop tracker must not be labelled a malformed identity.
+for(const boundary of ['issue','admission'])test(`the audit distinguishes after-stop ${boundary} refusal from request syntax`,()=>{
+  const afterStop=createLitestreamAfterStop({clock:()=>0});
+  const audit=createLitestreamRequestAudit({phase:'workload',afterStop});
+  const invocation='11111111-2222-4333-8444-555555555555';
+  const log=`SDK now DEBUG Request\nPUT /PRIVATE_CANARY/key HTTP/1.1\namz-sdk-invocation-id: ${invocation}\namz-sdk-request: attempt=1; max=3\n\n`;
+  if(boundary==='issue'){
+    afterStop.invalidate();assert.throws(()=>audit.write(Buffer.from(log)));
+  }else{
+    audit.write(Buffer.from(log));afterStop.admit({invocation,ordinal:0,operation:'put',hop:'producer',phase:'workload'});
+    afterStop.acknowledgeStop({statusCode:200,ownedPath:'/venue.db',body:Buffer.from(JSON.stringify({status:'stopped',path:'/venue.db',txid:0}))});
+    assert.throws(()=>audit.observe({headers:{'amz-sdk-invocation-id':invocation,'amz-sdk-request':'attempt=1; max=3'},operation:'put'}));
+  }
+  assert.equal(audit.checkpoint().failure.stage,boundary==='issue'?'after-stop-issue':'after-stop-admission');
+  assert.doesNotMatch(JSON.stringify(audit.checkpoint()),/PRIVATE_CANARY/);assert.throws(()=>audit.snapshot());
 });
