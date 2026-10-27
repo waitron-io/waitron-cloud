@@ -55,6 +55,27 @@ test('mixed Ubuntu and vendor URI stanzas refuse before rewriting any source', a
   assert.equal(await readFile(join(root, 'sources.list.d/mixed.sources'), 'utf8'), mixed);
 });
 
+// Detection and rewriting must agree, without changing unsupported compact URI fields.
+test('Deb822 field boundaries and appended policy preserve the source format', async t => {
+  for (const [name, before, expected] of [
+    ['lowercase field', 'Types: deb\nuris: https://archive.ubuntu.com/ubuntu\nSuites: noble\n',
+      root => `Types: deb\nuris: mirror+file:${root}/waitron-browser-mirrors.txt\nSuites: noble\nBy-Hash: no\n`],
+    ['compact field', 'Types: deb\nURIs:https://archive.ubuntu.com/ubuntu\nSuites: noble\n',
+      () => 'Types: deb\nURIs:https://archive.ubuntu.com/ubuntu\nSuites: noble\n'],
+    ['CRLF appended policy', 'Types: deb\r\nURIs: https://archive.ubuntu.com/ubuntu\r\nSuites: noble\r\n',
+      root => `Types: deb\r\nURIs: mirror+file:${root}/waitron-browser-mirrors.txt\r\nSuites: noble\r\nBy-Hash: no\r\n`],
+  ]) {
+    await t.test(name, async t => {
+      const root = await mkdtemp(join(tmpdir(), 'cloud-browser-field-'));
+      t.after(() => rm(root, {recursive: true, force: true}));
+      await mkdir(join(root, 'sources.list.d'));
+      await writeFile(join(root, 'sources.list.d/ubuntu.sources'), before);
+      execFileSync('python3', ['scripts/ci-browser-source.py', '--apt-root', root], {stdio: 'pipe'});
+      assert.equal(await readFile(join(root, 'sources.list.d/ubuntu.sources'), 'utf8'), expected(root));
+    });
+  }
+});
+
 // Real signed metadata must select the immutable vendor index and still reject changed bytes.
 for (const [format, flags] of [['legacy', []], ['Deb822', ['--deb822']]]) {
 test(`Linux APT keeps vendor by-hash acquisition through a stable-index publication mismatch (${format})`, {

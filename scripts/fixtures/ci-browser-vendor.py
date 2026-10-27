@@ -78,7 +78,7 @@ with tempfile.TemporaryDirectory(prefix='cloud-browser-vendor-') as directory:
         (apt / 'apt.conf.d').mkdir(parents=True)
         source = (f'deb [arch=amd64 signed-by={keyring}] https://archive.ubuntu.com/ubuntu noble main\n'
                   f'deb [arch=amd64 signed-by={keyring}] {base}/vendor noble main\n')
-        source_file = apt / ('ubuntu.sources' if '--deb822' in sys.argv else 'sources.list')
+        source_file = apt / 'sources.list'
         if '--deb822' in sys.argv:
             source_file = apt / 'sources.list.d/fixture.sources'
             source_file.parent.mkdir()

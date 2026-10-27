@@ -28,7 +28,8 @@ def rewrite_source(path, original, mirror_uri, parser):
     chunks = re.split(r'(\r?\n[ \t]*\r?\n)', original)
     for i in range(0, len(chunks), 2):
         stanza = chunks[i]
-        uris = re.search(r'^URIs:[^\r\n]*(?:\r?\n[ \t]+[^\r\n]*)*', stanza, re.MULTILINE)
+        uris = re.search(r'^URIs:(?=[ \t\r\n])[^\r\n]*(?:\r?\n[ \t]+[^\r\n]*)*',
+                         stanza, re.MULTILINE | re.IGNORECASE)
         if uris is None:
             continue
         values = uris.group().split(':', 1)[1].split()

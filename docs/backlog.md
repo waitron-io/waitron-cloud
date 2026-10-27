@@ -2427,8 +2427,8 @@ implementation or production evidence.
   The controlled regression includes four suites with sixteen package indexes
   and forty-eight compressed package, translation and command indexes, with a
   separate altered-index refusal. Both journeys require the actual stable
-  index request paths, with no missing or extra requests. The compressed by-hash case reproduced the
-  release-success/index-timeout sequence before this change; the one-index and
+  index request paths, with no missing or extra requests. The compressed Ubuntu by-hash case reproduced the
+  release-success/index-timeout sequence before stable filenames were introduced; the one-index and
   uncompressed sixteen-index cases did not. Run
   `node --test scripts/ci-browser-apt-components.test.mjs` on Linux as well as
   the original trust and refusal journeys. The public mirror's underlying
