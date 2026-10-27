@@ -26,7 +26,8 @@ const installations = [first, second].map((id, index) => ({
 }));
 
 for (const locale of ['en','es'] as const) for (const theme of ['light','dark'] as const) for (const width of [390,1280]) {
- test(`${locale} ${theme} ${width}: fiscal drafts refuse pending lists and clear unavailable venues`, async t => {
+ const handlers=locale==='en'&&theme==='light'&&width===390 ? ['ordinary','delayed','missing'] as const : ['ordinary','delayed'] as const;
+ for(const handler of handlers)test(`${locale} ${theme} ${width}: fiscal drafts refuse pending lists and clear unavailable venues${handler==='ordinary'?'':` (${handler} handler)`}`, async t => {
   const browser = await chromium.launch({headless:true});
   try {
    const page = await browser.newPage({locale,colorScheme:theme,viewport:{width,height:900}});
@@ -42,7 +43,7 @@ for (const locale of ['en','es'] as const) for (const theme of ['light','dark'] 
    await page.route('**/api/account/**', async route => {
     const path = new URL(route.request().url()).pathname;
     if (path.endsWith('/session') || path.endsWith('/session/activity')) return route.fulfill({json:{accountId:'owner',expiresAt:new Date(Date.now()+3600000).toISOString()}});
-    if (path.endsWith('/installations')) { reached?.(); await readGate; return route.fulfill({json:{installations:current}}); }
+    if (path.endsWith('/installations')) { if(readGate&&handler==='delayed')await new Promise(resolve=>setTimeout(resolve,100)); if(handler!=='missing')reached?.(); await readGate; return route.fulfill({json:{installations:current}}); }
     if (path.endsWith('/reserve')) { writes.push(route.request().postDataJSON()); if(writeGate){await writeGate;return writeStatus ? route.fulfill({status:writeStatus,json:{error:writeStatus===403?'forbidden':'binding_conflict'}}):route.abort();} }
     return route.fulfill({status:503,json:{error:'continuity_unavailable'}});
    });
@@ -56,11 +57,21 @@ for (const locale of ['en','es'] as const) for (const theme of ['light','dark'] 
    await mount();
    const c=translations[locale],organisation=page.getByLabel(c.recoveryOrganisation,{exact:true}),venue=page.getByLabel(c.fiscalVenue,{exact:true}),reserveButton=page.getByRole('button',{name:c.fiscalReserve,exact:true});
    await t.test('pending installation reads refuse organisation changes and fiscal submission', async () => {
-    const readStarted=new Promise<void>(resolve => {reached=resolve;});
+    let readEntered=false;reached=()=>{readEntered=true;};
+    const waitForReadHandler=()=>t.waitFor(()=>{
+     assert.equal(readEntered,true,'the installation handler must observe the pending read');
+    },{timeout:30000});
     readGate=new Promise<void>(resolve => {release=resolve;});
     try {
      await page.evaluate(() => {void (window as any).app.installations.load();});
-     await readStarted;
+     if(handler==='missing'){
+      let timer:ReturnType<typeof setTimeout>|undefined;
+      try{
+       await assert.rejects(Promise.race([waitForReadHandler(),new Promise<void>(resolve=>{timer=setTimeout(resolve,31000);})]),/waitFor\(\) timed out/);
+      }finally{clearTimeout(timer);}
+      return;
+     }
+     await waitForReadHandler();
      assert.equal(await organisation.isDisabled(),true);
      assert.equal(await venue.isDisabled(),true);
      assert.equal(await reserveButton.isDisabled(),true);
@@ -75,6 +86,7 @@ for (const locale of ['en','es'] as const) for (const theme of ['light','dark'] 
     assert.equal(await venue.inputValue(),'');
     await mount();
    });
+   if(handler==='missing')return;
    for(const removed of ['permission','list'] as const) await t.test(`${removed}: a missing venue clears an unsent draft`,async () => {
     current=removed==='permission' ? installations.map(i=>i.organisationId===second ? {...i,canRevoke:false}:i) : installations.filter(i=>i.organisationId!==second);
     await page.evaluate(async () => {await (window as any).app.installations.load();});
