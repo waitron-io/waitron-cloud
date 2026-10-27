@@ -361,3 +361,43 @@ MiB in the untuned run.
 These figures describe one local machine and fixture. Use the receipt to compare code
 changes, not to promise production throughput or availability. Repeat it with the chosen
 database, mail relay limits and deployment-sized venue distribution before launch.
+
+## Private gateway forwarding collection
+
+A gateway can report its last observed forwarding outcome without putting the venue
+application's reply or address in visitor responses. Reporting is disabled by default.
+Country collection requires a separately provisioned Ed25519 reporter key and a version 2
+gateway manifest. Register or rotate that authority through trusted country provisioning;
+it grants no route, account or activation permission.
+
+Run `pnpm --dir packages/remote-access forward:collect /absolute/config.json` inside
+the country, with `DATABASE_URL` pointing at its primary database. For one polling
+pass, add `--once`. A failed collection or pruning pass exits with status 1 so your
+scheduler can detect the failure; the continuous worker logs the fixed error and
+tries again on its next poll. The trusted configuration has this shape:
+
+```json
+{"mappings":[{"country":"ES","environment":"test","cellId":"00000000-0000-4000-8000-000000000001","file":"/country/forward/report.json","writerUid":0,"readerGid":1000}]}
+```
+
+Mount only the report directory read-only into the collector. It must have mode 2750,
+the configured writer owner and collector group; `report.json` must be a regular 0640
+file with the same identities and no symlink traversal. Keep the signing key outside
+that mount. The collector polls every 30 seconds and prunes at most 64 observations
+per cell every 60 seconds. A failed prune keeps ingestion paused until the next
+prune succeeds. Its database cursor also enforces the 30-second batch
+limit across restarts and concurrent collectors.
+
+The latest observation expires after at most five minutes or when its manifest
+expires. Revocation, replacement, placement, revision or reporter changes make old
+observations unreadable immediately. Collection failure and lost transient storage
+mean unknown; they never mean that forwarding succeeded. A successful gateway
+attempt records a success, not a promise that every visitor can reach the venue.
+
+Logical backups must use `--exclude-table-data=*.remote_forward_observations`.
+The schema-upgrade backup driver shares this exclusion with the dump/restore test.
+Reporter authority and ordering cursors remain durable, while cause rows use an
+unlogged table whose contents are lost on crash recovery. Before enabling reporting
+in P1/P3 deployments, qualify the gateway/collector mounts, primary-only reads and
+backup exclusion in that deployment. No deployment is enabled by this change;
+the owner-only Account display remains separate work.

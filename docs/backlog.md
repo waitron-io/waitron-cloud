@@ -3880,9 +3880,14 @@ Cloud follow-ups, each a separate small change with tests before implementation:
   writer preserves ordering and expiry across restart, batches at most once per
   30 seconds and keeps at most 64 routes. Key or storage failure disables reporting
   while native HTTPS forwarding continues. Version 1 forwarding remains supported;
-  deployments still leave reporting disabled. Country publication and collection,
-  migration and the owner-only Account view remain open. Gateway/collector container
-  and backup-exclusion qualification remains part of the collection work. Visitor
+  deployments still leave reporting disabled. Country collection now checks signed reports against current reporter authority,
+  placement, revision, route binding and plan eligibility. Version 2 publication is
+  opt-in. Migration 044 keeps durable reporter cursors and disposable latest causes;
+  polling and database admission bound batches, while expiry and current-binding
+  reads reject stale evidence. Logical schema-upgrade backups exclude cause rows.
+  The owner-only Account view remains open. Gateway/collector container mounts,
+  primary-only reads and P1/P3 backup integration still need deployment qualification;
+  reporting remains disabled in deployments. Visitor
   guidance does not diagnose or repair the cause.
 - R10 delivered: direct navigation to rejected public requests receives bilingual
   guidance for 421/429/413/404/405/400 and failed-proof 403. Background refusals stay

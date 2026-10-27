@@ -7,7 +7,8 @@
     "test": "node --test --test-timeout=30000 test/*.test.ts",
     "test:movement": "node --test --test-timeout=30000 test/movement.test.ts test/operator-cli.test.ts",
     "probe": "node src/probe-cli.ts",
-    "reconcile": "node src/reconciler-cli.ts"
+    "reconcile": "node src/reconciler-cli.ts",
+    "forward:collect": "node src/forward-report-cli.ts"
   },
   "dependencies": {
     "@waitron-cloud/registration": "workspace:*",
@@ -26,7 +27,8 @@
     "./probe-targets": "./src/probe-targets.ts",
     "./probe-observations": "./src/probe-observations.ts",
     "./probe": "./src/probe.ts",
-    "./probe-runner": "./src/probe-runner.ts"
+    "./probe-runner": "./src/probe-runner.ts",
+    "./forward-observations": "./src/forward-observations.ts"
   },
   "license": "SEE LICENSE IN LICENSE"
 }

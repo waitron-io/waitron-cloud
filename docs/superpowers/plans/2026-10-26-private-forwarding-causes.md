@@ -1,4 +1,4 @@
-> **Status: The owner approved this plan and separately authorised the D291 build. Task 1 is delivered; Task 2 covers applied authority and private file delivery. Country publication/collection, schema and the Account view remain Tasks 3–4. Provider deployment still needs separate authority.**
+> **Status: The owner approved this plan and separately authorised the D291 build. Tasks 1–2 are delivered. Task 3 adds opt-in country publication, authenticated collection and transient storage. The owner-only Account view remains Task 4. Provider deployment still needs separate authority.**
 
 # Private public-forwarding causes (D291) implementation plan
 

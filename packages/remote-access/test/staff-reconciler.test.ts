@@ -69,3 +69,10 @@ test('reusing a replaced ID with a new CSR never exposes the retained old-key ch
  const statusReply=await(await read(a,id)).json();assert.equal(statusReply.state,'pending');assert.equal('certificate'in statusReply,false);
  const next=chain({...a,body,privateKey:other.privateKey}),reissuer=new RemoteConfigurationReconciler(f.db.pool,{staffExchange:true,issueCertificate:async()=>next});await select(reissuer,a.installationId);await reissuer.runOnce();assert.equal((await(await read(a,id)).json()).certificate,next);
 });
+
+test('reporting staff exchange completes with policy before installation and job locks',async()=>{
+ const {a,id}=await setup(),certificate=chain(a),worker=new RemoteConfigurationReconciler(f.db.pool,{staffExchange:true,forwardReports:true,issueCertificate:async()=>certificate});
+ await select(worker,a.installationId);assert.equal(await worker.runOnce(),true);
+ const reply=await(await read(a,id)).json();assert.equal(reply.state,'ready');assert.equal(reply.certificate,certificate);
+ const job=(await f.db.pool.query("SELECT failures,last_error,applied_digest=desired_digest AS applied FROM remote_configuration_jobs WHERE target_id=$1 AND kind='certificate_staff'",[a.installationId])).rows[0];assert.deepEqual(job,{failures:'0',last_error:null,applied:true});
+});

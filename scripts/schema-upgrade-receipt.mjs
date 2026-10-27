@@ -13,6 +13,7 @@ import {source,seed,digest,identity,ledger,completionRetry,upgradeRevisions,seed
 import {storedRows,relayState,identityAccountState,seedRelay,stoppedRelay,restoredRelay} from './schema-upgrade-relay-fixture.mjs';
 import {seedMonitoring,monitoringState,legacyMonitoring,restoredMonitoring} from './schema-upgrade-monitoring-fixture.mjs';
 import {seedBackupMonitoring,seedLegacyBackups,upgradedBackups,freshBackupEvidence,backupState,restoredBackups} from './schema-upgrade-backup-fixture.mjs';
+import {privateObservationDumpArgs} from './database-backup-policy.mjs';
 import {verifySchemaUpgradeReceipt} from './verify-schema-upgrade-receipt.mjs';
 
 const driver=resolve(fileURLToPath(new URL('..',import.meta.url)));
@@ -130,7 +131,7 @@ try{
  // Freeze the recovery point with no running consumers; keys stay outside pg_dump.
  const fullOldLedger=(relayStop||monitoringQuiet||backupVerification)?(await primary.pool.query('SELECT * FROM schema_migrations ORDER BY name')).rows:null;
  const beforeRows=(relayStop||monitoringQuiet||backupVerification)?await storedRows(primary.pool,monitoringQuiet||backupVerification):null,beforeRelay=(relayStop||monitoringQuiet||backupVerification)?await relayState(primary.pool):null;
- const backup=run('docker',['exec',containers[0],'pg_dump','-U','postgres','-d','cloud','-Fc'],{encoding:null});
+ const backup=run('docker',['exec',containers[0],'pg_dump','-U','postgres','-d','cloud','-Fc',...privateObservationDumpArgs],{encoding:null});
  const pendingBefore=(await primary.pool.query('SELECT * FROM email_outbox WHERE id=$1',[state.messageId])).rows[0];
  checks.newRefusedOld=await startAccount(next,primary.url,true);
  console.log(JSON.stringify({phase:'upgrade'}));
@@ -229,19 +230,19 @@ try{
   assert.deepEqual(command('--status'),{stopped:true});
   await stoppedRelay(next,primary.pool,relayProof,Number(smtp));checks.stopRestartPreserved=true;
   stoppedRows=await storedRows(primary.pool,true);fullNewLedger=(await primary.pool.query('SELECT * FROM schema_migrations ORDER BY name')).rows;
-  stoppedBackup=run('docker',['exec',containers[0],'pg_dump','-U','postgres','-d','cloud','-Fc'],{encoding:null});
+  stoppedBackup=run('docker',['exec',containers[0],'pg_dump','-U','postgres','-d','cloud','-Fc',...privateObservationDumpArgs],{encoding:null});
  }
  if(factor){
   factorProof=await enrolFactor(next,primary.pool,state,factorKeys);checks.factorEnrolled=true;factorBefore=await factorState(primary.pool);
-  factorBackup=run('docker',['exec',containers[0],'pg_dump','-U','postgres','-d','cloud','-Fc'],{encoding:null});
+  factorBackup=run('docker',['exec',containers[0],'pg_dump','-U','postgres','-d','cloud','-Fc',...privateObservationDumpArgs],{encoding:null});
  }
  if(backupVerification){
   Object.assign(backupChecks,await freshBackupEvidence(next,primary.pool,state,backupProof));
   backupAfter=await backupState(primary.pool);
-  backupDump=run('docker',['exec',containers[0],'pg_dump','-U','postgres','-d','cloud','-Fc'],{encoding:null});
+  backupDump=run('docker',['exec',containers[0],'pg_dump','-U','postgres','-d','cloud','-Fc',...privateObservationDumpArgs],{encoding:null});
  }
  timings.upgradeMs=Date.now()-upgradeStart;
- if(monitoringQuiet){email.smtpPort=Number(smtp);monitoringProof=await seedMonitoring(next,primary.pool,state,email);monitoringBefore=await monitoringState(primary.pool);monitoringBackup=run('docker',['exec',containers[0],'pg_dump','-U','postgres','-d','cloud','-Fc'],{encoding:null});}
+ if(monitoringQuiet){email.smtpPort=Number(smtp);monitoringProof=await seedMonitoring(next,primary.pool,state,email);monitoringBefore=await monitoringState(primary.pool);monitoringBackup=run('docker',['exec',containers[0],'pg_dump','-U','postgres','-d','cloud','-Fc',...privateObservationDumpArgs],{encoding:null});}
  const upgradedMonitoringDigest=monitoringQuiet?digest(await storedRows(primary.pool,true)):null;
  const upgradedRelayDigest=relayStop?digest({ledger:(await primary.pool.query('SELECT * FROM schema_migrations ORDER BY name')).rows,rows:await storedRows(primary.pool,true)}):null;
  const upgradedDigest=digest({ledger:await ledger(primary.pool),identity:await identity(primary.pool),mail:(await primary.pool.query('SELECT * FROM email_outbox ORDER BY id')).rows,pairing:(await primary.pool.query('SELECT * FROM pairing_requests ORDER BY id')).rows});

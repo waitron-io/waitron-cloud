@@ -419,7 +419,8 @@ test('old_recovery_has_no_v2_identity', async () => {
 });
 
 test('concurrent_upgrade_is_once_and_applied_sql_unchanged', async () => {
-  assert.equal(migrationNames.at(-1), '043_backup_target_verification.sql', 'the release must include the additive migration');
+  assert.equal(migrationNames.at(-1), '044_remote_forward_observations.sql', 'the release includes private forwarding observations');
+  assert.equal(migrationNames[42], '043_backup_target_verification.sql', 'the historical additive migration is retained');
   const name = `concurrent_verification_${randomUUID().replaceAll('-', '')}`;
   const p = new Pool({connectionString: process.env.TEST_DATABASE_URL, options: `-c search_path=${name}`});
   await admin.query(`CREATE SCHEMA ${name}`);
@@ -427,7 +428,7 @@ test('concurrent_upgrade_is_once_and_applied_sql_unchanged', async () => {
     await legacyMigrate(p); const before = (await p.query('SELECT * FROM schema_migrations ORDER BY name')).rows;
     await Promise.all([migrate(p), migrate(p)]); await migrate(p);
     const rows = (await p.query('SELECT * FROM schema_migrations ORDER BY name')).rows;
-    assert.equal(rows.length, 43); assert.deepEqual(rows.slice(0, 42), before);
+    assert.equal(rows.length, 44); assert.deepEqual(rows.slice(0, 42), before);
     assert.equal((await p.query('SELECT count(*) FROM backup_verification_policy')).rows[0].count, '1');
     await p.query("UPDATE schema_migrations SET digest='changed' WHERE name='043_backup_target_verification.sql'");
     await assert.rejects(migrate(p), /Applied migration has changed: 043_backup_target_verification.sql/);
