@@ -109,9 +109,12 @@ export async function openReplayStream(input) {
   })();
   const abort = () => { invalid = true; dispose().catch(() => {}); };
   const quiesce = async () => {
-    healthy(); await session.whenIdle(() => { writer.stopping = true; writer.child.kill('SIGTERM'); });
-    successful(await stop(writer)); writer = undefined; healthy();
-    return session.checkpoint();
+    healthy();
+    at('quiesce-idle'); await session.whenIdle(() => { writer.stopping = true; writer.child.kill('SIGTERM'); });
+    at('quiesce-stop'); const result = await stop(writer);
+    at('quiesce-stop-result'); successful(result); writer = undefined;
+    at('quiesce-health'); healthy();
+    at('quiesce-checkpoint'); return session.checkpoint();
   };
   const start = async () => {
     const before = session.activity(), observation = new AbortController();
@@ -182,7 +185,8 @@ export async function openReplayStream(input) {
       if (!finishing) finishing = (async () => {
         try {
           healthy(); need(!busy && Number.isSafeInteger(expectedSales) && expectedSales > 0 && expectedSales <= 100000);
-          at('quiesce'); await quiesce(); healthy(); session.setPhase('restore');
+          at('quiesce'); await quiesce();
+          at('restore-admission'); healthy(); session.setPhase('restore');
           const output = join(args.workRoot, 'restored.db'); need(!existsSync(output));
           at('restore'); const restore = launch(['restore', '-config', join(args.workRoot, 'stream.json'), '-o', output, args.database]);
           const timeout = setTimeout(() => { restore.bad = true; restore.child.kill('SIGKILL'); }, 30000);

@@ -1119,6 +1119,21 @@ implementation or production evidence.
   That diagnostic head changed no cost-model files relative to `5b709aa`.
   Its saved log has no underlying worker stage; the later bounded traces and
   separate startup correction do not establish that historical failure's cause.
+  A later paced failure in
+  [cost run 40489223783, job 122138753711](https://github.com/waitron-io/waitron-cloud/actions/runs/40489223783/job/122138753711)
+  stops at `quiesce` after a zero native exit, before restore. That label combines
+  several independent checks. You now receive separate fixed codes for waiting
+  for idle transfers, waiting for child collection, validating its stop result,
+  checking post-stop health and checking storage accounting. A separate code
+  marks restore admission after that checkpoint completes. Cancellation can
+  refuse any active operation; these codes identify its boundary, not its cause. Native child/HTTP tests
+  distinguish nonzero stops, interrupted transfers, cancellation after a zero
+  exit and inconsistent storage inventory after a zero exit. A held child
+  reports collection in progress before the unchanged forced-kill timer fires.
+  Each controlled failure refuses publication and collects owned resources. Run `node --test
+  scripts/cloud-cost/replay-stream.test.mjs scripts/cloud-cost/replay-quiesce-diagnostics.test.mjs`.
+  The historical cause remains unknown; capture the new boundary on recurrence
+  before changing any accounting, ownership, restore or deadline guard.
   The D121 recurrence in [cost run 40144665901, job 121023380173](https://github.com/waitron-io/waitron-cloud/actions/runs/40144665901/job/121023380173)
   reaches `storage-cleanup` after successful native replicate and restore exits.
   Cleanup now retains its first refused operation as a fixed `storage-refusal`
