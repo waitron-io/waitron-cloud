@@ -2446,7 +2446,17 @@ implementation or production evidence.
   release-success/index-timeout sequence before stable filenames were introduced; the one-index and
   uncompressed sixteen-index cases did not. Run
   `node --test scripts/ci-browser-apt-components.test.mjs` on Linux as well as
-  the original trust and refusal journeys. The public mirror's underlying
+  the original trust and refusal journeys. If the isolated fixture's update or
+  package download fails, its bounded stderr record names the stage and scenario,
+  retains the output tail and lists the latest requests received by its local
+  archive. Run `node --test scripts/ci-browser-apt-diagnostics.test.mjs` on any
+  platform to check timeout evidence, nonzero exits, output bounds and silent
+  success. The original exception, result, checks and deadlines are preserved.
+  The compressed-index update timeout in
+  [run40536424286](https://github.com/waitron-io/waitron-cloud/actions/runs/40536424286/job/122302974742)
+  remains unexplained; the missing temporary configuration warning's relation to
+  that timeout is unknown. A labelled recurrence is still needed.
+  The public mirror's underlying
   network failure remains unexplained; this change addresses index selection.
   Real Actions qualification must show two consecutive full runs of the same
   head and its independent merge run, with one install attempt and every portal
