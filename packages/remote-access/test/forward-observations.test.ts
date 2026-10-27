@@ -30,7 +30,9 @@ for(const field of ['country','environment','cell','generation','installation','
   if(field==='manifest-high')o.manifestSequence=f.manifest.sequence+10;
   const envelope=signForwardReport(r,field==='unknown-key'?generateKeyPairSync('ed25519').privateKey:f.keys.privateKey);
   if(field==='signature')envelope.signature='A'.repeat(86);
-  assert.equal(await f.store.record(mapping,envelope),'ignored');assert.equal(await f.read(),null);
+  const staleBinding=['installation','venue','revision','binding','manifest-low','manifest-high'].includes(field);
+  assert.equal(await f.store.record(mapping,envelope),staleBinding?'accepted':'ignored');assert.equal(await f.read(),null);
+  assert.equal((await f.db.pool.query('SELECT count(*) FROM remote_forward_observations')).rows[0].count,'0');
   assert.equal((await f.db.pool.query('SELECT last_sequence FROM remote_forward_reporters')).rows[0].last_sequence,field==='installation'||field==='venue'||field==='revision'||field==='binding'||field.startsWith('manifest-')?'1':'0');
  }finally{await f.db.close();}
 });

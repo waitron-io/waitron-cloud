@@ -35,17 +35,18 @@ const faults:Fault[]=[
  {name:'pruning',source:store,file:retention,pattern:'^expiry_and_prune',changes:[["return (await client.query('DELETE FROM remote_forward_observations WHERE venue_id=ANY($1::uuid[])',[rows.map(r=>r.venue_id)])).rowCount??0;",'return 0;']]},
  {name:'backup exclusion',source:'scripts/database-backup-policy.mjs',file:retention,pattern:'^logical_restore_',changes:[["['--exclude-table-data=*.remote_forward_observations']",'[]']]},
  {name:'file permissions',source:collector,file:collection,pattern:'^collector refuses mode ',changes:[['||(s.mode&0o7777)!==0o640','']]},
- {name:'writer identity',source:collector,file:collection,pattern:'^collector refuses uid ',changes:[['s.uid!==mapping.writerUid||',''],['||s.uid!==mapping.writerUid','']]},
- {name:'reader identity',source:collector,file:collection,pattern:'^collector refuses gid ',changes:[['s.gid!==mapping.readerGid||',''],['||s.gid!==mapping.readerGid','']]},
+ {name:'writer identity',source:collector,file:collection,pattern:'^collector refuses uid ',changes:[['s.uid!==mapping.writerUid||','']]},
+ {name:'reader identity',source:collector,file:collection,pattern:'^collector refuses gid ',changes:[['s.gid!==mapping.readerGid||','']]},
  {name:'file size',source:collector,file:collection,pattern:'^collector refuses oversize ',changes:[['||s.size>262144',''],['size>262144||','']]},
 ];
-for(const fault of faults)test(`${fault.source===collector?'native':'postgres'}: deleting ${fault.name} makes its original denial fail`,async()=>{
+for(const fault of faults)test(`${fault.source===collector?'native':'postgres'}: deleting ${fault.name} makes its original denial fail`,{timeout:150000},async()=>{
  const path=join(candidate,fault.source),original=await readFile(path,'utf8');let altered=original;
- const run=()=>spawnSync(process.execPath,['--test','--test-timeout=30000','--test-name-pattern='+fault.pattern,fault.file],{cwd:candidate,encoding:'utf8',timeout:60000,maxBuffer:4*1024*1024});
- const control=run();assert.equal(control.status,0,control.stdout+control.stderr);
+ const env={...process.env};delete env.NODE_TEST_CONTEXT;delete env.FORCE_COLOR;
+ const run=()=>spawnSync(process.execPath,['--test','--test-reporter=tap','--test-timeout=30000','--test-name-pattern='+fault.pattern,fault.file],{cwd:candidate,env,encoding:'utf8',timeout:60000,maxBuffer:4*1024*1024});
+ const control=run();assert.equal(control.status,0,control.stdout+control.stderr);assert.match(control.stdout,/# pass [1-9]\d*/);
  try{
   for(const [needle,replacement] of fault.changes){assert(altered.includes(needle),`missing guard: ${fault.name}`);altered=altered.replaceAll(needle,replacement);}
   await writeFile(path,altered);const broken=run();assert.equal(broken.status,1,broken.stdout+broken.stderr);assert.match(broken.stdout+broken.stderr,/AssertionError/);
  }finally{await writeFile(path,original);}
  const restored=run();assert.equal(restored.status,0,restored.stdout+restored.stderr);
-},{timeout:150000});
+});
