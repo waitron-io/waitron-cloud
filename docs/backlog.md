@@ -3901,9 +3901,16 @@ Cloud follow-ups, each a separate small change with tests before implementation:
   can show another refusal or a recovered response. Native HTTPS checks cover
   persistent 403/404/503 replies and dropped connections, then recovery, while
   preserving private upstream details. Cause-specific diagnostics for owners in
-  Account remain open. The [private forwarding-cause plan](superpowers/plans/2026-10-26-private-forwarding-causes.md)
-  proposes bounded private recording; owner plan approval and separate build
-  authority remain required. Visitor guidance does not diagnose or repair the cause.
+  Account remain open. The owner approved the [private forwarding-cause plan](superpowers/plans/2026-10-26-private-forwarding-causes.md)
+  and authorised building it. Its first task adds an optional forwarding observer
+  and a signed report format. Completed non-200 responses, inactivity timeout,
+  response limit, transport loss and internal construction failures have distinct
+  fixed categories; success reports no failure, while visitor cancellation and local
+  refusals produce no observation. Native HTTPS checks cover classification,
+  observer failure containment and private response boundaries. Reporting remains
+  unwired and disabled. Applied-authority binding, bounded file delivery, country
+  collection, migration and the owner-only Account view remain open. Visitor
+  guidance does not diagnose or repair the cause.
 - R10 delivered: direct navigation to rejected public requests receives bilingual
   guidance for 421/429/413/404/405/400 and failed-proof 403. Background refusals stay
   empty; host, proof, quota, size and forwarding checks retain their status codes.
