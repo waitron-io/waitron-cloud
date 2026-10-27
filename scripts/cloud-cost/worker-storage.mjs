@@ -43,7 +43,12 @@ export async function openWorkerStorage(args) {
   const makeClient = phase => {
     const value = new sdk.S3Client({ endpoint: proxy.url, region: 'eu-north-1', forcePathStyle: true, maxAttempts: 1,
       requestHandler: { connectionTimeout: 1000, requestTimeout: 2000 }, credentials: { accessKeyId: 'SYNTHETIC', secretAccessKey: 'SYNTHETIC' } });
-    instrumentStorageClient({ client: value, meter, phase, endpoint: proxy.url }); return value;
+    try { instrumentStorageClient({ client: value, meter, phase, endpoint: proxy.url }); return value; }
+    catch {
+      // The caller cannot collect a constructed client that was never returned.
+      try { value.destroy(); } catch { /* Failed instrumentation still refuses the client. */ }
+      fail();
+    }
   };
   const listObjects = async () => {
     stage = 'object-list';
@@ -84,9 +89,14 @@ export async function openWorkerStorage(args) {
   const dispose = () => disposal ??= (async () => {
     stage = 'cleanup-client-open';
     cleanupSignal = AbortSignal.timeout(10000);
-    if (proxy) { client?.destroy(); client = makeClient('cleanup'); }
     const failures = []; const attempt = async fn => { try { await fn(); } catch { refused(); failures.push(true); } };
-    if (created) await attempt(async () => {
+    if (proxy) {
+      // A failed setup-client close cannot prevent independent resource collection.
+      const setupClient = client; client = undefined;
+      await attempt(() => setupClient?.destroy());
+      await attempt(() => { client = makeClient('cleanup'); });
+    }
+    if (created && client) await attempt(async () => {
       stage = 'bucket-ownership';
       assertOwnedRoot(args); record({ kind: 'storage-bucket', state: 'cleanup-intent', bucket });
       // Bucket lists can omit a created bucket; only the owned bucket's direct 404 proves absence.
