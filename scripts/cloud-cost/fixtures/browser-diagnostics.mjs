@@ -53,6 +53,16 @@ export function runBrowserFixture(command, args, environment) {
     maxBuffer: 1048576, stdio: ['ignore', 'pipe', 'pipe'] }).trim(); }
   catch (error) {
     const failure = Error('Generated local gateway fixture failed');
+    // Fixed categories and counts retain command failure evidence without private arguments or output.
+    failure.commandFailure = {
+      command: command === 'docker' ? (args[0] === 'start' ? 'docker-start' : 'docker-other') : 'other',
+      reason: ['EACCES', 'EPERM', 'ENOENT', 'ENOSPC', 'EIO', 'ETIMEDOUT', 'ENOBUFS'].includes(error.code)
+        ? error.code : 'command-exit',
+      exitCode: Number.isSafeInteger(error.status) && error.status >= 0 && error.status <= 255 ? error.status : null,
+      signal: ['SIGTERM', 'SIGKILL', 'SIGABRT', 'SIGSEGV', 'SIGINT'].includes(error.signal) ? error.signal : null,
+      stdoutBytes: Math.min(1048576, Buffer.byteLength(error.stdout ?? '')),
+      stderrBytes: Math.min(1048576, Buffer.byteLength(error.stderr ?? '')),
+    };
     failure.journeyRefused = error.status === 1 && error.stdout?.length === 0
       && /Error: Invalid cloud cost browser journey/.test(error.stderr?.toString() ?? '');
     Object.assign(failure, parseBrowserDiagnostics(error.stderr?.toString() ?? ''));

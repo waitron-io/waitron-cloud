@@ -517,6 +517,16 @@ implementation or production evidence.
   phase on recurrence before choosing a fix. This diagnostic change does not
   identify or fix the historical failure. The two-second request timeout,
   30-second startup deadline and all original gateway and browser journey checks remain.
+  A separate browser fixture refusal in [PR594's cost run40536958436](https://github.com/waitron-io/waitron-cloud/actions/runs/40536958436/job/122305238271)
+  occurred during the gateway's `docker start`, before any browser phase. The command
+  wrapper now retains a fixed command category, failure reason, exit code or signal,
+  and output byte counts capped at one MiB per stream. Arguments, paths and output
+  contents stay private. Native child-process checks cover exit, signal, missing
+  executable, output limit and the unchanged 30-second timeout. Existing browser
+  refusal labels and all journey, ownership and cleanup checks remain unchanged.
+  Capture the next labelled failure to identify the startup cause; these controls
+  do not explain the historical Docker delay. Local Docker qualification stays
+  parked until 3 November; current-head CI runs the genuine gateway journeys.
 
 - **LAN test Cloud with free and paid organisations.** The
   [test deployment design](superpowers/specs/2026-10-17-test-cloud-free-paid-design.md)
