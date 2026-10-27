@@ -2644,7 +2644,12 @@ implementation or production evidence.
   earlier step fails; a setup failure remains the cause when cleanup also rejects.
   Docker-free checks exercise real pool closure with database operations replaced.
   They do not reproduce the historical PostgreSQL hang; genuine database cleanup
-  remains for CI. Diagnostics: `~/waitron-campaign-d/receipts/d76/`.
+  remains for CI. The relay operator-stop SMTP fixture now rejects listener startup
+  errors with their original cause instead of waiting for a successful listen
+  callback. A Docker-free occupied-port check reproduces the earlier pending setup
+  and keeps the competing listener open; real mail capture and test teardown are
+  also checked. This does not identify the historical PostgreSQL hang's cause.
+  Diagnostics: `~/waitron-campaign-d/receipts/d76/`.
   The migration batch-size fixture now confines its database-wide DDL trigger
   to its own schema. A second populated fixture proves that other tests can
   migrate while it is active; the original 103-recipient and 100-row batch

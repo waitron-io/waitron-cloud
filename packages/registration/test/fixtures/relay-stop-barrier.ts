@@ -43,7 +43,13 @@ export async function smtp(t: TestContext, options: SMTPServerOptions = {}) {
       stream.on('end', () => {captured.push(raw); done();});
     }, ...options});
   server.on('error', () => {});
-  await new Promise<void>(r => server.listen(0, '127.0.0.1', r));
+  await new Promise<void>((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(0, '127.0.0.1', () => {
+      server.off('error', reject);
+      resolve();
+    });
+  });
   t.after(() => new Promise<void>(r => server.close(r)));
   const address = server.server.address(); assert.ok(address && typeof address !== 'string');
   return {port: address.port, captured, server};
