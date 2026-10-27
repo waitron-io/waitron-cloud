@@ -3582,6 +3582,15 @@ uncertain writes and padded codes. Real PostgreSQL recovery suites remain CI's
 gate while Docker is down locally. This does not qualify production recovery,
 prove an old server has stopped, or change the existing recovery source limits.
 
+## Public browser-check status handler wait (D366)
+
+The live-status browser fixture bounds its challenge-handler wait at the existing
+four-second page budget. An absent signal fails promptly; delayed handlers repeat
+all language, theme, width and failure journeys. Every original live-region,
+accessibility-tree, reload, focus, cookie and forwarding assertion remains.
+These native Chromium and local HTTP checks leave production-network qualification
+open and do not change product behaviour.
+
 ## Recovery-choice browser handler wait (D362)
 
 The recovery-choice browser fixture refuses an absent installation-handler signal
