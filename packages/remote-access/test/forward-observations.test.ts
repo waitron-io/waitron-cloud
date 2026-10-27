@@ -134,3 +134,18 @@ test('reporting cell jobs do not lock installations in an unrelated cell',async(
   const manifest=verifyManifest(JSON.parse(published),issuer.publicKey,cell);assert.deepEqual(manifest.routes,[]);
  }finally{await held.query('ROLLBACK');held.release();await running;await f.db.close();}
 });
+
+test('signature is rechecked against reporter authority after waiting for its lock',async()=>{
+ const f=await forwardFixture(),held=await f.db.secondPool.connect();let running:Promise<unknown>|undefined;
+ try{
+  await held.query('BEGIN');await held.query('UPDATE remote_forward_reporters SET public_key=$1 WHERE cell_id=$2',[generateKeyPairSync('ed25519').publicKey.export({type:'spki',format:'pem'}).toString(),f.cellId]);
+  running=f.send();let waiting=false;
+  for(let attempt=0;attempt<300;attempt++){
+   waiting=(await f.db.secondPool.query("SELECT count(*)::integer AS n FROM pg_stat_activity WHERE application_name=$1 AND wait_event_type='Lock' AND query LIKE 'SELECT * FROM remote_forward_reporters%'",[f.db.schema])).rows[0].n>0;
+   if(waiting)break;await delay(10);
+  }
+  assert.equal(waiting,true,'collection must verify the old committed key and wait for the new locked key');await held.query('COMMIT');
+  assert.equal(await running,'ignored');assert.equal(await f.read(),null);
+  assert.equal((await f.db.pool.query('SELECT last_sequence FROM remote_forward_reporters')).rows[0].last_sequence,'0');assert.equal((await f.db.pool.query('SELECT count(*) FROM remote_forward_observations')).rows[0].count,'0');
+ }finally{await held.query('ROLLBACK');held.release();await running;await f.db.close();}
+});

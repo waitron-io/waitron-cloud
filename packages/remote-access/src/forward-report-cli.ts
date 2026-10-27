@@ -19,6 +19,6 @@ try{
  pool=new Pool({connectionString:process.env.DATABASE_URL,max:2,connectionTimeoutMillis:5000,statement_timeout:5000});
  pool.on('error',()=>console.error('remote.forward_collection_failed'));
  const poller=new ForwardReportPoller(mappings,new ForwardObservationStore(pool,planMode),message=>console.error(message));
- do{await poller.poll();if(mode==='--once'||stop.signal.aborted)break;await delay(30000,undefined,{signal:stop.signal}).catch(()=>{});}while(!stop.signal.aborted);
+ do{const succeeded=await poller.poll();if(mode==='--once'){if(!succeeded)process.exitCode=1;break;}if(stop.signal.aborted)break;await delay(30000,undefined,{signal:stop.signal}).catch(()=>{});}while(!stop.signal.aborted);
 }catch{console.error('remote.forward_collector_failed');process.exitCode=1;}
 finally{try{await pool?.end();}catch{process.exitCode=1;}process.removeListener('SIGINT',shutdown);process.removeListener('SIGTERM',shutdown);}

@@ -39,14 +39,15 @@ export class ForwardReportPoller {
   const ids=new Set<string>();for(const mapping of mappings){validateForwardMapping(mapping);if(ids.has(mapping.cellId))throw unavailable();ids.add(mapping.cellId);}
   this.#mappings=mappings.map(m=>({...m}));this.#store=store;this.#log=log;
  }
- async poll(now=Date.now()):Promise<void>{
-  await Promise.all(this.#mappings.map(async mapping=>{
-   const id=mapping.cellId;if(this.#running.has(id)||now-(this.#polled.get(id)??-Infinity)<30000)return;
+ async poll(now=Date.now()):Promise<boolean>{
+  const results=await Promise.all(this.#mappings.map(async mapping=>{
+   const id=mapping.cellId;if(this.#running.has(id)||now-(this.#polled.get(id)??-Infinity)<30000)return true;
    this.#running.add(id);this.#polled.set(id,now);
    try{
     if(now-(this.#pruned.get(id)??-Infinity)>=60000){this.#pruned.set(id,now);await this.#store.prune(id);}
-    await collectForwardReport(mapping,this.#store);
-   }catch{this.#log('remote.forward_collection_failed');}finally{this.#running.delete(id);}
+    await collectForwardReport(mapping,this.#store);return true;
+   }catch{this.#log('remote.forward_collection_failed');return false;}finally{this.#running.delete(id);}
   }));
+  return results.every(Boolean);
  }
 }

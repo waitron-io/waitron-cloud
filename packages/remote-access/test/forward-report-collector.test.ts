@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict';
 import {randomUUID,generateKeyPairSync} from 'node:crypto';
-import {mkdtemp,writeFile,chmod,symlink,rm,mkdir,realpath} from 'node:fs/promises';
+import {mkdtemp,writeFile,chmod,symlink,rm,mkdir,realpath,link} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {test} from 'node:test';
-import {spawnSync} from 'node:child_process';
+import {execFileSync,spawnSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
 import {collectForwardReport,ForwardReportPoller} from '../src/forward-report-collector.ts';
 import {signForwardReport} from '../src/forward-report.ts';
@@ -70,5 +70,36 @@ test('collector CLI once fails when the configured country database is unavailab
   await writeFile(config,JSON.stringify({mappings:[f.mapping]}));
   const result=spawnSync(process.execPath,[path,config,'--once'],{encoding:'utf8',timeout:10000,env:{...process.env,DATABASE_URL:'postgres://probe@127.0.0.1:1/private-canary'}});
   assert.equal(result.signal,null);assert.equal(result.status,1);assert.equal(result.stdout,'');assert.equal(result.stderr,'remote.forward_collection_failed\n');
+ }finally{await f.close();}
+});
+
+test('failed pruning makes the poll fail before ingestion while a later poll recovers',async()=>{
+ const f=await fixture();try{
+  let reads=0,prunes=0;const logs:string[]=[];
+  const poller=new ForwardReportPoller([f.mapping],{async record(){reads++;return 'accepted';},async prune(){if(++prunes===1)throw Error('private-canary');return 0;}},message=>logs.push(message));
+  assert.equal(await poller.poll(0),false);assert.equal(reads,0);assert.deepEqual(logs,['remote.forward_collection_failed']);
+  assert.equal(await poller.poll(60000),true);assert.equal(reads,1);assert.equal(prunes,2);
+ }finally{await f.close();}
+});
+test('collector CLI once with no configured cells succeeds without connecting',async()=>{
+ const f=await fixture();try{
+  const path=fileURLToPath(new URL('../src/forward-report-cli.ts',import.meta.url)),config=join(f.directory,'config.json');await writeFile(config,JSON.stringify({mappings:[]}));
+  const result=spawnSync(process.execPath,[path,config,'--once'],{encoding:'utf8',timeout:10000,env:{...process.env,DATABASE_URL:'postgres://probe@127.0.0.1:1/private-canary'}});
+  assert.equal(result.status,0);assert.equal(result.stdout,'');assert.equal(result.stderr,'');
+ }finally{await f.close();}
+});
+
+for(const fault of ['hard-link','directory-mode'] as const)test(`collector refuses ${fault} before storage`,async()=>{
+ const f=await fixture();try{
+  if(fault==='hard-link')await link(f.mapping.file,join(f.directory,'second.json'));else await chmod(f.directory,0o750);
+  let calls=0;await assert.rejects(collectForwardReport(f.mapping,{async record(){calls++;return 'accepted';},async prune(){return 0;}}),/^Error: forward_report_unavailable$/);assert.equal(calls,0);
+ }finally{await f.close();}
+});
+for(const scenario of ['directory-open','post-read','fifo'] as const)test(`collector refuses ${scenario} race without hanging or reaching storage`,async()=>{
+ const f=await fixture();try{
+  if(scenario==='fifo'){await rm(f.mapping.file);execFileSync('mkfifo',['-m','640',f.mapping.file]);}
+  const path=fileURLToPath(new URL('./fixtures/forward-file-race.ts',import.meta.url));
+  const result=spawnSync(process.execPath,[path,scenario,JSON.stringify(f.mapping)],{encoding:'utf8',timeout:3000});
+  assert.equal(result.signal,null,'nonregular input must not block the collector');assert.equal(result.status,0,result.stdout+result.stderr);assert.equal(result.stdout,'refused without storage\n');
  }finally{await f.close();}
 });
