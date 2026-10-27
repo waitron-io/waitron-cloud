@@ -2740,10 +2740,16 @@ implementation or production evidence.
   lock table (`out of shared memory`, with `max_locks_per_transaction` hints).
   That run reported 486 passes and 198 failures across 684 reported cases; two
   stalled test processes and their recorded descendant required termination.
-  The wrapper then cleaned up its owned database and mail containers. Qualify
-  high-core local harness defaults separately; do not raise test deadlines or
-  database limits to conceal this run. A bounded four-file full-suite run uses
-  the same files, assertions, database settings and individual test deadlines.
+  The wrapper then cleaned up its owned database and mail containers.
+  Full local registration and account HTTP package commands now run at most two
+  test files at once, keeping every discovered file and its existing deadline.
+  Docker-free command probes check the bound, new-file discovery and failure
+  reporting with real Node workers. A complete unsharded PostgreSQL run still
+  needs qualification when local Docker returns; CI's existing database shards
+  keep their own commands. Receipt fixtures compare seeded historical manifests
+  with their saved test commands; existing assertions and production selection
+  guards stay unchanged. The historical lock exhaustion and unidentified
+  failed-setup handles remain recorded; database limits are unchanged.
 
   **One-second relay budget fixture.** The key-retirement and rollover tests now
   retry setup admissions at most ten times when the budget window ends before

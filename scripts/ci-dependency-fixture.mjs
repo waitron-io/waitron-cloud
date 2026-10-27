@@ -13,7 +13,9 @@ const inputs = {...deploymentInputs.files, ...schemaInputs.files, ...JSON.parse(
   ...JSON.parse(readFileSync(new URL('./fixtures/ci-local-stack-reader-inputs.json', import.meta.url), 'utf8')), ...gatewayInputs};
 
 export function receiptFixtureWorkspace() {
-  return loadWorkspace().filter(pkg => Object.hasOwn(inputs, `${pkg.directory}/package.json`));
+  // Compare seeded historical manifests with their own commands, not live package commands.
+  return loadWorkspace().filter(pkg => Object.hasOwn(inputs, `${pkg.directory}/package.json`))
+    .map(pkg => ({...pkg, scripts: JSON.parse(inputs[`${pkg.directory}/package.json`]).scripts}));
 }
 
 export function copyReceiptFixtureInput(path, target) {
