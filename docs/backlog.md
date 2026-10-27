@@ -3970,8 +3970,11 @@ Cloud follow-ups, each a separate small change with tests before implementation:
   browser fixture now serves the exact shipped HTML from before the static
   fallback, with a pinned digest independent of current page generation. Its
   existing waiting, bilingual failure, no-forwarding and no-cookie checks run
-  against the current script. Successful proof completion on historical markup,
-  other historical versions and other browser engines remain unqualified.
+  against the current script. Native Chromium also completes the real worker and
+  proof exchange on that historical page, then opens the local HTTPS venue response.
+  Both languages, themes and widths retain zero cookies and upstream requests before
+  proof, followed by the scoped access cookie and one forwarded request. Other
+  historical versions, browser engines and production networks remain unqualified.
   The browser-check page groups its heading, waiting or failure message and
   reload guidance in one main content region. Native Chromium checks cover
   disabled JavaScript, a failed script download and a running check that fails,
