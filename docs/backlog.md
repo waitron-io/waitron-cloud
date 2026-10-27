@@ -3726,6 +3726,10 @@ pause, beyond its old one-second window. It now starts earlier and freezes at
 the original instant before loading the app. Both connect and recovery journeys
 retain every protected-action, request, retry, cooldown and deadline assertion;
 the original language, theme and viewport matrix and four delayed variants run.
+The change-email cooldown fixture reproduces the refusal after a 1100 ms setup
+pause and now freezes from an earlier start at the original instant. Its original
+journeys and delayed signup/recovery variants retain every corrected-address,
+per-address wait, server retry, navigation, operation separation and deadline check.
 No historical CI failure in these fixtures is attributed here.
 
 ## Paced replay object deletion refusal (D344 qualification)
