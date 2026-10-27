@@ -3954,6 +3954,20 @@ Read the [isolation and deadline investigation](backlog/cost-stack-isolation.md)
 before changing the fixture guards. Historical attribution and Linux qualification
 remain limited as described there; the separate replication interruption remains open.
 
+## Gateway container startup refusal (D349 qualification)
+
+The outside-request browser control in [cost run 40536958436, job
+122305238271](https://github.com/waitron-io/waitron-cloud/actions/runs/40536958436/job/122305238271)
+refused while starting its generated gateway, before the browser journey, after
+30.6 seconds. The command helper discarded the original exit and stderr; the
+cause is unknown. All six other browser cases passed. The 30-second command
+bound matches the duration, but a timeout is only an inference. Retain this
+startup recurrence with lane D's reserved browser investigation, expose the
+command boundary without secrets, then reproduce before repairing it. Keep
+all original outside-request, accounting, cleanup and deadline checks. Genuine
+local container reproduction waits for Docker to return. Source equality with
+the parent does not establish independence from the qualification branch.
+
 ## Public browser and network qualification
 
 Qualify the public browser check against the supported browsers and production
