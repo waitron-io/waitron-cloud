@@ -3710,6 +3710,13 @@ URL refusal and catches omission of the destination wait. All original
 assertions and four-second page/120-second runner deadlines stay unchanged;
 this corrects test readiness without changing product authentication or routing.
 
+## Pending-session sign-out browser handler wait (D363)
+
+The pending-session sign-out browser fixture bounds its old-read handler wait
+at the existing four-second page budget. An absent signal fails promptly; delayed
+handlers retain the original revocation and stale-session journeys across both
+languages, themes and widths. Production session authority is unchanged.
+
 ## Sign-out failure browser handler wait (D361)
 
 The sign-out failure fixture refuses within its existing four-second page budget
