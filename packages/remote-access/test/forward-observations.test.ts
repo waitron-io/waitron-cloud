@@ -72,10 +72,16 @@ for(const change of ['revision','hostname','revocation','superseded','rotation',
   assert.equal(await f.read(),null);await f.budget();await f.send(f.report(2));assert.equal(await f.read(),null);
  }finally{await f.db.close();}
 });
-test('collection waits for locked revocation and downgrade, then rejects the stale route',async()=>{
- for(const change of ['revoke','downgrade'] as const){const f=await forwardFixture();let pending:Promise<unknown>|undefined;const lock=await f.db.secondPool.connect();try{
-  await lock.query('BEGIN');if(change==='revoke')await lock.query('UPDATE installations SET revoked_at=clock_timestamp()');else await lock.query("UPDATE organisations SET service_plan='free'");
+test('collection waits for locked revocation, revision, replacement, rotation and downgrade, then rejects stale authority',async()=>{
+ for(const change of ['revoke','revision','replacement','rotation','downgrade'] as const){const f=await forwardFixture();let pending:Promise<unknown>|undefined;const lock=await f.db.secondPool.connect();try{
+  await lock.query('BEGIN');
+  if(change==='revoke')await lock.query('UPDATE installations SET revoked_at=clock_timestamp()');
+  if(change==='revision')await lock.query('UPDATE installations SET configuration_revision=2');
+  if(change==='downgrade')await lock.query("UPDATE organisations SET service_plan='free'");
+  if(change==='rotation')await registerForwardReporter(lock,{cellId:f.cellId,gatewayId:randomUUID(),generation:2,publicKey:generateKeyPairSync('ed25519').publicKey.export({type:'spki',format:'pem'}).toString()});
+  if(change==='replacement'){const id=randomUUID();await lock.query('UPDATE installations SET revoked_at=clock_timestamp(),superseded_by=$1 WHERE id=$2',[id,f.installed.installationId]);await lock.query('INSERT INTO installations(id,venue_id,public_key) VALUES($1,$2,$3)',[id,f.installed.venueId,randomUUID()]);await lock.query('UPDATE remote_placements SET installation_id=$1 WHERE venue_id=$2',[id,f.installed.venueId]);}
   let settled=false;pending=f.send().then(v=>{settled=true;return v;});await delay(50);assert.equal(settled,false);await lock.query('COMMIT');await pending;assert.equal(await f.read(),null);
+  assert.equal((await f.db.pool.query('SELECT count(*) FROM remote_forward_observations')).rows[0].count,'0');
  }finally{await lock.query('ROLLBACK');lock.release();await pending;await f.db.close();}}
 });
 test('staged_move_not_current and old source after completion never count as active observations',async()=>{
