@@ -57,6 +57,17 @@ The detector scans new text with a bounded phrase suffix. Run
 `node --test packages/backups/test/verify-process-scanning.test.ts` to exercise
 one-byte delivery, line boundaries and the scan-work limit.
 
+For a resource refusal, you can compare the container entry process and child process
+IDs, the child exit or signal, and fixed heap, scratch and file-limit indicators.
+The legacy container adapter also reports Docker state and Linux memory-event
+counters before and after verification when its cgroup exposes them. Missing counters
+remain unknown. The child indicators and exit 73 are advisory; they do not establish
+that the kernel killed the container. The adapter itself sends SIGKILL when it detects
+a fatal heap report. Scratch and file-limit indicators come from child text, so they
+cannot independently prove exhaustion. Raw child text stays private. Run
+`node --test packages/backups/test/*resource-diagnostics.test.ts` to check the report
+through controlled child, entry and Docker boundaries without a Docker daemon.
+
 A failed download, Docker connection or start, container cleanup, configuration, input
 transfer or result protocol leaves the snapshot's last verification state unchanged.
 The worker records `verification_unavailable` and retries the same snapshot. It does not

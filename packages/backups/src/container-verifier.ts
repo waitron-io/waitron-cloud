@@ -5,6 +5,7 @@ import {pipeline} from 'node:stream/promises';
 import {promisify} from 'node:util';
 import {setTimeout as delay} from 'node:timers/promises';
 import type {LegacyRestoreVerifier} from './waitron-verifier.ts';
+import {readVerifierResourceDiagnostic} from './verify-process.ts';
 const execute=promisify(execFile),label='cloud.backup-verifier.owner';
 function containerDiagnostic(error:unknown,messages:string[]){
  const detail=error as {code?:unknown;signal?:unknown;killed?:boolean;stderr?:string};
@@ -68,8 +69,8 @@ export async function createContainerWaitronVerifier(options:ContainerVerifierOp
    created=true;if(failure||signal.aborted){stop(failure??'backup.verifier_cancelled');throw Error(failure);}
    const attachedChild=spawn('docker',['start','-ai',name],{stdio:['pipe','pipe','pipe']});
    child=attachedChild;
-   let output='',size=0,uploadFailed=false;
-   const collect=(bytes:Buffer,stdout:boolean)=>{size+=bytes.length;if(size>65536){stop('backup.verifier_output');return;}if(stdout)output+=bytes.toString('utf8');};
+   let output='',errors='',size=0,uploadFailed=false;
+   const collect=(bytes:Buffer,stdout:boolean)=>{size+=bytes.length;if(size>65536){stop('backup.verifier_output');return;}if(stdout)output+=bytes.toString('utf8');else errors+=bytes.toString('utf8');};
    attachedChild.stdout.on('data',chunk=>collect(chunk,true));attachedChild.stderr.on('data',chunk=>collect(chunk,false));
    const closed=attached=new Promise<number|null>(resolve=>{attachedChild.once('error',()=>{stop('backup.verifier_container');resolve(null);});attachedChild.once('close',resolve);});
    let attachExit:{code:number|null}|undefined;
@@ -97,7 +98,7 @@ export async function createContainerWaitronVerifier(options:ContainerVerifierOp
    if(failure)throw Error(failure);
    // A created container or host start error has not completed an archive check.
    if(info.State.Status!=='exited'||info.State.Error||(info.State.ExitCode===0&&attachCode!==0))throw Error('backup.verifier_container',{cause:{status:info.State.Status,exitCode:info.State.ExitCode,oomKilled:info.State.OOMKilled,startError:Boolean(info.State.Error),attachCode,uploadFailed}});
-   if(info.State.OOMKilled||info.State.ExitCode===73)throw Error('backup.verifier_resource',{cause:{oomKilled:info.State.OOMKilled,exitCode:info.State.ExitCode,memoryBytes:info.HostConfig.Memory,memorySwapBytes:info.HostConfig.MemorySwap,scratch:info.HostConfig.Tmpfs,network:info.HostConfig.NetworkMode,readOnly:info.HostConfig.ReadonlyRootfs,mounts:info.Mounts}});
+   if(info.State.OOMKilled||info.State.ExitCode===73)throw Error('backup.verifier_resource',{cause:{status:info.State.Status,startError:Boolean(info.State.Error),attachCode,uploadFailed,resourceDetail:readVerifierResourceDiagnostic(errors),oomKilled:info.State.OOMKilled,exitCode:info.State.ExitCode,memoryBytes:info.HostConfig.Memory,memorySwapBytes:info.HostConfig.MemorySwap,scratch:info.HostConfig.Tmpfs,network:info.HostConfig.NetworkMode,readOnly:info.HostConfig.ReadonlyRootfs,mounts:info.Mounts}});
    // Only the entrypoint's documented exit codes attest a completed verifier outcome.
    if(![0,1,74].includes(info.State.ExitCode))throw Error('backup.verifier_container',{cause:{status:info.State.Status,exitCode:info.State.ExitCode,oomKilled:info.State.OOMKilled,startError:Boolean(info.State.Error),attachCode,uploadFailed}});
    if(uploadFailed)throw Error('backup.verifier_input');

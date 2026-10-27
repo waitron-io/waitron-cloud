@@ -3219,6 +3219,18 @@ implementation or production evidence.
   including unresolved verifier failures and capacity qualification.
 
 
+## Container verifier memory-refusal observation (D335)
+
+The native-memory check sometimes receives exit 73 without Docker marking the
+container as killed for running out of memory. Its cause remains unknown. Resource
+refusals now report the entry and child process IDs, child exit or signal, fixed
+heap/scratch/file-limit indicators, Docker state and before/after Linux memory-event
+counters when readable. These reports are advisory and omit raw child text; a failed
+report preserves the resource refusal. Capture
+a recurrence and reproduce its cause; passing CI does not explain the earlier failure.
+Keep every resource, isolation, cleanup and later-snapshot assertion and deadline.
+Local Docker reproduction remains blocked until 3 November.
+
 ## Bound verifier fixture build timeout (D312)
 
 Find why the bound verifier fixture image exceeded its two-minute build limit in CI.

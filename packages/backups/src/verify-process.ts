@@ -1,7 +1,48 @@
+import {readFileSync} from 'node:fs';
 import {spawn} from 'node:child_process';
 import {Readable} from 'node:stream';
 import {pipeline} from 'node:stream/promises';
 import {readBackupVerificationRequest,readBackupVerificationResult,type BackupVerificationRequest} from './verification-protocol.ts';
+const memoryEventNames=['low','high','max','oom','oom_kill','oom_group_kill'] as const;
+function memoryEvents(value:unknown){
+ if(!value||typeof value!=='object'||Array.isArray(value))return null;
+ const result:Record<string,number>={};
+ for(const key of memoryEventNames){
+  const count=(value as Record<string,unknown>)[key];
+  if(count===undefined)continue;
+  if(typeof count!=='number'||!Number.isSafeInteger(count)||count<0)return null;
+  result[key]=count;
+ }
+ return Object.keys(result).length?result:null;
+}
+export function readVerifierMemoryEvents(){
+ try{
+  const text=readFileSync('/sys/fs/cgroup/memory.events','utf8'),values:Record<string,number>={};
+  if(text.length>4096)return null;
+  for(const line of text.trim().split('\n')){
+   const [key,count,...extra]=line.trim().split(/\s+/);
+   if(!key||!memoryEventNames.includes(key as typeof memoryEventNames[number]))continue;
+   if(extra.length||!/^\d+$/.test(count??'')||Object.hasOwn(values,key))return null;
+   values[key]=Number(count);
+  }
+  return memoryEvents(values);
+ }catch{return null;}
+}
+export function verifierResourceDiagnostic(value:unknown){
+ if(!value||typeof value!=='object'||Array.isArray(value))return null;
+ const raw=value as Record<string,any>,detail=raw.child;
+ const pid=(value:unknown)=>typeof value==='number'&&Number.isSafeInteger(value)&&value>0?value:null;
+ const child=detail&&pid(detail.childPid)!==null&&(detail.childExitCode===null||Number.isInteger(detail.childExitCode)&&detail.childExitCode>=0&&detail.childExitCode<=255)&&(detail.childSignal===null||['SIGKILL','SIGABRT','SIGXCPU','SIGXFSZ'].includes(detail.childSignal))&&['fatalHeap','scratchFull','fileLimit'].every(key=>typeof detail[key]==='boolean')?
+  {childPid:detail.childPid,childExitCode:detail.childExitCode,childSignal:detail.childSignal,fatalHeap:detail.fatalHeap,scratchFull:detail.scratchFull,fileLimit:detail.fileLimit}:null;
+ return {entryPid:pid(raw.entryPid),entryReason:['scratch_full','child_resource'].includes(raw.entryReason)?raw.entryReason:null,child,memoryBefore:memoryEvents(raw.memoryBefore),memoryAfter:memoryEvents(raw.memoryAfter)};
+}
+export function readVerifierResourceDiagnostic(text:string){
+ // Container output is advisory: only Docker state decides the resource refusal.
+ const prefix='backup.verifier_resource_detail ';
+ const line=text.split('\n').findLast(line=>line.startsWith(prefix));
+ if(!line)return null;
+ try{return verifierResourceDiagnostic(JSON.parse(line.slice(prefix.length)));}catch{return null;}
+}
 function fatalHeapDetector(){
  const prefix='fatal error: ';
  let matched=0,fatalLine=false,tail='',found=false;
@@ -71,7 +112,10 @@ export async function runNodeVerifier(args:string[],options:{input?:unknown;inpu
    const resourceSignal=signal==='SIGXCPU'||signal==='SIGXFSZ'||signal==='SIGKILL'||signal==='SIGABRT';
    // Node reports macOS file-limit failures as EFBIG and V8 heap exhaustion in stderr before exiting.
    const resourceError=/\b(?:EFBIG|ENOSPC)\b|heap out of memory|reached heap limit|ineffective mark-compacts near heap limit/i.test(errors);
-   if(failure||code!==0){reject(Error(failure??(resourceSignal||resourceError?'backup.verifier_resource':'backup.verifier_failed')));return;}
+   if(failure||code!==0){
+    const reason=failure??(resourceSignal||resourceError?'backup.verifier_resource':'backup.verifier_failed');
+    reject(Error(reason,reason==='backup.verifier_resource'?{cause:{childPid:child.pid??null,childExitCode:code,childSignal:signal,fatalHeap:failure==='backup.verifier_resource',scratchFull:/\bENOSPC\b/.test(errors),fileLimit:/\bEFBIG\b/.test(errors)}}:undefined));return;
+   }
    try{
     const raw=new TextDecoder('utf-8',{fatal:true,ignoreBOM:true}).decode(Buffer.concat(output));
     resolve(options.boundRequest?readBackupVerificationResult(raw,options.boundRequest):JSON.parse(raw));
