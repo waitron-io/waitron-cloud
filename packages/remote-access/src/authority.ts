@@ -1,13 +1,20 @@
 import type {KeyObject} from 'node:crypto';
-import {verifyManifest,type GatewayManifest,type GatewayRoute,type ManifestEnvelope} from './manifest.ts';
+import {verifyManifest,type AcceptedGatewayManifest,type GatewayRoute,type ManifestEnvelope} from './manifest.ts';
+import {routeBinding,type ForwardBinding} from './forward-report.ts';
 interface Hooks {persist:(envelope:unknown)=>Promise<void>;apply:(routes:GatewayRoute[])=>Promise<void>;close:()=>Promise<void>}
 /** The caller serializes accept/restore/tick and calls tick at least once a second. */
 export class GatewayAuthority {
- #manifest:GatewayManifest|undefined;#sequence=0;#pending:ManifestEnvelope|undefined;
+ #manifest:AcceptedGatewayManifest|undefined;#sequence=0;#pending:ManifestEnvelope|undefined;
  readonly #key:KeyObject;readonly #cell:string;readonly #hooks:Hooks;readonly #now:()=>number;
  constructor(key:KeyObject,cell:string,hooks:Hooks,now=Date.now){this.#key=key;this.#cell=cell;this.#hooks=hooks;this.#now=now;}
  get hasAuthority():boolean{return !!this.#manifest&&this.#manifest.expiresAt>this.#now();}
- get routes():GatewayRoute[]{return this.hasAuthority?this.#manifest!.routes:[];}
+ get routes():GatewayRoute[]{return this.hasAuthority?this.#manifest!.routes.map(route=>({...route})):[];}
+ forwardBinding(installationId:string):Readonly<ForwardBinding>|undefined {
+  const manifest=this.#manifest;if(!this.hasAuthority||manifest?.version!==2)return;
+  const route=manifest.routes.find(route=>route.installationId===installationId);if(!route)return;
+  return Object.freeze({cellId:manifest.cellId,...manifest.reporter,installationId:route.installationId,venueId:route.venueId,
+   revision:route.revision,routeId:'public_availability',routeBinding:routeBinding(route),manifestSequence:manifest.sequence,manifestExpiresAt:manifest.expiresAt});
+ }
  get sequence(){return this.#sequence;}
  async accept(envelope:unknown){
   const candidate=envelope as Partial<ManifestEnvelope>|null;
@@ -16,7 +23,7 @@ export class GatewayAuthority {
   const value=verifyManifest(envelope,this.#key,this.#cell,this.#now(),retry?this.#sequence-1:this.#sequence);
   try{
    if(!retry){await this.#hooks.persist(envelope);this.#sequence=value.sequence;this.#pending={payload:candidate!.payload!,signature:candidate!.signature!};}
-   await this.#hooks.apply(value.routes);this.#manifest=value;this.#pending=undefined;
+   await this.#hooks.apply(value.routes.map(route=>({...route})));this.#manifest=value;this.#pending=undefined;
   }
   catch(error){this.#manifest=undefined;await this.#hooks.close();throw error;}
  }

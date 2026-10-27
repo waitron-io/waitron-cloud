@@ -605,3 +605,38 @@ or peer. The shorter lease tests the existing expiry mechanism; it is not a
 measurement of a ten-minute wait. All owned containers, network, image tag and
 fixture directories were removed. This proves the local synthetic gateway
 boundary, not LAN deployment or a connection to the quarantined Waitron venue.
+
+## Keep forwarding causes private
+
+A visitor's 503 response cannot tell you whether the venue application refused a
+request or the connection failed. The gateway now has an optional private reporter
+for those observed attempts. Account does not display these reports yet; country
+publication, collection and the owner-only view remain unfinished. Existing
+deployments leave reporting disabled.
+
+The reporter accepts only applied, unexpired version 2 gateway authority with a
+reporter identity and route revisions. Version 1 authority still forwards traffic
+but produces no private observations. Setting both `GATEWAY_FORWARD_REPORT_KEY`
+and `GATEWAY_FORWARD_REPORT_DIR` opts the gateway writer in; it does not provision
+reporter authority or a collector. The Ed25519 private key must be a separate,
+writer-owned `0600` file outside the report directory. The directory must already
+exist at its absolute resolved path, owned by the writer with mode `2750` and the
+dedicated collector group, deployment GID 1000. Keep it out of backups and mount it
+only for the writer and read-only collector.
+
+The writer keeps one signed `report.json`, mode `0640`, and a private initialisation
+marker that distinguishes an idle stream from a previously published report. It replaces the report atomically at most once per 30 seconds and retains
+at most 64 latest route observations. A newer success clears an older failure.
+Reports expire within five minutes and never outlive their signed route authority;
+restarting preserves their timestamps and the publication sequence. Losing or
+corrupting published state disables reporting until trusted provisioning supplies
+a higher generation and a fresh key. A missing or corrupt marker requires a freshly
+provisioned directory as part of that rotation. Up to one unflushed window can be
+lost; this is a recent observation, not a history or an availability promise.
+
+Key, permission and storage failures disable reporting without changing forwarding
+or readiness. After fixing permissions or a key path, restart the gateway to retry
+setup; the writer does not run a storage retry queue. `/state/status.json` keeps aggregate counters only. Reports contain
+fixed categories and hashed route bindings, never upstream addresses, response
+bodies, credentials or visitor data. You still use the existing outside probes and
+installation health reports for their separate observations.

@@ -3911,9 +3911,14 @@ Cloud follow-ups, each a separate small change with tests before implementation:
   response limit, transport loss and internal construction failures have distinct
   fixed categories; success reports no failure, while visitor cancellation and local
   refusals produce no observation. Native HTTPS checks cover classification,
-  observer failure containment and private response boundaries. Reporting remains
-  unwired and disabled. Applied-authority binding, bounded file delivery, country
-  collection, migration and the owner-only Account view remain open. Visitor
+  observer failure containment and private response boundaries. The gateway can now bind observations to an applied version 2 manifest
+  and deliver a signed latest report to a dedicated private directory. The opt-in
+  writer preserves ordering and expiry across restart, batches at most once per
+  30 seconds and keeps at most 64 routes. Key or storage failure disables reporting
+  while native HTTPS forwarding continues. Version 1 forwarding remains supported;
+  deployments still leave reporting disabled. Country publication and collection,
+  migration and the owner-only Account view remain open. Gateway/collector container
+  and backup-exclusion qualification remains part of the collection work. Visitor
   guidance does not diagnose or repair the cause.
 - R10 delivered: direct navigation to rejected public requests receives bilingual
   guidance for 421/429/413/404/405/400 and failed-proof 403. Background refusals stay

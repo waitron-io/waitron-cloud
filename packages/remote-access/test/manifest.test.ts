@@ -19,3 +19,15 @@ test('routes reject command injection, public/private name overlap and invalid W
  for(const patch of [{staffHostname:'staff.example.test\nbackend steal'},{publicHostname:value.routes[0]!.staffHostname},{address:'127.0.0.1'},{port:0},{peerPublicKey:'a'.repeat(44)}])
   assert.throws(()=>signManifest({...value,routes:[{...value.routes[0]!,...patch}]},keys.privateKey),/invalid_manifest/);
 });
+
+test('v2_requires_revision_and_reporter while preserving strict v1 shape',()=>{
+ const v2={...value,version:2,reporter:{gatewayId:randomUUID(),generation:1},routes:[{...value.routes[0]!,revision:0}]};
+ const envelope=signManifest(v2 as unknown as GatewayManifest,keys.privateKey,now);
+ assert.deepEqual(verifyManifest(envelope,keys.publicKey,cellId,now),v2);
+ const bad=[{...v2,reporter:undefined},{...v2,reporter:{...v2.reporter,generation:0}},
+  {...v2,reporter:{...v2.reporter,extra:true}},{...v2,reporter:{...v2.reporter,gatewayId:'invalid'}},
+  ...[undefined,-1,0.1,Number.MAX_SAFE_INTEGER+1].map(revision=>({...v2,routes:[{...v2.routes[0]!,revision}]})),
+  {...v2,routes:[{...v2.routes[0]!,extra:true}]},{...value,reporter:v2.reporter},{...value,routes:v2.routes}];
+ for(const input of bad)assert.throws(()=>signManifest(input as unknown as GatewayManifest,keys.privateKey,now),/invalid_manifest/);
+ for(const [time,sequence] of [[value.expiresAt,0],[now,1]])assert.throws(()=>verifyManifest(envelope,keys.publicKey,cellId,time,sequence),/invalid_manifest/);
+});

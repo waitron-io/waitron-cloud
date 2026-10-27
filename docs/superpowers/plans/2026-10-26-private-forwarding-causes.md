@@ -1,4 +1,4 @@
-> **Status: PLAN ONLY. Owner review required after fresh independent review. Neither publication, review nor approval of this plan is permission to build.**
+> **Status: The owner approved this plan and separately authorised the D291 build. Task 1 is delivered; Task 2 covers applied authority and private file delivery. Country publication/collection, schema and the Account view remain Tasks 3–4. Provider deployment still needs separate authority.**
 
 # Private public-forwarding causes (D291) implementation plan
 
