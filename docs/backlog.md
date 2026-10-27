@@ -3967,8 +3967,11 @@ Cloud follow-ups, each a separate small change with tests before implementation:
   checks cover restarting after challenge, worker, proof and timeout failures,
   with no automatic retry or granted access; the new attempt hides the fallback
   while it runs. The older-page
-  browser fixture derives its markup from the current page; pinning actual
-  historical markup remains a test follow-up.
+  browser fixture now serves the exact shipped HTML from before the static
+  fallback, with a pinned digest independent of current page generation. Its
+  existing waiting, bilingual failure, no-forwarding and no-cookie checks run
+  against the current script. Successful proof completion on historical markup,
+  other historical versions and other browser engines remain unqualified.
   The browser-check page groups its heading, waiting or failure message and
   reload guidance in one main content region. Native Chromium checks cover
   disabled JavaScript, a failed script download and a running check that fails,
