@@ -292,45 +292,51 @@ export function litestreamAfterStopOutput(input) {
 export function createLitestreamRequestAudit({ phase, allowBulkDeletes = false, afterStop }) {
   requireThat(phases.includes(phase));
   const decoder = new StringDecoder('utf8'), producer = new Map(), observer = new Map(), sequences = new Map();
-  let buffer = '', current = null, ended = false, invalid = false;
-  const guarded = fn => (...args) => {
-    try { requireThat(!invalid); return fn(...args); } catch { invalid = true; afterStop?.invalidate(); fail(); }
+  let buffer = '', current = null, ended = false, invalid = false, validationStage, failure;
+  const guarded = (stage, fn) => (...args) => {
+    validationStage = stage;
+    try { requireThat(!invalid); return fn(...args); }
+    catch { failure ??= { stage: validationStage }; invalid = true; afterStop?.invalidate(); fail(); }
   };
   const line = text => {
-    if (/^SDK .* DEBUG Request$/.test(text)) { requireThat(!current); current = { operation: null, invocation: null, attempt: null, size: 0 }; return; }
+    if (/^SDK .* DEBUG Request$/.test(text)) { validationStage = 'request-start'; requireThat(!current); current = { operation: null, invocation: null, attempt: null, size: 0 }; return; }
     if (!current) return;
-    current.size += text.length; requireThat(current.size <= 65536);
-    if (current.operation === null) { current.operation = operation(text, allowBulkDeletes); return; }
+    validationStage = 'request-size'; current.size += text.length; requireThat(current.size <= 65536);
+    if (current.operation === null) { validationStage = 'request-operation'; current.operation = operation(text, allowBulkDeletes); return; }
     if (text === '') {
+      validationStage = 'request-identity';
       const id = identity(current.invocation, current.attempt);
       requireThat(!producer.has(id.key) && id.ordinal === (sequences.get(id.invocation) ?? -1) + 1 && producer.size < 100000);
+      validationStage = 'after-stop-issue';
       afterStop?.issue({ invocation: id.invocation, ordinal: id.ordinal, operation: current.operation });
       producer.set(id.key, { operation: current.operation, ordinal: id.ordinal }); sequences.set(id.invocation, id.ordinal);
       current = null; return;
     }
+    validationStage = 'request-header';
     const header = /^([^: ]+): (.*)$/.exec(text); requireThat(header);
     const name = header[1].toLowerCase();
     if (name === 'amz-sdk-invocation-id') { requireThat(current.invocation === null); current.invocation = header[2]; }
     if (name === 'amz-sdk-request') { requireThat(current.attempt === null); current.attempt = header[2]; }
   };
-  const write = guarded(chunk => {
+  const write = guarded('write', chunk => {
     requireThat(!ended && Buffer.isBuffer(chunk) && chunk.length <= 1048576);
     buffer += decoder.write(chunk);
     let offset;
     while ((offset = buffer.indexOf('\n')) !== -1) {
-      requireThat(offset <= 65536); const text = buffer.slice(0, offset).replace(/\r$/, ''); buffer = buffer.slice(offset + 1); line(text);
+      validationStage = 'line-size'; requireThat(offset <= 65536); const text = buffer.slice(0, offset).replace(/\r$/, ''); buffer = buffer.slice(offset + 1); line(text);
     }
-    requireThat(buffer.length <= 65536);
+    validationStage = 'buffer-size'; requireThat(buffer.length <= 65536);
   });
-  const observe = guarded(({ headers, operation: name }) => {
+  const observe = guarded('observe', ({ headers, operation: name }) => {
     requireThat(!ended && operations.includes(name) && (name !== 'delete-many' || allowBulkDeletes === true));
     const id = identity(headers?.['amz-sdk-invocation-id'], headers?.['amz-sdk-request']);
     requireThat(!observer.has(id.key) && observer.size < 100000);
+    validationStage = 'after-stop-admission';
     afterStop?.admit({ invocation: id.invocation, ordinal: id.ordinal, operation: name, hop: 'observer', phase });
     observer.set(id.key, { operation: name, ordinal: id.ordinal });
     return { token: id.key, phase, retryOrdinal: id.ordinal, operation: name, errorCode: null, sameAccount: null };
   });
-  const end = guarded(() => {
+  const end = guarded('end', () => {
     requireThat(!ended); buffer += decoder.end();
     requireThat(current === null && buffer === ''); ended = true;
   });
@@ -350,7 +356,10 @@ export function createLitestreamRequestAudit({ phase, allowBulkDeletes = false, 
       requests: [...requests.values()], gaps: [...(!requestsReconciled ? ['litestream:requests-unreconciled'] : []),
         'litestream:body-bytes-unpaired', 'litestream:object-lifetimes-unpaired'] };
   };
-  return { write, observe, end, snapshot };
+  // A refused audit cannot publish a snapshot; these counts identify its first failed boundary without SDK text.
+  const checkpoint = () => ({ invalid, ended, producerAttempts: producer.size, observerAttempts: observer.size,
+    ...(failure ? { failure: { ...failure } } : {}) });
+  return { write, observe, end, snapshot, checkpoint };
 }
 
 const closeStages = new Set(['replication-transport', 'restore-transport', 'cleanup-replication-transport',
@@ -391,7 +400,13 @@ export async function withLitestreamCloseDiagnostics({ stage, close, report = li
     const code = own(raw, 'code'); if (networkErrors.has(code)) diagnostic.code = code;
     const ioEvent = own(raw, 'ioEvent'); if (ioEvents.has(ioEvent)) diagnostic.ioEvent = ioEvent;
     const operation = own(raw, 'operation'); if (transportOperations.has(operation)) diagnostic.operation = operation;
+    const rawAttempt = own(raw, 'attempt'), producerAttempt = own(rawAttempt, 'producerAttempt'),
+      retryOrdinal = own(rawAttempt, 'retryOrdinal'), phase = own(rawAttempt, 'phase');
+    const attempt = Number.isSafeInteger(producerAttempt) && producerAttempt > 0
+      && Number.isSafeInteger(retryOrdinal) && retryOrdinal >= 0 && phases.includes(phase)
+      ? { producerAttempt, retryOrdinal, phase } : undefined;
     emit({ ...record, status: 'rejected', error: closeReasons.has(reason) ? 'transport-refused' : 'unclassified',
+      ...(attempt ? { attempt } : {}),
       ...(Object.keys(diagnostic).length ? { diagnostic } : {}) });
     throw error;
   }
@@ -414,7 +429,7 @@ export async function createLitestreamTransport({ target, meter, phase, lifetime
   const transfers = new Map();
   const socketTransfers = new WeakMap();
   const idleWaiters = new Set();
-  let completed = 0, idleActionsStarted = 0;
+  let completed = 0, idleActionsStarted = 0, admitted = 0;
   const runIdleAction = action => { idleActionsStarted++; return action(); };
   const remember = (reason, error, ioEvent, operation, context) => {
     refusal ??= { reason, ...(ioEvent ? { ioEvent, operation, ...context } : {}) };
@@ -427,7 +442,7 @@ export async function createLitestreamTransport({ target, meter, phase, lifetime
   };
   const server = createServer(async (source, destination) => {
     const idleActionsAtAdmission = idleActionsStarted, requestPhase = currentPhase;
-    let id, name, expectedOut, completeLifetime, body;
+    let id, name, expectedOut, completeLifetime, body, producerAttempt;
     try {
       requireThat(!invalid && !closing && !Object.hasOwn(source.headers, 'x-amz-copy-source'));
       id = identity(source.headers['amz-sdk-invocation-id'], source.headers['amz-sdk-request']);
@@ -438,7 +453,7 @@ export async function createLitestreamTransport({ target, meter, phase, lifetime
       afterStop?.admit({ invocation: id.invocation, ordinal: id.ordinal, operation: name, hop: 'producer', phase: requestPhase });
       expectedOut = size(source.headers['content-length']);
       invocations.set(id.invocation, { ordinal: id.ordinal, name, path: source.url });
-      pending.add(id.key);
+      pending.add(id.key); producerAttempt = ++admitted;
       if (name === 'delete-many' || name === 'multipart-complete' && lifetimes) {
         requireThat(expectedOut > 0 && expectedOut <= 1048576);
         // Validate bounded mutation controls before forwarding them to the backend.
@@ -458,12 +473,13 @@ export async function createLitestreamTransport({ target, meter, phase, lifetime
       requestSent: sent, responseReceived: received, statusCode, clientClosed: destination.destroyed }));
     // Record the first failure's ordering; an idle callback does not freeze a separate writer process.
     const rememberTransfer = (reason, error, ioEvent) => remember(reason, error, ioEvent, name, {
-      idleActionsAtAdmission,
+      attempt: { producerAttempt, retryOrdinal: id.ordinal, phase: requestPhase }, idleActionsAtAdmission,
       clientClosed: destination.destroyed, responseHeadersSeen: statusCode !== null,
     });
     const clientSocket = source.socket;
     if (!socketTransfers.has(clientSocket)) socketTransfers.set(clientSocket, new Map());
     socketTransfers.get(clientSocket).set(id.key, () => ({ operation: name, idleActionsAtAdmission,
+      attempt: { producerAttempt, retryOrdinal: id.ordinal, phase: requestPhase },
       clientClosed: destination.destroyed, responseHeadersSeen: statusCode !== null,
       bytesIn, expectedIn, bytesOut, expectedOut }));
     const responseChunks = lifetimes && ['delete-many', 'multipart-create', 'multipart-complete'].includes(name) ? [] : null;

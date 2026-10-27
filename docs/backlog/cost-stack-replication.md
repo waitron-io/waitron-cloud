@@ -277,3 +277,32 @@ using operation names and byte counts without paths, credentials or invocation I
 The two-row restore and full accounting checks still decide whether a run passes.
 This fixture sequencing correction does not attribute the separate historical list
 interruptions or qualify production shutdown.
+
+
+### Stop exit diagnostics (D325)
+
+[Main cost run 40443038771, job 121987717163](https://github.com/waitron-io/waitron-cloud/actions/runs/40443038771/job/121987717163)
+refused the request-log smoke at the stop's exit step after 29 ms. It recorded
+an interrupted PUT and 20 producer attempts against 19 observer attempts. The
+record did not distinguish a failed child exit from an invalid request audit,
+so the historical cause remains unknown.
+
+Stop refusals now include the child's exit code, termination signal and invalid
+flag, together with the request audit's first failed validation stage and both
+request counts. Separate labels distinguish request parsing from after-stop
+bookkeeping. A transport failure carries its request's admission number,
+retry ordinal and phase in both the stop checkpoint and the printed close record. That number identifies a
+request within one transport; it is not the SDK invocation ID. Request paths,
+headers and raw SDK logs stay private. Known synthetic stop errors retain their
+message and smoke-fixture stack frames; other errors keep their original thrown value internally
+and publish a fixed category to avoid exposing transport metadata.
+
+Native controls run the actual smoke and audit with substitute external workload,
+storage and child-process boundaries. They distinguish failed exit, signal,
+audit and combined refusals, preserve the first audit failure, and exercise a
+successful control. Separate real HTTP retry and socket-error checks identify
+the interrupted request and still refuse accounting. Diagnostic-write failures
+retain the original stop rejection and finish cleanup. The stop budget, retry cap, restore and
+measurement guards remain unchanged. Reproduce the next labelled recurrence,
+or use genuine Docker qualification when Docker returns, before repairing the
+underlying cause. Passing qualification does not explain the historical failure.
