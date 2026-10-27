@@ -78,6 +78,7 @@ test('failed pruning makes the poll fail before ingestion while a later poll rec
   let reads=0,prunes=0;const logs:string[]=[];
   const poller=new ForwardReportPoller([f.mapping],{async record(){reads++;return 'accepted';},async prune(){if(++prunes===1)throw Error('private-canary');return 0;}},message=>logs.push(message));
   assert.equal(await poller.poll(0),false);assert.equal(reads,0);assert.deepEqual(logs,['remote.forward_collection_failed']);
+  assert.equal(await poller.poll(30000),false);assert.equal(reads,0);assert.equal(prunes,1);assert.deepEqual(logs,['remote.forward_collection_failed','remote.forward_collection_failed']);
   assert.equal(await poller.poll(60000),true);assert.equal(reads,1);assert.equal(prunes,2);
  }finally{await f.close();}
 });

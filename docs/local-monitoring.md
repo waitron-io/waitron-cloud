@@ -384,7 +384,8 @@ Mount only the report directory read-only into the collector. It must have mode 
 the configured writer owner and collector group; `report.json` must be a regular 0640
 file with the same identities and no symlink traversal. Keep the signing key outside
 that mount. The collector polls every 30 seconds and prunes at most 64 observations
-per cell every 60 seconds. Its database cursor also enforces the 30-second batch
+per cell every 60 seconds. A failed prune keeps ingestion paused until the next
+prune succeeds. Its database cursor also enforces the 30-second batch
 limit across restarts and concurrent collectors.
 
 The latest observation expires after at most five minutes or when its manifest

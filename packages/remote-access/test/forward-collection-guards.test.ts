@@ -38,6 +38,7 @@ const faults:Fault[]=[
  {name:'scheduling avoids installation locks',source:'packages/remote-access/src/reconciler.ts',file:'packages/remote-access/test/reconciler.test.ts',pattern:'^reporting certificate completion and scheduling',changes:[["OF i`:'';","OF i`:' FOR SHARE OF i';"]]},
  {name:'cell-scoped completion locks',source:'packages/remote-access/src/reconciler.ts',file:observations,pattern:'^reporting cell jobs',changes:[["cellId=scope?.kind==='route'?scope.targetId:null","cellId=null"]]},
  {name:'locked reporter signature',source:store,file:observations,pattern:'^signature is rechecked',changes:[['verifyForwardReport(envelope,createPublicKey(reporter.public_key),now.getTime())',"JSON.parse(Buffer.from((envelope as any).payload,'base64url').toString())"]]},
+ {name:'successful prune before recovery ingestion',source:collector,file:collection,pattern:'^failed pruning',changes:[['if(this.#pruneFailed.has(id))throw unavailable();','']]},
  {name:'hard link refusal',source:collector,file:collection,pattern:'^collector refuses hard-link ',changes:[['||s.nlink!==1','']]},
  {name:'directory permissions',source:collector,file:collection,pattern:'^collector refuses directory-mode ',changes:[['||(s.mode&0o7777)!==0o2750','']]},
  {name:'directory symlink race',source:collector,file:collection,pattern:'^collector refuses directory-open ',changes:[['constants.O_RDONLY|constants.O_DIRECTORY|constants.O_NOFOLLOW','constants.O_RDONLY|constants.O_DIRECTORY']]},

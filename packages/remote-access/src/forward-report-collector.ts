@@ -34,7 +34,7 @@ export async function collectForwardReport(mapping:ForwardReportMapping,store:St
 /** Polls do not enqueue retries or overlap work for a cell. SQL owns the persistent write budget. */
 export class ForwardReportPoller {
  readonly #mappings:ForwardReportMapping[];readonly #store:Store;readonly #log:(message:string)=>void;
- #running=new Set<string>();#polled=new Map<string,number>();#pruned=new Map<string,number>();
+ #pruneFailed=new Set<string>();#running=new Set<string>();#polled=new Map<string,number>();#pruned=new Map<string,number>();
  constructor(mappings:ForwardReportMapping[],store:Store,log:(message:string)=>void){
   const ids=new Set<string>();for(const mapping of mappings){validateForwardMapping(mapping);if(ids.has(mapping.cellId))throw unavailable();ids.add(mapping.cellId);}
   this.#mappings=mappings.map(m=>({...m}));this.#store=store;this.#log=log;
@@ -44,7 +44,8 @@ export class ForwardReportPoller {
    const id=mapping.cellId;if(this.#running.has(id)||now-(this.#polled.get(id)??-Infinity)<30000)return true;
    this.#running.add(id);this.#polled.set(id,now);
    try{
-    if(now-(this.#pruned.get(id)??-Infinity)>=60000){this.#pruned.set(id,now);await this.#store.prune(id);}
+    if(now-(this.#pruned.get(id)??-Infinity)>=60000){this.#pruned.set(id,now);this.#pruneFailed.add(id);await this.#store.prune(id);this.#pruneFailed.delete(id);}
+    if(this.#pruneFailed.has(id))throw unavailable();
     await collectForwardReport(mapping,this.#store);return true;
    }catch{this.#log('remote.forward_collection_failed');return false;}finally{this.#running.delete(id);}
   }));
