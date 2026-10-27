@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
+import {setTimeout as delay} from 'node:timers/promises';
 import {readFile, mkdir} from 'node:fs/promises';
 import {build} from 'esbuild';
 import {chromium, type Page} from 'playwright';
@@ -22,7 +23,7 @@ const bundle = await build({stdin: {contents: `
 `, resolveDir: new URL('..', import.meta.url).pathname}, bundle: true, write: false, format: 'iife', target: 'es2023'});
 const styles = await readFile(new URL('../src/styles.css', import.meta.url), 'utf8');
 
-async function fixture(page: Page, initialStatus = 503) {
+async function fixture(page: Page, initialStatus = 503, handler: 'normal' | 'delayed' | 'missing' = 'normal') {
   page.setDefaultTimeout(2000);
   let status = initialStatus, reads = 0;
   let releaseRead: (() => void) | undefined, readGate: Promise<void> | undefined;
@@ -33,7 +34,9 @@ async function fixture(page: Page, initialStatus = 503) {
     const path = new URL(route.request().url()).pathname;
     if (path.endsWith('/session') || path.endsWith('/session/activity')) return route.fulfill({json: {accountId: 'owner', expiresAt: new Date(Date.now() + 3600000).toISOString()}});
     if (path.endsWith('/installations')) {
-      reads++; await readGate;
+      if (readGate && handler === 'delayed') await delay(250);
+      if (!readGate || handler !== 'missing') reads++;
+      await readGate;
       return status === 200 ? route.fulfill({json: {installations: [installation]}})
         : route.fulfill({status, headers: status === 429 ? {'Retry-After': '2'} : {}, json: {error: status === 429 ? 'rate_limited' : 'unavailable'}});
     }
@@ -54,12 +57,18 @@ async function fixture(page: Page, initialStatus = 503) {
   };
 }
 
+for (const handler of ['normal', 'delayed', 'missing'] as const)
 for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'] as const) for (const width of [390, 1280]) {
-  test(`${locale} ${theme} ${width}: a failed venue list explains itself and can be retried`, async t => {
+  if (handler === 'missing' && (locale !== 'en' || theme !== 'light' || width !== 390)) continue;
+  test(`${locale} ${theme} ${width}${handler === 'normal' ? '' : ` with ${handler} refresh handler`}: a failed venue list explains itself and can be retried`, async t => {
     const browser = await chromium.launch({headless: true});
     try {
       const page = await browser.newPage({locale, colorScheme: theme, viewport: {width, height: 900}});
-      const f = await fixture(page), c = translations[locale];
+      const f = await fixture(page, 503, handler), c = translations[locale];
+      // Browser pending state can precede the Node route handler's read count.
+      const waitForRefreshHandler = () => t.waitFor(() => {
+        assert.equal(f.reads, 2);
+      }, {timeout: 2000});
       const refresh = page.getByRole('button', {name: c.refreshStatus, exact: true});
       const venue = page.getByLabel(c.fiscalVenue, {exact: true});
       await t.test('the failed read shows its alert beside an available refresh action', async () => {
@@ -74,10 +83,22 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
           await page.screenshot({path: `${process.env.FISCAL_PORTAL_RECEIPT_DIR}/${locale}-${theme}-${width}-read-failed.png`, fullPage: true});
         }
       });
+      if (handler === 'missing') {
+        f.status(200); f.holdRead();
+        try {
+          await refresh.click();
+          let timer: ReturnType<typeof setTimeout> | undefined;
+          try {
+            await assert.rejects(Promise.race([waitForRefreshHandler(), new Promise<void>(resolve => {timer = setTimeout(resolve, 3000);})]), /waitFor\(\) timed out/);
+          } finally {clearTimeout(timer);}
+        } finally {f.releaseRead();}
+        return;
+      }
       await t.test('refresh waits for the list, then shows the recovered venue without a fiscal write', async () => {
         f.status(200); f.holdRead();
         try {
           await refresh.click(); await page.waitForFunction(() => (window as any).app.installations.pending);
+          await waitForRefreshHandler();
           assert.equal(await venue.isDisabled(), true);
           assert.equal(await page.getByRole('alert').count(), 0);
           assert.equal(await refresh.isDisabled(), true);

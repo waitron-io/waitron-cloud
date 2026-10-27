@@ -244,6 +244,16 @@ venue permission, uncertain-write, signed receipt, reconciliation and layout che
 remains. These native Chromium checks use stubbed HTTP and leave fiscal allocation
 and production authority unchanged.
 
+## Fiscal venue-refresh browser handler observation (D376)
+
+The failed venue-list fixture observes its refresh handler's read count before
+checking duplicate suppression. Browser pending state can appear before the
+Node route handler runs. A delayed handler reproduces that gap; a missing-count
+control fails within the existing two-second page budget. Original and delayed
+journeys preserve every venue, fiscal-write, uncertain-outcome, retry, layout and
+deadline assertion across both languages, themes and widths. These stubbed
+Chromium checks leave fiscal allocation behavior and expected results unchanged.
+
 ## Fiscal allocation registry
 
 The [shared registry plan](https://github.com/clintongormley/waitron/blob/main/docs/superpowers/plans/2026-10-12-cloud-fiscal-allocation-registry.md)
