@@ -97,7 +97,7 @@ export class PortalApp {
     window.addEventListener('popstate', () => this.navigate(location.pathname, false));
     document.addEventListener('keydown', event => { if (['/account','/connect','/recover','/fiscal-allocations'].includes(this.path)) void this.session.activity(event); });
     document.addEventListener('pointerdown', event => { if (['/account','/connect','/recover','/fiscal-allocations'].includes(this.path)) void this.session.activity(event); });
-    window.addEventListener('pagehide', () => { this.session.dispose(); this.authenticator.account(undefined); this.authenticator.fence(); this.fiscal.fence(); this.factorCodes = []; this.fields.password = ''; this.root.querySelectorAll('canvas').forEach(canvas => {canvas.width=0;}); this.draw(); this.pairing.account(undefined); this.installations.account(undefined); this.backups.account(undefined); this.recovery.account(undefined); this.fiscal.account(undefined); this.remote.account(undefined); this.alerts.account(undefined); this.translationConsent.account(undefined); this.usage.account(undefined); this.diagnostics.account(undefined); this.passkeys.account(undefined); this.security.account(undefined); clearTimeout(this.#timer); }, {once: true});
+    window.addEventListener('pagehide', () => { this.remote.account(undefined); this.session.dispose(); this.authenticator.account(undefined); this.authenticator.fence(); this.fiscal.fence(); this.factorCodes = []; this.fields.password = ''; this.root.querySelectorAll('canvas').forEach(canvas => {canvas.width=0;}); this.draw(); this.pairing.account(undefined); this.installations.account(undefined); this.backups.account(undefined); this.recovery.account(undefined); this.fiscal.account(undefined); this.alerts.account(undefined); this.translationConsent.account(undefined); this.usage.account(undefined); this.diagnostics.account(undefined); this.passkeys.account(undefined); this.security.account(undefined); clearTimeout(this.#timer); }, {once: true});
     window.addEventListener('pageshow', event => {
       if (event.persisted) { this.session = this.#session(); void this.session.check(); }
     });
@@ -155,6 +155,7 @@ export class PortalApp {
     if(this.fiscal.venueId&&!this.fiscal.pending&&!this.fiscal.uncertain&&!this.fiscal.receipt&&!this.installations.visible.some(i=>i.venueId===this.fiscal.venueId&&i.canRevoke))this.fiscal.open(undefined);
   }
   draw() {
+    this.remote.expireForward();
     // Account can inspect production backups; recovery accepts only its offered test venues.
     if(this.path==='/recover'&&this.backups.venueId&&!this.installations.visible.some(i=>i.venueId===this.backups.venueId&&i.canRevoke&&i.environment==='test')){this.backups.close();this.recovery.choose(undefined,undefined);}
     document.documentElement.lang = this.locale;

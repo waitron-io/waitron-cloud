@@ -1,11 +1,20 @@
 export type RemoteKind='staff'|'public';
-export interface RemoteView {installationId:string;revision:number;revoked:boolean;names:Record<RemoteKind,{assigned:string;current:string}>|null;service:{state:'unconfigured'|'provisioning'|'ready'|'failed';health:'unknown'|'healthy'|'degraded'|'failed';observedAt:string|null;validUntil:string|null};}
+export type ForwardCause='upstream_non_200'|'upstream_timeout'|'upstream_response_limit'|'upstream_transport'|'forward_internal';
+export interface PublicForwardView {category:ForwardCause|null;observedAt:string;expiresAt:string}
+export interface RemoteView {publicForward?:PublicForwardView|null;installationId:string;revision:number;revoked:boolean;names:Record<RemoteKind,{assigned:string;current:string}>|null;service:{state:'unconfigured'|'provisioning'|'ready'|'failed';health:'unknown'|'healthy'|'degraded'|'failed';observedAt:string|null;validUntil:string|null};}
 export interface RemoteDns {installationId:string;kind:RemoteKind;hostname:string;records:{type:'CNAME';name:string;value:string}[];}
 const object=(v:unknown):v is Record<string,unknown>=>!!v&&typeof v==='object'&&!Array.isArray(v);
 const id=(v:unknown)=>typeof v==='string'&&/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/.test(v);
 export const remoteHostname=(v:unknown):v is string=>typeof v==='string'&&v.length<=237&&v.includes('.')&&v.split('.').every(s=>/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(s))&&!/^\d+(\.\d+){3}$/.test(v);
+const iso=(v:unknown):v is string=>typeof v==='string'&&Number.isFinite(Date.parse(v))&&new Date(v).toISOString()===v;
+function validForward(v:unknown):boolean{
+ if(v===null||v===undefined)return true;
+ return object(v)&&Object.keys(v).sort().join(',')==='category,expiresAt,observedAt'
+  &&(v.category===null||(typeof v.category==='string'&&['upstream_non_200','upstream_timeout','upstream_response_limit','upstream_transport','forward_internal'].includes(v.category)))
+  &&iso(v.observedAt)&&iso(v.expiresAt)&&Date.parse(v.expiresAt)>Date.parse(v.observedAt)&&Date.parse(v.expiresAt)<=Date.parse(v.observedAt)+300000;
+}
 export function validRemoteView(v:unknown):v is RemoteView{
- if(!object(v)||!id(v.installationId)||!Number.isSafeInteger(v.revision)||(v.revision as number)<0||typeof v.revoked!=='boolean'||!object(v.service))return false;
+ if(!object(v)||!validForward(v.publicForward)||(v.publicForward!=null&&(v.revoked===true||v.names===null))||!id(v.installationId)||!Number.isSafeInteger(v.revision)||(v.revision as number)<0||typeof v.revoked!=='boolean'||!object(v.service))return false;
  const names=v.names;
  return (names===null||(object(names)&&['staff','public'].every(k=>object(names[k])&&remoteHostname(names[k].assigned)&&remoteHostname(names[k].current))))&&['unconfigured','provisioning','ready','failed'].includes(String(v.service.state))&&['unknown','healthy','degraded','failed'].includes(String(v.service.health))&&(v.service.validUntil===null||(typeof v.service.validUntil==='string'&&Number.isFinite(Date.parse(v.service.validUntil))))&&(v.service.observedAt===null||(typeof v.service.observedAt==='string'&&Number.isFinite(Date.parse(v.service.observedAt))));
 }

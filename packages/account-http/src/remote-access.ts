@@ -3,6 +3,7 @@ import type {Context} from 'hono';
 import type {Pool,PoolClient} from 'pg';
 import {resolveSession} from '@waitron-cloud/identity';
 import {transaction,readVenuePlan,type PlanMode} from '@waitron-cloud/registration';
+import {ForwardObservationStore} from '@waitron-cloud/remote-access/forward-observations';
 import {RemoteAccessStore} from '@waitron-cloud/remote-access/placement';
 import {isUuid,isHostname} from '@waitron-cloud/remote-access/manifest';
 import {readSessionCookie} from './cookies.ts';
@@ -35,14 +36,17 @@ export async function remoteAccessResponse(c:Context,options:{pool:Pool;origin:s
  const status=()=>transaction(pool,async client=>{
   await authorize(client);
   const binding=(await client.query('SELECT venue_id FROM installations WHERE id=$1',[id])).rows[0];
+  // Policy locks precede installation locks, including when existing-plan mode skips policy reads.
+  await client.query('SELECT o.id FROM organisations o JOIN venues v ON v.organisation_id=o.id WHERE v.id=$1 ORDER BY o.id FOR SHARE OF o',[binding.venue_id]);
   const paid=await readVenuePlan(client,binding.venue_id,options.planMode??'existing')==='paid';
   const installation=(await client.query('SELECT configuration_revision,revoked_at,lease_expires_at FROM installations WHERE id=$1 FOR SHARE',[id])).rows[0];
   const p=(await client.query(`SELECT p.venue_id,c.suffix,s.hostname AS staff,u.hostname AS public FROM remote_placements p JOIN remote_cells c ON c.id=p.cell_id JOIN remote_hostnames s ON s.venue_id=p.venue_id AND s.kind='staff' JOIN remote_hostnames u ON u.venue_id=p.venue_id AND u.kind='public' WHERE p.installation_id=$1`,[id])).rows[0];
   const service=(await client.query("SELECT s.state,o.health,o.observed_at,o.received_at,o.revision FROM installation_services s LEFT JOIN installation_observations o USING(installation_id,service) WHERE s.installation_id=$1 AND s.service='remote_access'",[id])).rows[0];
-  await resolveSession(client,token,{csrfToken,touch:false});
+  const publicForward=action==='status'?await new ForwardObservationStore(pool,options.planMode).readCurrent(client,id):undefined;
+  await authorize(client);
   const deadline=Math.min(service?.observed_at?.getTime()+300000,service?.received_at?.getTime()+300000,installation.lease_expires_at?.getTime());
   const current=paid&&!installation.revoked_at&&service?.revision===installation.configuration_revision&&deadline>Date.now();
-  return {installationId:id,revision:installation.configuration_revision,revoked:!!installation.revoked_at,names:p?{staff:{assigned:`staff-v-${p.venue_id}.${p.suffix}`,current:p.staff},public:{assigned:`v-${p.venue_id}.${p.suffix}`,current:p.public}}:null,service:{state:paid?(service?.state??'unconfigured'):'unconfigured',health:current?service.health:'unknown',observedAt:service?.observed_at?.toISOString()??null,validUntil:current?new Date(deadline).toISOString():null}};
+  return {...(action==='status'?{publicForward}:{}),installationId:id,revision:installation.configuration_revision,revoked:!!installation.revoked_at,names:p?{staff:{assigned:`staff-v-${p.venue_id}.${p.suffix}`,current:p.staff},public:{assigned:`v-${p.venue_id}.${p.suffix}`,current:p.public}}:null,service:{state:paid?(service?.state??'unconfigured'):'unconfigured',health:current?service.health:'unknown',observedAt:service?.observed_at?.toISOString()??null,validUntil:current?new Date(deadline).toISOString():null}};
  });
  try{
   if(action==='status')return c.json(await status());
