@@ -3325,17 +3325,6 @@ bounded diagnostics](backlog/mail-capture.md#account-http-reset-mail-capture).
 **Open; historical cause unknown.** Capture a diagnostic recurrence before
 attributing the initial signed-in timeout. See the [investigation and diagnostic boundaries](backlog/portal-session-startup.md).
 
-## Browser dependency package-index integrity refusal
-
-Browser installation can stop before tests when Microsoft's Ubuntu package indexes
-have different hashes from its signed release metadata. Both permitted install
-attempts refused the mismatched indexes; Ubuntu indexes loaded. Keep the signature
-and hash checks, source definitions and fixed attempt limits. Reproduce with a
-controlled signed archive before changing setup. The browser mirror helper sets
-`Acquire::By-Hash "false"` globally, including unrelated repositories; whether that
-setting caused this refusal remains unproved. Qualify any repair with real Linux
-APT and a deliberately mismatched-index control before resuming blocked PRs.
-
 ## Portal lost-reply test ordering
 
 **Open:** the historical reset-link, lost-reply and translation-control failures
