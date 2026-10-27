@@ -3989,6 +3989,16 @@ Read the [isolation and deadline investigation](backlog/cost-stack-isolation.md)
 before changing the fixture guards. Historical attribution and Linux qualification
 remain limited as described there; the separate replication interruption remains open.
 
+## Litestream LIST-response interruption (D352 qualification)
+
+[Cost run40546771851, job122339634344](https://github.com/waitron-io/waitron-cloud/actions/runs/40546771851/job/122339634344)
+refused the transport body-accounting case after10.20seconds. At stop/idle, a
+response listing storage objects closed prematurely after headers; the native
+process exited0 but the audit remained unfinished. Retain the parsed diagnostic
+with the [Litestream shutdown investigation](backlog/cost-stack-replication.md).
+The cause is unknown. Keep all accounting guards and deadlines unchanged;
+genuine local reproduction waits for Docker. Source equality is not causal proof.
+
 ## Public browser and network qualification
 
 Qualify the public browser check against the supported browsers and production
