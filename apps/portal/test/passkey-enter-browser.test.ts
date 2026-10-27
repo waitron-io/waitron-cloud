@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import {mkdir, readFile} from 'node:fs/promises';
 import {test} from 'node:test';
+import {setTimeout as delay} from 'node:timers/promises';
 import {build} from 'esbuild';
 import {chromium} from 'playwright';
 import {translations} from '../src/locale.ts';
@@ -13,16 +14,21 @@ const bundle = await build({stdin: {contents: `
 `, resolveDir: new URL('..', import.meta.url).pathname}, bundle: true, write: false, format: 'iife', target: 'es2023'});
 const styles = await readFile(new URL('../src/styles.css', import.meta.url), 'utf8');
 const at = '2026-10-24T12:00:00.000Z', password = ' Current account password ';
+// The clock runs after installation; freeze before registering application timers.
+const clockStart = new Date(Date.parse(at) - 86_400_000);
 const id = '12345678-1234-4234-8234-123456789abc';
+for (const setupDelay of [0, 100])
 for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'] as const) for (const width of [390, 1280]) {
-  test(`${locale} ${theme} ${width}: Enter in the passkey password starts Add once and keeps browser confirmation`, async () => {
+  test(`${locale} ${theme} ${width}${setupDelay ? ' with delayed clock setup' : ''}: Enter in the passkey password starts Add once and keeps browser confirmation`, async () => {
     const browser = await chromium.launch({headless: true});
     let releaseOptions!: () => void;
     const optionsReply = new Promise<void>(resolve => {releaseOptions = resolve;});
     try {
       const page = await browser.newPage({locale, colorScheme: theme, viewport: {width, height: 1000}});
       page.setDefaultTimeout(4000);
-      await page.clock.install({time: new Date(at)}); await page.clock.pauseAt(new Date(at));
+      await page.clock.install({time: clockStart});
+      if (setupDelay) await delay(setupDelay);
+      await page.clock.pauseAt(new Date(at));
       const authenticator = await page.context().newCDPSession(page);
       await authenticator.send('WebAuthn.enable');
       await authenticator.send('WebAuthn.addVirtualAuthenticator', {options: {
@@ -90,13 +96,16 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
   });
 }
 
+for (const setupDelay of [0, 100])
 for (const blocked of ['unsupported', 'cooldown'] as const) {
-  test(`Enter in the passkey password respects ${blocked}`, async () => {
+  test(`Enter in the passkey password respects ${blocked}${setupDelay ? ' with delayed clock setup' : ''}`, async () => {
     const browser = await chromium.launch({headless: true});
     try {
       const page = await browser.newPage();
       page.setDefaultTimeout(3000);
-      await page.clock.install({time: new Date(at)}); await page.clock.pauseAt(new Date(at));
+      await page.clock.install({time: clockStart});
+      if (setupDelay) await delay(setupDelay);
+      await page.clock.pauseAt(new Date(at));
       const authenticator = await page.context().newCDPSession(page);
       await authenticator.send('WebAuthn.enable');
       if (blocked === 'cooldown') await authenticator.send('WebAuthn.addVirtualAuthenticator', {options: {protocol: 'ctap2', transport: 'internal', hasResidentKey: true, hasUserVerification: true, isUserVerified: true, automaticPresenceSimulation: true}});
@@ -141,11 +150,14 @@ for (const blocked of ['unsupported', 'cooldown'] as const) {
 }
 
 
-test('Enter adds alongside an existing passkey and submits once for two immediate presses', async () => {
+for (const setupDelay of [0, 100])
+test(`Enter adds alongside an existing passkey and submits once for two immediate presses${setupDelay ? ' with delayed clock setup' : ''}`, async () => {
   const browser = await chromium.launch({headless: true});
   try {
     const page = await browser.newPage(); page.setDefaultTimeout(4000);
-    await page.clock.install({time: new Date(at)}); await page.clock.pauseAt(new Date(at));
+    await page.clock.install({time: clockStart});
+    if (setupDelay) await delay(setupDelay);
+    await page.clock.pauseAt(new Date(at));
     const authenticator = await page.context().newCDPSession(page);
     await authenticator.send('WebAuthn.enable');
     await authenticator.send('WebAuthn.addVirtualAuthenticator', {options: {protocol: 'ctap2', transport: 'internal', hasResidentKey: true, hasUserVerification: true, isUserVerified: true, automaticPresenceSimulation: true}});
