@@ -15,6 +15,8 @@ import sys
 import tempfile
 import threading
 
+from ci_apt_diagnostics import run_apt
+
 index_hash = '--index-hash' in sys.argv
 runner_indexes = '--runner-indexes' in sys.argv or index_hash
 multi_component = '--multi-component' in sys.argv or runner_indexes
@@ -228,7 +230,12 @@ with tempfile.TemporaryDirectory(prefix='cloud-browser-apt-') as directory:
                        '-o', 'APT::Update::Error-Mode=any',
                        '-o', f'APT::Sandbox::User={pwd.getpwuid(os.getuid()).pw_name}']
             start = len(requests)
-            update = subprocess.run([*supervisor, 'apt-get', *options, 'update'], capture_output=True, text=True, timeout=12)
+            scenario = ('index-hash' if index_hash else 'runner-indexes' if runner_indexes
+                        else 'multi-component' if multi_component else 'single-component')
+            update = run_apt([*supervisor, 'apt-get', *options, 'update'],
+                             stage='update', scenario=scenario, mode=mode,
+                             requests=requests, request_start=start,
+                             capture_output=True, text=True, timeout=12)
             log = update.stdout + update.stderr
             assert 'Download attempt exceeded' not in log, log
             assert any(path.startswith('/second/') for path in requests[start:]), log
@@ -252,8 +259,10 @@ with tempfile.TemporaryDirectory(prefix='cloud-browser-apt-') as directory:
                                         if path.startswith('/second/dists/') and not path.endswith('/InRelease'))
                 assert index_requests == sorted(expected_indexes), (index_requests, log)
                 outcomes['indexRequests'] = index_requests
-            download = subprocess.run([*supervisor, 'apt-get', *options, 'download', 'cloud-apt-fixture=1.0'],
-                                      cwd=state, capture_output=True, text=True, timeout=12)
+            download = run_apt([*supervisor, 'apt-get', *options, 'download', 'cloud-apt-fixture=1.0'],
+                               stage='download', scenario=scenario, mode=mode,
+                               requests=requests, request_start=len(requests),
+                               cwd=state, capture_output=True, text=True, timeout=12)
             log = download.stdout + download.stderr
             assert 'Download attempt exceeded' not in log, log
             if mode == 'package-hash':
