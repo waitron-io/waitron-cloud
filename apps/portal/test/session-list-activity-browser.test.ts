@@ -19,9 +19,11 @@ const clockStart = new Date(Date.parse(at) - 86_400_000);
 const current = {id: '12345678-1234-4234-8234-123456789abc', createdAt: at, lastUsedAt: at, expiresAt, current: true};
 
 // Repeating startup after a failed list would clear its alert and start a hidden retry.
+for (const handler of ['normal', 'delayed', 'missing'] as const)
 for (const setupDelay of [0, 100])
 for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'] as const) for (const width of [390, 1280]) {
-  test(`${locale} ${theme} ${width}${setupDelay ? ' with delayed clock setup' : ''}: session activity preserves a failed session list until explicit retry`, async () => {
+  if (handler === 'missing' && (setupDelay !== 0 || locale !== 'en' || theme !== 'light' || width !== 390)) continue;
+  test(`${locale} ${theme} ${width}${setupDelay ? ' with delayed clock setup' : ''}${handler === 'normal' ? '' : ` with ${handler} retry handler`}: session activity preserves a failed session list until explicit retry`, async t => {
     const browser = await chromium.launch({headless: true});
     let releaseActivity!: () => void, releaseRetry!: () => void;
     const activityReply = new Promise<void>(resolve => {releaseActivity = resolve;});
@@ -41,6 +43,8 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
         if (path === '/session/activity') { await activityReply; return route.fulfill({json: {accountId: 'owner', expiresAt: '2030-01-02T00:00:00.000Z'}}); }
         if (path === '/session') return route.fulfill({json: {accountId: 'owner', expiresAt}});
         if (path === '/sessions') {
+          if (reads > 0 && handler === 'delayed') await delay(250);
+          if (reads > 0 && handler === 'missing') {await retryReply; return route.fulfill({json: {sessions: [current]}});}
           if (++reads === 1) return route.fulfill({status: 503, json: {error: 'temporarily_unavailable'}});
           await retryReply;
           return route.fulfill({json: {sessions: [current]}});
@@ -69,7 +73,20 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
         await section.screenshot({path: `${process.env.SESSION_LIST_RECEIPT_DIR}/${locale}-${theme}-${width}.png`});
       }
       const retryRequest = page.waitForRequest('**/api/account/sessions');
-      await retry.click(); await retryRequest;
+      await retry.click();
+      const waitForRetryHandler = async () => {
+        await retryRequest;
+        // The browser event can precede the handler count used by the duplicate-read check.
+        await t.waitFor(() => {assert.equal(reads, 2, "the retry handler must count the read");}, {timeout: 4000});
+      };
+      if (handler === 'missing') {
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        try {
+          await assert.rejects(Promise.race([waitForRetryHandler(), new Promise<void>(resolve => {timer = setTimeout(resolve, 5000);})]), /waitFor\(\) timed out/);
+        } finally {clearTimeout(timer);}
+        return;
+      }
+      await waitForRetryHandler();
       assert.equal(await section.getByRole('button').count(), 0, 'a pending read cannot offer another action');
       await page.evaluate(async () => {const app = (window as unknown as {sessionListApp: {security: {load(): Promise<void>}}}).sessionListApp; await app.security.load();});
       assert.equal(reads, 2, 'pending retries cannot duplicate the read');

@@ -3875,6 +3875,16 @@ translation retry, consent, pending-state, layout and runner deadline assertions
 remain. These native Chromium checks use stubbed HTTP and do not qualify the
 backend or production.
 
+## Session-list retry browser handler observation (D375)
+
+The session-list activity fixture waits for its retry handler to count the read
+before checking that a second load cannot duplicate it. The browser request event
+can arrive before that count. The wait uses the existing four-second page budget;
+a missing count fails within that budget. Delayed handlers repeat both languages,
+themes, widths and clock setups while retaining every original session, retry,
+uncertain-revoke, account, write and deadline assertion. These native Chromium
+checks use stubbed HTTP; database and permission qualification remain in CI.
+
 ## Browser-test clock setup (D313)
 
 The monitoring-status fixture also reproduces the refusal when setup pauses
