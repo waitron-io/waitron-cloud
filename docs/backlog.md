@@ -3643,6 +3643,15 @@ journeys in both languages, themes and phone/desktop widths. All original reload
 keyboard, request-count, cookie, forwarding and disabled-JavaScript checks remain.
 These checks use native Chromium and local HTTP; production behaviour is unchanged.
 
+## Running browser-check failure reload handler waits (D368)
+
+The running-check failure reload fixture refuses either missing first or restarted
+challenge-handler signal within its existing four-second page budget. Delayed
+handlers repeat all four failure journeys across both languages, themes and
+phone/desktop widths. Original messages, reload, keyboard, request-count, cookie,
+forwarding and deadline checks remain. Native Chromium and local HTTP qualify
+this fixture; supported-browser and production-network checks remain open.
+
 ## Public gateway source limits (D191)
 
 The public gate now counts an IPv6 /64 network as one source, while IPv4-mapped
