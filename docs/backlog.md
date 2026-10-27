@@ -3617,6 +3617,15 @@ Qualify the public browser check against the supported browsers and production
 networks before public exposure. Local HTTP, script and Chromium checks do not
 discharge that deployment gate.
 
+## Public browser-check landmark handler wait (D365)
+
+The landmark browser fixture refuses an absent challenge-handler signal within
+its existing four-second page budget. Delayed handlers repeat running-check
+journeys in both languages, themes and phone/desktop widths. All original main
+region, bilingual guidance, reload link, cookie, forwarding and layout checks
+remain, including disabled JavaScript and unavailable-script journeys. These
+checks use native Chromium and local HTTP; production behaviour is unchanged.
+
 ## Public gateway source limits (D191)
 
 The public gate now counts an IPv6 /64 network as one source, while IPv4-mapped
