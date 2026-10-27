@@ -20,7 +20,9 @@ const bundle=await build({stdin:{contents:`
 `,resolveDir:new URL('..',import.meta.url).pathname},bundle:true,write:false,format:'iife',target:'es2023'});
 const styles=await readFile(new URL('../src/styles.css',import.meta.url),'utf8');
 
-for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as const)for(const width of [390,1280])test(`${locale} ${theme} ${width}: a long organisation name keeps recovery within the viewport and its choice usable`,async()=>{
+for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as const)for(const width of [390,1280]){
+ const handlers=locale==='en'&&theme==='light'&&width===390?['ordinary','delayed','missing'] as const:['ordinary','delayed'] as const;
+ for(const handler of handlers)test(`${locale} ${theme} ${width}: a long organisation name keeps recovery within the viewport and its choice usable${handler==='ordinary'?'':` (${handler} handler)`}`,async t=>{
  const browser=await chromium.launch({headless:true});
  let release:(()=>void)|undefined;
  try{
@@ -29,7 +31,11 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
   await page.route('https://portal.test/**',async route=>{
    const path=new URL(route.request().url()).pathname;
    if(path.endsWith('/session')||path.endsWith('/session/activity'))return route.fulfill({json:{accountId:'owner',expiresAt:new Date(Date.now()+3600000).toISOString()}});
-   if(path.endsWith('/installations')){entered?.();await gate;return route.fulfill({json:{installations}});}
+   if(path.endsWith('/installations')){
+    if(gate&&handler==='delayed')await new Promise(resolve=>setTimeout(resolve,100));
+    if(!gate||handler!=='missing')entered?.();
+    await gate;return route.fulfill({json:{installations}});
+   }
    if(path.endsWith('/recovery/inspect'))return route.fulfill({json:{requestId:request,state:'awaiting_owner',expiresAt:new Date(Date.now()+600000).toISOString(),operationId:null,operation:null}});
    if(path.startsWith('/api/'))return route.fulfill({status:503,json:{error:'unavailable'}});
    return route.fulfill({contentType:'text/html',body:'<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><div id="portal" class="portal"></div>'});
@@ -49,11 +55,21 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
   if(process.env.RECOVERY_WIDTH_RECEIPT_DIR){await mkdir(process.env.RECOVERY_WIDTH_RECEIPT_DIR,{recursive:true});await page.screenshot({path:`${process.env.RECOVERY_WIDTH_RECEIPT_DIR}/${locale}-${theme}-${width}.png`,fullPage:true});}
   assert.ok(dimensions.scroll<=width,`page width ${dimensions.scroll} exceeds viewport ${width}`);
   assert.ok(dimensions.select<=dimensions.parent,`select width ${dimensions.select} exceeds label ${dimensions.parent}`);
-  const reading=new Promise<void>(resolve=>{entered=resolve;});gate=new Promise<void>(resolve=>{release=resolve;});
-  await page.getByRole('button',{name:c.refreshStatus,exact:true}).click();await reading;
+  let observed=false;entered=()=>{observed=true;};gate=new Promise<void>(resolve=>{release=resolve;});
+  const reading=t.waitFor(()=>{assert.equal(observed,true,'the installation handler must observe the refresh');},{timeout:4000});
+  await page.getByRole('button',{name:c.refreshStatus,exact:true}).click();
+  if(handler==='missing'){
+   let timer:ReturnType<typeof setTimeout>|undefined;
+   try{
+    await assert.rejects(Promise.race([reading,new Promise<void>(resolve=>{timer=setTimeout(resolve,5000);})]),/waitFor\(\) timed out/);
+   }finally{clearTimeout(timer);}
+   return;
+  }
+  await reading;
   assert.equal(await organisation.isDisabled(),true);assert.equal(await organisation.inputValue(),second);
   release?.();gate=undefined;
   await page.waitForFunction(label=>!(document.querySelector(`select[aria-label="${label}"]`) as HTMLSelectElement)?.disabled,c.recoveryOrganisation);
   assert.equal(await organisation.inputValue(),second);
  }finally{release?.();await browser.close();}
 });
+}
