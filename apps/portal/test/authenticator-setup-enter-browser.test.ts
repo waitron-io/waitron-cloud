@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import {mkdir, readFile} from 'node:fs/promises';
 import {test} from 'node:test';
+import {setTimeout as delay} from 'node:timers/promises';
 import {build} from 'esbuild';
 import {chromium} from 'playwright';
 import {translations} from '../src/locale.ts';
@@ -13,17 +14,22 @@ const bundle = await build({stdin: {contents: `
 `, resolveDir: new URL('..', import.meta.url).pathname}, bundle: true, write: false, format: 'iife', target: 'es2023'});
 const styles = await readFile(new URL('../src/styles.css', import.meta.url), 'utf8');
 const at = '2026-10-24T12:00:00.000Z', password = ' Current account password ';
+// The clock runs after installation; freeze before registering application timers.
+const clockStart = new Date(Date.parse(at) - 86_400_000);
 const enrolment = {pendingToken: 'A'.repeat(43), secret: 'JBSWY3DPEHPK3PXP', uri: 'otpauth://totp/Cloud?secret=JBSWY3DPEHPK3PXP', expiresAt: '2026-10-25T12:00:00Z'};
 
+for (const setupDelay of [0, 100])
 for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'] as const) for (const width of [390, 1280]) {
-  test(`${locale} ${theme} ${width}: password Enter starts first authenticator setup once and leaves activation explicit`, async () => {
+  test(`${locale} ${theme} ${width}${setupDelay ? ' with delayed clock setup' : ''}: password Enter starts first authenticator setup once and leaves activation explicit`, async () => {
     const browser = await chromium.launch({headless: true});
     let release!: () => void;
     const reply = new Promise<void>(resolve => {release = resolve;});
     try {
       const page = await browser.newPage({locale, colorScheme: theme, viewport: {width, height: 1000}});
       page.setDefaultTimeout(4000);
-      await page.clock.install({time: new Date(at)}); await page.clock.pauseAt(new Date(at));
+      await page.clock.install({time: clockStart});
+      if (setupDelay) await delay(setupDelay);
+      await page.clock.pauseAt(new Date(at));
       const c = translations[locale], writes: {path: string; body: unknown}[] = [];
       await page.route('https://portal.test/account', route => route.fulfill({contentType: 'text/html', body: '<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><div id="portal" class="portal"></div>'}));
       await page.route('**/api/account/**', async route => {
@@ -72,12 +78,15 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
   });
 }
 
+for (const setupDelay of [0, 100])
 for (const state of ['active', 'unavailable', 'cooldown'] as const) {
-  test(`password Enter leaves ${state} authenticator actions alone`, async () => {
+  test(`password Enter leaves ${state} authenticator actions alone${setupDelay ? ' with delayed clock setup' : ''}`, async () => {
     const browser = await chromium.launch({headless: true});
     try {
       const page = await browser.newPage(); page.setDefaultTimeout(4000);
-      await page.clock.install({time: new Date(at)}); await page.clock.pauseAt(new Date(at));
+      await page.clock.install({time: clockStart});
+      if (setupDelay) await delay(setupDelay);
+      await page.clock.pauseAt(new Date(at));
       const c = translations.en, writes: string[] = [];
       await page.route('https://portal.test/account', route => route.fulfill({contentType: 'text/html', body: '<div id="portal" class="portal"></div>'}));
       await page.route('**/api/account/**', route => {

@@ -3703,6 +3703,10 @@ The account-security cooldown fixture also reproduces the refusal with a 100 ms
 setup delay and now freezes from the earlier start. Original and delayed journeys
 retain all six passkey/session actions, request counts, disabled-control, countdown,
 retry and deadline checks across both languages, themes and viewport widths.
+The authenticator keyboard fixture reproduces the refusal with the same setup
+delay and now freezes from the earlier start. Original and delayed journeys retain
+every Enter-key, activation, unavailable-status, cooldown, request and deadline
+check. Both clock setup sites are qualified.
 No historical CI failure in these fixtures is attributed here.
 
 ## Password-change notification recovery link (D261)
