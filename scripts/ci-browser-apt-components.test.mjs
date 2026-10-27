@@ -12,3 +12,15 @@ test('Linux APT completes four signed suites and sixteen indexes through the ava
   });
   assert.deepEqual(JSON.parse(stdout), {allSixteenIndexesFetched: true, fallbackDownloaded: true});
 });
+
+// A fallback that fetches release metadata alone cannot satisfy the compressed index checks.
+test('Linux APT completes compressed package, translation and command indexes by their signed hashes', {
+  skip: process.platform !== 'linux', timeout: 60000,
+}, async () => {
+  const {stdout} = await promisify(execFile)('python3', ['scripts/fixtures/ci-browser-apt.py', '--runner-indexes'], {
+    timeout: 55000, maxBuffer: 2 ** 20,
+  });
+  assert.deepEqual(JSON.parse(stdout), {
+    allSixteenIndexesFetched: true, allFortyEightIndexesFetched: true, fallbackDownloaded: true,
+  });
+});

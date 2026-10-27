@@ -5,6 +5,7 @@ import functools
 import hashlib
 import http.server
 import json
+import lzma
 import os
 from pathlib import Path
 import pwd
@@ -14,7 +15,8 @@ import sys
 import tempfile
 import threading
 
-multi_component = '--multi-component' in sys.argv
+runner_indexes = '--runner-indexes' in sys.argv
+multi_component = '--multi-component' in sys.argv or runner_indexes
 suites = ('noble', 'noble-updates', 'noble-backports', 'noble-security') if multi_component else ('noble',)
 components = ('main', 'universe', 'restricted', 'multiverse') if multi_component else ('main',)
 
@@ -64,6 +66,7 @@ with tempfile.TemporaryDirectory(prefix='cloud-browser-apt-') as directory:
         run(['gpg', '--homedir', str(keys), '--batch', '--yes', '--clearsign',
              '--output', str(signed), str(release)])
         original_signed = signed.read_bytes()
+        expected_indexes = []
         if multi_component:
             # Each suite has an independently signed release and four required indexes.
             index_bytes = index.read_bytes()
@@ -71,15 +74,36 @@ with tempfile.TemporaryDirectory(prefix='cloud-browser-apt-') as directory:
                 hashes = []
                 for component in components:
                     relative = f'{component}/binary-amd64/Packages'
-                    target = archive / 'dists' / suite / relative
-                    target.parent.mkdir(parents=True, exist_ok=True)
-                    target.write_bytes(index_bytes)
-                    hashes.append(f' {hashlib.sha256(index_bytes).hexdigest()} {len(index_bytes)} {relative}\n')
+                    entries = [(relative, index_bytes)]
+                    if runner_indexes:
+                        entries.extend([(f'{component}/i18n/Translation-en',
+                                         b'Package: cloud-apt-fixture\nDescription-en: '
+                                         + b'isolated APT download fixture ' * 80 + b'\n\n'),
+                                        (f'{component}/cnf/Commands-amd64', b'fixture command metadata\n' * 80)])
+                    for name, content in entries:
+                        variants = [(name, content)]
+                        if runner_indexes:
+                            variants.append((name + '.xz', lzma.compress(content)))
+                        for filename, data in variants:
+                            target = archive / 'dists' / suite / filename
+                            target.parent.mkdir(parents=True, exist_ok=True)
+                            target.write_bytes(data)
+                            digest = hashlib.sha256(data).hexdigest()
+                            hashes.append(f' {digest} {len(data)} {filename}\n')
+                            if runner_indexes:
+                                hashed = target.parent / 'by-hash/SHA256' / digest
+                                hashed.parent.mkdir(parents=True, exist_ok=True)
+                                hashed.write_bytes(data)
+                                if filename.endswith('.xz'):
+                                    expected_indexes.append(f'/second/dists/{suite}/{hashed.relative_to(archive / "dists" / suite)}')
+                            else:
+                                expected_indexes.append(f'/second/dists/{suite}/{filename}')
                 target_release = archive / 'dists' / suite / 'Release'
                 target_release.write_text('Origin: Cloud fixture\nLabel: Cloud fixture\n'
                                           f'Suite: {suite}\nCodename: {suite}\nArchitectures: amd64\n'
                                           f'Components: {" ".join(components)}\n'
-                                          f'Date: {datetime.datetime.now(datetime.timezone.utc).strftime("%a, %d %b %Y %H:%M:%S +0000")}\n'
+                                          + ('Acquire-By-Hash: yes\n' if runner_indexes else '')
+                                          + f'Date: {datetime.datetime.now(datetime.timezone.utc).strftime("%a, %d %b %Y %H:%M:%S +0000")}\n'
                                           'SHA256:\n' + ''.join(hashes))
                 run(['gpg', '--homedir', str(keys), '--batch', '--yes', '--clearsign',
                      '--output', str(target_release.with_name('InRelease')), str(target_release)])
@@ -143,6 +167,14 @@ with tempfile.TemporaryDirectory(prefix='cloud-browser-apt-') as directory:
                                                        'Acquire::https::Pipeline-Depth "0";\n'
                                                        'Acquire::https::No-Cache "true";\n'
                                                        'Acquire::BrokenProxy "true";\n')
+        if runner_indexes:
+            (apt / 'apt.conf.d/50command-not-found').write_text(
+                'Acquire::Languages "en";\n'
+                'Acquire::IndexTargets::deb::CNF {\n'
+                ' MetaKey "$(COMPONENT)/cnf/Commands-$(NATIVE_ARCHITECTURE)";\n'
+                ' ShortDescription "c-n-f Metadata";\n'
+                ' Description "$(RELEASE)/$(COMPONENT) $(NATIVE_ARCHITECTURE) c-n-f Metadata";\n'
+                '};\n')
         bootstrap = root / 'apt.conf'
         bootstrap.write_text(f'Dir::Etc::parts "{apt}/apt.conf.d";\nDir::Etc::main "-";\n')
         os.environ['APT_CONFIG'] = str(bootstrap)
@@ -201,11 +233,11 @@ with tempfile.TemporaryDirectory(prefix='cloud-browser-apt-') as directory:
                 continue
             assert update.returncode == 0, log
             if multi_component:
-                for suite in suites:
-                    for component in components:
-                        expected = f'/second/dists/{suite}/{component}/binary-amd64/Packages'
-                        assert expected in requests[start:], (expected, requests[start:], log)
+                for expected in expected_indexes:
+                    assert expected in requests[start:], (expected, requests[start:], log)
                 outcomes['allSixteenIndexesFetched'] = True
+                if runner_indexes:
+                    outcomes['allFortyEightIndexesFetched'] = True
             download = subprocess.run([*supervisor, 'apt-get', *options, 'download', 'cloud-apt-fixture=1.0'],
                                       cwd=state, capture_output=True, text=True, timeout=12)
             log = download.stdout + download.stderr
