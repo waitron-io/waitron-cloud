@@ -5,6 +5,7 @@ import functools
 import hashlib
 import http.server
 import json
+import lzma
 import os
 from pathlib import Path
 import pwd
@@ -13,6 +14,12 @@ import subprocess
 import sys
 import tempfile
 import threading
+
+index_hash = '--index-hash' in sys.argv
+runner_indexes = '--runner-indexes' in sys.argv or index_hash
+multi_component = '--multi-component' in sys.argv or runner_indexes
+suites = ('noble', 'noble-updates', 'noble-backports', 'noble-security') if multi_component else ('noble',)
+components = ('main', 'universe', 'restricted', 'multiverse') if multi_component else ('main',)
 
 
 def run(command, **kwargs):
@@ -60,6 +67,56 @@ with tempfile.TemporaryDirectory(prefix='cloud-browser-apt-') as directory:
         run(['gpg', '--homedir', str(keys), '--batch', '--yes', '--clearsign',
              '--output', str(signed), str(release)])
         original_signed = signed.read_bytes()
+        expected_indexes = []
+        if multi_component:
+            # Each suite has an independently signed release and four required indexes.
+            index_bytes = index.read_bytes()
+            for suite in suites:
+                hashes = []
+                for component in components:
+                    relative = f'{component}/binary-amd64/Packages'
+                    entries = [(relative, index_bytes)]
+                    if runner_indexes:
+                        entries.extend([(f'{component}/i18n/Translation-en',
+                                         b'Package: cloud-apt-fixture\nDescription-en: '
+                                         + b'isolated APT download fixture ' * 80 + b'\n\n'),
+                                        (f'{component}/cnf/Commands-amd64', b'fixture command metadata\n' * 80)])
+                    for name, content in entries:
+                        variants = [(name, content)]
+                        if runner_indexes:
+                            variants.append((name + '.xz', lzma.compress(content)))
+                        for filename, data in variants:
+                            target = archive / 'dists' / suite / filename
+                            target.parent.mkdir(parents=True, exist_ok=True)
+                            target.write_bytes(data)
+                            digest = hashlib.sha256(data).hexdigest()
+                            hashes.append(f' {digest} {len(data)} {filename}\n')
+                            if runner_indexes:
+                                hashed = target.parent / 'by-hash/SHA256' / digest
+                                hashed.parent.mkdir(parents=True, exist_ok=True)
+                                hashed.write_bytes(data)
+                                if filename.endswith('.xz'):
+                                    expected_indexes.append(f'/second/dists/{suite}/{filename}')
+                            else:
+                                expected_indexes.append(f'/second/dists/{suite}/{filename}')
+                target_release = archive / 'dists' / suite / 'Release'
+                target_release.write_text('Origin: Cloud fixture\nLabel: Cloud fixture\n'
+                                          f'Suite: {suite}\nCodename: {suite}\nArchitectures: amd64\n'
+                                          f'Components: {" ".join(components)}\n'
+                                          + ('Acquire-By-Hash: yes\n' if runner_indexes else '')
+                                          + f'Date: {datetime.datetime.now(datetime.timezone.utc).strftime("%a, %d %b %Y %H:%M:%S +0000")}\n'
+                                          'SHA256:\n' + ''.join(hashes))
+                run(['gpg', '--homedir', str(keys), '--batch', '--yes', '--clearsign',
+                     '--output', str(target_release.with_name('InRelease')), str(target_release)])
+            original_signed = signed.read_bytes()
+            assert len(expected_indexes) == (48 if runner_indexes else 16)
+            if index_hash:
+                compressed = archive / 'dists/noble/main/binary-amd64/Packages.xz'
+                data = compressed.read_bytes()
+                hashed = compressed.parent / 'by-hash/SHA256' / hashlib.sha256(data).hexdigest()
+                changed = bytes([data[0] ^ 1]) + data[1:]
+                compressed.write_bytes(changed)
+                hashed.write_bytes(changed)
         cert = root / 'tls.pem'
         private = root / 'tls.key'
         run(['openssl', 'req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-days', '1',
@@ -105,9 +162,28 @@ with tempfile.TemporaryDirectory(prefix='cloud-browser-apt-') as directory:
         thread.start()
         base = f'https://127.0.0.1:{server.server_port}'
         (apt / 'sources.list').write_text(f'deb [arch=amd64 signed-by={keyring}] https://archive.ubuntu.com/ubuntu noble main\n')
+        if multi_component:
+            (apt / 'sources.list').write_text(''.join(
+                f'deb [arch=amd64 signed-by={keyring}] https://archive.ubuntu.com/ubuntu {suite} {" ".join(components)}\n'
+                for suite in suites))
         (apt / 'apt.conf.d').mkdir()
         # Match the runner image's late settings, including its real retry count.
         (apt / 'apt.conf.d/zz-retries').write_text('Acquire::Retries "1";\nAcquire::https::Timeout "15";\n')
+        if multi_component:
+            # Match ubuntu24/20261012.334's request scheduling as well as its retries.
+            (apt / 'apt.conf.d/99bad_proxy').write_text('Acquire::http::Pipeline-Depth "0";\n'
+                                                       'Acquire::http::No-Cache "true";\n'
+                                                       'Acquire::https::Pipeline-Depth "0";\n'
+                                                       'Acquire::https::No-Cache "true";\n'
+                                                       'Acquire::BrokenProxy "true";\n')
+        if runner_indexes:
+            (apt / 'apt.conf.d/50command-not-found').write_text(
+                'Acquire::Languages "en";\n'
+                'Acquire::IndexTargets::deb::CNF {\n'
+                ' MetaKey "$(COMPONENT)/cnf/Commands-$(NATIVE_ARCHITECTURE)";\n'
+                ' ShortDescription "c-n-f Metadata";\n'
+                ' Description "$(RELEASE)/$(COMPONENT) $(NATIVE_ARCHITECTURE) c-n-f Metadata";\n'
+                '};\n')
         bootstrap = root / 'apt.conf'
         bootstrap.write_text(f'Dir::Etc::parts "{apt}/apt.conf.d";\nDir::Etc::main "-";\n')
         os.environ['APT_CONFIG'] = str(bootstrap)
@@ -131,13 +207,14 @@ with tempfile.TemporaryDirectory(prefix='cloud-browser-apt-') as directory:
                                                        f'https://127.0.0.2:{blackhole.getsockname()[1]}/first')
                            .replace('https://archive.ubuntu.com/ubuntu', f'{base}/second'))
         config = generated
-        assert config.read_text() == 'Acquire::https::Timeout "10";\n'
-        config.write_text('Acquire::https::Timeout "1";\n')
+        assert config.read_text() == 'Acquire::https::Timeout "10";\nAcquire::By-Hash "false";\n'
+        config.write_text(config.read_text().replace('Timeout "10"', 'Timeout "1"'))
         supervisor = [sys.executable, str(Path('scripts/ci-download.py').resolve()),
                       '--timeout', '8', '--attempts', '1', '--grace', '1',
                       '--lock-wait', '0', '--retry-delay', '0', '--']
         outcomes = {}
-        for mode in ('fallback', 'exhausted', 'signature', 'package-hash'):
+        modes = ('index-hash',) if index_hash else (('fallback',) if multi_component else ('fallback', 'exhausted', 'signature', 'package-hash'))
+        for mode in modes:
             state = root / mode
             (state / 'lists/partial').mkdir(parents=True)
             (state / 'cache/archives/partial').mkdir(parents=True)
@@ -155,6 +232,11 @@ with tempfile.TemporaryDirectory(prefix='cloud-browser-apt-') as directory:
             log = update.stdout + update.stderr
             assert 'Download attempt exceeded' not in log, log
             assert any(path.startswith('/second/') for path in requests[start:]), log
+            if mode == 'index-hash':
+                assert update.returncode != 0, log
+                assert 'Hash Sum mismatch' in log, log
+                outcomes['indexHashRefused'] = True
+                continue
             if mode in ('signature', 'exhausted'):
                 assert update.returncode != 0, log
                 if mode == 'signature':
@@ -165,6 +247,11 @@ with tempfile.TemporaryDirectory(prefix='cloud-browser-apt-') as directory:
                 outcomes['signatureRefused' if mode == 'signature' else 'exhaustedRefused'] = True
                 continue
             assert update.returncode == 0, log
+            if multi_component:
+                index_requests = sorted(path for path in requests[start:]
+                                        if path.startswith('/second/dists/') and not path.endswith('/InRelease'))
+                assert index_requests == sorted(expected_indexes), (index_requests, log)
+                outcomes['indexRequests'] = index_requests
             download = subprocess.run([*supervisor, 'apt-get', *options, 'download', 'cloud-apt-fixture=1.0'],
                                       cwd=state, capture_output=True, text=True, timeout=12)
             log = download.stdout + download.stderr

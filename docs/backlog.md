@@ -2434,6 +2434,22 @@ implementation or production evidence.
   refuses two unavailable mirrors, rejects altered signatures and
   rejects changed package bytes. It installs no package and uses no system APT
   state. On macOS that Linux check is skipped; GitHub CI must execute it.
+  Browser CI now requests stable index filenames, keeping the mirror that
+  supplied each signed release. APT's by-hash URLs otherwise select a mirror
+  again for every index, including one that just failed. Signed release metadata
+  still supplies the required index digests, and package hashes still apply.
+  This setting also covers other APT sources on that disposable browser runner.
+  If an index changes during publication, a digest mismatch must refuse the
+  update; this does not accept changed bytes or repair package state.
+  The controlled regression includes four suites with sixteen package indexes
+  and forty-eight compressed package, translation and command indexes, with a
+  separate altered-index refusal. Both journeys require the actual stable
+  index request paths, with no missing or extra requests. The compressed by-hash case reproduced the
+  release-success/index-timeout sequence before this change; the one-index and
+  uncompressed sixteen-index cases did not. Run
+  `node --test scripts/ci-browser-apt-components.test.mjs` on Linux as well as
+  the original trust and refusal journeys. The public mirror's underlying
+  network failure remains unexplained; this change addresses index selection.
   Real Actions qualification must show two consecutive full runs of the same
   head and its independent merge run, with one install attempt and every portal
   and UI-smoke test executed. Keep this gate when changing sources; controlled
