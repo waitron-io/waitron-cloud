@@ -3684,6 +3684,11 @@ this corrects test readiness without changing product authentication or routing.
 
 ## Browser-test clock setup (D313)
 
+The passkey Add keyboard fixture reproduces the refusal with a 100 ms setup
+delay and now freezes from an earlier start. Original and delayed journeys retain
+every caret, focus, exact-password, Tab/Enter, pending-request and enrollment check
+across both languages, themes and viewport widths, with unchanged deadlines.
+
 The alert-preferences activity fixture now installs its running clock a day before
 its intended pause, then freezes at the original instant before loading the app.
 A 100 ms setup delay reproduced CI's “Cannot fast-forward to the past” refusal;
