@@ -8,7 +8,7 @@ import {privateObservationDumpArgs} from '../../../scripts/database-backup-polic
 
 test('expiry_and_prune and unlogged_loss_is_unknown preserve durable reporter ordering',async()=>{
  const f=await forwardFixture();try{
-  await f.send();await f.db.pool.query("UPDATE remote_forward_observations SET expires_at=clock_timestamp()-interval '1 second'");
+  await f.send();const observed=Date.now()-301000;await f.db.pool.query('UPDATE remote_forward_observations SET observed_at=$1,expires_at=$2,manifest_expires_at=$3',[new Date(observed),new Date(observed+300000),new Date(observed+600000)]);
   assert.equal(await f.read(),null);assert.equal(await f.store.prune(f.cellId),1);assert.equal(await f.store.prune(f.cellId),0);
   await f.budget();await f.send(f.report(2));await f.db.pool.query('TRUNCATE remote_forward_observations');assert.equal(await f.read(),null);
   assert.equal((await f.db.pool.query('SELECT last_sequence FROM remote_forward_reporters')).rows[0].last_sequence,'2');

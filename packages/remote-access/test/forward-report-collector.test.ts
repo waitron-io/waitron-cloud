@@ -31,7 +31,7 @@ for(const fault of ['mode','uid','gid','oversize','symlink','parent-symlink','di
   if(fault==='mode')await chmod(mapping.file,0o644);
   if(fault==='uid')mapping.writerUid++;
   if(fault==='gid')mapping.readerGid++;
-  if(fault==='oversize')await writeFile(mapping.file,'x'.repeat(262145));
+  if(fault==='oversize')await writeFile(mapping.file,JSON.stringify(f.envelope)+' '.repeat(262145));
   if(fault==='symlink'){await symlink(mapping.file,join(f.directory,'link'));mapping.file=join(f.directory,'link');}
   if(fault==='parent-symlink'){await symlink(f.directory,join(f.directory,'alias'));mapping.file=join(f.directory,'alias','report.json');}
   if(fault==='directory'){await mkdir(join(f.directory,'sub'));mapping.file=join(f.directory,'sub');}

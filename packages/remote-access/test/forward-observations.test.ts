@@ -6,6 +6,7 @@ import {transaction,OrganisationPlanStore} from '@waitron-cloud/registration';
 import {ForwardObservationStore,registerForwardReporter,revokeForwardReporter} from '../src/forward-observations.ts';
 import {signForwardReport,routeBinding} from '../src/forward-report.ts';
 import {RemoteConfigurationReconciler} from '../src/reconciler.ts';
+import {verifyManifest} from '../src/manifest.ts';
 import {forwardFixture} from './fixtures/forward-observations.ts';
 
 test('signed current report records a private latest view; success clears failure; replay cannot refresh it',async()=>{
@@ -17,12 +18,13 @@ test('signed current report records a private latest view; success clears failur
   assert.equal((await f.db.pool.query('SELECT count(*) FROM usage_events')).rows[0].count,'0');
  }finally{await f.db.close();}
 });
-for(const field of ['country','environment','cell','installation','venue','revision','binding','manifest-low','manifest-high','signature','unknown-key'] as const)test(`wrong_${field}_refuses_without_causes`,async()=>{
+for(const field of ['country','environment','cell','generation','installation','venue','revision','binding','manifest-low','manifest-high','signature','unknown-key'] as const)test(`wrong_${field}_refuses_without_causes`,async()=>{
  const f=await forwardFixture();try{
   const r=f.report(),o=r.observations[0]!,mapping={...f.mapping};
   if(field==='country')Object.assign(mapping,{country:'FR'});
   if(field==='environment')mapping.environment='production' as 'test';
   if(field==='cell')mapping.cellId=randomUUID();
+  if(field==='generation'){r.generation++;o.generation++;}
   if(field==='installation')o.installationId=randomUUID();if(field==='venue')o.venueId=randomUUID();if(field==='revision')o.revision++;if(field==='binding')o.routeBinding='0'.repeat(64);
   if(field==='manifest-low')await f.db.pool.query('UPDATE remote_forward_reporters SET minimum_manifest_sequence=$1',[f.manifest.sequence+1]);
   if(field==='manifest-high')o.manifestSequence=f.manifest.sequence+10;
@@ -50,6 +52,8 @@ test('rollback_allows_identical_retry and older observation never replaces newer
   await f.db.pool.query('ALTER TABLE remote_forward_observations DROP CONSTRAINT fixture_reject');assert.equal(await f.send(r),'accepted');
   await f.budget();const stale=f.report(2);stale.observations[0]!.observedAt=r.observations[0]!.observedAt-1;stale.observations[0]!.expiresAt=Math.min(stale.observations[0]!.observedAt+300000,stale.observations[0]!.manifestExpiresAt);
   assert.equal(await f.send(stale),'accepted');assert.equal((await f.read())!.observedAt,new Date(r.observations[0]!.observedAt).toISOString());
+  await f.budget();const replay=f.report(3,null);replay.observations[0]!.observationSequence=1;
+  assert.equal(await f.send(replay),'accepted');assert.equal((await f.read())!.category,'upstream_transport');
  }finally{await f.db.close();}
 });
 for(const change of ['revision','hostname','revocation','superseded','rotation','reporter-revocation','downgrade','unconfigured'] as const)test(`current read and later collection reject ${change}`,async()=>{
@@ -81,6 +85,7 @@ test('staged_move_not_current and old source after completion never count as act
   const staged=await f.remote.reportingManifest(target);assert.equal(staged.version,2);assert.equal(staged.routes.length,1);
   const r=f.report();r.cellId=target;r.gatewayId=gatewayId;Object.assign(r.observations[0]!,{cellId:target,gatewayId,manifestSequence:staged.sequence,routeBinding:routeBinding(staged.routes[0]!)});
   assert.equal(await f.store.record({...f.mapping,cellId:target},signForwardReport(r,keys.privateKey)),'accepted');assert.equal(await f.read(),null);
+  assert.equal((await f.db.pool.query('SELECT count(*) FROM remote_forward_observations')).rows[0].count,'0');
   assert.equal(await f.send(),'accepted');await f.remote.markMoveReady(moveId,1,staged.sequence);await f.remote.completeMove(moveId,1);assert.equal(await f.read(),null);
   await f.budget();await f.send(f.report(2));assert.equal(await f.read(),null);
  }finally{await f.db.close();}
@@ -93,4 +98,14 @@ test('publication remains v1 by default; opt-in includes revisions and authority
   const first=await digest();await f.db.pool.query('UPDATE installations SET configuration_revision=2');await worker.schedule();assert.notEqual(await digest(),first);
   const second=await digest();await transaction(f.db.pool,c=>revokeForwardReporter(c,f.cellId,1));assert.equal((await f.remote.reportingManifest(f.cellId)).version,1);await worker.schedule();assert.notEqual(await digest(),second);
  }finally{await f.db.close();}
+});
+test('opted-in reconciler publishes verifiable v2 authority and defaults still publish v1',async()=>{
+ for(const enabled of [false,true]){const f=await forwardFixture();try{
+  const issuer=generateKeyPairSync('ed25519');let published='';
+  const worker=new RemoteConfigurationReconciler(f.db.pool,{forwardReports:enabled,planMode:'test-free-paid',signingKeyForCell:async()=>issuer.privateKey,
+   artifacts:{readCsr:async()=>{throw new Error('unused');},readCertificate:async()=>undefined,publishCertificate:async()=>{throw new Error('unused');},publishManifest:async(cell,envelope)=>{assert.equal(cell,f.cellId);published=envelope;}}});
+  await worker.schedule();await f.db.pool.query("DELETE FROM remote_configuration_jobs WHERE kind<>'route'");assert.equal(await worker.runOnce(),true);
+  assert(published,'route digest must match the actual published manifest');const manifest=verifyManifest(JSON.parse(published),issuer.publicKey,f.cellId);
+  assert.equal(manifest.version,enabled?2:1);if(manifest.version===2){assert.deepEqual(manifest.reporter,{gatewayId:f.gatewayId,generation:1});assert.equal(manifest.routes[0]!.revision,1);}else assert.equal('revision'in manifest.routes[0]!,false);
+ }finally{await f.db.close();}}
 });
