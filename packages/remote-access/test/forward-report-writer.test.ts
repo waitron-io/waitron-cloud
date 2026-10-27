@@ -15,7 +15,7 @@ async function fixture(){
  const writer=new module!.ForwardReportWriter(options);await writer.restore(now);
  const binding:ForwardBinding={cellId,gatewayId,generation:1,installationId:randomUUID(),venueId:randomUUID(),revision:7,routeId:'public_availability',routeBinding:'a'.repeat(64),manifestSequence:3,manifestExpiresAt:start+600000};
  return {writer,options,binding,keys,directory,setTime:(value:number)=>{now=value;},time:()=>now,
-  async report(){return verifyForwardReport(JSON.parse(await readFile(join(directory,'report.json'),'utf8')),keys.publicKey,now);},
+  async report(){assert.ok((await readdir(directory)).includes('report.json'),'a valid completion must publish a report');return verifyForwardReport(JSON.parse(await readFile(join(directory,'report.json'),'utf8')),keys.publicKey,now);},
   close:()=>rm(directory,{recursive:true,force:true})};
 }
 test('new_success_beats_old_failure and one completion per attempt',async()=>{
@@ -31,6 +31,7 @@ test('changed_binding_discards_inflight and only fixed fields reach the report',
  const f=await fixture();try{
   const old=f.writer.begin(f.binding,start);
   const complete=f.writer.begin({...f.binding,revision:8,routeBinding:'b'.repeat(64),raw:'secret body'} as ForwardBinding,start);
+  old('upstream_transport',start);await f.writer.flush(start);assert.equal((await readdir(f.directory)).includes('report.json'),false,'an obsolete completion cannot trigger publication');
   complete('upstream_non_200',start);old('upstream_transport',start);await f.writer.flush(start);
   const report=await f.report();assert.equal(report.observations[0]!.revision,8);assert.equal(report.observations[0]!.routeBinding,'b'.repeat(64));
   assert.equal(report.observations[0]!.category,'upstream_non_200');assert.doesNotMatch(Buffer.from(JSON.parse(await readFile(join(f.directory,'report.json'),'utf8')).payload,'base64url').toString(),/secret|raw|address|hostname|error/i);
@@ -96,7 +97,7 @@ test('expiry and stream identity reject observations without refreshing authorit
  }finally{await f.close();}
 });
 for(const mode of [0o750,0o2770,0o2755])test(`directory permissions fail closed: ${mode.toString(8)}`,async()=>{
- const f=await fixture();try{await chmod(f.directory,mode);const writer=new module!.ForwardReportWriter(f.options);await assert.rejects(writer.restore(start),/forward_report_unavailable/);}finally{await f.close();}
+ const f=await fixture();try{await unlink(join(f.directory,'initialized.json'));await chmod(f.directory,mode);const writer=new module!.ForwardReportWriter(f.options);await assert.rejects(writer.restore(start),/forward_report_unavailable/);}finally{await f.close();}
 });
 test('symlink report and directory are refused without changing the target',async()=>{
  const f=await fixture();const other=await mkdtemp(join(tmpdir(),'cloud-forward-target-'));try{
@@ -125,7 +126,9 @@ test('restart removes only an owned incomplete temporary report',async()=>{
 });
 test('wrong reader group, regressed generation and reused generation key are refused',async()=>{
  const f=await fixture();try{
+  const marker=await readFile(join(f.directory,'initialized.json'),'utf8');await unlink(join(f.directory,'initialized.json'));
   const wrong=new module!.ForwardReportWriter({...f.options,readerGid:f.options.readerGid+1});await assert.rejects(wrong.restore(start),/forward_report_unavailable/);
+  await writeFile(join(f.directory,'initialized.json'),marker,{mode:0o600});
   f.writer.begin(f.binding,start)(null,start);await f.writer.flush(start);
   for(const options of [{...f.options,key:generateKeyPairSync('ed25519').privateKey},{...f.options,generation:2}]){
    const writer=new module!.ForwardReportWriter(options);await assert.rejects(writer.restore(start),/forward_report_unavailable/);

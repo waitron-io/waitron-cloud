@@ -51,11 +51,13 @@ test('absent opt-in and invalid key/storage leave applied routes available',asyn
    const reports=new module!.GatewayForwardReports(f.authority,options);await reports.refresh();assert.equal(reports.beginForward(f.route,start),undefined);await reports.flush(start);
    assert.equal(f.authority.hasAuthority,true);assert.equal(f.authority.routes.length,1);
   }
+  f.reports.beginForward(f.route,start)!(null,start);await f.reports.flush(start);
   await chmod(f.keyFile,0o640);const reports=new module!.GatewayForwardReports(f.authority,f.options);await reports.refresh();assert.equal(reports.beginForward(f.route,start),undefined);
  }finally{await f.close();}
 });
 test('dedicated reporter key cannot reuse issuer authority',async()=>{
  const f=await fixture();try{
+  f.reports.beginForward(f.route,start)!(null,start);await f.reports.flush(start);
   await writeFile(f.keyFile,f.key.privateKey.export({format:'pem',type:'pkcs8'}));
   // The gateway receives the issuer public key separately and must reject reusing it.
   const reports=new module!.GatewayForwardReports(f.authority,{...f.options,issuerKey:f.key.publicKey});await reports.refresh();assert.equal(reports.beginForward(f.route,start),undefined);
