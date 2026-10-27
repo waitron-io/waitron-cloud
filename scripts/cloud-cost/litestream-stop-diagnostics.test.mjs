@@ -32,8 +32,8 @@ function run(failure) {
     '/code/cost-waitron-adapter.mjs': `export const openReplay=async()=>({recordSale:async()=>{},counts:()=>({attempted:2,successful:2,failed:0}),
       verify:async()=>({ok:true,issues:0}),close:async()=>{}});`,
     '/code/litestream.mjs': `export {createLitestreamAfterStop,litestreamAfterStopOutput,withLitestreamCloseDiagnostics,createLitestreamRequestAudit} from ${JSON.stringify(actual)};
-      export const createLitestreamTransport=async()=>({url:'http://127.0.0.1:1',checkpoint:()=>({pending:0}),snapshot:()=>({}),whenIdle:async action=>{if(process.env.STOP_FAILURE==='stack-getter'){
-        const error=Error('Synthetic Litestream check failed');Object.defineProperty(error,'stack',{get(){throw Error('PRIVATE_CANARY');}});throw error;
+      export const createLitestreamTransport=async()=>({url:'http://127.0.0.1:1',checkpoint:()=>({pending:0}),snapshot:()=>({}),whenIdle:async action=>{if(['stack-getter','private-stack'].includes(process.env.STOP_FAILURE)){
+        const error=Error('Synthetic Litestream check failed');if(process.env.STOP_FAILURE==='private-stack')error.stack='Error: Synthetic Litestream check failed\\n    at PRIVATE_CANARY (private.mjs:1:1)';else Object.defineProperty(error,'stack',{get(){throw Error('PRIVATE_CANARY');}});throw error;
       }return action();},close:async()=>{}});`,
     '/code/meter.mjs': `export const createMeter=({phase})=>({phase,snapshot:()=>({})});
       export const createMeteringProxy=async()=>({url:'http://127.0.0.1:1',snapshot:()=>({}),close:async()=>{}});
@@ -59,6 +59,7 @@ for (const [failure, code, signal, invalid] of [['exit',7,null,false],['signal',
     assert.equal(result.stdout,'');
     const records=result.stderr.split('\n').filter(line=>line.startsWith('{')).map(line=>JSON.parse(line));
     const record=records.find(row=>row.kind==='litestream-stop');
+    assert.ok(record,'emit a stop refusal before cleanup');
     assert.equal(record.step,'exit');
     assert.deepEqual(record.process,{code,signal,invalid});
     assert.ok(record.audit,'retain audit evidence at the stop refusal');
@@ -112,4 +113,11 @@ test('an oversized unfinished log line names the buffer limit instead of the pre
   assert.throws(()=>audit.write(Buffer.from('SDK now DEBUG Request\n'+'x'.repeat(65537))));
   assert.equal(audit.checkpoint().failure.stage,'buffer-size');
   assert.throws(()=>audit.snapshot());
+});
+
+test('a known synthetic message cannot carry private transport frames into the stop record',()=>{
+  const result=run('private-stack');assert.equal(result.error,undefined);assert.equal(result.status,1,result.stderr);
+  assert.doesNotMatch(result.stderr,/PRIVATE_CANARY|private.mjs/);
+  const records=result.stderr.split('\n').filter(line=>line.startsWith('{')).map(line=>JSON.parse(line));
+  assert.equal(records.find(row=>row.kind==='litestream-stop').error.message,'Synthetic Litestream check failed');
 });

@@ -174,7 +174,11 @@ async function smoke() {
       const message = read('message');
       const known = ['Synthetic Litestream check failed', 'Synthetic Litestream stop timed out',
         'Synthetic Litestream stop reply refused', 'Invalid cloud cost Litestream audit'].includes(message);
-      const stack = known && message.startsWith('Synthetic Litestream') ? read('stack') : undefined;
+      const rawStack = known ? read('stack') : undefined;
+      const stack = typeof rawStack === 'string' ? ['Error: ' + message, ...rawStack.split('\n').flatMap(line => {
+        const frame = /\/litestream-smoke\.mjs:(\d+):(\d+)\)?$/.exec(line);
+        return frame ? [`    at litestream-smoke.mjs:${frame[1]}:${frame[2]}`] : [];
+      })].join('\n') : undefined;
       try { console.error(JSON.stringify({ kind: 'litestream-stop', status: 'rejected', step: stopStep,
         error: { name: 'Error', message: known ? message : 'Unclassified Litestream stop error', ...(typeof stack === 'string' ? { stack } : {}) },
         ...(stopOutcome ? { process: stopOutcome } : {}),

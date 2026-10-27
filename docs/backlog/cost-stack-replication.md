@@ -293,7 +293,7 @@ request counts. A transport failure carries its request's admission number,
 retry ordinal and phase in the stop checkpoint. That number identifies a
 request within one transport; it is not the SDK invocation ID. Request paths,
 headers and raw SDK logs stay private. Known synthetic stop errors retain their
-message and stack; other errors keep their original thrown value internally
+message and smoke-fixture stack frames; other errors keep their original thrown value internally
 and publish a fixed category to avoid exposing transport metadata.
 
 Native controls run the actual smoke and audit with substitute external workload,
