@@ -3,8 +3,12 @@ import {isIP} from 'node:net';
 import {publicUnavailable} from './public-unavailable.ts';
 import {request} from 'node:https';
 import type {IncomingMessage,ServerResponse} from 'node:http';
-interface Route {publicHostname:string;staffHostname:string;address:string;port:number}
-interface Options {key:Buffer;ca?:string|Buffer;routes:()=>Route[];difficulty?:number;now?:()=>number}
+import type {ForwardCause} from './forward-report.ts';
+export interface PublicGateRoute {publicHostname:string;staffHostname:string;address:string;port:number}
+export interface PublicGateOptions<R extends PublicGateRoute=PublicGateRoute> {
+ key:Buffer;ca?:string|Buffer;routes:()=>R[];difficulty?:number;now?:()=>number;
+ beginForward?:(route:Readonly<R>,startedAt:number)=>((category:ForwardCause|null,observedAt:number)=>void)|undefined;
+}
 function sourceBucket(ip:string):string{
  if(isIP(ip)===4)return ip;
  // URL canonicalisation handles embedded IPv4 without adding a dependency to the source-only gateway image.
@@ -41,7 +45,7 @@ const rejectionText:Record<number,[string,string]>={
  403:['The browser check was not accepted. Open the venue’s public page to start again.','No se aceptó la comprobación del navegador. Abre la página pública del local para empezar de nuevo.'],
 };
 /** Bind this handler to loopback only, behind HAProxy's overwritten client-IP/SNI headers. */
-export function createPublicGate(options:Options){
+export function createPublicGate<R extends PublicGateRoute>(options:PublicGateOptions<R>){
  if(options.key.length!==32)throw new Error('invalid_gate_key');
  const difficulty=options.difficulty??16;if(!Number.isInteger(difficulty)||difficulty<8||difficulty>22)throw new Error('invalid_difficulty');
  const now=options.now??Date.now,buckets=new Map<string,{count:number;until:number}>();let active=0;
@@ -90,15 +94,27 @@ export function createPublicGate(options:Options){
     counters.challenged++;reply(403,'<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><meta name="color-scheme" content="light dark"><title>Checking your browser / Comprobando tu navegador</title><body><main><h1>Checking your browser / <span lang="es">Comprobando tu navegador</span></h1><div hidden role="status"><p>Please wait a moment. / <span lang="es">Espera un momento.</span></p></div><p id="browser-guidance"><a href="/public/availability">Reload page / <span lang="es">Volver a cargar</span></a><span id="browser-static-guidance"><br>Allow JavaScript or try another browser to open this page. / <span lang="es">Permite JavaScript o prueba con otro navegador para abrir esta página.</span></span></p><script src="/_cloud/challenge.js" defer></script></main></body></html>','text/html; charset=utf-8');return;
    }
    if(active>=64){counters.rejected++;reply(429);return;}active++;counters.forwarded++;
+   let complete:((category:ForwardCause|null,observedAt:number)=>void)|undefined;
+   try{const observer=options.beginForward?.(route,now());if(typeof observer==='function')complete=observer;else void Promise.resolve(observer).catch(()=>{});}catch{}
+   let cancelled=false,observed=false,category:ForwardCause='forward_internal';
+   const observe=(outcome:ForwardCause|null)=>{if(cancelled||observed)return;observed=true;try{void Promise.resolve(complete?.(outcome,now())).catch(()=>{});}catch{}};
    try{
-    const result=await new Promise<{status:number;body:Buffer}>((resolve,reject)=>{
+    const result=await new Promise<{status:number|undefined;body:Buffer}>((resolve,reject)=>{
      const upstream=request({host:route.address,port:route.port,servername:route.staffHostname,ca:options.ca,method:'GET',path:'/public/availability',headers:{host:route.staffHostname,accept:'application/json'},timeout:5000,agent:false},response=>{
-      const chunks:Buffer[]=[];let size=0;response.on('data',(chunk:Buffer)=>{size+=chunk.length;if(size>65536){upstream.destroy(new Error('response_limit'));return;}chunks.push(chunk);});response.on('error',reject);response.on('end',()=>resolve({status:response.statusCode??502,body:Buffer.concat(chunks)}));
-     });upstream.on('timeout',()=>upstream.destroy(new Error('upstream_timeout')));upstream.on('error',reject);
-     const cancel=()=>{if(!res.writableEnded)upstream.destroy(new Error('client_closed'));};res.once('close',cancel);upstream.once('close',()=>res.off('close',cancel));upstream.end();
+      const chunks:Buffer[]=[];let size=0;response.on('data',(chunk:Buffer)=>{size+=chunk.length;if(size>65536){category='upstream_response_limit';upstream.destroy(new Error('response_limit'));return;}chunks.push(chunk);});
+      response.on('error',reject);response.on('aborted',()=>reject(new Error('upstream_aborted')));
+      response.on('close',()=>{if(!response.complete)reject(new Error('upstream_closed'));});
+      response.on('end',()=>resolve({status:response.statusCode,body:Buffer.concat(chunks)}));
+     });
+     category='upstream_transport';
+     upstream.on('timeout',()=>{category='upstream_timeout';upstream.destroy(new Error('upstream_timeout'));});upstream.on('error',reject);
+     // A visitor disconnect establishes no venue fault, including subsequent socket errors.
+     const cancel=()=>{if(!res.writableEnded){cancelled=true;upstream.destroy(new Error('client_closed'));}};
+     res.once('close',cancel);upstream.once('close',()=>res.off('close',cancel));upstream.end();
     });
-    if(result.status!==200)throw new Error('unavailable');reply(200,result.body.toString(),'application/json');
-   }catch{counters.unavailable++;const unavailable=publicUnavailable(req.headers.accept,req.headers['accept-language']);reply(503,unavailable.body,unavailable.type,unavailable.headers);}
+    if(result.status!==200){category=result.status===undefined?'forward_internal':'upstream_non_200';throw new Error('unavailable');}
+    observe(null);reply(200,result.body.toString(),'application/json');
+   }catch{observe(category);counters.unavailable++;const unavailable=publicUnavailable(req.headers.accept,req.headers['accept-language']);reply(503,unavailable.body,unavailable.type,unavailable.headers);}
    finally{active--;}
   }catch{if(!res.headersSent)reply(400);else res.destroy();}
  }

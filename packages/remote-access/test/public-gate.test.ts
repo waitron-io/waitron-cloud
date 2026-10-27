@@ -1,7 +1,12 @@
 import assert from 'node:assert/strict';
-import {test} from 'node:test';
+import {test,mock} from 'node:test';
 import {createServer,request} from 'node:http';
+import {IncomingMessage,type ServerResponse} from 'node:http';
+import {Socket} from 'node:net';
+import {EventEmitter} from 'node:events';
 import {createServer as httpsServer} from 'node:https';
+import https from 'node:https';
+import {syncBuiltinESMExports} from 'node:module';
 import {execFileSync} from 'node:child_process';
 import {mkdtemp,readFile,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
@@ -66,21 +71,142 @@ for(const outcome of ['403','429','network','worker','challenge','success'])test
   }
  }finally{await f.close();}
 });
-async function fixture(){
- let now=Date.now(),available=true,disconnect=false,failureStatus=503;
+async function fixture(beginForward?:(route:Readonly<{publicHostname:string;staffHostname:string;address:string;port:number}>,startedAt:number)=>((category:string|null,observedAt:number)=>void)|undefined){
+ let now=Date.now(),available=true,disconnect=false,failureStatus=503,mode='normal';
+ let start:()=>void=()=>{};const started=new Promise<void>(resolve=>{start=resolve;});
  const root=await mkdtemp(join(tmpdir(),'cloud-gate-pki-'));
  execFileSync('openssl',['req','-x509','-newkey','rsa:2048','-nodes','-days','1','-subj','/CN=staff.sol.example.test','-addext','subjectAltName=DNS:staff.sol.example.test','-keyout',join(root,'key.pem'),'-out',join(root,'cert.pem')],{stdio:'ignore'});
  const key=await readFile(join(root,'key.pem')),certificate=await readFile(join(root,'cert.pem'));await rm(root,{recursive:true});
  let upstream=0;let headers:Record<string,unknown>={};
- const venue=httpsServer({key,cert:certificate},(req,res)=>{upstream++;headers=req.headers;if(!available){if(disconnect){req.socket.destroy();return;}res.statusCode=failureStatus;res.end('internal failure at staff.sol.example.test: database offline');return;}res.setHeader('Set-Cookie','staff=private');res.end('available');});await new Promise<void>(r=>venue.listen(0,'127.0.0.1',r));const address=venue.address();assert.ok(address&&typeof address!=='string');
- const gate=createPublicGate({key:randomBytes(32),now:()=>now,difficulty:8,ca:certificate,routes:()=>[{publicHostname:host,staffHostname:'staff.sol.example.test',address:'127.0.0.1',port:address.port}]});
+ const venue=httpsServer({key,cert:certificate},(req,res)=>{upstream++;headers=req.headers;start();if(mode==='timeout'||mode==='cancel')return;if(mode==='limit'){res.end('x'.repeat(65537));return;}if(mode==='partial'){res.writeHead(200,{'Content-Length':'50'});res.write('partial');setImmediate(()=>res.destroy());return;}if(!available){if(disconnect){req.socket.destroy();return;}res.statusCode=failureStatus;res.end('internal failure at staff.sol.example.test: database offline');return;}res.setHeader('Set-Cookie','staff=private');res.end('available');});await new Promise<void>(r=>venue.listen(0,'127.0.0.1',r));const address=venue.address();assert.ok(address&&typeof address!=='string');
+ const gate=createPublicGate({key:randomBytes(32),now:()=>now,difficulty:8,ca:certificate,beginForward,routes:()=>[{publicHostname:host,staffHostname:'staff.sol.example.test',address:'127.0.0.1',get port(){if(mode==='internal')throw 'secret construction failure';return address.port;}}]});
  const server=createServer(gate.handle);await new Promise<void>(r=>server.listen(0,'127.0.0.1',r));const bound=server.address();assert.ok(bound&&typeof bound!=='string');
  const send=(path='/public/availability',extra:Record<string,string>={},method='GET',body?:string)=>new Promise<Response>((resolve,reject)=>{
   const req=request({host:'127.0.0.1',port:bound.port,path,method,headers:{host,'x-waitron-client-ip':'192.0.2.2','x-waitron-sni':host,...extra}},res=>{const chunks:Buffer[]=[];res.on('data',chunk=>chunks.push(chunk));res.on('end',()=>{const headers=new Headers();for(const [key,value]of Object.entries(res.headers)){if(Array.isArray(value))for(const v of value)headers.append(key,v);else if(value)headers.set(key,value);}resolve(new Response(res.statusCode===204?null:Buffer.concat(chunks),{status:res.statusCode!,headers}));});});req.on('error',reject);req.end(body);
  });
- return {send,gate,advance:(ms:number)=>{now+=ms;},unavailable:(dropConnection=false,status=503)=>{available=false;disconnect=dropConnection;failureStatus=status;},recover:()=>{available=true;},count:()=>upstream,headers:()=>headers,async close(){server.closeAllConnections();venue.closeAllConnections();await Promise.all([new Promise<void>(r=>server.close(()=>r())),new Promise<void>(r=>venue.close(()=>r()))]);}};
+ return {send,gate,started,bound,setMode:(value:string)=>{mode=value;},advance:(ms:number)=>{now+=ms;},unavailable:(dropConnection=false,status=503)=>{available=false;disconnect=dropConnection;failureStatus=status;},recover:()=>{available=true;},count:()=>upstream,headers:()=>headers,async close(){server.closeAllConnections();venue.closeAllConnections();await Promise.all([new Promise<void>(r=>server.close(()=>r())),new Promise<void>(r=>venue.close(()=>r()))]);}};
 }
 function solve(challenge:string,bits:number){for(let n=0;;n++){const hash=createHash('sha256').update(`${challenge}:${n}`).digest();if(hash.readUInt32BE(0)<2**(32-bits))return n;}}
+
+async function accessCookie(f:Awaited<ReturnType<typeof fixture>>){
+ const challenge=await(await f.send('/_cloud/challenge')).json() as {challenge:string;difficulty:number};
+ const reply=await f.send('/_cloud/solve',{'content-type':'application/json'},'POST',JSON.stringify({challenge:challenge.challenge,nonce:solve(challenge.challenge,challenge.difficulty)}));
+ assert.equal(reply.status,204);return reply.headers.get('set-cookie')!.split(';')[0]!;
+}
+
+for(const status of [201,302,403,404,503])test(`completed_http_is_not_transport: ${status}`,async()=>{
+ const calls:unknown[][]=[];let begins=0;
+ const f=await fixture((route,startedAt)=>{begins++;assert.equal(route.publicHostname,host);assert.ok(Number.isSafeInteger(startedAt));return (...args)=>{calls.push(args);};});
+ try{
+  const cookie=await accessCookie(f);f.unavailable(false,status);
+  const response=await f.send('/public/availability',{cookie,accept:'application/json'});
+  assert.equal(response.status,503);assert.deepEqual(await response.json(),{error:'venue_unavailable'});
+  assert.equal(begins,1);assert.equal(calls.length,1);assert.equal(calls[0]!.length,2);
+  assert.equal(calls[0]![0],'upstream_non_200');assert.ok(Number.isSafeInteger(calls[0]![1]));
+  assert.equal(f.gate.stats().forwarded,1);assert.equal(f.gate.stats().unavailable,1);assert.equal(f.gate.stats().active,0);
+ }finally{await f.close();}
+});
+
+for(const [mode,category] of [['timeout','upstream_timeout'],['limit','upstream_response_limit'],['disconnect','upstream_transport'],['partial','upstream_transport'],['internal','forward_internal']] as const)test(`timeout_limit_transport_internal_are_distinct: ${mode}`,async()=>{
+ const calls:unknown[][]=[];const f=await fixture(()=> (...args)=>{calls.push(args);});
+ try{
+  const cookie=await accessCookie(f);f.setMode(mode);if(mode==='disconnect')f.unavailable(true);
+  const response=await f.send('/public/availability',{cookie,accept:'text/html','accept-language':'es'});
+  const body=await response.text();assert.equal(response.status,503);assert.match(body,/<h1>Local no disponible<\/h1>/);
+  assert.doesNotMatch(body,/secret|staff\.sol|internal failure|127\.0|partial/);
+  assert.equal(calls.length,1);assert.deepEqual(calls[0]!.slice(0,1),[category]);assert.equal(calls[0]!.length,2);
+  assert.equal(f.gate.stats().unavailable,1);assert.equal(f.gate.stats().active,0);
+ }finally{await f.close();}
+});
+
+test('cancel_and_local_refusals_emit_nothing',async()=>{
+ let begins=0;const calls:unknown[][]=[];const f=await fixture(()=>{begins++;return (...args)=>{calls.push(args);};});
+ try{
+  for(const [path,status,headers] of [['/public/availability',421,{'x-waitron-sni':'unknown.example.test'}],['/private',404,{}],['/public/availability',403,{}]] as const)assert.equal((await f.send(path,headers)).status,status);
+  assert.equal(begins,0);assert.deepEqual(calls,[]);
+  const cookie=await accessCookie(f);f.setMode('cancel');
+  const req=request({host:'127.0.0.1',port:f.bound.port,path:'/public/availability',headers:{host,'x-waitron-sni':host,'x-waitron-client-ip':'192.0.2.2',cookie}});
+  req.on('error',()=>{});req.end();await f.started;req.destroy();
+  for(let i=0;i<100&&f.gate.stats().active;i++)await new Promise(resolve=>setTimeout(resolve,5));
+  assert.equal(begins,1);assert.deepEqual(calls,[]);assert.equal(f.gate.stats().active,0);
+  assert.equal(f.gate.stats().unavailable,1,'cancellation keeps the existing unavailable counter');
+ }finally{await f.close();}
+});
+
+for(const phase of ['begin','complete'])test(`observer_throw_does_not_change_public_reply: ${phase}`,async()=>{
+ let invocations=0;const f=await fixture(()=>{if(phase==='begin'){invocations++;throw 'private observer failure';}return ()=>{invocations++;throw new Error('private observer failure');};});
+ try{
+  const cookie=await accessCookie(f);
+  assert.equal((await f.send('/public/availability',{cookie})).status,200);
+  f.unavailable();const response=await f.send('/public/availability',{cookie,accept:'application/json'});
+  assert.equal(response.status,503);assert.deepEqual(await response.json(),{error:'venue_unavailable'});
+  assert.equal(f.gate.stats().forwarded,2);assert.equal(f.gate.stats().unavailable,1);assert.equal(f.gate.stats().active,0);assert.equal(invocations,2);
+ }finally{await f.close();}
+});
+
+for(const phase of ['begin','complete'])test(`observer_rejection_does_not_escape: ${phase}`,async()=>{
+ let invocations=0;const f=await fixture(()=>{
+  if(phase==='begin'){invocations++;return Promise.reject(new Error('private asynchronous begin')) as unknown as undefined;}
+  return async()=>{invocations++;throw new Error('private asynchronous completion');};
+ });
+ try{
+  const cookie=await accessCookie(f);
+  assert.equal((await f.send('/public/availability',{cookie})).status,200);
+  f.unavailable();const response=await f.send('/public/availability',{cookie,accept:'application/json'});
+  assert.equal(response.status,503);assert.deepEqual(await response.json(),{error:'venue_unavailable'});
+  await new Promise(resolve=>setImmediate(resolve));assert.equal(invocations,2);
+  assert.equal(f.gate.stats().forwarded,2);assert.equal(f.gate.stats().unavailable,1);assert.equal(f.gate.stats().active,0);
+ }finally{await f.close();}
+});
+
+test('private_payload_never_escapes and successful completion reports null exactly once',async()=>{
+ const calls:unknown[][]=[];const f=await fixture(()=> (...args)=>{calls.push(args);});
+ try{
+  const cookie=await accessCookie(f);f.unavailable();
+  const refused=await f.send('/public/availability',{cookie,authorization:'Bearer PRIVATE-CANARY',accept:'text/html'});
+  assert.equal(refused.status,503);assert.doesNotMatch(await refused.text(),/staff\.sol|database offline|PRIVATE-CANARY/);
+  f.recover();const recovered=await f.send('/public/availability',{cookie,authorization:'Bearer PRIVATE-CANARY'});
+  assert.equal(recovered.status,200);assert.equal(await recovered.text(),'available');assert.equal(recovered.headers.get('set-cookie'),null);
+  assert.equal(f.headers().authorization,undefined);assert.equal(f.headers().cookie,undefined);
+  assert.equal(calls.length,2);assert.deepEqual(calls.map(args=>args[0]),['upstream_non_200',null]);
+  assert.ok(calls.every(args=>args.length===2&&Number.isSafeInteger(args[1])));
+  assert.doesNotMatch(JSON.stringify(calls),/staff\.sol|127\.0|database offline|PRIVATE-CANARY|headers|body|path/);
+  assert.equal(f.gate.stats().unavailable,1);assert.equal(f.gate.stats().active,0);
+ }finally{await f.close();}
+});
+
+test('a synchronous visitor reply failure cannot complete one attempt twice',async()=>{
+ const calls:unknown[][]=[];const f=await fixture(()=> (...args)=>{calls.push(args);});
+ try{
+  const cookie=await accessCookie(f);const response=new EventEmitter();let writes=0;
+  const ended=new Promise<void>(resolve=>Object.assign(response,{
+   writableEnded:false,headersSent:false,
+   writeHead(){if(++writes===1)throw new Error('visitor response failure');},end(){resolve();},
+  }));
+  const req=new IncomingMessage(new Socket());
+  Object.assign(req,{headers:{host,'x-waitron-sni':host,'x-waitron-client-ip':'192.0.2.2',cookie},url:'/public/availability',method:'GET'});
+  f.gate.handle(req,response as ServerResponse);
+  await ended;assert.equal(writes,2);assert.equal(calls.length,1);assert.equal(calls[0]![0],null);
+  assert.equal(f.gate.stats().active,0);
+ }finally{await f.close();}
+});
+
+test('missing upstream status is an internal failure, never an application refusal',async()=>{
+ const calls:unknown[][]=[];const f=await fixture(()=> (...args)=>{calls.push(args);});
+ let stub:ReturnType<typeof mock.method>|undefined;
+ try{
+  const cookie=await accessCookie(f);
+  // The HTTPS boundary supplies a malformed response to exercise the defensive missing-status branch.
+  stub=mock.method(https,'request',((...args:unknown[])=>{
+   const onResponse=args.at(-1) as (response:unknown)=>void,upstream=new EventEmitter();
+   Object.assign(upstream,{end(){queueMicrotask(()=>{const response=Object.assign(new EventEmitter(),{complete:true});onResponse(response);response.emit('end');upstream.emit('close');});}});
+   return upstream;
+  }) as unknown as typeof https.request);syncBuiltinESMExports();
+  const response=await f.send('/public/availability',{cookie,accept:'application/json'});
+  assert.equal(response.status,503);assert.deepEqual(await response.json(),{error:'venue_unavailable'});
+  assert.equal(calls.length,1);assert.equal(calls[0]![0],'forward_internal');assert.equal(f.gate.stats().active,0);
+ }finally{stub?.mock.restore();syncBuiltinESMExports();await f.close();}
+});
 test('public challenge gates actual HTTPS forwarding and strips staff credentials and cookies',async()=>{
  const f=await fixture();try{
   assert.equal((await f.send('/management-api/session')).status,404);assert.equal((await f.send('/public/availability',{},'POST')).status,405);
