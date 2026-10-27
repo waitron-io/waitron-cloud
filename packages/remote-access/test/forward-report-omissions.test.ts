@@ -17,19 +17,12 @@ before(async()=>{
 },{timeout:150000});
 after(async()=>{if(temporary)await rm(temporary,{recursive:true,force:true});});
 interface Fault {name:string;source:string;file:string;pattern:string;changes:[string,string][];postgres?:boolean}
-const controller='apps/portal/src/remote-controller.ts',types='apps/portal/src/remote-types.ts',app='apps/portal/src/app.ts';
-const controls='apps/portal/test/remote-controller.test.ts',browser='apps/portal/test/forwarding-causes-browser.test.ts';
 const faults:Fault[]=[
- {name:'canonical timestamp validation',source:types,file:controls,pattern:'^a recent timestamp',changes:[['&&new Date(v).toISOString()===v','']]},
- {name:'clear before apply',source:controller,file:controls,pattern:'^apply clears private',changes:[['this.#clearForward();const generation=this.#generation;this.pending=true;','const generation=this.#generation;this.pending=true;']]},
+ {name:'report cell binding',source:'packages/remote-access/src/forward-report.ts',file:'packages/remote-access/test/forward-report.test.ts',pattern:'^report keys,',changes:[['entry.cellId!==value.cellId||','']]},
+ {name:'installation identity',source:'packages/remote-access/src/forward-report.ts',file:'packages/remote-access/test/forward-report.test.ts',pattern:'^report keys,',changes:[['!isUuid(entry.installationId)||','']]},
+ {name:'venue identity',source:'packages/remote-access/src/forward-report.ts',file:'packages/remote-access/test/forward-report.test.ts',pattern:'^report keys,',changes:[['!isUuid(entry.venueId)||','']]},
+ {name:'private view projection',source:'packages/remote-access/src/forward-observations.ts',file:'packages/account-http/test/forwarding-causes.test.ts',pattern:'^owner status returns exactly',changes:[['?{category:observation.category,observedAt:row.observed_at.toISOString(),expiresAt:row.expires_at.toISOString()}:null','?row:null']],postgres:true},
  {name:'policy-before-installation order',source:'packages/account-http/src/remote-access.ts',file:'packages/account-http/test/forwarding-causes.test.ts',pattern:'^existing-plan status locks',changes:[["  await client.query('SELECT o.id FROM organisations o JOIN venues v ON v.organisation_id=o.id WHERE v.id=$1 ORDER BY o.id FOR SHARE OF o',[binding.venue_id]);",'']],postgres:true},
- {name:'client view validation',source:types,file:controls,pattern:'^forward view rejects',changes:[['!validForward(v.publicForward)||','']]},
- {name:'client expiry',source:controller,file:controls,pattern:'^older server has null',changes:[['this.view={...this.view,publicForward:null};}\n #clearForward','this.view={...this.view};}\n #clearForward']]},
- {name:'refresh clearing',source:controller,file:controls,pattern:'^refresh erases',changes:[['this.#clearForward();const generation=this.#generation,id=this.installationId','const generation=this.#generation,id=this.installationId']]},
- {name:'response binding',source:controller,file:controls,pattern:'^refresh erases',changes:[['&&result.value.installationId===id','']]},
- {name:'late navigation fence',source:controller,file:controls,pattern:'^a venue switch',changes:[['if(generation!==this.#generation)return;','']]},
- {name:'draw timer expiry',source:app,file:browser,pattern:'^en light 390:',changes:[['    this.remote.expireForward();\n','']]},
- {name:'pagehide clearing before draw',source:app,file:browser,pattern:'^en light 390:',changes:[["window.addEventListener('pagehide', () => { this.remote.account(undefined);", "window.addEventListener('pagehide', () => {"]]},
  {name:'report signature',source:'packages/remote-access/src/forward-report.ts',file:'packages/remote-access/test/forward-report.test.ts',pattern:'^report signature,',changes:[['||!verify(null,bytes,key,signature)','']]},
  {name:'writer queue bound',source:'packages/remote-access/src/forward-report-writer.ts',file:'packages/remote-access/test/forward-report-writer.test.ts',pattern:'^sixty_four_routes',changes:[['if(!entry&&this.#entries.size>=64)return none;','']]},
  {name:'writer cadence',source:'packages/remote-access/src/forward-report-writer.ts',file:'packages/remote-access/test/forward-report-writer.test.ts',pattern:'^sixty_four_routes',changes:[['||now-this.#lastPublication<30000','']]},
