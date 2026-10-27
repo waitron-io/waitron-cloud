@@ -117,3 +117,20 @@ test('opted-in reconciler publishes verifiable v2 authority and defaults still p
   assert.equal(manifest.version,enabled?2:1);if(manifest.version===2){assert.deepEqual(manifest.reporter,{gatewayId:f.gatewayId,generation:1});assert.equal(manifest.routes[0]!.revision,1);}else assert.equal('revision'in manifest.routes[0]!,false);
  }finally{await f.db.close();}}
 });
+
+test('reporting cell jobs do not lock installations in an unrelated cell',async()=>{
+ const f=await forwardFixture();await f.remote.createCell({id:randomUUID(),country:'ES',provider:'aws',environment:'test',suffix:'unrelated.example.test',subnet:21,publicKey:randomBytes(32).toString('base64'),endpoint:'unrelated.example.test:51820'});
+ const cell=(await f.db.pool.query("SELECT id FROM remote_cells WHERE subnet=21")).rows[0].id;
+ const issuer=generateKeyPairSync('ed25519');let published='';
+ const worker=new RemoteConfigurationReconciler(f.db.pool,{forwardReports:true,planMode:'test-free-paid',signingKeyForCell:async()=>issuer.privateKey,
+  artifacts:{readCsr:async()=>{throw Error('unused');},readCertificate:async()=>undefined,publishCertificate:async()=>{throw Error('unused');},publishManifest:async(id,envelope)=>{assert.equal(id,cell);published=envelope;}}});
+ const held=await f.db.secondPool.connect();let running:Promise<unknown>|undefined;
+ try{
+  await worker.schedule();await f.db.pool.query("DELETE FROM remote_configuration_jobs WHERE kind<>'route' OR target_id<>$1",[cell]);
+  await held.query('BEGIN');await held.query('SELECT 1 FROM installations WHERE id=$1 FOR UPDATE',[f.installed.installationId]);
+  running=worker.runOnce();let settled=false;running.then(()=>settled=true);
+  for(let attempt=0;attempt<300&&!settled;attempt++)await delay(10);
+  assert.equal(settled,true,'an unrelated installation must not block this empty cell');assert(published);
+  const manifest=verifyManifest(JSON.parse(published),issuer.publicKey,cell);assert.deepEqual(manifest.routes,[]);
+ }finally{await held.query('ROLLBACK');held.release();await running;await f.db.close();}
+});

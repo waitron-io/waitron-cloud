@@ -63,3 +63,12 @@ test('collector CLI rejects untrusted configuration without exposing its content
   }
  }finally{await f.close();}
 });
+
+test('collector CLI once fails when the configured country database is unavailable',async()=>{
+ const f=await fixture();try{
+  const path=fileURLToPath(new URL('../src/forward-report-cli.ts',import.meta.url)),config=join(f.directory,'config.json');
+  await writeFile(config,JSON.stringify({mappings:[f.mapping]}));
+  const result=spawnSync(process.execPath,[path,config,'--once'],{encoding:'utf8',timeout:10000,env:{...process.env,DATABASE_URL:'postgres://probe@127.0.0.1:1/private-canary'}});
+  assert.equal(result.signal,null);assert.equal(result.status,1);assert.equal(result.stdout,'');assert.equal(result.stderr,'remote.forward_collection_failed\n');
+ }finally{await f.close();}
+});
