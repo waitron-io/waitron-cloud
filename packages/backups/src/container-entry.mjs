@@ -38,7 +38,10 @@ try{
  process.exitCode=error.code==='ENOSPC'||error.message==='backup.verifier_resource'?73:1;
  // Restore errors may carry secret archive content; only a fixed diagnostic leaves the container.
  console.error(process.exitCode===73?'backup.verifier_resource':'backup.verifier_failed');
- if(process.exitCode===73)console.error('backup.verifier_resource_detail '+JSON.stringify(verifierResourceDiagnostic({entryPid:process.pid,entryReason:error.code==='ENOSPC'?'scratch_full':'child_resource',child:error.cause,memoryBefore,memoryAfter:readVerifierMemoryEvents()})));
+ if(process.exitCode===73){
+  // Optional details must not replace the resource exit or expose a reporting exception.
+  try{console.error('backup.verifier_resource_detail '+JSON.stringify(verifierResourceDiagnostic({entryPid:process.pid,entryReason:error.code==='ENOSPC'?'scratch_full':'child_resource',child:error.cause,memoryBefore,memoryAfter:readVerifierMemoryEvents()})));}catch{}
+ }
 }finally{clearTimeout(deadline);}
 
 }

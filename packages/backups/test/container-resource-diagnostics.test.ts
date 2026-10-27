@@ -1,23 +1,24 @@
 import assert from 'node:assert/strict';
 import {execFile} from 'node:child_process';
-import {mkdtemp,writeFile,readFile,rm,chmod} from 'node:fs/promises';
+import {mkdtemp,mkdir,readdir,writeFile,readFile,rm,chmod} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {test} from 'node:test';
 import {Readable} from 'node:stream';
 import {createContainerWaitronVerifier} from '../src/container-verifier.ts';
+import {createWaitronVerifier} from '../src/waitron-verifier.ts';
 const detail={entryPid:1,entryReason:'child_resource',child:{childPid:9,childExitCode:null,childSignal:'SIGKILL',fatalHeap:false,scratchFull:false,fileLimit:false},memoryBefore:{oom:0,oom_kill:0},memoryAfter:{oom:1,oom_kill:1}};
 
-for(const entryReason of ['child_resource','scratch_full'])test(`the real entry program reports ${entryReason} and both memory snapshots`,async()=>{
+for(const entryReason of ['child_resource','scratch_full','throwing_details'])test(`the real entry program reports ${entryReason} and both memory snapshots`,async()=>{
  const directory=await mkdtemp(join(tmpdir(),'verifier-entry-report-')),preload=join(directory,'preload.mjs'),input=join(directory,'input');
- const stub=`export async function createWaitronVerifier(){return async()=>{throw Error('backup.verifier_resource',{cause:${JSON.stringify({...detail.child,private:'private-child-secret'})}})}}`;
+ const stub=entryReason==='throwing_details'?`export async function createWaitronVerifier(){return async()=>{const error=Error('backup.verifier_resource');Object.defineProperty(error,'cause',{get(){throw Error('private-cause-secret')}});throw error;}}`:`export async function createWaitronVerifier(){return async()=>{throw Error('backup.verifier_resource',{cause:${JSON.stringify({...detail.child,private:'private-child-secret'})}})}}`;
  const entry=fileURLToPath(new URL('../src/container-entry.mjs',import.meta.url));
  try{
   await writeFile(preload,`import fs from 'node:fs';import {syncBuiltinESMExports,registerHooks} from 'node:module';
-const originalRead=fs.readFileSync,originalCreate=fs.createWriteStream,originalStream=fs.createReadStream,originalStat=fs.promises.stat;let count=0;
-fs.readFileSync=(path,...args)=>path==='/sys/fs/cgroup/memory.events'?(count++?'oom 1\\noom_kill 1\\n':'oom 0\\noom_kill 0\\n'):originalRead(path,...args);
-fs.createWriteStream=(path,...args)=>{if(${JSON.stringify(entryReason)}==='scratch_full')throw Object.assign(Error('private-scratch-secret'),{code:'ENOSPC'});return originalCreate(path==='/scratch/input.backup.enc'?${JSON.stringify(input)}:path,...args)};
+const originalRead=fs.readFileSync,originalCreate=fs.createWriteStream,originalStream=fs.createReadStream,originalStat=fs.promises.stat;globalThis.reportWorkStarted=false;
+fs.readFileSync=(path,...args)=>path==='/sys/fs/cgroup/memory.events'?(globalThis.reportWorkStarted?'oom 1\\noom_kill 1\\n':'oom 0\\noom_kill 0\\n'):originalRead(path,...args);
+fs.createWriteStream=(path,...args)=>{globalThis.reportWorkStarted=true;if(${JSON.stringify(entryReason)}==='scratch_full')throw Object.assign(Error('private-scratch-secret'),{code:'ENOSPC'});return originalCreate(path==='/scratch/input.backup.enc'?${JSON.stringify(input)}:path,...args)};
 fs.createReadStream=(path,...args)=>originalStream(path==='/scratch/input.backup.enc'?${JSON.stringify(input)}:path,...args);
 fs.promises.stat=(path,...args)=>originalStat(path==='/scratch/input.backup.enc'?${JSON.stringify(input)}:path,...args);syncBuiltinESMExports();
 registerHooks({resolve(specifier,context,next){if(specifier==='./waitron-verifier.ts'&&context.parentURL.endsWith('/container-entry.mjs'))return {url:${JSON.stringify('data:text/javascript,'+encodeURIComponent(stub))},shortCircuit:true};return next(specifier,context)}});`);
@@ -29,6 +30,7 @@ registerHooks({resolve(specifier,context,next){if(specifier==='./waitron-verifie
   await assert.rejects(pending, (error:any)=>{
    assert.equal(error.code,73);
    const line=error.stderr.split('\n').find((line:string)=>line.startsWith('backup.verifier_resource_detail '));
+   if(entryReason==='throwing_details'){assert.equal(error.stderr.trim(),'backup.verifier_resource');return true;}
    assert(line,'entry must report its resource boundary');
    assert.deepEqual(JSON.parse(line.slice('backup.verifier_resource_detail '.length)),{...detail,entryReason,child:entryReason==='scratch_full'?null:detail.child,entryPid});
    assert.equal(typeof JSON.parse(line.slice('backup.verifier_resource_detail '.length)).entryPid,'number');
@@ -65,4 +67,22 @@ else process.exitCode=125;`);await chmod(wrapper,0o700);process.env.PATH=directo
   });
   assert.equal(await readFile(removed,'utf8'),'removed');
  }finally{process.env.PATH=oldPath;await rm(directory,{recursive:true,force:true});}
+});
+
+test('the legacy restore adapter forwards child resource details and removes private scratch',async()=>{
+ const directory=await mkdtemp(join(tmpdir(),'verifier-restore-report-')),server=join(directory,'waitron/apps/server'),scratch=join(directory,'scratch');
+ try{
+  await mkdir(join(server,'src'),{recursive:true});await mkdir(join(server,'node_modules/tsx'),{recursive:true});await mkdir(scratch);
+  await writeFile(join(server,'package.json'),'{"type":"module"}');
+  await writeFile(join(server,'node_modules/tsx/package.json'),'{"name":"tsx","type":"module","exports":"./loader.mjs"}');
+  await writeFile(join(server,'node_modules/tsx/loader.mjs'),'');
+  await writeFile(join(server,'src/restore.ts'),"export async function validateArtifact(){process.kill(process.pid,'SIGKILL')}export async function writeValidated(){}");
+  await writeFile(join(server,'src/modules.ts'),'export const ALL_MODULES=[]');await writeFile(join(server,'src/env-file.ts'),'export function parseEnvFile(){return {}}');
+  const verify=await createWaitronVerifier(join(directory,'waitron'),{temporaryRoot:scratch});
+  await assert.rejects(verify({receipt:{size:1,digest:''},open:()=>Readable.from([Buffer.from('x')]),async dispose(){}},{recoveryKey:'private-key'} as never,{} as never,new AbortController().signal),(error:any)=>{
+   assert.equal(error.message,'backup.verifier_resource');const {childPid,...reported}=error.cause;
+   assert(Number.isInteger(childPid)&&childPid>0);assert.deepEqual(reported,{childExitCode:null,childSignal:'SIGKILL',fatalHeap:false,scratchFull:false,fileLimit:false});
+   assert.throws(()=>process.kill(childPid,0));return true;
+  });assert.deepEqual(await readdir(scratch),[]);
+ }finally{await rm(directory,{recursive:true,force:true});}
 });

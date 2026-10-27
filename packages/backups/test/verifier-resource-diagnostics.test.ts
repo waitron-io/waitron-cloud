@@ -1,19 +1,22 @@
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
 import {runNodeVerifier} from '../src/verify-process.ts';
+import childProcess from 'node:child_process';
 
 for(const [name,code,expected] of [
- ['kernel signal',"process.kill(process.pid,'SIGKILL')",{childExitCode:null,childSignal:'SIGKILL',fatalHeap:false,scratchFull:false,fileLimit:false}],
+ ['child SIGKILL',"process.kill(process.pid,'SIGKILL')",{childExitCode:null,childSignal:'SIGKILL',fatalHeap:false,scratchFull:false,fileLimit:false}],
  ['heap refusal',"process.stderr.write('FATAL ERROR: Reached heap limit\\nprivate-recovery-key');setInterval(()=>{},1000)",{childExitCode:null,childSignal:'SIGKILL',fatalHeap:true,scratchFull:false,fileLimit:false}],
  ['scratch refusal',"process.stderr.write('ENOSPC private-recovery-key');process.exit(3)",{childExitCode:3,childSignal:null,fatalHeap:false,scratchFull:true,fileLimit:false}],
  ['file limit',"process.stderr.write('EFBIG private-recovery-key');process.exit(3)",{childExitCode:3,childSignal:null,fatalHeap:false,scratchFull:false,fileLimit:true}],
-] as const)test(`resource reporting distinguishes ${name} without echoing child text`,async()=>{
- await assert.rejects(runNodeVerifier(['-e',code],{input:{},timeoutMs:5000}),(error:any)=>{
+] as const)test(`resource reporting distinguishes ${name} without echoing child text`,async t=>{
+ const spawn=childProcess.spawn;let expectedPid:number|undefined;
+ t.mock.method(childProcess,'spawn',(...args:Parameters<typeof spawn>)=>{const child=spawn(...args);expectedPid=child.pid;return child;});syncBuiltinESMExports();
+ try{await assert.rejects(runNodeVerifier(['-e',code],{input:{},timeoutMs:5000}),(error:any)=>{
   assert.equal(error.message,'backup.verifier_resource');
-  assert.equal(typeof error.cause?.childPid,'number');assert(error.cause.childPid>0);
+  assert.equal(error.cause?.childPid,expectedPid);assert(expectedPid);
   const {childPid,...detail}=error.cause;assert.deepEqual(detail,expected);
   assert(!JSON.stringify(error).includes('private-recovery-key'));return true;
- });
+ });}finally{t.mock.restoreAll();syncBuiltinESMExports();}
 });
 
 import fs from 'node:fs';
@@ -50,4 +53,18 @@ for(const raw of ['', 'backup.verifier_resource_detail invalid\n','backup.verifi
  const value=processVerifier.readVerifierResourceDiagnostic(raw);
  if(raw.includes('"entryPid"'))assert.deepEqual(value,{entryPid:null,entryReason:null,child:null,memoryBefore:null,memoryAfter:null});
  else assert.equal(value,null);
+});
+
+const validChild={childPid:9,childExitCode:null,childSignal:'SIGKILL',fatalHeap:false,scratchFull:false,fileLimit:false};
+for(const [field,value] of [['childSignal','private-signal'],['childExitCode',256],['childExitCode','private-exit'],['fatalHeap','private-flag']] as const)test(`valid child identity cannot bypass the ${field} filter with ${value}`,()=>{
+ const result=processVerifier.readVerifierResourceDiagnostic('backup.verifier_resource_detail '+JSON.stringify({entryPid:1,entryReason:'child_resource',child:{...validChild,[field]:value}}));
+ assert.deepEqual(result,{entryPid:1,entryReason:'child_resource',child:null,memoryBefore:null,memoryAfter:null});
+});
+test('an unrecognised entry reason cannot echo container text',()=>{
+ const result=processVerifier.readVerifierResourceDiagnostic('backup.verifier_resource_detail '+JSON.stringify({entryPid:1,entryReason:'private-reason',child:validChild}));
+ assert.deepEqual(result,{entryPid:1,entryReason:null,child:validChild,memoryBefore:null,memoryAfter:null});
+});
+test('the final resource report supersedes an earlier advisory line',()=>{
+ const result=processVerifier.readVerifierResourceDiagnostic('backup.verifier_resource_detail {"entryPid":1}\nbackup.verifier_resource_detail {"entryPid":2}\n');
+ assert.deepEqual(result,{entryPid:2,entryReason:null,child:null,memoryBefore:null,memoryAfter:null});
 });
