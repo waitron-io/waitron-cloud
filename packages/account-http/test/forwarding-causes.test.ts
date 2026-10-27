@@ -8,10 +8,10 @@ import {forwardFixture} from '../../remote-access/test/fixtures/forward-observat
 import {createAccountApp} from '../src/app.ts';
 import type {HttpBindings} from '@hono/node-server';
 const origin='https://cloud.example.test';
-async function fixture(){
+async function fixture(planMode:'existing'|'test-free-paid'='test-free-paid'){
  const f=await forwardFixture();
  const session=await transaction(f.db.pool,c=>createSession(c,f.owner.accountId));
- const app=createAccountApp({pool:f.db.pool,outbox:f.db.outbox,planMode:'test-free-paid',config:{portalOrigin:origin,production:true,rateKey:f.db.rateKey,trustedProxyIps:[]}});
+ const app=createAccountApp({pool:f.db.pool,outbox:f.db.outbox,planMode,config:{portalOrigin:origin,production:true,rateKey:f.db.rateKey,trustedProxyIps:[]}});
  const call=async(action='remote-access/status',body:unknown={installationId:f.installed.installationId},headers:Record<string,string>={})=>app.request(origin+'/api/account/'+action,{method:'POST',headers:{origin,cookie:'__Host-cloud_session='+session.token,'x-csrf-token':session.csrfToken,'content-type':'application/json',...headers},body:JSON.stringify(body)},{incoming:{socket:{remoteAddress:'192.0.2.1'}}} as HttpBindings);
  return {...f,session,call};
 }
@@ -73,4 +73,14 @@ test('diagnostic export and installation list omit private forwarding records',a
   await f.send();
   for(const [action,body] of [['diagnostics/read',{installationId:f.installed.installationId}],['installations',{}]] as const){const response=await f.call(action,body);assert.equal(response.status,200);const text=await response.text();for(const secret of ['publicForward','upstream_transport',f.gatewayId,f.publicKey,f.report().observations[0]!.routeBinding])assert(!text.includes(secret),secret);}
  }finally{await f.db.close();}
+});
+
+test('existing-plan status locks policy before installation so concurrent downgrade can finish',async()=>{
+ const f=await fixture('existing'),blocker=await f.db.secondPool.connect();let pending:Promise<Response>|undefined;
+ try{
+  await f.send();await blocker.query('BEGIN');await blocker.query("SET LOCAL statement_timeout='3s'");await blocker.query("UPDATE organisations SET service_plan='free'");pending=f.call();
+  let reached=false;for(let i=0;i<200;i++){const r=await f.db.secondPool.query("SELECT 1 FROM pg_stat_activity WHERE application_name=$1 AND wait_event_type='Lock' AND query LIKE '%organisations%'",[f.db.schema]);if(r.rowCount){reached=true;break;}await delay(10);}assert(reached,'status waits for policy before installation');
+  await assert.doesNotReject(()=>blocker.query('SELECT id FROM installations FOR UPDATE'));
+  await blocker.query('COMMIT');assert.equal((await pending).status,200);
+ }finally{await blocker.query('ROLLBACK');blocker.release();await pending;await f.db.close();}
 });

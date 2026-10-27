@@ -20,6 +20,7 @@ interface Fault {name:string;source:string;file:string;pattern:string;changes:[s
 const controller='apps/portal/src/remote-controller.ts',types='apps/portal/src/remote-types.ts',app='apps/portal/src/app.ts';
 const controls='apps/portal/test/remote-controller.test.ts',browser='apps/portal/test/forwarding-causes-browser.test.ts';
 const faults:Fault[]=[
+ {name:'policy-before-installation order',source:'packages/account-http/src/remote-access.ts',file:'packages/account-http/test/forwarding-causes.test.ts',pattern:'^existing-plan status locks',changes:[["  await client.query('SELECT o.id FROM organisations o JOIN venues v ON v.organisation_id=o.id WHERE v.id=$1 ORDER BY o.id FOR SHARE OF o',[binding.venue_id]);",'']],postgres:true},
  {name:'client view validation',source:types,file:controls,pattern:'^forward view rejects',changes:[['!validForward(v.publicForward)||','']]},
  {name:'client expiry',source:controller,file:controls,pattern:'^older server has null',changes:[['this.view={...this.view,publicForward:null};}\n #clearForward','this.view={...this.view};}\n #clearForward']]},
  {name:'refresh clearing',source:controller,file:controls,pattern:'^refresh erases',changes:[['this.#clearForward();const generation=this.#generation,id=this.installationId','const generation=this.#generation,id=this.installationId']]},
