@@ -31,8 +31,9 @@ try{
  if(command==='dns')console.log(JSON.stringify(await store.hostnameInstructions(config.installationId,config.kind,config.hostname)));
  if(command==='hostname')console.log(JSON.stringify(await store.setHostname(config.installationId,config.kind,config.hostname,config.expectedRevision)));
  if(command==='export'){
+  if(config.forwardReports!==undefined&&typeof config.forwardReports!=='boolean')throw new Error('invalid_export');
   const key=createPrivateKey(await readFile(config.signingKeyFile));
-  do{try{await store.publishManifest(config.cellId,async manifest=>atomic(config.output,JSON.stringify(signManifest(manifest,key))));}catch{if(!config.watch)throw new Error('export_failed');console.error('remote.export_failed');}
+  do{try{await store[config.forwardReports===true?'publishReportingManifest':'publishManifest'](config.cellId,async manifest=>atomic(config.output,JSON.stringify(signManifest(manifest,key))));}catch{if(!config.watch)throw new Error('export_failed');console.error('remote.export_failed');}
    if(config.watch)for(let n=0;n<30&&!stopping;n++)await delay(1000);
   }while(config.watch&&!stopping);
  }

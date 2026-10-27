@@ -5,7 +5,7 @@ import {transaction,type PlanMode} from '@waitron-cloud/registration';
 import {eligibleRemoteInstallations} from './plan-permissions.ts';
 import {RemoteAccessStore,type CertificateAuthorization} from './placement.ts';
 import {certificateNeedsRenewal} from './renewal.ts';
-import {signManifest,type GatewayRoute} from './manifest.ts';
+import {signManifest,type GatewayRoute,type ReportingGatewayRoute} from './manifest.ts';
 
 export type RemoteConfigurationKind='route'|'certificate_staff'|'certificate_public';
 export interface RemoteConfigurationJob {
@@ -22,6 +22,7 @@ export interface CertificateIssueTarget extends CertificateAuthorization {instal
 interface ReconcilerOptions {
  planMode?:PlanMode;
  staffExchange?:boolean;
+ forwardReports?:boolean;
  execute?:(job:RemoteConfigurationJob,context:ExecuteContext)=>Promise<void>;
  artifacts?:ReconcilerArtifacts;
  issueCertificate?:(target:CertificateIssueTarget)=>Promise<string>;
@@ -32,24 +33,36 @@ interface DesiredTarget {kind:RemoteConfigurationKind;targetId:string;digest:str
 
 const digest=(value:unknown)=>createHash('sha256').update(JSON.stringify(value)).digest('hex');
 const routeDigest=(routes:GatewayRoute[])=>digest([...routes].sort((a,b)=>a.venueId.localeCompare(b.venueId)).map(route=>({installationId:route.installationId,venueId:route.venueId,staffHostname:route.staffHostname,publicHostname:route.publicHostname,address:route.address,port:route.port,peerPublicKey:route.peerPublicKey})));
+const publicationDigest=(routes:GatewayRoute[],reporter?:{gatewayId:string;generation:number})=>reporter
+ ?digest({routes:[...routes].sort((a,b)=>a.venueId.localeCompare(b.venueId)).map(r=>({binding:routeDigest([r]),revision:(r as ReportingGatewayRoute).revision})),reporter}):routeDigest(routes);
 const certificateDigest=(installationId:string,kind:'staff'|'public',value:CertificateAuthorization)=>digest({installationId,kind,revision:value.revision,hostname:value.hostname,dnsName:value.dnsName});
 const rowJob=(row:Record<string,unknown>):RemoteConfigurationJob=>({kind:row.kind as RemoteConfigurationKind,targetId:String(row.target_id),desiredDigest:String(row.desired_digest),claimId:String(row.claim_id),attempts:Number(row.attempts)});
 
 const staffDigest=(authorityDigest:string,request:StaffCertificateRequest)=>digest({authorityDigest,requestId:request.request_id,requestDigest:request.request_digest});
 
-async function desiredTargets(client:PoolClient,staffExchange:boolean,mode:PlanMode):Promise<DesiredTarget[]>{
- const eligibleIds=await eligibleRemoteInstallations(client,mode);
+async function desiredTargets(client:PoolClient,staffExchange:boolean,mode:PlanMode,forwardReports:boolean):Promise<DesiredTarget[]>{
+ let eligibleIds:string[]|undefined;
+ if(forwardReports){
+  const policies=(await client.query(`SELECT o.id FROM organisations o WHERE EXISTS(SELECT 1 FROM venues v JOIN remote_placements p ON p.venue_id=v.id
+   WHERE v.organisation_id=o.id) ORDER BY o.id FOR SHARE OF o`)).rows.map(r=>r.id);
+  const locked=(await client.query(`SELECT i.id FROM installations i JOIN venues v ON v.id=i.venue_id WHERE v.organisation_id=ANY($1::uuid[])
+   AND EXISTS(SELECT 1 FROM remote_placements p WHERE p.installation_id=i.id) ORDER BY i.id FOR SHARE OF i`,[policies])).rows.map(r=>r.id);
+  eligibleIds=mode==='existing'?locked:(await client.query(`SELECT i.id FROM installations i JOIN venues v ON v.id=i.venue_id JOIN organisations o ON o.id=v.organisation_id
+   JOIN installation_services s ON s.installation_id=i.id AND s.service='remote_access' WHERE i.id=ANY($1::uuid[]) AND o.service_plan='paid'
+   AND v.environment='test' AND s.state<>'unconfigured' AND i.revoked_at IS NULL`,[locked])).rows.map(r=>r.id);
+ }else eligibleIds=await eligibleRemoteInstallations(client,mode);
  const eligible=eligibleIds===undefined?undefined:new Set(eligibleIds);
- const cells=(await client.query('SELECT id FROM remote_cells ORDER BY id')).rows;
+ const cells=(await client.query(forwardReports?`SELECT c.id,r.gateway_id,r.generation,r.revoked_at FROM remote_cells c
+  LEFT JOIN remote_forward_reporters r ON r.cell_id=c.id ORDER BY c.id`:'SELECT id FROM remote_cells ORDER BY id')).rows;
  const targets:DesiredTarget[]=[];
  const active=(await client.query(`SELECT p.cell_id,p.installation_id,p.venue_id,host(p.address) AS address,p.port,p.peer_public_key,
-    s.hostname AS staff_hostname,u.hostname AS public_hostname
+    s.hostname AS staff_hostname,u.hostname AS public_hostname,i.configuration_revision
    FROM remote_placements p JOIN installations i ON i.id=p.installation_id
    JOIN remote_hostnames s ON s.venue_id=p.venue_id AND s.kind='staff'
    JOIN remote_hostnames u ON u.venue_id=p.venue_id AND u.kind='public'
    WHERE i.revoked_at IS NULL ORDER BY p.cell_id,p.venue_id`)).rows;
  const staged=(await client.query(`SELECT m.target_cell_id AS cell_id,m.installation_id,m.venue_id,host(m.target_address) AS address,m.target_port AS port,m.target_peer_public_key AS peer_public_key,
-    s.hostname AS staff_hostname,u.hostname AS public_hostname
+    s.hostname AS staff_hostname,u.hostname AS public_hostname,i.configuration_revision
    FROM remote_cell_moves m JOIN installations i ON i.id=m.installation_id
    JOIN remote_hostnames s ON s.venue_id=m.venue_id AND s.kind='staff'
    JOIN remote_hostnames u ON u.venue_id=m.venue_id AND u.kind='public'
@@ -59,9 +72,9 @@ async function desiredTargets(client:PoolClient,staffExchange:boolean,mode:PlanM
  for(const row of [...active,...staged]){
   if(eligible&&!eligible.has(row.installation_id))continue;
   let routes=routesByCell.get(row.cell_id);if(!routes){routes=[];routesByCell.set(row.cell_id,routes);}
-  routes.push({installationId:row.installation_id,venueId:row.venue_id,address:row.address,port:row.port,peerPublicKey:row.peer_public_key,staffHostname:row.staff_hostname,publicHostname:row.public_hostname});
+  routes.push({...(forwardReports?{revision:Number(row.configuration_revision)}:{}),installationId:row.installation_id,venueId:row.venue_id,address:row.address,port:row.port,peerPublicKey:row.peer_public_key,staffHostname:row.staff_hostname,publicHostname:row.public_hostname});
  }
- for(const cell of cells)targets.push({kind:'route',targetId:cell.id,digest:routeDigest(routesByCell.get(cell.id)??[])});
+ for(const cell of cells)targets.push({kind:'route',targetId:cell.id,digest:publicationDigest(routesByCell.get(cell.id)??[],forwardReports&&cell.gateway_id&&!cell.revoked_at?{gatewayId:cell.gateway_id,generation:Number(cell.generation)}:undefined)});
  const certificates=(await client.query(`SELECT i.id,i.configuration_revision,p.venue_id,c.suffix,s.hostname AS staff_hostname,u.hostname AS public_hostname
   FROM installations i JOIN remote_placements p ON p.installation_id=i.id JOIN remote_cells c ON c.id=p.cell_id
   JOIN remote_hostnames s ON s.venue_id=p.venue_id AND s.kind='staff'
@@ -80,12 +93,12 @@ async function desiredTargets(client:PoolClient,staffExchange:boolean,mode:PlanM
 }
 
 export class RemoteConfigurationReconciler {
- readonly #planMode:PlanMode;readonly #staffExchange:boolean;readonly #pool:Pool;readonly #execute:ReconcilerOptions['execute'];readonly #artifacts:ReconcilerArtifacts|undefined;
+ readonly #forwardReports:boolean;readonly #planMode:PlanMode;readonly #staffExchange:boolean;readonly #pool:Pool;readonly #execute:ReconcilerOptions['execute'];readonly #artifacts:ReconcilerArtifacts|undefined;
  readonly #issueCertificate:ReconcilerOptions['issueCertificate'];readonly #signingKeyForCell:ReconcilerOptions['signingKeyForCell'];readonly #now:()=>number;readonly #store:RemoteAccessStore;
- constructor(pool:Pool,options:ReconcilerOptions={}){this.#planMode=options.planMode??'existing';this.#staffExchange=options.staffExchange??false;this.#pool=pool;this.#store=new RemoteAccessStore(pool,this.#planMode);this.#execute=options.execute;this.#artifacts=options.artifacts;this.#issueCertificate=options.issueCertificate;this.#signingKeyForCell=options.signingKeyForCell;this.#now=options.now??Date.now;}
+ constructor(pool:Pool,options:ReconcilerOptions={}){this.#forwardReports=options.forwardReports??false;this.#planMode=options.planMode??'existing';this.#staffExchange=options.staffExchange??false;this.#pool=pool;this.#store=new RemoteAccessStore(pool,this.#planMode);this.#execute=options.execute;this.#artifacts=options.artifacts;this.#issueCertificate=options.issueCertificate;this.#signingKeyForCell=options.signingKeyForCell;this.#now=options.now??Date.now;}
  async schedule():Promise<number>{return transaction(this.#pool,async client=>{
   await client.query("SELECT pg_advisory_xact_lock(hashtext(current_schema()),hashtext('remote_configuration_schedule'))");
-  const desired=await desiredTargets(client,this.#staffExchange,this.#planMode),keys=new Set(desired.map(target=>`${target.kind}:${target.targetId}`));let changed=0;
+  const desired=await desiredTargets(client,this.#staffExchange,this.#planMode,this.#forwardReports),keys=new Set(desired.map(target=>`${target.kind}:${target.targetId}`));let changed=0;
   const existing=(await client.query('SELECT kind,target_id FROM remote_configuration_jobs WHERE enabled')).rows;
   for(const row of existing)if(!keys.has(`${row.kind}:${row.target_id}`)){
    const result=await client.query(`UPDATE remote_configuration_jobs SET enabled=false,status='pending',claim_id=NULL,lease_until=NULL,attempts=0,last_error=NULL,updated_at=clock_timestamp()
@@ -108,7 +121,7 @@ export class RemoteConfigurationReconciler {
   return changed;
  });}
  async #eligible(job:RemoteConfigurationJob,client:PoolClient):Promise<boolean>{
-  return this.#planMode==='existing'||(await desiredTargets(client,this.#staffExchange,this.#planMode)).some(t=>t.kind===job.kind&&t.targetId===job.targetId&&t.digest===job.desiredDigest);
+  return this.#planMode==='existing'&&!this.#forwardReports||(await desiredTargets(client,this.#staffExchange,this.#planMode,this.#forwardReports)).some(t=>t.kind===job.kind&&t.targetId===job.targetId&&t.digest===job.desiredDigest);
  }
  async #current(job:RemoteConfigurationJob,client?:PoolClient):Promise<boolean>{
   if(!client)return transaction(this.#pool,c=>this.#current(job,c));
@@ -142,7 +155,7 @@ export class RemoteConfigurationReconciler {
  }
  async #route(job:RemoteConfigurationJob){
   if(!this.#artifacts||!this.#signingKeyForCell)throw new Error('reconciler_not_configured');const now=this.#now();
-  const manifest=await this.#store.manifest(job.targetId,now);if(routeDigest(manifest.routes)!==job.desiredDigest)throw new Error('stale_configuration');
+  const manifest=this.#forwardReports?await this.#store.reportingManifest(job.targetId,now):await this.#store.manifest(job.targetId,now);if(publicationDigest(manifest.routes,manifest.version===2?manifest.reporter:undefined)!==job.desiredDigest)throw new Error('stale_configuration');
   const key=await this.#signingKeyForCell(job.targetId),envelope=JSON.stringify(signManifest(manifest,key,now));
   await this.#complete(job,()=>this.#artifacts!.publishManifest(job.targetId,envelope));
  }

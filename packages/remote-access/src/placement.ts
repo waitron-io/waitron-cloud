@@ -3,7 +3,7 @@ import {resolveCname} from 'node:dns/promises';
 import {dnsInstructions,verifyDelegation,validateCsr} from './certificates.ts';
 import {requireRemotePlan,eligibleRemoteInstallations} from './plan-permissions.ts';
 import {transaction,type PlanMode} from '@waitron-cloud/registration';
-import {isUuid,isHostname,isPeerKey,type GatewayManifest,type GatewayRoute} from './manifest.ts';
+import {isUuid,isHostname,isPeerKey,type GatewayManifest,type GatewayRoute,type AcceptedGatewayManifest,type ReportingGatewayRoute} from './manifest.ts';
 export interface CellInput {id:string;country:string;provider:string;environment:string;suffix:string;subnet:number;publicKey:string;endpoint:string}
 export interface Placement extends GatewayRoute {cellId:string;gatewayPublicKey:string;endpoint:string}
 export interface CellMove {
@@ -14,7 +14,7 @@ export interface CellMove {
 export interface StageMoveInput {operationId:string;installationId:string;targetCellId:string;targetPeerPublicKey:string;port?:number;expectedRevision:number}
 export interface CertificateAuthorization {hostname:string;dnsName:string;revision:number}
 function fail(code:string):never {throw new Error(code);}
-const route=(p:Placement):GatewayRoute=>({installationId:p.installationId,venueId:p.venueId,staffHostname:p.staffHostname,publicHostname:p.publicHostname,address:p.address,port:p.port,peerPublicKey:p.peerPublicKey});
+const route=(p:GatewayRoute):GatewayRoute=>({installationId:p.installationId,venueId:p.venueId,staffHostname:p.staffHostname,publicHostname:p.publicHostname,address:p.address,port:p.port,peerPublicKey:p.peerPublicKey});
 // Peer keys are claimed in two tables, so both claim paths share this transaction lock.
 async function lockPeerKey(client:PoolClient,key:string){await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',[key]);}
 async function placement(client:PoolClient,id:string):Promise<Placement|undefined>{
@@ -203,25 +203,48 @@ export class RemoteAccessStore {
   if(!isUuid(cellId))fail('invalid_cell');
   await transaction(this.#pool,async client=>{await publish(await this.#manifest(client,cellId,now));});
  }
- async #manifest(client:PoolClient,cellId:string,now:number):Promise<GatewayManifest>{
-   const eligibleIds=await eligibleRemoteInstallations(client,this.#planMode,cellId);
+ async reportingManifest(cellId:string,now=Date.now()):Promise<AcceptedGatewayManifest>{
+  if(!isUuid(cellId))fail('invalid_cell');
+  return transaction(this.#pool,client=>this.#reportingManifest(client,cellId,now));
+ }
+ async publishReportingManifest(cellId:string,publish:(manifest:AcceptedGatewayManifest)=>Promise<void>,now=Date.now()):Promise<void>{
+  if(!isUuid(cellId))fail('invalid_cell');
+  await transaction(this.#pool,async client=>{await publish(await this.#reportingManifest(client,cellId,now));});
+ }
+ async #reportingManifest(client:PoolClient,cellId:string,now:number):Promise<AcceptedGatewayManifest>{
+  const policies=(await client.query(`SELECT o.id FROM organisations o WHERE EXISTS(SELECT 1 FROM venues v JOIN remote_placements p ON p.venue_id=v.id
+   WHERE v.organisation_id=o.id AND (p.cell_id=$1 OR EXISTS(SELECT 1 FROM remote_cell_moves m WHERE m.installation_id=p.installation_id
+    AND m.target_cell_id=$1 AND m.state IN ('staged','ready')))) ORDER BY o.id FOR SHARE OF o`,[cellId])).rows.map(r=>r.id);
+  // Freeze the candidate set before taking cell authority. A new placement waits for the next export.
+  const ids=(await client.query(`SELECT i.id FROM installations i JOIN venues v ON v.id=i.venue_id JOIN organisations o ON o.id=v.organisation_id
+   WHERE v.organisation_id=ANY($2::uuid[]) AND ($3='existing' OR (o.service_plan='paid' AND v.environment='test' AND EXISTS(SELECT 1 FROM installation_services s
+    WHERE s.installation_id=i.id AND s.service='remote_access' AND s.state<>'unconfigured')))
+   AND (EXISTS(SELECT 1 FROM remote_placements p WHERE p.installation_id=i.id AND p.cell_id=$1)
+   OR EXISTS(SELECT 1 FROM remote_cell_moves m WHERE m.installation_id=i.id AND m.target_cell_id=$1 AND m.state IN ('staged','ready'))) ORDER BY i.id FOR SHARE OF i`,[cellId,policies,this.#planMode])).rows.map(r=>r.id);
+  const manifest=await this.#manifest(client,cellId,now,ids);
+  const reporter=(await client.query('SELECT gateway_id,generation,revoked_at FROM remote_forward_reporters WHERE cell_id=$1 FOR SHARE',[cellId])).rows[0];
+  if(!reporter||reporter.revoked_at)return {...manifest,routes:manifest.routes.map(route)};
+  return {...manifest,version:2,reporter:{gatewayId:reporter.gateway_id,generation:Number(reporter.generation)},routes:manifest.routes as ReportingGatewayRoute[]};
+ }
+ async #manifest(client:PoolClient,cellId:string,now:number,reportingIds?:string[]):Promise<GatewayManifest>{
+   const eligibleIds=reportingIds?undefined:await eligibleRemoteInstallations(client,this.#planMode,cellId);
    const eligible=eligibleIds===undefined?undefined:new Set(eligibleIds);
    const cell=(await client.query('UPDATE remote_cells SET sequence=sequence+1 WHERE id=$1 RETURNING sequence',[cellId])).rows[0];if(!cell)fail('cell_unavailable');
    const active=await client.query(`SELECT p.installation_id AS "installationId",p.venue_id AS "venueId",host(p.address) AS address,p.port,p.peer_public_key AS "peerPublicKey",
-    s.hostname AS "staffHostname",u.hostname AS "publicHostname"
+    s.hostname AS "staffHostname",u.hostname AS "publicHostname",i.configuration_revision AS revision
     FROM remote_placements p JOIN installations i ON i.id=p.installation_id
     LEFT JOIN remote_hostnames s ON s.venue_id=p.venue_id AND s.kind='staff'
     LEFT JOIN remote_hostnames u ON u.venue_id=p.venue_id AND u.kind='public'
     WHERE p.cell_id=$1 AND i.revoked_at IS NULL ORDER BY p.venue_id`,[cellId]);
    const routes:GatewayRoute[]=[];
-   for(const row of active.rows){if(eligible&&!eligible.has(row.installationId))continue;if(!row.staffHostname||!row.publicHostname)fail('installation_unavailable');routes.push(route(row));}
+   for(const row of active.rows){if(eligible&&!eligible.has(row.installationId)||reportingIds&&!reportingIds.includes(row.installationId))continue;if(!row.staffHostname||!row.publicHostname)fail('installation_unavailable');routes.push(reportingIds?{...route(row),revision:Number(row.revision)} as ReportingGatewayRoute:route(row));}
    const moves=await client.query(`SELECT m.installation_id AS "installationId",m.venue_id AS "venueId",host(m.target_address) AS address,m.target_port AS port,m.target_peer_public_key AS "peerPublicKey",
-    s.hostname AS "staffHostname",u.hostname AS "publicHostname"
+    s.hostname AS "staffHostname",u.hostname AS "publicHostname",i.configuration_revision AS revision
     FROM remote_cell_moves m JOIN installations i ON i.id=m.installation_id
     LEFT JOIN remote_hostnames s ON s.venue_id=m.venue_id AND s.kind='staff'
     LEFT JOIN remote_hostnames u ON u.venue_id=m.venue_id AND u.kind='public'
     WHERE m.target_cell_id=$1 AND m.state IN ('staged','ready') AND i.configuration_revision=m.expected_revision AND i.revoked_at IS NULL ORDER BY m.venue_id`,[cellId]);
-   for(const row of moves.rows){if(eligible&&!eligible.has(row.installationId))continue;if(!row.staffHostname||!row.publicHostname)fail('installation_unavailable');routes.push(route(row));}routes.sort((a,b)=>a.venueId.localeCompare(b.venueId));
+   for(const row of moves.rows){if(eligible&&!eligible.has(row.installationId)||reportingIds&&!reportingIds.includes(row.installationId))continue;if(!row.staffHostname||!row.publicHostname)fail('installation_unavailable');routes.push(reportingIds?{...route(row),revision:Number(row.revision)} as ReportingGatewayRoute:route(row));}routes.sort((a,b)=>a.venueId.localeCompare(b.venueId));
    return {version:1,audience:'waitron-cloud-gateway',cellId,sequence:Number(cell.sequence),issuedAt:now,expiresAt:now+600000,routes};
  }
 }

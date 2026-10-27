@@ -76,7 +76,7 @@ test('migration remains repeatable after concurrent initial application', async 
   assert.equal(migrationNames.slice(0,35).length,35);
   assert.equal(migrationNames[33],'034_relay_admission_bounds.sql');
   assert.equal(migrationNames[34],'035_authenticator_factor.sql');
-  assert.equal(migrationNames.length,43);assert.equal(migrationNames[42],'043_backup_target_verification.sql');assert.equal(migrationNames[41],'042_organisation_service_plans.sql');assert.equal(migrationNames[40],'041_content_translation_service.sql');assert.equal(migrationNames[39],'040_translation_result_json.sql');
+  assert.equal(migrationNames.length,44);assert.equal(migrationNames[43],'044_remote_forward_observations.sql');assert.equal(migrationNames[42],'043_backup_target_verification.sql');assert.equal(migrationNames[41],'042_organisation_service_plans.sql');assert.equal(migrationNames[40],'041_content_translation_service.sql');assert.equal(migrationNames[39],'040_translation_result_json.sql');
   assert.equal(migrationNames[35],'036_relay_operator_stop.sql');
   assert.equal(migrationNames[36],'037_monitoring_quiet_escalation.sql');
   assert.equal(migrationNames[37],'038_fiscal_allocation_registry.sql');assert.equal(migrationNames[38],'039_translation_jobs.sql');

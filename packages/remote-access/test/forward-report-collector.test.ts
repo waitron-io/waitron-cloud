@@ -1,14 +1,16 @@
 import assert from 'node:assert/strict';
 import {randomUUID,generateKeyPairSync} from 'node:crypto';
-import {mkdtemp,writeFile,chmod,symlink,rm,mkdir} from 'node:fs/promises';
+import {mkdtemp,writeFile,chmod,symlink,rm,mkdir,realpath} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {test} from 'node:test';
+import {spawnSync} from 'node:child_process';
+import {fileURLToPath} from 'node:url';
 import {collectForwardReport,ForwardReportPoller} from '../src/forward-report-collector.ts';
 import {signForwardReport} from '../src/forward-report.ts';
 
 async function fixture(){
- const directory=await mkdtemp(join(tmpdir(),'forward-collector-')),file=join(directory,'report.json');
+ const directory=await realpath(await mkdtemp(join(tmpdir(),'forward-collector-'))),file=join(directory,'report.json');
  const mapping={country:'ES' as const,environment:'test' as const,cellId:randomUUID(),file,writerUid:process.geteuid!(),readerGid:process.getegid!()};
  const now=Date.now(),key=generateKeyPairSync('ed25519');
  const envelope=signForwardReport({version:1,audience:'waitron-cloud-public-forward-report',cellId:mapping.cellId,gatewayId:randomUUID(),generation:1,sequence:1,issuedAt:now,observations:[]},key.privateKey);
@@ -43,11 +45,21 @@ test('poller serializes each cell, respects 30-second polls and 60-second prunin
   let finish!:()=>void,reads=0,prunes=0;const logs:string[]=[];
   const store={async record(){reads++;if(reads===1)await new Promise<void>(resolve=>{finish=resolve;});throw new Error('private-canary');},async prune(){prunes++;return 0;}};
   const poller=new ForwardReportPoller([f.mapping],store,message=>logs.push(message));
-  const pending=poller.poll(0);while(!finish)await new Promise(resolve=>setImmediate(resolve));
+  const pending=poller.poll(0);for(let i=0;!finish&&i<1000;i++)await new Promise(resolve=>setTimeout(resolve,1));assert(finish,'first read reached storage');
   await poller.poll(30000);assert.equal(reads,1);assert.equal(prunes,1);finish();await pending;
   await poller.poll(29999);assert.equal(reads,1);
   await poller.poll(30000);assert.equal(reads,2);assert.equal(prunes,1);
   await poller.poll(60000);assert.equal(reads,3);assert.equal(prunes,2);
   assert.deepEqual(logs,['remote.forward_collection_failed','remote.forward_collection_failed','remote.forward_collection_failed']);
+ }finally{await f.close();}
+});
+test('collector CLI rejects untrusted configuration without exposing its contents',async()=>{
+ const f=await fixture();try{
+  const path=fileURLToPath(new URL('../src/forward-report-cli.ts',import.meta.url));
+  for(const config of [{mappings:[{...f.mapping,country:'FR'}]}, {mappings:[f.mapping,f.mapping]}, {mappings:[f.mapping],secret:'private-canary'}]){
+   const file=join(f.directory,'config.json');await writeFile(file,JSON.stringify(config));
+   const result=spawnSync(process.execPath,[path,file,'--once'],{encoding:'utf8',timeout:5000,env:{...process.env,DATABASE_URL:'postgres://invalid/private-canary'}});
+   assert.equal(result.status,1);assert.equal(result.stdout,'');assert.equal(result.stderr,'remote.forward_collector_failed\n');
+  }
  }finally{await f.close();}
 });

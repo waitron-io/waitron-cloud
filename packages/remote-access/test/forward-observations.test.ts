@@ -4,7 +4,7 @@ import {test} from 'node:test';
 import {setTimeout as delay} from 'node:timers/promises';
 import {transaction,OrganisationPlanStore} from '@waitron-cloud/registration';
 import {ForwardObservationStore,registerForwardReporter,revokeForwardReporter} from '../src/forward-observations.ts';
-import {signForwardReport} from '../src/forward-report.ts';
+import {signForwardReport,routeBinding} from '../src/forward-report.ts';
 import {RemoteConfigurationReconciler} from '../src/reconciler.ts';
 import {forwardFixture} from './fixtures/forward-observations.ts';
 
@@ -24,7 +24,7 @@ for(const field of ['country','environment','cell','installation','venue','revis
   if(field==='environment')mapping.environment='production' as 'test';
   if(field==='cell')mapping.cellId=randomUUID();
   if(field==='installation')o.installationId=randomUUID();if(field==='venue')o.venueId=randomUUID();if(field==='revision')o.revision++;if(field==='binding')o.routeBinding='0'.repeat(64);
-  if(field==='manifest-low')o.manifestSequence=1===f.manifest.sequence?f.manifest.sequence+1:1;
+  if(field==='manifest-low')await f.db.pool.query('UPDATE remote_forward_reporters SET minimum_manifest_sequence=$1',[f.manifest.sequence+1]);
   if(field==='manifest-high')o.manifestSequence=f.manifest.sequence+10;
   const envelope=signForwardReport(r,field==='unknown-key'?generateKeyPairSync('ed25519').privateKey:f.keys.privateKey);
   if(field==='signature')envelope.signature='A'.repeat(86);
@@ -38,9 +38,9 @@ test('simultaneous_new_old_and_duplicate_reports and restart preserve persistent
   const values=await Promise.all([f.send(r),second.record(f.mapping,signForwardReport(r,f.keys.privateKey)),f.send(old)]);
   assert.equal(values.filter(v=>v==='accepted').length,1);const first=await f.read();assert(first);
   assert.equal(await second.record(f.mapping,signForwardReport(f.report(3),f.keys.privateKey)),'ignored');assert.deepEqual(await f.read(),first);
-  await f.budget();assert.equal(await f.send(r),'ignored');
+  await f.budget();assert.equal(await f.send(f.report(3,null)),'accepted');
   const cursor=(await f.db.pool.query('SELECT last_sequence FROM remote_forward_reporters')).rows[0].last_sequence;
-  assert.equal(cursor,'2');
+  assert.equal(cursor,'3');
  }finally{await f.db.close();}
 });
 test('rollback_allows_identical_retry and older observation never replaces newer success',async()=>{
@@ -58,7 +58,7 @@ for(const change of ['revision','hostname','revocation','superseded','rotation',
   if(change==='revision')await f.db.pool.query('UPDATE installations SET configuration_revision=2');
   if(change==='hostname')await f.db.pool.query("UPDATE remote_hostnames SET hostname='changed.example.test' WHERE kind='public'");
   if(change==='revocation')await f.db.pool.query('UPDATE installations SET revoked_at=clock_timestamp()');
-  if(change==='superseded'){const id=randomUUID();await f.db.pool.query('UPDATE installations SET revoked_at=clock_timestamp(),superseded_by=$1 WHERE id=$2',[id,f.installed.installationId]).catch(()=>{});await f.db.pool.query('UPDATE installations SET revoked_at=clock_timestamp()');}
+  if(change==='superseded')await transaction(f.db.pool,async c=>{const id=randomUUID();await c.query('UPDATE installations SET revoked_at=clock_timestamp(),superseded_by=$1 WHERE id=$2',[id,f.installed.installationId]);await c.query('INSERT INTO installations(id,venue_id,public_key) VALUES($1,$2,$3)',[id,f.installed.venueId,randomUUID()]);});
   if(change==='rotation')await transaction(f.db.pool,c=>registerForwardReporter(c,{cellId:f.cellId,gatewayId:randomUUID(),generation:2,publicKey:generateKeyPairSync('ed25519').publicKey.export({type:'spki',format:'pem'}).toString()}));
   if(change==='reporter-revocation')await transaction(f.db.pool,c=>revokeForwardReporter(c,f.cellId,1));
   if(change==='downgrade')await new OrganisationPlanStore(f.db.pool).set(f.owner.organisationId,'free');
@@ -79,7 +79,7 @@ test('staged_move_not_current and old source after completion never count as act
   await transaction(f.db.pool,c=>registerForwardReporter(c,{cellId:target,gatewayId,generation:1,publicKey:keys.publicKey.export({type:'spki',format:'pem'}).toString()}));
   const moveId=randomUUID();await f.remote.stageMove({operationId:moveId,installationId:f.installed.installationId,targetCellId:target,targetPeerPublicKey:randomBytes(32).toString('base64'),expectedRevision:1});
   const staged=await f.remote.reportingManifest(target);assert.equal(staged.version,2);assert.equal(staged.routes.length,1);
-  const r=f.report();r.cellId=target;r.gatewayId=gatewayId;Object.assign(r.observations[0]!,{cellId:target,gatewayId,manifestSequence:staged.sequence});
+  const r=f.report();r.cellId=target;r.gatewayId=gatewayId;Object.assign(r.observations[0]!,{cellId:target,gatewayId,manifestSequence:staged.sequence,routeBinding:routeBinding(staged.routes[0]!)});
   assert.equal(await f.store.record({...f.mapping,cellId:target},signForwardReport(r,keys.privateKey)),'accepted');assert.equal(await f.read(),null);
   assert.equal(await f.send(),'accepted');await f.remote.markMoveReady(moveId,1,staged.sequence);await f.remote.completeMove(moveId,1);assert.equal(await f.read(),null);
   await f.budget();await f.send(f.report(2));assert.equal(await f.read(),null);
