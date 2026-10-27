@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
-import {mkdir} from 'node:fs/promises';
+import {mkdir, readFile} from 'node:fs/promises';
 import {createServer} from 'node:http';
-import {randomBytes} from 'node:crypto';
+import {createHash, randomBytes} from 'node:crypto';
 import {after, before, test} from 'node:test';
 import {chromium} from 'playwright';
 import {createPublicGate} from '../../../packages/remote-access/src/public-gate.ts';
@@ -94,14 +94,17 @@ test('an earlier challenge page can run the newer script during a rollout', asyn
     const page = await context.newPage(); page.setDefaultTimeout(4000);
     await page.route('**/public/availability', async route => {
       const response = await route.fetch();
-      const body = (await response.text()).replace('<p id="browser-guidance">', '<noscript><p>')
-        .replace('</span></p><script', '</span></p></noscript><script');
+      const body = await readFile(new URL('./fixtures/public-challenge-68366e7d.html', import.meta.url), 'utf8');
       await route.fulfill({response, body});
     });
     await page.route('**/_cloud/challenge', async route => {
       await held; await route.fulfill({status: 503, contentType: 'application/json', body: 'unavailable'});
     });
-    assert.equal((await page.goto(`http://127.0.0.1:${address.port}/public/availability`))?.status(), 403);
+    const response = await page.goto(`http://127.0.0.1:${address.port}/public/availability`);
+    assert.equal(response?.status(), 403);
+    // Keep the shipped page independent of new markup so rollout compatibility cannot drift.
+    assert.equal(createHash('sha256').update(await response.text()).digest('hex'),
+      '0779568c1600f440e547b08e2e213237013206d1232b935a1476b86abe3f7b42', 'rollout fixture must be the exact page shipped at 68366e7d');
     await page.getByText('Please wait a moment.', {exact: false}).waitFor();
     assert.equal(await page.getByText('Espera un momento.', {exact: true}).isVisible(), true);
     assert.equal(await page.locator('noscript p').isVisible(), false);
