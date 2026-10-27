@@ -16,7 +16,7 @@ const bundle=await build({stdin:{contents:`
  window.app=new PortalApp(document.querySelector('#portal'));
 `,resolveDir:new URL('..',import.meta.url).pathname},bundle:true,write:false,format:'iife',target:'es2023'});
 const styles=await readFile(new URL('../src/styles.css',import.meta.url),'utf8');
-for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as const)for(const width of [390,1280])test(`${locale} ${theme} ${width}: translation refresh waits for the installation list`,async t=>{
+for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as const)for(const width of [390,1280])for(const handler of ['normal', 'delayed', ...(locale==='en'&&theme==='light'&&width===390?['missing'] as const:[])] as const)test(`${locale} ${theme} ${width} ${handler}: translation refresh waits for the installation list`,async t=>{
  const browser=await chromium.launch({headless:true});let release=()=>{};
  try{
   const page=await browser.newPage({locale,colorScheme:theme,viewport:{width,height:900}});page.setDefaultTimeout(4000);
@@ -25,7 +25,7 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
   await page.route('**/api/account/**',async route=>{
    const path=new URL(route.request().url()).pathname;
    if(path.endsWith('/session')||path.endsWith('/session/activity'))return route.fulfill({json:{accountId:'owner',expiresAt:new Date(Date.now()+3600000).toISOString()}});
-   if(path.endsWith('/installations')){entered?.();await gate;return route.fulfill({json:{installations:[installation]}});}
+   if(path.endsWith('/installations')){if(gate&&handler==='delayed')await new Promise(resolve=>setTimeout(resolve,100));if(handler!=='missing')entered?.();await gate;return route.fulfill({json:{installations:[installation]}});}
    if(path.endsWith('/usage/read'))return route.fulfill({json:{version:1,organisationId:venue,storage:{currentBytes:'0',addedBytes:'0',removedBytes:'0'},transfer:{uploadedBytes:'0',restoredBytes:'0'},operations:{installationCompleted:'0',monitoringProbes:'0'},messages:{sent:'0',failed:'0',expired:'0',cancelled:'0'},latestEventAt:null,measuredThrough:null}});
    if(path.endsWith('/translation-consent'))return route.fulfill(status===200?{json:{consents:[]}}:{status,json:{error:'unavailable'}});
    return route.fulfill({status:503,json:{error:'unavailable'}});
@@ -39,8 +39,17 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
    assert.equal(await list.getByRole('button',{name:c.refreshStatus,exact:true}).count(),1);
   });
   await t.test('translation retry is disabled throughout a held installation refresh',async()=>{
-   gate=new Promise<void>(resolve=>{release=resolve;});const requested=new Promise<void>(resolve=>{entered=resolve;});
-   await list.locator(':scope > wt-button').getByRole('button',{name:c.refreshStatus,exact:true}).click();await requested;
+   gate=new Promise<void>(resolve=>{release=resolve;});let handlerEntered=false;entered=()=>{handlerEntered=true;};
+   await list.locator(':scope > wt-button').getByRole('button',{name:c.refreshStatus,exact:true}).click();
+   const waitForHandler=()=>t.waitFor(()=>{assert.equal(handlerEntered,true,'the installation refresh route handler must enter');},{timeout:4000});
+   if(handler==='missing'){
+    let timer:ReturnType<typeof setTimeout>|undefined;
+    try{
+     await assert.rejects(Promise.race([waitForHandler(),new Promise<void>(resolve=>{timer=setTimeout(resolve,5000);})]),/waitFor\(\) timed out/);
+    }finally{clearTimeout(timer);release();gate=undefined;entered=undefined;}
+    return;
+   }
+   await waitForHandler();
    try{
     assert.equal(await group.getByRole('button',{name:c.translationConsentAgree,exact:true}).isDisabled(),true);
     assert.equal(await refresh.isDisabled(),true);
