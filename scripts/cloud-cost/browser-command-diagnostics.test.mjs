@@ -73,6 +73,21 @@ test('browser fixture reports an output-limit failure with bounded byte counts',
   assert.ok(JSON.stringify(error.commandFailure).length < 200);
 });
 
+test('browser fixture bounds oversized standard error without exposing its contents', t => {
+  const env = command(t, "process.stderr.write('PRIVATE_CANARY'.repeat(150000));");
+  const error = refusal(() => runBrowserFixture('docker', ['start', 'PRIVATE_CANARY'], env));
+  assert.equal(error.commandFailure?.reason, 'ENOBUFS');
+  assert.equal(error.commandFailure.stderrBytes, 1048576);
+  assert.equal(error.commandFailure.stdoutBytes, 0);
+});
+
+test('browser fixture contains signals outside its fixed diagnostic vocabulary', t => {
+  const env = command(t, "process.kill(process.pid, 'SIGUSR2');");
+  const error = refusal(() => runBrowserFixture('docker', ['start', 'PRIVATE_CANARY'], env));
+  assert.equal(error.commandFailure?.signal, null);
+  assert.equal(error.commandFailure.exitCode, null);
+});
+
 test('browser fixture keeps genuine journey refusal and child diagnostics alongside command evidence', () => {
   const script = "process.stderr.write('cost_browser_phase=reconnect\\ncost_browser_step=requests\\nError: Invalid cloud cost browser journey\\n'); process.exit(1);";
   assert.throws(() => runBrowserFixture(process.execPath, ['-e', script], {}), error => {
