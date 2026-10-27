@@ -3,6 +3,7 @@ import {mkdir} from 'node:fs/promises';
 import {createServer} from 'node:http';
 import {randomBytes} from 'node:crypto';
 import {after, before, test} from 'node:test';
+import {setTimeout as delay} from 'node:timers/promises';
 import {chromium} from 'playwright';
 import {createPublicGate} from '../../../packages/remote-access/src/public-gate.ts';
 
@@ -12,8 +13,10 @@ after(async () => {await browser?.close();});
 
 // Removing the fallback link must prevent a visitor from restarting the real page request.
 for (const locale of ['en', 'es']) for (const theme of ['light', 'dark'] as const) for (const width of [390, 1280]) {
-  for (const failure of ['503', 'disconnected', 'disabled'] as const) {
-    test(`${locale} ${theme} ${width}: reload link restarts the browser check after ${failure}`, async () => {
+  for (const failure of ['503', 'disconnected', 'disabled'] as const) for (const handler of ['normal', 'delayed', 'missing'] as const) {
+    if (handler !== 'normal' && failure === 'disabled') continue;
+    if (handler === 'missing' && (locale !== 'en' || theme !== 'light' || width !== 390 || failure !== '503')) continue;
+    test(`${locale} ${theme} ${width}${handler === 'normal' ? '' : ` with ${handler} challenge handler`}: reload link restarts the browser check after ${failure}`, async t => {
       const gate = createPublicGate({key: randomBytes(32), difficulty: 8, routes: () => [
         {publicHostname: 'sol.example.test', staffHostname: 'staff.sol.example.test', address: '127.0.0.1', port: 1},
       ]});
@@ -31,15 +34,17 @@ for (const locale of ['en', 'es']) for (const theme of ['light', 'dark'] as cons
       try {
         context = await browser.newContext({locale, colorScheme: theme, viewport: {width, height: 800}, javaScriptEnabled: failure !== 'disabled'});
         const page = await context.newPage(); page.setDefaultTimeout(4000);
-        let recovered = false, requested!: () => void;
-        const challenged = new Promise<void>(resolve => {requested = resolve;});
+        let recovered = false, challengeEntered = false;
+        const requested = () => {challengeEntered = true;};
         await page.route('**/_cloud/challenge.js', async route => {
           if (recovered) await route.continue();
           else if (failure === '503') await route.fulfill({status: 503, body: 'unavailable'});
           else await route.abort('connectionreset');
         });
         await page.route('**/_cloud/challenge', async route => {
-          requested(); await held;
+          if (handler === 'delayed') await delay(100);
+          if (handler !== 'missing') requested();
+          await held;
           await route.fulfill({status: 503, contentType: 'application/json', body: 'unavailable'});
         });
         const url = `http://127.0.0.1:${address.port}/public/availability`;
@@ -68,7 +73,16 @@ for (const locale of ['en', 'es']) for (const theme of ['light', 'dark'] as cons
           assert.equal(await reload.isVisible(), true);
           assert.doesNotMatch(await page.locator('body').innerText(), /Please wait a moment|Espera un momento/);
         } else {
-          await challenged;
+          const waitForHandler = () => t.waitFor(() => {assert.equal(challengeEntered, true, 'the challenge route handler must enter');}, {timeout: 4000});
+          // An absent signal must refuse within the page budget; removing the wait must also fail.
+          if (handler === 'missing') {
+            let timer: ReturnType<typeof setTimeout> | undefined;
+            try {
+              await assert.rejects(Promise.race([waitForHandler(), new Promise<void>(resolve => {timer = setTimeout(resolve, 5000);})]), /waitFor\(\) timed out/);
+            } finally {clearTimeout(timer);}
+            return;
+          }
+          await waitForHandler();
           assert.equal(await reload.isVisible(), false);
           assert.equal(await page.getByText('Please wait a moment.', {exact: false}).isVisible(), true);
           release();

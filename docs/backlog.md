@@ -3635,6 +3635,14 @@ region, bilingual guidance, reload link, cookie, forwarding and layout checks
 remain, including disabled JavaScript and unavailable-script journeys. These
 checks use native Chromium and local HTTP; production behaviour is unchanged.
 
+## Public browser-check reload handler wait (D367)
+
+The reload browser fixture refuses an absent challenge-handler signal within
+its existing four-second page budget. Delayed handlers repeat both script-failure
+journeys in both languages, themes and phone/desktop widths. All original reload,
+keyboard, request-count, cookie, forwarding and disabled-JavaScript checks remain.
+These checks use native Chromium and local HTTP; production behaviour is unchanged.
+
 ## Public gateway source limits (D191)
 
 The public gate now counts an IPv6 /64 network as one source, while IPv4-mapped
