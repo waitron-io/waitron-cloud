@@ -4029,3 +4029,16 @@ existing Enter, installation-refresh and uncertain-save checks retain their
 assertions and deadlines with the three owner-approved setup changes. Server
 behaviour and the outstanding live DNS/ACME and deployment qualification are
 unchanged.
+
+## Native stream-history snapshot failure during D291 qualification
+
+[PR556's cost check](https://github.com/waitron-io/waitron-cloud/actions/runs/40433930926/job/121958110536)
+failed the native stream-history case after replication, restore and cleanup
+closes all reported fulfilled. The final message names `restore-transport-close`,
+but that stage also covers result construction, replay verification and snapshots
+before the next stage. The original error is discarded; the cause remains unknown.
+The cost fixture and its transport/meter sources match main. Capture a fixed,
+private-data-free result or snapshot boundary and reproduce the hidden rejection
+before changing the cause. Coordinate this follow-up with lane D's D141 work;
+preserve every accounting assertion and deadline. Genuine local stack reproduction
+waits for Docker to return. D291's reviewed gate classification remains parked.
