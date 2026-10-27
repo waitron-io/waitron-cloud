@@ -18,9 +18,11 @@ const at = '2026-10-24T12:00:00.000Z', password = ' Current account password ';
 const clockStart = new Date(Date.parse(at) - 86_400_000);
 const enrolment = {pendingToken: 'A'.repeat(43), secret: 'JBSWY3DPEHPK3PXP', uri: 'otpauth://totp/Cloud?secret=JBSWY3DPEHPK3PXP', expiresAt: '2026-10-25T12:00:00Z'};
 
+for (const handler of ['ordinary', 'delayed', 'missing'] as const)
 for (const setupDelay of [0, 100])
 for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'] as const) for (const width of [390, 1280]) {
-  test(`${locale} ${theme} ${width}${setupDelay ? ' with delayed clock setup' : ''}: password Enter starts first authenticator setup once and leaves activation explicit`, async () => {
+  if (handler === 'missing' && (setupDelay !== 0 || locale !== 'en' || theme !== 'light' || width !== 390)) continue;
+  test(`${locale} ${theme} ${width}${setupDelay ? ' with delayed clock setup' : ''}${handler === 'ordinary' ? '' : ` with ${handler} setup handler`}: password Enter starts first authenticator setup once and leaves activation explicit`, async t => {
     const browser = await chromium.launch({headless: true});
     let release!: () => void;
     const reply = new Promise<void>(resolve => {release = resolve;});
@@ -36,7 +38,8 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
         const request = route.request(), path = new URL(request.url()).pathname.replace('/api/account', '');
         if (path === '/session' || path === '/session/activity') return route.fulfill({json: {accountId: 'owner', expiresAt: '2026-10-25T12:00:00Z'}});
         if (path === '/authenticator') return route.fulfill({json: {active: false, version: 0, recoveryCodesRemaining: 0, available: true}});
-        if (request.method() === 'POST') writes.push({path, body: request.postDataJSON()});
+        if (path === '/authenticator/begin' && handler === 'delayed') await delay(100);
+        if (request.method() === 'POST' && !(path === '/authenticator/begin' && handler === 'missing')) writes.push({path, body: request.postDataJSON()});
         if (path === '/authenticator/begin') { await reply; return route.fulfill({json: enrolment}); }
         return route.fulfill({status: 503, json: {error: 'unavailable'}});
       });
@@ -54,7 +57,19 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
       assert.equal(writes.length, 0, 'modified, composing and repeated Enter do not submit');
       const requested = page.waitForRequest('**/authenticator/begin', {timeout: 1500});
       await field.evaluate(input => { for (let i = 0; i < 2; i++) input.dispatchEvent(new KeyboardEvent('keydown', {key: 'Enter', bubbles: true, composed: true, cancelable: true})); });
-      await requested;
+      const waitForHandler = async () => {
+        await requested;
+        // The browser request event can precede the route handler's recorded write.
+        await t.waitFor(() => {assert.equal(writes.length, 1, 'the setup handler must record the request');}, {timeout: 4000});
+      };
+      if (handler === 'missing') {
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        try {
+          await assert.rejects(Promise.race([waitForHandler(), new Promise<void>(resolve => {timer = setTimeout(resolve, 5000);})]), /waitFor\(\) timed out/);
+        } finally {clearTimeout(timer);}
+        return;
+      }
+      await waitForHandler();
       assert.equal(await field.isDisabled(), true, 'pending request disables the password');
       assert.equal(await section.getByRole('button', {name: c.factorEnable, exact: true}).isDisabled(), true);
       await field.dispatchEvent('keydown', {key: 'Enter'});
