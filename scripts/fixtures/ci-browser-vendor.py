@@ -78,7 +78,15 @@ with tempfile.TemporaryDirectory(prefix='cloud-browser-vendor-') as directory:
         (apt / 'apt.conf.d').mkdir(parents=True)
         source = (f'deb [arch=amd64 signed-by={keyring}] https://archive.ubuntu.com/ubuntu noble main\n'
                   f'deb [arch=amd64 signed-by={keyring}] {base}/vendor noble main\n')
-        (apt / 'sources.list').write_text(source)
+        source_file = apt / ('ubuntu.sources' if '--deb822' in sys.argv else 'sources.list')
+        if '--deb822' in sys.argv:
+            source_file = apt / 'sources.list.d/fixture.sources'
+            source_file.parent.mkdir()
+            source = (f'Types: deb\nURIs: https://archive.ubuntu.com/ubuntu\nSuites: noble\n'
+                      f'Components: main\nArchitectures: amd64\nSigned-By: {keyring}\n\n'
+                      f'Types: deb\nURIs: {base}/vendor\nSuites: noble\nComponents: main\n'
+                      f'Architectures: amd64\nSigned-By: {keyring}\n')
+        source_file.write_text(source)
         run([sys.executable, 'scripts/ci-browser-source.py', '--apt-root', str(apt)])
         mirrors = apt / 'waitron-browser-mirrors.txt'
         mirrors.write_text(f'{base}/ubuntu\n')
@@ -96,7 +104,7 @@ with tempfile.TemporaryDirectory(prefix='cloud-browser-vendor-') as directory:
             hashed.write_bytes(bytes([compressed[0] ^ 1]) + compressed[1:] if mode == 'hash' else compressed)
             signed.write_bytes(original_signed.replace(b'Origin: Cloud vendor fixture', b'Origin: Wrong vendor fixture')
                                if mode == 'signature' else original_signed)
-            options = ['-o', f'Dir::Etc::sourcelist={apt}/sources.list', '-o', 'Dir::Etc::sourceparts=-',
+            options = ['-o', f'Dir::Etc::sourcelist={source_file}', '-o', 'Dir::Etc::sourceparts=-',
                        '-o', f'Dir::State={state}', '-o', f'Dir::State::lists={state}/lists',
                        '-o', f'Dir::Cache={state}/cache', '-o', 'Acquire::Languages=none',
                        '-o', 'APT::Update::Error-Mode=any',

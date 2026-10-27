@@ -56,10 +56,11 @@ test('mixed Ubuntu and vendor URI stanzas refuse before rewriting any source', a
 });
 
 // Real signed metadata must select the immutable vendor index and still reject changed bytes.
-test('Linux APT keeps vendor by-hash acquisition through a stable-index publication mismatch', {
+for (const [format, flags] of [['legacy', []], ['Deb822', ['--deb822']]]) {
+test(`Linux APT keeps vendor by-hash acquisition through a stable-index publication mismatch (${format})`, {
   skip: process.platform !== 'linux', timeout: 60000,
 }, () => {
-  const stdout = execFileSync('python3', ['scripts/fixtures/ci-browser-vendor.py'], {
+  const stdout = execFileSync('python3', ['scripts/fixtures/ci-browser-vendor.py', ...flags], {
     encoding: 'utf8', timeout: 55000, maxBuffer: 2 ** 20,
   });
   assert.deepEqual(JSON.parse(stdout), {
@@ -67,3 +68,4 @@ test('Linux APT keeps vendor by-hash acquisition through a stable-index publicat
     alteredHashRefused: true, alteredSignatureRefused: true,
   });
 });
+}

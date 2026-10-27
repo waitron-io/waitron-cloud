@@ -2422,6 +2422,8 @@ implementation or production evidence.
   remains unattributed; a controlled reproduction does not explain its CDN state.
   If an index changes during publication and its required bytes cannot be fetched,
   a digest mismatch still refuses the update; no package state is repaired.
+  A separate [extra relay admission](backlog/relay-contention-extra-admission.md)
+  needs PostgreSQL reproduction; this source repair does not explain it.
   The controlled regression includes four suites with sixteen package indexes
   and forty-eight compressed package, translation and command indexes, with a
   separate altered-index refusal. Both journeys require the actual stable
