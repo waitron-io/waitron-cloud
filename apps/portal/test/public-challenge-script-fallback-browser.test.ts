@@ -11,8 +11,9 @@ before(async () => {browser = await chromium.launch({headless: true});});
 after(async () => {await browser?.close();});
 
 for (const locale of ['en', 'es']) for (const theme of ['light', 'dark'] as const) for (const width of [390, 1280]) {
-  for (const refusal of ['503', 'disconnected', 'delayed'] as const) {
-    test(`${locale} ${theme} ${width}: script ${refusal} keeps guidance until execution`, async () => {
+  for (const refusal of ['503', 'disconnected', 'delayed'] as const) for (const handler of ['normal', 'delayed', 'missing'] as const) {
+    if (handler === 'missing' && (locale !== 'en' || theme !== 'light' || width !== 390 || refusal !== '503')) continue;
+    test(`${locale} ${theme} ${width}${handler === 'normal' ? '' : ` with ${handler} challenge handler`}: script ${refusal} keeps guidance until execution`, async t => {
       const gate = createPublicGate({key: randomBytes(32), difficulty: 8, routes: () => [
         {publicHostname: 'sol.example.test', staffHostname: 'staff.sol.example.test', address: '127.0.0.1', port: 1},
       ]});
@@ -31,8 +32,8 @@ for (const locale of ['en', 'es']) for (const theme of ['light', 'dark'] as cons
       try {
         context = await browser.newContext({locale, colorScheme: theme, viewport: {width, height: 800}});
         const page = await context.newPage(); page.setDefaultTimeout(4000);
-        let recover = false, challengeRequested!: () => void;
-        const challenged = new Promise<void>(resolve => {challengeRequested = resolve;});
+        let recover = false, handlerEntered = false;
+        const challengeRequested = () => {handlerEntered = true;};
         await page.route('**/_cloud/challenge.js', async route => {
           if (recover) {await route.continue(); return;}
           if (refusal === 'delayed') {await scriptHeld; await route.continue();}
@@ -40,7 +41,8 @@ for (const locale of ['en', 'es']) for (const theme of ['light', 'dark'] as cons
           else await route.abort('connectionreset');
         });
         await page.route('**/_cloud/challenge', async route => {
-          challengeRequested(); await challengeHeld;
+          if (handler === 'delayed') await new Promise(resolve => setTimeout(resolve, 100));
+          if (handler !== 'missing') challengeRequested(); await challengeHeld;
           await route.fulfill({status: 503, contentType: 'application/json', body: 'unavailable'});
         });
         const response = await page.goto(`http://127.0.0.1:${address.port}/public/availability`, {waitUntil: refusal === 'delayed' ? 'commit' : 'load'});
@@ -59,7 +61,15 @@ for (const locale of ['en', 'es']) for (const theme of ['light', 'dark'] as cons
         }
         if (refusal === 'delayed') releaseScript();
         else {recover = true; await page.reload();}
-        await challenged;
+        const waitForHandler = () => t.waitFor(() => {assert.equal(handlerEntered, true, 'the challenge handler must enter after script recovery');}, {timeout: 4000});
+        if (handler === 'missing') {
+          let timer: ReturnType<typeof setTimeout> | undefined;
+          try {
+            await assert.rejects(Promise.race([waitForHandler(), new Promise<void>(resolve => {timer = setTimeout(resolve, 5000);})]), /waitFor\(\) timed out/);
+          } finally {clearTimeout(timer);}
+          return;
+        }
+        await waitForHandler();
         assert.equal(await guidance.isVisible(), false);
         assert.equal(await page.getByText('Please wait a moment.', {exact: false}).isVisible(), true);
         assert.equal(await page.getByText('Espera un momento.', {exact: true}).isVisible(), true);
