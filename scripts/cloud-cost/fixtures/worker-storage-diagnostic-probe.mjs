@@ -1,11 +1,11 @@
 // Only the external storage process, SDK and meter are simulated; cleanup and ownership are real.
 import { registerHooks } from 'node:module';
 import { EventEmitter } from 'node:events';
-import { mkdtempSync, realpathSync, mkdirSync, writeFileSync, existsSync, rmSync } from 'node:fs';
+import { mkdtempSync, realpathSync, mkdirSync, writeFileSync, readFileSync, existsSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-const fault = process.argv[2], records = [];
+const fault = process.argv[2], action = process.argv[3] ?? 'finish', records = [];
 const parent = realpathSync(mkdtempSync(join(tmpdir(), 'storage-diagnostic-')));
 const source = join(parent, 'source'), root = join(parent, 'owned');
 mkdirSync(source, { mode: 0o700 }); mkdirSync(root, { mode: 0o700 });
@@ -13,6 +13,7 @@ const token = 'a'.repeat(64), journal = { token, path: join(root, 'journal.json'
 writeFileSync(join(root, '.cloud-cost-owner'), token, { mode: 0o600 });
 writeFileSync(journal.path, JSON.stringify({ schemaVersion: 1, source, root, ownershipToken: token }), { mode: 0o600 });
 let cleanup = false, present = false, collected = false, destroyed = 0, accountingDone = false, deleted = false;
+let proxyClosed = 0, clientCount = 0, cleanupRequests = 0;
 const refuse = () => { throw Error('PRIVATE_STORAGE_CANARY'); };
 const child = new EventEmitter();
 child.pid = 12345;
@@ -30,6 +31,7 @@ globalThis.storageProbe = {
     return { reconciled: true, accounting: {}, observedRequests: [] };
   } }),
   createMeteringProxy: async () => ({ url: 'http://127.0.0.1:9999', close: async () => {
+    proxyClosed++;
     if (['proxy-close', 'two-failures', 'reporter', 'async-reporter'].includes(fault)) refuse();
   } }),
   instrumentStorageClient: () => {}, correlatedStorageAttempt: () => {},
@@ -46,7 +48,12 @@ for (const name of ['ListBuckets', 'HeadBucket', 'ListObjectsV2', 'ListMultipart
   sdk[name + 'Command'] = { [name + 'Command']: class {} }[name + 'Command'];
 }
 sdk.S3Client = class {
+  constructor() {
+    clientCount++;
+    if (cleanup && fault === 'cleanup-client-construction') refuse();
+  }
   async send(command) {
+    if (cleanup) cleanupRequests++;
     const name = command.constructor.name;
     if (cleanup && ({ 'bucket-inventory': 'ListBucketsCommand', 'bucket-present': 'HeadBucketCommand',
       'multipart-list': 'ListMultipartUploadsCommand', 'object-list': 'ListObjectsV2Command',
@@ -68,8 +75,12 @@ sdk.S3Client = class {
     throw Error('Unexpected command');
   }
   destroy() {
-    if (cleanup && ['cleanup-client-open', 'close-only'].includes(fault)) refuse();
-    if (cleanup && fault === 'client-close' && ++destroyed === 2) refuse();
+    if (cleanup) {
+      destroyed++;
+      if (['cleanup-client-open', 'close-only'].includes(fault)) refuse();
+      if (fault === 'first-client-close' && destroyed === 1) refuse();
+      if (fault === 'client-close' && destroyed === 2) refuse();
+    }
   }
 };
 try {
@@ -85,13 +96,15 @@ try {
   if (fault === 'storage-health') controller.abort();
   if (fault === 'bucket-ownership') writeFileSync(journal.path, '{}', { mode: 0o600 });
   let message = null;
-  const closing = fault === 'concurrent' ? storage.close().catch(() => {}) : undefined;
-  try { if (fault === 'close-only') await storage.close(); else await storage.finish(fault === 'finish-input' ? { private: 'PRIVATE_CANARY' }
+  const closing = (fault === 'concurrent' || action === 'concurrent') ? storage.close().catch(() => {}) : undefined;
+  try { if (fault === 'close-only' || action === 'close') await storage.close(); else await storage.finish(fault === 'finish-input' ? { private: 'PRIVATE_CANARY' }
     : fault === 'retained-inventory' ? { retained: { since: 0, bytes: 4, objects: 1 } }
     : fault === 'retained-accounting' ? { retained: { since: 0, bytes: 0, objects: 0 } } : {}); }
   catch (error) { message = error.message; }
   await closing;
   await storage.close().catch(() => {});
   await new Promise(resolve => setImmediate(resolve));
-  console.log(JSON.stringify({ message, records, collected, rootRetained: existsSync(join(root, 'local-storage')) }));
+  const entries = JSON.parse(readFileSync(journal.path, 'utf8')).localResources ?? [];
+  console.log(JSON.stringify({ message, records, collected, proxyClosed, clientCount, destroyed, cleanupRequests,
+    bucketRemoved: entries.some(e => e.kind === 'storage-bucket' && e.state === 'removed'), rootRetained: existsSync(join(root, 'local-storage')) }));
 } finally { rmSync(parent, { recursive: true, force: true }); }

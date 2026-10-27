@@ -84,9 +84,14 @@ export async function openWorkerStorage(args) {
   const dispose = () => disposal ??= (async () => {
     stage = 'cleanup-client-open';
     cleanupSignal = AbortSignal.timeout(10000);
-    if (proxy) { client?.destroy(); client = makeClient('cleanup'); }
     const failures = []; const attempt = async fn => { try { await fn(); } catch { refused(); failures.push(true); } };
-    if (created) await attempt(async () => {
+    if (proxy) {
+      // A failed setup-client close cannot prevent independent resource collection.
+      const setupClient = client; client = undefined;
+      await attempt(() => setupClient?.destroy());
+      await attempt(() => { client = makeClient('cleanup'); });
+    }
+    if (created && client) await attempt(async () => {
       stage = 'bucket-ownership';
       assertOwnedRoot(args); record({ kind: 'storage-bucket', state: 'cleanup-intent', bucket });
       // Bucket lists can omit a created bucket; only the owned bucket's direct 404 proves absence.

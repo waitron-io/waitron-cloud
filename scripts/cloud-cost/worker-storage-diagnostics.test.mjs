@@ -15,8 +15,8 @@ for (const stage of ['bucket-inventory', 'bucket-present', 'multipart-list', 'ob
     assert.equal(output.message, 'Invalid cloud cost worker storage');
     assert.ok(output.records.some(event => event.kind === 'storage-refusal' && event.stage === stage), 'retain the refused operation');
     assert.deepEqual(workerFailureTrace(output.records), output.records, 'the private-worker boundary must admit the diagnostic');
-    assert.equal(output.collected, !['cleanup-client-open', 'bucket-ownership'].includes(stage),
-      'preserve collection and existing ownership refusal behavior');
+    assert.equal(output.collected, stage !== 'bucket-ownership',
+      'continue independent collection while preserving ownership refusal');
     assert.equal((result.stdout + result.stderr).includes('PRIVATE'), false);
   });
 }
@@ -66,8 +66,9 @@ test('a direct close reports its refused client setup without requiring finish',
     { encoding: 'utf8', timeout: 10000 });
   assert.equal(result.status, 0, result.stderr);
   const output = JSON.parse(result.stdout);
-  assert.equal(output.message, 'PRIVATE_STORAGE_CANARY');
+  assert.equal(output.message, 'Invalid cloud cost worker storage');
   assert.deepEqual(output.records, [{ kind: 'storage-refusal', stage: 'cleanup-client-open' }]);
-  assert.equal(output.collected, false, 'the existing client destruction refusal still stops disposal');
+  assert.equal(output.collected, true, 'a client destruction refusal must not stop process collection');
+  assert.equal((result.stdout + result.stderr).includes('PRIVATE'), false);
   assert.equal(output.rootRetained, true);
 });
