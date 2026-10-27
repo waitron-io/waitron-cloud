@@ -118,14 +118,14 @@ export class ForwardReportWriter {
    // Clock skew must defer unrepresentable evidence without disabling future reporting.
    if([...this.#entries.values()].some(entry=>entry.observation&&entry.observation.observedAt>now+5000))return;
    const sequence=this.#sequence+1;
-   const snapshot=[...this.#entries.values()].flatMap(entry=>entry.observation?[{entry,original:entry.observation,value:{...entry.observation,observationSequence:entry.observation.observationSequence||sequence}}]:[]);
+   const snapshot=[...this.#entries.values()].flatMap(entry=>entry.observation?[{original:entry.observation,value:{...entry.observation,observationSequence:entry.observation.observationSequence||sequence}}]:[]);
    const report:ForwardReport={version:1,audience:'waitron-cloud-public-forward-report',cellId:this.#marker.cellId,gatewayId:this.#marker.gatewayId,generation:this.#marker.generation,sequence,issuedAt:now,observations:snapshot.map(o=>o.value)};
    const text=JSON.stringify(signForwardReport(report,this.#options.key));
    await this.#directory();
    if(!this.#published){await this.#atomic('initialized.json',JSON.stringify({...this.#marker,published:true}),0o600);this.#published=true;}
    await this.#atomic('report.json',text,0o640);
    this.#sequence=sequence;this.#lastPublication=now;this.#dirty=false;
-   for(const item of snapshot){if(item.entry.observation===item.original)item.entry.observation=item.value;}
+   for(const item of snapshot){const current=this.#entries.get(item.original.installationId);if(current?.observation===item.original)current.observation=item.value;}
    // A completion during fsync belongs to the next bounded snapshot.
    if([...this.#entries.values()].some(entry=>entry.observation?.observationSequence===0))this.#dirty=true;
   }catch{this.#ready=false;this.#entries.clear();}

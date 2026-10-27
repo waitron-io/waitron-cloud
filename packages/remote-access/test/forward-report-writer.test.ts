@@ -229,3 +229,11 @@ test('a signed future report and a hard-linked report cannot restore authority',
   await link(join(f.directory,'report.json'),join(outside,'copy'));const linked=new module!.ForwardReportWriter(f.options);await assert.rejects(linked.restore(start),/forward_report_unavailable/);
  }finally{await f.close();await rm(outside,{recursive:true,force:true});}
 });
+test('renewal during publication keeps the published completion sequence',async()=>{
+ const f=await fixture();try{
+  f.writer.begin(f.binding,start)('upstream_timeout',start);const publication=f.writer.flush(start);
+  f.writer.begin({...f.binding,manifestSequence:4},start);await publication;
+  f.setTime(start+30000);await f.writer.flush(f.time());const report=await f.report();
+  assert.equal(report.sequence,1,'an unchanged completion does not allocate another report');assert.equal(report.observations[0]!.observationSequence,1);
+ }finally{await f.close();}
+});
