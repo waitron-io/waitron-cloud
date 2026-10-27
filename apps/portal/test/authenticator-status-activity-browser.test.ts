@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import {mkdir, readFile} from 'node:fs/promises';
 import {test} from 'node:test';
+import {setTimeout as delay} from 'node:timers/promises';
 import {build} from 'esbuild';
 import {chromium} from 'playwright';
 import {translations} from '../src/locale.ts';
@@ -13,9 +14,12 @@ const bundle = await build({stdin: {contents: `
 `, resolveDir: new URL('..', import.meta.url).pathname}, bundle: true, write: false, format: 'iife', target: 'es2023'});
 const styles = await readFile(new URL('../src/styles.css', import.meta.url), 'utf8');
 const at = '2026-10-24T12:00:00.000Z', expiresAt = '2030-01-01T00:00:00.000Z';
+// The clock runs after installation; freeze before registering application timers.
+const clockStart = new Date(Date.parse(at) - 86_400_000);
 
+for (const setupDelay of [0, 100])
 for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'] as const) for (const width of [390, 1280]) {
-  test(`${locale} ${theme} ${width}: session activity preserves a failed authenticator read until explicit retry`, async () => {
+  test(`${locale} ${theme} ${width}${setupDelay ? ' with delayed clock setup' : ''}: session activity preserves a failed authenticator read until explicit retry`, async () => {
     const browser = await chromium.launch({headless: true});
     let releaseActivity!: () => void, releaseRetry!: () => void;
     const activityReply = new Promise<void>(resolve => {releaseActivity = resolve;});
@@ -23,7 +27,9 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
     try {
       const page = await browser.newPage({locale, colorScheme: theme, viewport: {width, height: 900}});
       page.setDefaultTimeout(4000);
-      await page.clock.install({time: new Date(at)}); await page.clock.pauseAt(new Date(at));
+      await page.clock.install({time: clockStart});
+      if (setupDelay) await delay(setupDelay);
+      await page.clock.pauseAt(new Date(at));
       const c = translations[locale]; let reads = 0;
       const writes: string[] = [];
       await page.route('https://portal.test/account', route => route.fulfill({contentType: 'text/html', body: '<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><div id="portal" class="portal"></div>'}));
@@ -80,12 +86,15 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
   });
 }
 
+for (const setupDelay of [0, 100])
 for (const scenario of ['cooldown', 'new account', 'blocked startup'] as const) {
-  test(`authenticator status retry preserves ${scenario} behavior`, async () => {
+  test(`authenticator status retry preserves ${scenario} behavior${setupDelay ? ' with delayed clock setup' : ''}`, async () => {
     const browser = await chromium.launch({headless: true});
     try {
       const page = await browser.newPage(); page.setDefaultTimeout(4000);
-      await page.clock.install({time: new Date(at)}); await page.clock.pauseAt(new Date(at));
+      await page.clock.install({time: clockStart});
+      if (setupDelay) await delay(setupDelay);
+      await page.clock.pauseAt(new Date(at));
       const c = translations.en; let reads = 0, sessionReads = 0;
       await page.route('https://portal.test/account', route => route.fulfill({contentType: 'text/html', body: '<div id="portal" class="portal"></div>'}));
       await page.route('**/api/account/**', route => {

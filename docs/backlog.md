@@ -3687,9 +3687,12 @@ assertions, deadlines or application time. The session-list activity fixture als
 reproduces the refusal with a 100 ms setup delay and now freezes from the earlier
 start before loading the app. Its original journeys and delayed variants retain
 all session, retry, uncertain-revoke and account assertions and deadlines.
-Authenticator and translation-consent activity fixtures still install and pause
-at the same instant; qualify them separately if this refusal recurs. No historical
-CI failure in those fixtures is attributed here.
+The authenticator-status activity fixture reproduces the same refusal under a
+100 ms setup delay and now uses the earlier start too. Its original journeys and
+delayed variants preserve every status, retry, account, write and deadline check.
+The translation-consent activity fixture still installs and pauses at the same
+instant; qualify it separately if this refusal recurs. No historical CI failure
+in these fixtures is attributed here.
 
 ## Password-change notification recovery link (D261)
 
