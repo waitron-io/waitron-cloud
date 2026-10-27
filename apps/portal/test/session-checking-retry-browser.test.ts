@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import {mkdir, readFile} from 'node:fs/promises';
 import {test} from 'node:test';
+import {setTimeout as delay} from 'node:timers/promises';
 import {build} from 'esbuild';
 import {chromium, type Route} from 'playwright';
 
@@ -14,13 +15,16 @@ const styles = await readFile(new URL('../src/styles.css', import.meta.url), 'ut
 
 for (const path of ['/connect', '/recover']) for (const locale of ['en', 'es'] as const)
 for (const theme of ['light', 'dark'] as const) for (const width of [390, 1280])
-for (const failure of ['503', 'network'] as const) {
-  test(`${path} ${locale} ${theme} ${width} ${failure}: retry appears only after the session check fails`, async () => {
+for (const failure of ['503', 'network'] as const) for (const setupDelay of [0, 1100]) {
+  if (setupDelay && (locale !== 'en' || theme !== 'light' || width !== 390)) continue;
+  test(`${path} ${locale} ${theme} ${width} ${failure}${setupDelay ? ' with delayed clock setup' : ''}: retry appears only after the session check fails`, async () => {
     const browser = await chromium.launch({headless: true});
     try {
       const page = await browser.newPage({locale, colorScheme: theme, viewport: {width, height: 900}});
       page.setDefaultTimeout(3000);
-      await page.clock.install({time: new Date('2026-10-25T12:00:00Z')});
+      // The clock runs after installation; freeze before registering application timers.
+      await page.clock.install({time: new Date('2026-10-24T12:00:01Z')});
+      if (setupDelay) await delay(setupDelay);
       await page.clock.pauseAt(new Date('2026-10-25T12:00:01Z'));
       let held!: Route, received!: () => void, requests = 0;
       const sessionRequested = new Promise<void>(resolve => { received = resolve; });
