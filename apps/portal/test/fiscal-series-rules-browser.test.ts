@@ -20,6 +20,10 @@ const bundle=await build({stdin:{contents:`
    installations:{organisations:[],visible:[{venueId:input.venueId,canRevoke:true,environment:'test'}]},
    draw(){render(fiscalAllocationScreen(app),document.querySelector('#portal'));}};
   app.fiscal=new FiscalAllocationController(()=>app.draw());
+  window.reserveCalls=[];
+  const reserve=app.fiscal.reserve.bind(app.fiscal);
+  // Observe the screen boundary before the controller can reject the same invalid draft.
+  app.fiscal.reserve=input=>{window.reserveCalls.push(structuredClone(input));return reserve(input);};
   app.fiscal.account(accountId);app.fiscal.open(input.venueId);app.fiscal.choose(input);app.draw();
  };
 `,resolveDir:new URL('..',import.meta.url).pathname},bundle:true,write:false,format:'iife',target:'es2023'});
@@ -42,6 +46,7 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
   await page.evaluate(({locale,accountId,input})=>(window as any).mount(locale,accountId,input),{locale,accountId,input});
   const c=translations[locale],base=(i:number)=>page.locator(`wt-input[name="base-${i}"]`),submit=page.getByRole('button',{name:c.fiscalReserve,exact:true});
   await submit.click();
+  assert.deepEqual(await page.evaluate(()=>(window as any).reserveCalls),[],'the screen must reject invalid series before calling the controller');
   if(problem!=='duplicate')assert.equal(await page.getByRole('alert').textContent(),locale==='en'?'Add a Standard series.':'Añade una serie ordinaria.');
   for(let i=0;i<input.bases.length;i++){
    const repeated=problem!=='no-standard'&&i!==1;
@@ -58,6 +63,7 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
   if(problem!=='duplicate'){await page.getByLabel(c.fiscalPurpose+' 1',{exact:true}).selectOption('standard');assert.equal(await page.getByRole('alert').count(),0,'choosing Standard clears its warning before submission');}
   const response=page.waitForResponse(r=>r.url().endsWith('/api/account/fiscal-allocations/reserve'));
   await submit.click();await response;
+  assert.equal(await page.evaluate(()=>(window as any).reserveCalls.length),1,'a corrected draft must reach the controller exactly once');
   assert.equal(requests.length,1);assert.equal(requests[0]!.path,'/api/account/fiscal-allocations/reserve');
   assert.deepEqual(requests[0]!.body,{...input,scope:{...input.scope,taxpayerNif:'B12345678',softwareId:'WT'},bases:input.bases.map((b,i)=>({...b,...(i===2?{code:'a'}:{}),...(i===0&&problem!=='duplicate'?{purpose:'standard'}:{})}))});
   for(let i=0;i<input.bases.length;i++)assert.equal(await base(i).locator('input').getAttribute('aria-invalid'),'false');

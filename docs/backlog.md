@@ -305,8 +305,9 @@ Fiscal drafts name a missing Standard series and mark every repeated code.
 Correcting series clears stale feedback. English/Spanish browser checks cover
 both refusals together, leave unrelated codes unmarked and submit corrected drafts
 with existing case-sensitive codes and normalized taxpayer/software fields.
-The no-request checks also rely on the controller's validation; a focused test
-that isolates the screen's own refusal remains a client-validation follow-up.
+Browser checks observe the screen-to-controller call before the controller can
+reject an invalid draft. Missing Standard, duplicate and combined series errors
+stay in the screen; a corrected draft reaches the controller exactly once.
 Browser validation checks structure; local recovery must verify cryptographic
 trust and authority before activation. Cloud now preserves the exact person or recovery-key event operator through
 reserve validation, consumption approval, signed manual packets and retained
