@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import {mkdir, readFile} from 'node:fs/promises';
 import {test} from 'node:test';
+import {setTimeout as delay} from 'node:timers/promises';
 import {build} from 'esbuild';
 import {chromium} from 'playwright';
 import {translations} from '../src/locale.ts';
@@ -19,13 +20,16 @@ const flows = [
 
 // An operation-wide resend wait breaks the corrected-address submission; forgetting
 // earlier addresses or treating a server wait as address-specific breaks the controls.
-for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'] as const) for (const width of [390, 1280]) for (const flow of flows) {
-  test(`${locale} ${theme} ${width} ${flow.path}: a different address can be sent straight away`, async t => {
+for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'] as const) for (const width of [390, 1280]) for (const flow of flows) for (const setupDelay of [0, 1100]) {
+  if (setupDelay && (locale !== 'en' || theme !== 'light' || width !== 390)) continue;
+  test(`${locale} ${theme} ${width} ${flow.path}${setupDelay ? ' with delayed clock setup' : ''}: a different address can be sent straight away`, async t => {
     const browser = await chromium.launch({headless: true});
     try {
       const page = await browser.newPage({locale, colorScheme: theme, viewport: {width, height: 900}});
       page.setDefaultTimeout(3000);
-      await page.clock.install({time: new Date('2026-10-25T12:00:00Z')});
+      // The clock runs after installation; freeze before registering application timers.
+      await page.clock.install({time: new Date('2026-10-24T12:00:01Z')});
+      if (setupDelay) await delay(setupDelay);
       await page.clock.pauseAt(new Date('2026-10-25T12:00:01Z'));
       const c = translations[locale], calls: {email: string; locale: string}[] = [];
       const other = flows.find(item => item.path !== flow.path)!, otherCalls: unknown[] = [];
