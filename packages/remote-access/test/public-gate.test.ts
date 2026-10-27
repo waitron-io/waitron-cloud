@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
 import {createServer,request} from 'node:http';
-import type {IncomingMessage,ServerResponse} from 'node:http';
+import {IncomingMessage,type ServerResponse} from 'node:http';
+import {Socket} from 'node:net';
 import {EventEmitter} from 'node:events';
 import {createServer as httpsServer} from 'node:https';
 import {execFileSync} from 'node:child_process';
@@ -165,7 +166,9 @@ test('a synchronous visitor reply failure cannot complete one attempt twice',asy
    writableEnded:false,headersSent:false,
    writeHead(){if(++writes===1)throw new Error('visitor response failure');},end(){resolve();},
   }));
-  f.gate.handle({headers:{host,'x-waitron-sni':host,'x-waitron-client-ip':'192.0.2.2',cookie},url:'/public/availability',method:'GET'} as IncomingMessage,response as ServerResponse);
+  const req=new IncomingMessage(new Socket());
+  Object.assign(req,{headers:{host,'x-waitron-sni':host,'x-waitron-client-ip':'192.0.2.2',cookie},url:'/public/availability',method:'GET'});
+  f.gate.handle(req,response as ServerResponse);
   await ended;assert.equal(writes,2);assert.equal(calls.length,1);assert.equal(calls[0]![0],null);
   assert.equal(f.gate.stats().active,0);
  }finally{await f.close();}
