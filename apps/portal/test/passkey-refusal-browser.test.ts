@@ -15,17 +15,16 @@ const labels = {
 for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'] as const) for (const width of [390, 1280]) {
   test(`${locale} ${theme} ${width}: refused passkey changes have a read-only check and fresh attempt`, async t => {
     const browser = await chromium.launch({headless: true});
-    try { for (const flow of ['options', 'verify', 'remove', 'browser-duplicate', 'failed-list', 'navigation'] as const) await t.test(flow, async () => {
+    const flows = ['options', 'verify', 'remove', 'browser-duplicate', 'failed-list', 'navigation', ...(locale === 'en' && theme === 'light' && width === 390 ? ['missing-handler'] as const : [])] as const;
+    try { for (const flow of flows) await t.test(flow, async () => {
       const page = await browser.newPage({locale, colorScheme: theme, viewport: {width, height: 900}});
       page.setDefaultTimeout(4000);
       let release!: () => void;
       const checked = new Promise<void>(resolve => {release = resolve;});
-      let counted!: () => void;
-      const handled = new Promise<void>(resolve => {counted = resolve;});
       let checking = false, refused = false, refusingAgain = false, reads = 0, added = false, removed = false, optionsCount = 0;
       const writes: {path: string; body: Record<string, unknown>}[] = [];
       const c = translations[locale], text = labels[locale];
-      const failureAt = flow === 'failed-list' || flow === 'navigation' ? 'verify' : flow;
+      const failureAt = flow === 'failed-list' || flow === 'navigation' || flow === 'missing-handler' ? 'verify' : flow;
       try {
         const virtual = await page.context().newCDPSession(page);
         await virtual.send('WebAuthn.enable');
@@ -41,7 +40,7 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
         await page.route('**/api/account/**', async route => {
           const req = route.request(), path = new URL(req.url()).pathname.replace('/api/account', '');
           if (path === '/session' || path === '/session/activity') return route.fulfill({json: {accountId: 'owner', expiresAt: '2099-01-01T00:00:00Z'}});
-          if (path === '/passkeys') {reads++; if (checking) {counted(); await checked;} if (flow === 'failed-list' && refused && !checking) return route.fulfill({status: 503, json: {error: 'unavailable'}}); return route.fulfill({json: {passkeys: removed ? [] : added ? [key, {...key, id: addedId}] : [key]}});}
+          if (path === '/passkeys') {reads++; if (checking) await checked; if (flow === 'failed-list' && refused && !checking) return route.fulfill({status: 503, json: {error: 'unavailable'}}); return route.fulfill({json: {passkeys: removed ? [] : added ? [key, {...key, id: addedId}] : [key]}});}
           if (path.startsWith('/passkeys/')) {
             writes.push({path, body: req.postDataJSON()});
             if (refusingAgain || (flow !== 'browser-duplicate' && !refused && path.endsWith(failureAt === 'options' ? '/options' : failureAt === 'verify' ? '/verify' : '/remove'))) {refused = true; return route.fulfill({status: 400, headers: refusingAgain ? {'Retry-After': '60'} : {}, json: {error: 'invalid_input'}});}
@@ -75,9 +74,23 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
           const original = w.passkeyRefusalApp.refreshPasskeys.bind(w.passkeyRefusalApp);
           w.passkeyRefusalApp.refreshPasskeys = () => w.passkeyRefreshDone = original();
         });
+        if (flow === 'missing-handler') await page.route('**/api/account/passkeys', route => route.fulfill({json: {passkeys: [key]}}));
         const requested = page.waitForRequest('**/api/account/passkeys'); await refresh.click(); await requested;
         // The request event can precede the route handler that counts and holds the read.
-        await handled;
+        const waitForHandler = () => t.waitFor(() => {
+          assert.equal(reads, beforeReads + 1, 'the passkey refresh route handler must count the read');
+        }, {timeout: 4000});
+        if (flow === 'missing-handler') {
+          let timer: ReturnType<typeof setTimeout> | undefined;
+          try {
+            await assert.rejects(Promise.race([
+              waitForHandler(),
+              new Promise<void>(resolve => {timer = setTimeout(resolve, 5000);}),
+            ]), /waitFor\(\) timed out/);
+          } finally {clearTimeout(timer);}
+          return;
+        }
+        await waitForHandler();
         assert.equal(writes.length, before, 'checking never repeats registration or removal'); assert.equal(reads, beforeReads + 1);
         assert.equal(await password.inputValue(), ''); assert.equal(await password.isDisabled(), true, 'the check keeps password entry disabled while pending');
         if (flow === 'navigation') {
