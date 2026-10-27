@@ -12,7 +12,7 @@ async function fixture(planMode:'existing'|'test-free-paid'='test-free-paid'){
  const f=await forwardFixture();
  const session=await transaction(f.db.pool,c=>createSession(c,f.owner.accountId));
  const app=createAccountApp({pool:f.db.pool,outbox:f.db.outbox,planMode,config:{portalOrigin:origin,production:true,rateKey:f.db.rateKey,trustedProxyIps:[]}});
- const call=async(action='remote-access/status',body:unknown={installationId:f.installed.installationId},headers:Record<string,string>={})=>app.request(origin+'/api/account/'+action,{method:'POST',headers:{origin,cookie:'__Host-cloud_session='+session.token,'x-csrf-token':session.csrfToken,'content-type':'application/json',...headers},body:JSON.stringify(body)},{incoming:{socket:{remoteAddress:'192.0.2.1'}}} as HttpBindings);
+ const call=async(action='remote-access/status',body:unknown={installationId:f.installed.installationId},headers:Record<string,string>={})=>app.request(origin+'/api/account/'+action,{method:action==='installations'?'GET':'POST',headers:{origin,cookie:'__Host-cloud_session='+session.token,'x-csrf-token':session.csrfToken,'content-type':'application/json',...headers},...(action==='installations'?{}:{body:JSON.stringify(body)})},{incoming:{socket:{remoteAddress:'192.0.2.1'}}} as HttpBindings);
  return {...f,session,call};
 }
 test('owner status returns exactly the recorded outcome with no caching or session activity; apply does not export it',async()=>{
@@ -40,7 +40,7 @@ for(const change of ['missing','expiry','revision','hostname','revoked','reporte
   if(change==='reporter')await f.db.pool.query('UPDATE remote_forward_reporters SET revoked_at=clock_timestamp()');
   if(change==='downgrade')await f.db.pool.query("UPDATE organisations SET service_plan='free'");
   if(change==='unconfigured')await f.db.pool.query("UPDATE installation_services SET state='unconfigured' WHERE service='remote_access'");
-  if(change==='unplaced')await f.db.pool.query('DELETE FROM remote_placements');
+  if(change==='unplaced'){await f.db.pool.query('DELETE FROM remote_hostnames');await f.db.pool.query('DELETE FROM remote_placements');}
   const response=await f.call();assert.equal(response.status,200);assert.equal((await response.json()).publicForward,null);
  }finally{await f.db.close();}
 });
