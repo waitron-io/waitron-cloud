@@ -31,7 +31,7 @@ async function fixture(t, mode = 'normal', { holdAfterStop = false, interruptQue
   const database = join(root, 'venue.db'); const db = new DatabaseSync(database);
   db.exec('CREATE TABLE sales(id INTEGER PRIMARY KEY CHECK(id>0)); INSERT INTO sales VALUES(1)');
   if (mode === 'empty') db.exec('DELETE FROM sales'); db.close();
-  let stored, uploaded = 0, releaseUpload, heldResponse, releaseInventory, inventoryHeld;
+  let stored, uploaded = 0, releaseUpload, heldResponse, releaseInventory, inventoryHeld, wrongInventory = false;
   const heldUpload = new Promise(resolve => { heldResponse = resolve; });
   const heldInventory = new Promise(resolve => { inventoryHeld = resolve; });
   let interrupted; const connections = new Set();
@@ -57,7 +57,7 @@ async function fixture(t, mode = 'normal', { holdAfterStop = false, interruptQue
       }
       else if (url.searchParams.has('uploads')) res.end('<ListMultipartUploadsResult><IsTruncated>false</IsTruncated></ListMultipartUploadsResult>');
       else if (url.searchParams.get('list-type') === '2') res.end('<ListBucketResult><IsTruncated>false</IsTruncated>'
-        + (stored ? `<Contents><Key>stream.ltx</Key><Size>${stored.length}</Size></Contents>` : '') + '</ListBucketResult>');
+        + (stored ? `<Contents><Key>stream.ltx</Key><Size>${stored.length + (wrongInventory ? 1 : 0)}</Size></Contents>` : '') + '</ListBucketResult>');
       else {
         if (mode === 'read-before-upload' && req.method === 'GET')
           res.once('finish', () => readCompleted(performance.now()));
@@ -143,6 +143,7 @@ process.once('SIGTERM',()=>{
   });
   return { source, root, journal, database, binary, binarySha256: createHash('sha256').update(text).digest('hex'),
     target: `http://127.0.0.1:${provider.address().port}`, sdk, bucket: 'synthetic-replay-stream', versioned: false,
+    misreportInventory: () => { wrongInventory = true; },
     uploaded: () => uploaded, stored: () => stored, heldUpload, releaseUpload: () => releaseUpload(),
     heldInventory, releaseInventory: () => releaseInventory(), firstRead,
     interruptedUpload: () => interrupted && { afterStop: interrupted.request.headers['x-fixture-after-stop'] === 'yes',
@@ -708,4 +709,38 @@ test('replayStreamOpeningRefusalSurvivesDiagnosticOutputFailure', async t => {
   t.mock.method(t, 'diagnostic', () => { throw Error('PRIVATE_REPORTER_FAILURE'); });
   await assert.rejects(open(t, f), bad);
   clean(f);
+});
+
+// Collapsing these boundaries hides whether a clean native exit preceded invalid accounting or cancellation.
+for (const [fault, stage] of [
+  ['idle', 'quiesce-idle'],
+  ['stop', 'quiesce-stop-result'],
+  ['cancel', 'quiesce-health'],
+  ['inventory', 'quiesce-checkpoint'],
+]) test('replayStreamNamesTheRefusingQuiesceBoundary_' + fault, { timeout: 10000 }, async t => {
+  const f = await fixture(t, fault === 'idle' ? 'held-invalid' : fault === 'stop' ? 'stop' : 'normal');
+  const abort = new AbortController(), trace = [];
+  const run = await open(t, { ...f, signal: abort.signal, onDiagnostic: event => {
+    trace.push(event);
+    if (event.kind === 'native' && event.operation === 'replicate') {
+      if (fault === 'cancel') abort.abort();
+      if (fault === 'inventory') f.misreportInventory();
+    }
+  } });
+  await upload(f);
+  if (fault === 'idle') await f.heldUpload;
+  const finishing = assert.rejects(run.finish({ expectedSales: 1 }), bad);
+  if (fault === 'idle') f.releaseUpload();
+  await finishing;
+  clean(f);
+  assert.ok(trace.some(event => event.kind === 'stream-refusal' && event.stage === stage), JSON.stringify(trace));
+  const native = trace.find(event => event.kind === 'native' && event.operation === 'replicate');
+  assert.equal(native.code, fault === 'stop' ? 23 : fault === 'idle' ? 18 : 0);
+  assert.equal(native.signal, null);
+  const entries = JSON.parse(readFileSync(f.journal.path, 'utf8')).localResources;
+  assert.deepEqual(entries.filter(e => e.kind === 'stream-process' && e.state === 'started').map(e => e.operation),
+    ['version', 'replicate'], 'no restore begins after refused quiescence');
+  assert.deepEqual(workerFailureTrace(trace), trace, 'the exact bounded trace survives worker admission');
+  for (const secret of [f.source, f.root, f.journal.token, f.bucket, 'PRIVATE_'])
+    assert.equal(JSON.stringify(trace).includes(secret), false);
 });

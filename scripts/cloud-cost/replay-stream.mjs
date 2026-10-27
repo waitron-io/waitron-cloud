@@ -109,9 +109,12 @@ export async function openReplayStream(input) {
   })();
   const abort = () => { invalid = true; dispose().catch(() => {}); };
   const quiesce = async () => {
-    healthy(); await session.whenIdle(() => { writer.stopping = true; writer.child.kill('SIGTERM'); });
-    successful(await stop(writer)); writer = undefined; healthy();
-    return session.checkpoint();
+    healthy();
+    at('quiesce-idle'); await session.whenIdle(() => { writer.stopping = true; writer.child.kill('SIGTERM'); });
+    at('quiesce-stop'); const result = await stop(writer);
+    at('quiesce-stop-result'); successful(result); writer = undefined;
+    at('quiesce-health'); healthy();
+    at('quiesce-checkpoint'); return session.checkpoint();
   };
   const start = async () => {
     const before = session.activity(), observation = new AbortController();
