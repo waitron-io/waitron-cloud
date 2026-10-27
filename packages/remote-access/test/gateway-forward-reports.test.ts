@@ -3,10 +3,10 @@ import {test,mock} from 'node:test';
 import https from 'node:https';
 import {createServer,request,type IncomingMessage} from 'node:http';
 import {syncBuiltinESMExports} from 'node:module';
-import {execFileSync} from 'node:child_process';
+import {execFileSync,spawnSync} from 'node:child_process';
 import {createPublicGate} from '../src/public-gate.ts';
 import {generateKeyPairSync,randomUUID,randomBytes,createHash} from 'node:crypto';
-import {mkdtemp,mkdir,chmod,writeFile,readFile,rm,realpath,readdir} from 'node:fs/promises';
+import {mkdtemp,mkdir,chmod,writeFile,readFile,rm,realpath,readdir,symlink,unlink,link} from 'node:fs/promises';
 import {join} from 'node:path';
 import {tmpdir} from 'node:os';
 import {GatewayAuthority} from '../src/authority.ts';
@@ -108,5 +108,36 @@ test('gateway rotation reloads a fresh dedicated signing key for the new generat
   f.reports.beginForward(f.route,start)!('upstream_timeout',start);await f.reports.flush(start);
   const envelope=JSON.parse(await readFile(join(f.directory,'report.json'),'utf8'));const report=verifyForwardReport(envelope,fresh.publicKey,start);
   assert.equal(report.generation,2);assert.equal(report.sequence,1);assert.equal(report.observations[0]!.category,'upstream_timeout');assert.throws(()=>verifyForwardReport(envelope,f.key.publicKey,start),/invalid_forward_report/);
+ }finally{await f.close();}
+});
+
+test('existing private key inside the collector mount or behind a parent symlink is refused',async()=>{
+ const f=await fixture();try{
+  f.reports.beginForward(f.route,start)!(null,start);await f.reports.flush(start);
+  const inside=join(f.directory,'secret.pem');await writeFile(inside,f.key.privateKey.export({type:'pkcs8',format:'pem'}),{mode:0o600});
+  await symlink(f.root,join(f.root,'alias'));
+  for(const keyFile of [inside,join(f.root,'alias','reporting.pem')]){
+   const reports=new module!.GatewayForwardReports(f.authority,{...f.options,keyFile});await reports.refresh();assert.equal(reports.beginForward(f.route,start),undefined);
+  }
+ }finally{await f.close();}
+});
+
+test('a named pipe cannot block the optional key loader',async()=>{
+ const f=await fixture();try{
+  await unlink(f.keyFile);execFileSync('mkfifo',[f.keyFile]);
+  const script=`import {generateKeyPairSync} from 'node:crypto';import {GatewayAuthority} from './packages/remote-access/src/authority.ts';import {signManifest} from './packages/remote-access/src/manifest.ts';import {GatewayForwardReports} from './packages/remote-access/src/gateway-forward-reports.ts';const keys=generateKeyPairSync('ed25519'),value=JSON.parse(process.argv[2]);const authority=new GatewayAuthority(keys.publicKey,value.cellId,{persist:async()=>{},apply:async()=>{},close:async()=>{}},()=>${start});await authority.accept(signManifest(value,keys.privateKey,${start}));const reports=new GatewayForwardReports(authority,{keyFile:process.argv[1],directory:process.argv[3],readerGid:process.getegid(),now:()=>${start}});await reports.refresh();if(reports.beginForward(value.routes[0],${start})!==undefined)process.exitCode=1;`;
+  const child=spawnSync(process.execPath,['--input-type=module','-e',script,f.keyFile,JSON.stringify(f.value),f.directory],{encoding:'utf8',timeout:2000});assert.equal(child.status,0,`key loader must reject a named pipe promptly: ${child.error?.message??child.stderr}`);
+ }finally{await f.close();}
+});
+
+test('a hard-linked or known bot signing key cannot become reporting authority',async()=>{
+ const f=await fixture();try{
+  f.reports.beginForward(f.route,start)!(null,start);await f.reports.flush(start);
+  await link(f.keyFile,join(f.root,'linked-key'));const linked=new module!.GatewayForwardReports(f.authority,f.options);await linked.refresh();assert.equal(linked.beginForward(f.route,start),undefined);
+  await unlink(join(f.root,'linked-key'));
+  await symlink(f.keyFile,join(f.root,'bot-key-alias'));
+  for(const other of [f.keyFile,join(f.root,'bot-key-alias')]){
+   const shared=new module!.GatewayForwardReports(f.authority,{...f.options,otherKeyFiles:[other]});await shared.refresh();assert.equal(shared.beginForward(f.route,start),undefined);
+  }
  }finally{await f.close();}
 });

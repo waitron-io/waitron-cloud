@@ -6,7 +6,7 @@ import type {GatewayAuthority} from './authority.ts';
 import type {GatewayRoute} from './manifest.ts';
 import {routeBinding,type ForwardCause} from './forward-report.ts';
 import {ForwardReportWriter} from './forward-report-writer.ts';
-interface Options {directory?:string;keyFile?:string;readerGid?:number;issuerKey?:KeyObject;now?:()=>number}
+interface Options {directory?:string;keyFile?:string;readerGid?:number;issuerKey?:KeyObject;otherKeyFiles?:readonly string[];now?:()=>number}
 /** Optional diagnostics have no authority to interrupt the gate or change its readiness. */
 export class GatewayForwardReports {
  readonly #authority:GatewayAuthority;readonly #options:Options;#writer:ForwardReportWriter|undefined;#identity:string|undefined;
@@ -19,8 +19,9 @@ export class GatewayForwardReports {
    this.#writer=undefined;this.#identity=identity;
    const {directory,keyFile,issuerKey}=this.#options;
    if(!directory||!keyFile||!isAbsolute(directory)||!isAbsolute(keyFile)||await realpath(keyFile)!==keyFile) return;
+   for(const other of this.#options.otherKeyFiles??[])if(await realpath(other)===keyFile)return;
    const rel=relative(directory,keyFile);if(rel===''||(!rel.startsWith('../')&&!isAbsolute(rel)))return;
-   const file=await open(keyFile,constants.O_RDONLY|constants.O_NOFOLLOW);let key:KeyObject;
+   const file=await open(keyFile,constants.O_RDONLY|constants.O_NONBLOCK|constants.O_NOFOLLOW);let key:KeyObject;
    try{const s=await file.stat();if(!s.isFile()||s.nlink!==1||s.uid!==process.geteuid!()||(s.mode&0o7777)!==0o600||s.size>4096)return;
     key=createPrivateKey(await file.readFile());
    }finally{await file.close();}

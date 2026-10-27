@@ -1,10 +1,11 @@
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
+import {execFileSync,spawnSync} from 'node:child_process';
 import {generateKeyPairSync,randomUUID,createPublicKey} from 'node:crypto';
-import {mkdtemp,mkdir,chmod,readFile,readdir,rm,stat,writeFile,symlink,unlink,realpath} from 'node:fs/promises';
+import {mkdtemp,mkdir,chmod,readFile,readdir,rm,stat,writeFile,symlink,unlink,realpath,link} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
-import {verifyForwardReport,type ForwardBinding} from '../src/forward-report.ts';
+import {verifyForwardReport,signForwardReport,type ForwardBinding} from '../src/forward-report.ts';
 const module=await import('../src/forward-report-writer.ts').catch(()=>undefined);
 const start=1_000_000;
 async function fixture(){
@@ -146,4 +147,84 @@ test('a completion during publication remains pending for the next snapshot',asy
   f.setTime(start+30000);await f.writer.flush(f.time());const report=await f.report();
   assert.equal(report.sequence,2);assert.equal(report.observations[0]!.category,null);assert.equal(report.observations[0]!.observedAt,start+1);
  }finally{await f.close();}
+});
+
+test('a symlink in the report directory parent cannot acquire a writer',async()=>{
+ const f=await fixture();const parent=await realpath(await mkdtemp(join(tmpdir(),'cloud-forward-parent-')));try{
+  await symlink(f.directory,join(parent,'alias'));
+  const directory=join(parent,'alias','nested');await mkdir(directory);await chmod(directory,0o2750);
+  const writer=new module!.ForwardReportWriter({...f.options,directory});await assert.rejects(writer.restore(start),/forward_report_unavailable/);
+ }finally{await f.close();await rm(parent,{recursive:true,force:true});}
+});
+
+for(const target of ['directory','report','temporary'])test(`non-regular ${target} fails without blocking on a named pipe`,async()=>{
+ const f=await fixture();try{
+  let directory=f.directory;
+  if(target==='directory'){directory=join(f.directory,'pipe');execFileSync('mkfifo',[directory]);}
+  else{f.writer.begin(f.binding,start)(null,start);await f.writer.flush(start);const file=join(f.directory,target==='report'?'report.json':'report.json.tmp');if(target==='report')await unlink(file);execFileSync('mkfifo',[file]);}
+  const script=`import {generateKeyPairSync} from 'node:crypto';import {ForwardReportWriter} from './packages/remote-access/src/forward-report-writer.ts';const writer=new ForwardReportWriter({directory:process.argv[1],key:generateKeyPairSync('ed25519').privateKey,cellId:process.argv[2],gatewayId:process.argv[3],generation:2,readerGid:process.getegid()});try{await writer.restore(${start});process.exitCode=1;}catch(error){if(error.message!=='forward_report_unavailable')throw error;}`;
+  const child=spawnSync(process.execPath,['--input-type=module','-e',script,directory,f.options.cellId,f.options.gatewayId],{encoding:'utf8',timeout:2000});assert.equal(child.status,0,`writer must reject a named pipe promptly: ${child.error?.message??child.stderr}`);
+ }finally{await f.close();}
+});
+test('idle first-use and rotated streams restart without losing ordering authority',async()=>{
+ const f=await fixture();try{
+  const idle=new module!.ForwardReportWriter(f.options);await idle.restore(start);idle.begin(f.binding,start)(null,start);await idle.flush(start);assert.equal((await f.report()).sequence,1);
+  const freshKey=generateKeyPairSync('ed25519').privateKey;const rotatedOptions={...f.options,generation:2,key:freshKey};
+  await new module!.ForwardReportWriter(rotatedOptions).restore(start);
+  const restarted=new module!.ForwardReportWriter(rotatedOptions);await restarted.restore(start);restarted.begin({...f.binding,generation:2},start)(null,start);await restarted.flush(start);
+  const envelope=JSON.parse(await readFile(join(f.directory,'report.json'),'utf8'));const report=verifyForwardReport(envelope,createPublicKey(freshKey),start);assert.equal(report.sequence,1);assert.equal(report.generation,2);
+ }finally{await f.close();}
+});
+for(const temporary of ['initialized.json.tmp','report.json.tmp'])test(`owned interrupted temporary creation is recoverable: ${temporary}`,async()=>{
+ const f=await fixture();try{
+  if(temporary.startsWith('initialized'))await unlink(join(f.directory,'initialized.json'));
+  else{f.writer.begin(f.binding,start)(null,start);await f.writer.flush(start);}
+  await writeFile(join(f.directory,temporary),'incomplete',{mode:0o600});
+  f.setTime(start+30000);const restarted=new module!.ForwardReportWriter(f.options);await restarted.restore(f.time());restarted.begin(f.binding,f.time())(null,f.time());await restarted.flush(f.time());
+  assert.equal((await f.report()).observations[0]!.category,null);assert.equal((await readdir(f.directory)).includes(temporary),false);
+ }finally{await f.close();}
+});
+test('future issuer clock does not permanently disable valid later observations',async()=>{
+ const f=await fixture();try{
+  const binding={...f.binding,manifestExpiresAt:start+630000};f.writer.begin(binding,start)('upstream_timeout',start);await f.writer.flush(start);
+  f.setTime(start+30000);f.writer.begin(binding,f.time())(null,f.time());await f.writer.flush(f.time());const report=await f.report();assert.equal(report.observations[0]!.category,null);assert.equal(report.observations[0]!.observedAt,start+30000);
+ }finally{await f.close();}
+});
+test('a backward clock step before publication defers rather than kills reporting',async()=>{
+ const f=await fixture();try{
+  f.writer.begin(f.binding,start)(null,start);f.setTime(start-10000);await f.writer.flush(f.time());
+  f.setTime(start);await f.writer.flush(f.time());assert.equal((await f.report()).observations[0]!.category,null);
+ }finally{await f.close();}
+});
+test('manifest renewal retains the last completion while its next attempt is pending',async()=>{
+ const f=await fixture();try{
+  f.writer.begin(f.binding,start)('upstream_timeout',start);await f.writer.flush(start);
+  const pending=f.writer.begin({...f.binding,manifestSequence:4,manifestExpiresAt:start+630000},start+30000);
+  const other={...f.binding,installationId:randomUUID(),venueId:randomUUID()};f.setTime(start+30000);f.writer.begin(other,f.time())(null,f.time());await f.writer.flush(f.time());
+  let report=await f.report();assert.equal(report.observations.length,2);let original=report.observations.find(o=>o.installationId===f.binding.installationId)!;assert.equal(original.category,'upstream_timeout');assert.equal(original.manifestSequence,3);assert.equal(original.observationSequence,1);
+  pending(null,f.time());f.setTime(start+60000);await f.writer.flush(f.time());report=await f.report();original=report.observations.find(o=>o.installationId===f.binding.installationId)!;assert.equal(original.category,null);assert.equal(original.manifestSequence,4);
+ }finally{await f.close();}
+});
+
+test('an impossible future completion cannot disable later valid publications',async()=>{
+ const f=await fixture();try{
+  f.writer.begin(f.binding,start)(null,start);await f.writer.flush(start);
+  f.setTime(start+30000);f.writer.begin(f.binding,f.time())('upstream_transport',f.time()+5001);await f.writer.flush(f.time());
+  f.setTime(start+60000);f.writer.begin(f.binding,f.time())(null,f.time());await f.writer.flush(f.time());assert.equal((await f.report()).sequence,2);
+ }finally{await f.close();}
+});
+test('duplicate venue with another installation cannot poison a valid batch',async()=>{
+ const f=await fixture();try{
+  f.writer.begin(f.binding,start)(null,start);f.writer.begin({...f.binding,installationId:randomUUID()},start)('upstream_transport',start);await f.writer.flush(start);
+  const report=await f.report();assert.equal(report.observations.length,1);assert.equal(report.observations[0]!.installationId,f.binding.installationId);assert.equal(report.observations[0]!.category,null);
+ }finally{await f.close();}
+});
+test('a signed future report and a hard-linked report cannot restore authority',async()=>{
+ const f=await fixture();const outside=await mkdtemp(join(tmpdir(),'cloud-forward-links-'));try{
+  f.writer.begin(f.binding,start)(null,start);await f.writer.flush(start);const report=await f.report();
+  await writeFile(join(f.directory,'report.json'),JSON.stringify(signForwardReport({...report,issuedAt:start+10000},f.keys.privateKey)));
+  const future=new module!.ForwardReportWriter(f.options);await assert.rejects(future.restore(start),/forward_report_unavailable/);
+  await writeFile(join(f.directory,'report.json'),JSON.stringify(signForwardReport(report,f.keys.privateKey)));
+  await link(join(f.directory,'report.json'),join(outside,'copy'));const linked=new module!.ForwardReportWriter(f.options);await assert.rejects(linked.restore(start),/forward_report_unavailable/);
+ }finally{await f.close();await rm(outside,{recursive:true,force:true});}
 });
