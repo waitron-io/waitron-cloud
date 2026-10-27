@@ -162,7 +162,7 @@ for(const target of ['directory','report','temporary'])test(`non-regular ${targe
   let directory=f.directory;
   if(target==='directory'){directory=join(f.directory,'pipe');execFileSync('mkfifo',[directory]);}
   else{f.writer.begin(f.binding,start)(null,start);await f.writer.flush(start);const file=join(f.directory,target==='report'?'report.json':'report.json.tmp');if(target==='report')await unlink(file);execFileSync('mkfifo',[file]);}
-  const script=`import {generateKeyPairSync} from 'node:crypto';import {ForwardReportWriter} from './packages/remote-access/src/forward-report-writer.ts';const writer=new ForwardReportWriter({directory:process.argv[1],key:generateKeyPairSync('ed25519').privateKey,cellId:process.argv[2],gatewayId:process.argv[3],generation:2,readerGid:process.getegid()});try{await writer.restore(${start});process.exitCode=1;}catch(error){if(error.message!=='forward_report_unavailable')throw error;}`;
+  const script=`import {generateKeyPairSync} from 'node:crypto';import {ForwardReportWriter} from ${JSON.stringify(new URL('../src/forward-report-writer.ts',import.meta.url).href)};const writer=new ForwardReportWriter({directory:process.argv[1],key:generateKeyPairSync('ed25519').privateKey,cellId:process.argv[2],gatewayId:process.argv[3],generation:2,readerGid:process.getegid()});try{await writer.restore(${start});process.exitCode=1;}catch(error){if(error.message!=='forward_report_unavailable')throw error;}`;
   const child=spawnSync(process.execPath,['--input-type=module','-e',script,directory,f.options.cellId,f.options.gatewayId],{encoding:'utf8',timeout:2000});assert.equal(child.status,0,`writer must reject a named pipe promptly: ${child.error?.message??child.stderr}`);
  }finally{await f.close();}
 });
