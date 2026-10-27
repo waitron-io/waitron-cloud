@@ -11,24 +11,39 @@ const bundle=await build({stdin:{contents:`
  new PortalApp(document.querySelector('#portal'));
 `,resolveDir:new URL('..',import.meta.url).pathname},bundle:true,write:false,format:'iife',target:'es2023'});
 const styles=await readFile(new URL('../src/styles.css',import.meta.url),'utf8');
-for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as const)for(const width of [390,1280])for(const failure of ['503','network'] as const)test(`${locale} ${theme} ${width} ${failure}: recovery distinguishes a failed session check and retries`,async()=>{
+for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as const)for(const width of [390,1280])for(const failure of ['503','network'] as const){
+ const handlers=locale==='en'&&theme==='light'&&width===390&&failure==='503'?['ordinary','delayed','missing'] as const:['ordinary','delayed'] as const;
+ for(const handler of handlers)test(`${locale} ${theme} ${width} ${failure}: recovery distinguishes a failed session check and retries${handler==='ordinary'?'':` (${handler} handler)`}`,async t=>{
  const browser=await chromium.launch({headless:true});
  try{
   const page=await browser.newPage({locale,colorScheme:theme,viewport:{width,height:900}});page.setDefaultTimeout(3000);
-  let firstRoute!:Route,received!:()=>void;
-  const sessionRequested=new Promise<void>(resolve=>{received=resolve;});let requests=0;
-  await page.route('https://portal.test/**',route=>{
+  let firstRoute!:Route,received=false,requests=0;
+  await page.route('https://portal.test/**',async route=>{
    const path=new URL(route.request().url()).pathname;
    if(path==='/api/account/session'){
     requests++;
-    if(requests===1){firstRoute=route;received();return;}
+    if(requests===1){
+     firstRoute=route;
+     if(handler==='delayed')await new Promise(resolve=>setTimeout(resolve,100));
+     if(handler!=='missing')received=true;
+     return;
+    }
     return route.fulfill({status:401,json:{error:'credentials_invalid'}});
    }
    if(!path.startsWith('/api/'))return route.fulfill({contentType:'text/html',body:'<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><div id="portal" class="portal"></div>'});
    return route.fulfill({status:503,json:{error:'unavailable'}});
   });
   await page.goto('https://portal.test/recover#request=10000000-0000-4000-8000-000000000001');
-  await page.addStyleTag({content:styles});await page.addScriptTag({content:bundle.outputFiles[0]!.text});await sessionRequested;
+  await page.addStyleTag({content:styles});await page.addScriptTag({content:bundle.outputFiles[0]!.text});
+  const ready=t.waitFor(()=>{assert.equal(received,true,'the session route handler must observe the first check');},{timeout:3000});
+  if(handler==='missing'){
+   let timer:ReturnType<typeof setTimeout>|undefined;
+   try{
+    await assert.rejects(Promise.race([ready,new Promise<void>(resolve=>{timer=setTimeout(resolve,4000);})]),/waitFor\(\) timed out/);
+   }finally{clearTimeout(timer);}
+   return;
+  }
+  await ready;
   const checking=locale==='en'?'Checking your session…':'Comprobando tu sesión…';
   const unavailable=locale==='en'?'We could not check your session. Try again.':'No hemos podido comprobar tu sesión. Vuelve a intentarlo.';
   const status=page.getByRole('status');assert.equal(await status.textContent(),checking);
@@ -42,3 +57,4 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
   await page.waitForURL('https://portal.test/login');assert.equal(requests,2);
  }finally{await browser.close();}
 });
+}
