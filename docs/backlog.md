@@ -3740,6 +3740,10 @@ The change-email cooldown fixture reproduces the refusal after a 1100 ms setup
 pause and now freezes from an earlier start at the original instant. Its original
 journeys and delayed signup/recovery variants retain every corrected-address,
 per-address wait, server retry, navigation, operation separation and deadline check.
+The cooldown wording fixture reproduces the refusal after a 1100 ms setup pause
+and now starts earlier before freezing at the original instant. Its account and
+fiscal views retain all singular, plural, expiry, layout and deadline checks;
+the original language, theme and viewport matrix and delayed variants run.
 No historical CI failure in these fixtures is attributed here.
 
 ## Paced replay object deletion refusal (D344 qualification)
