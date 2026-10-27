@@ -96,10 +96,9 @@ with tempfile.TemporaryDirectory(prefix='cloud-browser-apt-') as directory:
                                 hashed.parent.mkdir(parents=True, exist_ok=True)
                                 hashed.write_bytes(data)
                                 if filename.endswith('.xz'):
-                                    expected_indexes.append((f'/second/dists/{suite}/{hashed.relative_to(archive / "dists" / suite)}',
-                                                             f'/second/dists/{suite}/{filename}'))
+                                    expected_indexes.append(f'/second/dists/{suite}/{filename}')
                             else:
-                                expected_indexes.append((f'/second/dists/{suite}/{filename}',))
+                                expected_indexes.append(f'/second/dists/{suite}/{filename}')
                 target_release = archive / 'dists' / suite / 'Release'
                 target_release.write_text('Origin: Cloud fixture\nLabel: Cloud fixture\n'
                                           f'Suite: {suite}\nCodename: {suite}\nArchitectures: amd64\n'
@@ -249,11 +248,10 @@ with tempfile.TemporaryDirectory(prefix='cloud-browser-apt-') as directory:
                 continue
             assert update.returncode == 0, log
             if multi_component:
-                assert sum(any(path in requests[start:] for path in alternatives)
-                           for alternatives in expected_indexes) == (48 if runner_indexes else 16), (requests[start:], log)
-                outcomes['allSixteenIndexesFetched'] = True
-                if runner_indexes:
-                    outcomes['allFortyEightIndexesFetched'] = True
+                index_requests = sorted(path for path in requests[start:]
+                                        if path.startswith('/second/dists/') and not path.endswith('/InRelease'))
+                assert index_requests == sorted(expected_indexes), (index_requests, log)
+                outcomes['indexRequests'] = index_requests
             download = subprocess.run([*supervisor, 'apt-get', *options, 'download', 'cloud-apt-fixture=1.0'],
                                       cwd=state, capture_output=True, text=True, timeout=12)
             log = download.stdout + download.stderr
