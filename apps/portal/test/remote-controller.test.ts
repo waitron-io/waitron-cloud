@@ -97,9 +97,11 @@ test('a saved name becomes unchanged for direct controller calls',async()=>{
 });
 
 const forward=(category:unknown='upstream_transport',now=Date.now())=>({category,observedAt:new Date(now-1000).toISOString(),expiresAt:new Date(now+10000).toISOString()});
-test('forward view rejects extra fields, categories and noncanonical or impossible dates',()=>{
+test('forward view rejects extra fields, categories and noncanonical or impossible dates',t=>{
+ // A tick between fixture reads must not turn equal timestamps into a valid lifetime.
+ let now=Date.now();t.mock.method(Date,'now',()=>now++);const equal=forward();
  for(const category of [null,'upstream_non_200','upstream_timeout','upstream_response_limit','upstream_transport','forward_internal'])assert(validRemoteView({...view,publicForward:forward(category)}));
- for(const publicForward of [{...forward(),address:'private'},forward('raw error'),{...forward(),observedAt:'2026-01-01'},{...forward(),expiresAt:'not a date'},{...forward(),expiresAt:forward().observedAt},{...forward(),observedAt:'2026-02-30T00:00:00.000Z'},{...forward(),expiresAt:'2099-01-01T00:00:00.000Z'},{}])assert.equal(validRemoteView({...view,publicForward}),false,JSON.stringify(publicForward));
+ for(const publicForward of [{...forward(),address:'private'},forward('raw error'),{...forward(),observedAt:'2026-01-01'},{...forward(),expiresAt:'not a date'},{...equal,expiresAt:equal.observedAt},{...forward(),observedAt:'2026-02-30T00:00:00.000Z'},{...forward(),expiresAt:'2099-01-01T00:00:00.000Z'},{}])assert.equal(validRemoteView({...view,publicForward}),false,JSON.stringify(publicForward));
 });
 test('older server has null forwarding evidence and the controller clears evidence at expiry without a request',async()=>{
  let calls=0,reply:unknown={...view,publicForward:forward()};const c=new RemoteController(()=>{},async<T>():Promise<ApiResult<T>>=>{calls++;return {ok:true,value:reply as T};});
