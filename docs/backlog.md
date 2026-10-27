@@ -3590,6 +3590,15 @@ language, theme and viewport journey. Original organisation and venue selection,
 recovery permission, source clearing, approval payload, pairing, layout and
 deadline assertions remain.
 
+## Recovery organisation-width browser handler wait (D364)
+
+The recovery organisation-width fixture refuses an absent refresh-handler signal
+within its existing four-second page budget. Delayed handlers repeat all eight
+English and Spanish journeys across both themes and phone/desktop widths. Every
+original choice, page width, select width, pending state, selected value and
+deadline assertion remains. This qualifies the fixture's wait; it does not
+attribute a historical CI failure or qualify production recovery.
+
 ## Recovery screen scope and supplied choices (D158)
 
 Read the [recovery-screen scope detail](backlog/recovery-screen-scope.md) for the
