@@ -61,6 +61,7 @@ for (const [failure, code, signal, invalid] of [['exit',7,null,false],['signal',
     const record=records.find(row=>row.kind==='litestream-stop');
     assert.equal(record.step,'exit');
     assert.deepEqual(record.process,{code,signal,invalid});
+    assert.ok(record.audit,'retain audit evidence at the stop refusal');
     assert.equal(record.audit.invalid,invalid);
     assert.equal(record.audit.producerAttempts,0);assert.equal(record.audit.observerAttempts,0);
     if(invalid)assert.equal(record.audit.failure.stage,'request-header');
