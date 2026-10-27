@@ -197,10 +197,27 @@ async function smoke() {
     await withLitestreamCloseDiagnostics({ stage: 'replication-transport', close: () => replication.transport?.close() });
     stage = 'restore-transport-close';
     await withLitestreamCloseDiagnostics({ stage: 'restore-transport', close: () => restore.transport?.close() });
-    const result = { version, injectedFailures, restoredSales, integrity, sales: replay.counts(), fiscal: await replay.verify(),
-      replication: replication.audit.snapshot(), restore: restore.audit.snapshot(), observed: replication.meter.snapshot() };
-    Object.assign(result, litestreamAfterStopOutput(afterStop.snapshot()));
-    if (replication.transport) result.transport = { replication: replication.transport.snapshot(), restore: restore.transport.snapshot() };
+    const result = { version, injectedFailures, restoredSales, integrity };
+    try {
+      stage = 'result-counts'; result.sales = replay.counts();
+      stage = 'replay-verification'; result.fiscal = await replay.verify();
+      stage = 'replication-audit-snapshot'; result.replication = replication.audit.snapshot();
+      stage = 'restore-audit-snapshot'; result.restore = restore.audit.snapshot();
+      stage = 'replication-meter-snapshot'; result.observed = replication.meter.snapshot();
+      stage = 'after-stop-snapshot'; Object.assign(result, litestreamAfterStopOutput(afterStop.snapshot()));
+      if (replication.transport) {
+        stage = 'replication-transport-snapshot'; const replicationSnapshot = replication.transport.snapshot();
+        stage = 'restore-transport-snapshot'; const restoreSnapshot = restore.transport.snapshot();
+        result.transport = { replication: replicationSnapshot, restore: restoreSnapshot };
+      }
+    } catch (error) {
+      // Result errors belong to the synthetic replay; report before cleanup can replace the rejection.
+      const text = read => { try { const value = read(); return value === undefined ? undefined : String(value); } catch { return undefined; } };
+      try { console.error(JSON.stringify({ kind: 'litestream-result', stage,
+        error: { name: text(() => error?.name) ?? (error === null ? 'null' : typeof error),
+          message: text(() => error?.message) ?? text(() => error), stack: text(() => error?.stack) } })); } catch {}
+      throw error;
+    }
     if (lifetimes) {
       stage = 'lifetimes'; await lifetimes.verify();
       const inventory = await list();
