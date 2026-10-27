@@ -15,9 +15,12 @@ const styles = await readFile(new URL('../src/styles.css', import.meta.url), 'ut
 
 for (const path of ['/connect', '/recover']) for (const locale of ['en', 'es'] as const)
 for (const theme of ['light', 'dark'] as const) for (const width of [390, 1280])
-for (const failure of ['503', 'network'] as const) for (const setupDelay of [0, 1100]) {
+for (const failure of ['503', 'network'] as const) for (const setupDelay of [0, 1100])
+for (const handler of ['normal', 'delayed', 'missing'] as const) {
   if (setupDelay && (locale !== 'en' || theme !== 'light' || width !== 390)) continue;
-  test(`${path} ${locale} ${theme} ${width} ${failure}${setupDelay ? ' with delayed clock setup' : ''}: retry appears only after the session check fails`, async () => {
+  if (handler !== 'normal' && setupDelay) continue;
+  if (handler === 'missing' && (locale !== 'en' || theme !== 'light' || width !== 390 || failure !== '503')) continue;
+  test(`${path} ${locale} ${theme} ${width} ${failure}${setupDelay ? ' with delayed clock setup' : ''}${handler === 'normal' ? '' : ` with ${handler} handler`}: retry appears only after the session check fails`, async t => {
     const browser = await chromium.launch({headless: true});
     try {
       const page = await browser.newPage({locale, colorScheme: theme, viewport: {width, height: 900}});
@@ -26,14 +29,18 @@ for (const failure of ['503', 'network'] as const) for (const setupDelay of [0, 
       await page.clock.install({time: new Date('2026-10-24T12:00:01Z')});
       if (setupDelay) await delay(setupDelay);
       await page.clock.pauseAt(new Date('2026-10-25T12:00:01Z'));
-      let held!: Route, received!: () => void, requests = 0;
-      const sessionRequested = new Promise<void>(resolve => { received = resolve; });
+      let held!: Route, handlerEntered = false, requests = 0;
       const unexpected: string[] = [];
-      await page.route('https://portal.test/**', route => {
+      await page.route('https://portal.test/**', async route => {
         const endpoint = new URL(route.request().url()).pathname;
         if (endpoint === '/api/account/session') {
           requests++;
-          if (requests === 1) { held = route; received(); return; }
+          if (requests === 1) {
+            if (handler === 'delayed') await delay(100);
+            held = route;
+            if (handler !== 'missing') handlerEntered = true;
+            return;
+          }
           return route.fulfill({status: 401, json: {error: 'credentials_invalid'}});
         }
         if (!endpoint.startsWith('/api/')) return route.fulfill({contentType: 'text/html', body: '<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><div id="portal" class="portal"></div>'});
@@ -43,7 +50,21 @@ for (const failure of ['503', 'network'] as const) for (const setupDelay of [0, 
       await page.goto(`https://portal.test${path}#request=10000000-0000-4000-8000-000000000001`);
       await page.addStyleTag({content: styles});
       await page.addScriptTag({content: bundle.outputFiles[0]!.text});
-      await sessionRequested;
+      const waitForHandler = () => t.waitFor(() => {
+        assert.equal(handlerEntered, true, 'the first session route handler must enter');
+      }, {timeout: 3000});
+      if (handler === 'missing') {
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        try {
+          await assert.rejects(Promise.race([
+            waitForHandler(), new Promise<void>(resolve => {timer = setTimeout(resolve, 4000);}),
+          ]), /waitFor\(\) timed out/);
+          assert.equal(requests, 1, 'the missing signal belongs to the held first request');
+          assert.deepEqual(unexpected, []);
+        } finally {clearTimeout(timer);}
+        return;
+      }
+      await waitForHandler();
       const checking = locale === 'en' ? 'Checking your session…' : 'Comprobando tu sesión…';
       const unavailable = locale === 'en' ? 'We could not check your session. Try again.' : 'No hemos podido comprobar tu sesión. Vuelve a intentarlo.';
       const retry = page.getByRole('button', {name: locale === 'en' ? 'Try again' : 'Volver a intentar', exact: true});
