@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import {mkdtempSync, writeFileSync, rmSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
+import childProcess from 'node:child_process';
+import {syncBuiltinESMExports} from 'node:module';
 import {runBrowserFixture} from './fixtures/browser-diagnostics.mjs';
 
 function command(t, script) {
@@ -55,7 +57,7 @@ test('browser fixture distinguishes a signalled gateway start from an ordinary e
 });
 
 test('browser fixture retains the existing thirty-second startup timeout', {timeout: 45000}, t => {
-  const env = command(t, "process.stderr.write('PRIVATE_CANARY'); setInterval(() => {}, 1000);");
+  const env = command(t, "process.stderr.write('PRIVATE_CANARY'); setTimeout(() => process.exit(0), 35000);");
   const started = performance.now();
   const error = refusal(() => runBrowserFixture('docker', ['start', 'PRIVATE_CANARY'], env));
   assert.ok(performance.now() - started >= 29500, 'the original command budget is retained');
@@ -86,6 +88,20 @@ test('browser fixture contains signals outside its fixed diagnostic vocabulary',
   const error = refusal(() => runBrowserFixture('docker', ['start', 'PRIVATE_CANARY'], env));
   assert.equal(error.commandFailure?.signal, null);
   assert.equal(error.commandFailure.exitCode, null);
+});
+
+test('browser fixture caps both captured streams when native pipe reads exceed the buffer budget', t => {
+  // Native overflow chunks vary by platform; inject only that command-result boundary.
+  const native = childProcess.execFileSync;
+  t.after(() => {childProcess.execFileSync = native; syncBuiltinESMExports();});
+  t.mock.method(childProcess, 'execFileSync', () => {
+    throw Object.assign(Error('PRIVATE_CANARY'), {code: 'ENOBUFS', status: null,
+      signal: 'SIGTERM', stdout: 'x'.repeat(1114112), stderr: 'PRIVATE_CANARY'.repeat(80000)});
+  });
+  syncBuiltinESMExports();
+  const error = refusal(() => runBrowserFixture('docker', ['start', 'PRIVATE_CANARY'], {}));
+  assert.deepEqual(error.commandFailure, {command: 'docker-start', reason: 'ENOBUFS',
+    exitCode: null, signal: 'SIGTERM', stdoutBytes: 1048576, stderrBytes: 1048576});
 });
 
 test('browser fixture keeps genuine journey refusal and child diagnostics alongside command evidence', () => {
