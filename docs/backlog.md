@@ -4200,6 +4200,11 @@ Local Docker reproduction waits until 3 November.
 
 ## Browser-test clock setup (D313)
 
+The two-venue monitoring fixture reproduces the refusal after a 1100 ms setup
+pause and now freezes from an earlier start at the original instant. Original
+and delayed journeys retain all venue, group, heading, freshness, evidence-date,
+monitoring-off, read-only, layout and deadline checks.
+
 The monitoring-status fixture also reproduces the refusal when setup pauses
 longer than its one-second clock window. It now freezes from the earlier start;
 original and delayed journeys retain every latest-status, freshness, missing-data,
