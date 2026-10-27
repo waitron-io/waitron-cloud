@@ -14,6 +14,10 @@ import sys
 import tempfile
 import threading
 
+multi_component = '--multi-component' in sys.argv
+suites = ('noble', 'noble-updates', 'noble-backports', 'noble-security') if multi_component else ('noble',)
+components = ('main', 'universe', 'restricted', 'multiverse') if multi_component else ('main',)
+
 
 def run(command, **kwargs):
     return subprocess.run(command, check=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
@@ -60,6 +64,26 @@ with tempfile.TemporaryDirectory(prefix='cloud-browser-apt-') as directory:
         run(['gpg', '--homedir', str(keys), '--batch', '--yes', '--clearsign',
              '--output', str(signed), str(release)])
         original_signed = signed.read_bytes()
+        if multi_component:
+            # Each suite has an independently signed release and four required indexes.
+            index_bytes = index.read_bytes()
+            for suite in suites:
+                hashes = []
+                for component in components:
+                    relative = f'{component}/binary-amd64/Packages'
+                    target = archive / 'dists' / suite / relative
+                    target.parent.mkdir(parents=True, exist_ok=True)
+                    target.write_bytes(index_bytes)
+                    hashes.append(f' {hashlib.sha256(index_bytes).hexdigest()} {len(index_bytes)} {relative}\n')
+                target_release = archive / 'dists' / suite / 'Release'
+                target_release.write_text('Origin: Cloud fixture\nLabel: Cloud fixture\n'
+                                          f'Suite: {suite}\nCodename: {suite}\nArchitectures: amd64\n'
+                                          f'Components: {" ".join(components)}\n'
+                                          f'Date: {datetime.datetime.now(datetime.timezone.utc).strftime("%a, %d %b %Y %H:%M:%S +0000")}\n'
+                                          'SHA256:\n' + ''.join(hashes))
+                run(['gpg', '--homedir', str(keys), '--batch', '--yes', '--clearsign',
+                     '--output', str(target_release.with_name('InRelease')), str(target_release)])
+            original_signed = signed.read_bytes()
         cert = root / 'tls.pem'
         private = root / 'tls.key'
         run(['openssl', 'req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-days', '1',
@@ -105,6 +129,10 @@ with tempfile.TemporaryDirectory(prefix='cloud-browser-apt-') as directory:
         thread.start()
         base = f'https://127.0.0.1:{server.server_port}'
         (apt / 'sources.list').write_text(f'deb [arch=amd64 signed-by={keyring}] https://archive.ubuntu.com/ubuntu noble main\n')
+        if multi_component:
+            (apt / 'sources.list').write_text(''.join(
+                f'deb [arch=amd64 signed-by={keyring}] https://archive.ubuntu.com/ubuntu {suite} {" ".join(components)}\n'
+                for suite in suites))
         (apt / 'apt.conf.d').mkdir()
         # Match the runner image's late settings, including its real retry count.
         (apt / 'apt.conf.d/zz-retries').write_text('Acquire::Retries "1";\nAcquire::https::Timeout "15";\n')
@@ -137,7 +165,7 @@ with tempfile.TemporaryDirectory(prefix='cloud-browser-apt-') as directory:
                       '--timeout', '8', '--attempts', '1', '--grace', '1',
                       '--lock-wait', '0', '--retry-delay', '0', '--']
         outcomes = {}
-        for mode in ('fallback', 'exhausted', 'signature', 'package-hash'):
+        for mode in (('fallback',) if multi_component else ('fallback', 'exhausted', 'signature', 'package-hash')):
             state = root / mode
             (state / 'lists/partial').mkdir(parents=True)
             (state / 'cache/archives/partial').mkdir(parents=True)
@@ -165,6 +193,12 @@ with tempfile.TemporaryDirectory(prefix='cloud-browser-apt-') as directory:
                 outcomes['signatureRefused' if mode == 'signature' else 'exhaustedRefused'] = True
                 continue
             assert update.returncode == 0, log
+            if multi_component:
+                for suite in suites:
+                    for component in components:
+                        expected = f'/second/dists/{suite}/{component}/binary-amd64/Packages'
+                        assert expected in requests[start:], (expected, requests[start:], log)
+                outcomes['allSixteenIndexesFetched'] = True
             download = subprocess.run([*supervisor, 'apt-get', *options, 'download', 'cloud-apt-fixture=1.0'],
                                       cwd=state, capture_output=True, text=True, timeout=12)
             log = download.stdout + download.stderr
