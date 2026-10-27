@@ -140,3 +140,13 @@ test('the real API malformed-reply failure also clears private evidence during D
  const c=new RemoteController(()=>{},async<T>(path:string):Promise<ApiResult<T>>=>path.endsWith('/status')?{ok:true,value:{...view,publicForward:forward()} as T}:{ok:false,status:503,code:'unexpected_response',retryAfterMs:0});
  c.account('owner');await c.open(id);c.edit(dns.hostname);await c.preview();assert.equal(c.error,'unavailable');assert.equal(c.view?.publicForward,null);
 });
+test('a recent timestamp with a timezone offset is refused even within the valid lifetime',()=>{
+ const recent=forward();assert.equal(validRemoteView({...view,publicForward:{...recent,observedAt:recent.observedAt.replace('Z','+00:00')}}),false);
+});
+test('apply clears private evidence before drawing or awaiting a configuration change',async()=>{
+ let finish!:(v:ApiResult<unknown>)=>void;const draws:unknown[]=[];
+ const c=new RemoteController(()=>{draws.push(c.view?.publicForward??null);},<T>(path:string):Promise<ApiResult<T>>=>path.endsWith('/apply')?new Promise(r=>{finish=r as typeof finish;}):Promise.resolve({ok:true,value:(path.endsWith('/dns')?dns:{...view,publicForward:forward()}) as T}));
+ c.account('owner');await c.open(id);c.edit(dns.hostname);await c.preview();assert(c.confirmation);assert(c.view?.publicForward);draws.length=0;
+ const applying=c.apply();assert.equal(c.view?.publicForward,null);assert(draws.every(value=>value===null));
+ finish({ok:true,value:{...view,revision:2,names:{...view.names,staff:{...view.names.staff,current:dns.hostname}}}});await applying;assert.equal(c.view?.publicForward,null);assert.equal(c.notice,'remoteSaved');
+});
