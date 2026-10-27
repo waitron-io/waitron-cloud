@@ -3630,6 +3630,10 @@ remain unresolved.** Read the [replication and shutdown investigations](backlog/
 for retained limits, diagnostic findings and remaining reproduction work. Local
 Docker proof waits for Docker to return; reproduce each new diagnostic recurrence
 before changing transport, accounting or cleanup.
+The D325 stop diagnostic now distinguishes child exit code and signal from an
+invalid request audit, retains the first failed audit stage and identifies an
+interrupted producer attempt. The historical stop/exit cause still needs a
+labelled recurrence; see the linked investigation before changing the stop rule.
 
 ## Recovery refusal messages and pasted codes (D192)
 

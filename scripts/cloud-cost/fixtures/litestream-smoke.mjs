@@ -76,7 +76,7 @@ async function smoke() {
     const timer = setTimeout(() => child.kill('SIGKILL'), 80000);
     const done = new Promise(resolve => {
       child.once('error', () => { invalid = true; });
-      child.once('close', code => { clearTimeout(timer); children.delete(child); resolve({ code, invalid }); });
+      child.once('close', (code, signal) => { clearTimeout(timer); children.delete(child); resolve({ code, signal: signal ?? null, invalid }); });
     });
     return { child, done };
   };
@@ -128,7 +128,7 @@ async function smoke() {
     }
     if (!uploaded) fail(); stage = 'second-sale'; await sale(2);
     stage = 'stop';
-    let drainTimer, control, stopStep = 'control', controlMs, exitMs;
+    let drainTimer, control, stopStep = 'control', controlMs, exitMs, stopOutcome;
     const stopStarted = performance.now(), stopElapsed = () => Math.max(0, Math.round(performance.now() - stopStarted));
     try {
       await Promise.race([
@@ -160,7 +160,7 @@ async function smoke() {
           ]);
           controlMs = stopElapsed();
           stopStep = 'exit';
-          const ended = await stop(replicator);
+          const ended = stopOutcome = await stop(replicator);
           if (ended.invalid || ended.code !== 0) fail();
           exitMs = stopElapsed();
           stopStep = 'idle';
@@ -169,10 +169,19 @@ async function smoke() {
         new Promise((_, reject) => { drainTimer = setTimeout(() => reject(Error('Synthetic Litestream stop timed out')), 2000); }),
       ]);
     } catch (error) {
-      console.error(JSON.stringify({ kind: 'litestream-stop', status: 'rejected', step: stopStep,
+      // Keep the thrown error intact; arbitrary transport text and stack frames can contain SDK metadata.
+      const read = field => { try { return error?.[field]; } catch { return undefined; } };
+      const message = read('message');
+      const known = ['Synthetic Litestream check failed', 'Synthetic Litestream stop timed out',
+        'Synthetic Litestream stop reply refused', 'Invalid cloud cost Litestream audit'].includes(message);
+      const stack = known && message.startsWith('Synthetic Litestream') ? read('stack') : undefined;
+      try { console.error(JSON.stringify({ kind: 'litestream-stop', status: 'rejected', step: stopStep,
+        error: { name: 'Error', message: known ? message : 'Unclassified Litestream stop error', ...(typeof stack === 'string' ? { stack } : {}) },
+        ...(stopOutcome ? { process: stopOutcome } : {}),
+        ...(replication.audit.checkpoint ? { audit: replication.audit.checkpoint() } : {}),
         timing: { elapsedMs: stopElapsed(), controlMs, exitMs },
         ...(replication.transport?.pendingTransfers ? { pendingTransfers: replication.transport.pendingTransfers() } : {}),
-        ...(replication.transport?.checkpoint ? { diagnostic: replication.transport.checkpoint() } : {}) }));
+        ...(replication.transport?.checkpoint ? { diagnostic: replication.transport.checkpoint() } : {}) })); } catch {}
       throw error;
     } finally { clearTimeout(drainTimer); control?.destroy(); }
     stage = 'restore'; let restoredSales = 0, integrity;
