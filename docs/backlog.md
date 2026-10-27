@@ -3684,6 +3684,11 @@ this corrects test readiness without changing product authentication or routing.
 
 ## Browser-test clock setup (D313)
 
+The monitoring-status fixture also reproduces the refusal when setup pauses
+longer than its one-second clock window. It now freezes from the earlier start;
+original and delayed journeys retain every latest-status, freshness, missing-data,
+certificate, read-only, layout and deadline check.
+
 The passkey Add keyboard fixture reproduces the refusal with a 100 ms setup
 delay and now freezes from an earlier start. Original and delayed journeys retain
 every caret, focus, exact-password, Tab/Enter, pending-request and enrollment check
