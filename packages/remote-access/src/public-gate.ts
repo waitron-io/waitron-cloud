@@ -95,9 +95,9 @@ export function createPublicGate<R extends PublicGateRoute>(options:PublicGateOp
    }
    if(active>=64){counters.rejected++;reply(429);return;}active++;counters.forwarded++;
    let complete:((category:ForwardCause|null,observedAt:number)=>void)|undefined;
-   try{complete=options.beginForward?.(route,now());}catch{}
+   try{const observer=options.beginForward?.(route,now());if(typeof observer==='function')complete=observer;else void Promise.resolve(observer).catch(()=>{});}catch{}
    let cancelled=false,observed=false,category:ForwardCause='forward_internal';
-   const observe=(outcome:ForwardCause|null)=>{if(cancelled||observed)return;observed=true;try{complete?.(outcome,now());}catch{}};
+   const observe=(outcome:ForwardCause|null)=>{if(cancelled||observed)return;observed=true;try{void Promise.resolve(complete?.(outcome,now())).catch(()=>{});}catch{}};
    try{
     const result=await new Promise<{status:number|undefined;body:Buffer}>((resolve,reject)=>{
      const upstream=request({host:route.address,port:route.port,servername:route.staffHostname,ca:options.ca,method:'GET',path:'/public/availability',headers:{host:route.staffHostname,accept:'application/json'},timeout:5000,agent:false},response=>{

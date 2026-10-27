@@ -1,10 +1,12 @@
 import assert from 'node:assert/strict';
-import {test} from 'node:test';
+import {test,mock} from 'node:test';
 import {createServer,request} from 'node:http';
 import {IncomingMessage,type ServerResponse} from 'node:http';
 import {Socket} from 'node:net';
 import {EventEmitter} from 'node:events';
 import {createServer as httpsServer} from 'node:https';
+import https from 'node:https';
+import {syncBuiltinESMExports} from 'node:module';
 import {execFileSync} from 'node:child_process';
 import {mkdtemp,readFile,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
@@ -142,6 +144,21 @@ for(const phase of ['begin','complete'])test(`observer_throw_does_not_change_pub
  }finally{await f.close();}
 });
 
+for(const phase of ['begin','complete'])test(`observer_rejection_does_not_escape: ${phase}`,async()=>{
+ let invocations=0;const f=await fixture(()=>{
+  if(phase==='begin'){invocations++;return Promise.reject(new Error('private asynchronous begin')) as unknown as undefined;}
+  return async()=>{invocations++;throw new Error('private asynchronous completion');};
+ });
+ try{
+  const cookie=await accessCookie(f);
+  assert.equal((await f.send('/public/availability',{cookie})).status,200);
+  f.unavailable();const response=await f.send('/public/availability',{cookie,accept:'application/json'});
+  assert.equal(response.status,503);assert.deepEqual(await response.json(),{error:'venue_unavailable'});
+  await new Promise(resolve=>setImmediate(resolve));assert.equal(invocations,2);
+  assert.equal(f.gate.stats().forwarded,2);assert.equal(f.gate.stats().unavailable,1);assert.equal(f.gate.stats().active,0);
+ }finally{await f.close();}
+});
+
 test('private_payload_never_escapes and successful completion reports null exactly once',async()=>{
  const calls:unknown[][]=[];const f=await fixture(()=> (...args)=>{calls.push(args);});
  try{
@@ -172,6 +189,23 @@ test('a synchronous visitor reply failure cannot complete one attempt twice',asy
   await ended;assert.equal(writes,2);assert.equal(calls.length,1);assert.equal(calls[0]![0],null);
   assert.equal(f.gate.stats().active,0);
  }finally{await f.close();}
+});
+
+test('missing upstream status is an internal failure, never an application refusal',async()=>{
+ const calls:unknown[][]=[];const f=await fixture(()=> (...args)=>{calls.push(args);});
+ let stub:ReturnType<typeof mock.method>|undefined;
+ try{
+  const cookie=await accessCookie(f);
+  // The HTTPS boundary supplies a malformed response to exercise the defensive missing-status branch.
+  stub=mock.method(https,'request',((...args:unknown[])=>{
+   const onResponse=args.at(-1) as (response:unknown)=>void,upstream=new EventEmitter();
+   Object.assign(upstream,{end(){queueMicrotask(()=>{const response=Object.assign(new EventEmitter(),{complete:true});onResponse(response);response.emit('end');upstream.emit('close');});}});
+   return upstream;
+  }) as unknown as typeof https.request);syncBuiltinESMExports();
+  const response=await f.send('/public/availability',{cookie,accept:'application/json'});
+  assert.equal(response.status,503);assert.deepEqual(await response.json(),{error:'venue_unavailable'});
+  assert.equal(calls.length,1);assert.equal(calls[0]![0],'forward_internal');assert.equal(f.gate.stats().active,0);
+ }finally{stub?.mock.restore();syncBuiltinESMExports();await f.close();}
 });
 test('public challenge gates actual HTTPS forwarding and strips staff credentials and cookies',async()=>{
  const f=await fixture();try{
