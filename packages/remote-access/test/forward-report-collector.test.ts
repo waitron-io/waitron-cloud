@@ -1,0 +1,53 @@
+import assert from 'node:assert/strict';
+import {randomUUID,generateKeyPairSync} from 'node:crypto';
+import {mkdtemp,writeFile,chmod,symlink,rm,mkdir} from 'node:fs/promises';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
+import {test} from 'node:test';
+import {collectForwardReport,ForwardReportPoller} from '../src/forward-report-collector.ts';
+import {signForwardReport} from '../src/forward-report.ts';
+
+async function fixture(){
+ const directory=await mkdtemp(join(tmpdir(),'forward-collector-')),file=join(directory,'report.json');
+ const mapping={country:'ES' as const,environment:'test' as const,cellId:randomUUID(),file,writerUid:process.geteuid!(),readerGid:process.getegid!()};
+ const now=Date.now(),key=generateKeyPairSync('ed25519');
+ const envelope=signForwardReport({version:1,audience:'waitron-cloud-public-forward-report',cellId:mapping.cellId,gatewayId:randomUUID(),generation:1,sequence:1,issuedAt:now,observations:[]},key.privateKey);
+ await chmod(directory,0o2750);await writeFile(file,JSON.stringify(envelope),{mode:0o640});await chmod(file,0o640);
+ return {directory,mapping,envelope,async close(){await rm(directory,{recursive:true,force:true});}};
+}
+
+test('collector passes only a bounded envelope from the exact regular private file to authenticated storage',async()=>{
+ const f=await fixture();try{
+  const seen:unknown[]=[];const store={async record(mapping:unknown,envelope:unknown){seen.push([mapping,envelope]);return 'accepted' as const;},async prune(){return 0;}};
+  await collectForwardReport(f.mapping,store);assert.deepEqual(seen,[[f.mapping,f.envelope]]);
+ }finally{await f.close();}
+});
+for(const fault of ['mode','uid','gid','oversize','symlink','parent-symlink','directory','malformed','traversal'] as const)test(`collector refuses ${fault} before storage`,async()=>{
+ const f=await fixture();try{
+  let touched=false;const store={async record(){touched=true;return 'accepted' as const;},async prune(){return 0;}};
+  let mapping={...f.mapping};
+  if(fault==='mode')await chmod(mapping.file,0o644);
+  if(fault==='uid')mapping.writerUid++;
+  if(fault==='gid')mapping.readerGid++;
+  if(fault==='oversize')await writeFile(mapping.file,'x'.repeat(262145));
+  if(fault==='symlink'){await symlink(mapping.file,join(f.directory,'link'));mapping.file=join(f.directory,'link');}
+  if(fault==='parent-symlink'){await symlink(f.directory,join(f.directory,'alias'));mapping.file=join(f.directory,'alias','report.json');}
+  if(fault==='directory'){await mkdir(join(f.directory,'sub'));mapping.file=join(f.directory,'sub');}
+  if(fault==='malformed')await writeFile(mapping.file,'private-canary');
+  if(fault==='traversal')mapping.file=f.directory+'/../'+f.directory.split('/').at(-1)+'/report.json';
+  await assert.rejects(collectForwardReport(mapping,store),/^Error: forward_report_unavailable$/);assert.equal(touched,false);
+ }finally{await f.close();}
+});
+test('poller serializes each cell, respects 30-second polls and 60-second pruning, and logs fixed errors',async()=>{
+ const f=await fixture();try{
+  let finish!:()=>void,reads=0,prunes=0;const logs:string[]=[];
+  const store={async record(){reads++;if(reads===1)await new Promise<void>(resolve=>{finish=resolve;});throw new Error('private-canary');},async prune(){prunes++;return 0;}};
+  const poller=new ForwardReportPoller([f.mapping],store,message=>logs.push(message));
+  const pending=poller.poll(0);while(!finish)await new Promise(resolve=>setImmediate(resolve));
+  await poller.poll(30000);assert.equal(reads,1);assert.equal(prunes,1);finish();await pending;
+  await poller.poll(29999);assert.equal(reads,1);
+  await poller.poll(30000);assert.equal(reads,2);assert.equal(prunes,1);
+  await poller.poll(60000);assert.equal(reads,3);assert.equal(prunes,2);
+  assert.deepEqual(logs,['remote.forward_collection_failed','remote.forward_collection_failed','remote.forward_collection_failed']);
+ }finally{await f.close();}
+});
