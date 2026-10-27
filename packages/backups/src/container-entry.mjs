@@ -4,6 +4,7 @@ import {stat} from 'node:fs/promises';
 import {Readable} from 'node:stream';
 import {pipeline} from 'node:stream/promises';
 import {createWaitronVerifier} from './waitron-verifier.ts';
+import {readVerifierMemoryEvents,verifierResourceDiagnostic} from './verify-process.ts';
 if(process.argv[2]==='--bound'){
  const child=spawn(process.execPath,['--max-old-space-size=512','--permission','--allow-fs-read=/waitron/apps/server/dist/','--allow-fs-read=/verifier/','--allow-fs-read=/scratch/','--allow-fs-write=/scratch/','/verifier/waitron-data-verify-child.mjs','/waitron/apps/server/dist','/scratch'],{env:{TMPDIR:'/scratch'},stdio:['pipe','pipe','pipe']});
  let expired=false;
@@ -18,6 +19,7 @@ if(process.argv[2]==='--bound'){
 }else{
 // The container owns this watchdog even if the orchestration process disappears.
 const deadline=setTimeout(()=>process.exit(74),30000);
+const memoryBefore=readVerifierMemoryEvents();
 try{
  const iterator=process.stdin[Symbol.asyncIterator]();let head=Buffer.alloc(0),tail;
  while(tail===undefined){
@@ -36,6 +38,7 @@ try{
  process.exitCode=error.code==='ENOSPC'||error.message==='backup.verifier_resource'?73:1;
  // Restore errors may carry secret archive content; only a fixed diagnostic leaves the container.
  console.error(process.exitCode===73?'backup.verifier_resource':'backup.verifier_failed');
+ if(process.exitCode===73)console.error('backup.verifier_resource_detail '+JSON.stringify(verifierResourceDiagnostic({entryPid:process.pid,entryReason:error.code==='ENOSPC'?'scratch_full':'child_resource',child:error.cause,memoryBefore,memoryAfter:readVerifierMemoryEvents()})));
 }finally{clearTimeout(deadline);}
 
 }
