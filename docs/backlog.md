@@ -3917,7 +3917,8 @@ Cloud follow-ups, each a separate small change with tests before implementation:
   30 seconds and keeps at most 64 routes. Key or storage failure disables reporting
   while native HTTPS forwarding continues. Version 1 forwarding remains supported;
   deployments still leave reporting disabled. Country publication and collection,
-  migration and the owner-only Account view remain open. Visitor
+  migration and the owner-only Account view remain open. Gateway/collector container
+  and backup-exclusion qualification remains part of the collection work. Visitor
   guidance does not diagnose or repair the cause.
 - R10 delivered: direct navigation to rejected public requests receives bilingual
   guidance for 421/429/413/404/405/400 and failed-proof 403. Background refusals stay

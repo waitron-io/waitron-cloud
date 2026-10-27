@@ -210,7 +210,8 @@ test('an impossible future completion cannot disable later valid publications',a
  const f=await fixture();try{
   f.writer.begin(f.binding,start)(null,start);await f.writer.flush(start);
   f.setTime(start+30000);f.writer.begin(f.binding,f.time())('upstream_transport',f.time()+5001);await f.writer.flush(f.time());
-  f.setTime(start+60000);f.writer.begin(f.binding,f.time())(null,f.time());await f.writer.flush(f.time());assert.equal((await f.report()).sequence,2);
+  f.setTime(start+60000);await f.writer.flush(f.time());assert.equal((await f.report()).sequence,1,'evidence rejected when completed must not reappear after the clock catches up');
+  f.writer.begin(f.binding,f.time())(null,f.time());await f.writer.flush(f.time());assert.equal((await f.report()).sequence,2);
  }finally{await f.close();}
 });
 test('duplicate venue with another installation cannot poison a valid batch',async()=>{

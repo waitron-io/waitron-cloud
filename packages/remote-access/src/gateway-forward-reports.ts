@@ -7,7 +7,7 @@ import type {GatewayRoute} from './manifest.ts';
 import {routeBinding,type ForwardCause} from './forward-report.ts';
 import {ForwardReportWriter} from './forward-report-writer.ts';
 interface Options {directory?:string;keyFile?:string;readerGid?:number;issuerKey?:KeyObject;otherKeyFiles?:readonly string[];now?:()=>number}
-/** Optional diagnostics have no authority to interrupt the gate or change its readiness. */
+/** Optional diagnostics stay outside the public request path and aggregate readiness data. */
 export class GatewayForwardReports {
  readonly #authority:GatewayAuthority;readonly #options:Options;#writer:ForwardReportWriter|undefined;#identity:string|undefined;
  constructor(authority:GatewayAuthority,options:Options){this.#authority=authority;this.#options={...options};}
