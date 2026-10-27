@@ -54,19 +54,20 @@ for (const locale of ['en', 'es']) for (const theme of ['light', 'dark'] as cons
       await new Promise<void>(resolve => server!.listen(0, '127.0.0.1', resolve));
       const address = server.address(); assert.ok(address && typeof address !== 'string');
       const page = await context.newPage(); page.setDefaultTimeout(4000);
-      let challenges = 0;
-      await page.route('**/_cloud/challenge.js', route => route.fulfill({contentType: 'application/javascript', body: historicalScript}));
+      let challenges = 0, scripts = 0;
+      await page.route('**/_cloud/challenge.js', async route => {
+        scripts++; await route.fulfill({contentType: 'application/javascript', body: historicalScript});
+      });
       await page.route('**/_cloud/challenge', async route => {
         challenges++;
         if (challenges === 1) {await failureHeld; await route.fulfill({status: 503, body: 'unavailable'});}
         else {await proofHeld; await route.continue();}
       });
       const url = `https://127.0.0.1:${address.port}/public/availability`;
-      const scriptLoaded = page.waitForResponse(response => response.url().endsWith('/_cloud/challenge.js'));
       assert.equal((await page.goto(url))?.status(), 403);
-      assert.equal(await (await scriptLoaded).text(), historicalScript);
       const status = page.getByRole('status');
       await status.getByText('Please wait a moment.', {exact: false}).waitFor();
+      assert.equal(scripts, 1);
       assert.equal(await status.locator('[lang="es"]').innerText(), 'Espera un momento.');
       const reload = page.getByRole('main').getByRole('link', {name: 'Reload page / Volver a cargar', exact: true});
       assert.equal(await reload.isVisible(), true, 'the older script leaves the current fallback available');
@@ -102,6 +103,7 @@ for (const locale of ['en', 'es']) for (const theme of ['light', 'dark'] as cons
       assert.equal(await result.text(), '{"available":true}');
       await page.getByText('{"available":true}', {exact: true}).waitFor();
       assert.equal(challenges, 2);
+      assert.equal(scripts, 2);
       assert.equal(gate.stats().forwarded, 1); assert.equal(upstreamRequests, 1);
       const cookies = await context.cookies(); assert.equal(cookies.length, 1);
       assert.equal(cookies[0]!.name, '__Host-waitron-public');
