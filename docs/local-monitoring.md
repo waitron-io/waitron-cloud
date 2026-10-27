@@ -372,7 +372,9 @@ it grants no route, account or activation permission.
 
 Run `pnpm --dir packages/remote-access forward:collect /absolute/config.json` inside
 the country, with `DATABASE_URL` pointing at its primary database. For one polling
-pass, add `--once`. The trusted configuration has this shape:
+pass, add `--once`. A failed collection or pruning pass exits with status 1 so your
+scheduler can detect the failure; the continuous worker logs the fixed error and
+tries again on its next poll. The trusted configuration has this shape:
 
 ```json
 {"mappings":[{"country":"ES","environment":"test","cellId":"00000000-0000-4000-8000-000000000001","file":"/country/forward/report.json","writerUid":0,"readerGid":1000}]}

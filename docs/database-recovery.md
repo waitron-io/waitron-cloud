@@ -97,7 +97,7 @@ pnpm verify:schema-upgrade /tmp/cloud-schema-upgrade-receipt.json
 ```
 
 For the pinned 26-to-27 migration pair, it stops consumers, takes `pg_dump -Fc`
-with the [logical backup exclusions](local-monitoring.md#private-gateway-forwarding-reports), upgrades
+with the [logical backup exclusions](local-monitoring.md#private-gateway-forwarding-collection), upgrades
 the original database, then restores the dump with `pg_restore --exit-on-error` into a
 fresh PostgreSQL container. It starts the old account server and email worker with the
 retained email and installation keys, proves retries and tenant isolation, and checks

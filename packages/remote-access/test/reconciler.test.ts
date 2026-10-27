@@ -238,7 +238,7 @@ test('reporting certificate completion and scheduling cannot deadlock each other
  const running=worker.runOnce();let scheduling:Promise<number>|undefined;
  try{
   await started;scheduling=worker.schedule();await waitForDatabaseLock('INSERT INTO remote_configuration_jobs%');release();
-  await Promise.all([running,scheduling]);assert.deepEqual(memory.publications,[`${current.installationId}:staff`]);
+  const outcomes=await Promise.allSettled([running,scheduling]);assert(outcomes.every(o=>o.status==='fulfilled'),JSON.stringify(outcomes));assert.deepEqual(memory.publications,[`${current.installationId}:staff`]);
   const row=(await db.pool.query("SELECT failures,last_error,applied_digest=desired_digest AS applied FROM remote_configuration_jobs WHERE kind='certificate_staff' AND target_id=$1",[current.installationId])).rows[0];
   assert.deepEqual(row,{failures:'0',last_error:null,applied:true});
  }finally{release();await Promise.allSettled([running,...(scheduling?[scheduling]:[])]);}

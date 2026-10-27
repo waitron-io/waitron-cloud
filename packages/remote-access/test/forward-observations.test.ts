@@ -149,3 +149,20 @@ test('signature is rechecked against reporter authority after waiting for its lo
   assert.equal((await f.db.pool.query('SELECT last_sequence FROM remote_forward_reporters')).rows[0].last_sequence,'0');assert.equal((await f.db.pool.query('SELECT count(*) FROM remote_forward_observations')).rows[0].count,'0');
  }finally{await held.query('ROLLBACK');held.release();await running;await f.db.close();}
 });
+
+test('staged reporting move changes both cell digests and publishes the current revisions',async()=>{
+ const f=await forwardFixture(),target=randomUUID(),gatewayId=randomUUID(),keys=generateKeyPairSync('ed25519');
+ try{
+  await f.remote.createCell({id:target,country:'ES',provider:'aws',environment:'test',suffix:'moved.example.test',subnet:22,publicKey:randomBytes(32).toString('base64'),endpoint:'moved.example.test:51820'});
+  await transaction(f.db.pool,c=>registerForwardReporter(c,{cellId:target,gatewayId,generation:1,publicKey:keys.publicKey.export({type:'spki',format:'pem'}).toString()}));
+  const worker=new RemoteConfigurationReconciler(f.db.pool,{forwardReports:true,planMode:'test-free-paid'}),digests=async()=>Object.fromEntries((await f.db.pool.query("SELECT target_id,desired_digest FROM remote_configuration_jobs WHERE kind='route'")).rows.map(r=>[r.target_id,r.desired_digest]));
+  await worker.schedule();const initial=await digests(),operationId=randomUUID();
+  await f.remote.stageMove({operationId,installationId:f.installed.installationId,targetCellId:target,targetPeerPublicKey:randomBytes(32).toString('base64'),expectedRevision:1});
+  await worker.schedule();const stagedDigests=await digests();assert.equal(stagedDigests[f.cellId],initial[f.cellId]);assert.notEqual(stagedDigests[target],initial[target]);
+  const staged=await f.remote.reportingManifest(target);assert.equal(staged.version,2);if(staged.version!==2)throw Error('missing reporting authority');assert.equal(staged.routes[0]!.revision,1);
+  await f.remote.markMoveReady(operationId,1,staged.sequence);await f.remote.completeMove(operationId,1);await worker.schedule();
+  const completed=await digests();assert.notEqual(completed[f.cellId],stagedDigests[f.cellId]);assert.notEqual(completed[target],stagedDigests[target]);
+  assert.deepEqual((await f.remote.reportingManifest(f.cellId)).routes,[]);const moved=await f.remote.reportingManifest(target);assert.equal(moved.version,2);if(moved.version!==2)throw Error('missing reporting authority');assert.equal(moved.routes[0]!.revision,2);
+  assert.deepEqual(moved.reporter,{gatewayId,generation:1});
+ }finally{await f.db.close();}
+});
