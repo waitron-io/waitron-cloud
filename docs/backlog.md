@@ -3702,6 +3702,16 @@ URL refusal and catches omission of the destination wait. All original
 assertions and four-second page/120-second runner deadlines stay unchanged;
 this corrects test readiness without changing product authentication or routing.
 
+## Translation-refresh browser handler wait (D358)
+
+The translation-refresh fixture now refuses within its existing four-second page
+budget when the installation route handler never signals entry. A missing-signal
+control reproduces the earlier unbounded wait; delayed handlers repeat every
+original journey across both languages, themes and phone/desktop widths. All
+translation retry, consent, pending-state, layout and runner deadline assertions
+remain. These native Chromium checks use stubbed HTTP and do not qualify the
+backend or production.
+
 ## Browser-test clock setup (D313)
 
 The monitoring-status fixture also reproduces the refusal when setup pauses
