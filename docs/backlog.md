@@ -3558,7 +3558,8 @@ that label does not identify the failing operation. Result assembly now names
 sales counting, replay verification and each audit, meter, after-stop and transport
 snapshot separately. A result-step rejection prints its original name, message
 and stack before cleanup, so a later cleanup refusal cannot erase that evidence.
-These details are limited to synthetic replay results; close diagnostics keep
+Unreadable fields are omitted without losing readable ones; thrown primitive
+values retain their type and text. These details are limited to synthetic replay results; close diagnostics keep
 their existing redaction. Controlled failures exercise each result step through
 the actual smoke script, with a successful result control. The Linux recurrence's
 cause remains unknown; qualify the changed head in CI and investigate its next

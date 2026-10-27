@@ -2,13 +2,17 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 
-// Exercise the actual fixture; only the external writer, database and storage boundaries are replaced.
+// Run the actual smoke sequencing, after-stop tracker and close reporter with controlled workload, audit, meter and transport boundaries.
 // Omitting a result phase or discarding its rejection must lose the diagnostic asserted below.
-function run(failure) {
+function run(failure, shape = '') {
   const fault = `function check(step) {
     if (process.env.RESULT_FAILURE !== step) return;
     const error = new RangeError('Synthetic result failure: ' + step);
     error.stack = 'RangeError: Synthetic result failure: ' + step + '\\n    at syntheticResultBoundary (synthetic-result.mjs:1:1)';
+    if (process.env.RESULT_ERROR === 'stack-getter') Object.defineProperty(error, 'stack', { get() { throw Error('unreadable stack'); } });
+    if (process.env.RESULT_ERROR === 'bigint-message') error.message = 10n;
+    if (process.env.RESULT_ERROR === 'string') throw 'Synthetic thrown value';
+    if (process.env.RESULT_ERROR === 'null') throw null;
     throw error;
   }`;
   const actual = new URL('./litestream.mjs', import.meta.url).href;
@@ -50,7 +54,7 @@ function run(failure) {
     await import(${JSON.stringify(fixture)});`;
   return spawnSync(process.execPath, ['--input-type=module', '--eval', code], {
     env: { ...process.env, COST_LITESTREAM_TRANSPORT: '1', COST_LITESTREAM_LIFETIMES: '0',
-      COST_LITESTREAM_VERSIONS: '0', COST_LITESTREAM_HISTORIES: '0', RESULT_FAILURE: failure },
+      COST_LITESTREAM_VERSIONS: '0', COST_LITESTREAM_HISTORIES: '0', RESULT_FAILURE: failure, RESULT_ERROR: shape },
     encoding: 'utf8', timeout: 5000,
   });
 }
@@ -85,4 +89,22 @@ test('successful smoke results keep their counts and snapshots without an error 
   assert.equal(output.restoredSales, 2); assert.equal(output.integrity, 'ok');
   assert.deepEqual(output.replication, {}); assert.deepEqual(output.restore, {});
   assert.deepEqual(output.observed, {}); assert.deepEqual(output.transport, { replication: {}, restore: {} });
+});
+
+for (const [shape, expected] of [
+  ['stack-getter', { name: 'RangeError', message: 'Synthetic result failure: replay-verification' }],
+  ['bigint-message', { name: 'RangeError', message: '10',
+    stack: 'RangeError: Synthetic result failure: replay-verification\n    at syntheticResultBoundary (synthetic-result.mjs:1:1)' }],
+  ['string', { name: 'string', message: 'Synthetic thrown value' }],
+  ['null', { name: 'null', message: 'null' }],
+]) test(`the smoke keeps readable result error fields for ${shape}`, () => {
+  const result = run('replay-verification', shape);
+  assert.equal(result.error, undefined); assert.equal(result.signal, null);
+  assert.equal(result.status, 1, result.stderr); assert.equal(result.stdout, '');
+  const records = result.stderr.split('\n').filter(line => line.startsWith('{')).map(line => JSON.parse(line));
+  assert.deepEqual(records.find(row => row.kind === 'litestream-result'), {
+    kind: 'litestream-result', stage: 'replay-verification', error: expected,
+  }, result.stderr);
+  assert.equal(records.filter(row => row.stage === 'cleanup-admin-proxy' && row.status === 'fulfilled').length, 1);
+  assert.match(result.stderr, /Synthetic Litestream phase: replay-verification/);
 });
