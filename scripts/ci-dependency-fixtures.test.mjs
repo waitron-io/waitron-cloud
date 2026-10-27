@@ -210,3 +210,24 @@ test('receipt fixtures keep the audited unavailable page after current source ch
     assert.match(result.stdout, /^ok 1 - unrelated package changes omit public gateway while retaining packages, types and other receipts$/m);
   } finally {rmSync(root, {recursive: true, force: true});}
 });
+
+test('receipt selector fixtures retain positive checks after gateway authority changes', () => {
+  const root = mkdtempSync(join(tmpdir(), 'cloud-manifest-fixture-control-'));
+  try {
+    execFileSync('git', ['clone', '--shared', '--quiet', process.cwd(), root], {stdio: 'pipe'});
+    cpSync('scripts', join(root, 'scripts'), {recursive: true});
+    appendFileSync(join(root, 'packages/remote-access/src/manifest.ts'), '\n// Changed gateway authority protocol\n');
+    const git = (...args) => execFileSync('git', ['-c', 'maintenance.auto=false', ...args], {cwd: root, encoding: 'utf8', stdio: 'pipe'});
+    git('config', 'user.name', 'CI test'); git('config', 'user.email', 'ci@example.test');
+    git('add', '-A'); git('commit', '-s', '-qm', 'Change gateway authority fixture');
+    const env = {...process.env}; delete env.NODE_TEST_CONTEXT;
+    const result = spawnSync('node', ['--test', '--test-reporter=tap', '--test-name-pattern=^unrelated package changes omit all audited receipts',
+      'scripts/ci-local-stack-receipt.test.mjs'], {cwd: root, env, encoding: 'utf8', timeout: 60_000});
+    assert.equal(result.error, undefined);
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    assert.match(result.stdout, /(?:ℹ |# )tests 1\b/);
+    assert.match(result.stdout, /(?:ℹ |# )pass 1\b/);
+    assert.match(result.stdout, /(?:ℹ |# )fail 0\b/);
+    assert.match(result.stdout, /^ok 1 - unrelated package changes omit all audited receipts and retain actual package and type checks$/m);
+  } finally { rmSync(root, {recursive: true, force: true}); }
+});
