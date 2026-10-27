@@ -3981,6 +3981,13 @@ rather than waiting for the outer runner deadline. Native browser checks cover
 an absent handler and a delayed handler while retaining every original assertion.
 No remote setup or permission behaviour changes.
 
+## Recovery-session browser handler wait (D360)
+
+The recovery-session browser fixture refuses an absent handler signal within its
+existing three-second page budget. Delayed handlers still run the full bilingual,
+theme, viewport and server/network failure matrix. Original session-status,
+recovery-input, request-count, retry navigation, layout and deadline checks remain.
+
 ## Installation-refresh browser handler wait (D357)
 
 The installation-refresh browser fixture refuses an absent route-handler signal
