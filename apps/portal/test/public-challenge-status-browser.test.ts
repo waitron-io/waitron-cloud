@@ -13,7 +13,9 @@ after(async () => {await browser?.close();});
 // Losing the live status semantics or replacing its node on failure breaks these journeys.
 for (const locale of ['en', 'es']) for (const theme of ['light', 'dark'] as const) for (const width of [390, 1280]) {
   for (const failure of ['challenge', 'worker'] as const) {
-    test(`${locale} ${theme} ${width}: browser-check status survives ${failure} failure`, async () => {
+    const handlers = locale === 'en' && theme === 'light' && width === 390 && failure === 'challenge'
+      ? ['ordinary', 'delayed', 'missing'] as const : ['ordinary', 'delayed'] as const;
+    for (const handler of handlers) test(`${locale} ${theme} ${width}: browser-check status survives ${failure} failure${handler === 'ordinary' ? '' : ` (${handler} handler)`}`, async t => {
       const gate = createPublicGate({key: randomBytes(32), difficulty: 8, routes: () => [
         {publicHostname: 'sol.example.test', staffHostname: 'staff.sol.example.test', address: '127.0.0.1', port: 1},
       ]});
@@ -24,14 +26,19 @@ for (const locale of ['en', 'es']) for (const theme of ['light', 'dark'] as cons
       await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
       const address = server.address(); assert.ok(address && typeof address !== 'string');
       let context: Awaited<ReturnType<typeof browser.newContext>> | undefined;
-      let release!: () => void, requested!: () => void;
+      let release!: () => void;
+      let challengeEntered = false;
       const held = new Promise<void>(resolve => {release = resolve;});
-      const challenged = new Promise<void>(resolve => {requested = resolve;});
+      const waitForHandler = () => t.waitFor(() => {
+        assert.equal(challengeEntered, true, 'the challenge handler must observe the browser request');
+      }, {timeout: 4000});
       try {
         context = await browser.newContext({locale, colorScheme: theme, viewport: {width, height: 800}});
         const page = await context.newPage(); page.setDefaultTimeout(4000);
         await page.route('**/_cloud/challenge', async route => {
-          requested(); await held;
+          if (handler === 'delayed') await new Promise(resolve => setTimeout(resolve, 100));
+          if (handler !== 'missing') challengeEntered = true;
+          await held;
           if (failure === 'challenge') await route.fulfill({status: 503, body: 'unavailable'});
           else await route.continue();
         });
@@ -39,7 +46,16 @@ for (const locale of ['en', 'es']) for (const theme of ['light', 'dark'] as cons
           contentType: 'application/javascript', body: 'throw new Error("worker unavailable");',
         }));
         assert.equal((await page.goto(`http://127.0.0.1:${address.port}/public/availability`))?.status(), 403);
-        await challenged;
+        if (handler === 'missing') {
+          let timer: ReturnType<typeof setTimeout> | undefined;
+          try {
+            await assert.rejects(Promise.race([
+              waitForHandler(), new Promise<void>(resolve => {timer = setTimeout(resolve, 5000);}),
+            ]), /waitFor\(\) timed out/);
+          } finally {clearTimeout(timer);}
+          return;
+        }
+        await waitForHandler();
         const status = page.getByRole('status');
         assert.equal(await status.count(), 1, 'the running browser check must expose a status region');
         assert.match(await status.innerText(), /Please wait a moment/);
