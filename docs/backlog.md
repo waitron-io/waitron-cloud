@@ -4360,13 +4360,14 @@ delivery remains part of the first working milestone's production qualification.
 
 ## Passkey keyboard browser handler observation (D373)
 
-The passkey keyboard fixture waits for the options handler to record its request
-before checking the exact password and pending controls. This closes the gap
-between the browser sending a request and the handler observing it. The wait uses
-the existing four-second page budget; a missing record fails within that budget.
-Original keyboard journeys remain, with delayed handlers across both languages,
-themes, widths and clock setups. Real passkey and database qualification stays
-with the broader browser suites.
+The keyboard fixture waits for its options handler before checking the exact
+password and pending controls, within the existing four-second budget. Original
+journeys remain alongside delayed-handler and missing-record controls.
+
+Qualification is blocked by a [gateway reconnect refusal](https://github.com/waitron-io/waitron-cloud/actions/runs/40597914600/job/122518692085):
+the session was accepted but the request check failed. Its cause remains unknown;
+lane D's D201 owns the investigation. Keep the accounting checks and deadlines.
+Local Docker reproduction waits until 3 November.
 
 ## A way forward after every refusal (D254)
 
