@@ -95,3 +95,31 @@ test('a saved name becomes unchanged for direct controller calls',async()=>{
  await c.preview();assert.equal(c.confirmation,undefined,'the saved name no longer has a change to confirm');await c.apply();
  assert.deepEqual(calls,['/remote-access/status','/remote-access/dns','/remote-access/apply']);
 });
+
+const forward=(category:unknown='upstream_transport',now=Date.now())=>({category,observedAt:new Date(now-1000).toISOString(),expiresAt:new Date(now+10000).toISOString()});
+test('forward view rejects extra fields, categories and noncanonical or impossible dates',()=>{
+ for(const category of [null,'upstream_non_200','upstream_timeout','upstream_response_limit','upstream_transport','forward_internal'])assert(validRemoteView({...view,publicForward:forward(category)}));
+ for(const publicForward of [{...forward(),address:'private'},forward('raw error'),{...forward(),observedAt:'2026-01-01'},{...forward(),expiresAt:'not a date'},{...forward(),expiresAt:forward().observedAt},{...forward(),observedAt:'2026-02-30T00:00:00.000Z'},{...forward(),expiresAt:'2099-01-01T00:00:00.000Z'},{}])assert.equal(validRemoteView({...view,publicForward}),false,JSON.stringify(publicForward));
+});
+test('older server has null forwarding evidence and the controller clears evidence at expiry without a request',async()=>{
+ let calls=0,reply:unknown={...view,publicForward:forward()};const c=new RemoteController(()=>{},async<T>():Promise<ApiResult<T>>=>{calls++;return {ok:true,value:reply as T};});
+ c.account('owner');await c.open(id);const saved=(c.view as any).publicForward;assert(saved);c.expireForward(Date.parse(saved.expiresAt)-1);assert.deepEqual((c.view as any).publicForward,saved);c.expireForward(Date.parse(saved.expiresAt));assert.equal((c.view as any).publicForward,null);assert.equal(calls,1);
+ reply=view;await c.load();assert.equal((c.view as any).publicForward,null);
+ reply={...view,publicForward:forward('upstream_timeout',Date.now()-20000)};await c.load();assert.equal((c.view as any).publicForward,null);
+});
+test('refresh erases old evidence before drawing or awaiting the reply, including malformed and failed replies',async()=>{
+ for(const reply of [{ok:true,value:{...view,publicForward:{...forward(),raw:'private'}}},{ok:true,value:{...view,installationId:other,publicForward:forward()}},{ok:false,status:503,code:'unavailable',retryAfterMs:0},{ok:false,status:401,code:'unauthenticated',retryAfterMs:0},{ok:false,status:403,code:'permission_denied',retryAfterMs:0}]){
+  let finish!:(v:ApiResult<unknown>)=>void,calls=0;const draws:unknown[]=[];
+  const c=new RemoteController(()=>{draws.push((c.view as any)?.publicForward??null);},<T>():Promise<ApiResult<T>>=>++calls===1?Promise.resolve({ok:true,value:{...view,publicForward:forward()} as T}):new Promise(r=>{finish=r as typeof finish;}));
+  c.account('owner');await c.open(id);assert((c.view as any).publicForward);draws.length=0;const pending=c.load();assert.equal((c.view as any)?.publicForward??null,null);assert(draws.every(v=>v===null));finish(reply as ApiResult<unknown>);await pending;assert.equal((c.view as any)?.publicForward??null,null);
+ }
+});
+test('closing, account/venue switches and signout discard in-flight private results',async()=>{
+ for(const change of ['close','account','signout']){
+  let finish!:(v:ApiResult<unknown>)=>void,calls=0;const c=new RemoteController(()=>{},<T>():Promise<ApiResult<T>>=>++calls===1?Promise.resolve({ok:true,value:{...view,publicForward:forward()} as T}):new Promise(r=>{finish=r as typeof finish;}));
+  c.account('owner');await c.open(id);const pending=c.load();
+  if(change==='close')c.close();if(change==='account')c.account('other');if(change==='signout')c.account(undefined);
+  finish({ok:true,value:{...view,publicForward:forward()}});
+  await pending;assert.equal(c.view,undefined);
+ }
+});
