@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import {mkdir, readFile} from 'node:fs/promises';
 import {test} from 'node:test';
+import {setTimeout as delay} from 'node:timers/promises';
 import {build} from 'esbuild';
 import {chromium} from 'playwright';
 import {translations} from '../src/locale.ts';
@@ -18,12 +19,14 @@ type App = {session: {check(options?: {fresh?: boolean}): Promise<void>; state: 
 for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'] as const) for (const width of [390, 1280]) {
  const scenarios = theme === 'light' && width === 390
   ? ['current','lost-reply','expired','unavailable','navigate','new-session','older-first','rate','passive','generic'] : ['current'];
- for (const scenario of scenarios) test(`${locale} ${theme} ${width}: ${scenario} revocation with a pending session snapshot`, async () => {
+ for (const handler of ['normal','delayed','missing'] as const) for (const scenario of scenarios) {
+  if(handler==='missing'&&(locale!=='en'||theme!=='light'||width!==390||scenario!=='current'))continue;
+  test(`${locale} ${theme} ${width}${handler==='normal'?'':` with ${handler} old-read handler`}: ${scenario} revocation with a pending session snapshot`, async t => {
   const browser = await chromium.launch({headless: true});
   let releaseOld!:()=>void, releaseFresh!:()=>void, oldEntered!:()=>void, freshEntered!:()=>void;
   const oldReply=new Promise<void>(resolve=>{releaseOld=resolve;});
   const freshReply=new Promise<void>(resolve=>{releaseFresh=resolve;});
-  const oldRequest=new Promise<void>(resolve=>{oldEntered=resolve;});
+  let oldHandlerEntered=false;oldEntered=()=>{oldHandlerEntered=true;};
   const freshRequest=new Promise<void>(resolve=>{freshEntered=resolve;});
   try {
    const page=await browser.newPage({locale,colorScheme:theme,viewport:{width,height:900}}); page.setDefaultTimeout(4000);
@@ -41,7 +44,7 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
     const path=new URL(route.request().url()).pathname.replace('/api/account','');
     if(path==='/session'){
      const read=++reads;
-     if(read===2){oldEntered();await oldReply;}
+     if(read===2){if(handler==='delayed')await delay(100);if(handler!=='missing')oldEntered();await oldReply;}
      if(read===3){freshEntered();await freshReply;}
      if(read<3)return route.fulfill({json:{accountId:'owner',expiresAt:read===2?'2099-01-02T00:00:00Z':current.expiresAt}});
      if(read===3&&scenario==='rate')return route.fulfill({status:429,headers:{'retry-after':'60'},json:{error:'rate_limited'}});
@@ -61,7 +64,18 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
    });
    await page.goto('https://portal.test/account');await page.addStyleTag({content:styles});await page.addScriptTag({content:bundle.outputFiles[0]!.text});
    const signout=page.locator('.sessions').getByRole('button',{name:c.sessionSignOut,exact:true});await signout.waitFor();
-   await page.evaluate(()=>{void(window as unknown as {pendingSignoutApp:App}).pendingSignoutApp.session.check();});await oldRequest;
+   const waitForOldHandler=()=>t.waitFor(()=>{assert.equal(oldHandlerEntered,true,'the old session route handler must enter');},{timeout:4000});
+   await page.evaluate(()=>{void(window as unknown as {pendingSignoutApp:App}).pendingSignoutApp.session.check();});
+   if(handler==='missing'){
+    let timer:ReturnType<typeof setTimeout>|undefined;
+    try{
+     await assert.rejects(Promise.race([waitForOldHandler(),new Promise<void>(resolve=>{timer=setTimeout(resolve,5000);})]),/waitFor\(\) timed out/);
+     assert.equal(reads,2,'the missing signal belongs to the pending old session read');
+     assert.deepEqual(writes,[],'the readiness control never revokes a session');
+    }finally{clearTimeout(timer);}
+    return;
+   }
+   await waitForOldHandler();
    if(scenario==='passive'||scenario==='generic'){
     if(scenario==='generic'){
      ended=true;
@@ -112,4 +126,5 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
    if(scenario==='current'&&process.env.PENDING_SIGNOUT_RECEIPT_DIR){await mkdir(process.env.PENDING_SIGNOUT_RECEIPT_DIR,{recursive:true});await page.screenshot({path:`${process.env.PENDING_SIGNOUT_RECEIPT_DIR}/${locale}-${theme}-${width}.png`});}
   }finally{releaseOld();releaseFresh();await browser.close();}
  });
+ }
 }
