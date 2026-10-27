@@ -6,6 +6,51 @@ import re
 import sys
 
 
+ARCHIVE_URI = re.compile(r'https?://(?:azure\.)?archive\.ubuntu\.com/ubuntu/?|'
+                         r'mirror\+file:/etc/apt/apt-mirrors\.txt')
+
+
+def rewrite_source(path, original, mirror_uri, parser):
+    if path.suffix != '.sources':
+        def line(match):
+            prefix, options, spacing, uri, tail = match.groups()
+            if not ARCHIVE_URI.fullmatch(uri):
+                return match.group()
+            if options is None:
+                options, spacing = 'by-hash=no', ' '
+            elif re.search(r'(?<!\S)by-hash=', options):
+                options = re.sub(r'(?<!\S)by-hash=\S+', 'by-hash=no', options)
+            else:
+                options += ' by-hash=no'
+            return f'{prefix}[{options}]{spacing}{mirror_uri}{tail}'
+        return re.sub(r'^([ \t]*deb(?:-src)?[ \t]+)(?:\[([^\]\r\n]*)\]([ \t]+))?'
+                      r'(\S+)([^\r\n]*)', line, original, flags=re.MULTILINE)
+    chunks = re.split(r'(\r?\n[ \t]*\r?\n)', original)
+    for i in range(0, len(chunks), 2):
+        stanza = chunks[i]
+        uris = re.search(r'^URIs:[^\r\n]*(?:\r?\n[ \t]+[^\r\n]*)*', stanza, re.MULTILINE)
+        if uris is None:
+            continue
+        values = uris.group().split(':', 1)[1].split()
+        if not any(ARCHIVE_URI.fullmatch(uri) for uri in values):
+            continue
+        # One Deb822 policy covers every URI in its stanza; refuse to change a vendor's policy.
+        if not all(ARCHIVE_URI.fullmatch(uri) for uri in values):
+            parser.exit(1, f'Cannot prepare mixed Ubuntu and other URI stanza: {path}\n')
+        changed = re.sub(r'(?<!\S)\S+', lambda m: mirror_uri if ARCHIVE_URI.fullmatch(m.group()) else m.group(), uris.group())
+        stanza = stanza[:uris.start()] + changed + stanza[uris.end():]
+        policy = re.compile(r'^By-Hash:[^\r\n]*(?:\r?\n[ \t]+[^\r\n]*)*', re.MULTILINE | re.IGNORECASE)
+        if policy.search(stanza):
+            stanza = policy.sub('By-Hash: no', stanza)
+        else:
+            newline = '\r\n' if '\r\n' in stanza else '\n'
+            ending = newline if stanza.endswith(newline) else ''
+            stanza = stanza.removesuffix(ending) if ending else stanza
+            stanza += newline + 'By-Hash: no' + ending
+        chunks[i] = stanza
+    return ''.join(chunks)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--apt-root', type=Path, default=Path('/etc/apt'))
@@ -28,11 +73,8 @@ def main():
     mirror_uri = f'mirror+file:{mirror_list}'
     # Read every input before writing so an unreadable vendor file leaves sources intact.
     for path, original in sources:
-        # Change the mirror URI only; suites, components and signing keys stay intact.
-        updated = re.sub(r'(?<!\S)https?://(?:azure\.)?archive\.ubuntu\.com/ubuntu/?(?=\s|$)',
-                         lambda _: mirror_uri, original)
-        updated = re.sub(r'(?<!\S)mirror\+file:/etc/apt/apt-mirrors\.txt(?=\s|$)',
-                         lambda _: mirror_uri, updated)
+        # Source-local index policy keeps vendor hash addressing and signing keys intact.
+        updated = rewrite_source(path, original, mirror_uri, parser)
         if updated != original:
             rewrites.append((path, updated))
     if rewrites:
@@ -41,10 +83,8 @@ def main():
                                'https://archive.ubuntu.com/ubuntu\tpriority:2\n', encoding='utf-8')
         config = args.apt_root / 'apt.conf.d'
         config.mkdir(exist_ok=True)
-        # Stable index paths retain the release mirror; APT still checks signed digests.
         # Sort after runner retry defaults so dead connections leave time for fallback.
-        (config / 'zzzz-waitron-browser-mirrors').write_text('Acquire::https::Timeout "10";\n'
-                                                          'Acquire::By-Hash "false";\n', encoding='utf-8')
+        (config / 'zzzz-waitron-browser-mirrors').write_text('Acquire::https::Timeout "10";\n', encoding='utf-8')
         for path, updated in rewrites:
             with path.open('w', encoding='utf-8', newline='') as source:
                 source.write(updated)

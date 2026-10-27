@@ -207,7 +207,7 @@ with tempfile.TemporaryDirectory(prefix='cloud-browser-apt-') as directory:
                                                        f'https://127.0.0.2:{blackhole.getsockname()[1]}/first')
                            .replace('https://archive.ubuntu.com/ubuntu', f'{base}/second'))
         config = generated
-        assert config.read_text() == 'Acquire::https::Timeout "10";\nAcquire::By-Hash "false";\n'
+        assert config.read_text() == 'Acquire::https::Timeout "10";\n'
         config.write_text(config.read_text().replace('Timeout "10"', 'Timeout "1"'))
         supervisor = [sys.executable, str(Path('scripts/ci-download.py').resolve()),
                       '--timeout', '8', '--attempts', '1', '--grace', '1',

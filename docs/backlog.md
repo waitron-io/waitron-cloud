@@ -2409,9 +2409,19 @@ implementation or production evidence.
   supplied each signed release. APT's by-hash URLs otherwise select a mirror
   again for every index, including one that just failed. Signed release metadata
   still supplies the required index digests, and package hashes still apply.
-  This setting also covers other APT sources on that disposable browser runner.
-  If an index changes during publication, a digest mismatch must refuse the
-  update; this does not accept changed bytes or repair package state.
+  Stable-path selection is now limited to each rewritten Ubuntu source entry,
+  using APT's [source-local By-Hash option](https://manpages.ubuntu.com/manpages/noble/man5/sources.list.5.html).
+  Vendor sources keep their own bytes and hash-addressed downloads, which can
+  avoid stale filename copies during index publication. A mixed Ubuntu/vendor
+  Deb822 stanza refuses before any source is changed because one stanza shares
+  its index policy. Signing keys, digest checks and retry deadlines stay intact.
+  Run `node --test scripts/ci-browser-vendor.test.mjs` on Linux to reproduce a
+  signed stale-filename mismatch, successful vendor hash-addressed acquisition,
+  and refusals of altered immutable-index bytes and signatures. The historical
+  Microsoft publication mismatch in [run40482034486](https://github.com/waitron-io/waitron-cloud/actions/runs/40482034486)
+  remains unattributed; a controlled reproduction does not explain its CDN state.
+  If an index changes during publication and its required bytes cannot be fetched,
+  a digest mismatch still refuses the update; no package state is repaired.
   The controlled regression includes four suites with sixteen package indexes
   and forty-eight compressed package, translation and command indexes, with a
   separate altered-index refusal. Both journeys require the actual stable

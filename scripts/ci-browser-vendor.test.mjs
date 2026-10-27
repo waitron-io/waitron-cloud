@@ -24,6 +24,37 @@ test('browser preparation confines stable indexes to Ubuntu and preserves vendor
     `Types: deb\nURIs: mirror+file:${root}/waitron-browser-mirrors.txt\nSuites: noble-updates\nComponents: main\nSigned-By: /keys/ubuntu.gpg\nBy-Hash: no\n`);
 });
 
+// An existing per-source override must not conflict with the fallback's stable-path policy.
+test('Ubuntu index policy replaces existing overrides and retains source endings', async t => {
+  const root = await mkdtemp(join(tmpdir(), 'cloud-browser-policy-'));
+  t.after(() => rm(root, {recursive: true, force: true}));
+  await mkdir(join(root, 'sources.list.d'));
+  await writeFile(join(root, 'sources.list'), 'deb https://archive.ubuntu.com/ubuntu noble main\r\ndeb-src [by-hash=force signed-by=/keys/u.gpg] https://archive.ubuntu.com/ubuntu noble main');
+  await writeFile(join(root, 'sources.list.d/ubuntu.sources'), 'Types: deb\r\nURIs: https://archive.ubuntu.com/ubuntu\r\nSuites: noble\r\nBy-Hash: yes\r\nComponents: main');
+  const expected = `deb [by-hash=no] mirror+file:${root}/waitron-browser-mirrors.txt noble main\r\ndeb-src [by-hash=no signed-by=/keys/u.gpg] mirror+file:${root}/waitron-browser-mirrors.txt noble main`;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    execFileSync('python3', ['scripts/ci-browser-source.py', '--apt-root', root], {stdio: 'pipe'});
+    assert.equal(await readFile(join(root, 'sources.list'), 'utf8'), expected);
+    assert.equal(await readFile(join(root, 'sources.list.d/ubuntu.sources'), 'utf8'),
+      `Types: deb\r\nURIs: mirror+file:${root}/waitron-browser-mirrors.txt\r\nSuites: noble\r\nBy-Hash: no\r\nComponents: main`);
+  }
+});
+
+// A shared Deb822 policy must never disable hash addressing for a vendor in the same stanza.
+test('mixed Ubuntu and vendor URI stanzas refuse before rewriting any source', async t => {
+  const root = await mkdtemp(join(tmpdir(), 'cloud-browser-mixed-'));
+  t.after(() => rm(root, {recursive: true, force: true}));
+  await mkdir(join(root, 'sources.list.d'));
+  const first = 'deb https://archive.ubuntu.com/ubuntu noble main\n';
+  const mixed = 'Types: deb\nURIs: https://archive.ubuntu.com/ubuntu\n https://vendor.example/prod\nSuites: noble\nComponents: main\n';
+  await writeFile(join(root, 'sources.list'), first);
+  await writeFile(join(root, 'sources.list.d/mixed.sources'), mixed);
+  assert.throws(() => execFileSync('python3', ['scripts/ci-browser-source.py', '--apt-root', root], {stdio: 'pipe'}),
+    error => error.status !== 0 && /mixed.*URI.*mixed\.sources/i.test(String(error.stderr)));
+  assert.equal(await readFile(join(root, 'sources.list'), 'utf8'), first);
+  assert.equal(await readFile(join(root, 'sources.list.d/mixed.sources'), 'utf8'), mixed);
+});
+
 // Real signed metadata must select the immutable vendor index and still reject changed bytes.
 test('Linux APT keeps vendor by-hash acquisition through a stable-index publication mismatch', {
   skip: process.platform !== 'linux', timeout: 60000,
