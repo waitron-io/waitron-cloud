@@ -4,6 +4,7 @@ import {join} from 'node:path';
 import {createServer} from 'node:http';
 import {spawn,execFileSync,type ChildProcess} from 'node:child_process';
 import {setTimeout as delay} from 'node:timers/promises';
+import {GatewayForwardReports} from './gateway-forward-reports.ts';
 import {GatewayAuthority} from './authority.ts';
 import {renderHaproxy,renderWireGuard} from './config.ts';
 import {createPublicGate} from './public-gate.ts';
@@ -38,7 +39,8 @@ async function apply(routes:GatewayRoute[]){
  current=child;lastRoutes=fingerprint;
 }
 const authority=new GatewayAuthority(trust,cell,{persist:async envelope=>{await atomic('accepted.json',JSON.stringify(envelope));await atomic('initialized','1\n');},apply,close:stop});
-const gate=createPublicGate({key:await readFile(process.env.GATEWAY_BOT_KEY??'/input/bot.key'),ca:process.env.GATEWAY_UPSTREAM_CA?await readFile(process.env.GATEWAY_UPSTREAM_CA):undefined,routes:()=>authority.routes});
+const forwardReports=new GatewayForwardReports(authority,{directory:process.env.GATEWAY_FORWARD_REPORT_DIR,keyFile:process.env.GATEWAY_FORWARD_REPORT_KEY,issuerKey:trust});
+const gate=createPublicGate({beginForward:(route,startedAt)=>forwardReports.beginForward(route,startedAt),key:await readFile(process.env.GATEWAY_BOT_KEY??'/input/bot.key'),ca:process.env.GATEWAY_UPSTREAM_CA?await readFile(process.env.GATEWAY_UPSTREAM_CA):undefined,routes:()=>authority.routes});
 const server=createServer({maxHeaderSize:8192,requestTimeout:10000,headersTimeout:5000,connectionsCheckingInterval:1000},gate.handle);server.maxConnections=128;
 await new Promise<void>(resolve=>server.listen(8080,'127.0.0.1',resolve));
 let initialized=false;try{const marker=await readFile(join(root,'initialized'),'utf8');if(marker!=='1\n')throw new Error('gateway.cache_unavailable');initialized=true;}catch(error){if(!(error&&typeof error==='object'&&'code'in error&&error.code==='ENOENT'))throw error;}
@@ -52,6 +54,7 @@ try{while(!stopping){
  if(authority.hasAuthority&&(!alive()||certificateRefresh==='1')){
   try{await apply(authority.routes);}catch{await stop();console.error('gateway.restart_unavailable');}
  }
+ await forwardReports.flush(Date.now());
  const ready=authority.hasAuthority&&alive();
  await atomic('status.json',JSON.stringify({sequence:authority.sequence,ready,routes:ready?authority.routes.length:0,...gate.stats()}));
  await delay(1000);
