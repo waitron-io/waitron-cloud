@@ -3609,6 +3609,22 @@ invalid request audit, retains the first failed audit stage and identifies an
 interrupted producer attempt. The historical stop/exit cause still needs a
 labelled recurrence; see the linked investigation before changing the stop rule.
 
+## Litestream request-validation diagnostics (D378)
+
+The transport records the first refused request-validation boundary using fixed
+stage names, including request identity, operation, retry sequence, after-stop
+admission, content length, mutation body and lifetime bookkeeping. Stop checkpoints
+and sanitized close records carry the stage without request paths, headers or
+SDK invocation identifiers. Later requests cannot replace the first refusal.
+Native HTTP checks still require refused requests to return 400 without forwarding
+or publishing accounting, and include a successful forwarding control.
+
+The [PR620 cost refusal](https://github.com/waitron-io/waitron-cloud/actions/runs/40600605206/job/122527571695)
+reported request-validation at stop's idle step without identifying its check.
+Its cause remains unknown. Reproduce the next labelled recurrence before changing
+transport, stop, accounting or cleanup rules. Genuine local Docker qualification
+remains unavailable until Docker returns; current-head Linux CI checks the delivery.
+
 ## Recovery refusal messages and pasted codes (D192)
 
 Recovery now keeps the server's definite refusal message for approval, close and
