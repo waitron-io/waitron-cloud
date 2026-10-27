@@ -4,7 +4,9 @@ import {ref} from 'lit/directives/ref.js';
 import QRCode from 'qrcode';
 import type {PortalApp} from './app.ts';
 function clearRequired(app:PortalApp,field:'password'|'proof'|'confirmation',value:string){const f=app.authenticator;
-  if(f.requiredField===field&&f.error===(field==='password'?'requiredPassword':'factorCodeRequired')&&(field==='password'?value:value.replace(/\s/g,''))){
+  const required=f.error===(field==='password'?'requiredPassword':'factorCodeRequired')&&(field==='password'?value:value.replace(/\s/g,''));
+  const malformed=field==='proof'&&f.error==='factorCodeInvalid'||field==='confirmation'&&f.error==='factorConfirmationInvalid';
+  if(f.requiredField===field&&(required||malformed)){
     f.error=undefined;f.requiredField=undefined;app.draw();
   }
 }
