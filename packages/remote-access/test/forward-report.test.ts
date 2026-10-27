@@ -54,6 +54,7 @@ test('report keys, fixed categories, stream identity and safe counters are close
   {category:['upstream_timeout']},{category:true},{path:'/secret'},{address:'10.77.0.2'},{body:'private body'},{observedAt:1.5}];
  for(const patch of reportPatches)assert.throws(()=>signForwardReport({...report,...patch} as ForwardReport,keys.privateKey),/invalid_forward_report/,JSON.stringify(patch));
  for(const patch of observationPatches)assert.throws(()=>signForwardReport({...report,observations:[{...observation,...patch}]} as ForwardReport,keys.privateKey),/invalid_forward_report/,JSON.stringify(patch));
+ for(const patch of [{cellId:'bad'},{gatewayId:'bad'},{generation:0}])assert.throws(()=>signForwardReport({...report,...patch,observations:[{...observation,...patch}]},keys.privateKey),/invalid_forward_report/,'matching identities still need valid UUIDs and a positive generation');
 });
 
 test('report and observation expiry cannot be refreshed by validation or replay',()=>{
@@ -63,11 +64,13 @@ test('report and observation expiry cannot be refreshed by validation or replay'
  assert.throws(()=>verifyForwardReport(signed,keys.publicKey,now-5001),/invalid_forward_report/);
  for(const patch of [{observedAt:now+5001,expiresAt:now+305001},{manifestExpiresAt:now},
   {manifestExpiresAt:now+600001},{expiresAt:now+300001},{expiresAt:now+299999},
+  {observedAt:now+1000,manifestExpiresAt:now+500,expiresAt:now+500},
   {manifestExpiresAt:now+10000,expiresAt:now+300000}])assert.throws(()=>signForwardReport({...report,observations:[{...observation,...patch}]},keys.privateKey),/invalid_forward_report/);
  const short={...report,observations:[{...observation,manifestExpiresAt:now+10000,expiresAt:now+10000}]};
  assert.deepEqual(verifyForwardReport(signForwardReport(short,keys.privateKey),keys.publicKey,now),short);
  const empty={...report,observations:[]};
  assert.throws(()=>verifyForwardReport(signForwardReport(empty,keys.privateKey),keys.publicKey,now+300001),/invalid_forward_report/);
+ assert.throws(()=>verifyForwardReport(signForwardReport(empty,keys.privateKey),keys.publicKey,now-5001),/invalid_forward_report/);
 });
 
 test('reports bound entries to 64 unique installations and venues',()=>{
