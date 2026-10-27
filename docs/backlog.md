@@ -3712,6 +3712,10 @@ The authenticator keyboard fixture reproduces the refusal with the same setup
 delay and now freezes from the earlier start. Original and delayed journeys retain
 every Enter-key, activation, unavailable-status, cooldown, request and deadline
 check. Both clock setup sites are qualified.
+The passkey Enter fixture reproduces the refusal with the same setup delay at
+all three clock setup sites and now freezes from the earlier start. Original and
+delayed journeys retain every password, enrollment, unsupported-browser, cooldown,
+request-count, duplicate-submit and deadline check.
 No historical CI failure in these fixtures is attributed here.
 
 ## Paced replay object deletion refusal (D344 qualification)
