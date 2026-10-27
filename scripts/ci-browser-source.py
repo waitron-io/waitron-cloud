@@ -41,8 +41,10 @@ def main():
                                'https://archive.ubuntu.com/ubuntu\tpriority:2\n', encoding='utf-8')
         config = args.apt_root / 'apt.conf.d'
         config.mkdir(exist_ok=True)
+        # Stable index paths retain the release mirror; APT still checks signed digests.
         # Sort after runner retry defaults so dead connections leave time for fallback.
-        (config / 'zzzz-waitron-browser-mirrors').write_text('Acquire::https::Timeout "10";\n', encoding='utf-8')
+        (config / 'zzzz-waitron-browser-mirrors').write_text('Acquire::https::Timeout "10";\n'
+                                                          'Acquire::By-Hash "false";\n', encoding='utf-8')
         for path, updated in rewrites:
             with path.open('w', encoding='utf-8', newline='') as source:
                 source.write(updated)
