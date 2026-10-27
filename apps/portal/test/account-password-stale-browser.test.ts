@@ -94,8 +94,8 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
             const malformed = flow === 'proof' ? c.factorCodeInvalid : c.factorConfirmationInvalid;
             await alert.getByText(malformed, {exact: true}).waitFor();
             await input.fill(value); await settled();
-            assert.equal(await alert.getByText(malformed, {exact: true}).count(), 1, 'typing only clears a required-input refusal');
-            assert.equal(await input.getAttribute('aria-invalid'), 'true');
+            assert.equal(await alert.getByText(malformed, {exact: true}).count(), 0, 'editing clears the previous local format refusal');
+            assert.equal(await input.getAttribute('aria-invalid'), 'false');
             assert.deepEqual(writes, [], 'malformed input is still refused locally');
           }
           const endpoint = flow === 'passkey' ? '/passkeys/remove' : flow === 'password' ? '/authenticator/begin' : flow === 'proof' ? '/authenticator/remove' : '/authenticator/activate';
