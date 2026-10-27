@@ -46,6 +46,11 @@ test('published close attempts refuse unsafe values and do not read accessors',a
   let reads=0;
   for(const attempt of [{producerAttempt:1,retryOrdinal:0,phase:'PRIVATE_CANARY'},
     {producerAttempt:-1,retryOrdinal:0,phase:'workload'},
+    {producerAttempt:0,retryOrdinal:0,phase:'workload'},
+    {producerAttempt:1.5,retryOrdinal:0,phase:'workload'},
+    {producerAttempt:Number.MAX_SAFE_INTEGER+1,retryOrdinal:0,phase:'workload'},
+    {producerAttempt:1,retryOrdinal:-1,phase:'workload'},
+    {producerAttempt:1,retryOrdinal:Number.MAX_SAFE_INTEGER+1,phase:'workload'},
     {producerAttempt:1,retryOrdinal:0.5,phase:'workload'},
     {get producerAttempt(){reads++;throw Error('PRIVATE_CANARY');},retryOrdinal:0,phase:'workload'}]){
     const error=Object.assign(Error('PRIVATE_CANARY'),{litestreamCloseDiagnostic:{reason:'upstream-error',attempt}}),records=[];
