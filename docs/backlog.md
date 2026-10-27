@@ -3702,6 +3702,16 @@ URL refusal and catches omission of the destination wait. All original
 assertions and four-second page/120-second runner deadlines stay unchanged;
 this corrects test readiness without changing product authentication or routing.
 
+## Sign-out failure browser handler wait (D361)
+
+The sign-out failure fixture refuses within its existing four-second page budget
+when the first logout route handler never signals entry. A missing-signal control
+reproduces the unbounded wait; delayed handlers repeat all eight original journeys
+across both languages, themes and phone/desktop widths. Pending-state, focus,
+scroll, failure-message, retry, request-count, layout and runner deadline checks
+remain. These native Chromium checks use stubbed HTTP and do not qualify backend
+or production sign-out.
+
 ## Session-check retry browser handler wait (D359)
 
 The session-check retry fixture refuses within its existing three-second page

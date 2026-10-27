@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import {mkdir,readFile} from 'node:fs/promises';
 import {test} from 'node:test';
+import {setTimeout as delay} from 'node:timers/promises';
 import {build} from 'esbuild';
 import {chromium} from 'playwright';
 import {translations} from '../src/locale.ts';
@@ -16,10 +17,11 @@ const installations=Array.from({length:8},(_,i)=>{
  return {installationId:id,venueId:id,organisationId:id,legalBusinessId:id,environment:'test',revision:1,revokedAt:null,lastContactAt:null,leaseExpiresAt:null,canRevoke:true,
   services:['continuous_backup','remote_access','retained_snapshots'].map(service=>({service,state:'unconfigured',health:'unknown',failure:null,observedAt:null}))};
 });
-for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as const)for(const width of [390,1280]){
- test(`${locale} ${theme} ${width}: a failed sign-out is brought into view and focused`,async()=>{
+for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as const)for(const width of [390,1280])for(const handler of ['normal','delayed','missing'] as const){
+ if(handler==='missing'&&(locale!=='en'||theme!=='light'||width!==390))continue;
+ test(`${locale} ${theme} ${width}${handler==='normal'?'':` with ${handler} handler`}: a failed sign-out is brought into view and focused`,async t=>{
   const browser=await chromium.launch({headless:true});let release!:()=>void;
-  const held=new Promise<void>(resolve=>{release=resolve;});let entered!:()=>void;const requested=new Promise<void>(resolve=>{entered=resolve;});
+  const held=new Promise<void>(resolve=>{release=resolve;});let handlerEntered=false;const entered=()=>{handlerEntered=true;};
   try{
    const page=await browser.newPage({locale,colorScheme:theme,viewport:{width,height:900}});page.setDefaultTimeout(4000);
    const c=translations[locale];let signedIn=true,attempts=0;
@@ -32,7 +34,7 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
     if(endpoint==='/installations')return route.fulfill({json:{installations}});
     if(endpoint==='/alerts')return route.fulfill({json:{enabled:false,locale}});
     if(endpoint==='/logout'){
-     attempts++;if(attempts===1){entered();await held;return route.fulfill({status:503,json:{error:'temporarily_unavailable'}});}
+     attempts++;if(attempts===1){if(handler==='delayed')await delay(100);if(handler!=='missing')entered();await held;return route.fulfill({status:503,json:{error:'temporarily_unavailable'}});}
      signedIn=false;return route.fulfill({status:204});
     }
     return route.fulfill({status:503,json:{error:'temporarily_unavailable'}});
@@ -40,7 +42,16 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
    await page.goto('https://portal.test/account');await page.addStyleTag({content:styles});await page.addScriptTag({content:bundle.outputFiles[0]!.text});
    const signOut=page.getByRole('button',{name:c.signout,exact:true});
    await signOut.scrollIntoViewIfNeeded();assert.equal(await page.evaluate(()=>scrollY>500),true,'the button starts well below the summary');
-   const response=page.waitForResponse('**/api/account/logout');await signOut.click();await requested;
+   const waitForHandler=()=>t.waitFor(()=>{assert.equal(handlerEntered,true,'the first logout route handler must enter');},{timeout:4000});
+   if(handler==='missing'){
+    await signOut.click();let timer:ReturnType<typeof setTimeout>|undefined;
+    try{
+     await assert.rejects(Promise.race([waitForHandler(),new Promise<void>(resolve=>{timer=setTimeout(resolve,5000);})]),/waitFor\(\) timed out/);
+     assert.equal(attempts,1,'the missing signal belongs to the held first logout request');
+    }finally{clearTimeout(timer);}
+    return;
+   }
+   const response=page.waitForResponse('**/api/account/logout');await signOut.click();await waitForHandler();
    assert.equal(await signOut.isDisabled(),true,'sign-out remains disabled while pending');assert.equal(attempts,1);
    release();assert.equal((await response).status(),503);
    const summary=page.locator('wt-form-error-summary');await summary.getByText(c.logoutFailed,{exact:true}).waitFor();
