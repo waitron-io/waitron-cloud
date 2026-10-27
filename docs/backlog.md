@@ -4244,6 +4244,10 @@ The passkey Enter fixture reproduces the refusal with the same setup delay at
 all three clock setup sites and now freezes from the earlier start. Original and
 delayed journeys retain every password, enrollment, unsupported-browser, cooldown,
 request-count, duplicate-submit and deadline check.
+The monitoring-action guidance fixture reproduces the refusal with a 1100 ms
+setup pause and now freezes from an earlier start at the original instant. Its
+original and delayed journeys retain all failed/stale/certificate explanations,
+read-only actions, hostnames, dates, requests, healthy states and deadlines.
 The session-check retry fixture reproduces the refusal after a 1100 ms setup
 pause, beyond its old one-second window. It now starts earlier and freezes at
 the original instant before loading the app. Both connect and recovery journeys
