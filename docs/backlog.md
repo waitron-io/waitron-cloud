@@ -3626,6 +3626,15 @@ Qualify the public browser check against the supported browsers and production
 networks before public exposure. Local HTTP, script and Chromium checks do not
 discharge that deployment gate.
 
+## JavaScript-disabled browser-check fixture handler wait (D369)
+
+The JavaScript-disabled browser fixture bounds its enabled-script challenge-handler
+wait at the existing four-second page budget. An absent signal fails promptly;
+delayed handlers repeat enabled-script journeys in both languages, themes and
+phone/desktop widths. Original script-disabled guidance, content-security policy,
+bilingual visibility, cookie, forwarding and failure assertions remain. These
+native Chromium and local HTTP checks leave production-network qualification open.
+
 ## Public browser-check landmark handler wait (D365)
 
 The landmark browser fixture refuses an absent challenge-handler signal within
