@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict';
-import {randomUUID} from 'node:crypto';
+import {generateKeyPairSync,randomUUID} from 'node:crypto';
 import {test} from 'node:test';
 import {setTimeout as delay} from 'node:timers/promises';
 import {createSession} from '@waitron-cloud/identity';
-import {transaction} from '@waitron-cloud/registration';
+import {transaction,createLeaseIssuer} from '@waitron-cloud/registration';
 import {forwardFixture} from '../../remote-access/test/fixtures/forward-observations.ts';
 import {createAccountApp} from '../src/app.ts';
 import type {HttpBindings} from '@hono/node-server';
@@ -11,7 +11,8 @@ const origin='https://cloud.example.test';
 async function fixture(planMode:'existing'|'test-free-paid'='test-free-paid'){
  const f=await forwardFixture();
  const session=await transaction(f.db.pool,c=>createSession(c,f.owner.accountId));
- const app=createAccountApp({pool:f.db.pool,outbox:f.db.outbox,planMode,config:{portalOrigin:origin,production:true,rateKey:f.db.rateKey,trustedProxyIps:[]}});
+ const issuer=createLeaseIssuer(generateKeyPairSync('ed25519').privateKey.export({type:'pkcs8',format:'der'}).toString('base64url'));
+ const app=createAccountApp({pool:f.db.pool,outbox:f.db.outbox,planMode,leaseIssuer:issuer,config:{portalOrigin:origin,production:true,rateKey:f.db.rateKey,trustedProxyIps:[]}});
  const call=async(action='remote-access/status',body:unknown={installationId:f.installed.installationId},headers:Record<string,string>={})=>app.request(origin+'/api/account/'+action,{method:action==='installations'?'GET':'POST',headers:{origin,cookie:'__Host-cloud_session='+session.token,'x-csrf-token':session.csrfToken,'content-type':'application/json',...headers},...(action==='installations'?{}:{body:JSON.stringify(body)})},{incoming:{socket:{remoteAddress:'192.0.2.1'}}} as HttpBindings);
  return {...f,session,call};
 }
@@ -71,7 +72,7 @@ test('session expiry while the private observation read waits is refused by the 
 test('diagnostic export and installation list omit private forwarding records',async()=>{
  const f=await fixture();try{
   await f.send();
-  for(const [action,body] of [['diagnostics/read',{installationId:f.installed.installationId}],['installations',{}]] as const){const response=await f.call(action,body);assert.equal(response.status,200);const text=await response.text();for(const secret of ['publicForward','upstream_transport',f.gatewayId,f.publicKey,f.report().observations[0]!.routeBinding])assert(!text.includes(secret),secret);}
+  for(const [action,body] of [['diagnostics/read',{installationId:f.installed.installationId}],['installations',{}]] as const){const response=await f.call(action,body);assert.equal(response.status,200,action);const text=await response.text();for(const secret of ['publicForward','upstream_transport',f.gatewayId,f.publicKey,f.report().observations[0]!.routeBinding])assert(!text.includes(secret),secret);}
  }finally{await f.db.close();}
 });
 
