@@ -3947,6 +3947,9 @@ request before checking its payload and pending-review behaviour. The browser's
 request event can arrive before that record is filled. A controlled handler delay
 reproduces the empty-array refusal; waiting for the handler preserves the existing
 request, confirmation, apply, invalid-input and rate-limit assertions and deadlines.
+A missing handler now refuses within the existing three-second page budget,
+rather than waiting for the outer runner deadline. Native browser checks cover
+an absent handler and a delayed handler while retaining every original assertion.
 No remote setup or permission behaviour changes.
 
 ## Unchanged remote hostname review (D259)
