@@ -3936,6 +3936,12 @@ Cloud follow-ups, each a separate small change with tests before implementation:
   Both languages, themes and widths retain zero cookies and upstream requests before
   proof, followed by the scoped access cookie and one forwarded request. Other
   historical versions, browser engines and production networks remain unqualified.
+  In the reverse rollout pairing, the shipped older script also runs on the
+  current page: after a failed challenge, Reload page restarts the real worker
+  and proof exchange before opening the local HTTPS venue response. Chromium
+  checks cover both languages, themes and widths, with no cookie or forwarding
+  before proof. The older script leaves the current static advice and reload
+  link visible while checking; these tests preserve that known mixed-version limit.
   The browser-check page groups its heading, waiting or failure message and
   reload guidance in one main content region. Native Chromium checks cover
   disabled JavaScript, a failed script download and a running check that fails,
