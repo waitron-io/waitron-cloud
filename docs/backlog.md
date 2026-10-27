@@ -2746,7 +2746,9 @@ implementation or production evidence.
   Docker-free command probes check the bound, new-file discovery and failure
   reporting with real Node workers. A complete unsharded PostgreSQL run still
   needs qualification when local Docker returns; CI's existing database shards
-  keep their own commands. The historical lock exhaustion and unidentified
+  keep their own commands. Receipt fixtures compare seeded historical manifests
+  with their saved test commands; existing assertions and production selection
+  guards stay unchanged. The historical lock exhaustion and unidentified
   failed-setup handles remain recorded; database limits are unchanged.
 
   **One-second relay budget fixture.** The key-retirement and rollover tests now
