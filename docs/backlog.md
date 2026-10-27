@@ -3845,6 +3845,9 @@ Cloud follow-ups, each a separate small change with tests before implementation:
   container mounts, primary-only reads and P1/P3 backup integration still need
   deployment qualification. Reporting stays disabled in deployments. See the
   [collection and Account guide](local-monitoring.md#private-gateway-forwarding-collection).
+  The invalid equal-timestamp fixture uses one captured observation; its owning
+  refusal test advances the clock on every read so a tick cannot make it valid.
+  Client validation and the guard-deletion checks retain their assertions.
 - R10 delivered: direct navigation to rejected public requests receives bilingual
   guidance for 421/429/413/404/405/400 and failed-proof 403. Background refusals stay
   empty; host, proof, quota, size and forwarding checks retain their status codes.
