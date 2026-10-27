@@ -25,7 +25,9 @@ async function disabled(page: Page, labels: string[]) {
   for (const label of labels) assert.equal(await page.getByRole('button', {name: label, exact: true}).isDisabled(), true, label);
 }
 
-for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'] as const) for (const width of [390, 1280]) test(`${locale} ${theme} ${width}: venue actions wait for installation refresh`, async t => {
+for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'] as const) for (const width of [390, 1280]) {
+  const handlers = locale === 'en' && theme === 'light' && width === 390 ? ['ordinary', 'delayed', 'missing'] as const : ['ordinary'] as const;
+  for (const handler of handlers) test(`${locale} ${theme} ${width}: venue actions wait for installation refresh${handler === 'ordinary' ? '' : ` (${handler} handler)`}`, async t => {
   const browser = await chromium.launch({headless: true});
   try {
     const page = await browser.newPage({locale, colorScheme: theme, viewport: {width, height: 900}}); page.setDefaultTimeout(4000);
@@ -36,7 +38,12 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
     await page.route('**/api/account/**', async route => {
       const path = new URL(route.request().url()).pathname;
       if (path.endsWith('/session') || path.endsWith('/session/activity')) return route.fulfill({json: {accountId: 'owner', expiresAt: new Date(Date.now() + 3600000).toISOString()}});
-      if (path.endsWith('/installations')) {entered?.(); await gate; return refreshFails ? route.fulfill({status: 503, json: {error: 'unavailable'}}) : route.fulfill({json: {installations: refreshed}});}
+      if (path.endsWith('/installations')) {
+        if (gate && handler === 'delayed') await new Promise(resolve => setTimeout(resolve, 100));
+        if (!gate || handler !== 'missing') entered?.();
+        await gate;
+        return refreshFails ? route.fulfill({status: 503, json: {error: 'unavailable'}}) : route.fulfill({json: {installations: refreshed}});
+      }
       if (path.endsWith('/usage/read')) return route.fulfill({json: {version: 1, organisationId: route.request().postDataJSON().organisationId, storage: {currentBytes: '0', addedBytes: '0', removedBytes: '0'}, transfer: {uploadedBytes: '0', restoredBytes: '0'}, operations: {installationCompleted: '0', monitoringProbes: '0'}, messages: {sent: '0', failed: '0', expired: '0', cancelled: '0'}, latestEventAt: null, measuredThrough: null}});
       calls.push({path, body: route.request().postData() ? route.request().postDataJSON() : null});
       if (path.endsWith('/backups/list')) return route.fulfill({json: {venueId: route.request().postDataJSON().venueId, points: [{id: point, capturedAt: '2026-10-23T10:00:00.000Z', verification: 'verified', retention: 'daily', expiresAt: '2026-11-23T10:00:00.000Z', protection: 'fallback'}], nextCursor: 'older', defaultPointId: point, continuousRecovery: {recoverableAt: '2026-10-23T10:00:00.000Z', checkedAt: '2026-10-23T10:00:00.000Z', sourceNodeId: second}}});
@@ -61,9 +68,11 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
       }, {installations, second, request, path});
     };
     const holdRefresh = async () => {
-      const received = new Promise<void>(resolve => {entered = resolve;});
+      let received = false;
+      entered = () => {received = true;};
       gate = new Promise<void>(resolve => {release = resolve;});
-      await page.evaluate(() => {void (window as any).app.installations.load();}); await received;
+      await page.evaluate(() => {void (window as any).app.installations.load();});
+      await t.waitFor(() => {assert.equal(received, true, 'the installation route handler must observe the refresh');}, {timeout: 4000});
     };
     const settle = async () => {
       release?.(); gate = undefined; entered = undefined;
@@ -76,6 +85,14 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
       }
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
     };
+    if (handler === 'missing') {
+      await prepare('/account');
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      try {
+        await assert.rejects(Promise.race([holdRefresh(), new Promise<void>(resolve => {timer = setTimeout(resolve, 5000);})]), /waitFor\(\) timed out/);
+      } finally {clearTimeout(timer); await settle();}
+      return;
+    }
     for (const result of ['removed', 'retained', 'failed'] as const) await t.test(`recovery ${result}: selection and approval wait, then reflect the result`, async () => {
       await prepare('/recover');
       await page.getByLabel(c.recoveryVenue, {exact: true}).selectOption(second);
@@ -153,3 +170,4 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
     });
   } finally {await browser.close();}
 });
+}

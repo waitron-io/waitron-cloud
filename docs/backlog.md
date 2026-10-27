@@ -3962,6 +3962,14 @@ rather than waiting for the outer runner deadline. Native browser checks cover
 an absent handler and a delayed handler while retaining every original assertion.
 No remote setup or permission behaviour changes.
 
+## Installation-refresh browser handler wait (D357)
+
+The installation-refresh browser fixture refuses an absent route-handler signal
+within its existing four-second page budget. A delayed handler still runs all
+removed, retained and failed-refresh journeys. Original recovery, permission,
+selection, request, layout and deadline assertions remain unchanged across both
+languages, themes and viewport widths. No product authority changes.
+
 ## Unchanged remote hostname review (D259)
 
 On Account, Review DNS settings is available only when the entered name differs
