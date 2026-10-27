@@ -1140,8 +1140,9 @@ implementation or production evidence.
   The worker tries a fresh cleanup client, collects its owned bucket when that
   client opens, and closes its listener and child process. Any failed step still
   refuses measurement and retains the private directory; a failed replacement
-  client never sends requests through the stale setup client. The first fixed
-  diagnostic remains available without raw SDK errors. Whether the real SDK
+  client never sends requests through the stale setup client or records a bucket
+  cleanup intent. A client whose instrumentation fails is closed before refusal.
+  The first fixed diagnostic remains available without raw SDK errors. Whether the real SDK
   naturally throws there and the historical Linux cleanup cause remain unverified.
   The successful browser journey also refused in
   [run 39890570428](https://github.com/waitron-io/waitron-cloud/actions/runs/39890570428/job/120209134728),

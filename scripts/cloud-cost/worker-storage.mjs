@@ -43,7 +43,12 @@ export async function openWorkerStorage(args) {
   const makeClient = phase => {
     const value = new sdk.S3Client({ endpoint: proxy.url, region: 'eu-north-1', forcePathStyle: true, maxAttempts: 1,
       requestHandler: { connectionTimeout: 1000, requestTimeout: 2000 }, credentials: { accessKeyId: 'SYNTHETIC', secretAccessKey: 'SYNTHETIC' } });
-    instrumentStorageClient({ client: value, meter, phase, endpoint: proxy.url }); return value;
+    try { instrumentStorageClient({ client: value, meter, phase, endpoint: proxy.url }); return value; }
+    catch {
+      // The caller cannot collect a constructed client that was never returned.
+      try { value.destroy(); } catch { /* Failed instrumentation still refuses the client. */ }
+      fail();
+    }
   };
   const listObjects = async () => {
     stage = 'object-list';

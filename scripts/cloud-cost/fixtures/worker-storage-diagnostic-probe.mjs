@@ -34,7 +34,9 @@ globalThis.storageProbe = {
     proxyClosed++;
     if (['proxy-close', 'two-failures', 'reporter', 'async-reporter'].includes(fault)) refuse();
   } }),
-  instrumentStorageClient: () => {}, correlatedStorageAttempt: () => {},
+  instrumentStorageClient: () => {
+    if (cleanup && fault === 'cleanup-client-instrumentation') refuse();
+  }, correlatedStorageAttempt: () => {},
 };
 registerHooks({ resolve(specifier, context, next) {
   if (context.parentURL?.endsWith('/worker-storage.mjs')) {
@@ -106,5 +108,6 @@ try {
   await new Promise(resolve => setImmediate(resolve));
   const entries = JSON.parse(readFileSync(journal.path, 'utf8')).localResources ?? [];
   console.log(JSON.stringify({ message, records, collected, proxyClosed, clientCount, destroyed, cleanupRequests,
-    bucketRemoved: entries.some(e => e.kind === 'storage-bucket' && e.state === 'removed'), rootRetained: existsSync(join(root, 'local-storage')) }));
+    bucketRemoved: entries.some(e => e.kind === 'storage-bucket' && e.state === 'removed'),
+    bucketCleanupIntents: entries.filter(e => e.kind === 'storage-bucket' && e.state === 'cleanup-intent').length, rootRetained: existsSync(join(root, 'local-storage')) }));
 } finally { rmSync(parent, { recursive: true, force: true }); }

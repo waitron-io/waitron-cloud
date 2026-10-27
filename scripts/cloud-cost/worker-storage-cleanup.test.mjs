@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 
 // Removing independent cleanup attempts must leave the owned bucket or child uncollected.
-for (const fault of ['first-client-close', 'cleanup-client-open', 'cleanup-client-construction']) {
+for (const fault of ['first-client-close', 'cleanup-client-open', 'cleanup-client-construction', 'cleanup-client-instrumentation']) {
   for (const action of ['finish', 'close', 'concurrent']) test(`${action} collects independent resources after ${fault}`, () => {
     const result = spawnSync(process.execPath, [new URL('./fixtures/worker-storage-diagnostic-probe.mjs', import.meta.url).pathname, fault, action],
       { encoding: 'utf8', timeout: 10000 });
@@ -15,10 +15,11 @@ for (const fault of ['first-client-close', 'cleanup-client-open', 'cleanup-clien
     assert.equal(output.proxyClosed, 1, 'close the listener once despite repeated disposal');
     assert.equal(output.clientCount, 2, 'try one independent cleanup client');
     assert.equal(output.rootRetained, true, 'retain private evidence after any cleanup failure');
-    assert.equal(output.bucketRemoved, fault !== 'cleanup-client-construction', 'only a successfully opened cleanup client may collect the owned bucket');
-    if (fault === 'cleanup-client-construction') {
+    assert.equal(output.bucketRemoved, !['cleanup-client-construction', 'cleanup-client-instrumentation'].includes(fault), 'only a successfully opened cleanup client may collect the owned bucket');
+    if (['cleanup-client-construction', 'cleanup-client-instrumentation'].includes(fault)) {
+      assert.equal(output.bucketCleanupIntents, 0, 'do not journal bucket cleanup without a usable cleanup client');
       assert.equal(output.cleanupRequests, 0, 'never reuse the setup client after cleanup client construction failed');
-      assert.equal(output.destroyed, 1, 'do not destroy the stale setup client again');
+      assert.equal(output.destroyed, fault === 'cleanup-client-construction' ? 1 : 2, 'close each constructed client once, including failed instrumentation');
     } else assert.equal(output.destroyed, 2, 'attempt to close each client once');
     assert.equal((result.stdout + result.stderr).includes('PRIVATE'), false);
   });
