@@ -744,3 +744,43 @@ for (const [fault, stage] of [
   for (const secret of [f.source, f.root, f.journal.token, f.bucket, 'PRIVATE_'])
     assert.equal(JSON.stringify(trace).includes(secret), false);
 });
+
+// Omitting the collection marker leaves a stalled writer indistinguishable from an idle handoff.
+test('replayStreamReportsChildCollectionWhileTheWriterIsStillUncollected', { timeout: 10000 }, async t => {
+  const f = await fixture(t, 'hang'), trace = [];
+  let waiting; const collectionStarted = new Promise(resolve => { waiting = resolve; });
+  const run = await open(t, { ...f, onDiagnostic: event => {
+    trace.push(event);
+    if (event.kind === 'stream' && event.stage === 'quiesce-stop') waiting();
+  } });
+  let finished = false;
+  const finishing = assert.rejects(run.finish({ expectedSales: 1 }), bad).then(() => { finished = true; });
+  let timer;
+  try {
+    await Promise.race([collectionStarted, new Promise((_, reject) => {
+      timer = setTimeout(() => reject(Error('missing child-collection diagnostic')), 1000);
+    })]);
+    assert.equal(finished, false);
+    assert.equal(trace.some(event => event.kind === 'native' && event.operation === 'replicate'), false);
+    assert.deepEqual(trace.at(-1), { kind: 'stream', stage: 'quiesce-stop' });
+  } finally { clearTimeout(timer); await finishing; }
+  clean(f);
+  assert.ok(trace.some(event => event.kind === 'native' && event.operation === 'replicate' && event.signal === 'SIGKILL'));
+  assert.deepEqual(workerFailureTrace(trace), trace);
+});
+
+// Post-checkpoint admission must not be described as a storage-accounting failure.
+test('replayStreamSeparatesRestoreAdmissionFromTheCompletedCheckpoint', async t => {
+  const f = await fixture(t), abort = new AbortController(), trace = [];
+  const run = await open(t, { ...f, signal: abort.signal, onDiagnostic: event => {
+    trace.push(event);
+    if (event.kind === 'stream' && event.stage === 'restore-admission') abort.abort();
+  } });
+  await assert.rejects(run.finish({ expectedSales: 1 }), bad);
+  clean(f);
+  assert.ok(trace.some(event => event.kind === 'stream-refusal' && event.stage === 'restore-admission'), JSON.stringify(trace));
+  const entries = JSON.parse(readFileSync(f.journal.path, 'utf8')).localResources;
+  assert.deepEqual(entries.filter(e => e.kind === 'stream-process' && e.state === 'started').map(e => e.operation),
+    ['version', 'replicate']);
+  assert.deepEqual(workerFailureTrace(trace), trace);
+});

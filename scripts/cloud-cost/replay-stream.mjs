@@ -185,7 +185,8 @@ export async function openReplayStream(input) {
       if (!finishing) finishing = (async () => {
         try {
           healthy(); need(!busy && Number.isSafeInteger(expectedSales) && expectedSales > 0 && expectedSales <= 100000);
-          at('quiesce'); await quiesce(); healthy(); session.setPhase('restore');
+          at('quiesce'); await quiesce();
+          at('restore-admission'); healthy(); session.setPhase('restore');
           const output = join(args.workRoot, 'restored.db'); need(!existsSync(output));
           at('restore'); const restore = launch(['restore', '-config', join(args.workRoot, 'stream.json'), '-o', output, args.database]);
           const timeout = setTimeout(() => { restore.bad = true; restore.child.kill('SIGKILL'); }, 30000);

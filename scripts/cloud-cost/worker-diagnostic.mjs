@@ -46,7 +46,7 @@ export function workerFailureTrace(value) {
       exact(event, ['kind', 'stage']);
       const stages = event.kind.startsWith('replay')
         ? ['configuration', 'input', 'adapter-open', 'selection', 'stream-open', 'startup', 'workload', 'idle', 'verification', 'stream-finish', 'archive', 'restore', 'cleanup', 'storage-finish-input', 'storage-finish-result']
-        : ['admission', 'measurement-open', 'version', 'replicate', 'phase', 'quiesce', 'quiesce-idle', 'quiesce-stop', 'quiesce-stop-result', 'quiesce-health', 'quiesce-checkpoint', 'restore', 'restore-file', 'restore-integrity', 'restore-sales', 'accounting', 'cleanup'];
+        : ['admission', 'measurement-open', 'version', 'replicate', 'phase', 'quiesce', 'quiesce-idle', 'quiesce-stop', 'quiesce-stop-result', 'quiesce-health', 'quiesce-checkpoint', 'restore-admission', 'restore', 'restore-file', 'restore-integrity', 'restore-sales', 'accounting', 'cleanup'];
       need(stages.includes(event.stage));
     } else {
       exact(event, ['kind', 'operation', 'code', 'signal', 'stderrBytes', 'stderrFlags']);
