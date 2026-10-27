@@ -4046,3 +4046,14 @@ existing Enter, installation-refresh and uncertain-save checks retain their
 assertions and deadlines with the three owner-approved setup changes. Server
 behaviour and the outstanding live DNS/ACME and deployment qualification are
 unchanged.
+
+## Browser dependency mirror certificate refusal
+
+**Open:** [PR554's CI](https://github.com/waitron-io/waitron-cloud/actions/runs/40424384489)
+refused Chromium installation before portal and UI smoke tests. APT reported an
+expired certificate chain from the Princeton Ubuntu mirror, then missing font
+packages on both attempts. The browser source helper, download supervisor and CI
+workflow have the same Git blobs as main. Route this evidence through the existing
+single-mirror availability work (D200); preserve TLS verification and package
+signature checks. Obtain green CI on the repaired tree before resuming this
+backlog move; an unchanged retry does not repair the mirror refusal.
