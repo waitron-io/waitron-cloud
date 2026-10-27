@@ -3699,6 +3699,10 @@ The translation-consent activity fixture also reproduces the refusal under a
 100 ms setup delay. Its four clock setups now start earlier and freeze at the
 original instant before loading the app. Original journeys and delayed variants
 retain every consent, retry, navigation, account, write and deadline check.
+The account-security cooldown fixture also reproduces the refusal with a 100 ms
+setup delay and now freezes from the earlier start. Original and delayed journeys
+retain all six passkey/session actions, request counts, disabled-control, countdown,
+retry and deadline checks across both languages, themes and viewport widths.
 No historical CI failure in these fixtures is attributed here.
 
 ## Password-change notification recovery link (D261)
