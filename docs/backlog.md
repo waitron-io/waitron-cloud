@@ -3271,6 +3271,18 @@ unique image tag, with a one-second limit, and always removes temporary files.
 Reproduce the image build when local Docker is available; passing CI does not explain
 the earlier timeout. Keep every verifier assertion and the existing build and job limits.
 
+## Storage startup configuration refusals (D446)
+
+Malformed token-duration strings are now checked before the fixture allocates a
+private directory or requests an archive. Run
+`node --test scripts/ci-backup-storage-options.test.mjs` for native controls of
+missing units, partial matches, whitespace, negative and fractional durations,
+and an empty value that must not select the default. Accepted second, minute and
+hour formats and omitted options reach a deliberately refused download; that
+failure retains its cause and removes its private directory without retrying.
+These checks exercise the existing format rule. Real token issuance and expiry,
+store startup and concurrent valid-cache publication keep their separate gates.
+
 ## Existing storage-cache refusal qualification (D442)
 
 An invalid existing archive must fail before extraction or download, so a fixture
