@@ -38,6 +38,16 @@ pending read, and a current rate limit still applies after an account change.
 Server authority, browser integration and production delivery remain separate
 qualification gates.
 
+## Alert-preference HTTP response validation (D415)
+
+Malformed alert replies cannot replace your choices or confirm a save. Native
+HTTP/client/controller checks cover initial reads, refreshes and saves, including
+broken JSON and lost connections. An uncertain save stays retryable after you
+revert your choices; a valid reply confirms the server's choices. Current permission
+loss clears the form, and rate limits retain their wait before another request.
+Server authority, browser integration and production mail delivery remain separate
+qualification gates; database suites run in CI while local Docker is unavailable.
+
 ## Account request proof and transport boundaries (D406)
 
 The account request client selects one CSRF cookie for the connection protocol.
