@@ -3543,6 +3543,15 @@ the next genuine Linux timeout, then reproduce and fix its cause while preservin
 the existing assertions and deadlines. See the [investigation and qualification
 limits](backlog/storage-authority-timeout.md).
 
+## Authenticator replies after account changes (D399)
+
+Delayed authenticator reads, setup, activation, removal, regeneration, cancellation
+and follow-up session reads are covered across account changes and sign-out.
+Old replies must preserve the current account's pending work and setup draft,
+without returning old recovery codes or applying old cooldowns. These native
+controller checks leave browser/session integration and production qualification
+open; they do not change server authority or retry policy.
+
 ## Authenticator code format feedback (D237)
 
 Malformed authenticator codes now stay in their field with an explanation, before
