@@ -2453,8 +2453,8 @@ implementation or production evidence.
   `@pnpm/linux-x64@9.15.0` terminated. No backup tests ran in that job. Retain
   verification and capture the missing HTTP stage before choosing a repair;
   neither the underlying cause nor a connection to portal changes is established.
-  D154 adds a read-only observer to each pnpm setup in the standard and cost
-  workflows. It records fixed package-metadata endpoints, HTTP status, interrupted
+  D154 adds a read-only observer to pnpm setup in every Cloud workflow.
+  It records fixed package-metadata endpoints, HTTP status, interrupted
   metadata transfers, child exit or signal, and the final process exit. Each Node
   thread has separate limits for normal, failure and child records. It
   omits URL credentials, hosts other than the public npm label, queries, headers,
@@ -2475,18 +2475,25 @@ implementation or production evidence.
   Other native controls cover cut-off tarballs, HTTP refusals, paused caller-owned
   bodies, unhandled errors, redaction and bounded output.
   This does not attribute the reset in [merge run 40712695671, root partition 4](https://github.com/waitron-io/waitron-cloud/actions/runs/40712695671/job/122902175152).
-  That job records npm failure before tests but no request endpoint. Await a
-  labelled recurrence before choosing recovery. Requests, retries, time limits,
-  versions and signature verification remain unchanged. Native diagnostics omit
+  That job records npm failure before tests but no request endpoint. The bounded
+  setup now recovers transient transport failures without waiting for recurrence.
+  Native diagnostics omit
   unknown packages, tarball versions, credentials, queries, headers and bodies;
   body decoding after a completed wire transfer remains outside their evidence.
-  The exact locked 11.19.0 bootstrap completes its verified 9.15.0 switch in a
-  fresh native probe. Linux qualification runs the controlled failure checks and
-  observes the unchanged setup action; a later successful setup is recovery
-  evidence only. Keep the current verified installer while awaiting a traced
-  recurrence. Do not copy Waitron's bounded setup script unchanged: it replaces
-  this self-update with `npm install`. Any later bounded recovery must retain
-  signature verification, pinned versions and existing deadlines.
+  Every workflow uses `scripts/ci-setup-pnpm.mjs` before using or caching pnpm.
+  The script retains the action's integrity-locked 11.19.0 bootstrap and its
+  signature-verified self-update to the repository's pinned 9.15.0. You get at most
+  three fresh attempts, each limited to 30 seconds with two seconds to kill an
+  unresponsive child and its descendants. Known transport failures and stalled
+  installs can retry; explicit integrity, signature or identity refusals, unknown
+  errors and a wrong or unconfirmed final version fail immediately. Each failed
+  attempt keeps its diagnostic output. Only the confirmed target reaches later
+  steps through `GITHUB_PATH` and `PNPM_HOME`. The existing npm request budgets
+  and workflow deadlines remain unchanged. Native controls exercise recovery,
+  exhaustion, refusal, cancellation and process cleanup; an isolated real install
+  completes the verified switch and prints 9.15.0. Linux CI qualifies the workflow
+  wiring and controlled failures. The historical network cause remains unknown;
+  retain any new labelled recurrence for D154 attribution.
   Package-only changes omit the two-venue milestone receipt when both immutable
   revisions retain its audited regular-file inputs, test command and CI wiring.
   These tests exercise validators and receipt composition; their guarded CLI
