@@ -31,6 +31,13 @@ async function run(mode, extraEnv = {}) {
   writeFileSync(join(root, 'github-path'), '');
   writeFileSync(join(root, 'github-env'), '');
   writeFileSync(join(root, 'unrelated'), 'preserve me');
+  writeFileSync(join(root, 'descendant.mjs'), `
+import {appendFileSync, writeFileSync} from 'node:fs';
+appendFileSync(process.env.FIXTURE_ROOT + '/pids', process.pid + '\\n');
+process.on('SIGTERM', () => {});
+setTimeout(() => writeFileSync(process.env.FIXTURE_ROOT + '/escaped', 'escaped'), 1500);
+setInterval(() => {}, 1000);
+`);
   const bootstrap = `
 import {appendFileSync, mkdirSync, writeFileSync} from 'node:fs';
 import {join} from 'node:path';
@@ -72,8 +79,7 @@ if (mode === 'integrity') {console.error('npm error code EINTEGRITY ECONNRESET')
 if (mode === 'unknown') {console.error('unclassified failure'); process.exit(1);}
 if (mode === 'hang' || mode === 'ignore-term' || mode === 'descendant') {
   if (mode !== 'hang') process.on('SIGTERM', () => {});
-  if (mode === 'descendant') require('node:child_process').spawn(process.execPath, ['-e',
-    "const fs = require('node:fs'); fs.appendFileSync(process.env.FIXTURE_ROOT + '/pids', process.pid + '\\n'); process.on('SIGTERM', () => {}); setTimeout(() => fs.writeFileSync(process.env.FIXTURE_ROOT + '/escaped', 'escaped'), 1500); setInterval(() => {}, 1000);"]);
+  if (mode === 'descendant') require('node:child_process').spawn(process.execPath, [path.join(root, 'descendant.mjs')], {stdio: 'inherit'});
   setInterval(() => {}, 1000);
 } else {
   fs.mkdirSync('node_modules/pnpm/bin', {recursive: true});
@@ -111,7 +117,8 @@ if (mode === 'hang' || mode === 'ignore-term' || mode === 'descendant') {
     const read = name => existsSync(join(root, name)) ? readFileSync(join(root, name), 'utf8') : '';
     if (mode === 'descendant') await new Promise(resolve => setTimeout(resolve, 1800));
     return {...result, stdout, stderr, elapsed: performance.now() - started, escaped: existsSync(join(root, 'escaped')),
-      attempts: Number(read('count')), published: read('github-path'), exported: read('github-env'),
+      attempts: Number(read('count')), recordedChildren: read('pids').trim().split('\n').length,
+      published: read('github-path'), exported: read('github-env'),
       unrelated: read('unrelated'), root};
   } finally {
     clearTimeout(stop);
@@ -148,6 +155,7 @@ test('timed-out attempts stop descendants that ignore the polite signal', async 
   const result = await run('descendant', {PNPM_SETUP_ATTEMPT_MS: '500'});
   assert.equal(result.code, 1, result.stderr);
   assert.equal(result.attempts, 3);
+  assert.equal(result.recordedChildren, 6, 'each attempt must start the stubborn descendant it claims to stop');
   assert.equal(result.escaped, false, 'an owned descendant outlived setup');
 });
 

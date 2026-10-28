@@ -6,13 +6,13 @@ import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import test from 'node:test';
 
-// A setup action that inherits npm's long registry waits can consume the test budget.
+// A setup process that inherits npm's long registry waits can consume the test budget.
 test('every pnpm bootstrap refuses an unresponsive registry within its network budget', {timeout: 50_000}, async () => {
   const workflow = readFileSync(new URL('../.github/workflows/ci.yml', import.meta.url), 'utf8');
   const steps = [...workflow.matchAll(/      - run: node scripts\/ci-setup-pnpm\.mjs\n([\s\S]*?)(?=      - |^  [a-z]|$(?![\s\S]))/gm)];
   assert.equal(steps.length, 5, 'Every pnpm bootstrap must be exercised');
   const configurations = steps.map(([, source]) => Object.fromEntries([...source.matchAll(/          (npm_config_[a-z_]+): ['"]?([0-9]+)['"]?\s*$/gm)].map(([, key, value]) => [key, value])));
-  // Each actual action receives the same policy; one npm child exercises that policy.
+  // Each setup receives the same policy; one npm child exercises that policy.
   for (const configuration of configurations) assert.deepEqual(configuration, configurations[0]);
   const root = mkdtempSync(join(tmpdir(), 'cloud-pnpm-network-'));
   let requests = 0;
