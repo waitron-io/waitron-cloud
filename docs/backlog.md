@@ -3235,6 +3235,17 @@ a recurrence and reproduce its cause; passing CI does not explain the earlier fa
 Keep every resource, isolation, cleanup and later-snapshot assertion and deadline.
 Local Docker reproduction remains blocked until 3 November.
 
+## Verifier source isolation from local edits (D445)
+
+Your verifier build must use the pinned committed source even when its checkout
+contains local edits or private files. Run
+`node --test scripts/ci-verifier-source-isolation.test.mjs` to check staged and
+unstaged tracked edits, ignored credentials, untracked venue data and a locally
+replaced release generator. Native temporary Git fixtures capture the build
+context through a command stub, preserve local inputs and remove private build
+directories. These checks do not run Docker or build an image. Keep real image
+qualification in CI and leave the historical image-build timeout investigation open.
+
 ## Verifier build refusal and cleanup controls (D443)
 
 A refused build must leave no private build directory or successful image result.
