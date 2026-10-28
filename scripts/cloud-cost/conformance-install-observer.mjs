@@ -3,8 +3,8 @@ const count=value=>Number.isSafeInteger(value)&&value>=0?value:undefined;
 const scriptStages=new Set(['preinstall','install','postinstall','prepublish','preprepare','prepare','postprepare']);
 
 export function createInstallObserver(source) {
-  let buffer='',discarding=false,discardedLines=0,overflow=false;
-  const packages=new Map(),scripts=new Map(),errors=new Set();
+  let buffer='',discarding=false,discardedLines=0,overflow=false,rootName;
+  const packages=new Map(),scripts=new Map(),failedScripts=new Map(),errors=new Set();
   const fromPath=value=>{
     if(typeof value!=='string'||!source||!value.startsWith(source+'/node_modules/.pnpm/'))return null;
     const folder=value.slice((source+'/node_modules/.pnpm/').length).split('/')[0];
@@ -13,17 +13,33 @@ export function createInstallObserver(source) {
     const id=packageId(name.startsWith('@')?name.replace('+','/'):name);
     return packages.has(id)?id:null;
   };
+  const failed=(id,stage,exitCode)=>{
+    if(!id||!scriptStages.has(stage)||count(exitCode)===undefined||exitCode===0)return;
+    const key=id+':'+stage;scripts.delete(key);
+    if(failedScripts.size<2048)failedScripts.set(key,{packageId:id,stage,exitCode});else overflow=true;
+  };
   const consume=line=>{
     let record;try{record=JSON.parse(line);}catch{return;}
     if(!record||typeof record!=='object')return;
-    if(record.name==='pnpm'&&record.level==='error'&&typeof record.code==='string'&&/^ERR_PNPM_[A-Z0-9_]{1,80}$/.test(record.code)) {
+    if(record.name==='pnpm:package-manifest'&&record.prefix===source){
+      const name=record.initial?.name;
+      if(typeof name==='string'&&packageId(name+'@0'))rootName=name;
+    }
+    if(record.name==='pnpm'&&record.level==='error'&&typeof record.code==='string'&&(/^ERR_PNPM_[A-Z0-9_]{1,80}$/.test(record.code)||record.code==='ELIFECYCLE')) {
       if(errors.size<20)errors.add(record.code);else overflow=true;
+      if(record.code==='ELIFECYCLE'){
+        const id=rootName&&record.pkgname===rootName?'workspace':packageId(record.pkgid);
+        failed(id==='workspace'||packages.has(id)?id:null,record.stage,record.errno);
+      }
     }
     if(record.name==='pnpm:lifecycle'&&scriptStages.has(record.stage)) {
       const id=source&&record.depPath===source?'workspace':fromPath(record.depPath);
       if(!id)return;
       const key=id+':'+record.stage;
-      if(count(record.exitCode)!==undefined)scripts.delete(key);
+      if(count(record.exitCode)!==undefined){
+        scripts.delete(key);
+        failed(id,record.stage,record.exitCode);
+      }
       else if(scripts.size<2048)scripts.set(key,{packageId:id,stage:record.stage});else overflow=true;
       return;
     }
@@ -60,7 +76,8 @@ export function createInstallObserver(source) {
         imported:states.filter(s=>s.imported).length,pendingDownloadCount:downloads.length,pendingImportCount:imports.length,
         pendingDownloads:downloads.slice(0,20).map(({packageId,attempt,size,downloaded})=>({packageId,...attempt===undefined?{}:{attempt},...size===undefined?{}:{size},...downloaded===undefined?{}:{downloaded}})),
         pendingImports:imports.slice(0,20).map(s=>s.packageId),activeScriptCount:scripts.size,activeScripts:[...scripts.values()].slice(0,20),
-        errorCodes:[...errors],discardedLines,truncated:overflow||downloads.length>20||imports.length>20||scripts.size>20};
+        failedScriptCount:failedScripts.size,failedScripts:[...failedScripts.values()].slice(0,20),
+        errorCodes:[...errors],discardedLines,truncated:overflow||downloads.length>20||imports.length>20||scripts.size>20||failedScripts.size>20};
     },
   };
 }

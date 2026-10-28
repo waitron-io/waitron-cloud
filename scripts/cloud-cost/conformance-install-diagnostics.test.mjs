@@ -1,10 +1,11 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {spawn} from 'node:child_process';
-import {mkdtempSync,mkdirSync,writeFileSync,readFileSync,existsSync,rmSync} from 'node:fs';
+import {spawn,spawnSync} from 'node:child_process';
+import {mkdtempSync,mkdirSync,writeFileSync,readFileSync,existsSync,rmSync,realpathSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {setTimeout as delay} from 'node:timers/promises';
+import {createInstallObserver} from './conformance-install-observer.mjs';
 
 // Dropping the source-install observer must hide the unfinished download and fail this test.
 for(const outcome of ['timeout','failure','complete','interrupt'])test('setup identifies unfinished installation work on '+outcome,{timeout:15000},async()=>{
@@ -68,4 +69,21 @@ setInterval(()=>{},1000);
     }
     rmSync(root,{recursive:true,force:true});
   }
+});
+
+// A real pnpm refusal protects its event shape, which differs from ERR_PNPM_* errors.
+test('real offline pnpm script refusal retains its fixed reason and failed script',{timeout:60000},()=>{
+  const root=realpathSync(mkdtempSync(join(tmpdir(),'cost-install-script-refusal-')));
+  try{
+    writeFileSync(join(root,'package.json'),JSON.stringify({name:'install-script-refusal',private:true,scripts:{postinstall:'node -e "process.exit(7)"'}}));
+    const locked=spawnSync('pnpm',['install','--lockfile-only','--ignore-scripts'],{cwd:root,encoding:'utf8',timeout:20000});
+    assert.equal(locked.status,0);
+    const refused=spawnSync('pnpm',['install','--frozen-lockfile','--offline','--reporter=ndjson'],{cwd:root,encoding:'utf8',timeout:20000});
+    assert.equal(refused.status,7);
+    const observer=createInstallObserver(root);observer.write(Buffer.from(refused.stdout));observer.end();
+    const summary=observer.snapshot();
+    assert.deepEqual(summary.activeScripts,[]);assert.deepEqual(summary.errorCodes,['ELIFECYCLE']);
+    assert.deepEqual(summary.failedScripts,[{packageId:'workspace',stage:'postinstall',exitCode:7}]);
+    for(const hidden of [root,'process.exit','install-script-refusal'])assert.equal(JSON.stringify(summary).includes(hidden),false);
+  }finally{rmSync(root,{recursive:true,force:true});}
 });

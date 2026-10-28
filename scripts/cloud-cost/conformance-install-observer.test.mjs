@@ -72,3 +72,27 @@ test('underscores in public package names are retained when an import finishes',
   send(o,{name:'pnpm:progress',status:'imported',to:'/owned/source/node_modules/.pnpm/string_decoder@1.3.0/node_modules/string_decoder'});
   assert.deepEqual(o.snapshot().pendingImports,[]);assert.equal(o.snapshot().imported,1);
 });
+test('failed root and dependency scripts remain identified after leaving the active set',()=>{
+  const o=createInstallObserver('/owned/source');progress(o,'esbuild@0.28.2','resolved');
+  const depPath='/owned/source/node_modules/.pnpm/esbuild@0.28.2/node_modules/esbuild';
+  for(const [path,stage,exitCode] of [[depPath,'postinstall',1],['/owned/source','postinstall',7]]){
+    send(o,{name:'pnpm:lifecycle',depPath:path,stage,script:'private-command'});
+    send(o,{name:'pnpm:lifecycle',depPath:path,stage,exitCode,line:'private-output'});
+  }
+  send(o,{name:'pnpm',level:'error',code:'ELIFECYCLE',message:'private-failure'});
+  assert.deepEqual(o.snapshot().activeScripts,[]);
+  assert.deepEqual(o.snapshot().failedScripts,[{packageId:'esbuild@0.28.2',stage:'postinstall',exitCode:1},{packageId:'workspace',stage:'postinstall',exitCode:7}]);
+  assert.equal(o.snapshot().failedScriptCount,2);assert.deepEqual(o.snapshot().errorCodes,['ELIFECYCLE']);
+  assert.equal(JSON.stringify(o.snapshot()).includes('private'),false);
+});
+test('failed scripts retain bounded labels with an explicit total',()=>{
+  const o=createInstallObserver('/owned/source');
+  for(let n=0;n<30;n++){
+    const id='builder-'+n+'@1.0.0';progress(o,id,'resolved');progress(o,id,'fetched');
+    const depPath='/owned/source/node_modules/.pnpm/'+id+'/node_modules/builder-'+n;
+    send(o,{name:'pnpm:progress',status:'imported',to:depPath});
+    send(o,{name:'pnpm:lifecycle',depPath,stage:'install',exitCode:1});
+  }
+  const s=o.snapshot();assert.equal(s.failedScriptCount,30);assert.equal(s.failedScripts.length,20);assert.equal(s.truncated,true);
+  assert.deepEqual(s.pendingDownloads,[]);assert.deepEqual(s.pendingImports,[]);
+});

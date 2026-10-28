@@ -34,8 +34,8 @@ missing package, transfer or install script and the underlying cause remain unkn
 
 You now get a bounded `install-progress` summary every ten seconds and when the
 installer closes. It lists unfinished public package downloads with their observed
-attempt and byte counts, packages awaiting import, active install scripts and fixed
-pnpm error codes. The structured reporter supplies these events; raw messages,
+attempt and byte counts, packages awaiting import, active root and dependency
+install scripts, failed scripts with their exit codes, and fixed pnpm error codes. The structured reporter supplies these events; raw messages,
 script commands, URLs, host names, environment values and script output are excluded.
 A summary retains at most 2,048 packages and displays 20 labels per category;
 `truncated` and `discardedLines` expose incomplete diagnostics. Package totals count
@@ -50,3 +50,9 @@ nonzero and zero exits, cancellation, periodic reports and cleanup. These checks
 qualify the observer, not the historical Linux failure. Lane D must inspect the next
 labelled Linux recurrence before proposing a repair. Genuine local container
 qualification stays blocked while Docker is down.
+
+The pinned source has a root `prepare` script and no install scripts in workspace
+sub-packages. Extend the observer before relying on such scripts in a later source
+revision; sub-package paths are not currently labelled. A real offline pnpm failure
+qualifies the retained `ELIFECYCLE` code and failed-script exit status without
+printing the command or its output. Other non-pnpm transport codes remain unqualified.
