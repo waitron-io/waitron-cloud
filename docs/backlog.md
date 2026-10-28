@@ -59,6 +59,17 @@ pending read, and a current rate limit still applies after an account change.
 Server authority, browser integration and production delivery remain separate
 qualification gates.
 
+## Alert-preference transport refusals and retry waits (D429)
+
+If an alert read or save has no usable reply, your choices remain unconfirmed
+until you explicitly retry or read the current server state. Native tests exercise
+the real HTTP client and controller with unreadable bodies and valid-looking
+preferences carried by refused HTTP responses. Pending requests cannot dispatch again or change the
+draft. Server retry waits apply through sign-out and account changes, including
+the exact end of seconds and date values. Server authority, browser integration
+and production mail delivery remain separate qualification gates; database
+suites run in CI while local Docker is unavailable.
+
 ## Alert-preference HTTP response validation (D415)
 
 Malformed alert replies cannot replace your choices or confirm a save. Native
