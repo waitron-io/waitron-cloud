@@ -7,6 +7,7 @@ import { requireCurrentHistory } from '../src/continuity.ts';
 import { scope, bases, binding, payload } from './fixtures.ts';
 import { storeFixture, blocked } from './store-fixture.ts';
 import { retain } from './continuity-fixture.ts';
+import { assertWorkerResults } from './worker-diagnostics.ts';
 import type { PoolClient } from 'pg';
 import type { AllocationReceipt } from '../src/types.ts';
 
@@ -146,7 +147,7 @@ for (const denial of ['entitlement', 'custody', 'ownership'] as const) {
     }
   });
 }
-test('two independent authenticated workers allocate one shared namespace and retain exact retries', async () => {
+test('two independent authenticated workers allocate one shared namespace and retain exact retries', async t => {
   const s = await storeFixture();
   try {
     const a = await s.venue(),
@@ -163,17 +164,21 @@ test('two independent authenticated workers allocate one shared namespace and re
       input: v.input,
     }));
     const results = await Promise.all(inputs.map((input) => s.a.worker('store-reserve', input)));
-    assert.deepEqual(
-      results.map((r) => r.receipt?.payload.allocation.installationIdentity).sort(),
-      ['C000001', 'C000002'],
-    );
-    assert.notEqual(results[0].pid, results[1].pid);
-    assert.notEqual(results[0].pid, process.pid);
+    assertWorkerResults('reserve', results, () => {
+      assert.deepEqual(
+        results.map((r) => r.receipt?.payload.allocation.installationIdentity).sort(),
+        ['C000001', 'C000002'],
+      );
+      assert.notEqual(results[0].pid, results[1].pid);
+      assert.notEqual(results[0].pid, process.pid);
+    }, line => t.diagnostic(line));
     const retries = await Promise.all(inputs.map((input) => s.a.worker('store-reserve', input)));
-    assert.deepEqual(
-      retries.map((r) => r.receipt),
-      results.map((r) => r.receipt),
-    );
+    assertWorkerResults('retry', retries, () => {
+      assert.deepEqual(
+        retries.map((r) => r.receipt),
+        results.map((r) => r.receipt),
+      );
+    }, line => t.diagnostic(line));
     await retain('task3-two-worker-proof', {
       workerPids: results.map((r) => r.pid),
       receipts: results.map((r) => r.receipt),
