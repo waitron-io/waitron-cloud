@@ -2977,6 +2977,12 @@ implementation or production evidence.
   signed-out notice once the session check confirms it ended. Lost replies still
   reconcile; passive session loss stays quiet and expiry keeps its own notice.
   Database-free English and Spanish browser checks cover both themes and widths.
+  Direct controller checks hold an old revocation reply or its follow-up list
+  across account changes, including switching away and back. Late success,
+  lost replies and refused requests cannot change the current list, its pending
+  state or cooldown, show feedback, request another list or recheck sign-in.
+  Both pending and completed reads for the current account still take effect.
+  These native checks use controlled HTTP replies; database authority stays in CI.
   While your session is checked, the home page uses the account heading in the page
   and browser tab. If the check fails, that heading stays above the retry message.
   Stubbed Chromium checks cover both languages, themes and phone/desktop widths,
