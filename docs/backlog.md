@@ -400,6 +400,18 @@ exact expiry, including both Retry-After formats. Run
 These checks preserve the existing permissions and waits. Server redaction,
 browser file downloads and production-network qualification remain separate gates.
 
+## Usage-read transport refusals and retry waits (D434)
+
+If a usage read loses its reply, your earlier totals remain available until you
+explicitly retry. Native HTTP/client/controller checks cover unreadable replies,
+valid-looking totals carried by refused responses and permission loss that clears
+private totals. Pending reads cannot dispatch again, and accepted totals load once
+until refreshed. Server retry waits survive account and organisation changes and
+backward clock adjustments, through the exact end of seconds and date values.
+Runtime, accounting and existing assertions stay unchanged. Server authority,
+browser integration and production metering remain separate qualification gates;
+database suites run in CI while local Docker is unavailable.
+
 ## Repository licence
 
 The root `LICENSE` is copied byte for byte from Waitron's Elastic License 2.0 text.
@@ -3148,18 +3160,6 @@ implementation or production evidence.
   policies remain open. See [the complete requirements and deliberate limits](backlog/data-lifecycle.md),
   including unresolved verifier failures and capacity qualification.
 
-
-## Usage-read transport refusals and retry waits (D434)
-
-If a usage read loses its reply, your earlier totals remain available until you
-explicitly retry. Native HTTP/client/controller checks cover unreadable replies,
-valid-looking totals carried by refused responses and permission loss that clears
-private totals. Pending reads cannot dispatch again, and accepted totals load once
-until refreshed. Server retry waits survive account and organisation changes and
-backward clock adjustments, through the exact end of seconds and date values.
-Runtime, accounting and existing assertions stay unchanged. Server authority,
-browser integration and production metering remain separate qualification gates;
-database suites run in CI while local Docker is unavailable.
 
 ## Backup catalogue replies after account and venue changes (D396)
 
