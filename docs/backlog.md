@@ -3232,6 +3232,21 @@ a recurrence and reproduce its cause; passing CI does not explain the earlier fa
 Keep every resource, isolation, cleanup and later-snapshot assertion and deadline.
 Local Docker reproduction remains blocked until 3 November.
 
+## Verifier build refusal and cleanup controls (D443)
+
+A refused build must leave no private build directory or successful image result.
+Run `node --test scripts/ci-verifier-build-refusals.test.mjs` to check missing
+build inputs, invalid or unavailable source commits, release-generation failure
+and a refused build command. A successful command is the control. Each case
+uses a private temporary Git repository and directory; the command stub records
+the build boundary without contacting Docker or building an image. The checks
+also verify the pinned revision reaches the release stamp and image label.
+
+These native controls qualify refusal and cleanup paths. They do not explain
+the earlier CI image-build timeout or establish that an image builds successfully.
+Keep the real image and PostgreSQL qualification in CI while local Docker is
+unavailable; the existing source pins, build limits and runtime rules remain.
+
 ## Bound verifier fixture build timeout (D312)
 
 Find why the bound verifier fixture image exceeded its two-minute build limit in CI.
