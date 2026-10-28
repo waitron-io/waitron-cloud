@@ -130,6 +130,7 @@ for (const entry of [
     const f = fixture(t);
     let now = Date.parse('2026-10-28T10:00:00.000Z');
     t.mock.method(Date, 'now', () => now);
+    let elapsed = 0; t.mock.method(performance, 'now', () => elapsed);
     f.replies.push({body: summary()}); await f.controller.load(); f.controller.refresh();
     f.replies.push({status: entry.status, body: {error: 'temporarily_unavailable'}, retry: entry.retry});
     await f.controller.load();
@@ -146,11 +147,11 @@ for (const entry of [
     assert.equal(f.controller.waiting, 2);
     const changes = f.changes();
     await f.controller.load();
-    now -= 1_000; await f.controller.load(); assert.equal(f.controller.waiting, 3);
-    now += 2_999; await f.controller.load(); assert.equal(f.controller.waiting, 1);
+    now -= 1_000; await f.controller.load(); assert.equal(f.controller.waiting, 2);
+    elapsed = 1_999; now += 2_999; await f.controller.load(); assert.equal(f.controller.waiting, 1);
     assert.equal(f.requests.length, 2); assert.equal(f.changes(), changes);
     assert.equal(f.controller.pending, false);
-    now++;
+    elapsed++; now++;
     assert.equal(f.controller.waiting, 0);
     const organisationId = navigation === 'same selection' ? first : second;
     f.replies.push({body: summary(organisationId, '42')}); await f.controller.load();

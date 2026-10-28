@@ -414,24 +414,30 @@ exact expiry, including both Retry-After formats. Run
 These checks preserve the existing permissions and waits. Server redaction,
 browser file downloads and production-network qualification remain separate gates.
 
-## Usage-read transport refusals and retry waits (D434)
+## Usage-read transport refusals and retry waits (D434, D436)
 
 If a usage read loses its reply, your earlier totals remain available during an
 explicit retry and after another failure. A successful read replaces them;
 permission loss or a changed account or organisation clears them. Native
 HTTP/client/controller checks cover unreadable replies, valid-looking totals
 carried by refused responses, duplicate reads and exact seconds/date retry
-boundaries through navigation and backward clock adjustments. Runtime, accounting
-and existing assertions stay unchanged. Run
+boundaries through navigation. Run
 `node --test apps/portal/test/usage-transport-boundary.test.ts`.
 
-The existing wall-clock deadline can lengthen a wait, or revive an expired wait,
-when your system clock moves backward. Decide how relative waits and clock
-corrections should interact before changing that policy; a one-hour correction
-reproduces a 3,602-second wait after a two-second server delay. The longer-wait
-retention branch still needs a dedicated check. Server authority, browser
-integration and production metering remain separate qualification gates;
-database suites run in CI while local Docker is unavailable.
+Your usage retry wait measures elapsed time, so changing your system clock
+cannot lengthen, bypass or revive it. HTTP-date waits use the response's `Date`
+when valid, otherwise your clock at receipt; past dates give no wait. The usage
+wait contributes its remaining delay to the app countdown; another panel may hold
+that countdown for longer. Native clock checks and
+English/Spanish browser checks at 390 and 1280 pixels in both themes cover these
+boundaries. Run `node --test apps/portal/test/usage-retry-clock*.test.ts`.
+The longer-wait retention branch still needs a dedicated check. Other portal
+controllers retain their existing clock policy: an expired alert retry wait
+revives after a backward clock correction, without another request. A refusal
+with no server delay can also leave such a deadline. That separate issue remains
+open. Server authority and production
+metering remain separate qualification gates; database suites run in CI while
+local Docker is unavailable.
 
 ## Repository licence
 

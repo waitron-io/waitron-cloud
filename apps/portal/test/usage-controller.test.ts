@@ -37,7 +37,8 @@ test('account and organisation changes fence delayed replies and clear private t
  assert.equal(controller.summary,undefined);assert.equal(controller.organisationId,undefined);
 });
 
-test('retry-after blocks repeated reads and an ownership failure clears totals',async()=>{
+test('retry-after blocks repeated reads and an ownership failure clears totals',async t=>{
+ let elapsed=0;t.mock.method(performance,'now',()=>elapsed);
  let calls=0,mode:'ok'|'limited'|'denied'='ok';
  const controller=new UsageController(()=>{},async<T>():Promise<ApiResult<T>>=>{
   calls++;
@@ -48,5 +49,5 @@ test('retry-after blocks repeated reads and an ownership failure clears totals',
  controller.account('owner');controller.organisation(first);await controller.load();assert(controller.summary);
  controller.refresh();mode='limited';await controller.load();assert.equal(controller.error,'limited');const limitedCalls=calls;
  await controller.load();assert.equal(calls,limitedCalls);assert(controller.waiting>0);
- controller.retryAt=0;mode='denied';await controller.load();assert.equal(controller.error,'forbidden');assert.equal(controller.summary,undefined);
+ elapsed=60_000;mode='denied';await controller.load();assert.equal(controller.error,'forbidden');assert.equal(controller.summary,undefined);
 });
