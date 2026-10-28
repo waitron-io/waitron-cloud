@@ -22,11 +22,14 @@ function fixture(t: TestContext) {
   }
   const replies: Reply[] = [];
   const requests: Array<{url: string; init: RequestInit}> = [];
+  const unexpected: string[] = [];
+  // The client catches transport errors, so fixture violations must fail outside fetch.
+  t.after(() => assert.deepEqual(unexpected, [], 'every HTTP request needs options and an explicit outcome'));
   t.mock.method(globalThis, 'fetch', async (url: unknown, init?: RequestInit) => {
-    assert.ok(init);
-    requests.push({url: String(url), init});
-    assert.ok(replies.length, 'each HTTP request needs an explicit outcome');
-    const reply = replies.shift()!;
+    if (!init) unexpected.push('missing request options');
+    requests.push({url: String(url), init: init ?? {}});
+    const reply = replies.shift();
+    if (!reply) {unexpected.push('missing HTTP outcome'); throw new Error('unplanned HTTP request');}
     if (reply.lost) throw new TypeError('private connection failure');
     const response = new Response(reply.status === 204 ? null : JSON.stringify(reply.body), {
       status: reply.status ?? 200, headers: reply.retry ? {'Retry-After': reply.retry} : {},
@@ -141,7 +144,7 @@ for (const operation of ['load', 'begin', 'cancel'] as const) for (const format 
     authority(c);
     now += 29_999;
     await c.load(); await c.refresh(); await c.begin(); await c.cancel();
-    assert.equal(f.requests.length, 3, 'all management requests stay blocked one millisecond before the boundary');
+    assert.equal(f.requests.length, 3, 'no attempted request dispatches one millisecond before the boundary');
     assert.equal(c.pending, false); assert.equal(c.password, 'current password');
     assert.equal(c.retryAt, 1_800_000_030_000);
     now++;

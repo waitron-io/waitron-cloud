@@ -3807,7 +3807,7 @@ without repeating the change. Native HTTP/client/controller tests cover current,
 other, expired and unreadable session replies. Cancellation clears its setup
 secret and proof inputs even when its reply is lost, so continuing requires an
 explicit fresh setup. Seconds and date retry waits survive account changes and
-block management until their exact boundary. Runtime and existing tests stay
+block status and setup requests until their exact boundary. Runtime and existing tests stay
 unchanged; server authority, browser and production qualification remain separate.
 
 ## Authenticator HTTP response boundaries (D418)
