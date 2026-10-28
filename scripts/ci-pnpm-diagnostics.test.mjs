@@ -9,7 +9,7 @@ const repository = fileURLToPath(new URL('../', import.meta.url)).replace(/\/$/,
 const marker = 'pnpm-setup-diagnostic ';
 function setupOptions(file) {
   const workflow = readFileSync(new URL(`../.github/workflows/${file}`, import.meta.url), 'utf8');
-  return [...workflow.matchAll(/      - uses: pnpm\/action-setup@v6\n([\s\S]*?)(?=      - |^  [a-z]|$(?![\s\S]))/gm)]
+  return [...workflow.matchAll(/      - run: node scripts\/ci-setup-pnpm\.mjs\n([\s\S]*?)(?=      - |^  [a-z]|$(?![\s\S]))/gm)]
     .map(([, step]) => (step.match(/NODE_OPTIONS: (.+)/)?.[1] ?? '')
       .replaceAll('${{ github.workspace }}', repository));
 }
@@ -110,8 +110,8 @@ test('setup reports a child process signal and spawn refusal without command arg
   assert.doesNotMatch(result.stderr, /argument-secret|path-secret/);
 });
 
-test('standard and cost workflow setup invocations load the observer in the installer process', async () => {
-  for (const workflow of ['ci.yml', 'cloud-cost.yml']) {
+test('every workflow setup invocation loads the observer in the installer process', async () => {
+  for (const workflow of ['ci.yml', 'cloud-cost.yml', 'password-derivation-diagnostic.yml', 'relay-counter-diagnostic.yml', 'ui-release.yml']) {
     const configurations = setupOptions(workflow);
     assert.ok(configurations.length > 0, workflow);
     for (const options of configurations) {
