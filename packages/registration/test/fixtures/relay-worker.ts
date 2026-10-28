@@ -23,11 +23,13 @@ export async function fixture(initialise=migrate){
  }
  try{
  await admin.query(`CREATE SCHEMA ${schema}`);created=true;stage='migrate';await initialise(pool);
+ stage='issuer-create';
  const issuer=createLeaseIssuer(generateKeyPairSync('ed25519').privateKey.export({type:'pkcs8',format:'der'}).toString('base64url'));
  const grants:RelayConfig={mode:'local-proof',consentVersion:'local-v1',policy:{version:'local-v1',units:100,periodSeconds:3600,epoch:'2026-01-01T00:00:00.000Z',excess:'refuse',debit:'retain'},verifyOrigin:async r=>({...r,domainControl:true,httpsEndpoint:true,expiresAt:new Date(Date.now()+7200000).toISOString()})};
  // Worker tests exercise handoff and stop, so their counters start with the database fixture.
  stage='bounds-clock';
  const boundsEpoch=(await pool.query('SELECT clock_timestamp() AS now')).rows[0].now.toISOString();
+ stage='relay-config';
  const relay:RelayAdmissionConfig={mode:'local-proof',grants,payloadKeys:{activeKeyId:'p1',keys:{p1:randomBytes(32).toString('hex')}},replayKeys:{activeKeyId:'r1',keys:{r1:randomBytes(32).toString('hex')}},bounds:{version:'ample-local-v1',epoch:boundsEpoch,windowSeconds:3600,recipientLimit:1000,grantLimit:1000,queuedPayloadBytes:10000000,maxCounterRows:10000,recipientKeys:{activeKeyId:'b1',keys:{b1:randomBytes(32).toString('hex')}}}};
  const config={mode:'local-proof' as const,grants,payloadKeys:relay.payloadKeys,suppressionKeys:{activeKeyId:'s1',keys:{s1:randomBytes(32).toString('hex')}},smtpPort:Number(process.env.MAILPIT_TEST_SMTP_PORT)};
  const messages=new RelayMessages(pool,issuer,'http://localhost',relay);

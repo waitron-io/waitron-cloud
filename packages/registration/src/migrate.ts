@@ -19,8 +19,8 @@ export async function migrate(pool: Pool): Promise<void> {
       stage = 'ledger-compatibility';
       const unknown = await client.query('SELECT name FROM schema_migrations WHERE NOT (name = ANY($1::text[]))', [migrationNames]);
       if (unknown.rowCount) throw new Error('schema_incompatible');
-      for (const name of migrationNames) {
-        migrationOrdinal = migrationNames.indexOf(name) + 1;
+      for (const [index, name] of migrationNames.entries()) {
+        migrationOrdinal = index + 1;
         stage = 'migration-load';
         const sql = await readFile(new URL(`../migrations/${name}`, import.meta.url), 'utf8');
         const digest = createHash('sha256').update(sql).digest('hex');

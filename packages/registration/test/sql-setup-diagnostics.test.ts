@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import {EventEmitter} from 'node:events';
-import {createHash} from 'node:crypto';
+import crypto, {createHash} from 'node:crypto';
+import {syncBuiltinESMExports} from 'node:module';
+import {RelayGrantStore} from '../src/relay-grants.ts';
 import {readFile, mkdtemp, copyFile, rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
@@ -156,4 +158,36 @@ test('an unreadable migration names its load boundary without publishing the fil
   assert.deepEqual(lines,[[JSON.stringify({event:'cloud-migration-setup-failed',stage:'migration-load',migrationOrdinal:1})]]);
   assert.equal(db.queries.at(-1)!.sql,'ROLLBACK');assert.equal(db.released,false);
  }finally{await rm(root,{recursive:true,force:true});}
+});
+
+for(const [method,stage,queries] of [['generateKeyPairSync','issuer-create',1],['randomBytes','relay-config',2]] as const){
+ test(`relay preparation failure names ${stage} after the preceding database step succeeded`,async t=>{
+  const lines=capture(t);const error=new Error('private preparation failure');const db=relayDatabase(t,-1,null);
+  const patched=t.mock.method(crypto,method,()=>{throw error;});syncBuiltinESMExports();
+  try{
+   assert.equal((await thrown(()=>fixture(async()=>{}))).error,error);
+   assert.deepEqual(lines,[[JSON.stringify({event:'cloud-relay-fixture-setup-failed',stage})]]);
+   assert.equal(db.ended.length,2);assert.equal(db.queries.length,queries+1);
+  }finally{patched.mock.restore();syncBuiltinESMExports();}
+ });
+}
+test('venue key preparation failure is distinct from account insertion',async t=>{
+ const lines=capture(t);const error=new Error('private signing key');const db=relayDatabase(t,-1,null);const f=await fixture(async()=>{});
+ const patched=t.mock.method(crypto,'generateKeyPairSync',()=>{throw error;});syncBuiltinESMExports();
+ try{
+  assert.equal((await thrown(()=>f.venue())).error,error);
+  assert.deepEqual(lines,[[JSON.stringify({event:'cloud-relay-fixture-setup-failed',stage:'venue-prepare'})]]);
+  assert.equal(db.queries.length,2);
+ }finally{patched.mock.restore();syncBuiltinESMExports();await f.close();}
+});
+test('lease construction failure is distinct from the successfully approved grant',async t=>{
+ const lines=capture(t);const error=new Error('private lease');relayDatabase(t,-1,null);const f=await fixture(async()=>{});
+ const client=Object.assign(new EventEmitter(),{async query(){return {rows:[],rowCount:1,command:'SELECT',oid:0,fields:[]};},release(){}});
+ t.mock.method(Pool.prototype,'connect',async()=>client);
+ t.mock.method(RelayGrantStore.prototype,'approve',async()=>({id:'controlled-grant'} as any));
+ t.mock.method(f.issuer,'issue',()=>{throw error;});
+ try{
+  assert.equal((await thrown(()=>f.venue())).error,error);
+  assert.deepEqual(lines,[[JSON.stringify({event:'cloud-relay-fixture-setup-failed',stage:'lease-build'})]]);
+ }finally{await f.close();}
 });

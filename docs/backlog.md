@@ -3624,8 +3624,9 @@ A registration setup failure now reports its fixed boundary and, for migration
 work, its ordinal in the shipped migration list. You can distinguish the advisory
 lock, ledger creation and compatibility check, migration loading, lookup,
 application and ledger recording, and transaction start or finish. Relay fixtures
-identify schema creation, migration setup, the bounds clock, each initial insert,
-session creation and grant approval. These failure-only records omit SQL,
+identify schema creation, migration setup, issuer creation, the bounds clock, relay
+configuration, venue preparation, each initial insert, session creation, grant
+approval and lease construction. These failure-only records omit SQL,
 parameters, schema and account names, credentials and caught error values.
 Original errors, query text and arguments, rollback, cleanup and the five-second
 statement limit stay in force. Successful setup remains silent.
