@@ -52,6 +52,37 @@ observe('undici:request:error', ({request, error}) => {
   const record = requests.get(request);
   if (record) report({event: 'http-error', ...record, error: safeError(error)}, 'failure');
 });
+function nativeEndpoint(path) {
+  const metadata = endpoint(path);
+  if (metadata) return metadata;
+  try {
+    const decoded = decodeURIComponent(path.split('?')[0]);
+    const match = decoded.match(/^(.*)\/-\/([^/]+)-[0-9]+\.[0-9]+\.[0-9]+\.tgz$/);
+    if (match && endpoint(match[1]) && match[2] === match[1].split('/').at(-1)) return `${match[1]}/-/tarball`;
+  } catch { /* A non-package URL remains outside the allowlist. */ }
+}
+function onceSafely(emitter, event, listener) {
+  emitter.once(event, (...args) => {
+    try {listener(...args);}
+    catch { /* Observation must preserve the installer's event handling. */ }
+  });
+}
+observe('http.client.request.start', ({request}) => {
+  const path = nativeEndpoint(request.path);
+  if (!path) return;
+  const record = {id: ++sequence, client: 'node', endpoint: path,
+    registry: request.protocol === 'https:' && request.host === 'registry.npmjs.org' && request.getHeader('host') === 'registry.npmjs.org' ? 'npm' : 'other'};
+  report({event: 'http-start', ...record});
+  // errorMonitor records failures without handling them. Response listeners never
+  // read or resume the body, so npm keeps control of decoding and backpressure.
+  onceSafely(request, errorMonitor, error => report({event: 'http-error', ...record, stage: 'request', error: safeError(error)}, 'failure'));
+  onceSafely(request, 'response', response => {
+    record.status = response.statusCode;
+    report({event: response.statusCode >= 400 ? 'http-status' : 'http-headers', ...record}, response.statusCode >= 400 ? 'failure' : 'ordinary');
+    onceSafely(response, errorMonitor, error => report({event: 'http-error', ...record, stage: 'response', error: safeError(error)}, 'failure'));
+    onceSafely(response, 'end', () => report({event: 'http-transfer-complete', ...record}));
+  });
+});
 observe('child_process', ({process: child}) => {
   // errorMonitor observes an error without handling it or suppressing Node's normal failure.
   child.once(errorMonitor, error => report({event: 'child-error', childPid: child.pid ?? null, error: safeError(error)}, 'child'));
