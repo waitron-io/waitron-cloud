@@ -3625,17 +3625,14 @@ Its cause remains unknown. Reproduce the next labelled recurrence before changin
 transport, stop, accounting or cleanup rules. Genuine local Docker qualification
 remains unavailable until Docker returns; current-head Linux CI checks the delivery.
 
-
-D378 qualification is parked on a fiscal-allocation failure in
+The first D378 qualification also found an absent fiscal worker identity in
 [CI40604297872, job122540422831](https://github.com/waitron-io/waitron-cloud/actions/runs/40604297872/job/122540422831).
-The two-worker namespace test expected `C000001` and `C000002`, but one worker's
-allocation identity was absent from the observed results. The reason is absent from the assertion output;
-the cause remains unknown. The fiscal package and its expectations are unchanged
-from this branch's base. Preserve both exact identities and every authority,
-retry and concurrency check. Capture a bounded, private-data-free refusal reason
-or reproduce with PostgreSQL before changing the fixture or allocator. Local
-PostgreSQL reproduction waits for Docker to return. Do not rerun unchanged code
-for a passing result. All 13 new diagnostic cases pass in CI.
+The test expected `C000001` and `C000002`; its output did not identify why one
+worker returned no allocation. D380 now adds bounded worker-refusal reporting
+without exposing the response. The historical cause remains unknown. Preserve
+both exact identities and every authority, retry and concurrency check. Use the
+new reporting on a recurrence, or reproduce with PostgreSQL when Docker returns,
+before changing the fixture or allocator.
 
 ## Recovery refusal messages and pasted codes (D192)
 
