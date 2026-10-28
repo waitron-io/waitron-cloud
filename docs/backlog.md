@@ -3566,6 +3566,19 @@ original choice, page width, select width, pending state, selected value and
 deadline assertion remains. This qualifies the fixture's wait; it does not
 attribute a historical CI failure or qualify production recovery.
 
+
+## Recovery HTTP replies before confirming an outcome (D419)
+
+Native real-client/controller checks reject malformed inspection, approval, close
+and replacement replies without replacing the displayed recovery. An uncertain
+write triggers inspection; failed inspection keeps approval and replacement
+blocked until a valid reply confirms current state. Replies must match the
+request, selected source and displayed replacement proposal. Permission loss
+clears choices and confirmation; retry waits still apply. Snapshot and continuous
+source controls retain the exact approval payload. These checks do not qualify
+production recovery, prove the old server stopped or change recovery authority.
+
+
 ## Recovery screen scope and supplied choices (D158)
 
 Read the [recovery-screen scope detail](backlog/recovery-screen-scope.md) for the
