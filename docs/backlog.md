@@ -33,11 +33,10 @@ Docker is unavailable; historical browser startup failures remain unattributed.
 
 Native tests cover late list, enrollment and removal HTTP replies after account
 changes, returning accounts and sign-out, preserving current work and feedback.
-Open: an old browser enrollment prompt still sends `/passkeys/registration/verify`
-after you change accounts, before discarding its reply. A native delayed-prompt
-probe reproduces that request; backend acceptance is untested. Check the account
-again before verification and preserve current enrollment. Physical-passkey and
-live-provider qualification remain open.
+Enrollment and sign-in now discard obsolete browser prompt results before sending
+verification, so an account or route change cannot continue the old ceremony.
+Current prompts and cancellation feedback retain their existing behavior.
+Physical-passkey and live-provider qualification remain open.
 
 ## Current state
 
