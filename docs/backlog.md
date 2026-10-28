@@ -29,6 +29,17 @@ a valid reply keeps the selected row's display context and offered action.
 Permission refusals and retry waits retain their existing handling. Server
 permission checks and live delivery remain separate qualification gates.
 
+## Pairing transport refusals and retry waits (D428)
+
+When pairing transport fails, your code, offered business and inspected venue
+remain available for an explicit retry. Native HTTP/client/controller checks
+cover refused and unreadable replies, uncertain approvals and success-shaped
+bodies carried by refused HTTP statuses. Pending requests cannot dispatch again;
+server waits apply through account and request changes, including the exact end
+of seconds and date Retry-After values. A retry keeps the existing request proof
+and binding. Server permission checks and local confirmation remain separate
+qualification gates; database suites run in CI during the local Docker outage.
+
 ## Pairing HTTP replies and binding checks (D414)
 
 Malformed business lists cannot supply a pairing choice, and malformed inspection
