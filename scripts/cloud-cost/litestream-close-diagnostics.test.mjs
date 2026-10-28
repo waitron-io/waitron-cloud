@@ -74,8 +74,8 @@ test('invalid request retains the first refusal through repeated cleanup closes'
   await assert.rejects(observe('replication-transport', () => transport.close(), records), /Invalid cloud cost Litestream audit/);
   await assert.rejects(observe('cleanup-replication-transport', () => transport.close(), records), /Invalid cloud cost Litestream audit/);
   assert.deepEqual(records.filter(r => r.status === 'rejected').map(r => r.diagnostic), [
-    { reason: 'request-validation', pending: 0, completed: 0, connections: 0 },
-    { reason: 'request-validation', pending: 0, completed: 0, connections: 0 },
+    { reason: 'request-validation', validationStage: 'identity', pending: 0, completed: 0, connections: 0 },
+    { reason: 'request-validation', validationStage: 'identity', pending: 0, completed: 0, connections: 0 },
   ]);
   assert.equal(JSON.stringify(records).includes('PRIVATE'), false);
   assert.throws(() => meter.snapshot(), /Invalid cloud cost meter/);

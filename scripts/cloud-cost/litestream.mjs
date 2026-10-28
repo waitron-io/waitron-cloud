@@ -370,6 +370,8 @@ const networkErrors = new Set(['ECONNRESET', 'ECONNREFUSED', 'EPIPE', 'ETIMEDOUT
 const ioEvents = new Set(['request-pipeline', 'response-aborted', 'response-error',
   'response-headers', 'response-pipeline', 'upstream-error', 'upstream-timeout', 'client-error']);
 const transportOperations = new Set(operations);
+const requestValidationStages = new Set(['transport-state', 'copy-source', 'identity', 'operation', 'retry-sequence',
+  'after-stop-admission', 'content-length', 'mutation-body', 'lifetime-begin', 'lifetime-callback']);
 const own = (value, key) => {
   try { return value && (typeof value === 'object' || typeof value === 'function')
     ? Object.getOwnPropertyDescriptor(value, key)?.value : undefined; }
@@ -389,6 +391,8 @@ export async function withLitestreamCloseDiagnostics({ stage, close, report = li
     const raw = own(error, 'litestreamCloseDiagnostic'), reason = own(raw, 'reason');
     const diagnostic = {};
     if (closeReasons.has(reason)) diagnostic.reason = reason;
+    const validationStage = own(raw, 'validationStage');
+    if (reason === 'request-validation' && requestValidationStages.has(validationStage)) diagnostic.validationStage = validationStage;
     for (const key of ['pending', 'completed', 'connections', 'idleActionsAtAdmission', 'forwardingTransfers',
       'bytesIn', 'expectedIn', 'bytesOut', 'expectedOut']) {
       const value = own(raw, key);
@@ -443,18 +447,27 @@ export async function createLitestreamTransport({ target, meter, phase, lifetime
   const server = createServer(async (source, destination) => {
     const idleActionsAtAdmission = idleActionsStarted, requestPhase = currentPhase;
     let id, name, expectedOut, completeLifetime, body, producerAttempt;
+    let validationStage = 'transport-state';
     try {
-      requireThat(!invalid && !closing && !Object.hasOwn(source.headers, 'x-amz-copy-source'));
+      requireThat(!invalid && !closing);
+      validationStage = 'copy-source';
+      requireThat(!Object.hasOwn(source.headers, 'x-amz-copy-source'));
+      validationStage = 'identity';
       id = identity(source.headers['amz-sdk-invocation-id'], source.headers['amz-sdk-request']);
+      validationStage = 'operation';
       name = operation(`${source.method} ${source.url} HTTP/1.1`, allowBulkDeletes);
+      validationStage = 'retry-sequence';
       const previous = invocations.get(id.invocation);
       requireThat(id.ordinal === (previous?.ordinal ?? -1) + 1 && (!previous || previous.name === name && previous.path === source.url)
         && invocations.size < 100000);
+      validationStage = 'after-stop-admission';
       afterStop?.admit({ invocation: id.invocation, ordinal: id.ordinal, operation: name, hop: 'producer', phase: requestPhase });
+      validationStage = 'content-length';
       expectedOut = size(source.headers['content-length']);
       invocations.set(id.invocation, { ordinal: id.ordinal, name, path: source.url });
       pending.add(id.key); producerAttempt = ++admitted;
       if (name === 'delete-many' || name === 'multipart-complete' && lifetimes) {
+        validationStage = 'mutation-body';
         requireThat(expectedOut > 0 && expectedOut <= 1048576);
         // Validate bounded mutation controls before forwarding them to the backend.
         const chunks = []; let length = 0;
@@ -462,10 +475,17 @@ export async function createLitestreamTransport({ target, meter, phase, lifetime
         requireThat(!closing && !invalid && length === expectedOut); body = Buffer.concat(chunks);
       }
       if (lifetimes) {
+        validationStage = 'lifetime-begin';
         completeLifetime = lifetimes.begin({ method: source.method, path: source.url, headers: source.headers, body });
+        validationStage = 'lifetime-callback';
         requireThat(typeof completeLifetime === 'function');
       }
-    } catch { poison('request-validation'); if (id) pending.delete(id.key); source.resume(); destination.writeHead(400); destination.end(); return; }
+    } catch {
+      poison('request-validation');
+      // Later requests rejected by the poisoned transport must not replace its first failing boundary.
+      if (refusal.reason === 'request-validation') refusal.validationStage ??= validationStage;
+      if (id) pending.delete(id.key); source.resume(); destination.writeHead(400); destination.end(); return;
+    }
     let bytesOut = 0, bytesIn = 0, expectedIn = 0, statusCode = null, responseHeaders, sent = false, received = false, settled = false;
     const admittedAt = performance.now();
     transfers.set(id.key, () => ({ operation: name, phase: requestPhase, retryOrdinal: id.ordinal,

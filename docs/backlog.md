@@ -3609,6 +3609,31 @@ invalid request audit, retains the first failed audit stage and identifies an
 interrupted producer attempt. The historical stop/exit cause still needs a
 labelled recurrence; see the linked investigation before changing the stop rule.
 
+## Litestream request-validation diagnostics (D378)
+
+The transport records the first refused request-validation boundary using fixed
+stage names, including request identity, operation, retry sequence, after-stop
+admission, content length, mutation body and lifetime bookkeeping. Stop checkpoints
+and sanitized close records carry the stage without request paths, headers or
+SDK invocation identifiers. Later requests cannot replace the first refusal.
+Native HTTP checks still require refused requests to return 400 without forwarding
+or publishing accounting, and include a successful forwarding control.
+
+The [PR620 cost refusal](https://github.com/waitron-io/waitron-cloud/actions/runs/40600605206/job/122527571695)
+reported request-validation at stop's idle step without identifying its check.
+Its cause remains unknown. Reproduce the next labelled recurrence before changing
+transport, stop, accounting or cleanup rules. Genuine local Docker qualification
+remains unavailable until Docker returns; current-head Linux CI checks the delivery.
+
+The first D378 qualification also found an absent fiscal worker identity in
+[CI40604297872, job122540422831](https://github.com/waitron-io/waitron-cloud/actions/runs/40604297872/job/122540422831).
+The test expected `C000001` and `C000002`; its output did not identify why one
+worker returned no allocation. D380 now adds bounded worker-refusal reporting
+without exposing the response. The historical cause remains unknown. Preserve
+both exact identities and every authority, retry and concurrency check. Use the
+new reporting on a recurrence, or reproduce with PostgreSQL when Docker returns,
+before changing the fixture or allocator.
+
 ## Recovery refusal messages and pasted codes (D192)
 
 Recovery now keeps the server's definite refusal message for approval, close and
