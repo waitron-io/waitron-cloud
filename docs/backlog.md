@@ -3314,7 +3314,12 @@ implementation or production evidence.
   Production observation, phone delivery, recovery targets and C39 plan/build approval
   remain open; see [the requirements and deliberate limits](backlog/service-monitoring.md).
 - **Usage metering.** Local totals cover snapshot storage and transfer, installation
-  operations, monitoring probes and administrative alerts. Production deployment,
+  operations, monitoring probes and administrative alerts. Native controller tests
+  hold old totals, permission refusals and rate limits across account or organisation
+  changes, including switching away and back and signing out. They check that old
+  replies cannot replace current totals, end a pending read, publish an error or
+  impose a cooldown; selecting the same account and organisation keeps its read.
+  Production deployment,
   monitoring and additional service units remain open; define costs, allowances and
   outage policy before using totals for billing. See [scope and remaining work](backlog/usage-metering.md).
 - **Data lifecycle.** Local backup capture, retention, verification and recovery are
