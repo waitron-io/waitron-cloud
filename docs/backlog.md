@@ -3256,7 +3256,10 @@ and deadlines. See [the observer investigation and remaining work](backlog/insta
 
 The historical setup timeout remains unexplained. Bounded installation summaries
 identify unfinished package downloads, imports and install scripts, alongside the
-existing command and archive diagnostics. Deadlines and integrity checks stay unchanged.
+existing command and archive diagnostics. Real pnpm controls prove that the outer
+setup limit stops stalled and slowly progressing response bodies and removes their
+process and scratch directory. The labelled Linux canvas slowdown remains unexplained;
+deadlines and integrity checks stay unchanged.
 See the [investigation and remaining qualification](backlog/cost-setup-timeout.md).
 
 ### Fixture archive download retries (D311)
