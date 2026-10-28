@@ -36,7 +36,7 @@ You now get a bounded `install-progress` summary every ten seconds and when the
 installer closes. It lists unfinished public package downloads with their observed
 attempt and byte counts, packages awaiting import, active install scripts and fixed
 pnpm error codes. The structured reporter supplies these events; raw messages,
-commands, URLs, host names, environment values and script output are excluded.
+script commands, URLs, host names, environment values and script output are excluded.
 A summary retains at most 2,048 packages and displays 20 labels per category;
 `truncated` and `discardedLines` expose incomplete diagnostics. Package totals count
 distinct names and versions, so they need not equal pnpm's platform-specific totals.
