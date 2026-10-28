@@ -3695,6 +3695,24 @@ accounting or cleanup. Native controls exercise each category and real HTTP
 refusal; genuine local Docker reproduction waits for Docker to return. Current-head
 Linux CI supplies the genuine backend qualification.
 
+## Litestream refused operation and attempt diagnostics (D383)
+
+The [PR625 merge refusal](https://github.com/waitron-io/waitron-cloud/actions/runs/40615344423/job/122576493560)
+identified a non-list operation after stop, but omitted the operation and whether
+it was an initial attempt or a retry. You can now read both fixed categories from
+the validated internal row in admission errors, independent audit checkpoints,
+transport checkpoints and sanitized close reports. Later poisoned calls retain the
+first shared producer or observer cause, without adding their own request details.
+Earlier refusals keep their existing context-free shape. Request identifiers,
+paths, headers, arbitrary caller values and accessor output stay private.
+
+Native controls exercise initial attempts and retries, shared first-cause retention,
+real HTTP refusal and the privacy filters. Every original admission, stop, retry,
+accounting and cleanup rule, assertion and deadline remains unchanged. The cause
+of the historical refusal is still unknown. Reproduce the labelled operation
+before changing runtime rules; genuine local reproduction waits for Docker to
+return, while current-head Linux CI qualifies the real backend.
+
 ## Recovery refusal messages and pasted codes (D192)
 
 Recovery now keeps the server's definite refusal message for approval, close and

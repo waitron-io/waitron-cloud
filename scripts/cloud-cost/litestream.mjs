@@ -119,19 +119,27 @@ export function createLitestreamAfterStop(options) {
     mark('observer-pairing');
     if (input.hop === 'observer') requireThat(row.admissions.producer && row.admissions.producer.phase === input.phase);
     if (acknowledged) {
-      mark('post-stop-operation'); requireThat(input.operation === 'list');
+      mark('post-stop-operation', row); requireThat(input.operation === 'list');
       mark('post-stop-ordinal'); requireThat(input.ordinal === 0);
     }
     row.admissions[input.hop] = { ...event(mark), phase: input.phase };
     if (acknowledged && input.hop === 'observer') { row.lateAdmission = true; affect(row, mark); }
   });
-  let firstAdmissionGuard;
+  let firstAdmissionFailure;
   const admit = input => {
-    let guard = 'state';
-    try { return admitGuarded(input, name => { guard = name; }); }
+    let guard = 'state', context;
+    try { return admitGuarded(input, (name, row) => {
+      guard = name;
+      if (row) context = { operation: row.operation, attemptClass: row.ordinal === 0 ? 'initial' : 'retry' };
+    }); }
     catch (error) {
       // Poisoned follow-up calls retain the first admission refusal without exposing request metadata.
-      error.litestreamAfterStopAdmissionGuard = firstAdmissionGuard ??= guard;
+      const failure = firstAdmissionFailure ??= { guard, ...context };
+      error.litestreamAfterStopAdmissionGuard = failure.guard;
+      if (failure.operation !== undefined) {
+        error.litestreamAfterStopAdmissionOperation = failure.operation;
+        error.litestreamAfterStopAdmissionAttemptClass = failure.attemptClass;
+      }
       throw error;
     }
   };
@@ -323,8 +331,7 @@ export function createLitestreamRequestAudit({ phase, allowBulkDeletes = false, 
       if (!failure) {
         failure = { stage: validationStage };
         if (validationStage === 'after-stop-admission') {
-          const guard = own(error, 'litestreamAfterStopAdmissionGuard');
-          if (afterStopAdmissionGuards.has(guard)) failure.afterStopAdmissionGuard = guard;
+          Object.assign(failure, admissionDiagnostic(error));
         }
       }
       invalid = true; afterStop?.invalidate(); fail();
@@ -413,6 +420,18 @@ const own = (value, key) => {
   catch { return undefined; }
 };
 
+const admissionAttemptClasses = new Set(['initial', 'retry']);
+function admissionDiagnostic(error) {
+  const guard = own(error, 'litestreamAfterStopAdmissionGuard');
+  if (!afterStopAdmissionGuards.has(guard)) return {};
+  const result = { afterStopAdmissionGuard: guard };
+  const operation = own(error, 'litestreamAfterStopAdmissionOperation');
+  const attemptClass = own(error, 'litestreamAfterStopAdmissionAttemptClass');
+  if (transportOperations.has(operation)) result.afterStopAdmissionOperation = operation;
+  if (admissionAttemptClasses.has(attemptClass)) result.afterStopAdmissionAttemptClass = attemptClass;
+  return result;
+}
+
 // Error text and request metadata can contain credentials; publish only closed categories and counts.
 export async function withLitestreamCloseDiagnostics({ stage, close, report = line => console.error(line) }) {
   requireThat(closeStages.has(stage) && typeof close === 'function' && typeof report === 'function');
@@ -431,6 +450,10 @@ export async function withLitestreamCloseDiagnostics({ stage, close, report = li
     const admissionGuard = own(raw, 'afterStopAdmissionGuard');
     if (diagnostic.validationStage === 'after-stop-admission' && afterStopAdmissionGuards.has(admissionGuard)) {
       diagnostic.afterStopAdmissionGuard = admissionGuard;
+      const operation = own(raw, 'afterStopAdmissionOperation');
+      const attemptClass = own(raw, 'afterStopAdmissionAttemptClass');
+      if (transportOperations.has(operation)) diagnostic.afterStopAdmissionOperation = operation;
+      if (admissionAttemptClasses.has(attemptClass)) diagnostic.afterStopAdmissionAttemptClass = attemptClass;
     }
     for (const key of ['pending', 'completed', 'connections', 'idleActionsAtAdmission', 'forwardingTransfers',
       'bytesIn', 'expectedIn', 'bytesOut', 'expectedOut']) {
@@ -525,8 +548,7 @@ export async function createLitestreamTransport({ target, meter, phase, lifetime
       if (refusal.reason === 'request-validation' && !refusal.validationStage) {
         refusal.validationStage = validationStage;
         if (validationStage === 'after-stop-admission') {
-          const guard = own(error, 'litestreamAfterStopAdmissionGuard');
-          if (afterStopAdmissionGuards.has(guard)) refusal.afterStopAdmissionGuard = guard;
+          Object.assign(refusal, admissionDiagnostic(error));
         }
       }
       if (id) pending.delete(id.key); source.resume(); destination.writeHead(400); destination.end(); return;
