@@ -2882,7 +2882,12 @@ implementation or production evidence.
   without restarting the read; account changes discard its old success and replies.
   Controller and stubbed Chromium checks cover failure, empty-list retry and account
   changes; the delayed session-activity wrong-password regression remains covered.
-  A failed refresh keeps the last-read rows alongside Retry.
+  A failed refresh keeps the last-read rows alongside Retry. Stubbed browser
+  checks cover uncertain removal after a server failure or a lost reply: the
+  previous keys stay visible through a failed follow-up read and pending Retry.
+  Only a successful empty list removes them; Retry never repeats removal or
+  resends your password. These checks cover both languages, themes and widths;
+  backend authority and provider qualification keep their separate gates.
   Unsupported browsers keep one help message. Stubbed Chromium checks cover both
   languages, themes and widths, repeated cancellation and a later refused attempt.
   Passkey and session
