@@ -3113,6 +3113,18 @@ A refused older page keeps your accepted rows and snapshot selection; valid retr
 still paginate. Another venue's reply cannot replace your catalogue. Recovery
 permissions, server authority and genuine restore qualification remain separate gates.
 
+## Backup catalogue transport refusals and retry waits (D426)
+
+When an older catalogue request loses its connection or receives a service refusal,
+your accepted snapshots and recovery choice remain available for an explicit retry.
+A current session or permission refusal clears those choices because the catalogue
+can no longer confirm your access. Native HTTP/client/controller checks cover initial
+loads, pagination, unreadable bodies and retries with the existing page cursor.
+Server retry waits cover seconds and HTTP dates, survive closing and reopening,
+and permit the next request at their exact expiry. Server authority, browser
+integration and genuine restore qualification remain separate gates; database
+suites run in CI while local Docker is unavailable.
+
 ## Container verifier memory-refusal observation (D335)
 
 The native-memory check sometimes receives exit 73 without Docker marking the
