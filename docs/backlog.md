@@ -758,6 +758,15 @@ owner-only quality trials after 2026-11-02, and commercial and production decisi
 are complete; preserve the approved cap, admission, consent and paging rules in the
 [translation requirements and open work](backlog/translation.md).
 
+## Installation replies after account changes (D398)
+
+Native controller tests hold installation-list and stop replies while you change
+accounts, switch away and back, or sign out. Old successes and refusals leave the
+current rows, organisation, stop confirmation, pending work, feedback and cooldown
+unchanged. Selecting the same account keeps its pending request, and the current
+account can still load and stop its offered installation. These tests control
+HTTP replies; server permission and revocation checks remain qualified in CI.
+
 ## Initial focus
 
 **Open; local building only.** Launch first in Spain on AWS and keep routine customer
