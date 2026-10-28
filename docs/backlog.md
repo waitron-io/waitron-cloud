@@ -254,6 +254,18 @@ journeys preserve every venue, fiscal-write, uncertain-outcome, retry, layout an
 deadline assertion across both languages, themes and widths. These stubbed
 Chromium checks leave fiscal allocation behavior and expected results unchanged.
 
+## Fiscal test-worker failure evidence (D380)
+
+PR622's two-worker allocation check observed C000001 and a missing second receipt;
+the worker refusal was absent from CI40604297872. Its reservation and retry
+assertions now report up to two workers' fixed refusal codes and receipt presence
+only when a check fails, then rethrow the identical assertion. Native controls
+cover a real independent worker refusal, private fields, accessors, bounded output
+and a broken diagnostic sink. Every original identity, allocation, retry, process
+separation and deadline check remains. The historical cause is unknown; local
+PostgreSQL reproduction waits for Docker to return. Use a labelled recurrence
+to reproduce the cause before changing allocation behavior or expected values.
+
 ## Fiscal allocation registry
 
 The [shared registry plan](https://github.com/clintongormley/waitron/blob/main/docs/superpowers/plans/2026-10-12-cloud-fiscal-allocation-registry.md)
