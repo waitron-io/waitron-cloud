@@ -52,6 +52,52 @@ observe('undici:request:error', ({request, error}) => {
   const record = requests.get(request);
   if (record) report({event: 'http-error', ...record, error: safeError(error)}, 'failure');
 });
+function nativeEndpoint(path) {
+  const metadata = endpoint(path);
+  if (metadata) return metadata;
+  try {
+    const decoded = decodeURIComponent(path.split('?')[0]);
+    const match = decoded.match(/^(.*)\/-\/([^/]+)-[0-9]+\.[0-9]+\.[0-9]+\.tgz$/);
+    if (match && endpoint(match[1]) && match[2] === match[1].split('/').at(-1)) return `${match[1]}/-/tarball`;
+  } catch { /* A non-package URL remains outside the allowlist. */ }
+}
+function onceSafely(emitter, event, listener) {
+  emitter.once(event, (...args) => {
+    try {listener(...args);}
+    catch { /* Observation must preserve the installer's event handling. */ }
+  });
+}
+// A reset can reach both the request and response. Spend one failure record
+// per request, and use the received status to identify the failing stage.
+const nativeFailures = new WeakSet();
+function nativeError(request, error) {
+  const record = requests.get(request);
+  if (!record || nativeFailures.has(request)) return;
+  nativeFailures.add(request);
+  report({event: 'http-error', ...record, stage: record.status === undefined ? 'request' : 'response',
+    clientAborted: request.aborted === true, error: safeError(error)}, 'failure');
+}
+observe('http.client.request.created', ({request}) => {
+  const path = nativeEndpoint(request.path);
+  if (!path) return;
+  const record = {id: ++sequence, client: 'node', endpoint: path,
+    registry: request.protocol === 'https:' && request.host === 'registry.npmjs.org' && request.getHeader('host') === 'registry.npmjs.org' ? 'npm' : 'other'};
+  requests.set(request, record);
+  report({event: 'http-start', ...record});
+  // npm's agent can fail before assigning a socket. Observe creation so its
+  // connection failures remain visible without handling the error for npm.
+  onceSafely(request, errorMonitor, error => nativeError(request, error));
+});
+observe('http.client.response.finish', ({request, response}) => {
+  const record = requests.get(request);
+  if (!record) return;
+  record.status = response.statusCode;
+  report({event: response.statusCode >= 400 ? 'http-status' : 'http-headers', ...record}, response.statusCode >= 400 ? 'failure' : 'ordinary');
+  // Never add a request response listener: Node uses its absence to drain an
+  // ignored response. These listeners neither read nor resume the caller's body.
+  onceSafely(response, errorMonitor, error => nativeError(request, error));
+  onceSafely(response, 'end', () => report({event: 'http-transfer-complete', ...record}));
+});
 observe('child_process', ({process: child}) => {
   // errorMonitor observes an error without handling it or suppressing Node's normal failure.
   child.once(errorMonitor, error => report({event: 'child-error', childPid: child.pid ?? null, error: safeError(error)}, 'child'));

@@ -2451,7 +2451,23 @@ implementation or production evidence.
   reproduces `terminated` with HTTP 200 and `UND_ERR_SOCKET`; invalid gzip can
   also produce `terminated` after a completed wire transfer, so these diagnostics
   do not by themselves expose every body-decoding failure or explain the old run.
-  Tarball downloads are outside this observer's metadata allowlist.
+  Undici tarball downloads remain outside its metadata allowlist. The D154
+  native HTTP milestone adds observation of npm's own HTTP client, including
+  fixed pnpm package tarball labels, response status, request or response error
+  stage, client-abort state and completed wire transfers. Real npm controls
+  reproduce interrupted metadata, refused connections and resets during TCP/TLS
+  connection setup. Creation-time observation covers npm's asynchronous agent;
+  response observation preserves Node's automatic draining when no caller handles
+  the reply. A real response reset emits one failure record. npm's own timeout
+  records a client abort, which is evidence of cancellation, not its root cause.
+  Other native controls cover cut-off tarballs, HTTP refusals, paused caller-owned
+  bodies, unhandled errors, redaction and bounded output.
+  This does not attribute the reset in [merge run 40712695671, root partition 4](https://github.com/waitron-io/waitron-cloud/actions/runs/40712695671/job/122902175152).
+  That job records npm failure before tests but no request endpoint. Await a
+  labelled recurrence before choosing recovery. Requests, retries, time limits,
+  versions and signature verification remain unchanged. Native diagnostics omit
+  unknown packages, tarball versions, credentials, queries, headers and bodies;
+  body decoding after a completed wire transfer remains outside their evidence.
   The exact locked 11.19.0 bootstrap completes its verified 9.15.0 switch in a
   fresh native probe. Linux qualification runs the controlled failure checks and
   observes the unchanged setup action; a later successful setup is recovery
