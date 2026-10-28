@@ -55,11 +55,20 @@ async function binary(root) {
     bytes = await readFile(archive);
   } catch (error) {
     if (error.code !== "ENOENT") throw error;
-    const response = await fetch(
-      "https://github.com/seaweedfs/seaweedfs/releases/download/4.47/" + pin[0],
-    );
-    if (!response.ok) throw Error("SeaweedFS download failed");
-    bytes = Buffer.from(await response.arrayBuffer());
+    const url = "https://github.com/seaweedfs/seaweedfs/releases/download/4.47/" + pin[0];
+    let phase = "headers", response;
+    try {
+      response = await fetch(url);
+      phase = "status";
+      if (!response.ok) throw Error("SeaweedFS download failed");
+      phase = "body";
+      bytes = Buffer.from(await response.arrayBuffer());
+    } catch (cause) {
+      const failure = new Error(`SeaweedFS download failed (${phase})`, { cause });
+      // Redirect URLs may carry signed credentials; identify only the public request.
+      failure.storageDownload = { phase, url, httpStatus: response?.status ?? null };
+      throw failure;
+    }
     downloaded = true;
   }
   if (createHash("sha256").update(bytes).digest("hex") !== pin[1])

@@ -4393,3 +4393,22 @@ existing Enter, installation-refresh and uncertain-save checks retain their
 assertions and deadlines with the three owner-approved setup changes. Server
 behaviour and the outstanding live DNS/ACME and deployment qualification are
 unchanged.
+
+## Storage archive download failure reporting (D441)
+
+A Test Cloud plan-enforcement check failed in run40775240637, job123122878210,
+with an interrupted HTTP/2 response (`UND_ERR_RES_CONTENT_LENGTH_MISMATCH`).
+The retained stack does not identify the request, so its cause remains unknown.
+The SeaweedFS fixture now labels archive download failures by phase: awaiting
+headers, refusing an HTTP status or reading the body. Its error includes the
+public release URL and available status, and retains the original error as its
+cause. The diagnostic does not copy the signed redirect URL.
+
+Run `node --test scripts/ci-backup-storage-download.test.mjs` for isolated
+cold-cache controls, including a genuinely truncated local HTTP response. Failed
+startup removes its private directory and publishes no archive; a complete
+archive with the wrong digest remains refused. Download retries, archive pins,
+cache publication and permission checks are unchanged. These controls qualify
+reporting, not the historical Linux failure. Capture an instrumented recurrence
+before changing transport or startup behavior; the full PostgreSQL and storage
+journey still belongs to CI while local Docker is unavailable.
