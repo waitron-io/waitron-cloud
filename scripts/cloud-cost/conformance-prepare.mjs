@@ -8,6 +8,7 @@ import {createHash,randomUUID} from 'node:crypto';
 import {execFileSync,spawn} from 'node:child_process';
 import {setTimeout as delay} from 'node:timers/promises';
 import {downloadConformanceArchive} from './conformance-archive.mjs';
+import {createInstallObserver} from './conformance-install-observer.mjs';
 
 const revision='fbadd15785464e59747e697c11048bfbc6e4938f';
 const repository=fileURLToPath(new URL('../..',import.meta.url));
@@ -50,7 +51,7 @@ export async function prepareConformance(selected) {
   const environment={PATH:process.env.PATH,LANG:'C',TZ:'UTC',CI:'true',
     ...(process.env.NODE_AUTH_TOKEN?{NODE_AUTH_TOKEN:process.env.NODE_AUTH_TOKEN}:{})};
   let phase='revision';
-  const run=(command,args,{encoding,timeout=300000,captureStderr=false,...options}={})=>{
+  const run=(command,args,{encoding,timeout=300000,captureStderr=false,observeInstall=false,...options}={})=>{
     controller.signal.throwIfAborted();
     return new Promise((resolve,reject)=>{
       const child=spawn(command,args,{env:environment,stdio:'inherit',...options,detached:true});
@@ -60,6 +61,8 @@ export async function prepareConformance(selected) {
         event,phase:commandPhase,command,args,pid:child.pid??null,
         elapsedMs:Math.round(performance.now()-started),timeoutMs:timeout,...details}));
       report('start');
+      const install=observeInstall?createInstallObserver(options.cwd):null;
+      const installTimer=install?setInterval(()=>report('install-progress',install.snapshot()),10000):null;
       // This process group belongs to this one setup command and its descendants.
       const stop=signal=>{
         if(!child.pid)return;
@@ -70,7 +73,7 @@ export async function prepareConformance(selected) {
         forceTimer=setTimeout(()=>stop('SIGKILL'),1000);
       };
       controller.signal.addEventListener('abort',abort,{once:true});
-      child.stdout?.on('data',bytes=>output.push(bytes));
+      child.stdout?.on('data',bytes=>{if(install)install.write(bytes);else output.push(bytes);});
       if(captureStderr)child.stderr?.on('data',bytes=>{
         process.stderr.write(bytes);stderr=(stderr+bytes.toString()).slice(-16384);
       });
@@ -78,7 +81,8 @@ export async function prepareConformance(selected) {
       const timer=setTimeout(()=>{failure=Error('Conformance setup timed out');report('timeout');stop('SIGKILL');},timeout);
       child.once('close',(code,signal)=>{
         if(controller.signal.aborted)stop('SIGKILL');
-        clearTimeout(timer);clearTimeout(forceTimer);controller.signal.removeEventListener('abort',abort);
+        clearTimeout(timer);clearTimeout(forceTimer);clearInterval(installTimer);controller.signal.removeEventListener('abort',abort);
+        if(install){install.end();report('install-progress',install.snapshot());}
         report(failure?'closed':code===0&&!signal?'complete':'failure',{code,signal});
         if(failure||code!==0||signal)reject(Object.assign(failure??Error('Conformance setup command failed: '+command),{stderr}));
         else resolve(encoding?Buffer.concat(output).toString(encoding):Buffer.concat(output));
@@ -106,7 +110,7 @@ export async function prepareConformance(selected) {
       phase='source-verify';
       if((await run('git',['-C',source,'rev-parse','HEAD'],{encoding:'utf8',stdio:'pipe'})).trim()!==revision) throw Error('Unexpected public source');
       phase='source-install';
-      await run('pnpm',['install','--frozen-lockfile'],{cwd:source});
+      await run('pnpm',['install','--frozen-lockfile','--reporter=ndjson'],{cwd:source,observeInstall:true,stdio:['ignore','pipe','inherit']});
       const {build}=await import(join(source,'node_modules/.pnpm/esbuild@0.28.2/node_modules/esbuild/lib/main.js'));
       code=join(root,'runtime');mkdirSync(code,{mode:0o700});runtime=join(code,'runtime.mjs');
       const entry=join(source,'cloud-cost-entry.mjs');
