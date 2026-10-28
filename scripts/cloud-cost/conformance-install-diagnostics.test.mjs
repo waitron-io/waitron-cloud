@@ -4,6 +4,7 @@ import {spawn} from 'node:child_process';
 import {mkdtempSync,mkdirSync,writeFileSync,readFileSync,existsSync,rmSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
+import {setTimeout as delay} from 'node:timers/promises';
 
 // Dropping the source-install observer must hide the unfinished download and fail this test.
 for(const outcome of ['timeout','failure','complete','interrupt'])test('setup identifies unfinished installation work on '+outcome,{timeout:15000},async()=>{
@@ -38,7 +39,9 @@ setInterval(()=>{},1000);
       for(let n=0;n<200&&!output.includes('\"downloaded\":1000');n++)await new Promise(resolve=>setTimeout(resolve,10));
       assert.ok(output.includes('\"downloaded\":1000'),'wait for the observed download before interrupting');child.kill('SIGTERM');
     }
-    const result=await closed;assert.deepEqual(result,{code:1,signal:null});
+    const result=await Promise.race([closed,delay(6000,null,{ref:false})]);
+    assert.notEqual(result,null,'the installer must release its timers and close within the bounded observation');
+    assert.deepEqual(result,{code:1,signal:null});
     assert.ok(existsSync(marker),'reach the real source-install supervisor');
     const owned=JSON.parse(readFileSync(marker));
     const records=output.split('\n').filter(l=>l.startsWith('conformance_setup=')).map(l=>JSON.parse(l.slice(18)));
