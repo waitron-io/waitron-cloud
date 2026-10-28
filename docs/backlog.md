@@ -3776,6 +3776,16 @@ Read the [recovery-screen scope detail](backlog/recovery-screen-scope.md) for th
 supplied-choice checks and retained server refusals. Production backup provisioning
 remains unqualified; PostgreSQL checks run in CI while local Docker is down.
 
+## Delayed recovery replies across account and request changes (D401)
+
+Native controller checks hold inspection, approval, close and replacement replies
+while you change account, return to the same account, sign out or open another
+recovery request. Late successes and refusals cannot change your current recovery
+view, matching code, source, confirmations, pending work, feedback or server wait,
+or start another inspection. Current replies and unchanged selections still work.
+These checks use controlled HTTP replies; recovery authority remains unchanged
+and PostgreSQL qualification runs in CI while local Docker is down.
+
 ## Cost-stack isolation command refusal (D152)
 
 **Open.** Attribute any new signal-check failure from the retained child evidence;
