@@ -19,6 +19,16 @@
   A server Retry-After still blocks every address for that operation.
 
 
+## Installation HTTP replies and stop confirmation (D416)
+
+When an installation reply is malformed, your existing venue rows and stop
+confirmation remain available for an explicit retry. Native client/controller
+tests cover service, overview and redacted monitoring evidence. A stop reply must
+confirm revocation for the same installation, venue, organisation and business;
+a valid reply keeps the selected row's display context and offered action.
+Permission refusals and retry waits retain their existing handling. Server
+permission checks and live delivery remain separate qualification gates.
+
 ## Pairing HTTP replies and binding checks (D414)
 
 Malformed business lists cannot supply a pairing choice, and malformed inspection
