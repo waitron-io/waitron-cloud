@@ -249,6 +249,11 @@ tokens and locale. Run `node --test apps/portal/test/signup-reset-response-bound
 Production email delivery, browser and server authority remain separate
 qualification gates; database suites run in CI while local Docker is unavailable.
 
+Qualification of this test change is blocked by [PR #669's cost stack run](https://github.com/waitron-io/waitron-cloud/actions/runs/40716310898/job/122914999702).
+The Litestream lifetime fixture refuses a prematurely closed LIST response during
+stop. Its cause remains unknown; lane D's shutdown investigation owns the next
+step. Preserve the audit guards and deadlines when reproducing it after Docker returns.
+
 ## Session HTTP response validation (D412)
 
 **Open.** Qualify server authority, browser integration and live ingress; physical
