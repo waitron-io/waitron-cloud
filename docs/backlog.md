@@ -2888,6 +2888,10 @@ implementation or production evidence.
   Only a successful empty list removes them; Retry never repeats removal or
   resends your password. These checks cover both languages, themes and widths;
   backend authority and provider qualification keep their separate gates.
+  With two keys, a lost removal reply keeps both rows while the follow-up read
+  is pending. A successful read confirms removal of the selected key and keeps
+  the other row, without another removal request. Stubbed Chromium checks cover
+  both languages, themes and phone/desktop widths.
   Unsupported browsers keep one help message. Stubbed Chromium checks cover both
   languages, themes and widths, repeated cancellation and a later refused attempt.
   Passkey and session
