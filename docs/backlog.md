@@ -122,6 +122,17 @@ See [the boundaries and remaining work](backlog/account-http-boundaries.md#accou
 passkeys and the separate retry-clock repair retain their own gates.
 See [the boundaries and remaining work](backlog/account-http-boundaries.md#session-http-response-validation-d412).
 
+## Session revocation replies after sign-out or view reset (D440)
+
+When you sign out or reset the session view, earlier revocation replies cannot
+restore rows, release a newer pending read, change feedback or retry waits, or
+trigger sign-out callbacks or another request. Native controlled-fetch tests hold
+revocation and reconciliation headers or bodies across both boundaries. They also
+check that an unchanged account keeps its active revocation and blocks duplicate
+actions. Run `node --test apps/portal/test/session-revoke-lifecycle.test.ts`.
+Runtime and original assertions stay unchanged; server authority and live ingress
+remain separate qualification gates. Database suites run in CI during the Docker outage.
+
 ## Session management transport refusals and retry waits (D432)
 
 **Open.** Qualify server authority, browser integration and live ingress; physical
