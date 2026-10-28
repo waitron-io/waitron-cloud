@@ -3001,6 +3001,16 @@ the same account preserves its pending read. These checks use controlled HTTP
 replies and preserve the existing recovery permissions and cooldown policy.
 Server authority and genuine restore qualification remain separate CI and launch gates.
 
+
+## Backup catalogue HTTP response validation (D411)
+
+Malformed or secret-bearing catalogue replies cannot become recovery choices.
+Native tests pass HTTP responses through the account client and catalogue controller,
+covering snapshot and continuous-source metadata, duplicate points and page limits.
+A refused older page keeps your accepted rows and snapshot selection; valid retries
+still paginate. Another venue's reply cannot replace your catalogue. Recovery
+permissions, server authority and genuine restore qualification remain separate gates.
+
 ## Container verifier memory-refusal observation (D335)
 
 The native-memory check sometimes receives exit 73 without Docker marking the
