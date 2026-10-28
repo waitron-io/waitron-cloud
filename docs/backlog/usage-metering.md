@@ -47,3 +47,31 @@ Production deployment and monitoring remain open. Next: add
 attributable lookup/API, report and compute units when those services exist, measure
 provider costs, then define allowances, excess-use and metering-outage policy before
 connecting any total to billing or enforcement.
+
+## Usage-read transport refusals and retry waits (D434, D436)
+
+If a usage read loses its reply, your earlier totals remain available during an
+explicit retry and after another failure. A successful read replaces them;
+permission loss or a changed account or organisation clears them. Native
+HTTP/client/controller checks cover unreadable replies, valid-looking totals
+carried by refused responses, duplicate reads and exact seconds/date retry
+boundaries through navigation. Run
+`node --test apps/portal/test/usage-transport-boundary.test.ts`.
+
+Your usage retry wait measures elapsed time, so changing your system clock
+cannot lengthen, bypass or revive it. HTTP-date waits use the response's `Date`
+when valid, otherwise your clock at receipt; past dates give no wait. The usage
+wait contributes its remaining delay to the app countdown; another panel may hold
+that countdown for longer. Native clock checks and
+English/Spanish browser checks at 390 and 1280 pixels in both themes cover these
+boundaries. Run `node --test apps/portal/test/usage-retry-clock*.test.ts`.
+The shared countdown also has dedicated English/Spanish browser checks in both
+themes at 390 and 1280 pixels: the longer of a usage wait and an alert wait stays
+visible until its own expiry. When usage is ready first, you can refresh its totals
+without clearing the remaining alert wait. Run
+`node --test apps/portal/test/usage-shared-countdown-browser.test.ts` (D444).
+Other portal controllers retain their existing clock policy: an expired alert
+retry wait revives after a backward clock correction, without another request.
+A refusal with no server delay can also leave such a deadline. That separate
+issue remains open. Server authority and production metering remain separate
+qualification gates; database suites run in CI while local Docker is unavailable.
