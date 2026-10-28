@@ -2903,6 +2903,11 @@ implementation or production evidence.
   while controls are disabled, then display both old and new keys. Retry neither
   repeats enrollment nor resends your password; the failed follow-up clears it.
   These checks cover both languages, themes and phone/desktop widths.
+  Direct controller checks also hold a passkey list read and reject repeated
+  reads, refresh, sign-in, enrollment and removal independently of disabled
+  buttons. Suppressed calls retain your password and last-read keys; completing
+  the read permits the next explicit action. Removing each pending guard makes
+  its check fail, including the refresh guard that prevents password clearing.
   Unsupported browsers keep one help message. Stubbed Chromium checks cover both
   languages, themes and widths, repeated cancellation and a later refused attempt.
   Passkey and session
