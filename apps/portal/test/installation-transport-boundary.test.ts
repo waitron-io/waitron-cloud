@@ -113,7 +113,7 @@ for (const operation of ['load', 'revoke'] as const) {
     assert.equal(c.pending, true);
     try {
       await c.load(); await c.revoke();
-      c.choose(); c.selectOrganisation('other');
+      c.choose(); c.selectOrganisation(organisationId);
       assert.equal(calls.length, 2);
       assert.equal(c.confirming, id);
       assert.equal(c.selectedOrganisation, organisationId);
