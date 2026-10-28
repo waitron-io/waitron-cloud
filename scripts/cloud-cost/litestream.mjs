@@ -62,32 +62,39 @@ export function createLitestreamAfterStop(options) {
   let invalid = false, lastTime = -1, sequence = 0, acknowledged = null;
   // Two controlled list admissions plus one underway upload; this is a bound, not a measured maximum.
   const cap = 3;
-  const event = () => {
+  const unlabelled = () => {};
+  const event = (mark = unlabelled) => {
+    mark('clock');
     const time = clock(); requireThat(Number.isFinite(time) && time >= 0 && time >= lastTime);
     lastTime = time; return { time, sequence: ++sequence };
   };
   const guarded = fn => (...args) => {
     try { requireThat(!invalid); return fn(...args); } catch { invalid = true; fail(); }
   };
-  const rowFor = ({ invocation, ordinal, operation: name }) => {
+  const rowFor = ({ invocation, ordinal, operation: name }, mark = unlabelled) => {
+    mark('row-metadata');
     requireThat(nonnegative(ordinal) && operations.includes(name));
+    mark('row-identity');
     const id = identity(invocation, `attempt=${ordinal + 1}; max=${ordinal + 1}`);
     let row = attempts.get(id.key);
     if (!row) {
+      mark('row-cap');
       requireThat(attempts.size < 100000);
       row = { operation: name, ordinal, issued: null, admissions: {}, settlements: {}, affected: false,
         lateAdmission: false, lateSettlement: false };
       attempts.set(id.key, row);
     }
-    requireThat(row.operation === name); return row;
+    mark('row-operation'); requireThat(row.operation === name); return row;
   };
-  const next = (source, e) => {
+  const next = (source, e, mark = unlabelled) => {
     const key = source + ':' + e.invocation, prior = sequences.get(key);
+    mark('retry-sequence');
     requireThat(e.ordinal === (prior?.ordinal ?? -1) + 1 && (!prior || prior.operation === e.operation));
     sequences.set(key, { ordinal: e.ordinal, operation: e.operation });
   };
-  const affect = row => {
+  const affect = (row, mark = unlabelled) => {
     row.affected = true;
+    mark('affected-cap');
     requireThat([...attempts.values()].filter(row => row.affected).length <= cap);
   };
   const acknowledgeStop = guarded(input => {
@@ -102,16 +109,30 @@ export function createLitestreamAfterStop(options) {
     exactFields(input, ['invocation', 'ordinal', 'operation']);
     const row = rowFor(input); requireThat(!row.issued); next('issue', input); row.issued = event();
   });
-  const admit = guarded(input => {
+  const admitGuarded = guarded((input, mark) => {
+    mark('input');
     exactFields(input, ['invocation', 'ordinal', 'operation', 'hop', 'phase']);
+    mark('hop-phase');
     requireThat(['producer', 'observer'].includes(input.hop) && phases.includes(input.phase));
-    const row = rowFor(input); requireThat(!row.admissions[input.hop]);
-    next(input.hop, input);
+    const row = rowFor(input, mark); mark('duplicate-hop'); requireThat(!row.admissions[input.hop]);
+    next(input.hop, input, mark);
+    mark('observer-pairing');
     if (input.hop === 'observer') requireThat(row.admissions.producer && row.admissions.producer.phase === input.phase);
+    mark(input.operation !== 'list' ? 'post-stop-operation' : 'post-stop-ordinal');
     if (acknowledged) requireThat(input.operation === 'list' && input.ordinal === 0);
-    row.admissions[input.hop] = { ...event(), phase: input.phase };
-    if (acknowledged && input.hop === 'observer') { row.lateAdmission = true; affect(row); }
+    row.admissions[input.hop] = { ...event(mark), phase: input.phase };
+    if (acknowledged && input.hop === 'observer') { row.lateAdmission = true; affect(row, mark); }
   });
+  let firstAdmissionGuard;
+  const admit = input => {
+    let guard = 'state';
+    try { return admitGuarded(input, name => { guard = name; }); }
+    catch (error) {
+      // Poisoned follow-up calls retain the first admission refusal without exposing request metadata.
+      error.litestreamAfterStopAdmissionGuard = firstAdmissionGuard ??= guard;
+      throw error;
+    }
+  };
   const attemptForToken = token => {
     requireThat(typeof token === 'string');
     const match = /^(.+):([1-9]\d*)$/.exec(token); requireThat(match);
@@ -296,7 +317,14 @@ export function createLitestreamRequestAudit({ phase, allowBulkDeletes = false, 
   const guarded = (stage, fn) => (...args) => {
     validationStage = stage;
     try { requireThat(!invalid); return fn(...args); }
-    catch { failure ??= { stage: validationStage }; invalid = true; afterStop?.invalidate(); fail(); }
+    catch (error) {
+      if (!failure) {
+        failure = { stage: validationStage };
+        const guard = own(error, 'litestreamAfterStopAdmissionGuard');
+        if (validationStage === 'after-stop-admission' && afterStopAdmissionGuards.has(guard)) failure.afterStopAdmissionGuard = guard;
+      }
+      invalid = true; afterStop?.invalidate(); fail();
+    }
   };
   const line = text => {
     if (/^SDK .* DEBUG Request$/.test(text)) { validationStage = 'request-start'; requireThat(!current); current = { operation: null, invocation: null, attempt: null, size: 0 }; return; }
@@ -372,6 +400,9 @@ const ioEvents = new Set(['request-pipeline', 'response-aborted', 'response-erro
 const transportOperations = new Set(operations);
 const requestValidationStages = new Set(['transport-state', 'copy-source', 'identity', 'operation', 'retry-sequence',
   'after-stop-admission', 'content-length', 'mutation-body', 'lifetime-begin', 'lifetime-callback']);
+const afterStopAdmissionGuards = new Set(['state', 'input', 'hop-phase', 'row-metadata', 'row-identity', 'row-cap',
+  'row-operation', 'duplicate-hop', 'retry-sequence', 'observer-pairing', 'post-stop-operation', 'post-stop-ordinal',
+  'clock', 'affected-cap']);
 const own = (value, key) => {
   try { return value && (typeof value === 'object' || typeof value === 'function')
     ? Object.getOwnPropertyDescriptor(value, key)?.value : undefined; }
@@ -393,6 +424,10 @@ export async function withLitestreamCloseDiagnostics({ stage, close, report = li
     if (closeReasons.has(reason)) diagnostic.reason = reason;
     const validationStage = own(raw, 'validationStage');
     if (reason === 'request-validation' && requestValidationStages.has(validationStage)) diagnostic.validationStage = validationStage;
+    const admissionGuard = own(raw, 'afterStopAdmissionGuard');
+    if (diagnostic.validationStage === 'after-stop-admission' && afterStopAdmissionGuards.has(admissionGuard)) {
+      diagnostic.afterStopAdmissionGuard = admissionGuard;
+    }
     for (const key of ['pending', 'completed', 'connections', 'idleActionsAtAdmission', 'forwardingTransfers',
       'bytesIn', 'expectedIn', 'bytesOut', 'expectedOut']) {
       const value = own(raw, key);
@@ -480,10 +515,14 @@ export async function createLitestreamTransport({ target, meter, phase, lifetime
         validationStage = 'lifetime-callback';
         requireThat(typeof completeLifetime === 'function');
       }
-    } catch {
+    } catch (error) {
       poison('request-validation');
       // Later requests rejected by the poisoned transport must not replace its first failing boundary.
-      if (refusal.reason === 'request-validation') refusal.validationStage ??= validationStage;
+      if (refusal.reason === 'request-validation' && !refusal.validationStage) {
+        refusal.validationStage = validationStage;
+        const guard = own(error, 'litestreamAfterStopAdmissionGuard');
+        if (validationStage === 'after-stop-admission' && afterStopAdmissionGuards.has(guard)) refusal.afterStopAdmissionGuard = guard;
+      }
       if (id) pending.delete(id.key); source.resume(); destination.writeHead(400); destination.end(); return;
     }
     let bytesOut = 0, bytesIn = 0, expectedIn = 0, statusCode = null, responseHeaders, sent = false, received = false, settled = false;

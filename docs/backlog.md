@@ -3634,6 +3634,24 @@ both exact identities and every authority, retry and concurrency check. Use the
 new reporting on a recurrence, or reproduce with PostgreSQL when Docker returns,
 before changing the fixture or allocator.
 
+## Litestream after-stop admission diagnostics (D381)
+
+You can now identify the exact refused admission guard in the stop checkpoint,
+independent request audit and sanitized close record. Fixed categories distinguish
+poisoned state, input shape, hop and phase, row metadata and identity, row capacity
+and operation, duplicate admission, retry sequence, observer pairing, post-stop
+operation and ordinal, clock order and the three-attempt bound. Later refused
+calls retain the first admission cause. No request paths, headers, invocation
+identifiers or accessor values are published; every existing refusal and accounting
+rule remains in force.
+
+The [PR622 merge refusal](https://github.com/waitron-io/waitron-cloud/actions/runs/40611462709/job/122563803926)
+named after-stop admission without its inner guard. Its underlying cause remains
+unknown. Reproduce a labelled recurrence before changing admission, stop, retry,
+accounting or cleanup. Native controls exercise each category and real HTTP
+refusal; genuine local Docker reproduction waits for Docker to return. Current-head
+Linux CI supplies the genuine backend qualification.
+
 ## Recovery refusal messages and pasted codes (D192)
 
 Recovery now keeps the server's definite refusal message for approval, close and
