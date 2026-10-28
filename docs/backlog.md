@@ -3234,10 +3234,10 @@ and deadlines. See [the observer investigation and remaining work](backlog/insta
 
 ### Cost conformance setup timeout (D131)
 
-The historical setup timeout remains unexplained. Command and archive-download
-diagnostics now identify the phase without changing deadlines or checksum checks.
-See the [investigation and remaining qualification](backlog/cost-setup-timeout.md)
-for the diagnostic recurrence and unchanged cleanup requirements.
+The historical setup timeout remains unexplained. Bounded installation summaries
+identify unfinished package downloads, imports and install scripts, alongside the
+existing command and archive diagnostics. Deadlines and integrity checks stay unchanged.
+See the [investigation and remaining qualification](backlog/cost-setup-timeout.md).
 
 ### Fixture archive download retries (D311)
 

@@ -25,3 +25,34 @@ or changing a deadline. This passing run does not explain or repair the historic
 timeout. Local Docker-backed qualification remains unavailable while Docker is down.
 
 
+## Source installation stops at 669 of 670 packages
+
+D400 job `122675571593` and D409 job `122754483156` reach the same
+`source-install` phase, then stop at 669 downloaded and added packages until the
+existing 300-second limit kills the command. No conformance case starts. The
+missing package, transfer or install script and the underlying cause remain unknown.
+
+You now get a bounded `install-progress` summary every ten seconds and when the
+installer closes. It lists unfinished public package downloads with their observed
+attempt and byte counts, packages awaiting import, active root and dependency
+install scripts, failed scripts with their exit codes, and fixed pnpm error codes. The structured reporter supplies these events; raw messages,
+script commands, URLs, host names, environment values and script output are excluded.
+A summary retains at most 2,048 packages and displays 20 labels per category;
+`truncated` and `discardedLines` expose incomplete diagnostics. Package totals count
+distinct names and versions, so they need not equal pnpm's platform-specific totals.
+The reporter changes logging only; the frozen lockfile, pinned source, checks,
+command deadline and process-group cleanup remain intact.
+
+Native macOS warm-cache and isolated fresh-cache installs of pinned Waitron
+`fbadd15785464e59747e697c11048bfbc6e4938f` pass. The real native cadence setup also
+completes without a container. Controlled child processes exercise download waits,
+nonzero and zero exits, cancellation, periodic reports and cleanup. These checks
+qualify the observer, not the historical Linux failure. Lane D must inspect the next
+labelled Linux recurrence before proposing a repair. Genuine local container
+qualification stays blocked while Docker is down.
+
+The pinned source has a root `prepare` script and no install scripts in workspace
+sub-packages. Extend the observer before relying on such scripts in a later source
+revision; sub-package paths are not currently labelled. A real offline pnpm failure
+qualifies the retained `ELIFECYCLE` code and failed-script exit status without
+printing the command or its output. Other non-pnpm transport codes remain unqualified.
