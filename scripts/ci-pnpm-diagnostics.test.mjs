@@ -110,8 +110,8 @@ test('setup reports a child process signal and spawn refusal without command arg
   assert.doesNotMatch(result.stderr, /argument-secret|path-secret/);
 });
 
-test('standard and cost workflow setup invocations load the observer in the installer process', async () => {
-  for (const workflow of ['ci.yml', 'cloud-cost.yml']) {
+test('every workflow setup invocation loads the observer in the installer process', async () => {
+  for (const workflow of ['ci.yml', 'cloud-cost.yml', 'password-derivation-diagnostic.yml', 'relay-counter-diagnostic.yml', 'ui-release.yml']) {
     const configurations = setupOptions(workflow);
     assert.ok(configurations.length > 0, workflow);
     for (const options of configurations) {

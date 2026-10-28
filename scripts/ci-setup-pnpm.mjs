@@ -1,5 +1,5 @@
 import {spawn} from 'node:child_process';
-import {appendFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync} from 'node:fs';
+import {closeSync, fstatSync, ftruncateSync, mkdirSync, mkdtempSync, openSync, readFileSync, rmSync, writeFileSync, writeSync} from 'node:fs';
 import {join} from 'node:path';
 import {fileURLToPath} from 'node:url';
 
@@ -30,6 +30,27 @@ function budget(name, fallback) {
     throw Error(`${name} must be a positive whole number of milliseconds`);
   }
   return Number(value);
+}
+
+function publish(home, bin) {
+  const files = [];
+  try {
+    for (const [path, value] of [[process.env.GITHUB_ENV, `PNPM_HOME=${home}\n`], [process.env.GITHUB_PATH, `${bin}\n`]]) {
+      const fd = openSync(path, 'a');
+      files.push({fd, size: fstatSync(fd).size, value: Buffer.from(value)});
+    }
+    for (const {fd, value} of files) {
+      let offset = 0;
+      while (offset < value.length) {
+        const written = writeSync(fd, value, offset, value.length - offset);
+        if (!written) throw Error('pnpm publication did not finish writing');
+        offset += written;
+      }
+    }
+  } catch (error) {
+    for (const {fd, size} of files) ftruncateSync(fd, size);
+    throw error;
+  } finally {for (const {fd} of files) closeSync(fd);}
 }
 
 async function command(executable, args, cwd, env, deadline, grace) {
@@ -106,8 +127,7 @@ async function setup() {
         if (checked.code !== 0 || checked.timedOut || checked.stdout.trim() !== version || cancelled) {
           throw Error('installed pnpm did not confirm the pinned version');
         }
-        appendFileSync(process.env.GITHUB_ENV, `PNPM_HOME=${home}\n`);
-        appendFileSync(process.env.GITHUB_PATH, `${bin}\n`);
+        publish(home, bin);
         published = true;
         console.log(`pnpm ${version} installed on attempt ${attempt} of 3`);
         return;

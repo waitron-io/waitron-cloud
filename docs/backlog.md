@@ -2480,7 +2480,8 @@ implementation or production evidence.
   Native diagnostics omit
   unknown packages, tarball versions, credentials, queries, headers and bodies;
   body decoding after a completed wire transfer remains outside their evidence.
-  Every workflow uses `scripts/ci-setup-pnpm.mjs` before using or caching pnpm.
+  Every workflow pins Node 26 without a package-manager cache, then uses
+  `scripts/ci-setup-pnpm.mjs` before using or caching pnpm.
   The script retains the action's integrity-locked 11.19.0 bootstrap and its
   signature-verified self-update to the repository's pinned 9.15.0. You get at most
   three fresh attempts, each limited to 30 seconds with two seconds to kill an
@@ -2488,12 +2489,15 @@ implementation or production evidence.
   installs can retry; explicit integrity, signature or identity refusals, unknown
   errors and a wrong or unconfirmed final version fail immediately. Each failed
   attempt keeps its diagnostic output. Only the confirmed target reaches later
-  steps through `GITHUB_PATH` and `PNPM_HOME`. The existing npm request budgets
+  steps through `GITHUB_PATH` and `PNPM_HOME`; a failed command-file write rolls
+  both files back. The existing npm request budgets
   and workflow deadlines remain unchanged. Native controls exercise recovery,
-  exhaustion, refusal, cancellation and process cleanup; an isolated real install
+  exhaustion, refusal, cancellation, publication and process cleanup; an isolated real install
   completes the verified switch and prints 9.15.0. Linux CI qualifies the workflow
   wiring and controlled failures. The historical network cause remains unknown;
-  retain any new labelled recurrence for D154 attribution.
+  retain any new labelled recurrence for D154 attribution. Forced termination
+  of the supervisor itself cannot run its cleanup handlers; cleanup after that
+  depends on the job runner and is not qualified by the native signal controls.
   Package-only changes omit the two-venue milestone receipt when both immutable
   revisions retain its audited regular-file inputs, test command and CI wiring.
   These tests exercise validators and receipt composition; their guarded CLI
