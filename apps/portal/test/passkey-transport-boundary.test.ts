@@ -60,7 +60,7 @@ for (const failure of ['lost', 'unreadable', 'refused'] as const) {
   });
 }
 
-// Bypassing the options failure branch would open a prompt without an accepted ceremony.
+// Refused options retain their status-specific guidance and never open a prompt.
 for (const mode of ['sign-in', 'enroll'] as const) for (const failure of ['lost', 'unreadable', 'refused'] as const) {
   test(`passkey ${mode} ${failure} options cannot open a prompt and explicit retry succeeds`, async t => {
     environment(t);
@@ -75,7 +75,7 @@ for (const mode of ['sign-in', 'enroll'] as const) for (const failure of ['lost'
         if (!failed) return Response.json(options);
         if (failure === 'lost') throw new TypeError('fixture lost reply');
         if (failure === 'unreadable') return new Response('{');
-        return Response.json(options, {status: 503});
+        return Response.json(options, {status: 403});
       }
       if (url === prefix + '/passkeys') return Response.json({passkeys: verified ? [added] : []});
       assert.equal(url, prefix + verifyPath); verified = true;
@@ -85,7 +85,7 @@ for (const mode of ['sign-in', 'enroll'] as const) for (const failure of ['lost'
     const act = () => mode === 'enroll' ? c.enroll('current password') : c.signIn();
     await act();
     assert.deepEqual(events, []); assert.equal(c.pending, false);
-    assert.equal(c.error, 'passkeyUnavailable'); assert.equal(c.notice, undefined);
+    assert.equal(c.error, failure === 'refused' ? 'forbidden' : 'passkeyUnavailable'); assert.equal(c.notice, undefined);
     assert.deepEqual(paths, [prefix + optionsPath]);
     failed = false;
     assert.equal(await act(), mode === 'enroll' ? undefined : 'authenticated');
@@ -100,7 +100,7 @@ for (const mode of ['sign-in', 'enroll'] as const) for (const failure of ['lost'
 for (const mode of ['load', 'sign-in', 'enroll', 'remove'] as const) {
   const stages = mode === 'load' ? ['list'] : mode === 'sign-in' ? ['options', 'verify']
     : mode === 'enroll' ? ['options', 'verify', 'list'] : ['verify', 'list'];
-  for (const stage of stages) test(`passkey ${mode} blocks duplicate actions during pending HTTP ${stage}`, async t => {
+  for (const stage of stages) test(`passkey ${mode} blocks duplicate actions during pending HTTP ${stage}`, {timeout: 5_000}, async t => {
     environment(t);
     const held = deferred<Response>(), reached = deferred<void>();
     const paths: unknown[] = [], events: string[] = [];
@@ -119,15 +119,17 @@ for (const mode of ['load', 'sign-in', 'enroll', 'remove'] as const) {
       return mode === 'remove' ? new Response(null, {status: 204}) : Response.json(mode === 'enroll' ? added : {accountId: 'owner'});
     });
     const c = new PasskeyController(() => {}, accountRequest, browser(events));
-    c.account('owner'); c.supported = true; c.passkeys = [key]; c.listLoaded = true;
+    c.account('owner'); c.supported = true; c.passkeys = [key]; c.listLoaded = true; c.password = 'pending password';
     const act = () => mode === 'load' ? c.load() : mode === 'sign-in' ? c.signIn()
       : mode === 'enroll' ? c.enroll('current password') : c.remove(id, 'current password');
-    const first = act(); await reached.promise;
+    const first = act();
+    await Promise.race([reached.promise, first.then(() => assert.fail('the action ended before reaching the held HTTP request'))]);
     assert.equal(c.pending, true);
     const before = [...paths], prompts = [...events];
     // Do not await duplicate actions: a missing guard would wait on the same held response.
     const duplicates = [act(), c.refresh()];
     assert.deepEqual(paths, before); assert.deepEqual(events, prompts); assert.equal(c.pending, true);
+    assert.equal(c.password, 'pending password', 'a blocked refresh must retain the password field');
     held.resolve(stage === 'list' ? Response.json({passkeys: mode === 'remove' ? [] : [key, added]})
       : stage === 'options' ? Response.json(mode === 'enroll' ? registration : authentication)
       : mode === 'remove' ? new Response(null, {status: 204}) : Response.json(mode === 'enroll' ? added : {accountId: 'owner'}));

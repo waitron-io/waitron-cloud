@@ -168,6 +168,7 @@ prove the HTTP, pending, wait and request-proof assertions. Runtime and existing
 tests stay unchanged. Backward-clock handling belongs to the separate retry-clock
 repair; physical passkeys, server authority and live ingress still need their own
 qualification, with database suites running in CI while Docker is unavailable.
+Run `node --test apps/portal/test/passkey-transport-boundary.test.ts`.
 
 ## Passkey management after account changes (D403)
 
