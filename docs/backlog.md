@@ -156,6 +156,20 @@ bodies, account-management CSRF and rate-limit waits without changing runtime or
 permissions. Physical-passkey, database and live ingress qualification remain
 separate gates; database suites run in CI while local Docker is unavailable.
 
+## Passkey transport refusals and pending actions (D435)
+
+When a passkey request fails, you can retry explicitly without replaying an
+unconfirmed action. Native checks through the real HTTP client retain usable
+keys after failed reads and reject refused ceremony options before opening a
+browser prompt. Each pending list, options, verification and reconciliation
+request blocks duplicate actions. Management waits accept seconds or HTTP dates
+and survive account changes until their exact expiry. Disposable guard deletions
+prove the HTTP, pending, wait and request-proof assertions. Runtime and existing
+tests stay unchanged. Backward-clock handling belongs to the separate retry-clock
+repair; physical passkeys, server authority and live ingress still need their own
+qualification, with database suites running in CI while Docker is unavailable.
+Run `node --test apps/portal/test/passkey-transport-boundary.test.ts`.
+
 ## Passkey management after account changes (D403)
 
 Obsolete enrollment and sign-in browser prompts stop before verification after
