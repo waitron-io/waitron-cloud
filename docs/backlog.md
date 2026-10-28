@@ -4124,6 +4124,17 @@ removed, retained and failed-refresh journeys. Original recovery, permission,
 selection, request, layout and deadline assertions remain unchanged across both
 languages, themes and viewport widths. No product authority changes.
 
+## Remote-access HTTP response boundaries (D420)
+
+Native HTTP client and controller checks reject malformed remote status and DNS
+replies before they replace your setup or create a review. DNS reviews must match
+the selected installation, route kind, requested hostname and assigned target.
+An invalid save reply triggers one status read without replaying the write; only
+a matching current hostname confirms the result. Mismatched save replies require
+you to reload. Permission refusals clear the setup, and server retry waits block
+new requests until their deadline. Runtime rules and existing tests are unchanged.
+Live DNS/ACME, browser integration and deployment qualification remain open.
+
 ## Remote hostname replies after account and venue changes (D402)
 
 Native controller checks hold DNS previews, saves and uncertain-save status reads
