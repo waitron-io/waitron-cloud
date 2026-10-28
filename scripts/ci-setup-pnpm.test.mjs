@@ -215,5 +215,7 @@ for (const value of ['0', '-1', 'NaN', 'Infinity']) {
     assert.equal(result.code, 1);
     assert.equal(result.attempts, 0);
     assert.equal(result.published, '');
+    assert.match(result.stderr, /PNPM_SETUP_ATTEMPT_MS must be a positive whole number/);
+    assert.doesNotMatch(result.stderr, /pnpm setup attempt/);
   });
 }
