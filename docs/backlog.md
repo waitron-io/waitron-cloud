@@ -2898,6 +2898,11 @@ implementation or production evidence.
   verify disabled controls and cleared password input, and refuse another
   ceremony or verification request across both languages, themes and widths.
   These stubbed HTTP checks do not qualify backend enrollment authority.
+  If the list read also fails after a lost enrollment reply, you retain your old
+  keys and can Retry. Native browser checks hold that retry, retain the old rows
+  while controls are disabled, then display both old and new keys. Retry neither
+  repeats enrollment nor resends your password; the failed follow-up clears it.
+  These checks cover both languages, themes and phone/desktop widths.
   Unsupported browsers keep one help message. Stubbed Chromium checks cover both
   languages, themes and widths, repeated cancellation and a later refused attempt.
   Passkey and session
