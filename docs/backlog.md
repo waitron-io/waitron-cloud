@@ -3242,6 +3242,16 @@ unique image tag, with a one-second limit, and always removes temporary files.
 Reproduce the image build when local Docker is available; passing CI does not explain
 the earlier timeout. Keep every verifier assertion and the existing build and job limits.
 
+## Existing storage-cache refusal qualification (D442)
+
+An invalid existing archive must fail before extraction or download, so a fixture
+cannot silently replace evidence of cache corruption. Run
+`node --test scripts/ci-backup-storage-cache.test.mjs` for isolated native checks
+of corrupt and empty archives, cache read errors and a blocked cache directory.
+Each failed startup preserves its cache input and removes its private directory.
+These checks leave the historical cache/startup causes open; real store startup
+and concurrent valid-cache publication remain separate qualification gates.
+
 ## Storage archive download failure reporting (D441)
 
 A Test Cloud plan-enforcement check failed in run40775240637, job123122878210,
