@@ -26,6 +26,7 @@ type Action = typeof actions[number];
 type Reply = {body: unknown; status?: number; retry?: string};
 
 function harness(t: TestContext, action: Action) {
+  t.mock.timers.enable({apis: ['setTimeout']});
   let clock = now;
   t.mock.method(Date, 'now', () => clock);
   for (const [name, value] of [
@@ -77,7 +78,7 @@ function harness(t: TestContext, action: Action) {
     assert.deepEqual(JSON.parse(String(call.init?.body)), body);
   }
   return {c, replies, calls, initial, select, wire, changes: () => changes,
-    advance: (ms: number) => {clock += ms;},
+    advance: (ms: number) => {clock += ms; t.mock.timers.tick(ms);},
     hold: () => {held = action;},
     release: () => {assert.ok(release, 'the HTTP request reached its held boundary'); held = undefined; release();}};
 }
@@ -157,22 +158,45 @@ for (const action of ['approve', 'close', 'replace'] as const) {
   });
 }
 
-test('recovery HTTP retry wait survives account and request changes without retaining private choices', async t => {
-  const h = harness(t, 'replace'), {c} = h;
-  await c.inspect(); h.select();
-  h.replies.replace = {body: {error: 'rate_limited'}, status: 429, retry: '2'};
-  await c.replace();
-  c.account('other'); c.open(otherId); c.code = '87654321';
-  assert.equal(c.view, undefined); assert.equal(c.confirmReplacement, false);
-  assert.equal(c.venueId, undefined); assert.equal(c.pointId, undefined);
-  assert.equal(c.waiting, 2);
-  await c.inspect(); h.advance(1999); await c.inspect();
-  assert.equal(h.calls.length, 2); assert.equal(c.waiting, 1);
-  h.advance(1);
-  h.replies.inspect = {body: {...pending, requestId: otherId}};
-  await c.inspect();
-  assert.equal(h.calls.length, 3);
-  assert.deepEqual(JSON.parse(String(h.calls[2]!.init?.body)), {requestId: otherId, code: '87654321'});
-  assert.deepEqual(c.view, {...pending, requestId: otherId});
-  assert.equal(c.error, undefined); assert.equal(c.waiting, 0);
-});
+for (const reset of ['account', 'request'] as const) {
+  test(`recovery HTTP retry wait survives ${reset} changes while clearing chosen recovery details`, async t => {
+    const h = harness(t, 'approve'), {c} = h;
+    await c.inspect(); h.select();
+    assert.equal(c.venueId, venueId); assert.equal(c.pointId, pointId);
+    assert.equal(c.source, 'snapshot'); assert.equal(c.stopped, true); assert.equal(c.acceptLoss, true);
+    h.replies.approve = {body: {error: 'rate_limited'}, status: 429, retry: '2'};
+    await c.approve();
+    if (reset === 'account') c.account('other'); else c.open(otherId);
+    assert.equal(c.code, '');
+    assert.equal(c.view, undefined); assert.equal(c.confirmReplacement, false);
+    assert.equal(c.venueId, undefined); assert.equal(c.pointId, undefined); assert.equal(c.source, undefined);
+    assert.equal(c.stopped, false); assert.equal(c.acceptLoss, false);
+    assert.equal(c.waiting, 2);
+    c.code = '87654321';
+    await c.inspect(); h.advance(1999); await c.inspect();
+    assert.equal(h.calls.length, 2); assert.equal(c.waiting, 1);
+    h.advance(1);
+    const expectedRequest = reset === 'request' ? otherId : requestId;
+    h.replies.inspect = {body: {...pending, requestId: expectedRequest}};
+    await c.inspect();
+    assert.equal(h.calls.length, 3);
+    assert.deepEqual(JSON.parse(String(h.calls[2]!.init?.body)), {requestId: expectedRequest, code: '87654321'});
+    assert.deepEqual(c.view, {...pending, requestId: expectedRequest});
+    assert.equal(c.error, undefined); assert.equal(c.waiting, 0);
+  });
+
+  test(`recovery HTTP ${reset} round trip cannot restore confirmation for an identical replacement proposal`, async t => {
+    const h = harness(t, 'replace'), {c} = h;
+    await c.inspect(); h.select(); assert.equal(c.confirmReplacement, true);
+    if (reset === 'account') {c.account('other'); c.account('owner');}
+    else {c.open(otherId); c.open(requestId);}
+    assert.equal(c.code, ''); assert.equal(c.view, undefined);
+    c.code = '01234567'; await c.inspect();
+    assert.deepEqual(c.view, ready); assert.equal(c.confirmReplacement, false);
+    await c.replace();
+    assert.equal(h.calls.length, 2, 'the restored identical offer still needs fresh confirmation');
+    c.confirmReplacement = true; await c.replace();
+    assert.equal(h.calls.length, 3); h.wire(2, 'replace');
+    assert.deepEqual(c.view, completed); assert.equal(c.confirmReplacement, false);
+  });
+}

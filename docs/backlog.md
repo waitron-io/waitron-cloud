@@ -3738,12 +3738,12 @@ source controls retain the exact approval payload. These checks do not qualify
 production recovery, prove the old server stopped or change recovery authority.
 
 
-
 ## Recovery transport waits and pending actions (D437)
 
 When a recovery request is pending, you cannot send a second inspection,
-approval, close or replacement from that controller. Native HTTP/client/controller
-checks cover these gates and exact seconds/date retry expiry for all four actions.
+approval, close or replacement from that controller. Native client and controller
+checks with stubbed fetch cover these gates and exact seconds/date retry expiry
+for all four actions.
 A server failure with a retry wait leaves the write uncertain; expiry sends no
 request, and your next inspection reconciles the result without repeating the
 write. Account and request changes clear private choices while keeping the wait.
