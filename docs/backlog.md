@@ -3545,6 +3545,15 @@ and rollout checks remain, including the exact earlier shipped-page hash.
 These are native Chromium and local HTTP checks; production network and browser
 qualification remains open.
 
+## Initial session lists after account changes (D407)
+
+When you switch accounts, sign out or refresh the session view, an older session
+list must leave the current view and its retry wait untouched. Native controlled
+requests cover delayed successes and refusals while the current read is pending
+or loaded, including switching away and back. Current reads still enforce retry
+waits and normal sign-in rechecks. Browser and database qualification runs in CI;
+physical-passkey and live-provider qualification remain open.
+
 ## Public gateway source limits (D191)
 
 The public gate now counts an IPv6 /64 network as one source, while IPv4-mapped
