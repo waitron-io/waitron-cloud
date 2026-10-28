@@ -3715,14 +3715,12 @@ of the historical refusal is still unknown. Reproduce the labelled operation
 before changing runtime rules; genuine local reproduction waits for Docker to
 return, while current-head Linux CI qualifies the real backend.
 
-Qualification is still blocked on this branch. [PR627 standard CI](https://github.com/waitron-io/waitron-cloud/actions/runs/40617804734/job/122584381707)
-reports three PostgreSQL statement timeouts in registration shard 5: the lease-expiry
-status test and revocation-while-stopped test fail during migration setup; the
-bounded-backoff worker test fails while creating its account fixture. The reason
-for those timeouts is unknown. All 40 new controls and the cost workflow pass.
-Preserve the failing assertions and five-second database limit; reproduce the
-setup failure with PostgreSQL when Docker returns, or add scoped failure evidence
-before a genuinely changed qualification. Do not retry unchanged code to seek green.
+[PR627's first qualification](https://github.com/waitron-io/waitron-cloud/actions/runs/40617804734/job/122584381707)
+reported three PostgreSQL statement timeouts in registration shard 5: two during
+migration setup and one while creating an account fixture. Their cause is unknown.
+D385 now labels those setup boundaries, so a changed qualification can retain more
+evidence if they recur. Preserve the failing assertions and five-second database
+limit, then reproduce a labelled failure before changing runtime rules.
 
 ## Recovery refusal messages and pasted codes (D192)
 
