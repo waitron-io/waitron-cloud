@@ -400,6 +400,25 @@ exact expiry, including both Retry-After formats. Run
 These checks preserve the existing permissions and waits. Server redaction,
 browser file downloads and production-network qualification remain separate gates.
 
+## Usage-read transport refusals and retry waits (D434)
+
+If a usage read loses its reply, your earlier totals remain available during an
+explicit retry and after another failure. A successful read replaces them;
+permission loss or a changed account or organisation clears them. Native
+HTTP/client/controller checks cover unreadable replies, valid-looking totals
+carried by refused responses, duplicate reads and exact seconds/date retry
+boundaries through navigation and backward clock adjustments. Runtime, accounting
+and existing assertions stay unchanged. Run
+`node --test apps/portal/test/usage-transport-boundary.test.ts`.
+
+The existing wall-clock deadline can lengthen a wait, or revive an expired wait,
+when your system clock moves backward. Decide how relative waits and clock
+corrections should interact before changing that policy; a one-hour correction
+reproduces a 3,602-second wait after a two-second server delay. The longer-wait
+retention branch still needs a dedicated check. Server authority, browser
+integration and production metering remain separate qualification gates;
+database suites run in CI while local Docker is unavailable.
+
 ## Repository licence
 
 The root `LICENSE` is copied byte for byte from Waitron's Elastic License 2.0 text.
