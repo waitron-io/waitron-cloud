@@ -125,7 +125,9 @@ for (const stage of ['status', 'dns'] as const) for (const phase of ['fetch', 'b
   test(`remote ${stage} pending ${phase} blocks duplicate reads, previews and route changes`, async t => {
     const f = fixture(t);
     await opened(f);
-    const deferred = Promise.withResolvers<void>();
+    let resolve!: () => void;
+    const promise = new Promise<void>(done => {resolve = done;});
+    const deferred = {promise, resolve};
     t.after(() => deferred.resolve());
     f.replies.push({body: stage === 'status' ? view : dns,
       ...(phase === 'fetch' ? {fetchWait: deferred.promise} : {bodyWait: deferred.promise})});
