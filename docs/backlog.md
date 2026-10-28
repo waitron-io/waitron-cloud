@@ -3885,10 +3885,10 @@ themes, widths and clock setups while retaining every original session, retry,
 uncertain-revoke, account, write and deadline assertion. These native Chromium
 checks use stubbed HTTP; database and permission qualification remain in CI.
 
-Qualification is blocked by a [Litestream storage refusal](https://github.com/waitron-io/waitron-cloud/actions/runs/40600605206/job/122527571695):
-shutdown fails a request-validation check with unmatched audit attempt counts.
-The cause remains unknown; lane D owns the cost-stack investigation. Preserve the
-accounting checks and deadlines. Local Docker reproduction waits until 3 November.
+Earlier qualification encountered a [Litestream storage refusal](https://github.com/waitron-io/waitron-cloud/actions/runs/40600605206/job/122527571695).
+The historical cause remains unknown. The shared transport now reports which
+request-validation check refused; keep its accounting checks and deadlines.
+Local Docker reproduction waits until 3 November.
 
 ## Browser-test clock setup (D313)
 
