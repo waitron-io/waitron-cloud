@@ -117,6 +117,19 @@ Obsolete enrollment and sign-in browser prompts stop before verification after
 account or route changes. Physical-passkey and live-provider qualification remain
 open.
 
+## Password and second-factor sign-in HTTP replies (D424)
+
+Your password reply must distinguish a signed-in account from a second-factor
+challenge before the portal can continue. Native checks through the real HTTP
+client reject malformed account IDs, mixed account/challenge replies, malformed
+challenge markers, tokens and expiry dates, and the wrong success status. A
+second-factor completion accepts only its account reply. Refused, unreadable and
+lost replies remain failures; a later explicit valid request can still succeed.
+The checks preserve exact password and proof payloads, retry waits and one request
+per action, including a recovery-code completion. Removing each exercised guard
+in a disposable copy makes the checks fail. Runtime and original assertions stay
+unchanged; browser, server authority and deployment keep their separate gates.
+
 ## Current state
 
 Updated 2026-10-22. The repository has a pnpm workspace and internal PostgreSQL
