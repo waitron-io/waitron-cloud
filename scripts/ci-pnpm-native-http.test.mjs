@@ -151,7 +151,7 @@ test('native public-registry label requires both the destination and Host header
       ['https:', 'registry.npmjs.org', 'private-secret.invalid'],
     ]) {
       const request = Object.assign(new EventEmitter(), {path: '/pnpm', protocol, host, getHeader: () => header});
-      channel('http.client.request.start').publish({request});
+      for (const name of ['http.client.request.created', 'http.client.request.start']) channel(name).publish({request});
     }`);
   assert.equal(result.code, 0);
   assert.deepEqual(result.records.filter(row => row.event === 'http-start').map(row => row.registry), ['npm', 'other', 'other', 'other']);
@@ -172,5 +172,83 @@ test('native observation leaves the response paused until the caller consumes it
     assert.equal(result.code, 0);
     assert.equal(result.stdout, 'null\ncomplete caller body\n');
     assert.ok(result.records.some(row => row.event === 'http-transfer-complete'));
+  });
+});
+
+async function npmView(base, timeout = 1000) {
+  const root = mkdtempSync(join(tmpdir(), 'pnpm-npm-connection-'));
+  writeFileSync(join(root, 'npmrc'), '');
+  try {
+    return await run('npm', ['view', 'pnpm', 'version', '--registry=' + base, '--fetch-retries=0', '--fetch-timeout=' + timeout, '--cache=' + join(root, 'cache'), '--userconfig=' + join(root, 'npmrc')]);
+  } finally {rmSync(root, {recursive: true, force: true});}
+}
+
+for (const protocol of ['http', 'https']) test('real npm connection reset is observed before a socket is assigned for ' + protocol, async () => {
+  const {createServer} = await import('node:net');
+  const server = createServer(socket => socket.resetAndDestroy());
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  try {
+    const result = await npmView(protocol + '://127.0.0.1:' + server.address().port);
+    assert.notEqual(result.code, 0); assert.match(result.stderr, /ECONNRESET/);
+    const error = result.records.find(row => row.event === 'http-error');
+    assert.ok(error, 'connection setup must name its failed request');
+    assert.equal(error.endpoint, '/pnpm'); assert.equal(error.stage, 'request');
+    assert.equal(error.error.code, 'ECONNRESET'); assert.equal(error.registry, 'other');
+  } finally {await new Promise(resolve => server.close(resolve));}
+});
+
+test('real npm connection refusal is observed before a socket is assigned', async () => {
+  const server = createServer();
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  const base = 'http://127.0.0.1:' + server.address().port;
+  await new Promise(resolve => server.close(resolve));
+  const result = await npmView(base);
+  assert.notEqual(result.code, 0); assert.match(result.stderr, /ECONNREFUSED/);
+  const error = result.records.find(row => row.event === 'http-error');
+  assert.ok(error); assert.equal(error.endpoint, '/pnpm');
+  assert.equal(error.stage, 'request'); assert.equal(error.error.code, 'ECONNREFUSED');
+});
+
+test('native observation preserves automatic response draining without a caller handler', async () => {
+  await registry((request, response) => response.end('caller ignores this body'), async base => {
+    const result = await node(`import {get} from 'node:http';
+      await new Promise(resolve => {
+        get(${JSON.stringify(base + '/pnpm')}).on('close', () => {console.log('request closed'); resolve();});
+      });`);
+    assert.equal(result.code, 0); assert.equal(result.stdout, 'request closed\n');
+    assert.ok(result.records.some(row => row.event === 'http-transfer-complete'));
+  });
+});
+
+test('real TCP reset during a native response emits one response-stage failure', async () => {
+  await registry((request, response) => {
+    response.writeHead(200, {'content-length': '1000'}); response.write('partial');
+    setTimeout(() => request.socket.resetAndDestroy(), 20);
+  }, async base => {
+    const result = await node(get(base + '/pnpm'));
+    assert.equal(result.code, 7);
+    const errors = result.records.filter(row => row.event === 'http-error');
+    assert.equal(errors.length, 1, 'one network failure must use only one failure record');
+    assert.equal(errors[0].stage, 'response'); assert.equal(errors[0].status, 200);
+    assert.equal(errors[0].error.code, 'ECONNRESET');
+  });
+});
+
+test('real npm timeout records its client abort without declaring a network cause', async () => {
+  await registry(() => {}, async base => {
+    const result = await npmView(base, 100);
+    assert.notEqual(result.code, 0); assert.match(result.stderr, /FETCH_ERROR.*|network timeout/);
+    const error = result.records.find(row => row.event === 'http-error');
+    assert.ok(error); assert.equal(error.stage, 'request');
+    assert.equal(error.clientAborted, true);
+  });
+});
+
+test('a server reset is not reported as a caller abort', async () => {
+  await registry(request => request.socket.resetAndDestroy(), async base => {
+    const result = await npmView(base);
+    assert.notEqual(result.code, 0);
+    const error = result.records.find(row => row.event === 'http-error');
+    assert.ok(error); assert.equal(error.clientAborted, false);
   });
 });

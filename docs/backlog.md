@@ -2452,12 +2452,16 @@ implementation or production evidence.
   also produce `terminated` after a completed wire transfer, so these diagnostics
   do not by themselves expose every body-decoding failure or explain the old run.
   Undici tarball downloads remain outside its metadata allowlist. The D154
-  native-HTTP milestone adds observation of npm's own HTTP client, including
+  native HTTP milestone adds observation of npm's own HTTP client, including
   fixed pnpm package tarball labels, response status, request or response error
-  stage, and completed wire transfers. A real npm request to a local interrupted
-  metadata response reproduces ECONNRESET and proves the earlier observation gap.
-  Native controls cover cut-off tarballs, resets before headers, HTTP refusals,
-  paused caller-owned bodies, unhandled errors, redaction and bounded output.
+  stage, client-abort state and completed wire transfers. Real npm controls
+  reproduce interrupted metadata, refused connections and resets during TCP/TLS
+  connection setup. Creation-time observation covers npm's asynchronous agent;
+  response observation preserves Node's automatic draining when no caller handles
+  the reply. A real response reset emits one failure record. npm's own timeout
+  records a client abort, which is evidence of cancellation, not its root cause.
+  Other native controls cover cut-off tarballs, HTTP refusals, paused caller-owned
+  bodies, unhandled errors, redaction and bounded output.
   This does not attribute the reset in [merge run 40712695671, root partition 4](https://github.com/waitron-io/waitron-cloud/actions/runs/40712695671/job/122902175152).
   That job records npm failure before tests but no request endpoint. Await a
   labelled recurrence before choosing recovery. Requests, retries, time limits,
