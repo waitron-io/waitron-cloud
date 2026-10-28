@@ -18,6 +18,17 @@
   Correcting an address allows an immediate send; returning to it keeps its wait.
   A server Retry-After still blocks every address for that operation.
 
+## Session recheck ordering and disposal (D405)
+
+When session checks overlap, a late reply cannot replace a newer accepted result,
+change its retry wait or notify the app. An earlier result can still apply while
+a newer read is pending. Ordinary checks share that pending read; completing an
+older read cannot release it. Disposing an old session drops later replies,
+removes visibility observation and cancels the scheduled expiry check.
+Native controlled-fetch tests cover these boundaries without changing session
+policy or server authority. Browser/database qualification runs in CI while local
+Docker is unavailable; historical browser startup failures remain unattributed.
+
 ## Passkey management after account changes (D403)
 
 Native tests cover late list, enrollment and removal HTTP replies after account
