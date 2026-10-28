@@ -33,6 +33,7 @@ function fixture(t: TestContext) {
       else Reflect.deleteProperty(globalThis, name);
     });
   }
+  let bodyStarted = false;
   const replies: Reply[] = [];
   const calls: Array<{url: string; init: RequestInit}> = [];
   t.mock.method(globalThis, 'fetch', async (url: unknown, init?: RequestInit) => {
@@ -48,7 +49,7 @@ function fixture(t: TestContext) {
     if (reply.bodyWait || reply.brokenBody) {
       const json = response.json.bind(response);
       Object.defineProperty(response, 'json', {value: async () => {
-        if (reply.bodyWait) await reply.bodyWait;
+        if (reply.bodyWait) {bodyStarted = true; await reply.bodyWait;}
         if (reply.brokenBody) throw new Error('private body detail');
         return json();
       }});
@@ -57,7 +58,7 @@ function fixture(t: TestContext) {
   });
   const c = new RemoteController(() => {});
   c.account('owner');
-  return {c, replies, calls, advance: (ms: number) => {now += ms;}};
+  return {c, replies, calls, get bodyStarted() {return bodyStarted;}, advance: (ms: number) => {now += ms;}};
 }
 
 function assertCalls(f: ReturnType<typeof fixture>, expected: Array<[string, Record<string, string>]>) {
@@ -135,6 +136,8 @@ for (const stage of ['status', 'dns'] as const) for (const phase of ['fetch', 'b
     // Let response headers reach the real client before exercising its body-reading gate.
     await new Promise<void>(resolve => setImmediate(resolve));
     assert.equal(f.c.pending, true);
+    assert.equal(f.calls.length, 2);
+    if (phase === 'body') assert.equal(f.bodyStarted, true);
     const before = f.calls.length;
     await f.c.load();
     await f.c.preview();
@@ -155,7 +158,7 @@ for (const stage of ['status', 'dns'] as const) for (const phase of ['fetch', 'b
 }
 
 for (const stage of ['status', 'dns'] as const) for (const retry of ['2', 'Wed, 28 Oct 2026 12:00:02 GMT']) {
-  for (const reset of ['none', 'account', 'venue'] as const) {
+  for (const reset of ['none', 'account', 'other-account', 'venue'] as const) {
     test(`remote ${stage} ${retry === '2' ? 'seconds' : 'date'} wait survives ${reset} reset until exact expiry`, async t => {
       const f = fixture(t);
       await opened(f);
@@ -166,6 +169,7 @@ for (const stage of ['status', 'dns'] as const) for (const retry of ['2', 'Wed, 
       assert.equal(f.c.retryAt, Date.parse('2026-10-28T12:00:02.000Z'));
       let selected = id;
       if (reset === 'account') {f.c.account(undefined); f.c.account('owner'); await f.c.open(id);}
+      if (reset === 'other-account') {f.c.account('other-owner'); await f.c.open(id);}
       if (reset === 'venue') {selected = other; await f.c.open(other);}
       f.advance(1_999);
       await f.c.load();
@@ -194,4 +198,27 @@ for (const stage of ['status', 'dns'] as const) for (const retry of ['2', 'Wed, 
         ['dns', {installationId: selected, kind: 'staff', hostname}]]);
     });
   }
+}
+
+for (const reply of ['network', {status: 503, body: view}] satisfies Reply[]) {
+  test(`remote failed status read ${reply === 'network' ? 'without a reply' : 'with refused data'} discards a previously matching preview`, async t => {
+    const f = fixture(t);
+    await opened(f);
+    f.replies.push({body: dns});
+    await f.c.preview();
+    assert.deepEqual(f.c.confirmation, {kind: 'staff', hostname, revision: 7, records: dns.records});
+    f.replies.push(reply);
+    await f.c.load();
+    assert.equal(f.c.error, 'unavailable');
+    assert.equal(f.c.confirmation, undefined);
+    assert.equal(f.c.pending, false);
+    assert.equal(f.c.notice, undefined);
+    assert.deepEqual(f.c.view, {...view, publicForward: null});
+    await f.c.apply();
+    assertCalls(f, [statusCall, dnsCall, statusCall]);
+    f.replies.push({body: dns});
+    await f.c.preview();
+    assert.deepEqual(f.c.confirmation, {kind: 'staff', hostname, revision: 7, records: dns.records});
+    assertCalls(f, [statusCall, dnsCall, statusCall, dnsCall]);
+  });
 }
