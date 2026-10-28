@@ -63,7 +63,7 @@ function harness(t: TestContext) {
   });
   const controller = new InstallationController(() => {});
   controller.account('owner');
-  const enqueue = (operation: Operation, reply = () => accepted(operation)) =>
+  const enqueue = (operation: Operation, reply: () => Response | Promise<Response> = () => accepted(operation)) =>
     replies.push({url: path(operation), reply});
   const seed = async () => { enqueue('load'); await controller.load(); controller.choose(id); };
   return {controller, calls, enqueue, seed};
@@ -106,8 +106,9 @@ for (const operation of ['load', 'revoke'] as const) {
   test(`installation pending ${operation} blocks another request and selection changes`, async t => {
     const {controller: c, calls, enqueue, seed} = harness(t);
     await seed();
-    const held = Promise.withResolvers<Response>();
-    enqueue(operation, () => held.promise);
+    let release!: (response: Response) => void;
+    const held = new Promise<Response>(resolve => { release = resolve; });
+    enqueue(operation, () => held);
     const running = c[operation]();
     assert.equal(c.pending, true);
     try {
@@ -117,7 +118,7 @@ for (const operation of ['load', 'revoke'] as const) {
       assert.equal(c.confirming, id);
       assert.equal(c.selectedOrganisation, organisationId);
       assert.equal(c.pending, true);
-    } finally { held.resolve(accepted(operation)); await running; }
+    } finally { release(accepted(operation)); await running; }
     assert.equal(c.pending, false);
     assert.equal(c.error, undefined);
     assert.equal(c.confirming, operation === 'load' ? id : undefined);
