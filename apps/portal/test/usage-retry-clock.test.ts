@@ -101,3 +101,25 @@ for (const path of ['/session', '/login', '/remote-access/status', '/fiscal-allo
   const result = await accountRequest(path);
   assert.ok(!result.ok); assert.equal(result.retryAfterMs, 3_602_000);
 });
+
+for (const entry of [
+  {name: 'a past HTTP date', retry: 'Wed, 28 Oct 2026 10:59:58 GMT', elapsed: 0},
+  {name: 'a seconds delay consumed by the body', retry: '2', elapsed: 5_000},
+  {name: 'an HTTP-date delay consumed by the body', retry: 'Wed, 28 Oct 2026 11:00:02 GMT', elapsed: 5_000},
+]) test(`usage API returns zero for ${entry.name}`, async t => {
+  const f = fixture(t), response = refusal(entry.retry, 'Wed, 28 Oct 2026 11:00:00 GMT');
+  const json = response.json.bind(response);
+  t.mock.method(response, 'json', async () => { f.elapsed(entry.elapsed); return await json(); });
+  f.responses.push(response);
+  const result = await accountRequest('/usage/read', {organisationId});
+  assert.ok(!result.ok); assert.equal(result.retryAfterMs, 0);
+});
+
+for (const date of [undefined, 'invalid']) test(`usage HTTP-date conversion freezes the local receipt clock with ${date ?? 'missing'} Date`, async t => {
+  const f = fixture(t), response = refusal('Wed, 28 Oct 2026 10:00:02 GMT', date);
+  const json = response.json.bind(response);
+  t.mock.method(response, 'json', async () => { f.wall(receiptTime - 3_600_000); f.elapsed(1_500); return await json(); });
+  f.responses.push(response);
+  const result = await accountRequest('/usage/read', {organisationId});
+  assert.ok(!result.ok); assert.equal(result.retryAfterMs, 500);
+});

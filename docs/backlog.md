@@ -426,14 +426,16 @@ boundaries through navigation. Run
 
 Your usage retry wait measures elapsed time, so changing your system clock
 cannot lengthen, bypass or revive it. HTTP-date waits use the response's `Date`
-when valid, otherwise your clock at receipt; past dates give no wait. The app
-countdown and read gate share the same remaining delay. Native clock checks and
+when valid, otherwise your clock at receipt; past dates give no wait. The usage
+wait contributes its remaining delay to the app countdown; another panel may hold
+that countdown for longer. Native clock checks and
 English/Spanish browser checks at 390 and 1280 pixels in both themes cover these
 boundaries. Run `node --test apps/portal/test/usage-retry-clock*.test.ts`.
 The longer-wait retention branch still needs a dedicated check. Other portal
-controllers retain their existing clock policy: an alert read refused without a
-new delay can acquire a one-hour wait after a backward one-hour correction. That
-separate clock issue remains open. Server authority and production
+controllers retain their existing clock policy: an expired alert retry wait
+revives after a backward clock correction, without another request. A refusal
+with no server delay can also leave such a deadline. That separate issue remains
+open. Server authority and production
 metering remain separate qualification gates; database suites run in CI while
 local Docker is unavailable.
 
