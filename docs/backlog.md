@@ -258,6 +258,17 @@ the eight-minute cap, original case assertions, runtime pins and cleanup rules.
 Check the complete case inventory and both head and merge runs before claiming
 the jobs meet the five-minute target.
 
+## Diagnostic download response validation (D410)
+
+When you download a diagnostic, native HTTP/controller checks now prove that
+nested extra fields, malformed service and incident metadata, duplicate entries,
+and invalid timestamps cannot reach the file-saving callback. A well-formed
+reply for another installation is also refused; a later valid retry still saves
+the selected installation's document with its expected filename. These checks
+exercise the existing response validator and preserve every permission and
+cooldown rule. Server redaction and genuine browser downloads remain separate
+CI and launch checks.
+
 ## Repository licence
 
 The root `LICENSE` is copied byte for byte from Waitron's Elastic License 2.0 text.
