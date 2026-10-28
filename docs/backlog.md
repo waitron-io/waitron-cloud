@@ -3703,7 +3703,9 @@ it was an initial attempt or a retry. You can now read both fixed categories fro
 the validated internal row in admission errors, independent audit checkpoints,
 transport checkpoints and sanitized close reports. Later poisoned calls retain the
 first shared producer or observer cause, without adding their own request details.
-Earlier refusals keep their existing context-free shape. Request identifiers,
+Earlier refusals keep their existing context-free shape, including after stop.
+Later clock and affected-attempt refusals retain the validated list and initial
+attempt categories. Request identifiers,
 paths, headers, arbitrary caller values and accessor output stay private.
 
 Native controls exercise initial attempts and retries, shared first-cause retention,

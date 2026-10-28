@@ -203,3 +203,58 @@ test('close context skips accessor output and contains descriptor traps without 
   }
   assert.equal(reads, 0);
 });
+
+for (const guard of ['duplicate-hop', 'observer-pairing']) {
+  test(`an earlier ${guard} refusal stays context-free even after stop`, () => {
+    const s = createLitestreamAfterStop({ clock: () => 0 });
+    if (guard === 'duplicate-hop') s.admit(input({ operation: 'list' }));
+    stop(s);
+    const call = input({ operation: 'list', hop: guard === 'duplicate-hop' ? 'producer' : 'observer' });
+    for (let n = 0; n < 2; n++) assert.throws(() => s.admit(call), error => {
+      assert.deepEqual({ ...error }, { litestreamAfterStopAdmissionGuard: guard }); return true;
+    });
+    assert.throws(() => s.snapshot(), bad);
+  });
+}
+
+for (const guard of ['clock', 'affected-cap']) {
+  test(`a later ${guard} refusal retains the validated post-stop list initial categories`, () => {
+    let time = 1;
+    const s = createLitestreamAfterStop({ clock: () => time }); stop(s);
+    let call;
+    if (guard === 'clock') { time = 0; call = input({ operation: 'list' }); }
+    else {
+      for (let n = 1; n <= 3; n++) {
+        const invocation = `${String(n).padStart(8, '0')}-2222-4333-8444-555555555555`;
+        s.admit(input({ operation: 'list', invocation }));
+        s.admit(input({ operation: 'list', invocation, hop: 'observer' }));
+      }
+      const invocation = '00000004-2222-4333-8444-555555555555';
+      s.admit(input({ operation: 'list', invocation }));
+      call = input({ operation: 'list', invocation, hop: 'observer' });
+    }
+    for (const attempt of [call, input({ operation: 'get' })]) assert.throws(() => s.admit(attempt), error => {
+      assert.deepEqual({ ...error }, { litestreamAfterStopAdmissionGuard: guard,
+        litestreamAfterStopAdmissionOperation: 'list', litestreamAfterStopAdmissionAttemptClass: 'initial' });
+      return true;
+    });
+    assert.throws(() => s.snapshot(), bad);
+  });
+}
+
+test('a private frozen clock error is replaced by the same generic audit error before diagnostic tagging', () => {
+  let reads = 0, refuse = false;
+  const privateError = new Proxy(Object.freeze(Error('PRIVATE_CANARY')), {
+    get() { reads++; throw Error('PRIVATE_CANARY'); },
+    getOwnPropertyDescriptor() { reads++; throw Error('PRIVATE_CANARY'); },
+  });
+  const s = createLitestreamAfterStop({ clock: () => { if (refuse) throw privateError; return 0; } });
+  stop(s); refuse = true;
+  assert.throws(() => s.admit(input({ operation: 'list' })), error => {
+    assert.notEqual(error, privateError); assert.match(error.message, bad);
+    assert.equal(error.litestreamAfterStopAdmissionGuard, 'clock');
+    assert.deepEqual(errorDetail(error), { operation: 'list', attemptClass: 'initial' });
+    assert.doesNotMatch(JSON.stringify(error), privateText); return true;
+  });
+  assert.equal(reads, 0);
+});
