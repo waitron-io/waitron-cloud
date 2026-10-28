@@ -28,7 +28,7 @@ test('a missing worker receipt reports its refusal and rethrows the identical al
 for (const code of ['invalid_input', 'permission_denied', 'entitlement_unavailable',
   'custody_unavailable', 'continuity_unavailable', 'history_uncertain', 'binding_conflict',
   'allocation_unavailable', 'space_exhausted', 'reservation_untrusted', 'unexpected_error',
-  '57014', '40P01', '40001']) {
+  '57014', '40P01', '40001', 'session_unavailable', 'session_expired', 'csrf_invalid']) {
   test(`a refused retry reports the fixed worker code ${code}`, () => {
     const failure = Error('original retry failure');
     const lines: string[] = [];

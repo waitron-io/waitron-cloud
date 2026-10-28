@@ -19,6 +19,7 @@ export function assertWorkerResults<T>(
               'custody_unavailable', 'continuity_unavailable', 'history_uncertain',
               'binding_conflict', 'allocation_unavailable', 'space_exhausted',
               'reservation_untrusted', 'unexpected_error', '57014', '40P01', '40001',
+              'session_unavailable', 'session_expired', 'csrf_invalid',
             ].includes(code) ? code : 'unknown',
             receipt: !!ownValue(result, 'receipt'),
           };
