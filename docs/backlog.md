@@ -252,6 +252,11 @@ request cannot shorten an earlier deadline.
 Server authority, browser integration and translation release checks remain
 separate qualification gates; database suites run in CI while Docker is down.
 
+Full qualification still needs D201's reconnect-refusal investigation. The
+strict genuine-browser check refuses at reconnect/requests; its cause is
+unknown. Keep its assertions and deadlines and qualify with the genuine Linux
+fixture after a demonstrated repair.
+
 ## Account request proof and transport boundaries (D406)
 
 **Open.** Qualify server authority, browser integration and live ingress; physical
