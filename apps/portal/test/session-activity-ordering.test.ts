@@ -30,6 +30,7 @@ function fixture(t: TestContext) {
   }
   const requests: Array<{url: string; init: RequestInit; finished: boolean; finish(reply: Reply): void}> = [];
   const entered = new Map<number, () => void>();
+  let answerFurtherRequests = false;
   t.mock.method(globalThis, 'fetch', (url: unknown, init?: RequestInit) => new Promise<Response>((resolve, reject) => {
     assert.ok(init);
     const request = {url: String(url), init, finished: false, finish(reply: Reply) {
@@ -42,6 +43,7 @@ function fixture(t: TestContext) {
     }};
     requests.push(request);
     entered.get(requests.length - 1)?.();
+    if (answerFurtherRequests) request.finish(accepted);
   }));
   const changes: SessionState[] = [];
   const session = new PortalSession(state => changes.push(structuredClone(state)));
@@ -51,6 +53,7 @@ function fixture(t: TestContext) {
     assert.ok(requests.every(request => request.finished), 'all held HTTP requests must be collected');
   });
   return {session, requests, changes, document,
+    answerFurtherRequests() {answerFurtherRequests = true;},
     async signedIn() {
       const pending = session.check(); requests.at(-1)!.finish(accepted); await pending;
       assert.deepEqual(session.state, {kind: 'authenticated', ...owner});
@@ -107,29 +110,38 @@ for (const [label, logoutReply, success] of [
   ['refused', {status: 503, body: {error: 'temporarily_unavailable'}, retry: '30'}, false],
 ] satisfies Array<[string, Reply, boolean]>) {
   for (const [oldLabel, oldReply] of [lateReplies[0]!, lateReplies[1]!]) {
-    test(`${label} logout drops a delayed activity reply carrying ${oldLabel}`, {timeout: 2_000}, async t => {
-      const f = fixture(t); await f.signedIn();
-      const logout = f.session.logout(), renewal = f.session.activity(activity);
-      f.requests[1]!.finish(accepted);
-      const write = await f.requestAt(3);
-      assert.equal(write.url, '/api/account/logout');
-      assert.equal(write.init.method, 'POST');
-      assert.equal(write.init.body, '{}');
-      assert.equal(write.init.credentials, 'same-origin');
-      assert.deepEqual(write.init.headers, {'Content-Type': 'application/json', 'X-CSRF-Token': 'activity-proof'});
-      write.finish(logoutReply); assert.equal(await logout, success);
-      const expected = success ? {kind: 'anonymous'} : {kind: 'authenticated', ...owner};
-      assert.deepEqual(f.session.state, expected);
-      const changes = structuredClone(f.changes), retryAt = f.session.retryAt;
-      assert.equal(retryAt, label === 'refused' ? now + 30_000 : success ? 0 : now);
-      f.requests[2]!.finish(oldReply); await renewal;
-      assert.deepEqual(f.session.state, expected);
-      assert.equal(f.session.retryAt, retryAt);
-      assert.deepEqual(f.changes, changes);
-      assert.deepEqual(f.requests.map(request => request.url), [
-        '/api/account/session', '/api/account/session', '/api/account/session/activity', '/api/account/logout',
-      ], 'a lost or refused sign-out must not replay a write');
-    });
+    for (const when of ['before', 'after'] as const) {
+      test(`${label} logout drops activity carrying ${oldLabel} ${when} its HTTP reply`, {timeout: 2_000}, async t => {
+        const f = fixture(t); await f.signedIn();
+        const logout = f.session.logout(), renewal = f.session.activity(activity);
+        f.requests[1]!.finish(accepted);
+        const write = await f.requestAt(3);
+        assert.equal(write.url, '/api/account/logout');
+        assert.equal(write.init.method, 'POST');
+        assert.equal(write.init.body, '{}');
+        assert.equal(write.init.credentials, 'same-origin');
+        assert.deepEqual(write.init.headers, {'Content-Type': 'application/json', 'X-CSRF-Token': 'activity-proof'});
+        if (when === 'before') {
+          const changes = structuredClone(f.changes);
+          f.requests[2]!.finish(oldReply); await renewal;
+          assert.deepEqual(f.session.state, {kind: 'authenticated', ...owner});
+          assert.equal(f.session.retryAt, 0);
+          assert.deepEqual(f.changes, changes, 'activity cannot change the account while logout is pending');
+        }
+        write.finish(logoutReply); assert.equal(await logout, success);
+        const expected = success ? {kind: 'anonymous'} : {kind: 'authenticated', ...owner};
+        assert.deepEqual(f.session.state, expected);
+        const changes = structuredClone(f.changes), retryAt = f.session.retryAt;
+        assert.equal(retryAt, label === 'refused' ? now + 30_000 : success ? 0 : now);
+        if (when === 'after') {f.requests[2]!.finish(oldReply); await renewal;}
+        assert.deepEqual(f.session.state, expected);
+        assert.equal(f.session.retryAt, retryAt);
+        assert.deepEqual(f.changes, changes);
+        assert.deepEqual(f.requests.map(request => request.url), [
+          '/api/account/session', '/api/account/session', '/api/account/session/activity', '/api/account/logout',
+        ], 'a lost or refused sign-out must not replay a write');
+      });
+    }
   }
 }
 
@@ -143,8 +155,8 @@ for (const [label, reply] of lateReplies) {
     assert.deepEqual(f.session.state, {kind: 'authenticated', ...owner});
     assert.equal(f.session.retryAt, 0);
     assert.deepEqual(f.changes, changes);
-    f.document.dispatchEvent(new Event('visibilitychange'));
-    t.mock.timers.tick(3_600_000);
+    f.answerFurtherRequests();
+    t.mock.timers.tick(60_000);
     await f.session.activity(activity); await f.session.check({fresh: true});
     assert.equal(f.requests.length, 2);
   });

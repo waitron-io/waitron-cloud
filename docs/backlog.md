@@ -3821,7 +3821,8 @@ A delayed activity reply cannot replace a newer accepted session read, change
 its retry wait or notify the app. An accepted expiry also discards a newer
 pending read, so it cannot restore the expired sign-in. Sign-out discards activity
 started during its preflight, even when the sign-out reply is lost or refused;
-a disposed session ignores late activity results and sends no further requests.
+a disposed session ignores late activity results and refuses further activity
+and session checks.
 Run `node --test apps/portal/test/session-activity-ordering.test.ts` for these
 native HTTP/client checks. Runtime and original tests stay unchanged. Trusted
 browser activity, server-side session storage and production ingress retain their
