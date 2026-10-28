@@ -58,6 +58,16 @@ loss clears the form, and rate limits retain their wait before another request.
 Server authority, browser integration and production mail delivery remain separate
 qualification gates; database suites run in CI while local Docker is unavailable.
 
+## Translation-consent HTTP response validation (D417)
+
+Malformed consent replies cannot replace your last confirmed choices. Native
+HTTP/client/controller tests cover initial reads, refreshes, agreement and
+withdrawal, including duplicate venues, invalid dates, unexpected statuses and
+lost replies. An uncertain write keeps the last choice and offers an explicit
+retry; permission loss clears it, and rate limits keep their server wait.
+Server authority, browser integration and the translation release gates remain
+separate qualification work; local database checks wait for Docker.
+
 ## Account request proof and transport boundaries (D406)
 
 The account request client selects one CSRF cookie for the connection protocol.
