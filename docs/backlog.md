@@ -100,6 +100,17 @@ Native controlled-fetch tests cover these boundaries without changing session
 policy or server authority. Browser/database qualification runs in CI while local
 Docker is unavailable; historical browser startup failures remain unattributed.
 
+## Passkey HTTP replies before prompts and confirmation (D421)
+
+Malformed passkey lists cannot supply removal targets. Native HTTP/client/controller
+checks reject invalid sign-in and registration options before opening a browser
+prompt. An unreadable verification reply leaves sign-in uncertain; adding or
+removing a key uses a valid fresh list to reconcile a lost reply. A rejected list
+retains the last usable choices and offers a read-only retry. Tests cover request
+bodies, account-management CSRF and rate-limit waits without changing runtime or
+permissions. Physical-passkey, database and live ingress qualification remain
+separate gates; database suites run in CI while local Docker is unavailable.
+
 ## Passkey management after account changes (D403)
 
 Obsolete enrollment and sign-in browser prompts stop before verification after
