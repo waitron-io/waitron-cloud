@@ -39,6 +39,16 @@ or a response body; failed writes remain single attempts. Server authority and
 live ingress qualification remain open; database/browser suites run in CI while
 local Docker is unavailable.
 
+## Session HTTP response validation (D412)
+
+Malformed session lists cannot become revocation targets or confirm that a session
+ended. Native HTTP/client/controller checks cover initial reads and reconciliation
+after accepted or lost revocation replies. A failed reconciliation offers a
+read-only retry without repeating the write; a valid list confirms removal only
+when the selected session is absent. Lists retain exactly one current session,
+including beyond 100 other sessions. Server authority and live ingress remain
+separate qualification gates; database suites run in CI while Docker is unavailable.
+
 ## Session recheck ordering and disposal (D405)
 
 When session checks overlap, a late reply cannot replace a newer accepted result,
