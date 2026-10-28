@@ -21,7 +21,7 @@ function deferred<T>() {
   return {promise, resolve, reject};
 }
 
-function fixture(mode: Mode) {
+function fixture(mode: Mode, signedOut = false) {
   const calls: {path: string; body: Record<string, unknown> | undefined}[] = [];
   const prompts: ReturnType<typeof deferred<unknown>>[] = [];
   let changes = 0;
@@ -38,7 +38,7 @@ function fixture(mode: Mode) {
   };
   const controller = new PasskeyController(() => {changes++;}, request, browser);
   controller.supported = true;
-  controller.account('owner');
+  controller.account(signedOut ? undefined : 'owner');
   const start = () => mode === 'enrollment' ? controller.enroll('Current password') : controller.signIn();
   const response = mode === 'enrollment' ? registration : authentication;
   const snapshot = () => structuredClone({passkeys: controller.passkeys, password: controller.password,
@@ -124,5 +124,20 @@ for (const mode of ['enrollment', 'sign-in'] as const) {
     assert.equal(c.retryAt, 0);
     assert.equal(c.error, undefined);
     if (mode === 'enrollment') {assert.deepEqual(c.passkeys, [key]); assert.equal(c.notice, 'passkeyAdded');}
+  });
+}
+
+for (const transition of ['account established', 'route change'] as const) {
+  test(`signed-out sign-in prompt cannot verify after ${transition}`, {timeout: 5_000}, async () => {
+    const f = fixture('sign-in', true), c = f.controller;
+    const old = f.start(); await turn();
+    assert.equal(f.prompts.length, 1);
+    if (transition === 'account established') c.account('password-sign-in-owner');
+    else c.fence();
+    const before = f.snapshot();
+    f.prompts[0]!.resolve(authentication);
+    assert.equal(await old, false);
+    assert.deepEqual(f.snapshot(), before);
+    assert.deepEqual(f.calls, [{path: '/passkeys/authentication/options', body: {}}]);
   });
 }

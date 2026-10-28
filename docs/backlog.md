@@ -31,12 +31,9 @@ Docker is unavailable; historical browser startup failures remain unattributed.
 
 ## Passkey management after account changes (D403)
 
-Native tests cover late list, enrollment and removal HTTP replies after account
-changes, returning accounts and sign-out, preserving current work and feedback.
-Enrollment and sign-in now discard obsolete browser prompt results before sending
-verification, so an account or route change cannot continue the old ceremony.
-Current prompts and cancellation feedback retain their existing behavior.
-Physical-passkey and live-provider qualification remain open.
+Obsolete enrollment and sign-in browser prompts stop before verification after
+account or route changes. Physical-passkey and live-provider qualification remain
+open.
 
 ## Current state
 
