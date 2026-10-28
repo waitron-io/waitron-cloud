@@ -3340,7 +3340,8 @@ return to the original account or sign out. Old documents, malformed replies,
 refusals and rate limits cannot save a file, end a newer download or change its
 selection, feedback or wait. Current downloads still finish, selecting the same
 account keeps pending work, and an existing server wait remains in force.
-Production permission checks and provider qualification remain unchanged.
+PR #644 remains unmerged: source installation timed out before private-replay
+checks began. D131 owns the cause investigation; provider qualification stays open.
 
 ## Backup catalogue replies after account and venue changes (D396)
 
