@@ -3653,6 +3653,19 @@ and rollout checks remain, including the exact earlier shipped-page hash.
 These are native Chromium and local HTTP checks; production network and browser
 qualification remains open.
 
+## Session HTTP replies and sign-out acknowledgements (D422)
+
+Native tests exercise the real HTTP client and session manager with 44 controlled
+responses. Malformed passive and activity replies leave the account unavailable;
+a later valid read restores it. Server retry waits block explicit and visibility
+reads until their boundary. Only the recognised expiry response adds the expiry
+explanation, and uncertain sign-out replies never confirm that you signed out.
+The tests also check sign-out preflight and secure/local CSRF cookie selection.
+Run `node --test apps/portal/test/session-http-boundary.test.ts`.
+Runtime, existing tests and authentication policy are unchanged. These local client
+checks do not qualify the production ingress, server-side session storage or
+browser activity; keep their separate qualification gates.
+
 ## Initial session lists after account changes (D407)
 
 When you switch accounts, sign out or refresh the session view, an older session
