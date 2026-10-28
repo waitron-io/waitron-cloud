@@ -156,6 +156,11 @@ replies and 401/403/429/503 refusals preserve current choices, the pending read,
 venue warning and retry deadline. Production provider and database authority still
 need their separate qualification; these checks cover only browser-side state.
 
+Qualification is blocked by the remote-browser conformance journey timing out at
+dashboard reconnect/takings. The underlying connection cause remains unknown;
+resume after the owning remote-browser investigation identifies a fix or supplies
+new evidence. Local reproduction waits for Docker availability.
+
 ## Decisions and deliberate limits
 
 - Email resend waits belong to each address and operation (owner, 2026-10-25).
