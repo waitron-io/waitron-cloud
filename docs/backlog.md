@@ -3618,6 +3618,28 @@ invalid request audit, retains the first failed audit stage and identifies an
 interrupted producer attempt. The historical stop/exit cause still needs a
 labelled recurrence; see the linked investigation before changing the stop rule.
 
+## Registration SQL setup failure diagnostics (D385)
+
+A registration setup failure now reports its fixed boundary and, for migration
+work, its ordinal in the shipped migration list. You can distinguish the advisory
+lock, ledger creation and compatibility check, migration loading, lookup,
+application and ledger recording, and transaction start or finish. Relay fixtures
+identify schema creation, migration setup, issuer creation, the bounds clock, relay
+configuration, venue preparation, each initial insert, session creation, grant
+approval and lease construction. These failure-only records omit SQL,
+parameters, schema and account names, credentials and caught error values.
+Original errors, query text and arguments, rollback, cleanup and the five-second
+statement limit stay in force. Successful setup remains silent.
+
+[PR627 qualification](https://github.com/waitron-io/waitron-cloud/actions/runs/40617804734/job/122584381707)
+refused two migration applications and one relay account insert with PostgreSQL
+statement timeouts. The historical cause remains unknown. Native controls cover
+labelled refusals and reporter failures; genuine local PostgreSQL reproduction
+waits for Docker to return. Use a labelled recurrence to reproduce the cause
+before changing queries, transaction rules, concurrency or timeouts. D383 remains
+parked with its completed review; this diagnostic delivery does not qualify that
+branch or establish a runtime repair.
+
 ## Litestream request-validation diagnostics (D378)
 
 The transport records the first refused request-validation boundary using fixed
