@@ -3645,6 +3645,28 @@ interrupted producer attempt. The historical stop/exit cause still needs a
 labelled recurrence; see the linked investigation before changing the stop rule.
 
 
+## Initial upload admitted after stop (D393)
+
+[PR635's merge cost run](https://github.com/waitron-io/waitron-cloud/actions/runs/40634308325/job/122638015466)
+refused an initial PUT after a validated stop reply, with writer exit zero.
+A controlled macOS reproduction uses the checksum-verified official 0.5.17
+binary and a toy SQLite database with two rows. A loopback relay holds a snapshot
+upload before the measuring transport receives it. The runtime confirms stop
+while that upload remains held; forwarding it then reproduces the same
+`after-stop-admission / post-stop-operation / put / initial` refusal.
+A private native stack identifies the controlled upload as `DB.Snapshot` under
+`Store.monitorCompactionLevel`. Completing it before stop passes the paired case.
+
+You cannot infer first HTTP admission from the earlier SDK request log, an idle
+transfer count or a zero writer exit. Run `node --test
+scripts/cloud-cost/litestream-pre-admission-put.test.mjs` for the two real HTTP
+ordering controls. Removing the admission guard makes the late upload return
+200 instead of the required 400. Existing runtime code, assertions, accounting,
+pins, allowances and deadlines remain unchanged. This establishes a possible
+cause, not the historical Linux cause or real fiscal-workload qualification.
+Keep that attribution and any repair open; genuine local container reproduction
+waits until Docker returns. Do not delay stop or admit late uploads as a workaround.
+
 ## Held-list control failure ordering (D391)
 
 The official held-metadata control failed in [PR633's merge cost run](https://github.com/waitron-io/waitron-cloud/actions/runs/40631222000/job/122627856885)
