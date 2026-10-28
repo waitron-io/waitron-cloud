@@ -18,6 +18,16 @@
   Correcting an address allows an immediate send; returning to it keeps its wait.
   A server Retry-After still blocks every address for that operation.
 
+
+## Pairing HTTP replies and binding checks (D414)
+
+Malformed business lists cannot supply a pairing choice, and malformed inspection
+or approval replies cannot replace your accepted view. Native client/controller
+tests cover valid replies naming another request, venue, organisation or business,
+plus approval replies that still await approval. A refused reply retains your
+code and choice for an explicit retry; writes carry the existing request proof.
+Server permission checks and local confirmation remain separate qualification gates.
+
 ## Initial alert reads after account changes (D408)
 
 When you change account or sign out, late alert-preference reads cannot replace
