@@ -2892,6 +2892,12 @@ implementation or production evidence.
   is pending. A successful read confirms removal of the selected key and keeps
   the other row, without another removal request. Stubbed Chromium checks cover
   both languages, themes and phone/desktop widths.
+  Lost enrollment replies also reconcile from the list: a newly listed key
+  confirms success and retains the existing key; an unchanged list keeps the
+  uncertain-change message. Native Chromium checks hold the follow-up read,
+  verify disabled controls and cleared password input, and refuse another
+  ceremony or verification request across both languages, themes and widths.
+  These stubbed HTTP checks do not qualify backend enrollment authority.
   Unsupported browsers keep one help message. Stubbed Chromium checks cover both
   languages, themes and widths, repeated cancellation and a later refused attempt.
   Passkey and session
