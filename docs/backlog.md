@@ -29,6 +29,17 @@ a valid reply keeps the selected row's display context and offered action.
 Permission refusals and retry waits retain their existing handling. Server
 permission checks and live delivery remain separate qualification gates.
 
+## Installation transport refusals and retry waits (D433)
+
+When an installation read or stop has no usable reply, your selected row and
+stop confirmation remain available for an explicit retry. Native HTTP client
+and controller checks cover lost replies, unreadable bodies and refused statuses
+carrying success-shaped data. Pending requests block another read or stop and
+selection changes. Server retry waits survive account changes and backward clock
+adjustments through the exact end of seconds and date values. Runtime and existing
+assertions are unchanged; server permissions and live delivery remain separate
+qualification gates. Database suites run in CI during the local Docker outage.
+
 ## Pairing transport refusals and retry waits (D428)
 
 When pairing transport fails, your code, offered business and inspected venue
