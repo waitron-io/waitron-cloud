@@ -2828,6 +2828,12 @@ implementation or production evidence.
   have been adapted with a pinned source map, PostgreSQL tests, hashed session/CSRF
   tokens, passive polling and separate platform permission checks. Session-backed
   Cloud approval derives the account from the live session in its transaction.
+  Native controller checks also hold business-list, inspection and approval replies
+  while you change account or connection request, including switching away and back.
+  Late success, lost replies and refusals leave the current private choices,
+  pending read, cooldown and feedback unchanged. The current account can still
+  read its businesses, inspect the request and approve its offered business.
+  These checks use controlled HTTP replies; server authority remains qualified in CI.
   The signup backend now issues hashed, expiring email tokens with a shared per-address
   cooldown and creates a verified customer account, named organisation, first legal
   business and owner membership atomically. It grants no platform access. Account
