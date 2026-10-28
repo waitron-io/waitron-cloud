@@ -343,6 +343,18 @@ exercise the existing response validator and preserve every permission and
 cooldown rule. Server redaction and genuine browser downloads remain separate
 CI and launch checks.
 
+## Diagnostic download transport failures (D425)
+
+A refused or unreadable diagnostic reply must never save a file. Native tests
+exercise the real HTTP client and download controller for session and permission
+refusals, service errors, broken JSON, empty replies and network failures. A
+well-formed document inside an HTTP refusal is still refused. Each failed download
+leaves a usable explicit retry; a server wait prevents another request until its
+exact expiry, including both Retry-After formats. Run
+`node --test apps/portal/test/diagnostic-transport-boundary.test.ts`.
+These checks preserve the existing permissions and waits. Server redaction,
+browser file downloads and production-network qualification remain separate gates.
+
 ## Repository licence
 
 The root `LICENSE` is copied byte for byte from Waitron's Elastic License 2.0 text.
