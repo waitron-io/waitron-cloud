@@ -3255,7 +3255,7 @@ cause. The diagnostic does not copy the signed redirect URL.
 Run `node --test scripts/ci-backup-storage-download.test.mjs` for isolated
 cold-cache controls, including a genuinely truncated local HTTP response. Failed
 startup removes its private directory and publishes no archive; a complete
-archive with the wrong digest remains refused. Download retries, archive pins,
+archive with the wrong digest remains refused. The fixture still makes exactly one download attempt; archive pins,
 cache publication and permission checks are unchanged. These controls qualify
 reporting, not the historical Linux failure. Capture an instrumented recurrence
 before changing transport or startup behavior; the full PostgreSQL and storage

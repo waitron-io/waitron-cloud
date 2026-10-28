@@ -52,7 +52,7 @@ try {
     message: error.message, diagnostic: error.storageDownload ?? null,
     causeIsOriginal: error.cause === original,
     causeCode: error.cause?.cause?.code,
-    causeName: error.cause?.name,
+    causeName: error.cause?.name, causeMessage: error.cause?.message,
     calls, bodyReads, requested, cacheEntries,
     roots: rootEntries.filter(name => name.startsWith("cloud-backup-storage-"))
   }));
@@ -82,11 +82,14 @@ for (const [mode, phase, httpStatus] of [["headers", "headers", null], ["body", 
   test("storage archive " + mode + " failure identifies its public request and phase", { timeout: 20000 }, async t => {
     const result = await runProbe(t, mode);
     assert.deepEqual(result.diagnostic, { phase, url: result.requested, httpStatus });
-    assert.match(result.message, /SeaweedFS download failed/);
+    assert.equal(result.message, `SeaweedFS download failed (${phase})`);
     assert.equal(result.bodyReads, mode === "body" ? 1 : 0);
     if (mode !== "status") {
       assert.equal(result.causeIsOriginal, true, "the transport error must remain the cause");
       assert.equal(result.causeCode, "UND_ERR_RES_CONTENT_LENGTH_MISMATCH");
+    } else {
+      assert.equal(result.causeName, "Error");
+      assert.equal(result.causeMessage, "SeaweedFS download failed");
     }
     assert.ok(!JSON.stringify(result.diagnostic).includes("PRIVATE"), "signed redirect URLs must stay out of diagnostics");
   });
