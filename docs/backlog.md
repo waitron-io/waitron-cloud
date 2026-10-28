@@ -431,13 +431,16 @@ wait contributes its remaining delay to the app countdown; another panel may hol
 that countdown for longer. Native clock checks and
 English/Spanish browser checks at 390 and 1280 pixels in both themes cover these
 boundaries. Run `node --test apps/portal/test/usage-retry-clock*.test.ts`.
-The longer-wait retention branch still needs a dedicated check. Other portal
-controllers retain their existing clock policy: an expired alert retry wait
-revives after a backward clock correction, without another request. A refusal
-with no server delay can also leave such a deadline. That separate issue remains
-open. Server authority and production
-metering remain separate qualification gates; database suites run in CI while
-local Docker is unavailable.
+The shared countdown also has dedicated English/Spanish browser checks in both
+themes at 390 and 1280 pixels: the longer of a usage wait and an alert wait stays
+visible until its own expiry. When usage is ready first, you can refresh its totals
+without clearing the remaining alert wait. Run
+`node --test apps/portal/test/usage-shared-countdown-browser.test.ts` (D444).
+Other portal controllers retain their existing clock policy: an expired alert
+retry wait revives after a backward clock correction, without another request.
+A refusal with no server delay can also leave such a deadline. That separate
+issue remains open. Server authority and production metering remain separate
+qualification gates; database suites run in CI while local Docker is unavailable.
 
 ## Repository licence
 
