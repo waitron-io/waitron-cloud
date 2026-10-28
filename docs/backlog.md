@@ -18,6 +18,16 @@
   Correcting an address allows an immediate send; returning to it keeps its wait.
   A server Retry-After still blocks every address for that operation.
 
+## Initial alert reads after account changes (D408)
+
+When you change account or sign out, late alert-preference reads cannot replace
+current choices, end a newer pending read, clear a saved confirmation or impose
+an old retry wait. Native controller tests cover successful reads and refusals,
+including returning to the same account. Selecting the current account keeps its
+pending read, and a current rate limit still applies after an account change.
+Server authority, browser integration and production delivery remain separate
+qualification gates.
+
 ## Account request proof and transport boundaries (D406)
 
 The account request client selects one CSRF cookie for the connection protocol.
