@@ -56,3 +56,38 @@ sub-packages. Extend the observer before relying on such scripts in a later sour
 revision; sub-package paths are not currently labelled. A real offline pnpm failure
 qualifies the retained `ELIFECYCLE` code and failed-script exit status without
 printing the command or its output. Other non-pnpm transport codes remain unqualified.
+
+## A response body can outlive pnpm's request timeout
+
+The observer's first failed merge run, `40677826792`, identifies an unfinished
+`@napi-rs/canvas-linux-x64-gnu@1.0.10` download in job `122780751423`.
+At the existing 300-second setup limit, it reports 983,040 of 14,214,570 bytes,
+attempt one, with all other 669 packages available and imported. No install script
+is running. This identifies the unfinished transfer; it does not identify the
+registry, network or client cause. Earlier unlabelled failures remain separate.
+
+Keep the outer setup limit even when the installer has its own request timeout.
+Native Node 26.11.1 and pnpm 9.15.0 controls use a generated archive and a local HTTP
+server. With the request timeout set to one second for this probe, waiting for
+headers fails in about one second. Sending headers and then stopping the body, or
+sending small chunks every 400 milliseconds, leaves the installer running until
+the probe stops it after 3.5 seconds. A complete response installs successfully;
+damaged bytes fail the locked checksum. These are controlled native observations,
+not a reproduction of the historical Linux network condition.
+
+Run `node --test scripts/cloud-cost/conformance-install-transport.test.mjs` to
+exercise the actual setup supervisor and pnpm against the local server. Five
+controls cover missing headers, stalled and progressing bodies, a complete archive
+and damaged bytes. Source acquisition supplies a generated package and frozen
+lockfile; installation uses the real CLI, an isolated store and no install scripts.
+The generated source has no runtime bundle, so the complete-archive control checks
+the successful installation record before fixture construction refuses. It does
+not qualify a running venue. Only the disposable supervisor's clock is accelerated;
+the production limit stays five minutes. The checks require the unfinished-package
+snapshot, checksum refusal, collected installer and removed scratch directory.
+
+Lane D must obtain evidence from the affected Linux transfer before proposing a
+repair. A fast native download, a passing changed CI run and this controlled stall
+do not establish that cause. Keep the source revision, lockfile, integrity checks,
+request settings, outer limit and process-group cleanup unchanged. Genuine local
+container qualification remains blocked while Docker is down.
