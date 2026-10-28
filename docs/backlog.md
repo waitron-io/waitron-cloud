@@ -2940,7 +2940,11 @@ implementation or production evidence.
   preferences while keeping a pending read and already loaded choices; changing
   accounts discards old replies. A refused Save keeps its message after navigation
   and activity; Load reads preferences without repeating the refused save.
-  Uncertain-save handling keeps its existing checks.
+  Uncertain-save handling keeps its existing checks. Direct controller checks
+  complete old saves after switching accounts, including switching back to the
+  original account. Late success, transport failures, refusals and rate limits
+  leave the current pending read or edited draft untouched. Current reads and
+  saves still complete; stale replies cannot publish changes or impose a wait.
   Stubbed Chromium checks cover both languages, themes and phone/desktop widths.
   Sign-out browser checks now wait for startup to settle before opening a passkey
   prompt and retain both enabled-button assertions. Held authenticator and
