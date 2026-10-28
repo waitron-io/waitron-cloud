@@ -107,17 +107,11 @@ for (const mode of ['load', 'sign-in', 'enroll', 'remove'] as const) {
     let completedWrite = false;
     const stem = mode === 'sign-in' ? '/passkeys/authentication' : '/passkeys/registration';
     const heldPath = stage === 'list' ? '/passkeys' : mode === 'remove' ? '/passkeys/remove' : stem + '/' + stage;
+    const requests: Array<{path: string; init?: RequestInit}> = [];
     t.mock.method(globalThis, 'fetch', async (url: unknown, init?: RequestInit) => {
       paths.push(url);
       const path = String(url).slice(prefix.length);
-      assert.equal(init?.credentials, 'same-origin');
-      assert.equal(init?.method, path === '/passkeys' ? 'GET' : 'POST');
-      const proof = path.startsWith('/passkeys/registration/') || path === '/passkeys/remove';
-      assert.equal(new Headers(init?.headers).get('X-CSRF-Token'), proof ? 'passkey-proof' : null);
-      if (path !== '/passkeys') assert.deepEqual(JSON.parse(String(init?.body)),
-        path.endsWith('/options') ? mode === 'enroll' ? {password: 'current password'} : {}
-          : mode === 'remove' ? {id, password: 'current password'}
-          : {ceremonyId: id, response: mode === 'enroll' ? registrationReply : authenticationReply});
+      requests.push({path, init});
       if (path === heldPath) {reached.resolve(); return held.promise;}
       if (path === '/passkeys') return Response.json({passkeys: mode === 'remove' ? [] : [key, added]});
       if (path.endsWith('/options')) return Response.json(mode === 'enroll' ? registration : authentication);
@@ -145,6 +139,16 @@ for (const mode of ['load', 'sign-in', 'enroll', 'remove'] as const) {
       ? [prefix + '/passkeys/remove', prefix + '/passkeys'] : [prefix + stem + '/options', prefix + stem + '/verify',
         ...(mode === 'enroll' ? [prefix + '/passkeys'] : [])]);
     if (stage === 'list' && mode !== 'load') assert.equal(completedWrite, true);
+    for (const {path, init} of requests) {
+      assert.equal(init?.credentials, 'same-origin');
+      assert.equal(init?.method, path === '/passkeys' ? 'GET' : 'POST');
+      const proof = path.startsWith('/passkeys/registration/') || path === '/passkeys/remove';
+      assert.equal(new Headers(init?.headers).get('X-CSRF-Token'), proof ? 'passkey-proof' : null);
+      if (path !== '/passkeys') assert.deepEqual(JSON.parse(String(init?.body)),
+        path.endsWith('/options') ? mode === 'enroll' ? {password: 'current password'} : {}
+          : mode === 'remove' ? {id, password: 'current password'}
+          : {ceremonyId: id, response: mode === 'enroll' ? registrationReply : authenticationReply});
+    }
   });
 }
 
