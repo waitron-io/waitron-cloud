@@ -241,6 +241,17 @@ retry; permission loss clears it, and rate limits keep their server wait.
 Server authority, browser integration and the translation release gates remain
 separate qualification work; local database checks wait for Docker.
 
+
+## Translation-consent HTTP retry deadlines (D430)
+
+Switching accounts keeps the server's translation-consent retry wait, so another
+account cannot bypass it. Native HTTP/client/controller tests cover seconds and
+HTTP-date waits for reads, agreement and withdrawal. Requests resume only after
+the deadline and an explicit retry. A backward clock change during a later
+request cannot shorten an earlier deadline.
+Server authority, browser integration and translation release checks remain
+separate qualification gates; database suites run in CI while Docker is down.
+
 ## Account request proof and transport boundaries (D406)
 
 **Open.** Qualify server authority, browser integration and live ingress; physical
