@@ -148,6 +148,14 @@ Real database scheduling and production shutdown remain separate gates.
 - Keep owner decisions you still cite under `Decisions and deliberate limits`.
   Never remove a recorded decision with finished work.
 
+## Translation consent during account changes
+
+Native controller checks hold old reads, agreements and withdrawals across account
+changes, including signing back into the original account. Late success, lost
+replies and 401/403/429/503 refusals preserve current choices, the pending read,
+venue warning and retry deadline. Production provider and database authority still
+need their separate qualification; these checks cover only browser-side state.
+
 ## Decisions and deliberate limits
 
 - Email resend waits belong to each address and operation (owner, 2026-10-25).
