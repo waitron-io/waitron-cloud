@@ -9,7 +9,7 @@ import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { createLitestreamAfterStop, litestreamAfterStopOutput, createLitestreamRequestAudit, createLitestreamTransport } from '/code/litestream.mjs';
 import { createMeter, createMeteringProxy, classifyStorageOperation } from '/code/meter.mjs';
-let stage = 'prepare', checkpoint, diagnostic, writer;
+let stage = 'prepare', checkpoint, diagnostic, writer, listEvidence;
 
 async function run() {
   const root = mkdtempSync(join(tmpdir(), 'cost-native-list-')), path = join(root, 'venue.db');
@@ -22,12 +22,24 @@ async function run() {
   let uploaded;
   const initialUpload = new Promise(resolve => { uploaded = resolve; });
   const counter = { ...meter, observeAttempt(...args) {
-    const accepted = meter.observeAttempt(...args), [row] = args;
+    const [row] = args, list = listAttempts.get(row.token);
+    if (list && ['producer', 'observer'].includes(row.channel)
+      && ['success', 'transport-error', 'server-error', 'client-error'].includes(row.outcome)) {
+      list[row.channel + 'Outcome'] ??= row.outcome; mark(list, row.channel + 'Settled');
+    }
+    const accepted = meter.observeAttempt(...args);
     if (row.channel === 'producer' && row.operation === 'put' && row.outcome === 'success') uploaded();
     return accepted;
   } };
   let release, held, child, ended, control, front, proxy, timer, invalid = false;
   const objects = new Map();
+  // Fixed categories and bounded event numbers retain ordering without storage paths or SDK identities.
+  const evidence = { lists: [], truncated: false, lastEvent: 0 }, listAttempts = new Map();
+  const mark = (row, key) => {
+    if (!row || Object.hasOwn(row, key)) return;
+    row[key] = ++evidence.lastEvent;
+  };
+  const captureLists = () => ({ ...evidence, lists: evidence.lists.map(row => ({ ...row })) });
   const waiting = new Promise(resolve => { held = resolve; });
   const backend = createServer((req, res) => {
     const url = new URL(req.url, 'http://local'), key = decodeURIComponent(url.pathname.split('/').slice(2).join('/'));
@@ -60,16 +72,33 @@ async function run() {
     });
   });
   const gate = createServer((req, res) => {
+    const url = new URL(req.url, 'http://local');
+    const isList = req.method === 'GET' && url.searchParams.get('list-type') === '2';
+    let row;
+    if (isList) {
+      if (evidence.lists.length < 16) {
+        row = { category: !release && url.searchParams.get('prefix') === 'stream/0009/'
+          ? 'held-retention-list' : evidence.lists.length === 0 ? 'initial-list' : 'other-list' };
+        evidence.lists.push(row); mark(row, 'arrived');
+        const attempt = /^attempt=([1-9]\d*); max=[1-9]\d*$/.exec(req.headers['amz-sdk-request'] ?? '');
+        if (attempt) listAttempts.set(req.headers['amz-sdk-invocation-id'] + ':' + attempt[1], row);
+        req.on('aborted', () => mark(row, 'requestAborted'));
+        res.on('close', () => { mark(row, 'clientClosed'); row.responseFinished = res.writableFinished; });
+      } else evidence.truncated = true;
+    }
     const forward = () => {
+      mark(row, 'forwarded');
       const upstream = request(proxy.url + req.url, { method: req.method, headers: req.headers }, incoming => {
-        incoming.on('error', () => res.destroy()); res.writeHead(incoming.statusCode, incoming.headers); incoming.pipe(res);
+        mark(row, 'responseHeaders');
+        incoming.on('end', () => mark(row, 'responseEnd'));
+        incoming.on('aborted', () => mark(row, 'responseAborted'));
+        incoming.on('error', () => { mark(row, 'responseError'); res.destroy(); }); res.writeHead(incoming.statusCode, incoming.headers); incoming.pipe(res);
       });
-      upstream.on('error', () => res.destroy());
+      upstream.on('error', () => { mark(row, 'upstreamError'); res.destroy(); });
       res.on('close', () => { if (!res.writableFinished) upstream.destroy(); });
       req.pipe(upstream);
     };
     // Hold the observed snapshot-retention list; initialization must remain able to read its committed uploads.
-    const url = new URL(req.url, 'http://local');
     if (!release && req.method === 'GET' && url.searchParams.get('list-type') === '2' && url.searchParams.get('prefix') === 'stream/0009/') {
       release = forward; held({ method: req.method, list: true });
     }
@@ -103,7 +132,7 @@ async function run() {
       await Promise.race([initialUpload, ended.then(() => assert.fail('writer ended before initial upload'))]);
       await Promise.race([
         (async () => {
-          stage = 'stop-control';
+          stage = 'stop-control'; mark(evidence, 'stopRequested');
           const acknowledgement = await new Promise((resolve, reject) => {
             control = request({ socketPath, path: '/stop', method: 'POST', headers: { 'content-type': 'application/json' } }, res => {
               const chunks = []; let size = 0;
@@ -114,10 +143,13 @@ async function run() {
             });
             control.on('error', reject); control.end(JSON.stringify({ path, timeout: 2 }));
           });
+          mark(evidence, 'stopReplyReceived');
           stage = 'stop-acknowledgement'; afterStop.acknowledgeStop(acknowledgement);
+          mark(evidence, 'stopAcknowledged');
           stage = 'exit';
-          release(); child.kill('SIGTERM');
-          const [code] = await ended; assert.equal(code, 0); assert.equal(invalid, false);
+          mark(evidence, 'heldReleased'); release();
+          mark(evidence, 'signalSent'); child.kill('SIGTERM');
+          const [code] = await ended; mark(evidence, 'writerExited'); assert.equal(code, 0); assert.equal(invalid, false);
           stage = 'idle'; await front.whenIdle(() => {});
         })(),
         new Promise((_, reject) => { timer = setTimeout(() => reject(Error('native stop deadline')), 2000); }),
@@ -129,7 +161,7 @@ async function run() {
       return { version, initialUploadComplete: true, replication: audit.snapshot(), observed: meter.snapshot(), ...litestreamAfterStopOutput(subset) };
     } finally { clearTimeout(watchdog); clearTimeout(timer); control?.destroy(); }
   } catch (error) {
-    diagnostic = checkpoint?.();
+    diagnostic = checkpoint?.(); listEvidence = captureLists();
     throw error;
   } finally {
     if (child && child.exitCode === null && child.signalCode === null) { child.kill('SIGKILL'); await ended; }
@@ -141,6 +173,7 @@ async function run() {
 await run().then(result => process.stdout.write(JSON.stringify(result)), () => {
   console.error(JSON.stringify({ kind: 'litestream-native-control', stage, status: 'rejected',
     ...(diagnostic ? { diagnostic } : {}),
+    ...(listEvidence ? { listEvidence } : {}),
     ...(writer ? { writer: { exited: writer.exitCode !== null || writer.signalCode !== null,
       code: writer.exitCode, signal: writer.signalCode } } : {}) }));
   console.error('Official Litestream list control failed'); process.exitCode = 1;

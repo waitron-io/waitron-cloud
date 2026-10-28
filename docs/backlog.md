@@ -3644,6 +3644,26 @@ invalid request audit, retains the first failed audit stage and identifies an
 interrupted producer attempt. The historical stop/exit cause still needs a
 labelled recurrence; see the linked investigation before changing the stop rule.
 
+
+## Held-list control failure ordering (D391)
+
+The official held-metadata control failed in [PR633's merge cost run](https://github.com/waitron-io/waitron-cloud/actions/runs/40631222000/job/122627856885)
+on its first LIST attempt. The transport reported an interrupted response while
+the storage observer reported success. Matching byte totals and a zero writer exit
+do not explain or permit that refusal.
+
+Failure-only fixture records now distinguish the initial, held retention and other
+LISTs. You can compare arrival, forwarding, response and per-counter settlement
+order with the stop request, reply, validated acknowledgement, release and signal.
+The record holds at most sixteen LISTs, marks truncation, omits private request
+identities and freezes before cleanup. Native HTTP/process controls cover ordering,
+invalid replies, truncation and an actual pre-acknowledgement interruption. That
+controlled partial response remains refused at a different boundary from the
+historical Linux event; it does not identify the historical cause. The official
+0.5.17 binary, allowance, both counters, assertions and deadlines remain unchanged.
+Genuine local Docker reproduction waits until Docker returns. Use a labelled
+recurrence to establish the cause before changing any shutdown rule.
+
 ## Registration SQL setup failure diagnostics (D385)
 
 A registration setup failure now reports its fixed boundary and, for migration
