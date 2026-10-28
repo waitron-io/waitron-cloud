@@ -402,14 +402,21 @@ browser file downloads and production-network qualification remain separate gate
 
 ## Usage-read transport refusals and retry waits (D434)
 
-If a usage read loses its reply, your earlier totals remain available until you
-explicitly retry. Native HTTP/client/controller checks cover unreadable replies,
-valid-looking totals carried by refused responses and permission loss that clears
-private totals. Pending reads cannot dispatch again, and accepted totals load once
-until refreshed. Server retry waits survive account and organisation changes and
-backward clock adjustments, through the exact end of seconds and date values.
-Runtime, accounting and existing assertions stay unchanged. Server authority,
-browser integration and production metering remain separate qualification gates;
+If a usage read loses its reply, your earlier totals remain available during an
+explicit retry and after another failure. A successful read replaces them;
+permission loss or a changed account or organisation clears them. Native
+HTTP/client/controller checks cover unreadable replies, valid-looking totals
+carried by refused responses, duplicate reads and exact seconds/date retry
+boundaries through navigation and backward clock adjustments. Runtime, accounting
+and existing assertions stay unchanged. Run
+`node --test apps/portal/test/usage-transport-boundary.test.ts`.
+
+The existing wall-clock deadline can lengthen a wait, or revive an expired wait,
+when your system clock moves backward. Decide how relative waits and clock
+corrections should interact before changing that policy; a one-hour correction
+reproduces a 3,602-second wait after a two-second server delay. The longer-wait
+retention branch still needs a dedicated check. Server authority, browser
+integration and production metering remain separate qualification gates;
 database suites run in CI while local Docker is unavailable.
 
 ## Repository licence
