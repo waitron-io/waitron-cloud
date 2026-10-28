@@ -124,6 +124,7 @@ export class PasskeyController {
       if (this.#cancelled(error)) this.notice = 'passkeyCancelled'; else this.error = 'passkeyUnavailable';
       this.#changed(); return false;
     }
+    if (generation !== this.#generation) return false;
     const result = await this.#request<{accountId: string}>('/passkeys/authentication/verify', {ceremonyId: options.value.ceremonyId, response});
     if (generation !== this.#generation) return false;
     this.pending = false;
@@ -150,6 +151,7 @@ export class PasskeyController {
       else this.error = error instanceof DOMException && error.name === 'InvalidStateError' ? 'passkeyRegistrationRefused' : 'passkeyUnavailable';
       this.#changed(); return;
     }
+    if (generation !== this.#generation) return;
     const result = await this.#request<PasskeySummary>('/passkeys/registration/verify', {ceremonyId: options.value.ceremonyId, response});
     if (generation !== this.#generation) return;
     if (!result.ok) this.retryAt = Math.max(this.retryAt, Date.now() + result.retryAfterMs);
