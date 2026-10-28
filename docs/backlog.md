@@ -3641,7 +3641,8 @@ independent request audit and sanitized close record. Fixed categories distingui
 poisoned state, input shape, hop and phase, row metadata and identity, row capacity
 and operation, duplicate admission, retry sequence, observer pairing, post-stop
 operation and ordinal, clock order and the three-attempt bound. Later refused
-calls retain the first admission cause. No request paths, headers, invocation
+calls retain the first admission cause. Producer and observer share the tracker,
+so a later poisoned hop reports the earlier hop's cause. No request paths, headers, invocation
 identifiers or accessor values are published; every existing refusal and accounting
 rule remains in force.
 

@@ -69,6 +69,19 @@ test('admission input accessors are refused without being evaluated', () => {
   assert.equal(reads, 0);
 });
 
+for (const stopped of [false, true]) test(`admission labels preserve the existing operation read count when stopped=${stopped}`, () => {
+  const s = createLitestreamAfterStop({ clock: () => 0 });
+  if (stopped) stop(s);
+  let reads = 0;
+  const limit = stopped ? 3 : 2;
+  const input = new Proxy(admission(), { get(target, key, receiver) {
+    if (key === 'operation' && ++reads > limit) throw Error('PRIVATE_CANARY');
+    return Reflect.get(target, key, receiver);
+  } });
+  assert.doesNotThrow(() => s.admit(input));
+  assert.equal(reads, limit);
+});
+
 test('the independent observer audit retains its first admission guard without recording headers', () => {
   const afterStop = createLitestreamAfterStop({ clock: () => 0 });
   const audit = createLitestreamRequestAudit({ phase: 'workload', afterStop });
@@ -83,14 +96,41 @@ test('the independent observer audit retains its first admission guard without r
   assert.throws(() => audit.snapshot(), bad);
 });
 
-async function httpFixture(t, afterStop) {
+test('an SDK issue refusal cannot run a diagnostic descriptor trap or supply an admission label', () => {
+  let reads = 0;
+  const error = new Proxy(Error('PRIVATE_CANARY'), { getOwnPropertyDescriptor() { reads++; throw Error('PRIVATE_CANARY'); } });
+  const audit = createLitestreamRequestAudit({ phase: 'workload', afterStop: {
+    issue() { throw error; }, invalidate() {},
+  } });
+  const log = `SDK 2026/10/28 DEBUG Request\nGET /bucket?list-type=2 HTTP/1.1\namz-sdk-invocation-id: ${invocation(1)}\namz-sdk-request: attempt=1; max=3\n\n`;
+  assert.throws(() => audit.write(Buffer.from(log)), bad);
+  assert.deepEqual(audit.checkpoint().failure, { stage: 'after-stop-issue' });
+  assert.equal(reads, 0);
+});
+
+for (const label of ['clock', 'PRIVATE_CANARY']) test(`an observer audit filters a forged guard from the ${label === 'clock' ? 'wrong stage' : 'unknown category'}`, () => {
+  const error = Object.assign(Error('PRIVATE_CANARY'), { litestreamAfterStopAdmissionGuard: label });
+  const afterStop = { issue() { throw error; }, admit() { throw error; }, invalidate() {} };
+  const audit = createLitestreamRequestAudit({ phase: 'workload', afterStop });
+  if (label === 'clock') {
+    assert.throws(() => audit.write(Buffer.from(`SDK 2026/10/28 DEBUG Request\nGET /bucket?list-type=2 HTTP/1.1\namz-sdk-invocation-id: ${invocation(1)}\namz-sdk-request: attempt=1; max=3\n\n`)), bad);
+  } else {
+    assert.throws(() => audit.observe({ operation: 'list', headers: {
+      'amz-sdk-invocation-id': invocation(1), 'amz-sdk-request': 'attempt=1; max=3',
+    } }), bad);
+  }
+  assert.equal(Object.hasOwn(audit.checkpoint().failure, 'afterStopAdmissionGuard'), false);
+  assert.doesNotMatch(JSON.stringify(audit.checkpoint()), /PRIVATE_CANARY|55555555/);
+});
+
+async function httpFixture(t, afterStop, options = {}) {
   let forwarded = 0;
   const backend = createServer((req, res) => { forwarded++; req.resume(); req.on('end', () => res.end()); });
   backend.listen(0, '127.0.0.1'); await once(backend, 'listening');
   t.after(() => { backend.closeAllConnections(); return new Promise(resolve => backend.close(resolve)); });
   const meter = createMeter({ phase: 'workload', clock: () => 0, afterStop });
   const transport = await createLitestreamTransport({ target: `http://127.0.0.1:${backend.address().port}`,
-    meter, phase: 'workload', afterStop });
+    meter, phase: 'workload', afterStop, ...options });
   t.after(() => transport.close().catch(() => {}));
   const send = method => new Promise((resolve, reject) => {
     const req = request(transport.url + '/PRIVATE_CANARY/key', { method, headers: {
@@ -125,6 +165,52 @@ test('successful HTTP requests do not manufacture an admission diagnostic', asyn
   assert.equal(f.forwarded(), 1);
   assert.equal(Object.hasOwn(f.transport.checkpoint(), 'afterStopAdmissionGuard'), false);
   await f.transport.close();
+});
+
+test('unrelated lifetime errors cannot run a diagnostic descriptor trap or supply an admission label', async t => {
+  let reads = 0;
+  const error = new Proxy(Error('PRIVATE_CANARY'), { getOwnPropertyDescriptor() { reads++; throw Error('PRIVATE_CANARY'); } });
+  const f = await httpFixture(t, undefined, { lifetimes: { begin() { throw error; } } });
+  assert.equal(await f.send('PUT'), 400); assert.equal(f.forwarded(), 0);
+  assert.equal(f.transport.checkpoint().validationStage, 'lifetime-begin');
+  assert.equal(reads, 0);
+  assert.equal(Object.hasOwn(f.transport.checkpoint(), 'afterStopAdmissionGuard'), false);
+});
+
+test('an unrelated lifetime error cannot forge an admission label', async t => {
+  const f = await httpFixture(t, undefined, { lifetimes: { begin() {
+    throw Object.assign(Error('PRIVATE_CANARY'), { litestreamAfterStopAdmissionGuard: 'clock' });
+  } } });
+  assert.equal(await f.send('PUT'), 400);
+  assert.equal(Object.hasOwn(f.transport.checkpoint(), 'afterStopAdmissionGuard'), false);
+  await assert.rejects(f.transport.close(), bad);
+});
+
+test('the transport drops an unknown admission category without evaluating accessor output', async t => {
+  let reads = 0;
+  for (const error of [
+    Object.assign(Error('PRIVATE_CANARY'), { litestreamAfterStopAdmissionGuard: 'PRIVATE_CANARY' }),
+    Object.defineProperty(Error('PRIVATE_CANARY'), 'litestreamAfterStopAdmissionGuard', {
+      get() { reads++; throw Error('PRIVATE_CANARY'); },
+    }),
+  ]) {
+    const f = await httpFixture(t, { admit() { throw error; }, invalidate() {} });
+    assert.equal(await f.send('PUT'), 400); assert.equal(f.forwarded(), 0);
+    assert.equal(f.transport.checkpoint().validationStage, 'after-stop-admission');
+    assert.equal(Object.hasOwn(f.transport.checkpoint(), 'afterStopAdmissionGuard'), false);
+    assert.doesNotMatch(JSON.stringify(f.transport.checkpoint()), /PRIVATE_CANARY/);
+    await assert.rejects(f.transport.close(), bad);
+  }
+  assert.equal(reads, 0);
+});
+
+test('the shared tracker reports its first observer refusal when a later producer is already poisoned', async t => {
+  const s = createLitestreamAfterStop({ clock: () => 0 });
+  assert.throws(() => s.admit(admission({ hop: 'observer' })), bad);
+  const f = await httpFixture(t, s);
+  assert.equal(await f.send('PUT'), 400); assert.equal(f.forwarded(), 0);
+  assert.equal(f.transport.checkpoint().afterStopAdmissionGuard, 'observer-pairing');
+  await assert.rejects(f.transport.close(), bad);
 });
 
 test('close reporting filters untrusted admission labels and preserves the original thrown error', async () => {

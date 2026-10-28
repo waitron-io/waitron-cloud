@@ -118,8 +118,10 @@ export function createLitestreamAfterStop(options) {
     next(input.hop, input, mark);
     mark('observer-pairing');
     if (input.hop === 'observer') requireThat(row.admissions.producer && row.admissions.producer.phase === input.phase);
-    mark(input.operation !== 'list' ? 'post-stop-operation' : 'post-stop-ordinal');
-    if (acknowledged) requireThat(input.operation === 'list' && input.ordinal === 0);
+    if (acknowledged) {
+      mark('post-stop-operation'); requireThat(input.operation === 'list');
+      mark('post-stop-ordinal'); requireThat(input.ordinal === 0);
+    }
     row.admissions[input.hop] = { ...event(mark), phase: input.phase };
     if (acknowledged && input.hop === 'observer') { row.lateAdmission = true; affect(row, mark); }
   });
@@ -320,8 +322,10 @@ export function createLitestreamRequestAudit({ phase, allowBulkDeletes = false, 
     catch (error) {
       if (!failure) {
         failure = { stage: validationStage };
-        const guard = own(error, 'litestreamAfterStopAdmissionGuard');
-        if (validationStage === 'after-stop-admission' && afterStopAdmissionGuards.has(guard)) failure.afterStopAdmissionGuard = guard;
+        if (validationStage === 'after-stop-admission') {
+          const guard = own(error, 'litestreamAfterStopAdmissionGuard');
+          if (afterStopAdmissionGuards.has(guard)) failure.afterStopAdmissionGuard = guard;
+        }
       }
       invalid = true; afterStop?.invalidate(); fail();
     }
@@ -520,8 +524,10 @@ export async function createLitestreamTransport({ target, meter, phase, lifetime
       // Later requests rejected by the poisoned transport must not replace its first failing boundary.
       if (refusal.reason === 'request-validation' && !refusal.validationStage) {
         refusal.validationStage = validationStage;
-        const guard = own(error, 'litestreamAfterStopAdmissionGuard');
-        if (validationStage === 'after-stop-admission' && afterStopAdmissionGuards.has(guard)) refusal.afterStopAdmissionGuard = guard;
+        if (validationStage === 'after-stop-admission') {
+          const guard = own(error, 'litestreamAfterStopAdmissionGuard');
+          if (afterStopAdmissionGuards.has(guard)) refusal.afterStopAdmissionGuard = guard;
+        }
       }
       if (id) pending.delete(id.key); source.resume(); destination.writeHead(400); destination.end(); return;
     }
