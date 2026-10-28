@@ -3664,6 +3664,18 @@ the next genuine Linux timeout, then reproduce and fix its cause while preservin
 the existing assertions and deadlines. See the [investigation and qualification
 limits](backlog/storage-authority-timeout.md).
 
+## Authenticator HTTP response boundaries (D418)
+
+Malformed authenticator status and setup replies cannot replace a confirmed
+factor state or expose a setup secret. Malformed activation, removal and
+recovery-code replacement replies require you to check the current state before
+continuing; they cannot return recovery codes or confirm a change. Native checks
+exercise the real HTTP client and controller, including secret/URI matching,
+unique recovery codes, cleared proof inputs, explicit valid retries and retry
+waits. Runtime rules and existing tests are unchanged. Browser/session integration,
+server authority and production release qualification remain separate gates.
+
+
 ## Authenticator replies after account changes (D399)
 
 Delayed authenticator reads, setup, activation, removal, regeneration, cancellation
