@@ -76,6 +76,7 @@ console.error('attempt evidence ' + attempt);
 const mode = process.env.FIXTURE_MODE;
 if (mode === 'reset' || (mode === 'reset-first' && attempt === 1) || (mode === 'reset-twice' && attempt < 3)) {console.error('npm error code ECONNRESET'); process.exit(1);}
 if (mode === 'integrity') {console.error('npm error code EINTEGRITY ECONNRESET'); process.exit(1);}
+if (mode === 'reset-then-permission') {console.error('npm error code ECONNRESET\\nnpm error code EACCES'); process.exit(1);}
 if (mode === 'unknown') {console.error('unclassified failure'); process.exit(1);}
 if (mode === 'hang' || mode === 'ignore-term' || mode === 'descendant') {
   if (mode !== 'hang') process.on('SIGTERM', () => {});
@@ -180,7 +181,7 @@ test('three registry resets fail without publishing an unverified installation',
   assert.match(result.stderr, /attempt evidence 3/);
 });
 
-for (const mode of ['integrity', 'signature', 'identity', 'unknown', 'wrong-version', 'version-exit']) {
+for (const mode of ['integrity', 'signature', 'identity', 'unknown', 'reset-then-permission', 'wrong-version', 'version-exit']) {
   test(`${mode} fails immediately without publishing or retrying`, async () => {
     const result = await run(mode);
     assert.equal(result.code, 1, result.stderr);

@@ -37,10 +37,14 @@ async function command(executable, args, cwd, env, deadline, grace) {
   let stdout = '', tail = '', permanent = false, transient = false, timedOut = false;
   const observe = (chunk, destination) => {
     destination.write(chunk);
-    tail = (tail + chunk.toString()).slice(-65_536);
+    tail += chunk.toString();
     // An explicit verification refusal wins even when it also mentions a reset.
     permanent ||= /EINTEGRITY|ERR_PNPM_(?:PNPM_ENGINE_IDENTITY|INVALID_SIGNATURE)|invalid signature|signature (?:verification )?failed/i.test(tail);
+    for (const code of tail.matchAll(/\bERR_PNPM_([A-Z][A-Z0-9_]*)\b|npm (?:error|ERR!) code ([A-Z][A-Z0-9_]*)\b/g)) {
+      permanent ||= !/^(?:ECONNRESET|ECONNREFUSED|ETIMEDOUT|EAI_AGAIN|ENETUNREACH|EHOSTUNREACH|UND_ERR_SOCKET|UND_ERR_CONNECT_TIMEOUT|FETCH_ERROR|FETCH_(?:429|502|503|504))$/.test(code[1] ?? code[2]);
+    }
     transient ||= /(?:\b|ERR_PNPM_)(?:ECONNRESET|ECONNREFUSED|ETIMEDOUT|EAI_AGAIN|ENETUNREACH|EHOSTUNREACH|UND_ERR_SOCKET|UND_ERR_CONNECT_TIMEOUT|FETCH_ERROR)\b|ERR_PNPM_FETCH_(?:429|502|503|504)\b/.test(tail);
+    tail = tail.slice(-65_536);
   };
   return await new Promise(resolve => {
     const child = spawn(executable, args, {cwd, env, detached: true, stdio: ['ignore', 'pipe', 'pipe']});
