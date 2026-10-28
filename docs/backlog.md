@@ -4201,6 +4201,16 @@ removed, retained and failed-refresh journeys. Original recovery, permission,
 selection, request, layout and deadline assertions remain unchanged across both
 languages, themes and viewport widths. No product authority changes.
 
+## Remote hostname save transport and read-back (D427)
+
+If a hostname save loses its reply, the portal reads the current status once
+to find out whether it succeeded. Native HTTP/client/controller checks cover
+refused, unreadable and lost replies, plus failed read-back and explicit status
+retries. Only a matching current hostname confirms the save; another apply
+requires a fresh review. A server wait permits this immediate read-back but
+blocks later requests until its deadline. Runtime and existing tests stay
+unchanged. Live DNS/ACME, browser and deployment qualification remain open.
+
 ## Remote-access HTTP response boundaries (D420)
 
 Native HTTP client and controller checks reject malformed remote status and DNS
