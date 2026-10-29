@@ -21,75 +21,42 @@
 
 ## Installation HTTP replies and stop confirmation (D416)
 
-When an installation reply is malformed, your existing venue rows and stop
-confirmation remain available for an explicit retry. Native client/controller
-tests cover service, overview and redacted monitoring evidence. A stop reply must
-confirm revocation for the same installation, venue, organisation and business;
-a valid reply keeps the selected row's display context and offered action.
-Permission refusals and retry waits retain their existing handling. Server
-permission checks and live delivery remain separate qualification gates.
+**Open.** Qualify server permissions, local confirmation and live delivery against the
+selected deployment.
+See [the boundaries and remaining work](backlog/venue-connection-http.md#installation-http-replies-and-stop-confirmation-d416).
 
 ## Installation transport refusals and retry waits (D433)
 
-When an installation read or stop has no usable reply, your selected row and
-stop confirmation remain available for an explicit retry. Native HTTP client
-and controller checks cover lost replies, unreadable bodies and refused statuses
-carrying success-shaped data. Pending requests block another read or stop and
-selection changes. Server retry waits survive account changes and backward clock
-adjustments through the exact end of seconds and date values. Runtime and existing
-assertions are unchanged; server permissions and live delivery remain separate
-qualification gates. Database suites run in CI during the local Docker outage.
+**Open.** Qualify server permissions, local confirmation and live delivery against the
+selected deployment.
+See [the boundaries and remaining work](backlog/venue-connection-http.md#installation-transport-refusals-and-retry-waits-d433).
 
 ## Pairing transport refusals and retry waits (D428)
 
-When pairing transport fails, your code, offered business and inspected venue
-remain available for an explicit retry. Native HTTP/client/controller checks
-cover refused and unreadable replies, uncertain approvals and success-shaped
-bodies carried by refused HTTP statuses. Pending requests cannot dispatch again;
-server waits apply through account and request changes, including the exact end
-of seconds and date Retry-After values. A retry keeps the existing request proof
-and binding. Server permission checks and local confirmation remain separate
-qualification gates; database suites run in CI during the local Docker outage.
+**Open.** Qualify server permissions, local confirmation and live delivery against the
+selected deployment.
+See [the boundaries and remaining work](backlog/venue-connection-http.md#pairing-transport-refusals-and-retry-waits-d428).
 
 ## Pairing HTTP replies and binding checks (D414)
 
-Malformed business lists cannot supply a pairing choice, and malformed inspection
-or approval replies cannot replace your accepted view. Native client/controller
-tests cover valid replies naming another request, venue, organisation or business,
-plus approval replies that still await approval. A refused reply retains your
-code and choice for an explicit retry; writes carry the existing request proof.
-Server permission checks and local confirmation remain separate qualification gates.
+**Open.** Qualify server permissions, local confirmation and live delivery against the
+selected deployment.
+See [the boundaries and remaining work](backlog/venue-connection-http.md#pairing-http-replies-and-binding-checks-d414).
 
 ## Initial alert reads after account changes (D408)
 
-When you change account or sign out, late alert-preference reads cannot replace
-current choices, end a newer pending read, clear a saved confirmation or impose
-an old retry wait. Native controller tests cover successful reads and refusals,
-including returning to the same account. Selecting the current account keeps its
-pending read, and a current rate limit still applies after an account change.
-Server authority, browser integration and production delivery remain separate
-qualification gates.
+**Open.** Qualify server authority, browser integration and production mail delivery.
+See [the boundaries and remaining work](backlog/alert-preference-http.md#initial-alert-reads-after-account-changes-d408).
 
 ## Alert-preference transport refusals and retry waits (D429)
 
-If an alert read or save has no usable reply, your choices remain unconfirmed
-until you explicitly retry or read the current server state. Native tests exercise
-the real HTTP client and controller with unreadable bodies and valid-looking
-preferences carried by refused HTTP responses. Pending requests cannot dispatch again or change the
-draft. Server retry waits apply through sign-out and account changes, including
-the exact end of seconds and date values. Server authority, browser integration
-and production mail delivery remain separate qualification gates; database
-suites run in CI while local Docker is unavailable.
+**Open.** Qualify server authority, browser integration and production mail delivery.
+See [the boundaries and remaining work](backlog/alert-preference-http.md#alert-preference-transport-refusals-and-retry-waits-d429).
 
 ## Alert-preference HTTP response validation (D415)
 
-Malformed alert replies cannot replace your choices or confirm a save. Native
-HTTP/client/controller checks cover initial reads, refreshes and saves, including
-broken JSON and lost connections. An uncertain save stays retryable after you
-revert your choices; a valid reply confirms the server's choices. Current permission
-loss clears the form, and rate limits retain their wait before another request.
-Server authority, browser integration and production mail delivery remain separate
-qualification gates; database suites run in CI while local Docker is unavailable.
+**Open.** Qualify server authority, browser integration and production mail delivery.
+See [the boundaries and remaining work](backlog/alert-preference-http.md#alert-preference-http-response-validation-d415).
 
 ## Translation-consent HTTP response validation (D417)
 
@@ -103,91 +70,51 @@ separate qualification work; local database checks wait for Docker.
 
 ## Account request proof and transport boundaries (D406)
 
-The account request client selects one CSRF cookie for the connection protocol.
-Missing or duplicate cookies send an empty proof, and public sign-in and passive
-account reads do not inspect management cookies. Native tests cover request
-payloads, credentials, refusals and private error redaction across account controls.
-Real loopback HTTP checks cover the existing deadline while waiting for headers
-or a response body; failed writes remain single attempts. Server authority and
-live ingress qualification remain open; database/browser suites run in CI while
-local Docker is unavailable.
+**Open.** Qualify server authority, browser integration and live ingress; physical
+passkeys and the separate retry-clock repair retain their own gates.
+See [the boundaries and remaining work](backlog/account-http-boundaries.md#account-request-proof-and-transport-boundaries-d406).
 
 ## Session HTTP response validation (D412)
 
-Malformed session lists cannot become revocation targets or confirm that a session
-ended. Native HTTP/client/controller checks cover initial reads and reconciliation
-after accepted or lost revocation replies. A failed reconciliation offers a
-read-only retry without repeating the write; a valid list confirms removal only
-when the selected session is absent. Lists retain exactly one current session,
-including beyond 100 other sessions. Server authority and live ingress remain
-separate qualification gates; database suites run in CI while Docker is unavailable.
+**Open.** Qualify server authority, browser integration and live ingress; physical
+passkeys and the separate retry-clock repair retain their own gates.
+See [the boundaries and remaining work](backlog/account-http-boundaries.md#session-http-response-validation-d412).
 
 ## Session management transport refusals and retry waits (D432)
 
-When a session list cannot be read, it cannot supply targets for revocation.
-An uncertain removal uses a fresh read to check whether the selected session
-still exists; a later retry reads the list without repeating the write. Native
-HTTP/client/controller checks cover refused and unreadable replies, lost writes
-and the supported sign-out reasons when the current session ends. Server retry
-waits apply across account changes through the exact end of seconds and date
-values, and a shorter read wait cannot shorten an earlier write wait. Runtime
-and original assertions stay unchanged; server authority and live ingress remain
-separate qualification gates. Database suites run in CI during the Docker outage.
+**Open.** Qualify server authority, browser integration and live ingress; physical
+passkeys and the separate retry-clock repair retain their own gates.
+See [the boundaries and remaining work](backlog/account-http-boundaries.md#session-management-transport-refusals-and-retry-waits-d432).
 
 ## Session recheck ordering and disposal (D405)
 
-When session checks overlap, a late reply cannot replace a newer accepted result,
-change its retry wait or notify the app. An earlier result can still apply while
-a newer read is pending. Ordinary checks share that pending read; completing an
-older read cannot release it. Disposing an old session drops later replies,
-removes visibility observation and cancels the scheduled expiry check.
-Native controlled-fetch tests cover these boundaries without changing session
-policy or server authority. Browser/database qualification runs in CI while local
-Docker is unavailable; historical browser startup failures remain unattributed.
+**Open.** Qualify server authority, browser integration and live ingress; physical
+passkeys and the separate retry-clock repair retain their own gates.
+See [the boundaries and remaining work](backlog/account-http-boundaries.md#session-recheck-ordering-and-disposal-d405).
 
 ## Passkey HTTP replies before prompts and confirmation (D421)
 
-Malformed passkey lists cannot supply removal targets. Native HTTP/client/controller
-checks reject invalid sign-in and registration options before opening a browser
-prompt. An unreadable verification reply leaves sign-in uncertain; adding or
-removing a key uses a valid fresh list to reconcile a lost reply. A rejected list
-retains the last usable choices and offers a read-only retry. Tests cover request
-bodies, account-management CSRF and rate-limit waits without changing runtime or
-permissions. Physical-passkey, database and live ingress qualification remain
-separate gates; database suites run in CI while local Docker is unavailable.
+**Open.** Qualify server authority, browser integration and live ingress; physical
+passkeys and the separate retry-clock repair retain their own gates.
+See [the boundaries and remaining work](backlog/account-http-boundaries.md#passkey-http-replies-before-prompts-and-confirmation-d421).
 
 ## Passkey transport refusals and pending actions (D435)
 
-When a passkey request fails, you can retry explicitly without replaying an
-unconfirmed action. Native checks through the real HTTP client retain usable
-keys after failed reads and reject refused ceremony options before opening a
-browser prompt. Each pending list, options, verification and reconciliation
-request blocks duplicate actions. Management waits accept seconds or HTTP dates
-and survive account changes until their exact expiry. Disposable guard deletions
-prove the HTTP, pending, wait and request-proof assertions. Runtime and existing
-tests stay unchanged. Backward-clock handling belongs to the separate retry-clock
-repair; physical passkeys, server authority and live ingress still need their own
-qualification, with database suites running in CI while Docker is unavailable.
-Run `node --test apps/portal/test/passkey-transport-boundary.test.ts`.
+**Open.** Qualify server authority, browser integration and live ingress; physical
+passkeys and the separate retry-clock repair retain their own gates.
+See [the boundaries and remaining work](backlog/account-http-boundaries.md#passkey-transport-refusals-and-pending-actions-d435).
 
 ## Passkey management after account changes (D403)
 
-Obsolete enrollment and sign-in browser prompts stop before verification after
-account or route changes. Physical-passkey and live-provider qualification remain
-open.
+**Open.** Qualify server authority, browser integration and live ingress; physical
+passkeys and the separate retry-clock repair retain their own gates.
+See [the boundaries and remaining work](backlog/account-http-boundaries.md#passkey-management-after-account-changes-d403).
 
 ## Password and second-factor sign-in HTTP replies (D424)
 
-Your password reply must distinguish a signed-in account from a second-factor
-challenge before the portal can continue. Native checks through the real HTTP
-client reject malformed account IDs, mixed account/challenge replies, malformed
-challenge markers, tokens and expiry dates, and the wrong success status. A
-second-factor completion accepts only its account reply. Refused, unreadable and
-lost replies remain failures; a later explicit valid request can still succeed.
-The checks preserve exact password and proof payloads, retry waits and one request
-per action, including a recovery-code completion. Removing each exercised guard
-in a disposable copy makes the checks fail. Runtime and original assertions stay
-unchanged; browser, server authority and deployment keep their separate gates.
+**Open.** Qualify server authority, browser integration and live ingress; physical
+passkeys and the separate retry-clock repair retain their own gates.
+See [the boundaries and remaining work](backlog/account-http-boundaries.md#password-and-second-factor-sign-in-http-replies-d424).
 
 ## Current state
 
@@ -393,54 +320,21 @@ the jobs meet the five-minute target.
 
 ## Diagnostic download response validation (D410)
 
-When you download a diagnostic, native HTTP/controller checks now prove that
-nested extra fields, malformed service and incident metadata, duplicate entries,
-and invalid timestamps cannot reach the file-saving callback. A well-formed
-reply for another installation is also refused; a later valid retry still saves
-the selected installation's document with its expected filename. These checks
-exercise the existing response validator and preserve every permission and
-cooldown rule. Server redaction and genuine browser downloads remain separate
-CI and launch checks.
+**Open.** Qualify server redaction, genuine browser downloads and production-network
+behaviour.
+See [the boundaries and remaining work](backlog/diagnostic-download-http.md#diagnostic-download-response-validation-d410).
 
 ## Diagnostic download transport failures (D425)
 
-A refused or unreadable diagnostic reply must never save a file. Native tests
-exercise the real HTTP client and download controller for session and permission
-refusals, service errors, broken JSON, empty replies and network failures. A
-well-formed document inside an HTTP refusal is still refused. Each failed download
-leaves a usable explicit retry; a server wait prevents another request until its
-exact expiry, including both Retry-After formats. Run
-`node --test apps/portal/test/diagnostic-transport-boundary.test.ts`.
-These checks preserve the existing permissions and waits. Server redaction,
-browser file downloads and production-network qualification remain separate gates.
+**Open.** Qualify server redaction, genuine browser downloads and production-network
+behaviour.
+See [the boundaries and remaining work](backlog/diagnostic-download-http.md#diagnostic-download-transport-failures-d425).
 
 ## Usage-read transport refusals and retry waits (D434, D436)
 
-If a usage read loses its reply, your earlier totals remain available during an
-explicit retry and after another failure. A successful read replaces them;
-permission loss or a changed account or organisation clears them. Native
-HTTP/client/controller checks cover unreadable replies, valid-looking totals
-carried by refused responses, duplicate reads and exact seconds/date retry
-boundaries through navigation. Run
-`node --test apps/portal/test/usage-transport-boundary.test.ts`.
-
-Your usage retry wait measures elapsed time, so changing your system clock
-cannot lengthen, bypass or revive it. HTTP-date waits use the response's `Date`
-when valid, otherwise your clock at receipt; past dates give no wait. The usage
-wait contributes its remaining delay to the app countdown; another panel may hold
-that countdown for longer. Native clock checks and
-English/Spanish browser checks at 390 and 1280 pixels in both themes cover these
-boundaries. Run `node --test apps/portal/test/usage-retry-clock*.test.ts`.
-The shared countdown also has dedicated English/Spanish browser checks in both
-themes at 390 and 1280 pixels: the longer of a usage wait and an alert wait stays
-visible until its own expiry. When usage is ready first, you can refresh its totals
-without clearing the remaining alert wait. Run
-`node --test apps/portal/test/usage-shared-countdown-browser.test.ts` (D444).
-Other portal controllers retain their existing clock policy: an expired alert
-retry wait revives after a backward clock correction, without another request.
-A refusal with no server delay can also leave such a deadline. That separate
-issue remains open. Server authority and production metering remain separate
-qualification gates; database suites run in CI while local Docker is unavailable.
+**Open.** Fix the separate backward-clock revival of other panels’ retry waits; server
+authority and production metering remain unqualified.
+See [the boundaries and remaining work](backlog/usage-metering.md#usage-read-transport-refusals-and-retry-waits-d434-d436).
 
 ## Repository licence
 
@@ -2512,79 +2406,10 @@ implementation or production evidence.
   configurations in the inventory and real compiler trace. Isolated controls
   switch every package to the long spelling and still refuse unknown commands
   or configurations. All earlier compiler assertions remain in place.
-  Bootstrap setup now gives npm
-  registry requests 15 seconds with one retry after one second, so a stalled
-  tarball fetch cannot consume minutes before tests start. A real local `npm ci`
-  against a held tarball request exceeds 35 seconds under the defaults and fails
-  in about 31 seconds with these settings, after two attempts. The setup action
-  receives this policy in every CI job; project installation, auditing and all
-  test/job deadlines stay unchanged. This is a per-request limit, not a total
-  bootstrap deadline. In run 38803777952, bootstrap npm reported a five-minute
-  installation and the account shard was later cancelled before completing.
-  Its log does not identify the slow request, so do not attribute it to a
-  particular registry endpoint or to a product test. Preserve bootstrap timing
-  and npm diagnostics if setup overruns recur. A separate
-  [merge run 39650584401](https://github.com/waitron-io/waitron-cloud/actions/runs/39650584401/job/119397690795)
-  refused registration partition 3 before tests: the action's locked pnpm 11.19.0
-  bootstrap could not verify `@pnpm/exe@9.15.0` signature metadata, reporting
-  `ERR_PNPM_PNPM_ENGINE_IDENTITY_UNVERIFIABLE` with `terminated`. The pinned
-  verifier classifies that error as unreachable metadata, rather than a completed
-  invalid-signature check. A fresh disposable Linux bootstrap with the exact
-  action lock later completed the switch and printed 9.15.0 with verification
-  intact; it does not explain the original termination. Capture the failing
-  HTTP stage and registry response if it recurs, then evaluate bounded recovery
-  while preserving signature verification. A later successful run is recovery
-  evidence, not a code fix. The same error class recurred in merge run
-  [40022323542, backups partition 2](https://github.com/waitron-io/waitron-cloud/actions/runs/40022323542/job/120649947311):
-  pnpm 11.19.0 refused the switch to 9.15.0 after signature verification of
-  `@pnpm/linux-x64@9.15.0` terminated. No backup tests ran in that job. Retain
-  verification and capture the missing HTTP stage before choosing a repair;
-  neither the underlying cause nor a connection to portal changes is established.
-  D154 adds a read-only observer to pnpm setup in every Cloud workflow.
-  It records fixed package-metadata endpoints, HTTP status, interrupted
-  metadata transfers, child exit or signal, and the final process exit. Each Node
-  thread has separate limits for normal, failure and child records. It
-  omits URL credentials, hosts other than the public npm label, queries, headers,
-  bodies, command arguments and raw error messages. Process and worker identities
-  distinguish parallel verification requests. A controlled cut-off response
-  reproduces `terminated` with HTTP 200 and `UND_ERR_SOCKET`; invalid gzip can
-  also produce `terminated` after a completed wire transfer, so these diagnostics
-  do not by themselves expose every body-decoding failure or explain the old run.
-  Undici tarball downloads remain outside its metadata allowlist. The D154
-  native HTTP milestone adds observation of npm's own HTTP client, including
-  fixed pnpm package tarball labels, response status, request or response error
-  stage, client-abort state and completed wire transfers. Real npm controls
-  reproduce interrupted metadata, refused connections and resets during TCP/TLS
-  connection setup. Creation-time observation covers npm's asynchronous agent;
-  response observation preserves Node's automatic draining when no caller handles
-  the reply. A real response reset emits one failure record. npm's own timeout
-  records a client abort, which is evidence of cancellation, not its root cause.
-  Other native controls cover cut-off tarballs, HTTP refusals, paused caller-owned
-  bodies, unhandled errors, redaction and bounded output.
-  This does not attribute the reset in [merge run 40712695671, root partition 4](https://github.com/waitron-io/waitron-cloud/actions/runs/40712695671/job/122902175152).
-  That job records npm failure before tests but no request endpoint. The bounded
-  setup now recovers transient transport failures without waiting for recurrence.
-  Native diagnostics omit
-  unknown packages, tarball versions, credentials, queries, headers and bodies;
-  body decoding after a completed wire transfer remains outside their evidence.
-  Every workflow pins Node 26 without a package-manager cache, then uses
-  `scripts/ci-setup-pnpm.mjs` before using or caching pnpm.
-  The script retains the action's integrity-locked 11.19.0 bootstrap and its
-  signature-verified self-update to the repository's pinned 9.15.0. You get at most
-  three fresh attempts, each limited to 30 seconds with two seconds to kill an
-  unresponsive child and its descendants. Known transport failures and stalled
-  installs can retry; explicit integrity, signature or identity refusals, unknown
-  errors and a wrong or unconfirmed final version fail immediately. Each failed
-  attempt keeps its diagnostic output. Only the confirmed target reaches later
-  steps through `GITHUB_PATH` and `PNPM_HOME`; a failed command-file write rolls
-  both files back. The existing npm request budgets
-  and workflow deadlines remain unchanged. Native controls exercise recovery,
-  exhaustion, refusal, cancellation, publication and process cleanup; an isolated real install
-  completes the verified switch and prints 9.15.0. Linux CI qualifies the workflow
-  wiring and controlled failures. The historical network cause remains unknown;
-  retain any new labelled recurrence for D154 attribution. Forced termination
-  of the supervisor itself cannot run its cleanup handlers; cleanup after that
-  depends on the job runner and is not qualified by the native signal controls.
+  **pnpm setup:** capture a labelled recurrence to explain the historical network
+  failures, and qualify cleanup when the supervisor itself is forcibly stopped.
+  Keep signature verification, version pins and deadlines; see the
+  [setup boundaries and remaining work](backlog/ci-pnpm-setup.md).
   Package-only changes omit the two-venue milestone receipt when both immutable
   revisions retain its audited regular-file inputs, test command and CI wiring.
   These tests exercise validators and receipt composition; their guarded CLI
@@ -3204,24 +3029,15 @@ Server authority and genuine restore qualification remain separate CI and launch
 
 ## Backup catalogue HTTP response validation (D411)
 
-Malformed or secret-bearing catalogue replies cannot become recovery choices.
-Native tests pass HTTP responses through the account client and catalogue controller,
-covering snapshot and continuous-source metadata, duplicate points and page limits.
-A refused older page keeps your accepted rows and snapshot selection; valid retries
-still paginate. Another venue's reply cannot replace your catalogue. Recovery
-permissions, server authority and genuine restore qualification remain separate gates.
+**Open.** Qualify server permissions and genuine restore or recovery; these client
+checks grant no activation or stop-proof authority.
+See [the boundaries and remaining work](backlog/backup-recovery-http.md#backup-catalogue-http-response-validation-d411).
 
 ## Backup catalogue transport refusals and retry waits (D426)
 
-When an older catalogue request loses its connection or receives a service refusal,
-your accepted snapshots and recovery choice remain available for an explicit retry.
-A current session or permission refusal clears those choices because the catalogue
-can no longer confirm your access. Native HTTP/client/controller checks cover initial
-loads, pagination, unreadable bodies and retries with the existing page cursor.
-Server retry waits cover seconds and HTTP dates, survive closing and reopening,
-and permit the next request at their exact expiry. Server authority, browser
-integration and genuine restore qualification remain separate gates; database
-suites run in CI while local Docker is unavailable.
+**Open.** Qualify server permissions and genuine restore or recovery; these client
+checks grant no activation or stop-proof authority.
+See [the boundaries and remaining work](backlog/backup-recovery-http.md#backup-catalogue-transport-refusals-and-retry-waits-d426).
 
 ## Container verifier memory-refusal observation (D335)
 
@@ -3237,29 +3053,15 @@ Local Docker reproduction remains blocked until 3 November.
 
 ## Verifier source isolation from local edits (D445)
 
-Your verifier build must use the pinned committed source even when its checkout
-contains local edits or private files. Run
-`node --test scripts/ci-verifier-source-isolation.test.mjs` to check staged and
-unstaged tracked edits, ignored credentials, untracked venue data and a locally
-replaced release generator. Native temporary Git fixtures capture the build
-context through a command stub, preserve local inputs and remove private build
-directories. These checks do not run Docker or build an image. Keep real image
-qualification in CI and leave the historical image-build timeout investigation open.
+**Open.** Run real image qualification in CI and reproduce the historical build timeout
+when local Docker returns.
+See [the boundaries and remaining work](backlog/verifier-build.md#verifier-source-isolation-from-local-edits-d445).
 
 ## Verifier build refusal and cleanup controls (D443)
 
-A refused build must leave no private build directory or successful image result.
-Run `node --test scripts/ci-verifier-build-refusals.test.mjs` to check missing
-build inputs, invalid or unavailable source commits, release-generation failure
-and a refused build command. A successful command is the control. Each case
-uses a private temporary Git repository and directory; the command stub records
-the build boundary without contacting Docker or building an image. The checks
-also verify the pinned revision reaches the release stamp and image label.
-
-These native controls qualify refusal and cleanup paths. They do not explain
-the earlier CI image-build timeout or establish that an image builds successfully.
-Keep the real image and PostgreSQL qualification in CI while local Docker is
-unavailable; the existing source pins, build limits and runtime rules remain.
+**Open.** Run real image qualification in CI and reproduce the historical build timeout
+when local Docker returns.
+See [the boundaries and remaining work](backlog/verifier-build.md#verifier-build-refusal-and-cleanup-controls-d443).
 
 ## Bound verifier fixture build timeout (D312)
 
@@ -3285,32 +3087,15 @@ store startup and concurrent valid-cache publication keep their separate gates.
 
 ## Existing storage-cache refusal qualification (D442)
 
-An invalid existing archive must fail before extraction or download, so a fixture
-cannot silently replace evidence of cache corruption. Run
-`node --test scripts/ci-backup-storage-cache.test.mjs` for isolated native checks
-of corrupt and empty archives, cache read errors and a blocked cache directory.
-Each failed startup preserves its cache input and removes its private directory.
-These checks leave the historical cache/startup causes open; real store startup
-and concurrent valid-cache publication remain separate qualification gates.
+**Open.** Capture an instrumented recurrence before attributing the historical startup
+or download failure; real storage qualification remains separate.
+See [the boundaries and remaining work](backlog/storage-cache-fixture.md#existing-storage-cache-refusal-qualification-d442).
 
 ## Storage archive download failure reporting (D441)
 
-A Test Cloud plan-enforcement check failed in run40775240637, job123122878210,
-with an interrupted HTTP/2 response (`UND_ERR_RES_CONTENT_LENGTH_MISMATCH`).
-The retained stack does not identify the request, so its cause remains unknown.
-The SeaweedFS fixture now labels archive download failures by phase: awaiting
-headers, refusing an HTTP status or reading the body. Its error includes the
-public release URL and available status, and retains the original error as its
-cause. The diagnostic does not copy the signed redirect URL.
-
-Run `node --test scripts/ci-backup-storage-download.test.mjs` for isolated
-cold-cache controls, including a genuinely truncated local HTTP response. Failed
-startup removes its private directory and publishes no archive; a complete
-archive with the wrong digest remains refused. The fixture still makes exactly one download attempt; archive pins,
-cache publication and permission checks are unchanged. These controls qualify
-reporting, not the historical Linux failure. Capture an instrumented recurrence
-before changing transport or startup behavior; the full PostgreSQL and storage
-journey still belongs to CI while local Docker is unavailable.
+**Open.** Capture an instrumented recurrence before attributing the historical startup
+or download failure; real storage qualification remains separate.
+See [the boundaries and remaining work](backlog/storage-cache-fixture.md#storage-archive-download-failure-reporting-d441).
 
 ## Parallel storage-cache fixture failure on main
 
@@ -3798,29 +3583,15 @@ attribute a historical CI failure or qualify production recovery.
 
 ## Recovery HTTP replies before confirming an outcome (D419)
 
-Native real-client/controller checks reject malformed inspection, approval, close
-and replacement replies without replacing the displayed recovery. An uncertain
-write triggers inspection; failed inspection keeps approval and replacement
-blocked until a valid reply confirms current state. Replies must match the
-request, selected source and displayed replacement proposal. Permission loss
-clears choices and confirmation; retry waits still apply. Snapshot and continuous
-source controls retain the exact approval payload. These checks do not qualify
-production recovery, prove the old server stopped or change recovery authority.
-
+**Open.** Qualify server permissions and genuine restore or recovery; these client
+checks grant no activation or stop-proof authority.
+See [the boundaries and remaining work](backlog/backup-recovery-http.md#recovery-http-replies-before-confirming-an-outcome-d419).
 
 ## Recovery transport waits and pending actions (D437)
 
-When a recovery request is pending, you cannot send a second inspection,
-approval, close or replacement from that controller. Native client and controller
-checks with stubbed fetch cover these gates and exact seconds/date retry expiry
-for all four actions.
-A server failure with a retry wait leaves the write uncertain; expiry sends no
-request, and your next inspection reconciles the result without repeating the
-write. Account and request changes clear private choices while keeping the wait.
-Run `node --test apps/portal/test/recovery-transport-boundary.test.ts` for these
-checks. They preserve runtime behaviour and recovery authority; production
-recovery, server-side permissions and clock-correction handling remain separate
-qualification work.
+**Open.** Qualify server permissions and genuine restore or recovery; these client
+checks grant no activation or stop-proof authority.
+See [the boundaries and remaining work](backlog/backup-recovery-http.md#recovery-transport-waits-and-pending-actions-d437).
 
 ## Recovery screen scope and supplied choices (D158)
 
@@ -3887,38 +3658,21 @@ qualification remains open.
 
 ## Session activity replies across reads and sign-out (D439)
 
-A delayed activity reply cannot replace a newer accepted session read, change
-its retry wait or notify the app. An accepted expiry also discards a newer
-pending read, so it cannot restore the expired sign-in. Sign-out discards activity
-started during its preflight, even when the sign-out reply is lost or refused;
-a disposed session ignores late activity results and refuses further activity
-and session checks.
-Run `node --test apps/portal/test/session-activity-ordering.test.ts` for these
-native HTTP/client checks. Runtime and original tests stay unchanged. Trusted
-browser activity, server-side session storage and production ingress retain their
-separate qualification gates.
+**Open.** Qualify server authority, browser integration and live ingress; physical
+passkeys and the separate retry-clock repair retain their own gates.
+See [the boundaries and remaining work](backlog/account-http-boundaries.md#session-activity-replies-across-reads-and-sign-out-d439).
 
 ## Session HTTP replies and sign-out acknowledgements (D422)
 
-Native tests exercise the real HTTP client and session manager with 44 controlled
-responses. Malformed passive and activity replies leave the account unavailable;
-a later valid read restores it. Server retry waits block explicit and visibility
-reads until their boundary. Only the recognised expiry response adds the expiry
-explanation, and uncertain sign-out replies never confirm that you signed out.
-The tests also check sign-out preflight and secure/local CSRF cookie selection.
-Run `node --test apps/portal/test/session-http-boundary.test.ts`.
-Runtime, existing tests and authentication policy are unchanged. These local client
-checks do not qualify the production ingress, server-side session storage or
-browser activity; keep their separate qualification gates.
+**Open.** Qualify server authority, browser integration and live ingress; physical
+passkeys and the separate retry-clock repair retain their own gates.
+See [the boundaries and remaining work](backlog/account-http-boundaries.md#session-http-replies-and-sign-out-acknowledgements-d422).
 
 ## Initial session lists after account changes (D407)
 
-When you switch accounts, sign out or refresh the session view, an older session
-list must leave the current view and its retry wait untouched. Native controlled
-requests cover delayed successes and refusals while the current read is pending
-or loaded, including switching away and back. Current reads still enforce retry
-waits and normal sign-in rechecks. Browser and database qualification runs in CI;
-physical-passkey and live-provider qualification remain open.
+**Open.** Qualify server authority, browser integration and live ingress; physical
+passkeys and the separate retry-clock repair retain their own gates.
+See [the boundaries and remaining work](backlog/account-http-boundaries.md#initial-session-lists-after-account-changes-d407).
 
 ## Public gateway source limits (D191)
 
@@ -3948,35 +3702,21 @@ limits](backlog/storage-authority-timeout.md).
 
 ## Authenticator management transport and session rechecks (D431)
 
-A credentials refusal during an authenticator change triggers one session read.
-If that read cannot confirm your account, the portal asks you to check the outcome
-without repeating the change. Native HTTP/client/controller tests cover current,
-other, expired and unreadable session replies. Cancellation clears its setup
-secret and proof inputs even when its reply is lost, so continuing requires an
-explicit fresh setup. Seconds and date retry waits survive account changes and
-block status and setup requests until their exact boundary. Runtime and existing tests stay
-unchanged; server authority, browser and production qualification remain separate.
+**Open.** Qualify server authority, browser integration and live ingress; physical
+passkeys and the separate retry-clock repair retain their own gates.
+See [the boundaries and remaining work](backlog/account-http-boundaries.md#authenticator-management-transport-and-session-rechecks-d431).
 
 ## Authenticator HTTP response boundaries (D418)
 
-Malformed authenticator status and setup replies cannot replace a confirmed
-factor state or expose a setup secret. Malformed activation, removal and
-recovery-code replacement replies require you to check the current state before
-continuing; they cannot return recovery codes or confirm a change. Native checks
-exercise the real HTTP client and controller, including secret/URI matching,
-unique recovery codes, cleared proof inputs, explicit valid retries and retry
-waits. Runtime rules and existing tests are unchanged. Browser/session integration,
-server authority and production release qualification remain separate gates.
-
+**Open.** Qualify server authority, browser integration and live ingress; physical
+passkeys and the separate retry-clock repair retain their own gates.
+See [the boundaries and remaining work](backlog/account-http-boundaries.md#authenticator-http-response-boundaries-d418).
 
 ## Authenticator replies after account changes (D399)
 
-Delayed authenticator reads, setup, activation, removal, regeneration, cancellation
-and follow-up session reads are covered across account changes and sign-out.
-Old replies must preserve the current account's pending work and setup draft,
-without returning old recovery codes or applying old cooldowns. These native
-controller checks leave browser/session integration and production qualification
-open; they do not change server authority or retry policy.
+**Open.** Qualify server authority, browser integration and live ingress; physical
+passkeys and the separate retry-clock repair retain their own gates.
+See [the boundaries and remaining work](backlog/account-http-boundaries.md#authenticator-replies-after-account-changes-d399).
 
 ## Authenticator code format feedback (D237)
 
@@ -4349,17 +4089,9 @@ review and owner gates. This audit does not enable services or change policy.
 
 ## D413 — Locate a failed joint fiscal fixture setup
 
-If the pinned PostgreSQL/Waitron integration fails during setup, you now get the
-active operation and elapsed timings before cleanup. A reporting timer also names
-the active operation when the existing 120-second hook budget elapses. Successful
-setup stays silent; reports contain fixed labels and timings, without caught
-errors, commands, credentials or receipt contents. Native controlled-boundary
-checks cover failed operations, reporting failure, cleanup and the real hook's
-timeout path. Git, install, bridge and hook deadlines, the pinned commit, fiscal
-assertions and allocation behaviour are unchanged. The operation behind D412's
-historical setup timeout remains unknown; use a failing instrumented run to
-identify it before proposing a repair. Real PostgreSQL qualification runs in CI
-while local Docker is unavailable.
+**Open.** Capture the failing operation behind the historical setup timeout; keep the
+pinned source, fiscal assertions and deadlines unchanged.
+See [the boundaries and remaining work](backlog/joint-fiscal-fixture-setup.md#d413--locate-a-failed-joint-fiscal-fixture-setup).
 
 ## Cost-mail reconciliation refusal observed during D262
 
@@ -4406,47 +4138,27 @@ languages, themes and viewport widths. No product authority changes.
 
 ## Remote hostname save transport and read-back (D427)
 
-If a hostname save loses its reply, the portal reads the current status once
-to find out whether it succeeded. Native HTTP/client/controller checks cover
-refused, unreadable and lost replies, plus failed read-back and explicit status
-retries. Only a matching current hostname confirms the save; another apply
-requires a fresh review. A server wait permits this immediate read-back but
-blocks later requests until its deadline. Runtime and existing tests stay
-unchanged. Live DNS/ACME, browser and deployment qualification remain open.
+**Open.** Qualify live DNS/ACME, browser integration and deployment; retain the existing
+permission and retry rules.
+See [the boundaries and remaining work](backlog/remote-access-http.md#remote-hostname-save-transport-and-read-back-d427).
 
 ## Remote status and DNS-preview transport failures (D438)
 
-When a remote status read or DNS preview loses its reply, your setup remains
-available for an explicit retry. Session or permission refusals clear it; every
-failed read clears the temporary public-forward warning. Native HTTP/client/controller
-checks cover unreadable replies, refused responses carrying valid-looking data,
-pending duplicate requests, and exact seconds/date retry expiry across account
-and venue changes. A fresh matching preview is required before a save. Run
-`node --test apps/portal/test/remote-read-transport-boundary.test.ts`.
-Runtime and existing assertions are unchanged. Live DNS/ACME, browser integration
-and deployment qualification remain open.
+**Open.** Qualify live DNS/ACME, browser integration and deployment; retain the existing
+permission and retry rules.
+See [the boundaries and remaining work](backlog/remote-access-http.md#remote-status-and-dns-preview-transport-failures-d438).
 
 ## Remote-access HTTP response boundaries (D420)
 
-Native HTTP client and controller checks reject malformed remote status and DNS
-replies before they replace your setup or create a review. DNS reviews must match
-the selected installation, route kind, requested hostname and assigned target.
-An invalid save reply triggers one status read without replaying the write; only
-a matching current hostname confirms the result. Mismatched save replies require
-you to reload. Permission refusals clear the setup, and server retry waits block
-new requests until their deadline. Runtime rules and existing tests are unchanged.
-Live DNS/ACME, browser integration and deployment qualification remain open.
+**Open.** Qualify live DNS/ACME, browser integration and deployment; retain the existing
+permission and retry rules.
+See [the boundaries and remaining work](backlog/remote-access-http.md#remote-access-http-response-boundaries-d420).
 
 ## Remote hostname replies after account and venue changes (D402)
 
-Native controller checks hold DNS previews, saves and uncertain-save status reads
-across account changes, returning accounts, venue changes, closing and sign-out.
-A late success, malformed or mismatched reply, lost reply or server refusal cannot
-replace your newer pending read or reviewed public hostname, publish feedback,
-change the wait or start another request. Current replies still finish when you
-select the same account. Six deliberate faults fail; restored controls pass.
-These checks cover local reply handling. Live DNS/ACME and deployment qualification
-remain open; PostgreSQL and container suites run in CI during the Docker outage.
+**Open.** Qualify live DNS/ACME, browser integration and deployment; retain the existing
+permission and retry rules.
+See [the boundaries and remaining work](backlog/remote-access-http.md#remote-hostname-replies-after-account-and-venue-changes-d402).
 
 ## Unchanged remote hostname review (D259)
 

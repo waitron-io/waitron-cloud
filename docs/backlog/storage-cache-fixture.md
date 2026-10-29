@@ -78,3 +78,31 @@ Remaining: retain the diagnostics to attribute any recurrence of the original
 read-only-cache rejection. Do not treat this demonstrated readiness repair as
 proof of that historical failure's cause.
 
+## Existing storage-cache refusal qualification (D442)
+
+An invalid existing archive must fail before extraction or download, so a fixture
+cannot silently replace evidence of cache corruption. Run
+`node --test scripts/ci-backup-storage-cache.test.mjs` for isolated native checks
+of corrupt and empty archives, cache read errors and a blocked cache directory.
+Each failed startup preserves its cache input and removes its private directory.
+These checks leave the historical cache/startup causes open; real store startup
+and concurrent valid-cache publication remain separate qualification gates.
+
+## Storage archive download failure reporting (D441)
+
+A Test Cloud plan-enforcement check failed in run40775240637, job123122878210,
+with an interrupted HTTP/2 response (`UND_ERR_RES_CONTENT_LENGTH_MISMATCH`).
+The retained stack does not identify the request, so its cause remains unknown.
+The SeaweedFS fixture now labels archive download failures by phase: awaiting
+headers, refusing an HTTP status or reading the body. Its error includes the
+public release URL and available status, and retains the original error as its
+cause. The diagnostic does not copy the signed redirect URL.
+
+Run `node --test scripts/ci-backup-storage-download.test.mjs` for isolated
+cold-cache controls, including a genuinely truncated local HTTP response. Failed
+startup removes its private directory and publishes no archive; a complete
+archive with the wrong digest remains refused. The fixture still makes exactly one download attempt; archive pins,
+cache publication and permission checks are unchanged. These controls qualify
+reporting, not the historical Linux failure. Capture an instrumented recurrence
+before changing transport or startup behavior; the full PostgreSQL and storage
+journey still belongs to CI while local Docker is unavailable.
