@@ -1,5 +1,12 @@
 # Waitron Cloud backlog
 
+## Storage fixture filesystem refusals (D448)
+
+Run `node --test scripts/ci-backup-storage-filesystem.test.mjs` to check native
+allocation and cache permission or I/O refusals, preserved error identity and owned
+cleanup. Real store startup and concurrent valid-cache publication remain separate
+gates; see [the open storage investigation](backlog/storage-cache-fixture.md).
+
 ## How to keep this file honest
 
 - Delete finished entries after checking main, the named pull requests and the code.
