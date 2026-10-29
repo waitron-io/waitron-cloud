@@ -128,3 +128,16 @@ that repair still need complete CI; a green run does not establish the historica
 cause.
 Keep this observation separate from the package-body stall and D458's earlier
 connection refusal. Preserve the source pin and cleanup.
+
+
+## Source fetch cannot connect to GitHub
+
+PR #707 cost run `40813781853`, paced-replay job `123250042763`, fails before
+any test at `source-fetch`. Git cannot connect to `github.com:443`, then exits
+128 after 134,890 milliseconds while fetching the pinned public Waitron revision.
+The trace identifies the failed command, not the underlying network cause.
+Keep that failure separate from the historical installation and replay failures.
+[Bounded pinned-source acquisition](#bounded-pinned-source-acquisition-d482) now
+limits failed transfers and permits one transport retry. Fresh heads containing
+that repair still need complete CI; a green run does not establish the historical
+connection cause.
