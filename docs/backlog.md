@@ -1,5 +1,13 @@
 # Waitron Cloud backlog
 
+## Worker shutdown during polling and error reporting (D459)
+
+Run `node --test packages/registration/test/worker-loop-shutdown.test.ts` to
+check that shutdown interrupts real idle and error-retry timers and lets native
+worker processes exit. Pending scheduling and claim error reports finish before
+the loop returns, without further claims or waits. Production shutdown and real
+database failures remain separate qualification gates.
+
 ## Concurrent storage archive publication (D450)
 
 Run `node --test scripts/ci-backup-storage-concurrent-publication.test.mjs` to
