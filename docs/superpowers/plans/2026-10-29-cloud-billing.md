@@ -2217,3 +2217,767 @@ job budget; ordinary tests keep 30 seconds. Never edit CI to conceal omissions.
 The owner price/allowance slots, legal exit/retention and hosted-stop qualification
 remain with their named slices. They do not block these synthetic engineering
 choices, and passing D does not settle them.
+
+## Slice E: allowances and remote-access traffic
+
+You need bounded service use and trustworthy traffic measurements before trials
+can use them. Build monthly allowance accounting beside the existing usage ledger,
+then attach it to the existing admission points. Bytes measure traffic; they never
+create a charge, payment, hosted day or invoice. This appendix implements design
+§§2–4, 10, 11 and 13. It changes none of B–D or the unaccepted J proposal above.
+
+### Publication, scope and source clearance
+
+- This is **PLAN ONLY**. Publish this appendix separately, resolve a fresh-context
+  plan review, and land it before runtime work. Execute inline under the driver;
+  the author neither builds nor commits. Engineering choices below need no new
+  owner approval. Production sizes remain the owner's §11 slots.
+- C is delivered by PR #718, `3d3c3def00bf27d60f2d97f5c23cd4acc1aebf7d`.
+  Inspection here is `afa917fe082c8e36ce2ae80b9cf0d9443d96b1a0`. D's landed
+  plan is a contract for future work, not an installed API. D462 is parked at
+  `defcb40020a52e1e6a7e857dcb990f0bd88a9070`, with only
+  `venue-service-rules.ts` and its pure tests built. Do not import its unlanded
+  reader/transition or copy its pure file into E.
+- E1/E3 use new files and direct local imports, without registration exports,
+  policy, runtime or migration edits. They can proceed independently of D.
+  E2/E4 need source/slot clearance; E5 needs D's authority integration or an
+  agreed narrow landing of those interfaces. This is a source dependency for
+  those adapters, not a new dependency on all of D for pure rules or traffic.
+  Parallel E/D execution is allowed only for disjoint agreed file sets.
+- Before each shared-file edit, compare current main, each parked branch's
+  merge-base changes **and dirty files**, then inspect actual three-way hunks.
+  Agree exact interface/export/assembly hunks and landing order with D462/P3,
+  P1 and D79's test-cloud driver, or wait/rebase. An empty current diff does not
+  release a planned reservation. Preserve G's own D466 fiscal-removal work,
+  historic `038_fiscal_allocation_registry.sql`, its history/schema tests and
+  fiscal assertions. G can coordinate its own branches without another owner
+  decision. J remains unaccepted and supplies no E API or calendar authority.
+- Do not allocate 046: D462 proposed it and has not obtained a slot. Reconcile
+  the actual SQL directory, `migrationNames`, backlog, P3 and both lanes' slot
+  records before naming E's migration. Below, `<E-slot>_billing_allowances_traffic.sql`
+  denotes that **single agreed filename**; record its exact predecessor hash,
+  count and filename in the implementation receipt before E2's test-only push.
+- P1 owns `deploy/kubernetes/**`/`scripts/kubernetes-*`; P3 reserves country
+  policy, migrations, exports and account composition; D79 reserves
+  `scripts/{test-cloud-integration,verify-test-cloud-receipt}*`, integration
+  fixtures and `docs/test-cloud.md`. Do not edit those paths. Coordinate E's
+  additive `app.ts`/server/runtime/export hunks, or mount in P3's country app
+  if it lands first. Lane D's pinned-source-fetch repair owns cost/CI source
+  files. No E changes to `.github/workflows/*`, `scripts/ci-*`, cost fixtures,
+  install/source pins, manifests, lockfiles or package membership.
+- Everything uses the trusted **country** registration pool, ES initially.
+  Accounts, organisations, businesses and venues remain their existing local
+  identities. No global customer, allowance service or new billing engine.
+  Published configuration is internal; no publication HTTP API is added.
+  Keep production enforcement OFF, existing modes unchanged and provider keys
+  discarded. No live deployment, provider resources/accounts, spending, mail,
+  payment, retention schedule or enforcement enablement follows from E.
+
+### Consumer and ownership map
+
+Re-run `rg -n 'recordUsageEvent|usageEventTypes|usageSourceKinds|usageReconciliationSourceNames|UsageSummary|relay_reservations|monthSpend|spendingPolicy|trialAllowanceTier|beginForward|renderHaproxy|forwardBinding|PlanMode' packages apps deploy scripts`
+before implementation. Read/classify new matches before changing a gate or unit.
+
+| Existing source/consumer | E boundary and coordination |
+| --- | --- |
+| Registration `src/usage-metering.ts`: `recordUsageEvent(client,input)`, `UsageReconciler.runOnce(limit=100)`, `UsageStore.summary(token,{organisationId})`; migrations 025/039 | Add one explicitly paired traffic event/source, preserving all other unit checks, immutable events and replay comparisons. Traffic source and ledger commit together; collector replay repairs lost replies, not the four-source historical reconciler. |
+| Registration `src/usage-reconcile-cli.ts`; operations `src/{status,metrics}.ts`; account-http `src/usage.ts`; portal `src/{usage-types,usage-controller,api}.ts`; `deploy/local-stack/usage-proof.mjs`, `scripts/scheduled-usage-proof{,.test}.mjs` | Keep v1 summary shape and its four reconciliation sources/freshness semantics. No traffic field silently added to v1 or relabelled old receipt. E4 exposes a separate internal venue/day read with its own completeness. Retain original usage/HTTP/portal assertions. |
+| Registration `src/{billing-config,billing-types,billing-store,billing-venues,billing-trials}.ts` | Reuse `BillingScope`, `BillingLevel`, `TrialView`, date validation, scoped venue/trial facts and `trialAllowanceTier(boolean)`. New allowance modules own their types/errors; no enlargement of `BillingCommand`, event meaning, price defaults or paid-history meaning. C's `set_method` pointer is the internal synthetic payment-method fact, not provider qualification. |
+| Migrations 001/003/045; registration `src/{signup,relay-grants}.ts` | Account ID is `cloud_accounts.id`, not organisation/business ID. Signup makes an owner membership; schema allows several. For relay, use the current verified grant's `account_id` and recheck that owner's membership, never select an arbitrary organisation owner. Future P3 sole-owner migration remains P3's. |
+| Remote `src/{config,gateway-cli,authority,gateway-forward-reports,forward-report,forward-report-writer,forward-report-collector,forward-observations}.ts` | Current HAProxy has per-installation staff backends but shared public backends and no byte export. Health v1 reports contain causes, not traffic; their five-minute expiry, reporter sequence, pruning and D's current-route checks stay independent. Add a separate signed traffic audience/spool; reuse reporter key registration, not health observation sequence/state. |
+| Remote `src/{placement,reconciler,probe,probe-runner,probe-observations}.ts` | Manifests bind routes; v2 binds reporter/generation/revision. Current public probes really complete the challenge and staff probes exchange TLS bytes. Merely counting a positive HAProxy counter would count probes. E3/E4 isolate trusted operational origins before collecting user counters; probes and installation ledger operations never supply trial-use facts. Preserve routing, permissions and reporter recovery checks. |
+| Registration `src/{relay-grants,relay-messages,relay-worker,relay-bounds,relay-control,email-outbox}.ts`; account-http `src/relay-messages.ts` | `RelayGrantStore.reserve(client,authenticated,input)` already serialises `relay-account:` and retains a debit per message. New mode adds monthly accounting in that transaction, after independent grant/origin/owner checks, before queue insertion. Worker replays the original reservation at handoff; it must not mint a new month's debit. Keep bounds, kill-switch, cancellation, SMTP uncertainty and identity/account mail independent. |
+| Translation `src/{machine,job-store,worker,batch-runner,retention}.ts` | `TranslationMachine.execute` finds authenticated submit replay before new admission; `createJob` checks estimate against `monthSpend`; worker `mayCall/spent/attempted` accounts calls, lease and cancellation. E5 reserves requested items once per new job; keeps the separate money safety cap and cost ledger, callback order, lease fencing and retention. D owns new level permission and post-wait permission checks. |
+| Account-http `src/{app,server,server-cli}.ts`; translation `src/worker-cli.ts`; `deploy/{local-stack/runtime,test-cloud/runtime,test-cloud/account-worker,test-cloud/service-runtime,test-cloud/remote-runtime}.mjs` | Additive options only after concrete D/P3/D79 clearance. Defaults do no E reads/writes; no environment fallback enables E. New focused fixture tests import pure options separately from DB hooks. No P1/P2 deployment edits. |
+| `docs/address-lookup-scope.md`, address-suggestions spec/plan; D pure service floors | Address lookup is a configuration/service boundary only; its future confirmed-address reservation must compose with provider budgets/manual entry. SMS/rota are unbuilt: configuration slots and future boundary tests only. No invented HTTP service, solver, SMS provider or provider call. |
+| Registration `src/migrate.ts`, `test/fixtures/migration-release.ts`; `scripts/{schema-upgrade-fixture,schema-upgrade-receipt,verify-schema-upgrade-receipt,database-recovery-migrations}.mjs` and tests | Append a coordinated migration and separate proof mode/version. Preserve old SQL/ledgers, historical receipts and exact schema checks; E6 specifies current-tail and historical-wrapper prerequisites explicitly. |
+
+### Accounting decisions
+
+Use calendar months `[first day,next first day)` and UTC days in this **test-only**
+slice. Read DB time after lock waits, not request time. No periodic counter reset
+job: keys contain the month and history stays intact. Country production calendar,
+IANA time zone, DST, provider traffic comparison and operational-origin inventory
+need qualification before production; UTC fixtures do not settle those choices.
+
+Publish immutable `AllowanceVersion` records with strictly increasing revision and
+month-start effective dates. Select the greatest effective revision at the month's
+first day; never apply a mid-month publication retroactively. Store the chosen
+revision on each reservation. Missing configuration refuses new use. No migration
+seeds, hardcoded sizes, prices or retention. The translation US$5 starting point
+remains the existing independent `translation_policy` safety cap; do not turn that
+historical value into a new production size. E's translation unit is a **requested
+item**, chosen to bound admitted work without a new provider pricing system.
+
+| Allowance service | Unit and debit boundary |
+| --- | --- |
+| `transactional_email` | One admitted message; debit retained on failure, cancellation, expiry or uncertain handoff, matching existing `RelayPolicy.debit='retain'`. Rollback before admission retains nothing. Account security/signup/reset mail is outside this gateway allowance. |
+| `content_translation` | Number of items with missing translations in a newly admitted job. Hold all units at submit; spend once immediately before the first provider attempt. Review/retry/resume of that job uses that same admission. Release only a job proven never attempted; started, failed, partly done, cancelled or uncertain work retains its debit. |
+| `sms` | Future outbound segment slot; no service built. |
+| `rota_solver` | Future admitted solver-run slot; no service built. |
+| `address_lookup` | Future confirmed-address workflow slot; no route/provider built. Separate provider request budgets still apply. |
+
+At registered level, basic-service usage shares one country **account** month
+across its organisations/venues. Connected/hosted limits apply per **venue**, never
+per installation. An immutable reservation carries both identities for basic
+services: account totals include all that account's basic-service debits, and venue
+totals include all that venue's debits, across level changes. Select one current
+limit, never add the account and venue allowances. Thus upgrades, downgrades,
+replacement, payment-method changes and trial conversion cannot create a second
+pot. They change the applicable ceiling, not usage. Two owners have separate
+account budgets; neither can replay/rebind the other's message. Do not infer a
+cross-country/global budget or solve ownership transfer here.
+
+Only an active stored trial containing today, **and no current method**, selects
+`trialAllowanceTier(false)` for translation/rota. Outside that interval select
+full; within it with a method select `trialAllowanceTier(true)`. Email/SMS/address
+never tighten because of trial status. Trial extension does not reset the month;
+adding/removing a method raises/lowers the ceiling over the same held/spent units.
+At equality, new reservations refuse `allowance_exhausted` until month rollover
+or a legitimately higher configured ceiling; admission never spends a negative
+balance. A reserved job may complete within its existing units. Permission,
+consent and the money cap still independently stop further calls.
+
+Lock account/credential/membership or existing request/message-identity prefixes
+first as their current callers do. Then organisation SHARE, legal business SHARE
+and billing business SHARE (C writers use NO KEY UPDATE), venue NO KEY UPDATE,
+D's authority when installed, installations, service advisory locks, allowance
+account keys then venue keys in UUID/service/month order, then job/reservation
+rows. Service paths add the business reads **before** the venue to serialize
+`set_method` with tier selection. Never acquire policy after a job/queue lock or
+upgrade SHARE to UPDATE. C writers never acquire E bucket locks; E never calls
+`BillingStore` methods that open another transaction. DB time and final proof,
+session, owner, grant, lease and original identity rechecks follow waits. No new
+transaction spans a network/model/SMTP wait. Use two-pool barriers, not sleeps,
+to test ordering and races.
+
+### Traffic decisions
+
+Measure ingress plus egress **once at the outer HAProxy venue backend**, for
+staff TCP and public TLS traffic. Ingress means client-to-gateway proxied bytes;
+egress means the reverse. TLS overhead is included; IP/WireGuard overhead and
+internal second-hop counters are excluded. Do not add frontend and backend totals
+or count shared `public_gate` again. This is a transport measurement, not a
+successful-login/action claim or the provider's invoice definition.
+
+In explicit traffic test mode, render distinct staff/public **user** backends per
+installation, plus operational backends selected first by exact trusted probe/
+health/installation-worker source addresses from private collector configuration.
+The public hop must retain PROXY v2, trusted overwritten headers, SNI selection,
+connection limits and all gate checks. No request header/query can declare itself
+operational or name a venue. Operational traffic is excluded from qualifying user
+bytes, even if the probe solves the public challenge. Keep only aggregate counters;
+no URLs, addresses, cookies, credentials, messages or content enter reports/rows.
+Source-address classification needs a separately qualified production network
+inventory; shared NAT with users, unknown operational origins or incomplete
+mapping makes trial-use coverage unavailable, not inferred from total traffic.
+
+Read HAProxy's private UNIX stats socket, not public HTTP metrics. Bind rows by
+generated backend name to the installed signed route/revision. Each HAProxy child
+gets a persisted random process UUID before it starts; never use PID alone as
+restart identity. Keep distinct child/socket identities during graceful reload.
+Parse header-named `bin`/`bout` unsigned decimal counters using bigint. First
+snapshot is zero only for a verified newly started child; otherwise establish an
+incomplete baseline and claim no historical delta. Increasing cumulative snapshots
+become deltas; equal snapshots add zero, decreases/wrap/unknown reset mark a gap
+and refuse a fabricated delta. Counter inputs are uint64; each delta sum must fit
+PostgreSQL signed bigint (`9223372036854775807`), otherwise refuse with no wrap,
+rounding or Number conversion. Missing/malformed/duplicate backend rows cannot
+become zero-use evidence.
+
+Sample once per second in fixtures; attribute each delta to the UTC civil day of
+its **interval end**. A midnight-crossing sample belongs wholly to the new day;
+there is no invented interpolation. A long-lived connection contributes sampled
+bytes on each day it transfers them, not only at disconnect. Report this sampling
+uncertainty in evidence and qualify it with the production calendar. Persist
+baseline plus signed pending delta atomically with file/directory fsync before
+advancing the exporter cursor. Retry exactly those bytes/identity after DB failure
+or lost acknowledgement, including restart; remove only acknowledged spool files.
+A crash before sampling can lose the unsampled tail: record an incomplete interval,
+never claim exactly-once measurement of that tail. Bound each report to 128 entries
+(64 routes with two channels)/262,144 bytes and configure a bounded private spool.
+Full spool, missing checkpoint,
+abnormal child exit or lost final reload sample marks a durable gap, emits a fixed
+error and makes affected trial coverage unavailable. It must not block ordinary
+trading or silently delete unacknowledged records. No retention/deletion job.
+
+The collector accepts a distinct signed audience using the currently registered
+Ed25519 reporter for the mapped country/cell/environment. Preliminary key lookup
+is not authority: relock/reverify reporter generation/revocation, cell and route
+bindings after waits. Persist process/sequence/checkpoint, source and ledger in
+one country transaction. Accept exact replay before freshness/current-route checks,
+but only after signature and original country/reporter identity validation; it
+returns the original receipt with no effects, even after rotation. An unknown old
+reporter report is refused; already accepted historical replay can be checked
+against its saved public key/binding. Changed payload under an existing identity
+conflicts. New stale-generation/foreign/rebound route reports cannot add usage.
+Require the next contiguous sequence; gaps wait for durable retry. Historical
+uncollected deltas crossing reporter rotation are explicitly incomplete, never
+reattributed to a new installation or discarded as measured zero.
+
+Ledger type is `remote_access.traffic_bytes`, source kind `remote_traffic_sample`,
+positive quantity `ingressDelta+egressDelta`. Zero deltas update completeness only.
+Use fixed source reference `<process-uuid>:<sequence>:<installation-uuid>:<staff|public>`
+(under 256 characters); bind country/cell/generation/report digest in the source
+row. Daily totals sum those immutable events by venue/day. There may be many
+samples per day; exactly one **distinct day** contributes to trial use if its
+accepted user sum is positive and it lies in the trial's stored half-open interval.
+Three such dates yield `remoteTrafficDays:3`; repeated samples on one date yield
+1. Health observations, probes, zero bytes and installation operations yield 0.
+Completeness requires contiguous collection over the relevant trial interval and
+every serving process, or durable evidence that no remote route was serving then.
+An interval before instrumentation has no coverage; never backfill it from probes.
+E4 stores an expected-route journal from the country publication path, separately
+from exporter claims. Each row binds venue, manifest digest/expiry and expected
+staff/public channels before publication. Removing a route cannot close its old
+lifetime until its authority has expired or all serving processes acknowledge a
+final sample. Failed/uncertain publication remains uncovered. Store signed
+supervisor process start/end records, predecessor UUID and final sequence beside
+those expectations. A new process never closes its predecessor.
+For each expected route/channel/process lifetime, accepted intervals must start
+at its recorded start, have `next.from === previous.until`, and reach its recorded
+end or the queried trial boundary. Concurrent reload processes each need coverage.
+Zero-byte intervals are positive evidence; an absent row is not. No reports,
+silent exporters, unacknowledged intervals, unclosed predecessors and leading,
+trailing or sequence-contiguous time holes return complete false, even if every
+received report says complete true. A local gap file need not arrive to detect
+a missing tail. A no-route interval needs the country journal plus expiry/final
+sample evidence for all prior serving authority; current placement absence alone
+proves nothing. Late instrumentation leaves the earlier trial interval uncovered.
+Expose `{complete,usage}` for G; incomplete coverage never becomes an unused
+trial/extension decision. One translation job with an observed provider-attempt
+callback contributes one translation run; queued/rejected/released-unstarted jobs
+contribute zero. A pre-call debit without that callback is uncertain: retain its
+units and return complete false for trial usage, rather than claiming a run or
+an unused trial. Rota remains zero until its future trusted integration records
+real starts.
+
+### Review focus
+
+1. Two venues/installations racing the last account unit must admit exactly one,
+   while a foreign owner cannot spend it (E2/E5).
+2. Method/trial/level changes and month rollover must retain usage without a
+   second allowance, and preserve the independent translation money cap (E1/E5).
+3. Lost replies, child reload/restart, counter reset/overflow and midnight must
+   never duplicate bytes or turn missing measurements into unused days (E3/E4).
+4. A validly signed but stale/foreign/rebound reporter must add no event; genuine
+   probes with positive TLS bytes must still yield zero trial days (E4).
+5. Lease takeover, cancellation and accounting failure after a model response
+   must not replay paid work, release spent allowance or lose recorded cost (E5).
+
+### Task E1: Define published allowance shapes and pure monthly rules
+
+**Files:** Create `packages/registration/src/billing-allowance-rules.ts` and
+`packages/registration/test/billing-allowance-rules.test.ts`. No export edit yet.
+
+**Interfaces:** Reuse `BillingLevel`, `TrialView`, `CivilDate`, `TrialUsage` and
+`trialAllowanceTier`. Produce `AllowanceService` (the five names in the table),
+`AllowanceOptions={mode:'test';calendar:'UTC'}`,
+`AllowanceVersion={revision:number;effectiveFrom:CivilDate;limits:Record<BillingLevel,Record<AllowanceService,string>>;unpaidTrial:{content_translation:string;rota_solver:string}}`;
+quantities are canonical nonnegative decimal strings <= signed bigint maximum.
+Produce `validateAllowanceVersion(value:unknown):AllowanceVersion`,
+`allowanceMonth(day:CivilDate):{from:CivilDate;until:CivilDate}` and
+`allowanceLimit(config:AllowanceVersion,input:{base:BillingLevel;trials:readonly TrialView[];day:CivilDate;hasPaymentMethod:boolean;service:AllowanceService}):bigint`.
+The last computes the highest base/active-trial level solely to select an allowance,
+not to grant a service; it does not depend on D1. Reject extra/malformed values
+using `AllowanceError extends Error`, `constructor(code:AllowanceErrorCode)` with
+readonly `code:AllowanceErrorCode`. That union is `invalid_allowance_input`, `allowance_unavailable`,
+`allowance_conflict`, `allowance_exhausted`, `allowance_scope_not_found`.
+
+- [ ] **Step 1: Write named failing assertions.** Use fixture `TEST_ALLOWANCES`,
+  never production defaults: registered email/address/SMS `2/2/0`, connected
+  `4/4/0`, hosted `6/6/0`; translation/rota `0/0`, `6/4`, `8/6`; unpaid trial
+  translation/rota `2/1`. In `allowance months and trial tiers do not create pots`:
+  `assert.deepEqual(allowanceMonth('2028-02-29'),{from:'2028-02-01',until:'2028-03-01'})`.
+  Stored trial `[2026-10-31,2026-11-30)` selects translation `2n` on 29 November
+  without method, `6n` with method; on 30 November selects registered `0n`.
+  Assert email `4n` in both trial tiers and paid/no-trial translation `6n` even
+  without method. Future/converted/lapsed trials add nothing. In `allowance
+  configuration has no implicit production values`, assert missing/extra fields,
+  leading zeros, fractions, negatives, invalid month-start, unknown level/service,
+  trial values above corresponding connected/hosted full limits and
+  `9223372036854775808` reject; explicit `0` stays zero, never unlimited.
+- [ ] **Step 2: Run RED:** `node --test packages/registration/test/billing-allowance-rules.test.ts`.
+  Use runtime import/export assertions initially, then observe the named boundary
+  failures. No PostgreSQL setup or stub implementation to bypass RED.
+- [ ] **Step 3: Implement only E1's pure interface and fixed validation.**
+- [ ] **Step 4: Repeat E1's command plus B's unchanged `billing-trials.test.ts`;
+  require nonzero cases, no failures/skips and `pnpm typecheck` exit 0.**
+- [ ] **Step 5: Commit:** `git commit -s -m "feat: define monthly allowance configuration and trial tiers"`.
+
+### Task E2: Publish configuration and serialize durable reservations
+
+**Files:** Create `packages/registration/src/billing-allowances.ts`,
+`packages/registration/test/billing-allowances.test.ts`,
+`packages/registration/test/billing-allowance-migration.test.ts` and the coordinated
+`packages/registration/migrations/<E-slot>_billing_allowances_traffic.sql`.
+Modify `packages/registration/src/{migrate,index}.ts` only after clearance;
+apply E6's enumerated release-test/wrapper prerequisites in this test-only stage.
+
+**Interfaces:** Produce `AllowanceConfigStore(pool:Pool)` with
+`publish(value:AllowanceVersion):Promise<AllowanceVersion>` and
+`effective(month:CivilDate):Promise<AllowanceVersion>`; internal
+`readAllowanceVersion(client:PoolClient,month:CivilDate):Promise<AllowanceVersion>`.
+Produce `reserveAllowance(client:PoolClient,input:{accountId:string;venueId:string;installationId:string;service:AllowanceService;operationId:string;binding:string;units:bigint}):Promise<AllowanceReservation>`;
+`AllowanceReservation={id:string;month:CivilDate;revision:number;units:string;state:'held'|'spent'|'released'}`;
+`spendAllowance(client:PoolClient,id:string):Promise<AllowanceReservation>`,
+`recordAllowanceAttempt(client:PoolClient,id:string,attemptStartedAt:string):Promise<void>` and
+`releaseUnstartedAllowance(client:PoolClient,id:string):Promise<AllowanceReservation>`
+are internal transaction helpers, never public customer authority. Reserve derives
+the composite venue scope, current method, level/trials and month from locked
+stored facts, and verifies the trusted caller-derived account's current ownership
+and installation-to-venue binding. Relay derives that account from the verified
+grant; translation derives it from E5's exact current consent owner. A machine
+proof never supplies a Cloud account ID. Operation identity is
+`(service,installationId,operationId)`, with immutable account/venue/body binding;
+a replacement installation shares the venue budget, not the old operation ID.
+Release requires the owning service's locked never-attempted fact, not a caller
+boolean. Missing transactions refuse. Defaults do not call these helpers.
+
+- [ ] **Step 1: Write DB RED cases.** `one account last unit is atomic across venues`:
+  first spend one message against test limit `2`, then two account-owned registered
+  venues each request `1n` email unit; assert racing admitted count `1`, refused
+  count `1`, total `2n`, no losing
+  reservation. Different account remains `0n`; foreign org/business, a crossed
+  installation/venue pair and changed
+  owner refuse with zero writes. `reservation replay does not refill after
+  rollover`: same operation/binding returns the same ID/month on reconnect after
+  1 December; changed units/account/venue/binding under that identity conflicts.
+  A different service has its own operation namespace and must pass fresh admission.
+  `transitions
+  keep one history`: spend 2 registered units, switch connected then registered,
+  assert respective remaining `2n` then `0n`, not `4n/2n`; method/trial changes
+  retain translation held/spent `2n`. `held release cannot refund started work`:
+  held 2 releases once to total 0; spent 2 remains 2 after release refusal.
+  Trigger failure rolls back configuration/reservation/service effects together.
+  Publication identical retry returns revision 1; changed revision payload refuses,
+  future revision not selected early; new month starts empty without deleting old.
+  SQL foreign/composite ownership rejects `23503`, duplicate identity `23505`,
+  invalid quantity/state `23514`, immutable facts mutation `55000`.
+- [ ] **Step 2: Sign off/push test-only changes and observe named RED in actual CI:**
+  `pnpm --dir packages/registration exec node --test --test-timeout=30000 test/billing-allowances.test.ts test/billing-allowance-migration.test.ts`.
+  Missing relation/export is initial RED; require intended behavior failures for
+  guards. Setup/import-only errors, unavailable DB, timeout or skips do not qualify.
+- [ ] **Step 3: Implement the small store and additive schema.** Tables:
+  `billing_allowance_versions` (immutable fixed config),
+  `billing_allowance_reservations` (service/installation/operation unique,
+  account FK and composite-owned venue/installation binding,
+  immutable units/binding/month/revision, monotone held→spent or held→released,
+  nullable once-set observed-attempt timestamp),
+  `remote_traffic_processes` (key `(cell_id,gateway_id,generation,process_id)`,
+  saved reporter public key/binding, contiguous checkpoint and gaps),
+  `remote_traffic_samples` (immutable signed report/route deltas/day; unique
+  process key plus sequence/installation/channel and globally unique source reference).
+  Add `remote_traffic_coverage` for the expected-route journal and signed process
+  boundaries above. Incomplete boundaries survive restart/restore. No generic
+  metadata column. Retain referenced parents, no cascading delete.
+  Reserve locks absent buckets with advisory keys, sums held+spent using bigint,
+  and inserts only if remaining fits. Email reservations require exactly `1n`;
+  translation requires a positive requested-item count matching its job. Publication uses its own schema-scoped
+  advisory key, fixed-shape canonical comparison and increasing effective months.
+  Account/venue totals derive from one reservation history, not resettable
+  per-plan counters. Add traffic ledger CHECK alternatives in the new migration
+  only, preserving every existing event/source/unit alternative from 025/039.
+- [ ] **Step 4: Observe E2 GREEN at the implementation SHA in CI**, with C's
+  unchanged schema/store/venues/payment and usage suites; locally E1/types only.
+- [ ] **Step 5: Commit:** `git commit -s -m "feat: publish country allowances and reserve service use atomically"`.
+
+### Task E3: Define traffic reports, counter deltas and restartable spool
+
+**Files:** Create remote-access `src/{traffic-report,traffic-counters,traffic-spool}.ts`
+and `test/{traffic-report,traffic-counters,traffic-spool}.test.ts`. These pure/file
+tests use native Node, no gateway processes, DB or Docker.
+
+**Interfaces:** Produce `TrafficCounter={ingress:string;egress:string}`,
+`trafficDelta(previous:TrafficCounter,current:TrafficCounter):{ingress:bigint;egress:bigint}`;
+`readTrafficCounters(csv:string,backends:ReadonlyMap<string,string>):Map<string,TrafficCounter>`
+(map values are generated route keys, not supplied hostnames).
+`TrafficEntry={installationId:string;venueId:string;revision:number;routeBinding:string;channel:'staff'|'public';ingress:string;egress:string}`;
+`TrafficReport={version:1;audience:'waitron-cloud-remote-traffic';cellId:string;gatewayId:string;generation:number;processId:string;sequence:number;from:string;until:string;complete:boolean;entries:TrafficEntry[]}`.
+`from/until` are canonical UTC instants, entries are deltas, and report sequence is
+process-local, positive and safe. Produce `signTrafficReport(report:TrafficReport,key:KeyObject):ManifestEnvelope`,
+`verifyTrafficReport(envelope:unknown,key:KeyObject):TrafficReport` (structural/crypto
+validation; E4 does time/authority). `TrafficSpool({directory:string;maxBytes:number})`
+provides `append(report:TrafficReport,envelope:ManifestEnvelope,counters:ReadonlyMap<string,TrafficCounter>):Promise<void>`,
+`pending():Promise<ManifestEnvelope[]>`, `ack(processId:string,sequence:number):Promise<void>`
+and `restore():Promise<{processId:string;sequence:number;counters:Map<string,TrafficCounter>;complete:boolean}>`.
+Append/ack use an owned exclusive file lease and atomic durable checkpoints.
+
+- [ ] **Step 1: Add `traffic counters are exact deltas and midnight is explicit`**:
+  `assert.deepEqual(trafficDelta({ingress:'100',egress:'40'},{ingress:'110',egress:'65'}),{ingress:10n,egress:25n})`;
+  equal counters total `0n`; decrease, wrap, duplicate/missing CSV rows and delta
+  sum `9223372036854775808n` refuse. Keep `9007199254740993` exact. An interval
+  ending `2026-11-01T00:00:00.000Z` belongs to `2026-11-01`. `traffic spool retries
+  original bytes after crashes`: append, lose reply, restore and resend yields
+  identical envelope/process/sequence; ack twice removes once; checkpoint/spool
+  partial-write, full capacity, unknown old process and lost final sample expose
+  complete false. `traffic signature cannot carry content or cross audiences`:
+  changed byte/key/audience, extra URL/header/content field, oversized report,
+  >128 entries and malformed numbers reject before output.
+- [ ] **Step 2: Run RED:** `node --test packages/remote-access/test/traffic-report.test.ts packages/remote-access/test/traffic-counters.test.ts packages/remote-access/test/traffic-spool.test.ts`.
+- [ ] **Step 3: Implement those interfaces only.** Keep cumulative parsing separate
+  from signed deltas, never reuse health `observationSequence` or report TTL.
+- [ ] **Step 4: Repeat E3's command and require nonzero GREEN/no skips**, then
+  `pnpm typecheck`. Simulated crash controls operate only on owned temp files.
+- [ ] **Step 5: Commit:** `git commit -s -m "feat: define bounded traffic deltas and durable collector replay"`.
+
+### Task E4: Authenticate traffic into the ledger and prove real gateway counts
+
+**Files:** Create remote-access `src/{traffic-store,traffic-collector,traffic-coverage,traffic-cli}.ts`,
+`test/{traffic-store,traffic-collector,traffic-gateway}.test.ts`,
+`packages/registration/src/billing-trial-usage.ts`,
+`packages/registration/test/billing-trial-usage.test.ts`,
+`deploy/test-cloud/allowance-traffic-proof.test.mjs` and
+`scripts/verify-allowance-traffic-receipt{,.test}.mjs`.
+Modify registration `src/{usage-metering,index}.ts` and remote
+`src/{config,gateway-cli,placement,reconciler}.ts` only after source clearance.
+The last two paths journal expectations for direct and reconciled publication;
+retain their existing permission/publication behavior. No health-report,
+manifest-wire or probe-policy rewrite.
+
+**Interfaces:** Produce a separate
+`TrafficMapping={country:'ES';environment:'test';cellId:string;directory:string;writerUid:number;readerGid:number}`;
+do not change `ForwardReportMapping.file` meaning. `TrafficStore(pool:Pool)` has
+`record(mapping:TrafficMapping,envelope:unknown):Promise<{state:'accepted'|'replay';processId:string;sequence:number}>`
+and `days(scope:BillingScope,venueId:string,from:CivilDate,until:CivilDate):Promise<{complete:boolean;days:Array<{on:CivilDate;bytes:string}>}>`.
+Reuse private file/mapping ownership checks from the inspected collector pattern,
+but a separate spool reader; do not make health pruning delete traffic.
+`collectTraffic(mapping:TrafficMapping,store:Pick<TrafficStore,'record'>):Promise<void>`
+reads only validated process/sequence filenames within the mapped private directory,
+with the same no-symlink/regular-file/owner/group/size checks; it acks only durable
+receipts. New `TrafficCoverageStore(pool:Pool)` exposes internal
+`expect(client:PoolClient,manifest:AcceptedGatewayManifest):Promise<void>` for the
+country journal and `recordLifecycle(mapping:TrafficMapping,envelope:unknown):Promise<void>`
+for signed supervisor records. A lifecycle record binds process UUID, manifest
+digest, canonical start, optional end/final sequence and predecessor UUID under
+the dedicated traffic audience. Exact retries preserve it; changed boundaries
+conflict. Explicit test enrolment snapshots current and still-valid old authority,
+marks unknown history uncovered and enables no production traffic collection.
+`TrafficStore.days` checks the interval invariant against the journal and every
+process, rather than trusting report complete flags. `renderHaproxy` adds optional
+`traffic?:{socket:string;operationalSources:readonly string[]}` to its existing
+options; absent means byte-identical legacy rendering. Gateway traffic is enabled
+only by explicit validated test options, fresh signed v2 authority and separate
+private reporter/spool configuration. Reject non-test binding; never auto-enable
+from health reports. `readTrialUsage(client:PoolClient,scope:BillingScope,venueId:string,trial:TrialView):Promise<{complete:boolean;usage:TrialUsage}>`
+reads exact traffic dates and actually started jobs; G must check complete first.
+For the supplied trial, re-read its scoped stored row and require identical bounds/
+state before aggregating; caller-provided dates cannot select another trial.
+The new verifier owns `TrafficProofReceipt={version:1;kind:'cloud-allowance-traffic';
+cloudHead:string;cloudTree:string;scope:'local-fixtures';productionEnforcement:'off';
+checks:{backendDeltasMatch:boolean;operationalDaysZero:boolean;userDaysThree:boolean;
+restartReplayStable:boolean;crashGapIncomplete:boolean;foreignScopeRefused:boolean};
+suites:Array<{id:'counters'|'collector'|'gateway';tests:number;passed:number;failed:number;cancelled:number;skipped:number;todo:number}>;
+cleanup:{containers:number;volumes:number;processes:number};limitations:string[]}`.
+Require exactly those suite IDs once each, all checks strictly true, tests>0,
+passed=tests, all other counts/cleanup zero and nonempty limitations. Bind clean
+head/tree to the wrapper's candidate. This is synthetic proof, not live measurement.
+
+- [ ] **Step 1: Add `traffic atomic replay and scope survive reconnect`**: 10+25
+  bytes creates exactly one ledger quantity `35`, repeated/reconnected report
+  remains `35`, changed same key conflicts; failed ledger insert leaves checkpoint/
+  source unchanged and retries once. Forged/foreign country/cell/venue/business,
+  revoked reporter, old generation/new report, changed route revision and sequence
+  gaps add `0` events; exact accepted replay after rotation adds `0`. Queued
+  verification rechecks current authority. `only real user bytes make trial days`:
+  positive samples on 1/1/2 November give days 2 and `trialWasUsed=false`; add
+  3 November gives 3/true. Probes, health, installation operations and zero samples
+  give 0; dates before start/on end excluded; gaps give complete false.
+  `traffic silence and handoff never prove zero use`: no reports returns false;
+  zero reports through 10 November then exporter death with the gateway serving
+  through 30 November returns false without ingesting any gap marker. Contiguous
+  sequences with a one-second time hole return false. A clean process at sequence
+  1 whose predecessor lacks a final sample returns false. Missing public-channel
+  coverage, late enrolment, an unacknowledged interval, a reload tail or coverage
+  ending before the trial does each returns false. Complete zero-byte intervals
+  covering every journalled lifetime through the trial boundary return true/zero
+  days; later expiry cannot erase an earlier uncovered tail. Real
+  gateway fixture sends trusted operational TLS/public probes on three dates,
+  asserts days `0`, then user traffic on three dates asserts days `3`. Include
+  same-organisation sibling routing, both public/staff, no double inner-hop
+  counting, live socket/reload, long connection across midnight, exporter restart,
+  lost DB ack and child crash gap. Assert fixed fixture payload byte counts in
+  synthetic transport; for real TLS assert measured ingress/egress positive and
+  equality with selected HAProxy backend deltas, not guessed TLS overhead.
+- [ ] **Step 2: Observe actual CI RED before adapters.**
+  `pnpm --dir packages/remote-access exec node --test --test-timeout=30000 test/traffic-store.test.ts test/traffic-collector.test.ts`;
+  `pnpm --dir packages/registration exec node --test --test-timeout=30000 test/billing-trial-usage.test.ts`.
+  `test/traffic-gateway.test.ts` is the discovered, explicitly bounded 240-second
+  CI wrapper invoking the new deploy proof and native verifier tests. Its setup
+  builds an owned throwaway image from existing `deploy/local-remote/Dockerfile`
+  (which copies the candidate remote sources), starts isolated fixture listeners
+  and HAProxy, and uses CI's real disposable PostgreSQL. No full-stack image,
+  installed `haproxy` assumption or optional-image skip. It must first fail the
+  named byte/probe assertion, not fail to build/install/start. Record prerequisites
+  and fix setup through the driver without editing foreign CI/install pins.
+- [ ] **Step 3: Implement collectors and locked ingestion** under the decisions
+  above. New reports require fresh reporter/route/test binding and <=5-second
+  future skew; delayed spool reports may be old if contiguous and their recorded
+  route authority is still verifiable, otherwise mark unavailable. Store only
+  fixed typed aggregate fields and signed aggregate bytes. `recordUsageEvent`
+  accepts positive traffic quantity only with the new source and nonnull venue;
+  preserve all old source/unit constraints. Keep v1 summary and reconciler shape.
+  Trial usage counts translation when E5 records actual first-attempt admission;
+  until E5, do not pretend queued/`started_at` lease selection proves a call.
+- [ ] **Step 4: Require exact-head CI GREEN**, including the wrapper's actual
+  HAProxy/DB execution with zero skips, plus original haproxy/forward-authority/
+  forward-observations/probe/usage tests. Receipt version 1, kind
+  `cloud-allowance-traffic`, clean head/tree, test-only scope, enforcement off,
+  explicit counters/complete-gap checks and nonzero per-suite counts; verifier
+  rejects missing/false/string/extra fields, wrong head, skips and nonzero cleanup.
+  Run pure verifier locally: `node --test scripts/verify-allowance-traffic-receipt.test.mjs`.
+- [ ] **Step 5: Commit:** `git commit -s -m "feat: record authenticated venue traffic without charging"`.
+
+### Task E5: Attach allowances to relay and translation without weakening gates
+
+**Files:** After D/P3 clearance, modify registration `src/{relay-grants,relay-messages,relay-worker}.ts`,
+translation `src/{consent,machine,job-store,worker,batch-runner,retention,worker-cli}.ts`,
+account-http `src/{app,server,server-cli}.ts` and the exact runtime paths in the
+consumer map. Create `packages/registration/test/billing-allowance-relay.test.ts`,
+`packages/translation/test/billing-allowance-translation.test.ts`,
+`packages/account-http/test/billing-allowance-runtime.test.ts` and
+`deploy/test-cloud/allowance-runtime.test.mjs` (pure option/env tests).
+No edits to `email-outbox.ts`, providers, archived prompts or original test bodies.
+
+**Interfaces:** Consume E1's `AllowanceOptions`.
+Append `allowances?:AllowanceOptions` after D's planned `planMode` argument on
+`RelayGrantStore`, `RelayMessages`, `RelayWorker`, `TranslationMachine`; add the
+same optional property to TranslationWorker's existing options and account app/
+server options. Missing options preserves old behavior exactly; test option
+requires D's qualified `test-venue-levels` integration and test venue. D's future
+`VenuePermission=BillingScope&{venueId:string;level:BillingLevel;revision:number}`,
+`readVenuePermissions(client,venueId,'test-venue-levels')` and
+`requireVenueService(client,venueId,service,mode,lock?)` are **planned**, not on main.
+Do not manufacture them or return organisation `paid` as a venue level.
+Keep `BatchHooks.mayCall/spent/attempted/wait` and D's optional `stillPermitted`.
+Add optional `beforeProvider?():Promise<boolean>` to BatchHooks; it durably spends
+the held admission with current job lease immediately before the first call.
+False means no call; callback/storage failure escapes, never becomes a retry.
+Extend the internal hook to `attempted(attemptStartedAt?:string):Promise<void>`;
+old consumers may ignore the optional argument. `runPass` captures the canonical
+call-start instant immediately before `respond` and supplies it after the response
+or throw, preserving spent-then-attempted ordering. A later confirmed attempt does
+not close an earlier unresolved pre-call interval or manufacture its start date.
+Produce internal `readAllowanceConsentActor(client:PoolClient,venueId:string):Promise<{accountId:string;consentId:string}>`
+in `translation/src/consent.ts`. Preliminary lookup identifies the exact active
+current-version consent row, never an arbitrary owner membership. Lock that
+account, verified credential and owner membership before organisation/business/
+venue locks, then re-read the same consent ID/owner under the existing translation
+consent lock. Withdrawal, replacement, disablement or ownership loss during waits
+refuses new admission. Bind the reservation to that actor; authenticated exact
+job replay keeps its original binding without selecting a later owner or another
+debit. Keep the signed machine wire and public boolean hasConsent API unchanged.
+
+- [ ] **Step 1: Write `monthly relay keeps account debit through handoff`**:
+  account limit 2 across two venues admits message A/B, C raises
+  `allowance_exhausted` with no queue row. Retry A, restart worker, cross month,
+  cancel/fail/uncertain delivery leaves total 2, new-month debit 0 for A. Reject
+  foreign binding, revoked/expired owner/grant/origin/lease and operator stop
+  exactly as before; no new grant or signup/reset mail allowance. `translation
+  allowance and money cap are independent`: test trial limit 2 items accepts 2,
+  refuses 3 with `limit_reached,fits:2`, provider calls 0 on refusal; full limit 6
+  after method addition still includes the 2 already used. Set existing policy
+  cap `5000000`, old spend `4998978`: preserve the original exact-fit admission
+  test and refuse one extra even when E allowance has room. Reverse the constraints
+  and prove E refuses while safety cap has room. `translation lease and failure
+  cannot refund or replay a call`: held 2/unstarted expiry releases to 0; first
+  call spends 2 once, actual cost e.g. `7` stays `7` through lease takeover,
+  cancellation and callback failure; calls remain 1 where the original callback
+  contract forbids retry. Preserve cancellation-after-response accounting order,
+  failed billed responses, retained usage, partly_done, result replay/collect/
+  release, foreign-job-before-cursor checks and D's post-wait refusal. Old lease
+  cannot spend/release; uncertain crash before response retains debit and creates
+  no extra allowance on resume. `month and method transitions do not refill`:
+  start 30 November, finish 1 December, debit stays November; a new December job
+  uses December, while safety cap still follows its existing created_at month.
+  Disabled/existing/test-free-paid paths produce identical old responses and no
+  E rows; invalid options/production binding refuse before listeners/provider work.
+
+  `translation uses the exact consent owner`: A and B both own an organisation;
+  A's consent binds admission to A although the proof names only installation/
+  venue. B cannot substitute. Disable/remove A or withdraw/replace consent while
+  admission waits: zero reservations/provider calls. Exact authorised job replay
+  keeps the original actor/ID with zero new debits. `uncertain pre-call work is not
+  confirmed trial use`: pause after spent commits but before provider invocation,
+  crash the worker, then assert units 2/spent, calls 0, translationRuns 0 and
+  complete false. A real call whose callback cannot commit also remains unavailable
+  without replay. Filter confirmed starts by their saved invocation instant at
+  trial start/last included day/end; a reply after midnight cannot move the run.
+
+  Pin the principal results in those named cases with these assertions (fixture
+  variables are actual stored totals/results, not replacement implementations):
+  ```ts
+  assert.deepEqual([admitted,refused,accountUsed],[1,1,2n]);
+  assert.deepEqual([afterLostAck,afterReplay],[35n,35n]);
+  assert.deepEqual([probeDays,twoDays,threeDays],[0,2,3]);
+  assert.deepEqual([uncertain.complete,uncertain.usage.translationRuns],[false,0]);
+  assert.deepEqual([afterCancel.units,afterCancel.state,recordedCost],['2','spent','7']);
+  assert.deepEqual([deniedProviderCalls,staleLeaseCalls],[0,0]);
+  ```
+  Keep the account/traffic assertions in E2/E4's owning named tests; this block
+  fixes their exact values without moving unrelated tests into E5.
+- [ ] **Step 2: Observe named DB/real relay RED in actual CI**, test-only signed
+  commits first: `pnpm --dir packages/registration exec node --test --test-timeout=30000 test/billing-allowance-relay.test.ts`;
+  `pnpm --dir packages/translation exec node --test --test-timeout=30000 test/billing-allowance-translation.test.ts`;
+  `pnpm --dir packages/account-http exec node --test --test-timeout=30000 test/billing-allowance-runtime.test.ts`.
+  Native only: `node --test deploy/test-cloud/allowance-runtime.test.mjs`.
+- [ ] **Step 3: Implement admission and lifecycle integration.** Relay keeps
+  its legacy policy as an additional independent ceiling, not a substitute;
+  account+venue monthly reservation and retained message debit commit together.
+  Handoff/status/cancel only replay the saved reservation, never select a fresh
+  month. Translation reserves in createJob's transaction after bound replay,
+  permission, consent/readiness and existing estimate checks. Bind reservation to
+  job/operation fingerprint. First provider attempt spends it under current lease;
+  conservative pre-call crash debit stays spent. Prove unstarted status under job
+  lock before release in sweep/terminal failure paths; never reclaim a live lease
+  merely because its time elapsed. A stale worker's beforeProvider returns false.
+  Preserve `spent` then `attempted` callbacks even on abort/billed failure, the
+  existing cost rounding/ledger and independent cap. Do not replay a paid call
+  because allowance/accounting/guard storage failed. Do not alter `monthSpend`
+  semantics, job retention or cost records. Record `recordAllowanceAttempt` from
+  the existing attempted callback under the current job lease, alongside its
+  lease update, passing the call-start instant captured immediately before actual
+  respond invocation, never callback completion time. Once observed it remains
+  historical. An uncertain pre-call debit
+  stays incomplete for trial usage until an actual callback exists; do not replay
+  a call to manufacture that evidence. SMS/rota/address
+  remain future adapters only; no invocation or provider is added.
+- [ ] **Step 4: Require new and original relay/translation/security suites GREEN
+  in CI on this head**, including relay bounds/control/worker, translation
+  machine/job-store/worker/batch-runner/retention and D permission regressions.
+  Run E1/E3/pure runtime and types locally. Inspect all mode defaults explicitly;
+  no checked-in env/Compose enablement or live mail.
+- [ ] **Step 5: Commit:** `git commit -s -m "feat: enforce test monthly allowances at existing service admissions"`.
+
+### Task E6: Qualify migrations, recovery and independent omission controls
+
+**Files:** Create `scripts/{allowance-traffic-guard-probes,allowance-traffic-guard-probes.test,schema-upgrade-allowance-fixture}.mjs`,
+`packages/registration/test/{billing-allowance-guards,billing-allowance-upgrade-recovery}.test.ts`.
+Modify `scripts/{schema-upgrade-fixture,schema-upgrade-fixture.test,schema-upgrade-receipt,verify-schema-upgrade-receipt,verify-schema-upgrade-receipt.test,database-recovery-migrations.test}.mjs`
+and registration `test/fixtures/migration-release.ts` after slot/proof coordination.
+Docs: `docs/usage-metering.md`, `packages/registration/README.md` and only E's own
+billing backlog paragraph at finish. No campaign instructions in the repository.
+
+**Interfaces:** Guard runner `--pure|--database`, strict per-case baseline/fault/
+restored receipts. Fixture exports
+`seedAllowances(root:string,pool:Pool,state:object):Promise<object>`,
+`allowanceState(pool:Pool):Promise<object>` and
+`restoredAllowances(root:string,pool:Pool,proof:object,expected:object):Promise<void>`;
+objects are private synthetic proof state. Extend `upgradeRevisions` with mutually
+exclusive `--allowances --old <full-predecessor> --new <full-candidate>`.
+Reserve schema receipt **version 8** for E (D proposes 7); if occupied, coordinate
+a new version, never reinterpret 1–7. Require exact recorded predecessor/new
+manifest counts and driver/new equal clean candidate head.
+
+- [ ] **Step 1: Write harness/verifier and actual migration RED before proof code.**
+  Native: `node --test scripts/allowance-traffic-guard-probes.test.mjs scripts/schema-upgrade-fixture.test.mjs scripts/verify-schema-upgrade-receipt.test.mjs scripts/database-recovery-migrations.test.mjs`.
+  Zero/skipped cases, setup errors, timeouts, zero/multiple mutation matches and
+  deliberately undetected negative-control faults reject qualification. Missing/
+  false/string/extra receipt facts, wrong head/count/digest, equal pins, dirty
+  driver and nonzero cleanup reject. CI wrappers named `allowance guards detect
+  independent omissions` (240-second bound) and `allowance exact head upgrade and
+  recovery is qualified` (360-second bound) must execute actual new-schema RED,
+  not only validators, before E2 SQL/proof implementation.
+- [ ] **Step 2: Implement omission controls in disposable complete copies only.**
+  For every row below independently omit exactly one guard, see its named test
+  fail for the specified wrong value, restore original bytes and require GREEN.
+  Pure controls run natively; DB/relay/gateway controls run only in actual CI.
+
+| Separate omission | Behavioral assertion that must detect it |
+| --- | --- |
+| Trial-active interval test; method test (two faults) | E1 expired trial incorrectly selects `2n` instead of `0n`; paid-method trial selects `2n` instead of `6n`. |
+| Account bucket serialization | E2 last-unit race admits 2 instead of 1. |
+| Composite/account ownership check | E2 foreign owner obtains a reservation instead of refusal and zero rows. |
+| Original reservation replay comparison | E2 changed binding is accepted instead of conflict, or rollover makes a second debit. |
+| Never-attempted release guard | E5 spent 2 becomes 0 after release instead of remaining 2. |
+| Independent money cap admission | E5 extra item at cap is admitted instead of original limit refusal. |
+| Current job-lease check before provider | E5 stale lease makes a call instead of calls 0. |
+| Traffic signature check; final reporter binding (two faults) | E4 forged envelope or old-generation new report adds an event instead of 0. |
+| Traffic sequence/payload replay check | E4 lost-ack replay adds 35 more or changed payload succeeds instead of total 35/conflict. |
+| Operational-backend exclusion | E4 positive three-day probes produce 3 trial days instead of 0. |
+| Counter decrease/overflow rejection | E3 reset/wrap produces bytes instead of refusal and incomplete coverage. |
+| Completeness gate for trial usage | E4 silence/time hole/unclosed predecessor becomes complete/unused instead of unavailable. |
+| Confirmed-attempt distinction | E5 spent debit with calls 0 becomes a confirmed run instead of incomplete/0. |
+| Exact consent-actor binding | E5 selects B for A's consent or admits after A loses authority instead of refusing. |
+
+- [ ] **Step 3: Implement and run the coordinated stopped-consumer upgrade/recovery.**
+  In E2's **test-only prerequisite** commit, update only current total/tail checks
+  in registration `test/{registration,schema-compatibility,backup-verification-migration,forward-observations-migration}.test.ts`
+  and translation `test/result-storage-upgrade.test.ts`. Preserve every historical
+  prefix/index/digest/row assertion and old SQL, including 038 and 045. Add the
+  exact real predecessor release to `migrationRelease`; do not fake a truncated
+  current migrate function. `hasReleaseMigrationCount` stays manifest driven.
+  Current release rejects the old count and missing/changed/future ledgers.
+
+  The delivered `billing-upgrade-recovery.test.ts` currently runs v6 against HEAD,
+  but v6 requires 44→45. Before E adds a migration, preserve its original test
+  and assertion bodies by invoking them in an installed clean owned checkout at
+  `3d3c3def00bf27d60f2d97f5c23cd4acc1aebf7d` (old full
+  `1a3e43e885edfbe9932c835e3f4fb8929718b2dc`, counts 44/45), as D6 plans.
+  If D implements that prerequisite first, reuse it; do not repeat or undo it.
+  If D's v7 HEAD wrapper lands before E, pin its original proof invocation to
+  the exact delivered D release/counts before E adds its next migration. Keep
+  v7 assertions there and add E's v8 current-head replacement; do not let a
+  historical verifier accept arbitrary newer schemas. Agree these invocation
+  hunks with D before editing them. No weakening historical recovery checks.
+
+  Name migration cases `allowance upgrade preserves every prior ledger row` and
+  `interrupted allowance migration rolls back and retries once`. Use actual old
+  migrate/SQL, stopped consumers, concurrent/repeated migration and owned-backend
+  termination while ledger insertion is blocked. Assert prior rows/digests/
+  applied_at unchanged, new tables absent on interruption, exactly one new ledger
+  entry after retry and empty unenabled E state after old-backup upgrade. New
+  consumer refuses old/interrupted schema; old consumer refuses the new schema.
+  New current consumer starts only with complete exact ledger.
+
+  Extend the existing proof, retaining its common identity/account/relay/monitoring/
+  backup/key/hold checks. v8 `allowances` has exactly these true fields:
+  `oldSqlUnchanged`, `oldRowsPreserved`, `interruptedRollback`, `restartIdempotent`,
+  `defaultOff`, `configRestored`, `reservationsRestored`, `spentNotReleased`,
+  `trafficSourcesRestored`, `trafficLedgerRestored`, `trafficRetryStable`,
+  `gapsRemainIncomplete`, `foreignScopeRefused`, `oldBackupUpgradeEmpty`.
+  Create separate pre-upgrade and populated-new logical backups. Restore each to
+  another owned DB with matching external synthetic keys/spool state; use
+  `pg_restore --exit-on-error` and preserve schema search paths in nested SQL
+  helpers. Restore held/spent/released reservations, config revisions, reporter/
+  process identity, accepted reports/gaps, exact traffic ledger and trial facts.
+  Replay pending spool after DB restore without duplicate bytes; stale checkpoint
+  against newer DB must recover by exact replay or refuse, never reset identity.
+  Wrong/missing keys refuse; preserved backups/holds and upgraded DB remain intact.
+  No backwards migration, history pruning, live recovery or retention claim.
+- [ ] **Step 4: Require exact-head CI GREEN and inspect execution receipts.**
+  `pnpm --dir packages/registration exec node --test --test-timeout=240000 test/billing-allowance-guards.test.ts`;
+  `pnpm --dir packages/registration exec node --test --test-timeout=360000 test/billing-allowance-upgrade-recovery.test.ts`.
+  Their existing `test/*.test.ts` discovery must run harness controls, all 16
+  independent omissions/restorations and the actual two-backup recovery. E4's
+  discovered remote wrapper must run actual HAProxy proof. Ordinary tests keep
+  30 seconds; wrappers fit the actual eight-minute package job. Inspect counts,
+  coverage, receipts and selection; omitted suites, conditional skips, prior-head
+  evidence, setup-only RED or exhausted budget block readiness and go to driver
+  coordination, never CI edits to conceal them. While Docker is down, run only
+  E1/E3, pure runtime/fixture/verifier controls and `pnpm typecheck` locally.
+  No local Docker, `scripts/test-postgres.mjs`, `pnpm test` or blanket workspace
+  suite. Record each test-only RED head/job/assertion and implementation-head GREEN.
+- [ ] **Step 5: Commit and complete the authorised branch lifecycle through the driver.**
+  `git commit -s -m "test: qualify allowance guards traffic replay and recovery"`.
+  Announce readiness for `finish-branch`. After initial rebase, run one full
+  candidate Claude run-it review via `claude-seat.sh review-run` in a complete
+  installed throwaway checkout, triage/fix findings in the feature tree, use normal
+  hooks and signed-off commits, and requalify each changed head. A later rebase
+  alone retains that review. Require every current-head selected CI job final/
+  green: selection, documentation/scripts, root 1–4, types, actual package shards,
+  receipts, strict summary and every actual cloud-cost job. Audit justified
+  reuse/skip evidence rather than trusting the summary. Compare actual backlog
+  three-way merges with **every** active/parked branch and preserve others' hunks.
+  Under shared `~/waitron-campaign-shared/main.lock`, fetch/read fresh main and run
+  `git merge-base --is-ancestor <fresh-main> <qualified-head>` immediately before
+  authorised `land-branch`; rebase/requalify if false. Perform normal main install
+  and only owned branch/worktree/environment/process cleanup. Independently audit
+  all main jobs at the exact merge SHA to final green. No live enablement.
+
+E1/E2 cover design §3's sizes-as-configuration, monthly refusal and account/venue
+scope; E1/E5 cover §4's active unpaid-method tier without losing the safety cap;
+E3/E4 cover §3's traffic unit and §4's three distinct actual-use days. E2/E6 keep
+§10's country ownership and recoverability. SMS/rota/address runtime, owner sizes,
+production calendar/network qualification, legal retention, G's trial decisions,
+J's unaccepted shared display and live enforcement remain explicitly unbuilt.
