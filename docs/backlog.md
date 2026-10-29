@@ -3096,6 +3096,15 @@ unique image tag, with a one-second limit, and always removes temporary files.
 Reproduce the image build when local Docker is available; passing CI does not explain
 the earlier timeout. Keep every verifier assertion and the existing build and job limits.
 
+## Storage extraction and certificate setup refusals (D452)
+
+Run `node --test scripts/ci-backup-storage-extraction.test.mjs` to check real
+pinned archive extraction with warm and cold private caches, followed by failed
+certificate generation or reading. Failed setup removes its extracted root and
+preserves the verified archive and unrelated files. Store startup, concurrent
+extraction and the historical failure causes retain their separate gates; see
+[the storage investigation](backlog/storage-cache-fixture.md).
+
 ## Storage startup configuration refusals (D446)
 
 Malformed token-duration strings are now checked before the fixture allocates a
