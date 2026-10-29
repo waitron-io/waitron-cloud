@@ -3117,17 +3117,11 @@ implementation or production evidence.
   monitoring and additional service units remain open; define costs, allowances and
   outage policy before using totals for billing. See [scope and remaining work](backlog/usage-metering.md).
 - **Data lifecycle.** Local backup capture, retention, verification and recovery are
-  implemented; production custody, provider qualification, isolation and lifecycle
+  implemented; paused-parent verifier checks retain diagnostic-input ordering. Production
+  custody, provider qualification, isolation and lifecycle
   policies remain open. See [the complete requirements and deliberate limits](backlog/data-lifecycle.md),
   including unresolved verifier failures and capacity qualification.
 
-
-## Verifier diagnostic fixture input ordering (D469)
-
-Run `node --test packages/backups/test/verify-process-scanning.test.ts` to check
-normal and paused-parent delivery after the diagnostic children consume input.
-Existing scan bounds, heap classifications and line-boundary checks remain.
-Historical CI pipe timing is still unproved; see [the verifier limits](backlog/data-lifecycle.md).
 
 ## Backup catalogue replies after account and venue changes (D396)
 
