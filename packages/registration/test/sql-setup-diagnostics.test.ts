@@ -38,7 +38,8 @@ function database(failAt:number,error:unknown,applied=false){
 for(const [at,stage,ordinal] of [
  [1,'transaction-start',undefined],[2,'advisory-lock',undefined],[3,'ledger-create',undefined],
  [4,'ledger-compatibility',undefined],[5,'migration-lookup',1],[6,'migration-apply',1],
- [7,'migration-record',1],[137,'transaction-finish',undefined],[54,'migration-apply',17],[135,'migration-apply',44],
+ [7,'migration-record',1],[migrationNames.length*3+5,'transaction-finish',undefined],[54,'migration-apply',17],[135,'migration-apply',44],
+ [(migrationNames.length-1)*3+6,'migration-apply',migrationNames.length],
 ] as const){
  test(`migration failure names ${stage} ${ordinal??'without ordinal'} and preserves rollback`,async t=>{
   const lines=capture(t);const error=Object.freeze(new Error('private SQL and credential'));
@@ -51,7 +52,7 @@ for(const [at,stage,ordinal] of [
 }
 test('successful migrations keep query order, SQL, arguments and silence',async t=>{
  const lines=capture(t);const db=database(-1,null);await migrate(db.pool);
- assert.deepEqual(lines,[]);assert.equal(db.queries.length,137);
+ assert.deepEqual(lines,[]);assert.equal(db.queries.length,4+migrationNames.length*3+1);
  assert.equal(db.queries[0]!.sql,'BEGIN');assert.equal(db.queries[1]!.sql,"SELECT pg_advisory_xact_lock(hashtext(current_schema()), hashtext('cloud_migrations'))");
  assert.equal(db.queries[2]!.sql,`CREATE TABLE IF NOT EXISTS schema_migrations (
       name text PRIMARY KEY, digest text NOT NULL, applied_at timestamptz NOT NULL DEFAULT clock_timestamp()
@@ -68,7 +69,7 @@ test('successful migrations keep query order, SQL, arguments and silence',async 
 });
 test('already applied migrations stay silent and retain every lookup without reapplication',async t=>{
  const lines=capture(t);const db=database(-1,null,true);await migrate(db.pool);
- assert.deepEqual(lines,[]);assert.equal(db.queries.length,49);assert.equal(db.queries.at(-1)!.sql,'COMMIT');
+ assert.deepEqual(lines,[]);assert.equal(db.queries.length,4+migrationNames.length+1);assert.equal(db.queries.at(-1)!.sql,'COMMIT');
 });
 test('migration reporting never reads hostile thrown values and reporter failure keeps the original',async t=>{
  capture(t,true);const error=new Proxy({}, {get(){assert.fail('diagnostics read caught value');},ownKeys(){assert.fail('diagnostics enumerated caught value');}});
