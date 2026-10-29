@@ -87,11 +87,13 @@ async function waiting(f:Fixture,blocker:PoolClient){
  assert.fail('billing read must observably wait on the held parent lock');
 }
 async function blockedRead(f:Fixture,target:Target,change:(blocker:PoolClient)=>Promise<void>,check:(pending:Promise<any>)=>Promise<void>){
- const blocker=await f.second.connect();await blocker.query('BEGIN');
- await blocker.query('SELECT id FROM legal_businesses WHERE id=$1 FOR NO KEY UPDATE',[target.scope.legalBusinessId]);
- const pending=machine(f).read(request(target));pending.catch(()=>{});
- try{await waiting(f,blocker);await change(blocker);await blocker.query('COMMIT');await check(pending);}
- finally{await blocker.query('ROLLBACK');blocker.release();await pending.catch(()=>{});}
+ const blocker=await f.second.connect();let pending:Promise<any>|undefined;
+ try{
+  await blocker.query('BEGIN');
+  await blocker.query('SELECT id FROM legal_businesses WHERE id=$1 FOR NO KEY UPDATE',[target.scope.legalBusinessId]);
+  pending=machine(f).read(request(target));pending!.catch(()=>{});
+  await waiting(f,blocker);await change(blocker);await blocker.query('COMMIT');await check(pending!);
+ }finally{await blocker.query('ROLLBACK');blocker.release();await pending?.catch(()=>{});}
 }
 // Refuse defaults for missing authority; no read may create billing or installation facts.
 test('owned unstored billing read is registered active and writes no rows',async t=>{
