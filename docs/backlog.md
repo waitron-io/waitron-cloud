@@ -758,6 +758,13 @@ admitting text or usage. Delayed valid checksums succeed; corrupt checksums retu
 a sanitized error without usage or automatic retry. A later call through the same
 client still succeeds. Real provider and release qualification remain open.
 
+Run `node --test packages/translation/test/batch-runner-compressed-integrity.test.ts`
+to check spending, lease renewal and retries after gzip or deflate checksum failures
+in both passes. Pending checksums withhold callbacks; corrupt replies renew the lease
+without inventing usage. A healthy retry succeeds, while four failed attempts stop
+the pass. Failed reviews retain first-pass names and spending. These local HTTP checks
+keep real provider and release qualification open.
+
 Run `node --test packages/translation/test/openai-client-unfinished-refusals.test.ts`
 to check that unfinished HTTP refusals close their connections and retain their
 retry decisions without parsing error-body usage or private text. A later valid
