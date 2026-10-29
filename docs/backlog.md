@@ -3131,6 +3131,14 @@ store startup and concurrent valid-cache publication keep their separate gates.
 or download failure; real storage qualification remains separate.
 See [the boundaries and remaining work](backlog/storage-cache-fixture.md#existing-storage-cache-refusal-qualification-d442).
 
+## Storage TLS material refusals (D455)
+
+Run `node --test scripts/ci-backup-storage-tls-refusals.test.mjs` to check malformed
+certificates, malformed private keys and mismatched pairs with real HTTPS construction.
+Failed startup preserves the TLS error, removes its extracted files and private key,
+and leaves cached input and a competing listener intact. Real store startup and
+historical failure causes remain open; see [the investigation](backlog/storage-cache-fixture.md).
+
 ## Storage archive download failure reporting (D441)
 
 **Open.** Capture an instrumented recurrence before attributing the historical startup
