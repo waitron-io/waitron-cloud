@@ -4,11 +4,16 @@ import {syncBuiltinESMExports} from 'node:module';
 import {test} from 'node:test';
 import {runNodeVerifier} from '../src/verify-process.ts';
 
-test('one-byte stderr delivery scans bounded text per byte and preserves valid output',async t=>{
+for(const pauseParent of [false,true]){
+ const suffix=pauseParent?' after parent spawn pause':'';
+
+test('one-byte stderr delivery scans bounded text per byte and preserves valid output'+suffix,async t=>{
  const spawn=childProcess.spawn,regexTest=RegExp.prototype.test;
  let delivered=0,scanned=0;
  t.mock.method(childProcess,'spawn',(...args:Parameters<typeof spawn>)=>{
   const child=spawn(...args),stderr=child.stderr!;
+  // Let the real child run while its parent has not yet submitted the private input.
+  if(pauseParent)Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,200);
   const on=stderr.on;
   t.mock.method(stderr,'on',(event:string,listener:(bytes:Buffer)=>void)=>{
    if(event!=='data')return on.call(stderr,event,listener);
@@ -27,7 +32,8 @@ test('one-byte stderr delivery scans bounded text per byte and preserves valid o
  syncBuiltinESMExports();
  try{
   // Rescanning the growing diagnostic transcript would examine about 800 million characters.
-  const result=await runNodeVerifier(['-e',"process.stderr.write('FATAL ERROR: '+'x'.repeat(39987));console.log('{\"valid\":true}')"],{input:{}});
+  // Consume the request before exiting so a closed stdin pipe cannot mask the diagnostic.
+  const result=await runNodeVerifier(['-e',"process.stdin.resume();process.stdin.on('end',()=>{process.stderr.write('FATAL ERROR: '+'x'.repeat(39987));console.log('{\"valid\":true}')})"],{input:{}});
   assert.deepEqual(result,{valid:true});
   assert.equal(delivered,40000);
   assert(scanned<=delivered*64,`scanned ${scanned} characters for ${delivered} stderr bytes`);
@@ -35,10 +41,11 @@ test('one-byte stderr delivery scans bounded text per byte and preserves valid o
  }finally{t.mock.restoreAll();syncBuiltinESMExports();}
 });
 
-test('one-byte delivery retains fatal-line boundaries and both heap phrases',async t=>{
+test('one-byte delivery retains fatal-line boundaries and both heap phrases'+suffix,async t=>{
  const spawn=childProcess.spawn;
  t.mock.method(childProcess,'spawn',(...args:Parameters<typeof spawn>)=>{
   const child=spawn(...args),stderr=child.stderr!,on=stderr.on;
+  if(pauseParent)Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,200);
   t.mock.method(stderr,'on',(event:string,listener:(bytes:Buffer)=>void)=>on.call(stderr,event,event==='data'?(bytes:Buffer)=>{
    for(const byte of bytes)listener(Buffer.from([byte]));
   }:listener));
@@ -61,10 +68,12 @@ test('one-byte delivery retains fatal-line boundaries and both heap phrases',asy
    ['FATAL ERROR:heap limit',false],
   ] as const){
    await t.test(JSON.stringify(diagnostic.length>100?diagnostic.slice(0,30)+'…':diagnostic),async()=>{
-    const pending=runNodeVerifier(['-e',`process.stderr.write(${JSON.stringify(diagnostic)});console.log('{"valid":true}')`],{input:{}});
+    const pending=runNodeVerifier(['-e',`process.stdin.resume();process.stdin.on('end',()=>{process.stderr.write(${JSON.stringify(diagnostic)});console.log('{"valid":true}')})`],{input:{}});
     if(resource)await assert.rejects(pending,/^Error: backup.verifier_resource$/);
     else assert.deepEqual(await pending,{valid:true});
    });
   }
  }finally{t.mock.restoreAll();syncBuiltinESMExports();}
 });
+
+}
