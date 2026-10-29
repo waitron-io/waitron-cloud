@@ -34,6 +34,6 @@ for(const [name,value] of Object.entries({origin:'https://other.example.test',ac
 }
 test('billing display rejects cross-action use and a one-byte signature change',()=>{
  assert.throws(()=>verifyMachine(vector.envelope,vector.publicKey,vector.claims.origin,'configuration',vector.claims.issuedAt),{code:'invalid_proof'});
- const signature=Buffer.from(vector.envelope.signature,'base64url');signature[0]^=1;
+ const signature=Buffer.from(vector.envelope.signature,'base64url');signature[0]=signature[0]!^1;
  assert.throws(()=>verifyMachine({...vector.envelope,signature:signature.toString('base64url')},vector.publicKey,vector.claims.origin,'billing-display' as any,vector.claims.issuedAt),{code:'invalid_proof'});
 });

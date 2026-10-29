@@ -6,7 +6,7 @@ import {Pool,type PoolClient} from 'pg';
 import * as api from '../src/index.ts';
 import {migrate} from '../src/migrate.ts';
 import {createLeaseIssuer,encodeMachine} from '../src/installation-proof.ts';
-import type {BillingEvent,BillingScope,BillingCommand,BillingPriceVersion} from '../src/billing-types.ts';
+import type {BillingEvent,BillingCommand,BillingPriceVersion} from '../src/billing-types.ts';
 
 const origin='https://billing.example.test',now=Date.parse('2026-11-02T11:00:00.000Z');
 const settings={countryCode:'ES',calendarTimeZone:'Europe/Madrid'} as const;
@@ -104,7 +104,7 @@ test('owned unstored billing read is registered active and writes no rows',async
 test('billing display derives venue business scope',async t=>{
  const f=await fixture();try{frozenClock(t);await f.prices.publish(price);
   for(const target of f.targets){await level(f,target);}
-  for(const target of f.targets){const id=await freeze(f,target);const a=await attempt(f,target,id);await observe(f,target,a,'succeeded',0);}
+  for(const target of [f.targets[0]!,f.targets[2]!,f.targets[3]!]){const id=await freeze(f,target);const a=await attempt(f,target,id);await observe(f,target,a,'succeeded',0);}
   const reader=machine(f);
   for(const target of f.targets){const result=await reader.read(request(target));assert.equal(result.venueId,target.venueId);assert.deepEqual(result.billing,{status:'ready',level:'connected',state:'active',period:{kind:'paid',level:'connected',from:'2026-11-01',until:'2026-12-01',coversAsOf:true}});}
   const first=f.targets[0]!,other=f.targets[1]!;
@@ -205,9 +205,9 @@ test('billing display requires remaining accepted success through stored payment
 });
 test('billing display preserves stored trial extension and effective lapse',async t=>{
  const f=await fixture();try{frozenClock(t);const target=f.targets[0]!;await level(f,target);
-  await command(f,target,{type:'start_trial',venueId:target.venueId,level:'connected',on:'2026-10-01'});
+  await command(f,target,{type:'start_trial',venueId:target.venueId,level:'connected',on:'2026-10-02'});
   await command(f,target,{type:'extend_trial',venueId:target.venueId,level:'connected',expectedEnd:'2026-11-01'});
-  const reader=machine(f);assert.deepEqual((await reader.read(request(target))).billing,{status:'ready',level:'connected',state:'trial',period:{kind:'trial',level:'connected',from:'2026-10-01',until:'2026-12-01',coversAsOf:true}});
+  const reader=machine(f);assert.deepEqual((await reader.read(request(target))).billing,{status:'ready',level:'connected',state:'trial',period:{kind:'trial',level:'connected',from:'2026-10-02',until:'2026-12-01',coversAsOf:true}});
   t.mock.timers.setTime(Date.parse('2026-12-01T11:00:00Z'));assert.deepEqual((await reader.read(request(target))).billing,{status:'unavailable',reason:'state_not_ready'});
   await level(f,target,{level:'registered',connectedFrom:null,lapsedOn:'2026-12-01'});assert.equal((await reader.read(request(target))).billing.state,'lapsed');
  }finally{await f.close();}
