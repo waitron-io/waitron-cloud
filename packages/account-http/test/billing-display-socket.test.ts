@@ -47,7 +47,7 @@ test('billing socket enforces streamed bytes and body encoding independently of 
  await fault(await socket(running,undefined,{},'overflow'),413,'invalid_input');
  await fault(await socket(running,f.proof(),{'content-encoding':'br'}),415,'invalid_input');
 });
-test('billing socket destination is the existing account page and unsafe configured origins refuse before database reads',async t=>{
+test('billing socket serves the trusted account destination and refuses unsafe HTTP configuration',async t=>{
  const f=await fixture(t),running=await server(t,f,true);
  const display=await socket(running,f.proof());assert.equal(display.status,200);assert.equal((await display.json()).accountUrl,origin+'/account');
  const account=await new Promise<{status:number;body:string}>((resolve,reject)=>{

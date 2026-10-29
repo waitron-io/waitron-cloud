@@ -238,3 +238,35 @@ test('missing country schema refuses instead of returning registered defaults',a
  try{frozenClock(t);await f.admin.query(`CREATE SCHEMA ${empty}`);await assert.rejects(machine(f,settings,origin,pool).read(request(f.targets[0]!)),{code:'temporarily_unavailable'});}
  finally{await pool.end();await f.admin.query(`DROP SCHEMA IF EXISTS ${empty} CASCADE`);await f.close();}
 });
+
+test('billing display reads of different venues share their business lock while billing writes wait',async t=>{
+ const f=await fixture(),blocker=await f.second.connect();let first:Promise<any>|undefined,second:Promise<any>|undefined,writer:Promise<any>|undefined;
+ try{
+  frozenClock(t);const a=f.targets[0]!,b=f.targets[1]!,reader=machine(f);
+  await blocker.query('BEGIN');await blocker.query('SELECT id FROM venues WHERE id=$1 FOR UPDATE',[a.venueId]);
+  first=reader.read(request(a));first!.catch(()=>{});await waiting(f,blocker);
+  const blockerPid=(await blocker.query('SELECT pg_backend_pid() AS pid')).rows[0].pid;
+  const held=await f.second.query("SELECT pid FROM pg_stat_activity WHERE application_name=$1 AND wait_event_type='Lock' AND $2::integer=ANY(pg_blocking_pids(pid))",[f.schema,blockerPid]);
+  assert.equal(held.rowCount,1);const firstPid=held.rows[0].pid;
+  let complete=false;second=reader.read(request(b));second!.then(()=>{complete=true;},()=>{complete=true;});
+  const deadline=performance.now()+5000;
+  while(!complete&&performance.now()<deadline){
+   const blocked=await f.second.query("SELECT pid FROM pg_stat_activity WHERE application_name=$1 AND wait_event_type='Lock' AND $2::integer=ANY(pg_blocking_pids(pid))",[f.schema,firstPid]);
+   assert.equal(blocked.rowCount,0,'a display read must not block another venue billing read');
+   await setImmediate();
+  }
+  assert.equal(complete,true,'the independent venue read must finish while the first venue is locked');
+  assert.deepEqual((await second!).billing,{status:'ready',level:'registered',state:'active',period:null});
+  writer=f.store.execute(a.scope,event(),{type:'ensure_business'});writer!.catch(()=>{});
+  let writerWaits=false;const writeDeadline=performance.now()+5000;
+  while(!writerWaits&&performance.now()<writeDeadline){
+   writerWaits=!!(await f.second.query("SELECT pid FROM pg_stat_activity WHERE application_name=$1 AND wait_event_type='Lock' AND $2::integer=ANY(pg_blocking_pids(pid))",[f.schema,firstPid])).rowCount;
+   if(!writerWaits)await setImmediate();
+  }
+  assert.equal(writerWaits,true,'billing writes must still wait for the display snapshot');
+  await blocker.query('COMMIT');assert.deepEqual((await first!).billing,{status:'ready',level:'registered',state:'active',period:null});await writer;
+  assert.equal((await f.pool.query('SELECT count(*)::integer AS n FROM billing_businesses')).rows[0].n,1);
+ }finally{
+  await blocker.query('ROLLBACK');blocker.release();await Promise.allSettled([first,second,writer].filter(Boolean));await f.close();
+ }
+});

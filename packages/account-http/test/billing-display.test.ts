@@ -66,7 +66,7 @@ for(const [name,claims] of [
  ['wrong signed origin',()=>({origin:'https://elsewhere.example.test'})],['stale proof',()=>({issuedAt:now-60001})],
  ['future proof',()=>({issuedAt:now+60001})],['missing lease',()=>({lease:''})],
 ] as const)test('billing HTTP rejects '+name,async t=>{const f=await fixture(t);await fault(await f.send(f.proof(claims())),401,'invalid_proof');});
-test('billing HTTP rejects a forged key, crossed lease and expired lease without spending an unverified installation budget',async t=>{
+test('billing HTTP charges the installation budget only after stored-key authentication',async t=>{
  const f=await fixture(t),other=await fixture(t,false);
  await fault(await f.send({...f.proof(),signature:other.proof().signature}),401,'invalid_proof');
  const limiter=new AccountRateLimiter(f.pool,f.rateKey);
