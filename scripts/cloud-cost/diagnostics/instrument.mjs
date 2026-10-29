@@ -17,10 +17,10 @@ process.once('exit', () => { try { appendTrace('/tmp/cost-browser-trace.jsonl', 
 export function instrumentRemote(source, {buffered = false, compact = false} = {}) {
   source = (buffered ? bufferedReporter : reporter) + source;
   source = replace(source, 'const poison = reason => {', "const poison = reason => { trace({event:'poison',reason});");
-  source = replace(source, "const upstream = connect({", "const connection = connections; trace({event:'admit',connection});\n    const upstream = connect({");
+  source = replace(source, "const upstream = connect({", "const connection = connections, browserPort = client.remotePort; trace({event:'admit',connection});\n    const upstream = connect({");
   source = replace(source, "upstream.once('connect', () => { connected = true; });", "upstream.once('connect', () => { connected = true; trace({event:'connected',connection}); });");
   source = replace(source, 'sockets.add(socket);', `sockets.add(socket);
-      const state = () => ({connection, side, read:socket.bytesRead, written:socket.bytesWritten,
+      const state = () => ({connection, side, browserPort, gatewayPort:upstream.localPort, read:socket.bytesRead, written:socket.bytesWritten,
         readableEnded:socket.readableEnded, writableFinished:socket.writableFinished,
         readableLength:socket.readableLength, writableLength:socket.writableLength});
       ${compact ? '' : `socket.on('end', () => trace({event:'end',...state()}));
@@ -33,6 +33,7 @@ export function instrumentRemote(source, {buffered = false, compact = false} = {
 export function instrumentBrowser(source, {buffered = false, compact = false} = {}) {
   source = (buffered ? bufferedReporter : reporter) + source;
   if (!compact) source = replace(source, "const key = keyFor(req) + ':' + event;", "const key = keyFor(req) + ':' + event; trace({event:'request',key,phase});");
+  source = replace(source, "args: ['--no-sandbox',", "args: ['--log-net-log=/tmp/cost-browser-netlog.json', '--no-sandbox',");
   source = replace(source, "phase = 'reconnect';", "phase = 'reconnect'; trace({event:'phase',phase});");
   source = replace(source, "const error = Error('Invalid cloud cost browser journey');", "trace({event:'refusal',phase,step,relay:meter?.failure()}); const error = Error('Invalid cloud cost browser journey');");
   return source;
@@ -40,7 +41,11 @@ export function instrumentBrowser(source, {buffered = false, compact = false} = 
 export function instrumentFixture(source) {
   source = replace(source, 'const containers = []; let networkId;', 'const containers = []; let networkId, runner;');
   source = replace(source, "const runner = docker('create'", "runner = docker('create'");
+  source = replace(source, "cpSync(new URL('./browser-diagnostics.mjs', import.meta.url), join(root, 'measure/browser-diagnostics.mjs'));",
+    "cpSync(new URL('./browser-diagnostics.mjs', import.meta.url), join(root, 'measure/browser-diagnostics.mjs')); cpSync(new URL('../diagnostics/netlog-summary.mjs', import.meta.url), join(root, 'measure/netlog-summary.mjs'));");
   source = replace(source, 'const ownedContainers = new Set', `if (runner) {
+      try { console.error('cost_browser_netlog=' + docker('exec', runner, 'node', '/measure/netlog-summary.mjs', '/tmp/cost-browser-netlog.json')); }
+      catch { console.error('cost_browser_netlog=unavailable'); }
       try { console.error('cost_browser_socket_trace=' + docker('exec', runner, 'cat', '/tmp/cost-browser-trace.jsonl')); }
       catch { console.error('cost_browser_socket_trace=unavailable'); }
     }

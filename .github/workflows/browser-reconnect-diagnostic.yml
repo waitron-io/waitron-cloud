@@ -46,7 +46,7 @@ jobs:
         run: |
           set -o pipefail
           mkdir -p diagnostics
-          node --test scripts/cloud-cost/diagnostics/instrument.test.mjs
+          node --test scripts/cloud-cost/diagnostics/*.test.mjs
           node scripts/cloud-cost/diagnostics/instrument.mjs
           if [ '${{ matrix.group }}' = 'compact-one-cpu' ]; then
             python3 - <<'PYTHON'
