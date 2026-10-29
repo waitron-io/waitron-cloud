@@ -3262,9 +3262,12 @@ Startup now returns that socket error and removes its private files instead of
 crashing before cleanup. Run
 `node --test scripts/ci-backup-storage-issuer-bind.test.mjs` to check refused and
 successful binds, later setup failure and preservation of another listener.
-Port-probe refusals and identity-server errors after startup still need separate
-qualification. Real store startup and historical failure causes remain separate;
-see [the storage investigation](backlog/storage-cache-fixture.md).
+The port probe also returns bind errors through startup cleanup. Run
+`node --test scripts/ci-backup-storage-port-probe.test.mjs` to check a real bind
+refusal, successful probe closure, preserved errors and cleanup of private files.
+Identity-server errors after startup still need separate qualification. Real store
+startup and historical failure causes remain separate; see
+[the storage investigation](backlog/storage-cache-fixture.md).
 
 ## Storage TLS material refusals (D455)
 
