@@ -62,7 +62,7 @@ async function attempt(f:Fixture,chargeId:string,saved=method(),scope:BillingSco
 async function observe(f:Fixture,attemptId:string,state:string,expectedRevision:number|null,providerPaymentId='test-payment',ev=event(),scope:BillingScope=f.scope){
  return f.store.execute(scope,ev,{type:'observe_payment',attemptId,providerPaymentId,state,expectedRevision});
 }
-// SQL setup isolates observation and database guards from the still-missing charge handler.
+// SQL setup exercises observation and database guards independently of charge creation.
 async function seeded(f:Fixture,scope:BillingScope=f.scope,venueId=f.venues[0]!){
  const saved=method(),e=randomUUID(),id=randomUUID(),attemptId=randomUUID();
  await f.store.execute(scope,event(),{type:'set_method',method:saved});
