@@ -3,6 +3,9 @@ import type {Pool,PoolClient} from 'pg';
 import {billingDate,billingRecord,billingWhole} from './billing-config.ts';
 import {BillingError,type BillingCommand,type BillingEvent,type BillingReceipt,type BillingScope,type BusinessBillingView,type ProviderMethod} from './billing-types.ts';
 import {transaction} from './transaction.ts';
+import type {VenueChargeView} from './billing-charges.ts';
+import {applyVenueCommand,readBillingVenue,readVenueHistory,readRenewalViews,type VenueCommand} from './billing-venues.ts';
+import type {HostedWindow,VenueBillingView,VenueBillingHistory} from './billing-types.ts';
 
 type BusinessCommand=Extract<BillingCommand,{type:'ensure_business'|'set_method'|'anchor'}>;
 function invalid():never{throw new BillingError('invalid_billing_input');}
@@ -40,7 +43,7 @@ function methodInput(input:unknown):ProviderMethod|null{
  if(m.kind==='direct_debit'&&(m.provider!=='stripe'||m.mandateId===null))invalid();
  return {id:uuid(m.id),kind:m.kind,provider:m.provider,providerAccountId:reference(m.providerAccountId),customerId:reference(m.customerId),methodId:reference(m.methodId),mandateId:m.mandateId===null?null:reference(m.mandateId)};
 }
-function commandInput(input:unknown):BusinessCommand{
+function commandInput(input:unknown):BusinessCommand|VenueCommand{
  const c=input as Record<string,unknown>|null;
  switch(c?.type){
  case 'ensure_business':billingRecord(c,['type']);return {type:'ensure_business'};
@@ -50,8 +53,39 @@ function commandInput(input:unknown):BusinessCommand{
   if(c.mode!=='initial'&&c.mode!=='comeback')invalid();
   return {type:'anchor',on:billingDate(c.on),mode:c.mode,expectedRevision:billingWhole(c.expectedRevision)};
  }
+ case 'set_venue':{
+  billingRecord(c,['type','venueId','expectedRevision','value']);
+  const v=billingRecord(c.value,['level','connectedFrom','lapsedOn','scheduledLevel','scheduledOn']);
+  if(v.level!=='registered'&&v.level!=='connected'&&v.level!=='hosted')invalid();
+  if(v.scheduledLevel!==null&&v.scheduledLevel!=='registered'&&v.scheduledLevel!=='connected')invalid();
+  if((v.scheduledLevel===null)!==(v.scheduledOn===null))invalid();
+  return {type:'set_venue',venueId:uuid(c.venueId),expectedRevision:billingWhole(c.expectedRevision),value:{level:v.level,connectedFrom:v.connectedFrom===null?null:billingDate(v.connectedFrom),lapsedOn:v.lapsedOn===null?null:billingDate(v.lapsedOn),scheduledLevel:v.scheduledLevel,scheduledOn:v.scheduledOn===null?null:billingDate(v.scheduledOn)}};
+ }
+ case 'start_trial':{
+  billingRecord(c,['type','venueId','level','on']);
+  if(c.level!=='connected'&&c.level!=='hosted')invalid();
+  return {type:'start_trial',venueId:uuid(c.venueId),level:c.level,on:billingDate(c.on)};
+ }
+ case 'extend_trial':{
+  billingRecord(c,['type','venueId','level','expectedEnd']);
+  if(c.level!=='connected')invalid();
+  return {type:'extend_trial',venueId:uuid(c.venueId),level:'connected',expectedEnd:billingDate(c.expectedEnd)};
+ }
+ case 'end_trial':{
+  billingRecord(c,['type','venueId','level','expectedEnd','outcome']);
+  if((c.level!=='connected'&&c.level!=='hosted')||(c.outcome!=='converted'&&c.outcome!=='lapsed'))invalid();
+  return {type:'end_trial',venueId:uuid(c.venueId),level:c.level,expectedEnd:billingDate(c.expectedEnd),outcome:c.outcome};
+ }
+ case 'hosted_day':
+  billingRecord(c,['type','venueId','on','coveredByChargeId']);
+  return {type:'hosted_day',venueId:uuid(c.venueId),on:billingDate(c.on),coveredByChargeId:c.coveredByChargeId===null?null:uuid(c.coveredByChargeId)};
  default:return invalid();
  }
+}
+function hostedWindow(input:unknown):HostedWindow{
+ const w=billingRecord(input,['from','through']),from=billingDate(w.from),through=billingDate(w.through);
+ if(from>through)invalid();
+ return {from,through};
 }
 function canonical(value:unknown):string{
  if(Array.isArray(value))return '['+value.map(canonical).join(',')+']';
@@ -105,6 +139,18 @@ export class BillingStore{
   const scope=scopeInput(input);
   return transaction(this.pool,async client=>{await lockScope(client,scope);return readBusiness(client,scope,'SHARE');});
  }
+ async venue(input:BillingScope,inputVenueId:string):Promise<VenueBillingView>{
+  const scope=scopeInput(input),venueId=uuid(inputVenueId);
+  return transaction(this.pool,async client=>{await lockScope(client,scope);return readBillingVenue({client,scope},venueId);});
+ }
+ async history(input:BillingScope,inputVenueId:string):Promise<VenueBillingHistory>{
+  const scope=scopeInput(input),venueId=uuid(inputVenueId);
+  return transaction(this.pool,async client=>{await lockScope(client,scope);return readVenueHistory({client,scope},venueId);});
+ }
+ async renewalViews(input:BillingScope,inputWindow:HostedWindow):Promise<VenueChargeView[]>{
+  const scope=scopeInput(input),window=hostedWindow(inputWindow);
+  return transaction(this.pool,async client=>{await lockScope(client,scope);return readRenewalViews({client,scope},window);});
+ }
  async execute(inputScope:BillingScope,inputEvent:BillingEvent,inputCommand:BillingCommand):Promise<BillingReceipt>{
   const scope=scopeInput(inputScope),event=eventInput(inputEvent),command=commandInput(inputCommand);
   if(event.source.kind!=='internal')invalid();
@@ -121,7 +167,9 @@ export class BillingStore{
     return {eventId:previous.id,value:previous.result};
    }
    const eventId=randomUUID();
-   const value=await applyBusiness(client,scope,eventId,command,business);
+   const value=command.type==='ensure_business'||command.type==='set_method'||command.type==='anchor'
+    ?await applyBusiness(client,scope,eventId,command,business)
+    :await applyVenueCommand({client,scope,eventId,occurredAt:event.occurredAt},command);
    const inserted=await client.query(`INSERT INTO billing_events(id,organisation_id,legal_business_id,source,event_key,occurred_at,command,result)
     VALUES($1,$2,$3,'internal',$4,$5,$6,$7) ON CONFLICT DO NOTHING RETURNING id`,[eventId,...args,event.key,event.occurredAt,command,value]);
    if(!inserted.rowCount)throw new BillingError('billing_event_conflict');
