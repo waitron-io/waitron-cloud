@@ -30,6 +30,7 @@ export type BillingCommand=
  |{type:'freeze_charge';chargeId:string;kind:'renewal'|'hosted_comeback';renewalDate:CivilDate;connectedUntil:CivilDate|null;window:HostedWindow;priceRevision:number}
  |{type:'begin_attempt';chargeId:string;attemptId:string;methodId:string;requestKey:string}
  |{type:'observe_payment';attemptId:string;providerPaymentId:string;state:PaymentState;expectedRevision:number|null};
+export type PermissionCommand=Extract<BillingCommand,{type:'set_venue'|'start_trial'|'extend_trial'|'end_trial'}>;
 export type BillingValue=BusinessBillingView|VenueBillingView|TrialView|FrozenCharge|PaymentView|{venueId:string;on:CivilDate;coveredByChargeId:string|null};
 export type BillingReceipt={eventId:string;value:BillingValue};
 export type BillingErrorCode='invalid_billing_input'|'billing_scope_not_found'|'billing_event_conflict'|'billing_state_conflict'|'billing_price_unavailable'|'billing_price_conflict'|'billing_charge_conflict'|'billing_trial_unavailable';

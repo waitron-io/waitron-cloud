@@ -4,7 +4,7 @@ import {transaction} from './transaction.ts';
 export type OrganisationPlan = 'free' | 'paid';
 export type PlanService = 'address_lookup' | 'transactional_email' | 'content_translation'
   | 'continuous_backup' | 'retained_snapshots' | 'remote_access';
-export type PlanMode = 'existing' | 'test-free-paid';
+export type PlanMode = 'existing' | 'test-free-paid' | 'test-venue-levels';
 export interface OrganisationPlanView {
   organisationId: string;
   plan: OrganisationPlan;
@@ -13,12 +13,16 @@ export interface OrganisationPlanView {
 }
 
 function requireMode(mode: PlanMode): void {
-  if (mode !== 'existing' && mode !== 'test-free-paid') throw new Error('invalid_plan_mode');
+  if (mode !== 'existing' && mode !== 'test-free-paid' && mode !== 'test-venue-levels') throw new Error('invalid_plan_mode');
 }
 function requireId(id: string): void {
   if (typeof id !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) throw new Error('invalid_organisation');
 }
-export function parsePlanMode(value: string | undefined): PlanMode {
+export function parsePlanMode(value: string | undefined, venueLevels?: string): PlanMode {
+  if (venueLevels !== undefined && venueLevels !== '0') {
+    if (venueLevels !== 'test' || (value !== undefined && value !== '0')) throw new Error('invalid_plan_mode');
+    return 'test-venue-levels';
+  }
   if (value === undefined || value === '0') return 'existing';
   if (value === '1') return 'test-free-paid';
   throw new Error('invalid_plan_mode');
@@ -27,6 +31,7 @@ export function parsePlanMode(value: string | undefined): PlanMode {
 // Callers supply the stored venue environment after authenticating its binding.
 export function requireTestPlanVenue(environment: string, mode: PlanMode): void {
   requireMode(mode);
+  if (mode === 'test-venue-levels' && environment !== 'test') throw new Error('permission_denied');
   if (mode === 'test-free-paid' && environment !== 'test') throw new Error('permission_denied', {cause: 'test_venue_required'});
 }
 export function planAllows(plan: OrganisationPlan, service: PlanService): boolean {
@@ -53,6 +58,7 @@ export async function readOrganisationPlan(client: PoolClient, organisationId: s
 }
 export async function requirePlanService(client: PoolClient, organisationId: string, service: PlanService, mode: PlanMode): Promise<void> {
   requireMode(mode);
+  if (mode === 'test-venue-levels') throw new Error('invalid_plan_mode');
   if (mode === 'existing') return;
   if (!planAllows(await readOrganisationPlan(client, organisationId), service)) throw new Error('permission_denied');
 }
@@ -80,16 +86,22 @@ export class OrganisationPlanStore {
 // fences these SHARE readers without blocking foreign-key KEY SHARE readers.
 export async function readVenuePlan(client: PoolClient, venueId: string, mode: PlanMode): Promise<OrganisationPlan> {
   requireMode(mode);
+  if (mode === 'test-venue-levels') throw new Error('invalid_plan_mode');
   if (mode === 'existing') return 'paid';
   const row = (await client.query('SELECT organisation_id,environment FROM venues WHERE id=$1', [venueId])).rows[0];
   if (!row) throw new Error('permission_denied');
   requireTestPlanVenue(row.environment, mode);
-  return readOrganisationPlan(client, row.organisation_id);
+  const plan = await readOrganisationPlan(client, row.organisation_id);
+  const locked = (await client.query('SELECT organisation_id,environment FROM venues WHERE id=$1 FOR SHARE', [venueId])).rows[0];
+  if (!locked || locked.organisation_id !== row.organisation_id) throw new Error('permission_denied');
+  requireTestPlanVenue(locked.environment, mode);
+  if ((await client.query('SELECT 1 FROM billing_service_authority WHERE venue_id=$1', [venueId])).rowCount) throw new Error('permission_denied');
+  return plan;
 }
 
 export async function advancePlanConfiguration(client: PoolClient, organisationId: string, downgrade: boolean): Promise<void> {
   const rows = (await client.query(`SELECT i.id FROM installations i JOIN venues v ON v.id=i.venue_id
-    WHERE v.organisation_id=$1 ORDER BY i.id FOR UPDATE OF i`, [organisationId])).rows;
+    WHERE v.organisation_id=$1 AND NOT EXISTS (SELECT 1 FROM billing_service_authority a WHERE (a.organisation_id,a.legal_business_id,a.venue_id)=(v.organisation_id,v.legal_business_id,v.id)) ORDER BY i.id FOR UPDATE OF i`, [organisationId])).rows;
   for (const row of rows) {
     await client.query('UPDATE installations SET configuration_revision=configuration_revision+1 WHERE id=$1', [row.id]);
     if (downgrade) await client.query(`UPDATE installation_services SET state='unconfigured',configuration='{}'
