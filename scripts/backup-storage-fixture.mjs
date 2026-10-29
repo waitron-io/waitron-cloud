@@ -191,7 +191,13 @@ async function startBackupStorageAttempt(options) {
         ),
       );
     });
-    await new Promise((r) => oidc.listen(oidcPort, "127.0.0.1", r));
+    await new Promise((resolve, reject) => {
+      oidc.once("error", reject);
+      oidc.listen(oidcPort, "127.0.0.1", () => {
+        oidc.removeListener("error", reject);
+        resolve();
+      });
+    });
     const resource = "arn:aws:s3:::${jwt:bucket}/${jwt:scope}";
     const policies = ["capture", "stream", "restore"].map((kind) => ({
       name: kind,
