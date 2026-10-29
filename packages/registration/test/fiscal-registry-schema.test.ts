@@ -3,16 +3,16 @@ import { randomUUID } from 'node:crypto';
 import { setTimeout as delay } from 'node:timers/promises';
 import { after, test } from 'node:test';
 import { Pool } from 'pg';
-import { migrate, migrationNames } from '../../registration/src/migrate.ts';
-import { migrationRelease } from '../../registration/test/fixtures/migration-release.ts';
-import { fixture } from '../../registration/test/fixtures/relay-worker.ts';
+import { migrate, migrationNames } from '../src/migrate.ts';
+import { migrationRelease } from './fixtures/migration-release.ts';
+import { fixture } from './fixtures/relay-worker.ts';
 const { checkConsumerSchema } = await import(
   new URL('../../../deploy/local-stack/runtime.mjs', import.meta.url).href
 );
 const { hasReleaseMigrationCount } = await import(
   new URL('../../../scripts/database-recovery-migrations.mjs', import.meta.url).href
 );
-import { payload, binding } from './fixtures.ts';
+import { payload, binding } from './fixtures/fiscal-registry-schema.ts';
 const root = new URL('../../../', import.meta.url).pathname;
 const release = await migrationRelease(37);
 after(() => release.close());
