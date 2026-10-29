@@ -121,8 +121,9 @@ stops in `source-fetch` before any case starts. The shallow fetch of pinned Wait
 `fbadd15785464e59747e697c11048bfbc6e4938f` reaches the unchanged 300-second limit
 and closes with SIGKILL and empty standard error. No setup code changed in D480.
 
-Lane D must locate the stalled operation inside the affected Linux Git transfer
-before proposing a repair. The existing phase trace identifies the command, not
-the network or Git cause. Keep this observation separate from the package-body
-stall and D458's earlier connection refusal. Preserve the source pin, deadline and
-cleanup; an unchanged rerun does not establish a fix.
+The phase trace identifies the command, not the network or Git cause.
+[Bounded pinned-source acquisition](#bounded-pinned-source-acquisition-d482) now
+limits failed transfers and permits one transport retry. Qualify D480 on a fresh
+head containing that repair; a green run does not establish the historical cause.
+Keep this observation separate from the package-body stall and D458's earlier
+connection refusal. Preserve the source pin and cleanup.
