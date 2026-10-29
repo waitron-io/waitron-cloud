@@ -262,3 +262,22 @@ test('the paired complete PUT body reconciles both hops and completes the stand-
   assert.deepEqual(output.afterStop.observer, { attempts: 1, bytesIn: 0, bytesOut: 4 });
   assert.equal(records.filter(row => row.kind === 'restore-started').length, 1);
 });
+
+test('the smoke prints aborted reply progress in its stop and cleanup reports', () => {
+  const result = run({ backendReply: 'truncated' });
+  assert.equal(result.error, undefined); assert.equal(result.status, 1, result.stderr); assert.equal(result.stdout, '');
+  const records = result.stderr.split('\n').filter(line => line.startsWith('{')).map(line => JSON.parse(line));
+  const stop = records.find(row => row.kind === 'litestream-stop');
+  const close = records.find(row => row.kind === 'litestream-close'
+    && row.stage === 'cleanup-replication-transport' && row.status === 'rejected');
+  assert.equal(stop?.step, 'idle');
+  for (const detail of [stop?.diagnostic, close?.diagnostic]) {
+    assert.equal(detail?.ioEvent, 'response-aborted');
+    assert.equal(detail.bytesIn, 1); assert.equal(detail.expectedIn, 4);
+    assert.equal(detail.bytesOut, 4); assert.equal(detail.expectedOut, 4);
+    assert.equal(detail.statusCode, 200); assert.equal(detail.requestComplete, true);
+    assert.equal(detail.responseComplete, false); assert.equal(detail.requestSent, true); assert.equal(detail.responseReceived, false);
+    assert.equal(detail.code, 'ECONNRESET');
+  }
+  assert.doesNotMatch(result.stderr, /Synthetic Litestream phase: restore/);
+});

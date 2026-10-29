@@ -51,6 +51,40 @@ for (const statusCode of [200, 503]) for (const body of ['x', 'xyz']) {
   });
 }
 
+test('an aborted early reply retains an unfinished upload at the first event', { timeout: 5000 }, async t => {
+  let reply, arrived, invalidated;
+  const received = new Promise(resolve => { arrived = resolve; });
+  const refused = new Promise(resolve => { invalidated = resolve; });
+  const backend = createServer((req, res) => {
+    req.on('error', () => {}); req.once('data', () => {
+      reply = res; res.writeHead(200, { 'content-length': 4 }); res.write('x');
+    }); req.resume();
+  });
+  backend.listen(0, '127.0.0.1'); await once(backend, 'listening');
+  t.after(() => { backend.closeAllConnections(); return new Promise(resolve => backend.close(resolve)); });
+  const meter = createMeter({ phase: 'workload', clock: () => 0 });
+  const front = await createLitestreamTransport({ target: `http://127.0.0.1:${backend.address().port}`, phase: 'workload',
+    meter: { observeAttempt: meter.observeAttempt, invalidate: () => { meter.invalidate(); invalidated(); } } });
+  t.after(() => front.close().catch(() => {}));
+  const caller = request(front.url + '/PRIVATE_CANARY/key', { method: 'PUT', headers }, res => {
+    res.on('error', () => {}); res.once('data', arrived); res.resume();
+  });
+  caller.on('error', () => {}); t.after(() => caller.destroy()); caller.write('f');
+  await received; reply.destroy(); await refused;
+  const checkpoint = front.checkpoint(), records = [];
+  await assert.rejects(withLitestreamCloseDiagnostics({ stage: 'replication-transport', close: () => front.close(),
+    report: line => records.push(JSON.parse(line)) }), /Invalid cloud cost Litestream audit/);
+  for (const detail of [checkpoint, records.at(-1).diagnostic]) {
+    assert.equal(detail.ioEvent, 'response-aborted'); assert.equal(detail.bytesIn, 1); assert.equal(detail.expectedIn, 4);
+    assert.equal(detail.bytesOut, 1); assert.equal(detail.expectedOut, 4); assert.equal(detail.statusCode, 200);
+    assert.equal(detail.requestComplete, false); assert.equal(detail.requestSent, false);
+    assert.equal(detail.responseComplete, false); assert.equal(detail.responseReceived, false);
+    assert.equal(detail.code, 'ECONNRESET');
+  }
+  assert.throws(() => meter.snapshot(), /Invalid cloud cost meter/);
+  assert.equal(JSON.stringify([checkpoint, records]).includes('PRIVATE_CANARY'), false);
+});
+
 test('response progress reporting excludes malformed values and accessors', async () => {
   let reads = 0;
   const raw = { reason: 'upstream-response-interrupted', statusCode: 700, bytesIn: -1, expectedIn: Infinity,

@@ -91,7 +91,11 @@ the later close report. These values describe that event, before socket cleanup
 can change the observations. Real local HTTP tests truncate one- and three-byte
 replies declared as four bytes, for both 200 and 503 responses. Every interruption
 still refuses the waiting idle action and accounting; malformed diagnostic values
-and accessors cannot publish private content. Run
+and accessors cannot publish private content. An early-reply control also keeps
+an incomplete upload's completion flags false. The smoke control checks both
+printed reports through the actual fixture with external workload dependencies
+substituted. A later response-error event can supplement the first record with a
+known network error code; the progress fields still describe the original abort. Run
 `node --test scripts/cloud-cost/litestream-response-progress.test.mjs` for these
 controls. The genuine Linux cause remains unknown. Reproduce it with the pinned
 writer and storage backend when Docker is available, or investigate the next CI
