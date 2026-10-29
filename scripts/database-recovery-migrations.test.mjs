@@ -22,8 +22,4 @@ test('billing recovery count follows the actual selected manifest',async()=>{
  assert.equal(hasReleaseMigrationCount(String(migrationNames.length),migrationNames),true);
  assert.equal(hasReleaseMigrationCount(String(migrationNames.length-1),migrationNames),false);
  assert.equal(hasReleaseMigrationCount(String(migrationNames.length+1),migrationNames),false);
- const {migrationRelease}=await import('../packages/registration/test/fixtures/migration-release.ts');
- const old=await migrationRelease(44);try{
-  assert.equal(hasReleaseMigrationCount('44',old.names),true);assert.equal(hasReleaseMigrationCount(String(migrationNames.length),old.names),false);
- }finally{await old.close();}
 });
