@@ -115,3 +115,10 @@ export async function restoredFactor(root,pool,proof,keys){
  const again=await store.start(login);await assert.rejects(store.complete(again.challengeToken,{kind:'recovery',code:proof.codes[0]}),error=>error.code==='credentials_invalid');
  return true;
 }
+
+export function upgradeFailure(error,phase){
+ const billingCodes=new Set(['invalid_billing_input','billing_scope_not_found','billing_event_conflict','billing_state_conflict','billing_price_unavailable','billing_price_conflict','billing_charge_conflict','billing_trial_unavailable']);
+ const code=typeof error?.code==='string'&&(/^[A-Z0-9_]{1,32}$/.test(error.code)||billingCodes.has(error.code))?error.code:'proof_failed';
+ const location=typeof error?.stack==='string'?error.stack.match(/schema-upgrade-[a-z-]+\.mjs:\d+:\d+/)?.[0]??'unknown':'unknown';
+ return {event:'schema-upgrade-failed',phase,code,location};
+}
