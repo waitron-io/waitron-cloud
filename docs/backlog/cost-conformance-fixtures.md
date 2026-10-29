@@ -81,4 +81,20 @@ the actual smoke script, with a successful result control. The Linux recurrence'
 cause remains unknown; qualify the changed head in CI and investigate its next
 labelled failure before claiming a repair.
 
+[G474 merge cost run 40961277969](https://github.com/waitron-io/waitron-cloud/actions/runs/40961277969/job/123754465362)
+refuses the delayed committed-PUT shutdown case at stop's idle step. Its first
+event is an aborted upstream PUT response; the native writer exits successfully.
+The report does not establish whether the reply body completed. You now get the
+first event's transferred and expected body bytes, HTTP status, HTTP message
+completion flags and forwarding completion flags in both the stop checkpoint and
+the later close report. These values describe that event, before socket cleanup
+can change the observations. Real local HTTP tests truncate one- and three-byte
+replies declared as four bytes, for both 200 and 503 responses. Every interruption
+still refuses the waiting idle action and accounting; malformed diagnostic values
+and accessors cannot publish private content. Run
+`node --test scripts/cloud-cost/litestream-response-progress.test.mjs` for these
+controls. The genuine Linux cause remains unknown. Reproduce it with the pinned
+writer and storage backend when Docker is available, or investigate the next CI
+event carrying this evidence; do not infer a repair from a passing run.
+
 Return to the [backlog index](../backlog.md).
