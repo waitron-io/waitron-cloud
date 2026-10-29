@@ -1512,3 +1512,708 @@ correction. A definite recovery/stop promise would require G's durable fact firs
 Production calendar, price sizes, legal retention and live provider/hosting
 qualification stay with their release gates. They do not block synthetic J tests
 once Lane B agrees the contract.
+
+## Slice D: per-venue levels replace the test switch
+
+You need two venues in one organisation to have different service permissions.
+Use C's country-local facts, with one transactional permission reader and one
+transition path. C landed in PR #718 at `3d3c3def`; this inspection is at
+`b338275c3ba4e2b211d7617b03d38e95b916ee7c`. C's
+`BillingStore.execute(scope,event,command)` and `applyVenueCommand(context,command)`
+currently record levels/trials without changing installation setup. They are not
+service transitions. The engineering choices below implement design §§2–4, 6,
+8, 10 and 13; they need no additional owner decision.
+
+### Boundaries and coordination before implementation
+
+- Land this appendix as a docs-only PR after fresh-context review, before code.
+  Execute D inline. This author invocation authorises neither code nor commits.
+  D474's Slice J and contract proposal landed in PR #728; leave both sections and
+  the proposal unchanged and unaccepted pending Waitron Lane B agreement. Display
+  state is not permission. No new Waitron action, signed body, field, service name,
+  lease lifetime or three/four-service negotiation; no local trading gate.
+- Build permission rules and adapters with production enforcement **off**. No
+  allowance sizes, pricing policy, retention/legal policy, billing worker, payment
+  provider, invoice, emergency activation or live enablement. E owns allowances;
+  G owns due transitions, extensions, reminders, paid-period cancellation and
+  quiet-hour hosting stops. D provides an internal transition, not their scheduler.
+  Level 3 permits a future hosting controller; D does not build or start one.
+- Before **any source/test edit**, the driver compares proposed paths with each
+  parked branch's merge-base diff, dirty files and planned reservations. Inspect
+  actual three-way hunks against current main; a filename list is insufficient.
+  The standing cross-branch exception covers only your own backlog paragraph.
+  This plan author edits no backlog; the driver owns that paragraph.
+- Current `main...refactor/remove-fiscal-registry` changes only its schema tests/
+  fixture, migration-history test and backlog. Its planned deletion also reserves
+  account-http `src/{app,server}.ts`, registration exports, fiscal tests, manifests,
+  lockfiles and CI. Leave that work to D466; agree only additive permission-option
+  hunks and export hunks or wait/rebase. No fiscal source, SQL, assertion or golden
+  result belongs to D. Do not treat D466's parked tests as permission to proceed.
+- `feat/test-cloud-integration` reserves `deploy/test-cloud/test-fixtures/integration-*`,
+  `integration-receipt.test.mjs`, `scripts/{test-cloud-integration,verify-test-cloud-receipt}*`
+  and `docs/test-cloud.md`. Coordinate D's runtime/receipt additions before touching
+  their shared call sites; keep the integration fixtures and existing receipt
+  versions intact. Do not edit that branch or claim its Waitron proof.
+- AWS/P2 reserves `deploy/aws/**` and its workflow/plan; Kubernetes/P1 reserves
+  `deploy/kubernetes/**`, `scripts/kubernetes-*` and its deployment plan. P3's
+  country-split plan reserves registration policy/exports, migrations, account
+  assembly and runtime schema ownership. Agree D's country-only permission interface,
+  migration slot and additive assembly hunks with their drivers before those edits;
+  D makes no infrastructure/provider/global-app changes. If P3 lands first, put
+  D's assembly in its country app and update the file map before implementation.
+- `feat/precise-ci-selection` reserves `.github/workflows/ci.yml`, `scripts/ci-*`
+  and its plan/spec; D466 also reserves CI membership. D uses existing discovery,
+  not CI edits. If new checks are omitted or exceed the current job budget, stop
+  at that evidence gate for driver coordination. No foreign edits or invented
+  owner gate follows. Recheck reservations after every intervening landing.
+
+### Authority and compatibility decisions
+
+Add a small country table `billing_service_authority`, keyed by
+`(organisation_id,legal_business_id,venue_id)` with the composite venue FK from
+045, `revision bigint NOT NULL CHECK(revision BETWEEN 1 AND 9007199254740991)` and
+no cascading delete. Add `setup_grant_active boolean NOT NULL DEFAULT false` and
+`setup_grant_until date`, with inactive implying a null end. These record the last
+continuous level-2-or-higher grant window already observed by D; active/null end
+means an unbounded base-level grant. They are derived from C facts, never another
+level or expiry policy. Forbid identity changes, deletion, revision rewind or a
+skipped generation with `55000`; derived-window bookkeeping may keep the revision.
+Row existence means this venue has explicitly entered D's transition path;
+revision is a durable generation that makes old writers invalid.
+It stores no second level, price or payment policy. No backfill or default
+activation. A known venue without that row has level 1 in the new mode, even if C
+has recorded connected/hosted facts. This prevents storage-only fixtures or an
+unqualified billing writer from silently enabling service access.
+
+New `BillingStore.transition(scope,event,command)` enrols a **test** venue and
+applies a venue permission command in C's existing event transaction. Keep
+`execute` as the recording API for unenrolled venues. Once enrolled, both APIs
+use the same internal transition hook for `set_venue`, `start_trial`,
+`extend_trial`, `end_trial`; neither can bypass configuration invalidation.
+`transition` and `execute` share event identity/content/replay rules. No second
+receipt transaction, placeholder event, provider call or customer endpoint.
+A replay cannot enrol or apply effects again. First enrolment needs a new internal
+event, not replay of an earlier storage-only event. Unknown/foreign scope retains
+`billing_scope_not_found`; trying to enrol a production venue gives
+`permission_denied`, with no event or authority row.
+
+Under the venue lock, compare permission facts before/after the command: stored
+level plus each trial's level/start/end/state. First enrolment gives generation 1;
+subsequent changes to these facts advance it once, including an extension that
+changes the grant's time limit. A newly observed elapsed grant window also advances
+it once. Coalesce both causes into one generation/configuration increment in the
+same transaction. Same facts under another event advance it zero times unless an
+elapsed window needs invalidating; exact event replay advances it zero times. C's billing venue revision still follows C's existing
+set-command semantics; it is not the authority generation. Scheduled dates, payment observations, prices and display
+fields confer no service grant. Guard revision overflow before effects. A generation
+change advances each affected installation's configuration revision once in UUID
+order. On losing level-2 permission, clear only `continuous_backup`,
+`retained_snapshots`, `remote_access` to `state='unconfigured',configuration={}`.
+Keep installation credentials and the stored translation entry. On upgrade, restore
+none of those three automatically. Hosted-to-connected retains level-2 setup.
+
+The permission reader combines the enrolled venue's stored base level with its
+stored active trials: take the highest level whose half-open `[startedOn,endsOn)`
+contains today. A registered venue with an active connected trial therefore has
+level 2 without rewriting `billing_venues.level`; hosted trial gives 3. Before
+start, on/after end, or after converted/lapsed outcome, that trial adds nothing.
+An expired trial cannot prolong permission while G is delayed; a payment method,
+paid-history bounding interval, pending charge or display `active` cannot convert
+it. A connected base remains 2 after a hosted trial expires. Extension uses its
+stored new end; no computed extension or automatic payment conversion here.
+The new mode is test-only and uses the database clock's UTC civil day, read after
+lock waits. Production country-calendar wiring must be qualified before any later
+production mode is introduced; J's proposed calendar is not accepted by D.
+Time expiry filters current grants even before G commits cleanup. Reprovisioning
+always requires current permission and the current generation. Trial revocation
+or extension cannot make an old generation current again.
+
+Time can remove permission without changing C facts. Before a new-mode authority
+read or a new permission command, take the venue `FOR NO KEY UPDATE` immediately,
+then inspect the **previously stored** grant-window end against the fresh UTC day.
+If an active finite window has ended, clear the same three setup rows, advance
+the generation/configuration once and mark that window inactive before computing
+current permission or applying the command. Then record today's derived window:
+combine overlapping or touching active-trial intervals until the first uncovered
+day; a connected/hosted base is unbounded. A gap invalidates setup even if no reader
+or G ran during it and today falls in a later trial. An extension before the end
+keeps setup; one after the old end first invalidates it. A command that removes
+level-2 access also invalidates before storing the next window. Repeating the
+same synchronisation makes no further revision change. Keep this bookkeeping in
+the caller's transaction; rollback preserves all old facts/setup/generations and
+returns no grant. Permission denial may roll it back, but the next successful
+authority read/transition must repeat it before returning anything. No scheduler,
+billing event or payment conversion is created by this read. Exact event replay
+still returns its original receipt without effects; it cannot return a service
+grant, and every service consumer synchronises independently.
+
+| Mode/configuration | Exact behaviour |
+| --- | --- |
+| `existing`; legacy flag absent or `0`, new flag absent or `0` | Preserve current service behaviour; merely installing D or recording C facts grants/withdraws nothing. |
+| `test-free-paid`; legacy `CLOUD_TEST_SERVICE_PLANS=1`, new flag absent/`0` | Preserve D79 free/paid matrix, including free translation, test-environment refusal and existing CLI. No reinterpretation or bulk conversion. |
+| New `test-venue-levels`; `CLOUD_VENUE_SERVICE_LEVELS=test`, legacy absent/`0` | Use only enrolled venue authority plus C facts; organisation paid/free grants nothing here. Known unenrolled venue is registered/revision 0; unknown venue refuses. All venues must be `environment='test'`. |
+| Both enabled, unknown/empty flag, `production`, `true`, whitespace or `1` for the new flag | Startup throws `invalid_plan_mode` before opening listeners/doing work. No production-enablement spelling is implemented. |
+| DB/schema/clock/read failure | Propagate unavailable/defer; HTTP uses existing 503 failure handling, no synthetic registered/paid success and no cached authority. Storage reconciliation withdraws writers before reporting failure; failed reload means withdrawal incomplete. |
+
+Keep `OrganisationPlanStore.show/set`, `planAllows`, `readOrganisationPlan`,
+`requirePlanService`, `readVenuePlan`, `advancePlanConfiguration`,
+`requireTestPlanVenue` and existing types/exports as legacy APIs. `requirePlanService`
+and `readVenuePlan` must reject the new mode with `invalid_plan_mode`; do not return
+`paid` as a stand-in for a venue level. `readOrganisationPlan` has no mode
+argument: keep it legacy-only and remove it from new-mode paths.
+`requireTestPlanVenue` validates test environment for both test modes.
+Legacy configuration advancement excludes
+enrolled venues, so an old org toggle cannot clear a paid sibling's setup. Legacy
+mode refuses an enrolled venue rather than authorising it through the old switch.
+The organisation CLI remains legacy-only and refuses new-mode invocation. No
+bulk level setter or organisation entitlement is introduced.
+
+### Consumer map and lock order
+
+Every row below either consumes the new authority in new mode or preserves a
+named independent gate. Paths are repository-relative; brace lists name actual
+files. Repeat `rg -n 'readVenuePlan|readOrganisationPlan|requirePlanService|planAllows|service_plan|test-free-paid|PlanMode' packages deploy scripts docs`
+before editing; classify new matches, including SQL predicates and runtime branches.
+Do not replace only the exported helper and leave direct SQL behind.
+
+| Owner / current entry points | D change or retained boundary |
+| --- | --- |
+| Registration `src/organisation-plans.ts`, exports and `RegistrationStore.complete` in `src/index.ts`; `src/{pairing,organisation-plan-cli}.ts` | Preserve legacy exports; add new reader/transition exports. Pairing/replacement serialize creation against the venue authority before installations; no plan in registration result. CLI remains guarded legacy-only. |
+| Registration `src/{billing-store,billing-venues,billing-types}.ts` | `execute`, `applyVenueCommand`, `readBillingVenue`, `readVenueHistory` retain scoped recording/history contracts. Add `transition` and shared mutation hook; all four permission commands take the venue lock even if unenrolled. No changes to charge/payment meaning. |
+| Registration `src/installations.ts` | `InstallationStore.execute/configure/listWithSession`, `installationPlan`, `maskPlan`: current authority on fresh **and cached** renew/configuration/report/configure/list; mask translation too at level 1 in new mode, without deleting its stored entry. Account configurations stay `{}`. Keep revoke and lease renewal possible. |
+| Backups `src/catalogue.ts` | `backupPlan`, `active`, `provision`, `rotate`, `reserveCapture`, `publish`, `cleanupOne`, `cleanupCapture`, `verifyClaim`: enforce the correct stream/snapshot floor; repeat admission after object waits. Keep keys/objects/holds; already admitted verification and abandoned staging cleanup can finish. Level-1 retained expiry pauses in this bounded test mode only. |
+| Backups `src/{managed-streams,captures}.ts`; account-http `src/{captures,managed-streams,backups}.ts` | `ManagedStreams.configure/observe/recovery`, `BackupCaptures.execute`, `ManagedStreamMachines.execute`: auth first; current authority and generation before/after provision/read/grant. Generalise explicit reprovisioning branches currently testing only `test-free-paid`; preserve input/revision conflicts and fresh writer requirement. |
+| Backups `src/{recovery,recovery-request,replacement}.ts`; account-http `src/{recovery,replacement}.ts` | `BackupRecovery.start/target/catalogue/status/close`, `RecoveryRequests.inspect/approve`, `ReplacementStore.machine/inspect/complete`: metadata/status/close remain available at level 1; new key/data grants and replacement activation refuse. HTTP read rechecks after STS/reader wait. Keep v2 target qualification, fresh target, declaration, owner/session and operation expiry checks. |
+| Direct storage `deploy/test-cloud/{service-runtime,storage-authority,storage-worker,storage-issuer}.mjs`; backups `src/storage.ts` | `openPlanStorage`, `openRuntimeStorage`, `testStorageOptions`, `openStorageAuthority({authorizeWriter})`: new-mode writer `policyRevision` is the per-venue authority generation, not organisation revision. Keep numeric generations and Cloud recovery reader; version private state as described in D3. Compare generation/permission after waits and on restart/reconcile; no new customer reader at level 1. Legacy writer revision semantics remain unchanged. STS still requests 900 seconds and rejects >901-second returned lifetime. |
+| Remote `src/{plan-permissions,placement}.ts` | `requireRemotePlan(client,id,mode,setup=true)`, `eligibleRemoteInstallations(client,mode,cellId?)`; `RemoteAccessStore.provision/stageMove/markMoveReady/completeMove/setHostname/hostnameInstructions/authorizeCertificate/publishAuthorizedCertificate/manifest/publishManifest/reportingManifest/publishReportingManifest`: authority before installation/cell locks, both active and incoming staged routes. Keep `cancelMove` available as withdrawal. |
+| Remote `src/{staff-exchange,reconciler,forward-observations}.ts`; account-http `src/{staff-certificates,remote-access}.ts` | `StaffCertificateExchange.execute`, `RemoteConfigurationReconciler.schedule/runOnce`, `ForwardObservationStore.record/readCurrent/prune`, account status/DNS: replace direct `o.service_plan` predicates as well as helpers with the same locked eligible set. Current `desiredTargets` and `#reportingManifest` have extra SQL bypasses. Publication/desired digest/observations must agree; denied reads expose no certificate/current forward claim. |
+| Registration `src/{relay-grants,relay-messages,relay-worker}.ts`; account-http `src/relay-messages.ts` | Email stays basic at all levels. Pass mode to `RelayGrantStore`/`RelayMessages`/`RelayWorker` and read basic eligibility in `authority` before venue/installation locks, including approve after origin verification and reserve/handoff. Preserve message-identity advisory lock, account allowance, consent/origin/grant revision, cancellation, deduplication and operator stop. Account signup/reset `EmailOutbox` is independent of venue billing. |
+| Translation `src/{machine,job-store,worker,batch-runner,consent,retention,worker-cli}.ts`; account-http `src/{app,translation,translation-consent}.ts` | `TranslationMachine.execute`: authenticated bound submit replay first, then level-2 check for a **new** job before consent/readiness/spend admission. Keep owned status/collect/release and replay after downgrade or lost consent/readiness; no new provider work from replay. Gate existing worker's `mayCall` before each first/review/retry call and after waits. Preserve cost/lease callbacks, consent, paging, result retention and ownership-first cursor checks. No billing worker or new provider adapter. |
+| Address `docs/address-lookup-scope.md`; `deploy/test-cloud/free-services-mail.test.mjs` | No shipped address HTTP/store entry exists in inspected `packages`/`deploy`; `/v1/address-lookup/*` is deliberately unavailable. Pure floor is level 1; preserve missing-route/provider-off assertions and discarded API-key env. Do not invent an address API. Rota/hosting likewise get pure permission floors only. |
+| Composition account-http `src/{app,server,server-cli}.ts`; backups `src/worker-cli.ts`; remote `src/{operator-cli,reconciler-cli}.ts`; translation `src/worker-cli.ts` | Extend validated mode threading to all constructors; no helper reads ambient env. Existing `PlanMode` parameters/defaults stay source-compatible; new translation/relay options append rather than shifting arguments. Preserve disabled-service responses. |
+| `deploy/local-stack/runtime.mjs`; `deploy/test-cloud/{runtime,account-worker,backup-worker,remote-worker,remote-runtime,service-runtime,storage-worker}.mjs`, `compose.yaml`, `test.env`; `scripts/test-cloud-free-services.mjs` and `deploy/test-cloud/test-fixtures/{storage-client,remote-client,snapshot-client}.mjs` | Thread the new flag consistently, keep both defaults `0`, unchanged old proof modes/results, local stack dormant and provider inputs dropped. Add a separate venue-level proof mode/fixture rather than relabel legacy receipts. D79 integration-owned files wait for the bounded coordination above. |
+| Backup maintenance `packages/backups/src/{worker,key-operations,key-operations-cli}.ts`; remote `src/{probe-targets,probe-observations,probe-cli}.ts` | `BackupWorker.schedule/runOnce` delegates expiry/verification to its mode-bound catalogue; `inspectManagedKeyDependencies` keeps recovery dependencies without exporting keys. Probes measure existing configured routes, not authority: retained observations cannot override current permission/revision filtering. No new probe grant or key retirement at downgrade. |
+| Existing proof clients `scripts/{test-local-backups,test-local-remote,test-waitron-pairing,test-waitron-translation,backup-transfer-receipt,remote-reconciler-receipt,control-plane-outage-receipt,schema-upgrade-backup-fixture,schema-upgrade-relay-fixture,backup-storage-fixture}.mjs` | Their default `existing` constructors and recorded values stay unchanged. The last fixture's nonexpiring managed writer is not valid new-mode withdrawal proof. Use the mode-bound D storage adapter for that proof; do not silently reuse this bypass. |
+| Tests/docs | Keep legacy `organisation-plans`, `organisation-plan-cli`, backup/remote `plan-permissions`, translation `free-service-plans`, free-services-mail/relay and runtime tests. Add D files below. Update `packages/registration/README.md`, `docs/{test-cloud,local-backups}.md` and translation backlog guide only for new mode/authority/limitations; no campaign instructions or Slice J contract edits. |
+
+Current locks are not one simple list. Preserve these prefixes and add the venue
+permission lock at the stated position:
+
+1. Pairing/connection request locks precede account/session/membership checks in
+   `pairing.ts` and `RegistrationStore.#request`. Recovery request `FOR UPDATE`
+   precedes those checks in `RecoveryRequests.#browser`, `BackupRecovery.start`
+   and `ReplacementStore.#locked/machine`. Keep that request-first order;
+   transitions never acquire request locks. Relay message advisory identity lock
+   precedes account/credentials/membership in `RelayMessages.execute` and
+   `RelayWorker.#handoff`; transitions never acquire it.
+2. Authenticate machine proof against the stored key before policy lookup. For
+   human authority, resolve session/account/credentials/membership first and
+   revalidate after waits. Then organisation `FOR SHARE` (legacy setter uses
+   `FOR NO KEY UPDATE`). Billing writers next lock legal business
+   `FOR NO KEY UPDATE`, billing business `FOR NO KEY UPDATE`, event advisory
+   identity as C does. Service readers need none of those business locks.
+3. Lock venues in UUID order: all new-mode permission reads and transitions take
+   `FOR NO KEY UPDATE` immediately because clock expiry can invalidate setup;
+   legacy readers keep SHARE. Never SHARE then upgrade. This existing
+   identity row protects even missing billing/authority child rows. Billing
+   facts cannot change between reading authority and granting service. Then
+   authority row, affected installations in UUID order with the required
+   SHARE/UPDATE strength, and service locks. Batch exports lock **all** relevant
+   organisations, then **all** relevant venues before any installation. Limit
+   candidates to the captured set; first placements/incoming moves outside it
+   wait for the next export. Recheck original org/business/venue/installation,
+   key, environment, supersession/revocation and current time under locks.
+4. Backup catalogue/streams currently take policy then installation then location;
+   recovery snapshot takes verification-policy lock then location; replacement
+   currently takes policy, verification-policy, venue NO KEY UPDATE, old installation,
+   location, replacement, placement/cell. Move its new venue authority lock ahead
+   of verification-policy without reversing request/account prefixes. Pairing
+   currently takes venue NO KEY UPDATE before installation but no org policy:
+   add the org lock before that venue lock, also on completed-result replay.
+   `PairingStore.available` currently locks a completed installation early:
+   defer that lock in paths that later read policy; take it only after org/venue
+   locks and repeat its availability check. Status-only paths that never acquire
+   later policy may retain their existing installation-only check.
+   Remote publication takes policies/installation then cell; move/export/report
+   code must insert venue locks before installation. Forward reports then take
+   cell, reporter, observation. Pruning takes observations only and must acquire
+   no policy locks afterwards; use eligibility computed beforehand or leave
+   denied observations to expire, never authorise reads from pruning's SQL.
+5. Translation currently takes installation SHARE before its `translation-venue:`
+   advisory lock. Resolve/authenticate nonlocking first, then org/venue policy,
+   installation, translation advisory, job. Worker lease selection must not hold
+   a job lock while later acquiring venue policy: select a candidate nonlocking,
+   then policy, then reselect/lock that exact still-eligible job with SKIP LOCKED.
+   Relay `authority` currently takes account/membership, venue SHARE, installation
+   SHARE; insert org/venue permission there, before installation/grant/allowance.
+
+Do not hold a new authority transaction across provider/DNS/model waits. The
+existing certificate/manifest publication and retention deletion callbacks hold
+locks across their bounded publication/removal; keep that exclusion, so a
+committed downgrade cannot precede an old publication/deletion. Other external
+operations use capture, release, wait, relock and compare both permission and
+generation. Refresh proof/session/lease/operation/target checks too. A free/paid
+round trip during the wait must refuse the old result even if current level is 2.
+Report committed downgrade separately from measured route/writer withdrawal.
+
+### Task D1: Define the level and trial rules without a database
+
+**Files:** Create `packages/registration/src/venue-service-rules.ts` and
+`packages/registration/test/venue-service-rules.test.ts`.
+
+**Interfaces:** Reuse `BillingLevel`, `TrialView`, `CivilDate`.
+Produce `VenueService = PlanService|'rota_solver'|'hosting'`,
+`levelAllows(level:BillingLevel,service:VenueService):boolean` and
+`effectiveVenueLevel(base:BillingLevel,trials:readonly TrialView[],today:CivilDate):BillingLevel`
+and `paidGrantWindow(base:BillingLevel,trials:readonly TrialView[],today:CivilDate):{until:CivilDate|null}|null`.
+The latter returns null for no current level-2 grant, `{until:null}` for an
+unbounded grant, otherwise its first uncovered civil day. These are new interfaces, not claimed existing exports. Reject malformed facts/
+dates with `invalid_billing_input`; unknown level/service never allows access.
+
+- [ ] **Step 1: Add named pure RED cases.** `venue levels have exact service floors`:
+  in order `address_lookup`, `transactional_email`, `content_translation`,
+  `continuous_backup`, `retained_snapshots`, `remote_access`, `rota_solver`, `hosting`,
+  assert registered `[true,true,false,false,false,false,false,false]`, connected
+  `[true,true,true,true,true,true,true,false]`, hosted eight `true` values.
+  `trial dates grant only the stored half open interval`: registered plus active
+  connected `[2026-10-31,2026-11-30)` gives registered on 30 October, connected on
+  31 October/29 November, registered on 30 November. Stored extension to
+  `2026-12-30` gives connected on 29 December and registered on 30 December.
+  Lapsed/converted trials add nothing; hosted base never falls to connected;
+  connected base plus expired hosted trial gives connected. Overlapping active
+  trials choose hosted; neither trial record is rewritten. No method/payment/
+  scheduled/display input participates. Unknown service/level returns false;
+  malformed trial state, inverted/impossible dates or invalid today raises
+  invalid_billing_input before any positive permission.
+  `paid setup window ends at the first real grant gap`: touching connected
+  `[2026-10-31,2026-11-30)` and hosted `[2026-11-30,2026-12-30)` end at
+  30 December; starting the latter on 1 December instead ends the first window
+  at 30 November. A connected base is unbounded, registered without a current
+  trial returns null, and no future interval bridges an uncovered day.
+- [ ] **Step 2: Run `node --test packages/registration/test/venue-service-rules.test.ts`
+  and record actual named RED before implementation.** Use runtime export
+  assertions initially; then observe the behavioral floor/boundary failures, not
+  just a missing static import. No PostgreSQL setup in this file.
+- [ ] **Step 3: Implement only these pure rules.** Keep allowance policy out.
+- [ ] **Step 4: Repeat D1's command; require nonzero tests, zero failures/skips.**
+- [ ] **Step 5: Commit `git commit -s -m "feat: define venue service level permission rules"`.**
+
+### Task D2: Make permission changes atomic with C's events and setup
+
+**Files:** Create registration `src/venue-service-permissions.ts`,
+`test/venue-service-permissions.test.ts`, `test/venue-service-migration.test.ts`;
+modify `src/{organisation-plans,billing-store,billing-venues,billing-types,index,migrate}.ts`
+and `test/fixtures/migration-release.ts` (add pinned 45 release only).
+Make D6's explicitly specified current-tail test replacements and historical-v6
+wrapper invocation change in D2's test-only commit, before adding the migration;
+otherwise the installed v6 HEAD assertion prevents D2's CI from reaching GREEN.
+D6 owns the new v7 proof, not postponing those compatibility prerequisites.
+Add one new migration, provisionally `046_venue_service_authority.sql`, only after
+slot reconciliation with P3/parked work. Never change landed 001–045 SQL.
+
+**Interfaces:** Produce `VenuePermission = BillingScope & {venueId:string;
+level:BillingLevel;revision:number}`, `PermissionCommand = Extract<BillingCommand,
+{type:'set_venue'|'start_trial'|'extend_trial'|'end_trial'}>`,
+`readVenuePermissions(client:PoolClient,venueId:string,mode:'test-venue-levels'):Promise<VenuePermission>`,
+`requireVenueService(client:PoolClient,venueId:string,service:VenueService,mode:PlanMode,lock?:'SHARE'|'NO KEY UPDATE'):Promise<void>`;
+add `BillingStore.transition(scope:BillingScope,event:BillingEvent,command:PermissionCommand):Promise<BillingReceipt>`.
+An internal `applyPermissionTransition(context:BillingContext,command:PermissionCommand,
+enrol:boolean):Promise<BillingValue>` wraps `applyVenueCommand` on the same client.
+`readVenuePermissions` is the only new-mode authority, including batch consumers;
+`requireVenueService` branches explicitly: existing returns without new reads,
+legacy uses `readVenuePlan`/`planAllows`, new mode uses the new reader/rules.
+New-mode reads always take venue NO KEY UPDATE at their first policy read and
+synchronise the stored grant window before installation locks. The optional
+`requireVenueService` lock argument remains for legacy compatibility only; it
+cannot weaken new-mode locking. Replacement therefore needs no later lock upgrade. Legacy mode refuses enrolled venues;
+do not project free translation through the
+new level-1 matrix. Permission refusal is `Error('permission_denied')`, mapped through existing typed
+machine/backup/account errors. Add `test-venue-levels` to `PlanMode` and extend
+`parsePlanMode(legacy:string|undefined,venueLevels?:string):PlanMode` with the
+compatibility table. Keep pure rules out of the `pg` module for native tests.
+
+- [ ] **Step 1: Add DB RED cases with real C facts, installations and two pools.**
+  `recording cannot activate an unenrolled venue`: C set connected yields billing
+  revision 1 but permission registered/revision 0, unchanged three setup rows.
+  `transition enrols once and raw setters cannot bypass it`: enrol with a fresh
+  same-value set event yields authority revision 1, each installation +1; exact
+  replay returns identical receipt, +0. Raw `execute` downgrade advances authority
+  to 2 and clears all three rows to unconfigured/`{}`. A subsequent upgrade is 3,
+  clears nothing further and restores no setup; no-op facts +0. Trial extension
+  advances generation once even while effective level stays 2.
+  `same organisation venues never share permission`: A connected, B registered,
+  C hosted, including a second legal business; downgrade A changes only A's
+  installations, B/C revisions and grants stay byte-identical.
+  `expired trial setup never revives across a late transition`: provision an
+  enrolled connected trial, move the controlled DB day to its end with G/readers
+  stopped, then separately test delayed end followed by the independent hosted
+  trial, and a late extension before finalisation. Each resets all three rows
+  before restored permission, advances the generation/configuration once per
+  transaction, and repeated synchronisation/replay changes nothing further.
+  `an unobserved gap between future trials clears old setup`: record non-touching
+  future intervals, skip every read across the gap, then read during the later
+  interval; setup is cleared before that read can authorise. Touching intervals
+  and an extension before expiry keep existing setup. Legacy org toggle
+  must leave enrolled A/B/C setup unchanged.
+  `permission transaction rollback preserves facts event and setup`: inject an
+  owned trigger failure after setup change, compare all rows/events/generations,
+  remove trigger and retry once. Foreign/unknown scope refuses with zero effects.
+  `permission locks precede installations even for absent rows`: hold venue lock,
+  observe waiter in `pg_stat_activity`, assert a third connection can still lock
+  installation; reverse-order run must fail that assertion, not earn a timeout.
+  Race transition with pairing, replacement and two-installation reads; bounded
+  completion, no deadlock, and no new installation escapes current permission.
+- [ ] **Step 2: Sign off the test-only commit and observe each intended named RED
+  in actual registration CI before adding SQL/implementation.** A missing new
+  relation/export is initial RED; setup errors, skips and unrelated failures are
+  not guard evidence. Use runtime imports so typecheck does not stop execution.
+  **CI:** `pnpm --dir packages/registration exec node --test --test-timeout=30000 test/venue-service-permissions.test.ts test/venue-service-migration.test.ts`.
+- [ ] **Step 3: Implement D2's interfaces and lock order.** Validate inputs before
+  mutation; use C's event advisory/receipt path, protect empty authority rows with
+  the parent venue lock. Legacy setters exclude enrolled venues. Never infer
+  enrolment on a read. Preserve C's original unenrolled/no-enforcement assertions.
+- [ ] **Step 4: Observe D2 GREEN in CI; locally run D1 and `pnpm typecheck`.**
+  Re-run C's billing-store/venues/payments/schema tests in CI, not locally.
+- [ ] **Step 5: Commit `git commit -s -m "feat: transition enrolled venue permissions with billing events"`.**
+
+### Task D3: Fence installation replies, backups, recovery and direct storage
+
+**Files:** Modify the registration installation, backup, account backup/recovery,
+composition and storage paths named in the consumer table. Create
+`packages/registration/test/venue-service-installations.test.ts`,
+`packages/backups/test/venue-service-backups.test.ts`,
+`packages/account-http/test/venue-service-recovery.test.ts`,
+`deploy/test-cloud/venue-service-storage.test.mjs`.
+
+**Interfaces:** Preserve `InstallationStore` and backup method signatures from
+the table; consume D2 on their supplied `PoolClient`. `openPlanStorage` keeps its
+existing `{pool,mode,...options}` contract and numeric `policyRevision`; new-mode
+revision comes from `VenuePermission.revision`. Preserve `ManagedStreamAuthority`
+`provision/reader/read/withdrawWriter/reconcile` contracts. No new Waitron wire. Extend `openStorageAuthority` options with
+`policyMode?:PlanMode` and its authorizer callback with an optional third
+`policyMode` argument. In explicit new mode upgrade private state to version 2,
+adding each writer's mode; absent/v1 mode is legacy, never new-mode authority.
+Under the existing file lease retire mismatched writers before publication,
+preserve the original reader/retired keys and atomically persist the new mode.
+New writer eligibility requires both mode and revision equality. Legacy v1
+fixtures remain v1; old binaries must refuse v2 rather than ignore its mode.
+No state-format change reaches Waitron's wire.
+
+- [ ] **Step 1: Add named RED assertions.** `venue cached replies cannot reissue
+  cleared setup`: for fresh/replayed renew, configuration v1/v2, report, configure
+  and account list, level 1 has all paid entries `state=unconfigured`, `configuration={}`, `health=unknown`,
+  `failure=null`, `observedAt=null`; v2 translation is masked too, stored entry unchanged.
+  Valid renew still issues the existing 3,600,000 ms lease. Old report revision
+  refuses conflict; forged signatures remain invalid_proof, not permission_denied.
+  `venue backup downgrade preserves recovery without new grants`: reserve, publish,
+  rotate, stream configure/observe, recovery approve/target read and replacement
+  complete refuse permission_denied at 1 with grant calls 0, key versions/object
+  counts unchanged. Catalogue/status/close still succeed for the owner; foreign
+  owner and stale target/v2 qualification still refuse their original errors.
+  `venue external wait rejects a round trip`: block grant/object/stream provider,
+  transition 2→1→2, release; no credentials/key/new point/observation/replacement
+  escapes and no partial setup commits. Repeat with revocation, lost membership,
+  session/lease/operation expiry and replacement binding change.
+  `venue explicit reprovision keeps keys and replaces the writer`: upgrade alone
+  keeps setup empty; explicit same location/placement reprovision works once,
+  stream current revision succeeds, original keys/reader/data survive, old writer
+  credentials fail at storage and new writer succeeds. Same-org neighbour works.
+  Repeat cached replies, active/incoming routes and actual stale-writer refusal
+  after both expired-trial late-transition cases and an unobserved future-trial
+  gap from D2; only explicit reprovision restores access. Keep keys, objects and
+  Cloud reader unchanged. No G/reconciler runs during the gap.
+  `writer modes cannot collide at equal revision`: legacy revision 1 then enrolled
+  venue generation 1 retires the old writer and returns a distinct key/reference;
+  old key receives storage 403, recovery reader/key/data unchanged. Restart with
+  v2 state retains mode/generation; a legacy-mode reopen cannot authorise the new
+  writer through an equal org revision. Missing/invalid mode/state refuses.
+  `venue level one pauses expiry but not abandoned staging cleanup`: retained
+  deletion count 0 even after elapsed retention; staging cleanup removes only
+  expired unpublished objects. Last verified point and active recovery holds stay.
+  A deletion already holding authority completes before downgrade commits.
+- [ ] **Step 2: Observe actual named RED before modifying each boundary.**
+  **CI:** `pnpm --dir packages/registration exec node --test --test-timeout=30000 test/venue-service-installations.test.ts`;
+  `pnpm --dir packages/backups exec node --test --test-timeout=30000 test/venue-service-backups.test.ts`;
+  `pnpm --dir packages/account-http exec node --test --test-timeout=30000 test/venue-service-recovery.test.ts`.
+  The new backup file uses DB/object doubles for waits, no Docker-building global
+  hook from old `plan-permissions.test.ts`. Storage uses real existing fixture in
+  CI: `node --test --test-timeout=120000 deploy/test-cloud/venue-service-storage.test.mjs`;
+  invoke that file from D6's discovered package wrapper so it cannot be omitted.
+- [ ] **Step 3: Implement the named consumers and post-wait generation checks.**
+  Generalise D79's existing cleared-setup reprovision branches. Preserve Cloud's
+  reader on writer withdrawal; no new customer read grants at 1. DB failure must
+  withdraw before reconciliation error, and restart must finish pending intent.
+  Prove actual storage refusal; API refusal is not writer revocation. Do not claim
+  immediate removal of already issued STS: measure its existing expiry bound.
+- [ ] **Step 4: Require D3 GREEN and unchanged legacy backup/recovery assertions
+  in CI; locally D1 and typecheck only.** No customer cancellation/deletion clock
+  is introduced; the 90-day readable exit remains §8's separate implementation.
+- [ ] **Step 5: Commit `git commit -s -m "feat: enforce venue permissions across backup and recovery boundaries"`.**
+
+### Task D4: Use the same eligible venue set for remote work
+
+**Files:** Modify remote and account remote paths in the table; create
+`packages/remote-access/test/venue-service-remote.test.ts` and
+`packages/account-http/test/venue-service-remote.test.ts`.
+
+**Interfaces:** Preserve remote public signatures; `eligibleRemoteInstallations`
+uses D2 reads after sorted batch locks. Its `existing` result remains `undefined`;
+new mode returns exact eligible installation UUIDs, including `[]`. Scheduling,
+active/staged manifests, publication and observations consume that same set.
+
+- [ ] **Step 1: Add `venue remote routes isolate same organisation siblings`:
+  A at 2 and B at 1 in one organisation yields active/staged installation IDs
+  exactly `[A]` in their respective source/target cells, never B. After A drops
+  to 1 both lists are `[]`, peer count 0, pending certificate work disabled;
+  after upgrade they remain `[]` until explicit reprovision. Include forward
+  reports both on/off. `venue remote publication rechecks after waits`: paused
+  DNS/signing/certificate work followed by downgrade or 2→1→2 never publishes
+  old artifacts or completes the old job. Signed authority lifetime stays
+  <=600,000 ms and gateway restart cannot extend it. Status/certificate reads
+  refuse or mask using current permission even before schedule catches up.
+  Retain foreign owner, forged proof, expected revision, incoming-move race,
+  current reporter and unrelated-cell nonblocking assertions.
+- [ ] **Step 2: Observe named DB RED in actual CI.**
+  `pnpm --dir packages/remote-access exec node --test --test-timeout=30000 test/venue-service-remote.test.ts`;
+  `pnpm --dir packages/account-http exec node --test --test-timeout=30000 test/venue-service-remote.test.ts`.
+- [ ] **Step 3: Replace every direct paid SQL filter listed in the table, not the
+  legacy stored field's meaning.** Add venue locks ahead of installation locks;
+  keep publication exclusion and original-binding rechecks. Pruning cannot
+  become an alternate permission authority.
+- [ ] **Step 4: Require D4 GREEN plus original plan-permissions, manifest-route-reads,
+  reconciler-route-reads and forward-observations checks in CI.** Locally D1/types.
+- [ ] **Step 5: Commit `git commit -s -m "feat: filter remote work through current venue permissions"`.**
+
+### Task D5: Move new translation work to level 2 and keep basic services basic
+
+**Files:** Modify translation, relay, composition/CLI/runtime paths in the table;
+create `packages/translation/test/venue-service-translation.test.ts`,
+`packages/registration/test/venue-service-relay.test.ts` and
+`deploy/test-cloud/venue-service-runtime.test.mjs`. Add a separate new-mode proof
+in `scripts/test-cloud-free-services.mjs` with its verifier tests; do not change
+legacy receipt expected fields or values.
+
+**Interfaces:** Append `planMode:PlanMode='existing'` after TranslationMachine's
+current `collectPageBytes` argument; add `planMode?:PlanMode` to TranslationWorker's
+existing options. Append mode to RelayGrantStore/RelayMessages/RelayWorker
+constructors as `RelayGrantStore(pool:Pool,config?:RelayConfig,planMode?:PlanMode)`,
+`RelayMessages(pool:Pool,issuer:LeaseIssuer,origin:string,config:RelayAdmissionConfig,
+trusted?:ReadonlyMap<string,string>,planMode?:PlanMode)` and
+`RelayWorker(pool:Pool,config?:RelayWorkerConfig,planMode?:PlanMode)`, with
+`existing` defaults. Pass mode from account app
+and worker CLIs. Extend existing `BatchHooks` with optional
+`stillPermitted?():Promise<boolean>`: after each provider wait/callback accounting,
+stop further review/retry work on denial. Keep consent/spending checks independent.
+Current in-flight spend is recorded once, never replayed because a guard/storage
+callback failed. Previously admitted outputs may be saved and collected, but that
+completion authorises no new model call. On lost permission, persist a valid
+first-pass result and skip review (done, reviewApplied/reviewDropped both 0);
+a failed response gets no retry and terminates with existing
+`state=failed,reason=provider_unavailable,failed=total`. A queued denied job likewise
+terminates unavailable with zero provider calls, so it cannot starve a paid
+neighbour. Keep already saved results and use existing partly_done semantics
+where only some batches completed; never invent a new wire reason. Do not change
+archived prompts or prices.
+
+Add `--venue-levels` to `scripts/test-cloud-free-services.mjs` and
+`validateVenueServiceReceipt(value:unknown):true`, keeping its existing mode and
+validator untouched. New receipt has exactly `version:2`,
+`kind:'test-cloud-venue-services'`, `cloudHead`, `cloudTree`,
+`scope:'local-fixtures'`, `mode:'test-venue-levels'`,
+`productionEnforcement:'off'`, `suites`. Reuse the existing per-suite count shape;
+require exact suite IDs `rules`, `installations`, `backups`, `recovery`, `remote`,
+`translation`, `relay`, `runtime`, `storage`, each with tests>0, passed=tests and
+failed/cancelled/skipped/todo all 0. Pins must match the clean candidate.
+D6's CI wrapper runs this mode explicitly; it is a Cloud fixture receipt,
+not joint Waitron/provider qualification.
+
+- [ ] **Step 1: Add `registered venue refuses new translation before provider use`:
+  valid consent/readiness at 1, and a forged body selector naming paid sibling,
+  both yield machine 403 permission_denied, jobs +0, fake provider calls 0.
+  At 2 and 3 submit queues once and normal paging succeeds; lack of consent still
+  gives consent_required. `translation durable results survive venue downgrade`:
+  complete the existing Cafe fixture, downgrade, remove consent/readiness; replay
+  returns the same jobId, status done, results exactly
+  `[{ref:'product:1',names:{ca:'Cafe [ca]',es:'Cafe [es]'},placeholder:false,corrections:[]}]`,
+  nextCursor null; release collected, further collect expired. Foreign job stays
+  job_not_found before invalid cursor; changed submit fingerprint stays conflict.
+  `translation downgrade stops next provider call`: block first pass or retry
+  wait, drop to 1, release; calls exactly 1, review/retry calls 0, actual first
+  spend recorded once. A DB failure likewise starts no next call; release/collect
+  have no new model work. Preserve lease fencing, cancellation/storage callback
+  ordering and result retention assertions. `basic relay remains independently
+  authorised at all three levels`: valid local-proof submit/handoff succeeds;
+  grant/revision/origin/owner/expiry/allowance/kill-switch refusals and account
+  signup/reset mail are identical before/after transition; zero new mail grants
+  from transition. Address routes stay unavailable and keys absent from env.
+- [ ] **Step 2: Observe RED locally only for pure runtime/parser cases and in CI
+  for DB cases.** Native:
+  `node --test deploy/test-cloud/venue-service-runtime.test.mjs` (pure only).
+  **CI:** `pnpm --dir packages/translation exec node --test --test-timeout=30000 test/venue-service-translation.test.ts`;
+  `pnpm --dir packages/registration exec node --test --test-timeout=30000 test/venue-service-relay.test.ts`.
+- [ ] **Step 3: Implement admission/worker guards and validated mode propagation.**
+  Assert all mode combinations in the compatibility table, constructor defaults,
+  each account/storage/backup/manifest/reconcile/translation role, production
+  venue refusal and startup invalid-config refusal before work. Keep new flag
+  dormant in checked-in env/Compose. No live provider/deployment change.
+- [ ] **Step 4: Observe GREEN; run legacy free-service proof and translation,
+  relay and HTTP security/consent/paging suites in CI.** Preserve original checks;
+  new mode adds stricter fresh-admission tests, not weaker legacy expectations.
+- [ ] **Step 5: Commit `git commit -s -m "feat: require venue level two for new translation work"`.**
+
+### Task D6: Qualify guard omissions, migration/recovery and branch lifecycle
+
+**Files:** Create `scripts/venue-service-guard-probes.mjs`,
+`scripts/venue-service-guard-probes.test.mjs`,
+`packages/account-http/test/venue-service-guards.test.ts` (bounded CI wrapper),
+`packages/registration/test/venue-service-upgrade-recovery.test.ts` and
+`scripts/schema-upgrade-venue-service-fixture.mjs`. Extend the existing
+`schema-upgrade-{fixture,receipt}.mjs`, `verify-schema-upgrade-receipt.mjs` and
+corresponding tests with a separate proof version/mode, not changed old receipts.
+Modify only current-release tail checks named below and the docs in the table.
+
+**Interfaces:** Probe runner has `--pure|--database`, runs named tests in owned
+complete candidate copies with dependencies and CI's disposable DB env, and emits
+sanitised per-guard baseline/fault/restored case counts. CI wrapper explicitly
+runs pure harness controls plus both modes and the new runtime/storage proof
+files. Pure runtime tests must import only parsers/env builders, with no DB
+fixture hooks. Add a native verifier test in
+`scripts/verify-schema-upgrade-receipt.test.mjs` for every v7 missing/false/string/
+extra field, dirty driver, wrong candidate/count, nonzero cleanup and equal pins.
+Existing package `test/*.test.ts` discovery must execute it and the upgrade
+wrapper. New fixture exports are
+`seedVenueServiceAuthority(root:string,pool:Pool,state:object):Promise<object>`,
+`venueServiceAuthorityState(pool:Pool):Promise<object>` and
+`restoredVenueServiceAuthority(root:string,pool:Pool,proof:object,expected:object):Promise<void>`;
+these private synthetic objects follow C's fixture convention, never public data.
+Name the wrapper tests `venue service guards detect all omissions` and
+`venue service exact head upgrade and recovery is qualified`.
+Give wrappers explicit test-level timeouts within the current eight-minute
+job budget; ordinary tests keep 30 seconds. Never edit CI to conceal omissions.
+
+- [ ] **Step 1: Add harness-control RED before runner code.** Zero cases, skipped
+  selected case, unexpected/missing test name, setup/import error, timeout, zero/
+  multiple mutation matches and an undetected negative-control mutation must all
+  reject qualification. Require baseline/fault/restored distinct runs; source
+  text presence alone is not evidence. Native:
+  `node --test scripts/venue-service-guard-probes.test.mjs`.
+- [ ] **Step 2: Implement distinct omissions in disposable copies only.** For
+  each row remove precisely that guard, see the named behavioral assertion fail
+  for its expected wrong value, restore original bytes and see it pass. Keep
+  all original refusal assertions in place. Pure probes can run natively;
+  every PostgreSQL/storage probe runs in actual CI only.
+
+| Guard omitted separately | Required detection |
+| --- | --- |
+| Translation level floor; trial end exclusion (two pure faults) | Registered translation incorrectly true; 30 November incorrectly connected. |
+| Composite venue binding | Foreign/same-org-other-business call returns a grant or changes a row instead of scope refusal. |
+| Raw `execute` transition hook | Authority stays 1/setup ready after raw downgrade instead of revision 2/unconfigured. |
+| Stored grant-window expiry fence | A late extension or later trial exposes old ready setup/routes/writer after an unobserved gap instead of cleared setup and stale-writer refusal. |
+| Venue lock before installation | The controlled third-connection installation lock is blocked instead of available while policy waits. |
+| Downgrade persisted setup clearing | Raw service rows remain ready instead of the three exact unconfigured/`{}` rows. |
+| Cached installation masking | Replayed v2 response exposes the retained translation configuration instead of `{}`. |
+| Final post-wait proof/session recheck | Revoked/expired/changed-binding proof returns keys instead of its original refusal. |
+| Private writer mode comparison | Legacy revision 1 key survives new-mode generation 1 instead of storage 403. |
+| Post-provider generation comparison | A 2→1→2 round trip returns credentials/keys instead of refusal and zero publication. |
+| Active route filter; incoming staged route filter (two faults) | Denied sibling UUID appears in the corresponding exact route array instead of absence. |
+| Direct writer generation comparison | Old storage writer works after a round trip/restart instead of genuine storage refusal. |
+| Retained expiry permission check | A stored snapshot is removed at 1 instead of deletion count 0. |
+| New translation admission; post-wait provider permission (two faults) | Jobs/provider calls become 1 at 1 instead of 0; a second review/retry call occurs instead of total 1. |
+
+- [ ] **Step 3: Observe real migration RED, then implement/qualify recovery in CI.**
+  New schema is needed because C's venue revision does not cover trial mutations
+  and D needs durable opt-in/generation without rewriting C or org sentinel meaning.
+  Reconfirm the allocated filename; if 046 is free, current total becomes 46,
+  new tail/index 45 is `046_venue_service_authority.sql`, 045 stays at index 44.
+  Name the DB tests `045 upgrades to venue service authority without changing old bytes`
+  and `interrupted venue service migration rolls back DDL ledger and retries`;
+  assert the old 45 ledger rows byte-identical, authority row count 0 after
+  upgrade, no new relation/ledger row after interruption, exactly one new ledger
+  row after retry and no further change on repeated migration.
+  Apply these test prerequisites in D2: replace **only current-tail/total checks** in registration
+  `test/{registration,schema-compatibility,backup-verification-migration,forward-observations-migration}.test.ts`
+  and translation `test/result-storage-upgrade.test.ts`: expect exactly those new
+  total/tail values, preserve every old index, prefix/digest/row comparison and
+  add `hasReleaseMigrationCount('45')===false` for the new current manifest.
+  Preserve old behavioral assertions, pinned release fixtures, golden data and
+  SQL 045. Add the 45 release at
+  `b338275c3ba4e2b211d7617b03d38e95b916ee7c` to `migrationRelease`; use its
+  real migrate function, not a manually truncated current manifest.
+  If another slot lands first, record its exact name/count and append D after it;
+  update only D's new current-release expectations together.
+
+  Add proof `--venue-services --old <full-b338275c-hash> --new <candidate-hash>`
+  alongside existing modes; reject symbolic/equal/mixed/missing revisions.
+  Version 7 receipt keeps existing common security/recovery checks and adds
+  `venueServices` exact booleans: `oldSqlUnchanged`, `oldRowsPreserved`,
+  `defaultOff`, `interruptedRollback`, `restartIdempotent`, `foreignScopeRefused`,
+  `newBackupRestored`, `restoredAuthority`, `restoredTrials`, `restoredEvents`,
+  `restoredKeysAndHolds`, `restoredRetryStable`, `staleWriterRefused`,
+  `oldBackupUpgradeUnenrolled`, all strictly true. Require actual stopped-consumer
+  45→46 upgrade, concurrent/idempotent migration, interrupted DDL+ledger rollback
+  and successful retry. Old consumer refuses new ledger; new consumer refuses
+  old/missing/changed/future ledger. Compare all old rows/digests/applied times.
+  Create separate pre-upgrade and populated post-upgrade backups; restore each
+  into another owned DB with matching external synthetic keys and storage state.
+  Old backup upgrade leaves authority empty/permission registered; populated
+  restore preserves generations, facts, trials, event retries, objects/key
+  versions and recovery holds. Wrong/missing keys refuse. Restoring old writer
+  state against newer DB generations must withdraw it before readiness.
+  Use `pg_restore --exit-on-error`, keep the empty-search-path helper behavior,
+  preserve the upgraded DB, and record cleanup/limitations. No reverse migration,
+  live recovery claim or old binary on new schema. Version 6's 44→45 receipts and
+  all earlier receipt formats/expectations stay historical and unchanged.
+
+  The shipped `billing-upgrade-recovery.test.ts` binds v6 to HEAD, while its
+  verifier requires new count 45. Adding 046 would break that invocation.
+  Explicit replacement: that wrapper runs its original test unchanged in an
+  installed, clean owned checkout pinned to delivered
+  `3d3c3def00bf27d60f2d97f5c23cd4acc1aebf7d`. Assert v6, old count 44, new count
+  45, old hash `1a3e43e885edfbe9932c835e3f4fb8929718b2dc`, driver/new hash
+  `3d3c3def00bf27d60f2d97f5c23cd4acc1aebf7d`; retain every original recovery
+  assertion there. This invocation-only wrapper change belongs to D2's
+  test prerequisites; D6 adds its current-candidate replacement proof.
+  The new D wrapper separately requires v7, driver/new equal candidate HEAD,
+  old full b338275c/count 45 and new count 46. Historical execution is preserved;
+  v6 must not accept arbitrary newer schemas. If the slot changes, pin its real
+  preceding release and exact counts for v7 only.
+
+- [ ] **Step 4: Collect named GREEN and coverage at the implementation head.**
+  Before every implementation step, sign off/push tests first and observe its
+  actual named RED in the selected CI package, including migration execution;
+  save head, job, name and assertion. Do not proceed on unavailable DB or import/
+  setup-only failure when qualifying a specific guard. Repeat on implementation
+  head for GREEN. **CI:**
+  `pnpm --dir packages/account-http exec node --test --test-timeout=360000 test/venue-service-guards.test.ts`;
+  `pnpm --dir packages/registration exec node --test --test-timeout=360000 test/venue-service-upgrade-recovery.test.ts`.
+  Require all 17 detected omissions, passing restored controls, real storage
+  refusal and both restored databases. Inspect package discovery, executed
+  nonzero counts, coverage and sanitised receipts; skips/old-head evidence or a
+  summary without these executions block readiness. Let CI own required
+  PostgreSQL suites and coverage. Until 3 November run no Docker,
+  `scripts/test-postgres.mjs`, `pnpm test` or whole-workspace suites locally.
+  Focused native checks are D1, D5 pure runtime,
+  `node --test scripts/venue-service-guard-probes.test.mjs scripts/schema-upgrade-fixture.test.mjs scripts/verify-schema-upgrade-receipt.test.mjs`,
+  `node scripts/venue-service-guard-probes.mjs --pure`, then `pnpm typecheck`; normal push hooks remain intact.
+- [ ] **Step 5: Commit and finish through the driver.**
+  `git commit -s -m "test: qualify venue service guards and authority recovery"`.
+  Announce readiness for `finish-branch`. The full production-code branch needs
+  initial rebase then one `claude-seat.sh review-run` whole-branch run-it review
+  in an installed throwaway checkout containing the complete candidate tree.
+  Triage findings in the feature checkout, focused checks, normal signed-off
+  commits/hooks and exact-head CI after fixes. A later rebase alone retains that
+  review; inspect the result and qualify the new head again. Require every
+  **actual** selected job final at the PR head: changes/selection, documentation/
+  scripts, root 1–4, typecheck, package shards including registration/backups/
+  remote/account/translation, receipts, strict summary, and all actual cloud-cost
+  discover/conformance jobs. Audit justified skip/reuse evidence; no green-summary
+  shortcut. Under shared `main.lock`, fetch/read fresh main and check
+  `git merge-base --is-ancestor <fresh-main> <qualified-head>` before the driver's
+  `land-branch`; if it fails, rebase/requalify first. Install the merged result
+  through the normal managed workflow, clean only owned worktree/environment/
+  recorded processes, and verify all independent main CI jobs name the exact
+  merge SHA and finish successfully. Landed D still grants no live enablement.
+
+The owner price/allowance slots, legal exit/retention and hosted-stop qualification
+remain with their named slices. They do not block these synthetic engineering
+choices, and passing D does not settle them.
