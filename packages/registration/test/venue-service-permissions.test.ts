@@ -81,9 +81,9 @@ for(const touching of [false,true])test(`${touching?'touching':'gapped'} future 
 });
 test('legacy organisation changes exclude enrolled venues and cannot authorise them',async()=>{
  const f=await fixture();try{
-  await set(f);await set(f,'registered',f.venues[1]);await set(f,'hosted',f.otherVenue,true,f.other);const before=await snapshot(f);
+  await set(f);await set(f,'registered',f.venues[1]);await set(f,'hosted',f.otherVenue,true,f.other);const before=await Promise.all([rows(f),rows(f,f.venues[1]),rows(f,f.otherVenue)]);
   const legacy=new f.api.OrganisationPlanStore(f.pool);await legacy.set(f.scope.organisationId,'paid');await legacy.set(f.scope.organisationId,'free');
-  assert.deepEqual(await snapshot(f),before);
+  assert.deepEqual(await Promise.all([rows(f),rows(f,f.venues[1]),rows(f,f.otherVenue)]),before);
   await assert.rejects(transaction(f.pool,c=>f.api.readVenuePlan(c,f.venues[0],'test-free-paid')),/permission_denied/);
   for(const name of ['readVenuePlan','requirePlanService'])await assert.rejects(transaction(f.pool,c=>f.api[name](c,name==='readVenuePlan'?f.venues[0]:f.scope.organisationId,...(name==='readVenuePlan'?['test-venue-levels']:['remote_access','test-venue-levels']))),/invalid_plan_mode/);
  }finally{await f.close();}
