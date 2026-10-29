@@ -55,10 +55,10 @@ for(const slots of [2,32])for(const busyFirst of [true,false]){
       assert.deepEqual(waits,[]);
 
       stop.abort();
-      releases[slots]!.release();
+      for(let index=slots;index<slots*2-1;index++)releases[index]!.release();
       await turn();
       assert.equal(finished,false,'shutdown must await every active claim');
-      assert.equal(active,slots-1);
+      assert.equal(active,1);
       assert.equal(started,slots*2);
     }finally{
       stop.abort();for(const release of releases)release.release();
