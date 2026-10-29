@@ -302,3 +302,21 @@ for(const [from,to] of [['succeeded','pending'],['succeeded','failed'],['refunde
   }finally{await f.close();}
  });
 }
+
+test('a later successful attempt preserves hosted coverage after the first is refunded',async()=>{
+ const f=await fixture();try{
+  const a=await seeded(f),second=randomUUID();
+  await f.store.execute(f.scope,event(),{type:'begin_attempt',chargeId:a.id,attemptId:second,methodId:a.method.id,requestKey:randomUUID()});
+  await observe(f,a.attemptId,'succeeded',0,'first-payment');
+  await observe(f,second,'succeeded',0,'second-payment');
+  await observe(f,a.attemptId,'refunded',1,'first-payment');
+  const frozen=await f.store.charge(f.scope,a.id);
+  const saved=await day(f,'2026-11-02',a.id);
+  assert.deepEqual(saved.value,{venueId:f.venues[0],on:'2026-11-02',coveredByChargeId:a.id});
+  assert.equal((await f.store.payments(f.scope,a.id)).filter((p:any)=>p.state==='succeeded').length,1);
+  assert.deepEqual((await f.store.history(f.scope,f.venues[0])).paid,[{level:'connected',chargeId:a.id,attemptId:a.attemptId,from:'2026-11-01',until:'2026-12-01'}]);
+  assert.deepEqual(await f.store.charge(f.scope,a.id),frozen);
+  await observe(f,second,'refunded',1,'second-payment');
+  await noEffect(f,()=>day(f,'2026-11-03',a.id),'billing_charge_conflict');
+ }finally{await f.close();}
+});
