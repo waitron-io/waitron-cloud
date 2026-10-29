@@ -151,3 +151,34 @@ test('native progress obeys the existing script display bounds without losing th
   const s=o.snapshot();assert.equal(s.activeScriptCount,30);assert.equal(s.activeScripts.length,20);assert.equal(s.truncated,true);
   for(const script of s.activeScripts)assert.deepEqual(script.lastMilestone,{step:'node-gyp-start'});
 });
+
+test('script cap keeps the truncation receipt after later completions reduce the active set',()=>{
+  const o=createInstallObserver(source);
+  for(let n=0;n<2048;n++){
+    const id='capped-builder-'+n+'@1.0.0';send(o,{name:'pnpm:progress',packageId:id,status:'resolved'});
+    send(o,{name:'pnpm:progress',packageId:id,status:'fetched'});
+    send(o,{name:'pnpm:progress',status:'imported',to:source+'/node_modules/.pnpm/'+id+'/node_modules/capped-builder-'+n});
+    send(o,{name:'pnpm:lifecycle',depPath:source+'/node_modules/.pnpm/'+id+'/node_modules/capped-builder-'+n,stage:'install'});
+  }
+  send(o,{name:'pnpm:lifecycle',depPath:source+'/node_modules/.pnpm/capped-builder-0@1.0.0/node_modules/capped-builder-0',stage:'install',line:'gyp info spawn make'});
+  for(let n=1;n<2048;n++)send(o,{name:'pnpm:lifecycle',depPath:source+'/node_modules/.pnpm/capped-builder-'+n+'@1.0.0/node_modules/capped-builder-'+n,stage:'install',exitCode:0});
+  const s=o.snapshot();assert.equal(s.activeScriptCount,1);assert.equal(s.truncated,true);
+  assert.deepEqual(s.activeScripts,[{packageId:'capped-builder-0@1.0.0',stage:'install'}]);
+});
+
+test('a repeated script failure cannot inherit the earlier attempt milestone',()=>{
+  const o=observer();lifecycle(o,'gyp http 404 https://private.invalid/v26.11.1/node-v26.11.1-headers.tar.gz');
+  send(o,{name:'pnpm:lifecycle',depPath,stage:'install',exitCode:1});
+  send(o,{name:'pnpm:lifecycle',depPath,stage:'install',script:'private-second-attempt'});
+  send(o,{name:'pnpm:lifecycle',depPath,stage:'install',exitCode:2});
+  const s=o.snapshot();assert.equal(s.failedScriptCount,1);
+  assert.deepEqual(s.failedScripts,[{packageId:'cpu-features@0.0.10',stage:'install',exitCode:2}]);
+});
+
+test('later native output leaves an earlier snapshot unchanged',()=>{
+  const o=observer();lifecycle(o,'gyp http GET https://private.invalid/v26.11.1/node-v26.11.1-headers.tar.gz');
+  const before=o.snapshot();
+  lifecycle(o,'gyp http 200 https://private.invalid/v26.11.1/node-v26.11.1-headers.tar.gz');
+  assert.deepEqual(before.activeScripts,[{packageId:'cpu-features@0.0.10',stage:'install',lastMilestone:{step:'headers-request'}}]);
+  assert.deepEqual(o.snapshot().activeScripts,[{packageId:'cpu-features@0.0.10',stage:'install',lastMilestone:{step:'headers-response',httpStatus:200}}]);
+});

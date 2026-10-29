@@ -31,7 +31,7 @@ export function createInstallObserver(source) {
   };
   const failed=(id,stage,exitCode)=>{
     if(!id||!scriptStages.has(stage)||count(exitCode)===undefined||exitCode===0)return;
-    const key=id+':'+stage,lastMilestone=scripts.get(key)?.lastMilestone??failedScripts.get(key)?.lastMilestone;scripts.delete(key);
+    const key=id+':'+stage,lastMilestone=(scripts.get(key)??failedScripts.get(key))?.lastMilestone;scripts.delete(key);
     if(failedScripts.size<2048)failedScripts.set(key,{packageId:id,stage,exitCode,...lastMilestone?{lastMilestone}:{}});else overflow=true;
   };
   const consume=line=>{
@@ -56,8 +56,8 @@ export function createInstallObserver(source) {
         failed(id,record.stage,record.exitCode);
         scripts.delete(key);
       }
-      else if(scripts.has(key)||scripts.size<2048){
-        const state=scripts.get(key)??{packageId:id,stage:record.stage};
+      else if(scripts.size<2048){
+        const state={...(scripts.get(key)??{packageId:id,stage:record.stage})};
         // Keep only fixed milestones; script output and URLs never enter a snapshot.
         const milestone=nativeMilestone(record.line);if(milestone)state.lastMilestone=milestone;
         scripts.set(key,state);
