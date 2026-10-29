@@ -1,3 +1,4 @@
+import {createBillingDisplayMachine,billingDisplayResponse,type BillingDisplayOptions} from './billing-display.ts';
 import type {PlanMode} from '@waitron-cloud/registration';
 import {TranslationMachine} from '@waitron-cloud/translation';
 import {translationPaths,translationResponse} from './translation.ts';
@@ -77,7 +78,7 @@ function publicError(error: unknown): AccountHttpError {
   }
   return new AccountHttpError(503, 'temporarily_unavailable', 1);
 }
-export function createAccountApp(options: {pool: Pool; outbox: EmailOutbox; config: AccountHttpConfig;factor?:FactorConfig;fiscalAllocation?:RegistryOptions;relay?:RelayAdmissionConfig;staffCertificates?:boolean;translation?:boolean;translationMachine?:TranslationMachine;leaseIssuer?:LeaseIssuer;leaseTrust?:ReadonlyMap<string,string>;captures?:CaptureOptions;planMode?:PlanMode;remoteResolve?:RemoteResolver;passwordScreening?:PasswordScreeningProvider;passkeyAdapter?:PasskeyCeremonyAdapter;pairingCodeKeys?:PairingCodeKeys|null;recoveryCodeKeys?:RecoveryCodeKeys|null}) {
+export function createAccountApp(options: {pool: Pool; outbox: EmailOutbox; config: AccountHttpConfig;factor?:FactorConfig;fiscalAllocation?:RegistryOptions;relay?:RelayAdmissionConfig;staffCertificates?:boolean;translation?:boolean;translationMachine?:TranslationMachine;leaseIssuer?:LeaseIssuer;leaseTrust?:ReadonlyMap<string,string>;billingDisplay?:BillingDisplayOptions;captures?:CaptureOptions;planMode?:PlanMode;remoteResolve?:RemoteResolver;passwordScreening?:PasswordScreeningProvider;passkeyAdapter?:PasskeyCeremonyAdapter;pairingCodeKeys?:PairingCodeKeys|null;recoveryCodeKeys?:RecoveryCodeKeys|null}) {
   const config = validateConfig(options.config);
   if(options.relay&&!options.leaseIssuer)throw Error('relay.installation_issuer_required');
   if(options.translation&&!options.leaseIssuer)throw Error('translation.installation_issuer_required');
@@ -95,6 +96,7 @@ export function createAccountApp(options: {pool: Pool; outbox: EmailOutbox; conf
   const staffExchange=options.staffCertificates&&options.leaseIssuer?new StaffCertificateExchange(pool,options.leaseIssuer,config.portalOrigin,options.leaseTrust,options.planMode):undefined;
   const streams=options.captures?.managedStreams&&options.leaseIssuer?new ManagedStreamMachines(pool,options.leaseIssuer,config.portalOrigin,options.captures.vault,options.captures.managedStreams,options.leaseTrust,options.planMode):undefined;
   const relay=options.relay&&options.leaseIssuer?new RelayMessages(pool,options.leaseIssuer,config.portalOrigin,options.relay,options.leaseTrust):undefined;
+  const billingDisplay=createBillingDisplayMachine({pool,issuer:options.leaseIssuer,origin:config.portalOrigin,display:options.billingDisplay,trusted:options.leaseTrust});
   const limiter = new AccountRateLimiter(pool, config.rateKey);
   const signup = new SignupStore(pool, outbox, options.passwordScreening); const recovery = new PasswordRecoveryStore(pool, outbox, options.passwordScreening);
   const passkeys = new PasskeyStore(pool, {rpName: 'Waitron Cloud', rpId: origin.hostname, origin: config.portalOrigin}, options.passkeyAdapter);
@@ -147,6 +149,7 @@ export function createAccountApp(options: {pool: Pool; outbox: EmailOutbox; conf
     if(c.req.path==='/api/account/translation-consent')return translationConsentResponse(c,{pool,origin:config.portalOrigin,consume});
     if(c.req.path==='/api/account/alerts')return alertPreferencesResponse(c,{pool,origin:config.portalOrigin,consume});
     if(c.req.path.startsWith('/api/account/backups/'))return backupResponse(c,{pool,origin:config.portalOrigin,consume});
+    if(c.req.path==='/api/installations/billing-display')return billingDisplayResponse(c,{machine:billingDisplay,ip,consume});
     if(c.req.path.startsWith('/api/installations/')||c.req.path==='/api/account/installations'||c.req.path.startsWith('/api/account/installations/')) return installationResponse(c,{pool,issuer:options.leaseIssuer,trusted:options.leaseTrust,planMode:options.planMode,origin:config.portalOrigin,ip,consume});
     if(c.req.path.startsWith('/api/pairing/')||c.req.path.startsWith('/api/account/pairing/')) return pairingResponse(c,{pool,origin:config.portalOrigin,ip,consume,pairingCodeKeys});
     const path = c.req.path.startsWith('/api/account/') ? c.req.path.slice('/api/account'.length) : '';
