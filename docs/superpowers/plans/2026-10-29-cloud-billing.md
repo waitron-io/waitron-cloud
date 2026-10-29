@@ -1572,10 +1572,15 @@ service transitions. The engineering choices below implement design §§2–4, 6
 Add a small country table `billing_service_authority`, keyed by
 `(organisation_id,legal_business_id,venue_id)` with the composite venue FK from
 045, `revision bigint NOT NULL CHECK(revision BETWEEN 1 AND 9007199254740991)` and
-no cascading delete. Forbid identity changes, deletion and revision rewind with
-`55000`; updates advance exactly one generation. Row existence means this venue has explicitly entered D's
-transition path; revision is a durable generation that makes old writers invalid.
-It stores no second level, price, payment or expiry policy. No backfill or default
+no cascading delete. Add `setup_grant_active boolean NOT NULL DEFAULT false` and
+`setup_grant_until date`, with inactive implying a null end. These record the last
+continuous level-2-or-higher grant window already observed by D; active/null end
+means an unbounded base-level grant. They are derived from C facts, never another
+level or expiry policy. Forbid identity changes, deletion, revision rewind or a
+skipped generation with `55000`; derived-window bookkeeping may keep the revision.
+Row existence means this venue has explicitly entered D's transition path;
+revision is a durable generation that makes old writers invalid.
+It stores no second level, price or payment policy. No backfill or default
 activation. A known venue without that row has level 1 in the new mode, even if C
 has recorded connected/hosted facts. This prevents storage-only fixtures or an
 unqualified billing writer from silently enabling service access.
@@ -1595,8 +1600,10 @@ event, not replay of an earlier storage-only event. Unknown/foreign scope retain
 Under the venue lock, compare permission facts before/after the command: stored
 level plus each trial's level/start/end/state. First enrolment gives generation 1;
 subsequent changes to these facts advance it once, including an extension that
-changes the grant's time limit. Same facts under another event and exact replay
-advance it zero times. C's billing venue revision still follows C's existing
+changes the grant's time limit. A newly observed elapsed grant window also advances
+it once. Coalesce both causes into one generation/configuration increment in the
+same transaction. Same facts under another event advance it zero times unless an
+elapsed window needs invalidating; exact event replay advances it zero times. C's billing venue revision still follows C's existing
 set-command semantics; it is not the authority generation. Scheduled dates, payment observations, prices and display
 fields confer no service grant. Guard revision overflow before effects. A generation
 change advances each affected installation's configuration revision once in UUID
@@ -1620,6 +1627,25 @@ production mode is introduced; J's proposed calendar is not accepted by D.
 Time expiry filters current grants even before G commits cleanup. Reprovisioning
 always requires current permission and the current generation. Trial revocation
 or extension cannot make an old generation current again.
+
+Time can remove permission without changing C facts. Before a new-mode authority
+read or a new permission command, take the venue `FOR NO KEY UPDATE` immediately,
+then inspect the **previously stored** grant-window end against the fresh UTC day.
+If an active finite window has ended, clear the same three setup rows, advance
+the generation/configuration once and mark that window inactive before computing
+current permission or applying the command. Then record today's derived window:
+combine overlapping or touching active-trial intervals until the first uncovered
+day; a connected/hosted base is unbounded. A gap invalidates setup even if no reader
+or G ran during it and today falls in a later trial. An extension before the end
+keeps setup; one after the old end first invalidates it. A command that removes
+level-2 access also invalidates before storing the next window. Repeating the
+same synchronisation makes no further revision change. Keep this bookkeeping in
+the caller's transaction; rollback preserves all old facts/setup/generations and
+returns no grant. Permission denial may roll it back, but the next successful
+authority read/transition must repeat it before returning anything. No scheduler,
+billing event or payment conversion is created by this read. Exact event replay
+still returns its original receipt without effects; it cannot return a service
+grant, and every service consumer synchronises independently.
 
 | Mode/configuration | Exact behaviour |
 | --- | --- |
@@ -1686,8 +1712,9 @@ permission lock at the stated position:
    `FOR NO KEY UPDATE`). Billing writers next lock legal business
    `FOR NO KEY UPDATE`, billing business `FOR NO KEY UPDATE`, event advisory
    identity as C does. Service readers need none of those business locks.
-3. Lock venues in UUID order: permission reads `FOR SHARE`, transitions
-   `FOR NO KEY UPDATE` immediately, never SHARE then upgrade. This existing
+3. Lock venues in UUID order: all new-mode permission reads and transitions take
+   `FOR NO KEY UPDATE` immediately because clock expiry can invalidate setup;
+   legacy readers keep SHARE. Never SHARE then upgrade. This existing
    identity row protects even missing billing/authority child rows. Billing
    facts cannot change between reading authority and granting service. Then
    authority row, affected installations in UUID order with the required
@@ -1737,8 +1764,10 @@ Report committed downgrade separately from measured route/writer withdrawal.
 **Interfaces:** Reuse `BillingLevel`, `TrialView`, `CivilDate`.
 Produce `VenueService = PlanService|'rota_solver'|'hosting'`,
 `levelAllows(level:BillingLevel,service:VenueService):boolean` and
-`effectiveVenueLevel(base:BillingLevel,trials:readonly TrialView[],today:CivilDate):BillingLevel`.
-These are new interfaces, not claimed existing exports. Reject malformed facts/
+`effectiveVenueLevel(base:BillingLevel,trials:readonly TrialView[],today:CivilDate):BillingLevel`
+and `paidGrantWindow(base:BillingLevel,trials:readonly TrialView[],today:CivilDate):{until:CivilDate|null}|null`.
+The latter returns null for no current level-2 grant, `{until:null}` for an
+unbounded grant, otherwise its first uncovered civil day. These are new interfaces, not claimed existing exports. Reject malformed facts/
 dates with `invalid_billing_input`; unknown level/service never allows access.
 
 - [ ] **Step 1: Add named pure RED cases.** `venue levels have exact service floors`:
@@ -1756,6 +1785,11 @@ dates with `invalid_billing_input`; unknown level/service never allows access.
   scheduled/display input participates. Unknown service/level returns false;
   malformed trial state, inverted/impossible dates or invalid today raises
   invalid_billing_input before any positive permission.
+  `paid setup window ends at the first real grant gap`: touching connected
+  `[2026-10-31,2026-11-30)` and hosted `[2026-11-30,2026-12-30)` end at
+  30 December; starting the latter on 1 December instead ends the first window
+  at 30 November. A connected base is unbounded, registered without a current
+  trial returns null, and no future interval bridges an uncovered day.
 - [ ] **Step 2: Run `node --test packages/registration/test/venue-service-rules.test.ts`
   and record actual named RED before implementation.** Use runtime export
   assertions initially; then observe the behavioral floor/boundary failures, not
@@ -1780,7 +1814,7 @@ slot reconciliation with P3/parked work. Never change landed 001–045 SQL.
 **Interfaces:** Produce `VenuePermission = BillingScope & {venueId:string;
 level:BillingLevel;revision:number}`, `PermissionCommand = Extract<BillingCommand,
 {type:'set_venue'|'start_trial'|'extend_trial'|'end_trial'}>`,
-`readVenuePermissions(client:PoolClient,venueId:string,mode:'test-venue-levels',lock?:'SHARE'|'NO KEY UPDATE'):Promise<VenuePermission>`,
+`readVenuePermissions(client:PoolClient,venueId:string,mode:'test-venue-levels'):Promise<VenuePermission>`,
 `requireVenueService(client:PoolClient,venueId:string,service:VenueService,mode:PlanMode,lock?:'SHARE'|'NO KEY UPDATE'):Promise<void>`;
 add `BillingStore.transition(scope:BillingScope,event:BillingEvent,command:PermissionCommand):Promise<BillingReceipt>`.
 An internal `applyPermissionTransition(context:BillingContext,command:PermissionCommand,
@@ -1788,8 +1822,10 @@ enrol:boolean):Promise<BillingValue>` wraps `applyVenueCommand` on the same clie
 `readVenuePermissions` is the only new-mode authority, including batch consumers;
 `requireVenueService` branches explicitly: existing returns without new reads,
 legacy uses `readVenuePlan`/`planAllows`, new mode uses the new reader/rules.
-Lock defaults to SHARE; replacement requests NO KEY UPDATE at its first policy
-read because it later mutates the venue. Legacy mode refuses enrolled venues;
+New-mode reads always take venue NO KEY UPDATE at their first policy read and
+synchronise the stored grant window before installation locks. The optional
+`requireVenueService` lock argument remains for legacy compatibility only; it
+cannot weaken new-mode locking. Replacement therefore needs no later lock upgrade. Legacy mode refuses enrolled venues;
 do not project free translation through the
 new level-1 matrix. Permission refusal is `Error('permission_denied')`, mapped through existing typed
 machine/backup/account errors. Add `test-venue-levels` to `PlanMode` and extend
@@ -1807,7 +1843,17 @@ compatibility table. Keep pure rules out of the `pg` module for native tests.
   advances generation once even while effective level stays 2.
   `same organisation venues never share permission`: A connected, B registered,
   C hosted, including a second legal business; downgrade A changes only A's
-  installations, B/C revisions and grants stay byte-identical. Legacy org toggle
+  installations, B/C revisions and grants stay byte-identical.
+  `expired trial setup never revives across a late transition`: provision an
+  enrolled connected trial, move the controlled DB day to its end with G/readers
+  stopped, then separately test delayed end followed by the independent hosted
+  trial, and a late extension before finalisation. Each resets all three rows
+  before restored permission, advances the generation/configuration once per
+  transaction, and repeated synchronisation/replay changes nothing further.
+  `an unobserved gap between future trials clears old setup`: record non-touching
+  future intervals, skip every read across the gap, then read during the later
+  interval; setup is cleared before that read can authorise. Touching intervals
+  and an extension before expiry keep existing setup. Legacy org toggle
   must leave enrolled A/B/C setup unchanged.
   `permission transaction rollback preserves facts event and setup`: inject an
   owned trigger failure after setup change, compare all rows/events/generations,
@@ -1872,6 +1918,10 @@ No state-format change reaches Waitron's wire.
   keeps setup empty; explicit same location/placement reprovision works once,
   stream current revision succeeds, original keys/reader/data survive, old writer
   credentials fail at storage and new writer succeeds. Same-org neighbour works.
+  Repeat cached replies, active/incoming routes and actual stale-writer refusal
+  after both expired-trial late-transition cases and an unobserved future-trial
+  gap from D2; only explicit reprovision restores access. Keep keys, objects and
+  Cloud reader unchanged. No G/reconciler runs during the gap.
   `writer modes cannot collide at equal revision`: legacy revision 1 then enrolled
   venue generation 1 retires the old writer and returns a distinct key/reference;
   old key receives storage 403, recovery reader/key/data unchanged. Restart with
@@ -2058,6 +2108,7 @@ job budget; ordinary tests keep 30 seconds. Never edit CI to conceal omissions.
 | Translation level floor; trial end exclusion (two pure faults) | Registered translation incorrectly true; 30 November incorrectly connected. |
 | Composite venue binding | Foreign/same-org-other-business call returns a grant or changes a row instead of scope refusal. |
 | Raw `execute` transition hook | Authority stays 1/setup ready after raw downgrade instead of revision 2/unconfigured. |
+| Stored grant-window expiry fence | A late extension or later trial exposes old ready setup/routes/writer after an unobserved gap instead of cleared setup and stale-writer refusal. |
 | Venue lock before installation | The controlled third-connection installation lock is blocked instead of available while policy waits. |
 | Downgrade persisted setup clearing | Raw service rows remain ready instead of the three exact unconfigured/`{}` rows. |
 | Cached installation masking | Replayed v2 response exposes the retained translation configuration instead of `{}`. |
@@ -2135,7 +2186,7 @@ job budget; ordinary tests keep 30 seconds. Never edit CI to conceal omissions.
   head for GREEN. **CI:**
   `pnpm --dir packages/account-http exec node --test --test-timeout=360000 test/venue-service-guards.test.ts`;
   `pnpm --dir packages/registration exec node --test --test-timeout=360000 test/venue-service-upgrade-recovery.test.ts`.
-  Require all 16 detected omissions, passing restored controls, real storage
+  Require all 17 detected omissions, passing restored controls, real storage
   refusal and both restored databases. Inspect package discovery, executed
   nonzero counts, coverage and sanitised receipts; skips/old-head evidence or a
   summary without these executions block readiness. Let CI own required
