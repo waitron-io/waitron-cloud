@@ -110,7 +110,7 @@ export async function openReplay({ codeRoot, stateRoot, config, initial }) {
       return { nodeId: node.id, locationId: location.id, standard: standard.id, full: full.id };
     });
     writeFileSync(join(stateRoot, 'trading.env'),
-      `WAITRON_TILL_NODE_ID=${nodeId}\nWAITRON_TILL_LOCATION_ID=${locationId}\n`, { mode: 0o600, flag: 'wx' });
+      `WAITRON_NODE_ID=${nodeId}\n`, { mode: 0o600, flag: 'wx' });
     const backend = new r.VerifactuBackend({ db, clock: { now: runtimeFail }, environment: 'preproduction',
       deploymentEnvironment: 'preproduction', resolveClient: async () => runtimeFail() });
     const stateIdentity = lstatSync(stateRoot);
