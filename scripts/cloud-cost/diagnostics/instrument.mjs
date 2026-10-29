@@ -76,6 +76,22 @@ export function instrumentRemote(source, {buffered = false, compact = false} = {
 }
 export function instrumentBrowser(source, {buffered = false, compact = false, application = false} = {}) {
   source = (buffered ? bufferedReporter : reporter) + source;
+  if (application) source = replace(source, 'const record = (req, event) => {', `
+    const traceRequestIds = new WeakMap(); let traceNextRequest = 0;
+    const traceRequest = req => {
+      if (!traceRequestIds.has(req)) traceRequestIds.set(req, ++traceNextRequest);
+      const url = new URL(req.url()), path = url.pathname;
+      const category = url.origin !== 'https://' + staffHostname ? 'outside'
+        : path === '/management-api/events' ? 'live'
+        : path.startsWith('/management-api/alerts') ? 'alerts'
+        : path.startsWith('/management-api/reports/') ? 'report'
+        : path.startsWith('/management-api/') ? 'api' : 'other';
+      const resource = req.resourceType();
+      return {request:traceRequestIds.get(req), category,
+        resource:['document','stylesheet','image','media','font','script','texttrack','xhr','fetch','eventsource','websocket','manifest','other'].includes(resource) ? resource : 'other'};
+    };
+    const tracePending = () => [...seen].map(req => ({key:keyFor(req), ...traceRequest(req)}));
+    const record = (req, event) => {`);
   if (application) source = replace(source, "const pending = [], seen = new Set();", `
     context.on('console', message => {
       const text = message.text();
@@ -90,13 +106,13 @@ export function instrumentBrowser(source, {buffered = false, compact = false, ap
     });
     await context.addInitScript(${installApplicationTrace.toString()});
     const pending = [], seen = new Set();`);
-  if (!compact || application) source = replace(source, "const key = keyFor(req) + ':' + event;", "const key = keyFor(req) + ':' + event; trace({event:'request',key,phase,at:Date.now()});");
+  if (!compact || application) source = replace(source, "const key = keyFor(req) + ':' + event;", "const key = keyFor(req) + ':' + event; trace({event:'request',key,phase,at:Date.now()" + (application ? ',...traceRequest(req)' : '') + "});");
   if (application) {
-    source = replace(source, 'const deadline = Date.now() + 3000;', "trace({event:'drain-start',phase,at:Date.now(),pending:[...seen].map(req=>keyFor(req))}); const deadline = Date.now() + 3000;");
-    source = replace(source, 'await Promise.all(pending);\n    };', "await Promise.all(pending); trace({event:'drain-return',phase,at:Date.now(),pending:[...seen].map(req=>keyFor(req))});\n    };");
+    source = replace(source, 'const deadline = Date.now() + 3000;', "trace({event:'drain-start',phase,at:Date.now(),pending:tracePending()}); const deadline = Date.now() + 3000;");
+    source = replace(source, 'await Promise.all(pending);\n    };', "await Promise.all(pending); trace({event:'drain-return',phase,at:Date.now(),pending:tracePending()});\n    };");
   }
   source = replace(source, "args: ['--no-sandbox',", "args: ['--log-net-log=/tmp/cost-browser-netlog.json', '--no-sandbox',");
-  source = replace(source, "phase = 'reconnect';", "phase = 'reconnect'; trace({event:'phase',phase,at:Date.now(),pending:[...seen].map(req=>keyFor(req))});");
+  source = replace(source, "phase = 'reconnect';", "phase = 'reconnect'; trace({event:'phase',phase,at:Date.now(),pending:" + (application ? 'tracePending()' : '[...seen].map(req=>keyFor(req))') + "});");
   source = replace(source, "const error = Error('Invalid cloud cost browser journey');", "trace({event:'refusal',phase,step,relay:meter?.failure()}); const error = Error('Invalid cloud cost browser journey');");
   return source;
 }
