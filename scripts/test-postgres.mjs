@@ -27,8 +27,10 @@ async function ensureTestImage(image) {
       return;
     } catch (error) {
       const pause = attempt * 1000;
-      const transient = error.code === 'ETIMEDOUT'
-        || /Client\.Timeout|i\/o timeout|TLS handshake timeout|context deadline exceeded|connection reset by peer|connect: network is unreachable|unexpected EOF|received unexpected HTTP status: 502 Bad Gateway/i.test(String(error.stderr));
+      const status = /received unexpected HTTP status: (\d{3})\b/i.exec(String(error.stderr))?.[1];
+      if (status) console.error(`Test image pull ${image} failed: HTTP ${status} (${attempt}/3)`);
+      const transient = error.code === 'ETIMEDOUT' || status?.startsWith('5')
+        || /Client\.Timeout|i\/o timeout|TLS handshake timeout|context deadline exceeded|connection reset by peer|connect: network is unreachable|unexpected EOF/i.test(String(error.stderr));
       if (!transient || attempt >= 3 || remaining() <= pause) throw error;
       console.error(`Test image pull failed temporarily; retrying ${image} (${attempt + 1}/3)`);
       await delay(pause);
