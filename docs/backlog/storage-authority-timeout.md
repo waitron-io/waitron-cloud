@@ -25,7 +25,10 @@ refusal. Preserve the full log before repairing the underlying cause.
 Run `node --test scripts/ci-backup-storage-readiness-diagnostics.test.mjs` to check
 startup request attribution. A readiness failure now retains the last request
 (`create-bucket` or `head-bucket`), its attempt number and separate request counts
-in `error.storageStartup.readiness`. These fixed labels and counters let you
+in `error.storageStartup.readiness`. When all attempts fail, it also prints one
+`storage_readiness_failure=` line because test reporters can omit custom error
+fields. A failed output sink still preserves the original refusal. These fixed
+labels and counters let you
 identify which request failed without copying credentials or request contents.
 The controlled creation and ownership-check refusals keep the original SDK error,
 all 120 attempts, request deadlines and owned-child cleanup. The tests also check

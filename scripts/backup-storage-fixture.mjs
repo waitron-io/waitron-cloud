@@ -389,7 +389,12 @@ async function startBackupStorageAttempt(options) {
             "SeaweedFS exited: " +
               (await readFile(join(root, "store.log"), "utf8")),
           );
-        if (n === 119) throw error;
+        if (n === 119) {
+          // Test reporters may omit custom Error fields. A broken output sink
+          // must still leave the original readiness refusal and cleanup intact.
+          try { console.error("storage_readiness_failure=" + JSON.stringify(readiness)); } catch {}
+          throw error;
+        }
         await new Promise((r) => setTimeout(r, 250));
       }
     }

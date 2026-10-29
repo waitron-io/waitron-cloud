@@ -49,7 +49,11 @@ const {S3Client} = require("@aws-sdk/client-s3");
 const original = Object.assign(Error("PRIVATE_READINESS_ERROR"), {name: "InternalError", $metadata: {httpStatusCode: 500}});
 const owned = Object.assign(Error("PRIVATE_OWNED_BUCKET"), {name: "BucketAlreadyOwnedByYou"});
 const send = S3Client.prototype.send, spawn = childProcess.spawn;
-let child, creates = 0, heads = 0;
+let child, creates = 0, heads = 0, reports = [];
+if (mode === "reporter-throws") console.error = message => {
+  reports.push(message);
+  throw Error("PRIVATE_REPORTER_ERROR");
+};
 childProcess.spawn = (...args) => { child = spawn(...args); return child; };
 syncBuiltinESMExports();
 S3Client.prototype.send = async function(command, options) {
@@ -80,13 +84,14 @@ assert.deepEqual(readiness, {
   createRequests: 120, headRequests: mode === "head" ? 120 : 0,
 }, "startup refusal must identify the final readiness request and both request counts");
 assert.ok(!JSON.stringify(readiness).includes("PRIVATE"));
+if (mode === "reporter-throws") assert.deepEqual(reports, ["storage_readiness_failure=" + JSON.stringify(readiness)], "a throwing reporter must still receive only bounded request evidence");
 console.log(JSON.stringify({mode, readiness, originalError: failure === original, stopped: true}));
 `;
 
 // Losing the active command or either count hides whether creation or the
 // post-timeout ownership check refused. Both paths retain the same SDK error.
-test("storage startup failures retain bounded readiness request evidence", {concurrency: 2, timeout: 65000}, async t => {
-  await Promise.all(["create", "head"].map(mode => t.test(mode, {timeout: 60000}, async t => {
+test("storage startup failures retain bounded readiness request evidence", {concurrency: 3, timeout: 65000}, async t => {
+  await Promise.all(["create", "head", "reporter-throws"].map(mode => t.test(mode, {timeout: 60000}, async t => {
     const directory = await mkdtemp(join(tmpdir(), "cloud-storage-readiness-test-"));
     t.after(() => rm(directory, {recursive: true, force: true}));
     const {stdout, stderr} = await execute(process.execPath,
@@ -95,8 +100,8 @@ test("storage startup failures retain bounded readiness request evidence", {conc
         env: {...process.env, TMPDIR: directory, TMP: directory, TEMP: directory},
         timeout: 55000, maxBuffer: 1024 * 1024,
       });
-    assert.equal(stderr, "");
     const result = JSON.parse(stdout);
+    assert.equal(stderr, mode === "reporter-throws" ? "" : "storage_readiness_failure=" + JSON.stringify(result.readiness) + "\n", "a real CI refusal must print the bounded evidence rather than rely on custom Error fields");
     assert.equal(result.mode, mode);
     assert.equal(result.originalError, true);
     assert.equal(result.stopped, true);

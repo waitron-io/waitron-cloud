@@ -3919,7 +3919,8 @@ gate checks do not qualify that separate layer.
 
 **Historical cause unknown.** A later Linux run of the same case reports a
 startup `InternalError` before authority opening. The fixture now retains the last
-readiness request, attempt and request counts without changing its retry budget.
+readiness request, attempt and request counts, and prints them when attempts run
+out, without changing its retry budget.
 Use that evidence to reproduce the refusal before a fix; preserve the existing
 assertions and deadlines. The labelled failure does not establish the historical
 timeout's cause. See the [investigation and qualification
