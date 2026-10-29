@@ -1487,6 +1487,11 @@ implementation or production evidence.
   stay private. Run `node --test scripts/cloud-cost/remote-refusal-evidence.test.mjs scripts/cloud-cost/browser-relay-evidence.test.mjs`
   for real relay sockets with controlled resets and injected faults, preserved
   accounting refusals and the child-process diagnostic boundary. These controls do not establish the historical Linux cause.
+  Genuine Linux traces now link browser request cancellations to the reset socket
+  and the relay-wide shutdown. The live-stream and API cases remain distinct;
+  an invariant-preserving repair is still open. See the
+  [current cancellation investigation](backlog/browser-reconnect.md), retained in
+  draft [PR #739](https://github.com/waitron-io/waitron-cloud/pull/739).
   The temporary observation workflow is removed. Retain the next instrumented
   refusal before repairing browser behavior; all existing checks and deadlines remain.
   The reporter preserves the original refusal when a diagnostic property cannot
