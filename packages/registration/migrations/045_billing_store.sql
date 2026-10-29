@@ -41,6 +41,9 @@ CREATE TABLE billing_events (
  CHECK((source='internal' AND provider IS NULL AND provider_account_id IS NULL) OR
   (source='provider' AND provider IS NOT NULL AND provider_account_id IS NOT NULL))
 );
+CREATE UNIQUE INDEX billing_internal_event_identity ON billing_events(organisation_id,legal_business_id,event_key) WHERE source='internal';
+CREATE UNIQUE INDEX billing_provider_event_identity ON billing_events(provider,provider_account_id,event_key) WHERE source='provider';
+
 CREATE TABLE billing_payment_methods (
  organisation_id uuid NOT NULL,
  legal_business_id uuid NOT NULL,

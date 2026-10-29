@@ -290,3 +290,5 @@ export {AuthenticatorFactorStore, FactorManagementError, type FactorAuthority, t
 
 export * from './billing-types.ts';
 export {BillingPriceStore,validateBillingPrice} from './billing-config.ts';
+
+export {BillingStore} from './billing-store.ts';
