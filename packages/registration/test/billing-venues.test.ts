@@ -240,3 +240,25 @@ test('venue billing validates fixed shapes dates revisions and windows before ef
   assert.deepEqual(await f.store.venue(f.scope,venueId),{...f.scope,venueId,revision:0,level:'registered',connectedFrom:null,lapsedOn:null,scheduledLevel:null,scheduledOn:null});
  }finally{await f.close();}
 });
+
+for(const boundary of ['pending','failed','other-venue','other-business','missing-period','missing-line','hosted-line','before-period','after-period','unknown-charge'] as const){
+ test(`hosted coverage refuses ${boundary} before any hosted day is written`,async()=>{
+  const f=await fixture();try{
+   const venueId=f.venues[0]!;
+   await seedVenue(f,venueId);
+   let chargeId:string=randomUUID(),on='2026-10-12';
+   switch(boundary){
+   case 'pending':case 'failed':chargeId=(await payment(f,venueId,{state:boundary})).charge;break;
+   case 'other-venue':chargeId=(await payment(f,f.venues[1]!)).charge;break;
+   case 'other-business':chargeId=(await payment(f,f.otherVenue,{scope:f.other})).charge;break;
+   case 'missing-period':chargeId=(await payment(f,venueId,{period:false})).charge;break;
+   case 'missing-line':chargeId=(await payment(f,venueId,{line:false})).charge;break;
+   case 'hosted-line':chargeId=(await payment(f,venueId,{level:'hosted'})).charge;break;
+   case 'before-period':case 'after-period':chargeId=(await payment(f,venueId)).charge;on=boundary==='before-period'?'2026-09-30':'2026-11-01';break;
+   case 'unknown-charge':break;
+   }
+   await noEffect(f,()=>f.store.execute(f.scope,event(),{type:'hosted_day',venueId,on,coveredByChargeId:chargeId}),'billing_charge_conflict');
+   assert.equal((await f.pool.query('SELECT count(*) FROM billing_hosted_days')).rows[0].count,'0');
+  }finally{await f.close();}
+ });
+}
