@@ -3139,6 +3139,16 @@ store startup and concurrent valid-cache publication keep their separate gates.
 or download failure; real storage qualification remains separate.
 See [the boundaries and remaining work](backlog/storage-cache-fixture.md#existing-storage-cache-refusal-qualification-d442).
 
+## Storage identity-server bind refusals (D456)
+
+A competing listener can take the identity server's port after its probe closes.
+Startup now returns that socket error and removes its private files instead of
+crashing before cleanup. Run
+`node --test scripts/ci-backup-storage-issuer-bind.test.mjs` to check refused and
+successful binds, later setup failure and preservation of another listener.
+Real store startup and historical failure causes remain separate; see
+[the storage investigation](backlog/storage-cache-fixture.md).
+
 ## Storage TLS material refusals (D455)
 
 Run `node --test scripts/ci-backup-storage-tls-refusals.test.mjs` to check malformed
