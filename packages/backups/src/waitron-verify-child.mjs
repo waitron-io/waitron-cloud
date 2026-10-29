@@ -29,7 +29,7 @@ const checked=await validateArtifact(validation);
 assert.deepEqual(checked.manifest.modules,request.modules);
 assert.equal(new Date(checked.manifest.createdAt).toISOString(),new Date(request.capturedAt).toISOString());
 const trading=checked.secretEntries.find(e=>e.name==='secrets/trading.env');assert(trading);
-assert.equal(parseEnvFile(Buffer.from(trading.bytes).toString()).WAITRON_TILL_NODE_ID,request.sourceNodeId);
+assert.equal(parseEnvFile(Buffer.from(trading.bytes).toString()).WAITRON_NODE_ID,request.sourceNodeId);
 assert(!checked.secretEntries.some(e=>e.name.includes('cloud-connection')||e.name.includes('cloud-staff')));
 const sideFile=join(root,'integrity.db');
 if(typeof checked.databasePath==='string')await copyFile(checked.databasePath,sideFile);

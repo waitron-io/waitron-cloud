@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import * as adapter from './waitron-adapter.mjs';
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync, realpathSync, symlinkSync, existsSync, readFileSync, chmodSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync, realpathSync, symlinkSync, existsSync, readFileSync, chmodSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createHash } from 'node:crypto';
@@ -150,4 +150,30 @@ test('malformedIssuerDomicileRefusesBeforeRuntimeImport', async t => {
       taxpayer: { ...args.initial.taxpayer, taxpayerDomicile } } }), /Invalid cloud cost replay runtime/);
     assert.equal(existsSync(args.marker), false);
   }
+});
+
+// The adapter owns this identity file; the runtime fixture supplies only the database boundary.
+test('replayWritesOnlyTheCurrentNodeIdentityWithPrivatePermissions', async t => {
+  const args = runtimeFixture(t);
+  const runtime = `
+export const tenants={},locations={},nodes={},invoiceSeries={};
+export async function applyMigrations(){}
+export async function openVenueDatabase(){return {venue:{},async close(){}}}
+export async function withTransaction(_db,action){
+ return action({insert:table=>({values:()=>({async returning(){
+  return [{id:table===locations?'location-a':table===nodes?'node-a':table===invoiceSeries?'series-a':'tenant-a'}];
+ }})})});
+}
+export async function registerSif(){}
+export class VerifactuBackend{}
+`;
+  writeFileSync(join(args.codeRoot, 'runtime.mjs'), runtime);
+  writeFileSync(join(args.codeRoot, 'runtime-manifest.json'), JSON.stringify({schemaVersion: 1,
+    revision: 'fbadd15785464e59747e697c11048bfbc6e4938f', sha256: createHash('sha256').update(runtime).digest('hex')}));
+  const replay = await adapter.openReplay(args);
+  try {
+    const identity = join(args.stateRoot, 'trading.env');
+    assert.equal(readFileSync(identity, 'utf8'), 'WAITRON_NODE_ID=node-a\n');
+    assert.equal(statSync(identity).mode & 0o777, 0o600);
+  } finally { await replay.close(); }
 });
