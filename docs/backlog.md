@@ -8,6 +8,14 @@ bytes stay outside the final path, readers see complete pinned bytes and cleanup
 preserves the other publisher. Real extraction and concurrent store startup remain
 separate gates; see [the open investigation](backlog/storage-cache-fixture.md).
 
+## Concurrent storage extraction and failed-startup cleanup (D454)
+
+Run `node --test scripts/ci-backup-storage-concurrent-extraction.test.mjs` to
+check two fixtures extracting the same read-only archive into separate roots.
+Certificate-read refusals finish in both orders; each cleanup must preserve the
+other extracted tree, shared archive and unrelated files. Real store startup and
+historical failure causes remain open; see [the investigation](backlog/storage-cache-fixture.md).
+
 ## Storage archive publication refusals (D449)
 
 Run `node --test scripts/ci-backup-storage-publication.test.mjs` to check partial
@@ -3103,14 +3111,6 @@ and output tail before the test summary. Failed-build cleanup still attempts its
 unique image tag, with a one-second limit, and always removes temporary files.
 Reproduce the image build when local Docker is available; passing CI does not explain
 the earlier timeout. Keep every verifier assertion and the existing build and job limits.
-
-## Concurrent storage extraction and failed-startup cleanup (D454)
-
-Run `node --test scripts/ci-backup-storage-concurrent-extraction.test.mjs` to
-check two fixtures extracting the same read-only archive into separate roots.
-Certificate-read refusals finish in both orders; each cleanup must preserve the
-other extracted tree, shared archive and unrelated files. Real store startup and
-historical failure causes remain open; see [the investigation](backlog/storage-cache-fixture.md).
 
 ## Storage extraction and certificate setup refusals (D452)
 
