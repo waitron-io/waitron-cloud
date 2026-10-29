@@ -681,6 +681,12 @@ GitHub CI qualifies the PostgreSQL journeys while local Docker is unavailable.
 
 ## Translate all: approved design, implementation still open
 
+Run `node --test packages/translation/test/batch-runner-unbilled-failures.test.ts`
+to check that lease-renewal failures after HTTP refusals and uncounted malformed
+replies escape in both passes, without another provider call or invented usage.
+Real database recovery, provider activation and wider release qualification remain
+open in the [translation backlog](backlog/translation.md).
+
 Run `node --test packages/translation/test/batch-runner-admission-ordering.test.ts`
 to check that each provider pass waits for its spending-cap answer. Delayed
 refusals, failures and cancellation prevent another call and preserve earlier
