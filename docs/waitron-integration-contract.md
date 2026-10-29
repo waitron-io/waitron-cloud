@@ -1641,6 +1641,14 @@ with its five requested additions below. Source inspection pins: Cloud
 interfaces, not completed billing adapters. The [Slice J plan](superpowers/plans/2026-10-29-cloud-billing.md#slice-j-the-boxs-billing-view)
 owns implementation and qualification.
 
+The [fixed synthetic signing vector](../packages/registration/test/billing-display-vector.json)
+and [signing checks](../packages/registration/test/billing-display-proof.test.ts)
+give both implementations the same request bytes. Use the five complete replies
+below for success and partial unavailability, and the error table for refusals.
+Waitron A1185's client qualification remains pending; record its actual source
+pin and results here when supplied. Cloud provider checks alone establish no
+consumer result.
+
 ### Purpose and authority
 
 Your Cloud services screen shows billing; it never grants or withdraws local
