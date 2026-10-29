@@ -681,6 +681,12 @@ GitHub CI qualifies the PostgreSQL journeys while local Docker is unavailable.
 
 ## Translate all: approved design, implementation still open
 
+Run `node --test packages/translation/test/batch-runner-admission-ordering.test.ts`
+to check that each provider pass waits for its spending-cap answer. Delayed
+refusals, failures and cancellation prevent another call and preserve earlier
+billed usage and first-pass names where applicable. Production activation and
+wider runtime qualification remain open in the [translation backlog](backlog/translation.md).
+
 Run `node --test packages/translation/test/batch-runner-retry-ordering.test.ts`
 to check that each pass waits for its retry pause to finish before admitting
 another call. Delayed cancellation and wait failures preserve billed usage and
