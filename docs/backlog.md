@@ -681,6 +681,11 @@ GitHub CI qualifies the PostgreSQL journeys while local Docker is unavailable.
 
 ## Translate all: approved design, implementation still open
 
+Run `node --test packages/translation/test/batch-runner-callback-ordering.test.ts`
+to check that delayed spending and lease-renewal callbacks finish before a batch
+continues or returns cancellation, in either pass. Real database recovery and
+release qualification remain separate gates in the linked translation backlog.
+
 Run `node --test packages/translation/test/batch-runner-callback-failures.test.ts`
 to check accounting and lease-renewal failures after valid, unusable and incomplete
 billed replies in both passes. Local HTTP checks retain each original error and
