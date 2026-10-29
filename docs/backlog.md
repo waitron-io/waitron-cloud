@@ -1,5 +1,13 @@
 # Waitron Cloud backlog
 
+## Concurrent storage archive publication (D450)
+
+Run `node --test scripts/ci-backup-storage-concurrent-publication.test.mjs` to
+check two native publishers and a cache reader in both completion orders. Partial
+bytes stay outside the final path, readers see complete pinned bytes and cleanup
+preserves the other publisher. Real extraction and concurrent store startup remain
+separate gates; see [the open investigation](backlog/storage-cache-fixture.md).
+
 ## Storage archive publication refusals (D449)
 
 Run `node --test scripts/ci-backup-storage-publication.test.mjs` to check partial
