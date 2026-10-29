@@ -684,9 +684,10 @@ GitHub CI qualifies the PostgreSQL journeys while local Docker is unavailable.
 Run `node --test packages/translation/test/openai-client-concurrency.test.ts`
 to check that an aborted, oversized, truncated or refused HTTP response leaves a
 simultaneous request through the same client usable in either completion order.
-The checks retain the healthy reply's text and usage and require failed
-connections to close. Real provider and release qualification remain separate
-gates in the linked translation backlog.
+The checks overlap successful body readers and retain the healthy reply's text
+and usage. Oversized and refused responses must close their unfinished
+connections. Real provider and release qualification remain separate gates in
+the linked translation backlog.
 
 Run `node --test packages/translation/test/batch-runner-callback-ordering.test.ts`
 to check that delayed spending and lease-renewal callbacks finish before a batch
