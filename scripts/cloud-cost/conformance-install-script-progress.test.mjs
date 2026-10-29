@@ -41,6 +41,16 @@ test('unrecognised script output cannot replace a recognised milestone or echo o
   assert.equal(JSON.stringify(o.snapshot()).includes('private'),false);
 });
 
+test('invalid and unsupported native download targets never become milestones',()=>{
+  for(const line of ['gyp http GET ftp://private.invalid/v26.11.1/node-v26.11.1-headers.tar.gz',
+    'gyp http GET not-a-url/node-v26.11.1-headers.tar.gz',
+    'gyp http GET https://private.invalid/unrecognised.tar.gz',
+    'gyp http 999 https://private.invalid/v26.11.1/node-v26.11.1-headers.tar.gz']){
+    const o=observer();lifecycle(o,line);
+    assert.deepEqual(o.snapshot().activeScripts,[{packageId:'cpu-features@0.0.10',stage:'install'}]);
+  }
+});
+
 test('native progress is retained on refusal and removed on successful completion',()=>{
   for(const exitCode of [0,7]){
     const o=observer();lifecycle(o,'gyp http 503 https://private.invalid/v26.11.1/node-v26.11.1-headers.tar.gz');
