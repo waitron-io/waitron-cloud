@@ -95,10 +95,6 @@ fixtures; the same unchanged scan bounds, heap classifications and line-boundary
 checks pass once input finishes first. Normal and paused-parent cases remain in
 `packages/backups/test/verify-process-scanning.test.ts`. The historical CI refusal
 has no child pipe timings, so its precise ordering remains unproved.
-D469's repair remains unmerged in [PR #717](https://github.com/waitron-io/waitron-cloud/pull/717):
-its full-suite replay setup received HTTP 500 while pulling the pinned Mailpit
-image, before replay tests started. The registry cause is unknown; retain the
-current pin and qualification gate.
 **Open: process-verifier CPU refusal timing.** A local 205-case backup run on
 21 October passed 204 cases but the one-second CPU-limit case returned
 `backup.verifier_timeout` at its unchanged five-second wall deadline instead of
