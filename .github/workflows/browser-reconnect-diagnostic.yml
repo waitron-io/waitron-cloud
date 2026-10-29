@@ -15,7 +15,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        group: [buffered, buffered-one-cpu]
+        group: [compact, compact-one-cpu]
     steps:
       - uses: actions/checkout@v5
         with:
@@ -48,7 +48,7 @@ jobs:
           mkdir -p diagnostics
           node --test scripts/cloud-cost/diagnostics/instrument.test.mjs
           node scripts/cloud-cost/diagnostics/instrument.mjs
-          if [ '${{ matrix.group }}' = 'buffered-one-cpu' ]; then
+          if [ '${{ matrix.group }}' = 'compact-one-cpu' ]; then
             python3 - <<'PYTHON'
           from pathlib import Path
           import os
@@ -69,7 +69,7 @@ jobs:
           const fixture = await prepareConformance([file]);
           const observations = [];
           try {
-            for (let index = 1; index <= 6; index++) {
+            for (let index = 1; index <= 24; index++) {
               const result = await runTests(['scripts/cloud-cost/fixtures/' + file], {
                 env: {...process.env, ...fixture.env}, stdio: 'pipe',
                 pattern: '^pinnedDashboardBrowserLoadsAssetsAuthenticatesReconnectsAndSignsOut_none$',

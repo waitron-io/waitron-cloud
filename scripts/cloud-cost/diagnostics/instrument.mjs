@@ -14,7 +14,7 @@ const traceEvents = [];
 const trace = value => { if (traceEvents.length < 10000) traceEvents.push({ms: Math.round(performance.now()), ...value}); };
 process.once('exit', () => { try { appendTrace('/tmp/cost-browser-trace.jsonl', traceEvents.map(value => JSON.stringify(value)).join('\\n') + '\\n'); } catch {} });
 `;
-export function instrumentRemote(source, {buffered = false} = {}) {
+export function instrumentRemote(source, {buffered = false, compact = false} = {}) {
   source = (buffered ? bufferedReporter : reporter) + source;
   source = replace(source, 'const poison = reason => {', "const poison = reason => { trace({event:'poison',reason});");
   source = replace(source, "const upstream = connect({", "const connection = connections; trace({event:'admit',connection});\n    const upstream = connect({");
@@ -23,16 +23,16 @@ export function instrumentRemote(source, {buffered = false} = {}) {
       const state = () => ({connection, side, read:socket.bytesRead, written:socket.bytesWritten,
         readableEnded:socket.readableEnded, writableFinished:socket.writableFinished,
         readableLength:socket.readableLength, writableLength:socket.writableLength});
-      socket.on('end', () => trace({event:'end',...state()}));
+      ${compact ? '' : `socket.on('end', () => trace({event:'end',...state()}));
       socket.on('finish', () => trace({event:'finish',...state()}));
-      socket.on('data', bytes => trace({event:'data',length:bytes.length,...state()}));`);
+      socket.on('data', bytes => trace({event:'data',length:bytes.length,...state()}));`}`);
   source = replace(source, "poison('socket-' + side + '-' + kind);", "trace({event:'error',code:kind,...state()}); poison('socket-' + side + '-' + kind);");
   source = replace(source, "socket.once('close', () => {", "socket.once('close', () => { trace({event:'close',...state()});");
   return source;
 }
-export function instrumentBrowser(source, {buffered = false} = {}) {
+export function instrumentBrowser(source, {buffered = false, compact = false} = {}) {
   source = (buffered ? bufferedReporter : reporter) + source;
-  source = replace(source, "const key = keyFor(req) + ':' + event;", "const key = keyFor(req) + ':' + event; trace({event:'request',key,phase});");
+  if (!compact) source = replace(source, "const key = keyFor(req) + ':' + event;", "const key = keyFor(req) + ':' + event; trace({event:'request',key,phase});");
   source = replace(source, "phase = 'reconnect';", "phase = 'reconnect'; trace({event:'phase',phase});");
   source = replace(source, "const error = Error('Invalid cloud cost browser journey');", "trace({event:'refusal',phase,step,relay:meter?.failure()}); const error = Error('Invalid cloud cost browser journey');");
   return source;
@@ -52,5 +52,5 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     ['scripts/cloud-cost/remote.mjs', instrumentRemote],
     ['scripts/cloud-cost/browser.mjs', instrumentBrowser],
     ['scripts/cloud-cost/fixtures/remote-browser-conformance.test.mjs', instrumentFixture],
-  ]) writeFileSync(path, instrument(readFileSync(path, 'utf8'), {buffered:true}));
+  ]) writeFileSync(path, instrument(readFileSync(path, 'utf8'), {buffered:true, compact:true}));
 }
