@@ -47,13 +47,6 @@ the scheduling cadence, and error reporting waits for every active claim. A fail
 error report stops the loop. Production scheduling and real database failures
 remain separate qualification gates.
 
-## Verifier diagnostic fixture input ordering (D469)
-
-Run `node --test packages/backups/test/verify-process-scanning.test.ts` to check
-normal and paused-parent delivery after the diagnostic children consume input.
-Existing scan bounds, heap classifications and line-boundary checks remain.
-Historical CI pipe timing is still unproved; see [the verifier limits](backlog/data-lifecycle.md).
-
 ## How to keep this file honest
 
 - Delete finished entries after checking main, the named pull requests and the code.
@@ -3128,6 +3121,13 @@ implementation or production evidence.
   policies remain open. See [the complete requirements and deliberate limits](backlog/data-lifecycle.md),
   including unresolved verifier failures and capacity qualification.
 
+
+## Verifier diagnostic fixture input ordering (D469)
+
+Run `node --test packages/backups/test/verify-process-scanning.test.ts` to check
+normal and paused-parent delivery after the diagnostic children consume input.
+Existing scan bounds, heap classifications and line-boundary checks remain.
+Historical CI pipe timing is still unproved; see [the verifier limits](backlog/data-lifecycle.md).
 
 ## Backup catalogue replies after account and venue changes (D396)
 
