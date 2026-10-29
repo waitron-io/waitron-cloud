@@ -101,7 +101,7 @@ async function startBackupStorageAttempt(options) {
   if (!/^\d+[smh]$/.test(tokenDuration))
     throw Error("Invalid local storage token duration");
   const root = await mkdtemp(join(tmpdir(), "cloud-backup-storage-"));
-  let oidc, child, log, adminClient, allocatedPorts;
+  let oidc, child, log, adminClient, allocatedPorts, readiness;
   const managed = new Map();
   const portReservations = [];
   async function releasePorts() {
@@ -357,6 +357,13 @@ async function startBackupStorageAttempt(options) {
     });
     let ready = false;
     for (let n = 0; n < 120; n++) {
+      // Closed labels and counters identify the final request without retaining
+      // credentials, SDK input or raw responses across readiness retries.
+      readiness = {
+        attempt: n + 1, request: "create-bucket",
+        createRequests: (readiness?.createRequests ?? 0) + 1,
+        headRequests: readiness?.headRequests ?? 0,
+      };
       try {
         try {
           await adminClient.send(
@@ -367,6 +374,8 @@ async function startBackupStorageAttempt(options) {
           if (error.name !== "BucketAlreadyOwnedByYou") throw error;
           // Creation may commit after its reply times out. Verify the owned
           // bucket is accessible before treating that retry as readiness.
+          readiness.request = "head-bucket";
+          readiness.headRequests++;
           await adminClient.send(
             new HeadBucketCommand({ Bucket: "readiness-probe" }),
             { abortSignal: AbortSignal.timeout(1000) },
@@ -561,7 +570,7 @@ async function startBackupStorageAttempt(options) {
         socketOwners = { source: "unavailable", reason: diagnosticError.code ?? "exit_" + diagnosticError.status };
       }
       // Observe listeners before owned-child cleanup. Never stop a competing owner.
-      error.storageStartup = { ports: allocatedPorts, socketOwners };
+      error.storageStartup = { ports: allocatedPorts, socketOwners, ...(readiness ? { readiness } : {}) };
     }
     await stop();
     throw error;
