@@ -3281,15 +3281,16 @@ the controlled launcher checks, including timeout termination, retry exhaustion,
 Mailpit acquisition, command exit status and cleanup. These checks qualify local
 failure handling; they do not prove Docker Hub availability or explain its outage.
 
-The launcher also retries the exact `502 Bad Gateway` image response recorded
-before any remote-conformance case in [D162's cost run
-40039426881](https://github.com/waitron-io/waitron-cloud/actions/runs/40039426881/job/120707064606).
-Both pinned images use the same existing three-attempt, 120-second acquisition
-limits. Controlled launcher checks cover recovery, exhausted gateway responses
-and immediate refusal of HTTP 401, 403, 404 and 429. Container creation, image
-pins, cancellation and cleanup are unchanged. This handles the observed response;
-the cause of Docker Hub's outage remains unknown. Real Docker qualification
-continues in CI while local Docker is unavailable.
+The launcher also retries registry HTTP 5xx responses, including the HTTP 500
+failures before package tests in [this merge run](https://github.com/waitron-io/waitron-cloud/actions/runs/40856632619).
+Each failed HTTP attempt logs its status and attempt number. Both pinned images
+keep the same three-attempt, 120-second acquisition limits. Controlled launcher
+checks cover recovery, exhausted server responses, both retry-wait deadline
+boundaries and immediate refusal of HTTP 401, 403, 404 and 429. Container creation,
+image pins, cancellation and cleanup retain their existing behaviour. These
+bounded retries handle registry server failures; the cause of Docker Hub's outage
+remains unknown. Real Docker qualification continues in CI while local Docker is
+unavailable.
 
 The controlled checks also cover both deadline boundaries around retry waits,
 a pull client that ignores graceful termination, and every recognised connection

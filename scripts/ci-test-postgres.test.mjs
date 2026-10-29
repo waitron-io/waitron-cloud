@@ -219,6 +219,59 @@ for (const status of ['401 Unauthorized', '403 Forbidden', '404 Not Found', '429
   });
 }
 
+// Restricting retries to 502 must lose recovery from the other server responses.
+for (const status of ['500 Internal Server Error', '501 Not Implemented', '503 Service Unavailable', '504 Gateway Timeout', '599 Unknown']) {
+  for (const image of [postgres, mailpit]) {
+    test(`launcher recovers from registry ${status} for ${image} within acquisition`, async t => {
+      const result = await launch(t, {cached: [], failureImage: image,
+        failures: ['received unexpected HTTP status: ' + status]});
+      assert.equal(result.code, 0, result.output);
+      assert.equal(result.calls.filter(call => call.command === 'pull' && call.image === image).length, 2);
+      assert.ok(result.calls.findIndex(call => call.command === 'run') > result.calls.findLastIndex(call => call.command === 'pull'));
+      assert.equal(result.calls.find(call => call.command === 'pnpm')?.database, true);
+      const created = result.calls.filter(call => call.command === 'run').map(call => call.name);
+      assert.deepEqual(result.calls.filter(call => call.command === 'rm').map(call => call.name), created.toReversed());
+      assert.match(result.output, new RegExp(`HTTP ${status.slice(0, 3)} \\(1/3\\)`));
+    });
+  }
+}
+
+// Losing the attempt bound must reach success and start containers after these failures.
+for (const image of [postgres, mailpit]) {
+  test(`registry 500 exhaustion for ${image} stops after three logged attempts`, async t => {
+    const result = await launch(t, {cached: [], failureImage: image,
+      failures: Array(3).fill('received unexpected HTTP status: 500 Internal Server Error')});
+    assert.equal(result.code, 1, result.output);
+    assert.equal(result.calls.filter(call => call.command === 'pull' && call.image === image).length, 3);
+    assert.equal(result.calls.some(call => ['run', 'pnpm', 'rm'].includes(call.command)), false);
+    assert.deepEqual([...result.output.matchAll(/HTTP 500 \((\d)\/3\)/g)].map(match => match[1]), ['1', '2', '3']);
+  });
+}
+
+for (const status of ['499 Client Closed Request', '600 Invalid', '5000 Invalid']) {
+  test(`launcher refuses non-5xx registry status ${status} without retrying`, async t => {
+    const result = await launch(t, {cached: [postgres], failureImage: mailpit,
+      failures: ['received unexpected HTTP status: ' + status]});
+    assert.equal(result.code, 1);
+    assert.equal(result.calls.filter(call => call.command === 'pull').length, 1);
+    assert.equal(result.calls.some(call => ['run', 'pnpm', 'rm'].includes(call.command)), false);
+    assert.doesNotMatch(result.output, /retrying/);
+  });
+}
+
+for (const budgetPhase of ['before', 'after']) {
+  test(`registry 500 retains the image deadline ${budgetPhase} the retry wait`, async t => {
+    const result = await launch(t, {cached: [mailpit], budgetPhase,
+      failures: ['received unexpected HTTP status: 500 Internal Server Error']});
+    assert.equal(result.code, 1);
+    assert.equal(result.invocations.filter(call => call.args[0] === 'pull').length, 1);
+    assert.equal(result.calls.some(call => ['run', 'pnpm', 'rm'].includes(call.command)), false);
+    if (budgetPhase === 'before') assert.doesNotMatch(result.output, /retrying/);
+    else assert.match(result.output, /retrying/);
+    assert.match(result.output, /HTTP 500 \(1\/3\)/);
+  });
+}
+
 for (const image of [postgres, mailpit]) {
   test(`launcher recovers from the recorded network-unreachable response for ${image} before creating containers`, async t => {
     const result = await launch(t, {cached: [], failureImage: image, failures: [unreachableFailure]});
