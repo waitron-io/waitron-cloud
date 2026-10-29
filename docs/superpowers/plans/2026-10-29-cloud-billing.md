@@ -1121,3 +1121,394 @@ Production prices and allowances, lawyer retention fields/durations/access polic
 provider qualification and webhook acceptance policy, worker transitions/retry schedules,
 invoice/refund treatment and the remaining D–J contracts stay with their named slices
 or advisers. None blocks synthetic C storage tests; none is settled or enabled by C.
+
+## Slice J: the box's billing view
+
+Waitron A1185 needs billing facts it can show without making a sale depend on
+Cloud. Add one authenticated country read, separate from service configuration.
+The design is approved (§5); the wire proposal below still needs agreement.
+Execute inline after the separate docs-only plan PR lands and its fresh-context
+review is resolved (RUNNER §5.2). This section overrides the generic header's
+recommended delegation for J. It does not authorise implementation in the plan
+author's session.
+
+### Scope and execution gates
+
+- C is installed at inspected Cloud `3d3c3def00bf27d60f2d97f5c23cd4acc1aebf7d`.
+  Read `billing-{types,config,store,venues,payments}.ts` again at build time.
+  Reuse its country pool, ownership and accepted payment facts. No global lookup,
+  provider call, trial start, billing write, worker transition or enforcement.
+- First finish/review/land this plan as its own docs-only PR. The driver then
+  proposes the [exact contract draft](../specs/2026-10-29-billing-display-contract-proposal.md)
+  to Waitron Lane B for A1185 and records the accepted text's
+  digest, both source pins and agreement. Only then land that section in
+  `docs/waitron-integration-contract.md` and begin J's code. This author writes
+  neither campaign questions nor acceptance. Plan publication is not agreement.
+  The draft is versioned here so the plan has no dependency on local campaign files.
+- Prices and VAT come only from published country configuration; no defaults,
+  production seeds or allowance sizes. J does not enable production collection,
+  billing workers, hosting, fiscal operations or D79's replacement enforcement.
+  No migration is expected: 045 already holds the required exact dates, lines
+  and accepted states. Missing reconciliation facts use the explicit unavailable
+  result; a demand to store new accounting meaning reopens design/coordination.
+- Docker is down until 3 November. Run pure tests and types natively. For each
+  database task, sign off and push its **test-only** commit through normal hooks;
+  observe the intended named RED in actual registration/account-http CI before
+  writing implementation. Use runtime imports/export assertions so missing new
+  modules fail in the test, not at typecheck. A missing DB, setup error, timeout,
+  skipped test or an unrelated red job is not behavioral RED. Require the named
+  GREEN on the implementation SHA. If CI cannot run it, stop at that gate.
+- Do not run Docker, `pnpm test` or `scripts/test-postgres.mjs` locally while that
+  restriction holds. Commands marked **CI** below execute inside the existing
+  package jobs' disposable PostgreSQL environment. Do not replace real DB tests
+  with mocks, alter CI selection to escape checks or duplicate whole CI locally.
+- Preserve all original assertions. Add tests in J-specific files rather than
+  rewriting installed machine/configuration or paid-history tests. No edits to
+  the fiscal registry, shipped SQL, migration manifest, package manifests,
+  lockfiles, `.github/workflows/*` or `scripts/ci-*`.
+
+### Coordination and file map
+
+Put pure rules/types in new registration `src/billing-display.ts`, transactional
+machine reads in new `src/billing-display-machine.ts`, and the HTTP adapter and
+explicit country/calendar options in new account-http `src/billing-display.ts`.
+Use existing package exports, with additive lines only. Mount the exact path in
+`packages/account-http/src/app.ts` before its generic installation dispatcher.
+Leave `installations.ts`, existing configuration bytes and service arrays alone.
+
+`app.ts` is a shared assembly point: G/D466's parked removal plan Task 3 owns
+its fiscal options/error/dispatch deletion; G/D112's approved but unbuilt P3
+Task 15a names account-http `src/{app,server,server-cli,config,index}.ts` and
+new `country-app.ts`. Registration `src/index.ts` is also a prospective shared
+export point for G/D462–D463; D466 eventually removes fiscal exports/consumers.
+At inspection, `git diff --name-only main...refactor/remove-fiscal-registry`
+shows only its Task 1 tests/backlog, not an implemented HTTP deletion. The
+parked D79 branch currently changes its test-cloud harness, not these adapters.
+These are planned overlaps, not evidence of current text conflicts.
+
+Use a J-only adapter plus one import/option/dispatch addition; make no edits to
+existing account-http `config.ts`/`index.ts` or portal `app.ts`. Before either
+owner touches shared `app.ts` or registration `index.ts`, agree the exact hunks
+and landing order with D466/P3/D462–D463, or wait for their landing and rebase.
+If P3 lands first, mount only in its country app, never the global app, and
+update J3's path/tests before starting. Recheck actual dirty files and branch
+diffs rather than declaring whole files free. Lane D/D468 owns only
+`packages/registration/test/worker-loop-timing.test.ts` and its backlog paragraph;
+neither belongs to J. Add J-specific tests listed below. Update only J's own
+billing backlog paragraph at finish and preserve every other lane's bytes.
+
+### Proposed interface and review focus
+
+Use POST `/api/installations/billing-display`, signed action `billing-display`,
+exact signed body `{"version":1}` and the existing machine envelope/control
+lease. No request IDs select organisation, business or venue. Derive all three
+through the verified installation's current stored venue in the country pool.
+Return a separate `BillingDisplayV1`; never add billing to `InstallationView`.
+
+The proposed response has `version:1`, `installationId`, `venueId`,
+`countryCode:'ES'`, `calendarTimeZone`, canonical UTC `asOf`, `billing`, `prices`
+and `accountUrl`. `billing` is either `status:'unavailable',reason:'state_not_ready'`
+or `status:'ready',level,state,period`, with the design's three levels/four states.
+`period` is null or `{kind:'trial'|'paid',level:'connected'|'hosted',from,until,
+coversAsOf}`. All interval ends are the first excluded country civil day.
+`prices` is either unavailable/not_published or the effective published revision,
+effective day, EUR, taxExclusive true, VAT basis points, free registered 0 cents,
+both configured monthly-cent values and hostedDayDivisor 30. Exact rules and
+refusals are in the proposal; copy its agreed edition into the shared contract.
+
+1. An uninitialised owned store is registered/active with no period and no writes;
+   missing identities/schema/DB must never become that default (J1/J2).
+2. A refunded first success stays in trial-eligibility history. Current coverage
+   requires any remaining accepted success on the same charge; raw observations
+   and pending retries cannot manufacture it (J1/J2).
+3. Another venue's paid line supplies no coverage. Hosted dates are exact allocated
+   rows, including omitted zero-cent lines; min/max, windows and connected-credit
+   references never fill holes or establish hosted payment (J1/J2).
+4. Missing/future prices and unknown billing state are separate partial results.
+   Free joining days/hosted arrears have no invented paid end, and a delayed G
+   transition or ambiguous recovery is unavailable, not a guessed lapse (J1).
+5. Revocation/replacement, queued reads, forged body IDs, stale/redirected responses
+   and unsafe URLs cannot cross the installation/account boundary (J2/J3/J4).
+
+### Task J1: Define truthful display periods and state
+
+**Files:**
+- Create: `packages/registration/src/billing-display.ts`.
+- Modify: `packages/registration/src/index.ts` (coordinated export only).
+- Test: `packages/registration/test/billing-display.test.ts`.
+
+**Interfaces:**
+- Consumes C's `VenueBillingView`, `TrialView`, `FrozenCharge`, `PaymentState`,
+  `BillingPriceVersion`, B's `CivilDate`/`addDays` and the agreed wire rules.
+- Produces `BillingDisplayV1`, `BillingDisplayFacts` and
+  `projectBillingDisplay(facts:BillingDisplayFacts,today:CivilDate):BillingDisplayV1['billing']`.
+  Facts contain the scoped venue, trials and charges; each charge contains its
+  frozen charge, accepted attempts as `{state:PaymentState;succeededAt:string|null}`
+  and exact `{venueId:string;on:CivilDate}[]` allocated hosted days. No raw
+  observations or provider-method values. J2 constructs these facts.
+  Property names are `venue`, `trials`, `charges`; each charges entry has
+  `charge:FrozenCharge`, `attempts` and `hostedDays`, with the shapes just given.
+  Also export `billingDisplayDay(asOf:string,timeZone:string):CivilDate` for
+  deterministic country-midnight/DST tests; reject invalid instants/zones.
+
+- [ ] **Step 1: Write the failing behavioral cases.** Assert `registered/active/null`
+  for a known unstored venue; matching connected/hosted trials use stored exact
+  ends, including extension, and `2026-10-31` to `2026-11-30` excludes 30 November.
+  A still-active expired trial gives unavailable; a stored effective lapse gives
+  lapsed. Paid connected `[2026-11-01,2026-12-01)` contains 30 November but not
+  1 December. Prepaid future coverage is not selected early. Pending alone creates
+  no paid period/failure; accepted failure/refund signals payment_failing without
+  creating coverage. A pending retry does not clear that signal; any accepted
+  success on the same charge restores coverage. Test a
+  refunded first attempt followed by a different successful attempt, and raw
+  failed/refunded observations that never changed accepted success.
+  For hosted allocations on 1 and 3 November, reading on the 2nd returns only
+  `[01,02)` with coversAsOf false, never `[01,04)`; on the 3rd return `[03,04)`
+  true. Adjacent settled days may coalesce; another level/venue or unpaid day
+  cannot bridge them. Include zero-cent omitted hosted lines, connected credit
+  whose source was later refunded, and a paid business charge without this
+  venue's line/allocation. An unresolved relevant failed/refunded charge with no
+  remaining accepted success, alongside a settled different charge whose
+  renewalDate is the same or later, gives unavailable. Pin same-date charges,
+  same-charge recovery, earlier unrelated successes, venue scoping, and trial or
+  lapse precedence. This is a conservative unknown, not a claim that recovery
+  occurred. Pin lapsed historical-period selection and all null cases from the
+  contract. Keep existing C history assertions unchanged.
+  Name the omission targets `billing display requires remaining accepted success`
+  and `billing display preserves exact hosted day holes`.
+- [ ] **Step 2: Observe local RED.** Run
+  `node --test packages/registration/test/billing-display.test.ts`.
+  Expect the missing projector assertion, then each named rule to discriminate
+  its incorrect result; record actual failure, not just an import error.
+- [ ] **Step 3: Implement the interface and agreed precedence only.** Use accepted
+  charge settlement and exact days; do not change C's historical semantics or
+  infer transitions, future payments, service permissions or debt settlement.
+- [ ] **Step 4: Observe local GREEN.** Repeat J1's command and
+  `node --test packages/registration/test/billing-calendar.test.ts packages/registration/test/billing-trials.test.ts packages/registration/test/billing-charges.test.ts packages/registration/test/billing-config.test.ts`.
+  Require nonzero counts, zero failures/unexpected skips, then `pnpm typecheck`.
+- [ ] **Step 5: Commit with sign-off.**
+  `git commit -s -m "feat: project venue billing display without inventing coverage"`.
+
+### Task J2: Read country billing through the existing installation proof
+
+**Files:**
+- Create: `packages/registration/src/billing-display-machine.ts`.
+- Modify: `packages/registration/src/installation-proof.ts` (add the action to
+  both the `MachineAction` union and its runtime allowlist),
+  `packages/registration/src/index.ts`
+  (coordinated exports only).
+- Test: `packages/registration/test/billing-display-machine.test.ts`,
+  `packages/registration/test/billing-display-proof.test.ts` (pure),
+  `packages/registration/test/billing-display-vector.json` (synthetic fixed vector).
+
+**Interfaces:**
+- Produces `BillingDisplayMachine(pool:Pool,issuer:LeaseIssuer,origin:string,
+  options:{countryCode:'ES';calendarTimeZone:string},trusted?:ReadonlyMap<string,string>)`;
+  `authenticate(envelope:unknown):Promise<MachineClaims>` for rate accounting and
+  `read(envelope:unknown):Promise<BillingDisplayV1>` for final authorisation/read.
+- Consumes `InstallationStore.authenticate`, `readMachineClaims`, `verifyMachine`,
+  `verifyLease`, `createLeaseTrust`, `transaction`, `readBillingPrice` and J1.
+  `authenticate` alone grants no billing read. Derive today from the trusted
+  configured calendar and one server instant captured after lock waits.
+- Produces `BillingDisplayError extends Error` with readonly code
+  `'invalid_request'|'unsupported_billing_version'|'temporarily_unavailable'`;
+  retain `InstallationError` for proof/revocation failures. Missing effective
+  prices become a component result, not a whole-read error.
+
+- [ ] **Step 1: Add pure signing and real DB RED cases.** The fixed vector must
+  preserve existing envelope bytes/domain, sign the new action/body and reject
+  one-byte changes/cross-action use. Test the country-zone date either side of
+  local midnight/DST. DB fixtures use actual C commands/tables and two pools:
+  another business in the same organisation, another organisation, installation
+  and country schema cannot read each other's facts. Reject expired/mismatched
+  leases, key/origin/environment/venue changes, revoked and superseded machines,
+  and added signed selectors. Block a read behind a parent lock, commit revocation
+  or a billing change on the other pool, release it and assert fresh refusal or
+  one complete new billing snapshot, not mixed fields. Use observed
+  `pg_stat_activity` barriers, never timing sleeps. Verify uninitialised reads
+  create no business/trial/event/operation/contact rows or updates. Missing schema
+  is a 503-bound failure. Test missing/future/effective prices and a later price
+  publication without changing frozen charges. Exercise J1's sparse/zero-line
+  allocations and refunded-first/later-success cases through actual stored facts.
+  Name the scope and queued-refusal targets `billing display derives venue business scope`
+  and `billing display rechecks revocation after waiting`. Add
+  `billing display refuses unsafe account origins` against the machine constructor
+  as well as HTTP config, so deleting its secure-origin check is observable.
+- [ ] **Step 2: Observe RED before implementation.** Locally run
+  `node --test packages/registration/test/billing-display-proof.test.ts`.
+  **CI:** `pnpm --dir packages/registration exec node --test --test-timeout=30000 test/billing-display-machine.test.ts`.
+  Sign off/push tests first; record named assertion, exact SHA and actual package
+  job. Missing action/read is expected; DB setup failure is not.
+- [ ] **Step 3: Implement one scoped transaction.** Use preliminary routing only
+  to locate a stored key, then verify. Follow C's parent order: organisation
+  SHARE, legal business NO KEY UPDATE, billing business SHARE if present; then
+  lock the stored venue and installation SHARE and recheck the derived mapping,
+  key, revocation/supersession and lease with fresh time after waits. Parent
+  locks serialize C writes even when billing children do not exist. No external
+  awaits or nested `BillingStore` transactions. Read venue/trials, venue-scoped
+  charge lines, exact consumed days and all accepted attempts in this transaction;
+  read the effective price once. Build minimal J1 facts, not `history().paid`
+  bounds or a business-wide payment summary. Validate configured country/calendar
+  and use `origin + '/account'`; return only the agreed wire fields.
+- [ ] **Step 4: Observe GREEN.** Repeat both J2 commands, plus **CI**
+  `pnpm --dir packages/registration exec node --test --test-timeout=30000 test/billing-payments.test.ts test/billing-venues.test.ts test/installations.test.ts`.
+  Require all original assertions, nonzero counts and no unexpected skips;
+  locally run J1/proof pure files and `pnpm typecheck`.
+- [ ] **Step 5: Commit with sign-off.**
+  `git commit -s -m "feat: read country billing with installation authority"`.
+
+### Task J3: Mount the bounded display adapter without changing configuration
+
+**Files:**
+- Create: `packages/account-http/src/billing-display.ts`.
+- Modify: `packages/account-http/src/app.ts` (coordinated additive route/option).
+- Test: `packages/account-http/test/billing-display.test.ts`,
+  `packages/account-http/test/billing-display-socket.test.ts`.
+
+**Interfaces:**
+- Produces `BillingDisplayOptions={countryCode:'ES';calendarTimeZone:string}` and
+  `billingDisplayResponse(c:Context,options:{machine?:BillingDisplayMachine;
+  ip:string;consume:(rules:RateRule[])=>Promise<void>}):Promise<Response>`.
+- Add `billingDisplay?:BillingDisplayOptions` to `createAccountApp` options.
+  Construct the machine only when options and existing issuer are configured;
+  otherwise this exact route returns 503. Do not add environment/deployment
+  enablement. P3's later country composition must supply the country binding.
+  No new public export, general configuration rewrite or portal route is needed.
+
+- [ ] **Step 1: Write real HTTP/socket RED cases.** Authenticated POST returns
+  the exact bound v1 shape; GET is 405; browser Origin/wrong host 403; invalid
+  body/query/media/size/time uses the agreed errors. Unknown/crossed proof or
+  lease is 401; revoked/superseded is 403; missing options/issuer/DB is 503.
+  Distinguish unsupported version from invalid signed body. Assert 200 partial
+  price/state unavailability, no secrets/cookies, no-store on success/errors,
+  response <=16,384 UTF-8 bytes and no ETag/304 behavior. Verify shared 60/IP and
+  30/installation budgets across app workers, existing general budget and
+  Retry-After. Read through a real socket, restart only the owned server, change
+  facts and repeat the operation UUID: return current facts, no stored result.
+  Original `{}` and servicesVersion 2 configuration responses/arrays stay equal
+  before/after this addition, including test-free-paid mode. Display still works
+  for registered/lapsed/unconfigured venues. Account URL is exactly trusted
+  `/account`, no selectors/token/query/fragment; unsafe origins refuse before
+  reads. Confirm `/account` exists without claiming F's controls exist.
+- [ ] **Step 2: Observe database-backed RED in actual CI.**
+  `pnpm --dir packages/account-http exec node --test --test-timeout=30000 test/billing-display.test.ts test/billing-display-socket.test.ts`.
+  Expect missing route/incorrect response assertions. Commit tests with sign-off
+  and read the actual failing account-http job before implementing the adapter.
+- [ ] **Step 3: Implement the exact-path adapter.** Reuse `readAccountBody`,
+  current host/query/security handling and machine rate scopes; map new display
+  errors inside this adapter, retaining existing installation error mapping.
+  Apply the proposal's five-second/16 KiB request bounds, eight-second/16 KiB
+  client agreement, no-store and explicit partial-result semantics. Keep the
+  endpoint independent of service/placement readiness and paid enforcement.
+- [ ] **Step 4: Observe GREEN in CI.** Repeat J3's command and
+  `pnpm --dir packages/account-http exec node --test --test-timeout=30000 test/installations.test.ts test/account-http.test.ts test/rate-limit.test.ts`.
+  Require actual test counts and unchanged assertions. Locally run J1/J2 pure
+  tests and `pnpm typecheck`; do not run the database wrapper.
+- [ ] **Step 5: Commit with sign-off.**
+  `git commit -s -m "feat: serve the installation billing display contract"`.
+
+### Task J4: Qualify guards and the exact consumer boundary
+
+**Files:**
+- Create: `scripts/billing-display-guard-probes.mjs` (native disposable-copy
+  runner, `--pure` or `--database`),
+  `scripts/billing-display-guard-probes.test.mjs` (pure harness controls),
+  `packages/account-http/test/billing-display-guards.test.ts` (CI DB wrapper).
+- Modify: `docs/waitron-integration-contract.md` (accepted vectors/consumer pins),
+  `docs/backlog.md` (J paragraph only). No Waitron edits in the Cloud checkout.
+
+**Interfaces:** The runner executes the actual named J1/J2/J3 tests in complete
+disposable candidate copies with dependencies, never edits the feature tree,
+inherits CI's disposable TEST_DATABASE_URL only in database mode, and emits
+fixed test/guard/count results without credentials. The package wrapper runs
+`billing-display-guard-probes.test.mjs`, then both `--pure` and `--database`.
+Use explicit bounded timeouts following C's omission-test pattern and set the
+wrapper test's own timeout to 240,000 ms to override CI's 30-second default.
+All five omissions and the harness controls must execute in that package job;
+the generic root glob does not discover this harness filename.
+
+- [ ] **Step 1: Write harness RED controls.** A missing/ambiguous mutation target,
+  skipped case, setup error, timeout or zero-case run must fail qualification.
+  Use a behavioral negative control that leaves a bad guard undetected and
+  requires rejection. Run `node --test scripts/billing-display-guard-probes.test.mjs`
+  and observe its specific failure before implementing the runner.
+- [ ] **Step 2: Implement native deletion probes.** For each guard, require an
+  unchanged passing baseline, remove exactly that guard, observe its named
+  assertion fail, restore the bytes and require it pass again. Pure mode omits
+  accepted-success filtering, then exact-day gap separation. Database mode omits
+  derived venue/business scoping, final revocation check after waiting,
+  then account URL validation. Exercise real DB/socket paths for those guards;
+  failures in setup/imports or textual checks earn no detection. Preserve the
+  old assertions and only delete guards in owned disposable copies. Clean only
+  recorded owned files/processes. No Docker startup in this runner.
+- [ ] **Step 3: Observe GREEN and retain receipts.** Locally:
+  `node --test scripts/billing-display-guard-probes.test.mjs` and
+  `node scripts/billing-display-guard-probes.mjs --pure`, plus J1/J2 pure files.
+  **CI:** `pnpm --dir packages/account-http exec node --test --test-timeout=240000 test/billing-display-guards.test.ts`;
+  require passing harness controls plus two pure and three database detected
+  omissions and restored controls, not a summary
+  without executed cases. CI must discover the wrapper through its existing
+  `test/*.test.ts` glob. If the relevant package shard omits it, stop readiness.
+- [ ] **Step 4: Verify the shared handoff.** Give Lane B the accepted synthetic
+  vector and success/partial/error examples. Lane B owns Waitron's client,
+  manager-protected local API and dashboard tests: exact response binding,
+  bounded redirect-refusing fetch, request-generation fencing, correct civil
+  end/VAT/daily-basis labels, unavailable clearing, safe account link and proof
+  that every billing/error state leaves sale/service behavior unchanged. Its
+  current `cloud-installation.ts` parser drops unknown fields, so configuration
+  enrichment alone cannot deliver A1185. Record real consumer pins/results when
+  supplied; until then report Cloud provider qualification only, not A1185 done.
+- [ ] **Step 5: Commit and finish through RUNNER.**
+  `git commit -s -m "test: qualify billing display guards and shared boundary"`.
+  Announce readiness for `finish-branch`; the driver runs its one Claude run-it
+  whole-branch review after initial rebase in a complete throwaway checkout with
+  dependencies, triages findings, uses normal hooks and requalifies any changed
+  head. Require every selected job final on the exact PR SHA in CI and the
+  cloud-cost workflow: inspect changes/selection, documentation/scripts, all
+  four root shards, typecheck, selected package shards including registration
+  and account-http, receipts and strict summary. Audit any justified skip/reuse;
+  a green summary alone is insufficient. Do not repeat the full external review
+  only for a rebase. Under the driver's own shared landing lock, recheck current
+  main is an ancestor of that qualified head, then land normally. Verify the
+  independent main runs name the exact merge SHA and every job is final with
+  the same applicable evidence. No live enablement follows from landing J.
+
+### Facts checked, decisions and blocking ambiguity
+
+Source inspection, not runtime qualification: C's `business()` needs a billing
+business row but `venue()` can default an owned missing venue row;
+`packages/registration/src/billing-venues.ts:27` retains refunded paid history;
+`packages/registration/src/billing-payments.ts:80`
+builds hosted history bounds from min/max; actual allocation rows remain exact.
+`packages/registration/src/billing-config.ts:34` selects effective published prices
+without defaults. Machine proof/runtime action lists are in
+`packages/registration/src/installation-proof.ts:4` and `:41`;
+`packages/registration/src/installations.ts:78` is only preliminary authentication.
+The existing HTTP dispatcher at `packages/account-http/src/app.ts:150` requires
+an earlier exact-path route.
+Recheck line numbers after rebase; the named interfaces are the durable pointers.
+
+Read-only Waitron inspection at
+`6206c1a9f4f6e8b693fac5e11a2418fd249364ed` found the actual consumers in
+`apps/server/src/{cloud-client,cloud-installation,cloud-api}.ts` and
+`apps/dashboard/src/{api/client,screens/cloud-services-screen}.ts`. The server
+uses saved registration/key/origin and manager `system.manage`; the dashboard
+shows service state/health, not billing. A1185 remains the local implementation.
+Its existing account/configuration path is not a billing decoder. No runtime
+tests or joint client qualification were performed by the plan author.
+
+Proposed engineering choices are a separate versioned read, independent price
+availability, exact half-open coverage, no stored response cache, safe existing
+account destination and unavailable results where the store cannot tell the
+truth. Before contract/build, Lane B must agree those choices. Calendar is a
+mandatory configured IANA time zone; `Europe/Madrid` is only a synthetic fixture,
+not a production billing-calendar decision. `active` describes the stored level,
+not established payment; a null period is explicit. When unresolved failed or
+refunded charges coexist with a settled different charge of the same or later
+renewal date, the display is unavailable rather than inferring settlement.
+These are conservative engineering defaults under design §5, not new payment,
+recovery or stop promises. Record them as coordination defaults, open to owner
+correction. A definite recovery/stop promise would require G's durable fact first.
+Production calendar, price sizes, legal retention and live provider/hosting
+qualification stay with their release gates. They do not block synthetic J tests
+once Lane B agrees the contract.
