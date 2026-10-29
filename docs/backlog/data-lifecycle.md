@@ -89,6 +89,12 @@ chunks. A real-child fixture delivers 40,000 stderr bytes one at a time and
 bounds the text scanned, while separate cases retain the line-start anchor,
 split phrases, case handling and carriage-return/newline boundaries. The original
 process checks, combined 64 KiB output limit and failure ordering remain.
+The scanning fixtures now consume their private input before emitting diagnostics
+and exiting. A paused parent reproduces a closed-input-pipe refusal with the old
+fixtures; the same unchanged scan bounds, heap classifications and line-boundary
+checks pass once input finishes first. Normal and paused-parent cases remain in
+`packages/backups/test/verify-process-scanning.test.ts`. The historical CI refusal
+has no child pipe timings, so its precise ordering remains unproved.
 **Open: process-verifier CPU refusal timing.** A local 205-case backup run on
 21 October passed 204 cases but the one-second CPU-limit case returned
 `backup.verifier_timeout` at its unchanged five-second wall deadline instead of
