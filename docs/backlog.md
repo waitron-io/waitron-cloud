@@ -3491,6 +3491,8 @@ setup limit stops stalled and slowly progressing response bodies and removes the
 process and scratch directory. The labelled Linux canvas slowdown remains unexplained;
 deadlines and integrity checks stay unchanged.
 See the [investigation and remaining qualification](backlog/cost-setup-timeout.md).
+Pinned source fetches now use Git's low-speed limit and one bounded transport
+retry from a fresh owned checkout; bad references still stop immediately.
 
 ### Fixture archive download retries (D311)
 

@@ -51,7 +51,7 @@ export async function prepareConformance(selected) {
   const environment={PATH:process.env.PATH,LANG:'C',TZ:'UTC',CI:'true',
     ...(process.env.NODE_AUTH_TOKEN?{NODE_AUTH_TOKEN:process.env.NODE_AUTH_TOKEN}:{})};
   let phase='revision';
-  const run=(command,args,{encoding,timeout=300000,captureStderr=false,observeInstall=false,...options}={})=>{
+  const run=(command,args,{encoding,timeout=300000,captureStderr=false,observeInstall=false,attempt,...options}={})=>{
     controller.signal.throwIfAborted();
     return new Promise((resolve,reject)=>{
       const child=spawn(command,args,{env:environment,stdio:'inherit',...options,detached:true});
@@ -59,7 +59,7 @@ export async function prepareConformance(selected) {
       const started=performance.now(),commandPhase=phase;
       const report=(event,details={})=>console.error('conformance_setup='+JSON.stringify({
         event,phase:commandPhase,command,args,pid:child.pid??null,
-        elapsedMs:Math.round(performance.now()-started),timeoutMs:timeout,...details}));
+        elapsedMs:Math.round(performance.now()-started),timeoutMs:timeout,...(attempt===undefined?{}:{attempt}),...details}));
       report('start');
       const install=observeInstall?createInstallObserver(options.cwd):null;
       const installTimer=install?setInterval(()=>report('install-progress',install.snapshot()),10000):null;
@@ -101,10 +101,23 @@ export async function prepareConformance(selected) {
     let code, stackCode, runtime, migrations;
     if(needsRuntime) {
       const source=join(root,'public-source');
-      phase='source-init';
-      await run('git',['init','--quiet',source]);
-      phase='source-fetch';
-      await run('git',['-C',source,'fetch','--quiet','--depth=1','https://github.com/clintongormley/waitron.git',revision]);
+      for(let attempt=1;;attempt++) {
+        phase='source-init';
+        await run('git',['init','--quiet',source],{attempt});
+        phase='source-fetch';
+        try {
+          await run('git',['-c','http.lowSpeedLimit=1000','-c','http.lowSpeedTime=60',
+            '-C',source,'fetch','--quiet','--depth=1','https://github.com/clintongormley/waitron.git',revision],
+            {attempt,timeout:75000,captureStderr:true,stdio:['ignore','ignore','pipe']});
+          break;
+        } catch(error) {
+          const terminal=/not our ref|couldn't find remote ref|unadvertised object|invalid refspec|authentication failed|could not read Username|repository .*not found|requested URL returned error: (?:400|401|403|404)/i.test(error.stderr);
+          const transport=/operation too slow|timed out|could not resolve host|couldn't resolve host|failed to connect|couldn't connect|connection (?:reset|refused)|TLS|SSL connection|unexpected EOF|early EOF|requested URL returned error: 5\d\d/i.test(error.stderr);
+          if(controller.signal.aborted||terminal||attempt>=2||(!transport&&error.message!=='Conformance setup timed out'))throw error;
+          // A retry starts from a new owned checkout; no partial Git state survives.
+          rmSync(source,{recursive:true,force:true});
+        }
+      }
       phase='source-checkout';
       await run('git',['-C',source,'checkout','--quiet','--detach','FETCH_HEAD']);
       phase='source-verify';

@@ -91,3 +91,24 @@ repair. A fast native download, a passing changed CI run and this controlled sta
 do not establish that cause. Keep the source revision, lockfile, integrity checks,
 request settings, outer limit and process-group cleanup unchanged. Genuine local
 container qualification remains blocked while Docker is down.
+
+## Bounded pinned-source acquisition (D482)
+
+The D458 connection refusal and D480 five-minute fetch stall occurred before any
+conformance case. Their underlying network causes remain unknown. Source fetches
+now set Git's low-speed limit to 1,000 bytes per second for 60 seconds and retain
+a supervised 75-second maximum per attempt. You get the attempt number, elapsed
+time, outcome and Git's own error. A recognised transport failure or supervised
+fetch timeout permits one retry, after removing and reinitialising only the owned
+partial checkout. Two failed attempts fail setup. Bad references, authentication
+refusals and unrecognised errors stop immediately; interruption never retries.
+Checkout and exact revision verification still precede the frozen installation.
+
+Run `node --test scripts/cloud-cost/conformance-source-fetch.test.mjs` for native
+child-process controls: a stalled first fetch then success, repeated stalls,
+connection and low-speed refusals, permanent failures, a healthy fetch, wrong
+revision and interruption. External Git responses are substituted and only the
+disposable supervisor's timers are accelerated. These controls qualify the retry
+boundary, not the historical GitHub transport cause. The pinned revision,
+installation and conformance assertions stay unchanged. Genuine local Docker
+qualification remains unavailable during the outage; GitHub CI runs that work.
