@@ -17,6 +17,7 @@ test('the hosted amount is never negative',()=>{
 test('a venue whose paid month starts on this renewal date is charged on it',()=>{
  assert.deepEqual(renewalLines('2026-12-12',prices,[venue('b',{connectedFrom:'2026-12-12'})]),
   [{venueId:'b',kind:'connected_month',quantity:1,cents:1000}]);
+ assert.deepEqual(renewalLines('2026-12-12',{connectedMonthlyCents:0,hostedMonthlyCents:0},[venue('b',{hostedDays:3})]),[]);
 });
 test('a venue still in its trial or free days is not charged',()=>{
  assert.deepEqual(renewalLines('2026-12-12',prices,[venue('b',{connectedFrom:'2027-01-12'}),venue('c',{connectedFrom:null})]),[]);

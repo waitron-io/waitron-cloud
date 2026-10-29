@@ -39,6 +39,10 @@ test('a venue is first charged on the first renewal attempted after it becomes c
 test('level 2 stops on the renewal date; a card is retried 4 days and 1 day before it',()=>{
  assert.deepEqual(failureTimeline('connected','card','2026-12-12','2026-12-05'),
   {retryDates:['2026-12-08','2026-12-11'],servicesStop:'2026-12-12'});
+ assert.deepEqual(failureTimeline('connected','card','2026-12-12','2026-12-08'),
+  {retryDates:['2026-12-11'],servicesStop:'2026-12-12'});
+ assert.deepEqual(failureTimeline('connected','card','2026-12-12','2026-12-11'),
+  {retryDates:[],servicesStop:'2026-12-12'});
 });
 test('level 2 by direct debit is never retried before the renewal date',()=>{
  assert.deepEqual(failureTimeline('connected','direct_debit','2026-12-12','2026-12-08'),
