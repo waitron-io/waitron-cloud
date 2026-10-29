@@ -225,3 +225,28 @@ test('billing inputs reject malformed identities dates references and nested fie
   assert.deepEqual(await snapshot(f),before);
  }finally{await f.close();}
 });
+
+test('complete billing command and read matrix refuses crossed and unknown business scopes',async()=>{
+ const f=await fixture();try{
+  await ensure(f);await ensure(f,f.other);await ensure(f,f.foreign);
+  const venueId=randomUUID(),chargeId=randomUUID(),attemptId=randomUUID(),methodId=randomUUID();
+  const value={level:'connected',connectedFrom:'2026-10-01',lapsedOn:null,scheduledLevel:null,scheduledOn:null};
+  const window={from:'2026-10-01',through:'2026-10-31'};
+  const commands=[{type:'ensure_business'},{type:'set_method',method:method()},
+   {type:'anchor',on:'2026-10-01',mode:'initial',expectedRevision:0},
+   {type:'set_venue',venueId,expectedRevision:0,value},
+   {type:'start_trial',venueId,level:'connected',on:'2026-10-01'},
+   {type:'extend_trial',venueId,level:'connected',expectedEnd:'2026-10-31'},
+   {type:'end_trial',venueId,level:'connected',expectedEnd:'2026-10-31',outcome:'converted'},
+   {type:'hosted_day',venueId,on:'2026-10-01',coveredByChargeId:null},
+   {type:'freeze_charge',chargeId,kind:'renewal',renewalDate:'2026-11-01',connectedUntil:'2026-12-01',window,priceRevision:1},
+   {type:'begin_attempt',chargeId,attemptId,methodId,requestKey:'matrix'},
+   {type:'observe_payment',attemptId,providerPaymentId:'matrix-payment',state:'succeeded',expectedRevision:0}];
+  const before=await snapshot(f);
+  for(const scope of [{organisationId:randomUUID(),legalBusinessId:f.scope.legalBusinessId},{organisationId:f.foreign.organisationId,legalBusinessId:f.scope.legalBusinessId},{organisationId:f.scope.organisationId,legalBusinessId:f.foreign.legalBusinessId},{organisationId:f.scope.organisationId,legalBusinessId:randomUUID()}]){
+   for(const read of [()=>f.store.business(scope),()=>f.store.venue(scope,venueId),()=>f.store.history(scope,venueId),()=>f.store.renewalViews(scope,window),()=>f.store.charge(scope,chargeId),()=>f.store.payments(scope,chargeId)])await assert.rejects(read(),{code:'billing_scope_not_found'});
+   for(const command of commands)await assert.rejects(f.store.execute(scope,event(),command),{code:'billing_scope_not_found'},command.type);
+   assert.deepEqual(await snapshot(f),before);
+  }
+ }finally{await f.close();}
+});
