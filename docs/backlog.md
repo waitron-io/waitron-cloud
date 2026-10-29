@@ -752,6 +752,12 @@ closes unfinished HTTP connections before admitting text or usage; corrupt compr
 bodies return sanitized errors without retries. Real provider and release qualification
 remain separate gates in the linked translation backlog.
 
+Run `node --test packages/translation/test/openai-client-compressed-integrity.test.ts`
+to check that complete decoded JSON waits for a gzip or deflate checksum before
+admitting text or usage. Delayed valid checksums succeed; corrupt checksums return
+a sanitized error without usage or automatic retry. A later call through the same
+client still succeeds. Real provider and release qualification remain open.
+
 Run `node --test packages/translation/test/openai-client-unfinished-refusals.test.ts`
 to check that unfinished HTTP refusals close their connections and retain their
 retry decisions without parsing error-body usage or private text. A later valid
