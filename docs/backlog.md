@@ -418,8 +418,10 @@ and exact schema gates. Production authority is unavailable.
 
 **No longer used (owner, 2026-10-29).** "We no longer have the reservations because we
 use the time-based codes instead": Waitron names a new invoice chain from the box's own
-clock, with no Cloud service involved. Nothing below should be built further. Removing the
-registry's code and its append-only migration is open and needs its own decision.
+clock, with no Cloud service involved. Nothing below should be built further. **Remove
+it** (owner, 2026-10-29: "the registry can be removed"): the package, the account
+service's routes, the portal screens and migration 038, together with Waitron's client —
+tracked as Waitron A1189.
 
 The current-history stage adds challenged signed journal reads, signed expiring
 writer grants, exact full-history replay and permanent unknown outcomes. Local
