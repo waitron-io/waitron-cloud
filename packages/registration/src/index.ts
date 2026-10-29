@@ -292,3 +292,6 @@ export * from './billing-types.ts';
 export {BillingPriceStore,validateBillingPrice} from './billing-config.ts';
 
 export {BillingStore} from './billing-store.ts';
+
+export {projectBillingDisplay,billingDisplayDay,type BillingDisplayV1,type BillingDisplayFacts} from './billing-display.ts';
+export {BillingDisplayMachine,BillingDisplayError} from './billing-display-machine.ts';

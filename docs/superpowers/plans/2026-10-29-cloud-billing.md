@@ -1343,10 +1343,12 @@ refusals are in the proposal; copy its agreed edition into the shared contract.
   job. Missing action/read is expected; DB setup failure is not.
 - [ ] **Step 3: Implement one scoped transaction.** Use preliminary routing only
   to locate a stored key, then verify. Follow C's parent order: organisation
-  SHARE, legal business NO KEY UPDATE, billing business SHARE if present; then
+  SHARE, legal business SHARE, billing business SHARE if present; then
   lock the stored venue and installation SHARE and recheck the derived mapping,
   key, revocation/supersession and lease with fresh time after waits. Parent
-  locks serialize C writes even when billing children do not exist. No external
+  locks serialize C writes even when billing children do not exist. Business
+  SHARE admits other display readers while still conflicting with C writers'
+  NO KEY UPDATE. Prove two venue reads overlap while a billing writer waits. No external
   awaits or nested `BillingStore` transactions. Read venue/trials, venue-scoped
   charge lines, exact consumed days and all accepted attempts in this transaction;
   read the effective price once. Build minimal J1 facts, not `history().paid`
@@ -1426,7 +1428,7 @@ fixed test/guard/count results without credentials. The package wrapper runs
 `billing-display-guard-probes.test.mjs`, then both `--pure` and `--database`.
 Use explicit bounded timeouts following C's omission-test pattern and set the
 wrapper test's own timeout to 240,000 ms to override CI's 30-second default.
-All five omissions and the harness controls must execute in that package job;
+All six omissions and the harness controls must execute in that package job;
 the generic root glob does not discover this harness filename.
 
 - [ ] **Step 1: Write harness RED controls.** A missing/ambiguous mutation target,
@@ -1439,7 +1441,8 @@ the generic root glob does not discover this harness filename.
   assertion fail, restore the bytes and require it pass again. Pure mode omits
   accepted-success filtering, then exact-day gap separation. Database mode omits
   derived venue/business scoping, final revocation check after waiting,
-  then account URL validation. Exercise real DB/socket paths for those guards;
+  then account URL validation and the legal-business parent that excludes billing
+  writers while display readers overlap. Exercise real DB/socket paths for those guards;
   failures in setup/imports or textual checks earn no detection. Preserve the
   old assertions and only delete guards in owned disposable copies. Clean only
   recorded owned files/processes. No Docker startup in this runner.
@@ -1447,7 +1450,7 @@ the generic root glob does not discover this harness filename.
   `node --test scripts/billing-display-guard-probes.test.mjs` and
   `node scripts/billing-display-guard-probes.mjs --pure`, plus J1/J2 pure files.
   **CI:** `pnpm --dir packages/account-http exec node --test --test-timeout=240000 test/billing-display-guards.test.ts`;
-  require passing harness controls plus two pure and three database detected
+  require passing harness controls plus two pure and four database detected
   omissions and restored controls, not a summary
   without executed cases. CI must discover the wrapper through its existing
   `test/*.test.ts` glob. If the relevant package shard omits it, stop readiness.
