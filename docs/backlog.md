@@ -738,6 +738,12 @@ across separate network reads. Overflow must close unfinished connections and
 expose no unparsed token usage. Real provider and release qualification remain
 separate gates in the linked translation backlog.
 
+Run `node --test packages/translation/test/openai-client-unfinished-refusals.test.ts`
+to check that unfinished HTTP refusals close their connections and retain their
+retry decisions without parsing error-body usage or private text. A later valid
+reply through the same client still succeeds. Real provider and release
+qualification remain separate gates in the linked translation backlog.
+
 The design and 24-task plan are owner-approved; Tasks 1–21 are implemented.
 Keep translation off until the remaining Cloud, joint Waitron and release checks,
 owner-only quality trials after 2026-11-02, and commercial and production decisions
