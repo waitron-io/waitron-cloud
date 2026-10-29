@@ -752,6 +752,12 @@ retry decisions without parsing error-body usage or private text. A later valid
 reply through the same client still succeeds. Real provider and release
 qualification remain separate gates in the linked translation backlog.
 
+Run `node --test packages/translation/test/openai-client-interrupted-success.test.ts`
+to check that timeout and caller cancellation close unfinished successful HTTP
+responses, discard uncompleted usage and permit a later request on the same
+client. A caller cancelled before submission sends no request. These local
+checks keep real provider activation and wider release qualification open.
+
 The design and 24-task plan are owner-approved; Tasks 1–21 are implemented.
 Keep translation off until the remaining Cloud, joint Waitron and release checks,
 owner-only quality trials after 2026-11-02, and commercial and production decisions
