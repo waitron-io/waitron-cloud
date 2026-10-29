@@ -53,6 +53,13 @@ or error recovery, even at stopped startup. Valid minimum timers and the support
 capacity boundaries still run. These checks protect startup configuration; real
 database work and production capacity retain their separate gates.
 
+Run `node --test packages/registration/test/worker-loop-timer-limit.test.ts` to
+check that polling delays above 2,147,483,647 milliseconds refuse before callbacks.
+Node turns larger delays into one-millisecond waits, which would repeatedly poll
+instead of pausing. The maximum supported delay still reaches polling unchanged
+and lets native idle and retry processes stop cleanly. Longer scheduling cadences
+remain valid because their polling waits stay bounded.
+
 Run `node --test packages/registration/test/worker-loop-mixed-batches.test.ts`
 to check that mixed busy and idle claims finish the whole active batch before
 refilling slots. One busy claim prevents an idle pause at two and 32 slots,
