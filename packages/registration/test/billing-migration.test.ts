@@ -39,6 +39,9 @@ test('044 upgrades to billing without changing old rows or digests',async()=>{
   assert.equal((ledger as unknown[]).length,44);
   const {hasReleaseMigrationCount}=await import(new URL('../../../scripts/database-recovery-migrations.mjs',import.meta.url).href);
   assert.equal(hasReleaseMigrationCount('44',f.old.names),true);assert.equal(hasReleaseMigrationCount(String(migrationNames.length),f.old.names),false);
+  assert.equal(hasReleaseMigrationCount(String(migrationNames.length),migrationNames),true);
+  assert.equal(hasReleaseMigrationCount(String(migrationNames.length-1),migrationNames),false);
+  assert.equal(hasReleaseMigrationCount(String(migrationNames.length+1),migrationNames),false);
   for(const name of f.old.names)assert.deepEqual(await readFile(new URL('../migrations/'+name,import.meta.url)),await readFile(f.old.root+'/packages/registration/migrations/'+name),name);
   await Promise.all([migrate(f.pool),migrate(f.pool)]);await migrate(f.pool);
   assert.deepEqual(await rows(f.pool,Object.keys(before)),before);

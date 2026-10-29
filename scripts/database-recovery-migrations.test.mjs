@@ -16,10 +16,3 @@ test('refuses a database with an extra migration',()=>{
  const manifest=['001_initial.sql','002_next.sql'];
  assert.equal(hasReleaseMigrationCount('3',manifest),false);
 });
-
-test('billing recovery count follows the actual selected manifest',async()=>{
- const {migrationNames}=await import('../packages/registration/src/migrate.ts');
- assert.equal(hasReleaseMigrationCount(String(migrationNames.length),migrationNames),true);
- assert.equal(hasReleaseMigrationCount(String(migrationNames.length-1),migrationNames),false);
- assert.equal(hasReleaseMigrationCount(String(migrationNames.length+1),migrationNames),false);
-});
