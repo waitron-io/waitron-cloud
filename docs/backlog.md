@@ -1484,6 +1484,18 @@ implementation or production evidence.
   scripts/cloud-cost/replay-stream.test.mjs scripts/cloud-cost/replay-quiesce-diagnostics.test.mjs`.
   The historical cause remains unknown; capture the new boundary on recurrence
   before changing any accounting, ownership, restore or deadline guard.
+  Another paced replay refused at `quiesce-checkpoint` after a successful native
+  stop in [run 40954158356, job 123729967144](https://github.com/waitron-io/waitron-cloud/actions/runs/40954158356/job/123729967144).
+  You now receive a fixed `measurement-refusal` code distinguishing checkpoint
+  admission, independent inventory verification and accounting snapshots. The code
+  survives replay and worker admission without exposing raw storage errors. Native
+  HTTP controls refuse closed sessions, unobserved objects and overflowing storage
+  totals; a native writer control verifies forwarding after a successful stop.
+  Reporter exceptions cannot replace the refusal or prevent listener collection.
+  Run `node --test scripts/cloud-cost/stream-checkpoint-diagnostics.test.mjs
+  scripts/cloud-cost/replay-stream.test.mjs`. These controls reproduce diagnostic
+  boundaries; the historical Linux checkpoint cause remains unknown. Capture the
+  new code on recurrence before changing accounting, ownership or deadline checks.
   The D121 recurrence in [cost run 40144665901, job 121023380173](https://github.com/waitron-io/waitron-cloud/actions/runs/40144665901/job/121023380173)
   reaches `storage-cleanup` after successful native replicate and restore exits.
   Cleanup now retains its first refused operation as a fixed `storage-refusal`

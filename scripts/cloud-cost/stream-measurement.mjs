@@ -10,7 +10,7 @@ const phases = ['setup', 'startup', 'workload', 'idle', 'verification', 'restore
 // The caller owns an empty local bucket and stops its writer before finishing.
 // This session owns only its listeners/client; inventories never delete stored data.
 export async function openStreamMeasurement({ target, sdk, bucket, versioned, clock,
-  allowBulkDeletes = false, allowMultipart = false, resolveMultipartReplies = false, signal }) {
+  allowBulkDeletes = false, allowMultipart = false, resolveMultipartReplies = false, signal, onDiagnostic }) {
   let admin, observer, front, client, history, meter, disposal, finishing, evidence;
   let invalid = false, state = 'opening', phase = 'startup', phaseStart, last = -Infinity;
   let nativeCompleted = 0, nativeUploaded = false;
@@ -116,16 +116,22 @@ export async function openStreamMeasurement({ target, sdk, bucket, versioned, cl
       } catch { invalid = true; await dispose().catch(() => {}); fail(); }
     },
     checkpoint: async () => {
+      let stage = 'checkpoint-admission';
       try {
         need(!invalid && state === 'active' && !signal?.aborted);
         // A quiescent producer is required; a racing request poisons both counters.
         front.setPhase(phase); state = 'checking';
-        await history.verify();
+        stage = 'checkpoint-inventory'; await history.verify();
+        stage = 'checkpoint-accounting';
         need(!invalid && !signal?.aborted);
         const storage = history.snapshot(), requests = meter.snapshot();
         need(requests.reconciled === true && requests.status === 'measured');
         state = 'active'; return { requests, storage };
-      } catch { invalid = true; await dispose().catch(() => {}); fail(); }
+      } catch {
+        // Fixed operation codes preserve the first refusal without publishing private storage errors.
+        try { Promise.resolve(onDiagnostic?.({ kind: 'measurement-refusal', stage })).catch(() => {}); } catch { /* Reporting cannot prevent resource collection. */ }
+        invalid = true; await dispose().catch(() => {}); fail();
+      }
     },
     setPhase: switchPhase,
     finish: async () => {

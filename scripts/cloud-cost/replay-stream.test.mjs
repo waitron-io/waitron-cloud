@@ -784,3 +784,18 @@ test('replayStreamSeparatesRestoreAdmissionFromTheCompletedCheckpoint', async t 
     ['version', 'replicate']);
   assert.deepEqual(workerFailureTrace(trace), trace);
 });
+
+// Omitting the measurement callback erases the reason behind quiesce-checkpoint.
+test('replayStreamForwardsCheckpointInventoryRefusalThroughWorkerAdmission', { timeout: 10000 }, async t => {
+  const f = await fixture(t), trace = [];
+  const run = await open(t, { ...f, onDiagnostic: event => {
+    trace.push(event);
+    if (event.kind === 'native' && event.operation === 'replicate') f.misreportInventory();
+  } });
+  await upload(f);
+  await assert.rejects(run.finish({ expectedSales: 1 }), bad);
+  assert.deepEqual(trace.filter(event => event.kind === 'measurement-refusal'),
+    [{ kind: 'measurement-refusal', stage: 'checkpoint-inventory' }]);
+  assert.deepEqual(workerFailureTrace(trace), trace);
+  clean(f);
+});
