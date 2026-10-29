@@ -6,13 +6,13 @@ import {test} from 'node:test';
 const exec=promisify(execFile),root=fileURLToPath(new URL('../../../',import.meta.url));
 
 // An omission earns credit only through its named assertion with passing original and restored controls.
-test('billing display guard qualification executes its harness and all five real omissions',{timeout:240000},async()=>{
+test('billing display guard qualification executes its harness and all six real omissions',{timeout:240000},async()=>{
  const env={...process.env};delete env.NODE_TEST_CONTEXT;
  const harness=await exec(process.execPath,['--test','--test-isolation=none','--test-reporter=tap','scripts/billing-display-guard-probes.test.mjs'],{cwd:root,env,timeout:60000,maxBuffer:2*1024*1024});
  assert.match(harness.stdout,/# tests 12\b/);assert.match(harness.stdout,/# pass 12\b/);
  for(const kind of ['fail','cancelled','skipped'])assert.match(harness.stdout,new RegExp('# '+kind+' 0\\b'));
  console.log('BILLING_DISPLAY_HARNESS_PASS 12');
- const expected={pure:['remaining accepted success','exact hosted day gaps'],database:['derived business scope after wait','final revocation after wait','trusted account destination']};
+ const expected={pure:['remaining accepted success','exact hosted day gaps'],database:['derived business scope after wait','final revocation after wait','trusted account destination','billing writer exclusion']};
  for(const mode of ['pure','database'] as const){
   const output=await exec(process.execPath,['scripts/billing-display-guard-probes.mjs','--'+mode],{cwd:root,env,timeout:150000,maxBuffer:2*1024*1024});
   const result=JSON.parse(output.stdout);assert.equal(result.mode,mode);

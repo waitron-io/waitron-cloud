@@ -51,6 +51,7 @@ const guards={
   {name:'derived business scope after wait',file:'packages/registration/src/billing-display-machine.ts',needle:'||row.legal_business_id!==initial.legal_business_id',replacement:'',test:'packages/registration/test/billing-display-machine.test.ts',pattern:'billing display rechecks key and venue scope after waiting'},
   {name:'final revocation after wait',file:'packages/registration/src/billing-display-machine.ts',needle:"if(row.revoked_at||row.superseded_by)throw new InstallationError('revoked');",replacement:'',test:'packages/registration/test/billing-display-machine.test.ts',pattern:'billing display rechecks revocation after waiting'},
   {name:'trusted account destination',file:'packages/registration/src/billing-display-machine.ts',needle:'!accountOrigin(origin)||',replacement:'',test:'packages/registration/test/billing-display-machine.test.ts',pattern:'billing display refuses unsafe account origins'},
+  {name:'billing writer exclusion',file:'packages/registration/src/billing-display-machine.ts',needle:"   if(!(await client.query('SELECT id FROM legal_businesses WHERE organisation_id=$1 AND id=$2 FOR SHARE',[initial.organisation_id,initial.legal_business_id])).rowCount)invalid();",replacement:'',test:'packages/registration/test/billing-display-machine.test.ts',pattern:'billing display reads of different venues share their business lock while billing writes wait'},
  ],
 };
 export async function qualifyDisplayGuards(mode){

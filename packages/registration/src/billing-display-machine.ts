@@ -75,9 +75,9 @@ export class BillingDisplayMachine{
     JOIN venues v ON v.id=i.venue_id WHERE i.id=$1`,[routing.installationId])).rows[0];
    if(!initial)invalid();
    const preliminary=verifyMachine(envelope,initial.public_key,this.#origin,'billing-display');body(preliminary.body);
-   // Billing writers take these parents even when the first billing child does not exist.
+   // Shared parents admit display readers and exclude billing writes before child rows exist.
    if(!(await client.query('SELECT id FROM organisations WHERE id=$1 FOR SHARE',[initial.organisation_id])).rowCount)invalid();
-   if(!(await client.query('SELECT id FROM legal_businesses WHERE organisation_id=$1 AND id=$2 FOR NO KEY UPDATE',[initial.organisation_id,initial.legal_business_id])).rowCount)invalid();
+   if(!(await client.query('SELECT id FROM legal_businesses WHERE organisation_id=$1 AND id=$2 FOR SHARE',[initial.organisation_id,initial.legal_business_id])).rowCount)invalid();
    await client.query('SELECT legal_business_id FROM billing_businesses WHERE organisation_id=$1 AND legal_business_id=$2 FOR SHARE',[initial.organisation_id,initial.legal_business_id]);
    if(!(await client.query('SELECT id FROM venues WHERE id=$1 FOR SHARE',[initial.venue_id])).rowCount)invalid();
    const row=(await client.query(`SELECT i.*,v.environment,v.organisation_id,v.legal_business_id FROM installations i
