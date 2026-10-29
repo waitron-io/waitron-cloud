@@ -303,14 +303,14 @@ order. Remote access matters most because Waitron's customer-facing features wai
    owner as the only person on call and a free hosted status page. Missing: production
    collection and retained history, checks from outside the affected cell, a chosen paging
    provider, and the status page itself.
-3. **Billing.** Remote access and backups are paid services, and so is the rota solver
-   below. Today billing is one bullet under _Platform work to scope_. The plan switch is a
-   test-only one an operator sets by hand, and the usage ledger is "observational only"
-   ([usage metering](usage-metering.md)). Missing: what is charged for, prices and free
-   allowances; a payment provider and checkout; trials; Cloud's own invoices to venues under
-   Spanish rules, with the customer's tax number (signup leaves "Tax details, billing and
-   country-specific validation" to "the later billing journey"); failed payments;
-   cancellation; and closing an account.
+3. **Billing — DESIGNED AND APPROVED (2026-10-29).** The
+   [design](superpowers/specs/2026-10-29-cloud-billing-design.md) sets three levels
+   (registered, connected, hosted), trials, SumUp cards and Stripe direct debit, failed
+   payments, emergency hosting by a venue manager, and Cloud's own Veri\*Factu invoices.
+   The [build plan](superpowers/plans/2026-10-29-cloud-billing.md) orders ten slices; slice B (the billing rules) is planned in full and can start now, and slice A (a SumUp and Stripe test run) waits for the owner's sandbox accounts. Prices and allowance
+   sizes wait for measurement (the design's §11). Billing cannot go live before the
+   Waitron company exists to issue invoices, and that billing software needs its own
+   declaración responsable.
 4. **Terms, the data processing agreement and service promises.** These are needed before
    the first customer, paid or not, and a lawyer is needed for each, so the questions should
    go out early. The [launch evidence](launch-evidence.md) requires "lawyer-reviewed terms",
@@ -440,6 +440,13 @@ explicit unavailable capabilities and append-only migration 038. Local tests
 exercise the actual fiscal validator, populated concurrent 37-to-38 upgrades,
 interrupted migration rollback, namespace uniqueness, retained runtime history
 and exact schema gates. Production authority is unavailable.
+
+**No longer used (owner, 2026-10-29).** "We no longer have the reservations because we
+use the time-based codes instead": Waitron names a new invoice chain from the box's own
+clock, with no Cloud service involved. Nothing below should be built further. **Remove
+it** (owner, 2026-10-29: "the registry can be removed"): the package, the account
+service's routes, the portal screens and migration 038, together with Waitron's client —
+tracked as Waitron A1189.
 
 The current-history stage adds challenged signed journal reads, signed expiring
 writer grants, exact full-history replay and permanent unknown outcomes. Local
@@ -2954,7 +2961,8 @@ implementation or production evidence.
   including the email-region decision and the boundaries of local browser evidence.
 - **Subscriptions and billing.** Service catalogue, checkout, invoicing, permitted
   services, usage accounting, trials, failed payment and cancellation. Item 3 of
-  [launch platform work](#launch-platform-work-in-priority-order).
+  [launch platform work](#launch-platform-work-in-priority-order); designed in
+  [the billing design](superpowers/specs/2026-10-29-cloud-billing-design.md).
 - **Venue and node registration.** The agreed Waitron signup and connection journey is
   implemented locally. Planned handover, diagnostics, retention, key provisioning
   and rotation, deployment qualification and production activation remain open;
