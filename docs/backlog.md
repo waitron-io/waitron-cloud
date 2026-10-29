@@ -3062,6 +3062,14 @@ See [the boundaries and remaining work](backlog/backup-recovery-http.md#backup-c
 checks grant no activation or stop-proof authority.
 See [the boundaries and remaining work](backlog/backup-recovery-http.md#backup-catalogue-transport-refusals-and-retry-waits-d426).
 
+## Storage archive extraction command refusals (D453)
+
+Run `node --test scripts/ci-backup-storage-tar-refusals.test.mjs` to check
+real extraction failures in warm and cold private caches, plus unavailable tar.
+Failed extraction preserves the command error and complete cached archive, removes
+its private root and stops before certificate setup or listeners. Real store startup
+and historical causes remain open; see [the investigation](backlog/storage-cache-fixture.md).
+
 ## Container verifier memory-refusal observation (D335)
 
 The native-memory check sometimes receives exit 73 without Docker marking the
