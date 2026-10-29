@@ -1630,3 +1630,298 @@ host/device/runtime qualification retain their affected-path gates. Keep real
 admission disabled, production customer routes empty and `.local` independent.
 This agreement authorises no deployment, provider/host operation, publication,
 pause, customer authentication, payment, writer, fiscal or recovery action.
+
+## Venue billing display, version 1
+
+Agreed for Waitron A1185 on 29 October 2026, following Lane B's agreement to
+proposal SHA-256 `6ea5c4218f8999c23774fe29485e9c0fb3ca6ba6117eaf8893a5cfa71e45fa02`
+with its five requested additions below. Source inspection pins: Cloud
+`26edcdf8a6bc409c1f860907fe67526ea47b1149` and Waitron
+`0fdd3134e042c46c64337fc1734206ec33dcd65c`. These identify the existing
+interfaces, not completed billing adapters. The [Slice J plan](superpowers/plans/2026-10-29-cloud-billing.md#slice-j-the-boxs-billing-view)
+owns implementation and qualification.
+
+### Purpose and authority
+
+Your Cloud services screen shows billing; it never grants or withdraws local
+services, trading, restore, promotion or fiscal authority. Choosing a level,
+paying, cancelling and starting hosting remain on your Cloud account. A billing
+read changes no billing, installation, service or worker state. HTTP rate-limit
+accounting is the only expected write. Nothing here enables production billing,
+collection, hosting or new enforcement.
+
+POST `/api/installations/billing-display` with `Content-Type: application/json`
+and outer object `{payload,signature}`. Use the existing Ed25519
+`waitron-cloud-machine-v1` envelope with action `billing-display`, a fresh
+operation UUID, the stored installation key, trusted exact country portal
+origin and current control lease. The signed body is exactly `{"version":1}`.
+There are no organisation, business, venue, country, URL or clock selectors.
+Reject added selectors, including query parameters. An account cookie alone
+has no authority here; any browser Origin header is refused.
+
+Keep the existing 60-second proof window, one-hour maximum lease, 12,000-character
+encoded payload limit, 86-character signature and 4,096-code-unit lease/body
+limits. Preliminary stored-key authentication precedes the installation rate
+budget. Reverify the signature and lease after locks, against the current key,
+installation, venue and environment; reject revoked/superseded installations.
+Resolve organisation and legal business through that installation's stored
+venue, in the configured country's pool. Never take scope from parsed claims
+other than using installationId to find the key to verify. A concurrent
+revocation either waits for this read or commits first and prevents it.
+
+This read is available independent of the venue's paid level and D79 test plan.
+Do not require an active placement or ready service, which would hide a lapsed
+venue's bill. It grants no placement or service capability.
+
+### Response
+
+Return HTTP 200 with a JSON object having these exact fields. Type declarations
+describe the wire, not an implementation. `CivilDate` is a real `YYYY-MM-DD` day;
+`UtcInstant` is canonical ISO UTC with milliseconds.
+
+```ts
+type Level = 'registered' | 'connected' | 'hosted';
+type Period = {kind:'trial'|'paid'; level:'connected'|'hosted';
+  from:CivilDate; until:CivilDate; coversAsOf:boolean};
+type Billing = {status:'ready'; level:Level;
+  state:'trial'|'active'|'payment_failing'|'lapsed'; period:Period|null}
+  | {status:'unavailable'; reason:'state_not_ready'};
+type Prices = {status:'published'; revision:number; effectiveFrom:CivilDate;
+  currency:'EUR'; taxExclusive:true; vatRateBasisPoints:number;
+  registeredMonthlyCents:0; connectedMonthlyCents:number;
+  hostedMonthlyCents:number; hostedDayDivisor:30}
+  | {status:'unavailable'; reason:'not_published'};
+type BillingDisplayV1 = {version:1; installationId:string; venueId:string;
+  countryCode:'ES'; calendarTimeZone:string; asOf:UtcInstant;
+  billing:Billing; prices:Prices; accountUrl:string};
+```
+
+The two UUIDs bind the response to the saved registration. Do not send account,
+organisation, business, charge, attempt, payment-method, mandate or provider IDs,
+tax details, invoices, raw observations, keys or customer content. Validate the
+binding before displaying anything. `version` is the independent billing wire
+version. `revision` inside prices is only the published price revision, not an
+installation revision or ordering token for the whole response. Unsupported
+versions fail; incompatible field/meaning changes require a new version and
+agreement. Version 1 is closed: both sides reject malformed/extra fields.
+
+#### Billing and periods
+
+Apply these rules in order, using one transaction's country facts:
+
+1. A known owned venue with no billing business/venue rows is `registered`,
+   `active`, `period:null`. Do not call `ensure_business` or start a trial.
+   Missing identity/schema/database is an error, never this default.
+2. An effective stored `lapsedOn` gives `lapsed`. Otherwise a stored active trial
+   matching the current paid level and containing today gives `trial` and its
+   exact interval. An expired still-active trial, future effective lapse, or
+   inconsistent trial/level facts give `state_not_ready`; J does not run G's
+   transitions or extend trials. A completed old trial does not hide paid state.
+3. A venue charge is relevant only through its own `connected_month` line or
+   exact hosted rows whose `consumed_by_charge_id` names that charge. A business
+   total or another venue's line supplies no evidence for this venue. Include
+   allocations with an omitted zero-cent hosted line.
+4. A charge is currently settled when **any** attempt has accepted state
+   `succeeded` and non-null first success. A pending attempt alone is neither
+   success nor failure. With no remaining success, accepted `failed` or
+   `refunded` is a failure signal, including while a retry is pending. Ignore
+   history-only observations when deciding state. A later successful attempt
+   on the same charge restores its coverage even if the first was refunded.
+5. Outside trial/lapse, an unresolved failure gives `payment_failing` and
+   otherwise the stored level gives `active`. `active` describes the stored
+   billing level; it promises neither payment nor service readiness. Pending
+   first payment, free joining days and hosted days billed in arrears may have
+   `period:null`. Do not calculate a stop date or debt amount.
+6. If an unresolved relevant failed/refunded charge with no remaining accepted
+   success coexists with a currently settled **different** charge whose
+   `renewalDate` is the same or later, return `state_not_ready`. Earlier unrelated
+   successes alone do not meet this predicate. This conservative result asserts
+   neither recovery nor debt: C has no reconciliation link that could establish
+   settlement of the older failure. Do not infer it from UUID ordering, raw
+   observations, a new anchor or a comeback charge.
+
+For `trial`, use `[startedOn,endsOn)`. Otherwise derive paid coverage from
+currently settled charges: a venue's connected line covers
+`[renewalDate,connectedUntil)`; hosted coverage consists only of its exact
+allocated civil days, each `[day,day+1)`. Never use hosted paid-history min/max
+or a charge's hosted window as continuous coverage. Never turn connected
+coverage into hosted coverage. Retained refunded history records past payment
+for trial eligibility; it is not present paid coverage. `covered_by_charge_id`
+records a historical connected discount, not settlement of the hosted charge.
+
+Select coverage at the current paid level, or the most recent trial/paid level
+for a registered lapsed venue. Coalesce only overlapping/adjacent paid intervals
+at that same level. Select the interval containing today, else the last ending
+on/before today, else null; never choose a future prepaid interval early.
+For registered lapse, prefer latest `until`, then hosted on a same-end tie.
+Use a completed trial only if no such paid interval exists. `coversAsOf` states
+whether today belongs to the selected interval, so a historical end is not
+mistaken for a paid-through promise. Null means no established period to show,
+not an unlimited period. Never bridge an unpaid hosted day. This is a bounded
+summary, not a history export.
+
+`until` is the **first excluded day**, not a timestamp or last included day.
+A trial starting `2026-10-31` ends at `2026-11-30`, so its last included day is
+29 November. Use the configured billing calendar, never the browser's zone.
+Require an explicitly configured IANA time zone. `Europe/Madrid` is a synthetic
+fixture value, not a chosen production calendar. Production composition must
+supply its agreed calendar before enabling the adapter. Quiet-hour hosting stops
+are separate and cannot be inferred from this date.
+
+#### Allowed level, state and period combinations
+
+The table describes ready billing objects. Every interval has `from < until`;
+`coversAsOf` must equal membership of the calendar day containing `asOf` in
+`[from,until)`. Reject an unlisted combination and clear the billing display.
+The factual precedence and interval selection above still apply; a combination
+in this table alone cannot establish settlement or a transition.
+
+| Level | State | Allowed period |
+| --- | --- | --- |
+| `registered` | `active` | `null`. Registration alone establishes no paid interval. |
+| `registered` | `payment_failing` | `null`. An unresolved accepted failure does not establish current paid coverage. |
+| `connected` / `hosted` | `trial` | Matching-level `trial`, containing today, with `coversAsOf:true`. |
+| `connected` / `hosted` | `active` / `payment_failing` | `null`, or a matching-level `paid` interval selected by the rules above. Historical paid intervals have `coversAsOf:false`. |
+| Any level | `lapsed` | `null`, a selected `paid` interval, or the completed-trial fallback described above. For a paid current level the period matches it; for `registered` it names the former paid level. The membership flag still describes the interval, never service authority. |
+
+`registered/trial` and an active or payment-failing `trial` period are invalid.
+`billing:{status:'unavailable',reason:'state_not_ready'}` has no level, state or
+period fields; it can accompany either published or unavailable prices.
+
+Scheduling cancellation or a move down leaves the current level/state and
+established coverage visible until the stored change takes effect. After a
+cancellation has actually moved a venue to registered with an effective lapse,
+return `registered/lapsed`, with its selected historical interval or null.
+Do not relabel that as `registered/active` merely because the paid interval
+ended. A move from hosted to connected returns the stored connected state;
+`active` may have no established connected period, and a hosted interval cannot
+become a connected one. An effective lapse still takes precedence. A missing
+transition is unavailable where the rules above require it; this read never
+executes the transition or predicts a stop date. Slice G must supply those facts.
+
+#### Published prices and destination
+
+Select the greatest published revision effective on/before today's country
+calendar day. Return its stored cents and VAT, never working estimates,
+future prices, or a historic charge's frozen price. When no effective version
+exists, return `prices:{status:'unavailable',reason:'not_published'}` while
+retaining available billing facts. This does not mean zero or free. Do not seed
+production prices. All numeric money fields are nonnegative safe whole EUR
+cents. Registered is free; connected is per venue/month; hostedMonthlyCents is
+the per-venue 30-day rate basis, charged by actual hosted days, not a promise
+of a fixed calendar-month hosting charge. A hosted day's basis is monthly/30;
+do not round a daily display figure and multiply it to quote a bill.
+
+Prices exclude VAT. `2100` basis points means 21% in a synthetic fixture, not
+a configured production tax decision. VAT is added once to the whole charge's
+net total, rounded half up to cents. The hosted amount credits days already
+covered by connected at the frozen charge's connected rate, divides the
+aggregate numerator by 30, rounds half up and floors at zero (Slice B).
+These price fields are a published list, not an invoice or individual quote.
+
+`accountUrl` is exactly the configured trusted country portal origin plus
+`/account`. Require HTTPS, no userinfo/query/fragment or caller destination;
+only existing explicit loopback development-origin exceptions may use HTTP.
+There are no tokens, return URLs or business selectors. Waitron must compare the complete URL with its saved trusted Cloud origin
+plus `/account`, and refuse the whole response if they differ. A matching
+hostname alone is insufficient. Following it requires
+the owner's ordinary Cloud login and ownership checks. The existing account
+page is reachable; billing controls/invoices await F/H. A1185 should label
+this “Open Cloud account”, without promising controls already exist. For an
+unconnected venue, link to the independently configured trusted Cloud origin
+plus `/signup`, the existing signup page. Do not obtain this origin from a
+billing response. This signed read cannot serve an unconnected venue: the
+public price-read decision remains open, and version 1 adds no public endpoint.
+Do not invent prices or remove the approved pre-connection price requirement.
+
+### Errors, bounds and freshness
+
+Errors contain only `{error:code}` and existing security headers. Retain the
+app's 120/IP/minute general budget plus 60/IP/minute machine and
+30/authenticated-installation/minute shared budgets across workers.
+
+| HTTP | Code | Meaning | Waitron's code |
+| --- | --- | --- | --- |
+| 400 | `invalid_input` | Outer JSON/fields or query parameters invalid. | `cloud.request_invalid` |
+| 400 | `invalid_request` / `unsupported_billing_version` | Signed body differs from exact v1 / sole canonical integer version is unsupported. | `cloud.request_invalid` |
+| 401 | `invalid_proof` | Unknown installation, bad key/action/origin/time, lease or binding. | `cloud.unavailable` |
+| 403 | `forbidden` / `revoked` | Browser Origin/wrong host / revoked or superseded installation. | `cloud.unavailable` |
+| 405 | `method_not_allowed` | Anything except POST. | `cloud.request_invalid` |
+| 408 | `invalid_input` | Request time bound. | `cloud.unavailable` |
+| 413 / 415 | `invalid_input` | Request byte / media or encoding bound. | `cloud.request_invalid` |
+| 429 | `rate_limited` | Shared budget exhausted; observe `Retry-After`. | `cloud.unavailable` |
+| 503 | `temporarily_unavailable` | Display adapter/issuer unconfigured, missing trusted country/calendar or unavailable database/schema. | `cloud.unavailable` |
+
+Malformed, oversized, redirected, stale or incorrectly bound responses also
+produce `cloud.unavailable` locally; they never supply fallback billing facts.
+
+Read at most 16,384 request bytes within five seconds. Response JSON is at most
+16,384 UTF-8 bytes. Waitron uses its configured exact HTTPS origin, refuses
+redirects, and limits the complete response read to eight seconds/16,384 bytes.
+All responses use `Cache-Control: no-store`; no ETag, 304 or server response
+cache. A repeated read, including the same operation UUID, reauthenticates and
+returns current facts. Do not persist a result in `installation_operations`.
+
+The box issues at most one read per minute across all dashboards, including
+screen open and explicit refresh. While the screen is visible, periodic reads
+share that same limit. Keep no snapshot on disk; never fetch from a till, during
+startup or in a sale path. Fence overlapping responses by saved
+registration and request generation; ignore a slower older response. Persist
+no billing snapshot. On an error, partial unavailability, disconnect or
+revocation, show the affected section unavailable and clear its old values;
+retain independent connection/service health. Do not turn an error into
+`registered`, `lapsed`, zero prices or an entitlement decision. Retry 429 only
+after its hint and do not renew a lease just because prices are unpublished.
+
+### Shared example answers
+
+These five complete synthetic responses are fixtures for both adapters. Each
+uses the saved installation/venue and trusted origin shown here; substitute
+those saved identities when checking a real response. `Europe/Madrid`, prices
+and VAT are test values, not production configuration. Consumers reject extra
+fields, invalid combinations, an incorrect membership flag or a different
+`accountUrl`. These examples do not replace J2's fixed signing vector.
+
+#### Trial
+
+```json
+{"version":1,"installationId":"11111111-1111-4111-8111-111111111111","venueId":"22222222-2222-4222-8222-222222222222","countryCode":"ES","calendarTimeZone":"Europe/Madrid","asOf":"2026-11-10T12:00:00.000Z","billing":{"status":"ready","level":"connected","state":"trial","period":{"kind":"trial","level":"connected","from":"2026-10-31","until":"2026-11-30","coversAsOf":true}},"prices":{"status":"published","revision":1,"effectiveFrom":"2026-11-01","currency":"EUR","taxExclusive":true,"vatRateBasisPoints":2100,"registeredMonthlyCents":0,"connectedMonthlyCents":3000,"hostedMonthlyCents":9000,"hostedDayDivisor":30},"accountUrl":"https://cloud.example.test/account"}
+```
+
+#### Active with no established period
+
+```json
+{"version":1,"installationId":"11111111-1111-4111-8111-111111111111","venueId":"22222222-2222-4222-8222-222222222222","countryCode":"ES","calendarTimeZone":"Europe/Madrid","asOf":"2026-11-10T12:00:00.000Z","billing":{"status":"ready","level":"hosted","state":"active","period":null},"prices":{"status":"published","revision":1,"effectiveFrom":"2026-11-01","currency":"EUR","taxExclusive":true,"vatRateBasisPoints":2100,"registeredMonthlyCents":0,"connectedMonthlyCents":3000,"hostedMonthlyCents":9000,"hostedDayDivisor":30},"accountUrl":"https://cloud.example.test/account"}
+```
+
+#### Lapsed with a historical period
+
+```json
+{"version":1,"installationId":"11111111-1111-4111-8111-111111111111","venueId":"22222222-2222-4222-8222-222222222222","countryCode":"ES","calendarTimeZone":"Europe/Madrid","asOf":"2026-11-10T12:00:00.000Z","billing":{"status":"ready","level":"registered","state":"lapsed","period":{"kind":"paid","level":"connected","from":"2026-10-01","until":"2026-11-01","coversAsOf":false}},"prices":{"status":"published","revision":1,"effectiveFrom":"2026-11-01","currency":"EUR","taxExclusive":true,"vatRateBasisPoints":2100,"registeredMonthlyCents":0,"connectedMonthlyCents":3000,"hostedMonthlyCents":9000,"hostedDayDivisor":30},"accountUrl":"https://cloud.example.test/account"}
+```
+
+#### Billing unavailable, prices published
+
+```json
+{"version":1,"installationId":"11111111-1111-4111-8111-111111111111","venueId":"22222222-2222-4222-8222-222222222222","countryCode":"ES","calendarTimeZone":"Europe/Madrid","asOf":"2026-11-10T12:00:00.000Z","billing":{"status":"unavailable","reason":"state_not_ready"},"prices":{"status":"published","revision":1,"effectiveFrom":"2026-11-01","currency":"EUR","taxExclusive":true,"vatRateBasisPoints":2100,"registeredMonthlyCents":0,"connectedMonthlyCents":3000,"hostedMonthlyCents":9000,"hostedDayDivisor":30},"accountUrl":"https://cloud.example.test/account"}
+```
+
+#### Prices unpublished, billing available
+
+```json
+{"version":1,"installationId":"11111111-1111-4111-8111-111111111111","venueId":"22222222-2222-4222-8222-222222222222","countryCode":"ES","calendarTimeZone":"Europe/Madrid","asOf":"2026-11-10T12:00:00.000Z","billing":{"status":"ready","level":"connected","state":"trial","period":{"kind":"trial","level":"connected","from":"2026-10-31","until":"2026-11-30","coversAsOf":true}},"prices":{"status":"unavailable","reason":"not_published"},"accountUrl":"https://cloud.example.test/account"}
+```
+
+### Implementation and release gates
+
+This accepted wire section is the target for Slice J. The endpoint, provider
+adapter, omission checks, fixed signing vector and Waitron consumer remain
+unbuilt. Contract agreement is not runtime qualification. Record actual Cloud
+and Waitron implementation pins and results when those adapters land.
+
+The production billing calendar and the pre-connection public price read remain
+owner decisions raised by Lane B. Version 1 requires an explicit configured
+calendar with no production default; it does not choose between country-wide
+and per-venue production calendars. Production prices, retention, collection,
+hosted-stop legality and provider/invoice qualification retain their existing
+gates. Emergency hosting facts need a separate agreed read or a later version.
