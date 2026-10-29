@@ -1,0 +1,85 @@
+name: Browser reconnect attribution
+on:
+  pull_request:
+    paths:
+      - 'scripts/cloud-cost/diagnostics/**'
+      - '.github/workflows/browser-reconnect-diagnostic.yml'
+permissions:
+  contents: read
+  packages: read
+jobs:
+  socket-observation:
+    name: pinned Linux socket observation (${{ matrix.group }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    strategy:
+      fail-fast: false
+      matrix:
+        group: [1, 2]
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '26'
+          package-manager-cache: false
+      - run: node scripts/ci-setup-pnpm.mjs
+        env:
+          NODE_OPTIONS: --require=${{ github.workspace }}/scripts/ci-pnpm-diagnostics.cjs
+          npm_config_fetch_timeout: '15000'
+          npm_config_fetch_retries: '1'
+          npm_config_fetch_retry_mintimeout: '1000'
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '26'
+          cache: pnpm
+          registry-url: https://npm.pkg.github.com
+          scope: '@waitron-io'
+      - run: pnpm install --frozen-lockfile
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Observe the pinned journey and retain the first refusal
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -o pipefail
+          mkdir -p diagnostics
+          node --test scripts/cloud-cost/diagnostics/instrument.test.mjs
+          node scripts/cloud-cost/diagnostics/instrument.mjs
+          git diff -- scripts/cloud-cost/remote.mjs scripts/cloud-cost/browser.mjs scripts/cloud-cost/fixtures/remote-browser-conformance.test.mjs > diagnostics/instrumentation.patch
+          node --input-type=module <<'JS' 2>&1 | tee diagnostics/setup-and-observations.log
+          import {writeFileSync} from 'node:fs';
+          import {prepareConformance} from './scripts/cloud-cost/conformance-prepare.mjs';
+          import {runTests} from './scripts/cloud-cost/conformance.mjs';
+          const file = 'remote-browser-conformance.test.mjs';
+          const fixture = await prepareConformance([file]);
+          const observations = [];
+          try {
+            for (let index = 1; index <= 6; index++) {
+              const result = await runTests(['scripts/cloud-cost/fixtures/' + file], {
+                env: {...process.env, ...fixture.env}, stdio: 'pipe',
+                pattern: '^pinnedDashboardBrowserLoadsAssetsAuthenticatesReconnectsAndSignsOut_none$',
+              });
+              writeFileSync('diagnostics/observation-' + index + '.log', result.output);
+              observations.push({index, exit: result.code});
+              console.log(JSON.stringify(observations.at(-1)));
+              // Sampling stops at the first refusal; no failed sample is retried.
+              if (result.code !== 0) break;
+            }
+            const controls = await runTests(['scripts/cloud-cost/fixtures/' + file], {
+              env: {...process.env, ...fixture.env}, stdio: 'pipe',
+              pattern: '^pinnedDashboardBrowserLoadsAssetsAuthenticatesReconnectsAndSignsOut_(?!none$)',
+            });
+            writeFileSync('diagnostics/deliberate-fault-controls.log', controls.output);
+            writeFileSync('diagnostics/summary.json', JSON.stringify({observations, controlsExit: controls.code}, null, 2));
+            process.exitCode = controls.code || (observations.some(row => row.exit !== 0) ? 1 : 0);
+          } finally { fixture.cleanup(); }
+          JS
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: browser-reconnect-${{ github.event.pull_request.head.sha }}-${{ matrix.group }}
+          path: diagnostics/
+          retention-days: 14
