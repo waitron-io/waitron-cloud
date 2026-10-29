@@ -287,14 +287,14 @@ order. Remote access matters most because Waitron's customer-facing features wai
    owner as the only person on call and a free hosted status page. Missing: production
    collection and retained history, checks from outside the affected cell, a chosen paging
    provider, and the status page itself.
-3. **Billing.** Remote access and backups are paid services, and so is the rota solver
-   below. Today billing is one bullet under _Platform work to scope_. The plan switch is a
-   test-only one an operator sets by hand, and the usage ledger is "observational only"
-   ([usage metering](usage-metering.md)). Missing: what is charged for, prices and free
-   allowances; a payment provider and checkout; trials; Cloud's own invoices to venues under
-   Spanish rules, with the customer's tax number (signup leaves "Tax details, billing and
-   country-specific validation" to "the later billing journey"); failed payments;
-   cancellation; and closing an account.
+3. **Billing — DESIGNED AND APPROVED (2026-10-29).** The
+   [design](superpowers/specs/2026-10-29-cloud-billing-design.md) sets three levels
+   (registered, connected, hosted), trials, SumUp cards and Stripe direct debit, failed
+   payments, emergency hosting by a venue manager, and Cloud's own Veri\*Factu invoices.
+   The build plan is next; its first step is a SumUp sandbox test. Prices and allowance
+   sizes wait for measurement (the design's §11). Billing cannot go live before the
+   Waitron company exists to issue invoices, and that billing software needs its own
+   declaración responsable.
 4. **Terms, the data processing agreement and service promises.** These are needed before
    the first customer, paid or not, and a lawyer is needed for each, so the questions should
    go out early. The [launch evidence](launch-evidence.md) requires "lawyer-reviewed terms",
@@ -2929,7 +2929,8 @@ implementation or production evidence.
   including the email-region decision and the boundaries of local browser evidence.
 - **Subscriptions and billing.** Service catalogue, checkout, invoicing, permitted
   services, usage accounting, trials, failed payment and cancellation. Item 3 of
-  [launch platform work](#launch-platform-work-in-priority-order).
+  [launch platform work](#launch-platform-work-in-priority-order); designed in
+  [the billing design](superpowers/specs/2026-10-29-cloud-billing-design.md).
 - **Venue and node registration.** The agreed Waitron signup and connection journey is
   implemented locally. Planned handover, diagnostics, retention, key provisioning
   and rotation, deployment qualification and production activation remain open;
