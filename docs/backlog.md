@@ -3186,7 +3186,7 @@ The [kernel's cgroup documentation](https://www.kernel.org/doc/html/latest/admin
 defines `oom_kill` as killed processes in the cgroup. Resource reports still omit
 raw child text and cannot turn a successful exit into a refusal. Production code
 is unchanged. Real container qualification runs in CI while local Docker remains
-unavailable until 3 November.
+unavailable until 3 November. A native refusal control for a Docker-positive OOM report with a non-73 exit remains open in `packages/backups/test/container-resource-diagnostics.test.ts`; the review's omitted-flag experiment survives the current native suite.
 
 ## Verifier source isolation from local edits (D445)
 
