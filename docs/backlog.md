@@ -82,6 +82,13 @@ stops the loop with its original error. Successful reporting waits before retryi
 and preserves the scheduling deadline. Real database failures and production
 shutdown remain separate qualification gates.
 
+Run `node --test packages/registration/test/worker-loop-cancellation.test.ts` to
+check claims that finish or reject when shutdown cancels them. At two and 32 active
+slots, shutdown waits for every claim's cleanup and any pending error report,
+without scheduling, polling or retrying. Cancellation and reporting failures keep
+their original errors. Real database cancellation and production shutdown remain
+separate qualification gates.
+
 ## Worker scheduling deadlines and polling failures (D468)
 
 Run `node --test packages/registration/test/worker-loop-timing.test.ts` to
