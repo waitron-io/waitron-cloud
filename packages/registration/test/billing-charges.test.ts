@@ -10,6 +10,8 @@ test('a level-2 venue that fails over pays only the difference for each hosted d
 test('a venue hosted from the start pays a thirtieth of the hosted price a day',()=>{
  assert.equal(hostedDaysCents(prices,30,0),3000);
  assert.equal(hostedDaysCents(prices,1,0),100);
+ assert.equal(hostedDaysCents({connectedMonthlyCents:0,hostedMonthlyCents:40},1,0),1);
+ assert.equal(hostedDaysCents({connectedMonthlyCents:0,hostedMonthlyCents:15},1,0),1);
 });
 test('the hosted amount is never negative',()=>{
  assert.equal(hostedDaysCents({connectedMonthlyCents:3000,hostedMonthlyCents:1000},2,2),0);
@@ -37,4 +39,10 @@ test('VAT is added once on the charge total, rounded half up',()=>{
  const lines=renewalLines('2026-12-12',prices,[venue('b',{hostedDays:7,hostedDaysCoveredByConnected:7}),venue('a')]);
  assert.deepEqual(chargeTotals(lines,2100),{netCents:2467,vatCents:518,grossCents:2985});
  assert.deepEqual(chargeTotals([],2100),{netCents:0,vatCents:0,grossCents:0});
+ assert.deepEqual(chargeTotals([{venueId:'a',kind:'connected_month',quantity:1,cents:50}],2100),
+  {netCents:50,vatCents:11,grossCents:61});
+ assert.deepEqual(chargeTotals([
+  {venueId:'a',kind:'connected_month',quantity:1,cents:1002},
+  {venueId:'b',kind:'connected_month',quantity:1,cents:1002},
+ ],2100),{netCents:2004,vatCents:421,grossCents:2425});
 });

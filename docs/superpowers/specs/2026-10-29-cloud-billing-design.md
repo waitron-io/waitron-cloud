@@ -320,8 +320,9 @@ switches everything back on. A lapsed venue's backups follow the cancelling path
    venue owes nothing to come back, because its services stopped on the renewal date
    (owner). The day a business comes back becomes its new renewal date (driver's call).
 
-The rest is the driver's call: retries are at least weekly across that month, with an email
-each time saying the date hosting will stop. Hosting stops at the venue's quiet hour, not
+The rest is the driver's call: cards are retried weekly across that month. Direct-debit
+retries are 14 days apart, with none in the last 10 days before hosting stops; a pending
+debit prevents another attempt. Each retry emails the date hosting will stop. Hosting stops at the venue's quiet hour, not
 at a fixed time that could fall in the middle of a service. The production deployment
 design already uses quiet hours for moves. Why a month is reasonable: Lightspeed retries over
 about three weeks and then restricts the account for a week before cancelling (from a
@@ -516,8 +517,9 @@ For the owner to check while reading:
 9. Moving down or cancelling takes effect at the end of the paid month, with no refund,
    including a cancellation made after the early charge for the coming month; price changes
    come with 30 days' notice (§6).
-10. A hosted venue's retries are at least weekly; hosting stops at the venue's quiet hour
-    (§6).
+10. A hosted venue's card retries are weekly; direct-debit retries are 14 days apart,
+    outside the final 10 days and only after the previous debit settles. Hosting stops at
+    the venue's quiet hour (§6).
 11. A refunded direct debit counts as a failed payment (§6).
 12. The emergency setting is on by default (§7).
 13. The emergency page reveals nothing until a valid code is entered; the locked copy shuts

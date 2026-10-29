@@ -51,10 +51,16 @@ test('level 2 by direct debit is never retried before the renewal date',()=>{
 test('a hosted venue gets weekly retries for 30 days after the renewal date, then hosting stops',()=>{
  assert.deepEqual(failureTimeline('hosted','card','2026-12-12','2026-12-05'),
   {retryDates:['2026-12-12','2026-12-19','2026-12-26','2027-01-02','2027-01-09'],servicesStop:'2027-01-11'});
+ assert.deepEqual(failureTimeline('hosted','card','2026-12-12','2026-12-06'),
+  {retryDates:['2026-12-13','2026-12-20','2026-12-27','2027-01-03','2027-01-10'],servicesStop:'2027-01-11'});
+ assert.deepEqual(failureTimeline('hosted','card','2026-12-12','2026-12-07'),
+  {retryDates:['2026-12-14','2026-12-21','2026-12-28','2027-01-04'],servicesStop:'2027-01-11'});
 });
 test('a hosted venue by direct debit is retried 14 days apart and never within 10 days of hosting stopping',()=>{
  assert.deepEqual(failureTimeline('hosted','direct_debit','2026-12-12','2026-12-08'),
   {retryDates:['2026-12-22'],servicesStop:'2027-01-11'});
+ assert.deepEqual(failureTimeline('hosted','direct_debit','2026-12-12','2026-12-18'),
+  {retryDates:['2027-01-01'],servicesStop:'2027-01-11'});
 });
 test('a refunded direct debit starts the countdown a week after we learn of it',()=>{
  assert.deepEqual(refundTimeline('connected','card','2027-01-20'),

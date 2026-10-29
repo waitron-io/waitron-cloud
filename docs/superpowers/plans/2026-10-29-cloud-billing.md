@@ -36,7 +36,8 @@ plan does.
 - Cards are first tried 7 days before the renewal date; direct debit 10 days before
   (spec §6).
 - Level 2: online services stop on the renewal date after a failed payment. Hosted: about a
-  month of retries, at least weekly, then hosting stops (spec §6).
+  month of retries, weekly by card or 14 days apart by direct debit with none in the final
+  10 days, then hosting stops. A pending debit prevents another attempt (spec §6).
 - Coming back after a hosted lapse costs the unpaid hosted days; a lapsed level 2 owes
   nothing; the return day becomes the new renewal date (spec §6).
 - Money is whole cents, as integers. Prices are before VAT; VAT is added once per charge on
@@ -226,8 +227,8 @@ a `CivilDate` carries no time zone. `failureTimeline` works like this:
     `≤ servicesStop − 1`.
   - **By direct debit,** retries every `DIRECT_DEBIT_RETRY_SPACING_DAYS` from
     `firstFailure + 14`, kept while `≤ servicesStop − 10`. The 14-day spacing is longer than
-    a debit's confirmation time with weekends and holidays in it, so a retry never overlaps
-    a pending debit. Slice G still refuses to send while a debit is pending.
+    a debit's estimated confirmation time; slice A must verify the provider's actual timing.
+    Spacing alone does not prove settlement. Slice G refuses to send while a debit is pending.
 
 Add to `index.ts`:
 `export {addDays,renewalDateIn,nextRenewalAfter,renewalOnOrAfter,firstAttemptDate,firstChargedRenewal,failureTimeline,refundTimeline,ATTEMPT_LEAD_DAYS,HOSTED_GRACE_DAYS,DIRECT_DEBIT_RETRY_SPACING_DAYS,type CivilDate,type PaymentMethodKind,type PaidLevel,type FailureTimeline} from './billing-calendar.ts';`
@@ -441,6 +442,15 @@ Run: `pnpm --filter @waitron-cloud/registration typecheck`. Expected: exit statu
 git add packages/registration/src/billing-charges.ts packages/registration/src/index.ts packages/registration/test/billing-charges.test.ts
 git commit -s -m "Billing rules: hosted-day amounts and renewal lines"
 ```
+
+### Boundaries for later slices
+
+Slice C supplies one charge view per venue, so a renewal cannot include the same venue
+twice. Slice G calculates a first venue's attempt date only when its trial converts,
+after any extension is decided; calculating it mid-trial could schedule a charge before
+the outcome is known. Slice G also checks whether a debit is still pending before any
+retry. Slice A must qualify provider confirmation timing; the 14-day interval alone does
+not prove a debit has settled.
 
 ### After slice B
 
