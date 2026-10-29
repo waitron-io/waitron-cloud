@@ -3129,6 +3129,16 @@ unique image tag, with a one-second limit, and always removes temporary files.
 Reproduce the image build when local Docker is available; passing CI does not explain
 the earlier timeout. Keep every verifier assertion and the existing build and job limits.
 
+## Storage partial port-reservation refusals (D464)
+
+Run `node --test scripts/ci-backup-storage-reservation-refusals.test.mjs` to
+check occupied sockets at the first, fourth and eighth storage-port reservation.
+Failed startup returns the original socket error, releases earlier reservations
+and the identity server, and removes its extracted files and private key.
+The complete cache and a competing listener remain usable. Real store startup
+and historical failure causes retain their separate gates; see
+[the storage investigation](backlog/storage-cache-fixture.md).
+
 ## Storage extraction and certificate setup refusals (D452)
 
 Run `node --test scripts/ci-backup-storage-extraction.test.mjs` to check real
