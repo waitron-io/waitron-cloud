@@ -1862,9 +1862,10 @@ All responses use `Cache-Control: no-store`; no ETag, 304 or server response
 cache. A repeated read, including the same operation UUID, reauthenticates and
 returns current facts. Do not persist a result in `installation_operations`.
 
-Fetch on screen open or explicit refresh, and at most once per minute while
-visible. Share that limit across dashboards on the box. Keep no snapshot on
-disk; never fetch from a till, during startup or in a sale path. Fence overlapping responses by saved
+The box issues at most one read per minute across all dashboards, including
+screen open and explicit refresh. While the screen is visible, periodic reads
+share that same limit. Keep no snapshot on disk; never fetch from a till, during
+startup or in a sale path. Fence overlapping responses by saved
 registration and request generation; ignore a slower older response. Persist
 no billing snapshot. On an error, partial unavailability, disconnect or
 revocation, show the affected section unavailable and clear its old values;
