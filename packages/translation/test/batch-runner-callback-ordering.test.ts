@@ -9,7 +9,8 @@ const job=parseJob(JSON.stringify({version:1,country:'ES',languages:{default:'es
 
 for(const phase of ['first pass','review'] as const)for(const held of ['spent','attempted'] as const)for(const abort of [false,true]){
  test(`${phase} waits for delayed ${held} before ${abort?'returning cancellation':'continuing'}`,async()=>{
-  const entered=Promise.withResolvers<void>(),release=Promise.withResolvers<void>();
+  let enter!:()=>void,finish!:()=>void;
+  const entered=new Promise<void>(resolve=>{enter=resolve;}),release=new Promise<void>(resolve=>{finish=resolve;});
   const controller=new AbortController(),events:string[]=[],usage:{inputTokens:number;outputTokens:number}[]=[];
   const target=phase==='first pass'?1:2;
   let spends=0,renewals=0,settled=false;
@@ -18,12 +19,12 @@ for(const phase of ['first pass','review'] as const)for(const held of ['spent','
    async mayCall(){events.push('allow');return true;},
    async spent(tokens){
     usage.push(tokens);events.push('spent:start');spends++;
-    if(held==='spent'&&spends===target){entered.resolve();await release.promise;}
+    if(held==='spent'&&spends===target){enter();await release;}
     events.push('spent:end');
    },
    async attempted(){
     events.push('renew:start');renewals++;
-    if(held==='attempted'&&renewals===target){entered.resolve();await release.promise;}
+    if(held==='attempted'&&renewals===target){enter();await release;}
     events.push('renew:end');
    },
    async wait(){assert.fail('successful replies must not retry');},
@@ -32,7 +33,7 @@ for(const phase of ['first pass','review'] as const)for(const held of ['spent','
   const pending=translateBatch(job,job.items,client,hooks,controller.signal).finally(()=>{settled=true;});
   const completedCall=['allow','spent:start','spent:end','renew:start','renew:end'];
   try{
-   await entered.promise;
+   await entered;
    if(abort)controller.abort();
    // Let a missing await advance through the real HTTP and promise callbacks.
    await setImmediate();await setImmediate();
@@ -40,7 +41,7 @@ for(const phase of ['first pass','review'] as const)for(const held of ['spent','
    assert.deepEqual(events,[...(target===2?completedCall:[]),'allow','spent:start',...(held==='attempted'?['spent:end','renew:start']:[])]);
    assert.equal(fake.requests.length,target,'another paid call began before the callback completed');
    assert.deepEqual(usage,target===1?[{inputTokens:11,outputTokens:5}]:[{inputTokens:11,outputTokens:5},{inputTokens:7,outputTokens:3}]);
-   release.resolve();
+   finish();
    const result=await pending;
    if(abort){
     assert.deepEqual(result,{kind:'aborted'});
@@ -52,6 +53,6 @@ for(const phase of ['first pass','review'] as const)for(const held of ['spent','
     assert.deepEqual(usage,[{inputTokens:11,outputTokens:5},{inputTokens:7,outputTokens:3}]);
     assert.deepEqual(fake.requests.map(request=>request.body.reasoning.effort),['low','medium']);
    }
-  }finally{release.resolve();try{await pending;}finally{await fake.close();}}
+  }finally{finish();try{await pending;}finally{await fake.close();}}
  });
 }
