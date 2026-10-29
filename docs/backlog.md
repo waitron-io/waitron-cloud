@@ -681,6 +681,12 @@ GitHub CI qualifies the PostgreSQL journeys while local Docker is unavailable.
 
 ## Translate all: approved design, implementation still open
 
+Run `node --test packages/translation/test/batch-runner-callback-failures.test.ts`
+to check accounting and lease-renewal failures after valid, unusable and incomplete
+billed replies in both passes. Local HTTP checks retain each original error and
+prevent another paid call after those failures. Real database recovery, provider
+activation and the remaining [translation gates](backlog/translation.md) stay open.
+
 The design and 24-task plan are owner-approved; Tasks 1–21 are implemented.
 Keep translation off until the remaining Cloud, joint Waitron and release checks,
 owner-only quality trials after 2026-11-02, and commercial and production decisions
