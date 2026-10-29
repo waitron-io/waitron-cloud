@@ -100,14 +100,14 @@ export async function openReplay({ codeRoot, stateRoot, config, initial }) {
     await r.applyMigrations(join(stateRoot, 'venue'), migrations);
     store = await r.openVenueDatabase(join(stateRoot, 'venue'));
     const db = store.venue;
-    const { nodeId, locationId, standard, full } = await r.withTransaction(db, async tx => {
+    const { nodeId, standard, full } = await r.withTransaction(db, async tx => {
       await tx.insert(r.tenants).values({ id: 1, ...initial.taxpayer });
       const [location] = await tx.insert(r.locations).values(initial.location).returning({ id: r.locations.id });
       const [node] = await tx.insert(r.nodes).values({ locationId: location.id, name: initial.nodeName }).returning({ id: r.nodes.id });
       const [standard] = await tx.insert(r.invoiceSeries).values({ nodeId: node.id, code: initial.seriesCode }).returning({ id: r.invoiceSeries.id });
       const [full] = await tx.insert(r.invoiceSeries).values({ nodeId: node.id, code: initial.fullSeriesCode, purpose: 'full' }).returning({ id: r.invoiceSeries.id });
       await r.registerSif(tx, { nodeId: node.id, nif: initial.taxpayer.taxId, idSistemaInformatico: initial.idSistemaInformatico });
-      return { nodeId: node.id, locationId: location.id, standard: standard.id, full: full.id };
+      return { nodeId: node.id, standard: standard.id, full: full.id };
     });
     writeFileSync(join(stateRoot, 'trading.env'),
       `WAITRON_NODE_ID=${nodeId}\n`, { mode: 0o600, flag: 'wx' });
