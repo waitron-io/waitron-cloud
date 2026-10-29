@@ -123,7 +123,8 @@ and closes with SIGKILL and empty standard error. No setup code changed in D480.
 
 The phase trace identifies the command, not the network or Git cause.
 [Bounded pinned-source acquisition](#bounded-pinned-source-acquisition-d482) now
-limits failed transfers and permits one transport retry. Qualify D480 on a fresh
-head containing that repair; a green run does not establish the historical cause.
+limits failed transfers and permits one transport retry. Fresh heads containing
+that repair still need complete CI; a green run does not establish the historical
+cause.
 Keep this observation separate from the package-body stall and D458's earlier
 connection refusal. Preserve the source pin and cleanup.
