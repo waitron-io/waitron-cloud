@@ -48,8 +48,9 @@ async function hostedDay(context:BillingContext,command:Extract<VenueCommand,{ty
   if(old.covered_by_charge_id!==null||old.consumed_by_charge_id!==null)throw new BillingError('billing_charge_conflict');
  }
  if(command.coveredByChargeId!==null){
+  // The first success owns history; any still-paid attempt can cover the same charge.
   const coverage=await context.client.query(`SELECT p.charge_id FROM billing_paid_periods p
-   JOIN billing_payment_attempts a ON (a.organisation_id,a.legal_business_id,a.id,a.charge_id)=(p.organisation_id,p.legal_business_id,p.attempt_id,p.charge_id)
+   JOIN billing_payment_attempts a ON (a.organisation_id,a.legal_business_id,a.charge_id)=(p.organisation_id,p.legal_business_id,p.charge_id)
    JOIN billing_charge_lines l ON (l.organisation_id,l.legal_business_id,l.charge_id,l.venue_id,l.kind)=(p.organisation_id,p.legal_business_id,p.charge_id,p.venue_id,'connected_month')
    WHERE p.organisation_id=$1 AND p.legal_business_id=$2 AND p.venue_id=$3 AND p.charge_id=$5 AND p.level='connected'
     AND p.from_date<=$4::date AND p.until_date>$4::date AND a.state='succeeded' AND a.succeeded_at IS NOT NULL`,[...args,command.coveredByChargeId]);

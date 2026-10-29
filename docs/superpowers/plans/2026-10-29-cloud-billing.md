@@ -952,7 +952,7 @@ on the existing context/client. For renewal, calculate B's lines at renewalDate;
 for comeback, supply null connected starts to exclude monthly charges. A requested price
 revision must equal the effective revision at renewalDate. Validate interval bounds
 and safe arithmetic, compute totals once, save the whole version on the charge, then allocate all selected hosted days,
-including zero-cent ones. Do not recompute historical charges on reads or replays.
+including zero-cent ones. Do not recompute historical charges on reads or replays. Both daily rates come from the selected bill version under B3; earlier charges retain their own snapshots. A different basis for credits after a price change requires a separate pricing-rule amendment, not a silent change in C.
 
 Persist a local pending attempt and its immutable method binding before F ever submits
 it; C does not send or decide whether another attempt is due. Every observation appends
@@ -960,7 +960,7 @@ history tied to the current event. Provider-source events must match the attempt
 provider/account; only `observe_payment` accepts a provider event source. `expectedRevision:null` means history only; a numeric value asks to
 accept with a compare-and-set on that revision. Permit pending-to-succeeded/failed,
 failed-to-succeeded correction and succeeded-to-refunded acceptance, plus same-state
-observations. Acceptance increments attempt revision; history-only writes leave it unchanged.
+observations. Acceptance increments attempt revision; history-only writes leave accepted state and its revision unchanged. The first observation may bind the immutable provider payment reference even when it does not accept a state transition; later observations must retain that binding.
 Never accept succeeded-to-pending/failed or any reversal of refunded.
 Do not sort webhooks by timestamp or infer provider precedence. F validates authenticity
 and decides which observation to propose for acceptance; G decides effects and retries.
@@ -971,7 +971,7 @@ use renewalDate/connectedUntil; hosted periods use that venue's minimum assigned
 through one day after its maximum, without claiming connected coverage. History retains
 exact hosted dates in the assigned day rows. No success changes the current venue level,
 consumes the other level's trial, issues an invoice or starts service. Protect provider
-bindings, first success and frozen amounts against direct SQL regression.
+bindings, first success and frozen amounts against direct SQL regression. Hosted paid-period dates bound the allocated days; the exact days remain in `billing_hosted_days`. Those summary bounds must not grant continuous hosting or connected coverage across gaps.
 
 - [ ] **Step 4: Observe all C2–C4 matrix and concurrency tests GREEN on this CI head.**
 
