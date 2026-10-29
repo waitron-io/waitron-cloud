@@ -125,7 +125,7 @@ test('event insertion and effects roll back together',async()=>{
  }finally{await f.close();}
 });
 
-test('concurrent first venues share one anchor and stale comeback refuses',async()=>{
+test('concurrent first venues share one anchor and stale comeback refuses',async t=>{
  const f=await fixture();let blocker:PoolClient|undefined;const pending:Promise<unknown>[]=[];
  try{
   await ensure(f);blocker=await f.pool.connect();await blocker.query('BEGIN');
@@ -138,6 +138,10 @@ test('concurrent first venues share one anchor and stale comeback refuses',async
   while(Date.now()<deadline){
    waiting=(await f.admin.query("SELECT count(*)::int AS n FROM pg_stat_activity WHERE application_name=$1 AND wait_event_type='Lock' AND $2::int=ANY(pg_blocking_pids(pid))",[f.schema,pid])).rows[0].n;
    if(waiting===2)break;await setImmediate();
+  }
+  if(waiting!==2){
+   const activity=(await f.admin.query('SELECT pid,state,wait_event_type,wait_event,query,pg_blocking_pids(pid) AS blockers FROM pg_stat_activity WHERE application_name=$1 ORDER BY pid',[f.schema])).rows;
+   t.diagnostic(JSON.stringify({boundary:'billing-anchor-parent-lock',blockerPid:pid,observedDirectWaiters:waiting,activity}));
   }
   assert.equal(waiting,2,'both requests must reach the actual held parent lock');
   await blocker.query('COMMIT');blocker.release();blocker=undefined;
