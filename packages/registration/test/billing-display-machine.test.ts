@@ -55,6 +55,7 @@ function request(target:Target,changes:Record<string,unknown>={},leaseChanges:Re
 }
 async function command(f:Fixture,target:Target,c:BillingCommand){return (await f.store.execute(target.scope,event(),c)).value;}
 async function level(f:Fixture,target:Target,value:Record<string,unknown>={}){
+ await command(f,target,{type:'ensure_business'});
  const old=await f.store.venue(target.scope,target.venueId);
  await command(f,target,{type:'set_venue',venueId:target.venueId,expectedRevision:old.revision,value:{level:'connected',connectedFrom:'2026-10-01',lapsedOn:null,scheduledLevel:null,scheduledOn:null,...value}} as BillingCommand);
 }
