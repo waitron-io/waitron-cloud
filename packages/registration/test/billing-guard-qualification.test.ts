@@ -8,7 +8,7 @@ import {promisify} from 'node:util';
 const exec=promisify(execFile);
 
 // Run the real refusal cases with one guard removed at a time; setup errors earn no detection.
-test('billing guards detect omissions against real PostgreSQL',async()=>{
+test('billing guards detect omissions against real PostgreSQL',{timeout:180000},async()=>{
  const root=new URL('../../../',import.meta.url).pathname;
  const scratch=await mkdtemp(join(tmpdir(),'billing-guards-')),candidate=join(scratch,'candidate');
  try{
@@ -28,8 +28,9 @@ test('billing guards detect omissions against real PostgreSQL',async()=>{
     needle:'command.expectedRevision!==before.revision||!allowed',replacement:'command.expectedRevision!==before.revision',
     test:'billing-payments.test.ts',pattern:'accepted succeeded payment refuses failed before any observation effect'},
   ];
+  const env={...process.env};delete env.NODE_TEST_CONTEXT;
   async function run(c:typeof cases[number]){
-   return exec(process.execPath,['--test','--test-reporter=tap','--test-name-pattern='+c.pattern,'test/'+c.test],{cwd:join(candidate,'packages/registration'),timeout:10000,maxBuffer:2*1024*1024}).then(r=>({code:0,output:r.stdout+r.stderr}),e=>({code:e.code,output:e.stdout+e.stderr}));
+   return exec(process.execPath,['--test','--test-reporter=tap','--test-name-pattern='+c.pattern,'test/'+c.test],{cwd:join(candidate,'packages/registration'),env,timeout:10000,maxBuffer:2*1024*1024}).then(r=>({code:0,output:r.stdout+r.stderr}),e=>({code:e.code,output:e.stdout+e.stderr}));
   }
   let detected=0;
   for(const c of cases){

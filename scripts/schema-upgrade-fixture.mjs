@@ -40,18 +40,22 @@ export async function completionRetry(root,pool,state){
 
 export function upgradeRevisions(args){
  if(args.length===0)return{oldHead:'9a56d0122bf6872a0200735a7b1e3a23ad4f825c',newHead:'eafd97ad5ac51563e91c821d4c957ef996e5d3fb',factor:false};
- const values={};let relayStop=false,monitoringQuiet=false,backupVerification=false;
+ const values={};let relayStop=false,monitoringQuiet=false,backupVerification=false,billing=false;
  for(let i=0;i<args.length;){
+  if(args[i]==='--billing'){
+   if(billing||backupVerification||relayStop||monitoringQuiet)throw Error('schema upgrade revisions invalid');
+   billing=true;i++;continue;
+  }
   if(args[i]==='--backup-verification'){
-   if(backupVerification||relayStop||monitoringQuiet)throw Error('schema upgrade revisions invalid');
+   if(billing||backupVerification||relayStop||monitoringQuiet)throw Error('schema upgrade revisions invalid');
    backupVerification=true;i++;continue;
   }
   if(args[i]==='--monitoring-quiet'){
-   if(monitoringQuiet||relayStop||backupVerification)throw Error('schema upgrade revisions invalid');
+   if(billing||monitoringQuiet||relayStop||backupVerification)throw Error('schema upgrade revisions invalid');
    monitoringQuiet=true;i++;continue;
   }
   if(args[i]==='--relay-stop'){
-   if(relayStop||monitoringQuiet||backupVerification)throw Error('schema upgrade revisions invalid');
+   if(billing||relayStop||monitoringQuiet||backupVerification)throw Error('schema upgrade revisions invalid');
    relayStop=true;i++;continue;
   }
   const name=args[i],value=args[i+1];
@@ -59,7 +63,7 @@ export function upgradeRevisions(args){
   values[name]=value;i+=2;
  }
  if(!values['--old']||!values['--new']||values['--old']===values['--new'])throw Error('schema upgrade revisions invalid');
- return backupVerification?{oldHead:values['--old'],newHead:values['--new'],factor:false,backupVerification:true}:monitoringQuiet?{oldHead:values['--old'],newHead:values['--new'],factor:false,monitoringQuiet:true}:relayStop?{oldHead:values['--old'],newHead:values['--new'],factor:false,relayStop:true}:{oldHead:values['--old'],newHead:values['--new'],factor:true};
+ return billing?{oldHead:values['--old'],newHead:values['--new'],factor:false,billing:true}:backupVerification?{oldHead:values['--old'],newHead:values['--new'],factor:false,backupVerification:true}:monitoringQuiet?{oldHead:values['--old'],newHead:values['--new'],factor:false,monitoringQuiet:true}:relayStop?{oldHead:values['--old'],newHead:values['--new'],factor:false,relayStop:true}:{oldHead:values['--old'],newHead:values['--new'],factor:true};
 }
 
 export function factorCode(secret,now=Date.now()){
