@@ -29,7 +29,8 @@ export function migrationRelease(count: keyof typeof revisions): Promise<Release
           {cwd: new URL('../../../../', import.meta.url)});
         await exec('tar', ['-xf', join(root, 'release.tar'), '-C', root]);
         await rm(join(root, 'release.tar'));
-        await symlink(new URL('../../../../node_modules', import.meta.url).pathname, join(root, 'node_modules'));
+        if (count === 44) await exec('pnpm', ['install', '--frozen-lockfile'], {cwd: root});
+        else await symlink(new URL('../../../../node_modules', import.meta.url).pathname, join(root, 'node_modules'));
         const module = await import(pathToFileURL(join(root, 'packages/registration/src/migrate.ts')).href);
         return {root, migrate: module.migrate, names: module.migrationNames,
           async close() {releases.delete(count); await rm(root, {recursive: true, force: true});}};
