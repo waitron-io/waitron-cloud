@@ -758,6 +758,13 @@ retry decisions without parsing error-body usage or private text. A later valid
 reply through the same client still succeeds. Real provider and release
 qualification remain separate gates in the linked translation backlog.
 
+Run `node --test packages/translation/test/openai-client-unfinished-redirects.test.ts`
+to check that unfinished redirects close their connections without reaching the
+redirect target or admitting its text or usage. Both passes stop without retry;
+a refused review retains the first-pass names and spending. Later requests on
+the same client still work. Real provider and release qualification remain
+separate gates in the linked translation backlog.
+
 Run `node --test packages/translation/test/openai-client-interrupted-success.test.ts`
 to check that timeout and caller cancellation close unfinished successful HTTP
 responses, discard uncompleted usage and permit a later request on the same
