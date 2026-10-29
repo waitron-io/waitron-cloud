@@ -23,7 +23,7 @@ export async function venueServiceFixture(){
    await pool.query('INSERT INTO venues(id,organisation_id,legal_business_id,local_venue_id,environment) VALUES($1,$2,$3,$1,$4)',[id,s.organisationId,s.legalBusinessId,environment]);
    for(let i=0;i<2;i++){
     const installation=randomUUID();
-    await pool.query('INSERT INTO installations(id,venue_id,public_key) VALUES($1,$2,$1::text)',[installation,id]);
+    await pool.query('INSERT INTO installations(id,venue_id,public_key) VALUES($1,$2,$3)',[installation,id,installation]);
     for(const service of ['continuous_backup','retained_snapshots','remote_access','content_translation'])await pool.query("INSERT INTO installation_services(installation_id,service,state,configuration) VALUES($1,$2,'ready',$3)",[installation,service,{synthetic:service}]);
    }
   }
