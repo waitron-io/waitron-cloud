@@ -3551,6 +3551,16 @@ See the [investigation and remaining qualification](backlog/cost-setup-timeout.m
 Pinned source fetches now use Git's low-speed limit and one bounded transport
 retry from a fresh owned checkout; bad references still stop immediately.
 
+D212 qualification in PR #744, head
+`8cf732967538f0dc3e14111383f5c93e8b69c8e5`, reports a distinct source-install
+timeout in cost run 40941888772, job 123687227986. All 670 packages are available
+and imported; `cpu-features@0.0.10` remains in its install stage when the existing
+300-second limit expires. No package download or import is pending. Native-build
+progress now retains fixed node-gyp milestones and header/checksum HTTP status,
+without raw output or URLs. A controlled native header-body stall and a successful
+fresh build qualify this distinction; the historical Linux cause remains unknown.
+Keep the source pin, integrity checks, deadlines and original assertions.
+
 ### Fixture archive download retries (D311)
 
 **Open; the upstream 504 cause remains unknown.** Keep the bounded retries,

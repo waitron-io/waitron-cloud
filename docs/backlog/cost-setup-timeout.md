@@ -128,3 +128,44 @@ that repair still need complete CI; a green run does not establish the historica
 cause.
 Keep this observation separate from the package-body stall and D458's earlier
 connection refusal. Preserve the source pin and cleanup.
+
+## Native build waits after all packages are imported
+
+D212 qualification in PR #744, head
+`8cf732967538f0dc3e14111383f5c93e8b69c8e5`, reports a distinct source-install
+timeout in cost run 40941888772, job 123687227986. All 670 packages are available
+and imported; `cpu-features@0.0.10` remains in its install stage when the existing
+300-second limit expires. No download or import is pending. The cause is unknown;
+this does not establish a link to the historical canvas transfer slowdown.
+Investigate the native install script with bounded Linux evidence before a fix;
+preserve the source pin, integrity checks, deadlines and original assertions.
+
+
+When package transfers are complete, an install script can still download Node's
+headers, the files a native extension needs to compile. You now get an optional
+`lastMilestone` on active and failed scripts. Fixed labels distinguish node-gyp
+startup, finding Python, requesting and receiving headers or checksums, starting
+configuration or compilation, and node-gyp completion. HTTP responses include only
+the numeric status. An HTTP 200 milestone means response headers arrived; it does
+not prove the response body, extraction or checksum verification completed.
+Unrecognised lines leave the last recognised milestone intact. This is a record
+of observed output, not a guarantee of the command currently running. A script
+that has not reached node-gyp may have no milestone. Existing script-count and
+display limits apply. No raw script output, URL, hostname or path is included.
+
+A native macOS probe runs cpu-features 0.0.10 with the source-pinned buildcheck
+0.0.7 and nan 2.28.0, using pnpm 9.15.0 and its node-gyp 10.2.0. A controlled HTTP
+server sends response headers and withholds the body: node-gyp reports HTTP 200
+and waits until the probe stops it. A separate fresh public-header download and
+build passes. Neither result establishes what held the historical Linux script.
+
+Run `node --test scripts/cloud-cost/conformance-install-script-progress.test.mjs`
+for fixed-label and real installer controls. Generated packages and a local HTTP
+server exercise the actual setup supervisor, pnpm and bundled node-gyp while
+waiting for response headers, waiting after HTTP 200 and receiving HTTP 404.
+The checks retain failed-script progress, periodic reports, the original outer
+limit, process cleanup and scratch removal. Only the disposable supervisor's
+clock is accelerated. The test supplies an isolated package store and header
+cache, so it needs neither Docker nor an external header download. Linux CI must
+qualify these controls; a passing run does not explain or repair the historical
+failure. Preserve the existing pin, lockfile, deadlines, checks and cleanup.

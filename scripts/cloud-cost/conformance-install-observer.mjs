@@ -2,6 +2,22 @@ const packageId=value=>typeof value==='string'&&value.length<=200&&/^(?:@[a-z0-9
 const count=value=>Number.isSafeInteger(value)&&value>=0?value:undefined;
 const scriptStages=new Set(['preinstall','install','postinstall','prepublish','preprepare','prepare','postprepare']);
 
+const nativeMilestone=line=>{
+  if(typeof line!=='string')return;
+  if(/^gyp info using node-gyp@[0-9]+\.[0-9]+\.[0-9]+$/.test(line))return {step:'node-gyp-start'};
+  if(/^gyp info find Python using Python version [0-9.]+ found at ".+"$/.test(line))return {step:'python-found'};
+  if(/^gyp info spawn (?:.*[/\\])?python[0-9.]*$/.test(line))return {step:'configure'};
+  if(/^gyp info spawn (?:.*[/\\])?(?:g?make|ninja)$/.test(line))return {step:'build'};
+  if(/^gyp info ok\s*$/.test(line))return {step:'node-gyp-complete'};
+  const request=/^gyp http (GET|[1-5][0-9]{2}) (\S+)$/.exec(line);
+  if(!request)return;
+  let url;try{url=new URL(request[2]);}catch{return;}
+  if(!['http:','https:'].includes(url.protocol))return;
+  const resource=/\/node-v[0-9]+\.[0-9]+\.[0-9]+-headers\.tar\.gz$/.test(url.pathname)?'headers'
+    :url.pathname.endsWith('/SHASUMS256.txt')?'checksums':null;
+  if(resource)return request[1]==='GET'?{step:resource+'-request'}:{step:resource+'-response',httpStatus:Number(request[1])};
+};
+
 export function createInstallObserver(source) {
   let buffer='',discarding=false,discardedLines=0,overflow=false,rootName;
   const packages=new Map(),scripts=new Map(),failedScripts=new Map(),errors=new Set();
@@ -15,8 +31,8 @@ export function createInstallObserver(source) {
   };
   const failed=(id,stage,exitCode)=>{
     if(!id||!scriptStages.has(stage)||count(exitCode)===undefined||exitCode===0)return;
-    const key=id+':'+stage;scripts.delete(key);
-    if(failedScripts.size<2048)failedScripts.set(key,{packageId:id,stage,exitCode});else overflow=true;
+    const key=id+':'+stage,lastMilestone=scripts.get(key)?.lastMilestone??failedScripts.get(key)?.lastMilestone;scripts.delete(key);
+    if(failedScripts.size<2048)failedScripts.set(key,{packageId:id,stage,exitCode,...lastMilestone?{lastMilestone}:{}});else overflow=true;
   };
   const consume=line=>{
     let record;try{record=JSON.parse(line);}catch{return;}
@@ -37,10 +53,15 @@ export function createInstallObserver(source) {
       if(!id)return;
       const key=id+':'+record.stage;
       if(count(record.exitCode)!==undefined){
-        scripts.delete(key);
         failed(id,record.stage,record.exitCode);
+        scripts.delete(key);
       }
-      else if(scripts.size<2048)scripts.set(key,{packageId:id,stage:record.stage});else overflow=true;
+      else if(scripts.has(key)||scripts.size<2048){
+        const state=scripts.get(key)??{packageId:id,stage:record.stage};
+        // Keep only fixed milestones; script output and URLs never enter a snapshot.
+        const milestone=nativeMilestone(record.line);if(milestone)state.lastMilestone=milestone;
+        scripts.set(key,state);
+      }else overflow=true;
       return;
     }
     if(record.name==='pnpm:progress'&&record.status==='imported') {
