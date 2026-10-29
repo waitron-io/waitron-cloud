@@ -3178,7 +3178,7 @@ counters when readable. These reports are advisory and omit raw child text; a fa
 report preserves the resource refusal. Capture
 a recurrence and reproduce its cause; passing CI does not explain the earlier failure.
 Keep every resource, isolation, cleanup and later-snapshot assertion and deadline.
-Local Docker reproduction remains blocked until 3 November.
+Local Docker reproduction remains blocked until 3 November. The D480 recurrence now records a surviving entry process, child SIGKILL and a cgroup memory-kill increase from zero to one with Docker's flag false. An instrumented CI investigation is checking whether that flag is the wrong witness; no assertion or refusal policy has changed yet.
 
 ## Verifier source isolation from local edits (D445)
 
