@@ -16,7 +16,8 @@ export async function runWorkerLoop(options:WorkerLoopOptions):Promise<void>{
   const {signal}=options;
   if(!Number.isInteger(options.concurrency)||options.concurrency<1||options.concurrency>32
     ||!Number.isInteger(options.scheduleIntervalMs)||options.scheduleIntervalMs<1
-    ||!Number.isInteger(options.pollIntervalMs)||options.pollIntervalMs<1)throw new Error('invalid_worker_loop_config');
+    // Native timers replace overflowing delays with a one-millisecond wait.
+    ||!Number.isInteger(options.pollIntervalMs)||options.pollIntervalMs<1||options.pollIntervalMs>2147483647)throw new Error('invalid_worker_loop_config');
   const now=options.now??Date.now;
   const wait=options.wait??(async(milliseconds,currentSignal)=>{
     try{await delay(milliseconds,undefined,{signal:currentSignal});}
