@@ -1,5 +1,13 @@
 # Waitron Cloud backlog
 
+## Storage archive publication refusals (D449)
+
+Run `node --test scripts/ci-backup-storage-publication.test.mjs` to check partial
+writes, failed renames and preservation of a competing complete archive using
+real checksum-verified bytes. Temporary publication files and failed startup roots
+must be removed. Real extraction, store startup and concurrent successful publication
+keep their separate qualification gates; historical failure causes remain open.
+
 ## Storage fixture filesystem refusals (D448)
 
 Run `node --test scripts/ci-backup-storage-filesystem.test.mjs` to check native
