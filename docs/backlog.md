@@ -423,6 +423,15 @@ to reproduce the cause before changing allocation behavior or expected values.
 
 ## Fiscal allocation registry
 
+The owner requested removal of this obsolete registry on 29 October 2026
+because Waitron now generates time-based codes. The
+[removal design](superpowers/specs/2026-10-29-remove-fiscal-registry-design.md)
+and [implementation plan](superpowers/plans/2026-10-29-remove-fiscal-registry.md)
+cover its Cloud package, HTTP routes, portal and measurement consumers. This is
+planning only; the registry still runs. Runtime removal must wait for Waitron
+A1189 to land. The proposal retains migration 038 and stored records unchanged;
+removing shipped migration history or stored fiscal data needs a separate decision.
+
 The [shared registry plan](https://github.com/clintongormley/waitron/blob/main/docs/superpowers/plans/2026-10-12-cloud-fiscal-allocation-registry.md)
 defines the implemented Cloud service. The
 [contract and storage stage](fiscal-allocation-registry.md) defines strict signed
