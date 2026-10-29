@@ -62,3 +62,16 @@ Before changing the success conditions, write down how every cancelled request a
 encrypted byte remains covered and obtain the approval required by the campaign's
 changed-test-check rule. No accounting change or owner decision is implied by the
 current diagnostics. The branch remains a draft investigation.
+
+The next diagnostic adds application-side stream creation, opening and explicit
+closure, fetch signal cancellation, and navigation markers. It also records which
+requests remain when each drain starts and returns. Fixed categories and numeric
+identifiers distinguish an application abort from reload without publishing URLs,
+query strings or abort reasons. You must compare these observations with Chrome's
+socket mapping before attributing either recurrence to a specific action.
+
+A native Chromium probe observes explicit stream closure, a real cancelled fetch
+and the reload marker. Its console does not retain the old document's `pagehide`
+event, so absence of that event cannot establish absence of navigation. The Linux
+experiment still samples each group only until its first refusal and retains all
+six original fault controls. No repair or changed success condition is implied.

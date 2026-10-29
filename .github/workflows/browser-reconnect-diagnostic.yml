@@ -15,7 +15,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        group: [compact, compact-one-cpu]
+        group: [application, application-one-cpu]
     steps:
       - uses: actions/checkout@v5
         with:
@@ -48,7 +48,7 @@ jobs:
           mkdir -p diagnostics
           node --test scripts/cloud-cost/diagnostics/*.test.mjs
           node scripts/cloud-cost/diagnostics/instrument.mjs
-          if [ '${{ matrix.group }}' = 'compact-one-cpu' ]; then
+          if [ '${{ matrix.group }}' = 'application-one-cpu' ]; then
             python3 - <<'PYTHON'
           from pathlib import Path
           import os
