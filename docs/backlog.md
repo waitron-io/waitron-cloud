@@ -765,9 +765,9 @@ accounts, switch away and back, or sign out. Old successes and refusals leave th
 current rows, organisation, stop confirmation, pending work, feedback and cooldown
 unchanged. Selecting the same account keeps its pending request, and the current
 account can still load and stop its offered installation. These tests control
-HTTP replies. Branch qualification is parked after an incomplete pnpm signature
-metadata response; preserve verification and investigate the bootstrap timeout
-before qualifying server permission and revocation checks in CI.
+HTTP replies. The earlier incomplete signature-metadata response remains
+unexplained; setup now uses [bounded verified attempts](backlog/ci-pnpm-setup.md).
+Server permission and revocation checks still belong to mandatory CI.
 
 ## Initial focus
 
