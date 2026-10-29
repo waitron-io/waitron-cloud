@@ -1126,7 +1126,9 @@ or advisers. None blocks synthetic C storage tests; none is settled or enabled b
 
 Waitron A1185 needs billing facts it can show without making a sale depend on
 Cloud. Add one authenticated country read, separate from service configuration.
-The design is approved (§5); the wire proposal below still needs agreement.
+The design is approved (§5). Lane B agreed the wire proposal on 29 October
+2026 with five additions, now recorded in the [canonical contract](../../waitron-integration-contract.md#venue-billing-display-version-1).
+The separate contract publication precedes J's implementation; no adapter is built.
 Execute inline after the separate docs-only plan PR lands and its fresh-context
 review is resolved (RUNNER §5.2). This section overrides the generic header's
 recommended delegation for J. It does not authorise implementation in the plan

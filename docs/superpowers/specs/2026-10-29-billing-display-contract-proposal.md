@@ -1,3 +1,7 @@
+> Historical proposal. The accepted [version 1 billing section](../../waitron-integration-contract.md#venue-billing-display-version-1)
+> incorporates Lane B's five additions from 29 October 2026. The proposal below
+> is retained unchanged as the input to that agreement, not the current wire.
+
 # Proposed shared section: Venue billing display, version 1
 
 Status: D474 proposal, 29 October 2026. This is material for Waitron Lane B's
