@@ -416,14 +416,10 @@ exercise the actual fiscal validator, populated concurrent 37-to-38 upgrades,
 interrupted migration rollback, namespace uniqueness, retained runtime history
 and exact schema gates. Production authority is unavailable.
 
-**Open to every venue, with no Cloud account (owner, 2026-10-29).** Reserving a fiscal
-installation name is part of the basic product: it needs no billing level, no Cloud
-account and no subscription. This answers the plan's owner gate to "define subscription
-entitlement" with no billing check, but reservations today go through the account HTTP
-service. Design how a venue with no Cloud account proves the taxpayer custody the
-registry requires, and remove the entitlement check that refuses new reservations after
-a subscription ends. See the
-[billing design](superpowers/specs/2026-10-29-cloud-billing-design.md), §1.
+**No longer used (owner, 2026-10-29).** "We no longer have the reservations because we
+use the time-based codes instead": Waitron names a new invoice chain from the box's own
+clock, with no Cloud service involved. Nothing below should be built further. Removing the
+registry's code and its append-only migration is open and needs its own decision.
 
 The current-history stage adds challenged signed journal reads, signed expiring
 writer grants, exact full-history replay and permanent unknown outcomes. Local

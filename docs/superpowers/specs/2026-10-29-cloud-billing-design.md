@@ -49,13 +49,11 @@ the sign-up themselves. It should require zero work from us"
 
 - **Billing stops a sale on an on-prem box.** Nothing billing does may touch local
   trading. A lapsed level 2 venue keeps selling.
-- **Billing stands between a venue and selling again after a restore.** Reserving a new
-  fiscal installation name from Cloud's allocation registry sits outside billing
-  altogether. It needs no level, no Cloud account, and no billing state — trial, paid,
-  lapsed or inside the 90 days — changes it: "It's part of the basic product" (owner).
-  Today the registry takes reservations only through the account HTTP service
-  (`docs/fiscal-allocation-registry.md:8-11`), so serving venues without a Cloud account is
-  registry work, recorded in the backlog's fiscal allocation registry section.
+- **Billing stands between a venue and selling again after a restore.** A restored or moved
+  venue starts its new invoice chain under a time-based installation name the box chooses
+  itself; no Cloud service, account or billing level is involved: "It's part of the basic
+  product" (owner). Cloud's fiscal allocation registry, which would have handed out these
+  names, is no longer used (owner, 2026-10-29), so billing has no fiscal check to add.
   This answers the registry's open owner gate to "define subscription entitlement,
   end-of-subscription consumption policy and retained access" (Waitron
   `docs/superpowers/plans/2026-10-12-cloud-fiscal-allocation-registry.md:296`): no billing
