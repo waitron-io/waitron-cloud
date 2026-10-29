@@ -67,6 +67,14 @@ report, and a reporting failure stops the loop. A successful report keeps the
 existing polling delay and scheduling deadline. Real database failures and
 production shutdown remain separate qualification gates.
 
+Run `node --test packages/registration/test/worker-loop-synchronous-recovery.test.ts`
+to check an immediate callback throw in the first or last slot of two and 32 claims.
+The remaining claims finish before reporting. A pending report prevents new claims
+and retry waits, shutdown waits for the report, and an immediate reporter throw
+stops the loop with its original error. Successful reporting waits before retrying
+and preserves the scheduling deadline. Real database failures and production
+shutdown remain separate qualification gates.
+
 ## Worker scheduling deadlines and polling failures (D468)
 
 Run `node --test packages/registration/test/worker-loop-timing.test.ts` to
