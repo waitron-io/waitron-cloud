@@ -291,7 +291,7 @@ order. Remote access matters most because Waitron's customer-facing features wai
    [design](superpowers/specs/2026-10-29-cloud-billing-design.md) sets three levels
    (registered, connected, hosted), trials, SumUp cards and Stripe direct debit, failed
    payments, emergency hosting by a venue manager, and Cloud's own Veri\*Factu invoices.
-   The build plan is next; its first step is a SumUp sandbox test. Prices and allowance
+   The [build plan](superpowers/plans/2026-10-29-cloud-billing.md) orders ten slices; slice B (the billing rules) is planned in full and can start now, and slice A (a SumUp and Stripe test run) waits for the owner's sandbox accounts. Prices and allowance
    sizes wait for measurement (the design's §11). Billing cannot go live before the
    Waitron company exists to issue invoices, and that billing software needs its own
    declaración responsable.
