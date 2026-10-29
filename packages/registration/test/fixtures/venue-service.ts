@@ -21,9 +21,11 @@ export async function venueServiceFixture(){
   const venues=[randomUUID(),randomUUID()].sort(),otherVenue=randomUUID(),foreignVenue=randomUUID(),production=randomUUID();
   for(const [s,id,environment] of [[scope,venues[0],'test'],[scope,venues[1],'test'],[other,otherVenue,'test'],[foreign,foreignVenue,'test'],[scope,production,'production']] as const){
    await pool.query('INSERT INTO venues(id,organisation_id,legal_business_id,local_venue_id,environment) VALUES($1,$2,$3,$1,$4)',[id,s.organisationId,s.legalBusinessId,environment]);
+   const current=randomUUID();
    for(let i=0;i<2;i++){
-    const installation=randomUUID();
-    await pool.query('INSERT INTO installations(id,venue_id,public_key) VALUES($1,$2,$3)',[installation,id,installation]);
+    const installation=i===0?current:randomUUID();
+    if(i===0)await pool.query('INSERT INTO installations(id,venue_id,public_key) VALUES($1,$2,$3)',[installation,id,installation]);
+    else await pool.query('INSERT INTO installations(id,venue_id,public_key,revoked_at,superseded_by) VALUES($1,$2,$3,clock_timestamp(),$4)',[installation,id,installation,current]);
     for(const service of ['continuous_backup','retained_snapshots','remote_access','content_translation'])await pool.query("INSERT INTO installation_services(installation_id,service,state,configuration) VALUES($1,$2,'ready',$3)",[installation,service,{synthetic:service}]);
    }
   }
