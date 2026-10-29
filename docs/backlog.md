@@ -59,6 +59,14 @@ refilling slots. One busy claim prevents an idle pause at two and 32 slots,
 whether it finishes first or last; shutdown still waits for every active claim.
 Real database concurrency and production capacity remain separate gates.
 
+Run `node --test packages/registration/test/worker-loop-overlapping-failures.test.ts`
+to check two failed claims in either completion order at two and 32 active slots.
+Every active claim finishes before one original failure is reported or propagated.
+A pending report prevents retry waiting and new claims; shutdown waits for that
+report, and a reporting failure stops the loop. A successful report keeps the
+existing polling delay and scheduling deadline. Real database failures and
+production shutdown remain separate qualification gates.
+
 ## Worker scheduling deadlines and polling failures (D468)
 
 Run `node --test packages/registration/test/worker-loop-timing.test.ts` to
