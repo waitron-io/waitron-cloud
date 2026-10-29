@@ -681,6 +681,12 @@ GitHub CI qualifies the PostgreSQL journeys while local Docker is unavailable.
 
 ## Translate all: approved design, implementation still open
 
+Run `node --test packages/translation/test/batch-runner-cancelled-callback-failures.test.ts`
+to check that cancellation during delayed spending or lease-renewal failures in
+either pass preserves the original storage errors, billed usage and callback
+order, without another provider call. Wider runtime and release qualification
+remain open in the [translation backlog](backlog/translation.md).
+
 Run `node --test packages/translation/test/batch-runner-unbilled-failures.test.ts`
 to check that lease-renewal failures after HTTP refusals and uncounted malformed
 replies escape in both passes, without another provider call or invented usage.
