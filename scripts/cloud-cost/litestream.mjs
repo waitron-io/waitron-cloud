@@ -460,7 +460,9 @@ export async function withLitestreamCloseDiagnostics({ stage, close, report = li
       const value = own(raw, key);
       if (Number.isSafeInteger(value) && value >= 0) diagnostic[key] = value;
     }
-    for (const key of ['clientClosed', 'responseHeadersSeen']) {
+    const statusCode = own(raw, 'statusCode');
+    if (Number.isInteger(statusCode) && statusCode >= 100 && statusCode <= 599) diagnostic.statusCode = statusCode;
+    for (const key of ['clientClosed', 'responseHeadersSeen', 'requestComplete', 'responseComplete', 'requestSent', 'responseReceived']) {
       const value = own(raw, key); if (typeof value === 'boolean') diagnostic[key] = value;
     }
     const code = own(raw, 'code'); if (networkErrors.has(code)) diagnostic.code = code;
@@ -553,7 +555,7 @@ export async function createLitestreamTransport({ target, meter, phase, lifetime
       }
       if (id) pending.delete(id.key); source.resume(); destination.writeHead(400); destination.end(); return;
     }
-    let bytesOut = 0, bytesIn = 0, expectedIn = 0, statusCode = null, responseHeaders, sent = false, received = false, settled = false;
+    let bytesOut = 0, bytesIn = 0, expectedIn = 0, statusCode = null, responseHeaders, upstreamResponse, sent = false, received = false, settled = false;
     const admittedAt = performance.now();
     transfers.set(id.key, () => ({ operation: name, phase: requestPhase, retryOrdinal: id.ordinal,
       elapsedMs: Math.max(0, Math.round(performance.now() - admittedAt)), bytesOut, expectedOut, bytesIn, expectedIn,
@@ -562,6 +564,9 @@ export async function createLitestreamTransport({ target, meter, phase, lifetime
     const rememberTransfer = (reason, error, ioEvent) => remember(reason, error, ioEvent, name, {
       attempt: { producerAttempt, retryOrdinal: id.ordinal, phase: requestPhase }, idleActionsAtAdmission,
       clientClosed: destination.destroyed, responseHeadersSeen: statusCode !== null,
+      ...(ioEvent === 'response-aborted' ? { bytesIn, expectedIn, bytesOut, expectedOut, statusCode,
+        requestComplete: source.complete, responseComplete: upstreamResponse?.complete ?? false,
+        requestSent: sent, responseReceived: received } : {}),
     });
     const clientSocket = source.socket;
     if (!socketTransfers.has(clientSocket)) socketTransfers.set(clientSocket, new Map());
@@ -600,6 +605,7 @@ export async function createLitestreamTransport({ target, meter, phase, lifetime
       }
     };
     const upstream = request(endpoint, { method: source.method, path: source.url, headers: source.headers }, response => {
+      upstreamResponse = response;
       response.once('aborted', () => rememberTransfer('upstream-response-interrupted', undefined, 'response-aborted'));
       response.on('error', error => rememberTransfer('upstream-response-interrupted', error, 'response-error'));
       try { statusCode = response.statusCode; responseHeaders = response.headers;

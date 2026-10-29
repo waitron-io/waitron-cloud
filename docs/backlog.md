@@ -3607,8 +3607,9 @@ on the landed acquisition repair, preserving its archive diagnostics; see the
 ### Litestream conformance transport-close refusal (D141)
 
 **Open; the historical close refusal and later result-assembly failure remain
-unexplained.** Capture a labelled recurrence before changing the cause, preserving
-redaction, cleanup, accounting and deadlines; see the
+unexplained.** An aborted upstream reply now retains its first byte counts, HTTP
+status and completion state. The G474 PUT recurrence still needs Linux attribution,
+preserving redaction, cleanup, accounting and deadlines; see the
 [transport and result diagnostics](backlog/cost-conformance-fixtures.md#litestream-conformance-transport-close-refusal-d141).
 
 ## Cloud cost Mailpit fixture startup
