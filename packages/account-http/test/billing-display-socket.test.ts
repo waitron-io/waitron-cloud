@@ -14,7 +14,7 @@ function socket(running:Awaited<ReturnType<typeof startAccountServer>>,body:unkn
  return new Promise<Response>((resolve,reject)=>{
   const req=httpRequest({host:'127.0.0.1',port:(running.server.address() as {port:number}).port,path,method:'POST',headers:{host:'cloud.example.test','content-type':'application/json',...headers}},res=>{
    const chunks:Buffer[]=[];res.on('data',chunk=>chunks.push(chunk));res.on('error',reject);
-   res.on('end',()=>resolve(new Response(Buffer.concat(chunks),{status:res.statusCode!,headers:res.headers as Record<string,string>})));
+   res.on('end',()=>{resolve(new Response(Buffer.concat(chunks),{status:res.statusCode!,headers:res.headers as Record<string,string>}));req.destroy();});
   });
   req.on('error',reject);req.setTimeout(10000,()=>req.destroy(new Error('test_socket_timeout')));
   if(mode==='slow'){req.write('{');req.flushHeaders();}

@@ -123,9 +123,10 @@ test('billing HTTP original and version-2 configuration remain equal with the ad
   for(const body of ['{}','{"servicesVersion":2}']){
    const envelope=f.proof({action:'configuration',body});
    const before=await f.send(envelope,{target:disabled,url:origin+'/api/installations/configuration'});assert.equal(before.status,200);
-   const expected=await before.json();
+   const {lastContactAt:beforeContact,...expected}=await before.json();assert.ok(Number.isFinite(Date.parse(beforeContact)));
    const display=await f.send(undefined,{target:enabled});assert.equal(display.status,200);
-   const after=await f.send(envelope,{target:enabled,url:origin+'/api/installations/configuration'});assert.equal(after.status,200);assert.deepEqual(await after.json(),expected);
+   const after=await f.send(f.proof({action:'configuration',body}),{target:enabled,url:origin+'/api/installations/configuration'});assert.equal(after.status,200);
+   const {lastContactAt:afterContact,...actual}=await after.json();assert.ok(Number.isFinite(Date.parse(afterContact)));assert.deepEqual(actual,expected);
    assert.equal(expected.services.length,body==='{}'?3:4);assert.equal(Object.hasOwn(expected,'billing'),false);
   }
  }
