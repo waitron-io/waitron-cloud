@@ -31,6 +31,14 @@ allocation and cache permission or I/O refusals, preserved error identity and ow
 cleanup. Real store startup and concurrent valid-cache publication remain separate
 gates; see [the open storage investigation](backlog/storage-cache-fixture.md).
 
+## Worker shutdown during polling and error reporting (D459)
+
+Run `node --test packages/registration/test/worker-loop-shutdown.test.ts` to
+check that shutdown interrupts real idle and error-retry timers and lets native
+worker processes exit. Pending scheduling and claim error reports finish before
+the loop returns, without further claims or waits. Production shutdown and real
+database failures remain separate qualification gates.
+
 ## How to keep this file honest
 
 - Delete finished entries after checking main, the named pull requests and the code.
