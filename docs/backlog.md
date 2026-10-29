@@ -54,6 +54,10 @@ check that scheduling starts its next interval after completion and polling meet
 the next deadline. Polling failures retain their original cause, report before
 retrying and stop if the retry timer fails. Production scheduling and real database
 failures remain separate qualification gates.
+Delivery is parked on `test/worker-loop-timing` ([PR #715](https://github.com/waitron-io/waitron-cloud/pull/715)):
+image acquisition returns HTTP 500, and the verifier's long-stderr control returns
+an input error instead of a resource error. Reproduce the failures and obtain green
+current-head CI before landing.
 
 ## How to keep this file honest
 
