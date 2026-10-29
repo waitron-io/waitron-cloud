@@ -7,8 +7,8 @@ const job=parseJob(JSON.stringify({version:1,country:'ES',languages:{default:'es
  items:[{ref:'product:1',kind:'product',family:'product:1',category:null,staffName:'CAFE',existing:{},missing:['es']}],houseStyle:[]}));
 const done={kind:'done',results:[{ref:'product:1',placeholder:false,names:{es:'CAFE [es]'},corrections:[]}],reviewApplied:0,reviewDropped:0,reviewFailed:false};
 
-for(const phase of ['first pass','review'] as const)for(const answer of ['allow','decline','reject','cancel'] as const){
- test(`${phase} waits for a delayed cap check before ${answer}`,{timeout:5000},async()=>{
+for(const phase of ['first pass','review'] as const)for(const answer of ['allow','decline','reject','cancel','cancel with refusal'] as const){
+ test(`${phase} waits for a delayed cap check before ${answer}`,{timeout:5000},async t=>{
   let enter!:()=>void,resolve!: (value:boolean)=>void,reject!: (error:Error)=>void;
   const entered=new Promise<void>(ready=>{enter=ready;});
   const decision=new Promise<boolean>((yes,no)=>{resolve=yes;reject=no;});
@@ -31,31 +31,32 @@ for(const phase of ['first pass','review'] as const)for(const answer of ['allow'
   };
   const pending=translateBatch(job,job.items,client,hooks,controller.signal)
    .then(value=>({value}),failure=>({error:failure as unknown})).finally(()=>{settled=true;});
+  t.after(async()=>{resolve(true);try{await pending;}finally{await fake.close();}});
   const first=['cap:start','cap:end','http:low','spent:11/5','renew'];
   const review=['cap:start','cap:end','http:medium','spent:7/3','renew'];
   const before=target===2?first:[];
-  try{
-   await entered;
+  {
+   await Promise.race([entered,pending.then(()=>assert.fail('batch completed without requesting its cap answer'))]);
    assert.equal(settled,false,'batch returned while the cap answer was pending');
    // Observe entry to the real transport, before network scheduling can hide an early call.
    assert.deepEqual(events,[...before,'cap:start']);
    assert.equal(fake.requests.length,target-1);
    assert.deepEqual(usage,target===2?[{inputTokens:11,outputTokens:5}]:[]);
    if(answer==='reject')reject(error);
-   else{if(answer==='cancel')controller.abort();resolve(answer!=='decline');}
+   else{if(answer==='cancel'||answer==='cancel with refusal')controller.abort();resolve(answer!=='decline'&&answer!=='cancel with refusal');}
    const result=await pending;
    if(answer==='reject'){
     assert.ok('error' in result);assert.equal(result.error,error);
     assert.deepEqual(events,[...before,'cap:start']);
    }else{
     assert.ok('value' in result);
-    const expected=answer==='cancel'?{kind:'aborted'}:answer==='decline'&&target===1?{kind:'failed',reason:'cap_reached'}:done;
+    const expected=answer==='cancel'||answer==='cancel with refusal'?{kind:'aborted'}:answer==='decline'&&target===1?{kind:'failed',reason:'cap_reached'}:done;
     assert.deepEqual(result.value,expected);
     assert.deepEqual(events,answer==='allow'?[...first,...review]:[...before,'cap:start','cap:end']);
    }
    const calls=answer==='allow'?2:target-1;
    assert.deepEqual(fake.requests.map(request=>request.body.reasoning.effort),calls===2?['low','medium']:calls===1?['low']:[]);
    assert.deepEqual(usage,calls===2?[{inputTokens:11,outputTokens:5},{inputTokens:7,outputTokens:3}]:calls===1?[{inputTokens:11,outputTokens:5}]:[]);
-  }finally{resolve(true);try{await pending;}finally{await fake.close();}}
+  }
  });
 }
