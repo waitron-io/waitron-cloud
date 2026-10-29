@@ -92,9 +92,8 @@ export async function readVenuePlan(client: PoolClient, venueId: string, mode: P
   if (!row) throw new Error('permission_denied');
   requireTestPlanVenue(row.environment, mode);
   const plan = await readOrganisationPlan(client, row.organisation_id);
-  const locked = (await client.query('SELECT organisation_id,environment FROM venues WHERE id=$1 FOR SHARE', [venueId])).rows[0];
-  if (!locked || locked.organisation_id !== row.organisation_id) throw new Error('permission_denied');
-  requireTestPlanVenue(locked.environment, mode);
+  const locked = await client.query("SELECT id FROM venues WHERE id=$1 AND organisation_id=$2 AND environment='test' FOR SHARE", [venueId, row.organisation_id]);
+  if (!locked.rowCount) throw new Error('permission_denied');
   if ((await client.query('SELECT 1 FROM billing_service_authority WHERE venue_id=$1', [venueId])).rowCount) throw new Error('permission_denied');
   return plan;
 }
