@@ -327,6 +327,8 @@ order. Remote access matters most because Waitron's customer-facing features wai
    sizes wait for measurement (the design's §11). Billing cannot go live before the
    Waitron company exists to issue invoices, and that billing software needs its own
    declaración responsable.
+
+   Slice E now has a [plan](superpowers/plans/2026-10-29-cloud-billing.md#slice-e-allowances-and-remote-access-traffic) for account- and venue-scoped allowances, trial tiers and measured remote traffic. Configuration, accounting, the collector and service integration remain unbuilt; production allowance sizes are unset.
 4. **Terms, the data processing agreement and service promises.** These are needed before
    the first customer, paid or not, and a lawyer is needed for each, so the questions should
    go out early. The [launch evidence](launch-evidence.md) requires "lawyer-reviewed terms",
