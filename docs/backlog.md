@@ -10,6 +10,15 @@ See [the boundaries and remaining work](backlog/storage-cache-fixture.md#concurr
 **Open.** Real store startup and historical failure causes remain open.
 See [the boundaries and remaining work](backlog/storage-cache-fixture.md#concurrent-storage-extraction-and-failed-startup-cleanup-d454).
 
+## Separate-process storage extraction and failed-startup cleanup (D457)
+
+Run `node --test scripts/ci-backup-storage-process-extraction.test.mjs` to
+check two independent Node processes extracting one read-only archive. Each
+certificate-read refusal removes its own root while preserving the other
+process's executable, certificates and shared cache, in both completion orders.
+Real store startup and historical failure causes remain open; see
+[the investigation](backlog/storage-cache-fixture.md).
+
 ## Storage archive publication refusals (D449)
 
 **Open.** Real extraction, store startup and concurrent successful publication remain open.
