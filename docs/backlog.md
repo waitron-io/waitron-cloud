@@ -47,6 +47,14 @@ the scheduling cadence, and error reporting waits for every active claim. A fail
 error report stops the loop. Production scheduling and real database failures
 remain separate qualification gates.
 
+## Worker scheduling deadlines and polling failures (D468)
+
+Run `node --test packages/registration/test/worker-loop-timing.test.ts` to
+check that scheduling starts its next interval after completion and polling meets
+the next deadline. Polling failures retain their original cause, report before
+retrying and stop if the retry timer fails. Production scheduling and real database
+failures remain separate qualification gates.
+
 ## How to keep this file honest
 
 - Delete finished entries after checking main, the named pull requests and the code.
