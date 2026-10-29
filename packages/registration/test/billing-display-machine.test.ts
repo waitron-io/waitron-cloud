@@ -86,12 +86,12 @@ async function waiting(f:Fixture,blocker:PoolClient){
  }
  assert.fail('billing read must observably wait on the held parent lock');
 }
-async function blockedRead(f:Fixture,target:Target,change:(blocker:PoolClient)=>Promise<void>,check:(pending:Promise<any>)=>Promise<void>){
+async function blockedRead(f:Fixture,target:Target,change:(blocker:PoolClient)=>Promise<void>,check:(pending:Promise<any>)=>Promise<void>,leaseChanges:Record<string,unknown>={}){
  const blocker=await f.second.connect();let pending:Promise<any>|undefined;
  try{
   await blocker.query('BEGIN');
   await blocker.query('SELECT id FROM legal_businesses WHERE id=$1 FOR NO KEY UPDATE',[target.scope.legalBusinessId]);
-  pending=machine(f).read(request(target));pending!.catch(()=>{});
+  pending=machine(f).read(request(target,{},leaseChanges));pending!.catch(()=>{});
   await waiting(f,blocker);await change(blocker);await blocker.query('COMMIT');await check(pending!);
  }finally{await blocker.query('ROLLBACK');blocker.release();await pending?.catch(()=>{});}
 }
@@ -106,9 +106,10 @@ test('owned unstored billing read is registered active and writes no rows',async
 test('billing display derives venue business scope',async t=>{
  const f=await fixture();try{frozenClock(t);await f.prices.publish(price);
   for(const target of f.targets){await level(f,target);}
+  await level(f,f.targets[0]!,{connectedFrom:null});
   for(const target of [f.targets[0]!,f.targets[2]!,f.targets[3]!]){const id=await freeze(f,target);const a=await attempt(f,target,id);await observe(f,target,a,'succeeded',0);}
   const reader=machine(f);
-  for(const target of f.targets){const result=await reader.read(request(target));assert.equal(result.venueId,target.venueId);assert.deepEqual(result.billing,{status:'ready',level:'connected',state:'active',period:{kind:'paid',level:'connected',from:'2026-11-01',until:'2026-12-01',coversAsOf:true}});}
+  for(const target of f.targets){const result=await reader.read(request(target));assert.equal(result.venueId,target.venueId);assert.deepEqual(result.billing,{status:'ready',level:'connected',state:'active',period:target===f.targets[0]?null:{kind:'paid',level:'connected',from:'2026-11-01',until:'2026-12-01',coversAsOf:true}});}
   const first=f.targets[0]!,other=f.targets[1]!;
   await level(f,first,{level:'registered',connectedFrom:null});
   const before=await snapshot(f);
@@ -161,6 +162,16 @@ test('billing display rejects a proof that expires while queued',async t=>{
   await blockedRead(f,target,async()=>{t.mock.timers.setTime(now+60001);},async pending=>{await assert.rejects(pending,{code:'invalid_proof'});});
  }finally{await f.close();}
 });
+test('billing display rechecks the stored key after waiting',async t=>{
+ const f=await fixture();try{frozenClock(t);const target=f.targets[0]!;
+  await blockedRead(f,target,async blocker=>{await blocker.query('UPDATE installations SET public_key=$2 WHERE id=$1',[target.installationId,generateKeyPairSync('ed25519').publicKey.export({type:'spki',format:'der'}).toString('base64url')]);},async pending=>{await assert.rejects(pending,{code:'invalid_proof'});});
+ }finally{await f.close();}
+});
+test('billing display rechecks lease expiry after waiting',async t=>{
+ const f=await fixture();try{frozenClock(t);const target=f.targets[0]!;
+  await blockedRead(f,target,async()=>{t.mock.timers.setTime(now+11);},async pending=>{await assert.rejects(pending,{code:'invalid_proof'});},{issuedAt:now-3599990,expiresAt:now+10});
+ }finally{await f.close();}
+});
 test('billing display reads one complete post-wait billing state',async t=>{
  const f=await fixture();try{frozenClock(t);const target=f.targets[0]!;
   await blockedRead(f,target,async blocker=>{
@@ -184,13 +195,13 @@ test('billing display prices are effective publications independent of frozen ch
 test('billing display retains exact sparse days and omitted zero-cent allocations',async t=>{
  const f=await fixture();try{frozenClock(t);const target=f.targets[0]!,payer=f.targets[1]!;
   await f.prices.publish({...price,prices:{connectedMonthlyCents:1000,hostedMonthlyCents:0}});await level(f,payer);await level(f,target,{level:'hosted',connectedFrom:null});
-  for(const on of ['2026-10-01','2026-10-03'])await command(f,target,{type:'hosted_day',venueId:target.venueId,on,coveredByChargeId:null});
-  const charge=await freeze(f,payer),saved=await f.store.charge(payer.scope,charge);assert.equal(saved.lines.some(l=>l.venueId===target.venueId),false);
+  for(const on of ['2026-11-01','2026-11-03'])await command(f,target,{type:'hosted_day',venueId:target.venueId,on,coveredByChargeId:null});
+  const charge=await freeze(f,payer,{renewalDate:'2026-11-04',connectedUntil:'2026-12-04',window:{from:'2026-11-01',through:'2026-11-03'}}),saved=await f.store.charge(payer.scope,charge);assert.equal(saved.lines.some(l=>l.venueId===target.venueId),false);
   const a=await attempt(f,payer,charge);await observe(f,payer,a,'succeeded',0);
   const reader=machine(f);let result=await reader.read(request(target));
-  assert.deepEqual(result.billing,{status:'ready',level:'hosted',state:'active',period:{kind:'paid',level:'hosted',from:'2026-10-03',until:'2026-10-04',coversAsOf:false}});
-  t.mock.timers.setTime(Date.parse('2026-10-02T11:00:00Z'));result=await reader.read(request(target));
-  assert.deepEqual(result.billing.period,{kind:'paid',level:'hosted',from:'2026-10-01',until:'2026-10-02',coversAsOf:false});
+  assert.deepEqual(result.billing,{status:'ready',level:'hosted',state:'active',period:{kind:'paid',level:'hosted',from:'2026-11-01',until:'2026-11-02',coversAsOf:false}});
+  t.mock.timers.setTime(Date.parse('2026-11-03T11:00:00Z'));result=await reader.read(request(target));
+  assert.deepEqual(result.billing.period,{kind:'paid',level:'hosted',from:'2026-11-03',until:'2026-11-04',coversAsOf:true});
  }finally{await f.close();}
 });
 test('billing display requires remaining accepted success through stored payment retries',async t=>{
