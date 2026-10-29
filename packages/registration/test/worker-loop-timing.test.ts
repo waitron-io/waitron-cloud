@@ -52,7 +52,7 @@ test('an idle wait failure is reported before a polling delay resumes claims',{t
   });
   assert.deepEqual(events,['schedule','claim','wait','report','wait','claim']);
   assert.deepEqual(claims,[0,10]);
-  assert.deepEqual(reports,[failure]);
+  assert.equal(reports.length,1);assert.equal(reports[0],failure);
 });
 
 for(const phase of ['schedule','claim','idle wait'] as const){
@@ -72,7 +72,7 @@ for(const phase of ['schedule','claim','idle wait'] as const){
       async onError(error){reports.push(error);assert.equal(reports.length,1);},
     });
     await assert.rejects(running,error=>error===retryFailure);
-    assert.deepEqual(reports,[failure]);
+    assert.equal(reports.length,1);assert.equal(reports[0],failure);
     assert.equal(claims,phase==='schedule'?0:1);
     assert.equal(waits,phase==='idle wait'?2:1);
   });
