@@ -6,12 +6,16 @@ function replace(source, before, after) {
   return source.replace(before, after);
 }
 const reporter = `import {appendFileSync as appendTrace} from 'node:fs';
-const traceStart = performance.now();
-const trace = value => { try { appendTrace('/tmp/cost-browser-trace.jsonl', JSON.stringify({ms: Math.round(performance.now() - traceStart), ...value}) + '\\n'); } catch {} };
+const trace = value => { try { appendTrace('/tmp/cost-browser-trace.jsonl', JSON.stringify({ms: Math.round(performance.now()), ...value}) + '\\n'); } catch {} };
 `;
 
-export function instrumentRemote(source) {
-  source = reporter + source;
+const bufferedReporter = `import {appendFileSync as appendTrace} from 'node:fs';
+const traceEvents = [];
+const trace = value => { if (traceEvents.length < 10000) traceEvents.push({ms: Math.round(performance.now()), ...value}); };
+process.once('exit', () => { try { appendTrace('/tmp/cost-browser-trace.jsonl', traceEvents.map(value => JSON.stringify(value)).join('\\n') + '\\n'); } catch {} });
+`;
+export function instrumentRemote(source, {buffered = false} = {}) {
+  source = (buffered ? bufferedReporter : reporter) + source;
   source = replace(source, 'const poison = reason => {', "const poison = reason => { trace({event:'poison',reason});");
   source = replace(source, "const upstream = connect({", "const connection = connections; trace({event:'admit',connection});\n    const upstream = connect({");
   source = replace(source, "upstream.once('connect', () => { connected = true; });", "upstream.once('connect', () => { connected = true; trace({event:'connected',connection}); });");
@@ -26,8 +30,8 @@ export function instrumentRemote(source) {
   source = replace(source, "socket.once('close', () => {", "socket.once('close', () => { trace({event:'close',...state()});");
   return source;
 }
-export function instrumentBrowser(source) {
-  source = reporter + source;
+export function instrumentBrowser(source, {buffered = false} = {}) {
+  source = (buffered ? bufferedReporter : reporter) + source;
   source = replace(source, "const key = keyFor(req) + ':' + event;", "const key = keyFor(req) + ':' + event; trace({event:'request',key,phase});");
   source = replace(source, "phase = 'reconnect';", "phase = 'reconnect'; trace({event:'phase',phase});");
   source = replace(source, "const error = Error('Invalid cloud cost browser journey');", "trace({event:'refusal',phase,step,relay:meter?.failure()}); const error = Error('Invalid cloud cost browser journey');");
@@ -48,5 +52,5 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     ['scripts/cloud-cost/remote.mjs', instrumentRemote],
     ['scripts/cloud-cost/browser.mjs', instrumentBrowser],
     ['scripts/cloud-cost/fixtures/remote-browser-conformance.test.mjs', instrumentFixture],
-  ]) writeFileSync(path, instrument(readFileSync(path, 'utf8')));
+  ]) writeFileSync(path, instrument(readFileSync(path, 'utf8'), {buffered:true}));
 }

@@ -45,3 +45,30 @@ test('instrumented relay preserves reset refusal and records only closed socket 
   assert.ok(events.some(e => e.event === 'close' && Number.isSafeInteger(e.read) && Number.isSafeInteger(e.written)));
   assert.doesNotMatch(output, /PRIVATE|127\.0\.0\.1|tcp:|Error:/);
 });
+
+// File writes during socket callbacks can hide the timing being investigated.
+test('buffered tracing writes only after a real successful exchange exits', async t => {
+  const {spawnSync} = await import('node:child_process');
+  const root = mkdtempSync(join(tmpdir(), 'cost-relay-buffered-'));
+  t.after(() => rmSync(root, {recursive: true, force: true}));
+  const tracePath = join(root, 'trace.jsonl');
+  const source = readFileSync(new URL('../remote.mjs', import.meta.url), 'utf8');
+  writeFileSync(join(root, 'remote.mjs'), instrumentRemote(source, {buffered:true}).replaceAll('/tmp/cost-browser-trace.jsonl', tracePath));
+  const code = `import {createServer,connect} from 'node:net';
+    import {once} from 'node:events'; import assert from 'node:assert/strict';
+    import {existsSync} from 'node:fs'; import {openRemoteMeasurement} from './remote.mjs';
+    const server=createServer({allowHalfOpen:true},socket=>{socket.resume();socket.once('end',()=>socket.end('reply'));});
+    server.listen(0,'127.0.0.1');await once(server,'listening');
+    const meter=await openRemoteMeasurement({target:'tcp://127.0.0.1:'+server.address().port,audience:'staff'});
+    const socket=connect(meter.port,'127.0.0.1');socket.resume();socket.end('sent');await once(socket,'close');
+    await meter.close();assert.deepEqual(meter.snapshot().producer,{connections:1,bytesToGateway:4,bytesFromGateway:5});
+    assert.deepEqual(meter.snapshot().producer,meter.snapshot().observer);
+    await new Promise(resolve=>server.close(resolve));
+    assert.equal(existsSync(${JSON.stringify(tracePath)}),false,'socket callbacks must not write the trace file');`;
+  const child = spawnSync(process.execPath, ['--input-type=module','-e',code], {cwd:root,encoding:'utf8',timeout:5000});
+  assert.equal(child.status, 0, child.stderr);
+  const events = readFileSync(tracePath, 'utf8').trim().split('\n').map(JSON.parse);
+  assert.ok(events.some(e => e.event === 'data' && e.side === 'client' && e.length === 4));
+  assert.ok(events.some(e => e.event === 'data' && e.side === 'upstream' && e.length === 5));
+  assert.equal(events.filter(e => e.event === 'close').length, 2);
+});

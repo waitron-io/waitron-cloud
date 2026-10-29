@@ -15,7 +15,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        group: [1, 2]
+        group: [buffered, buffered-one-cpu]
     steps:
       - uses: actions/checkout@v5
         with:
@@ -48,6 +48,18 @@ jobs:
           mkdir -p diagnostics
           node --test scripts/cloud-cost/diagnostics/instrument.test.mjs
           node scripts/cloud-cost/diagnostics/instrument.mjs
+          if [ '${{ matrix.group }}' = 'buffered-one-cpu' ]; then
+            python3 - <<'PYTHON'
+          from pathlib import Path
+          import os
+          p = Path('scripts/cloud-cost/fixtures/remote-browser-conformance.test.mjs')
+          cpu = str(min(os.sched_getaffinity(0)))
+          source = p.read_text()
+          assert source.count("docker('create', '--pull=never'") == 2
+          p.write_text(source.replace("docker('create', '--pull=never'", "docker('create', '--cpuset-cpus', '" + cpu + "', '--pull=never'"))
+          print('Only this experiment\'s owned gateway, peer and browser containers use CPU ' + cpu)
+          PYTHON
+          fi
           git diff -- scripts/cloud-cost/remote.mjs scripts/cloud-cost/browser.mjs scripts/cloud-cost/fixtures/remote-browser-conformance.test.mjs > diagnostics/instrumentation.patch
           node --input-type=module <<'JS' 2>&1 | tee diagnostics/setup-and-observations.log
           import {writeFileSync} from 'node:fs';
