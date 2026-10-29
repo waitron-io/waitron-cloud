@@ -35,3 +35,19 @@ test('backup verification upgrades select only their complete pinned pair withou
  assert.deepEqual(fixture.upgradeRevisions([...pair,'--backup-verification']),want);
  for(const args of [['--backup-verification'],['--backup-verification',...pair,'--backup-verification'],['--backup-verification','--relay-stop',...pair],['--monitoring-quiet','--backup-verification',...pair],['--backup-verification','--old','main','--new','b'.repeat(40)]])assert.throws(()=>fixture.upgradeRevisions(args),/revisions/);
 });
+
+test('billing upgrade mode requires a distinct pinned pair',()=>{
+ const pair=['--old','a'.repeat(40),'--new','b'.repeat(40)],want={oldHead:'a'.repeat(40),newHead:'b'.repeat(40),factor:false,billing:true};
+ assert.deepEqual(fixture.upgradeRevisions(['--billing',...pair]),want);
+ assert.deepEqual(fixture.upgradeRevisions([...pair,'--billing']),want);
+ for(const args of [['--billing'],['--billing','--old','a'.repeat(40)],['--billing','--old','main','--new','b'.repeat(40)],['--billing','--old','a'.repeat(40),'--new','a'.repeat(40)],['--billing',...pair,'--billing'],...['--relay-stop','--monitoring-quiet','--backup-verification'].flatMap(mode=>[['--billing',mode,...pair],[mode,...pair,'--billing']])])assert.throws(()=>fixture.upgradeRevisions(args),/revisions/);
+});
+
+test('billing proof failures preserve known error codes without leaking private details',()=>{
+ assert.equal(typeof fixture.upgradeFailure,'function');
+ const stack='Error: synthetic private payload\n    at seedBilling (file:///tmp/private/schema-upgrade-billing-fixture.mjs:72:4)';
+ for(const code of ['billing_state_conflict','invalid_billing_input','ERR_ASSERTION','23503'])assert.deepEqual(fixture.upgradeFailure({code,stack,message:'never-log-this'},'upgrade'),{event:'schema-upgrade-failed',phase:'upgrade',code,location:'schema-upgrade-billing-fixture.mjs:72:4'});
+ for(const code of ['private-payload','synthetic_secret_reference','x'.repeat(100),null,{}])assert.equal(fixture.upgradeFailure({code,stack,message:'never-log-this'},'upgrade').code,'proof_failed');
+ assert.deepEqual(fixture.upgradeFailure(null,'restore'),{event:'schema-upgrade-failed',phase:'restore',code:'proof_failed',location:'unknown'});
+ assert.equal(JSON.stringify(fixture.upgradeFailure({code:'billing_state_conflict',stack,message:'never-log-this',secret:'never-log-this'},'upgrade')).includes('private'),false);
+});

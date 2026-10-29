@@ -77,6 +77,15 @@ test('populated release37 upgrades concurrently without changing any old row or 
     await Promise.all([migrate(f.pool), migrate(second)]);
     await migrate(second);
     const after = await oldState(f.pool);
+    for (const name of [
+      'billing_businesses', 'billing_charge_lines', 'billing_charges', 'billing_events',
+      'billing_hosted_days', 'billing_paid_periods', 'billing_payment_attempts',
+      'billing_payment_methods', 'billing_payment_observations', 'billing_prices',
+      'billing_trials', 'billing_venues',
+    ]) {
+      assert.deepEqual(after[name], [], name);
+      delete after[name];
+    }
     const { backup_verification_attempts, backup_verification_policy, remote_forward_observations, remote_forward_reporters, ...retained } = after;
     assert.deepEqual({ ...retained, schema_migrations: before.schema_migrations }, before);
     assert.deepEqual(backup_verification_attempts, []);
