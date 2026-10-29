@@ -6,6 +6,8 @@ import {transaction} from './transaction.ts';
 import type {VenueChargeView} from './billing-charges.ts';
 import {applyVenueCommand,readBillingVenue,readVenueHistory,readRenewalViews,type VenueCommand} from './billing-venues.ts';
 import type {HostedWindow,VenueBillingView,VenueBillingHistory} from './billing-types.ts';
+import {applyPaymentCommand,readFrozenCharge,readChargePayments,type PaymentCommand} from './billing-payments.ts';
+import type {FrozenCharge,PaymentView} from './billing-types.ts';
 
 type BusinessCommand=Extract<BillingCommand,{type:'ensure_business'|'set_method'|'anchor'}>;
 function invalid():never{throw new BillingError('invalid_billing_input');}
@@ -43,7 +45,7 @@ function methodInput(input:unknown):ProviderMethod|null{
  if(m.kind==='direct_debit'&&(m.provider!=='stripe'||m.mandateId===null))invalid();
  return {id:uuid(m.id),kind:m.kind,provider:m.provider,providerAccountId:reference(m.providerAccountId),customerId:reference(m.customerId),methodId:reference(m.methodId),mandateId:m.mandateId===null?null:reference(m.mandateId)};
 }
-function commandInput(input:unknown):BusinessCommand|VenueCommand{
+function commandInput(input:unknown):BusinessCommand|VenueCommand|PaymentCommand{
  const c=input as Record<string,unknown>|null;
  switch(c?.type){
  case 'ensure_business':billingRecord(c,['type']);return {type:'ensure_business'};
@@ -79,6 +81,20 @@ function commandInput(input:unknown):BusinessCommand|VenueCommand{
  case 'hosted_day':
   billingRecord(c,['type','venueId','on','coveredByChargeId']);
   return {type:'hosted_day',venueId:uuid(c.venueId),on:billingDate(c.on),coveredByChargeId:c.coveredByChargeId===null?null:uuid(c.coveredByChargeId)};
+ case 'freeze_charge':{
+  billingRecord(c,['type','chargeId','kind','renewalDate','connectedUntil','window','priceRevision']);
+  if(c.kind!=='renewal'&&c.kind!=='hosted_comeback')invalid();
+  const renewalDate=billingDate(c.renewalDate),connectedUntil=c.connectedUntil===null?null:billingDate(c.connectedUntil);
+  if(c.kind==='renewal'?(connectedUntil===null||connectedUntil<=renewalDate):connectedUntil!==null)invalid();
+  return {type:'freeze_charge',chargeId:uuid(c.chargeId),kind:c.kind,renewalDate,connectedUntil,window:hostedWindow(c.window),priceRevision:billingWhole(c.priceRevision,1)};
+ }
+ case 'begin_attempt':
+  billingRecord(c,['type','chargeId','attemptId','methodId','requestKey']);
+  return {type:'begin_attempt',chargeId:uuid(c.chargeId),attemptId:uuid(c.attemptId),methodId:uuid(c.methodId),requestKey:reference(c.requestKey)};
+ case 'observe_payment':
+  billingRecord(c,['type','attemptId','providerPaymentId','state','expectedRevision']);
+  if(c.state!=='pending'&&c.state!=='failed'&&c.state!=='succeeded'&&c.state!=='refunded')invalid();
+  return {type:'observe_payment',attemptId:uuid(c.attemptId),providerPaymentId:reference(c.providerPaymentId),state:c.state,expectedRevision:c.expectedRevision===null?null:billingWhole(c.expectedRevision)};
  default:return invalid();
  }
 }
@@ -151,27 +167,42 @@ export class BillingStore{
   const scope=scopeInput(input),window=hostedWindow(inputWindow);
   return transaction(this.pool,async client=>{await lockScope(client,scope);return readRenewalViews({client,scope},window);});
  }
+ async charge(input:BillingScope,inputChargeId:string):Promise<FrozenCharge>{
+  const scope=scopeInput(input),chargeId=uuid(inputChargeId);
+  return transaction(this.pool,async client=>{await lockScope(client,scope);return readFrozenCharge({client,scope},chargeId);});
+ }
+ async payments(input:BillingScope,inputChargeId:string):Promise<PaymentView[]>{
+  const scope=scopeInput(input),chargeId=uuid(inputChargeId);
+  return transaction(this.pool,async client=>{await lockScope(client,scope);return readChargePayments({client,scope},chargeId);});
+ }
  async execute(inputScope:BillingScope,inputEvent:BillingEvent,inputCommand:BillingCommand):Promise<BillingReceipt>{
   const scope=scopeInput(inputScope),event=eventInput(inputEvent),command=commandInput(inputCommand);
-  if(event.source.kind!=='internal')invalid();
+  if(event.source.kind!=='internal'&&command.type!=='observe_payment')invalid();
   return transaction(this.pool,async client=>{
    await lockScope(client,scope);
    const args=[scope.organisationId,scope.legalBusinessId];
    if(command.type==='ensure_business')await client.query('INSERT INTO billing_businesses(organisation_id,legal_business_id) VALUES($1,$2) ON CONFLICT DO NOTHING',args);
    const business=await readBusiness(client,scope,'NO KEY UPDATE');
    // Parent locking serialises first state creation before event identity is inspected.
-   await client.query("SELECT pg_advisory_xact_lock(hashtext(current_schema()),hashtext($1))",[canonical(['billing_internal',...args,event.key])]);
-   const previous=(await client.query("SELECT id,command,result,occurred_at FROM billing_events WHERE source='internal' AND organisation_id=$1 AND legal_business_id=$2 AND event_key=$3",[...args,event.key])).rows[0];
+   const source=event.source;
+   const identity=source.kind==='internal'?['billing_internal',...args,event.key]:['billing_provider',source.provider,source.accountId,event.key];
+   await client.query("SELECT pg_advisory_xact_lock(hashtext(current_schema()),hashtext($1))",[canonical(identity)]);
+   const previous=(await client.query(source.kind==='internal'
+    ?"SELECT * FROM billing_events WHERE source='internal' AND organisation_id=$1 AND legal_business_id=$2 AND event_key=$3"
+    :"SELECT * FROM billing_events WHERE source='provider' AND provider=$1 AND provider_account_id=$2 AND event_key=$3",
+    source.kind==='internal'?[...args,event.key]:[source.provider,source.accountId,event.key])).rows[0];
    if(previous){
-    if(previous.occurred_at.toISOString()!==event.occurredAt||canonical(previous.command)!==canonical(command))throw new BillingError('billing_event_conflict');
+    if(previous.organisation_id!==scope.organisationId||previous.legal_business_id!==scope.legalBusinessId||previous.occurred_at.toISOString()!==event.occurredAt||canonical(previous.command)!==canonical(command))throw new BillingError('billing_event_conflict');
     return {eventId:previous.id,value:previous.result};
    }
    const eventId=randomUUID();
    const value=command.type==='ensure_business'||command.type==='set_method'||command.type==='anchor'
     ?await applyBusiness(client,scope,eventId,command,business)
+    :command.type==='freeze_charge'||command.type==='begin_attempt'||command.type==='observe_payment'
+    ?await applyPaymentCommand({client,scope,eventId,occurredAt:event.occurredAt,source},command)
     :await applyVenueCommand({client,scope,eventId,occurredAt:event.occurredAt},command);
-   const inserted=await client.query(`INSERT INTO billing_events(id,organisation_id,legal_business_id,source,event_key,occurred_at,command,result)
-    VALUES($1,$2,$3,'internal',$4,$5,$6,$7) ON CONFLICT DO NOTHING RETURNING id`,[eventId,...args,event.key,event.occurredAt,command,value]);
+   const inserted=await client.query(`INSERT INTO billing_events(id,organisation_id,legal_business_id,source,provider,provider_account_id,event_key,occurred_at,command,result)
+    VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) ON CONFLICT DO NOTHING RETURNING id`,[eventId,...args,source.kind,source.kind==='provider'?source.provider:null,source.kind==='provider'?source.accountId:null,event.key,event.occurredAt,command,value]);
    if(!inserted.rowCount)throw new BillingError('billing_event_conflict');
    return {eventId,value};
   });

@@ -230,3 +230,22 @@ BEGIN
  RETURN NEW;
 END $$;
 CREATE TRIGGER billing_hosted_day_immutable BEFORE UPDATE OR DELETE ON billing_hosted_days FOR EACH ROW EXECUTE FUNCTION protect_billing_hosted_day();
+
+-- A provider reference and first success belong to the original attempt for its lifetime.
+CREATE FUNCTION protect_billing_attempt() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+ IF TG_OP='DELETE' OR
+  (to_jsonb(OLD)-ARRAY['provider_payment_id','state','revision','succeeded_at']) IS DISTINCT FROM
+  (to_jsonb(NEW)-ARRAY['provider_payment_id','state','revision','succeeded_at']) OR
+  (OLD.provider_payment_id IS NOT NULL AND OLD.provider_payment_id IS DISTINCT FROM NEW.provider_payment_id) OR
+  (OLD.succeeded_at IS NOT NULL AND OLD.succeeded_at IS DISTINCT FROM NEW.succeeded_at) OR
+  (NEW.state IN ('pending','failed','succeeded','refunded') AND NOT (
+   OLD.state=NEW.state OR
+   (OLD.state='pending' AND NEW.state IN ('failed','succeeded')) OR
+   (OLD.state='failed' AND NEW.state='succeeded') OR
+   (OLD.state='succeeded' AND NEW.state='refunded'))) THEN
+  RAISE EXCEPTION 'billing_attempt_immutable' USING ERRCODE='55000';
+ END IF;
+ RETURN NEW;
+END $$;
+CREATE TRIGGER billing_attempt_immutable BEFORE UPDATE OR DELETE ON billing_payment_attempts FOR EACH ROW EXECUTE FUNCTION protect_billing_attempt();

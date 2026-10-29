@@ -296,7 +296,8 @@ for(const [from,to] of [['succeeded','pending'],['succeeded','failed'],['refunde
  test(`accepted ${from} payment refuses ${to} before any observation effect`,async()=>{
   const f=await fixture();try{
    const a=await seeded(f);
-   await f.pool.query('UPDATE billing_payment_attempts SET state=$2,succeeded_at=\'2026-10-12T09:00:00Z\',provider_payment_id=\'test-payment\' WHERE id=$1',[a.attemptId,from]);
+   await f.pool.query("UPDATE billing_payment_attempts SET state='succeeded',succeeded_at='2026-10-12T09:00:00Z',provider_payment_id='test-payment' WHERE id=$1",[a.attemptId]);
+   if(from==='refunded')await f.pool.query("UPDATE billing_payment_attempts SET state='refunded' WHERE id=$1",[a.attemptId]);
    await noEffect(f,()=>observe(f,a.attemptId,to,0),'billing_state_conflict');
   }finally{await f.close();}
  });
