@@ -3104,6 +3104,14 @@ unique image tag, with a one-second limit, and always removes temporary files.
 Reproduce the image build when local Docker is available; passing CI does not explain
 the earlier timeout. Keep every verifier assertion and the existing build and job limits.
 
+## Concurrent storage extraction and failed-startup cleanup (D454)
+
+Run `node --test scripts/ci-backup-storage-concurrent-extraction.test.mjs` to
+check two fixtures extracting the same read-only archive into separate roots.
+Certificate-read refusals finish in both orders; each cleanup must preserve the
+other extracted tree, shared archive and unrelated files. Real store startup and
+historical failure causes remain open; see [the investigation](backlog/storage-cache-fixture.md).
+
 ## Storage extraction and certificate setup refusals (D452)
 
 Run `node --test scripts/ci-backup-storage-extraction.test.mjs` to check real
