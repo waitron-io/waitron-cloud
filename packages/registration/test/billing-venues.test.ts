@@ -48,13 +48,13 @@ async function payment(f:Fixture,venueId:string,options:{scope?:BillingScope;lev
  const args=[s.organisationId,s.legalBusinessId],e=randomUUID(),method=randomUUID(),charge=randomUUID(),attempt=randomUUID();
  await seedVenue(f,venueId,s);
  await f.pool.query("INSERT INTO billing_prices VALUES(1,'2026-10-01','EUR',1000,3000,2100) ON CONFLICT DO NOTHING");
- await f.pool.query("INSERT INTO billing_events(id,organisation_id,legal_business_id,source,event_key,occurred_at,command,result) VALUES($1,$2,$3,'internal',$1::text,'2026-10-01T00:00:00Z','{}','{}')",[e,...args]);
- await f.pool.query("INSERT INTO billing_payment_methods(organisation_id,legal_business_id,id,kind,provider,provider_account_id,customer_id,method_id,event_id) VALUES($1,$2,$3,'card','sumup','account','customer',$3::text,$4)",[...args,method,e]);
+ await f.pool.query("INSERT INTO billing_events(id,organisation_id,legal_business_id,source,event_key,occurred_at,command,result) VALUES($1,$2,$3,'internal',$4,'2026-10-01T00:00:00Z','{}','{}')",[e,...args,e]);
+ await f.pool.query("INSERT INTO billing_payment_methods(organisation_id,legal_business_id,id,kind,provider,provider_account_id,customer_id,method_id,event_id) VALUES($1,$2,$3,'card','sumup','account','customer',$5,$4)",[...args,method,e,method]);
  await f.pool.query(`INSERT INTO billing_charges(organisation_id,legal_business_id,id,kind,renewal_date,connected_until,hosted_from,hosted_through,price_revision,price_effective_from,currency,connected_monthly_cents,hosted_monthly_cents,vat_rate_basis_points,net_cents,vat_cents,gross_cents,event_id)
   VALUES($1,$2,$3,'renewal',$5,'2026-12-01','2026-09-01','2026-09-30',1,'2026-10-01','EUR',1000,3000,2100,1000,210,1210,$4)`,[...args,charge,e,options.date??'2026-10-01']);
  if(options.line!==false)await f.pool.query('INSERT INTO billing_charge_lines(organisation_id,legal_business_id,charge_id,venue_id,kind,quantity,cents) VALUES($1,$2,$3,$4,$5,1,1000)',[...args,charge,venueId,level==='connected'?'connected_month':'hosted_days']);
  await f.pool.query(`INSERT INTO billing_payment_attempts(organisation_id,legal_business_id,id,charge_id,method_id,provider,provider_account_id,request_key,state,succeeded_at,event_id)
-  VALUES($1,$2,$3,$4,$5,'sumup','account',$3::text,$6,$7,$8)`,[...args,attempt,charge,method,status,['succeeded','refunded'].includes(status)?'2026-10-01T00:00:00Z':null,e]);
+  VALUES($1,$2,$3,$4,$5,'sumup','account',$9,$6,$7,$8)`,[...args,attempt,charge,method,status,['succeeded','refunded'].includes(status)?'2026-10-01T00:00:00Z':null,e,attempt]);
  if(options.period!==false&&options.line!==false)await f.pool.query('INSERT INTO billing_paid_periods(organisation_id,legal_business_id,venue_id,level,charge_id,attempt_id,from_date,until_date) VALUES($1,$2,$3,$4,$5,$6,\'2026-10-01\',\'2026-11-01\')',[...args,venueId,level,charge,attempt]);
  return {charge,attempt,event:e};
 }
