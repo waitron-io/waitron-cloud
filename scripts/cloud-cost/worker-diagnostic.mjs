@@ -37,7 +37,10 @@ export function workerFailureTrace(value) {
   for (const event of value) {
     need(event && !isProxy(event) && Object.getPrototypeOf(event) === Object.prototype
       && Object.getOwnPropertyDescriptor(event, 'kind')?.get === undefined);
-    if (event.kind === 'storage-refusal') {
+    if (event.kind === 'measurement-refusal') {
+      exact(event, ['kind', 'stage']);
+      need(['checkpoint-admission', 'checkpoint-inventory', 'checkpoint-traffic', 'checkpoint-accounting'].includes(event.stage));
+    } else if (event.kind === 'storage-refusal') {
       exact(event, ['kind', 'stage']);
       need(['storage-health', 'finish-input', 'cleanup-client-open', 'bucket-ownership', 'bucket-inventory',
         'bucket-present', 'multipart-list', 'object-list', 'retained-inventory', 'abort-upload', 'delete-object',

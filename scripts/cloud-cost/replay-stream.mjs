@@ -154,7 +154,7 @@ export async function openReplayStream(input) {
     // The replay owns cancellation order: collect its writer before closing the transport it drains through.
     at('measurement-open');
     openingSession = openStreamMeasurement({ target, sdk, bucket, versioned, clock: () => performance.now() / 1000,
-      allowBulkDeletes: true, allowMultipart: true, resolveMultipartReplies: true });
+      allowBulkDeletes: true, allowMultipart: true, resolveMultipartReplies: true, onDiagnostic: diagnose });
     session = await openingSession;
     healthy(); record({ kind: 'stream-root', state: 'intent', path: workRoot });
     mkdirSync(workRoot, { mode: 0o700 }); identity = lstatSync(workRoot);
