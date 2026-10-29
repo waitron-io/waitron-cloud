@@ -39,6 +39,14 @@ worker processes exit. Pending scheduling and claim error reports finish before
 the loop returns, without further claims or waits. Production shutdown and real
 database failures remain separate qualification gates.
 
+## Worker scheduling failures and error reporting (D467)
+
+Run `node --test packages/registration/test/worker-loop-failures.test.ts` to
+check that failed scheduling delays retries and prevents claims, busy claims keep
+the scheduling cadence, and error reporting waits for every active claim. A failed
+error report stops the loop. Production scheduling and real database failures
+remain separate qualification gates.
+
 ## How to keep this file honest
 
 - Delete finished entries after checking main, the named pull requests and the code.
