@@ -45,6 +45,14 @@ accepts the actual assembled first-pass and review prompts. Retry hints reject m
 base URLs reject even empty query and fragment delimiters. Connection-close checks protect
 both response cancellation paths, and real HTTP checks pin the default byte limit. No real provider request or quality
 measurement is part of these checks.
+
+Run `node --test packages/translation/test/openai-client-compressed-integrity.test.ts`
+to exercise complete decoded JSON arriving before a delayed gzip or deflate
+checksum. Text and usage stay withheld until the stream finishes. A valid checksum
+admits the exact reply; a corrupt checksum returns a sanitized network error with
+no usage or automatic retry. A later call through the same client still succeeds.
+These local checks do not qualify a real provider or enable production traffic.
+
 Task 7 adds the two-pass batch runner. Loopback HTTP checks cover four calls per pass,
 2/8/30-second backoff or bounded provider hints, refusal handling and review fallback.
 Every billed reply reaches the spending callback, including unusable text and incomplete
