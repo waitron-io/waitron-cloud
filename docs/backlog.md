@@ -47,6 +47,12 @@ the scheduling cadence, and error reporting waits for every active claim. A fail
 error report stops the loop. Production scheduling and real database failures
 remain separate qualification gates.
 
+Run `node --test packages/registration/test/worker-loop-mixed-batches.test.ts`
+to check that mixed busy and idle claims finish the whole active batch before
+refilling slots. One busy claim prevents an idle pause at two and 32 slots,
+whether it finishes first or last; shutdown still waits for every active claim.
+Real database concurrency and production capacity remain separate gates.
+
 ## Worker scheduling deadlines and polling failures (D468)
 
 Run `node --test packages/registration/test/worker-loop-timing.test.ts` to
