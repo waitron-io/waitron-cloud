@@ -1487,7 +1487,10 @@ implementation or production evidence.
   Another paced replay refused at `quiesce-checkpoint` after a successful native
   stop in [run 40954158356, job 123729967144](https://github.com/waitron-io/waitron-cloud/actions/runs/40954158356/job/123729967144).
   You now receive a fixed `measurement-refusal` code distinguishing checkpoint
-  admission, independent inventory verification and accounting snapshots. The code
+  admission, independent inventory verification, rejected traffic during verification
+  and accounting snapshots. A request refused while inventory is running has its
+  own traffic code, even when it later poisons accounting. Cancellation is labelled
+  by the operation it interrupts. The code
   survives replay and worker admission without exposing raw storage errors. Native
   HTTP controls refuse closed sessions, unobserved objects and overflowing storage
   totals; a native writer control verifies forwarding after a successful stop.

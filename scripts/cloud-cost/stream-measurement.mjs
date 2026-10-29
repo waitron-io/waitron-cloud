@@ -13,7 +13,7 @@ export async function openStreamMeasurement({ target, sdk, bucket, versioned, cl
   allowBulkDeletes = false, allowMultipart = false, resolveMultipartReplies = false, signal, onDiagnostic }) {
   let admin, observer, front, client, history, meter, disposal, finishing, evidence;
   let invalid = false, state = 'opening', phase = 'startup', phaseStart, last = -Infinity;
-  let nativeCompleted = 0, nativeUploaded = false;
+  let nativeCompleted = 0, nativeUploaded = false, checkpointTraffic = false;
   const activityWaiters = new Set();
   const windows = [];
   const now = () => {
@@ -75,6 +75,7 @@ export async function openStreamMeasurement({ target, sdk, bucket, versioned, cl
     } });
     front = await createLitestreamTransport({ target: observer.url, meter, phase, allowBulkDeletes,
       lifetimes: { begin: input => {
+        if (state === 'checking') checkpointTraffic = true;
         need(state === 'active'); const complete = history.begin(input);
         const upload = classifyStorageOperation({ ...input, allowBulkDeletes }) === 'put';
         return event => {
@@ -120,15 +121,16 @@ export async function openStreamMeasurement({ target, sdk, bucket, versioned, cl
       try {
         need(!invalid && state === 'active' && !signal?.aborted);
         // A quiescent producer is required; a racing request poisons both counters.
-        front.setPhase(phase); state = 'checking';
+        front.setPhase(phase); checkpointTraffic = false; state = 'checking';
         stage = 'checkpoint-inventory'; await history.verify();
-        stage = 'checkpoint-accounting';
         need(!invalid && !signal?.aborted);
+        stage = 'checkpoint-accounting';
         const storage = history.snapshot(), requests = meter.snapshot();
         need(requests.reconciled === true && requests.status === 'measured');
         state = 'active'; return { requests, storage };
       } catch {
-        // Fixed operation codes preserve the first refusal without publishing private storage errors.
+        // Rejected traffic poisons counters even when inventory and session health still pass.
+        if (stage !== 'checkpoint-admission' && checkpointTraffic) stage = 'checkpoint-traffic';
         try { Promise.resolve(onDiagnostic?.({ kind: 'measurement-refusal', stage })).catch(() => {}); } catch { /* Reporting cannot prevent resource collection. */ }
         invalid = true; await dispose().catch(() => {}); fail();
       }

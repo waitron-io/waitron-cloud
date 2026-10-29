@@ -39,7 +39,7 @@ export function workerFailureTrace(value) {
       && Object.getOwnPropertyDescriptor(event, 'kind')?.get === undefined);
     if (event.kind === 'measurement-refusal') {
       exact(event, ['kind', 'stage']);
-      need(['checkpoint-admission', 'checkpoint-inventory', 'checkpoint-accounting'].includes(event.stage));
+      need(['checkpoint-admission', 'checkpoint-inventory', 'checkpoint-traffic', 'checkpoint-accounting'].includes(event.stage));
     } else if (event.kind === 'storage-refusal') {
       exact(event, ['kind', 'stage']);
       need(['storage-health', 'finish-input', 'cleanup-client-open', 'bucket-ownership', 'bucket-inventory',

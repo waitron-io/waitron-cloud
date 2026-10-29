@@ -20,9 +20,13 @@ async function fixture(t, onDiagnostic) {
       if (req.method === 'PUT') { state.stored = true; res.end(); }
       else if (url.searchParams.has('versioning')) res.end('<VersioningConfiguration/>');
       else if (url.searchParams.has('uploads')) res.end('<ListMultipartUploadsResult><IsTruncated>false</IsTruncated></ListMultipartUploadsResult>');
-      else if (url.searchParams.get('list-type') === '2') res.end('<ListBucketResult><IsTruncated>false</IsTruncated>'
+      else if (url.searchParams.get('list-type') === '2') {
+        const respond = () => res.end('<ListBucketResult><IsTruncated>false</IsTruncated>'
         + (state.stored ? '<Contents><Key>PRIVATE_KEY</Key><Size>4</Size></Contents>' : '')
         + (state.extra ? '<Contents><Key>PRIVATE_UNOBSERVED</Key><Size>1</Size></Contents>' : '') + '</ListBucketResult>');
+        if (state.holdList) { const hold = state.holdList; state.holdList = null; hold(respond); }
+        else respond();
+      }
       else { res.writeHead(500); res.end('PRIVATE_UNEXPECTED_REQUEST'); }
     });
   });
@@ -30,15 +34,15 @@ async function fixture(t, onDiagnostic) {
   t.after(() => { server.closeAllConnections(); return new Promise(resolve => server.close(resolve)); });
   const session = await openStreamMeasurement({ sdk, bucket: 'private-checkpoint', versioned: false,
     target: `http://127.0.0.1:${server.address().port}`, clock: () => state.time, onDiagnostic });
-  t.after(() => session.close());
+  t.after(() => session.close().catch(error => assert.deepEqual({ message: error.message }, bad)));
   return { state, session };
 }
-async function upload(url) {
-  await new Promise((resolve, reject) => {
+async function upload(url, expectedStatus = 200) {
+  return new Promise((resolve, reject) => {
     const req = request(url + '/private-checkpoint/PRIVATE_KEY', { method: 'PUT', agent: false, headers: {
       'content-length': '4', 'amz-sdk-invocation-id': '11111111-2222-4333-8444-000000000001',
       'amz-sdk-request': 'attempt=1; max=1',
-    } }, res => { res.resume(); res.on('end', () => res.statusCode === 200 ? resolve() : reject(Error('upload refused'))); });
+    } }, res => { res.resume(); res.on('end', () => res.statusCode === expectedStatus ? resolve(res.statusCode) : reject(Error('upload refused'))); });
     req.on('error', reject); req.end('data');
   });
 }
@@ -96,7 +100,7 @@ for (const [name, event] of [
   assert.throws(() => workerFailureTrace([event]), { message: 'Invalid cloud cost worker diagnostic' });
 });
 
-for (const stage of ['checkpoint-admission', 'checkpoint-inventory', 'checkpoint-accounting'])
+for (const stage of ['checkpoint-admission', 'checkpoint-inventory', 'checkpoint-traffic', 'checkpoint-accounting'])
   test('checkpointWorkerAdmissionPreservesOnlyItsFixedCode_' + stage, () => {
     const trace = [{ kind: 'measurement-refusal', stage }];
     const admitted = workerFailureTrace(trace);
@@ -104,3 +108,23 @@ for (const stage of ['checkpoint-admission', 'checkpoint-inventory', 'checkpoint
     trace[0].stage = 'PRIVATE_LATER_VALUE';
     assert.equal(admitted[0].stage, stage);
   });
+
+
+// A request refused during inventory poisons session health without an accounting snapshot failure.
+test('checkpointDistinguishesARacingWriteFromAccountingFailure', async t => {
+  const trace = [], f = await fixture(t, event => trace.push(event));
+  let entered, release;
+  const held = new Promise(resolve => { entered = resolve; });
+  f.state.holdList = resume => { release = resume; entered(); };
+  t.after(() => release?.());
+  const refusing = assert.rejects(f.session.checkpoint(), bad);
+  await held;
+  const before = f.state.requests;
+  assert.equal(await upload(f.session.url, 400), 400);
+  assert.equal(f.state.requests, before, 'racing writes never reach storage');
+  release(); await refusing;
+  assert.deepEqual(trace, [{ kind: 'measurement-refusal', stage: 'checkpoint-traffic' }]);
+  assert.deepEqual(workerFailureTrace(trace), trace);
+  await stopped(f.session.url);
+  await assert.rejects(f.session.finish(), bad);
+});
