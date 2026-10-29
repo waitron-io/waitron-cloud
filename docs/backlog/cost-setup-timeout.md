@@ -112,3 +112,17 @@ disposable supervisor's timers are accelerated. These controls qualify the retry
 boundary, not the historical GitHub transport cause. The pinned revision,
 installation and conformance assertions stay unchanged. Genuine local Docker
 qualification remains unavailable during the outage; GitHub CI runs that work.
+
+
+## Public source fetch reaches the setup limit (D480)
+
+D480's changed-head cost run `40885808434`, isolated-replay job `123489476324`,
+stops in `source-fetch` before any case starts. The shallow fetch of pinned Waitron
+`fbadd15785464e59747e697c11048bfbc6e4938f` reaches the unchanged 300-second limit
+and closes with SIGKILL and empty standard error. No setup code changed in D480.
+
+Lane D must locate the stalled operation inside the affected Linux Git transfer
+before proposing a repair. The existing phase trace identifies the command, not
+the network or Git cause. Keep this observation separate from the package-body
+stall and D458's earlier connection refusal. Preserve the source pin, deadline and
+cleanup; an unchanged rerun does not establish a fix.
