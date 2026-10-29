@@ -3170,15 +3170,23 @@ and historical causes remain open; see [the investigation](backlog/storage-cache
 
 ## Container verifier memory-refusal observation (D335)
 
-The native-memory check sometimes receives exit 73 without Docker marking the
-container as killed for running out of memory. Its cause remains unknown. Resource
-refusals now report the entry and child process IDs, child exit or signal, fixed
-heap/scratch/file-limit indicators, Docker state and before/after Linux memory-event
-counters when readable. These reports are advisory and omit raw child text; a failed
-report preserves the resource refusal. Capture
-a recurrence and reproduce its cause; passing CI does not explain the earlier failure.
-Keep every resource, isolation, cleanup and later-snapshot assertion and deadline.
-Local Docker reproduction remains blocked until 3 November. The D480 recurrence now records a surviving entry process, child SIGKILL and a cgroup memory-kill increase from zero to one with Docker's flag false. An instrumented CI investigation is checking whether that flag is the wrong witness; no assertion or refusal policy has changed yet.
+The memory-exhaustion check accepts Docker's positive OOM report or, when the
+entry survives, requires a distinct child killed by SIGKILL and a fresh increase
+in the container's cgroup `oom_kill` counter. Exit 73, SIGKILL, memory pressure,
+old counts and missing or malformed evidence alone do not pass. Native controls
+exercise both witnesses and reject those alternatives; deleting each guard makes
+its control fail. The existing resource refusal, limits, isolation, cleanup and
+later-snapshot checks remain.
+
+Instrumented Linux CI observed entry PID 1 surviving a child kill and the cgroup
+counter increasing from zero to one. Docker's flag was true there and false in
+the saved D480 failure despite the same kill evidence. The flag-only test was the
+wrong requirement; the Docker event-reporting difference remains unexplained.
+The [kernel's cgroup documentation](https://www.kernel.org/doc/html/latest/admin-guide/cgroup-v2.html)
+defines `oom_kill` as killed processes in the cgroup. Resource reports still omit
+raw child text and cannot turn a successful exit into a refusal. Production code
+is unchanged. Real container qualification runs in CI while local Docker remains
+unavailable until 3 November.
 
 ## Verifier source isolation from local edits (D445)
 
