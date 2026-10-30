@@ -3442,18 +3442,20 @@ for the deterministic handoff regression and bound-identity configuration checks
 The three TLS-refusal modes require zero TCP probes after the owner-approved
 count change; their TLS error, cleanup and competing-listener checks remain.
 
-Browser qualification now fetches Waitron `e8cfd38ed07bf546f14ad15334e54ee997114c75`,
+Browser qualification fetches Waitron `e8cfd38ed07bf546f14ad15334e54ee997114c75`,
 which defers the first live stream until the dashboard screen can register its
 subscriptions (Waitron PR #2269). Replay fixtures keep their original commit and
 recorded measurements. Native checks cover separate pins and cleanup of combined
-preparations. Current-head CI reaches the new source but all seven browser modes
-refuse at gateway readiness before the journey. The native bundled backend first
-refuses a missing `assets/invoice-noto-sans.ttf`; providing only that asset then
-refuses fiscal activation with `sif.allocation_invalid` and
-`reauthentication_required`. No fiscal guard or expected result has changed.
-Adapting the generated fixture to the current fiscal activation contract needs
-owner review under Lane D H2. The exact Linux peer failure and original reconnect
-cause remain unproved; do not rerun unchanged code to seek a green result.
+preparations. The generated browser backend includes the invoice font beside its
+bundle and requests Waitron's supported preproduction allocation. Waitron generates
+the signed evidence and checks operation authority; its fiscal implementation,
+guards and expected results are unchanged. A native SQLite check starts that actual
+bundle, verifies its committed generated allocation and exercises graceful shutdown
+through the current management API. The combined-preparation check also verifies
+that the runtime font reaches the browser fixture manifest. Run
+`pnpm test:cloud-cost:conformance --only remote-browser-conformance.test.mjs`
+for the native startup check and all seven browser journeys. The historical Linux
+bind failure and original reconnect cause remain unproved.
 
 ## Diagnostic permission test lock observation (D198)
 
