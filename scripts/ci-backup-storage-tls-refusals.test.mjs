@@ -117,7 +117,7 @@ try {
   assert.equal(certificates, 1);
   assert.equal(reads, 2);
   assert.equal(tlsCalls, 1);
-  assert.equal(allocated.length, 1, "only the temporary issuer-port probe may run");
+  assert.equal(allocated.length, 0, "TLS refusal must precede TCP listener allocation");
   assert.ok(allocated.every(server => !server.listening), "port probes must close before TLS construction");
   assert.ok(!existsSync(root), "failed TLS construction must remove its extracted root and private key");
   assert.deepEqual((await fs.readdir(tmpdir())).sort(), ["unrelated-root", "waitron-cloud-test-binaries"]);
