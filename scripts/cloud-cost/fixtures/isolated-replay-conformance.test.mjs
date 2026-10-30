@@ -9,6 +9,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { openReplay } from '../waitron-adapter.mjs';
 import { withOwnershipDiagnostics } from './ownership-diagnostics.mjs';
 import { withStreamResultDiagnostics } from './stream-result-diagnostics.mjs';
+import { withLocalCommandDiagnostics } from './local-command-diagnostics.mjs';
 const controller = await import('../isolated-replay.mjs').catch(error => {
   if (error.code === 'ERR_MODULE_NOT_FOUND' && error.url === new URL('../isolated-replay.mjs', import.meta.url).href) return {};
   throw error;
@@ -276,20 +277,25 @@ for (const signal of ['SIGINT', 'SIGTERM']) {
     const { spawn } = await import('node:child_process');
     const child = spawn(process.execPath, localCommand(f), { env: { PATH: process.env.PATH, LANG: 'C', TZ: 'UTC' },
       stdio: ['ignore', 'pipe', 'pipe'] });
-    let stdout = '', stderr = '', sent = false, timer;
-    child.stdout.on('data', chunk => { stdout += chunk; }); child.stderr.on('data', chunk => { stderr += chunk; });
-    const closed = new Promise((resolve, reject) => { child.once('error', reject); child.once('close', (status, signal) => resolve({ status, signal })); });
+    let stdout = '', stderr = '', sent = false, timer, result, timerFired = false, stdoutBytes = 0, stderrBytes = 0;
+    const began = performance.now();
+    child.stdout.on('data', chunk => { stdout += chunk; stdoutBytes += chunk.length; });
+    child.stderr.on('data', chunk => { stderr += chunk; stderrBytes += chunk.length; });
+    const closed = new Promise((resolve, reject) => { child.once('error', reject); child.once('close', (status, signal) => { result = { status, signal }; resolve(result); }); });
+    await withLocalCommandDiagnostics(async () => {
     const poll = setInterval(() => {
       const entries = JSON.parse(readFileSync(f.journal.path, 'utf8')).localResources ?? [];
       if (!sent && entries.some(e => e.kind === 'replay-worker' && e.state === 'started')) { sent = true; child.kill(signal); }
     }, 10);
     try {
-      timer = setTimeout(() => child.kill('SIGKILL'), 20000);
-      const result = await closed;
+      timer = setTimeout(() => { timerFired = true; child.kill('SIGKILL'); }, 20000);
+      await closed;
       assert.equal(sent, true, 'reach the admitted worker before signalling');
       assert.deepEqual(result, { status: 1, signal: null });
       assert.equal(stdout, ''); assert.equal(stderr, 'Cloud cost local command refused.\n'); clean(f, before);
     } finally { clearInterval(poll); clearTimeout(timer); }
+    }, () => readFileSync(f.journal.path, 'utf8'), () => ({ elapsedMilliseconds: performance.now() - began,
+      requestedSignal: signal, sent, timerFired, result, stdoutBytes, stderrBytes }), text => t.diagnostic(text));
   });
 }
 
