@@ -13,7 +13,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        mode: [healthy, stalled, failed-test]
+        mode: [healthy, stalled, stalled-final, failed-test]
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
@@ -30,7 +30,7 @@ jobs:
         run: |
           if [ '${{ matrix.mode }}' = failed-test ]; then exit 37; fi
       - name: Block archive creation inside the real cache-save action
-        if: matrix.mode == 'stalled'
+        if: matrix.mode == 'stalled' || matrix.mode == 'stalled-final'
         run: |
           mkdir -p "$RUNNER_TEMP/d507-bin"
           cat > "$RUNNER_TEMP/d507-bin/tar" <<'SH'
@@ -65,6 +65,7 @@ jobs:
           key: d507-control-${{ github.run_id }}-${{ matrix.mode }}
           fail-on-cache-miss: true
       - name: Verify healthy restore or bounded save cleanup
+        if: matrix.mode != 'stalled-final'
         env:
           MODE: ${{ matrix.mode }}
           SAVE_OUTCOME: ${{ steps.save.outcome }}
