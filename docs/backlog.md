@@ -1494,12 +1494,14 @@ implementation or production evidence.
   `node --test scripts/cloud-cost/browser-readiness.test.mjs` for controlled boundaries.
   The [Linux investigation](backlog/browser-reconnect.md) retains separate historical
   socket-reset attribution as open; readiness does not excuse cancelled bytes.
-  Linux still exposes distinct client cancellations: an API read around reload
-  and an application closing its first live stream while it is still connecting,
-  before any drain. The reviewed readiness repair remains unqualified. Protocol
-  observations retain document identities and numeric initiators without raw URLs.
-  A separate storage collision test also refuses with a direct occupied-port error;
-  preserve its expected native-child failure check while investigating that fixture.
+  Retained traces distinguish an API cancellation around reload from an initial
+  connecting-stream cancellation. Waitron's A1222 consumer repair and Cloud's
+  [D499 fixture qualification](https://github.com/waitron-io/waitron-cloud/pull/760)
+  now provide the current browser pin, generated authority, routes and assets;
+  D499 also repairs the separate storage identity-port handoff. This readiness
+  branch still needs its own current-head Linux qualification. Protocol observations
+  retain document identities and numeric initiators without raw URLs. Earlier
+  intermittent socket resets still need matching attribution.
   The bounded observation workflow retains the first refusal in each sampling
   group and all six original fault controls; all accounting checks and deadlines remain.
   The reporter preserves the original refusal when a diagnostic property cannot

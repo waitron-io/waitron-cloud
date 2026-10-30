@@ -194,3 +194,20 @@ behavioral check and investigate the competing-listener setup and handoff in
 `git diff --exit-code f32fac4a HEAD -- deploy/test-cloud scripts/backup-storage-fixture.mjs`
 confirms this branch changes neither that test nor the storage fixture. This
 separate failure also prevents landing and must not be rerun unchanged to green.
+
+## Requalification after the consumer and fixture repairs
+
+Waitron's [A1222 repair](https://github.com/clintongormley/waitron/pull/2269)
+keeps one live stream per page load while initial interests settle. Cloud's
+[D499 delivery](https://github.com/waitron-io/waitron-cloud/pull/760) pins that
+browser, supplies its supported generated authority and runtime assets, mounts
+its real theme and disk-stop routes, and selects the account menu's explicit
+trigger. It also repairs the storage identity-port handoff. D499's exact-head and
+independent merge runs pass the complete browser journey and all six fault controls.
+
+The preserved readiness branch now includes those landed repairs. Its own changed
+head must pass both ordinary CI and the bounded Linux observation groups before
+you call it qualified. Retain the earlier cancellation traces; these deliveries
+do not prove that every historical socket reset has the same cause. The native
+readiness checks still cover headers, open callbacks, follow-up reads, response
+sizes, established streams and the original deadline.
