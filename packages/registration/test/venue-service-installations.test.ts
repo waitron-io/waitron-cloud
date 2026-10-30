@@ -12,6 +12,10 @@ const origin='https://venue.example.test';
 async function fixture(){
  const f=await venueServiceFixture();
  try{
+  // The expired venue precedes its neighbour in the account's captured installation order.
+  const current=await f.pool.query('SELECT venue_id FROM installations WHERE venue_id=ANY($1::uuid[]) AND superseded_by IS NULL ORDER BY id',[f.venues]);
+  const order=current.rows.map(r=>r.venue_id as string);
+  f.venues.sort((a,b)=>order.indexOf(a)-order.indexOf(b));
   const key=generateKeyPairSync('ed25519'),publicKey=key.publicKey.export({type:'spki',format:'der'}).toString('base64url');
   const issuer=createLeaseIssuer(generateKeyPairSync('ed25519').privateKey.export({type:'pkcs8',format:'der'}).toString('base64url'));
   const installation=(await f.pool.query('UPDATE installations SET public_key=$2 WHERE venue_id=$1 AND superseded_by IS NULL RETURNING id',[f.venues[0],publicKey])).rows[0].id;
@@ -66,9 +70,9 @@ test('venue level one denies trusted setup without changing its stored services'
   assert.deepEqual(await rows(f),before);
  }finally{await f.close();}
 });
-test('venue level two allows explicit setup and upgrade never restores it by itself',async()=>{
+for(const level of ['connected','hosted'] as const)test(`venue level ${level==='connected'?'two':'three'} allows explicit setup and upgrade never restores it by itself`,async()=>{
  const f=await fixture();try{
-  await set(f);await set(f,'registered');await set(f);
+  await set(f,level);await set(f,'registered');await set(f,level);
   const before=await rows(f),rev=await revision(f);
   for(const s of before.services)if(s.service!=='content_translation'){assert.equal(s.state,'unconfigured');assert.deepEqual(s.configuration,{});}
   const result=await f.machines.configure(f.installation,rev,[{service:'remote_access',state:'ready',configuration:{hostname:'test.invalid'}}]);
@@ -125,7 +129,7 @@ for(const boundary of ['machine','setup'] as const)test(`venue ${boundary} waits
    if(waiting)break;await delay(10);
   }
   assert.equal(waiting,true,'service admission must wait on current venue policy');
-  await observer.query('BEGIN');await observer.query('SELECT id FROM installations WHERE venue_id=$1 FOR UPDATE NOWAIT',[f.venues[0]]);await observer.query('ROLLBACK');
+  await observer.query('BEGIN');await assert.doesNotReject(observer.query('SELECT id FROM installations WHERE venue_id=$1 FOR UPDATE NOWAIT',[f.venues[0]]),'policy wait must leave installations unlocked');await observer.query('ROLLBACK');
   await holder.query('COMMIT');await pending;
  }finally{await observer.query('ROLLBACK');await holder.query('ROLLBACK');await pending?.catch(()=>{});observer.release();holder.release();await f.close();}
 });
@@ -142,7 +146,7 @@ test('venue account list locks every venue before expiring earlier setup',async(
    if(waiting)break;await delay(10);
   }
   assert.equal(waiting,true,'the account batch must lock its complete captured venue set');
-  await observer.query('BEGIN');await observer.query('SELECT id FROM installations WHERE venue_id=$1 FOR UPDATE NOWAIT',[f.venues[0]]);await observer.query('ROLLBACK');
+  await observer.query('BEGIN');await assert.doesNotReject(observer.query('SELECT id FROM installations WHERE venue_id=$1 FOR UPDATE NOWAIT',[f.venues[0]]),'batch policy wait must leave earlier installations unlocked');await observer.query('ROLLBACK');
   await holder.query('COMMIT');const result=await pending as InstallationView[];const own=result.find(i=>i.installationId===f.installation);assert.ok(own);masked(own);
  }finally{await observer.query('ROLLBACK');await holder.query('ROLLBACK');await pending?.catch(()=>{});observer.release();holder.release();await f.close();}
 });
