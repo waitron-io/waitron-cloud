@@ -9,7 +9,7 @@ import {promisify} from 'node:util';
 const exec=promisify(execFile);
 
 // Each omission runs against the real database and must fail its assertion before restoration.
-test('remote boundary guards detect nine independent omissions',{timeout:180000},async()=>{
+test('remote boundary guards detect eleven independent omissions',{timeout:180000},async()=>{
  const root=fileURLToPath(new URL('../../../',import.meta.url)),scratch=await mkdtemp(join(tmpdir(),'venue-remote-boundary-guards-')),candidate=join(scratch,'candidate');
  try{
   await exec('git',['clone','--quiet','--no-hardlinks',root,candidate],{timeout:10000});
@@ -23,12 +23,14 @@ test('remote boundary guards detect nine independent omissions',{timeout:180000}
    {name:'post-wait setup statement',file:'remote-access/src/plan-permissions',needle:' if(lock)await client.query(`SELECT i.id FROM installations i WHERE i.id=ANY($1::uuid[]) ORDER BY i.id${lock}`,[candidates.map(r=>r.id)]);',replacement:'',pattern:'venue remote SHARE batch rereads setup after installation wait',expected:'remote boundary must reach the real installation lock wait'},
    {name:'private route generation digest',file:'remote-access/src/reconciler',needle:":undefined,mode==='test-venue-levels')});",replacement:':undefined,false)});',pattern:'venue remote signing wait refuses reprovisioned generation with reports false',expected:'1 !== 0'},
    {name:'private route revision',file:'remote-access/src/reconciler',needle:"forwardReports||mode==='test-venue-levels'?{revision:Number(row.configuration_revision)}",replacement:'forwardReports?{revision:Number(row.configuration_revision)}',pattern:'venue remote signing wait refuses reprovisioned generation with reports false',expected:'1 !== 0'},
+   {name:'captured new placement policy set',file:'remote-access/src/plan-permissions',needle:'WHERE v.organisation_id=ANY($1::uuid[])',replacement:'WHERE ($1::uuid[] IS NOT NULL)',pattern:'an export defers a new placement whose policy was not in its locked set',expected:'Expected values to be strictly deep-equal',legacy:true},
+   {name:'captured incoming move policy set',file:'remote-access/src/plan-permissions',needle:'WHERE v.organisation_id=ANY($1::uuid[])',replacement:'WHERE ($1::uuid[] IS NOT NULL)',pattern:'a cell export defers an incoming move whose organisation was absent from its policy locks',expected:'Expected values to be strictly deep-equal',legacy:true},
    {name:'account status current level',file:'account-http/src/remote-access',needle:"permission?permission.level==='connected'||permission.level==='hosted':",replacement:'permission?true:',pattern:'venue remote HTTP status masks downgraded setup and needs explicit reprovision after upgrade',expected:'Expected values to be strictly equal'},
   ];
   const originals=new Map<string,string>();for(const c of cases)if(!originals.has(c.file))originals.set(c.file,await readFile(join(candidate,'packages/'+c.file+'.ts'),'utf8'));
   const env={...process.env};delete env.NODE_TEST_CONTEXT;
   async function run(c:typeof cases[number]){
-   const http=c.file.startsWith('account-http/'),pkg=http?'account-http':'remote-access',file=http?'venue-service-remote.test.ts':'venue-service-remote-boundaries.test.ts';
+   const http=c.file.startsWith('account-http/'),legacy='legacy' in c&&c.legacy,pkg=http?'account-http':'remote-access',file=legacy?'plan-permissions.test.ts':http?'venue-service-remote.test.ts':'venue-service-remote-boundaries.test.ts';
    return exec(process.execPath,['--test','--test-reporter=tap','--test-name-pattern=^'+c.pattern+'$','test/'+file],{cwd:join(candidate,'packages',pkg),env,timeout:25000,maxBuffer:2*1024*1024})
     .then(r=>({code:0,output:r.stdout+r.stderr}),e=>({code:e.code,output:e.stdout+e.stderr}));
   }
