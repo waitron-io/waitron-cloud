@@ -68,7 +68,7 @@ for(const kind of ['registration','pairing'] as const)for(const replay of [false
    await holder.query('BEGIN');await holder.query('SELECT id FROM venues WHERE id=$1 FOR NO KEY UPDATE',[action.venueId]);
    const pid=(await holder.query('SELECT pg_backend_pid() AS pid')).rows[0].pid;
    const before=await f.store.venue(f.scope,action.venueId);
-   transition=f.store.execute(f.scope,event(),{type:'set_venue',venueId:action.venueId,expectedRevision:before.revision,value:{level:'registered',connectedFrom:null,lapsedOn:null,scheduledLevel:null,scheduledOn:null}});void transition.catch(()=>{});
+   transition=Promise.resolve(f.store.execute(f.scope,event(),{type:'set_venue',venueId:action.venueId,expectedRevision:before.revision,value:{level:'registered',connectedFrom:null,lapsedOn:null,scheduledLevel:null,scheduledOn:null}}));void transition.catch(()=>{});
    const writer=await waitForBlock(f,pid,()=>false,f.schema);
    let settled=false;pending=action.run().finally(()=>{settled=true;});void pending.catch(()=>{});
    await waitForBlock(f,[pid,writer],()=>settled);
