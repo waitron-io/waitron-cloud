@@ -44,6 +44,13 @@ at two and 32 slots. Claims and startup or recurring schedules recover after
 one native timer, keep the original refusal and exit after shutdown. Production
 signals and real database recovery remain separate gates.
 
+Run `node --test packages/registration/test/worker-loop-native-cadence.test.ts`
+to check real timer expiry against the next scheduling deadline at two and 32
+slots. The interval starts after scheduling completes; idle polling shortens
+either its only wait or its final wait to meet that deadline. Every active claim
+finishes before polling, and shutdown prevents further claims. Production
+scheduling and real database failures remain separate gates.
+
 ## Worker scheduling failures and error reporting (D467)
 
 **Open.** Production scheduling, real database failures and capacity remain separate gates.
