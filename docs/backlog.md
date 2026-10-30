@@ -3291,12 +3291,14 @@ requirements](backlog/diagnostic-permission-lock.md).
 
 ## Dependency-cache save stalls (D507)
 
-Cost conformance uses a stable pnpm store path across runners, restores it separately
-and limits optional cache saves to one minute after successful tests. A save timeout stays visible without changing
-the test result. Keep saving last so the runner promptly cleans up its child processes.
+Cost conformance and the password diagnostic use a stable pnpm store path across
+runners, restore it separately and limit optional cache saves to one minute after
+successful mandatory steps. A save timeout stays visible without changing the test
+result. Keep saving last so the runner promptly cleans up its child processes. The
+password diagnostic retains its password snapshot, deliberate-fault and artifact checks.
 
 **Open.** Attribute the historical upload stall; the controlled archive-creation stall
-proves the save deadline, not that transport cause. The other eight setup-node cache
+proves the save deadline, not that transport cause. The other seven setup-node cache
 consumers retain their existing behaviour and need separate qualification before changing.
 
 ## CI PostgreSQL image pull
