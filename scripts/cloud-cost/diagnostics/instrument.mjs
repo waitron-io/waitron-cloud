@@ -92,7 +92,7 @@ export function instrumentBrowser(source, {buffered = false, compact = false, ap
     };
     const tracePending = () => [...seen].map(req => ({key:keyFor(req), ...traceRequest(req)}));
     const record = (req, event) => {`);
-  if (application) source = replace(source, "const pending = [], seen = new Set();", `
+  if (application) source = replace(source, "const pending = [], seen = new Set(), received = new WeakSet();", `
     context.on('console', message => {
       const text = message.text();
       if (!text.startsWith('cost_application=') || text.length > 256) return;
@@ -105,7 +105,7 @@ export function instrumentBrowser(source, {buffered = false, compact = false, ap
       } catch {}
     });
     await context.addInitScript(${installApplicationTrace.toString()});
-    const pending = [], seen = new Set();`);
+    const pending = [], seen = new Set(), received = new WeakSet();`);
   if (!compact || application) source = replace(source, "const key = keyFor(req) + ':' + event;", "const key = keyFor(req) + ':' + event; trace({event:'request',key,phase,at:Date.now()" + (application ? ',...traceRequest(req)' : '') + "});");
   if (application) {
     source = replace(source, 'const deadline = Date.now() + 3000;', "trace({event:'drain-start',phase,at:Date.now(),pending:tracePending()}); const deadline = Date.now() + 3000;");

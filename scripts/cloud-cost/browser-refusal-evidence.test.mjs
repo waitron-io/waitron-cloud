@@ -26,7 +26,7 @@ for (const [name, thrown, session, pageError, wantFailure, wantSession, wantPage
   const response = (status, path = '/management-api/session/me') => ({
     status: () => status, url: () => 'https://staff.generated.example.test' + path,
   });
-  const page = {locator, on: (event, listener) => pageEvents.set(event, listener), setDefaultTimeout() {}, async goto() {
+  const page = {locator, on: (event, listener) => pageEvents.set(event, listener), setDefaultTimeout() {}, async evaluate() {return true;}, async goto() {
     events.get('response')(response(200));
     pageEvents.get('pageerror')(Error('PRIVATE_BEFORE_RECONNECT'));
   },
@@ -38,7 +38,7 @@ for (const [name, thrown, session, pageError, wantFailure, wantSession, wantPage
       if (pageError) pageEvents.get('pageerror')(Error('PRIVATE_PAGE_ERROR'));
     },
   };
-  const context = {on: (event, listener) => events.set(event, listener),
+  const context = {async addInitScript() {}, on: (event, listener) => events.set(event, listener),
     async newPage() {return page;}, async newCDPSession() {return {async send() {}, on() {}};},
   };
   const chromium = {async launch() {return {async newContext() {return context;}, async close() {closed++;}};}};

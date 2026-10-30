@@ -27,12 +27,29 @@ export async function measureRemoteBrowser(options) {
       '--host-resolver-rules=MAP ' + staffHostname + ' 127.0.0.1:' + meter.port + ',MAP * ~NOTFOUND'] });
     phase = 'context';
     const context = await browser.newContext({ ignoreHTTPSErrors: true, locale: 'en-GB', viewport: { width: 1280, height: 900 } });
+    // An HTTP response can arrive before the stream's open callback starts its
+    // follow-up reads. Evaluating readiness in the page waits for that event task.
+    await context.addInitScript(() => {
+      const connecting = new Set(), NativeStream = globalThis.EventSource;
+      globalThis.__cloudCostStreamsReady = () => connecting.size === 0;
+      globalThis.EventSource = class extends NativeStream {
+        constructor(...args) {
+          super(...args); connecting.add(this);
+          this.addEventListener('open', () => connecting.delete(this));
+          this.addEventListener('error', () => {
+            if (this.readyState === 0) connecting.add(this); else connecting.delete(this);
+          });
+        }
+        close() { super.close(); connecting.delete(this); }
+      };
+    });
     const result = { kind: 'pinned-waitron-browser-gateway', costMeasured: false, actions: [],
       requests: { document: 0, script: 0, stylesheet: 0, image: 0, font: 0, api: 0, eventsource: 0, other: 0 },
       completedRequestBodyBytes: 0, completedResponseBodyBytes: 0, completedRequests: 0, interruptedStreamRequests: 0,
       unfinishedStreamRequests: 0, streamBodyBytes: null, bodyBytesCoverage: 'completed-requests-only',
       failedRequests: 0, unexpectedResponses: 0, pageErrors: 0, outsideRequests: 0, cachedRequests: 0 };
-    const pending = [], seen = new Set();
+    const pending = [], seen = new Set(), received = new WeakSet();
+    let settling = 0;
     const traffic = new Map(), requestKeys = new WeakMap();
     const route = req => {
       const url = new URL(req.url());
@@ -72,6 +89,7 @@ export async function measureRemoteBrowser(options) {
       seen.add(req); result.requests[group(req)]++;
     });
     context.on('response', res => {
+      received.add(res.request?.() ?? res);
       const status = res.status();
       record(res.request?.() ?? res, status === 304 ? 'not-modified' : status >= 200 && status < 300 ? 'ok'
         : status >= 300 && status < 400 ? 'redirect' : status === 401 || status === 403 ? 'refused' : 'error');
@@ -83,9 +101,10 @@ export async function measureRemoteBrowser(options) {
     context.on('requestfinished', req => {
       record(req, 'finished');
       seen.delete(req);
+      settling++;
       pending.push(req.sizes().then(size => {
         result.completedRequests++; result.completedRequestBodyBytes += size.requestBodySize; result.completedResponseBodyBytes += size.responseBodySize;
-      }).catch(() => { record(req, 'size-failed'); result.failedRequests++; }));
+      }).catch(() => { record(req, 'size-failed'); result.failedRequests++; }).finally(() => { settling--; }));
     });
     context.on('requestfailed', req => {
       record(req, req.failure()?.errorText === 'net::ERR_ABORTED' ? 'aborted' : 'failed');
@@ -95,8 +114,13 @@ export async function measureRemoteBrowser(options) {
     });
     const drain = async (streamsRemain = false) => {
       const deadline = Date.now() + 3000;
-      while ([...seen].some(req => !streamsRemain || group(req) !== 'eventsource')) {
-        need(Date.now() < deadline); await delay(10);
+      for (;;) {
+        need(Date.now() < deadline);
+        const streamsReady = await page.evaluate(() => globalThis.__cloudCostStreamsReady());
+        need(Date.now() < deadline);
+        if (streamsReady && settling === 0
+          && ![...seen].some(req => !streamsRemain || group(req) !== 'eventsource' || !received.has(req))) break;
+        await delay(10);
       }
       await Promise.all(pending);
     };

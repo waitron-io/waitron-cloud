@@ -5,9 +5,9 @@ relay treats a reset on that connection as a failed measurement and closes every
 other connection. The browser then times out waiting for the dashboard. Increasing
 that wait or retrying the job would hide the failure rather than explain it.
 
-Draft [PR #739](https://github.com/waitron-io/waitron-cloud/pull/739) retains the
-Linux experiment. It has not repaired the journey or qualified a production change.
-The original relay, browser checks, accounting rules and deadlines are unchanged.
+[PR #739](https://github.com/waitron-io/waitron-cloud/pull/739) retains the Linux
+experiment and strengthens readiness at the identified late-read boundary. The
+relay, accounting, cache, isolation and cleanup checks retain their original rules.
 
 ## What the Linux traces establish
 
@@ -44,13 +44,11 @@ request cancellation and relay-wide shutdown in these recurrences. They do not
 establish that every historical reconnect refusal has the same cause, or identify
 which application action cancelled the API request.
 
-## What remains open
+## Remaining cancellation attribution
 
-Reproduce the mapped cancellation in a controlled comparison, identify its
-application or navigation trigger, and prove a repair that preserves complete
-accounting. Keep live-stream cancellation and API cancellation distinguishable.
-Check the drain boundary as a hypothesis: requests can start while response sizes
-are being collected. Reading that code is not proof that it caused either trace.
+Keep live-stream cancellation and API cancellation distinguishable when you
+investigate the earlier socket resets. The later drain trace below establishes a
+separate late-read sequence with no relay error; it does not attribute those resets.
 
 Do not exempt resets, drop interrupted traffic, finish streams before reload,
 lengthen deadlines or add retries to qualify the journey. Local socket counters
@@ -61,9 +59,9 @@ all cancellations would discard required evidence.
 Before changing the success conditions, write down how every cancelled request and
 encrypted byte remains covered and obtain the approval required by the campaign's
 changed-test-check rule. No accounting change or owner decision is implied by the
-current diagnostics. The branch remains a draft investigation.
+current diagnostics.
 
-The next diagnostic adds application-side stream creation, opening and explicit
+The application diagnostic adds application-side stream creation, opening and explicit
 closure, fetch signal cancellation, and navigation markers. It also records which
 requests remain when each drain starts and returns. Fixed categories and numeric
 identifiers distinguish an application abort from reload without publishing URLs,
@@ -94,12 +92,30 @@ request check. Rechecking the request set and establishing stream readiness are
 separate obligations. Waiting only for response headers has not been proved to
 cover the application's later stream-open callback.
 
-Before implementing stronger readiness, resolve the explicit test-scope decision
-recorded against PR #739. A disposable header-readiness prototype makes the
-unchanged `pending-before`, `late-before` and `aborted-before` diagnostic tests
-refuse in the dashboard phase, where they currently require reconnect. The
-campaign's changed-test rule requires approval before changing those fixtures.
-You must retain coverage of late completion and interruption, preserve the current
-deadline and every accounting check, and prove the final behavior on Linux. The
-prototype remains outside the branch; the original measurement and tests are
-unchanged. PR #739 is still a draft investigation.
+## Readiness at the boundary
+
+The owner approved stronger readiness and the three affected diagnostic fixtures
+on 30 October. Before you reload, the measurement now waits until every live
+stream has received headers and delivered its open event. A page evaluation runs
+after the whole open-event task, including the application's listeners that start
+follow-up reads. An already open stream stays open. An automatically reconnecting
+stream must open again; a stream closed by the application no longer blocks.
+
+Response-size collection participates in the same drain loop as outstanding reads.
+If another request starts while sizes settle, the loop waits for it too. The
+original three-second deadline still refuses unfinished streams, reads and size
+collection, including a readiness reply received after that deadline. No failure
+is retried, no socket reset is accepted and no byte is removed from accounting.
+
+Run `node --test scripts/cloud-cost/browser-readiness.test.mjs` for controlled
+headers, open callbacks, late reads, closure and deadline boundaries. The three
+`pending-before`, `late-before` and `aborted-before` fixtures now supply an
+established pre-reload stream and explicitly retain its response observation.
+Their reconnect-phase lifecycle, privacy and count checks remain.
+
+The native Chromium probe retained with the campaign uses a real TLS meter,
+delayed stream data and a delayed follow-up read. It reaches reload only after
+the read finishes, with the stream still open. The pinned Linux workflow compares
+ordinary and single-CPU scheduling and retains all six original fault controls.
+These checks address the identified late-read family. Earlier socket-reset
+recurrences still need a matching trace before you attribute them to this repair.

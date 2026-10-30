@@ -28,7 +28,7 @@ for (const reset of [false, true]) test('browserRetainsRelayObservationBeforeCle
     async fill() {}, async click() {}, async isVisible() {return false;}, async waitFor() {
       if (reconnect && selector.includes('takings')) throw Object.assign(Error('PRIVATE_TIMEOUT'), {name: 'TimeoutError'});
     }});
-  const page = {locator, on() {}, setDefaultTimeout() {}, async goto() {}, async reload() {
+  const page = {locator, on() {}, setDefaultTimeout() {}, async evaluate() {return true;}, async goto() {}, async reload() {
     reconnect = true;
     if (reset) {
       const socket = connect(port, '127.0.0.1'); socket.on('error', () => {});
@@ -37,7 +37,7 @@ for (const reset of [false, true]) test('browserRetainsRelayObservationBeforeCle
       socket.write('PRIVATE_TLS_BYTES'); await done;
     }
   }};
-  const context = {on() {}, async newPage() {return page;}, async newCDPSession() {return {async send() {}, on() {}};}};
+  const context = {async addInitScript() {},on() {}, async newPage() {return page;}, async newCDPSession() {return {async send() {}, on() {}};}};
   const chromium = {async launch(options) {
     port = Number(/127\.0\.0\.1:(\d+)/.exec(options.args.find(arg => arg.startsWith('--host-resolver-rules=')))[1]);
     return {async newContext() {return context;}, async close() {closed = true;}};
