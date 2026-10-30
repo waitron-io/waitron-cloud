@@ -40,3 +40,14 @@ tests cover valid replies naming another request, venue, organisation or busines
 plus approval replies that still await approval. A refused reply retains your
 code and choice for an explicit retry; writes carry the existing request proof.
 Server permission checks and local confirmation remain separate qualification gates.
+
+## Installation replies after account changes (D398)
+
+Native controller tests hold installation-list and stop replies while you change
+accounts, switch away and back, or sign out. Old successes and refusals leave the
+current rows, organisation, stop confirmation, pending work, feedback and cooldown
+unchanged. Selecting the same account keeps its pending request, and the current
+account can still load and stop its offered installation. These tests control
+HTTP replies. The earlier incomplete signature-metadata response remains
+unexplained; setup now uses [bounded verified attempts](ci-pnpm-setup.md).
+Server permission and revocation checks still belong to mandatory CI.

@@ -2,104 +2,33 @@
 
 ## Concurrent storage archive publication (D450)
 
-Run `node --test scripts/ci-backup-storage-concurrent-publication.test.mjs` to
-check two native publishers and a cache reader in both completion orders. Partial
-bytes stay outside the final path, readers see complete pinned bytes and cleanup
-preserves the other publisher. Real extraction and concurrent store startup remain
-separate gates; see [the open investigation](backlog/storage-cache-fixture.md).
+**Open.** Real extraction, store startup and historical failure causes remain open.
+See [the boundaries and remaining work](backlog/storage-cache-fixture.md#concurrent-storage-archive-publication-d450).
 
 ## Concurrent storage extraction and failed-startup cleanup (D454)
 
-Run `node --test scripts/ci-backup-storage-concurrent-extraction.test.mjs` to
-check two fixtures extracting the same read-only archive into separate roots.
-Certificate-read refusals finish in both orders; each cleanup must preserve the
-other extracted tree, shared archive and unrelated files. Real store startup and
-historical failure causes remain open; see [the investigation](backlog/storage-cache-fixture.md).
+**Open.** Real store startup and historical failure causes remain open.
+See [the boundaries and remaining work](backlog/storage-cache-fixture.md#concurrent-storage-extraction-and-failed-startup-cleanup-d454).
 
 ## Storage archive publication refusals (D449)
 
-Run `node --test scripts/ci-backup-storage-publication.test.mjs` to check partial
-writes, failed renames and preservation of a competing complete archive using
-real checksum-verified bytes. Temporary publication files and failed startup roots
-must be removed. Real extraction, store startup and concurrent successful publication
-keep their separate qualification gates; historical failure causes remain open.
+**Open.** Real extraction, store startup and concurrent successful publication remain open.
+See [the boundaries and remaining work](backlog/storage-cache-fixture.md#storage-archive-publication-refusals-d449).
 
 ## Storage fixture filesystem refusals (D448)
 
-Run `node --test scripts/ci-backup-storage-filesystem.test.mjs` to check native
-allocation and cache permission or I/O refusals, preserved error identity and owned
-cleanup. Real store startup and concurrent valid-cache publication remain separate
-gates; see [the open storage investigation](backlog/storage-cache-fixture.md).
+**Open.** Real store startup, concurrent publication and historical failure causes remain open.
+See [the boundaries and remaining work](backlog/storage-cache-fixture.md#storage-fixture-filesystem-refusals-d448).
 
 ## Worker shutdown during polling and error reporting (D459)
 
-Run `node --test packages/registration/test/worker-loop-shutdown.test.ts` to
-check that shutdown interrupts real idle and error-retry timers and lets native
-worker processes exit. Pending scheduling and claim error reports finish before
-the loop returns, without further claims or waits. Production shutdown and real
-database failures remain separate qualification gates.
-
-Run `node --test packages/registration/test/worker-loop-schedule-shutdown.test.ts`
-to check pending startup and recurring schedules that finish or reject after
-shutdown. Scheduling and any error report finish before the loop returns,
-without new claims or waits. Schedule and reporting failures keep their original
-errors. Real database scheduling and production shutdown retain separate gates.
-
-Run `node --test packages/registration/test/worker-loop-poll-shutdown.test.ts`
-to check pending idle and retry waits that finish or refuse after shutdown. The
-loop waits for polling and any late error report, preserves the original failure
-and starts no further work. A retry refusal stops without repeated reporting.
-Real database cancellation and production shutdown remain separate gates.
+**Open.** Production shutdown, real database failures and cancellation remain open.
+See [the boundaries and remaining work](backlog/worker-scheduling.md#worker-shutdown-during-polling-and-error-reporting-d459).
 
 ## Worker scheduling failures and error reporting (D467)
 
-Run `node --test packages/registration/test/worker-loop-failures.test.ts` to
-check that failed scheduling delays retries and prevents claims, busy claims keep
-the scheduling cadence, and error reporting waits for every active claim. A failed
-error report stops the loop. Production scheduling and real database failures
-remain separate qualification gates.
-
-Run `node --test packages/registration/test/worker-loop-isolation.test.ts` to
-check two independent workers at two and 32 slots. One worker's pending error
-report permits the other to schedule, claim and poll. Stopping either worker first
-preserves the other's pending work and cancellation signal; reporting still finishes
-before shutdown or retry. Real database failures and production process isolation
-remain separate qualification gates.
-
-Run `node --test packages/registration/test/worker-loop-config.test.ts` to
-check that invalid capacity and timer settings refuse before scheduling, claims
-or error recovery, even at stopped startup. Valid minimum timers and the supported
-capacity boundaries still run. These checks protect startup configuration; real
-database work and production capacity retain their separate gates.
-
-Run `node --test packages/registration/test/worker-loop-timer-limit.test.ts` to
-check that polling delays above 2,147,483,647 milliseconds refuse before callbacks.
-Node turns larger delays into one-millisecond waits, which would repeatedly poll
-instead of pausing. The maximum supported delay still reaches polling unchanged
-and lets native idle and retry processes stop cleanly. Longer scheduling cadences
-remain valid because their polling waits stay bounded.
-
-Run `node --test packages/registration/test/worker-loop-mixed-batches.test.ts`
-to check that mixed busy and idle claims finish the whole active batch before
-refilling slots. One busy claim prevents an idle pause at two and 32 slots,
-whether it finishes first or last; shutdown still waits for every active claim.
-Real database concurrency and production capacity remain separate gates.
-
-Run `node --test packages/registration/test/worker-loop-overlapping-failures.test.ts`
-to check two failed claims in either completion order at two and 32 active slots.
-Every active claim finishes before one original failure is reported or propagated.
-A pending report prevents retry waiting and new claims; shutdown waits for that
-report, and a reporting failure stops the loop. A successful report keeps the
-existing polling delay and scheduling deadline. Real database failures and
-production shutdown remain separate qualification gates.
-
-Run `node --test packages/registration/test/worker-loop-synchronous-recovery.test.ts`
-to check an immediate callback throw in the first or last slot of two and 32 claims.
-The remaining claims finish before reporting. A pending report prevents new claims
-and retry waits, shutdown waits for the report, and an immediate reporter throw
-stops the loop with its original error. Successful reporting waits before retrying
-and preserves the scheduling deadline. Real database failures and production
-shutdown remain separate qualification gates.
+**Open.** Production scheduling, real database failures and capacity remain separate gates.
+See [the native worker boundaries](backlog/worker-scheduling.md#worker-failure-and-reporting-boundaries-d467).
 
 Run `node --test packages/registration/test/worker-loop-cancellation.test.ts` to
 check claims that finish or reject when shutdown cancels them. At two and 32 active
@@ -110,25 +39,8 @@ separate qualification gates.
 
 ## Worker scheduling deadlines and polling failures (D468)
 
-Run `node --test packages/registration/test/worker-loop-callback-refusals.test.ts`
-to check immediate scheduling and polling throws at two and 32 slots. Pending
-reporting prevents claims and retry waits; successful reporting still waits before
-retrying. A rejected reporter terminates with its original error while the worker
-signal remains live. Without a reporter, the original callback error propagates.
-Real database failures and production shutdown remain separate gates.
-
-Run `node --test packages/registration/test/worker-loop-timing.test.ts` to
-check that scheduling starts its next interval after completion and polling meets
-the next deadline. Polling failures retain their original cause, report before
-retrying and stop if the retry timer fails. Production scheduling and real database
-failures remain separate qualification gates.
-
-Run `node --test packages/registration/test/worker-loop-recurring-recovery.test.ts`
-to check overdue recurring schedules that fail after a successful startup. At two
-and 32 slots, busy and idle batches wait for reporting and the retry delay before
-new claims. Successful recovery starts the next interval after scheduling finishes;
-idle polling still meets that deadline. Real database scheduling and production
-recovery remain separate gates.
+**Open.** Production scheduling, real database failures and recovery remain open.
+See [the boundaries and remaining work](backlog/worker-scheduling.md#worker-scheduling-deadlines-and-polling-failures-d468).
 
 ## How to keep this file honest
 
@@ -766,30 +678,8 @@ GitHub CI qualifies the PostgreSQL journeys while local Docker is unavailable.
 
 ## Translate all: approved design, implementation still open
 
-Run `node --test packages/translation/test/openai-client-timeout-isolation.test.ts`
-to check separate deadlines for overlapping HTTP requests. A timeout while waiting
-for headers or an unfinished successful body closes only that request and admits
-no text or usage. A later overlapping reply and another call through the same
-client keep their own deadlines. Real provider and release qualification remain
-separate gates in the [translation backlog](backlog/translation.md).
-
-Run `node --test packages/translation/test/batch-runner-cancelled-callback-failures.test.ts`
-to check that cancellation during delayed spending or lease-renewal failures in
-either pass preserves the original storage errors, billed usage and callback
-order, without another provider call. Wider runtime and release qualification
-remain open in the [translation backlog](backlog/translation.md).
-
-Run `node --test packages/translation/test/batch-runner-unbilled-failures.test.ts`
-to check that lease-renewal failures after HTTP refusals and uncounted malformed
-replies escape in both passes, without another provider call or invented usage.
-Real database recovery, provider activation and wider release qualification remain
-open in the [translation backlog](backlog/translation.md).
-
-Run `node --test packages/translation/test/batch-runner-admission-ordering.test.ts`
-to check that each provider pass waits for its spending-cap answer. Delayed
-refusals, failures and cancellation prevent another call and preserve earlier
-billed usage and first-pass names where applicable. Production activation and
-wider runtime qualification remain open in the [translation backlog](backlog/translation.md).
+Real database recovery, provider activation and release qualification remain open.
+See [the native callback and deadline boundaries](backlog/translation.md#callback-admission-and-request-deadlines).
 
 Run `node --test packages/translation/test/batch-runner-retry-ordering.test.ts`
 to check that each pass waits for its retry pause to finish before admitting
@@ -805,60 +695,8 @@ and usage. Oversized and refused responses must close their unfinished
 connections. Real provider and release qualification remain separate gates in
 the linked translation backlog.
 
-Run `node --test packages/translation/test/batch-runner-callback-ordering.test.ts`
-to check that delayed spending and lease-renewal callbacks finish before a batch
-continues or returns cancellation, in either pass. Real database recovery and
-release qualification remain separate gates in the linked translation backlog.
-
-Run `node --test packages/translation/test/batch-runner-callback-failures.test.ts`
-to check accounting and lease-renewal failures after valid, unusable and incomplete
-billed replies in both passes. Local HTTP checks retain each original error and
-prevent another paid call after those failures. Real database recovery, provider
-activation and the remaining [translation gates](backlog/translation.md) stay open.
-
-Run `node --test packages/translation/test/openai-client-fragmented-body.test.ts`
-to check split UTF-8 text at the exact response limit and cumulative overflow
-across separate network reads. Overflow must close unfinished connections and
-expose no unparsed token usage. Real provider and release qualification remain
-separate gates in the linked translation backlog.
-
-Run `node --test packages/translation/test/openai-client-compressed-body.test.ts`
-to check gzip, deflate and Brotli replies at the exact decoded byte limit. Overflow
-closes unfinished HTTP connections before admitting text or usage; corrupt compressed
-bodies return sanitized errors without retries. Real provider and release qualification
-remain separate gates in the linked translation backlog.
-
-Run `node --test packages/translation/test/openai-client-compressed-integrity.test.ts`
-to check that complete decoded JSON waits for a gzip or deflate checksum before
-admitting text or usage. Delayed valid checksums succeed; corrupt checksums return
-a sanitized error without usage or automatic retry. A later call through the same
-client still succeeds. Real provider and release qualification remain open.
-
-Run `node --test packages/translation/test/batch-runner-compressed-integrity.test.ts`
-to check spending, lease renewal and retries after gzip or deflate checksum failures
-in both passes. Pending checksums withhold callbacks; corrupt replies renew the lease
-without inventing usage. A healthy retry succeeds, while four failed attempts stop
-the pass. Failed reviews retain first-pass names and spending. These local HTTP checks
-keep real provider and release qualification open.
-
-Run `node --test packages/translation/test/openai-client-unfinished-refusals.test.ts`
-to check that unfinished HTTP refusals close their connections and retain their
-retry decisions without parsing error-body usage or private text. A later valid
-reply through the same client still succeeds. Real provider and release
-qualification remain separate gates in the linked translation backlog.
-
-Run `node --test packages/translation/test/openai-client-unfinished-redirects.test.ts`
-to check that unfinished redirects close their connections without reaching the
-redirect target or admitting its text or usage. Both passes stop without retry;
-a refused review retains the first-pass names and spending. Later requests on
-the same client still work. Real provider and release qualification remain
-separate gates in the linked translation backlog.
-
-Run `node --test packages/translation/test/openai-client-interrupted-success.test.ts`
-to check that timeout and caller cancellation close unfinished successful HTTP
-responses, discard uncompleted usage and permit a later request on the same
-client. A caller cancelled before submission sends no request. These local
-checks keep real provider activation and wider release qualification open.
+See [the native HTTP and batch boundaries](backlog/translation.md#http-body-and-batch-callback-boundaries)
+for completed transport checks and their remaining production limits.
 
 The design and 24-task plan are owner-approved; Tasks 1–21 are implemented.
 Keep translation off until the remaining Cloud, joint Waitron and release checks,
@@ -868,14 +706,8 @@ are complete; preserve the approved cap, admission, consent and paging rules in 
 
 ## Installation replies after account changes (D398)
 
-Native controller tests hold installation-list and stop replies while you change
-accounts, switch away and back, or sign out. Old successes and refusals leave the
-current rows, organisation, stop confirmation, pending work, feedback and cooldown
-unchanged. Selecting the same account keeps its pending request, and the current
-account can still load and stop its offered installation. These tests control
-HTTP replies. The earlier incomplete signature-metadata response remains
-unexplained; setup now uses [bounded verified attempts](backlog/ci-pnpm-setup.md).
-Server permission and revocation checks still belong to mandatory CI.
+**Open.** The earlier incomplete signature-metadata response remains unexplained; server permission and revocation checks remain in CI.
+See [the boundaries and remaining work](backlog/venue-connection-http.md#installation-replies-after-account-changes-d398).
 
 ## Initial focus
 
@@ -3316,31 +3148,13 @@ See [the boundaries and remaining work](backlog/backup-recovery-http.md#backup-c
 
 ## Storage archive extraction command refusals (D453)
 
-Run `node --test scripts/ci-backup-storage-tar-refusals.test.mjs` to check
-real extraction failures in warm and cold private caches, plus unavailable tar.
-Failed extraction preserves the command error and complete cached archive, removes
-its private root and stops before certificate setup or listeners. Real store startup
-and historical causes remain open; see [the investigation](backlog/storage-cache-fixture.md).
+**Open.** Real store startup and historical failure causes remain open.
+See [the boundaries and remaining work](backlog/storage-cache-fixture.md#storage-archive-extraction-command-refusals-d453).
 
 ## Container verifier memory-refusal observation (D335)
 
-The memory-exhaustion check accepts Docker's positive OOM report or, when the
-entry survives, requires a distinct child killed by SIGKILL and a fresh increase
-in the container's cgroup `oom_kill` counter. Exit 73, SIGKILL, memory pressure,
-old counts and missing or malformed evidence alone do not pass. Native controls
-exercise both witnesses and reject those alternatives; deleting each guard makes
-its control fail. The existing resource refusal, limits, isolation, cleanup and
-later-snapshot checks remain.
-
-Instrumented Linux CI observed entry PID 1 surviving a child kill and the cgroup
-counter increasing from zero to one. Docker's flag was true there and false in
-the saved D480 failure despite the same kill evidence. The flag-only test was the
-wrong requirement; the Docker event-reporting difference remains unexplained.
-The [kernel's cgroup documentation](https://www.kernel.org/doc/html/latest/admin-guide/cgroup-v2.html)
-defines `oom_kill` as killed processes in the cgroup. Resource reports still omit
-raw child text and cannot turn a successful exit into a refusal. Production code
-is unchanged. Real container qualification runs in CI while local Docker remains
-unavailable until 3 November. A native refusal control for a Docker-positive OOM report with a non-73 exit remains open in `packages/backups/test/container-resource-diagnostics.test.ts`; the review's omitted-flag experiment survives the current native suite.
+**Open.** Qualify the native Docker-positive, non-73 refusal control; Docker event-reporting differences remain unexplained.
+See [the boundaries and remaining work](backlog/verifier-build.md#container-verifier-memory-refusal-observation-d335).
 
 ## Verifier source isolation from local edits (D445)
 
@@ -3366,22 +3180,13 @@ the earlier timeout. Keep every verifier assertion and the existing build and jo
 
 ## Storage partial port-reservation refusals (D464)
 
-Run `node --test scripts/ci-backup-storage-reservation-refusals.test.mjs` to
-check occupied sockets at the first, fourth and eighth storage-port reservation.
-Failed startup returns the original socket error, releases earlier reservations
-and the identity server, and removes its extracted files and private key.
-The complete cache and a competing listener remain usable. Real store startup
-and historical failure causes retain their separate gates; see
-[the storage investigation](backlog/storage-cache-fixture.md).
+**Open.** Real store startup and historical failure causes remain open.
+See [the boundaries and remaining work](backlog/storage-cache-fixture.md#storage-partial-port-reservation-refusals-d464).
 
 ## Storage extraction and certificate setup refusals (D452)
 
-Run `node --test scripts/ci-backup-storage-extraction.test.mjs` to check real
-pinned archive extraction with warm and cold private caches, followed by failed
-certificate generation or reading. Failed setup removes its extracted root and
-preserves the verified archive and unrelated files. Store startup, concurrent
-extraction and the historical failure causes retain their separate gates; see
-[the storage investigation](backlog/storage-cache-fixture.md).
+**Open.** Store startup, concurrent extraction and historical failure causes remain open.
+See [the boundaries and remaining work](backlog/storage-cache-fixture.md#storage-extraction-and-certificate-setup-refusals-d452).
 
 ## Storage startup configuration refusals (D446)
 
@@ -3413,11 +3218,8 @@ see [the storage investigation](backlog/storage-cache-fixture.md#identity-port-a
 
 ## Storage TLS material refusals (D455)
 
-Run `node --test scripts/ci-backup-storage-tls-refusals.test.mjs` to check malformed
-certificates, malformed private keys and mismatched pairs with real HTTPS construction.
-Failed startup preserves the TLS error, removes its extracted files and private key,
-and leaves cached input and a competing listener intact. Real store startup and
-historical failure causes remain open; see [the investigation](backlog/storage-cache-fixture.md).
+**Open.** Real store startup and historical failure causes remain open.
+See [the boundaries and remaining work](backlog/storage-cache-fixture.md#storage-tls-material-refusals-d455).
 
 ## Storage archive download failure reporting (D441)
 
@@ -3432,40 +3234,8 @@ and S3 port repairs do not establish its cause. Reproduce an admin-listener bind
 failure and reserve those ports if needed, without retrying unknown ports or other
 child exits. See [the investigation and remaining work](backlog/storage-cache-fixture.md).
 
-D499 reproduces the direct `EADDRINUSE` that can interrupt the S3 collision test
-before either child starts: another listener takes the identity probe's released
-port. Direct HTTPS allocation removes that race without adding retries. The S3
-refusal assertions remain intact, and unexpected failures now retain their
-original error and stack. A Node socket stack may omit the calling bind;
-listener-stage attribution and the historical CI bind remain unproved. Run `node --test deploy/test-cloud/storage-s3-grpc.test.mjs`
-for the deterministic handoff regression and bound-identity configuration checks.
-The three TLS-refusal modes require zero TCP probes after the owner-approved
-count change; their TLS error, cleanup and competing-listener checks remain.
-
-Browser qualification fetches Waitron `e8cfd38ed07bf546f14ad15334e54ee997114c75`,
-which defers the first live stream until the dashboard screen can register its
-subscriptions (Waitron PR #2269). Replay fixtures keep their original commit and
-recorded measurements. Native checks cover separate pins and cleanup of combined
-preparations. The generated browser backend includes the invoice font beside its
-bundle and requests Waitron's supported preproduction allocation. Waitron generates
-the signed evidence and checks operation authority; its fiscal implementation,
-guards and expected results are unchanged. A native SQLite check starts that actual
-bundle, verifies its committed generated allocation and exercises graceful shutdown
-through the current management API. The combined-preparation check also verifies
-that the runtime font reaches the browser fixture manifest. The sign-out journey
-opens the account menu's explicit trigger: the current menu also contains hidden
-theme buttons, so choosing its first descendant button times out. Native Chromium
-reproduces that ordering with the pinned components and opens the menu with the
-explicit trigger. The native backend path check also covers a `/tmp` parent,
-which otherwise rewrites its own newly inserted input path on Linux. Signed-in
-native requests reproduce missing theme and disk-stop routes as HTTP 404. The
-fixture now mounts the pinned real handlers and includes the UI-core package
-metadata and theme tokens beside its runtime. Browser-only exports and assets
-leave historical replay inputs unchanged. The native check requires both routes
-to return HTTP 200 after real sign-in; browser accounting checks stay intact. Run
-`pnpm test:cloud-cost:conformance --only remote-browser-conformance.test.mjs`
-for the native startup check and all seven browser journeys. The historical Linux
-bind failure and original reconnect cause remain unproved.
+The qualified current browser fixture and identity-port repair retain separate
+historical bind and reconnect investigations. See [the D499 boundaries](backlog/storage-cache-fixture.md#current-browser-and-identity-port-qualification-d499).
 
 ## Diagnostic permission test lock observation (D198)
 
@@ -3978,23 +3748,8 @@ remains unqualified; PostgreSQL checks run in CI while local Docker is down.
 
 ## Cost-stack isolation command refusal (D152)
 
-### Local signal check stopped before worker admission (D502)
-
-The SIGINT cleanup check failed on main `d94391a3` in
-[cost run 41003177471](https://github.com/waitron-io/waitron-cloud/actions/runs/41003177471/job/123892097439)
-before it observed an admitted worker. Its log did not retain the child outcome
-or preparation stage, so the cause remains unknown. On a failed SIGINT or
-SIGTERM check, you now get bounded exit status, signal, output byte counts,
-forced-collection state, elapsed time and the last recognised journal stage
-before fixture teardown. Raw streams, paths, tokens and resource IDs remain
-private. Run `node --test scripts/cloud-cost/local-command-diagnostics.test.mjs`
-for the native controls, including a real child exit.
-
-Keep the admission, cleanup and private-output assertions and both existing
-timers. Attribute any new failure from this evidence before changing the
-controller or signal handling. Faithful local container reproduction remains
-blocked while Docker is down until 3 November; native controls alone do not
-establish the historical Linux cause.
+**Open.** Attribute any new signal-check failure from the retained child evidence;
+local container reproduction waits for Docker. See [the diagnostic boundary](backlog/cost-stack-isolation.md#local-signal-check-stopped-before-worker-admission-d502).
 
 Read the [isolation and deadline investigation](backlog/cost-stack-isolation.md)
 before changing the fixture guards. Historical attribution and Linux qualification

@@ -390,3 +390,87 @@ Implement routine work inline with failing behavioral tests first. Before every 
 full touched-package and dependent-package suites; run the whole workspace only for shared
 configuration changes. Require normal hooks and current-head CI. The amendment records the
 approved contract; the partial runtime above does not complete joint proof or release qualification.
+
+## Callback admission and request deadlines
+
+Run `node --test packages/translation/test/openai-client-timeout-isolation.test.ts`
+to check separate deadlines for overlapping HTTP requests. A timeout while waiting
+for headers or an unfinished successful body closes only that request and admits
+no text or usage. A later overlapping reply and another call through the same
+client keep their own deadlines. Real provider and release qualification remain
+separate gates in the [translation backlog](translation.md).
+
+Run `node --test packages/translation/test/batch-runner-cancelled-callback-failures.test.ts`
+to check that cancellation during delayed spending or lease-renewal failures in
+either pass preserves the original storage errors, billed usage and callback
+order, without another provider call. Wider runtime and release qualification
+remain open in the [translation backlog](translation.md).
+
+Run `node --test packages/translation/test/batch-runner-unbilled-failures.test.ts`
+to check that lease-renewal failures after HTTP refusals and uncounted malformed
+replies escape in both passes, without another provider call or invented usage.
+Real database recovery, provider activation and wider release qualification remain
+open in the [translation backlog](translation.md).
+
+Run `node --test packages/translation/test/batch-runner-admission-ordering.test.ts`
+to check that each provider pass waits for its spending-cap answer. Delayed
+refusals, failures and cancellation prevent another call and preserve earlier
+billed usage and first-pass names where applicable. Production activation and
+wider runtime qualification remain open in the [translation backlog](translation.md).
+
+## HTTP body and batch callback boundaries
+
+Run `node --test packages/translation/test/batch-runner-callback-ordering.test.ts`
+to check that delayed spending and lease-renewal callbacks finish before a batch
+continues or returns cancellation, in either pass. Real database recovery and
+release qualification remain separate gates in the linked translation backlog.
+
+Run `node --test packages/translation/test/batch-runner-callback-failures.test.ts`
+to check accounting and lease-renewal failures after valid, unusable and incomplete
+billed replies in both passes. Local HTTP checks retain each original error and
+prevent another paid call after those failures. Real database recovery, provider
+activation and the remaining [translation gates](translation.md) stay open.
+
+Run `node --test packages/translation/test/openai-client-fragmented-body.test.ts`
+to check split UTF-8 text at the exact response limit and cumulative overflow
+across separate network reads. Overflow must close unfinished connections and
+expose no unparsed token usage. Real provider and release qualification remain
+separate gates in the linked translation backlog.
+
+Run `node --test packages/translation/test/openai-client-compressed-body.test.ts`
+to check gzip, deflate and Brotli replies at the exact decoded byte limit. Overflow
+closes unfinished HTTP connections before admitting text or usage; corrupt compressed
+bodies return sanitized errors without retries. Real provider and release qualification
+remain separate gates in the linked translation backlog.
+
+Run `node --test packages/translation/test/openai-client-compressed-integrity.test.ts`
+to check that complete decoded JSON waits for a gzip or deflate checksum before
+admitting text or usage. Delayed valid checksums succeed; corrupt checksums return
+a sanitized error without usage or automatic retry. A later call through the same
+client still succeeds. Real provider and release qualification remain open.
+
+Run `node --test packages/translation/test/batch-runner-compressed-integrity.test.ts`
+to check spending, lease renewal and retries after gzip or deflate checksum failures
+in both passes. Pending checksums withhold callbacks; corrupt replies renew the lease
+without inventing usage. A healthy retry succeeds, while four failed attempts stop
+the pass. Failed reviews retain first-pass names and spending. These local HTTP checks
+keep real provider and release qualification open.
+
+Run `node --test packages/translation/test/openai-client-unfinished-refusals.test.ts`
+to check that unfinished HTTP refusals close their connections and retain their
+retry decisions without parsing error-body usage or private text. A later valid
+reply through the same client still succeeds. Real provider and release
+qualification remain separate gates in the linked translation backlog.
+
+Run `node --test packages/translation/test/openai-client-unfinished-redirects.test.ts`
+to check that unfinished redirects close their connections without reaching the
+redirect target or admitting its text or usage. Both passes stop without retry;
+a refused review retains the first-pass names and spending. Later requests on
+the same client still work. Real provider and release qualification remain
+separate gates in the linked translation backlog.
+
+Run `node --test packages/translation/test/openai-client-interrupted-success.test.ts`
+to check that timeout and caller cancellation close unfinished successful HTTP
+responses, discard uncompleted usage and permit a later request on the same
+client. A caller cancelled before submission sends no request. These local
+checks keep real provider activation and wider release qualification open.
