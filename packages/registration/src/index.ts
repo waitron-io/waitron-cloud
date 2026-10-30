@@ -194,8 +194,10 @@ export class RegistrationStore {
       return await this.#request(input, async (client, row, binding) => {
         if (!row.local_receipt_id || !row.cloud_account_id) throw new RegistrationError('approval_required');
         if (row.result) {
-          // Replays join the same policy order before touching a completed installation.
-          await client.query('SELECT id FROM organisations WHERE id=$1 FOR SHARE', [binding.organisationId]);
+          const authority = await client.query('SELECT 1 FROM billing_service_authority WHERE venue_id=$1', [row.result.venueId]);
+          if (authority.rowCount) {
+            await client.query('SELECT id FROM organisations WHERE id=$1 FOR SHARE', [binding.organisationId]);
+          }
           const venue = await client.query(`SELECT id FROM venues WHERE id=$1 AND organisation_id=$2
             AND legal_business_id=$3 AND local_venue_id=$4 AND environment=$5 FOR NO KEY UPDATE`,
           [row.result.venueId, binding.organisationId, binding.legalBusinessId, binding.localVenueId, binding.environment]);
@@ -208,7 +210,12 @@ export class RegistrationStore {
         // Hold permission rows until commit so revocation cannot commit between checking and linking.
         await requirePermission(client, row.cloud_account_id, binding.organisationId);
         await requireUnexpired(client, binding);
-        await client.query('SELECT id FROM organisations WHERE id=$1 FOR SHARE', [binding.organisationId]);
+        // Unenrolled linking keeps its legacy path; the venue lock still serializes first enrolment.
+        const enrolled = await client.query(`SELECT 1 FROM billing_service_authority a JOIN venues v ON v.id=a.venue_id
+          WHERE v.environment=$1 AND v.local_venue_id=$2`, [binding.environment, binding.localVenueId]);
+        if (enrolled.rowCount) {
+          await client.query('SELECT id FROM organisations WHERE id=$1 FOR SHARE', [binding.organisationId]);
+        }
         await client.query(`INSERT INTO venues (id, organisation_id, legal_business_id, local_venue_id, environment)
           VALUES ($1, $2, $3, $4, $5) ON CONFLICT (environment, local_venue_id) DO NOTHING`,
         [randomUUID(), binding.organisationId, binding.legalBusinessId, binding.localVenueId, binding.environment]);
