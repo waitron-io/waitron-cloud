@@ -29,7 +29,7 @@ async function probe(t, setup) {
       }
     }});
   const page = {locator, on() {}, setDefaultTimeout() {}, async goto() {},
-    async evaluate(fn) {state.evaluating?.(); return runInNewContext('(' + fn.toString() + ')()', sandbox);},
+    async evaluate(fn) {await state.evaluating?.(); return runInNewContext('(' + fn.toString() + ')()', sandbox);},
     async reload() {Object.assign(atReload, state.observe?.()); reloaded = true; throw Error('controlled stop at reload');}};
   const context = {on: (name, fn) => events.set(name, fn), async newPage() {return page;},
     async addInitScript(fn) {runInNewContext('(' + fn.toString() + ')()', sandbox);},
@@ -145,4 +145,27 @@ test('browser refuses readiness delivered after the drain deadline', async t => 
   });
   assert.equal(result.reloaded, false);
   assert.equal(result.refusal.browserPhase, 'dashboard');
+});
+
+// Removing the timer race, or changing its 3000 ms limit, must fail this boundary.
+test('browser refuses a blocked page evaluation at exactly three seconds', async t => {
+  t.mock.timers.enable({apis: ['Date', 'setTimeout']});
+  const started = Promise.withResolvers(), blocked = Promise.withResolvers();
+  let done = false;
+  const journey = probe(t, state => {
+    state.stream().dispatchEvent(new Event('open'));
+    state.evaluating = () => {started.resolve(); return blocked.promise;};
+  }).then(result => {done = true; return result;});
+  const turn = () => new Promise(resolve => setImmediate(resolve));
+  try {
+    await started.promise;
+    t.mock.timers.tick(2999); await turn();
+    assert.equal(done, false, 'the page retains the full three-second allowance');
+    t.mock.timers.tick(1); await turn();
+    assert.equal(done, true, 'the stalled page refuses at 3000 ms without a reply');
+    const result = await journey;
+    assert.equal(result.reloaded, false);
+    assert.equal(result.refusal.browserPhase, 'dashboard');
+    assert.equal(result.refusal.message, 'Invalid cloud cost browser journey');
+  } finally {blocked.resolve(); await journey;}
 });

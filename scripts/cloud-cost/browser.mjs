@@ -116,7 +116,13 @@ export async function measureRemoteBrowser(options) {
       const deadline = Date.now() + 3000;
       for (;;) {
         need(Date.now() < deadline);
-        const streamsReady = await page.evaluate(() => globalThis.__cloudCostStreamsReady());
+        let timer, streamsReady;
+        try {
+          streamsReady = await Promise.race([
+            page.evaluate(() => globalThis.__cloudCostStreamsReady()),
+            new Promise(resolve => { timer = setTimeout(resolve, Math.max(1, deadline - Date.now())); }).then(fail),
+          ]);
+        } finally { clearTimeout(timer); }
         need(Date.now() < deadline);
         if (streamsReady && settling === 0
           && ![...seen].some(req => !streamsRemain || group(req) !== 'eventsource' || !received.has(req))) break;

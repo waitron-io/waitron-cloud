@@ -1494,8 +1494,8 @@ implementation or production evidence.
   `node --test scripts/cloud-cost/browser-readiness.test.mjs` for controlled boundaries.
   The [Linux investigation](backlog/browser-reconnect.md) retains separate historical
   socket-reset attribution as open; readiness does not excuse cancelled bytes.
-  The temporary observation workflow is removed. Retain the next instrumented
-  refusal before repairing browser behavior; all existing checks and deadlines remain.
+  The bounded observation workflow retains the first refusal in each sampling
+  group and all six original fault controls; all accounting checks and deadlines remain.
   The reporter preserves the original refusal when a diagnostic property cannot
   be inspected, including throwing or revoked JavaScript proxies, objects that
   intercept property inspection. Each field is contained separately, so an

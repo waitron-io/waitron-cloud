@@ -104,7 +104,8 @@ stream must open again; a stream closed by the application no longer blocks.
 Response-size collection participates in the same drain loop as outstanding reads.
 If another request starts while sizes settle, the loop waits for it too. The
 original three-second deadline still refuses unfinished streams, reads and size
-collection, including a readiness reply received after that deadline. No failure
+collection. A timer races the page evaluation against the remaining allowance,
+so a blocked page refuses at three seconds even if it never replies. No failure
 is retried, no socket reset is accepted and no byte is removed from accounting.
 
 Run `node --test scripts/cloud-cost/browser-readiness.test.mjs` for controlled
@@ -119,3 +120,9 @@ the read finishes, with the stream still open. The pinned Linux workflow compare
 ordinary and single-CPU scheduling and retains all six original fault controls.
 These checks address the identified late-read family. Earlier socket-reset
 recurrences still need a matching trace before you attribute them to this repair.
+
+Readiness currently covers the top-level dashboard. Navigation during a drain
+refuses with the current phase rather than hiding an execution-context failure.
+Whether the genuine dashboard ever navigates during this boundary, or opens a
+live stream in a child frame, remains unverified; retain a matching trace before
+extending this measurement to such a page.

@@ -3,6 +3,8 @@ on:
   pull_request:
     paths:
       - 'scripts/cloud-cost/diagnostics/**'
+      - 'scripts/cloud-cost/browser.mjs'
+      - 'scripts/cloud-cost/browser-readiness.test.mjs'
       - '.github/workflows/browser-reconnect-diagnostic.yml'
 permissions:
   contents: read
