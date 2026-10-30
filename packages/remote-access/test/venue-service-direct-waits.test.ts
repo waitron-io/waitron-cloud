@@ -62,3 +62,20 @@ test('venue direct move rereads setup after installation wait',async()=>{
   assert.equal((await f.pool.query('SELECT next_address FROM remote_cells WHERE id=$1',[f.target])).rows[0].next_address,2);
  }finally{await holder.query('ROLLBACK');await pending?.catch(()=>{});holder.release();await f.close();}
 });
+
+test('venue direct policy wait leaves unrelated cell progressing',async()=>{
+ const f=await fixture(),holder=await f.peer.connect();let pending:Promise<unknown>|undefined;
+ try{
+  await set(f,'connected',f.venues[1]);
+  const other=(await f.pool.query('SELECT id FROM installations WHERE venue_id=$1 AND revoked_at IS NULL',[f.venues[1]])).rows[0].id;
+  const placed=await f.store.provision(other,f.target,peer());
+  await holder.query('BEGIN');await holder.query('SELECT id FROM venues WHERE id=$1 FOR NO KEY UPDATE',[f.venues[0]]);
+  const pid=Number((await holder.query('SELECT pg_backend_pid() AS pid')).rows[0].pid);let settled=false;
+  pending=f.store.provision(f.id,f.cellId,f.key).finally(()=>{settled=true;});void pending.catch(()=>{});
+  await waitForBlock(f,pid,()=>settled);
+  await assert.doesNotReject(f.store.hostnameInstructions(other,'staff','neighbour.example.test'),'the same organisation must keep its unrelated cell available');
+  assert.equal(settled,false);
+  await holder.query('COMMIT');assert.deepEqual(await pending,f.placement);
+  assert.deepEqual((await f.store.manifest(f.target)).routes.map(r=>r.installationId),[placed.installationId]);
+ }finally{await holder.query('ROLLBACK');await pending?.catch(()=>{});holder.release();await f.close();}
+});
