@@ -135,6 +135,7 @@ test('venue snapshot policy wait leaves installation and location unlocked',asyn
 test('venue snapshot policy wait refuses a changed installation venue',async()=>{
  const f=await fixture(),holder=await f.pool.connect();let pending:Promise<unknown>|undefined;
  try{
+  const changedVenue=randomUUID();await f.pool.query("INSERT INTO venues(id,organisation_id,legal_business_id,local_venue_id,environment) VALUES($1,$2,$3,$1,'test')",[changedVenue,f.scope.organisationId,f.scope.legalBusinessId]);
   await set(f);await holder.query('BEGIN');await holder.query('SELECT id FROM venues WHERE id=$1 FOR NO KEY UPDATE',[f.venues[0]]);
   const pid=(await holder.query('SELECT pg_backend_pid() AS pid')).rows[0].pid;let settled=false;
   pending=new BackupCatalogue(f.peer,f.vault,()=>{throw Error('no object work expected');},mode).provision(f.installation,f.location).finally(()=>{settled=true;});void pending.catch(()=>{});
@@ -143,7 +144,7 @@ test('venue snapshot policy wait refuses a changed installation venue',async()=>
    if(waiting)break;await delay(10);
   }
   assert.equal(waiting,true,'snapshot admission must reach its original venue wait');
-  await holder.query('UPDATE installations SET venue_id=$2 WHERE id=$1',[f.installation,f.venues[1]]);await holder.query('COMMIT');
+  await holder.query('UPDATE installations SET venue_id=$2 WHERE id=$1',[f.installation,changedVenue]);await holder.query('COMMIT');
   await assert.rejects(pending,{message:'backup.permission_denied'});
   assert.deepEqual(await state(f),{backup_locations:[],backup_key_versions:[],backup_points:[],backup_captures:[]});
  }finally{await holder.query('ROLLBACK');await pending?.catch(()=>{});holder.release();await f.close();}
@@ -169,7 +170,7 @@ for(const changeKind of ['round-trip','downgrade','revocation','key-change','sup
   change=(async()=>{
    if(changeKind==='revocation')await f.peer.query('UPDATE installations SET revoked_at=clock_timestamp() WHERE id=$1',[f.installation]);
    else if(changeKind==='key-change')await f.peer.query('UPDATE installations SET public_key=$2 WHERE id=$1',[f.installation,randomUUID()]);
-   else if(changeKind==='supersession')await f.peer.query('UPDATE installations SET superseded_by=(SELECT id FROM installations WHERE venue_id=$2 AND superseded_by IS NULL) WHERE id=$1',[f.installation,f.venues[1]]);
+   else if(changeKind==='supersession')await f.peer.query('UPDATE installations SET revoked_at=clock_timestamp(),superseded_by=(SELECT id FROM installations WHERE venue_id=$2 AND superseded_by IS NULL) WHERE id=$1',[f.installation,f.venues[1]]);
    else{await set(peer,'registered');if(changeKind==='round-trip')await set(peer);}
   })().finally(()=>{settled=true;});void change.catch(()=>{});
   let waiting=false;for(let i=0;i<300&&!settled;i++){
