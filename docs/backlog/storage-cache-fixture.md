@@ -68,11 +68,17 @@ allocation faults fail the new tests; restored controls pass. The collision prob
 waits for its competing listener before binding, including a controlled delayed
 listener. The unchanged bounded retry still refuses unknown ports and other exits.
 
-The run-it review also observes two unreserved admin listeners per native store,
-even with `-admin.ui=false`. Sixteen concurrent native stores succeed using their
-fallback allocation. An admin bind refusal and its effect on startup remain
-unproved. Follow-up: reproduce that failure and qualify explicit admin-port
-reservations if needed; do not widen the S3 repair's retry to unknown ports.
+The native fixture keeps SeaweedFS's automatic admin-port selection, even with
+`-admin.ui=false`. Run
+`node --test deploy/test-cloud/storage-admin-ports.test.mjs` to check occupied
+HTTP, gRPC and both admin ports using private saved settings and the real pinned
+binary. Each fallback leaves S3 usable without restarting the fixture. An explicit
+occupied HTTP flag instead refuses startup; that unreserved port must not trigger
+the service-port retry. Both paths remove their private directories and owned
+children while preserving competing listeners. This distinction follows
+[SeaweedFS's port selection](https://github.com/seaweedfs/seaweedfs/blob/4.47/weed/command/mini.go).
+Exhausted fallback ranges and a collision after availability checking remain
+unproved. Reproduce either before changing reservations or widening retries.
 
 Remaining: retain the diagnostics to attribute any recurrence of the original
 read-only-cache rejection. Do not treat this demonstrated readiness repair as

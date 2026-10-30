@@ -3350,6 +3350,9 @@ See [the boundaries and remaining work](backlog/storage-cache-fixture.md#storage
 
 ## Parallel storage-cache fixture failure on main
 
+Native admin-port fallback and explicit HTTP refusal now have controlled checks;
+see [the remaining collision boundaries](backlog/storage-cache-fixture.md).
+
 Retain diagnostics to explain the original read-only-cache rejection; the readiness
 and S3 port repairs do not establish its cause. Reproduce an admin-listener bind
 failure and reserve those ports if needed, without retrying unknown ports or other
