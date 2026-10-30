@@ -55,8 +55,12 @@ export function createMeter({ phase, clock, afterStop }) {
   const pending = new Set();
   let lastTime = clock(); requireThat(Number.isFinite(lastTime) && lastTime >= 0);
   let invalid = false;
+  let firstInvalidation = null, snapshotRefusal = null, advanceGuard = null;
+  const invalidate = boundary => { invalid = true; firstInvalidation ??= boundary; afterStop?.invalidate(); };
   const advance = () => {
+    advanceGuard = 'clock';
     const time = clock(); requireThat(Number.isFinite(time) && time >= lastTime);
+    advanceGuard = 'storage-integral';
     for (const o of objects.values()) if (!o.deleted) rows.get(o.class).byteSeconds += o.bytes * (time - lastTime);
     requireThat([...rows.values()].every(r => Number.isFinite(r.byteSeconds)));
     lastTime = time;
@@ -68,7 +72,7 @@ export function createMeter({ phase, clock, afterStop }) {
       const acceptedInterruption = afterStop?.settle(e, interruption) ?? false;
       if (e.channel === 'observer') pending.delete(e.token);
       return acceptedInterruption;
-    } catch { invalid = true; afterStop?.invalidate(); fail(); }
+    } catch { invalidate('observe-attempt'); fail(); }
   };
   const observeObject = event => {
     try {
@@ -94,11 +98,14 @@ export function createMeter({ phase, clock, afterStop }) {
       else if (e.action === 'multipart-part') { requireThat(count(existing.bytes + e.bytes)); existing.bytes += e.bytes; }
       else if (e.action === 'multipart-resize') existing.bytes = e.bytes;
       else if (e.action === 'multipart-complete') existing.state = 'current';
-    } catch { invalid = true; afterStop?.invalidate(); fail(); }
+    } catch { invalidate('observe-object'); fail(); }
   };
   const snapshot = () => {
+    let guard = invalid ? 'invalidated' : 'pending-attempts';
     try {
-      requireThat(!invalid && pending.size === 0); advance(); const producer = totals(); const observer = totals(); const requests = new Map(); const observedRequests = new Map(); const billing = new Map(); const gaps = [];
+      requireThat(!invalid && pending.size === 0);
+      guard = 'advance'; advance(); guard = 'aggregation';
+      const producer = totals(); const observer = totals(); const requests = new Map(); const observedRequests = new Map(); const billing = new Map(); const gaps = [];
       for (const channel of ['producer', 'observer']) for (const e of attempts[channel].values()) {
         const total = channel === 'producer' ? producer : observer;
         total.attempts++; total.bytesIn += e.bytesIn; total.bytesOut += e.bytesOut;
@@ -117,7 +124,8 @@ export function createMeter({ phase, clock, afterStop }) {
         if (quantity === null) { b.quantity = null; b.status = 'unknown'; gaps.push('request-billing:unknown'); }
         else if (b.quantity !== null) b.quantity += quantity;
       }
-      const subset = afterStop?.snapshot();
+      guard = 'after-stop'; const subset = afterStop?.snapshot();
+      guard = 'aggregation';
       const incomplete = subset?.gaps.includes('after-stop:list-response-interrupted') === true;
       const discrepancy = Object.fromEntries(Object.keys(producer).map(k => [k, observer[k] - producer[k]]));
       const same = (p, o) => o && ['phase', 'operation', 'retryOrdinal', 'outcome', 'statusCode', 'bytesIn', 'bytesOut',
@@ -134,15 +142,15 @@ export function createMeter({ phase, clock, afterStop }) {
         const r = aggregatedObjects.find(r => r.class === o.class); r.bytes += o.bytes;
         r[{ current: 'currentVersions', noncurrent: 'noncurrentVersions', marker: 'deleteMarkers', multipart: 'unfinishedMultipart' }[o.state]]++;
       }
-      requireThat([producer, observer].every(t => Object.values(t).every(count)));
+      guard = 'attempt-totals'; requireThat([producer, observer].every(t => Object.values(t).every(count)));
       return { status: reconciled && !incomplete ? 'measured' : 'unknown', reconciled, gaps: [...new Set(gaps)], billing: [...billing.values()],
         observedRequests: [...observedRequests.values()],
         accounting: { requests: [...requests.values()], objects: aggregatedObjects, producer, observer, discrepancy } };
-    } catch { fail(); }
+    } catch { snapshotRefusal = guard === 'advance' ? advanceGuard : guard; fail(); }
   };
   const beginAttempt = id => {
     try { token(id); requireThat(!pending.has(id) && !attempts.observer.has(id)); pending.add(id); }
-    catch { invalid = true; afterStop?.invalidate(); fail(); }
+    catch { invalidate('begin-attempt'); fail(); }
   };
   const checkpoint = () => {
     const producer = totals(), observer = totals(), outcomes = new Map();
@@ -156,7 +164,9 @@ export function createMeter({ phase, clock, afterStop }) {
     return { pending: pending.size, producer, observer, outcomes: [...outcomes.values()] };
   };
   return { observeAttempt, observeObject, snapshot, checkpoint, beginAttempt, ...(afterStop ? { afterStop } : {}),
-    invalidate: () => { invalid = true; afterStop?.invalidate(); } };
+    // Closed labels retain the first invalidation without reading event fields or advancing accounting.
+    diagnostics: () => ({ firstInvalidation, snapshotRefusal, pendingAttempts: pending.size }),
+    invalidate: () => invalidate('explicit') };
 }
 
 // Query names affect the S3 operation; values and object names never leave this classifier.
