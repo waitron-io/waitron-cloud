@@ -126,3 +126,25 @@ test(`venue direct certificate publication refuses changed ${change} after issua
   assert.equal((await f.pool.query('SELECT configuration_revision FROM installations WHERE id=$1',[f.id])).rows[0].configuration_revision,f.revision+(change==='revision'?1:0));
  }finally{await f.close();}
 });
+
+// Refusal guards must still allow unchanged, eligible installations to complete work.
+test('venue direct DNS wait accepts unchanged installation identity',async()=>{
+ const f=await fixture();try{
+  let calls=0;
+  const changed=await f.store.setHostname(f.id,'staff','custom.example.test',f.revision,async name=>{
+   calls++;return [name.startsWith('_acme-challenge.')?'_acme-challenge.'+f.placement.staffHostname:f.placement.staffHostname];
+  });
+  assert.equal(calls,2);assert.equal(changed.staffHostname,'custom.example.test');
+  assert.equal(changed.installationId,f.id);assert.equal(changed.venueId,f.venues[0]);
+  assert.equal((await f.pool.query('SELECT configuration_revision FROM installations WHERE id=$1',[f.id])).rows[0].configuration_revision,f.revision+1);
+ }finally{await f.close();}
+});
+
+test('venue direct certificate publication accepts unchanged installation identity',async()=>{
+ const f=await fixture();try{
+  const authority=await f.store.authorizeCertificate(f.id,'staff',f.csr);let published=0;
+  const current=await transaction(f.pool,client=>f.store.publishAuthorizedCertificate(client,f.id,'staff',f.csr,authority,async()=>{published++;}));
+  assert.equal(published,1);assert.deepEqual(current,authority);
+  assert.equal((await f.pool.query('SELECT configuration_revision FROM installations WHERE id=$1',[f.id])).rows[0].configuration_revision,f.revision);
+ }finally{await f.close();}
+});
