@@ -73,3 +73,26 @@ test('venue remote HTTP keeps owner origin CSRF and revision checks',async()=>{
   await f.db.pool.query('UPDATE organisation_memberships SET is_owner=false WHERE account_id=$1',[f.owner.accountId]);assert.equal((await f.request('status')).status,403);
  }finally{await f.close();}
 });
+
+// A valid old certificate request remains stored, but current permission controls every new reply.
+test('venue staff certificate HTTP authenticates before denial and requires fresh setup after a round trip',async()=>{
+ const {staffExchangeFixture}=await import('../../remote-access/test/staff-exchange-fixture.ts');const f=await staffExchangeFixture();
+ try{
+  const a=await f.venue(),scope=(await f.db.pool.query('SELECT organisation_id AS "organisationId",legal_business_id AS "legalBusinessId" FROM venues WHERE id=$1',[a.venueId])).rows[0];
+  const billing=new BillingStore(f.db.pool);await billing.execute(scope,event(),{type:'ensure_business'});
+  async function level(value:BillingLevel){const old=await billing.venue(scope,a.venueId);await billing.transition(scope,event(),{type:'set_venue',venueId:a.venueId,expectedRevision:old.revision,value:{level:value,connectedFrom:null,lapsedOn:null,scheduledLevel:null,scheduledOn:null}});}
+  await level('connected');const app=createAccountApp({staffCertificates:true,pool:f.db.pool,outbox:f.db.outbox,leaseIssuer:f.issuer,planMode:mode,config:{portalOrigin:origin,production:true,rateKey:f.db.rateKey,trustedProxyIps:[]}});
+  const request=(action:string,envelope:unknown)=>app.request(origin+'/api/installations/'+action,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(envelope)},{incoming:{socket:{remoteAddress:'192.0.2.1'}}} as never);
+  const revision=async()=>Number((await f.db.pool.query('SELECT configuration_revision FROM installations WHERE id=$1',[a.installationId])).rows[0].configuration_revision);
+  const submit='staff-certificate-submit',status='staff-certificate-status',requestId=randomUUID();
+  const accepted=await request(submit,a.proof(submit,{...a.body,revision:await revision()},requestId,a.lease));assert.equal(accepted.status,200,await accepted.clone().text());assert.equal((await accepted.json()).state,'pending');
+  await level('registered');const stored=(await f.db.pool.query('SELECT * FROM staff_certificate_exchange')).rows;
+  const proof=a.proof(status,{version:1,requestId},randomUUID(),a.lease);
+  const forged=await request(status,{...proof,signature:randomBytes(64).toString('base64url')});assert.equal(forged.status,401);
+  assert.equal((await request(status,proof)).status,403);await level('connected');assert.equal((await request(status,a.proof(status,{version:1,requestId},randomUUID(),a.lease))).status,403);
+  assert.deepEqual((await f.db.pool.query('SELECT * FROM staff_certificate_exchange')).rows,stored);
+  const store=new RemoteAccessStore(f.db.pool,mode);await store.provision(a.installationId,a.placement.cellId,a.placement.peerPublicKey);
+  const next=randomUUID(),fresh=await request(submit,a.proof(submit,{...a.body,revision:await revision(),previousRequestId:requestId},next,a.lease));assert.equal(fresh.status,200,await fresh.clone().text());
+  assert.equal((await request(status,a.proof(status,{version:1,requestId:next},randomUUID(),a.lease))).status,200);
+ }finally{await f.close();}
+});
