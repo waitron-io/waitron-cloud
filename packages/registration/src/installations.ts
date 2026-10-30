@@ -2,6 +2,7 @@ import {createHash,randomUUID} from 'node:crypto';
 import type {Pool,PoolClient} from 'pg';
 import {resolveSession} from '@waitron-cloud/identity';
 import {readVenuePlan,readOrganisationPlan,type PlanMode} from './organisation-plans.ts';
+import {readVenuePermissions} from './venue-service-permissions.ts';
 import {transaction} from './transaction.ts';
 import {isPairingUuid} from './pairing-proof.ts';
 import {createLeaseTrust,InstallationError,readMachineClaims,verifyMachine,verifyLease,type LeaseIssuer,type MachineAction,type SignedEnvelope} from './installation-proof.ts';
@@ -61,7 +62,10 @@ async function view(client:PoolClient,id:string,servicesVersion:1|2=1):Promise<I
   return JSON.parse(JSON.stringify({...rows[0],services:services.rows}));
 }
 async function installationPlan(client:PoolClient,venueId:string,mode:PlanMode) {
-  try{return await readVenuePlan(client,venueId,mode);}
+  try{
+    if(mode==='test-venue-levels')return (await readVenuePermissions(client,venueId,mode)).level;
+    return await readVenuePlan(client,venueId,mode);
+  }
   catch(error){if(error instanceof Error && error.message==='permission_denied')fail('permission_denied');throw error;}
 }
 function maskPlan(result:InstallationView,plan:string,mode:PlanMode):InstallationView {
