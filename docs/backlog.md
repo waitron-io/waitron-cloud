@@ -1509,6 +1509,15 @@ implementation or production evidence.
   cancellation to request/document identities and an elapsed-time clock. Earlier
   intermittent socket resets still need matching attribution; no accounting
   exception, retry or deadline change is implied.
+  Changed diagnostic head `de49ceab` retains an alerts cancellation on the reset
+  socket in single-CPU sample 4 and a separate unspecified-route cancellation
+  in ordinary sample 21. Both diagnostic jobs refuse; all twelve fault controls
+  pass. A native Chromium/TLS probe using pinned Waitron's actual live connection
+  reproduces an old-page error callback starting an alerts read after navigation.
+  Removing that refresh in memory or stopping before unload prevents it in 24
+  trials each; restoring the source reproduces it. Exact Linux callback attribution
+  remains an inference. This branch waits for the named Waitron document-lifecycle
+  follow-up, preserving real interruption recovery and every Cloud accounting rule.
   The bounded observation workflow retains the first refusal in each sampling
   group and all six original fault controls; all accounting checks and deadlines remain.
   The reporter preserves the original refusal when a diagnostic property cannot

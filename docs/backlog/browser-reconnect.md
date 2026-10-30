@@ -230,5 +230,30 @@ monotonic clock, which counts elapsed time independently of the wall clock.
 Run `node --test scripts/cloud-cost/diagnostics/navigation-evidence.test.mjs`
 for these boundaries. A generated native Chromium/TLS probe links an explicitly
 cancelled read to its old document and distinguishes the new document. This
-qualifies the observations, not the unresolved Linux reset. The changed bounded
-Linux experiment must supply the next recurrence before any repair is chosen.
+qualifies the observations, not the unresolved Linux reset.
+
+The changed [Linux run](https://github.com/waitron-io/waitron-cloud/actions/runs/41028304505)
+at `de49ceab` refuses ordinary sample 21 and single-CPU sample 4. All twelve fault
+controls pass. The single-CPU socket mapping identifies a cancelled alerts read
+at ticks 148697–148733; the new page's first script request is at 148728 and its
+first fetch at 148829. The cancelled request has no matching protocol request
+record. The ordinary reset maps to a different, still unspecified route. Neither
+run proves the cancelled request's initiating document or callback.
+
+A generated native Chromium/TLS probe using the actual pinned Waitron
+`LiveConnection` separately reproduces an old page starting an alerts read after
+navigation begins. The replacement page has no script. The old stream's error
+callback starts that read. Removing only its refresh call in memory prevents
+the late read in 24 trials; calling the existing stop method before unload does
+too. Restoring the original source reproduces the read again. These controls
+identify the cause in the native reproduction. Applying it to the Linux reset
+remains an inference.
+
+Waitron owns the document lifecycle and the
+[error refresh](https://github.com/clintongormley/waitron/blob/e8cfd38ed07bf546f14ad15334e54ee997114c75/packages/dashboard-kit/src/live-connection.ts#L94).
+Its follow-up must prevent unloading pages from starting new live-data reads
+while preserving refresh after real interruptions, session boundaries, cancelled
+navigation and supported history restoration. The two experimental controls are
+not a complete production repair. Keep this Cloud branch parked until the
+consumer investigation and repair can be qualified. All Cloud accounting,
+cache, isolation and deadline rules remain; neither red job is retried unchanged.
