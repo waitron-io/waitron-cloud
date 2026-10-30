@@ -79,3 +79,11 @@ test('reading diagnostics does not advance the clock or alter valid accounting',
   assert.equal(f.meter.snapshot().accounting.objects[0].byteSeconds, 3);
   assert.equal(f.meter.snapshot().status, 'measured');
 });
+
+test('reading diagnostics never calls the accounting clock', () => {
+  let reads = 0;
+  const meter = createMeter({ phase: 'workload', clock: () => { reads++; return 0; } });
+  const before = reads;
+  diagnostics(meter); diagnostics(meter);
+  assert.equal(reads, before);
+});

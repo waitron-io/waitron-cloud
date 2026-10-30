@@ -58,6 +58,12 @@ function run(failure, shape = '', meterFailure = '') {
       if(process.env.METER_FAILURE==='unreadable'){
         meter.invalidate();return {...meter,diagnostics(){throw Error('PRIVATE_DIAGNOSTIC_FAILURE');}};
       }
+      if(process.env.METER_FAILURE==='bigint-diagnostic'){
+        meter.invalidate();return {...meter,diagnostics(){return {private:10n};}};
+      }
+      if(process.env.METER_FAILURE==='throwing-json'){
+        meter.invalidate();return {...meter,diagnostics(){return {toJSON(){throw Error('PRIVATE_JSON_FAILURE');}};}};
+      }
       return meter;
     };
     export const createMeteringProxy=async()=>({url:'http://127.0.0.1:1',close:async()=>{}});
@@ -102,12 +108,15 @@ for (const [failure, expected] of [
   ['observe-attempt', { firstInvalidation: 'observe-attempt', snapshotRefusal: 'invalidated', pendingAttempts: 0 }],
   ['clock', { firstInvalidation: null, snapshotRefusal: 'clock', pendingAttempts: 0 }],
   ['unreadable', undefined],
+  ['bigint-diagnostic', undefined],
+  ['throwing-json', undefined],
 ]) test(`the actual smoke retains the meter refusal and cleanup for ${failure}`, () => {
   const result = run('', '', failure);
   assert.equal(result.error, undefined); assert.equal(result.signal, null); assert.equal(result.status, 1, result.stderr);
   assert.equal(result.stdout, '');
   const records = result.stderr.split('\n').filter(line => line.startsWith('{')).map(line => JSON.parse(line));
   const diagnostic = records.find(row => row.kind === 'litestream-result');
+  assert.ok(diagnostic, result.stderr);
   assert.equal(diagnostic.stage, 'replication-meter-snapshot');
   assert.equal(diagnostic.error.message, 'Invalid cloud cost meter');
   assert.deepEqual(diagnostic.meter, expected, result.stderr);
@@ -115,6 +124,16 @@ for (const [failure, expected] of [
   for (const stage of ['cleanup-replication-transport', 'cleanup-restore-transport', 'cleanup-replication-proxy',
     'cleanup-restore-proxy', 'cleanup-admin-proxy'])
     assert.equal(records.filter(row => row.stage === stage && row.status === 'fulfilled').length, 1, stage);
+});
+
+test('the smoke reads meter diagnostics only for a meter snapshot refusal', () => {
+  const result = run('replay-verification', '', 'pending-attempts');
+  assert.equal(result.error, undefined); assert.equal(result.signal, null); assert.equal(result.status, 1, result.stderr);
+  const records = result.stderr.split('\n').filter(line => line.startsWith('{')).map(line => JSON.parse(line));
+  const diagnostic = records.find(row => row.kind === 'litestream-result');
+  assert.equal(diagnostic.stage, 'replay-verification');
+  assert.equal(diagnostic.error.message, 'Synthetic result failure: replay-verification');
+  assert.equal(Object.hasOwn(diagnostic, 'meter'), false);
 });
 
 test('successful smoke results keep their counts and snapshots without an error diagnostic', () => {
