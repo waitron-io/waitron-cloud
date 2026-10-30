@@ -3587,8 +3587,11 @@ Keep the source pin, integrity checks, deadlines and original assertions.
 
 ### Fixture archive download retries (D311)
 
-**Open; the upstream 504 cause remains unknown.** Keep the bounded retries,
-shared download budget, cancellation and checksum requirements; see the
+**Open; the upstream 504 and later HTTP 500 causes remain unknown.** Archive
+diagnostics retain known public response-service labels and validated request IDs
+so you can correlate a refusal without exposing signed redirect URLs or arbitrary
+headers. Keep the bounded retries, shared download budget, cancellation and
+checksum requirements; see the
 [download handling and qualification limits](backlog/cost-conformance-fixtures.md#fixture-archive-download-retries-d311).
 
 ### Conformance image acquisition during D135 qualification

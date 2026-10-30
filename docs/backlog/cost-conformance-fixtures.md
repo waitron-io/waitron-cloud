@@ -20,6 +20,25 @@ permanent refusals, checksum verification after a retry, cancellation and the
 shared deadline. Docker-backed qualification runs in CI during the local outage;
 these controls do not establish the cause of the historical upstream 504.
 
+[Merge cost run 41139422264](https://github.com/waitron-io/waitron-cloud/actions/runs/41139422264/job/124349848462)
+received HTTP 500 on all three pinned Litestream archive attempts, with zero
+bytes, before any of that group's 12 cases ran. The trace cannot identify the
+responding service; the underlying cause remains unknown. You now get closed
+labels for recognised GitHub response hosts and GitHub, Azure Blob or Varnish
+server headers, plus format-checked GitHub and Azure request IDs. These describe
+the response and do not prove which service caused the failure. Signed redirect
+paths and queries, arbitrary headers and response bodies are excluded. Each
+attempt clears the preceding response's identity, including when a later
+connection fails before headers. Unreadable identity fields cannot interrupt the
+download or replace its refusal.
+
+Run `node --test scripts/cloud-cost/conformance-archive-correlation.test.mjs`
+for real local HTTP refusal, recovery, connection-reset, redirect, malformed-header,
+unreadable-header and digest controls. The redirect control supplies a public
+service URL over a local response; it does not contact GitHub. Inspect the next
+labelled CI refusal before claiming an upstream repair. Pins, checksum checks,
+three attempts, pauses, body cancellation and the shared budget remain unchanged.
+
 
 ### Conformance image acquisition during D135 qualification
 
