@@ -18,7 +18,11 @@ jobs:
       - run: node scripts/ci-setup-pnpm.mjs
       - name: Locate pnpm dependency store
         id: pnpm-store
-        run: echo "path=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
+        # The cache version must not depend on the bootstrap's random binary path.
+        run: |
+          export npm_config_store_dir="$RUNNER_TEMP/cloud-pnpm-store"
+          echo "npm_config_store_dir=$npm_config_store_dir" >> "$GITHUB_ENV"
+          echo "path=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
       - name: Create owned sentinel
         run: |
           mkdir -p '${{ steps.pnpm-store.outputs.path }}'
@@ -44,7 +48,11 @@ jobs:
       - run: node scripts/ci-setup-pnpm.mjs
       - name: Locate pnpm dependency store
         id: pnpm-store
-        run: echo "path=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
+        # The cache version must not depend on the bootstrap's random binary path.
+        run: |
+          export npm_config_store_dir="$RUNNER_TEMP/cloud-pnpm-store"
+          echo "npm_config_store_dir=$npm_config_store_dir" >> "$GITHUB_ENV"
+          echo "path=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
       - id: pnpm-cache
         uses: actions/cache/restore@v5
         with:

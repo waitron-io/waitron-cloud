@@ -3266,8 +3266,8 @@ requirements](backlog/diagnostic-permission-lock.md).
 
 ## Dependency-cache save stalls (D507)
 
-Cost conformance restores its pnpm store separately and limits optional cache saves
-to one minute after successful tests. A save timeout stays visible without changing
+Cost conformance uses a stable pnpm store path across runners, restores it separately
+and limits optional cache saves to one minute after successful tests. A save timeout stays visible without changing
 the test result. Keep saving last so the runner promptly cleans up its child processes.
 
 **Open.** Attribute the historical upload stall; the controlled archive-creation stall
