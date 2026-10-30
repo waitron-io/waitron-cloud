@@ -25,7 +25,7 @@ async function fixture(){
    const payload=encodeMachine({origin,action,installationId:installation,operationId,issuedAt:Date.now(),lease:action==='renew'||action==='revoke'?'':JSON.stringify(suppliedLease),body:JSON.stringify(body)});
    return {payload:payload.toString('base64url'),signature:sign(null,payload,key.privateKey).toString('base64url')};
   }
-  return {...f,key,issuer,installation,lease,session,store,legacy,proof};
+  return {...f,key,issuer,installation,lease,session,machines:store,legacy,proof};
  }catch(e){await f.close();throw e;}
 }
 type Fixture=Awaited<ReturnType<typeof fixture>>;
@@ -48,7 +48,7 @@ for(const action of ['renew','configuration-v1','configuration-v2','report'] as 
   let proof=f.proof(machineAction,body);if(cached)await f.legacy.execute(machineAction,proof);
   await set(f,'registered');await observe(f);
   if(action==='report'&&!cached)proof=f.proof('report',{...body,revision:await revision(f)});
-  const result=await f.store.execute(machineAction,proof);masked(result,action==='configuration-v2');
+  const result=await f.machines.execute(machineAction,proof);masked(result,action==='configuration-v2');
   if(action==='renew'){
    assert.ok(result.lease);const lease=verifyLease(result.lease,createLeaseTrust(f.issuer),origin);
    assert.equal(lease.expiresAt-lease.issuedAt,3600000);
@@ -60,7 +60,7 @@ for(const action of ['renew','configuration-v1','configuration-v2','report'] as 
 test('venue level one denies trusted setup without changing its stored services',async()=>{
  const f=await fixture();try{
   await set(f,'registered');const before=await rows(f);
-  await assert.rejects(f.store.configure(f.installation,await revision(f),[{service:'remote_access',state:'ready',configuration:{hostname:'test.invalid'}}]),{code:'permission_denied'});
+  await assert.rejects(f.machines.configure(f.installation,await revision(f),[{service:'remote_access',state:'ready',configuration:{hostname:'test.invalid'}}]),{code:'permission_denied'});
   assert.deepEqual(await rows(f),before);
  }finally{await f.close();}
 });
@@ -69,16 +69,16 @@ test('venue level two allows explicit setup and upgrade never restores it by its
   await set(f);await set(f,'registered');await set(f);
   const before=await rows(f),rev=await revision(f);
   for(const s of before.services)if(s.service!=='content_translation'){assert.equal(s.state,'unconfigured');assert.deepEqual(s.configuration,{});}
-  const result=await f.store.configure(f.installation,rev,[{service:'remote_access',state:'ready',configuration:{hostname:'test.invalid'}}]);
+  const result=await f.machines.configure(f.installation,rev,[{service:'remote_access',state:'ready',configuration:{hostname:'test.invalid'}}]);
   assert.equal(result.revision,rev+1);assert.deepEqual(result.services.find(s=>s.service==='remote_access')?.configuration,{hostname:'test.invalid'});
-  const reply=await f.store.execute('configuration',f.proof('configuration',{servicesVersion:2}));
+  const reply=await f.machines.execute('configuration',f.proof('configuration',{servicesVersion:2}));
   assert.equal(reply.services.find(s=>s.service==='content_translation')?.state,'ready');
  }finally{await f.close();}
 });
 test('venue account list masks level one but preserves its connected neighbour',async()=>{
  const f=await fixture();try{
   await set(f,'registered');await set(f,'connected',f.venues[1]);await observe(f);
-  const result=await f.store.listWithSession(f.session.token),own=result.find(i=>i.installationId===f.installation);
+  const result=await f.machines.listWithSession(f.session.token),own=result.find(i=>i.installationId===f.installation);
   assert.ok(own);masked(own);assert.equal(own.canRevoke,true);
   const neighbour=result.find(i=>i.venueId===f.venues[1]);assert.ok(neighbour);
   assert.equal(neighbour.services.find(s=>s.service==='remote_access')?.state,'ready');
@@ -88,25 +88,25 @@ test('venue account list masks level one but preserves its connected neighbour',
 test('venue old report revision still conflicts after a downgrade',async()=>{
  const f=await fixture();try{
   await set(f);const old=await revision(f);await set(f,'registered');
-  await assert.rejects(f.store.execute('report',f.proof('report',{revision:old,observedAt:Date.now(),services:[{service:'remote_access',health:'healthy',failure:null}]})),{code:'conflict'});
+  await assert.rejects(f.machines.execute('report',f.proof('report',{revision:old,observedAt:Date.now(),services:[{service:'remote_access',health:'healthy',failure:null}]})),{code:'conflict'});
   assert.equal((await f.pool.query('SELECT count(*) FROM installation_operations')).rows[0].count,'0');
  }finally{await f.close();}
 });
 test('venue signature verification precedes unavailable authority',async()=>{
  const f=await fixture();try{
   const proof=f.proof('renew');proof.signature=Buffer.alloc(64).toString('base64url');await f.pool.query('DROP TABLE billing_service_authority');
-  await assert.rejects(f.store.execute('renew',proof),{code:'invalid_proof'});
-  await assert.rejects(f.store.execute('renew',f.proof('renew')),{code:'42P01'});
+  await assert.rejects(f.machines.execute('renew',proof),{code:'invalid_proof'});
+  await assert.rejects(f.machines.execute('renew',f.proof('renew')),{code:'42P01'});
  }finally{await f.close();}
 });
 test('venue level one keeps machine and owner revocation available',async()=>{
  const f=await fixture();try{
-  await set(f,'registered');const proof=f.proof('revoke'),first=await f.store.execute('revoke',proof);assert.ok(first.revokedAt);
-  assert.deepEqual(await f.store.execute('revoke',proof),first);
+  await set(f,'registered');const proof=f.proof('revoke'),first=await f.machines.execute('revoke',proof);assert.ok(first.revokedAt);
+  assert.deepEqual(await f.machines.execute('revoke',proof),first);
   for(const s of first.services)assert.deepEqual(s.configuration,{});
-  await assert.rejects(f.store.execute('renew',f.proof('renew')),{code:'revoked'});
+  await assert.rejects(f.machines.execute('renew',f.proof('renew')),{code:'revoked'});
   const other=(await f.pool.query('SELECT id FROM installations WHERE venue_id=$1 AND superseded_by IS NULL',[f.venues[1]])).rows[0].id;
-  assert.ok((await f.store.revokeWithSession(f.session.token,f.session.csrfToken,other)).revokedAt);
+  assert.ok((await f.machines.revokeWithSession(f.session.token,f.session.csrfToken,other)).revokedAt);
  }finally{await f.close();}
 });
 
