@@ -253,7 +253,18 @@ Waitron owns the document lifecycle and the
 [error refresh](https://github.com/clintongormley/waitron/blob/e8cfd38ed07bf546f14ad15334e54ee997114c75/packages/dashboard-kit/src/live-connection.ts#L94).
 Its follow-up must prevent unloading pages from starting new live-data reads
 while preserving refresh after real interruptions, session boundaries, cancelled
-navigation and supported history restoration. The two experimental controls are
-not a complete production repair. Keep this Cloud branch parked until the
-consumer investigation and repair can be qualified. All Cloud accounting,
-cache, isolation and deadline rules remain; neither red job is retried unchanged.
+navigation and supported history restoration. The two experimental controls alone are
+not a complete production repair. Waitron's
+[landed lifecycle repair](https://github.com/clintongormley/waitron/pull/2279)
+suspends streams and cached reads when a document leaves, defers error recovery
+until document and session ownership are rechecked, and restores live reads on
+history return. Cloud pins that browser at
+`99c265981ba98f1afd0e5fc822624a9a91822ad2`; its replay measurements still use
+`fbadd15785464e59747e697c11048bfbc6e4938f`. Native pin-preparation checks cover
+both revisions together and cleanup after either build refuses.
+
+Use the bounded Linux observation groups to qualify the new consumer alongside
+Cloud's stronger readiness. Each group stops at its first refusal and retains
+all six original fault controls. All Cloud accounting, cache, isolation and
+deadline rules remain. The native callback reproduction does not establish the
+cause of every historical Linux reset; neither red job is retried unchanged.

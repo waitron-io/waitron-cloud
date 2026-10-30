@@ -30,7 +30,7 @@ for(const refusal of [null,'browser','replay'])test('combined browser and replay
     'writeFileSync(state,JSON.stringify(data));'
   ].join('\n'));
   await script('pnpm',[
-    "if(args[0]==='install'){const browser=data.sources[process.cwd()]==='e8cfd38ed07bf546f14ad15334e54ee997114c75';",
+    "if(args[0]==='install'){const browser=data.sources[process.cwd()]==='99c265981ba98f1afd0e5fc822624a9a91822ad2';",
     'if('+JSON.stringify(refusal)+"===(browser?'browser':'replay')){console.error('GENERATED_INSTALL_REFUSAL');process.exit(44);}}",
     "else if(args.at(-1)==='build')mkdirSync(join(process.cwd(),'apps/dashboard/dist'),{recursive:true});else process.exit(91);"
   ].join('\n'));
@@ -57,11 +57,11 @@ for(const refusal of [null,'browser','replay'])test('combined browser and replay
   assert.deepEqual(result,{code:refusal?1:0,signal:null},output);
   const data=JSON.parse(await readFile(state,'utf8'));
   assert.deepEqual(data.fetches,refusal==='replay'?['fbadd15785464e59747e697c11048bfbc6e4938f']:
-    ['fbadd15785464e59747e697c11048bfbc6e4938f','e8cfd38ed07bf546f14ad15334e54ee997114c75']);
+    ['fbadd15785464e59747e697c11048bfbc6e4938f','99c265981ba98f1afd0e5fc822624a9a91822ad2']);
   assert.ok(data.roots.every(owned=>!existsSync(owned)),'collect every owned preparation on success or refusal');
   if(refusal)assert.match(output,/GENERATED_INSTALL_REFUSAL/);
   else {
     const prepared=JSON.parse(output.split('\n').find(line=>line.startsWith('PREPARED=')).slice(9));
-    assert.deepEqual(prepared,{replay:'fbadd15785464e59747e697c11048bfbc6e4938f',owner:'fbadd15785464e59747e697c11048bfbc6e4938f',browser:'e8cfd38ed07bf546f14ad15334e54ee997114c75',font:'generated-font',runtimeAssets:true,colors:'generated-colors',structure:'generated-structure'});
+    assert.deepEqual(prepared,{replay:'fbadd15785464e59747e697c11048bfbc6e4938f',owner:'fbadd15785464e59747e697c11048bfbc6e4938f',browser:'99c265981ba98f1afd0e5fc822624a9a91822ad2',font:'generated-font',runtimeAssets:true,colors:'generated-colors',structure:'generated-structure'});
   }
 });

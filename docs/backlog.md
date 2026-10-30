@@ -1487,39 +1487,20 @@ implementation or production evidence.
   stay private. Run `node --test scripts/cloud-cost/remote-refusal-evidence.test.mjs scripts/cloud-cost/browser-relay-evidence.test.mjs`
   for real relay sockets with controlled resets and injected faults, preserved
   accounting refusals and the child-process diagnostic boundary. These controls do not establish the historical Linux cause.
-  Genuine Linux traces distinguish reset sockets from old-page reads started
-  after the pre-reload drain. Browser readiness now waits for stream-open callbacks
-  and their reads, rechecks requests while response sizes settle, and retains the
-  three-second deadline and every byte-accounting guard. Run
-  `node --test scripts/cloud-cost/browser-readiness.test.mjs` for controlled boundaries.
-  The [Linux investigation](backlog/browser-reconnect.md) retains separate historical
-  socket-reset attribution as open; readiness does not excuse cancelled bytes.
-  Retained traces distinguish an API cancellation around reload from an initial
-  connecting-stream cancellation. Waitron's A1222 consumer repair and Cloud's
-  [D499 fixture qualification](https://github.com/waitron-io/waitron-cloud/pull/760)
-  now provide the current browser pin, generated authority, routes and assets;
-  D499 also repairs the separate storage identity-port handoff. This readiness
-  branch still needs its own current-head Linux qualification. Protocol observations
-  retain document identities and numeric initiators without raw URLs. Rebased head
-  `97147228` passes ordinary CI and cost conformance, but Linux observation
-  [41023281681](https://github.com/waitron-io/waitron-cloud/actions/runs/41023281681)
-  refuses single-CPU sample 8 with an API socket reset during navigation. Its
-  initiating document remains unproved. The diagnostic copy now distinguishes
-  shell routes and numeric request flags, and links protocol completion and
-  cancellation to request/document identities and an elapsed-time clock. Earlier
-  intermittent socket resets still need matching attribution; no accounting
-  exception, retry or deadline change is implied.
-  Changed diagnostic head `de49ceab` retains an alerts cancellation on the reset
-  socket in single-CPU sample 4 and a separate unspecified-route cancellation
-  in ordinary sample 21. Both diagnostic jobs refuse; all twelve fault controls
-  pass. A native Chromium/TLS probe using pinned Waitron's actual live connection
-  reproduces an old-page error callback starting an alerts read after navigation.
-  Removing that refresh in memory or stopping before unload prevents it in 24
-  trials each; restoring the source reproduces it. Exact Linux callback attribution
-  remains an inference. This branch waits for the named Waitron document-lifecycle
-  follow-up, preserving real interruption recovery and every Cloud accounting rule.
-  The bounded observation workflow retains the first refusal in each sampling
-  group and all six original fault controls; all accounting checks and deadlines remain.
+  Browser readiness waits for stream-open callbacks and their reads, rechecks
+  requests while response sizes settle, and retains the three-second deadline
+  and every byte-accounting guard. Run
+  `node --test scripts/cloud-cost/browser-readiness.test.mjs` for these boundaries.
+  The browser source now includes Waitron's
+  [document-lifecycle repair](https://github.com/clintongormley/waitron/pull/2279)
+  at `99c265981ba98f1afd0e5fc822624a9a91822ad2`, alongside D499's supported
+  generated authority, routes, assets and storage identity-port handoff. Replay
+  measurements retain their original source. The
+  [Linux investigation](backlog/browser-reconnect.md) keeps the bounded observation
+  groups, six original fault controls and earlier cancellation traces. A native
+  Chromium/TLS reproduction identifies an unloading page's error refresh as one
+  source of late reads; historical Linux socket-reset attribution remains open.
+  No cancelled bytes, failed samples, accounting checks or deadlines are excused.
   The reporter preserves the original refusal when a diagnostic property cannot
   be inspected, including throwing or revoked JavaScript proxies, objects that
   intercept property inspection. Each field is contained separately, so an
