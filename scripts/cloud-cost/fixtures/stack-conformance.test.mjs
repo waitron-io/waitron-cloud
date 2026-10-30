@@ -743,7 +743,8 @@ test('genuinePrivateDayStreamsEverySelectedSaleAndRestoresBeforeRemovingReplaySt
   let stack; f.onCleanup(async () => { await stack?.close(); });
   stack = await local.startIsolatedStack({ ...f, prepared: plan });
   const s3 = stack.containerIds.find(id => docker('inspect', '--format', '{{index .Config.Labels "io.waitron.cloud-cost.role"}}', id) === 's3');
-  const proof = JSON.parse(execFileSync('docker', ['exec', s3, 'node', '/code/cost-streamed-day-smoke.mjs'],
+  const { runStreamedDayFixture } = await import('../streamed-day-diagnostics.mjs');
+  const proof = JSON.parse(runStreamedDayFixture('docker', ['exec', s3, 'node', '/code/cost-streamed-day-smoke.mjs'],
     { encoding: 'utf8', env: { PATH: process.env.PATH }, timeout: 90000, stdio: ['ignore', 'pipe', 'pipe'] }));
   assert.deepEqual(proof.result.replay.counts, { expected: 3, attempted: 3, successful: 3, failed: 0 });
   assert.deepEqual(proof.result.stream?.restored, { sales: 3, integrity: true });
@@ -757,7 +758,7 @@ test('genuinePrivateDayStreamsEverySelectedSaleAndRestoresBeforeRemovingReplaySt
   const { exportAggregate } = await import('../schema.mjs');
   assert.throws(() => exportAggregate(proof.result), /Invalid cloud cost evidence/);
   for (const mode of ['cancel', 'deadline']) {
-    const refused = JSON.parse(execFileSync('docker', ['exec', s3, 'node', '/code/cost-streamed-day-smoke.mjs', mode],
+    const refused = JSON.parse(runStreamedDayFixture('docker', ['exec', s3, 'node', '/code/cost-streamed-day-smoke.mjs', mode],
       { encoding: 'utf8', env: { PATH: process.env.PATH }, timeout: 90000, stdio: ['ignore', 'pipe', 'pipe'] }));
     assert.equal(refused.result, null); assert.equal(refused.refused, true);
     assert.equal(refused.sourceUnchanged, true); assert.equal(refused.collected, true); assert.equal(refused.clean, true); assert.equal(refused.leaked, false);

@@ -6,9 +6,11 @@ import { DatabaseSync } from 'node:sqlite';
 import { openReplay } from '/code/cost-waitron-adapter.mjs';
 import { preparePrivateCopy } from '/code/cloud-cost-runner/local.mjs';
 import { replayPrivateDay } from '/code/cloud-cost-runner/private-replay.mjs';
+import { withStreamedDayDiagnostics } from '/code/cloud-cost-runner/streamed-day-diagnostics.mjs';
 const sdk = createRequire('/app/packages/backups/package.json')('@aws-sdk/client-s3');
 const parent = '/state/generated-streamed-day', source = parent + '/source', root = parent + '/owned';
 let sourceReplay, copy, client, created = false, stage = 'setup';
+const diagnosticTrace = [];
 const Bucket = 'synthetic-streamed-day';
 const mode = process.argv[2] ?? 'normal';
 async function run() {
@@ -40,7 +42,8 @@ async function run() {
   stage = 'private-replay'; try { result = await replayPrivateDay({ ...args, database: copy.database, locationId, codeRoot: '/code', stateRoot: root + '/replay', config, initial,
     expected: { sales: 4, paid: 4, tradingDays: 2, busiest: 3 }, originalInventory: { timeZone: 'Europe/Madrid', days: 2, busiest: 3 },
     cadence: { mode: 'accelerated', factor: 100 }, windowSeconds: 10, signal: abort.signal,
-    onDiagnostic(event) { observed.push({ ...event, elapsedMs: Math.round(performance.now() - began) }); },
+    onDiagnostic(event) { observed.push({ ...event, elapsedMs: Math.round(performance.now() - began) });
+      diagnosticTrace.push(event); if (diagnosticTrace.length > 32) diagnosticTrace.shift(); },
     onProgress(value) { lastPhase = value.phase; if (mode === 'cancel' && value.successfulSales === 1) abort.abort(); },
     stream: { binary: '/code/litestream', binarySha256: createHash('sha256').update(readFileSync('/code/litestream')).digest('hex'),
       target: 'http://127.0.0.1:8334', sdk, bucket: Bucket, versioned: false, startupSeconds: 2, idleSeconds: 2,
@@ -63,7 +66,8 @@ async function run() {
   return { result, refused, inventoryBytes, sourceUnchanged: before === fingerprint(), collected: (mode === 'deadline' ? started.length <= 2 : started.length === (mode === 'normal' ? 3 : 2)) && collected, clean,
     leaked: /PRIVATE_|2026-|\/state|synthetic-|taxId|locationId/.test(JSON.stringify(result)) };
 }
-try { process.stdout.write(JSON.stringify(await run())); }
+try { process.stdout.write(JSON.stringify(await withStreamedDayDiagnostics(run,
+  () => ({ stage, trace: diagnosticTrace }), text => console.error(text)))); }
 catch { console.error('Synthetic streamed-day stage: ' + stage); process.exitCode = 1; }
 finally {
   await sourceReplay?.close(); await copy?.close();
