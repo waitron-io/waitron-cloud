@@ -106,3 +106,31 @@ cache publication and permission checks are unchanged. These controls qualify
 reporting, not the historical Linux failure. Capture an instrumented recurrence
 before changing transport or startup behavior; the full PostgreSQL and storage
 journey still belongs to CI while local Docker is unavailable.
+
+## Identity-port allocation race (D499)
+
+[Run 40990548896](https://github.com/waitron-io/waitron-cloud/actions/runs/40990548896),
+job 123851705352, failed the two-collision S3 test with a direct Node
+`EADDRINUSE` on port 40719. Its assertion replaced the original stack, so the
+historical failing bind cannot be identified from that log.
+
+A deterministic native regression claims the identity probe's port immediately
+after the probe closes. The unchanged S3 refusal assertion then fails with the
+same direct socket-error shape, before either child starts. The identity server
+now binds on port zero, letting the OS choose a port while keeping its socket
+open. Discovery, the provider's issuer and key URL, and issued tokens all use
+that bound port. This removes the demonstrated handoff race; it does not prove
+which bind failed in the historical Linux run.
+
+Run `node --test deploy/test-cloud/storage-s3-grpc.test.mjs` to check the claimed
+probe-port regression, both-child exhaustion, disabled retries and successful
+recovery. The original S3 assertions and one-retry limit remain unchanged. An
+unexpected startup failure now prints its original stack before the assertion
+checks it. The issuer and reservation refusal fixtures inject failures at the
+actual bind and the first, fourth and eighth reservations, preserving their
+original error-identity, cleanup and competing-listener assertions.
+
+The separate D458 port-probe error-handler change becomes unnecessary because
+this repair removes that probe. Its parked branch is preserved until delivery
+is verified. Local native checks need no containers; PostgreSQL and full Linux
+qualification remain CI gates while Docker is unavailable.

@@ -1,8 +1,11 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import {Server} from 'node:net';
+import net, {Server} from 'node:net';
 import {syncBuiltinESMExports} from 'node:module';
 import childProcess from 'node:child_process';
+import https from 'node:https';
+import {readFile} from 'node:fs/promises';
+import {join} from 'node:path';
 import {startBackupStorage} from '../../scripts/backup-storage-fixture.mjs';
 
 // Reproduce the observed S3 diagnostic after a real OS bind refusal. A child
@@ -57,7 +60,13 @@ async function collide(t, attempts) {
   });
   syncBuiltinESMExports();
   t.after(() => { t.mock.restoreAll(); syncBuiltinESMExports(); });
-  return {owners, children, allocations, async start(options) { storage = await startBackupStorage(options); return storage; }};
+  return {owners, children, allocations, async start(options) {
+    try { storage = await startBackupStorage(options); return storage; }
+    catch (error) {
+      if (!error.storageStartup) t.diagnostic(error.stack ?? String(error));
+      throw error;
+    }
+  }};
 }
 
 test('an S3 gRPC bind refusal retries once and starts a working store without stopping the competing owner', {timeout:90000}, async t => {
@@ -93,4 +102,80 @@ test('disabled retries retain the first S3 gRPC failure and its competing listen
   assert.equal(fixture.children.length, 1);
   assert.equal(fixture.children[0].exitCode, 72);
   assert.equal(fixture.owners[0].listening, true);
+});
+
+// Claim a released identity probe before HTTPS can bind it. Child-port
+// reservations use a connection callback and remain separate from this probe.
+test('S3 collision exhaustion still reaches both children when released identity probe ports are claimed', {timeout:90000}, async t => {
+  const createServer = net.createServer;
+  const competitors = [];
+  t.after(() => Promise.all(competitors.filter(server => server.listening).map(server => new Promise(resolve => server.close(resolve)))));
+  t.mock.method(net, 'createServer', (...args) => {
+    const server = createServer(...args);
+    if (args.length === 0) {
+      const close = server.close.bind(server);
+      server.close = callback => {
+        const port = server.address().port;
+        return close(() => {
+          const competitor = new Server();
+          competitors.push(competitor);
+          competitor.once('error', error => { throw error; });
+          competitor.listen(port, '127.0.0.1', callback);
+        });
+      };
+    }
+    return server;
+  });
+  syncBuiltinESMExports();
+  t.after(() => { t.mock.restoreAll(); syncBuiltinESMExports(); });
+  const fixture = await collide(t, 2);
+  await assert.rejects(fixture.start(), error => {
+    assert.match(error.message, /s3 failed to listen on grpc port/);
+    assert.equal(fixture.children.length, 2, 'identity startup must not fail before the intended child collisions');
+    assert.equal(error.storageStartup.ports.s3Grpc, fixture.allocations[1].grpc);
+    return true;
+  });
+  assert.ok(fixture.children.every(child => child.exitCode === 72));
+  assert.equal(fixture.owners.filter(owner => owner.listening).length, 2);
+});
+
+test('identity discovery, provider configuration and tokens use the bound HTTPS port', {timeout:90000}, async t => {
+  const createServer = https.createServer;
+  let identity;
+  t.mock.method(https, 'createServer', (...args) => {
+    identity = createServer(...args);
+    return identity;
+  });
+  syncBuiltinESMExports();
+  t.after(() => { t.mock.restoreAll(); syncBuiltinESMExports(); });
+  const storage = await startBackupStorage();
+  t.after(() => storage.stop());
+  const issuer = 'https://127.0.0.1:' + identity.address().port;
+  async function get(path) {
+    return new Promise((resolve, reject) => {
+      const request = https.get(issuer + path, {ca:storage.ca, agent:false}, response => {
+        let body = '';
+        response.on('data', bytes => { body += bytes; });
+        response.on('error', reject);
+        response.on('end', () => {
+          try { assert.equal(response.statusCode, 200); resolve(JSON.parse(body)); }
+          catch (error) { reject(error); }
+        });
+      });
+      request.setTimeout(5000, () => request.destroy(Error('identity response timed out')));
+      request.on('error', reject);
+    });
+  }
+  const discovery = await get('/.well-known/openid-configuration');
+  assert.equal(discovery.issuer, issuer);
+  assert.equal(discovery.jwks_uri, issuer + '/jwks');
+  assert.deepEqual(await get('/jwks'), storage.authority.jwks());
+  const configuration = JSON.parse(await readFile(join(storage.root, 'sts.json'), 'utf8'));
+  assert.equal(configuration.providers[0].config.issuer, issuer);
+  assert.equal(configuration.providers[0].config.jwksUri, issuer + '/jwks');
+  const token = storage.authority.token({kind:'capture', bucket:'identity-port', scope:'incoming/capture'});
+  assert.equal(JSON.parse(Buffer.from(token.split('.')[1], 'base64url')).iss, issuer);
+  await storage.bucket('identity-port-works');
+  await storage.stop();
+  assert.equal(identity.listening, false, 'stopping the fixture closes its original identity listener');
 });

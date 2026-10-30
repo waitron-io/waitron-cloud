@@ -3403,14 +3403,13 @@ See [the boundaries and remaining work](backlog/storage-cache-fixture.md#existin
 
 ## Storage identity-server bind refusals (D456)
 
-A competing listener can take the identity server's port after its probe closes.
-Startup now returns that socket error and removes its private files instead of
-crashing before cleanup. Run
-`node --test scripts/ci-backup-storage-issuer-bind.test.mjs` to check refused and
-successful binds, later setup failure and preservation of another listener.
-Port-probe refusals and identity-server errors after startup still need separate
-qualification. Real store startup and historical failure causes remain separate;
-see [the storage investigation](backlog/storage-cache-fixture.md).
+The identity server binds directly to an OS-assigned port and keeps that socket
+until cleanup. Its discovery response, provider configuration and tokens use the
+bound port, removing the probe-and-rebind race reproduced under D499.
+Run `node --test scripts/ci-backup-storage-issuer-bind.test.mjs` to check real
+bind refusals, later setup failure and preservation of another listener.
+Identity-server errors after startup and historical failure causes remain open;
+see [the storage investigation](backlog/storage-cache-fixture.md#identity-port-allocation-race-d499).
 
 ## Storage TLS material refusals (D455)
 
@@ -3432,6 +3431,14 @@ Retain diagnostics to explain the original read-only-cache rejection; the readin
 and S3 port repairs do not establish its cause. Reproduce an admin-listener bind
 failure and reserve those ports if needed, without retrying unknown ports or other
 child exits. See [the investigation and remaining work](backlog/storage-cache-fixture.md).
+
+D499 reproduces the direct `EADDRINUSE` that can interrupt the S3 collision test
+before either child starts: another listener takes the identity probe's released
+port. Direct HTTPS allocation removes that race without adding retries. The S3
+refusal assertions remain intact, and unexpected failures now retain their
+original stack. The historical CI refusal lacks that stack, so its exact bind
+remains unproved. Run `node --test deploy/test-cloud/storage-s3-grpc.test.mjs`
+for the deterministic handoff regression and bound-identity configuration checks.
 
 ## Diagnostic permission test lock observation (D198)
 

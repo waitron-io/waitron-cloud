@@ -37,13 +37,6 @@ const pins = {
     "31fb804858885f9e7f18b6d3b1da09e824baac3e6a55b5a62c3c4c77e6ed6d7d",
   ],
 };
-async function freePort() {
-  const s = netServer();
-  await new Promise((r) => s.listen(0, "127.0.0.1", r));
-  const port = s.address().port;
-  await new Promise((r) => s.close(r));
-  return port;
-}
 async function binary(root) {
   const pin = pins[process.platform + "-" + process.arch];
   if (!pin) throw Error("Unsupported SeaweedFS test platform");
@@ -159,22 +152,14 @@ async function startBackupStorageAttempt(options) {
     );
     const ca = await readFile(join(root, "cert.pem"), "utf8"),
       tlsKey = await readFile(join(root, "key.pem"));
-    const oidcPort = await freePort(),
-      issuer = "https://127.0.0.1:" + oidcPort,
-      keys = generateKeyPairSync("rsa", { modulusLength: 2048 });
+    const keys = generateKeyPairSync("rsa", { modulusLength: 2048 });
+    let issuer, authority;
     const roles = Object.fromEntries(
       ["capture", "stream", "restore"].map((k) => [
         k,
         "arn:aws:iam::role/cloud-" + k,
       ]),
     );
-    const authority = new StorageAuthority({
-      issuer,
-      audience: "cloud-storage",
-      keyId: "local-test",
-      privateKey: keys.privateKey,
-      roles,
-    });
     oidc = httpsServer({ key: tlsKey, cert: ca }, (req, res) => {
       res.setHeader("Content-Type", "application/json");
       res.end(
@@ -193,10 +178,20 @@ async function startBackupStorageAttempt(options) {
     });
     await new Promise((resolve, reject) => {
       oidc.once("error", reject);
-      oidc.listen(oidcPort, "127.0.0.1", () => {
+      oidc.listen(0, "127.0.0.1", () => {
         oidc.removeListener("error", reject);
         resolve();
       });
+    });
+    // The identity server keeps its assigned socket; publishing a released probe
+    // port would let another listener take it before HTTPS binds.
+    issuer = "https://127.0.0.1:" + oidc.address().port;
+    authority = new StorageAuthority({
+      issuer,
+      audience: "cloud-storage",
+      keyId: "local-test",
+      privateKey: keys.privateKey,
+      roles,
     });
     const resource = "arn:aws:s3:::${jwt:bucket}/${jwt:scope}";
     const policies = ["capture", "stream", "restore"].map((kind) => ({
