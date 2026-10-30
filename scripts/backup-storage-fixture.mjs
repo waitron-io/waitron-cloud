@@ -105,8 +105,8 @@ async function startBackupStorageAttempt(options) {
   const managed = new Map();
   const portReservations = [];
   function listenerFailure(error, listener, reservation = null) {
-    // Closed labels survive reporters that omit Error fields, without exposing
-    // keys or configuration. A broken output sink must preserve the refusal.
+    // Fixed names and a reservation number identify binds without exposing keys
+    // or configuration. A broken output sink must preserve the original refusal.
     try { console.error("storage_listener_failure=" + JSON.stringify({ listener, reservation })); } catch {}
     throw error;
   }
