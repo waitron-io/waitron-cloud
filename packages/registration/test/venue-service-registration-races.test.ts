@@ -79,3 +79,17 @@ for(const kind of ['registration','pairing'] as const)for(const replay of [false
   }finally{await observer.query('ROLLBACK');await holder.query('ROLLBACK');await transition?.catch(()=>{});await pending?.catch(()=>{});observer.release();holder.release();await f.close();}
  });
 }
+
+// Unenrolled venues keep the legacy ability to finish linking while an organisation setter waits.
+for(const kind of ['registration','pairing'] as const)test(`unenrolled ${kind} completion preserves the legacy organisation wait boundary`,async()=>{
+ const f=await venueServiceFixture(),holder=await f.pool.connect();let pending:Promise<unknown>|undefined;
+ try{
+  const action=await approved(f,kind,false),before=await rows(f);
+  await holder.query('BEGIN');await holder.query('SELECT id FROM organisations WHERE id=$1 FOR NO KEY UPDATE',[f.scope.organisationId]);
+  let settled=false;pending=action.run().finally(()=>{settled=true;});void pending.catch(()=>{});
+  for(let i=0;i<300&&!settled;i++)await delay(10);
+  assert.equal(settled,true,'unenrolled completion must retain its legacy path during an organisation change');
+  const result=await pending;assert.ok(result&&typeof result==='object'&&'venueId' in result);assert.equal(result.venueId,action.venueId);
+  assert.deepEqual(await rows(f),before);
+ }finally{await holder.query('ROLLBACK');await pending?.catch(()=>{});holder.release();await f.close();}
+});
