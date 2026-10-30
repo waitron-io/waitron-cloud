@@ -45,6 +45,12 @@ shutdown. Scheduling and any error report finish before the loop returns,
 without new claims or waits. Schedule and reporting failures keep their original
 errors. Real database scheduling and production shutdown retain separate gates.
 
+Run `node --test packages/registration/test/worker-loop-poll-shutdown.test.ts`
+to check pending idle and retry waits that finish or refuse after shutdown. The
+loop waits for polling and any late error report, preserves the original failure
+and starts no further work. A retry refusal stops without repeated reporting.
+Real database cancellation and production shutdown remain separate gates.
+
 ## Worker scheduling failures and error reporting (D467)
 
 Run `node --test packages/registration/test/worker-loop-failures.test.ts` to
