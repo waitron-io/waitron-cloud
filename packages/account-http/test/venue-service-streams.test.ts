@@ -43,7 +43,7 @@ async function fixture(){
    return {payload:payload.toString('base64url'),signature:sign(null,payload,key.privateKey).toString('base64url')};
   }
   function request(action:Action,envelope:unknown){return app.request(origin+'/api/installations/'+action,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(envelope)},{incoming:{socket:{remoteAddress:'192.0.2.1'}}} as HttpBindings);}
-  async function prepare(action:Action,asTrial=false){if(asTrial)await trial(f);else await set(f);await catalogue.provision(installation,location);if(action==='backup-stream-observe')await streams.configure(installation,await revision(),input);calls.provision=0;calls.read=0;return action==='backup-stream-configure'?{revision:await revision(),...input}:{};}
+  async function prepare(action:Action,asTrial=false,level='connected'){if(asTrial)await trial(f);else await set(f,level);await catalogue.provision(installation,location);if(action==='backup-stream-observe')await streams.configure(installation,await revision(),input);calls.provision=0;calls.read=0;return action==='backup-stream-configure'?{revision:await revision(),...input}:{};}
   return {...f,installation,input,location,calls,catalogue,streams,machines,lease,proof,request,prepare,revision,block(hook:()=>Promise<void>){wait=hook;}};
  }catch(e){await f.close();throw e;}
 }
@@ -67,7 +67,7 @@ for(const action of actions)for(const boundary of ['metadata','registered','unav
 
 for(const action of actions)for(const level of ['registered','connected','hosted'] as const)test(`venue stream HTTP ${action} obeys ${level} authority`,async()=>{
  const f=await fixture();try{
-  const body=await f.prepare(action);await set(f,level);const before=await state(f);
+  const body=await f.prepare(action,false,level==='hosted'?'hosted':'connected');if(level==='registered')await set(f,level);const before=await state(f);
   const response=await f.request(action,f.proof(action,body));assert.equal(response.status,level==='registered'?403:200,await response.clone().text());assert.equal(response.headers.get('cache-control'),'no-store');
   const result=await response.json();
   if(level==='registered'){assert.equal(result.error,'permission_denied');assert.deepEqual(f.calls,{provision:0,read:0});assert.deepEqual(await state(f),before);}
