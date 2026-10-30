@@ -3,7 +3,7 @@ import type {Pool,PoolClient} from 'pg';
 import {transaction,type PlanMode} from '@waitron-cloud/registration';
 import {isUuid,type GatewayRoute} from './manifest.ts';
 import {routeBinding,verifyForwardReport,type ForwardObservation,type PublicForwardView} from './forward-report.ts';
-import {eligibleRemoteInstallations} from './plan-permissions.ts';
+import {eligibleRemoteInstallations,legacyRemoteExclusion} from './plan-permissions.ts';
 import type {ForwardReportMapping} from './forward-report-collector.ts';
 
 const fail=():never=>{throw new Error('invalid_forward_reporter');};
@@ -32,13 +32,14 @@ async function lockInstallations(client:PoolClient,ids:string[],mode:PlanMode):P
 }
 async function currentRoute(client:PoolClient,id:string,mode:PlanMode,eligible?:Set<string>){
  if(mode==='test-venue-levels'&&!eligible?.has(id))return;
+ const exclusion=await legacyRemoteExclusion(client,mode);
  return (await client.query(`SELECT p.cell_id AS "cellId",p.installation_id AS "installationId",p.venue_id AS "venueId",host(p.address) AS address,
   p.port,p.peer_public_key AS "peerPublicKey",s.hostname AS "staffHostname",u.hostname AS "publicHostname",i.configuration_revision AS revision,v.environment
   FROM installations i JOIN venues v ON v.id=i.venue_id JOIN organisations o ON o.id=v.organisation_id
   JOIN remote_placements p ON p.installation_id=i.id AND p.venue_id=i.venue_id
   JOIN remote_hostnames s ON s.venue_id=i.venue_id AND s.kind='staff' JOIN remote_hostnames u ON u.venue_id=i.venue_id AND u.kind='public'
   JOIN installation_services service ON service.installation_id=i.id AND service.service='remote_access' AND service.state<>'unconfigured'
-  WHERE i.id=$1 AND i.revoked_at IS NULL AND i.superseded_by IS NULL AND ($2 IN ('existing','test-venue-levels') OR (o.service_plan='paid' AND v.environment='test'))`,[id,mode])).rows[0];
+  WHERE i.id=$1 AND i.revoked_at IS NULL AND i.superseded_by IS NULL AND ($2 IN ('existing','test-venue-levels') OR (o.service_plan='paid' AND v.environment='test'${exclusion}))`,[id,mode])).rows[0];
 }
 type Row=Record<string,any>;
 function bound(observation:ForwardObservation,route:Row|undefined,cell:Row|undefined,reporter:Row|undefined,now:number):boolean{

@@ -2,7 +2,7 @@ import {readStaffRequest,publishStaffCertificate,type StaffCertificateRequest} f
 import {createHash,randomUUID,type KeyObject} from 'node:crypto';
 import type {Pool,PoolClient} from 'pg';
 import {transaction,type PlanMode} from '@waitron-cloud/registration';
-import {eligibleRemoteInstallations} from './plan-permissions.ts';
+import {eligibleRemoteInstallations,legacyRemoteExclusion} from './plan-permissions.ts';
 import {RemoteAccessStore,type CertificateAuthorization} from './placement.ts';
 import {certificateNeedsRenewal} from './renewal.ts';
 import {signManifest,type GatewayRoute,type ReportingGatewayRoute} from './manifest.ts';
@@ -33,8 +33,8 @@ interface DesiredTarget {kind:RemoteConfigurationKind;targetId:string;digest:str
 
 const digest=(value:unknown)=>createHash('sha256').update(JSON.stringify(value)).digest('hex');
 const routeDigest=(routes:GatewayRoute[])=>digest([...routes].sort((a,b)=>a.venueId.localeCompare(b.venueId)).map(route=>({installationId:route.installationId,venueId:route.venueId,staffHostname:route.staffHostname,publicHostname:route.publicHostname,address:route.address,port:route.port,peerPublicKey:route.peerPublicKey})));
-const publicationDigest=(routes:GatewayRoute[],reporter?:{gatewayId:string;generation:number})=>reporter
- ?digest({routes:[...routes].sort((a,b)=>a.venueId.localeCompare(b.venueId)).map(r=>({binding:routeDigest([r]),revision:(r as ReportingGatewayRoute).revision})),reporter}):routeDigest(routes);
+const publicationDigest=(routes:GatewayRoute[],reporter?:{gatewayId:string;generation:number},venueLevels=false)=>reporter||venueLevels
+ ?digest({routes:[...routes].sort((a,b)=>a.venueId.localeCompare(b.venueId)).map(r=>({binding:routeDigest([r]),revision:(r as ReportingGatewayRoute).revision})),...(reporter?{reporter}:{})}):routeDigest(routes);
 const certificateDigest=(installationId:string,kind:'staff'|'public',value:CertificateAuthorization)=>digest({installationId,kind,revision:value.revision,hostname:value.hostname,dnsName:value.dnsName});
 const rowJob=(row:Record<string,unknown>):RemoteConfigurationJob=>({kind:row.kind as RemoteConfigurationKind,targetId:String(row.target_id),desiredDigest:String(row.desired_digest),claimId:String(row.claim_id),attempts:Number(row.attempts)});
 
@@ -46,6 +46,7 @@ async function desiredTargets(client:PoolClient,staffExchange:boolean,mode:PlanM
  if(mode==='test-venue-levels'){
   eligibleIds=await eligibleRemoteInstallations(client,mode,cellId??undefined,{installationIds:installationId?[installationId]:undefined,lock:scope?(scope.kind==='route'?'SHARE':'UPDATE'):false});
  }else if(forwardReports){
+  const exclusion=await legacyRemoteExclusion(client,mode);
   const policies=(await client.query(`SELECT o.id FROM organisations o WHERE EXISTS(SELECT 1 FROM venues v JOIN remote_placements p ON p.venue_id=v.id
    WHERE v.organisation_id=o.id AND ($1::uuid IS NULL OR p.cell_id=$1 OR EXISTS(SELECT 1 FROM remote_cell_moves m
     WHERE m.installation_id=p.installation_id AND m.target_cell_id=$1 AND m.state IN ('staged','ready')))
@@ -59,7 +60,7 @@ async function desiredTargets(client:PoolClient,staffExchange:boolean,mode:PlanM
      AND m.target_cell_id=$2 AND m.state IN ('staged','ready')))) ORDER BY i.id${lock}`,[policies,cellId,installationId])).rows.map(r=>r.id);
   eligibleIds=mode==='existing'?locked:(await client.query(`SELECT i.id FROM installations i JOIN venues v ON v.id=i.venue_id JOIN organisations o ON o.id=v.organisation_id
    JOIN installation_services s ON s.installation_id=i.id AND s.service='remote_access' WHERE i.id=ANY($1::uuid[]) AND o.service_plan='paid'
-   AND v.environment='test' AND s.state<>'unconfigured' AND i.revoked_at IS NULL`,[locked])).rows.map(r=>r.id);
+   AND v.environment='test' AND s.state<>'unconfigured' AND i.revoked_at IS NULL${exclusion}`,[locked])).rows.map(r=>r.id);
  }else eligibleIds=await eligibleRemoteInstallations(client,mode);
  const eligible=eligibleIds===undefined?undefined:new Set(eligibleIds);
  const cells=installationId?[]:(await client.query(forwardReports?`SELECT c.id,r.gateway_id,r.generation,r.revoked_at FROM remote_cells c
@@ -82,9 +83,9 @@ async function desiredTargets(client:PoolClient,staffExchange:boolean,mode:PlanM
  for(const row of [...active,...staged]){
   if(eligible&&!eligible.has(row.installation_id))continue;
   let routes=routesByCell.get(row.cell_id);if(!routes){routes=[];routesByCell.set(row.cell_id,routes);}
-  routes.push({...(forwardReports?{revision:Number(row.configuration_revision)}:{}),installationId:row.installation_id,venueId:row.venue_id,address:row.address,port:row.port,peerPublicKey:row.peer_public_key,staffHostname:row.staff_hostname,publicHostname:row.public_hostname});
+  routes.push({...(forwardReports||mode==='test-venue-levels'?{revision:Number(row.configuration_revision)}:{}),installationId:row.installation_id,venueId:row.venue_id,address:row.address,port:row.port,peerPublicKey:row.peer_public_key,staffHostname:row.staff_hostname,publicHostname:row.public_hostname});
  }
- for(const cell of cells)targets.push({kind:'route',targetId:cell.id,digest:publicationDigest(routesByCell.get(cell.id)??[],forwardReports&&cell.gateway_id&&!cell.revoked_at?{gatewayId:cell.gateway_id,generation:Number(cell.generation)}:undefined)});
+ for(const cell of cells)targets.push({kind:'route',targetId:cell.id,digest:publicationDigest(routesByCell.get(cell.id)??[],forwardReports&&cell.gateway_id&&!cell.revoked_at?{gatewayId:cell.gateway_id,generation:Number(cell.generation)}:undefined,mode==='test-venue-levels')});
  const certificates=cellId?[]:(await client.query(`SELECT i.id,i.configuration_revision,p.venue_id,c.suffix,s.hostname AS staff_hostname,u.hostname AS public_hostname
   FROM installations i JOIN remote_placements p ON p.installation_id=i.id JOIN remote_cells c ON c.id=p.cell_id
   JOIN remote_hostnames s ON s.venue_id=p.venue_id AND s.kind='staff'
@@ -165,7 +166,9 @@ export class RemoteConfigurationReconciler {
  }
  async #route(job:RemoteConfigurationJob){
   if(!this.#artifacts||!this.#signingKeyForCell)throw new Error('reconciler_not_configured');const now=this.#now();
-  const manifest=this.#forwardReports?await this.#store.reportingManifest(job.targetId,now):await this.#store.manifest(job.targetId,now);if(publicationDigest(manifest.routes,manifest.version===2?manifest.reporter:undefined)!==job.desiredDigest)throw new Error('stale_configuration');
+  const manifest=this.#forwardReports?await this.#store.reportingManifest(job.targetId,now):await this.#store.manifest(job.targetId,now);
+  // Venue generations fence the job privately, including when the gateway wire has no reporter or revision.
+  if(this.#planMode==='test-venue-levels'?!await this.#current(job):publicationDigest(manifest.routes,manifest.version===2?manifest.reporter:undefined)!==job.desiredDigest)throw new Error('stale_configuration');
   const key=await this.#signingKeyForCell(job.targetId),envelope=JSON.stringify(signManifest(manifest,key,now));
   await this.#complete(job,()=>this.#artifacts!.publishManifest(job.targetId,envelope));
  }
