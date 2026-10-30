@@ -1494,9 +1494,12 @@ implementation or production evidence.
   `node --test scripts/cloud-cost/browser-readiness.test.mjs` for controlled boundaries.
   The [Linux investigation](backlog/browser-reconnect.md) retains separate historical
   socket-reset attribution as open; readiness does not excuse cancelled bytes.
-  The first repaired-head single-CPU experiment still refuses on a client reset
-  after reads settle. Document identity and numeric initiators now distinguish
-  old-page unload reads from new-page startup without exporting URLs or stacks.
+  Linux still exposes distinct client cancellations: an API read around reload
+  and an application closing its first live stream while it is still connecting,
+  before any drain. The reviewed readiness repair remains unqualified. Protocol
+  observations retain document identities and numeric initiators without raw URLs.
+  A separate storage collision test also refuses with a direct occupied-port error;
+  preserve its expected native-child failure check while investigating that fixture.
   The bounded observation workflow retains the first refusal in each sampling
   group and all six original fault controls; all accounting checks and deadlines remain.
   The reporter preserves the original refusal when a diagnostic property cannot

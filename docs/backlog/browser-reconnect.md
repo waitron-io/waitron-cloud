@@ -143,7 +143,7 @@ and resets the connection. The new page's session reads fail after the relay
 correctly shuts down. These observations do not identify the API endpoint or
 which document started the cancelled request.
 
-The next changed diagnostic observes Chrome's document identities, numeric source
+The protocol diagnostic observes Chrome's document identities, numeric source
 locations and fixed route categories. It also reads the existing application
 markers directly from Chrome's protocol to retain their document context during
 teardown, alongside the page-level console forwarding. Raw URLs, function names, source text and abort
@@ -151,3 +151,46 @@ reasons remain private. A native Chromium control distinguishes a fetch started
 by an old page's unload handler from the new document; that control does not
 attribute the genuine failure. No further measurement or accounting rule changes
 are implied by this observation stage.
+
+## A connecting stream is cancelled before any drain
+
+The protocol experiment at `593bbb92`,
+[run 40990548906](https://github.com/waitron-io/waitron-cloud/actions/runs/40990548906),
+passes 24 ordinary samples. Its single-CPU group passes 21 samples and then refuses
+in sample 22, before any drain or reload. Both groups pass all six fault controls;
+all 18 helper checks pass.
+
+The application explicitly closes its first live stream while it is still
+connecting, then creates its replacement. Chrome cancels the live request with
+source 104 on socket 30, which maps to the relay's reset connection 2. Every
+protocol request belongs to the first document. This distinguishes an initial
+application cancellation from the earlier API cancellation around reload. The
+later dashboard timeout follows the relay's required shutdown.
+
+Reading the exact pinned `LiveConnection` and `LiveData` modules identifies the
+interest-change path that replaces a connecting stream. A native Chromium control
+running those actual modules reproduces that closure. With an unfinished 32 MiB
+stream, the replacement case refuses the real TLS meter with `socket-client-pipe`,
+while the unchanged-interest control stays clear before browser shutdown. The
+smaller native cases close the connecting stream without a relay refusal. This
+is not an exact reproduction of Linux's small-stream reset or a proof that every
+cancellation has the same cause.
+
+The next consumer investigation should compare initial interest settlement and
+connecting-stream replacement in Waitron, preserving the real browser behavior
+and every Cloud accounting guard. Cloud's lane must not edit Waitron or silently
+delay, suppress or rewrite the pinned application's requests. Retain both Linux
+traces and make the relevant controlled comparison before choosing a repair.
+
+## Separate storage qualification refusal
+
+The same head's standard workflow
+[run 40990548896, receipts job](https://github.com/waitron-io/waitron-cloud/actions/runs/40990548896/job/123851705352)
+also fails `two S3 gRPC bind refusals stop after the permitted retry and retain both competing listeners`.
+The expected native-child message is replaced by the direct error
+`listen EADDRINUSE: address already in use 127.0.0.1:40719`. Preserve that
+behavioral check and investigate the competing-listener setup and handoff in
+`deploy/test-cloud/storage-s3-grpc.test.mjs`; the exact failure stage is unproved.
+`git diff --exit-code f32fac4a HEAD -- deploy/test-cloud scripts/backup-storage-fixture.mjs`
+confirms this branch changes neither that test nor the storage fixture. This
+separate failure also prevents landing and must not be rerun unchanged to green.
