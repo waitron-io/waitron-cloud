@@ -3439,6 +3439,9 @@ refusal assertions remain intact, and unexpected failures now retain their
 original stack. The historical CI refusal lacks that stack, so its exact bind
 remains unproved. Run `node --test deploy/test-cloud/storage-s3-grpc.test.mjs`
 for the deterministic handoff regression and bound-identity configuration checks.
+The candidate still needs approval to change the TLS fixture's removed-probe
+count from one to zero; all three existing TLS-refusal modes currently fail that
+unchanged count. Review, CI and landing remain incomplete.
 
 ## Diagnostic permission test lock observation (D198)
 

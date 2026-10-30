@@ -134,3 +134,11 @@ The separate D458 port-probe error-handler change becomes unnecessary because
 this repair removes that probe. Its parked branch is preserved until delivery
 is verified. Local native checks need no containers; PostgreSQL and full Linux
 qualification remain CI gates while Docker is unavailable.
+
+The local candidate remains unfinished: its adjacent run passes 26 checks but
+fails the three TLS-refusal modes because their existing assertion still expects
+one TCP probe. That assertion is preserved pending the required approval to
+expect zero; every TLS/key error and cleanup assertion remains unchanged. The
+same three tests pass against the original source. Review, exact-head CI and
+landing follow resolution of that count, rather than treating this partial
+qualification as green.
