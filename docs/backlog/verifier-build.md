@@ -25,3 +25,23 @@ These native controls qualify refusal and cleanup paths. They do not explain
 the earlier CI image-build timeout or establish that an image builds successfully.
 Keep the real image and PostgreSQL qualification in CI while local Docker is
 unavailable; the existing source pins, build limits and runtime rules remain.
+
+## Container verifier memory-refusal observation (D335)
+
+The memory-exhaustion check accepts Docker's positive OOM report or, when the
+entry survives, requires a distinct child killed by SIGKILL and a fresh increase
+in the container's cgroup `oom_kill` counter. Exit 73, SIGKILL, memory pressure,
+old counts and missing or malformed evidence alone do not pass. Native controls
+exercise both witnesses and reject those alternatives; deleting each guard makes
+its control fail. The existing resource refusal, limits, isolation, cleanup and
+later-snapshot checks remain.
+
+Instrumented Linux CI observed entry PID 1 surviving a child kill and the cgroup
+counter increasing from zero to one. Docker's flag was true there and false in
+the saved D480 failure despite the same kill evidence. The flag-only test was the
+wrong requirement; the Docker event-reporting difference remains unexplained.
+The [kernel's cgroup documentation](https://www.kernel.org/doc/html/latest/admin-guide/cgroup-v2.html)
+defines `oom_kill` as killed processes in the cgroup. Resource reports still omit
+raw child text and cannot turn a successful exit into a refusal. Production code
+is unchanged. Real container qualification runs in CI while local Docker remains
+unavailable until 3 November. A native refusal control for a Docker-positive OOM report with a non-73 exit remains open in `packages/backups/test/container-resource-diagnostics.test.ts`; the review's omitted-flag experiment survives the current native suite.
