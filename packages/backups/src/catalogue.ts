@@ -78,6 +78,30 @@ async function snapshotsAllowed(client:PoolClient,venueId:string,mode:PlanMode):
   if(mode==='test-venue-levels')return (await readVenuePermissions(client,venueId,mode)).level!=='registered';
   return await readVenuePlan(client,venueId,mode)==='paid';
 }
+async function publicationTransaction<T>(client:PoolClient,action:(client:PoolClient)=>Promise<T>):Promise<T>{
+  await client.query('BEGIN');
+  try{
+    const result=await action(client);await client.query('COMMIT');return result;
+  }catch(error){
+    try{await client.query('ROLLBACK');}catch{}
+    throw error;
+  }
+}
+async function publicationSession<T>(pool:Pool,id:string,action:(client:PoolClient)=>Promise<T>):Promise<T>{
+  const client=await pool.connect(),lock='snapshot-publication:'+id;
+  let discard=false;
+  const onError=()=>{discard=true;};client.on('error',onError);
+  try{
+    // One capture's canonical object stays exclusive while authority transactions release their locks.
+    await client.query('SELECT pg_advisory_lock(hashtextextended($1,0))',[lock]);
+    return await action(client);
+  }catch(error){discard=true;throw error;}
+  finally{
+    try{if(!discard)await client.query('SELECT pg_advisory_unlock(hashtextextended($1,0))',[lock]);}
+    catch(error){discard=true;throw error;}
+    finally{client.release(discard);client.removeListener('error',onError);}
+  }
+}
 export async function lockVenue(client: PoolClient, id: string) {
   const row = (
     await client.query(
@@ -396,45 +420,47 @@ export class BackupCatalogue {
     return published.point;
   }
   async #publishVenue(installationId:string,id:string,m:PointMetadata,fence?:MutationFence):Promise<BackupPoint>{
-    const first=await transaction(this.#pool,async client=>{
-      const install=await active(client,installationId,this.#planMode),l=await lockVenue(client,install.venue_id);
-      const capture=(await client.query("SELECT *,expired_at IS NOT NULL OR created_at+interval '24 hours'<=clock_timestamp() AS expired FROM backup_captures WHERE id=$1 AND installation_id=$2",[id,installationId])).rows[0];
-      if(!capture)backupFail('unavailable');
-      await fence?.(client);
-      const prior=await point(client,id);
-      if(prior&&!sameMetadata(prior,m))backupFail('conflict');
-      if(!prior&&capture.expired)backupFail('capture_expired');
-      const permission=await readVenuePermissions(client,install.venue_id,'test-venue-levels');
-      return {prior,venueId:install.venue_id as string,publicKey:install.public_key as string,generation:permission.revision,keyVersion:capture.key_version as number,location:location(l)};
+    return publicationSession(this.#pool,id,async client=>{
+      const first=await publicationTransaction(client,async client=>{
+        const install=await active(client,installationId,this.#planMode),l=await lockVenue(client,install.venue_id);
+        const capture=(await client.query("SELECT *,expired_at IS NOT NULL OR created_at+interval '24 hours'<=clock_timestamp() AS expired FROM backup_captures WHERE id=$1 AND installation_id=$2",[id,installationId])).rows[0];
+        if(!capture)backupFail('unavailable');
+        await fence?.(client);
+        const prior=await point(client,id);
+        if(prior&&!sameMetadata(prior,m))backupFail('conflict');
+        if(!prior&&capture.expired)backupFail('capture_expired');
+        const permission=await readVenuePermissions(client,install.venue_id,'test-venue-levels');
+        return {prior,venueId:install.venue_id as string,publicKey:install.public_key as string,generation:permission.revision,keyVersion:capture.key_version as number,location:location(l)};
+      });
+      const objects=this.#objects(first.location);
+      if(first.prior){await objects.remove('incoming/'+id);return first.prior;}
+      // Object I/O holds no authority locks; only the captured generation may admit its result.
+      const source=await staged(objects,'incoming/'+id),objectKey='snapshots/'+id;
+      try{
+        if(source.receipt.digest!==m.digest||source.receipt.size!==m.size)backupFail('object_mismatch');
+        await putStaged(objects,objectKey,source);
+      }finally{await source.dispose();}
+      const published=await publicationTransaction(client,async client=>{
+        const install=await active(client,installationId,this.#planMode),l=await lockVenue(client,install.venue_id);
+        await fence?.(client);
+        const permission=await readVenuePermissions(client,install.venue_id,'test-venue-levels');
+        if(permission.revision!==first.generation)backupFail('conflict');
+        if(install.venue_id!==first.venueId)backupFail('conflict');
+        if(install.public_key!==first.publicKey)backupFail('conflict');
+        if(l.endpoint!==first.location.endpoint||l.bucket!==first.location.bucket||l.region!==first.location.region)backupFail('conflict');
+        const latest=(await client.query("SELECT *,expired_at IS NOT NULL OR created_at+interval '24 hours'<=clock_timestamp() AS expired FROM backup_captures WHERE id=$1 AND installation_id=$2",[id,installationId])).rows[0];
+        if(!latest)backupFail('unavailable');
+        if(latest.venue_id!==first.venueId||latest.key_version!==first.keyVersion)backupFail('conflict');
+        const prior=await point(client,id);
+        if(prior){if(!sameMetadata(prior,m))backupFail('conflict');return prior;}
+        if(latest.expired)backupFail('capture_expired');
+        await client.query(`INSERT INTO backup_points(id,venue_id,installation_id,key_version,kind,object_key,digest,size,captured_at,retention,source_node_id,modules) VALUES($1,$2,$3,$4,'snapshot',$5,$6,$7,$8,$9,$10,$11)`,
+          [id,first.venueId,installationId,first.keyVersion,objectKey,m.digest,m.size,m.capturedAt,m.retention,m.sourceNodeId,m.modules]);
+        return (await point(client,id))!;
+      });
+      await objects.remove('incoming/'+id);
+      return published;
     });
-    const objects=this.#objects(first.location);
-    if(first.prior){await objects.remove('incoming/'+id);return first.prior;}
-    // Object I/O holds no authority locks; only the captured generation may admit its result.
-    const source=await staged(objects,'incoming/'+id),objectKey='snapshots/'+id;
-    try{
-      if(source.receipt.digest!==m.digest||source.receipt.size!==m.size)backupFail('object_mismatch');
-      await putStaged(objects,objectKey,source);
-    }finally{await source.dispose();}
-    const published=await transaction(this.#pool,async client=>{
-      const install=await active(client,installationId,this.#planMode),l=await lockVenue(client,install.venue_id);
-      await fence?.(client);
-      const permission=await readVenuePermissions(client,install.venue_id,'test-venue-levels');
-      if(permission.revision!==first.generation)backupFail('conflict');
-      if(install.venue_id!==first.venueId)backupFail('conflict');
-      if(install.public_key!==first.publicKey)backupFail('conflict');
-      if(l.endpoint!==first.location.endpoint||l.bucket!==first.location.bucket||l.region!==first.location.region)backupFail('conflict');
-      const latest=(await client.query("SELECT *,expired_at IS NOT NULL OR created_at+interval '24 hours'<=clock_timestamp() AS expired FROM backup_captures WHERE id=$1 AND installation_id=$2",[id,installationId])).rows[0];
-      if(!latest)backupFail('unavailable');
-      if(latest.venue_id!==first.venueId||latest.key_version!==first.keyVersion)backupFail('conflict');
-      const prior=await point(client,id);
-      if(prior){if(!sameMetadata(prior,m))backupFail('conflict');return prior;}
-      if(latest.expired)backupFail('capture_expired');
-      await client.query(`INSERT INTO backup_points(id,venue_id,installation_id,key_version,kind,object_key,digest,size,captured_at,retention,source_node_id,modules) VALUES($1,$2,$3,$4,'snapshot',$5,$6,$7,$8,$9,$10,$11)`,
-        [id,first.venueId,installationId,first.keyVersion,objectKey,m.digest,m.size,m.capturedAt,m.retention,m.sourceNodeId,m.modules]);
-      return (await point(client,id))!;
-    });
-    await objects.remove('incoming/'+id);
-    return published;
   }
   async verifyClaim(claim:VerificationClaim,verify:DataRestoreVerifier,signal:AbortSignal=new AbortController().signal) {
     const prepared=await transaction(this.#pool,async client=>{

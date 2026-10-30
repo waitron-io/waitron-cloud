@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import {randomBytes,randomUUID} from 'node:crypto';
 import {test} from 'node:test';
 import {setTimeout as delay} from 'node:timers/promises';
+import {Pool} from 'pg';
 import {transaction} from '@waitron-cloud/registration';
 import {venueServiceFixture,set} from '../../registration/test/fixtures/venue-service.ts';
 import {BackupCatalogue,pointKeys,type PointMetadata} from '../src/catalogue.ts';
@@ -226,4 +227,24 @@ test('venue concurrent snapshot publications keep the winning object and metadat
   const stored=(await f.pool.query('SELECT digest,size::int FROM backup_points WHERE id=$1',[c.reserved.id])).rows;
   assert.deepEqual(stored,[{digest:metadata.digest,size:metadata.size}]);assert.equal(await f.catalogue.cleanupCapture(f.venues[0]!),null);
  }finally{blocked.release();await first;await second;await f.close();}
+});
+test('venue snapshot publication completes with a one connection pool',async()=>{
+ const f=await fixture(),single=new Pool({...f.pool.options,max:1,connectionTimeoutMillis:1000,application_name:f.schema+'_single'});
+ try{
+  await provision(f);const c=await capture(f),catalogue=new BackupCatalogue(single,f.vault,f.storage,mode);
+  const point=await catalogue.publish(f.installation,c.reserved.id,c.metadata);
+  assert.deepEqual(f.objects.get(point.objectKey),c.bytes);assert.equal(point.digest,c.metadata.digest);
+  assert.equal((await f.pool.query('SELECT count(*) FROM backup_points WHERE id=$1',[c.reserved.id])).rows[0].count,'1');
+ }finally{await single.end();await f.close();}
+});
+test('venue failed snapshot publication releases its capture for another publisher',async()=>{
+ const f=await fixture();try{
+  await provision(f);const c=await capture(f),failure=Error('synthetic object read failure');let fail=true;
+  f.blockRead(async()=>{if(fail){fail=false;throw failure;}});
+  await assert.rejects(f.catalogue.publish(f.installation,c.reserved.id,c.metadata),error=>error===failure);
+  const peer=new BackupCatalogue(f.peer,f.vault,f.storage,mode);
+  await assert.doesNotReject(peer.publish(f.installation,c.reserved.id,c.metadata),'a failed publication must release its capture lease');
+  assert.deepEqual(f.objects.get('snapshots/'+c.reserved.id),c.bytes);
+  assert.equal((await f.pool.query('SELECT count(*) FROM backup_points WHERE id=$1',[c.reserved.id])).rows[0].count,'1');
+ }finally{await f.close();}
 });
