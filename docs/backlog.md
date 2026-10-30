@@ -752,6 +752,13 @@ GitHub CI qualifies the PostgreSQL journeys while local Docker is unavailable.
 
 ## Translate all: approved design, implementation still open
 
+Run `node --test packages/translation/test/openai-client-timeout-isolation.test.ts`
+to check separate deadlines for overlapping HTTP requests. A timeout while waiting
+for headers or an unfinished successful body closes only that request and admits
+no text or usage. A later overlapping reply and another call through the same
+client keep their own deadlines. Real provider and release qualification remain
+separate gates in the [translation backlog](backlog/translation.md).
+
 Run `node --test packages/translation/test/batch-runner-cancelled-callback-failures.test.ts`
 to check that cancellation during delayed spending or lease-renewal failures in
 either pass preserves the original storage errors, billed usage and callback
