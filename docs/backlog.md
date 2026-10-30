@@ -3596,8 +3596,10 @@ checksum requirements; see the
 
 ### Conformance image acquisition during D135 qualification
 
-**Open; the registry timeout remains unexplained.** D135 needs fresh qualification
-on the landed acquisition repair, preserving its archive diagnostics; see the
+**Open; the registry timeout and metadata HTTP 502 remain unexplained.** Fixture
+builds now handle Docker Hub metadata HTTP 5xx within the original build budget,
+with native controls for bounded retries, permanent refusals and cleanup. D135
+still needs fresh qualification on the acquisition repair; see the
 [image acquisition investigation](backlog/cost-conformance-fixtures.md#conformance-image-acquisition-during-d135-qualification).
 
 ### Litestream conformance transport-close refusal (D141)

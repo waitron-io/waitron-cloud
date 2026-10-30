@@ -60,6 +60,26 @@ the original registry timeout's network cause remains unknown. D135 retains the
 archive diagnostics and requires fresh qualification on top of that repair.
 
 
+[Merge cost run 41143129809](https://github.com/waitron-io/waitron-cloud/actions/runs/41143129809/job/124361956617)
+verified both archives, then Docker Hub returned HTTP 502 while the fixture build
+read the Node image metadata. The build previously stopped after one attempt;
+the separate image-pull retry did not cover this earlier boundary.
+
+You now get at most three build attempts for a Docker Hub metadata HTTP 5xx
+response, with one- and two-second pauses inside the original five-minute build
+budget. Each attempt uses the same owned tag and verified context and prints its
+number and original failure. Authentication, missing manifests, rate limits,
+unknown failures, build-step errors and interruption stop without another attempt.
+Cleanup still removes only the owned tag and scratch directory.
+
+Run `node --test scripts/cloud-cost/conformance-image-build.test.mjs` for native
+controls of the recorded refusal, recovery, permanent errors, exhausted attempts,
+shared deadline and cancellation. These replace network archives and Docker
+commands at their external boundaries; they do not run a real image build.
+Docker-backed qualification belongs to CI while local Docker is unavailable.
+The registry's underlying HTTP 502 cause remains unknown.
+
+
 ### Litestream conformance transport-close refusal (D141)
 
 [Merge cost run 39987879658, stack group 2/3](https://github.com/waitron-io/waitron-cloud/actions/runs/39987879658/job/120531832768)
