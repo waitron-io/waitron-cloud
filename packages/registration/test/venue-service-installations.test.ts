@@ -6,7 +6,7 @@ import {createSession} from '@waitron-cloud/identity';
 import {InstallationStore,type InstallationView} from '../src/installations.ts';
 import {createLeaseIssuer,createLeaseTrust,encodeMachine,verifyLease,type MachineAction,type SignedEnvelope} from '../src/installation-proof.ts';
 import {transaction} from '../src/transaction.ts';
-import {venueServiceFixture,set,rows,trial,dayOffset} from './fixtures/venue-service.ts';
+import {venueServiceFixture,set,rows,trial,dayOffset,event} from './fixtures/venue-service.ts';
 
 const origin='https://venue.example.test';
 async function fixture(){
@@ -166,4 +166,54 @@ test('venue account list rechecks installation scope after its policy wait',asyn
   await holder.query('UPDATE installations SET venue_id=$2 WHERE id=$1',[f.installation,foreignVenue]);
   await holder.query('COMMIT');await assert.rejects(pending,{code:'permission_denied'});
  }finally{await holder.query('ROLLBACK');await pending?.catch(()=>{});holder.release();await f.close();}
+});
+
+// A saved response or a newly active trial cannot revive setup from before an uncovered day.
+for(const gap of ['expiry-read','late-extension','end-then-hosted','future-gap'] as const)
+ for(const boundary of ['renew','configuration-v1','configuration-v2','report','account-list','configure'] as const)
+ test(`venue installation ${boundary} clears setup across ${gap}`,async()=>{
+ const f=await fixture();try{
+  const oldEnd=gap==='future-gap'?dayOffset(f.today,-1):f.today;
+  await trial(f,'connected',dayOffset(oldEnd,-30));
+  if(gap==='future-gap')await trial(f,'hosted');
+  // Reconstruct setup admitted before expiry, with no venue reader running across the gap.
+  await f.legacy.configure(f.installation,await revision(f),['continuous_backup','retained_snapshots','remote_access'].map(service=>({service:service as 'continuous_backup'|'retained_snapshots'|'remote_access',state:'ready',configuration:{admittedBeforeGap:service}})));
+  await f.pool.query('UPDATE billing_service_authority SET setup_grant_active=true,setup_grant_until=$1 WHERE venue_id=$2',[oldEnd,f.venues[0]]);
+  await observe(f);const before=await revision(f);
+  const action=boundary==='renew'||boundary==='report'?boundary:'configuration';
+  const oldBody=boundary==='configuration-v2'?{servicesVersion:2}:boundary==='report'?{revision:before,observedAt:Date.now(),services:[{service:'remote_access',health:'healthy',failure:null}]}:{};
+  const cached=f.proof(action,oldBody);
+  const saved=boundary!=='account-list'&&boundary!=='configure'?await f.legacy.execute(action,cached):undefined;
+  if(gap==='late-extension')await f.store.execute(f.scope,event(),{type:'extend_trial',venueId:f.venues[0],level:'connected',expectedEnd:oldEnd});
+  else if(gap==='end-then-hosted'){
+   await f.store.execute(f.scope,event(),{type:'end_trial',venueId:f.venues[0],level:'connected',expectedEnd:oldEnd,outcome:'lapsed'});await trial(f,'hosted');
+  }
+  const expectedRevision=before+(gap==='end-then-hosted'?2:1);
+  if(boundary==='account-list'){
+   const reply=(await f.machines.listWithSession(f.session.token)).find(i=>i.installationId===f.installation);assert.ok(reply);assert.equal(reply.revision,expectedRevision);
+   for(const s of reply.services){assert.equal(s.state,'unconfigured',s.service);assert.deepEqual(s.configuration,{});assert.equal(s.health,'unknown');assert.equal(s.failure,null);}
+  }else if(boundary==='configure'){
+   if(gap==='expiry-read'){
+    await assert.rejects(f.machines.configure(f.installation,expectedRevision,[]),{code:'permission_denied'});
+    // A successful basic read commits expiry even when the denied setup transaction rolled back.
+    await f.machines.execute('renew',f.proof('renew'));
+   }else{
+    const result=await f.machines.configure(f.installation,expectedRevision,[{service:'remote_access',state:'ready',configuration:{reprovisioned:true}}]);
+    assert.equal(result.revision,expectedRevision+1);assert.deepEqual(result.services.find(s=>s.service==='remote_access')?.configuration,{reprovisioned:true});
+    for(const s of result.services)if(s.service!=='remote_access'){assert.equal(s.state,'unconfigured');assert.deepEqual(s.configuration,{});}
+   }
+  }else{
+   const replay=await f.machines.execute(action,cached);assert.equal(replay.revision,expectedRevision);
+   const freshBody=boundary==='report'?{revision:expectedRevision,observedAt:Date.now(),services:[{service:'remote_access',health:'unknown',failure:null}]}:oldBody;
+   const fresh=await f.machines.execute(action,f.proof(action,freshBody));assert.equal(fresh.revision,expectedRevision);
+   for(const result of [replay,fresh])for(const s of result.services){
+    if(s.service==='content_translation'&&gap!=='expiry-read'){assert.equal(s.state,'ready');assert.deepEqual(s.configuration,{synthetic:'content_translation'});}
+    else{assert.equal(s.state,'unconfigured',s.service);assert.deepEqual(s.configuration,{});assert.equal(s.health,'unknown');assert.equal(s.failure,null);}
+   }
+   if(boundary==='renew')assert.deepEqual(replay.lease,saved?.lease);
+  }
+  const stored=(await rows(f)).services.filter(s=>s.installation_id===f.installation);
+  for(const s of stored)if(s.service==='content_translation'){assert.equal(s.state,'ready');assert.deepEqual(s.configuration,{synthetic:'content_translation'});}else if(boundary!=='configure'||gap==='expiry-read'){assert.equal(s.state,'unconfigured');assert.deepEqual(s.configuration,{});}
+  assert.equal(await revision(f),expectedRevision+(boundary==='configure'&&gap!=='expiry-read'?1:0));
+ }finally{await f.close();}
 });
