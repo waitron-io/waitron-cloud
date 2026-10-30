@@ -99,3 +99,8 @@ test('venue permission allows an already admitted review result after downgrade'
  assert.deepEqual(await f.run(),{...done,results:[{...done.results[0],names:{ca:'Cafè',es:'Cafe [es]'}}],reviewApplied:1});
  assert.deepEqual(f.calls,['low','medium']);assert.equal(f.usage.length,2);assert.deepEqual(f.waits,[]);
 });
+test('venue permission restoration cannot reopen review after the completed pass was denied',async()=>{
+ const f=fixture();let checks=0;
+ f.hooks.stillPermitted=async()=>++checks!==3;
+ assert.deepEqual(await f.run(),done);assert.deepEqual(f.calls,['low']);assert.equal(f.usage.length,1);
+});
