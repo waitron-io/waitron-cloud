@@ -23,7 +23,7 @@ these controls do not establish the cause of the historical upstream 504.
 [Merge cost run 41139422264](https://github.com/waitron-io/waitron-cloud/actions/runs/41139422264/job/124349848462)
 received HTTP 500 on all three pinned Litestream archive attempts, with zero
 bytes, before any of that group's 12 cases ran. The trace cannot identify the
-responding service; the underlying cause remains unknown. You now get closed
+responding service; the underlying cause remains unknown. You now get fixed
 labels for recognised GitHub response hosts and GitHub, Azure Blob or Varnish
 server headers, plus format-checked GitHub and Azure request IDs. These describe
 the response and do not prove which service caused the failure. Signed redirect
@@ -33,8 +33,8 @@ connection fails before headers. Unreadable identity fields cannot interrupt the
 download or replace its refusal.
 
 Run `node --test scripts/cloud-cost/conformance-archive-correlation.test.mjs`
-for real local HTTP refusal, recovery, connection-reset, redirect, malformed-header,
-unreadable-header and digest controls. The redirect control supplies a public
+for real local HTTP refusal, recovery, connection-reset, redirect, malformed and
+duplicate request IDs, accepted maximum IDs, unreadable fields and digest controls. The redirect control supplies a public
 service URL over a local response; it does not contact GitHub. Inspect the next
 labelled CI refusal before claiming an upstream repair. Pins, checksum checks,
 three attempts, pauses, body cancellation and the shared budget remain unchanged.

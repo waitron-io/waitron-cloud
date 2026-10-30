@@ -9,7 +9,9 @@ import {spawn} from 'node:child_process';
 import {setTimeout as delay} from 'node:timers/promises';
 
 // Omitting, carrying over or copying unchecked response identity breaks these downloads.
-for(const scenario of ['exhausted','recovery','reset','redirect','malformed','unreadable','digest']) {
+for(const scenario of ['exhausted','recovery','reset','redirect','malformed','unreadable','digest',
+  'github-prefix','github-suffix','github-groups','github-width','azure-prefix','azure-suffix','duplicate',
+  'unreadable-url-refusal','unreadable-header-refusal','maximum-id','azure-server','varnish-server']) {
   test('archive response correlation: '+scenario,{timeout:8000},async()=>{
     const root=mkdtempSync(join(tmpdir(),'archive-correlation-')),path=join(root,'fixture.tar.gz');
     const bytes=Buffer.from('public pinned archive'),digest=createHash('sha256').update(bytes).digest('hex');
@@ -20,11 +22,18 @@ for(const scenario of ['exhausted','recovery','reset','redirect','malformed','un
       }
       const attempt=++requests;
       if(scenario==='reset'&&attempt>1){request.socket.resetAndDestroy();return;}
-      const refused=['exhausted','reset'].includes(scenario)||(scenario==='recovery'&&attempt===1);
+      const refused=['exhausted','reset','unreadable-url-refusal','unreadable-header-refusal'].includes(scenario)||(scenario==='recovery'&&attempt===1);
+      const githubId='ABCD:1234:5678:9ABC:DEF'+attempt,azureId='12345678-1234-abcd-9876-123456789abc';
+      const githubValues={
+        'github-prefix':'generated-private-'+githubId,'github-suffix':githubId+'-generated-private',
+        'github-groups':'A:B:C:D:E:F:1','github-width':'A'.repeat(17)+':1234:5678:9ABC',
+        'duplicate':[githubId,githubId],'maximum-id':Array(6).fill('A'.repeat(16)).join(':'),
+      };
+      const azureValues={'azure-prefix':'generated-private-'+azureId,'azure-suffix':azureId+'-generated-private','duplicate':[azureId,azureId]};
       const headers={
-        server:scenario==='malformed'?'generated-private-server':'GitHub.com',
-        'x-github-request-id':scenario==='malformed'?'generated-private-request':'ABCD:1234:5678:9ABC:DEF'+attempt,
-        'x-ms-request-id':scenario==='malformed'?'a'.repeat(500):'12345678-1234-abcd-9876-123456789abc',
+        server:scenario==='malformed'?'generated-private-server':scenario==='azure-server'?'Windows-Azure-Blob/1.0 Microsoft-HTTPAPI/2.0':scenario==='varnish-server'?'Varnish':'GitHub.com',
+        'x-github-request-id':scenario==='malformed'?'generated-private-request':githubValues[scenario]??githubId,
+        'x-ms-request-id':scenario==='malformed'?'a'.repeat(500):azureValues[scenario]??azureId,
         'set-cookie':'generated-private-cookie',
         'x-unrelated-request-id':'generated-private-header',
       };
@@ -43,7 +52,8 @@ for(const scenario of ['exhausted','recovery','reset','redirect','malformed','un
       globalThis.fetch=async(...args)=>{
         const response=await originalFetch(...args);
         ${scenario==='redirect'?"Object.defineProperty(response,'url',{value:'https://release-assets.githubusercontent.com/private/asset?signature=generated-private-query'});":''}
-        ${scenario==='unreadable'?"Object.defineProperty(response,'headers',{get(){throw Error('generated-private-accessor');}});":''}
+        ${['unreadable','unreadable-header-refusal'].includes(scenario)?"Object.defineProperty(response,'headers',{get(){throw Error('generated-private-accessor');}});":''}
+        ${scenario==='unreadable-url-refusal'?"Object.defineProperty(response,'url',{get(){throw Error('generated-private-url-accessor');}});":''}
         return response;
       };
       const {downloadConformanceArchive}=await import(${JSON.stringify(new URL('./conformance-archive.mjs',import.meta.url).href)});
@@ -57,20 +67,22 @@ for(const scenario of ['exhausted','recovery','reset','redirect','malformed','un
     try {
       const result=await Promise.race([closed,delay(6000,null,{ref:false})]);
       assert.notEqual(result,null,'the download must settle within its observed budget');
-      const failed=['exhausted','reset','digest'].includes(scenario);
+      const failed=['exhausted','reset','digest','unreadable-url-refusal','unreadable-header-refusal'].includes(scenario);
       assert.equal(result.signal,null);assert.equal(result.code,failed?1:0,output);
-      assert.equal(requests,['exhausted','reset'].includes(scenario)?3:scenario==='recovery'?2:1);
+      assert.equal(requests,['exhausted','reset','unreadable-url-refusal','unreadable-header-refusal'].includes(scenario)?3:scenario==='recovery'?2:1);
       if(failed)assert.equal(existsSync(path),false,'no refused or unverified file reaches extraction');
       else assert.deepEqual(readFileSync(path),bytes);
       const records=output.split('\n').filter(line=>line.startsWith('conformance_archive='))
         .map(line=>JSON.parse(line.slice('conformance_archive='.length)));
       const headers=records.filter(record=>record.event==='headers');
       assert.equal(headers.length,scenario==='reset'?1:requests);
-      if(!['malformed','unreadable'].includes(scenario)){
+      if(!['malformed','unreadable','unreadable-header-refusal'].includes(scenario)){
         for(const record of records.filter(record=>record.status!==undefined)){
-          assert.equal(record.responseServer,'github');
-          assert.equal(record.githubRequestId,'ABCD:1234:5678:9ABC:DEF'+record.attempt);
-          assert.equal(record.azureRequestId,'12345678-1234-abcd-9876-123456789abc');
+          assert.equal(record.responseServer,scenario==='azure-server'?'azure-blob':scenario==='varnish-server'?'varnish':'github');
+          if(['github-prefix','github-suffix','github-groups','github-width','duplicate'].includes(scenario))assert.equal('githubRequestId' in record,false);
+          else assert.equal(record.githubRequestId,scenario==='maximum-id'?'AAAAAAAAAAAAAAAA:AAAAAAAAAAAAAAAA:AAAAAAAAAAAAAAAA:AAAAAAAAAAAAAAAA:AAAAAAAAAAAAAAAA:AAAAAAAAAAAAAAAA':'ABCD:1234:5678:9ABC:DEF'+record.attempt);
+          if(['azure-prefix','azure-suffix','duplicate'].includes(scenario))assert.equal('azureRequestId' in record,false);
+          else assert.equal(record.azureRequestId,'12345678-1234-abcd-9876-123456789abc');
           if(scenario==='redirect')assert.equal(record.responseService,'github-release-assets');
           else assert.equal('responseService' in record,false,'unrecognised hosts stay unlabelled');
         }
@@ -84,7 +96,7 @@ for(const scenario of ['exhausted','recovery','reset','redirect','malformed','un
           assert.equal(key in record,false,'each new attempt clears prior response identity');
       }
       assert.equal(output.includes('generated-private'),false,'response bodies, signed URLs and arbitrary headers stay private');
-      if(scenario==='exhausted'){
+      if(['exhausted','unreadable-url-refusal','unreadable-header-refusal'].includes(scenario)){
         assert.match(output,/Fixture archive download failed/);assert.equal(records.at(-1).status,500);
       }
       if(scenario==='digest')assert.match(output,/Fixture archive digest mismatch/);
