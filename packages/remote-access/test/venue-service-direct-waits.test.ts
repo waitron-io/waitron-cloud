@@ -38,7 +38,7 @@ test(`venue direct ${action} rejects changed ${change} after authority wait`,asy
   pending=(action==='provision'?f.store.provision(f.id,f.cellId,f.key):action==='dns'?f.store.hostnameInstructions(f.id,'staff','custom.example.test'):f.store.authorizeCertificate(f.id,'staff',f.csr)).finally(()=>{settled=true;});void pending.catch(()=>{});
   await waitForBlock(f,pid,()=>settled);
   if(change==='venue'){
-   await holder.query('UPDATE installations SET revoked_at=clock_timestamp() WHERE venue_id=$1 AND revoked_at IS NULL',[f.venues[1]]);
+   await holder.query('UPDATE installations SET revoked_at=clock_timestamp(),superseded_by=$2 WHERE venue_id=$1 AND revoked_at IS NULL',[f.venues[1],f.id]);
    await holder.query('UPDATE installations SET venue_id=$2 WHERE id=$1',[f.id,f.venues[1]]);
   }else await holder.query('UPDATE installations SET public_key=$2 WHERE id=$1',[f.id,randomUUID()]);
   await holder.query('COMMIT');
