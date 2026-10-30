@@ -3413,9 +3413,7 @@ together: unexpected fields, numeric or malformed counts and invalid freshness
 are refused, while an explicit valid retry still completes. Signed storage bytes
 and decimal counts keep their exact precision. Production deployment, monitoring
 and billing policy remain open in [usage metering](backlog/usage-metering.md).
-Qualification of [PR653](https://github.com/waitron-io/waitron-cloud/pull/653) is
-blocked by a cost-fixture source installation timeout before paced replay starts.
-The missing package or child process remains unknown; D131 owns the investigation.
+Run `node --test apps/portal/test/usage-response-boundary.test.ts`.
 
 
 ## Initial services and future candidates
