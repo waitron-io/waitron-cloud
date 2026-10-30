@@ -3917,9 +3917,13 @@ gate checks do not qualify that separate layer.
 
 ## Storage-authority request timeout evidence (D212)
 
-**Historical cause unknown.** Capture the operation label and original error at
-the next genuine Linux timeout, then reproduce and fix its cause while preserving
-the existing assertions and deadlines. See the [investigation and qualification
+**Historical cause unknown.** A later Linux run of the same case reports a
+startup `InternalError` before authority opening. The fixture now retains the last
+readiness request, attempt and request counts, and prints them when attempts run
+out, without changing its retry budget.
+Use that evidence to reproduce the refusal before a fix; preserve the existing
+assertions and deadlines. The labelled failure does not establish the historical
+timeout's cause. See the [investigation and qualification
 limits](backlog/storage-authority-timeout.md).
 
 ## Authenticator management transport and session rechecks (D431)
