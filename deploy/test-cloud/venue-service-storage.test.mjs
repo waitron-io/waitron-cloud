@@ -9,7 +9,8 @@ import {join} from 'node:path';
 import {startBackupStorage} from '../../scripts/backup-storage-fixture.mjs';
 import {openStorageAuthority} from './storage-authority.mjs';
 import {openPlanStorage,openRuntimeStorage} from './service-runtime.mjs';
-import {venueServiceFixture,set,read} from '../../packages/registration/test/fixtures/venue-service.ts';
+import {venueServiceFixture,set,read,trial,dayOffset,event} from '../../packages/registration/test/fixtures/venue-service.ts';
+import {claimLease} from '../local-stack/lease.mjs';
 const require=createRequire(new URL('../../packages/backups/package.json',import.meta.url));
 const {S3Client,PutObjectCommand}=require('@aws-sdk/client-s3');
 const denied=e=>e?.$metadata?.httpStatusCode===403;
@@ -122,4 +123,55 @@ test('venue storage policy outage withdraws writers and preserves recovery reade
  try{await assert.rejects(authority.reconcile(),e=>e.code==='42P01');await assert.rejects(old('outage'),denied);assert.equal((await authority.read(first.readerReference,input.location,input.prefix+'before')).toString(),'retained venue body');}
  finally{await d.pool.query('ALTER TABLE billing_service_authority_unavailable RENAME TO billing_service_authority');}
  const reopened=await openPlanStorage(options),next=await reopened.provision(input);assert.notEqual(next.writerReference,first.writerReference);assert.equal(next.readerReference,first.readerReference);await assert.rejects(old('outage-revival'),denied);await f.writer(next,input)('recovered');
+});
+
+// A customer reader grant belongs to the generation admitted before the file-lease wait.
+test('venue storage reader refuses a permission round trip while waiting for its file lease',{timeout:90000},async t=>{
+ const f=await fixture(t,{database:true}),d=f.db;await set(d);const input=await f.input(d.venues[0]);let observed;
+ // Keep real transactions and their commit/release side effects; observe only when the policy read has completed.
+ const pool={async connect(){const client=await d.peer.connect();return new Proxy(client,{get(target,key){
+  if(key==='release')return (...args)=>{target.release(...args);observed?.();};
+  const value=Reflect.get(target,key);return typeof value==='function'?value.bind(target):value;
+ }});}};
+ const authority=await openPlanStorage({...f.options,pool,mode:'test-venue-levels'}),first=await authority.provision(input);
+ await f.writer(first,input)('before');const credentials=await authority.reader({...input,reference:first.readerReference});
+ const held=await claimLease(join(f.options.directory,'.authority.lock'));assert.ok(held);
+ let entered;const started=new Promise(r=>entered=r);observed=()=>entered();
+ const pending=authority.reader({...input,reference:first.readerReference});void pending.catch(()=>{});
+ try{await started;observed=undefined;await set(d,'registered');await set(d);}finally{observed=undefined;await held.release();}
+ await assert.rejects(pending,/permission_denied/);
+ // Recovery access keeps its original key and data; a fresh eligible request can read again.
+ assert.deepEqual(await authority.reader({...input,reference:first.readerReference}),credentials);
+ assert.equal((await authority.read(first.readerReference,input.location,input.prefix+'before')).toString(),'retained venue body');
+ await authority.reconcile();await assert.rejects(f.writer(first,input)('stale-writer'),denied);
+});
+
+// Persisted provider keys model a process that never ran a policy reader or reconciler during the trial gap.
+for(const gap of ['expiry-read','late-extension','end-then-hosted','future-gap'])
+test('venue storage withdraws the physical writer across '+gap,{timeout:90000},async t=>{
+ const f=await fixture(t,{database:true}),d=f.db;await set(d,'connected',d.venues[1]);
+ const oldEnd=gap==='future-gap'?dayOffset(d.today,-1):d.today;
+ await trial(d,'connected',dayOffset(oldEnd,-30));if(gap==='future-gap')await trial(d,'hosted');
+ const previous=Number((await d.pool.query('SELECT revision FROM billing_service_authority WHERE venue_id=$1',[d.venues[0]])).rows[0].revision);
+ await d.pool.query('UPDATE billing_service_authority SET setup_grant_active=true,setup_grant_until=$1 WHERE venue_id=$2',[oldEnd,d.venues[0]]);
+ const input=await f.input(d.venues[0]),neighbour=await f.input(d.venues[1]);
+ // Reconstruct physical authority admitted before the uncovered day, without consulting current policy.
+ const historical=await openStorageAuthority({...f.options,policyMode:'test-venue-levels'});
+ const first=await historical.provision({...input,policyRevision:previous}),peer=await historical.provision({...neighbour,policyRevision:1});
+ const old=f.writer(first,input),other=f.writer(peer,neighbour);await old('before');await other('before');
+ const credentials=await historical.reader({...input,reference:first.readerReference});
+ if(gap==='late-extension')await d.store.execute(d.scope,event(),{type:'extend_trial',venueId:d.venues[0],level:'connected',expectedEnd:oldEnd});
+ else if(gap==='end-then-hosted'){
+  await d.store.execute(d.scope,event(),{type:'end_trial',venueId:d.venues[0],level:'connected',expectedEnd:oldEnd,outcome:'lapsed'});await trial(d,'hosted');
+ }
+ const current=await openPlanStorage({...f.options,pool:d.pool,mode:'test-venue-levels'});
+ await assert.rejects(old('after-gap'),denied);await other('neighbour');
+ assert.deepEqual(await historical.reader({...input,reference:first.readerReference}),credentials);
+ assert.equal((await current.read(first.readerReference,input.location,input.prefix+'before')).toString(),'retained venue body');
+ const permission=await read(d);assert.equal(permission.revision,previous+(gap==='end-then-hosted'?2:1));
+ const state=await f.state();assert.equal(state.venues[input.venueId].writer,null);assert.deepEqual(state.venues[input.venueId].retired,[first.writerCredentials]);
+ if(gap==='expiry-read'){await assert.rejects(current.provision(input),/permission_denied/);await assert.rejects(current.reader({...input,reference:first.readerReference}),/permission_denied/);await set(d);}
+ const next=await current.provision(input);assert.notEqual(next.writerReference,first.writerReference);assert.equal(next.readerReference,first.readerReference);
+ assert.deepEqual(await current.reader({...input,reference:first.readerReference}),credentials);await f.writer(next,input)('explicit-reprovision');
+ await assert.rejects(old('never-revived'),denied);await other('still-neighbour');
 });
