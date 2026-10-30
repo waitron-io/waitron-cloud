@@ -15,13 +15,13 @@ async function fixture(){
  try{
   const installation=(await f.pool.query('SELECT id FROM installations WHERE venue_id=$1 AND superseded_by IS NULL',[f.venues[0]])).rows[0].id as string;
   const vault=new BackupKeyVault(randomBytes(32)),objects=new Map<string,Buffer>(),removed:string[]=[];
-  let readWait:undefined|(()=>Promise<void>),removeWait:undefined|(()=>Promise<void>);
+  let readWait:undefined|(()=>Promise<void>),removeWait:undefined|(()=>Promise<void>),putWait:undefined|(()=>Promise<void>);
   const storage=()=>({async read(key:string){await readWait?.();const bytes=objects.get(key);if(!bytes)throw Error('NoSuchKey');return Buffer.from(bytes);},
-   async put(key:string,bytes:Uint8Array){objects.set(key,Buffer.from(bytes));return receipt(bytes);},
+   async put(key:string,bytes:Uint8Array){await putWait?.();objects.set(key,Buffer.from(bytes));return receipt(bytes);},
    async remove(key:string){await removeWait?.();removed.push(key);objects.delete(key);}});
   const catalogue=new BackupCatalogue(f.pool,vault,storage,mode),location={endpoint:'https://storage.example.test',bucket:'venue-'+f.venues[0],region:'local'};
-  return {...f,installation,vault,objects,removed,catalogue,location,
-   blockRead(wait:()=>Promise<void>){readWait=wait;},blockRemove(wait:()=>Promise<void>){removeWait=wait;}};
+  return {...f,installation,vault,objects,removed,catalogue,location,storage,
+   blockRead(wait:()=>Promise<void>){readWait=wait;},blockRemove(wait:()=>Promise<void>){removeWait=wait;},blockPut(wait:()=>Promise<void>){putWait=wait;}};
  }catch(e){await f.close();throw e;}
 }
 type Fixture=Awaited<ReturnType<typeof fixture>>;
@@ -160,7 +160,7 @@ test('venue snapshot admitted verification completes after downgrade',async()=>{
   await assert.rejects(f.catalogue.rotate(f.installation),{message:'backup.permission_denied'});
  }finally{blocked.release();await pending?.catch(()=>{});await f.close();}
 });
-for(const changeKind of ['round-trip','downgrade','revocation','key-change','supersession'] as const)test(`venue snapshot object wait rejects ${changeKind} without publishing`,async()=>{
+for(const changeKind of ['round-trip','downgrade','revocation','key-change','supersession','location-change','capture-expiry'] as const)test(`venue snapshot object wait rejects ${changeKind} without publishing`,async()=>{
  const f=await fixture(),entered=latch(),blocked=latch();let pending:Promise<unknown>|undefined,change:Promise<unknown>|undefined;
  try{
   await provision(f);const c=await capture(f);f.blockRead(async()=>{entered.release();await blocked.promise;});
@@ -170,6 +170,8 @@ for(const changeKind of ['round-trip','downgrade','revocation','key-change','sup
   change=(async()=>{
    if(changeKind==='revocation')await f.peer.query('UPDATE installations SET revoked_at=clock_timestamp() WHERE id=$1',[f.installation]);
    else if(changeKind==='key-change')await f.peer.query('UPDATE installations SET public_key=$2 WHERE id=$1',[f.installation,randomUUID()]);
+   else if(changeKind==='location-change')await f.peer.query('UPDATE backup_locations SET bucket=$2 WHERE venue_id=$1',[f.venues[0],'changed-location']);
+   else if(changeKind==='capture-expiry')await f.peer.query('UPDATE backup_captures SET expired_at=clock_timestamp() WHERE id=$1',[c.reserved.id]);
    else if(changeKind==='supersession')await f.peer.query('UPDATE installations SET revoked_at=clock_timestamp(),superseded_by=(SELECT id FROM installations WHERE venue_id=$2 AND superseded_by IS NULL) WHERE id=$1',[f.installation,f.venues[1]]);
    else{await set(peer,'registered');if(changeKind==='round-trip')await set(peer);}
   })().finally(()=>{settled=true;});void change.catch(()=>{});
@@ -178,7 +180,7 @@ for(const changeKind of ['round-trip','downgrade','revocation','key-change','sup
    if(waiting)break;await delay(10);
   }
   assert.equal(waiting,false,'object work must release venue authority and installation locks');assert.equal(settled,true,'the policy change must complete during object work');await change;
-  blocked.release();await assert.rejects(pending,{message:changeKind==='round-trip'||changeKind==='key-change'?'backup.conflict':changeKind==='downgrade'?'backup.permission_denied':'backup.revoked'});
+  blocked.release();await assert.rejects(pending,{message:changeKind==='round-trip'||changeKind==='key-change'||changeKind==='location-change'?'backup.conflict':changeKind==='capture-expiry'?'backup.capture_expired':changeKind==='downgrade'?'backup.permission_denied':'backup.revoked'});
   assert.equal((await f.pool.query('SELECT count(*) FROM backup_points')).rows[0].count,'0');
   assert.equal((await f.pool.query('SELECT count(*) FROM backup_key_versions')).rows[0].count,'1');assert.ok(f.objects.has(c.reserved.incomingKey));assert.deepEqual(f.removed,[]);
  }finally{blocked.release();await pending?.catch(()=>{});await change?.catch(()=>{});await f.close();}
@@ -197,4 +199,31 @@ test('venue snapshot admitted deletion finishes before downgrade commits',async(
   blocked.release();assert.equal(await pending,old.point.id);await change;
   assert.equal(f.objects.has(old.point.objectKey),false);assert.deepEqual(f.objects.get(last.point.objectKey),last.bytes);assert.equal(await f.catalogue.cleanupOne(f.venues[0]!),null);
  }finally{blocked.release();await pending?.catch(()=>{});await change?.catch(()=>{});await f.close();}
+});
+test('venue concurrent snapshot publications keep the winning object and metadata together',async()=>{
+ const f=await fixture(),entered=latch(),blocked=latch();
+ type Outcome={point:Awaited<ReturnType<BackupCatalogue['publish']>>}|{error:unknown};
+ let first:Promise<Outcome>|undefined,second:Promise<Outcome>|undefined;
+ try{
+  await provision(f);const c=await capture(f);let calls=0;
+  f.blockPut(async()=>{if(calls++===0){entered.release();await blocked.promise;}});
+  const outcome=(p:ReturnType<BackupCatalogue['publish']>):Promise<Outcome>=>p.then(point=>({point}),error=>({error}));
+  first=outcome(f.catalogue.publish(f.installation,c.reserved.id,c.metadata));
+  await Promise.race([entered.promise,first.then(()=>{throw Error('expected blocked first copy');})]);
+  const otherBytes=Buffer.from('different encrypted archive '+c.reserved.id),otherMetadata={...c.metadata,...receipt(otherBytes)};
+  f.objects.set(c.reserved.incomingKey,otherBytes);
+  let settled=false;second=outcome(new BackupCatalogue(f.peer,f.vault,f.storage,mode).publish(f.installation,c.reserved.id,otherMetadata)).finally(()=>{settled=true;});
+  let waiting=false;for(let i=0;i<300&&!settled;i++){
+   waiting=!!(await f.admin.query('SELECT 1 FROM pg_stat_activity WHERE application_name=$1 AND cardinality(pg_blocking_pids(pid))>0',[f.schema+'_peer'])).rowCount;
+   if(waiting)break;await delay(10);
+  }
+  assert.ok(waiting||settled,'the second publisher must reach either admission or a publication wait');
+  blocked.release();const outcomes=await Promise.all([first,second]);
+  assert.equal(outcomes.filter(o=>'point' in o).length,1);assert.equal(outcomes.filter(o=>'error' in o).length,1);
+  const failure=outcomes.find(o=>'error' in o);assert.ok(failure&&'error' in failure);assert.equal((failure.error as Error).message,'backup.conflict');
+  const winner=outcomes.findIndex(o=>'point' in o),bytes=winner===0?c.bytes:otherBytes,metadata=winner===0?c.metadata:otherMetadata;
+  assert.deepEqual(f.objects.get('snapshots/'+c.reserved.id),bytes,'a refused copy must never overwrite the admitted archive');
+  const stored=(await f.pool.query('SELECT digest,size::int FROM backup_points WHERE id=$1',[c.reserved.id])).rows;
+  assert.deepEqual(stored,[{digest:metadata.digest,size:metadata.size}]);assert.equal(await f.catalogue.cleanupCapture(f.venues[0]!),null);
+ }finally{blocked.release();await first;await second;await f.close();}
 });
