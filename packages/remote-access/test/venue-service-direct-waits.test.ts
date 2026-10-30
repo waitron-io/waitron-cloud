@@ -16,7 +16,7 @@ async function fixture(){
   const placement=await store.provision(id,cellId,key);
   const revision=Number((await f.pool.query('SELECT configuration_revision FROM installations WHERE id=$1',[id])).rows[0].configuration_revision);
   const [,csr]=await acmeCrypto.createCsr({commonName:placement.staffHostname,altNames:[placement.staffHostname]});
-  return {...f,store,cellId,target,key,id,placement,revision,csr:csr.toString()};
+  return {...f,billingStore:f.store,store,cellId,target,key,id,placement,revision,csr:csr.toString()};
  }catch(error){await f.close();throw error;}
 }
 type Fixture=Awaited<ReturnType<typeof fixture>>;
@@ -66,7 +66,7 @@ test('venue direct move rereads setup after installation wait',async()=>{
 test('venue direct policy wait leaves unrelated cell progressing',async()=>{
  const f=await fixture(),holder=await f.peer.connect();let pending:Promise<unknown>|undefined;
  try{
-  await set(f,'connected',f.venues[1]);
+  await set({...f,store:f.billingStore},'connected',f.venues[1]);
   const other=(await f.pool.query('SELECT id FROM installations WHERE venue_id=$1 AND revoked_at IS NULL',[f.venues[1]])).rows[0].id;
   const placed=await f.store.provision(other,f.target,peer());
   await holder.query('BEGIN');await holder.query('SELECT id FROM venues WHERE id=$1 FOR NO KEY UPDATE',[f.venues[0]]);
