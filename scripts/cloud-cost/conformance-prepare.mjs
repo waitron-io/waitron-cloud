@@ -10,7 +10,8 @@ import {setTimeout as delay} from 'node:timers/promises';
 import {downloadConformanceArchive} from './conformance-archive.mjs';
 import {createInstallObserver} from './conformance-install-observer.mjs';
 
-const revision='fbadd15785464e59747e697c11048bfbc6e4938f';
+const replayRevision='fbadd15785464e59747e697c11048bfbc6e4938f';
+const browserRevision='e8cfd38ed07bf546f14ad15334e54ee997114c75';
 const repository=fileURLToPath(new URL('../..',import.meta.url));
 const sha=bytes=>createHash('sha256').update(bytes).digest('hex');
 const exports=[
@@ -33,6 +34,18 @@ const exports=[
 ];
 
 export async function prepareConformance(selected) {
+  const browserFile='remote-browser-conformance.test.mjs';
+  if(selected.includes(browserFile)&&selected.length>1) {
+    const replay=await prepareConformance(selected.filter(name=>name!==browserFile));
+    try {
+      const browser=await prepareConformance([browserFile]);
+      return {...replay,env:{...replay.env,COST_BROWSER_FIXTURE:browser.env.COST_BROWSER_FIXTURE},
+        cleanup:()=>{try {browser.cleanup();} finally {replay.cleanup();}}};
+    } catch(error) {replay.cleanup();throw error;}
+  }
+  // Browser qualification needs the first-stream repair; replay measurements
+  // retain their original source so their fiscal and accounting inputs agree.
+  const revision=selected.includes('remote-browser-conformance.test.mjs')?browserRevision:replayRevision;
   const controller=new AbortController();
   const interrupt=()=>controller.abort();
   process.once('SIGINT',interrupt);process.once('SIGTERM',interrupt);

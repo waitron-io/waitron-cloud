@@ -27,13 +27,16 @@ if(args[0]==='init'){
   if(failure==='hang')setInterval(()=>{},1000);
   else {console.error(failure);process.exit(128);}
  }
-}else if(args.includes('rev-parse'))console.log(data.wrongRevision?'wrong-revision':'fbadd15785464e59747e697c11048bfbc6e4938f');
+}else if(args.includes('rev-parse'))console.log(data.wrongRevision?'wrong-revision':data.sourceRevision??'fbadd15785464e59747e697c11048bfbc6e4938f');
 else if(!args.includes('checkout'))process.exit(90);
 `,{mode:0o700});
   await writeFile(join(bin,'pnpm'),`#!${process.execPath}\nconsole.error('REACHED_SOURCE_INSTALL');process.exit(73);\n`,{mode:0o700});
   // Accelerate supervisor time only in this disposable child; retain reported limits.
   const clock='const timer=setTimeout;globalThis.setTimeout=(fn,ms,...args)=>timer(fn,ms===300000?2500:ms===75000?350:ms,...args);';
-  const child=spawn(process.execPath,['--import','data:text/javascript,'+encodeURIComponent(clock),new URL('./conformance.mjs',import.meta.url).pathname,'--only','cadence-conformance.test.mjs'],
+  const preparation=Array.isArray(scenario.selected)
+    ?['--input-type=module','-e',`import {prepareConformance} from ${JSON.stringify(new URL('./conformance-prepare.mjs',import.meta.url).href)}; await prepareConformance(${JSON.stringify(scenario.selected)});`]
+    :[new URL('./conformance.mjs',import.meta.url).pathname,'--only',scenario.selected??'cadence-conformance.test.mjs'];
+  const child=spawn(process.execPath,['--import','data:text/javascript,'+encodeURIComponent(clock),...preparation],
     {env:{...process.env,PATH:bin+':'+process.env.PATH,NODE_AUTH_TOKEN:'generated-fetch-secret'},stdio:['ignore','pipe','pipe']});
   const closed=new Promise(resolve=>child.once('close',(code,signal)=>resolve({code,signal})));
   t.after(async()=>{
@@ -110,6 +113,31 @@ test('healthy fetch checks out and verifies the pinned source without retry',asy
   assert.match(result.output,/REACHED_SOURCE_INSTALL/);
   assert.equal(result.calls.filter(args=>args.includes('fetch')).length,1);
   assert.equal(result.calls.filter(args=>args.includes('checkout')).length,1);
+});
+
+test('browser preparation fetches and verifies the dashboard first-stream repair',async t=>{
+  const result=await prepare(t,{selected:'remote-browser-conformance.test.mjs',sourceRevision:'e8cfd38ed07bf546f14ad15334e54ee997114c75'});
+  assert.equal(result.calls.find(args=>args.includes('fetch')).at(-1),'e8cfd38ed07bf546f14ad15334e54ee997114c75');
+  assert.match(result.output,/REACHED_SOURCE_INSTALL/);
+  assert.equal(result.calls.filter(args=>args.includes('fetch')).length,1);
+});
+
+test('browser preparation refuses the historical replay revision before installation',async t=>{
+  const result=await prepare(t,{selected:'remote-browser-conformance.test.mjs'});
+  assert.match(result.output,/Unexpected public source/);
+  assert.equal(result.output.includes('REACHED_SOURCE_INSTALL'),false);
+});
+
+test('replay preparation retains its historical source independently of the browser pin',async t=>{
+  const result=await prepare(t);
+  assert.equal(result.calls.find(args=>args.includes('fetch')).at(-1),'fbadd15785464e59747e697c11048bfbc6e4938f');
+  assert.match(result.output,/REACHED_SOURCE_INSTALL/);
+});
+
+test('combined preparation begins with the historical replay source',async t=>{
+  const result=await prepare(t,{selected:['cadence-conformance.test.mjs','remote-browser-conformance.test.mjs']});
+  assert.equal(result.calls.find(args=>args.includes('fetch')).at(-1),'fbadd15785464e59747e697c11048bfbc6e4938f');
+  assert.match(result.output,/REACHED_SOURCE_INSTALL/);
 });
 
 test('a different checked-out revision cannot proceed to installation',async t=>{

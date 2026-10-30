@@ -3442,6 +3442,12 @@ for the deterministic handoff regression and bound-identity configuration checks
 The three TLS-refusal modes require zero TCP probes after the owner-approved
 count change; their TLS error, cleanup and competing-listener checks remain.
 
+Browser qualification now fetches Waitron `e8cfd38ed07bf546f14ad15334e54ee997114c75`,
+which defers the first live stream until the dashboard screen can register its
+subscriptions (Waitron PR #2269). Replay fixtures keep their original commit and
+recorded measurements. Native checks cover separate pins and cleanup of combined
+preparations; the genuine Linux browser journey still requires current-head CI.
+
 ## Diagnostic permission test lock observation (D198)
 
 Capture a recurrence to explain the historical membership-update delay. Keep the
