@@ -45,6 +45,44 @@ export function installApplicationTrace() {
   addEventListener('pagehide', () => record('pagehide'));
 }
 
+// Protocol events retain the document identity even when the page is unloading.
+export function installRequestTrace(cdp, trace, origin) {
+  const requests = new Map(), loaders = new Map();
+  const identity = (map, value) => {
+    if (!map.has(value)) { if (map.size >= 999) return 0; map.set(value, map.size + 1); }
+    return map.get(value);
+  };
+  cdp.on('Network.requestWillBeSent', row => {
+    try {
+      const url = new URL(row.request.url), path = url.pathname;
+      const route = url.origin !== origin ? 'outside' : path === '/management-api/events' ? 'live'
+        : path.startsWith('/management-api/alerts') ? 'alerts'
+        : path.startsWith('/management-api/reports/') ? 'report'
+        : path.startsWith('/management-api/') ? 'api'
+        : path === '/manage/' || path === '/manage' ? 'document' : 'other';
+      const at = Math.round(row.wallTime * 1000); if (!Number.isSafeInteger(at) || at < 0) return;
+      const frames = (row.initiator?.stack?.callFrames ?? []).slice(0, 3)
+        .filter(frame => [frame.lineNumber, frame.columnNumber].every(n => Number.isSafeInteger(n) && n >= 0))
+        .map(frame => ({line:frame.lineNumber, column:frame.columnNumber}));
+      trace({event:'cdp-request', request:identity(requests, row.requestId), loader:identity(loaders, row.loaderId), route,
+        resource:['Document','Fetch','XHR','EventSource','Script','Stylesheet','Image','Font','Other'].includes(row.type) ? row.type : 'Other',
+        at, initiator:['parser','script','preload','preflight','other'].includes(row.initiator?.type) ? row.initiator.type : 'other', frames});
+    } catch {}
+  });
+  cdp.on('Runtime.consoleAPICalled', event => {
+    try {
+      const text = event.args?.[0]?.value;
+      if (typeof text !== 'string' || !text.startsWith('cost_application=') || text.length > 256) return;
+      const row = JSON.parse(text.slice('cost_application='.length));
+      if (!['fetch-start','fetch-response','fetch-abort','fetch-rejected','stream-create','stream-open','stream-error','stream-close','beforeunload','pagehide'].includes(row.event)
+        || !['live','alerts','report','api','other','outside'].includes(row.route)
+        || ![event.executionContextId,row.id,row.at,row.state].every(Number.isSafeInteger)
+        || event.executionContextId < 0 || row.id < 0 || row.at < 0 || ![-1,0,1,2].includes(row.state)) return;
+      trace({event:'cdp-application', context:event.executionContextId, action:row.event, request:row.id, route:row.route, state:row.state, at:row.at});
+    } catch {}
+  });
+}
+
 function replace(source, before, after) {
   if (source.split(before).length !== 2) throw Error('Diagnostic insertion target changed');
   return source.replace(before, after);
@@ -108,6 +146,8 @@ export function instrumentBrowser(source, {buffered = false, compact = false, ap
     const pending = [], seen = new Set(), received = new WeakSet();`);
   if (!compact || application) source = replace(source, "const key = keyFor(req) + ':' + event;", "const key = keyFor(req) + ':' + event; trace({event:'request',key,phase,at:Date.now()" + (application ? ',...traceRequest(req)' : '') + "});");
   if (application) {
+    source = replace(source, "const cdp = await context.newCDPSession(page); await cdp.send('Network.enable');",
+      "const cdp = await context.newCDPSession(page); (" + installRequestTrace.toString() + ")(cdp, trace, 'https://' + staffHostname); await cdp.send('Network.enable'); await cdp.send('Runtime.enable');");
     source = replace(source, 'const deadline = Date.now() + 3000;', "trace({event:'drain-start',phase,at:Date.now(),pending:tracePending()}); const deadline = Date.now() + 3000;");
     source = replace(source, 'await Promise.all(pending);\n    };', "await Promise.all(pending); trace({event:'drain-return',phase,at:Date.now(),pending:tracePending()});\n    };");
   }

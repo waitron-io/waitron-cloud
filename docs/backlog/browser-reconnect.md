@@ -126,3 +126,28 @@ refuses with the current phase rather than hiding an execution-context failure.
 Whether the genuine dashboard ever navigates during this boundary, or opens a
 live stream in a child frame, remains unverified; retain a matching trace before
 extending this measurement to such a page.
+
+## Qualification exposed a separate client reset
+
+The repaired head `3a082da3` passes all 50 normal CI jobs, including the genuine
+browser journey and all six fault controls. The changed attribution experiment
+[run 40988995366](https://github.com/waitron-io/waitron-cloud/actions/runs/40988995366)
+passes 24 ordinary samples, but its single-CPU group stops at sample 4 with
+`socket-client-reset`. Both groups retain all six passing fault controls. This
+head is red overall and is not a qualified repair of that reset family.
+
+In the refusal, the live stream opens before the drain. Its follow-up reads finish
+before the drain returns, which leaves only that established stream. Chrome then
+reuses socket 159 for a new API request, source 198, cancels it around navigation
+and resets the connection. The new page's session reads fail after the relay
+correctly shuts down. These observations do not identify the API endpoint or
+which document started the cancelled request.
+
+The next changed diagnostic observes Chrome's document identities, numeric source
+locations and fixed route categories. It also reads the existing application
+markers directly from Chrome's protocol to retain their document context during
+teardown, alongside the page-level console forwarding. Raw URLs, function names, source text and abort
+reasons remain private. A native Chromium control distinguishes a fetch started
+by an old page's unload handler from the new document; that control does not
+attribute the genuine failure. No further measurement or accounting rule changes
+are implied by this observation stage.
