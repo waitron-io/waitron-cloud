@@ -3932,6 +3932,24 @@ remains unqualified; PostgreSQL checks run in CI while local Docker is down.
 
 ## Cost-stack isolation command refusal (D152)
 
+### Local signal check stopped before worker admission (D502)
+
+The SIGINT cleanup check failed on main `d94391a3` in
+[cost run 41003177471](https://github.com/waitron-io/waitron-cloud/actions/runs/41003177471/job/123892097439)
+before it observed an admitted worker. Its log did not retain the child outcome
+or preparation stage, so the cause remains unknown. On a failed SIGINT or
+SIGTERM check, you now get bounded exit status, signal, output byte counts,
+forced-collection state, elapsed time and the last recognised journal stage
+before fixture teardown. Raw streams, paths, tokens and resource IDs remain
+private. Run `node --test scripts/cloud-cost/local-command-diagnostics.test.mjs`
+for the native controls, including a real child exit.
+
+Keep the admission, cleanup and private-output assertions and both existing
+timers. Attribute any new failure from this evidence before changing the
+controller or signal handling. Faithful local container reproduction remains
+blocked while Docker is down until 3 November; native controls alone do not
+establish the historical Linux cause.
+
 Read the [isolation and deadline investigation](backlog/cost-stack-isolation.md)
 before changing the fixture guards. Historical attribution and Linux qualification
 remain limited as described there; the separate replication interruption remains open.
