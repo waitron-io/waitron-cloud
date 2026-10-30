@@ -81,10 +81,10 @@ for(const kind of ['registration','pairing'] as const)for(const replay of [false
 }
 
 // Unenrolled venues keep the legacy ability to finish linking while an organisation setter waits.
-for(const kind of ['registration','pairing'] as const)test(`unenrolled ${kind} completion preserves the legacy organisation wait boundary`,async()=>{
+for(const kind of ['registration','pairing'] as const)for(const replay of [false,true])test(`unenrolled ${kind} ${replay?'replay':'completion'} preserves the legacy organisation wait boundary`,async()=>{
  const f=await venueServiceFixture(),holder=await f.pool.connect();let pending:Promise<unknown>|undefined;
  try{
-  const action=await approved(f,kind,false),before=await rows(f);
+  const action=await approved(f,kind,replay),before=await rows(f);
   await holder.query('BEGIN');await holder.query('SELECT id FROM organisations WHERE id=$1 FOR NO KEY UPDATE',[f.scope.organisationId]);
   let settled=false;pending=action.run().finally(()=>{settled=true;});void pending.catch(()=>{});
   for(let i=0;i<300&&!settled;i++)await delay(10);
