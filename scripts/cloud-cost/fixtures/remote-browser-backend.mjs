@@ -29,7 +29,10 @@ r.mountReportApi(app, { db: store.venue, cfg: { nodeId: provisioned.nodeId, loca
 const bus = new r.LiveEvents();
 r.mountLiveApi(app, { db: store.venue, bus, resourceTypes: r.liveResourceTypes(r.ALL_MODULES.flatMap(m => m.changes ?? [])) }, () => {});
 r.mountCatalogueApi(app, { db: store.venue, venueCfg: { nodeId: provisioned.nodeId, locationId: provisioned.locationId }, venueLocale:'en-GB' }, () => {});
-r.mountAlertsApi(app, {db: store.venue, registry: r.createAlertRegistry({claims:r.ALL_ALERT_CLAIMS, sources:r.enabledAlertSources(r.ALL_MODULES)}), now: () => new Date()}, () => {});
+const registry = r.createAlertRegistry({claims:r.ALL_ALERT_CLAIMS, sources:r.enabledAlertSources(r.ALL_MODULES)});
+r.mountAlertsApi(app, {db: store.venue, registry, now: () => new Date()}, () => {});
+r.mountDiskStopApi(app, {db: store.venue, disk: {since: () => null}, registry, now: () => new Date()}, () => {});
+r.mountThemesApi(app, {db: store.venue}, () => {});
 r.mountCloudPublic(app, () => true);
 r.mountSpa(app, {root:'/input/dashboard', basePath:'/manage', navigationPath:'/manage'}, () => {});
 const server = createServer({ key: readFileSync('/input/staff.key'), cert: readFileSync('/input/staff.pem') }, r.getRequestListener(app.fetch));

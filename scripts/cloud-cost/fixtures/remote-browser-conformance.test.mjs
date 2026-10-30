@@ -36,6 +36,7 @@ test('pinned browser backend provisions a generated preproduction allocation', {
     mkdirSync(input); mkdirSync(state, { mode: 0o700 });
     cpSync(fixture.runtime, join(input, 'runtime.mjs'));
     cpSync(fixture.runtimeAssets, join(input, 'assets'), { recursive: true });
+    cpSync(fixture.runtimePackages, join(input, 'node_modules'), { recursive: true });
     cpSync(fixture.migrations, join(input, 'migrations'), { recursive: true });
     mkdirSync(join(input, 'dashboard')); writeFileSync(join(input, 'dashboard/index.html'), '<title>Generated</title>');
     const certificate = spawnSync('openssl', ['req', '-x509', '-newkey', 'rsa:2048', '-nodes',
@@ -52,6 +53,15 @@ console.log('GENERATED_ALLOCATION=' + JSON.stringify(allocations.map(row => ({
   environment: row.environment, generated: row.allocation_key.startsWith('throwaway-'),
   source: JSON.parse(row.approval).sourceId,
 }))));
+const signedIn = await app.request('/management-api/session', { method: 'POST',
+  headers: { 'content-type': 'application/json' },
+  body: JSON.stringify({ email: 'owner@example.test', password: 'Generated local password' }) });
+const cookie = signedIn.headers.get('set-cookie')?.split(';')[0];
+const routes = await Promise.all(['/api/theme', '/management-api/disk-stop'].map(async path => {
+  const response = await app.request(path, { headers: { cookie: cookie ?? '' } });
+  return { path, status: response.status };
+}));
+console.log('GENERATED_ROUTES=' + JSON.stringify({ login: signedIn.status, routes }));
 process.kill(process.pid, 'SIGTERM');
 `);
     const result = spawnSync(process.execPath, [join(root, 'backend.mjs')], { encoding: 'utf8', timeout: 20000 });
@@ -61,6 +71,11 @@ process.kill(process.pid, 'SIGTERM');
     assert.deepEqual(JSON.parse(record.slice('GENERATED_ALLOCATION='.length)), [
       { environment: 'preproduction', generated: true, source: 'throwaway-preproduction' },
     ]);
+    const routes = result.stdout.split('\n').find(line => line.startsWith('GENERATED_ROUTES='));
+    assert.ok(routes, result.stdout);
+    assert.deepEqual(JSON.parse(routes.slice('GENERATED_ROUTES='.length)), { login: 200, routes: [
+      { path: '/api/theme', status: 200 }, { path: '/management-api/disk-stop', status: 200 },
+    ] });
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
 
@@ -137,6 +152,7 @@ test('pinnedDashboardBrowserLoadsAssetsAuthenticatesReconnectsAndSignsOut_' + fa
     secret('peer/backend.mjs', backend);
     cpSync(fixture.runtime, join(root, 'peer/runtime.mjs'));
     cpSync(fixture.runtimeAssets, join(root, 'peer/assets'), { recursive: true });
+    cpSync(fixture.runtimePackages, join(root, 'peer/node_modules'), { recursive: true });
     cpSync(fixture.migrations, join(root, 'peer/migrations'), { recursive: true });
     cpSync(fixture.assets, join(root, 'peer/dashboard'), { recursive: true });
     if (fault === 'missing-bundle') rmSync(join(root, 'peer/dashboard/assets'), {recursive:true});

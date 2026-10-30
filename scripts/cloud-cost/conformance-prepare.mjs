@@ -33,6 +33,10 @@ const exports=[
  ['createAlertRegistry','apps/server/src/alerts.ts'],['mountSpa','apps/server/src/spa-api.ts'],
 ];
 
+const browserExports=[
+ ['mountThemesApi','apps/server/src/themes-api.ts'],['mountDiskStopApi','apps/server/src/disk-stop-api.ts'],
+];
+
 export async function prepareConformance(selected) {
   const browserFile='remote-browser-conformance.test.mjs';
   if(selected.includes(browserFile)&&selected.length>1) {
@@ -140,12 +144,17 @@ export async function prepareConformance(selected) {
       const {build}=await import(join(source,'node_modules/.pnpm/esbuild@0.28.2/node_modules/esbuild/lib/main.js'));
       code=join(root,'runtime');mkdirSync(code,{mode:0o700});runtime=join(code,'runtime.mjs');
       const entry=join(source,'cloud-cost-entry.mjs');
-      writeFileSync(entry,exports.map(([names,path])=>`export {${names}} from ${JSON.stringify('./'+path)};`).join('\n'));
+      writeFileSync(entry,(selected.includes('remote-browser-conformance.test.mjs')?[...exports,...browserExports]:exports).map(([names,path])=>`export {${names}} from ${JSON.stringify('./'+path)};`).join('\n'));
       await build({entryPoints:[entry],outfile:runtime,bundle:true,platform:'node',format:'esm',target:'node26',
         banner:{js:'import {createRequire as cloudCostRequire} from "node:module"; const require=cloudCostRequire(import.meta.url);'},logLevel:'warning'});
       if(selected.includes('remote-browser-conformance.test.mjs')) {
         mkdirSync(join(code,'assets'));
         cpSync(join(source,'apps/server/src/assets/invoice-noto-sans.ttf'),join(code,'assets/invoice-noto-sans.ttf'));
+        const tokens=join(code,'node_modules/@waitron/ui-core');
+        mkdirSync(join(tokens,'src/tokens'),{recursive:true});
+        cpSync(join(source,'packages/ui-core/package.json'),join(tokens,'package.json'));
+        for(const name of ['colors.css','structure.css'])
+          cpSync(join(source,'packages/ui-core/src/tokens',name),join(tokens,'src/tokens',name));
       }
       writeFileSync(join(code,'runtime-manifest.json'),JSON.stringify({schemaVersion:1,revision,sha256:sha(readFileSync(runtime))}));
       const sets=JSON.parse(readFileSync(join(source,'packages/migrations/migrations.manifest.json')));
@@ -175,7 +184,7 @@ export async function prepareConformance(selected) {
       if(selected.includes('remote-browser-conformance.test.mjs')) {
         phase='dashboard-build';
         await run('pnpm',['--dir','apps/dashboard','build'],{cwd:source});
-        env.COST_BROWSER_FIXTURE=json('browser.json',{revision,runtime,runtimeSha256:sha(readFileSync(runtime)),migrations,runtimeAssets:join(code,'assets'),assets:join(source,'apps/dashboard/dist')});
+        env.COST_BROWSER_FIXTURE=json('browser.json',{revision,runtime,runtimeSha256:sha(readFileSync(runtime)),migrations,runtimeAssets:join(code,'assets'),runtimePackages:join(code,'node_modules'),assets:join(source,'apps/dashboard/dist')});
       }
     }
     const imageNeeded=selected.some(name=>/^(stack|isolated-replay|paced-replay|worker-storage)-/.test(name));

@@ -3457,7 +3457,12 @@ opens the account menu's explicit trigger: the current menu also contains hidden
 theme buttons, so choosing its first descendant button times out. Native Chromium
 reproduces that ordering with the pinned components and opens the menu with the
 explicit trigger. The native backend path check also covers a `/tmp` parent,
-which otherwise rewrites its own newly inserted input path on Linux. Run
+which otherwise rewrites its own newly inserted input path on Linux. Signed-in
+native requests reproduce missing theme and disk-stop routes as HTTP 404. The
+fixture now mounts the pinned real handlers and includes the UI-core package
+metadata and theme tokens beside its runtime. Browser-only exports and assets
+leave historical replay inputs unchanged. The native check requires both routes
+to return HTTP 200 after real sign-in; browser accounting checks stay intact. Run
 `pnpm test:cloud-cost:conformance --only remote-browser-conformance.test.mjs`
 for the native startup check and all seven browser journeys. The historical Linux
 bind failure and original reconnect cause remain unproved.
