@@ -1,11 +1,12 @@
 import assert from 'node:assert/strict';
 import {generateKeyPairSync,randomUUID,sign} from 'node:crypto';
 import {test} from 'node:test';
+import {setTimeout as delay} from 'node:timers/promises';
 import {createSession} from '@waitron-cloud/identity';
 import {InstallationStore,type InstallationView} from '../src/installations.ts';
 import {createLeaseIssuer,createLeaseTrust,encodeMachine,verifyLease,type MachineAction,type SignedEnvelope} from '../src/installation-proof.ts';
 import {transaction} from '../src/transaction.ts';
-import {venueServiceFixture,set,rows} from './fixtures/venue-service.ts';
+import {venueServiceFixture,set,rows,trial,dayOffset} from './fixtures/venue-service.ts';
 
 const origin='https://venue.example.test';
 async function fixture(){
@@ -107,4 +108,39 @@ test('venue level one keeps machine and owner revocation available',async()=>{
   const other=(await f.pool.query('SELECT id FROM installations WHERE venue_id=$1 AND superseded_by IS NULL',[f.venues[1]])).rows[0].id;
   assert.ok((await f.store.revokeWithSession(f.session.token,f.session.csrfToken,other)).revokedAt);
  }finally{await f.close();}
+});
+
+// A policy waiter must leave installation locks available to the transition ahead of it.
+for(const boundary of ['machine','setup'] as const)test(`venue ${boundary} waits for policy before locking installations`,async()=>{
+ const f=await fixture(),holder=await f.pool.connect(),observer=await f.pool.connect();let pending:Promise<unknown>|undefined;
+ try{
+  await set(f);const reader=new InstallationStore(f.peer,f.issuer,origin,undefined,'test-venue-levels');
+  const rev=await revision(f);await holder.query('BEGIN');await holder.query('SELECT id FROM venues WHERE id=$1 FOR NO KEY UPDATE',[f.venues[0]]);
+  const pid=(await holder.query('SELECT pg_backend_pid() AS pid')).rows[0].pid;let settled=false;
+  pending=(boundary==='machine'?reader.execute('configuration',f.proof('configuration')):reader.configure(f.installation,rev,[])).finally(()=>{settled=true;});void pending.catch(()=>{});
+  let waiting=false;for(let i=0;i<300&&!settled;i++){
+   waiting=!!(await f.admin.query('SELECT 1 FROM pg_stat_activity WHERE application_name=$1 AND $2=ANY(pg_blocking_pids(pid))',[f.schema+'_peer',pid])).rowCount;
+   if(waiting)break;await delay(10);
+  }
+  assert.equal(waiting,true,'service admission must wait on current venue policy');
+  await observer.query('BEGIN');await observer.query('SELECT id FROM installations WHERE venue_id=$1 FOR UPDATE NOWAIT',[f.venues[0]]);await observer.query('ROLLBACK');
+  await holder.query('COMMIT');await pending;
+ }finally{await observer.query('ROLLBACK');await holder.query('ROLLBACK');await pending?.catch(()=>{});observer.release();holder.release();await f.close();}
+});
+test('venue account list locks every venue before expiring earlier setup',async()=>{
+ const f=await fixture(),holder=await f.pool.connect(),observer=await f.pool.connect();let pending:Promise<unknown>|undefined;
+ try{
+  await trial(f,'connected',dayOffset(f.today,-30));
+  await f.pool.query('UPDATE billing_service_authority SET setup_grant_active=true,setup_grant_until=$1',[f.today]);
+  await holder.query('BEGIN');await holder.query('SELECT id FROM venues WHERE id=$1 FOR NO KEY UPDATE',[f.venues[1]]);
+  const pid=(await holder.query('SELECT pg_backend_pid() AS pid')).rows[0].pid,reader=new InstallationStore(f.peer,f.issuer,origin,undefined,'test-venue-levels');
+  let settled=false;pending=reader.listWithSession(f.session.token).finally(()=>{settled=true;});void pending.catch(()=>{});
+  let waiting=false;for(let i=0;i<300&&!settled;i++){
+   waiting=!!(await f.admin.query('SELECT 1 FROM pg_stat_activity WHERE application_name=$1 AND $2=ANY(pg_blocking_pids(pid))',[f.schema+'_peer',pid])).rowCount;
+   if(waiting)break;await delay(10);
+  }
+  assert.equal(waiting,true,'the account batch must lock its complete captured venue set');
+  await observer.query('BEGIN');await observer.query('SELECT id FROM installations WHERE venue_id=$1 FOR UPDATE NOWAIT',[f.venues[0]]);await observer.query('ROLLBACK');
+  await holder.query('COMMIT');const result=await pending as InstallationView[];const own=result.find(i=>i.installationId===f.installation);assert.ok(own);masked(own);
+ }finally{await observer.query('ROLLBACK');await holder.query('ROLLBACK');await pending?.catch(()=>{});observer.release();holder.release();await f.close();}
 });
