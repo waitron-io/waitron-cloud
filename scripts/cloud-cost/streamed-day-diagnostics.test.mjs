@@ -85,7 +85,7 @@ for (const [name, text] of [
   ['raw', 'PRIVATE_ERROR'],
   ['extra-field', prefix + JSON.stringify({ schemaVersion: 1, stage: 'private-replay', traceAvailable: true, trace, private: 'PRIVATE_TOKEN' })],
   ['unsafe-trace', prefix + JSON.stringify({ schemaVersion: 1, stage: 'private-replay', traceAvailable: true, trace: [{ kind: 'replay', stage: 'PRIVATE_STAGE' }] })],
-  ['oversized', prefix + ' '.repeat(65536)],
+  ['oversized', prefix + ' '.repeat(65536) + JSON.stringify({ schemaVersion: 1, stage: 'private-replay', traceAvailable: true, trace })],
 ]) test('streamedDayParentDoesNotPublishUnvalidatedChildText_' + name, () => {
   assert.equal(typeof helper.runStreamedDayFixture, 'function');
   const messages = [];
