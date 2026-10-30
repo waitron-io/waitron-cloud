@@ -3405,6 +3405,17 @@ result barrier, password-reset refusal and existing bounds when investigating a
 recurrence. Read the [observation requirements and remaining qualification](backlog/password-derivation-observation.md);
 use Linux PostgreSQL CI while local Docker is unavailable.
 
+## Usage HTTP response boundaries (D409)
+
+Your usage view keeps its earlier measurements when a response is malformed or
+names another organisation. Native checks exercise the HTTP parser and controller
+together: unexpected fields, numeric or malformed counts and invalid freshness
+are refused, while an explicit valid retry still completes. Signed storage bytes
+and decimal counts keep their exact precision. Production deployment, monitoring
+and billing policy remain open in [usage metering](backlog/usage-metering.md).
+Run `node --test apps/portal/test/usage-response-boundary.test.ts`.
+
+
 ## Initial services and future candidates
 
 **Open; local implementations do not approve production enablement.** Remote access
