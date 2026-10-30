@@ -216,7 +216,27 @@ export async function prepareConformance(selected) {
       const tag='waitron-cloud-cost-conformance:'+randomUUID();
       ownedImageTag=tag;
       phase='fixture-image-build';
-      await run('docker',['build','--build-arg','FIXTURE_UID='+process.getuid(),'--build-arg','FIXTURE_GID='+process.getgid(),'-t',tag,context]);
+      // Every build attempt and pause shares the original five-minute build budget.
+      const deadline=performance.now()+300000;
+      const remaining=()=>Math.ceil(deadline-performance.now());
+      for(let attempt=1;;attempt++) {
+        if(remaining()<=0)throw Error('Conformance fixture image build timed out');
+        try {
+          await run('docker',['build','--build-arg','FIXTURE_UID='+process.getuid(),'--build-arg','FIXTURE_GID='+process.getgid(),'-t',tag,context],
+            {attempt,timeout:remaining(),captureStderr:true,stdio:['ignore','inherit','pipe']});
+          break;
+        } catch(error) {
+          const pause=attempt*1000;
+          const terminal=/denied|unauthorized|authentication required|manifest unknown|not found|toomanyrequests|rate limit|invalid reference format/i.test(error.stderr);
+          const transient=/failed to resolve source metadata[^\n]*unexpected status from (?:HEAD|GET) request to https:\/\/registry-1\.docker\.io\/v2\/[^\s"]+: 5\d\d\b/i.test(error.stderr);
+          if(controller.signal.aborted||terminal||!transient||attempt>=3||remaining()<=pause)throw error;
+          console.error('Conformance registry metadata unavailable; retrying fixture image ('+(attempt+1)+'/3)');
+          try {await delay(pause,undefined,{signal:controller.signal});} catch(interruption) {
+            if(controller.signal.aborted)throw Error('Conformance setup interrupted',{cause:interruption});
+            throw interruption;
+          }
+        }
+      }
       phase='fixture-image-inspect';
       image=await docker('image','inspect',tag,'--format','{{.Id}}');
       env.COST_STACK_FIXTURE=json('stack.json',{codeCache:stackCode??code,image,litestreamBinary});
