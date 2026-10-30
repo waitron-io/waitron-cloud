@@ -71,7 +71,7 @@ visible until its own expiry. When usage is ready first, you can refresh its tot
 without clearing the remaining alert wait. Run
 `node --test apps/portal/test/usage-shared-countdown-browser.test.ts` (D444).
 Usage and alert retry waits both use elapsed time and contribute their remaining
-delay to the shared countdown. Other portal controllers retain their existing
-clock policy and can revive an expired wait after a backward clock correction;
+delay to the shared countdown. Backup catalogue waits also use elapsed time. The
+remaining portal controllers retain their existing clock policy and can revive an expired wait after a backward clock correction;
 that separate issue remains open. Server authority and production metering remain separate
 qualification gates; database suites run in CI while local Docker is unavailable.

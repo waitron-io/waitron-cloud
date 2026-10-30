@@ -429,7 +429,7 @@ See [the boundaries and remaining work](backlog/diagnostic-download-http.md#diag
 
 ## Usage-read transport refusals and retry waits (D434, D436)
 
-**Open.** Fix the separate backward-clock revival of panels other than usage and alerts; server
+**Open.** Fix the separate backward-clock revival of panels other than usage, alerts and backup catalogues; server
 authority and production metering remain unqualified.
 See [the boundaries and remaining work](backlog/usage-metering.md#usage-read-transport-refusals-and-retry-waits-d434-d436).
 
@@ -3222,8 +3222,9 @@ See [the boundaries and remaining work](backlog/backup-recovery-http.md#backup-c
 
 ## Backup catalogue transport refusals and retry waits (D426)
 
-**Open.** Qualify server permissions and genuine restore or recovery; these client
-checks grant no activation or stop-proof authority.
+**Open.** Qualify server permissions and genuine restore or recovery. Catalogue retry
+waits now use elapsed time through clock corrections, including HTTP-date and
+body-reading time; these client checks grant no activation or stop-proof authority.
 See [the boundaries and remaining work](backlog/backup-recovery-http.md#backup-catalogue-transport-refusals-and-retry-waits-d426).
 
 ## Storage archive extraction command refusals (D453)

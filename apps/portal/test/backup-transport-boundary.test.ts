@@ -121,6 +121,7 @@ for (const entry of [
     const f = fixture(t);
     let now = Date.parse(stamp);
     t.mock.method(Date, 'now', () => now);
+    t.mock.method(performance, 'now', () => now - Date.parse(stamp));
     f.replies.push({body: page});
     await f.controller.open(venueId);
     f.controller.select(pointId);
