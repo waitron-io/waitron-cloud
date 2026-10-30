@@ -173,7 +173,7 @@ test('venue remote export rechecks original installation binding after a venue w
   await holder.query('BEGIN');await holder.query('SELECT id FROM venues WHERE id=$1 FOR NO KEY UPDATE',[f.venues[1]]);
   const pid=(await holder.query('SELECT pg_backend_pid() AS pid')).rows[0].pid;let settled=false;
   pending=f.remote.manifest(f.source).finally(()=>{settled=true;});void pending.catch(()=>{});await waitForVenue(f,pid,()=>settled);
-  await holder.query('UPDATE installations SET superseded_by=$2 WHERE id=$1',[f.ids[1],f.ids[0]]);
+  await holder.query('UPDATE installations SET superseded_by=$2,revoked_at=clock_timestamp() WHERE id=$1',[f.ids[1],f.ids[0]]);
   await holder.query('UPDATE installations SET venue_id=$2 WHERE id=$1',[f.ids[0],f.venues[1]]);
   await holder.query('COMMIT');assert.deepEqual((await pending as {routes:unknown[]}).routes,[]);
  }finally{await holder.query('ROLLBACK');await pending?.catch(()=>{});holder.release();await f.close();}
