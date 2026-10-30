@@ -19,7 +19,7 @@ export interface InstallationView {
   services:{service:Service|'content_translation';state:State;configuration:Record<string,unknown>;health:Health;failure:Failure|null;observedAt:string|null}[];
   lease?:SignedEnvelope;canRevoke?:boolean;
 }
-interface Row {id:string;venue_id:string;organisation_id:string;public_key:string;revoked_at:Date|null;configuration_revision:number;environment:'test'|'production'}
+interface Row {id:string;venue_id:string;organisation_id:string;public_key:string;revoked_at:Date|null;superseded_by:string|null;configuration_revision:number;environment:'test'|'production'}
 interface Report {revision:number;observedAt:number;services:{service:Service;health:Health;failure:Failure|null}[]}
 function fail(code:InstallationError['code']):never {throw new InstallationError(code);}
 function object(value:unknown,keys:string[]):value is Record<string,unknown> {
@@ -68,8 +68,11 @@ async function installationPlan(client:PoolClient,venueId:string,mode:PlanMode) 
   }
   catch(error){if(error instanceof Error && error.message==='permission_denied')fail('permission_denied');throw error;}
 }
+function paidInstallationPlan(plan:string,mode:PlanMode):boolean {
+  return mode==='test-venue-levels'?(plan==='connected'||plan==='hosted'):plan==='paid';
+}
 function maskPlan(result:InstallationView,plan:string,mode:PlanMode):InstallationView {
-  if(mode==='test-free-paid' && plan!=='paid')for(const s of result.services)if(s.service!=='content_translation') {
+  if((mode==='test-free-paid'||mode==='test-venue-levels')&&!paidInstallationPlan(plan,mode))for(const s of result.services)if(mode==='test-venue-levels'||s.service!=='content_translation') {
     s.state='unconfigured';s.configuration={};s.health='unknown';s.failure=null;s.observedAt=null;
   }
   return result;
@@ -147,7 +150,7 @@ export class InstallationStore {
     return transaction(this.#pool,async client=>{
       const initial=(await client.query('SELECT venue_id FROM installations WHERE id=$1',[id])).rows[0];if(!initial)fail('unavailable');
       const plan=await installationPlan(client,initial.venue_id,this.#planMode);
-      if(plan!=='paid')fail('permission_denied');
+      if(!paidInstallationPlan(plan,this.#planMode))fail('permission_denied');
       const row=await lock(client,id);if(row.venue_id!==initial.venue_id)fail('conflict');if(row.revoked_at)fail('revoked');if(row.configuration_revision!==expectedRevision)fail('conflict');
       for(const s of services)await client.query('UPDATE installation_services SET state=$3,configuration=$4 WHERE installation_id=$1 AND service=$2',[id,s.service,s.state,s.configuration]);
       await client.query('UPDATE installations SET configuration_revision=configuration_revision+1 WHERE id=$1',[id]);return view(client,id);
@@ -158,9 +161,29 @@ export class InstallationStore {
       const session=await resolveSession(client,token,{touch:false});
       const memberships=await client.query('SELECT organisation_id,is_owner FROM organisation_memberships WHERE account_id=$1 FOR SHARE',[session.accountId]);
       if(this.#planMode!=='existing')for(const m of [...memberships.rows].sort((a,b)=>a.organisation_id.localeCompare(b.organisation_id)))await readOrganisationPlan(client,m.organisation_id);
-      const ids=await client.query(`SELECT i.id,v.organisation_id FROM installations i JOIN venues v ON v.id=i.venue_id WHERE v.organisation_id=ANY($1::uuid[]) AND i.superseded_by IS NULL ORDER BY i.id`,[memberships.rows.map(m=>m.organisation_id)]);
+      const ids=await client.query(`SELECT i.id,i.venue_id,v.organisation_id,v.legal_business_id FROM installations i JOIN venues v ON v.id=i.venue_id WHERE v.organisation_id=ANY($1::uuid[]) AND i.superseded_by IS NULL ORDER BY i.id`,[memberships.rows.map(m=>m.organisation_id)]);
+      const venuePlans=new Map<string,string>();
+      if(this.#planMode==='test-venue-levels'){
+        const venueIds=[...new Set(ids.rows.map(i=>i.venue_id as string))];
+        // Expiry may update installations, so the whole captured venue set must be locked first.
+        const locked=await client.query('SELECT id,organisation_id,legal_business_id FROM venues WHERE id=ANY($1::uuid[]) ORDER BY id FOR NO KEY UPDATE',[venueIds]);
+        for(const i of ids.rows){
+          const venue=locked.rows.find(v=>v.id===i.venue_id);
+          if(!venue||venue.organisation_id!==i.organisation_id||venue.legal_business_id!==i.legal_business_id)fail('permission_denied');
+        }
+        for(const venueId of venueIds)venuePlans.set(venueId,await installationPlan(client,venueId,this.#planMode));
+      }
       const result:InstallationView[]=[];
-      for(const i of ids.rows){const plan=await installationPlan(client,(await client.query('SELECT venue_id FROM installations WHERE id=$1',[i.id])).rows[0].venue_id,this.#planMode);const v=maskPlan(await view(client,i.id),plan,this.#planMode);v.canRevoke=memberships.rows.find(m=>m.organisation_id===i.organisation_id).is_owner;
+      for(const i of ids.rows){
+        let plan:string;
+        if(this.#planMode==='test-venue-levels'){
+          const row=await lock(client,i.id);
+          if(row.superseded_by)continue;
+          plan=venuePlans.get(i.venue_id)!;
+        }else plan=await installationPlan(client,(await client.query('SELECT venue_id FROM installations WHERE id=$1',[i.id])).rows[0].venue_id,this.#planMode);
+        const v=await view(client,i.id);
+        if(this.#planMode==='test-venue-levels'&&(v.venueId!==i.venue_id||v.organisationId!==i.organisation_id||v.legalBusinessId!==i.legal_business_id))fail('permission_denied');
+        maskPlan(v,plan,this.#planMode);v.canRevoke=memberships.rows.find(m=>m.organisation_id===i.organisation_id).is_owner;
         // Provisioning values may contain adapter authority; account screens receive status only.
         for(const s of v.services)s.configuration={};result.push(v);}
       await resolveSession(client,token,{touch:false});return result;
