@@ -110,6 +110,13 @@ separate qualification gates.
 
 ## Worker scheduling deadlines and polling failures (D468)
 
+Run `node --test packages/registration/test/worker-loop-callback-refusals.test.ts`
+to check immediate scheduling and polling throws at two and 32 slots. Pending
+reporting prevents claims and retry waits; successful reporting still waits before
+retrying. A rejected reporter terminates with its original error while the worker
+signal remains live. Without a reporter, the original callback error propagates.
+Real database failures and production shutdown remain separate gates.
+
 Run `node --test packages/registration/test/worker-loop-timing.test.ts` to
 check that scheduling starts its next interval after completion and polling meets
 the next deadline. Polling failures retain their original cause, report before
