@@ -194,6 +194,12 @@ export class RegistrationStore {
       return await this.#request(input, async (client, row, binding) => {
         if (!row.local_receipt_id || !row.cloud_account_id) throw new RegistrationError('approval_required');
         if (row.result) {
+          // Replays join the same policy order before touching a completed installation.
+          await client.query('SELECT id FROM organisations WHERE id=$1 FOR SHARE', [binding.organisationId]);
+          const venue = await client.query(`SELECT id FROM venues WHERE id=$1 AND organisation_id=$2
+            AND legal_business_id=$3 AND local_venue_id=$4 AND environment=$5 FOR NO KEY UPDATE`,
+          [row.result.venueId, binding.organisationId, binding.legalBusinessId, binding.localVenueId, binding.environment]);
+          if (!venue.rowCount) throw new RegistrationError('registration_conflict');
           const active = await client.query('SELECT id FROM installations WHERE id = $1 AND revoked_at IS NULL FOR SHARE',
             [row.result.installationId]);
           if (!active.rowCount) throw new RegistrationError('installation_unavailable');
@@ -202,6 +208,7 @@ export class RegistrationStore {
         // Hold permission rows until commit so revocation cannot commit between checking and linking.
         await requirePermission(client, row.cloud_account_id, binding.organisationId);
         await requireUnexpired(client, binding);
+        await client.query('SELECT id FROM organisations WHERE id=$1 FOR SHARE', [binding.organisationId]);
         await client.query(`INSERT INTO venues (id, organisation_id, legal_business_id, local_venue_id, environment)
           VALUES ($1, $2, $3, $4, $5) ON CONFLICT (environment, local_venue_id) DO NOTHING`,
         [randomUUID(), binding.organisationId, binding.legalBusinessId, binding.localVenueId, binding.environment]);

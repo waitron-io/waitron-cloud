@@ -22,9 +22,9 @@ async function lock(client:PoolClient,id:string):Promise<Row> {
   const row=(await client.query<Row>('SELECT * FROM pairing_requests WHERE id=$1 FOR UPDATE',[id])).rows[0];
   if(!row)throw new PairingError('pairing_unavailable');return row;
 }
-async function available(client:PoolClient,row:Row) {
+async function available(client:PoolClient,row:Row,checkInstallation=true) {
   if(row.result) {
-    if(!(await client.query('SELECT id FROM installations WHERE id=$1 AND revoked_at IS NULL FOR SHARE',[row.result.installationId])).rowCount)throw new PairingError('pairing_unavailable');
+    if(checkInstallation&&!(await client.query('SELECT id FROM installations WHERE id=$1 AND revoked_at IS NULL FOR SHARE',[row.result.installationId])).rowCount)throw new PairingError('pairing_unavailable');
   }else if(row.failed_codes>=5||!(await client.query('SELECT expires_at>clock_timestamp() AS valid FROM pairing_requests WHERE id=$1',[row.id])).rows[0]?.valid)throw new PairingError('pairing_unavailable');
 }
 async function view(client:PoolClient,row:Row):Promise<PairingView> {
@@ -100,10 +100,18 @@ export class PairingStore {
   approve(id:string,code:string,org:string,business:string,token:string,csrf:string){return this.#browser(id,code,token,csrf,{org,business});}
   async complete(c:PairingClaims):Promise<PairingView> {
     return transaction(this.#pool,async client=>{
-      const row=await lock(client,c.requestId);machineBinding(row,c);await available(client,row);
+      const row=await lock(client,c.requestId);machineBinding(row,c);await available(client,row,false);
       if(!row.cloud_account_id)throw new PairingError('approval_required');
       if(row.organisation_id!==c.organisationId||row.legal_business_id!==c.legalBusinessId)throw new PairingError('binding_conflict');
-      if(row.result)return view(client,row);
+      if(row.result){
+        // Completion never holds an installation while waiting for its policy parents.
+        await client.query('SELECT id FROM organisations WHERE id=$1 FOR SHARE',[row.organisation_id]);
+        const venue=await client.query(`SELECT id FROM venues WHERE id=$1 AND organisation_id=$2
+          AND legal_business_id=$3 AND local_venue_id=$4 AND environment=$5 FOR NO KEY UPDATE`,
+        [row.result.venueId,row.organisation_id,row.legal_business_id,row.local_venue_id,row.environment]);
+        if(!venue.rowCount)throw new PairingError('pairing_unavailable');
+        await available(client,row);return view(client,row);
+      }
       await permission(client,row.cloud_account_id,c.organisationId,c.legalBusinessId);
       await available(client,row);
       const binding:ConnectionBinding={operationId:row.id,installationKey:row.public_key,localVenueId:row.local_venue_id,environment:row.environment,organisationId:c.organisationId,legalBusinessId:c.legalBusinessId};
