@@ -14,7 +14,7 @@ test('managed stream venue guards detect independent omissions',{timeout:240000}
  try{
   await exec('git',['clone','--quiet','--no-hardlinks',root,candidate],{timeout:10000});
   await exec('pnpm',['install','--frozen-lockfile'],{cwd:candidate,timeout:20000});
-  const path=join(candidate,'packages/backups/src/managed-streams.ts'),original=await readFile(path,'utf8');
+  const streamPath='packages/backups/src/managed-streams.ts',permissionPath='packages/registration/src/venue-service-permissions.ts';
   const cases=[
    {name:'post-policy installation scope',needle:"if (mode === 'test-venue-levels' && row.venue_id !== initial.venue_id) backupFail('permission_denied');",replacement:'',
     pattern:'venue stream policy wait rechecks installation scope before provisioning',count:1,expected:'sibling'},
@@ -24,6 +24,14 @@ test('managed stream venue guards detect independent omissions',{timeout:240000}
     pattern:'venue stream configure wait rejects changed (endpoint|bucket|region) without publishing',count:3,expected:'Missing expected rejection'},
    {name:'observation destination after wait',needle:"if (this.#planMode === 'test-venue-levels' &&\n          (row.venue_id !== initial.venue_id || row.endpoint !== initial.endpoint ||\n           row.bucket !== initial.bucket || row.region !== initial.region)) backupFail('conflict');",replacement:'',
     pattern:'venue stream observe wait rejects changed (endpoint|bucket|region) without publishing',count:3,expected:'Missing expected rejection'},
+   {name:'stream reprovision after trial gaps',needle:"const cleared=(this.#planMode==='test-free-paid'||this.#planMode==='test-venue-levels') && existing",replacement:"const cleared=this.#planMode==='test-free-paid' && existing",
+    pattern:'venue stream explicit reprovision after .* preserves recovery and its neighbour',count:4,expected:'backup.conflict'},
+   {name:'stream expiry read clears setup',path:permissionPath,needle:'expired=elapsed(old,day);',replacement:'expired=false;',
+    pattern:'venue stream explicit reprovision after expiry-read preserves recovery and its neighbour',count:1,expected:'continuous_backup'},
+   {name:'stream late extension clears setup',path:permissionPath,needle:'expired=old?elapsed(old,day):false;',replacement:'expired=false;',
+    pattern:'venue stream explicit reprovision after late-extension preserves recovery and its neighbour',count:1,expected:'continuous_backup'},
+   {name:'stream unobserved gap clears setup',path:permissionPath,needle:'if(advance)await installations(client,venueId,expired||window===null);',replacement:'if(advance)await installations(client,venueId,window===null);',
+    pattern:'venue stream explicit reprovision after future-gap preserves recovery and its neighbour',count:1,expected:'continuous_backup'},
   ];
   const env={...process.env};delete env.NODE_TEST_CONTEXT;
   async function run(c:typeof cases[number]){
@@ -31,6 +39,7 @@ test('managed stream venue guards detect independent omissions',{timeout:240000}
     .then(r=>({code:0,output:r.stdout+r.stderr}),e=>({code:e.code,output:e.stdout+e.stderr}));
   }
   for(const c of cases){
+   const path=join(candidate,c.path??streamPath),original=await readFile(path,'utf8');
    assert.equal(original.split(c.needle).length,2,c.name+' must target one guard');
    const before=await run(c);assert.equal(before.code,0,before.output);assert.match(before.output,new RegExp('# pass '+c.count+'\\b'));assert.match(before.output,/# fail 0\b/);
    try{

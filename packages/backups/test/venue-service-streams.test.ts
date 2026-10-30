@@ -3,7 +3,7 @@ import {generateKeyPairSync,randomBytes,randomUUID,sign} from 'node:crypto';
 import {test} from 'node:test';
 import {setTimeout as delay} from 'node:timers/promises';
 import {transaction} from '@waitron-cloud/registration';
-import {venueServiceFixture,set,trial,event} from '../../registration/test/fixtures/venue-service.ts';
+import {venueServiceFixture,set,trial,event,dayOffset,read,rows} from '../../registration/test/fixtures/venue-service.ts';
 import {BackupCatalogue} from '../src/catalogue.ts';
 import {BackupKeyVault} from '../src/keys.ts';
 import {ManagedStreams,type ManagedStreamAuthority,type ManagedStreamProvision} from '../src/managed-streams.ts';
@@ -23,7 +23,7 @@ async function fixture(){
    async read(reference,at,path){calls.read.push(reference+':'+at.bucket+':'+path);await readWait?.();const bytes=objects.get(path);if(!bytes)throw Error('NoSuchKey');return bytes;},
   };
   const catalogue=new BackupCatalogue(f.pool,vault,()=>({async read(){throw Error('unused');},async put(){throw Error('unused');},async remove(){}}),'test-venue-levels');
-  const streams=new ManagedStreams(f.pool,vault,authority,'test-venue-levels');
+  const streams=new ManagedStreams(f.pool,vault,authority,'test-venue-levels'),legacyStreams=new ManagedStreams(f.pool,vault,authority);
   async function revision(){return Number((await f.pool.query('SELECT configuration_revision FROM installations WHERE id=$1',[installation])).rows[0].configuration_revision);}
   async function configure(){return streams.configure(installation,await revision(),input);}
   function pointer(){
@@ -32,7 +32,7 @@ async function fixture(){
    objects.set(`streams/${f.venues[0]}/venues/${input.localVenueId}/current.json`,Buffer.from(JSON.stringify({body,signature:sign(null,Buffer.from(message),key.privateKey).toString('base64')})));
    return body;
   }
-  return {...f,installation,vault,location,input,objects,calls,catalogue,streams,revision,configure,pointer,
+  return {...f,installation,vault,location,input,objects,calls,catalogue,streams,legacyStreams,revision,configure,pointer,
    blockProvision(hook:()=>Promise<void>){provisionWait=hook;},blockRead(hook:()=>Promise<void>){readWait=hook;},
    replaceWriter(){provision={writerReference:'writer-two',readerReference:'reader-one',writerCredentials:{accessKeyId:'synthetic-access-two',secretAccessKey:'synthetic-secret-two'}};},
   };
@@ -83,6 +83,54 @@ test('venue stream explicit reprovision preserves keys reader and observed data'
   assert.equal(row.reader_reference,'reader-one');assert.equal(row.writer_reference,'writer-two');assert.equal(row.generation,observed.generation);assert.equal(row.recoverable_at.toISOString(),observed.recoverableAt);
   assert.deepEqual((await state(f)).backup_key_versions,before.backup_key_versions);
   assert.deepEqual(await f.streams.configure(f.installation,revision,f.input),next);assert.equal(await f.revision(),revision+1);
+ }finally{await f.close();}
+});
+
+// An uncovered day invalidates setup even when no reader or reconciler runs before a later trial starts.
+for(const gap of ['expiry-read','late-extension','end-then-hosted','future-gap'] as const)
+test(`venue stream explicit reprovision after ${gap} preserves recovery and its neighbour`,async()=>{
+ const f=await fixture();try{
+  const oldEnd=gap==='future-gap'?dayOffset(f.today,-1):f.today;
+  await trial(f,'connected',dayOffset(oldEnd,-30));
+  if(gap==='future-gap')await trial(f,'hosted');
+  await set(f,'connected',f.venues[1]);const neighbour=await rows(f,f.venues[1]);
+  // Legacy admission reconstructs the earlier stream without reading or synchronising the venue's expired grant.
+  const legacyCatalogue=new BackupCatalogue(f.pool,f.vault,()=>({async read(){throw Error('unused');},async put(){throw Error('unused');},async remove(){}}));
+  await legacyCatalogue.provision(f.installation,f.location);
+  const requested=await f.revision(),first=await f.legacyStreams.configure(f.installation,requested,f.input);
+  f.pointer();const observed=await f.legacyStreams.observe(f.installation,first.configurationRevision),before=await state(f),objects=[...f.objects];
+  await f.pool.query('UPDATE billing_service_authority SET setup_grant_active=true,setup_grant_until=$1 WHERE venue_id=$2',[oldEnd,f.venues[0]]);
+  if(gap==='late-extension')await f.store.execute(f.scope,event(),{type:'extend_trial',venueId:f.venues[0],level:'connected',expectedEnd:oldEnd});
+  else if(gap==='end-then-hosted'){
+   await f.store.execute(f.scope,event(),{type:'end_trial',venueId:f.venues[0],level:'connected',expectedEnd:oldEnd,outcome:'lapsed'});await trial(f,'hosted');
+  }
+  if(gap==='expiry-read'){
+   assert.equal((await read(f)).level,'registered');
+   for(const s of (await rows(f)).services)if(s.service!=='content_translation'){assert.equal(s.state,'unconfigured',s.service);assert.deepEqual(s.configuration,{});}
+   await assert.rejects(f.configure(),{message:'backup.permission_denied'});
+   await assert.rejects(f.streams.observe(f.installation,first.configurationRevision),{message:'backup.permission_denied'});
+   await set(f);
+  }
+  const permission=await read(f);assert.equal(permission.level,gap==='end-then-hosted'||gap==='future-gap'?'hosted':'connected');
+  for(const s of (await rows(f)).services)if(s.service!=='content_translation'){
+   assert.equal(s.state,'unconfigured',s.service);assert.deepEqual(s.configuration,{});
+  }
+  assert.deepEqual(await state(f),before);assert.deepEqual([...f.objects],objects);
+  await assert.rejects(f.streams.configure(f.installation,requested,f.input),{message:'backup.conflict'});
+  await assert.rejects(f.streams.observe(f.installation,first.configurationRevision),{message:'backup.conflict'});
+  assert.deepEqual(await state(f),before);
+  await f.catalogue.provision(f.installation,f.location);f.replaceWriter();const revision=await f.revision();
+  await assert.rejects(f.streams.configure(f.installation,revision,{...f.input,sourceNodeId:randomUUID()}),{message:'backup.conflict'});
+  const next=await f.configure();assert.equal(next.configurationRevision,revision+1);assert.equal(next.recoveryKey,first.recoveryKey);
+  assert.equal(next.bucket.accessKeyId,'synthetic-access-two');assert.equal(next.bucket.secretAccessKey,'synthetic-secret-two');
+  assert.equal(next.bucket.prefix,first.bucket.prefix);assert.equal(next.localVenueId,first.localVenueId);assert.equal(next.sourceNodeId,first.sourceNodeId);
+  const saved=(await f.pool.query('SELECT * FROM backup_managed_streams WHERE venue_id=$1',[f.venues[0]])).rows[0];
+  assert.equal(saved.reader_reference,'reader-one');assert.equal(saved.writer_reference,'writer-two');assert.equal(saved.generation,observed.generation);
+  assert.equal(saved.recoverable_at.toISOString(),observed.recoverableAt);assert.equal(saved.observed_at.toISOString(),observed.checkedAt);
+  assert.deepEqual((await state(f)).backup_key_versions,before.backup_key_versions);assert.deepEqual([...f.objects],objects);
+  assert.deepEqual(await f.streams.configure(f.installation,revision,f.input),next);assert.equal(await f.revision(),revision+1);
+  const after=await f.streams.observe(f.installation,next.configurationRevision);assert.equal(after.generation,observed.generation);assert.equal(after.readerReference,'reader-one');
+  assert.deepEqual(await rows(f,f.venues[1]),neighbour);
  }finally{await f.close();}
 });
 
