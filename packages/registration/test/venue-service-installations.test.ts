@@ -18,6 +18,8 @@ async function fixture(){
   const issuedAt=Date.now(),lease=issuer.issue({origin,leaseId:randomUUID(),installationId:installation,venueId:f.venues[0]!,environment:'test',publicKey,issuedAt,expiresAt:issuedAt+3600000});
   const account=randomUUID();await f.pool.query('INSERT INTO cloud_accounts(id) VALUES($1)',[account]);
   await f.pool.query('INSERT INTO cloud_credentials(account_id,email,email_verified_at) VALUES($1,$2,clock_timestamp())',[account,account+'@example.test']);
+  // This account owns test venues; production refusal is qualified independently.
+  await f.pool.query('UPDATE venues SET organisation_id=$2,legal_business_id=$3 WHERE id=$1',[f.production,f.foreign.organisationId,f.foreign.legalBusinessId]);
   await f.pool.query('INSERT INTO organisation_memberships(account_id,organisation_id,is_owner) VALUES($1,$2,true)',[account,f.scope.organisationId]);
   const session=await transaction(f.pool,c=>createSession(c,account));
   const store=new InstallationStore(f.pool,issuer,origin,undefined,'test-venue-levels'),legacy=new InstallationStore(f.pool,issuer,origin);
