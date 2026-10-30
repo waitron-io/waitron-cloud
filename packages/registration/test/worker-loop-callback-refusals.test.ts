@@ -59,6 +59,8 @@ for(const slots of [2,32])for(const phase of ['schedule','poll'] as const){
         assert.deepEqual(schedules,[0]);assert.deepEqual(reports,[failure]);
         if(outcome==='report-fails'){
           reportDone.reject(reportFailure);
+          await turn();
+          assert.equal(finished,true,'reporter rejection must terminate the live worker');
           const result=await running;
           assert.ok('error' in result);assert.equal(result.error,reportFailure);
           assert.equal(stop.signal.aborted,false,'reporter rejection must terminate without cancellation');
