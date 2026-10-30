@@ -3436,8 +3436,8 @@ D499 reproduces the direct `EADDRINUSE` that can interrupt the S3 collision test
 before either child starts: another listener takes the identity probe's released
 port. Direct HTTPS allocation removes that race without adding retries. The S3
 refusal assertions remain intact, and unexpected failures now retain their
-original stack. The historical CI refusal lacks that stack, so its exact bind
-remains unproved. Run `node --test deploy/test-cloud/storage-s3-grpc.test.mjs`
+original error and stack. A Node socket stack may omit the calling bind;
+listener-stage attribution and the historical CI bind remain unproved. Run `node --test deploy/test-cloud/storage-s3-grpc.test.mjs`
 for the deterministic handoff regression and bound-identity configuration checks.
 The three TLS-refusal modes require zero TCP probes after the owner-approved
 count change; their TLS error, cleanup and competing-listener checks remain.
