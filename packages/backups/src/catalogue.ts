@@ -1,6 +1,6 @@
 import {retentionExpirySql} from './retention.ts';
 import type { Pool, PoolClient } from "pg";
-import { readVenuePlan, type PlanMode, transaction } from "@waitron-cloud/registration";
+import { readVenuePlan, requireVenueService, type PlanMode, transaction } from "@waitron-cloud/registration";
 import { BackupKeyVault, type BackupKeys } from "./keys.ts";
 import {
   validateLocation,
@@ -68,7 +68,10 @@ export function backupFail(code: string): never {
   throw new Error("backup." + code);
 }
 export async function backupPlan(client: PoolClient, venueId: string, mode: PlanMode): Promise<void> {
-  try { if (await readVenuePlan(client, venueId, mode) !== 'paid') backupFail('permission_denied'); }
+  try {
+    if (mode === 'test-venue-levels') return await requireVenueService(client,venueId,'retained_snapshots',mode);
+    if (await readVenuePlan(client, venueId, mode) !== 'paid') backupFail('permission_denied');
+  }
   catch (error) { if (error instanceof Error && error.message === 'permission_denied') backupFail('permission_denied'); throw error; }
 }
 export async function lockVenue(client: PoolClient, id: string) {
