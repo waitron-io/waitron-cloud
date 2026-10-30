@@ -3784,8 +3784,8 @@ recovery request. Late successes and refusals cannot change your current recover
 view, matching code, source, confirmations, pending work, feedback or server wait,
 or start another inspection. Current replies and unchanged selections still work.
 These checks use controlled HTTP replies and leave recovery authority unchanged.
-Delivery waits for D201’s remote-browser reconnect refusal in cost CI; genuine
-local container qualification stays blocked while Docker is down until 3 November.
+The browser readiness repair is qualified separately in D201. PostgreSQL and
+container checks run in CI while local Docker is down until 3 November.
 
 ## Cost-stack isolation command refusal (D152)
 
