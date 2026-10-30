@@ -3489,6 +3489,12 @@ bounded, cache-first image acquisition and permanent-refusal checks; local Docke
 qualification and D135’s current-head CI remain open. See the
 [image acquisition detail](backlog/cost-image-acquisition.md).
 
+A later [Linux CI pull](https://github.com/waitron-io/waitron-cloud/actions/runs/40984997048/job/123833975271)
+of `node:26.11.1-slim` refused authentication before any browser case started.
+The registry or runner-credential cause is unknown. Capture the registry challenge
+and credential selection during a controlled reproduction, preserving the rule
+that authentication refusals stop immediately.
+
 ### Installation renewal accepted during owner revocation
 
 **Open; historical cause unknown.** Capture a diagnostic recurrence and qualify
