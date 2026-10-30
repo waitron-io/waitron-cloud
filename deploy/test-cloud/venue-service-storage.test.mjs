@@ -30,8 +30,10 @@ test('venue storage separates legacy revision one from venue generation one',{ti
  const legacy=await openStorageAuthority(f.options),first=await legacy.provision({...input,policyRevision:1}),old=f.writer(first,input);await old('before');
  assert.equal((await f.state()).version,1);
  const reader=await legacy.reader({...input,reference:first.readerReference});
- const options={...f.options,policyMode:'test-venue-levels',authorizeWriter:async(id,revision,mode)=>id===input.venueId&&revision===1&&(mode===undefined||mode==='test-venue-levels')};
- const venue=await openStorageAuthority(options),next=await venue.provision({...input,policyRevision:1});
+ const options={...f.options,policyMode:'test-venue-levels',authorizeWriter:async()=>true};
+ const venue=await openStorageAuthority(options);
+ await assert.rejects(old('mode-reopen'),denied);
+ const next=await venue.provision({...input,policyRevision:1});
  assert.notEqual(next.writerReference,first.writerReference,'mode equality must be part of writer reuse');
  assert.notEqual(next.writerCredentials.accessKeyId,first.writerCredentials.accessKeyId);
  await assert.rejects(old('equal-revision'),denied);await f.writer(next,input)('new-mode');
@@ -46,6 +48,10 @@ test('venue storage separates legacy revision one from venue generation one',{ti
  await assert.rejects(f.writer(next,input)('legacy-reopen'),denied);await legacy.reconcile();
  await assert.rejects(f.writer(next,input)('old-instance'),denied);
  assert.equal((await legacy.read(first.readerReference,input.location,input.prefix+'before')).toString(),'retained venue body');
+ const venueAgain=await openStorageAuthority(options),current=await venueAgain.provision({...input,policyRevision:1});
+ const legacyAgain=await legacy.provision({...input,policyRevision:1});
+ assert.notEqual(legacyAgain.writerReference,current.writerReference,'a retained legacy instance must rotate the new-mode writer before reuse');
+ await assert.rejects(f.writer(current,input)('legacy-provision'),denied);await f.writer(legacyAgain,input)('fresh-legacy');
 });
 
 // Invalid mode cannot select the ordinary always-allowed adapter or alter private files.
