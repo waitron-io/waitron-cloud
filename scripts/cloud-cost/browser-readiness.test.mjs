@@ -131,7 +131,7 @@ test('browser waits again when an established stream starts reconnecting', async
   const result = await probe(t, state => {
     state.stream().readyState = 1; state.stream().dispatchEvent(new Event('open'));
     state.stream().readyState = 0; state.stream().dispatchEvent(new Event('error'));
-    state.advanceDeadline();
+    state.jobs.push(new Promise(resolve => setImmediate(() => {state.advanceDeadline(); resolve();})));
   });
   assert.equal(result.reloaded, false);
   assert.equal(result.refusal.browserPhase, 'dashboard');
