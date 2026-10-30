@@ -3403,14 +3403,13 @@ See [the boundaries and remaining work](backlog/storage-cache-fixture.md#existin
 
 ## Storage identity-server bind refusals (D456)
 
-A competing listener can take the identity server's port after its probe closes.
-Startup now returns that socket error and removes its private files instead of
-crashing before cleanup. Run
-`node --test scripts/ci-backup-storage-issuer-bind.test.mjs` to check refused and
-successful binds, later setup failure and preservation of another listener.
-Port-probe refusals and identity-server errors after startup still need separate
-qualification. Real store startup and historical failure causes remain separate;
-see [the storage investigation](backlog/storage-cache-fixture.md).
+The identity server binds directly to an OS-assigned port and keeps that socket
+until cleanup. Its discovery response, provider configuration and tokens use the
+bound port, removing the probe-and-rebind race reproduced under D499.
+Run `node --test scripts/ci-backup-storage-issuer-bind.test.mjs` to check real
+bind refusals, later setup failure and preservation of another listener.
+Identity-server errors after startup and historical failure causes remain open;
+see [the storage investigation](backlog/storage-cache-fixture.md#identity-port-allocation-race-d499).
 
 ## Storage TLS material refusals (D455)
 
@@ -3432,6 +3431,41 @@ Retain diagnostics to explain the original read-only-cache rejection; the readin
 and S3 port repairs do not establish its cause. Reproduce an admin-listener bind
 failure and reserve those ports if needed, without retrying unknown ports or other
 child exits. See [the investigation and remaining work](backlog/storage-cache-fixture.md).
+
+D499 reproduces the direct `EADDRINUSE` that can interrupt the S3 collision test
+before either child starts: another listener takes the identity probe's released
+port. Direct HTTPS allocation removes that race without adding retries. The S3
+refusal assertions remain intact, and unexpected failures now retain their
+original error and stack. A Node socket stack may omit the calling bind;
+listener-stage attribution and the historical CI bind remain unproved. Run `node --test deploy/test-cloud/storage-s3-grpc.test.mjs`
+for the deterministic handoff regression and bound-identity configuration checks.
+The three TLS-refusal modes require zero TCP probes after the owner-approved
+count change; their TLS error, cleanup and competing-listener checks remain.
+
+Browser qualification fetches Waitron `e8cfd38ed07bf546f14ad15334e54ee997114c75`,
+which defers the first live stream until the dashboard screen can register its
+subscriptions (Waitron PR #2269). Replay fixtures keep their original commit and
+recorded measurements. Native checks cover separate pins and cleanup of combined
+preparations. The generated browser backend includes the invoice font beside its
+bundle and requests Waitron's supported preproduction allocation. Waitron generates
+the signed evidence and checks operation authority; its fiscal implementation,
+guards and expected results are unchanged. A native SQLite check starts that actual
+bundle, verifies its committed generated allocation and exercises graceful shutdown
+through the current management API. The combined-preparation check also verifies
+that the runtime font reaches the browser fixture manifest. The sign-out journey
+opens the account menu's explicit trigger: the current menu also contains hidden
+theme buttons, so choosing its first descendant button times out. Native Chromium
+reproduces that ordering with the pinned components and opens the menu with the
+explicit trigger. The native backend path check also covers a `/tmp` parent,
+which otherwise rewrites its own newly inserted input path on Linux. Signed-in
+native requests reproduce missing theme and disk-stop routes as HTTP 404. The
+fixture now mounts the pinned real handlers and includes the UI-core package
+metadata and theme tokens beside its runtime. Browser-only exports and assets
+leave historical replay inputs unchanged. The native check requires both routes
+to return HTTP 200 after real sign-in; browser accounting checks stay intact. Run
+`pnpm test:cloud-cost:conformance --only remote-browser-conformance.test.mjs`
+for the native startup check and all seven browser journeys. The historical Linux
+bind failure and original reconnect cause remain unproved.
 
 ## Diagnostic permission test lock observation (D198)
 

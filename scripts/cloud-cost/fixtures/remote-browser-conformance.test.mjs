@@ -2,6 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, realpathSync, mkdirSync, writeFileSync, readFileSync, cpSync, rmSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { generateKeyPairSync, randomBytes, randomUUID, createHash } from 'node:crypto';
@@ -26,11 +27,63 @@ const wire = id => {
 };
 const difference = (before, after) => ({ received: after.received - before.received, sent: after.sent - before.sent });
 
+// Missing runtime assets or allocation authority must fail before any gateway is started.
+test('pinned browser backend provisions a generated preproduction allocation', { timeout: 30000 }, () => {
+  const fixture = JSON.parse(readFileSync(process.env.COST_BROWSER_FIXTURE, 'utf8'));
+  const root = mkdtempSync(join(tmpdir(), 'cloud-browser-native-'));
+  try {
+    const input = join(root, 'input'), state = join(root, 'state');
+    mkdirSync(input); mkdirSync(state, { mode: 0o700 });
+    cpSync(fixture.runtime, join(input, 'runtime.mjs'));
+    cpSync(fixture.runtimeAssets, join(input, 'assets'), { recursive: true });
+    cpSync(fixture.runtimePackages, join(input, 'node_modules'), { recursive: true });
+    cpSync(fixture.migrations, join(input, 'migrations'), { recursive: true });
+    mkdirSync(join(input, 'dashboard')); writeFileSync(join(input, 'dashboard/index.html'), '<title>Generated</title>');
+    const certificate = spawnSync('openssl', ['req', '-x509', '-newkey', 'rsa:2048', '-nodes',
+      '-keyout', join(input, 'staff.key'), '-out', join(input, 'staff.pem'), '-days', '1', '-subj', '/CN=staff.generated.example.test'],
+    { encoding: 'utf8', timeout: 10000 });
+    assert.equal(certificate.status, 0, certificate.stderr);
+    const backend = readFileSync(new URL('./remote-browser-backend.mjs', import.meta.url), 'utf8')
+      .replace("await import('/app/src/peer-cli.ts');", '')
+      .replaceAll("'/tmp", "'" + state).replaceAll("'/input", "'" + input)
+      .replace('server.listen(8443', 'server.listen(0');
+    writeFileSync(join(root, 'backend.mjs'), backend + `
+const allocations = store.venue.all(r.sql.raw('select environment, allocation_key, approval from fiscal_allocations'));
+console.log('GENERATED_ALLOCATION=' + JSON.stringify(allocations.map(row => ({
+  environment: row.environment, generated: row.allocation_key.startsWith('throwaway-'),
+  source: JSON.parse(row.approval).sourceId,
+}))));
+const signedIn = await app.request('/management-api/session', { method: 'POST',
+  headers: { 'content-type': 'application/json' },
+  body: JSON.stringify({ email: 'owner@example.test', password: 'Generated local password' }) });
+const cookie = signedIn.headers.get('set-cookie')?.split(';')[0];
+const routes = await Promise.all(['/api/theme', '/management-api/disk-stop'].map(async path => {
+  const response = await app.request(path, { headers: { cookie: cookie ?? '' } });
+  return { path, status: response.status };
+}));
+console.log('GENERATED_ROUTES=' + JSON.stringify({ login: signedIn.status, routes }));
+process.kill(process.pid, 'SIGTERM');
+`);
+    const result = spawnSync(process.execPath, [join(root, 'backend.mjs')], { encoding: 'utf8', timeout: 20000 });
+    assert.equal(result.status, 0, result.stderr);
+    const record = result.stdout.split('\n').find(line => line.startsWith('GENERATED_ALLOCATION='));
+    assert.ok(record, result.stdout);
+    assert.deepEqual(JSON.parse(record.slice('GENERATED_ALLOCATION='.length)), [
+      { environment: 'preproduction', generated: true, source: 'throwaway-preproduction' },
+    ]);
+    const routes = result.stdout.split('\n').find(line => line.startsWith('GENERATED_ROUTES='));
+    assert.ok(routes, result.stdout);
+    assert.deepEqual(JSON.parse(routes.slice('GENERATED_ROUTES='.length)), { login: 200, routes: [
+      { path: '/api/theme', status: 200 }, { path: '/management-api/disk-stop', status: 200 },
+    ] });
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
 for (const fault of ['none', 'extra-config', 'missing-cookie', 'missing-bundle', 'late-asset-error', 'page-error', 'outside-request'])
 test('pinnedDashboardBrowserLoadsAssetsAuthenticatesReconnectsAndSignsOut_' + fault, { timeout: 120000 }, async t => {
   assert.equal(typeof journey.measureRemoteBrowser, 'function', 'measure genuine owner and public routes');
   const fixture = JSON.parse(readFileSync(process.env.COST_BROWSER_FIXTURE, 'utf8'));
-  assert.equal(fixture.revision, 'fbadd15785464e59747e697c11048bfbc6e4938f');
+  assert.equal(fixture.revision, 'e8cfd38ed07bf546f14ad15334e54ee997114c75');
   assert.equal(createHash('sha256').update(readFileSync(fixture.runtime)).digest('hex'), fixture.runtimeSha256);
   const root = realpathSync(mkdtempSync(join(tmpdir(), 'cloud-cost-browser-'))), owner = randomUUID();
   const label = 'io.waitron.cloud-cost.remote-browser=' + owner, network = 'cost-remote-' + owner;
@@ -98,6 +151,8 @@ test('pinnedDashboardBrowserLoadsAssetsAuthenticatesReconnectsAndSignsOut_' + fa
     }
     secret('peer/backend.mjs', backend);
     cpSync(fixture.runtime, join(root, 'peer/runtime.mjs'));
+    cpSync(fixture.runtimeAssets, join(root, 'peer/assets'), { recursive: true });
+    cpSync(fixture.runtimePackages, join(root, 'peer/node_modules'), { recursive: true });
     cpSync(fixture.migrations, join(root, 'peer/migrations'), { recursive: true });
     cpSync(fixture.assets, join(root, 'peer/dashboard'), { recursive: true });
     if (fault === 'missing-bundle') rmSync(join(root, 'peer/dashboard/assets'), {recursive:true});

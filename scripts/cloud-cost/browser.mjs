@@ -135,7 +135,7 @@ export async function measureRemoteBrowser(options) {
     await drain(true);
     result.actions.push('browser-reconnect');
     phase = 'logout';
-    await page.locator('[data-test=account-menu] button').first().click();
+    await page.locator('[data-test=account-menu] button[part=trigger]').click();
     await page.locator('[data-test=logout]').click();
     await login.locator('wt-input[name=email] input').waitFor(); result.actions.push('sign-out');
     await drain(true); await page.goto('about:blank'); await drain(true);

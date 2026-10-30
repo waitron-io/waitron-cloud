@@ -67,13 +67,12 @@ const servers = [], heldPorts = [];
 let root, issuer, original, allocations = 0, calls = 0, issuerPort;
 fs.mkdtemp = async (...args) => { allocations++; root = await allocate(...args); return root; };
 // Only the selected reservation changes destination; listen and its socket error
-// remain real. The first TCP server is the separate identity-port probe.
+// remain real. The identity server binds its own socket directly.
 net.createServer = (...args) => {
   const server = tcpServer(...args);
   server.unref();
   servers.push(server);
-  const index = servers.length - 1;
-  if (index === 0) return server;
+  const index = servers.length;
   const listen = server.listen;
   server.listen = function(port, host, callback) {
     calls++;

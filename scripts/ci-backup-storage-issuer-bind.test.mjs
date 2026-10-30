@@ -71,20 +71,10 @@ fs.writeFile = async (path, ...args) => {
   }
   return write(path, ...args);
 };
-// Occupy exactly the port released by the real probe, before the HTTPS bind.
-net.createServer = (...args) => {
-  const server = tcpServer(...args);
-  const close = server.close.bind(server);
-  server.close = callback => {
-    const port = server.address().port;
-    return close(() => {
-      competitor = tcpServer(socket => socket.end("competing listener"));
-      competitor.listen(mode === "occupied" ? port : 0, "127.0.0.1", callback);
-      competitor.unref();
-    });
-  };
-  return server;
-};
+// A real occupied socket refuses the actual HTTPS bind, without a separate probe.
+competitor = tcpServer(socket => socket.end("competing listener"));
+await new Promise(resolve => competitor.listen(0, "127.0.0.1", resolve));
+competitor.unref();
 https.createServer = (...args) => {
   issuer = tlsServer(...args);
   const emit = issuer.emit;
@@ -93,7 +83,10 @@ https.createServer = (...args) => {
     return emit.call(this, event, ...values);
   };
   const listen = issuer.listen;
-  issuer.listen = function(...values) { listeners++; return listen.apply(this, values); };
+  issuer.listen = function(port, host, callback) {
+    listeners++;
+    return listen.call(this, mode === "occupied" ? competitor.address().port : port, host, callback);
+  };
   return issuer;
 };
 childProcess.spawn = () => assert.fail("identity-server startup refusal must precede store startup");
