@@ -21,24 +21,25 @@ export async function requireRemotePlan(client:PoolClient,id:string,mode:PlanMod
 // a concurrently created first placement waits for the next export. A cell export
 // includes incoming moves, whose active placement still belongs to another cell.
 type EligibilityScope={installationIds?:string[];lock?:'SHARE'|'UPDATE'|false};
-export async function legacyRemoteExclusion(client:PoolClient,mode:PlanMode):Promise<string>{
+export async function legacyRemoteExclusion(client:PoolClient,mode:PlanMode,knownInstalled?:boolean):Promise<string>{
  if(mode!=='test-free-paid')return '';
- const installed=(await client.query(`SELECT to_regclass('billing_service_authority') IS NOT NULL
+ const installed=knownInstalled??(await client.query(`SELECT to_regclass('billing_service_authority') IS NOT NULL
   OR EXISTS(SELECT 1 FROM schema_migrations WHERE name='046_venue_service_authority.sql') AS installed`)).rows[0].installed;
  return installed?' AND NOT EXISTS(SELECT 1 FROM billing_service_authority a WHERE a.venue_id=v.id)':'';
 }
 export async function eligibleRemoteInstallations(client:PoolClient,mode:PlanMode,cellId?:string,scope:EligibilityScope={}):Promise<string[]|undefined>{
  if(mode==='existing')return;
  if(mode==='test-venue-levels')return eligibleVenueInstallations(client,cellId,scope);
- const policies=(await client.query(`SELECT o.id FROM organisations o WHERE EXISTS(
+ const policies=(await client.query(`SELECT o.id,(to_regclass('billing_service_authority') IS NOT NULL
+  OR EXISTS(SELECT 1 FROM schema_migrations WHERE name='046_venue_service_authority.sql')) AS venue_authority FROM organisations o WHERE EXISTS(
   SELECT 1 FROM venues v JOIN remote_placements p ON p.venue_id=v.id WHERE v.organisation_id=o.id
   AND ($1::uuid IS NULL OR p.cell_id=$1 OR EXISTS(SELECT 1 FROM remote_cell_moves m
    WHERE m.installation_id=p.installation_id AND m.target_cell_id=$1 AND m.state IN ('staged','ready'))))
-  ORDER BY o.id FOR SHARE OF o`,[cellId??null])).rows.map(row=>row.id);
- const exclusion=await legacyRemoteExclusion(client,mode);
+  ORDER BY o.id FOR SHARE OF o`,[cellId??null])).rows;
+ const exclusion=await legacyRemoteExclusion(client,mode,policies.some(row=>row.venue_authority));
  return (await client.query(`SELECT i.id FROM installations i JOIN venues v ON v.id=i.venue_id JOIN organisations o ON o.id=v.organisation_id
   JOIN installation_services s ON s.installation_id=i.id AND s.service='remote_access'
-  WHERE v.organisation_id=ANY($1::uuid[]) AND o.service_plan='paid' AND v.environment='test' AND s.state<>'unconfigured' AND i.revoked_at IS NULL${exclusion}`,[policies])).rows.map(row=>row.id);
+  WHERE v.organisation_id=ANY($1::uuid[]) AND o.service_plan='paid' AND v.environment='test' AND s.state<>'unconfigured' AND i.revoked_at IS NULL${exclusion}`,[policies.map(row=>row.id)])).rows.map(row=>row.id);
 }
 
 // Capture bindings before locks, then lock every organisation and venue before any
