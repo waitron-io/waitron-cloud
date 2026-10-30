@@ -16,10 +16,16 @@ your accepted snapshots and recovery choice remain available for an explicit ret
 A current session or permission refusal clears those choices because the catalogue
 can no longer confirm your access. Native HTTP/client/controller checks cover initial
 loads, pagination, unreadable bodies and retries with the existing page cursor.
-Server retry waits cover seconds and HTTP dates, survive closing and reopening,
-and permit the next request at their exact expiry. Server authority, browser
-integration and genuine restore qualification remain separate gates; database
-suites run in CI while local Docker is unavailable.
+Your catalogue retry wait measures elapsed time, so correcting your system clock
+cannot bypass it, extend it or revive an expired wait. An HTTP-date wait uses the
+response Date header, or your clock when the headers arrive, and includes time
+spent reading the response body. The wait survives closing, reopening and account
+changes; expiry permits an explicit read and sends no request by itself.
+Run `node --test apps/portal/test/backup-retry-clock*.test.ts` for native HTTP checks
+and the catalogue retry screen in both languages, themes and viewport widths.
+Server authority, deployed browser integration, computer sleep and genuine restore
+qualification remain separate gates; database suites run in CI while local Docker
+is unavailable.
 
 ## Recovery HTTP replies before confirming an outcome (D419)
 
