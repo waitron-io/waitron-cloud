@@ -71,7 +71,7 @@ export class RemoteAccessStore {
    if(!cell||cell.environment!==install.environment)fail('cell_unavailable');
    const prior=await placement(client,installationId);
    if(prior){if(prior.cellId!==cellId||prior.peerPublicKey!==peerPublicKey||prior.port!==port)fail('placement_conflict');
-    if(this.#planMode==='test-free-paid'){
+    if(this.#planMode==='test-free-paid'||this.#planMode==='test-venue-levels'){
      const restored=await client.query("UPDATE installation_services SET state='provisioning',configuration=$2 WHERE installation_id=$1 AND service='remote_access' AND state='unconfigured' RETURNING 1",[installationId,{version:1,...prior}]);
      if(restored.rowCount)await client.query('UPDATE installations SET configuration_revision=configuration_revision+1 WHERE id=$1',[installationId]);
     }return prior;}
@@ -212,15 +212,19 @@ export class RemoteAccessStore {
   await transaction(this.#pool,async client=>{await publish(await this.#reportingManifest(client,cellId,now));});
  }
  async #reportingManifest(client:PoolClient,cellId:string,now:number):Promise<AcceptedGatewayManifest>{
+  let ids:string[];
+  if(this.#planMode==='test-venue-levels')ids=(await eligibleRemoteInstallations(client,this.#planMode,cellId))!;
+  else {
   const policies=(await client.query(`SELECT o.id FROM organisations o WHERE EXISTS(SELECT 1 FROM venues v JOIN remote_placements p ON p.venue_id=v.id
    WHERE v.organisation_id=o.id AND (p.cell_id=$1 OR EXISTS(SELECT 1 FROM remote_cell_moves m WHERE m.installation_id=p.installation_id
     AND m.target_cell_id=$1 AND m.state IN ('staged','ready')))) ORDER BY o.id FOR SHARE OF o`,[cellId])).rows.map(r=>r.id);
   // Freeze the candidate set before taking cell authority. A new placement waits for the next export.
-  const ids=(await client.query(`SELECT i.id FROM installations i JOIN venues v ON v.id=i.venue_id JOIN organisations o ON o.id=v.organisation_id
+  ids=(await client.query(`SELECT i.id FROM installations i JOIN venues v ON v.id=i.venue_id JOIN organisations o ON o.id=v.organisation_id
    WHERE v.organisation_id=ANY($2::uuid[]) AND ($3='existing' OR (o.service_plan='paid' AND v.environment='test' AND EXISTS(SELECT 1 FROM installation_services s
     WHERE s.installation_id=i.id AND s.service='remote_access' AND s.state<>'unconfigured')))
    AND (EXISTS(SELECT 1 FROM remote_placements p WHERE p.installation_id=i.id AND p.cell_id=$1)
    OR EXISTS(SELECT 1 FROM remote_cell_moves m WHERE m.installation_id=i.id AND m.target_cell_id=$1 AND m.state IN ('staged','ready'))) ORDER BY i.id FOR SHARE OF i`,[cellId,policies,this.#planMode])).rows.map(r=>r.id);
+  }
   const manifest=await this.#manifest(client,cellId,now,ids);
   const reporter=(await client.query('SELECT gateway_id,generation,revoked_at FROM remote_forward_reporters WHERE cell_id=$1 FOR SHARE',[cellId])).rows[0];
   if(!reporter||reporter.revoked_at)return {...manifest,routes:manifest.routes.map(route)};
