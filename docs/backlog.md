@@ -3446,7 +3446,14 @@ Browser qualification now fetches Waitron `e8cfd38ed07bf546f14ad15334e54ee997114
 which defers the first live stream until the dashboard screen can register its
 subscriptions (Waitron PR #2269). Replay fixtures keep their original commit and
 recorded measurements. Native checks cover separate pins and cleanup of combined
-preparations; the genuine Linux browser journey still requires current-head CI.
+preparations. Current-head CI reaches the new source but all seven browser modes
+refuse at gateway readiness before the journey. The native bundled backend first
+refuses a missing `assets/invoice-noto-sans.ttf`; providing only that asset then
+refuses fiscal activation with `sif.allocation_invalid` and
+`reauthentication_required`. No fiscal guard or expected result has changed.
+Adapting the generated fixture to the current fiscal activation contract needs
+owner review under Lane D H2. The exact Linux peer failure and original reconnect
+cause remain unproved; do not rerun unchanged code to seek a green result.
 
 ## Diagnostic permission test lock observation (D198)
 
