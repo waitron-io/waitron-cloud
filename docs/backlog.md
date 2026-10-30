@@ -25,6 +25,12 @@ See [the boundaries and remaining work](backlog/storage-cache-fixture.md#storage
 **Open.** Production shutdown, real database failures and cancellation remain open.
 See [the boundaries and remaining work](backlog/worker-scheduling.md#worker-shutdown-during-polling-and-error-reporting-d459).
 
+Run `node --test packages/registration/test/worker-loop-schedule-timer.test.ts`
+to check that startup and recurring scheduling failures enter a real retry timer
+before shutdown. At two and 32 slots, reporting keeps the original error and
+failed schedules admit no new claims; cancellation releases the native timer and
+lets the process exit. Production signals and real database failures remain open.
+
 ## Worker scheduling failures and error reporting (D467)
 
 **Open.** Production scheduling, real database failures and capacity remain separate gates.
