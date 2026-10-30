@@ -2,7 +2,7 @@ import {readStaffRequest,publishStaffCertificate,type StaffCertificateRequest} f
 import {createHash,randomUUID,type KeyObject} from 'node:crypto';
 import type {Pool,PoolClient} from 'pg';
 import {transaction,type PlanMode} from '@waitron-cloud/registration';
-import {eligibleRemoteInstallations,legacyRemoteExclusion} from './plan-permissions.ts';
+import {eligibleRemoteInstallations,legacyRemoteExclusion,lockLegacyRemoteScope} from './plan-permissions.ts';
 import {RemoteAccessStore,type CertificateAuthorization} from './placement.ts';
 import {certificateNeedsRenewal} from './renewal.ts';
 import {signManifest,type GatewayRoute,type ReportingGatewayRoute} from './manifest.ts';
@@ -46,18 +46,19 @@ async function desiredTargets(client:PoolClient,staffExchange:boolean,mode:PlanM
  if(mode==='test-venue-levels'){
   eligibleIds=await eligibleRemoteInstallations(client,mode,cellId??undefined,{installationIds:installationId?[installationId]:undefined,lock:scope?(scope.kind==='route'?'SHARE':'UPDATE'):false});
  }else if(forwardReports){
-  const exclusion=await legacyRemoteExclusion(client,mode);
-  const policies=(await client.query(`SELECT o.id FROM organisations o WHERE EXISTS(SELECT 1 FROM venues v JOIN remote_placements p ON p.venue_id=v.id
+  const captured=mode==='test-free-paid'?await lockLegacyRemoteScope(client,cellId??undefined,installationId?[installationId]:undefined):undefined;
+  const exclusion=await legacyRemoteExclusion(client,mode,captured?.venue_authority);
+  const policies=captured?.organisations??(await client.query(`SELECT o.id FROM organisations o WHERE EXISTS(SELECT 1 FROM venues v JOIN remote_placements p ON p.venue_id=v.id
    WHERE v.organisation_id=o.id AND ($1::uuid IS NULL OR p.cell_id=$1 OR EXISTS(SELECT 1 FROM remote_cell_moves m
     WHERE m.installation_id=p.installation_id AND m.target_cell_id=$1 AND m.state IN ('staged','ready')))
    AND ($2::uuid IS NULL OR p.installation_id=$2)) ORDER BY o.id FOR SHARE OF o`,[cellId,installationId])).rows.map(r=>r.id);
   // Scheduling only projects work. Completion locks its policy and installations before the job;
   // certificate publication needs UPDATE immediately so concurrent completions never upgrade SHARE.
   const lock=scope?` FOR ${scope.kind==='route'?'SHARE':'UPDATE'} OF i`:'';
-  const locked=(await client.query(`SELECT i.id FROM installations i JOIN venues v ON v.id=i.venue_id WHERE v.organisation_id=ANY($1::uuid[])
+  const locked=(await client.query(`SELECT i.id FROM installations i JOIN venues v ON v.id=i.venue_id WHERE v.organisation_id=ANY($1::uuid[]) AND ($4::uuid[] IS NULL OR v.id=ANY($4::uuid[]))
    AND ($3::uuid IS NULL OR i.id=$3) AND EXISTS(SELECT 1 FROM remote_placements p WHERE p.installation_id=i.id
     AND ($2::uuid IS NULL OR p.cell_id=$2 OR EXISTS(SELECT 1 FROM remote_cell_moves m WHERE m.installation_id=i.id
-     AND m.target_cell_id=$2 AND m.state IN ('staged','ready')))) ORDER BY i.id${lock}`,[policies,cellId,installationId])).rows.map(r=>r.id);
+     AND m.target_cell_id=$2 AND m.state IN ('staged','ready')))) ORDER BY i.id${lock}`,[policies,cellId,installationId,captured?.venues??null])).rows.map(r=>r.id);
   eligibleIds=mode==='existing'?locked:(await client.query(`SELECT i.id FROM installations i JOIN venues v ON v.id=i.venue_id JOIN organisations o ON o.id=v.organisation_id
    JOIN installation_services s ON s.installation_id=i.id AND s.service='remote_access' WHERE i.id=ANY($1::uuid[]) AND o.service_plan='paid'
    AND v.environment='test' AND s.state<>'unconfigured' AND i.revoked_at IS NULL${exclusion}`,[locked])).rows.map(r=>r.id);

@@ -87,3 +87,31 @@ for(const operation of ['eligibility','manifest','reporting manifest','scheduler
   else assert.equal((await f.pool.query("SELECT count(*) AS n FROM remote_configuration_jobs WHERE target_id=$1 AND kind<>'route' AND enabled",[f.ids[0]])).rows[0].n,'0');
  }finally{enrol.release();await enrol.pending.catch(()=>{});await observer.query('ROLLBACK');await pending?.catch(()=>{});observer.release();await f.close();}
 });
+
+// A placement created after the parent snapshot waits for the next batch, even
+// when its organisation was already captured through another venue.
+for(const operation of ['manifest','reporting manifest','scheduler','reporting scheduler'] as const)test(`legacy remote ${operation} defers a new same-organisation placement`,async()=>{
+ const f=await fixture();let release!:()=>void,enter!:()=>void,paused=false,pending:Promise<unknown>|undefined;
+ const gate=new Promise<void>(r=>{release=r;}),ready=new Promise<void>(r=>{enter=r;});
+ const wrapped=new Proxy(f.pool,{get(pool,name){
+  if(name==='connect')return async()=>{
+   const client=await pool.connect();return new Proxy(client,{get(c,key){
+    if(key==='query')return async(...args:any[])=>{const result=await (c.query as any)(...args);if(!paused&&String(args[0]).startsWith('WITH policies AS MATERIALIZED (')){paused=true;enter();await gate;}return result;};
+    const value=Reflect.get(c,key);return typeof value==='function'?value.bind(c):value;
+   }});
+  };
+  const value=Reflect.get(pool,name);return typeof value==='function'?value.bind(pool):value;
+ }}) as Pool;
+ try{
+  await f.pool.query("UPDATE venues SET environment='test' WHERE id=$1",[f.production]);
+  const newcomer=(await f.pool.query('SELECT id FROM installations WHERE venue_id=$1 AND revoked_at IS NULL',[f.production])).rows[0].id;
+  const exporting=new RemoteAccessStore(wrapped,'test-free-paid'),worker=new RemoteConfigurationReconciler(wrapped,{planMode:'test-free-paid',forwardReports:operation==='reporting scheduler'});
+  pending=operation==='manifest'?exporting.manifest(f.source):operation==='reporting manifest'?exporting.reportingManifest(f.source):worker.schedule();void pending.catch(()=>{});
+  await ready;await f.ordinary.provision(newcomer,f.source,peer());release();const result=await pending;
+  if(operation==='manifest'||operation==='reporting manifest')assert.deepEqual((result as {routes:{installationId:string}[]}).routes.map(r=>r.installationId),f.ids);
+  else assert.equal((await f.pool.query("SELECT count(*) AS n FROM remote_configuration_jobs WHERE target_id=$1 AND kind<>'route' AND enabled",[newcomer])).rows[0].n,'0');
+  assert.equal((await f.legacy.manifest(f.source)).routes.length,3);
+  await new RemoteConfigurationReconciler(f.pool,{planMode:'test-free-paid',forwardReports:operation==='reporting scheduler'}).schedule();
+  assert.equal((await f.pool.query("SELECT count(*) AS n FROM remote_configuration_jobs WHERE target_id=$1 AND kind<>'route' AND enabled",[newcomer])).rows[0].n,'2');
+ }finally{release();await pending?.catch(()=>{});await f.close();}
+});
