@@ -39,6 +39,12 @@ test('snapshot venue guards detect independent omissions',{timeout:180000},async
     replacement:'',pattern:'venue snapshot object wait rejects capture-expiry without publishing',expected:'Missing expected rejection'},
    {name:'post-wait revocation',needle:'if (row.revoked_at) backupFail("revoked");',
     replacement:'',pattern:'venue snapshot object wait rejects revocation without publishing',expected:'Missing expected rejection'},
+   {name:'canonical object serialization',needle:"await client.query('SELECT pg_advisory_lock(hashtextextended($1,0))',[lock]);",
+    replacement:'',pattern:'venue concurrent snapshot publications keep the winning object and metadata together',expected:'a refused copy must never overwrite the admitted archive'},
+   {name:'successful publication releases capture',needle:"if(!discard)await client.query('SELECT pg_advisory_unlock(hashtextextended($1,0))',[lock]);",
+    replacement:'if(false){}',pattern:'venue concurrent snapshot publications keep the winning object and metadata together',expected:'backup.conflict'},
+   {name:'failed publication releases capture',needle:'client.release(discard);',replacement:'client.release(false);',
+    pattern:'venue failed snapshot publication releases its capture for another publisher',expected:'a failed publication must release its capture lease'},
   ];
   const env={...process.env};delete env.NODE_TEST_CONTEXT;
   async function run(pattern:string){
