@@ -38,6 +38,12 @@ own signal. Claim and schedule failures report their original error once; the
 surviving worker exits after its own shutdown. Production signals and real
 database failures remain separate gates.
 
+Run `node --test packages/registration/test/worker-loop-native-recovery.test.ts`
+to check that idle and failure-retry timers actually expire before work resumes
+at two and 32 slots. Claims and startup or recurring schedules recover after
+one native timer, keep the original refusal and exit after shutdown. Production
+signals and real database recovery remain separate gates.
+
 ## Worker scheduling failures and error reporting (D467)
 
 **Open.** Production scheduling, real database failures and capacity remain separate gates.
