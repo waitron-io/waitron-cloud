@@ -30,7 +30,7 @@ const difference = (before, after) => ({ received: after.received - before.recei
 // Missing runtime assets or allocation authority must fail before any gateway is started.
 test('pinned browser backend provisions a generated preproduction allocation', { timeout: 30000 }, () => {
   const fixture = JSON.parse(readFileSync(process.env.COST_BROWSER_FIXTURE, 'utf8'));
-  const root = realpathSync(mkdtempSync(join(tmpdir(), 'cloud-browser-native-')));
+  const root = mkdtempSync(join(tmpdir(), 'cloud-browser-native-'));
   try {
     const input = join(root, 'input'), state = join(root, 'state');
     mkdirSync(input); mkdirSync(state, { mode: 0o700 });
@@ -44,7 +44,7 @@ test('pinned browser backend provisions a generated preproduction allocation', {
     assert.equal(certificate.status, 0, certificate.stderr);
     const backend = readFileSync(new URL('./remote-browser-backend.mjs', import.meta.url), 'utf8')
       .replace("await import('/app/src/peer-cli.ts');", '')
-      .replaceAll("'/input", "'" + input).replaceAll("'/tmp", "'" + state)
+      .replaceAll("'/tmp", "'" + state).replaceAll("'/input", "'" + input)
       .replace('server.listen(8443', 'server.listen(0');
     writeFileSync(join(root, 'backend.mjs'), backend + `
 const allocations = store.venue.all(r.sql.raw('select environment, allocation_key, approval from fiscal_allocations'));

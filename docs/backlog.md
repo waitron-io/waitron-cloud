@@ -3452,7 +3452,12 @@ the signed evidence and checks operation authority; its fiscal implementation,
 guards and expected results are unchanged. A native SQLite check starts that actual
 bundle, verifies its committed generated allocation and exercises graceful shutdown
 through the current management API. The combined-preparation check also verifies
-that the runtime font reaches the browser fixture manifest. Run
+that the runtime font reaches the browser fixture manifest. The sign-out journey
+opens the account menu's explicit trigger: the current menu also contains hidden
+theme buttons, so choosing its first descendant button times out. Native Chromium
+reproduces that ordering with the pinned components and opens the menu with the
+explicit trigger. The native backend path check also covers a `/tmp` parent,
+which otherwise rewrites its own newly inserted input path on Linux. Run
 `pnpm test:cloud-cost:conformance --only remote-browser-conformance.test.mjs`
 for the native startup check and all seven browser journeys. The historical Linux
 bind failure and original reconnect cause remain unproved.
