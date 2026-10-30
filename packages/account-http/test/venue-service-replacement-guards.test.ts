@@ -28,7 +28,7 @@ test('replacement HTTP venue guards detect independent omissions',{timeout:24000
     replacement:"const machineView=await store.machine(action as 'prepare'|'status',envelope);",
     pattern:'venue (snapshot|continuous) replacement HTTP at (connected|hosted) keeps the machine wire and activates once',count:4,expected:"'source'"},
    {name:'machine proof error status',path:'replacement.ts',needle:"'backup.invalid_proof':401,",replacement:'',
-    pattern:'venue (snapshot|continuous) replacement HTTP authenticates both proofs before reporting level refusal',count:2,expected:'500 !== 401'},
+    pattern:'venue (snapshot|continuous) replacement HTTP authenticates both proofs before reporting level refusal',count:2,expected:'503 !== 401'},
   ];
   const env={...process.env};delete env.NODE_TEST_CONTEXT;
   async function run(pattern:string){
