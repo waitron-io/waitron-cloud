@@ -105,7 +105,10 @@ export class PairingStore {
       if(row.organisation_id!==c.organisationId||row.legal_business_id!==c.legalBusinessId)throw new PairingError('binding_conflict');
       if(row.result){
         // Completion never holds an installation while waiting for its policy parents.
-        await client.query('SELECT id FROM organisations WHERE id=$1 FOR SHARE',[row.organisation_id]);
+        const authority=await client.query('SELECT 1 FROM billing_service_authority WHERE venue_id=$1',[row.result.venueId]);
+        if(authority.rowCount){
+          await client.query('SELECT id FROM organisations WHERE id=$1 FOR SHARE',[row.organisation_id]);
+        }
         const venue=await client.query(`SELECT id FROM venues WHERE id=$1 AND organisation_id=$2
           AND legal_business_id=$3 AND local_venue_id=$4 AND environment=$5 FOR NO KEY UPDATE`,
         [row.result.venueId,row.organisation_id,row.legal_business_id,row.local_venue_id,row.environment]);
