@@ -3264,6 +3264,16 @@ Capture a recurrence to explain the historical membership-update delay. Keep the
 incident read, and final HTTP 403 refusal. See [the investigation and guard
 requirements](backlog/diagnostic-permission-lock.md).
 
+## Dependency-cache save stalls (D507)
+
+Cost conformance restores its pnpm store separately and limits optional cache saves
+to one minute after successful tests. A save timeout stays visible without changing
+the test result. Keep saving last so the runner promptly cleans up its child processes.
+
+**Open.** Attribute the historical upload stall; the controlled archive-creation stall
+proves the save deadline, not that transport cause. The other eight setup-node cache
+consumers retain their existing behaviour and need separate qualification before changing.
+
 ## CI PostgreSQL image pull
 
 D104's documentation-only [run 39733028534](https://github.com/waitron-io/waitron-cloud/actions/runs/39733028534/job/119672295764)
