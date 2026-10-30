@@ -50,7 +50,7 @@ jobs:
         if: success()
         timeout-minutes: 1
         continue-on-error: true
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@v5
         with:
           path: ${{ steps.store.outputs.path }}
           key: d507-control-${{ github.run_id }}-${{ matrix.mode }}
@@ -59,7 +59,7 @@ jobs:
         run: rm '${{ steps.store.outputs.path }}/d507-sentinel'
       - id: restore
         if: matrix.mode == 'healthy'
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v5
         with:
           path: ${{ steps.store.outputs.path }}
           key: d507-control-${{ github.run_id }}-${{ matrix.mode }}
