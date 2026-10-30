@@ -380,6 +380,14 @@ See [the boundaries and remaining work](backlog/diagnostic-download-http.md#diag
 authority and production metering remain unqualified.
 See [the boundaries and remaining work](backlog/usage-metering.md#usage-read-transport-refusals-and-retry-waits-d434-d436).
 
+## Native storage admin fallback exhaustion (D506)
+
+Run `node --test deploy/test-cloud/storage-admin-exhaustion.test.mjs` to check
+usable S3 storage when all 101 admin gRPC choices are occupied, preservation of
+every competing listener, cleanup and later clean startup. The native fallback
+warning does not imply S3 startup refusal. Admin-worker functionality, an actual
+admin bind refusal and later bind races remain open.
+
 ## Repository licence
 
 The root `LICENSE` is copied byte for byte from Waitron's Elastic License 2.0 text.
