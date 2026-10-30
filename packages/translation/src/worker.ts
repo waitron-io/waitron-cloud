@@ -72,9 +72,11 @@ export class TranslationWorker {
   return transaction(this.#pool,async client=>{
    // Bounded cleanup can leave old rows behind; they must not receive fresh work leases.
    const projection=this.#planMode==='test-venue-levels'?'id,venue_id':'id';
+   // Test-only workers leave production jobs untouched and available to their own workers.
+   const environment=this.#planMode==='test-venue-levels'?" AND venue_id IN (SELECT id FROM venues WHERE environment='test')":'';
    const candidate=(await client.query<{id:string;venue_id:string}>(`SELECT ${projection} FROM translation_jobs WHERE state='queued'
-    AND created_at>clock_timestamp()-interval '24 hours'
-    OR (state='running' AND lease_until<clock_timestamp() AND created_at>clock_timestamp()-interval '24 hours')
+    AND created_at>clock_timestamp()-interval '24 hours'${environment}
+    OR (state='running' AND lease_until<clock_timestamp() AND created_at>clock_timestamp()-interval '24 hours'${environment})
     ORDER BY created_at,id LIMIT 1${this.#planMode==='test-venue-levels'?'':' FOR UPDATE SKIP LOCKED'}`)).rows[0];
    if(!candidate)return undefined;
    let permissionRevision:number|undefined;
