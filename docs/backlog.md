@@ -125,7 +125,9 @@ See [the boundaries and remaining work](backlog/alert-preference-http.md#initial
 
 ## Alert-preference transport refusals and retry waits (D429)
 
-**Open.** Qualify server authority, browser integration and production mail delivery.
+**Open.** Qualify server authority, deployed browser integration and production mail
+delivery. Alert retry waits now use elapsed time through clock corrections;
+HTTP-date waits use the response Date or local receipt clock.
 See [the boundaries and remaining work](backlog/alert-preference-http.md#alert-preference-transport-refusals-and-retry-waits-d429).
 
 ## Alert-preference HTTP response validation (D415)
@@ -420,7 +422,7 @@ See [the boundaries and remaining work](backlog/diagnostic-download-http.md#diag
 
 ## Usage-read transport refusals and retry waits (D434, D436)
 
-**Open.** Fix the separate backward-clock revival of other panels’ retry waits; server
+**Open.** Fix the separate backward-clock revival of panels other than usage and alerts; server
 authority and production metering remain unqualified.
 See [the boundaries and remaining work](backlog/usage-metering.md#usage-read-transport-refusals-and-retry-waits-d434-d436).
 

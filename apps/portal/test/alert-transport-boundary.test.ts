@@ -129,6 +129,7 @@ for (const entry of [
     const f = fixture(t);
     let now = Date.parse('2026-10-28T10:00:00.000Z');
     t.mock.method(Date, 'now', () => now);
+    t.mock.method(performance, 'now', () => now - Date.parse('2026-10-28T10:00:00.000Z'));
     f.replies.push({body: confirmed});
     await f.controller.load();
     f.controller.choose(false, 'en');

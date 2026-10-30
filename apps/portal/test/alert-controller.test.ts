@@ -64,6 +64,7 @@ for(const status of [401,403])test(`alert ${status} clears the draft and prevent
 
 test('alert save keeps pending and 429 gates and resumes a changed choice when the wait ends',async(t)=>{
  t.mock.timers.enable({apis:['Date'],now:100000});
+ t.mock.method(performance,'now',()=>Date.now()-100000);
  let finish!:(value:ApiResult<unknown>)=>void;let writes=0;
  const c=new AlertController(()=>{},<T>(_path:string,body?:Record<string,unknown>):Promise<ApiResult<T>>=>{
   if(!body)return Promise.resolve({ok:true,value:{enabled:true,locale:'es'} as T});
