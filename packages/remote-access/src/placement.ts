@@ -157,7 +157,8 @@ export class RemoteAccessStore {
   if(!isUuid(id)||!['staff','public'].includes(kind))fail('invalid_placement');
   return transaction(this.#pool,async client=>{
   await requireRemotePlan(client,id,this.#planMode);
-  const row=(await client.query(`SELECT p.venue_id,c.suffix,i.revoked_at,i.venue_id AS installation_venue_id,i.public_key FROM remote_placements p JOIN remote_cells c ON c.id=p.cell_id JOIN installations i ON i.id=p.installation_id WHERE i.id=$1`,[id])).rows[0];
+  const identity=this.#planMode==='test-venue-levels'?',i.venue_id AS installation_venue_id,i.public_key':'';
+  const row=(await client.query(`SELECT p.venue_id,c.suffix,i.revoked_at${identity} FROM remote_placements p JOIN remote_cells c ON c.id=p.cell_id JOIN installations i ON i.id=p.installation_id WHERE i.id=$1`,[id])).rows[0];
   if(!row)fail('installation_unavailable');if(row.revoked_at)fail('revoked');return {hostname:`${kind==='staff'?'staff-':''}v-${row.venue_id}.${row.suffix}`,
    binding:this.#planMode==='test-venue-levels'?{venueId:row.installation_venue_id,publicKey:row.public_key}:undefined};
   });
