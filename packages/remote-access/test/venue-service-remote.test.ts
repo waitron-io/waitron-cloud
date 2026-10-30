@@ -120,3 +120,61 @@ test('venue remote gateway restart retains the signed ten-minute withdrawal boun
   assert.equal(manifest.expiresAt-now,600000);const restarted=new GatewayAuthority(key.publicKey,f.source,hooks,()=>time);await restarted.restore(saved);time=now+600000;await restarted.tick();assert.deepEqual(restarted.routes,[]);assert.equal(closed,1);
  }finally{await f.close();}
 });
+
+// Retained setup is never a substitute for current permission, even for a trusted reporter.
+test('venue remote stale configured level-one routes and fresh reports remain denied',async()=>{
+ const f=await fixture();try{
+  await disableSibling(f);await set(f,'registered');
+  await f.pool.query("UPDATE installation_services SET state='ready' WHERE installation_id=$1 AND service='remote_access'",[f.ids[0]]);
+  await f.pool.query("UPDATE organisations SET service_plan='paid' WHERE id=$1",[f.scope.organisationId]);
+  assert.deepEqual((await f.remote.manifest(f.source)).routes,[]);
+  assert.deepEqual((await f.remote.reportingManifest(f.source)).routes,[]);
+  const legacy=await f.ordinary.reportingManifest(f.source),route=legacy.routes.find(r=>r.installationId===f.ids[0])!,now=Date.now();assert(route);
+  const store=new ForwardObservationStore(f.pool,mode),report:ForwardReport={version:1,audience:'waitron-cloud-public-forward-report',cellId:f.source,gatewayId:f.gatewayId,generation:1,sequence:1,issuedAt:now,observations:[{cellId:f.source,gatewayId:f.gatewayId,generation:1,installationId:f.ids[0]!,venueId:f.venues[0]!,revision:await f.revision(),routeId:'public_availability',routeBinding:routeBinding(route),manifestSequence:legacy.sequence,manifestExpiresAt:legacy.expiresAt,observationSequence:1,category:'upstream_transport',observedAt:now,expiresAt:Math.min(now+300000,legacy.expiresAt)}]};
+  const mapping={country:'ES' as const,environment:'test' as const,cellId:f.source,file:'/country/forward/report.json',writerUid:0,readerGid:1000};
+  assert.equal(await store.record(mapping,signForwardReport(report,f.keys.privateKey)),'accepted');
+  assert.equal((await f.pool.query('SELECT count(*) AS n FROM remote_forward_observations')).rows[0].n,'0');
+  // Seed a validly bound old view to exercise the independent read boundary too.
+  await set(f,'connected');report.sequence++;report.observations[0]!.revision=await f.revision();report.observations[0]!.observationSequence++;
+  await f.pool.query("UPDATE remote_forward_reporters SET next_accept_at='-infinity' WHERE cell_id=$1",[f.source]);
+  assert.equal(await store.record(mapping,signForwardReport(report,f.keys.privateKey)),'accepted');
+  assert.equal((await transaction(f.pool,c=>store.readCurrent(c,f.ids[0]!)))!.category,'upstream_transport');
+  await set(f,'registered');await f.pool.query("UPDATE installation_services SET state='ready' WHERE installation_id=$1 AND service='remote_access'",[f.ids[0]]);
+  await f.pool.query('UPDATE remote_forward_observations SET configuration_revision=$1 WHERE installation_id=$2',[await f.revision(),f.ids[0]]);
+  assert.equal(await transaction(f.pool,c=>store.readCurrent(c,f.ids[0]!)),null);
+ }finally{await f.close();}
+});
+
+async function waitForVenue(f:Fixture,pid:number,settled:()=>boolean){
+ for(let n=0;n<300&&!settled();n++){
+  if((await f.admin.query('SELECT 1 FROM pg_stat_activity WHERE application_name=$1 AND $2=ANY(pg_blocking_pids(pid))',[f.schema,pid])).rowCount)return;
+  await new Promise(resolve=>setTimeout(resolve,10));
+ }
+ assert.fail('remote export must wait for the captured venue authority');
+}
+
+// Without the complete venue batch, expiry of A locks its installation before waiting on B.
+test('venue remote batch locks every venue before expiring earlier setup',async()=>{
+ const f=await fixture(),holder=await f.peer.connect(),observer=await f.peer.connect();let pending:Promise<unknown>|undefined;
+ try{
+  await f.pool.query('UPDATE billing_service_authority SET setup_grant_active=true,setup_grant_until=$1',[f.today]);
+  await holder.query('BEGIN');await holder.query('SELECT id FROM venues WHERE id=$1 FOR NO KEY UPDATE',[f.venues[1]]);
+  const pid=(await holder.query('SELECT pg_backend_pid() AS pid')).rows[0].pid;let settled=false;
+  pending=f.remote.manifest(f.source).finally(()=>{settled=true;});void pending.catch(()=>{});await waitForVenue(f,pid,()=>settled);
+  await observer.query('BEGIN');await assert.doesNotReject(observer.query('SELECT id FROM installations WHERE venue_id=$1 FOR UPDATE NOWAIT',[f.venues[0]]),'batch policy wait must leave earlier installations unlocked');await observer.query('ROLLBACK');
+  await holder.query('COMMIT');assert.deepEqual((await pending as {routes:unknown[]}).routes,[]);
+ }finally{await observer.query('ROLLBACK');await holder.query('ROLLBACK');await pending?.catch(()=>{});observer.release();holder.release();await f.close();}
+});
+
+// Permission on B cannot authorise a captured installation whose original binding was A.
+test('venue remote export rechecks original installation binding after a venue wait',async()=>{
+ const f=await fixture(),holder=await f.peer.connect();let pending:Promise<unknown>|undefined;
+ try{
+  await holder.query('BEGIN');await holder.query('SELECT id FROM venues WHERE id=$1 FOR NO KEY UPDATE',[f.venues[1]]);
+  const pid=(await holder.query('SELECT pg_backend_pid() AS pid')).rows[0].pid;let settled=false;
+  pending=f.remote.manifest(f.source).finally(()=>{settled=true;});void pending.catch(()=>{});await waitForVenue(f,pid,()=>settled);
+  await holder.query('UPDATE installations SET superseded_by=$2 WHERE id=$1',[f.ids[1],f.ids[0]]);
+  await holder.query('UPDATE installations SET venue_id=$2 WHERE id=$1',[f.ids[0],f.venues[1]]);
+  await holder.query('COMMIT');assert.deepEqual((await pending as {routes:unknown[]}).routes,[]);
+ }finally{await holder.query('ROLLBACK');await pending?.catch(()=>{});holder.release();await f.close();}
+});
