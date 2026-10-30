@@ -2,13 +2,16 @@ import {accountRequest,type ApiResult} from './api.ts';
 import type {Copy,Locale} from './locale.ts';
 export interface AlertPreferences {enabled:boolean;locale:Locale;}
 export class AlertController {
- enabled=false;locale:Locale='en';loaded=false;loadAttempted=false;pending=false;saved=false;error:keyof Copy|undefined;retryAt=0;
+ enabled=false;locale:Locale='en';loaded=false;loadAttempted=false;pending=false;saved=false;error:keyof Copy|undefined;
+ // Relative retry waits use elapsed time; retryAt projects the remainder for the shared wall-clock countdown.
+ #retryUntil=0;
  #confirmed:AlertPreferences|undefined;#account:string|undefined;#generation=0;readonly #changed:()=>void;readonly #request:typeof accountRequest;
  constructor(changed:()=>void,request:typeof accountRequest=accountRequest){this.#changed=changed;this.#request=request;}
  account(id:string|undefined){if(this.#account!==id){this.#account=id;this.#generation++;this.#clear();this.loadAttempted=false;this.pending=false;this.error=undefined;}}
  #clear(){this.#confirmed=undefined;this.enabled=false;this.locale='en';this.loaded=false;this.saved=false;}
  get dirty(){return this.loaded&&(!this.#confirmed||this.enabled!==this.#confirmed.enabled||this.locale!==this.#confirmed.locale);}
- get waiting(){return Math.max(0,Math.ceil((this.retryAt-Date.now())/1000));}
+ get retryAt(){const remaining=this.#retryUntil-performance.now();return remaining>0?Date.now()+remaining:0;}
+ get waiting(){return Math.max(0,Math.ceil((this.#retryUntil-performance.now())/1000));}
  choose(enabled:boolean,locale:Locale){if(this.pending||!this.loaded)return;this.enabled=enabled;this.locale=locale;this.saved=false;this.error=undefined;this.#changed();}
  async load(){await this.#perform(false);}
  async save(){if(this.dirty)await this.#perform(true);}
@@ -23,7 +26,7 @@ export class AlertController {
   this.#changed();
  }
  #failure(result:Extract<ApiResult<unknown>,{ok:false}>,write:boolean){
-  this.retryAt=Math.max(this.retryAt,Date.now()+result.retryAfterMs);
+  this.#retryUntil=Math.max(this.#retryUntil,performance.now()+result.retryAfterMs);
   if(result.status===401||result.status===403)this.#clear();
   this.error=result.status===429?'limited':result.status===401?'pairSession':result.status===403?'forbidden':write?'alertsUncertain':'unavailable';
   // An unconfirmed write may have changed the server, even if the draft is later reverted.

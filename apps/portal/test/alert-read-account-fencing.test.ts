@@ -39,6 +39,7 @@ for (const destination of ['another account', 'returning account'] as const) {
     for (const {name, result} of replies) {
       test(`old alert read ${name} preserves ${stage} for ${destination}`, {timeout: 5_000}, async t => {
         t.mock.timers.enable({apis: ['Date'], now: 1_000_000});
+ t.mock.method(performance,'now',()=>Date.now()-1_000_000);
         const {controller, requests, state, calls} = fixture();
         controller.account('first');
         const oldRead = controller.load();
@@ -107,6 +108,7 @@ for (const destination of ['another account', 'returning account'] as const) {
 for (const {name, result} of replies) {
   test(`old alert read ${name} leaves signed-out preferences empty`, {timeout: 5_000}, async t => {
     t.mock.timers.enable({apis: ['Date'], now: 1_000_000});
+ t.mock.method(performance,'now',()=>Date.now()-1_000_000);
     const {controller, requests, state, calls} = fixture();
     controller.account('first');
     const oldRead = controller.load();
@@ -149,6 +151,7 @@ test('selecting the same alert account preserves its pending read and accepts it
 
 test('a current alert read rate limit retains its cooldown through an account change', async t => {
   t.mock.timers.enable({apis: ['Date'], now: 1_000_000});
+ t.mock.method(performance,'now',()=>Date.now()-1_000_000);
   const {controller, requests, calls} = fixture();
   controller.account('first');
   const read = controller.load();

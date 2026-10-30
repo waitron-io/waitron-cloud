@@ -140,6 +140,7 @@ for (const operation of ['reload', 'save'] as const) {
   test(`alert ${operation} with HTTP 429 waits before retrying the current choices`, async t => {
     browser(t);
     t.mock.timers.enable({apis: ['Date'], now: 100000});
+ t.mock.method(performance,'now',()=>Date.now()-100000);
     let limited = false;
     let requests = 0;
     t.mock.method(globalThis, 'fetch', async () => {
