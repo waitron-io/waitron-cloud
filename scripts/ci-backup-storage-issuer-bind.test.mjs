@@ -49,7 +49,13 @@ import https from "node:https";
 import { syncBuiltinESMExports } from "node:module";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-const [mode, seed, archiveName] = process.argv.slice(1);
+const [mode, seed, archiveName, brokenSink] = process.argv.slice(1);
+const diagnostics = [];
+const diagnosticFailure = Error("diagnostic sink refused");
+console.error = (...values) => {
+  diagnostics.push(values);
+  if (brokenSink === "true") throw diagnosticFailure;
+};
 const bytes = await fs.readFile(seed);
 const cache = join(tmpdir(), "waitron-cloud-test-binaries"), archive = join(cache, archiveName);
 await fs.mkdir(cache);
@@ -109,6 +115,7 @@ try {
     assert.equal(failure, configurationRefusal);
     assert.equal(configurationWrites, 1);
   }
+  assert.deepEqual(diagnostics, mode === "occupied" ? [['storage_listener_failure={"listener":"identity","reservation":null}']] : [], "only the refused listener may emit a closed-label marker");
   assert.equal(failure.storageDownload, undefined);
   assert.equal(failure.storageStartup, undefined);
   assert.equal(allocations, 1, "an identity-server failure must not trigger child-port retries");
@@ -138,12 +145,12 @@ try {
 
 // Removing bind rejection, retaining its listener after success, swallowing its
 // error or omitting cleanup must fail against real sockets and private files.
-for (const mode of ["occupied", "available"]) {
-  test(`storage identity-server ${mode} bind preserves its failure and owned cleanup`, { timeout: 30000 }, async t => {
+for (const mode of ["occupied", "available"]) for (const brokenSink of [false, true]) {
+  test(`storage identity-server ${mode} bind preserves its failure and owned cleanup${brokenSink ? " with a refused diagnostic sink" : ""}`, { timeout: 30000 }, async t => {
     const directory = await mkdtemp(join(tmpdir(), "cloud-storage-issuer-test-"));
     t.after(() => rm(directory, { recursive: true, force: true }));
     const { stdout, stderr } = await execute(process.execPath,
-      ["--input-type=module", "-e", probe, mode, seed, archiveName], {
+      ["--input-type=module", "-e", probe, mode, seed, archiveName, String(brokenSink)], {
         cwd: new URL("..", import.meta.url),
         env: { ...process.env, TMPDIR: directory, TMP: directory, TEMP: directory },
         timeout: 25000, maxBuffer: 1024 * 1024,
