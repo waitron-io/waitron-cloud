@@ -30,16 +30,34 @@ export async function legacyRemoteExclusion(client:PoolClient,mode:PlanMode,know
 export async function eligibleRemoteInstallations(client:PoolClient,mode:PlanMode,cellId?:string,scope:EligibilityScope={}):Promise<string[]|undefined>{
  if(mode==='existing')return;
  if(mode==='test-venue-levels')return eligibleVenueInstallations(client,cellId,scope);
- const policies=(await client.query(`SELECT o.id,(to_regclass('billing_service_authority') IS NOT NULL
-  OR EXISTS(SELECT 1 FROM schema_migrations WHERE name='046_venue_service_authority.sql')) AS venue_authority FROM organisations o WHERE EXISTS(
-  SELECT 1 FROM venues v JOIN remote_placements p ON p.venue_id=v.id WHERE v.organisation_id=o.id
-  AND ($1::uuid IS NULL OR p.cell_id=$1 OR EXISTS(SELECT 1 FROM remote_cell_moves m
-   WHERE m.installation_id=p.installation_id AND m.target_cell_id=$1 AND m.state IN ('staged','ready'))))
-  ORDER BY o.id FOR SHARE OF o`,[cellId??null])).rows;
- const exclusion=await legacyRemoteExclusion(client,mode,policies.some(row=>row.venue_authority));
+ const captured=await lockLegacyRemoteScope(client,cellId,scope.installationIds);
+ const exclusion=await legacyRemoteExclusion(client,mode,captured.venue_authority);
  return (await client.query(`SELECT i.id FROM installations i JOIN venues v ON v.id=i.venue_id JOIN organisations o ON o.id=v.organisation_id
   JOIN installation_services s ON s.installation_id=i.id AND s.service='remote_access'
-  WHERE v.organisation_id=ANY($1::uuid[]) AND o.service_plan='paid' AND v.environment='test' AND s.state<>'unconfigured' AND i.revoked_at IS NULL${exclusion}`,[policies.map(row=>row.id)])).rows.map(row=>row.id);
+  WHERE v.organisation_id=ANY($1::uuid[]) AND v.id=ANY($2::uuid[]) AND o.service_plan='paid' AND v.environment='test' AND s.state<>'unconfigured' AND i.revoked_at IS NULL${exclusion}
+  AND ($3::uuid[] IS NULL OR i.id=ANY($3::uuid[]))`,[captured.organisations,captured.venues,scope.installationIds??null])).rows.map(row=>row.id);
+}
+
+// Materialise every organisation lock before venue locks. The parent protects even
+// absent authority; the next statement observes enrolment committed during a wait.
+export async function lockLegacyRemoteScope(client:PoolClient,cellId?:string,installationIds?:string[]):Promise<{organisations:string[];venues:string[];venue_authority:boolean}>{
+ return (await client.query(`WITH policies AS MATERIALIZED (
+  SELECT o.id FROM organisations o WHERE EXISTS(
+   SELECT 1 FROM venues v JOIN remote_placements p ON p.venue_id=v.id JOIN installations i ON i.id=p.installation_id AND i.venue_id=v.id
+   WHERE v.organisation_id=o.id AND ($2::uuid[] IS NULL OR i.id=ANY($2::uuid[]))
+   AND ($1::uuid IS NULL OR p.cell_id=$1 OR EXISTS(SELECT 1 FROM remote_cell_moves m
+    WHERE m.installation_id=p.installation_id AND m.target_cell_id=$1 AND m.state IN ('staged','ready'))))
+  ORDER BY o.id FOR SHARE OF o
+ ), locked_venues AS MATERIALIZED (
+  SELECT v.id FROM venues v WHERE v.organisation_id=ANY(ARRAY(SELECT id FROM policies))
+  AND EXISTS(SELECT 1 FROM remote_placements p JOIN installations i ON i.id=p.installation_id AND i.venue_id=p.venue_id
+   WHERE p.venue_id=v.id AND ($2::uuid[] IS NULL OR i.id=ANY($2::uuid[]))
+   AND ($1::uuid IS NULL OR p.cell_id=$1 OR EXISTS(SELECT 1 FROM remote_cell_moves m
+    WHERE m.installation_id=p.installation_id AND m.target_cell_id=$1 AND m.state IN ('staged','ready'))))
+  ORDER BY v.id FOR SHARE OF v
+ ) SELECT ARRAY(SELECT id FROM policies) AS organisations,ARRAY(SELECT id FROM locked_venues) AS venues,
+  (to_regclass('billing_service_authority') IS NOT NULL
+   OR EXISTS(SELECT 1 FROM schema_migrations WHERE name='046_venue_service_authority.sql')) AS venue_authority`,[cellId??null,installationIds??null])).rows[0];
 }
 
 // Capture bindings before locks, then lock every organisation and venue before any

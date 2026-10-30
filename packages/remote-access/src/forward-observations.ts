@@ -3,7 +3,7 @@ import type {Pool,PoolClient} from 'pg';
 import {transaction,type PlanMode} from '@waitron-cloud/registration';
 import {isUuid,type GatewayRoute} from './manifest.ts';
 import {routeBinding,verifyForwardReport,type ForwardObservation,type PublicForwardView} from './forward-report.ts';
-import {eligibleRemoteInstallations,legacyRemoteExclusion} from './plan-permissions.ts';
+import {eligibleRemoteInstallations,legacyRemoteExclusion,lockLegacyRemoteScope} from './plan-permissions.ts';
 import type {ForwardReportMapping} from './forward-report-collector.ts';
 
 const fail=():never=>{throw new Error('invalid_forward_reporter');};
@@ -25,13 +25,16 @@ export async function revokeForwardReporter(client:PoolClient,cellId:string,gene
 }
 async function lockInstallations(client:PoolClient,ids:string[],mode:PlanMode):Promise<Set<string>|undefined>{
  if(mode==='test-venue-levels')return new Set(await eligibleRemoteInstallations(client,mode,undefined,{installationIds:ids}));
+ const captured=mode==='test-free-paid'?await lockLegacyRemoteScope(client,undefined,ids):undefined;
  // A batch can span organisations. Sorted policy locks precede every installation and cell lock.
- await client.query(`SELECT o.id FROM organisations o WHERE EXISTS(SELECT 1 FROM venues v JOIN installations i ON i.venue_id=v.id
+ if(!captured)await client.query(`SELECT o.id FROM organisations o WHERE EXISTS(SELECT 1 FROM venues v JOIN installations i ON i.venue_id=v.id
   WHERE v.organisation_id=o.id AND i.id=ANY($1::uuid[])) ORDER BY o.id FOR SHARE OF o`,[ids]);
- await client.query('SELECT id FROM installations WHERE id=ANY($1::uuid[]) ORDER BY id FOR SHARE',[ids]);
+ const locked=(await client.query('SELECT id FROM installations WHERE id=ANY($1::uuid[]) AND ($2::uuid[] IS NULL OR venue_id=ANY($2::uuid[])) ORDER BY id FOR SHARE',[ids,captured?.venues??null])).rows;
+ if(captured)return new Set(locked.map(row=>row.id));
 }
 async function currentRoute(client:PoolClient,id:string,mode:PlanMode,eligible?:Set<string>){
  if(mode==='test-venue-levels'&&!eligible?.has(id))return;
+ if(mode==='test-free-paid'&&!eligible?.has(id))return;
  const exclusion=await legacyRemoteExclusion(client,mode);
  return (await client.query(`SELECT p.cell_id AS "cellId",p.installation_id AS "installationId",p.venue_id AS "venueId",host(p.address) AS address,
   p.port,p.peer_public_key AS "peerPublicKey",s.hostname AS "staffHostname",u.hostname AS "publicHostname",i.configuration_revision AS revision,v.environment
