@@ -20,7 +20,7 @@ async function fixture(t,{database=false}={}){
  const options={directory:join(storage.root,'managed'),iamPath:join(storage.root,'iam.json'),admin:storage.admin,endpoint:storage.endpoint,region:'local',ca:storage.ca,reload:()=>storage.reloadIdentityFile()};
  const clients=[];t.after(()=>clients.forEach(c=>c.destroy()));
  async function input(venueId=randomUUID()) {return {venueId,location:await storage.bucket('venue-'+venueId),prefix:`streams/${venueId}/`};}
- function writer(grant,value){const client=new S3Client({endpoint:storage.endpoint,region:'local',credentials:grant.writerCredentials,forcePathStyle:true,maxAttempts:1,requestHandler:{httpsAgent:new Agent({ca:storage.ca})}});clients.push(client);return suffix=>client.send(new PutObjectCommand({Bucket:value.location.bucket,Key:value.prefix+suffix,Body:'retained venue body'}),{abortSignal:AbortSignal.timeout(5000)});}
+ function writer(grant,value){const client=new S3Client({endpoint:storage.endpoint,region:'local',credentials:{...grant.writerCredentials},forcePathStyle:true,maxAttempts:1,requestHandler:{httpsAgent:new Agent({ca:storage.ca})}});clients.push(client);return suffix=>client.send(new PutObjectCommand({Bucket:value.location.bucket,Key:value.prefix+suffix,Body:'retained venue body'}),{abortSignal:AbortSignal.timeout(5000)});}
  return {storage,db,options,input,writer,state:async()=>JSON.parse(await readFile(join(options.directory,'state.json'),'utf8'))};
 }
 
