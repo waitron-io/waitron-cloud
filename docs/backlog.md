@@ -429,7 +429,7 @@ See [the boundaries and remaining work](backlog/diagnostic-download-http.md#diag
 
 ## Usage-read transport refusals and retry waits (D434, D436)
 
-**Open.** Fix the separate backward-clock revival of panels other than usage and alerts; server
+**Open.** Fix the separate backward-clock revival of panels other than usage, alerts and backup catalogues; server
 authority and production metering remain unqualified.
 See [the boundaries and remaining work](backlog/usage-metering.md#usage-read-transport-refusals-and-retry-waits-d434-d436).
 
