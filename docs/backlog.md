@@ -58,6 +58,14 @@ Shutdown waits for reporting without a retry timer; a refused report keeps its
 original error and stops a live worker. Real database failures and production
 shutdown remain separate gates.
 
+Run `node --test packages/registration/test/worker-loop-native-recurring.test.ts`
+to check a recurring schedule failure after busy or idle batches at two and 32
+slots. Pending reporting preserves the original error and prevents retry timer
+creation. Recovery follows real timer expiry, starts its next interval after
+scheduling completes and shortens idle polling to the next deadline. Shutdown
+after that interval admits no further claims. Real database recovery and
+production signals remain separate gates.
+
 ## Worker scheduling failures and error reporting (D467)
 
 **Open.** Production scheduling, real database failures and capacity remain separate gates.
