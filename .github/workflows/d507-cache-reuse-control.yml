@@ -1,0 +1,60 @@
+name: D507 cache reuse control
+on:
+  push:
+    branches: [fix/cost-cache-save-bound]
+    paths: [.github/workflows/d507-cache-reuse-control.yml]
+permissions:
+  contents: read
+jobs:
+  save:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '26'
+          package-manager-cache: false
+      - run: node scripts/ci-setup-pnpm.mjs
+      - name: Locate pnpm dependency store
+        id: pnpm-store
+        run: echo "path=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
+      - name: Create owned sentinel
+        run: |
+          mkdir -p '${{ steps.pnpm-store.outputs.path }}'
+          echo d507-cross-job > '${{ steps.pnpm-store.outputs.path }}/d507-sentinel'
+      - name: Save pnpm dependency cache
+        if: success()
+        timeout-minutes: 1
+        continue-on-error: true
+        uses: actions/cache/save@v5
+        with:
+          path: ${{ steps.pnpm-store.outputs.path }}
+          key: d507-cross-job-${{ github.run_id }}
+  restore:
+    needs: save
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '26'
+          package-manager-cache: false
+      - run: node scripts/ci-setup-pnpm.mjs
+      - name: Locate pnpm dependency store
+        id: pnpm-store
+        run: echo "path=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
+      - id: pnpm-cache
+        uses: actions/cache/restore@v5
+        with:
+          path: ${{ steps.pnpm-store.outputs.path }}
+          key: d507-cross-job-${{ github.run_id }}
+          fail-on-cache-miss: true
+      - name: Require cache reuse on a fresh runner
+        env:
+          CACHE_HIT: ${{ steps.pnpm-cache.outputs.cache-hit }}
+        run: |
+          test "$CACHE_HIT" = true
+          test "$(cat '${{ steps.pnpm-store.outputs.path }}/d507-sentinel')" = d507-cross-job
+          echo D507_FRESH_RUNNER_RESTORE_PASS
