@@ -6,7 +6,7 @@ import {existsSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 
-const metadata='ERROR: failed to build: failed to solve: node:26.11.1-slim: failed to resolve source metadata: unexpected status from HEAD request to https://registry-1.docker.io/v2/library/node/manifests/26.11.1-slim: 502 Bad Gateway';
+const metadata='ERROR: failed to build: failed to solve: node:26.11.1-slim: failed to resolve source metadata for docker.io/library/node:26.11.1-slim: unexpected status from HEAD request to https://registry-1.docker.io/v2/library/node/manifests/26.11.1-slim: 502 Bad Gateway';
 
 // The preparer owns real child supervision; only network archives and external commands are substituted.
 async function prepare(t,scenario={}) {
@@ -36,6 +36,7 @@ registerHooks({load(url,context,next){
 }});
 const now=performance.now.bind(performance);let firstBuild;
 ${scenario.expiredBudget||scenario.expireDuringBackoff?`Object.defineProperty(performance,'now',{value:()=>{const elapsed=now();if(JSON.parse(fs.readFileSync(${JSON.stringify(state)})).calls.some(args=>args[0]==='build'))firstBuild??=elapsed;return elapsed+(firstBuild!==undefined&&${scenario.expiredBudget?'true':'elapsed-firstBuild>500'}?301000:0);}});`:''}
+${scenario.interruptFailure?`const write=process.stderr.write.bind(process.stderr);let interrupted=false;process.stderr.write=(chunk,...args)=>{const result=write(chunk,...args);if(!interrupted&&String(chunk).startsWith('conformance_setup=')&&String(chunk).includes('"event":"failure","phase":"fixture-image-build"')){interrupted=true;process.emit(${JSON.stringify(scenario.interruptFailure)});}return result;};`:''}
 ${scenario.shortTimeout?"const timer=globalThis.setTimeout;globalThis.setTimeout=(fn,ms,...args)=>timer(fn,ms>290000?1000:ms,...args);":''}
 ${scenario.interrupt?"const timers=await import('node:timers/promises');const timer=timers.default.setTimeout;timers.default.setTimeout=(ms,...args)=>timer(ms===1000?30000:ms,...args);syncBuiltinESMExports();":''}
 const {prepareConformance}=await import(${JSON.stringify(new URL('./conformance-prepare.mjs',import.meta.url).href)});
@@ -89,6 +90,8 @@ test('successful fixture build needs one attempt',async t=>{
 for(const refusal of [
   'ERROR: failed to solve: process "/bin/sh -c install" did not complete successfully: exit code: 1',
   'ERROR: failed to build: unexpected EOF',
+  metadata.replace('502 Bad Gateway','400 Bad Request'),
+  metadata.replace('502 Bad Gateway','408 Request Timeout'),
   metadata.replace('502 Bad Gateway','404 Not Found'),
   metadata.replace('registry-1.docker.io','example.invalid'),
   metadata.replace('failed to resolve source metadata','RUN application'),
@@ -133,5 +136,14 @@ for(const signal of ['SIGINT','SIGTERM'])test('interruption during build backoff
   const result=await prepare(t,{failures:[metadata],interrupt:signal});
   assert.equal(result.code,1,result.output);assert.equal(result.builds.length,1);
   assert.match(result.output,/Conformance setup interrupted/);
+  assert.equal(result.output.includes('PREPARED='),false);
+});
+
+
+for(const signal of ['SIGINT','SIGTERM'])test('interruption after a metadata failure refuses before retry admission: '+signal,{timeout:10000},async t=>{
+  const result=await prepare(t,{failures:[metadata],interruptFailure:signal});
+  assert.equal(result.code,1,result.output);assert.equal(result.builds.length,1);
+  assert.match(result.output,/502 Bad Gateway/);
+  assert.equal(result.output.includes('retrying fixture image'),false);
   assert.equal(result.output.includes('PREPARED='),false);
 });
