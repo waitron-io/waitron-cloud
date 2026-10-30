@@ -1487,8 +1487,20 @@ implementation or production evidence.
   stay private. Run `node --test scripts/cloud-cost/remote-refusal-evidence.test.mjs scripts/cloud-cost/browser-relay-evidence.test.mjs`
   for real relay sockets with controlled resets and injected faults, preserved
   accounting refusals and the child-process diagnostic boundary. These controls do not establish the historical Linux cause.
-  The temporary observation workflow is removed. Retain the next instrumented
-  refusal before repairing browser behavior; all existing checks and deadlines remain.
+  Browser readiness waits for stream-open callbacks and their reads, rechecks
+  requests while response sizes settle, and retains the three-second deadline
+  and every byte-accounting guard. Run
+  `node --test scripts/cloud-cost/browser-readiness.test.mjs` for these boundaries.
+  The browser source now includes Waitron's
+  [document-lifecycle repair](https://github.com/clintongormley/waitron/pull/2279)
+  at `99c265981ba98f1afd0e5fc822624a9a91822ad2`, alongside D499's supported
+  generated authority, routes, assets and storage identity-port handoff. Replay
+  measurements retain their original source. The
+  [Linux investigation](backlog/browser-reconnect.md) keeps the bounded observation
+  groups, six original fault controls and earlier cancellation traces. A native
+  Chromium/TLS reproduction identifies an unloading page's error refresh as one
+  source of late reads; historical Linux socket-reset attribution remains open.
+  No cancelled bytes, failed samples, accounting checks or deadlines are excused.
   The reporter preserves the original refusal when a diagnostic property cannot
   be inspected, including throwing or revoked JavaScript proxies, objects that
   intercept property inspection. Each field is contained separately, so an

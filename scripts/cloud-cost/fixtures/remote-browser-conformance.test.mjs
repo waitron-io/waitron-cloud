@@ -83,7 +83,7 @@ for (const fault of ['none', 'extra-config', 'missing-cookie', 'missing-bundle',
 test('pinnedDashboardBrowserLoadsAssetsAuthenticatesReconnectsAndSignsOut_' + fault, { timeout: 120000 }, async t => {
   assert.equal(typeof journey.measureRemoteBrowser, 'function', 'measure genuine owner and public routes');
   const fixture = JSON.parse(readFileSync(process.env.COST_BROWSER_FIXTURE, 'utf8'));
-  assert.equal(fixture.revision, 'e8cfd38ed07bf546f14ad15334e54ee997114c75');
+  assert.equal(fixture.revision, '99c265981ba98f1afd0e5fc822624a9a91822ad2');
   assert.equal(createHash('sha256').update(readFileSync(fixture.runtime)).digest('hex'), fixture.runtimeSha256);
   const root = realpathSync(mkdtempSync(join(tmpdir(), 'cloud-cost-browser-'))), owner = randomUUID();
   const label = 'io.waitron.cloud-cost.remote-browser=' + owner, network = 'cost-remote-' + owner;

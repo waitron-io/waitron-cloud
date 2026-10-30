@@ -71,7 +71,7 @@ test('browserReconnectFailureIdentifies_' + step, async t => {
     },
   });
   const page = {
-    locator, on() {}, setDefaultTimeout() {}, async goto() {},
+    locator, on() {}, setDefaultTimeout() {}, async evaluate() {return true;}, async goto() {},
     async reload() {
       reconnect = true;
       if (step === 'reload') refuse();
@@ -83,7 +83,7 @@ test('browserReconnectFailureIdentifies_' + step, async t => {
       }
     },
   };
-  const context = {
+  const context = {async addInitScript() {},
     on: (name, listener) => events.set(name, listener), async newPage() { return page; },
     async newCDPSession() { return {async send() {}, on() {}}; },
     async close() { contextCloses++; },

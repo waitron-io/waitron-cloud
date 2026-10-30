@@ -18,33 +18,33 @@ test('browserReconnectTrafficEvidence_' + mode, async () => {
     async waitFor() {
       if (reconnect && selector.includes('takings')) throw Object.assign(Error('PRIVATE_TIMEOUT'), {name: 'TimeoutError'});
     }});
-  const page = {locator, on() {}, setDefaultTimeout() {}, async goto() {}, async reload() {
+  const page = {locator, on() {}, setDefaultTimeout() {}, async evaluate() {return true;}, async goto() {}, async reload() {
     reconnect = true;
     events.get('request')(overview);
     if (mode === 'saturated') for (let i = 1; i < 1005; i++) events.get('request')(request('/management-api/reports/overview?PRIVATE=' + i));
     if (mode === 'aborted-before') events.get('requestfailed')(before);
-    if (mode === 'late-before') {
-      events.get('response')({url: before.url, request: () => before, status: () => 200});
-      events.get('requestfinished')(before);
-    }
+    if (mode === 'late-before') events.get('requestfinished')(before);
     if (mode === 'failed-overview') events.get('requestfailed')(overview);
     if (mode === 'error-overview' || mode === 'finished-overview') {
       events.get('response')({url: overview.url, request: () => overview, status: () => mode === 'error-overview' ? 503 : 200});
       events.get('requestfinished')(overview);
     }
   }};
-  const context = {on: (event, listener) => events.set(event, listener), async newPage() {
-    if (mode === 'pending-before' || mode === 'late-before' || mode === 'aborted-before') events.get('request')(before);
+  const context = {async addInitScript() {}, on: (event, listener) => events.set(event, listener), async newPage() {
+    if (mode === 'pending-before' || mode === 'late-before' || mode === 'aborted-before') {
+      events.get('request')(before);
+      events.get('response')({url: before.url, request: () => before, status: () => 200});
+    }
     return page;
   }, async newCDPSession() {return {async send() {}, on() {}};}};
-  // A pre-reload EventSource may still be open; drain(true) must retain it.
+  // The pre-reload stream has headers and is open; drain(true) retains it.
   before.resourceType = () => 'eventsource';
   if (mode === 'aborted-before') before.failure = () => ({errorText: 'net::ERR_ABORTED'});
   const chromium = {async launch() {return {async newContext() {return context;}, async close() {}};}};
   const want = {
-    'pending-before': 'before:live:pending:1,before:live:started:1,reconnect:overview:pending:1,reconnect:overview:started:1',
+    'pending-before': 'before:live:ok:1,before:live:pending:1,before:live:started:1,reconnect:overview:pending:1,reconnect:overview:started:1',
     'late-before': 'before:live:finished:1,before:live:ok:1,before:live:started:1,reconnect:overview:pending:1,reconnect:overview:started:1',
-    'aborted-before': 'before:live:aborted:1,before:live:started:1,reconnect:overview:pending:1,reconnect:overview:started:1',
+    'aborted-before': 'before:live:aborted:1,before:live:ok:1,before:live:started:1,reconnect:overview:pending:1,reconnect:overview:started:1',
     'saturated': 'reconnect:overview:pending:999,reconnect:overview:started:999',
     'failed-overview': 'reconnect:overview:failed:1,reconnect:overview:started:1',
     'error-overview': 'reconnect:overview:error:1,reconnect:overview:finished:1,reconnect:overview:started:1',
@@ -113,11 +113,11 @@ async function trafficAfterReload(emit) {
     async fill() {}, async click() {}, async isVisible() {return false;}, async waitFor() {
       if (reconnect && selector.includes('takings')) throw Error('PRIVATE_REFUSAL');
     }});
-  const page = {locator, on() {}, setDefaultTimeout() {}, async goto() {}, async reload() {
+  const page = {locator, on() {}, setDefaultTimeout() {}, async evaluate() {return true;}, async goto() {}, async reload() {
     reconnect = true;
     await emit((event, value) => events.get(event)(value));
   }};
-  const context = {on: (event, listener) => events.set(event, listener), async newPage() {return page;},
+  const context = {async addInitScript() {}, on: (event, listener) => events.set(event, listener), async newPage() {return page;},
     async newCDPSession() {return {async send() {}, on() {}};}};
   const chromium = {async launch() {return {async newContext() {return context;}, async close() {}};}};
   let evidence;

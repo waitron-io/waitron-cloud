@@ -115,9 +115,9 @@ test('healthy fetch checks out and verifies the pinned source without retry',asy
   assert.equal(result.calls.filter(args=>args.includes('checkout')).length,1);
 });
 
-test('browser preparation fetches and verifies the dashboard first-stream repair',async t=>{
-  const result=await prepare(t,{selected:'remote-browser-conformance.test.mjs',sourceRevision:'e8cfd38ed07bf546f14ad15334e54ee997114c75'});
-  assert.equal(result.calls.find(args=>args.includes('fetch')).at(-1),'e8cfd38ed07bf546f14ad15334e54ee997114c75');
+test('browser preparation fetches and verifies the dashboard stream and unload repairs',async t=>{
+  const result=await prepare(t,{selected:'remote-browser-conformance.test.mjs',sourceRevision:'99c265981ba98f1afd0e5fc822624a9a91822ad2'});
+  assert.equal(result.calls.find(args=>args.includes('fetch')).at(-1),'99c265981ba98f1afd0e5fc822624a9a91822ad2');
   assert.match(result.output,/REACHED_SOURCE_INSTALL/);
   assert.equal(result.calls.filter(args=>args.includes('fetch')).length,1);
 });

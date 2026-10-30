@@ -11,7 +11,7 @@ import {downloadConformanceArchive} from './conformance-archive.mjs';
 import {createInstallObserver} from './conformance-install-observer.mjs';
 
 const replayRevision='fbadd15785464e59747e697c11048bfbc6e4938f';
-const browserRevision='e8cfd38ed07bf546f14ad15334e54ee997114c75';
+const browserRevision='99c265981ba98f1afd0e5fc822624a9a91822ad2';
 const repository=fileURLToPath(new URL('../..',import.meta.url));
 const sha=bytes=>createHash('sha256').update(bytes).digest('hex');
 const exports=[
@@ -47,7 +47,7 @@ export async function prepareConformance(selected) {
         cleanup:()=>{try {browser.cleanup();} finally {replay.cleanup();}}};
     } catch(error) {replay.cleanup();throw error;}
   }
-  // Browser qualification needs the first-stream repair; replay measurements
+  // Browser qualification needs stream and unload repairs; replay measurements
   // retain their original source so their fiscal and accounting inputs agree.
   const revision=selected.includes('remote-browser-conformance.test.mjs')?browserRevision:replayRevision;
   const controller=new AbortController();
