@@ -1382,6 +1382,18 @@ implementation or production evidence.
   Raw data, names, row identities, object keys, credentials and payloads stay on
   the Mac. Closed anonymous export rejects extra/hidden fields and raw canaries.
 
+  The generated streamed-day check now prints its fixed outer stage and the last
+  32 validated replay/native events when it refuses. The parent prints this
+  evidence explicitly before rethrowing the child-command failure; raw exceptions
+  and private fields are excluded. Run
+  `node --test scripts/cloud-cost/streamed-day-diagnostics.test.mjs` for native
+  child controls, the actual smoke catch, reporting failures and owned cleanup.
+  This addresses the missing evidence in
+  [run 41003745800, job 123893874129](https://github.com/waitron-io/waitron-cloud/actions/runs/41003745800/job/123893874129),
+  which stopped at `private-replay`. Its historical Linux cause remains unknown.
+  Capture a labelled recurrence and reproduce it with the pinned runtime when
+  Docker returns; preserve accounting, cleanup, existing assertions and deadlines.
+
   **Forecast and live-check limits.** The [component projection](cost-model/usage-projection.json)
   applies explicit [assumptions](cost-model/projection-settings.json), preserving
   separate phases, failures, retry identities and source windows. Default future
