@@ -144,3 +144,20 @@ test('venue account list locks every venue before expiring earlier setup',async(
   await holder.query('COMMIT');const result=await pending as InstallationView[];const own=result.find(i=>i.installationId===f.installation);assert.ok(own);masked(own);
  }finally{await observer.query('ROLLBACK');await holder.query('ROLLBACK');await pending?.catch(()=>{});observer.release();holder.release();await f.close();}
 });
+test('venue account list rechecks installation scope after its policy wait',async()=>{
+ const f=await fixture(),holder=await f.pool.connect();let pending:Promise<unknown>|undefined;
+ try{
+  await set(f);const foreignVenue=randomUUID();
+  await f.pool.query("INSERT INTO venues(id,organisation_id,legal_business_id,local_venue_id,environment) VALUES($1,$2,$3,$1,'test')",[foreignVenue,f.foreign.organisationId,f.foreign.legalBusinessId]);
+  await holder.query('BEGIN');await holder.query('SELECT id FROM venues WHERE id=$1 FOR NO KEY UPDATE',[f.venues[1]]);
+  const pid=(await holder.query('SELECT pg_backend_pid() AS pid')).rows[0].pid,reader=new InstallationStore(f.peer,f.issuer,origin,undefined,'test-venue-levels');
+  let settled=false;pending=reader.listWithSession(f.session.token).finally(()=>{settled=true;});void pending.catch(()=>{});
+  let waiting=false;for(let i=0;i<300&&!settled;i++){
+   waiting=!!(await f.admin.query('SELECT 1 FROM pg_stat_activity WHERE application_name=$1 AND $2=ANY(pg_blocking_pids(pid))',[f.schema+'_peer',pid])).rowCount;
+   if(waiting)break;await delay(10);
+  }
+  assert.equal(waiting,true,'the account batch must reach its policy wait before a scope change');
+  await holder.query('UPDATE installations SET venue_id=$2 WHERE id=$1',[f.installation,foreignVenue]);
+  await holder.query('COMMIT');await assert.rejects(pending,{code:'permission_denied'});
+ }finally{await holder.query('ROLLBACK');await pending?.catch(()=>{});holder.release();await f.close();}
+});
