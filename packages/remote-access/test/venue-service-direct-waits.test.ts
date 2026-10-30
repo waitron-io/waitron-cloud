@@ -4,6 +4,7 @@ import {test} from 'node:test';
 import {crypto as acmeCrypto} from 'acme-client';
 import {venueServiceFixture,set} from '../../registration/test/fixtures/venue-service.ts';
 import {RemoteAccessStore} from '../src/placement.ts';
+import {transaction} from '@waitron-cloud/registration';
 
 const peer=()=>randomBytes(32).toString('base64');
 async function fixture(){
@@ -78,4 +79,50 @@ test('venue direct policy wait leaves unrelated cell progressing',async()=>{
   await holder.query('COMMIT');assert.deepEqual(await pending,f.placement);
   assert.deepEqual((await f.store.manifest(f.target)).routes.map(r=>r.installationId),[placed.installationId]);
  }finally{await holder.query('ROLLBACK');await pending?.catch(()=>{});holder.release();await f.close();}
+});
+
+// External work must retain the original installation, even when its revision is unchanged.
+for(const change of ['key','venue','environment','revision','revocation'] as const)
+test(`venue direct DNS wait refuses changed ${change} without hostname writes`,async()=>{
+ const f=await fixture();try{
+  await set({...f,store:f.billingStore},'connected',f.venues[1]);
+  const before=(await f.pool.query('SELECT * FROM remote_hostnames ORDER BY hostname')).rows;let calls=0;
+  const resolver=async(name:string)=>{
+   if(calls++===0){
+    if(change==='key')await f.pool.query('UPDATE installations SET public_key=$2 WHERE id=$1',[f.id,randomUUID()]);
+    if(change==='venue'){
+     await f.pool.query('UPDATE installations SET revoked_at=clock_timestamp(),superseded_by=$2 WHERE venue_id=$1 AND revoked_at IS NULL',[f.venues[1],f.id]);
+     await f.pool.query('UPDATE installations SET venue_id=$2 WHERE id=$1',[f.id,f.venues[1]]);
+    }
+    if(change==='environment')await f.pool.query("UPDATE venues SET environment='production' WHERE id=$1",[f.venues[0]]);
+    if(change==='revision')await f.pool.query('UPDATE installations SET configuration_revision=configuration_revision+1 WHERE id=$1',[f.id]);
+    if(change==='revocation')await f.pool.query('UPDATE installations SET revoked_at=clock_timestamp() WHERE id=$1',[f.id]);
+   }
+   return [name.startsWith('_acme-challenge.')?'_acme-challenge.'+f.placement.staffHostname:f.placement.staffHostname];
+  };
+  await assert.rejects(f.store.setHostname(f.id,'staff','custom.example.test',f.revision,resolver),change==='revision'?/revision_conflict/:change==='revocation'?/revoked/:/permission_denied/);
+  assert.equal(calls,2);
+  assert.deepEqual((await f.pool.query('SELECT * FROM remote_hostnames ORDER BY hostname')).rows,before);
+  assert.equal((await f.pool.query('SELECT configuration_revision FROM installations WHERE id=$1',[f.id])).rows[0].configuration_revision,f.revision+(change==='revision'?1:0));
+  assert.equal((await f.pool.query('SELECT count(*) AS n FROM remote_hostname_changes')).rows[0].n,'0');
+ }finally{await f.close();}
+});
+
+for(const change of ['key','venue','environment','revision','revocation'] as const)
+test(`venue direct certificate publication refuses changed ${change} after issuance`,async()=>{
+ const f=await fixture();try{
+  await set({...f,store:f.billingStore},'connected',f.venues[1]);
+  const authority=await f.store.authorizeCertificate(f.id,'staff',f.csr);let published=0;
+  if(change==='key')await f.pool.query('UPDATE installations SET public_key=$2 WHERE id=$1',[f.id,randomUUID()]);
+  if(change==='venue'){
+   await f.pool.query('UPDATE installations SET revoked_at=clock_timestamp(),superseded_by=$2 WHERE venue_id=$1 AND revoked_at IS NULL',[f.venues[1],f.id]);
+   await f.pool.query('UPDATE installations SET venue_id=$2 WHERE id=$1',[f.id,f.venues[1]]);
+  }
+  if(change==='environment')await f.pool.query("UPDATE venues SET environment='production' WHERE id=$1",[f.venues[0]]);
+  if(change==='revision')await f.pool.query('UPDATE installations SET configuration_revision=configuration_revision+1 WHERE id=$1',[f.id]);
+  if(change==='revocation')await f.pool.query('UPDATE installations SET revoked_at=clock_timestamp() WHERE id=$1',[f.id]);
+  await assert.rejects(transaction(f.pool,client=>f.store.publishAuthorizedCertificate(client,f.id,'staff',f.csr,authority,async()=>{published++;})),change==='revision'?/placement_changed/:change==='revocation'?/revoked/:change==='environment'?/permission_denied/:/placement_changed|permission_denied/);
+  assert.equal(published,0);
+  assert.equal((await f.pool.query('SELECT configuration_revision FROM installations WHERE id=$1',[f.id])).rows[0].configuration_revision,f.revision+(change==='revision'?1:0));
+ }finally{await f.close();}
 });
