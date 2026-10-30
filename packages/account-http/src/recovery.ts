@@ -3,15 +3,20 @@ import {ReplacementStore} from '@waitron-cloud/backups/replacement';
 import type {Context} from 'hono';
 import type {Pool} from 'pg';
 import {resolveSession} from '@waitron-cloud/identity';
-import {transaction} from '@waitron-cloud/registration';
+import {readVenuePermissions,transaction,type VenuePermission} from '@waitron-cloud/registration';
 import {RecoveryRequests,verifyRecoveryRequest} from '@waitron-cloud/backups/recovery-request';
-import {BackupRecovery} from '@waitron-cloud/backups/recovery';
+import {BackupRecovery,type RecoveryAccess} from '@waitron-cloud/backups/recovery';
 import type {CaptureOptions} from '@waitron-cloud/backups/captures';
 import {readSessionCookie} from './cookies.ts';
 import {readRecoveryMachineBody} from './recovery-machine-body.ts';
 import {readAccountBody} from './request.ts';
 import {AccountHttpError} from './errors.ts';
 import type {RateRule} from './rate-limit.ts';
+function recoveryDestination(access:RecoveryAccess){
+ return JSON.stringify('stream' in access
+  ?[access.source,access.stream.venueId,access.stream.location,access.stream.prefix,access.stream.readerReference,access.stream.pointerSignerPublicKey,access.stream.localVenueId,access.stream.generation]
+  :[access.source,access.point.venueId,access.location,access.point.objectKey,access.point.keyVersion,access.point.digest]);
+}
 export async function recoveryResponse(c:Context,options:{recoveryCodeKeys:RecoveryCodeKeys|null;pool:Pool;origin:string;ip:string;captures?:CaptureOptions;consume:(rules:RateRule[])=>Promise<void>}){
  const {pool,origin,captures,consume}=options;
  if(c.req.method!=='POST')throw new AccountHttpError(405,'method_not_allowed');
@@ -63,18 +68,32 @@ export async function recoveryResponse(c:Context,options:{recoveryCodeKeys:Recov
   await consume([{scope:'recovery-key',subject:identity.publicKey,limit:30,windowSeconds:60}]);
   if(action==='info')return machineJson(await recovery.target(body.id!,'info',proof));
   if(action==='restored'){await recovery.target(body.id!,'restored',proof);return machineJson({...('version' in body&&body.version===2?{version:2 as const}:{}),status:'restored'});}
-  const first=await recovery.target(body.id!,'read',proof);
+  let permission:VenuePermission|undefined,destination:string|undefined;
+  const read=async()=>{
+   if(captures.planMode!=='test-venue-levels')return recovery.target(body.id!,'read',proof);
+   return transaction(pool,async client=>{
+    const access=await new BackupRecovery(pool,captures.vault,origin,client,captures.planMode).target(body.id!,'read',proof);
+    // Target admission holds venue authority through this snapshot; provider work happens after commit.
+    const current=await readVenuePermissions(client,'stream' in access?access.stream.venueId:access.point.venueId,'test-venue-levels');
+    if(permission&&(current.revision!==permission.revision||current.organisationId!==permission.organisationId||current.legalBusinessId!==permission.legalBusinessId||current.venueId!==permission.venueId))throw new Error('backup.conflict');
+    const currentDestination=recoveryDestination(access);
+    if(destination!==undefined&&currentDestination!==destination)throw new Error('backup.conflict');
+    permission??=current;destination??=currentDestination;
+    return access;
+   });
+  };
+  const first=await read();
   if('stream' in first){
    const reader=captures.managedStreams?.reader;if(!reader)throw new AccountHttpError(503,'temporarily_unavailable');
    const credentials=await reader({reference:first.stream.readerReference,venueId:first.stream.venueId,location:first.stream.location,prefix:first.stream.prefix});
-   const current=await recovery.target(body.id!,'read',proof);
+   const current=await read();
    if(!('stream' in current)||!credentials||Object.keys(credentials).sort().join(',')!=='accessKeyId,secretAccessKey'||!credentials.accessKeyId||!credentials.secretAccessKey)throw new AccountHttpError(503,'temporarily_unavailable');
    const recoveryKit='WAITRON-RECOVERY-KIT-1:'+Buffer.from(JSON.stringify({version:1,venueId:current.stream.localVenueId,bucket:{...current.stream.location,prefix:current.stream.prefix,...credentials},recoveryKey:current.stream.recoveryKey,pointerSignerPublicKey:current.stream.pointerSignerPublicKey})).toString('base64url');
    return machineJson({source:current.source,recoveryKit,operationExpiresAt:current.operationExpiresAt});
   }
   const grant=await captures.grant(first.location,{kind:'restore',bucket:first.location.bucket,scope:first.point.objectKey});
   // Owner cancellation can commit while the provider issues credentials. Recheck before disclosing keys.
-  const current=await recovery.target(body.id!,'read',proof),expires=Date.parse(grant.expiresAt);
+  const current=await read(),expires=Date.parse(grant.expiresAt);
   if(!Number.isFinite(expires)||expires<=Date.now()||expires>Date.now()+901000||!grant.credentials.accessKeyId||!grant.credentials.secretAccessKey||!grant.credentials.sessionToken)throw new AccountHttpError(503,'temporarily_unavailable');
   if(!('point' in current))throw new AccountHttpError(503,'temporarily_unavailable');
   return machineJson({...('version' in current&&current.version===2?{version:2 as const,verification:current.verification}:{}),point:current.point,location:current.location,recoveryKey:current.keys.recoveryKey,operationExpiresAt:current.operationExpiresAt,...grant});
