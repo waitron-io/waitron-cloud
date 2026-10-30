@@ -23,6 +23,10 @@ test('venue storage guards detect independent physical writer omissions',{timeou
     pattern:'venue storage withdraws stale generations across downgrade round trips and restart',expected:'Missing expected rejection'},
    {name:'generation after provider wait',path:'deploy/test-cloud/service-runtime.mjs',needle:"if(await policy(input.venueId)!==revision)throw Error('permission_denied');",replacement:'',
     pattern:'venue storage rejects a generation change during provider publication',expected:'Missing expected rejection'},
+   {name:'reader generation after file lease',path:'deploy/test-cloud/service-runtime.mjs',needle:"if(revision!==await policy(input.venueId))throw Error('permission_denied');",replacement:'',
+    pattern:'venue storage reader refuses a permission round trip while waiting for its file lease',expected:'Missing expected rejection'},
+   {name:'physical writer generation after trial gaps',path:'deploy/test-cloud/service-runtime.mjs',needle:'writerMode===mode&&await policy(id)===revision',replacement:'writerMode===mode&&(await policy(id),true)',
+    pattern:'venue storage withdraws the physical writer across (late-extension|end-then-hosted|future-gap)',expected:'Missing expected rejection',count:3},
   ];
   const env={...process.env};delete env.NODE_TEST_CONTEXT;
   async function run(pattern:string){
@@ -31,12 +35,13 @@ test('venue storage guards detect independent physical writer omissions',{timeou
   }
   for(const c of cases){
    const path=join(candidate,c.path),original=await readFile(path,'utf8');assert.equal(original.split(c.needle).length,2,c.name+' must target one guard');
-   const before=await run(c.pattern);assert.equal(before.code,0,before.output);assert.match(before.output,/# pass 1\b/);assert.match(before.output,/# fail 0\b/);
+   const count=c.count??1;
+   const before=await run(c.pattern);assert.equal(before.code,0,before.output);assert.match(before.output,new RegExp('# pass '+count+'\\b'));assert.match(before.output,/# fail 0\b/);
    try{
     await writeFile(path,original.replace(c.needle,c.replacement));
-    const omitted=await run(c.pattern);assert.equal(omitted.code,1,omitted.output);assert.match(omitted.output,/# fail 1\b/);assert.match(omitted.output,/AssertionError|ERR_ASSERTION/);assert.ok(omitted.output.includes(c.expected),omitted.output);
+    const omitted=await run(c.pattern);assert.equal(omitted.code,1,omitted.output);assert.match(omitted.output,new RegExp('# fail '+count+'\\b'));assert.match(omitted.output,/AssertionError|ERR_ASSERTION/);assert.ok(omitted.output.includes(c.expected),omitted.output);
    }finally{await writeFile(path,original);}
-   const restored=await run(c.pattern);assert.equal(restored.code,0,restored.output);assert.match(restored.output,/# pass 1\b/);assert.match(restored.output,/# fail 0\b/);
+   const restored=await run(c.pattern);assert.equal(restored.code,0,restored.output);assert.match(restored.output,new RegExp('# pass '+count+'\\b'));assert.match(restored.output,/# fail 0\b/);
    console.log('VENUE_STORAGE_GUARD_DETECTED '+c.name);
   }
  }finally{await rm(scratch,{recursive:true,force:true});}

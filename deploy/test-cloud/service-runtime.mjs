@@ -56,7 +56,7 @@ export async function openPlanStorage({pool,mode,...options}){
    try{if(await policy(input.venueId)!==revision)throw Error('permission_denied');return result;}
    catch(error){await authority.withdrawWriter(input.venueId,revision);throw error;}
   },
-  async reader(input){await policy(input.venueId);const result=await authority.reader(input);await policy(input.venueId);return result;},
+  async reader(input){const revision=await policy(input.venueId),result=await authority.reader(input);if(revision!==await policy(input.venueId))throw Error('permission_denied');return result;},
   read:(...args)=>authority.read(...args),
   withdrawWriter:(...args)=>authority.withdrawWriter(...args),
   reconcile:()=>authority.reconcile()
