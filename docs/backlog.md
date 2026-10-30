@@ -37,6 +37,13 @@ without scheduling, polling or retrying. Cancellation and reporting failures kee
 their original errors. Real database cancellation and production shutdown remain
 separate qualification gates.
 
+Run `node --test packages/registration/test/worker-loop-empty-failures.test.ts`
+to check rejection with undefined, null, false, zero or an empty string. Scheduling,
+claim and polling failures keep their original values through reporting or
+propagation; failed claims wait for sibling cleanup and pending reports. Empty
+reporter failures remain rejections. Real database errors and production shutdown
+remain separate qualification gates.
+
 ## Worker scheduling deadlines and polling failures (D468)
 
 **Open.** Production scheduling, real database failures and recovery remain open.
