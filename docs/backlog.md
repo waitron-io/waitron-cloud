@@ -37,6 +37,13 @@ without scheduling, polling or retrying. Cancellation and reporting failures kee
 their original errors. Real database cancellation and production shutdown remain
 separate qualification gates.
 
+Run `node --test packages/registration/test/worker-loop-empty-failures.test.ts`
+to check rejection with undefined, null, false, zero or an empty string. Scheduling,
+claim and polling failures keep their original values through reporting or
+propagation; failed claims wait for sibling cleanup and pending reports. Empty
+reporter failures remain rejections. Real database errors and production shutdown
+remain separate qualification gates.
+
 ## Worker scheduling deadlines and polling failures (D468)
 
 **Open.** Production scheduling, real database failures and recovery remain open.
@@ -3481,6 +3488,12 @@ The historical Docker Hub token-request timeout remains unattributed. Keep the
 bounded, cache-first image acquisition and permanent-refusal checks; local Docker
 qualification and D135’s current-head CI remain open. See the
 [image acquisition detail](backlog/cost-image-acquisition.md).
+
+A later [Linux CI pull](https://github.com/waitron-io/waitron-cloud/actions/runs/40984997048/job/123833975271)
+of `node:26.11.1-slim` refused authentication before any browser case started.
+The registry or runner-credential cause is unknown. Capture the registry challenge
+and credential selection during a controlled reproduction, preserving the rule
+that authentication refusals stop immediately.
 
 ### Installation renewal accepted during owner revocation
 
