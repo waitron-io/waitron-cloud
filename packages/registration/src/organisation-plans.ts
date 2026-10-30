@@ -1,5 +1,6 @@
 import type {Pool, PoolClient} from 'pg';
 import {transaction} from './transaction.ts';
+import {venueServiceAuthorityInstalled} from './venue-service-schema.ts';
 
 export type OrganisationPlan = 'free' | 'paid';
 export type PlanService = 'address_lookup' | 'transactional_email' | 'content_translation'
@@ -94,13 +95,16 @@ export async function readVenuePlan(client: PoolClient, venueId: string, mode: P
   const plan = await readOrganisationPlan(client, row.organisation_id);
   const locked = await client.query("SELECT id FROM venues WHERE id=$1 AND organisation_id=$2 AND environment='test' FOR SHARE", [venueId, row.organisation_id]);
   if (!locked.rowCount) throw new Error('permission_denied');
-  if ((await client.query('SELECT 1 FROM billing_service_authority WHERE venue_id=$1', [venueId])).rowCount) throw new Error('permission_denied');
+  if (await venueServiceAuthorityInstalled(client)
+    && (await client.query('SELECT 1 FROM billing_service_authority WHERE venue_id=$1', [venueId])).rowCount) throw new Error('permission_denied');
   return plan;
 }
 
 export async function advancePlanConfiguration(client: PoolClient, organisationId: string, downgrade: boolean): Promise<void> {
+  const exclusion = await venueServiceAuthorityInstalled(client)
+    ? ' AND NOT EXISTS (SELECT 1 FROM billing_service_authority a WHERE (a.organisation_id,a.legal_business_id,a.venue_id)=(v.organisation_id,v.legal_business_id,v.id))' : '';
   const rows = (await client.query(`SELECT i.id FROM installations i JOIN venues v ON v.id=i.venue_id
-    WHERE v.organisation_id=$1 AND NOT EXISTS (SELECT 1 FROM billing_service_authority a WHERE (a.organisation_id,a.legal_business_id,a.venue_id)=(v.organisation_id,v.legal_business_id,v.id)) ORDER BY i.id FOR UPDATE OF i`, [organisationId])).rows;
+    WHERE v.organisation_id=$1${exclusion} ORDER BY i.id FOR UPDATE OF i`, [organisationId])).rows;
   for (const row of rows) {
     await client.query('UPDATE installations SET configuration_revision=configuration_revision+1 WHERE id=$1', [row.id]);
     if (downgrade) await client.query(`UPDATE installation_services SET state='unconfigured',configuration='{}'

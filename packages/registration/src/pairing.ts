@@ -5,6 +5,7 @@ import {RegistrationStore,type ConnectionBinding,type Registration} from './inde
 import {transaction} from './transaction.ts';
 import {isPairingUuid,PairingError,type PairingClaims} from './pairing-proof.ts';
 import {recordSecurityAuditEvent} from './security-audit.ts';
+import {venueServiceAuthorityInstalled} from './venue-service-schema.ts';
 interface Row {
   id:string;public_key:string;local_venue_id:string;environment:string;code_hash:string;expires_at:Date;
   failed_codes:number;cloud_account_id:string|null;organisation_id:string|null;legal_business_id:string|null;result:Registration|null;
@@ -105,7 +106,8 @@ export class PairingStore {
       if(row.organisation_id!==c.organisationId||row.legal_business_id!==c.legalBusinessId)throw new PairingError('binding_conflict');
       if(row.result){
         // Completion never holds an installation while waiting for its policy parents.
-        const authority=await client.query('SELECT 1 FROM billing_service_authority WHERE venue_id=$1',[row.result.venueId]);
+        const authority=await venueServiceAuthorityInstalled(client)
+          ?await client.query('SELECT 1 FROM billing_service_authority WHERE venue_id=$1',[row.result.venueId]):{rowCount:0};
         if(authority.rowCount){
           await client.query('SELECT id FROM organisations WHERE id=$1 FOR SHARE',[row.organisation_id]);
         }

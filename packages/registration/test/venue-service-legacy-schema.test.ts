@@ -8,7 +8,7 @@ import {PairingStore} from '../src/pairing.ts';
 import type {PairingClaims} from '../src/pairing-proof.ts';
 import {transaction} from '../src/transaction.ts';
 import {migrationRelease} from './fixtures/migration-release.ts';
-import {venueServiceFixture} from './fixtures/venue-service.ts';
+import {venueServiceFixture,set,rows} from './fixtures/venue-service.ts';
 
 // New authority checks must preserve historical clients without treating damaged current schemas as legacy.
 async function legacyFixture(){
@@ -71,5 +71,14 @@ test('a missing current authority table cannot silently restore legacy plan acce
   await assert.rejects(transaction(f.pool,c=>readVenuePlan(c,f.venues[0]!,'test-free-paid')),{code:'42P01'});
   await assert.rejects(new OrganisationPlanStore(f.pool).set(f.scope.organisationId,'paid'),{code:'42P01'});
   assert.equal((await new OrganisationPlanStore(f.pool).show(f.scope.organisationId)).plan,'free');
+ }finally{await f.close();}
+});
+test('a missing migration receipt cannot hide an enrolled venue from legacy plans',async()=>{
+ const f=await venueServiceFixture();try{
+  await set(f);const before=await rows(f);
+  await f.pool.query("DELETE FROM schema_migrations WHERE name='046_venue_service_authority.sql'");
+  await assert.rejects(transaction(f.pool,c=>readVenuePlan(c,f.venues[0]!,'test-free-paid')),/permission_denied/);
+  const store=new OrganisationPlanStore(f.pool);await store.set(f.scope.organisationId,'paid');await store.set(f.scope.organisationId,'free');
+  assert.deepEqual(await rows(f),before);
  }finally{await f.close();}
 });
