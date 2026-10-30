@@ -226,7 +226,10 @@ async function smoke() {
     } catch (error) {
       // Result errors belong to the synthetic replay; report before cleanup can replace the rejection.
       const text = read => { try { const value = read(); return value === undefined ? undefined : String(value); } catch { return undefined; } };
+      let meter;
+      try { if (stage === 'replication-meter-snapshot') meter = JSON.parse(JSON.stringify(replication.meter.diagnostics?.())); } catch {}
       try { console.error(JSON.stringify({ kind: 'litestream-result', stage,
+        ...(meter ? { meter } : {}),
         error: { name: text(() => error?.name) ?? (error === null ? 'null' : typeof error),
           message: text(() => error?.message) ?? text(() => error), stack: text(() => error?.stack) } })); } catch {}
       throw error;

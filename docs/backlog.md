@@ -3568,10 +3568,11 @@ on the landed acquisition repair, preserving its archive diagnostics; see the
 
 ### Litestream conformance transport-close refusal (D141)
 
-**Open; the historical close refusal and later result-assembly failure remain
-unexplained.** An aborted upstream reply now retains its first byte counts, HTTP
-status and completion state. The G474 PUT recurrence still needs Linux attribution,
-preserving redaction, cleanup, accounting and deadlines; see the
+**Open; the historical close refusal and later result-assembly failures remain
+unexplained.** Meter snapshot refusals now identify the failed check and first
+invalidation boundary without exposing request details. The D513 meter recurrence
+and G474 PUT recurrence still need Linux attribution, preserving redaction,
+cleanup, accounting and deadlines; see the
 [transport and result diagnostics](backlog/cost-conformance-fixtures.md#litestream-conformance-transport-close-refusal-d141).
 
 ## Cloud cost Mailpit fixture startup

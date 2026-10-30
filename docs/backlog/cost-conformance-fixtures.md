@@ -101,4 +101,25 @@ controls. The genuine Linux cause remains unknown. Reproduce it with the pinned
 writer and storage backend when Docker is available, or investigate the next CI
 event carrying this evidence; do not infer a repair from a passing run.
 
+[D513 merge cost run 41105691430](https://github.com/waitron-io/waitron-cloud/actions/runs/41105691430/job/124234895797)
+refuses the body-byte comparison at `replication-meter-snapshot` after both
+transport closes succeed. Its `Invalid cloud cost meter` message does not identify
+the failed check. You now get the most recent snapshot refusal category, the first invalidation
+boundary and the unfinished request count in the result diagnostic. The categories
+distinguish invalidated state, unfinished requests, clock validation, storage
+integration overflow, after-stop accounting, aggregation and aggregate attempt totals. Earlier
+invalidation distinguishes attempt observation, object observation, attempt admission
+and explicit invalidation. These are closed labels and counts; event fields, tokens
+and arbitrary invalidation arguments are never copied into this diagnostic.
+
+Run `node --test scripts/cloud-cost/meter-refusal-diagnostics.test.mjs
+scripts/cloud-cost/litestream-result-diagnostics.test.mjs` for native controls,
+including the actual smoke sequencing with the real meter and substituted external
+workload boundaries. Reading the diagnosis cannot settle a request or advance
+accounting. An unreadable diagnosis still permits the original result error to be
+reported and cleanup to complete. Existing refusal checks, errors, accounting and
+deadlines remain in place. The Linux trigger remains unknown; investigate a failure
+carrying the new categories before claiming a repair. Genuine local qualification
+with the pinned writer and backend remains blocked while Docker is down.
+
 Return to the [backlog index](../backlog.md).

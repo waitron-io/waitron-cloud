@@ -4,7 +4,7 @@ import { spawnSync } from 'node:child_process';
 
 // Run the actual smoke sequencing, after-stop tracker and close reporter with controlled workload, audit, meter and transport boundaries.
 // Omitting a result phase or discarding its rejection must lose the diagnostic asserted below.
-function run(failure, shape = '') {
+function run(failure, shape = '', meterFailure = '') {
   const fault = `function check(step) {
     if (process.env.RESULT_FAILURE !== step) return;
     const error = new RangeError('Synthetic result failure: ' + step);
@@ -17,6 +17,7 @@ function run(failure, shape = '') {
   }`;
   const actual = new URL('./litestream.mjs', import.meta.url).href;
   const fixture = new URL('./fixtures/litestream-smoke.mjs', import.meta.url).href;
+  const actualMeter = new URL('./meter.mjs', import.meta.url).href;
   const modules = {
     'node:fs': `export const mkdirSync=()=>{},writeFileSync=()=>{},rmSync=()=>{};
       export const readFileSync=()=>JSON.stringify({config:{},initial:{}});`,
@@ -46,6 +47,27 @@ function run(failure, shape = '') {
       export const createMeteringProxy=async()=>({url:'http://127.0.0.1:1',snapshot:()=>({}),close:async()=>{}});
       export const classifyStorageOperation=()=>{},instrumentStorageClient=()=>{},correlatedStorageAttempt=()=>{};`,
   };
+  if (meterFailure) modules['/code/meter.mjs'] = `import {createMeter as create} from ${JSON.stringify(actualMeter)};
+    export const createMeter=({phase})=>{
+      let time=0;const meter=create({phase,clock:()=>time});
+      if(phase!=='workload')return meter;
+      if(process.env.METER_FAILURE==='pending-attempts')meter.beginAttempt('PRIVATE_ATTEMPT');
+      if(process.env.METER_FAILURE==='explicit')meter.invalidate('PRIVATE_PAYLOAD');
+      if(process.env.METER_FAILURE==='clock')time=-1;
+      if(process.env.METER_FAILURE==='observe-attempt')try{meter.observeAttempt({secret:'PRIVATE_PAYLOAD'});}catch{}
+      if(process.env.METER_FAILURE==='unreadable'){
+        meter.invalidate();return {...meter,diagnostics(){throw Error('PRIVATE_DIAGNOSTIC_FAILURE');}};
+      }
+      if(process.env.METER_FAILURE==='bigint-diagnostic'){
+        meter.invalidate();return {...meter,diagnostics(){return {private:10n};}};
+      }
+      if(process.env.METER_FAILURE==='throwing-json'){
+        meter.invalidate();return {...meter,diagnostics(){return {toJSON(){throw Error('PRIVATE_JSON_FAILURE');}};}};
+      }
+      return meter;
+    };
+    export const createMeteringProxy=async()=>({url:'http://127.0.0.1:1',close:async()=>{}});
+    export const classifyStorageOperation=()=>{},instrumentStorageClient=()=>{},correlatedStorageAttempt=()=>{};`;
   const code = `import {registerHooks} from 'node:module';
     const modules=${JSON.stringify(modules)};
     registerHooks({resolve(specifier,context,next){
@@ -54,7 +76,7 @@ function run(failure, shape = '') {
     await import(${JSON.stringify(fixture)});`;
   return spawnSync(process.execPath, ['--input-type=module', '--eval', code], {
     env: { ...process.env, COST_LITESTREAM_TRANSPORT: '1', COST_LITESTREAM_LIFETIMES: '0',
-      COST_LITESTREAM_VERSIONS: '0', COST_LITESTREAM_HISTORIES: '0', RESULT_FAILURE: failure, RESULT_ERROR: shape },
+      COST_LITESTREAM_VERSIONS: '0', COST_LITESTREAM_HISTORIES: '0', RESULT_FAILURE: failure, RESULT_ERROR: shape, METER_FAILURE: meterFailure },
     encoding: 'utf8', timeout: 5000,
   });
 }
@@ -77,6 +99,41 @@ for (const step of steps) test(`the smoke identifies ${step} after successful cl
     'cleanup-restore-transport', 'cleanup-replication-proxy', 'cleanup-restore-proxy', 'cleanup-admin-proxy']) {
     assert.equal(records.filter(row => row.stage === stage && row.status === 'fulfilled').length, 1, stage);
   }
+});
+
+// Dropping meter diagnostics from the actual result catch must hide these independently triggered guards.
+for (const [failure, expected] of [
+  ['pending-attempts', { firstInvalidation: null, snapshotRefusal: 'pending-attempts', pendingAttempts: 1 }],
+  ['explicit', { firstInvalidation: 'explicit', snapshotRefusal: 'invalidated', pendingAttempts: 0 }],
+  ['observe-attempt', { firstInvalidation: 'observe-attempt', snapshotRefusal: 'invalidated', pendingAttempts: 0 }],
+  ['clock', { firstInvalidation: null, snapshotRefusal: 'clock', pendingAttempts: 0 }],
+  ['unreadable', undefined],
+  ['bigint-diagnostic', undefined],
+  ['throwing-json', undefined],
+]) test(`the actual smoke retains the meter refusal and cleanup for ${failure}`, () => {
+  const result = run('', '', failure);
+  assert.equal(result.error, undefined); assert.equal(result.signal, null); assert.equal(result.status, 1, result.stderr);
+  assert.equal(result.stdout, '');
+  const records = result.stderr.split('\n').filter(line => line.startsWith('{')).map(line => JSON.parse(line));
+  const diagnostic = records.find(row => row.kind === 'litestream-result');
+  assert.ok(diagnostic, result.stderr);
+  assert.equal(diagnostic.stage, 'replication-meter-snapshot');
+  assert.equal(diagnostic.error.message, 'Invalid cloud cost meter');
+  assert.deepEqual(diagnostic.meter, expected, result.stderr);
+  assert.doesNotMatch(result.stderr, /PRIVATE/);
+  for (const stage of ['cleanup-replication-transport', 'cleanup-restore-transport', 'cleanup-replication-proxy',
+    'cleanup-restore-proxy', 'cleanup-admin-proxy'])
+    assert.equal(records.filter(row => row.stage === stage && row.status === 'fulfilled').length, 1, stage);
+});
+
+test('the smoke reads meter diagnostics only for a meter snapshot refusal', () => {
+  const result = run('replay-verification', '', 'pending-attempts');
+  assert.equal(result.error, undefined); assert.equal(result.signal, null); assert.equal(result.status, 1, result.stderr);
+  const records = result.stderr.split('\n').filter(line => line.startsWith('{')).map(line => JSON.parse(line));
+  const diagnostic = records.find(row => row.kind === 'litestream-result');
+  assert.equal(diagnostic.stage, 'replay-verification');
+  assert.equal(diagnostic.error.message, 'Synthetic result failure: replay-verification');
+  assert.equal(Object.hasOwn(diagnostic, 'meter'), false);
 });
 
 test('successful smoke results keep their counts and snapshots without an error diagnostic', () => {
