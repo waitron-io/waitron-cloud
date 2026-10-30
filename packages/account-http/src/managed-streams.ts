@@ -24,6 +24,7 @@ export class ManagedStreamMachines{
  constructor(pool:Pool,issuer:LeaseIssuer,origin:string,vault:BackupKeyVault,authority:ManagedStreamAuthority,trusted=createLeaseTrust(issuer),planMode:PlanMode='existing'){this.#pool=pool;this.#issuer=issuer;this.#origin=origin;this.#trusted=trusted;this.#streams=new ManagedStreams(pool,vault,authority,planMode);}
  async authenticate(action:StreamAction,envelope:unknown){return new InstallationStore(this.#pool,this.#issuer,this.#origin,this.#trusted).authenticate(action,envelope);}
  async execute(action:StreamAction,envelope:unknown){
+  await this.authenticate(action,envelope);
   const routing=readMachineClaims(envelope),parsed=body(action,routing.body);
   const fence=async(client:PoolClient)=>{
    const row=(await client.query(`SELECT i.*,v.environment FROM installations i JOIN venues v ON v.id=i.venue_id WHERE i.id=$1`,[routing.installationId])).rows[0];
