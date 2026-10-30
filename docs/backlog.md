@@ -51,6 +51,13 @@ either its only wait or its final wait to meet that deadline. Every active claim
 finishes before polling, and shutdown prevents further claims. Production
 scheduling and real database failures remain separate gates.
 
+Run `node --test packages/registration/test/worker-loop-native-reporting.test.ts`
+to check pending startup and claim error reports at two and 32 slots. Native retry
+timers start only after reporting completes, then expire before work resumes.
+Shutdown waits for reporting without a retry timer; a refused report keeps its
+original error and stops a live worker. Real database failures and production
+shutdown remain separate gates.
+
 ## Worker scheduling failures and error reporting (D467)
 
 **Open.** Production scheduling, real database failures and capacity remain separate gates.
