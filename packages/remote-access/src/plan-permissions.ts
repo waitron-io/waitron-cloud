@@ -1,5 +1,5 @@
 import type {PoolClient} from 'pg';
-import {readVenuePlan,type PlanMode} from '@waitron-cloud/registration';
+import {readVenuePlan,readVenuePermissions,requireVenueService,type PlanMode} from '@waitron-cloud/registration';
 
 // Acquire policy before installation, cell and job locks. Provisioning may restore
 // cleared setup; other paid work requires that explicit provisioning first.
@@ -7,6 +7,11 @@ export async function requireRemotePlan(client:PoolClient,id:string,mode:PlanMod
  if(mode==='existing')return;
  const row=(await client.query('SELECT venue_id FROM installations WHERE id=$1',[id])).rows[0];
  if(!row)throw new Error('installation_unavailable');
+ if(mode==='test-venue-levels'){
+  await requireVenueService(client,row.venue_id,'remote_access',mode);
+  if(setup&&!(await client.query("SELECT 1 FROM installation_services WHERE installation_id=$1 AND service='remote_access' AND state<>'unconfigured'",[id])).rowCount)throw new Error('permission_denied');
+  return;
+ }
  if(await readVenuePlan(client,row.venue_id,mode)!=='paid')throw new Error('permission_denied',{cause:'remote_plan_required'});
  if(setup&&!(await client.query("SELECT 1 FROM installation_services WHERE installation_id=$1 AND service='remote_access' AND state<>'unconfigured'",[id])).rowCount)throw new Error('permission_denied',{cause:'remote_setup_required'});
 }
@@ -15,8 +20,10 @@ export async function requireRemotePlan(client:PoolClient,id:string,mode:PlanMod
 // order before reading setup. Only those locked organisations can enter this export;
 // a concurrently created first placement waits for the next export. A cell export
 // includes incoming moves, whose active placement still belongs to another cell.
-export async function eligibleRemoteInstallations(client:PoolClient,mode:PlanMode,cellId?:string):Promise<string[]|undefined>{
+type EligibilityScope={installationIds?:string[];lock?:'SHARE'|'UPDATE'|false};
+export async function eligibleRemoteInstallations(client:PoolClient,mode:PlanMode,cellId?:string,scope:EligibilityScope={}):Promise<string[]|undefined>{
  if(mode==='existing')return;
+ if(mode==='test-venue-levels')return eligibleVenueInstallations(client,cellId,scope);
  const policies=(await client.query(`SELECT o.id FROM organisations o WHERE EXISTS(
   SELECT 1 FROM venues v JOIN remote_placements p ON p.venue_id=v.id WHERE v.organisation_id=o.id
   AND ($1::uuid IS NULL OR p.cell_id=$1 OR EXISTS(SELECT 1 FROM remote_cell_moves m
@@ -25,4 +32,31 @@ export async function eligibleRemoteInstallations(client:PoolClient,mode:PlanMod
  return (await client.query(`SELECT i.id FROM installations i JOIN venues v ON v.id=i.venue_id JOIN organisations o ON o.id=v.organisation_id
   JOIN installation_services s ON s.installation_id=i.id AND s.service='remote_access'
   WHERE v.organisation_id=ANY($1::uuid[]) AND o.service_plan='paid' AND v.environment='test' AND s.state<>'unconfigured' AND i.revoked_at IS NULL`,[policies])).rows.map(row=>row.id);
+}
+
+// Capture bindings before locks, then lock every organisation and venue before any
+// installation. Expiry can clear setup while reading the first venue's authority.
+async function eligibleVenueInstallations(client:PoolClient,cellId:string|undefined,scope:EligibilityScope):Promise<string[]>{
+ const candidates=(await client.query(`SELECT i.id,i.venue_id,v.organisation_id,v.legal_business_id
+  FROM installations i JOIN venues v ON v.id=i.venue_id JOIN remote_placements p ON p.installation_id=i.id AND p.venue_id=i.venue_id
+  WHERE ($1::uuid IS NULL OR p.cell_id=$1 OR EXISTS(SELECT 1 FROM remote_cell_moves m
+   WHERE m.installation_id=i.id AND m.target_cell_id=$1 AND m.state IN ('staged','ready')))
+  AND ($2::uuid[] IS NULL OR i.id=ANY($2::uuid[])) ORDER BY i.id`,[cellId??null,scope.installationIds??null])).rows;
+ await client.query('SELECT id FROM organisations WHERE id=ANY($1::uuid[]) ORDER BY id FOR SHARE',[candidates.map(r=>r.organisation_id)]);
+ const venues=(await client.query('SELECT id,organisation_id,legal_business_id,environment FROM venues WHERE id=ANY($1::uuid[]) ORDER BY id FOR NO KEY UPDATE',[candidates.map(r=>r.venue_id)])).rows;
+ const allowed=new Set<string>();
+ for(const venue of venues){
+  if(venue.environment!=='test')continue;
+  const permission=await readVenuePermissions(client,venue.id,'test-venue-levels');
+  if(permission.level==='connected'||permission.level==='hosted')allowed.add(venue.id);
+ }
+ const lock=scope.lock===false?'':` FOR ${scope.lock??'SHARE'} OF i`;
+ const current=(await client.query(`SELECT i.id,i.venue_id,v.organisation_id,v.legal_business_id FROM installations i JOIN venues v ON v.id=i.venue_id
+  JOIN installation_services s ON s.installation_id=i.id AND s.service='remote_access'
+  WHERE i.id=ANY($1::uuid[]) AND i.revoked_at IS NULL AND i.superseded_by IS NULL AND s.state<>'unconfigured' ORDER BY i.id${lock}`,[candidates.map(r=>r.id)])).rows;
+ const original=new Map(candidates.map(r=>[r.id,r]));
+ return current.filter(row=>{
+  const before=original.get(row.id);
+  return before&&allowed.has(row.venue_id)&&row.venue_id===before.venue_id&&row.organisation_id===before.organisation_id&&row.legal_business_id===before.legal_business_id;
+ }).map(row=>row.id);
 }

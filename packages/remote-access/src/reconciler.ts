@@ -43,7 +43,9 @@ const staffDigest=(authorityDigest:string,request:StaffCertificateRequest)=>dige
 async function desiredTargets(client:PoolClient,staffExchange:boolean,mode:PlanMode,forwardReports:boolean,scope?:Pick<RemoteConfigurationJob,'kind'|'targetId'>):Promise<DesiredTarget[]>{
  const cellId=scope?.kind==='route'?scope.targetId:null,installationId=scope&&scope.kind!=='route'?scope.targetId:null;
  let eligibleIds:string[]|undefined;
- if(forwardReports){
+ if(mode==='test-venue-levels'){
+  eligibleIds=await eligibleRemoteInstallations(client,mode,cellId??undefined,{installationIds:installationId?[installationId]:undefined,lock:scope?(scope.kind==='route'?'SHARE':'UPDATE'):false});
+ }else if(forwardReports){
   const policies=(await client.query(`SELECT o.id FROM organisations o WHERE EXISTS(SELECT 1 FROM venues v JOIN remote_placements p ON p.venue_id=v.id
    WHERE v.organisation_id=o.id AND ($1::uuid IS NULL OR p.cell_id=$1 OR EXISTS(SELECT 1 FROM remote_cell_moves m
     WHERE m.installation_id=p.installation_id AND m.target_cell_id=$1 AND m.state IN ('staged','ready')))
