@@ -706,6 +706,13 @@ another call. Delayed cancellation and wait failures preserve billed usage and
 stop further calls. Production activation and wider runtime qualification remain
 open in the [translation backlog](backlog/translation.md).
 
+Run `node --test packages/translation/test/batch-runner-http-retry.test.ts`
+to check server retry headers through both batch passes. Zero, seconds and dates
+reach the wait callback; invalid headers keep the retry schedule. Each pause must
+finish before another call, and exhaustion preserves accepted first-pass names
+without inventing usage for HTTP refusals. Real database recovery, provider
+activation and wider release qualification remain separate translation gates.
+
 Run `node --test packages/translation/test/openai-client-concurrency.test.ts`
 to check that an aborted, oversized, truncated or refused HTTP response leaves a
 simultaneous request through the same client usable in either completion order.
