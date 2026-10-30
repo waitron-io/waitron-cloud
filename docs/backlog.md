@@ -59,6 +59,13 @@ the scheduling cadence, and error reporting waits for every active claim. A fail
 error report stops the loop. Production scheduling and real database failures
 remain separate qualification gates.
 
+Run `node --test packages/registration/test/worker-loop-isolation.test.ts` to
+check two independent workers at two and 32 slots. One worker's pending error
+report permits the other to schedule, claim and poll. Stopping either worker first
+preserves the other's pending work and cancellation signal; reporting still finishes
+before shutdown or retry. Real database failures and production process isolation
+remain separate qualification gates.
+
 Run `node --test packages/registration/test/worker-loop-config.test.ts` to
 check that invalid capacity and timer settings refuse before scheduling, claims
 or error recovery, even at stopped startup. Valid minimum timers and the supported
