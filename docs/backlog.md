@@ -109,6 +109,13 @@ the next deadline. Polling failures retain their original cause, report before
 retrying and stop if the retry timer fails. Production scheduling and real database
 failures remain separate qualification gates.
 
+Run `node --test packages/registration/test/worker-loop-recurring-recovery.test.ts`
+to check overdue recurring schedules that fail after a successful startup. At two
+and 32 slots, busy and idle batches wait for reporting and the retry delay before
+new claims. Successful recovery starts the next interval after scheduling finishes;
+idle polling still meets that deadline. Real database scheduling and production
+recovery remain separate gates.
+
 ## How to keep this file honest
 
 - Delete finished entries after checking main, the named pull requests and the code.
