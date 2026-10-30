@@ -31,6 +31,13 @@ before shutdown. At two and 32 slots, reporting keeps the original error and
 failed schedules admit no new claims; cancellation releases the native timer and
 lets the process exit. Production signals and real database failures remain open.
 
+Run `node --test packages/registration/test/worker-loop-native-isolation.test.ts`
+to check two workers using real idle and failure-retry timers at two and 32 slots.
+Stopping either worker releases its timer while the other keeps waiting with its
+own signal. Claim and schedule failures report their original error once; the
+surviving worker exits after its own shutdown. Production signals and real
+database failures remain separate gates.
+
 ## Worker scheduling failures and error reporting (D467)
 
 **Open.** Production scheduling, real database failures and capacity remain separate gates.
