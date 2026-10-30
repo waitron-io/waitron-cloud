@@ -24,10 +24,10 @@ async function fixture(){
   const manifest=await ordinary.reportingManifest(source),route=manifest.routes.find(r=>r.installationId===ids[0])!,now=Date.now();
   const report:ForwardReport={version:1,audience:'waitron-cloud-public-forward-report',cellId:source,gatewayId,generation:1,sequence:1,issuedAt:now,observations:[{cellId:source,gatewayId,generation:1,installationId:ids[0]!,venueId:f.venues[0]!,revision:Number((await f.pool.query('SELECT configuration_revision FROM installations WHERE id=$1',[ids[0]])).rows[0].configuration_revision),routeId:'public_availability',routeBinding:routeBinding(route),manifestSequence:manifest.sequence,manifestExpiresAt:manifest.expiresAt,observationSequence:1,category:'upstream_transport',observedAt:now,expiresAt:Math.min(now+300000,manifest.expiresAt)}]};
   const mapping={country:'ES' as const,environment:'test' as const,cellId:source,file:'/country/forward/report.json',writerUid:0,readerGid:1000};
-  const observations=new ForwardObservationStore(f.pool,'test-free-paid');assert.equal(await observations.record(mapping,signForwardReport(report,key.privateKey)),'accepted');
+  const observations=new ForwardObservationStore(f.pool);assert.equal(await observations.record(mapping,signForwardReport(report,key.privateKey)),'accepted');
   assert.equal((await transaction(f.pool,c=>observations.readCurrent(c,ids[0]!)))!.category,'upstream_transport');
   await f.pool.query("UPDATE remote_forward_reporters SET next_accept_at='-infinity' WHERE cell_id=$1",[source]);report.sequence++;report.observations[0]!.observationSequence++;
-  return {...f,ordinary,legacy,source,otherCell,otherId,ids,observations,mapping,envelope:signForwardReport(report,key.privateKey)};
+  return {...f,ordinary,legacy,source,otherCell,otherId,ids,observations:new ForwardObservationStore(f.pool,'test-free-paid'),mapping,envelope:signForwardReport(report,key.privateKey)};
  }catch(error){await f.close();throw error;}
 }
 type Fixture=Awaited<ReturnType<typeof fixture>>;
@@ -114,4 +114,11 @@ for(const operation of ['manifest','reporting manifest','scheduler','reporting s
   await new RemoteConfigurationReconciler(f.pool,{planMode:'test-free-paid',forwardReports:operation==='reporting scheduler'}).schedule();
   assert.equal((await f.pool.query("SELECT count(*) AS n FROM remote_configuration_jobs WHERE target_id=$1 AND kind<>'route' AND enabled",[newcomer])).rows[0].n,'2');
  }finally{release();await pending?.catch(()=>{});await f.close();}
+});
+
+// Keep the positive legacy read independent of the deliberately omitted guard in concurrency controls.
+test('legacy remote observation reads retain a valid unenrolled route',async()=>{
+ const f=await fixture();try{
+  assert.equal((await transaction(f.pool,c=>f.observations.readCurrent(c,f.ids[0]!)))!.category,'upstream_transport');
+ }finally{await f.close();}
 });
