@@ -18,7 +18,7 @@ async function fixture(){
  const v=await connectedVenue(db,signer,origin),scope={organisationId:v.organisationId,legalBusinessId:v.legalBusinessId};
  await store.execute(scope,{key:randomUUID(),occurredAt:new Date().toISOString(),source:{kind:'internal'}},{type:'ensure_business'});
  await readyForTranslation(db,v);await giveConsent(db,v);
- // Runtime construction keeps the test-only commit executable before the appended option exists.
+ // Runtime construction lets database behavior checks run independently of static signature checks.
  const api=await import(new URL('../src/index.ts',import.meta.url).href);
  const machine:TranslationMachine=new api.TranslationMachine(db.pool,signer,origin,undefined,undefined,mode);
  const set=async(level:BillingLevel)=>{
