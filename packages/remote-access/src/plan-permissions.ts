@@ -11,8 +11,8 @@ export async function requireRemotePlan(client:PoolClient,id:string,mode:PlanMod
   const key=(await client.query('SELECT public_key FROM installations WHERE id=$1',[id])).rows[0]?.public_key;
   await requireVenueService(client,row.venue_id,'remote_access',mode);
   // Installation identity and setup must be read after both policy and installation waits.
-  const current=(await client.query('SELECT public_key FROM installations WHERE id=$1 FOR UPDATE',[id])).rows[0];
-  if(!current||current.public_key!==key)throw new Error('permission_denied');
+  const current=(await client.query('SELECT venue_id,public_key FROM installations WHERE id=$1 FOR UPDATE',[id])).rows[0];
+  if(!current||current.public_key!==key||current.venue_id!==row.venue_id)throw new Error('permission_denied');
   if(setup&&!(await client.query("SELECT 1 FROM installation_services WHERE installation_id=$1 AND service='remote_access' AND state<>'unconfigured'",[id])).rowCount)throw new Error('permission_denied');
   return;
  }
