@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import {generateKeyPairSync,randomBytes,randomUUID,sign} from 'node:crypto';
 import {test} from 'node:test';
 import {setTimeout as delay} from 'node:timers/promises';
+import {transaction} from '@waitron-cloud/registration';
 import {venueServiceFixture,set,trial,event} from '../../registration/test/fixtures/venue-service.ts';
 import {BackupCatalogue} from '../src/catalogue.ts';
 import {BackupKeyVault} from '../src/keys.ts';
@@ -107,7 +108,10 @@ for(const action of ['configure','observe'] as const)for(const change of ['downg
    if(change==='downgrade'||change==='round-trip'){await set(peer,'registered');if(change==='round-trip')await set(peer);}
    else if(change==='trial-extension'){const end=(await f.store.history(f.scope,f.venues[0])).trials[0]!.endsOn;await peer.store.execute(f.scope,event(),{type:'extend_trial',venueId:f.venues[0],level:'connected',expectedEnd:end});}
    else if(change==='revocation')await f.peer.query('UPDATE installations SET revoked_at=clock_timestamp() WHERE id=$1',[f.installation]);
-   else {const replacement=randomUUID();await f.peer.query('INSERT INTO installations(id,venue_id,public_key) VALUES($1,$2,$3)',[replacement,f.venues[0],replacement]);await f.peer.query('UPDATE installations SET superseded_by=$2 WHERE id=$1',[f.installation,replacement]);}
+   else {const replacement=randomUUID();await transaction(f.peer,async client=>{
+    await client.query('UPDATE installations SET superseded_by=$2,revoked_at=clock_timestamp() WHERE id=$1',[f.installation,replacement]);
+    await client.query('INSERT INTO installations(id,venue_id,public_key) VALUES($1,$2,$3)',[replacement,f.venues[0],replacement]);
+   });}
   };
   if(action==='configure')f.blockProvision(wait);else f.blockRead(wait);
   const expected=change==='downgrade'?'backup.permission_denied':change==='revocation'||change==='supersession'?'backup.revoked':'backup.conflict';
@@ -134,6 +138,7 @@ test('venue stream policy wait rechecks installation scope before provisioning',
    if(blocked)break;await delay(10);
   }
   assert.equal(blocked,true,'stream must wait for venue authority before locking the installation');
+  await holder.query('UPDATE installations SET superseded_by=$2,revoked_at=clock_timestamp() WHERE id=$1',[sibling,f.installation]);
   await holder.query('UPDATE installations SET venue_id=$2 WHERE id=$1',[f.installation,f.venues[1]]);await holder.query('COMMIT');
   await assert.rejects(pending,{message:'backup.permission_denied'});
   assert.deepEqual(f.calls,{provision:[],read:[]});assert.deepEqual(await state(f),before);
