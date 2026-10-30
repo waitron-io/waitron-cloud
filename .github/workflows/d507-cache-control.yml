@@ -39,12 +39,17 @@ jobs:
           echo "$$" > "$RUNNER_TEMP/d507-tar.pid"
           echo D507_CACHE_SAVE_ENTERED_BLOCKED_ARCHIVE
           trap 'exit 143' TERM INT
-          while true; do sleep 1; done
+          sleep 300 &
+          echo "$!" >> "$RUNNER_TEMP/d507-tar.pid"
+          wait "$!"
           SH
           chmod +x "$RUNNER_TEMP/d507-bin/tar"
           echo "$RUNNER_TEMP/d507-bin" >> "$GITHUB_PATH"
       - name: Save pnpm dependency cache
         id: save
+        if: success()
+        timeout-minutes: 1
+        continue-on-error: true
         uses: actions/cache/save@v4
         with:
           path: ${{ steps.store.outputs.path }}
@@ -75,7 +80,8 @@ jobs:
           else
             test "$SAVE_OUTCOME" = failure
             test "$SAVE_CONCLUSION" = success
-            pid=$(cat "$RUNNER_TEMP/d507-tar.pid")
-            if kill -0 "$pid" 2>/dev/null; then echo "Owned archive process still alive: $pid"; exit 1; fi
+            while read -r pid; do
+              if kill -0 "$pid" 2>/dev/null; then echo "Owned archive process still alive: $pid"; ps -p "$pid" -o pid,ppid,stat,command; exit 1; fi
+            done < "$RUNNER_TEMP/d507-tar.pid"
             echo D507_STALLED_SAVE_BOUNDED_AND_CLEANED
           fi

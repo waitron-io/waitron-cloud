@@ -53,12 +53,30 @@ jobs:
       - uses: actions/setup-node@v5
         with:
           node-version: '26'
-          cache: pnpm
+          package-manager-cache: false
           registry-url: https://npm.pkg.github.com
           scope: '@waitron-io'
+      - name: Locate pnpm dependency store
+        id: pnpm-store
+        run: echo "path=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
+      - name: Restore pnpm dependency cache
+        id: pnpm-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ steps.pnpm-store.outputs.path }}
+          key: pnpm-${{ runner.os }}-${{ runner.arch }}-node26-${{ hashFiles('pnpm-lock.yaml') }}
       - run: pnpm install --frozen-lockfile
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - run: pnpm test:cloud-cost:conformance --only '${{ matrix.file }}' --pattern '${{ matrix.pattern }}' --skip-pattern '${{ matrix.skipPattern }}'
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      # Cache publication is optional; a stalled save must not cancel completed tests.
+      - name: Save pnpm dependency cache
+        if: success() && steps.pnpm-cache.outputs.cache-hit != 'true'
+        timeout-minutes: 1
+        continue-on-error: true
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ steps.pnpm-store.outputs.path }}
+          key: ${{ steps.pnpm-cache.outputs.cache-primary-key }}
