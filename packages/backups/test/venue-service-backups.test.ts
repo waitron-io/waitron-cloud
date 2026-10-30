@@ -121,19 +121,25 @@ test('venue snapshot policy wait leaves installation and location unlocked',asyn
   await holder.query('COMMIT');await pending;
  }finally{await observer.query('ROLLBACK');await holder.query('ROLLBACK');await pending?.catch(()=>{});observer.release();holder.release();await f.close();}
 });
-test('venue snapshot admitted object publication finishes before downgrade commits',async()=>{
+for(const changeKind of ['round-trip','downgrade','revocation'] as const)test(`venue snapshot object wait rejects ${changeKind} without publishing`,async()=>{
  const f=await fixture(),entered=latch(),blocked=latch();let pending:Promise<unknown>|undefined,change:Promise<unknown>|undefined;
  try{
   await provision(f);const c=await capture(f);f.blockRead(async()=>{entered.release();await blocked.promise;});
-  pending=f.catalogue.publish(f.installation,c.reserved.id,c.metadata);void pending.catch(()=>{});await Promise.race([entered.promise,pending.then(()=>{throw Error("expected blocked object work");})]);
-  let settled=false;change=set({...f,store:new f.api.BillingStore(f.peer)},'registered').finally(()=>{settled=true;});void change.catch(()=>{});
+  pending=f.catalogue.publish(f.installation,c.reserved.id,c.metadata);void pending.catch(()=>{});
+  await Promise.race([entered.promise,pending.then(()=>{throw Error('expected blocked object work');})]);
+  let settled=false;const peer={...f,store:new f.api.BillingStore(f.peer)};
+  change=(async()=>{
+   if(changeKind==='revocation')await f.peer.query('UPDATE installations SET revoked_at=clock_timestamp() WHERE id=$1',[f.installation]);
+   else{await set(peer,'registered');if(changeKind==='round-trip')await set(peer);}
+  })().finally(()=>{settled=true;});void change.catch(()=>{});
   let waiting=false;for(let i=0;i<300&&!settled;i++){
    waiting=!!(await f.admin.query('SELECT 1 FROM pg_stat_activity WHERE application_name=$1 AND cardinality(pg_blocking_pids(pid))>0',[f.schema+'_peer'])).rowCount;
    if(waiting)break;await delay(10);
   }
-  assert.equal(waiting,true,'downgrade must wait for admitted publication');assert.equal(settled,false);
-  blocked.release();await pending;await change;
-  assert.deepEqual(f.objects.get('snapshots/'+c.reserved.id),c.bytes);await assert.rejects(f.catalogue.reserveCapture(f.installation,randomUUID()),{message:'backup.permission_denied'});
+  assert.equal(waiting,false,'object work must release venue authority and installation locks');assert.equal(settled,true,'the policy change must complete during object work');await change;
+  blocked.release();await assert.rejects(pending,{message:changeKind==='round-trip'?'backup.conflict':changeKind==='downgrade'?'backup.permission_denied':'backup.revoked'});
+  assert.equal((await f.pool.query('SELECT count(*) FROM backup_points')).rows[0].count,'0');
+  assert.equal((await f.pool.query('SELECT count(*) FROM backup_key_versions')).rows[0].count,'1');assert.ok(f.objects.has(c.reserved.incomingKey));assert.deepEqual(f.removed,[]);
  }finally{blocked.release();await pending?.catch(()=>{});await change?.catch(()=>{});await f.close();}
 });
 test('venue snapshot admitted deletion finishes before downgrade commits',async()=>{
