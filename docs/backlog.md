@@ -3739,6 +3739,10 @@ cause, not the historical Linux cause or real fiscal-workload qualification.
 Keep that attribution and any repair open; genuine local container reproduction
 waits until Docker returns. Do not delay stop or admit late uploads as a workaround.
 
+The native admin-port qualification also encounters an
+[initial PUT after stop](https://github.com/waitron-io/waitron-cloud/actions/runs/41037164023/job/124000805980).
+Its admin checks pass on Linux; the upload's underlying cause remains unproved.
+
 ## Held-list control failure ordering (D391)
 
 The official held-metadata control failed in [PR633's merge cost run](https://github.com/waitron-io/waitron-cloud/actions/runs/40631222000/job/122627856885)
