@@ -1500,8 +1500,15 @@ implementation or production evidence.
   now provide the current browser pin, generated authority, routes and assets;
   D499 also repairs the separate storage identity-port handoff. This readiness
   branch still needs its own current-head Linux qualification. Protocol observations
-  retain document identities and numeric initiators without raw URLs. Earlier
-  intermittent socket resets still need matching attribution.
+  retain document identities and numeric initiators without raw URLs. Rebased head
+  `97147228` passes ordinary CI and cost conformance, but Linux observation
+  [41023281681](https://github.com/waitron-io/waitron-cloud/actions/runs/41023281681)
+  refuses single-CPU sample 8 with an API socket reset during navigation. Its
+  initiating document remains unproved. The diagnostic copy now distinguishes
+  shell routes and numeric request flags, and links protocol completion and
+  cancellation to request/document identities and an elapsed-time clock. Earlier
+  intermittent socket resets still need matching attribution; no accounting
+  exception, retry or deadline change is implied.
   The bounded observation workflow retains the first refusal in each sampling
   group and all six original fault controls; all accounting checks and deadlines remain.
   The reporter preserves the original refusal when a diagnostic property cannot

@@ -47,7 +47,7 @@ export function installApplicationTrace() {
 
 // Protocol events retain the document identity even when the page is unloading.
 export function installRequestTrace(cdp, trace, origin) {
-  const requests = new Map(), loaders = new Map();
+  const requests = new Map(), loaders = new Map(), requestLoaders = new Map();
   const identity = (map, value) => {
     if (!map.has(value)) { if (map.size >= 999) return 0; map.set(value, map.size + 1); }
     return map.get(value);
@@ -56,6 +56,8 @@ export function installRequestTrace(cdp, trace, origin) {
     try {
       const url = new URL(row.request.url), path = url.pathname;
       const route = url.origin !== origin ? 'outside' : path === '/management-api/events' ? 'live'
+        : path === '/api/theme' ? 'theme'
+        : path === '/management-api/disk-stop' ? 'disk-stop'
         : path.startsWith('/management-api/alerts') ? 'alerts'
         : path.startsWith('/management-api/reports/') ? 'report'
         : path.startsWith('/management-api/') ? 'api'
@@ -64,11 +66,26 @@ export function installRequestTrace(cdp, trace, origin) {
       const frames = (row.initiator?.stack?.callFrames ?? []).slice(0, 3)
         .filter(frame => [frame.lineNumber, frame.columnNumber].every(n => Number.isSafeInteger(n) && n >= 0))
         .map(frame => ({line:frame.lineNumber, column:frame.columnNumber}));
-      trace({event:'cdp-request', request:identity(requests, row.requestId), loader:identity(loaders, row.loaderId), route,
+      const request = identity(requests, row.requestId), loader = identity(loaders, row.loaderId);
+      if (request) requestLoaders.set(row.requestId, loader);
+      const tick = Math.round(row.timestamp * 1000);
+      trace({event:'cdp-request', request, loader, route,
+        ...(Number.isSafeInteger(tick) && tick >= 0 ? {tick} : {}),
         resource:['Document','Fetch','XHR','EventSource','Script','Stylesheet','Image','Font','Other'].includes(row.type) ? row.type : 'Other',
         at, initiator:['parser','script','preload','preflight','other'].includes(row.initiator?.type) ? row.initiator.type : 'other', frames});
     } catch {}
   });
+  for (const [name, event] of [['Network.loadingFailed','cdp-failed'],['Network.loadingFinished','cdp-finished']]) {
+    cdp.on(name, row => {
+      const request = requests.get(row.requestId), loader = requestLoaders.get(row.requestId);
+      const tick = Math.round(row.timestamp * 1000);
+      if (!request || !Number.isSafeInteger(tick) || tick < 0) return;
+      trace({event,request,loader,tick, ...(event === 'cdp-failed' ? {
+        cancelled:row.canceled === true,
+        error:row.errorText === 'net::ERR_ABORTED' ? 'aborted' : row.errorText === 'net::ERR_CONNECTION_RESET' ? 'reset' : 'other',
+      } : {})});
+    });
+  }
   cdp.on('Runtime.consoleAPICalled', event => {
     try {
       const text = event.args?.[0]?.value;

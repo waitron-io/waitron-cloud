@@ -211,3 +211,24 @@ you call it qualified. Retain the earlier cancellation traces; these deliveries
 do not prove that every historical socket reset has the same cause. The native
 readiness checks still cover headers, open callbacks, follow-up reads, response
 sizes, established streams and the original deadline.
+
+The rebased head `97147228` passes ordinary CI and cost conformance. Its separate
+[Linux observation](https://github.com/waitron-io/waitron-cloud/actions/runs/41023281681)
+passes 24 ordinary samples, then refuses single-CPU sample 8 with an API socket
+reset. All six fault controls pass in both groups. Only an established stream
+remains when the pre-reload drain returns. Chrome records six further requests
+during navigation before the new page's script requests appear in the protocol
+trace. The cancelled API request belongs to this gap. Do not assign it to the
+old or new page using later requests or matching route counts alone.
+
+The diagnostic copy now distinguishes theme, disk-stop and alerts requests in
+Chrome's socket log. It also retains numeric request flags and Chrome's fixed
+frame categories. These describe how Chrome starts a request without exporting
+its URL, headers or initiating origin. Protocol completion and cancellation
+events use the existing numeric request and document identities and Chrome's
+monotonic clock, which counts elapsed time independently of the wall clock.
+Run `node --test scripts/cloud-cost/diagnostics/navigation-evidence.test.mjs`
+for these boundaries. A generated native Chromium/TLS probe links an explicitly
+cancelled read to its old document and distinguishes the new document. This
+qualifies the observations, not the unresolved Linux reset. The changed bounded
+Linux experiment must supply the next recurrence before any repair is chosen.

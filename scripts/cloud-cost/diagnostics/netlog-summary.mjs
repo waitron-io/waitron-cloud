@@ -11,6 +11,9 @@ function route(value) {
     const url = new URL(value);
     if (url.origin !== 'https://staff.generated.example.test') return 'outside';
     if (url.pathname === '/management-api/events') return 'live';
+    if (url.pathname === '/api/theme') return 'theme';
+    if (url.pathname === '/management-api/disk-stop') return 'disk-stop';
+    if (url.pathname === '/management-api/alerts') return 'alerts';
     if (url.pathname === '/management-api/session/me') return 'session';
     if (url.pathname === '/management-api/reports/overview') return 'overview';
     if (url.pathname === '/management-api/reports/overdue-orders') return 'overdue';
@@ -33,6 +36,10 @@ export function summarizeNetlog(log) {
       if (match && Number(match[1]) > 0 && Number(match[1]) <= 65535) sockets.set(source, Number(match[1]));
     }
     const row = {type, source};
+    if (type === 'URL_REQUEST_START_JOB') {
+      if (['main frame','subframe','other'].includes(params.request_type)) row.requestType = params.request_type;
+      if (Number.isSafeInteger(params.load_flags) && params.load_flags >= 0) row.loadFlags = params.load_flags;
+    }
     for (const [name,value] of [['phase',event.phase],['time',Number(event.time)],
       ['dependency',params.source_dependency?.id],['error',params.net_error]])
       if (Number.isSafeInteger(value)) row[name] = value;
