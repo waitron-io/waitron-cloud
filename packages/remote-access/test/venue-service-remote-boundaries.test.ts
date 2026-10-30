@@ -18,6 +18,8 @@ async function fixture(){
   const ordinary=new RemoteAccessStore(f.pool),remote=new RemoteAccessStore(f.pool,mode),source=randomUUID(),target=randomUUID();
   for(const [id,subnet] of [[source,81],[target,82]] as const)await ordinary.createCell({id,country:'ES',provider:'aws',environment:'test',suffix:`boundary-${id}.example.test`,subnet,publicKey:peer(),endpoint:'gateway.example.test:51820'});
   const ids:string[]=[],peers:string[]=[];
+  // Only the two placed test venues have remote setup available in this fixture.
+  await f.pool.query("UPDATE installation_services SET state='unconfigured',configuration='{}' WHERE service='remote_access' AND installation_id IN (SELECT id FROM installations WHERE venue_id=$1)",[f.otherVenue]);
   await set(f,'connected');
   for(const venueId of f.venues){const id=(await f.pool.query('SELECT id FROM installations WHERE venue_id=$1 AND revoked_at IS NULL',[venueId])).rows[0].id;ids.push(id);peers.push(peer());await ordinary.provision(id,source,peers.at(-1)!);}
   const revision=async(id=ids[0]!)=>Number((await f.pool.query('SELECT configuration_revision FROM installations WHERE id=$1',[id])).rows[0].configuration_revision);
