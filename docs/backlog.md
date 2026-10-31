@@ -3266,6 +3266,22 @@ implementation or production evidence.
   that historical run's precise cause. Keep the explicit replay variant and
   investigate any recurrence with the consumed time-step evidence.
 
+  **Stable registration enrolment clock (D530).** A previous-step code can expire
+  after the fixture checks the time but before password verification and database
+  work finish. A Linux probe holding the generated code across its period boundary
+  reproduces activation's `permission_denied`, with the original assertions and
+  30-second deadline. The successful enrolment and replay variants now use one
+  schema-local PostgreSQL timestamp for verification and code generation. The
+  clock sits 90 seconds ahead of real time, inside the five-minute enrolment
+  lifetime, so an ordinary-clock pool or missing clock function fails reliably.
+  Two additional host-clock-shift controls fail before the setup change. Every
+  original assertion, accepted code offset and deadline remains; the independent
+  lock-wait expiry cases still advance their verifier clock and require refusal.
+  Run the registration `test/authenticator-factor.test.ts` file through the
+  PostgreSQL wrapper. This repairs the fixture's timing dependency; the exact
+  cause of [the historical registration activation refusal](https://github.com/waitron-io/waitron-cloud/actions/runs/41167290103/job/124437552213)
+  remains unproved because that run did not capture both code periods.
+
   **Local registration suite lock capacity.** Running the complete registration
   suite with this Mac's default 18 test-file workers exhausted PostgreSQL's shared
   lock table (`out of shared memory`, with `max_locks_per_transaction` hints).
