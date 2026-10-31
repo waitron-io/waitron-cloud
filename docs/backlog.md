@@ -478,6 +478,15 @@ every competing listener, cleanup and later clean startup. The native fallback
 warning does not imply S3 startup refusal. Admin-worker functionality, an actual
 admin bind refusal and later bind races remain open.
 
+[PR790 qualification](https://github.com/waitron-io/waitron-cloud/actions/runs/41172266544/job/124452925371)
+failed before these checks when SeaweedFS refused its allocated master port.
+The listener snapshot names a `weed` process; its fixture owner remains
+unknown. This case deliberately disables the fixture's handoff retry to prove
+that admin exhaustion does not restart storage. The unchanged Linux control
+passes, which does not explain or fix the CI collision. Reproduce the handoff
+under concurrent fixtures and preserve the no-restart, competing-listener and
+cleanup assertions when fixing this separate cause.
+
 ## Repository licence
 
 The root `LICENSE` is copied byte for byte from Waitron's Elastic License 2.0 text.
