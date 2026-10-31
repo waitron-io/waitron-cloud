@@ -3,16 +3,19 @@ import type {Copy} from './locale.ts';
 import type {PairingBusiness,PairingView} from './pairing-types.ts';
 export class PairingController {
   requestId:string|undefined;code='';businesses:PairingBusiness[]=[];selected='';view:PairingView|undefined;
-  pending=false;loaded=false;codeError=false;error:keyof Copy|undefined;retryAt=0;
+  pending=false;loaded=false;codeError=false;error:keyof Copy|undefined;
+  // Server retry waits use elapsed time so clock corrections cannot change the request gate.
+  #retryUntil=0;
   #account:string|undefined;#generation=0;#changed:()=>void;#request:typeof accountRequest;
   constructor(changed:()=>void,request:typeof accountRequest=accountRequest){this.#changed=changed;this.#request=request;}
   #clear(){this.#generation++;this.code='';this.businesses=[];this.selected='';this.view=undefined;this.pending=false;this.loaded=false;this.codeError=false;this.error=undefined;}
   open(id:string|undefined){if(id!==this.requestId){this.#clear();this.requestId=id;}}
   account(id:string|undefined){if(id!==this.#account){this.#clear();this.#account=id;}}
-  get waiting(){return Math.max(0,Math.ceil((this.retryAt-Date.now())/1000));}
+  get retryAt(){const remaining=this.#retryUntil-performance.now();return remaining>0?Date.now()+remaining:0;}
+  get waiting(){return Math.max(0,Math.ceil((this.#retryUntil-performance.now())/1000));}
   #ready(){return !!this.requestId&&!!this.#account&&!this.pending&&!this.waiting;}
   #failure(result:Extract<ApiResult<unknown>,{ok:false}>,write=false){
-    this.retryAt=Math.max(this.retryAt,Date.now()+result.retryAfterMs);
+    this.#retryUntil=Math.max(this.#retryUntil,performance.now()+result.retryAfterMs);
     this.error=result.status===429?'limited':result.status===401?'pairSession':result.code==='pairing_unavailable'?'pairUnavailable'
       :result.status===403||result.code==='binding_conflict'?'pairPermission':write&&(result.status===0||result.status>=500)?'pairUncertain':'unavailable';
   }

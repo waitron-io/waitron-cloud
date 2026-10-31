@@ -117,6 +117,7 @@ for (const operation of operations) for (const status of [403, 503]) {
 for (const operation of operations) for (const format of ['seconds', 'date'] as const) {
   test(`pairing transport ${operation} keeps a ${format} retry wait across account and request changes`, async t => {
     t.mock.timers.enable({apis: ['Date'], now: Date.parse('2026-10-28T10:00:00.000Z')});
+    let elapsed = 0; t.mock.method(performance, 'now', () => elapsed);
     const {c, calls, transport, valid} = harness(t);
     await c.load(); await c.inspect(); calls.length = 0;
     transport.reply = async () => Response.json({error: 'rate_limited'}, {
@@ -139,10 +140,12 @@ for (const operation of operations) for (const format of ['seconds', 'date'] as 
     await c.load(); await c.inspect(); await c.approve();
     assert.equal(calls.length, 1, 'changing account or request cannot bypass the server wait');
     t.mock.timers.tick(6999);
+    elapsed += 6999;
     assert.equal(c.waiting, 1);
     await c.load(); await c.inspect(); await c.approve();
     assert.equal(calls.length, 1);
     t.mock.timers.tick(1);
+    elapsed += 1;
     assert.equal(c.waiting, 0);
     await c.load();
     assert.equal(calls.length, 2);

@@ -27,12 +27,13 @@ test('an account change clears private choices and fences delayed replies while 
   controller.account('second');release({ok:true,value:{businesses:[business]}});await loading;
   assert.deepEqual(controller.businesses,[]);assert.equal(controller.pending,false);
 });
-test('rate limits prevent writes, invalid code is local, and a mismatched reply never becomes confirmable',async()=>{
+test('rate limits prevent writes, invalid code is local, and a mismatched reply never becomes confirmable',async t=>{
+  let elapsed=0;t.mock.method(performance,'now',()=>elapsed);
   let calls=0;let limited=true;
   const controller=new PairingController(()=>{},async<T>():Promise<ApiResult<T>>=>{calls++;return limited?{ok:false,status:429,code:'rate_limited',retryAfterMs:60000}:{ok:true,value:{...view,requestId:business.legalBusinessId} as T};});
   controller.open(requestId);controller.account('first');controller.code='bad';await controller.inspect();assert.equal(calls,0);assert.equal(controller.codeError,true);
   controller.code='12345678';await controller.inspect();assert.equal(controller.error,'limited');await controller.inspect();assert.equal(calls,1);
-  controller.retryAt=0;limited=false;await controller.inspect();assert.equal(controller.error,'unavailable');assert.equal(controller.view,undefined);
+  elapsed=60000;limited=false;await controller.inspect();assert.equal(controller.error,'unavailable');assert.equal(controller.view,undefined);
 });
 test('changing accounts while approval waits discards the old approval',async()=>{
   let finish!:(value:ApiResult<unknown>)=>void;

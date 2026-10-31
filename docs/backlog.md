@@ -147,7 +147,8 @@ See [the boundaries and remaining work](backlog/venue-connection-http.md#install
 ## Pairing transport refusals and retry waits (D428)
 
 **Open.** Qualify server permissions, local confirmation and live delivery against the
-selected deployment.
+selected deployment. Pairing retry waits use elapsed time through clock corrections;
+HTTP-date waits use the response Date or local receipt clock.
 See [the boundaries and remaining work](backlog/venue-connection-http.md#pairing-transport-refusals-and-retry-waits-d428).
 
 ## Pairing HTTP replies and binding checks (D414)
@@ -460,7 +461,7 @@ See [the boundaries and remaining work](backlog/diagnostic-download-http.md#diag
 
 ## Usage-read transport refusals and retry waits (D434, D436)
 
-**Open.** Fix the separate backward-clock revival of panels other than usage, alerts and backup catalogues; server
+**Open.** Fix the separate backward-clock revival of panels other than usage, alerts, backup catalogues and pairing; server
 authority and production metering remain unqualified.
 See [the boundaries and remaining work](backlog/usage-metering.md#usage-read-transport-refusals-and-retry-waits-d434-d436).
 
