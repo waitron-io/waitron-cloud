@@ -51,6 +51,7 @@ function fixture() {
   }, (value, name) => {saved.push({value: structuredClone(value), name});});
   const snapshot = () => ({
     pending: controller.pending, selected: controller.selected, error: controller.error,
+    errorInstallationId: controller.errorInstallationId,
     retryAt: controller.retryAt, waiting: controller.waiting,
     calls: structuredClone(calls), saved: structuredClone(saved), changes,
   });
@@ -90,6 +91,7 @@ for (const account of ['different', 'return'] as const) {
             assert.equal(controller.pending, false);
             assert.equal(controller.selected, undefined);
             assert.equal(controller.error, current === 'refused' ? 'permissionBusiness' : undefined);
+            assert.equal(controller.errorInstallationId, current === 'refused' ? second : undefined);
             assert.equal(controller.waiting, current === 'refused' ? 3 : 0);
             assert.deepEqual(saved, current === 'saved' ? [expectedSave] : []);
           }
@@ -154,10 +156,13 @@ test('selecting the same account keeps its pending diagnostic download', async (
   const {controller, replies, calls, saved, snapshot} = fixture();
   controller.account('first');
   const download = controller.download(first);
+  let repeated: Promise<void> | undefined;
   try {
     const before = snapshot();
     controller.account('first');
-    await controller.download(second);
+    repeated = controller.download(second);
+    assert.equal(calls.length, 1, 'same-account pending work admitted another download');
+    await repeated;
     assert.deepEqual(snapshot(), before);
     replies[0].resolve({ok: true, value: document()});
     await download;
@@ -167,7 +172,8 @@ test('selecting the same account keeps its pending diagnostic download', async (
     assert.deepEqual(saved, [{value: document(), name: 'waitron-cloud-diagnostic-32345678-20261028T000000Z.json'}]);
   } finally {
     replies[0].resolve({ok: true, value: document()});
-    await download;
+    replies[1].resolve({ok: true, value: document(second)});
+    await Promise.allSettled([download, repeated]);
   }
 });
 
@@ -179,14 +185,23 @@ test('changing accounts clears diagnostic feedback while preserving an existing 
   replies[0].resolve(outcomes.limited);
   await download;
   assert.equal(controller.error, 'limited');
+  assert.equal(controller.errorInstallationId, first);
   assert.equal(controller.waiting, 17);
   const retryAt = controller.retryAt;
   controller.account('second');
   assert.equal(controller.error, undefined);
+  assert.equal(controller.errorInstallationId, undefined);
   assert.equal(controller.selected, undefined);
   assert.equal(controller.pending, false);
   assert.equal(controller.retryAt, retryAt);
-  await controller.download(second);
+  const blocked = controller.download(second);
+  try {
+    assert.equal(calls.length, 1, 'existing server wait admitted another download');
+    await blocked;
+  } finally {
+    if (calls.length > 1) replies[1].resolve({ok: true, value: document(second)});
+    await Promise.allSettled([blocked]);
+  }
   assert.equal(calls.length, 1);
   t.mock.timers.tick(17_000);
   const next = controller.download(second);
