@@ -104,6 +104,7 @@ for(const signal of ['SIGINT','SIGTERM'] as const){
       const disconnectedAt=performance.now();disconnect();
       assert.deepEqual(await exited,{code:0,signal:null});
       assert.ok(exitAt!>=disconnectedAt,'command exit must follow SMTP connection loss');
+      assert.ok(exitAt!-disconnectedAt<2000,'connection loss must drain before the five-second SMTP inactivity timeout');
       assert.deepEqual({stdout,stderr},{stdout:'{"drained":true,"code":0}\n',stderr:''},'shutdown must reach natural event-loop drain');
       assert.deepEqual(await sessions(),[],'no worker database session remains after exit');
       assert.equal(disconnects,1);assert.equal(connections,1,'shutdown must not reconnect to deliver later mail');

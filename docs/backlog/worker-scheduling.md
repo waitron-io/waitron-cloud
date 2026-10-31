@@ -117,6 +117,10 @@ code, releases the claim and retains the same encrypted payload for the first re
 30 seconds later. Mail queued during the hold stays untouched. No later SMTP connection
 opens, and the command drains naturally with code zero and no database sessions left.
 Only the observation wrapper prints the `beforeExit` marker, which a forced exit bypasses.
+A two-second bound after the disconnect step rejects a fixture that never closes
+its socket; the transport's existing five-second inactivity timeout cannot satisfy
+that bound. This distinction remains unqualified in the earlier acknowledgement-loss
+checks (D556).
 
 These checks cover the actual command, local transport and PostgreSQL state. They do
 not qualify other SMTP stages, provider behavior, delivery timeouts, longer waits,
