@@ -182,6 +182,32 @@ or distinguish waiting in the worker loop from waiting in pool cleanup. Other
 command modes, other database failures, connection loss, waits beyond the configured
 ten-second timeout, alert recipients and production shutdown remain separate gates.
 
+### Monitoring shutdown after losing an active observation connection (D555)
+
+Run `node scripts/test-postgres.mjs exec pnpm --dir packages/registration exec
+node --test test/monitor-worker-observation-disconnect-shutdown.test.ts` to check
+SIGINT and SIGTERM while an owned incident-table lock blocks a claimed observation.
+Each stop signal retains the same blocked query for one second. Terminating only
+that command's identified backend then produces one fixed observation-failure
+diagnostic and natural code-zero exit with no remaining command sessions.
+The incident lock stays held until exit, so another observation cannot complete unseen.
+
+The failed venue keeps unset check/contact state and a 30-second retry delay.
+A venue made due after the signal stays unchecked and due. Without a stop signal,
+a control reaches the later venue through a different live database connection.
+Its query must start after the termination request, rather than merely after the
+first observation started. SIGTERM and termination of its second blocked backend
+then finish the command.
+No incident, alert episode or email is created. A wrapper requires Node's
+`beforeExit` event, which forced successful exit bypasses.
+
+These checks terminate a single PostgreSQL backend while the database remains
+available. They do not qualify a database-wide outage, network interruption,
+explicit rollback or pool-cleanup method, other command modes, longer waits,
+alert recipients or production shutdown. The older cancellation and timeout
+controls still compare against the first observation start; qualifying their
+stronger post-failure ordering remains open.
+
 ### Monitoring command shutdown after database query cancellation (D541)
 
 Run `node scripts/test-postgres.mjs exec pnpm --dir packages/registration exec

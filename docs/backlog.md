@@ -67,6 +67,11 @@ Active-observation statement timeouts now qualify both stop signals and a runnin
 control, with retained retry state, no later claim after shutdown and natural exit.
 See [the statement-timeout limits](backlog/worker-scheduling.md#monitoring-shutdown-after-an-observation-reaches-its-statement-timeout-d554).
 
+Active-observation connection-loss checks now terminate the owned blocked backend
+after either stop signal, retain retry state and require natural exit without a
+later claim. A running control reaches another venue through a different live
+connection. See [the single-connection failure limits](backlog/worker-scheduling.md#monitoring-shutdown-after-losing-an-active-observation-connection-d555).
+
 ## Worker scheduling failures and error reporting (D467)
 
 **Open.** Production scheduling, real database failures and capacity remain separate gates.
