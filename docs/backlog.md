@@ -48,6 +48,13 @@ cover idle shutdown and a one-second hold of blocked startup scheduling under
 SIGINT and SIGTERM, followed by normal exit with no remaining database sessions.
 Active monitoring, database failure and production shutdown remain open.
 
+The [monitoring cancellation shutdown checks](backlog/worker-scheduling.md#monitoring-command-shutdown-after-database-query-cancellation-d541)
+cover SIGINT and SIGTERM while startup scheduling waits on a PostgreSQL table lock.
+After a one-second hold, cancelling that query produces one fixed diagnostic and
+code-zero command exit with no database sessions remaining, even while the table
+stays locked. Other database failures, active observations and production shutdown
+remain open.
+
 The [translation command signal checks](backlog/worker-scheduling.md#translation-command-shutdown-with-blocked-database-cleanup-d538)
 cover a one-second hold of blocked startup retention under SIGINT and SIGTERM,
 followed by normal exit with no database sessions remaining. Job, body and usage
