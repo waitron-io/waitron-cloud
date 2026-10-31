@@ -4244,6 +4244,10 @@ The passkey Enter fixture reproduces the refusal with the same setup delay at
 all three clock setup sites and now freezes from the earlier start. Original and
 delayed journeys retain every password, enrollment, unsupported-browser, cooldown,
 request-count, duplicate-submit and deadline check.
+The monitoring-action guidance fixture reproduces the refusal with a 1100 ms
+setup pause and now freezes from an earlier start at the original instant. Its
+original and delayed journeys retain all failed/stale/certificate explanations,
+read-only actions, hostnames, dates, requests, healthy states and deadlines.
 The session-check retry fixture reproduces the refusal after a 1100 ms setup
 pause, beyond its old one-second window. It now starts earlier and freezes at
 the original instant before loading the app. Both connect and recovery journeys
@@ -4258,6 +4262,15 @@ and now starts earlier before freezing at the original instant. Its account and
 fiscal views retain all singular, plural, expiry, layout and deadline checks;
 the original language, theme and viewport matrix and delayed variants run.
 No historical CI failure in these fixtures is attributed here.
+
+## Paced replay deletion recurrence (D351 qualification)
+
+[Cost run 40541558126, job 122321994540](https://github.com/waitron-io/waitron-cloud/actions/runs/40541558126/job/122321994540)
+records another `storage-cleanup` / `delete-object` refusal, after 75.35 seconds,
+following native restore and validation. Retain it with the D344 qualification
+trace below and lane D's D121 investigation. The deletion cause remains unknown;
+source equality with the parent does not establish independence. Keep ownership,
+accounting, cleanup and deadlines unchanged; genuine reproduction needs Docker.
 
 ## Paced replay object deletion refusal (D344 qualification)
 

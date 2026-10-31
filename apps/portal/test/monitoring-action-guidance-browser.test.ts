@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import {mkdir, readFile} from 'node:fs/promises';
 import {test} from 'node:test';
+import {setTimeout as delay} from 'node:timers/promises';
 import {build} from 'esbuild';
 import {chromium} from 'playwright';
 import {translations} from '../src/locale.ts';
@@ -16,13 +17,16 @@ const styles = await readFile(new URL('../src/styles.css', import.meta.url), 'ut
 const id = '12345678-1234-4234-8234-123456789abc';
 const checkedAt = '2026-10-24T12:00:00Z', expiresAt = '2026-10-29T12:00:00Z';
 
+for (const setupDelay of [0, 1100])
 for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'] as const) for (const width of [390, 1280]) {
-  test(`${locale} ${theme} ${width}: monitoring guidance leads to read-only owner checks`, async t => {
+  test(`${locale} ${theme} ${width}${setupDelay ? ' with delayed clock setup' : ''}: monitoring guidance leads to read-only owner checks`, async t => {
     const browser = await chromium.launch({headless: true});
     try {
       const page = await browser.newPage({locale, colorScheme: theme, viewport: {width, height: 1000}});
       page.setDefaultTimeout(4000);
-      await page.clock.install({time: new Date('2026-10-24T12:01:00Z')});
+      // The clock runs after installation; freeze before registering application timers.
+      await page.clock.install({time: new Date('2026-10-23T12:01:01Z')});
+      if (setupDelay) await delay(setupDelay);
       await page.clock.pauseAt(new Date('2026-10-24T12:01:01Z'));
       const c = translations[locale], writes: string[] = [], reads: unknown[] = [];
       let condition: 'failed' | 'stale' | 'certificate' | 'healthy' = 'failed';
