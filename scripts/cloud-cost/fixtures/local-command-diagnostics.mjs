@@ -1,6 +1,8 @@
+import { constants } from 'node:os';
 import { withOwnershipDiagnostics } from './ownership-diagnostics.mjs';
 
 const signals = new Set(['SIGINT', 'SIGTERM', 'SIGKILL']);
+const childSignals = new Set(Object.keys(constants.signals));
 const count = value => Number.isFinite(value) ? Math.min(1000000000, Math.max(0, Math.round(value))) : 0;
 
 // Child streams and journal IDs are private; publish only counts, fixed signals and preparation stages.
@@ -14,7 +16,7 @@ export async function withLocalCommandDiagnostics(operation, readJournal, observ
     evidence.childClosed = observed.result !== undefined;
     evidence.status = Number.isInteger(observed.result?.status) && observed.result.status >= 0 && observed.result.status <= 255
       ? observed.result.status : null;
-    evidence.signal = signals.has(observed.result?.signal) ? observed.result.signal : null;
+    evidence.signal = childSignals.has(observed.result?.signal) ? observed.result.signal : null;
     evidence.stdoutBytes = count(observed.stdoutBytes);
     evidence.stderrBytes = count(observed.stderrBytes);
     await report('local-command-refusal ' + JSON.stringify(evidence));
