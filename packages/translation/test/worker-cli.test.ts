@@ -11,6 +11,9 @@ import {echoFirstPass,emptyReview,isReview,startFakeOpenAi} from './fake-openai.
 let db:Awaited<ReturnType<typeof database>>;
 const origin='https://cloud.example.test',issuer=createLeaseIssuer(generateKeyPairSync('ed25519').privateKey.export({type:'pkcs8',format:'der'}).toString('base64url'));
 const failed='Translation worker failed; check database, migrations and provider configuration\n';
+// beforeExit observes natural drain; a forced successful exit bypasses it.
+const drainArgs=['--import','data:text/javascript,'+encodeURIComponent("process.once('beforeExit',code=>console.log(JSON.stringify({drained:true,code})));")];
+
 before(async()=>{db=await database();});after(async()=>db?.close());
 const children=new Set<()=>Promise<void>>();
 afterEach(async()=>{await Promise.all([...children].map(dispose=>dispose()));children.clear();});
@@ -59,11 +62,11 @@ test('--once runs a queued job to the end and prints nothing',async()=>{
 test('SIGTERM during a provider call exits 0, saves nothing and hands the lease back',async()=>{
  const fake=await startFakeOpenAi(()=>new Promise(()=>{}));
  try{
-  const job=await queue(),run=command([],{CLOUD_TRANSLATION_LOCAL_PROOF:'1',CLOUD_OPENAI_BASE_URL:fake.baseUrl});
+  const job=await queue(),run=command([],{CLOUD_TRANSLATION_LOCAL_PROOF:'1',CLOUD_OPENAI_BASE_URL:fake.baseUrl},drainArgs);
   await until(()=>fake.requests.length===1);
   run.child.kill('SIGTERM');
   const out=await run.exited;
-  assert.deepEqual([out.code,out.stdout,out.stderr],[0,'','']);
+  assert.deepEqual([out.code,out.stdout,out.stderr],[0,'{"drained":true,"code":0}\n','']);
   assert.deepEqual((await db.pool.query(`SELECT j.state,j.lease_count,j.lease_until<=clock_timestamp() AS free,b.batch_results
    FROM translation_jobs j JOIN translation_job_bodies b ON b.job_id=j.id WHERE j.id=$1`,[job.id])).rows,[{state:'running',lease_count:0,free:true,batch_results:{}}]);
  }finally{await fake.close();}
@@ -102,10 +105,10 @@ test('--once completes just one of two queued jobs with stored names and usage',
 });
 test('SIGINT during review saves no partial batch and hands its lease back',async()=>{
  const fake=await startFakeOpenAi(r=>isReview(r)?new Promise(()=>{}):echoFirstPass(r));
- const job=await queue(),run=command([],{CLOUD_TRANSLATION_LOCAL_PROOF:'1',CLOUD_OPENAI_BASE_URL:fake.baseUrl});
+ const job=await queue(),run=command([],{CLOUD_TRANSLATION_LOCAL_PROOF:'1',CLOUD_OPENAI_BASE_URL:fake.baseUrl},drainArgs);
  try{
   await until(()=>fake.requests.length===2);run.child.kill('SIGINT');
-  const out=await run.exited;assert.deepEqual([out.code,out.signal,out.stdout,out.stderr],[0,null,'','']);
+  const out=await run.exited;assert.deepEqual([out.code,out.signal,out.stdout,out.stderr],[0,null,'{"drained":true,"code":0}\n','']);
   assert.deepEqual((await db.pool.query(`SELECT j.state,j.lease_count,j.lease_until<=clock_timestamp() AS free,b.batch_results
    FROM translation_jobs j JOIN translation_job_bodies b ON b.job_id=j.id WHERE j.id=$1`,[job.id])).rows,
    [{state:'running',lease_count:0,free:true,batch_results:{}}]);
@@ -122,7 +125,7 @@ test(`${signal} while idle stops polling quietly`,async()=>{
 });
 test('continuous work leases two jobs, leaves a third queued and releases both on stop',async()=>{
  const fake=await startFakeOpenAi(()=>new Promise(()=>{}));
- const jobs=[await queue(),await queue(),await queue()],run=command([],{CLOUD_TRANSLATION_LOCAL_PROOF:'1',CLOUD_OPENAI_BASE_URL:fake.baseUrl});
+ const jobs=[await queue(),await queue(),await queue()],run=command([],{CLOUD_TRANSLATION_LOCAL_PROOF:'1',CLOUD_OPENAI_BASE_URL:fake.baseUrl},drainArgs);
  try{
   await until(()=>fake.requests.length>=2);
   assert.equal(fake.requests.length,2);
@@ -131,7 +134,7 @@ test('continuous work leases two jobs, leaves a third queued and releases both o
   assert.deepEqual(rows.map(r=>[r.state,r.lease_count]),[['running',1],['running',1],['queued',0]]);
   for(const row of rows.slice(0,2))assert.ok(row.remaining>590&&row.remaining<=600,'live lease must outlast the 120-second provider attempt');
   run.child.kill('SIGTERM');const out=await run.exited;
-  assert.deepEqual([out.code,out.signal,out.stdout,out.stderr],[0,null,'','']);
+  assert.deepEqual([out.code,out.signal,out.stdout,out.stderr],[0,null,'{"drained":true,"code":0}\n','']);
   assert.deepEqual((await db.pool.query(`SELECT state,lease_count,lease_until<=clock_timestamp() AS free
    FROM translation_jobs ORDER BY created_at,id`)).rows,
    [{state:'running',lease_count:0,free:true},{state:'running',lease_count:0,free:true},{state:'queued',lease_count:0,free:null}]);
