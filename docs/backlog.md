@@ -3637,7 +3637,7 @@ checksum requirements; see the
 
 ### Storage startup retry notice can replace the original refusal (D530)
 
-**Open; coordinate with D512's storage-fixture reservation.**
+**Open; lane D owns this follow-up through D526 and D512's fixture reservation.**
 [PR788 root shard 2](https://github.com/waitron-io/waitron-cloud/actions/runs/41164895176/job/124430391561)
 reached the port-handoff retry notice in `startBackupStorage`, where a throwing
 reporter replaced the expected readiness error. A controlled probe of the actual
