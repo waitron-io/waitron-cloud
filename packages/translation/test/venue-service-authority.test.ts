@@ -54,8 +54,12 @@ for(const change of ['revocation','key','venue','lease expiry'] as const)test(`v
   let settled=false;pending=f.machine.execute('translation-submit',{payload:envelope.payload,signature:envelope.signature},text).finally(()=>{settled=true;});void pending.catch(()=>{});
   await waitForBlock(f,pid,()=>settled);
   if(change==='revocation')await holder.query('UPDATE installations SET revoked_at=clock_timestamp() WHERE id=$1',[f.v.installationId]);
-  if(change==='key')await holder.query('UPDATE installations SET public_key=$2 WHERE id=$1',[f.v.installationId,f.other.installationKey]);
-  if(change==='venue')await holder.query('UPDATE installations SET venue_id=$2 WHERE id=$1',[f.v.installationId,f.other.venueId]);
+  if(change==='key')await holder.query('UPDATE installations SET public_key=$2 WHERE id=$1',[f.v.installationId,generateKeyPairSync('ed25519').publicKey.export({type:'spki',format:'der'}).toString('base64url')]);
+  if(change==='venue'){
+   const unused=randomUUID();
+   await holder.query("INSERT INTO venues(id,organisation_id,legal_business_id,local_venue_id,environment) VALUES($1,$2,$3,$1,'test')",[unused,f.other.organisationId,f.other.legalBusinessId]);
+   await holder.query('UPDATE installations SET venue_id=$2 WHERE id=$1',[f.v.installationId,unused]);
+  }
   if(change==='lease expiry')await delay(1100);
   await holder.query('COMMIT');await assert.rejects(pending,{code:change==='revocation'?'revoked':'invalid_proof'});
   assert.equal((await f.db.pool.query('SELECT count(*) FROM translation_jobs')).rows[0].count,'0');
