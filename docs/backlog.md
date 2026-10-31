@@ -3624,12 +3624,30 @@ Keep the source pin, integrity checks, deadlines and original assertions.
 
 ### Fixture archive download retries (D311)
 
-**Open; the upstream 504 and later HTTP 500 causes remain unknown.** Archive
+**Open; the upstream 504 and later HTTP 500 causes remain unknown.** D457's
+stalled successful response now gets another attempt after 30 seconds without
+headers or body progress, within the existing three attempts and shared
+120-second budget. Local HTTP controls prove recovery from stalled headers and
+partial bodies, ongoing progress, cancellation and exhausted attempts. Archive
 diagnostics retain known public response-service labels and validated request IDs
 so you can correlate a refusal without exposing signed redirect URLs or arbitrary
 headers. Keep the bounded retries, shared download budget, cancellation and
 checksum requirements; see the
 [download handling and qualification limits](backlog/cost-conformance-fixtures.md#fixture-archive-download-retries-d311).
+
+### Storage startup retry notice can replace the original refusal (D530)
+
+**Open; lane D owns this follow-up through D526 and D512's fixture reservation.**
+[PR788 root shard 2](https://github.com/waitron-io/waitron-cloud/actions/runs/41164895176/job/124430391561)
+reached the port-handoff retry notice in `startBackupStorage`, where a throwing
+reporter replaced the expected readiness error. A controlled probe of the actual
+retry wrapper injects a recognised port refusal followed by a readiness error.
+The notice aborts after one attempt; omitting it in the disposable probe permits
+the second attempt and preserves the readiness error. This isolates the wrapper
+defect without claiming to reproduce the native port collision. Remove or contain
+that notice under D512's reservation, retaining the existing original-error,
+bounded-reporting, retry-budget and cleanup assertions. Do not rerun an unchanged
+candidate as evidence of repair.
 
 ### Conformance image acquisition during D135 qualification
 

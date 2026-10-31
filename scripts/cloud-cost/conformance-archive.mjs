@@ -40,8 +40,16 @@ export async function downloadConformanceArchive(url,digest,path,{signal,phase})
       bytesReceived=0;status=undefined;identity={};report('attempt');
       downloadSignal.throwIfAborted();
       let bytes,retryable=false;
+      const inactivity=new AbortController();let idleTimer;
+      const progressReceived=()=>{
+        clearTimeout(idleTimer);
+        idleTimer=setTimeout(()=>inactivity.abort(new DOMException('Fixture archive download stalled','ArchiveInactivityError')),30000);
+      };
       try {
-        const response=await fetch(url,{signal:downloadSignal});
+        // Only progress restarts inactivity; every attempt still shares the overall deadline.
+        progressReceived();
+        const response=await fetch(url,{signal:AbortSignal.any([downloadSignal,inactivity.signal])});
+        progressReceived();
         status=response.status;identity=responseIdentity(response);report('headers');
         if(!response.ok){
           retryable=status>=500&&status<=599;
@@ -49,18 +57,19 @@ export async function downloadConformanceArchive(url,digest,path,{signal,phase})
           throw Error('Fixture archive download failed');
         }
         const chunks=[];
-        for await(const chunk of response.body){chunks.push(chunk);bytesReceived+=chunk.length;}
+        for await(const chunk of response.body){chunks.push(chunk);bytesReceived+=chunk.length;progressReceived();}
         bytes=Buffer.concat(chunks);
       } catch(error) {
+        clearTimeout(idleTimer);
         downloadSignal.throwIfAborted();
         const reset=['ECONNRESET','UND_ERR_SOCKET'].includes(error?.cause?.code??error?.code);
-        if(attempt>=3||(!retryable&&!reset))throw error;
+        if(attempt>=3||(!retryable&&!reset&&!inactivity.signal.aborted))throw error;
         const pauseMs=attempt*1000;
         report('retry',{pauseMs,errorName:error?.name??'UnknownError',errorCode:error?.cause?.code??error?.code});
         try {await delay(pauseMs,undefined,{signal:downloadSignal});}
         catch(error) {downloadSignal.throwIfAborted();throw error;}
         continue;
-      }
+      } finally {clearTimeout(idleTimer);}
       downloadSignal.throwIfAborted();
       if(createHash('sha256').update(bytes).digest('hex')!==digest)throw Error('Fixture archive digest mismatch');
       writeFileSync(path,bytes);
