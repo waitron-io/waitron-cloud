@@ -23,6 +23,9 @@ function database(condition:Condition,loss?:'owner'|'session'){
   if(sql.includes('organisation_memberships'))return result(condition==='foreign'||(condition==='late-foreign'||loss==='owner')&&++ownershipReads>1?[]:[{account_id:id}]);
   if(sql==='SELECT venue_id FROM installations WHERE id=$1')return result([{venue_id:id}]);
   if(sql==='SELECT organisation_id,environment FROM venues WHERE id=$1')return result(condition==='missing-venue'?[]:[{organisation_id:id,environment:condition==='production'?'production':'test'}]);
+  if(sql==="SELECT id FROM venues WHERE id=$1 AND organisation_id=$2 AND environment='test' FOR SHARE")return result([{id}]);
+  if(sql.startsWith("SELECT to_regclass('billing_service_authority') IS NOT NULL"))return result([{installed:true}]);
+  if(sql==='SELECT 1 FROM billing_service_authority WHERE venue_id=$1')return result([]);
   if(sql.startsWith('SELECT id,service_plan,service_plan_revision FROM organisations'))return result([{id,service_plan:condition==='free'?'free':'paid',service_plan_revision:0}]);
   if(sql.startsWith('SELECT 1 FROM installation_services'))return result(condition==='unconfigured'?[]:[{}]);
   if(sql.startsWith('SELECT p.venue_id,c.suffix,i.revoked_at'))return result([{venue_id:id,suffix:'cell.example.test',revoked_at:condition==='revoked'?now:null}]);
