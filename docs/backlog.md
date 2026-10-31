@@ -4060,6 +4060,11 @@ assertions and deadlines. The labelled failure does not establish the historical
 timeout's cause. See the [investigation and qualification
 limits](backlog/storage-authority-timeout.md).
 
+A later readiness diagnostic check observes 125 creates after a native S3 port
+collision and the bounded restart, against its unchanged 120-request assertion.
+Reproduce whether the abandoned attempt contributes to that total before changing
+any counter or budget. Preserve the original error, redaction and cleanup checks.
+
 ## Authenticator management transport and session rechecks (D431)
 
 **Open.** Qualify server authority, browser integration and live ingress; physical
