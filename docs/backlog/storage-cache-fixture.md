@@ -77,8 +77,9 @@ occupied HTTP flag instead refuses startup; that unreserved port must not trigge
 the service-port retry. Both paths remove their private directories and owned
 children while preserving competing listeners. This distinction follows
 [SeaweedFS's port selection](https://github.com/seaweedfs/seaweedfs/blob/4.47/weed/command/mini.go).
-Exhausted fallback ranges and a collision after availability checking remain
-unproved. Reproduce either before changing reservations or widening retries.
+The separate gRPC fallback-exhaustion check also leaves S3 usable. HTTP fallback
+exhaustion and a collision after availability checking remain unproved.
+Reproduce either before changing reservations or widening retries.
 
 Remaining: retain the diagnostics to attribute any recurrence of the original
 read-only-cache rejection. Do not treat this demonstrated readiness repair as
