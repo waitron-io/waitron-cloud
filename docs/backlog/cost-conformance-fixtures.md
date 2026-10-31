@@ -25,12 +25,15 @@ received HTTP 200, then stayed at 10,237,952 bytes through 110 seconds before it
 first attempt exhausted the shared 120-second budget. You now get another attempt
 when no headers or body bytes arrive for 30 seconds. Each header response or body
 chunk restarts that inactivity timer; the total budget still includes all
-attempts and pauses. Partial data is discarded before retrying, and only the
-complete archive with its pinned checksum reaches extraction.
+attempts and pauses. A stalled attempt reports `ArchiveInactivityError`, distinct
+from the overall deadline's `TimeoutError`. Partial data is discarded before
+retrying, and only the complete archive with its pinned checksum reaches extraction.
 
 Run `node --test scripts/cloud-cost/conformance-archive-idle.test.mjs` for local
 HTTP controls covering stalled headers, a stalled partial body, exhausted
-attempts, a progressing body, caller cancellation and the shared deadline.
+attempts and progressing headers and bodies. Run all four
+`conformance-archive*.test.mjs` files for cancellation and total-deadline coverage
+while a request is active.
 These reproduce the missing retry and its repair. The historical upstream
 stall and repeated HTTP 500/504 responses still need attribution; this handling
 does not repair a service that refuses all three attempts.

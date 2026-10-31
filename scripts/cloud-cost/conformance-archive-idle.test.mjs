@@ -8,7 +8,7 @@ import {join} from 'node:path';
 import {spawn} from 'node:child_process';
 
 // Without an inactivity bound, a stalled first response consumes the entire retry budget.
-for(const scenario of ['headers-stall','body-stall','always-stalled','progress','cancel','shared-deadline']) {
+for(const scenario of ['headers-stall','body-stall','always-stalled','progress','headers-progress','cancel','shared-deadline']) {
   test('archive inactivity: '+scenario,{timeout:5000},async t=>{
     const root=mkdtempSync(join(tmpdir(),'cost-archive-idle-')),path=join(root,'archive');
     const bytes=Buffer.from('complete verified archive'),digest=createHash('sha256').update(bytes).digest('hex');
@@ -17,6 +17,10 @@ for(const scenario of ['headers-stall','body-stall','always-stalled','progress',
     const server=createServer((request,response)=>{
       const attempt=++requests;
       if(['always-stalled','cancel','shared-deadline'].includes(scenario)||scenario==='headers-stall'&&attempt===1)return;
+      if(scenario==='headers-progress'){
+        later(()=>{response.writeHead(200);response.flushHeaders();later(()=>response.end(bytes),100);},100);
+        return;
+      }
       response.writeHead(200);
       if(scenario==='body-stall'&&attempt===1){response.write('discard partial archive');return;}
       if(scenario==='progress'){
@@ -56,10 +60,10 @@ for(const scenario of ['headers-stall','body-stall','always-stalled','progress',
     const closed=new Promise(resolve=>child.once('close',(code,signal)=>resolve({code,signal})));
     t.after(async()=>{if(child.exitCode===null&&child.signalCode===null)child.kill('SIGKILL');await closed;});
     const result=await closed;
-    const success=['headers-stall','body-stall','progress'].includes(scenario);
+    const success=['headers-stall','body-stall','progress','headers-progress'].includes(scenario);
     assert.equal(result.signal,null,output);
     assert.equal(result.code,success?0:1,output);
-    assert.equal(requests,scenario==='always-stalled'?3:scenario==='cancel'||scenario==='progress'?1:2,output);
+    assert.equal(requests,scenario==='always-stalled'?3:['cancel','progress','headers-progress'].includes(scenario)?1:2,output);
     if(success)assert.deepEqual(readFileSync(path),bytes,'partial failed responses cannot enter the archive');
     else assert.equal(existsSync(path),false);
     const records=output.split('\n').filter(line=>line.startsWith('conformance_archive='))
@@ -68,5 +72,8 @@ for(const scenario of ['headers-stall','body-stall','always-stalled','progress',
     if(scenario==='cancel')assert.match(output,/owner interrupted/);
     if(scenario==='shared-deadline')assert.match(output,/TimeoutError/);
     if(scenario==='body-stall')assert.equal(records.find(row=>row.event==='retry').bytesReceived,23);
+    if(['headers-stall','body-stall','always-stalled'].includes(scenario))
+      assert.equal(records.find(row=>row.event==='retry').errorName,'ArchiveInactivityError');
+    if(scenario==='always-stalled')assert.equal(records.at(-1).errorName,'ArchiveInactivityError');
   });
 }

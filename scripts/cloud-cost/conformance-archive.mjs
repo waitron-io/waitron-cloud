@@ -43,7 +43,7 @@ export async function downloadConformanceArchive(url,digest,path,{signal,phase})
       const inactivity=new AbortController();let idleTimer;
       const progressReceived=()=>{
         clearTimeout(idleTimer);
-        idleTimer=setTimeout(()=>inactivity.abort(new DOMException('Fixture archive download stalled','TimeoutError')),30000);
+        idleTimer=setTimeout(()=>inactivity.abort(new DOMException('Fixture archive download stalled','ArchiveInactivityError')),30000);
       };
       try {
         // Only progress restarts inactivity; every attempt still shares the overall deadline.
