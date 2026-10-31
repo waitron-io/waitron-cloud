@@ -5,6 +5,13 @@
 **Open.** Real extraction, store startup and historical failure causes remain open.
 See [the boundaries and remaining work](backlog/storage-cache-fixture.md#concurrent-storage-archive-publication-d450).
 
+## Retrospective review qualification (D535)
+
+Child exit reports retain known operating-system signals and publish the value
+that was checked. Historical Linux failure causes, mixed registry-error handling
+and enclosing CI job budgets remain separate limits.
+See [the diagnostic qualification and open work](backlog/retrospective-reviews.md).
+
 ## Concurrent storage extraction and failed-startup cleanup (D454)
 
 **Open.** Real store startup and historical failure causes remain open.
