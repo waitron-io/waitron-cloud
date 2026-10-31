@@ -22,3 +22,11 @@ exact expiry, including both Retry-After formats. Run
 `node --test apps/portal/test/diagnostic-transport-boundary.test.ts`.
 These checks preserve the existing permissions and waits. Server redaction,
 browser file downloads and production-network qualification remain separate gates.
+
+## Diagnostic download replies after account changes (D400)
+
+Native controller checks hold diagnostic replies while you change accounts,
+return to the original account or sign out. Old documents, malformed replies,
+refusals and rate limits cannot save a file, end a newer download or change its
+selection, feedback or wait. Current downloads still finish, selecting the same
+account keeps pending work, and an existing server wait remains in force.

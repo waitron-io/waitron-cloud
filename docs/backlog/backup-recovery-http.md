@@ -52,3 +52,14 @@ Run `node --test apps/portal/test/recovery-transport-boundary.test.ts` for these
 checks. They preserve runtime behaviour and recovery authority; production
 recovery, server-side permissions and clock-correction handling remain separate
 qualification work.
+
+## Delayed recovery replies across account and request changes (D401)
+
+Native controller checks hold inspection, approval, close and replacement replies
+while you change account, return to the same account, sign out or open another
+recovery request. Late successes and refusals cannot change your current recovery
+view, matching code, source, confirmations, pending work, feedback or server wait,
+or start another inspection. Current replies and unchanged selections still work.
+These checks use controlled HTTP replies and leave recovery authority unchanged.
+The browser readiness repair is qualified separately in D201. PostgreSQL and
+container checks run in CI while local Docker is down until 3 November.

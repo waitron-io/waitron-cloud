@@ -14,13 +14,7 @@ See [the boundaries and remaining work](backlog/storage-cache-fixture.md#concurr
 
 **Open.** Real store startup and historical failure causes remain open.
 
-Run `node --test scripts/ci-backup-storage-process-extraction.test.mjs` to
-check two independent Node processes extracting one read-only archive. Each
-certificate-read refusal removes its own root while preserving the other
-process's executable, certificates and shared cache, in both completion orders.
-The probes pause before listeners and store startup. An unexpected refusal retry
-is caught by the existing 30-second test deadline; prompt refusal is unproved.
-See [the storage qualification boundaries](backlog/storage-cache-fixture.md#concurrent-storage-extraction-and-failed-startup-cleanup-d454).
+See [the separate-process extraction limits](backlog/storage-cache-fixture.md#separate-process-storage-extraction-and-failed-startup-cleanup-d457).
 The earlier conformance archive stall (run 40811399202, job 123243127986) remains
 in [D311's download investigation](backlog/cost-conformance-fixtures.md#fixture-archive-download-retries-d311).
 PR #788 adds an inactivity retry for that download; it does not identify the
@@ -42,167 +36,27 @@ See [the boundaries and remaining work](backlog/storage-cache-fixture.md#storage
 **Open.** Production shutdown, real database failures and cancellation remain open.
 See [the boundaries and remaining work](backlog/worker-scheduling.md#worker-shutdown-during-polling-and-error-reporting-d459).
 
-The [idle command drain checks](backlog/worker-scheduling.md#idle-email-and-monitoring-commands-drain-naturally-d543)
-require email and monitoring commands to drain naturally after SIGINT and SIGTERM,
-with no remaining database sessions. They catch forced successful exit and, while
-idle connections keep Node alive under the default pool settings, omitted pool
-cleanup. Natural drain during active work beyond the local SMTP acceptance and
-refusal checks, database failures and production shutdown remain open.
-
-The [idle translation drain checks](backlog/worker-scheduling.md#idle-translation-commands-drain-naturally-d544)
-observe three seconds of live idle polling before SIGINT or SIGTERM, then require
-natural event-loop drain. No database sessions remain after exit, and the loopback
-provider receives no requests. They catch forced successful exit and omitted pool
-cleanup while default idle connections keep Node alive. Active work, database
-failures and production shutdown remain open.
-
-The [email command signal checks](backlog/worker-scheduling.md#email-command-shutdown-with-real-database-claims-d536)
-cover idle shutdown and a one-second hold of four blocked PostgreSQL connections
-under SIGINT and SIGTERM, followed by normal exit after lock release.
-Other worker commands, active delivery and production shutdown remain open.
-
-The [email delivery shutdown checks](backlog/worker-scheduling.md#email-command-shutdown-during-local-smtp-delivery-d539)
-hold a local SMTP acknowledgement for one second under SIGINT and SIGTERM.
-During that hold the message stays processing. After acknowledgement, the command
-records it as sent, leaves later mail pending and drains naturally with code zero
-and no database sessions remaining. The wrapper's `beforeExit` observation (D545)
-catches a forced successful exit after delivery. Provider failures,
-delivery timeouts and production shutdown remain open.
-
-The [email refusal shutdown checks](backlog/worker-scheduling.md#email-command-shutdown-after-a-local-smtp-refusal-d540)
-hold a local SMTP reply for one second, then refuse it under SIGINT and SIGTERM.
-The command records a delayed retry, retains the encrypted payload, releases the
-claim and leaves later mail untouched before draining naturally. The wrapper's
-`beforeExit` observation (D545) catches a forced successful exit after retry recording.
-Production SMTP classification, delivery timeouts and production shutdown remain
-open.
-
-The [monitoring command signal checks](backlog/worker-scheduling.md#monitoring-command-shutdown-with-real-database-scheduling-d537)
-cover idle shutdown and a one-second hold of blocked startup scheduling under
-SIGINT and SIGTERM, followed by normal exit with no remaining database sessions.
-Active monitoring, database failure and production shutdown remain open.
-
-The [monitoring cancellation shutdown checks](backlog/worker-scheduling.md#monitoring-command-shutdown-after-database-query-cancellation-d541)
-cover SIGINT and SIGTERM while startup scheduling waits on a PostgreSQL table lock.
-After a one-second hold, cancelling that query produces one fixed diagnostic and
-code-zero command exit with no database sessions remaining, even while the table
-stays locked. Without a signal, the command retries the cancelled schedule.
-Natural exit, explicit pool cleanup, other database failures, active observations
-and production shutdown remain open.
-
-The [translation command signal checks](backlog/worker-scheduling.md#translation-command-shutdown-with-blocked-database-cleanup-d538)
-cover a one-second hold of blocked startup retention under SIGINT and SIGTERM,
-followed by normal exit with no database sessions remaining. Job, body and usage
-tables end empty, and the local provider receives no request.
-Active retention changes, database failure and production shutdown remain open.
-
-The [translation cancellation shutdown checks](backlog/worker-scheduling.md#translation-command-shutdown-after-database-query-cancellation-d542)
-cover SIGINT and SIGTERM while startup retention waits on a PostgreSQL table lock.
-After a one-second hold, cancelling that query produces one fixed diagnostic and
-code-zero exit with no remaining database sessions. Without a signal, the command
-stays live for one second after cancellation; shutdown then ends the current
-60-second retry wait within six seconds. A shortened wait that ignores shutdown
-can pass. Actual retry expiry, active retention changes, natural exit, explicit
-pool cleanup, other database failures and production shutdown remain open.
-
-Run `node --test packages/registration/test/worker-loop-schedule-timer.test.ts`
-to check that startup and recurring scheduling failures enter a real retry timer
-before shutdown. At two and 32 slots, reporting keeps the original error and
-failed schedules admit no new claims; cancellation releases the native timer and
-lets the process exit. Production signals and real database failures remain open.
-
-Run `node --test packages/registration/test/worker-loop-native-isolation.test.ts`
-to check two workers using real idle and failure-retry timers at two and 32 slots.
-Stopping either worker releases its timer while the other keeps waiting with its
-own signal. Claim and schedule failures report their original error once; the
-surviving worker exits after its own shutdown. Production signals and real
-database failures remain separate gates.
-
-Run `node --test packages/registration/test/worker-loop-native-recovery.test.ts`
-to check that idle and failure-retry timers actually expire before work resumes
-at two and 32 slots. Claims and startup or recurring schedules recover after
-one native timer, keep the original refusal and exit after shutdown. Production
-signals and real database recovery remain separate gates.
-
-Run `node --test packages/registration/test/worker-loop-native-cadence.test.ts`
-to check real timer expiry against the next scheduling deadline at two and 32
-slots. The interval starts after scheduling completes; idle polling shortens
-either its only wait or its final wait to meet that deadline. Every active claim
-finishes before polling, and shutdown prevents further claims. Production
-scheduling and real database failures remain separate gates.
-
-Run `node --test packages/registration/test/worker-loop-native-reporting.test.ts`
-to check pending startup and claim error reports at two and 32 slots. Native retry
-timers start only after reporting completes, then expire before work resumes.
-Shutdown waits for reporting without a retry timer; a refused report keeps its
-original error and stops a live worker. Real database failures and production
-shutdown remain separate gates.
-
-Run `node --test packages/registration/test/worker-loop-native-recurring.test.ts`
-to check a recurring schedule failure after busy or idle batches at two and 32
-slots. Pending reporting preserves the original error and prevents retry timer
-creation. Recovery follows real timer expiry, starts its next interval after
-scheduling completes and shortens idle polling to the next deadline. Shutdown
-after that interval admits no further claims. Real database recovery and
-production signals remain separate gates.
-
-Run `node --test packages/registration/test/worker-loop-native-recurring-stop.test.ts`
-to check shutdown and reporter rejection during a pending recurring schedule
-error report. After busy or idle batches at two and 32 slots, cleanup finishes
-before return, original errors survive, and no new claims, schedules or retry
-timers start. Real database failures and production signals remain separate gates.
-
-Run `node --test packages/registration/test/worker-loop-native-cancellation.test.ts`
-to check shutdown while two or 32 active claims wait on real Node timers.
-Cancellation releases every timer; the loop waits for the last claim's cleanup
-and any pending error report before returning. Unreported claim failures and
-reporting failures keep their original errors, and shutdown starts no new claims
-or timers. Each child exits naturally. Real database cancellation and production
-signals remain separate qualification gates.
+See [the additional qualification detail](backlog/worker-scheduling.md#additional-shutdown-and-timer-qualification).
 
 ## Worker scheduling failures and error reporting (D467)
 
 **Open.** Production scheduling, real database failures and capacity remain separate gates.
 See [the native worker boundaries](backlog/worker-scheduling.md#worker-failure-and-reporting-boundaries-d467).
 
-Run `node --test packages/registration/test/worker-loop-cancellation.test.ts` to
-check claims that finish or reject when shutdown cancels them. At two and 32 active
-slots, shutdown waits for every claim's cleanup and any pending error report,
-without scheduling, polling or retrying. Cancellation and reporting failures keep
-their original errors. Real database cancellation and production shutdown remain
-separate qualification gates.
-
-Run `node --test packages/registration/test/worker-loop-empty-failures.test.ts`
-to check rejection with undefined, null, false, zero or an empty string. Scheduling,
-claim and polling failures keep their original values through reporting or
-propagation; failed claims wait for sibling cleanup and pending reports. Empty
-reporter failures remain rejections. Real database errors and production shutdown
-remain separate qualification gates.
+See [the additional qualification detail](backlog/worker-scheduling.md#cancellation-and-empty-failure-values).
 
 ## Worker scheduling deadlines and polling failures (D468)
 
 **Open.** Production scheduling, real database failures and recovery remain open.
 See [the boundaries and remaining work](backlog/worker-scheduling.md#worker-scheduling-deadlines-and-polling-failures-d468).
 
-Recurring worker intervals now use elapsed time, so system-clock corrections cannot
-delay or accelerate the next scheduling pass. Run `node --test
-packages/registration/test/worker-loop-clock.test.ts` to check forward and backward
-clock changes with busy and idle batches at two and 32 slots. Scheduling still
-starts its next interval after completion, and idle polling meets that deadline.
-Fractional waits round up before reaching native timers to avoid an extra idle
-batch caused by truncation.
-Real database scheduling and production shutdown remain separate gates.
+See [the additional qualification detail](backlog/worker-scheduling.md#recurring-intervals-across-clock-corrections).
 
 ## Translation consent during account changes (D392)
 
-**Open.** Qualify provider behavior and database authority separately from the
-browser controller. Late reads, agreements and withdrawals cannot change current
-choices or release a pending read after an account change, including signing back
-into the original account. They cannot add a warning or retry wait for that account.
-Preserving an existing warning or retry deadline still needs a separate check.
-The [remote-browser reconnect investigation](#platform-work-to-scope) retains the
-earlier reconnect/takings qualification failures; a clean qualification does not
-establish their cause.
+**Open.** Qualify provider behavior and database authority; preserving an existing
+warning or retry deadline still needs a separate controller check.
+See [the boundaries and remaining work](backlog/translation.md#translation-consent-during-account-changes-d392).
 
 ## How to keep this file honest
 
@@ -278,13 +132,8 @@ separate qualification work; local database checks wait for Docker.
 
 ## Translation-consent HTTP retry deadlines (D430)
 
-Switching accounts keeps the server's translation-consent retry wait, so another
-account cannot bypass it. Run `node --test apps/portal/test/translation-consent-retry-boundary.test.ts`
-to check seconds and HTTP-date waits for reads, agreement and withdrawal through
-the request client and controller with native HTTP responses. Requests resume
-only at the deadline and after an explicit retry; native timer expiry sends no
-request itself. A backward clock change during a later refusal with no new wait
-cannot shorten an earlier deadline.
+Translation-consent waits survive account and clock changes. See [the HTTP retry
+boundaries](backlog/translation.md#translation-consent-http-retry-deadlines-d430).
 
 Server authority, browser integration and translation release checks remain
 separate qualification gates. The historical genuine-browser reconnect refusal
@@ -299,16 +148,9 @@ See [the boundaries and remaining work](backlog/account-http-boundaries.md#accou
 
 ## Signup and password-reset HTTP acknowledgements (D423)
 
-Native account-client tests return an unsuccessful client result for malformed
-signup and password-reset replies. They cover email-request acknowledgements,
-signup account and business fields, reset completion, unreadable JSON, network
-loss and refused replies. Uncertain operations remain single attempts; an explicit
-retry can accept a valid reply. Exact request bodies preserve passwords, link
-tokens and locale. Run `node --test apps/portal/test/signup-reset-response-boundary.test.ts`.
-Production email delivery, browser and server authority remain separate
-qualification gates. These client tests use controlled fetch responses. Exact
-success status codes, empty organisation and business IDs, browser anti-forgery
-headers and the 15-second request deadline are outside this file's proof.
+**Open.** Qualify production mail, browser and server authority, exact success
+statuses, empty identifiers, request headers and the client deadline. See [the
+client acknowledgement boundaries](backlog/account-http-boundaries.md#signup-and-password-reset-http-acknowledgements-d423).
 
 The historical [PR #669 storage failure](https://github.com/waitron-io/waitron-cloud/actions/runs/40716310898/job/122914999702)
 was a prematurely closed LIST response during Litestream shutdown. D530 owns its
@@ -322,14 +164,8 @@ See [the boundaries and remaining work](backlog/account-http-boundaries.md#sessi
 
 ## Session revocation replies after sign-out or view reset (D440)
 
-When you sign out or reset the session view, earlier revocation replies cannot
-restore rows, release a newer pending read, change feedback or retry waits, or
-trigger sign-out callbacks or another request. Native controlled-fetch tests hold
-revocation and reconciliation headers or bodies across both boundaries. They also
-check that an unchanged account keeps its active revocation and blocks duplicate
-actions. Run `node --test apps/portal/test/session-revoke-lifecycle.test.ts`.
-Runtime and original assertions stay unchanged; server authority and live ingress
-remain separate qualification gates. Database suites run in CI during the Docker outage.
+**Open.** Qualify server authority and live ingress after the controlled client checks.
+See [the boundaries and remaining work](backlog/account-http-boundaries.md#session-revocation-replies-after-sign-out-or-view-reset-d440).
 
 ## Session management transport refusals and retry waits (D432)
 
@@ -621,30 +457,7 @@ assertion fails. Both storage source and test match the branch's base exactly.
 Lane H's D530 investigation owns this recurrence; keep the single restart and
 every assertion. A later clean qualification does not repair this collision.
 
-Run `node --test scripts/ci-backup-storage-port-ownership.test.mjs` to check
-port ownership across the socket-to-child handoff. Each fixture holds atomic
-filesystem claims until its child stops. Other cooperating fixtures, including
-separate processes with different temporary directories, skip those ports
-while selecting their own batch. A paused native child makes the gap reproducible.
-The checks retain usable storage, release after stop and bounded refusal after
-256 claimed candidates without starting another child. Existing restart limits,
-readiness budgets and error assertions remain.
-
-Run `node --test scripts/ci-backup-storage-claim-cleanup.test.mjs` to check
-missing or replaced claims and an unlink refusal. Cleanup checks link targets,
-leaves replacement claims in place and finishes closing owned resources before
-reporting an unlink failure. Startup retains its original error. The shared
-directory must be a real directory owned by your user with no access for other
-users; a permissive directory, symlink or different owner is refused.
-
-The Linux investigation captured two live fixtures requesting the same port
-before either exited. This identifies an allocation race; it does not identify
-the historical competing processes. Claims prevent that reuse between these
-fixtures. Other programs, native fallback choices and outgoing connections can
-still compete for a port; those causes remain open. A killed driver can leave
-claims under `/tmp/waitron-cloud-storage-ports-<uid>`; later fixtures skip them
-rather than remove another process's state. Cleanup removes only claims this
-fixture created.
+See [the cooperative port claims and cleanup limits](backlog/storage-cache-fixture.md#cooperative-native-storage-port-ownership).
 
 ## Repository licence
 
@@ -944,39 +757,8 @@ GitHub CI qualifies the PostgreSQL journeys while local Docker is unavailable.
 
 ## Translate all: approved design, implementation still open
 
-The translation worker runs retention cleanup at startup and hourly. One-second job
-polling and one-minute cleanup-failure retries remain separate. Run `node --test
-packages/translation/test/retention-worker-cadence.test.ts` for the native CLI
-boundaries; CI also checks retained-body deletion through the accelerated hourly
-PostgreSQL case. See [the translation backlog](backlog/translation.md) for the
-account-server cadence and remaining release gates.
-
-Real database recovery, provider activation and release qualification remain open.
-See [the native callback and deadline boundaries](backlog/translation.md#callback-admission-and-request-deadlines).
-
-Run `node --test packages/translation/test/batch-runner-retry-ordering.test.ts`
-to check that each pass waits for its retry pause to finish before admitting
-another call. Delayed cancellation and wait failures preserve billed usage and
-stop further calls. Production activation and wider runtime qualification remain
-open in the [translation backlog](backlog/translation.md).
-
-Run `node --test packages/translation/test/batch-runner-http-retry.test.ts`
-to check server retry headers through both batch passes. Zero, seconds and dates
-reach the wait callback; invalid headers keep the retry schedule. Each pause must
-finish before another call, and exhaustion preserves accepted first-pass names
-without inventing usage for HTTP refusals. Real database recovery, provider
-activation and wider release qualification remain separate translation gates.
-
-Run `node --test packages/translation/test/openai-client-concurrency.test.ts`
-to check that an aborted, oversized, truncated or refused HTTP response leaves a
-simultaneous request through the same client usable in either completion order.
-The checks overlap successful body readers and retain the healthy reply's text
-and usage. Oversized and refused responses must close their unfinished
-connections. Real provider and release qualification remain separate gates in
-the linked translation backlog.
-
-See [the native HTTP and batch boundaries](backlog/translation.md#http-body-and-batch-callback-boundaries)
-for completed transport checks and their remaining production limits.
+See [the retention cadence and native transport checks](backlog/translation.md#retention-cadence-and-additional-http-boundaries)
+for completed local qualification and the production limits it retains.
 
 The design and 24-task plan are owner-approved; Tasks 1–21 are implemented.
 Keep translation off until the remaining Cloud, joint Waitron and release checks,
@@ -3439,11 +3221,7 @@ implementation or production evidence.
 
 ## Diagnostic download replies after account changes (D400)
 
-Native controller checks hold diagnostic replies while you change accounts,
-return to the original account or sign out. Old documents, malformed replies,
-refusals and rate limits cannot save a file, end a newer download or change its
-selection, feedback or wait. Current downloads still finish, selecting the same
-account keeps pending work, and an existing server wait remains in force.
+See [the client account-change boundaries](backlog/diagnostic-download-http.md#diagnostic-download-replies-after-account-changes-d400).
 The earlier PR #644 qualification timed out during source installation before
 private-replay checks began (run 40646201742, job 122675571593). D530 retains
 the unresolved cause; a passing retest does not repair it. Production permission
@@ -3587,20 +3365,9 @@ requirements](backlog/diagnostic-permission-lock.md).
 
 ## Dependency-cache save stalls (D507)
 
-Cost conformance, the password diagnostic, the shared UI build and the browser
-reconnect diagnostic use a stable pnpm store path across runners, restore it
-separately and limit optional cache saves to
-one minute after successful mandatory steps. A save timeout stays visible without changing the test
-result. Keep saving last so the runner promptly cleans up its child processes. The
-password diagnostic retains its password snapshot, deliberate-fault and artifact checks.
-The UI build keeps its source-lockfile cache key, package checks, publication dry run
-and artifacts; actual publishing still requires its separate manual invocation.
-The reconnect diagnostic preserves both CPU groups, first-refusal sampling,
-deliberate-fault controls and diagnostic artifacts.
-
-**Open.** Attribute the historical upload stall; the controlled archive-creation stall
-proves the save deadline, not that transport cause. The other five setup-node cache
-consumers retain their existing behaviour and need separate qualification before changing.
+**Open.** Attribute the historical upload stall and qualify the five remaining
+setup-node cache consumers before changing them.
+See [the boundaries and remaining work](backlog/ci-cache-saving.md#dependency-cache-save-stalls-d507).
 
 ## CI PostgreSQL image pull
 
@@ -3710,14 +3477,8 @@ use Linux PostgreSQL CI while local Docker is unavailable.
 
 ## Usage HTTP response boundaries (D409)
 
-Your usage view keeps its earlier measurements when a response is malformed or
-names another organisation. Native checks exercise the HTTP parser and controller
-together: unexpected fields, numeric or malformed counts and invalid freshness
-are refused, while an explicit valid retry still completes. Signed storage bytes
-and decimal counts keep their exact precision. Production deployment, monitoring
-and billing policy remain open in [usage metering](backlog/usage-metering.md).
-Run `node --test apps/portal/test/usage-response-boundary.test.ts`.
-
+**Open.** Production deployment, monitoring and billing policy remain unqualified.
+See [the boundaries and remaining work](backlog/usage-metering.md#usage-http-response-boundaries-d409).
 
 ## Initial services and future candidates
 
@@ -4170,14 +3931,9 @@ remains unqualified; PostgreSQL checks run in CI while local Docker is down.
 
 ## Delayed recovery replies across account and request changes (D401)
 
-Native controller checks hold inspection, approval, close and replacement replies
-while you change account, return to the same account, sign out or open another
-recovery request. Late successes and refusals cannot change your current recovery
-view, matching code, source, confirmations, pending work, feedback or server wait,
-or start another inspection. Current replies and unchanged selections still work.
-These checks use controlled HTTP replies and leave recovery authority unchanged.
-The browser readiness repair is qualified separately in D201. PostgreSQL and
-container checks run in CI while local Docker is down until 3 November.
+**Open.** Qualify recovery authority and genuine browser and restore behavior
+separately from controlled replies.
+See [the boundaries and remaining work](backlog/backup-recovery-http.md#delayed-recovery-replies-across-account-and-request-changes-d401).
 
 ## Cost-stack isolation command refusal (D152)
 
