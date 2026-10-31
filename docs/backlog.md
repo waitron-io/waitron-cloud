@@ -66,6 +66,12 @@ scheduling completes and shortens idle polling to the next deadline. Shutdown
 after that interval admits no further claims. Real database recovery and
 production signals remain separate gates.
 
+Run `node --test packages/registration/test/worker-loop-native-recurring-stop.test.ts`
+to check shutdown and reporter rejection during a pending recurring schedule
+error report. After busy or idle batches at two and 32 slots, cleanup finishes
+before return, original errors survive, and no new claims, schedules or retry
+timers start. Real database failures and production signals remain separate gates.
+
 ## Worker scheduling failures and error reporting (D467)
 
 **Open.** Production scheduling, real database failures and capacity remain separate gates.
