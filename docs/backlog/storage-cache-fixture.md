@@ -135,14 +135,24 @@ recovery. The original S3 assertions and one-retry limit remain unchanged. An
 unexpected startup failure prints its original error and stack before the
 assertion checks it. When a Node socket stack omits the calling bind, look for
 `storage_listener_failure`: it identifies the identity listener or the numbered
-storage reservation before the original failure propagates. Run
+storage bind attempt before the original failure propagates. A claim already held
+by another process consumes an attempt even though its port is not accepted. Run
 `node --test scripts/ci-backup-storage-issuer-bind.test.mjs scripts/ci-backup-storage-reservation-refusals.test.mjs`
 to check real occupied sockets, stage markers and preserved cleanup even when
 diagnostic output throws. The marker contains only fixed labels and a reservation
-number; it excludes configuration and keys. The historical failing bind remains
+attempt number; it excludes configuration and keys. The historical failing bind remains
 unidentified. The issuer and reservation refusal fixtures inject failures at the
 actual bind and the first, fourth and eighth reservations, preserving their
 original error-identity, cleanup and competing-listener assertions.
+
+The [D548 merge run](https://github.com/waitron-io/waitron-cloud/actions/runs/41221742864/job/124597610947)
+reports reservation three where the fourth actual bind was refused. Controlled
+skipped-claim cases reproduce this mismatch on macOS and Linux. The diagnostic
+now counts every bind attempt, including ports skipped after a claim collision.
+The four added cases retain the existing error, cleanup, cache and competing-listener
+checks, including a diagnostic sink that throws. The original CI peer or stale
+claim was not observed, so its identity remains unknown. The separate portal job
+budget failure in that run remains under [D530 investigation](ci-cache-saving.md#portal-shard-job-budget-d546-qualification).
 
 The separate D458 port-probe error-handler change becomes unnecessary because
 this repair removes that probe. Its separate runtime change is unnecessary;
