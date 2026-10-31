@@ -42,7 +42,7 @@ function worker(command:'email'|'monitoring'){
     child.once('error',reject);child.once('close',(code,signal)=>resolve({code,signal}));
   });
   const result={process:child,name,exited,output:()=>({stdout,stderr})};
-  children.add(result);void exited.then(()=>children.delete(result));
+  children.add(result);void exited.then(()=>children.delete(result),()=>children.delete(result));
   return result;
 }
 

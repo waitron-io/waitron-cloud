@@ -152,8 +152,10 @@ monitoring shutdown under SIGINT and SIGTERM. Each command first reaches four
 idle connections after real empty-queue claims. A wrapper observes Node's
 `beforeExit` event, which runs when its work drains and is bypassed by a forced
 exit. Shutdown must reach that event with code zero within six seconds and leave
-no database sessions. The bound catches an omitted pool close before the default
-ten-second idle connection expiry can mask it.
+no database sessions. While idle connections keep Node alive under the default
+pool settings, the bound catches an omitted pool close before the ten-second
+idle connection expiry can mask it. Allowing exit with idle connections would
+let an omitted close pass; the session check cannot distinguish that case.
 
 The wrapper observes the actual commands without replacing database or worker
 methods. These checks cover empty queues only. Natural drain during active work,
