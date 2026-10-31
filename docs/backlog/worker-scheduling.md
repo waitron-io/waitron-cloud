@@ -127,7 +127,8 @@ connection expiry exceeds the six-second exit deadline. They do not identify the
 cleanup method or distinguish explicit cleanup from idle connections allowed to
 exit sooner. They also do not distinguish waiting in the worker loop from waiting
 in pool cleanup. For observation failures during shutdown, see the cancellation and statement-timeout
-checks below. Longer waits, connection loss and production shutdown remain open.
+checks below. Other active-observation database failures, longer waits, connection
+loss and production shutdown remain open.
 
 ### Monitoring shutdown after active-observation cancellation (D553)
 
@@ -170,14 +171,16 @@ A venue made due after the signal stays unchecked and due, so shutdown cannot
 claim or defer it. A control without a stop signal reaches that later venue after
 the first timeout. SIGTERM during its second blocked observation then ends the
 command after the second timeout and diagnostic. No incidents, alert episodes
-or email are created. The observation wrapper requires Node's `beforeExit` event;
+or email are created. Retry timestamps must fall within one second of the ten-second
+timeout plus the 30-second retry delay, allowing time to report and record the failure.
+The observation wrapper requires Node's `beforeExit` event;
 a forced successful exit bypasses that event.
 
 These checks cover automatic statement timeout during an active monitoring
 observation. They do not identify the explicit rollback or pool-cleanup method,
 or distinguish waiting in the worker loop from waiting in pool cleanup. Other
-command modes, connection loss, longer waits, alert recipients and production
-shutdown remain separate gates.
+command modes, other database failures, connection loss, waits beyond the configured
+ten-second timeout, alert recipients and production shutdown remain separate gates.
 
 ### Monitoring command shutdown after database query cancellation (D541)
 

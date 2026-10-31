@@ -111,12 +111,15 @@ for(const signal of ['SIGINT','SIGTERM',null] as const){
       assert.equal(failed.checked_at,null,'a timed-out observation must not commit a check');
       assert.equal(failed.contact_since,null,'a timed-out observation must not commit contact state');
       assert.ok(failed.next_check_at.getTime()>=blocked[0]!.query_start.getTime()+10000+30000,'the retry delay follows the ten-second observation timeout');
+      // Allow one second for reporting the timeout and recording its retry.
+      assert.ok(failed.next_check_at.getTime()<=blocked[0]!.query_start.getTime()+10000+30000+1000,'the first retry must follow a timeout of about ten seconds');
       assert.ok(failed.next_check_at.getTime()<=(secondQueryStarted??finishedAt).getTime()+30000,'the first retry must be within 30 seconds of the next observation or exit');
       const next=(await db.pool.query('SELECT checked_at,next_check_at FROM venue_monitors WHERE venue_id=$1',[later])).rows[0];
       assert.equal(next.checked_at,null,'the later venue must remain unchecked');
       if(signal)assert.ok(next.next_check_at<=timeoutStarted,'shutdown must not claim or defer the later due venue');
       else{
         assert.ok(next.next_check_at.getTime()>=secondQueryStarted!.getTime()+10000+30000,'the second timed-out observation must retain its 30-second retry delay');
+        assert.ok(next.next_check_at.getTime()<=secondQueryStarted!.getTime()+10000+30000+1000,'the second retry must follow a timeout of about ten seconds');
         assert.ok(next.next_check_at.getTime()<=finishedAt.getTime()+30000,'the second retry must be scheduled no later than 30 seconds after shutdown finishes');
       }
       await lock.query('ROLLBACK');
