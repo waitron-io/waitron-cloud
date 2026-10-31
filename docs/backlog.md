@@ -3630,6 +3630,7 @@ Keep the source pin, integrity checks, deadlines and original assertions.
 
 ### Interrupted source-fetch fixture state (D530)
 
+**Interrupted writes reproduced and handled; historical timing remains unknown.**
 [D349's CI run](https://github.com/waitron-io/waitron-cloud/actions/runs/41169033630/job/124443297790)
 failed to read an empty generated JSON state file while checking the historical browser
 revision. A controlled interruption reproduces that read failure by stopping the
@@ -3639,7 +3640,9 @@ when the supervisor kills a fetch. The new case still requires revision refusal,
 one bounded retry and collection of both fetch children. All original assertions,
 source pins, deadlines and cleanup checks remain unchanged. The historical run
 did not capture the write boundary or explain the helper's delay; those details
-remain unknown.
+remain unknown. A separate control kills the supervisor while its helper is
+paused; fixture cleanup records that helper's PID independently and waits for
+it to exit, so a failing supervisor cannot leave the test process behind.
 
 ### Fixture archive download retries (D311)
 

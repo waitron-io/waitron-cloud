@@ -19,7 +19,7 @@ const path=${JSON.stringify(state)},data=JSON.parse(readFileSync(path)),args=pro
 const writeFileSync=(file,value,...options)=>{
  if(data.pauseStateWrite&&args.includes('fetch')&&file.startsWith(path)&&!existsSync(path+'.paused')){
   persistFileSync(path+'.paused','');closeSync(openSync(file,'w'));
-  console.error('PAUSED_STATE_WRITE');Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0);
+  console.error('PAUSED_STATE_WRITE '+process.pid);Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0);
  }
  return persistFileSync(file,value,...options);
 };
@@ -48,7 +48,16 @@ else if(!args.includes('checkout'))process.exit(90);
   const child=spawn(process.execPath,['--import','data:text/javascript,'+encodeURIComponent(clock),...preparation],
     {env:{...process.env,PATH:bin+':'+process.env.PATH,NODE_AUTH_TOKEN:'generated-fetch-secret'},stdio:['ignore','pipe','pipe']});
   const closed=new Promise(resolve=>child.once('close',(code,signal)=>resolve({code,signal})));
+  const pausedPids=new Set();
   t.after(async()=>{
+    // The supervisor may die before it can collect a helper or publish its PID in state.
+    for(const pid of pausedPids){
+      try{process.kill(-pid,'SIGKILL');}catch(error){if(error.code!=='ESRCH')throw error;}
+      for(let attempt=0;attempt<100;attempt++){
+        try{process.kill(pid,0);}catch(error){if(error.code==='ESRCH')break;throw error;}
+        await delay(10);
+      }
+    }
     if(child.exitCode===null&&child.signalCode===null){child.kill('SIGKILL');await closed;}
     const data=JSON.parse(await readFile(state,'utf8'));
     for(const pid of data.pids){try{process.kill(-pid,'SIGKILL');}catch(error){if(error.code!=='ESRCH')throw error;}}
@@ -58,6 +67,11 @@ else if(!args.includes('checkout'))process.exit(90);
   let output='',interrupted=false;
   const collect=bytes=>{
     output+=bytes;
+    const paused=output.match(/PAUSED_STATE_WRITE (\d+)/);
+    if(paused)pausedPids.add(Number(paused[1]));
+    if(scenario.stopSupervisorDuringWrite&&!interrupted&&paused){
+      interrupted=true;scenario.onPause(Number(paused[1]));child.kill('SIGKILL');
+    }
     if(scenario.interrupt&&!interrupted&&output.includes('"phase":"source-fetch"')&&output.includes('"event":"start"')){
       interrupted=true;child.kill(scenario.interrupt);
     }
@@ -146,6 +160,19 @@ test('browser revision refusal survives a fetch killed during its fixture state 
   assert.equal(result.output.includes('REACHED_SOURCE_INSTALL'),false);
   for(const record of result.fetches.filter(record=>record.event==='start'))
     assert.throws(()=>process.kill(record.pid,0),{code:'ESRCH'},'collect each timed-out or completed fetch child');
+});
+
+test('fixture cleanup collects a paused fetch after its supervisor dies',async t=>{
+  let pid;
+  t.after(()=>{
+    if(pid)try{process.kill(-pid,'SIGKILL');}catch(error){if(error.code!=='ESRCH')throw error;}
+  });
+  await t.test('collect the abruptly stopped supervisor',async inner=>{
+    await assert.rejects(prepare(inner,{pauseStateWrite:true,stopSupervisorDuringWrite:true,onPause:value=>{pid=value;}}),
+      {code:'ERR_ASSERTION',actual:{code:null,signal:'SIGKILL'},expected:{code:1,signal:null}});
+  });
+  assert.ok(Number.isSafeInteger(pid),'observe the owned paused helper');
+  assert.throws(()=>process.kill(pid,0),{code:'ESRCH'},'cleanup collects the paused helper independently of its supervisor');
 });
 
 test('replay preparation retains its historical source independently of the browser pin',async t=>{
