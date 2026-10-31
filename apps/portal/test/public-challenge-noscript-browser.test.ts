@@ -70,7 +70,7 @@ for (const locale of ['en', 'es']) for (const theme of ['light', 'dark'] as cons
         assert.equal((await page.context().cookies()).length, 0);
         if (process.env.PUBLIC_CHALLENGE_RECEIPT_DIR) {
           await mkdir(process.env.PUBLIC_CHALLENGE_RECEIPT_DIR, {recursive: true});
-          await page.screenshot({path: `${process.env.PUBLIC_CHALLENGE_RECEIPT_DIR}/${locale}-${theme}-${width}-${javaScriptEnabled ? 'enabled' : 'disabled'}.png`});
+          await page.screenshot({path: `${process.env.PUBLIC_CHALLENGE_RECEIPT_DIR}/${locale}-${theme}-${width}-${javaScriptEnabled ? 'enabled' : 'disabled'}${handler === 'delayed' ? '-delayed' : ''}.png`});
         }
         if (javaScriptEnabled) {
           release();

@@ -20,6 +20,8 @@ Delayed passkey and authenticator fixtures stop adding their artificial pause
 once a request has been recorded. Their sampled duplicate controls and open timing
 and session-list cleanup limits are described below. The stale-draft and script
 recovery notes also distinguish delayed-handler scope from outer wait bounds.
+The JavaScript-disabled fixture retains ordinary and delayed screenshots separately.
+The reload fixtures still need distinct captures and clearer wait comments.
 See [the diagnostic qualification and open work](backlog/retrospective-reviews.md).
 
 ## Concurrent storage extraction and failed-startup cleanup (D454)
@@ -4035,6 +4037,9 @@ delayed handlers repeat enabled-script journeys in both languages, themes and
 phone/desktop widths. Original script-disabled guidance, content-security policy,
 bilingual visibility, cookie, forwarding and failure assertions remain. These
 native Chromium and local HTTP checks leave production-network qualification open.
+Ordinary captures keep their original names; delayed captures add a suffix so all
+24 screenshots survive. The missing-signal control checks the five-second outer
+bound rather than independently proving an exact four-second wait.
 
 ## Public browser-check landmark handler wait (D365)
 

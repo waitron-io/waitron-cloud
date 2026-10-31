@@ -139,3 +139,45 @@ failure but leaves the process alive. The same experiment on the parent commit
 needs an external stop at 45 seconds. Make this regression fail and clean up
 within its existing bounds without weakening duplicate-read assertions. The
 ordinary suite passes; this is a limit of its failure path.
+
+## Public browser-check waits and screenshots
+
+The JavaScript-disabled fixture now keeps all 24 screenshots from its ordinary
+and delayed journeys. Its 16 historical filenames stay the same; the eight
+delayed captures add `-delayed`. Before this change, those captures overwrote
+ordinary screenshots. A real browser run first passed all 25 checks but failed
+the 24-file check with only 16 images. After the filename change, both checks
+pass and the 16 original images remain byte-identical. Every existing assertion,
+clock and deadline stays unchanged.
+
+Historical PR614, PR613 and PR612 pass 25, 66 and 41 browser checks respectively;
+their parents pass 16, 32 and 24. The current three-file run passes all 132 checks.
+The 48 captured head/parent image pairs are byte-identical, covering only the
+states where these fixtures take screenshots. Other browser engines and real
+networks remain unqualified.
+
+All three missing-signal controls wrap a configured four-second observation in
+a five-second race. They reject an observation that exceeds the outer bound,
+but removing the explicit timeout uses Node's shorter default and still passes.
+Do not treat these controls as independent proof of the exact four-second value.
+Deleting the normal observation also leaves the JavaScript-disabled and reload
+journeys green; the running-failure fixture's restarted observation has an
+intermittent request-count failure when omitted. Delayed journeys repeat their
+product checks without proving every observation necessary. A changed challenge
+URL does expose the bounded refusal in the JavaScript-disabled and reload
+fixtures; the parent controls need external stops. Hiding or redirecting the
+running-failure fixture's reload link fails its original product checks.
+
+D535 still needs separate PR613 and PR612 follow-ups to keep their ordinary,
+delayed and reachable missing-signal screenshots separately, preserving historical
+names. Their wait comments also need to distinguish the missing-signal helper
+from the normal journey, without weakening or removing any behavioral assertion.
+The PR613 proof-count fault and fresh-restart product fault, disabled-script
+product faults in PR612, other failure-state images and real authority remain
+unverified. These are qualification limits, not claims of production repairs.
+
+Run `pnpm --dir apps/portal exec node --test test/public-challenge-noscript-browser.test.ts test/public-challenge-failure-reload-browser.test.ts test/public-challenge-reload-browser.test.ts`
+for the three local browser files. Set `PUBLIC_CHALLENGE_RECEIPT_DIR` to a fresh
+directory when checking the JavaScript-disabled fixture's 24 retained images.
+Use separate directories for the three files, because their historical filename
+schemes do not promise uniqueness across files.
