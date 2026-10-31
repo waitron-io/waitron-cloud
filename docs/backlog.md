@@ -16,8 +16,8 @@ The interrupted-LIST control identifies its producer outcome; the matching
 storage-observer outcome remains unqualified in that scenario.
 Venue-refresh handler checks preserve the original cases, while their matrix
 and outer deadline control have the limits described below.
-Delayed passkey-handler duplicate detection and session-list failure cleanup
-remain open in the same qualification notes.
+Delayed passkey-handler checks now expose a second options request before the
+journey completes. Session-list failure cleanup remains open in the same notes.
 See [the diagnostic qualification and open work](backlog/retrospective-reviews.md).
 
 ## Concurrent storage extraction and failed-startup cleanup (D454)
@@ -3500,7 +3500,10 @@ before checking the exact password and pending enrollment. A browser request eve
 can arrive before that record. The observation uses the existing four-second page
 budget; delayed-handler journeys and an absent-record control retain all original
 keyboard, enrollment, unsupported-browser, cooldown, clock and deadline checks.
-Historical browser failures remain unattributed.
+Only the first options request is delayed, so an injected second request reaches
+the existing count assertions in both ordinary and delayed journeys. All 39
+cases pass after restoring the controller. Historical browser failures remain
+unattributed; these stubbed HTTP checks do not qualify real server authority.
 
 ## Portal session test startup
 

@@ -80,12 +80,16 @@ HTTP; real server authority and the historical Linux cause remain unqualified.
 
 ## Open browser-fixture boundaries
 
-The delayed passkey-options handler pauses every request. An actual second
-options request can arrive after its last count assertion, so the delayed cases
-can pass despite that duplicate. The ordinary cases still catch it. Make later
-requests visible before the delayed journey completes, preserving the existing
-request counts, enrollment behavior and deadlines. A disposable first-request-only
-delay makes the same duplicate fail both cases; that change is not shipped here.
+A delay on every passkey-options request can hide a duplicate until after the
+last count assertion. The fixture now delays only the first request, so you can
+observe a second request with the existing assertions before the journey ends.
+A disposable controller injects a real browser request on the second Enter:
+both ordinary and delayed cases reject it. Removing only the first-request
+condition makes the delayed case pass despite that duplicate. After restoring
+the controller, all 39 cases pass with every original assertion and deadline.
+Run `pnpm --dir apps/portal exec node --test test/passkey-enter-browser.test.ts`
+to check the fixture. These stubbed HTTP journeys leave real server authority
+and the historical Linux failure cause unqualified.
 
 Removing the session-list controller's pending-load guard exposes an older
 harness weakness. The duplicate read blocks in the browser evaluation while its

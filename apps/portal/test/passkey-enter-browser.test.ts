@@ -46,7 +46,7 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
         if (endpoint === '/passkeys') return route.fulfill({json: {passkeys: enrolled ? [{id, createdAt: at, lastUsedAt: null}] : []}});
         if (endpoint === '/authenticator') return route.fulfill({json: {active: false, version: 0, recoveryCodesRemaining: 0, available: true}});
         if (endpoint === '/installations') return route.fulfill({json: {installations: []}});
-        if (endpoint === '/passkeys/registration/options' && handler === 'delayed') await delay(100);
+        if (endpoint === '/passkeys/registration/options' && handler === 'delayed' && writes.length === 0) await delay(100);
         if (request.method() === 'POST' && !(endpoint === '/passkeys/registration/options' && handler === 'missing')) writes.push({path: endpoint, body: request.postDataJSON()});
         if (endpoint === '/passkeys/registration/options') {
           await optionsReply;
