@@ -4651,8 +4651,10 @@ unchanged.
 
 ## Isolated replay ownership-loss fixture
 
-Reproduce why `isolatedControllerNeverClaimsCleanupAfterLosingItsOwnership` can
-finish without its fixture observing the replay worker's started journal state.
-The cause is unknown. Keep the ownership assertion, deadlines, resource collection
-and refusal to claim cleanup after ownership loss; qualify any fix with the genuine
-runtime fixture before retrying the blocked remote-guidance branch.
+An earlier remote-guidance qualification failed in
+`isolatedControllerNeverClaimsCleanupAfterLosingItsOwnership`: the fixture did not
+observe the replay worker's started journal state (conformance run 40265731418,
+job 121387722438). The cause remains unknown and belongs to D530's investigation.
+Keep the ownership assertion, deadlines, resource collection and refusal to claim
+cleanup after ownership loss. Qualify any repair with the genuine runtime fixture;
+a passing remote-guidance qualification does not establish a repair.
