@@ -4288,9 +4288,20 @@ Cloud follow-ups, each a separate small change with tests before implementation:
   existing four-second page wait budget, with a controlled bypass case that proves
   the bound. All original journeys and assertions remain; concurrent background
   list reads remain unqualified.
-  Request-body
-  limits/formats/interruption and other browser failures keep their previous
-  feedback and remain follow-ups.
+  Generic passkey failures now give neutral English/Spanish feedback with the
+  existing password sign-in as an alternative. Browser checks exercise a refused
+  prompt and unavailable options, a second refused passkey attempt, a rejected
+  password then successful password sign-in, and a failed list read followed by
+  a successful retry. They use synthetic
+  HTTP responses; real credential and database checks remain in CI. The shared
+  message cannot diagnose browser restrictions, configuration or transport faults.
+  These failure checks explicitly provide a simulated passkey device; a paired
+  native check records whether the machine can begin without it.
+  Request-body limits/formats/interruption still need cause-specific feedback.
+  An earlier [reconnect check](https://github.com/waitron-io/waitron-cloud/actions/runs/40246747289/job/121329853937)
+  refused with an accepted session and no page or relay error. Its historical
+  cause remains unknown and belongs to the shared CI-failure investigation;
+  a successful requalification does not establish a repair of that cause.
 - R3 delivered: recovery approval and replacement refusals now distinguish missing
   confirmations, unverified or incompatible sources, reused replacement keys,
   another open recovery, changed request bindings and missing approval in English

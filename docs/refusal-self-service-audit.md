@@ -40,8 +40,8 @@ demonstrated invariant at its source.
 
 Each row gives the current English/Spanish wording, the cause and the action to
 implement or clarify. R1, R4, R8 and R10 are implemented. R11's guidance and owner-check
-documentation are implemented; its repair controls remain open. R2's shared-400 and browser-duplicate paths
-are implemented; the remaining rows and R2 feedback stay open. No row authorizes a permission bypass.
+documentation are implemented; its repair controls remain open. R2's shared-400, browser-duplicate and generic-failure guidance
+are implemented; the remaining rows and cause-specific R2 request-body feedback stay open. No row authorizes a permission bypass.
 
 | ID and screen | Response and current wording, English / Spanish | Cause and evidence | Way forward and next change |
 | --- | --- | --- | --- |
@@ -121,13 +121,25 @@ work, delays and account switches. Browser checks use the real portal and browse
 passkey prompt with synthetic HTTP responses; they qualify the displayed action
 and a new server-issued prompt, not database expiry or cryptographic verification.
 The browser's already-registered (`InvalidStateError`) refusal uses the same
-general registration guidance, without sending a verification request. Other
-browser failures and cancellations keep their existing feedback.
-Existing PostgreSQL store and HTTP tests run in CI; Docker is unavailable locally.
-Oversized bodies (413), unsupported request formats (415), interrupted bodies
-(408) and other browser failures retain their previous feedback; this cut handles
-the shared 400 and the browser's already-registered refusal. Those other refusal
-messages remain follow-ups. The server and its disclosure policy are unchanged.
+general registration guidance, without sending a verification request.
+Cancellations keep their existing feedback.
+Existing PostgreSQL store and HTTP tests run in CI.
+Oversized bodies (413), unsupported request formats (415) and interrupted bodies
+(408) still share generic feedback. Their cause-specific messages remain
+follow-ups. The server and its disclosure policy are unchanged.
+
+Generic passkey failures say “Passkeys are unavailable. You can try again.
+Password sign-in remains available.” / “Las llaves de acceso no están disponibles.
+Puedes volver a intentarlo. Puedes seguir entrando con tu contraseña.” The shared
+message covers failed list/options requests, other refused sign-in or management
+requests, and browser prompt errors; it cannot establish a temporary cause. Password sign-in remains on the sign-in screen. On Account, a failed list
+read retains Retry and does not claim that your list is empty. Browser checks use
+synthetic HTTP responses to follow both paths, including a second refused
+passkey attempt and an incorrect password before a successful sign-in. The fixture explicitly provides a simulated passkey
+device, while a native check records whether the machine could begin the
+passkey journey without one. These checks do not qualify real credential
+verification or repair a browser or service restriction. Request-body limits, malformed requests
+and interrupted requests still need cause-specific feedback.
 
 ## Existing actions to preserve
 
