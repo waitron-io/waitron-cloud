@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {spawn} from 'node:child_process';
+import {execFileSync, spawn} from 'node:child_process';
 import {mkdtemp, readFile, writeFile, rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
@@ -14,8 +14,13 @@ async function acquire(t, scenario = {}) {
   const state = join(root, 'state.json');
   await writeFile(state, JSON.stringify({calls: [], failures: [], ...scenario}));
   await writeFile(join(root, 'docker'), `#!${process.execPath}
-import {readFileSync, writeFileSync} from 'node:fs';
+import {existsSync, readFileSync, writeFileSync} from 'node:fs';
 const path = ${JSON.stringify(state)}, data = JSON.parse(readFileSync(path)), args = process.argv.slice(2);
+if (!existsSync(path + '.warm')) {
+  if (data.coldStartMs) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, data.coldStartMs);
+  writeFileSync(path + '.warm', 'ready');
+}
+if (args[0] === '--warm-up') process.exit(0);
 data.calls.push(args); writeFileSync(path, JSON.stringify(data));
 const fail = message => { console.error(message); process.exit(1); };
 if (args[0] === 'image' && args[1] === 'inspect') {
@@ -30,18 +35,26 @@ if (args[0] === 'image' && args[1] === 'inspect') {
 } else fail('Unexpected operation: ' + args.join(' '));
 `, {mode: 0o700});
   const script = `import assert from 'node:assert/strict';
+${scenario.expireDuringBackoff || scenario.insufficientBackoff ? `import fs from 'node:fs';
+import {syncBuiltinESMExports} from 'node:module';
+const timers = await import('node:timers/promises'), realDelay = timers.default.setTimeout;
+let paused = false;
+timers.default.setTimeout = async (...args) => {await realDelay(...args); paused = true;};
+syncBuiltinESMExports();
+const started = performance.now();
+// Clock progress follows the real pause, independently of clock-read count.
+Object.defineProperty(performance, 'now', {value: () => {
+  if (!JSON.parse(fs.readFileSync(${JSON.stringify(state)})).calls.some(args => args[0] === 'pull')) return started;
+  return started + (paused ? 120000 : ${scenario.insufficientBackoff ? 119500 : 118000});
+}});` : ''}
 const module = await import(${JSON.stringify(new URL('./fixtures/isolation-image.mjs', import.meta.url).href)}).catch(error => {
   if (error.code === 'ERR_MODULE_NOT_FOUND') return {}; throw error;
 });
 assert.equal(typeof module.isolationTestImage, 'function', 'isolation tests need bounded image preparation');
-${scenario.expireDuringBackoff ? `import fs from 'node:fs';
-const now = performance.now.bind(performance); let firstPull;
-Object.defineProperty(performance, 'now', {value: () => {
-  const elapsed = now();
-  if (JSON.parse(fs.readFileSync(${JSON.stringify(state)})).calls.some(args => args[0] === 'pull')) firstPull ??= elapsed;
-  return elapsed + (firstPull !== undefined && elapsed - firstPull > 500 ? 121000 : 0);
-}});` : ''}
 console.log('IMAGE=' + await module.isolationTestImage(${JSON.stringify({budgetMs: scenario.budgetMs ?? 120000})}));`;
+  // Fresh executable startup is fixture setup, outside the short acquisition probe.
+  try {execFileSync(join(root, 'docker'), ['--warm-up'], {timeout: 5000, killSignal: 'SIGKILL', stdio: 'ignore'});}
+  catch (error) {await rm(root, {recursive: true, force: true}); throw error;}
   const child = spawn(process.execPath, ['--input-type=module', '-e', script], {
     env: {PATH: root + ':' + process.env.PATH}, stdio: ['ignore', 'pipe', 'pipe'],
   });
@@ -95,6 +108,13 @@ test('an unavailable Docker daemon stops at inspection', async t => {
   assert.deepEqual(result.calls, [inspect]);
 });
 
+test('an unrecognised isolation image pull failure stops without retrying', async t => {
+  const result = await acquire(t, {failures: ['unrecognised synthetic Docker refusal']});
+  assert.equal(result.code, 1, result.output);
+  assert.deepEqual(result.calls, [inspect, pull]);
+  assert.doesNotMatch(result.output, /IMAGE=|retrying/);
+});
+
 test('persistent isolation image HTTP 502 stops after three pulls', {timeout: 10000}, async t => {
   const result = await acquire(t, {failures: [unavailable, unavailable, unavailable, unavailable]});
   assert.equal(result.code, 1, result.output);
@@ -105,7 +125,7 @@ test('persistent isolation image HTTP 502 stops after three pulls', {timeout: 10
 
 for (const stage of ['hang', 'hangInspect']) {
   test('the shared isolation image deadline kills a stalled ' + stage, {timeout: 5000}, async t => {
-    const result = await acquire(t, {[stage]: true, cached: stage === 'hangInspect', budgetMs: 500});
+    const result = await acquire(t, {[stage]: true, cached: stage === 'hangInspect', budgetMs: 500, coldStartMs: 600});
     assert.equal(result.code, 1, result.output);
     assert.deepEqual(result.calls, stage === 'hang' ? [inspect, pull] : [inspect]);
     assert.throws(() => process.kill(result.pid, 0), {code: 'ESRCH'});
@@ -118,4 +138,11 @@ test('an expired acquisition budget does not start another pull after backoff', 
   assert.deepEqual(result.calls, [inspect, pull]);
   assert.match(result.output, /retrying/);
   assert.doesNotMatch(result.output, /IMAGE=/);
+});
+
+test('a retry pause that cannot fit the acquisition budget never starts', {timeout: 5000}, async t => {
+  const result = await acquire(t, {failures: [unavailable], insufficientBackoff: true});
+  assert.equal(result.code, 1, result.output);
+  assert.deepEqual(result.calls, [inspect, pull]);
+  assert.doesNotMatch(result.output, /IMAGE=|retrying/);
 });

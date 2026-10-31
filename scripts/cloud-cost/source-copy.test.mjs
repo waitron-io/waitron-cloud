@@ -49,8 +49,8 @@ test('hostCopyRefusesDormantWalWithoutChangingTheSourceDirectory', async t => {
 
 // Removing a source read-only mount or omitting WAL loses either isolation or committed sales.
 test('isolatedCopyIncludesActiveWalAndEnforcesSourceReadOnlyAtTheOperatingSystem', async t => {
-  const pinned = await image();
   assert.equal(typeof local.prepareIsolatedPrivateCopy, 'function');
+  const pinned = await image();
   const f = fixture(t), before = fingerprint(f.source);
   const copy = await local.prepareIsolatedPrivateCopy({ ...f, image: pinned });
   try {
@@ -73,8 +73,8 @@ test('isolatedCopyIncludesActiveWalAndEnforcesSourceReadOnlyAtTheOperatingSystem
 });
 
 test('isolatedCopySupportsAClosedRollbackDatabaseAndRefusesDormantWal', async t => {
-  const pinned = await image();
   assert.equal(typeof local.prepareIsolatedPrivateCopy, 'function');
+  const pinned = await image();
   for (const mode of ['delete', 'dormant']) {
     const f = fixture(t, mode), before = fingerprint(f.source); let copy;
     try {

@@ -267,8 +267,9 @@ test('copiedCodeMustBeReadOnlyAndStateWritableOnlyInsideOwnedRoot', t => {
   assert.throws(() => local.validateIsolationInspect(x), /Invalid cloud cost local run/);
 });
 test('realDockerCanaryDeniesInternetMetadataAndExternalDnsBeforeDataMounts', async t => {
+  available('proveDockerIsolation');
   const image = await isolationTestImage();
-  available('proveDockerIsolation'); const f = fixture(t);
+  const f = fixture(t);
   const name = 'd68-isolation-' + randomUUID(); let networkId, containerId;
   const docker = (...args) => execFileSync('docker', args, { encoding: 'utf8', env: { PATH: process.env.PATH }, stdio: ['ignore', 'pipe', 'pipe'] }).trim();
   t.after(() => { if (containerId) docker('rm', '-f', containerId); if (networkId) docker('network', 'rm', networkId); });
