@@ -136,6 +136,17 @@ Fractional waits round up before reaching native timers to avoid an extra idle
 batch caused by truncation.
 Real database scheduling and production shutdown remain separate gates.
 
+## Translation consent during account changes (D392)
+
+**Open.** Qualify provider behavior and database authority separately from the
+browser controller. Late reads, agreements and withdrawals cannot change current
+choices or release a pending read after an account change, including signing back
+into the original account. They cannot add a warning or retry wait for that account.
+Preserving an existing warning or retry deadline still needs a separate check.
+The [remote-browser reconnect investigation](#platform-work-to-scope) retains the
+earlier reconnect/takings qualification failures; a clean qualification does not
+establish their cause.
+
 ## How to keep this file honest
 
 - Delete finished entries after checking main, the named pull requests and the code.
@@ -147,18 +158,6 @@ Real database scheduling and production shutdown remain separate gates.
   narratives. Keep what is still open and why; receipts belong with the delivery.
 - Keep owner decisions you still cite under `Decisions and deliberate limits`.
   Never remove a recorded decision with finished work.
-
-## Translation consent during account changes
-
-Native controller checks hold old reads, agreements and withdrawals across account
-changes, including signing back into the original account. Late success, lost
-replies and 401/403/429/503 refusals preserve current choices, the pending read,
-venue warning and retry deadline. Production provider and database authority still
-need their separate qualification; these checks cover only browser-side state.
-
-The earlier remote-browser qualification timed out at dashboard reconnect/takings
-(run40634383638, job122638801183). D530 owns that unresolved connection failure;
-a later clean qualification does not establish its cause or repair it.
 
 ## Decisions and deliberate limits
 
