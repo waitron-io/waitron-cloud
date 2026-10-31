@@ -93,6 +93,19 @@ Run `pnpm --dir apps/portal exec node --test test/passkey-enter-browser.test.ts`
 to check the fixture. These stubbed HTTP journeys leave real server authority
 and the historical Linux failure cause unqualified.
 
+A delay on every authenticator setup request can also hide a duplicate while
+setup is pending. This fixture delays only the first recorded setup request.
+A disposable controller issues a real extra browser request when Enter reaches
+the disabled password field. The English, light, 390-pixel ordinary and delayed
+controls reject it with the original assertions. Removing the first-record
+condition lets the delayed control pass despite that duplicate. Other duplicate
+fault combinations remain unqualified. After restoring the controller, run
+`pnpm --dir apps/portal exec node --test test/authenticator-setup-enter-browser.test.ts`
+for all 39 checks. The missing-record control bounds its configured four-second
+wait through a five-second race; it does not independently assert the exact
+four-second value. Stubbed HTTP leaves real account authority and the historical
+Linux failure cause unqualified.
+
 Removing the session-list controller's pending-load guard exposes an older
 harness weakness. The duplicate read blocks in the browser evaluation while its
 reply waits for the test's cleanup. A controlled 30-second test timeout reports
