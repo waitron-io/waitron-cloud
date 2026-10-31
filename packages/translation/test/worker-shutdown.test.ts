@@ -54,7 +54,7 @@ async function untilBlocked(child:ReturnType<typeof worker>){
   const deadline=performance.now()+6000;
   while(performance.now()<deadline){
     const rows=await sessions(child);
-    if(rows.length===1&&rows[0].state==='active'&&rows[0].wait_event_type==='Lock'&&rows[0].query.startsWith('SELECT id FROM translation_jobs'))return;
+    if(rows.length===1&&rows[0].state==='active'&&rows[0].wait_event_type==='Lock'&&rows[0].query.startsWith('SELECT id FROM translation_jobs')&&rows[0].query.includes("state IN ('done','partly_done','failed')"))return;
     assert.equal(child.process.exitCode,null,`worker exited early: ${child.output().stderr}`);
     assert.equal(child.process.signalCode,null,'worker was terminated before the database observation');
     await delay(20);
@@ -62,7 +62,7 @@ async function untilBlocked(child:ReturnType<typeof worker>){
   assert.fail('translation command did not reach blocked database cleanup');
 }
 
-// Shutdown must retain pending retention work until the owned table lock is released.
+// Observe the blocked retention connection before signalling and throughout the hold.
 for(const signal of ['SIGINT','SIGTERM'] as const){
   test(`${signal} retains blocked translation cleanup for one second and exits after lock release`,async()=>{
     const lock=await pool.connect();
@@ -79,6 +79,7 @@ for(const signal of ['SIGINT','SIGTERM'] as const){
       assert.equal(rows.length,1,'the blocked cleanup retains its connection until lock release');
       assert.equal(rows[0].state,'active');assert.equal(rows[0].wait_event_type,'Lock');
       assert.ok(rows[0].query.startsWith('SELECT id FROM translation_jobs'));
+      assert.ok(rows[0].query.includes("state IN ('done','partly_done','failed')"),'the blocked query is retention, not a new job claim');
       const releasedAt=performance.now();await lock.query('ROLLBACK');
       const timer=setTimeout(()=>child!.process.kill('SIGKILL'),6000);
       try{

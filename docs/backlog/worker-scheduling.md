@@ -61,8 +61,9 @@ one-second hold. After lock release, the command exits normally with no database
 sessions remaining. Empty job, body and usage tables stay empty, and the local
 provider receives no request.
 
-These checks protect the command while pending database cleanup finishes. They
-do not distinguish waiting in the worker loop from waiting in pool cleanup.
+These checks observe the blocked connection and command exit. They do not prove
+explicit pool cleanup: a process exit can close its sockets too. They also do not
+distinguish waiting in the worker loop from waiting in pool cleanup.
 Retention that changes stored jobs, query cancellation, database failures and
 production deployment retain separate qualification gates. Existing idle and
 active-provider signal checks stay in `packages/translation/test/worker-cli.test.ts`.
