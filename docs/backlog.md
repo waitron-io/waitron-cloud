@@ -4265,8 +4265,8 @@ No historical CI failure in these fixtures is attributed here.
 
 ## Paced replay deletion recurrence (D351 qualification)
 
-[Cost run40541558126, job122321994540](https://github.com/waitron-io/waitron-cloud/actions/runs/40541558126/job/122321994540)
-records another `storage-cleanup` / `delete-object` refusal, after75.35seconds,
+[Cost run 40541558126, job 122321994540](https://github.com/waitron-io/waitron-cloud/actions/runs/40541558126/job/122321994540)
+records another `storage-cleanup` / `delete-object` refusal, after 75.35 seconds,
 following native restore and validation. Retain it with the D344 qualification
 trace below and lane D's D121 investigation. The deletion cause remains unknown;
 source equality with the parent does not establish independence. Keep ownership,
