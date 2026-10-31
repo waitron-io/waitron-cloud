@@ -3960,13 +3960,10 @@ The outside-request browser control in [cost run 40536958436, job
 122305238271](https://github.com/waitron-io/waitron-cloud/actions/runs/40536958436/job/122305238271)
 refused while starting its generated gateway, before the browser journey, after
 30.6 seconds. The command helper discarded the original exit and stderr; the
-cause is unknown. All six other browser cases passed. The 30-second command
-bound matches the duration, but a timeout is only an inference. Retain this
-startup recurrence with lane D's reserved browser investigation, expose the
-command boundary without secrets, then reproduce before repairing it. Keep
-all original outside-request, accounting, cleanup and deadline checks. Genuine
-local container reproduction waits for Docker to return. Source equality with
-the parent does not establish independence from the qualification branch.
+cause remains unknown. The duration matches the command bound, but a timeout
+is only an inference. Retain this failure in the shared CI-failure investigation.
+Fresh qualification preserves the original outside-request, accounting, cleanup
+and deadline checks; a passing run does not establish the historical cause.
 
 ## Public browser and network qualification
 
