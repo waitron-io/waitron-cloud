@@ -145,9 +145,10 @@ ordinary suite passes; this is a limit of its failure path.
 The JavaScript-disabled fixture now keeps all 24 screenshots from its ordinary
 and delayed journeys. Its 16 historical filenames stay the same; the eight
 delayed captures add `-delayed`. Before this change, those captures overwrote
-ordinary screenshots. A real browser run first passed all 25 checks but failed
-the 24-file check with only 16 images. After the filename change, both checks
-pass and the 16 original images remain byte-identical. Every existing assertion,
+ordinary screenshots. A real browser run first passed all 25 checks, while a
+separate review check of 24 expected files failed with only 16 images. After the
+filename change, the browser run and review check pass, and the 16 original images
+remain byte-identical. Every existing assertion,
 clock and deadline stays unchanged.
 
 Historical PR614, PR613 and PR612 pass 25, 66 and 41 browser checks respectively;
