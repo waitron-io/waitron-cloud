@@ -17,3 +17,7 @@ for(const name of ['grants','messages','worker'] as const)test(`venue relay ${na
  const issuer=createLeaseIssuer(generateKeyPairSync('ed25519').privateKey.export({type:'pkcs8',format:'der'}).toString('base64url'));
  assert.throws(()=>name==='grants'?new api.RelayGrantStore(pool,undefined,mode):name==='worker'?new api.RelayWorker(pool,undefined,mode):new api.RelayMessages(pool,issuer,'http://localhost',config,undefined,mode),/invalid_plan_mode/);
 });
+test('venue relay message mode validation precedes malformed relay configuration',()=>{
+ const issuer=createLeaseIssuer(generateKeyPairSync('ed25519').privateKey.export({type:'pkcs8',format:'der'}).toString('base64url'));
+ assert.throws(()=>new RelayMessages({} as Pool,issuer,'http://localhost',{mode:'local-proof'} as any,undefined,'production-venue-levels' as any),/invalid_plan_mode/);
+});

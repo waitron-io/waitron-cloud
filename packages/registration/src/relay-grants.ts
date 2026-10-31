@@ -1,3 +1,5 @@
+import {requireVenueService} from './venue-service-permissions.ts';
+import {requireTestPlanVenue,type PlanMode} from './organisation-plans.ts';
 import {randomUUID} from 'node:crypto';
 import type {Pool,PoolClient} from 'pg';
 import {IdentityError,resolveSession} from '@waitron-cloud/identity';
@@ -37,10 +39,13 @@ async function account(client:PoolClient,accountId:string){
  if(!(await client.query('SELECT id FROM cloud_accounts WHERE id=$1 AND disabled_at IS NULL FOR SHARE',[accountId])).rowCount)fail('grant_unavailable');
  if(!(await client.query('SELECT account_id FROM cloud_credentials WHERE account_id=$1 AND email_verified_at IS NOT NULL FOR SHARE',[accountId])).rowCount)fail('grant_unavailable');
 }
-async function authority(client:PoolClient,accountId:string,installationId:string):Promise<InstallationRow>{
+async function authority(client:PoolClient,accountId:string,installationId:string,planMode:PlanMode):Promise<InstallationRow>{
  const candidate=(await client.query('SELECT v.organisation_id,i.venue_id FROM installations i JOIN venues v ON v.id=i.venue_id WHERE i.id=$1',[installationId])).rows[0];
  if(!candidate)fail('grant_unavailable');
  if(!(await client.query('SELECT account_id FROM organisation_memberships WHERE account_id=$1 AND organisation_id=$2 AND is_owner FOR SHARE',[accountId,candidate.organisation_id])).rowCount)fail('grant_unavailable');
+ // Policy can synchronise expired setup, so it precedes every installation lock.
+ try{await requireVenueService(client,candidate.venue_id,'transactional_email',planMode);}
+ catch(error){if(error instanceof Error&&error.message==='permission_denied')fail('grant_unavailable');throw error;}
  const venue=(await client.query('SELECT organisation_id,environment FROM venues WHERE id=$1 FOR SHARE',[candidate.venue_id])).rows[0];
  if(!venue||venue.organisation_id!==candidate.organisation_id||venue.environment!=='test')fail('grant_unavailable');
  const row=(await client.query('SELECT * FROM installations WHERE id=$1 FOR SHARE',[installationId])).rows[0];
@@ -51,9 +56,10 @@ function liveInstallation(row:InstallationRow,time:number){if(!row.lease_expires
 
 /** Internal local-proof core. No HTTP caller or production verifier is installed. */
 export class RelayGrantStore {
- readonly #pool:Pool;readonly #config:RelayConfig|undefined;
- constructor(pool:Pool,config?:RelayConfig){
-  this.#pool=pool;
+ readonly #pool:Pool;readonly #config:RelayConfig|undefined;readonly #planMode:PlanMode;
+ constructor(pool:Pool,config?:RelayConfig,planMode:PlanMode='existing'){
+  requireTestPlanVenue('test',planMode);
+  this.#pool=pool;this.#planMode=planMode;
   if(config!==undefined){
    const p=config?.policy;
    if(config?.mode!=='local-proof'||typeof config.consentVersion!=='string'||!version.test(config.consentVersion)||typeof config.verifyOrigin!=='function'
@@ -69,14 +75,14 @@ export class RelayGrantStore {
    ||!Number.isSafeInteger(input.expectedRevision)||input.expectedRevision<0||input.expectedRevision>=2147483647||input.consent!==true
    ||input.consentVersion!==config.consentVersion||!canonicalOrigin(input.managementOrigin)||!date(input.expiresAt))fail('invalid_input');
   // Authenticate before invoking the trusted verifier; network proof runs outside database locks.
-  await transaction(this.#pool,async client=>{const actor=await session(client,token,csrfToken);await account(client,actor.accountId);await authority(client,actor.accountId,input.installationId);});
+  await transaction(this.#pool,async client=>{const actor=await session(client,token,csrfToken);await account(client,actor.accountId);await authority(client,actor.accountId,input.installationId,this.#planMode);});
   const challenge={installationId:input.installationId,managementOrigin:input.managementOrigin,challenge:randomUUID()};
   let evidence:OriginEvidence;
   try{evidence=await config.verifyOrigin({...challenge});}catch{return fail('origin_unverified');}
   if(!evidence||evidence.installationId!==challenge.installationId||evidence.managementOrigin!==challenge.managementOrigin||evidence.challenge!==challenge.challenge
    ||evidence.domainControl!==true||evidence.httpsEndpoint!==true||!date(evidence.expiresAt))fail('origin_unverified');
   return transaction(this.#pool,async client=>{
-   const actor=await session(client,token,csrfToken);await account(client,actor.accountId);const installation=await authority(client,actor.accountId,input.installationId);
+   const actor=await session(client,token,csrfToken);await account(client,actor.accountId);const installation=await authority(client,actor.accountId,input.installationId,this.#planMode);
    // Serialize first approval too; there is no grant row to lock until it is created.
    await client.query("SELECT pg_advisory_xact_lock(hashtextextended('relay-grant:'||$1,0))",[installation.id]);
    const prior=(await client.query<GrantRow>('SELECT * FROM relay_grants WHERE installation_id=$1 FOR UPDATE',[installation.id])).rows[0];
@@ -120,7 +126,7 @@ export class RelayGrantStore {
   const candidate=(await client.query<GrantRow>('SELECT * FROM relay_grants WHERE id=$1 AND installation_id=$2',[input.grantId,authenticated.installationId])).rows[0];
   if(!candidate)fail('grant_unavailable');
   await account(client,candidate.account_id);
-  const installation=await authority(client,candidate.account_id,authenticated.installationId);
+  const installation=await authority(client,candidate.account_id,authenticated.installationId,this.#planMode);
   const grant=(await client.query<GrantRow>('SELECT * FROM relay_grants WHERE id=$1 FOR SHARE',[candidate.id])).rows[0];
   if(!grant||grant.account_id!==candidate.account_id||grant.installation_id!==installation.id||grant.venue_id!==installation.venue_id
    ||grant.organisation_id!==installation.organisation_id||grant.environment!==installation.environment||grant.public_key!==installation.public_key
