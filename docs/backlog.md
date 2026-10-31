@@ -492,6 +492,16 @@ passes, which does not explain or fix the CI collision. Reproduce the handoff
 under concurrent fixtures and preserve the no-restart, competing-listener and
 cleanup assertions when fixing this separate cause.
 
+[PR793's unrelated documentation qualification](https://github.com/waitron-io/waitron-cloud/actions/runs/41182496471/job/124482642911)
+also reaches a later handoff refusal in the existing forced-collision readiness
+test. Its restarted native store cannot bind the allocated S3 gRPC port; the
+listener snapshot names another `weed` PID without identifying its fixture.
+The expected original SDK error is therefore replaced by the genuine startup
+refusal. Keep the single-restart limit and original-error assertion while
+reproducing this collision under concurrent fixtures. The unchanged forced-collision
+case passes all three modes on the authorised Linux test box, including the
+throwing reporter; that control does not explain or repair the CI collision.
+
 ## Repository licence
 
 The root `LICENSE` is copied byte for byte from Waitron's Elastic License 2.0 text.
@@ -3604,8 +3614,12 @@ existing outer limits and assertions. See the [fixture timing detail](backlog/li
 ## Cost conformance image acquisition (D137)
 
 The historical Docker Hub token-request timeout remains unattributed. Keep the
-bounded, cache-first image acquisition and permanent-refusal checks; local Docker
-qualification and D135’s current-head CI remain open. See the
+bounded, cache-first image acquisition and permanent-refusal checks. The D530
+inventory separates launcher HTTP 500, build-metadata HTTP 502 and later Node-pull
+authentication refusals; the first two already have bounded recovery on main.
+The authentication cause remains open and must retain immediate refusal. Use
+the authorised Linux test box for reproduction and current-head CI for landing.
+See the
 [image acquisition detail](backlog/cost-image-acquisition.md).
 
 A later [Linux CI pull](https://github.com/waitron-io/waitron-cloud/actions/runs/40984997048/job/123833975271)
