@@ -62,3 +62,18 @@ stall. The remaining job-budget investigation belongs to D530; neither a passing
 save nor a later green run establishes its repair. Native parsed-workflow probes
 qualify the cache wiring, while real save cancellation and child cleanup need
 their own runner evidence.
+
+## Venue-refresh handler observation
+
+The missing-counter control wraps its configured two-second observation in a
+three-second race. You can use it to detect an observation that outlasts that
+outer bound. It does not independently assert the exact two-second deadline:
+removing the explicit timeout uses Node's shorter default and still passes.
+A five-second observation fails the control with a missing-rejection error.
+
+Run `pnpm --dir apps/portal exec node --test test/fiscal-venue-read-failure-browser.test.ts`
+for the 54 browser checks, including subtests. Normal and delayed refresh journeys
+cover both languages, themes and widths. The separate Retry-After and
+pending/uncertain-write cases remain in both languages at width 390. Every
+original assertion and deadline remains unchanged. These checks use stubbed
+HTTP; real server authority and the historical Linux cause remain unqualified.

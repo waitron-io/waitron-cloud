@@ -14,6 +14,8 @@ Linux failure causes, mixed registry-error handling and enclosing CI job budgets
 remain separate limits.
 The interrupted-LIST control identifies its producer outcome; the matching
 storage-observer outcome remains unqualified in that scenario.
+Venue-refresh handler checks preserve the original cases, while their matrix
+and outer deadline control have the limits described below.
 See [the diagnostic qualification and open work](backlog/retrospective-reviews.md).
 
 ## Concurrent storage extraction and failed-startup cleanup (D454)
@@ -511,12 +513,16 @@ and production authority unchanged.
 ## Fiscal venue-refresh browser handler observation (D376)
 
 The failed venue-list fixture observes its refresh handler's read count before
-checking duplicate suppression. Browser pending state can appear before the
-Node route handler runs. A delayed handler reproduces that gap; a missing-count
-control fails within the existing two-second page budget. Original and delayed
-journeys preserve every venue, fiscal-write, uncertain-outcome, retry, layout and
-deadline assertion across both languages, themes and widths. These stubbed
-Chromium checks leave fiscal allocation behavior and expected results unchanged.
+checking duplicate suppression. A delayed handler reproduces browser pending
+state before the Node handler counts the read. Normal and delayed refresh
+journeys cover both languages, themes and widths. The separate Retry-After and
+pending/uncertain-write cases remain unchanged in both languages at width 390.
+
+The missing-count control checks a configured two-second wait through a
+three-second outer race. It detects waits that exceed that outer bound; it does
+not independently enforce the exact two-second deadline. Every original assertion
+and deadline remains. These stubbed Chromium checks leave fiscal allocation
+behavior and expected results unchanged.
 
 ## Fiscal test-worker failure evidence (D380)
 
