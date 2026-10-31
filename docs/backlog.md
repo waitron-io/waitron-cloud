@@ -515,6 +515,14 @@ reproducing this collision under concurrent fixtures. The unchanged forced-colli
 case passes all three modes on the authorised Linux test box, including the
 throwing reporter; that control does not explain or repair the CI collision.
 
+[PR795's email shutdown qualification](https://github.com/waitron-io/waitron-cloud/actions/runs/41187136562/job/124496295046)
+repeats this failure in the same forced-collision `reporter-throws` subcase.
+The restarted store cannot bind S3 gRPC port 46747; its listener snapshot names
+`weed` PID 7112, with fixture ownership still unknown. The original SDK-error
+assertion fails. Both storage source and test match the branch's base exactly.
+Lane H's D530 investigation owns this recurrence; keep the single restart and
+every assertion. A later clean qualification does not repair this collision.
+
 ## Repository licence
 
 The root `LICENSE` is copied byte for byte from Waitron's Elastic License 2.0 text.
