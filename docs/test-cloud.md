@@ -538,3 +538,24 @@ This command proves the client journey only. Its receipt has
 same installations' paid snapshot and stream recovery, independent snapshot fallback,
 remote withdrawal, measured resource budgets and complete rollback proof before the
 final integration receipt can pass. Keep deployment plan enforcement off.
+
+To exercise the paired paid venue's archive upload as well, use the same image
+variables with:
+
+```sh
+node --test scripts/test-cloud-paid-snapshot.test.mjs
+```
+
+This extension is awaiting its first complete passing run. Its test first exposed
+the missing paid journey; the implementation attempt then stopped at the test
+box's unchanged 20 GiB free-disk preflight requirement. The eight native evidence
+checks and nine deliberate check omissions qualify the evidence reader only.
+Do not use them as evidence that an archive was uploaded or recovered.
+
+The extension prepares backup state in the paid demo venue's own volume, trusts
+that venue's public CA for its manager API and uses its existing signed Cloud
+connection. After capture, upload and publication, Cloud independently reads the
+stored object and compares its bytes, hash and source binding. Deliberately wrong
+digest, organisation and source-node claims must refuse. A passing result still
+records verification as pending and recovery as not run; the final receipt reader
+continues to reject it as incomplete.

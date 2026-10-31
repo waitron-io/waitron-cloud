@@ -2,8 +2,12 @@
 import assert from 'node:assert/strict';
 import {appendFile, readFile, rm, chmod} from 'node:fs/promises';
 import {createServer} from 'node:http';
-import {randomUUID} from 'node:crypto';
+import {randomUUID, createHash} from 'node:crypto';
+import {spawn} from 'node:child_process';
+import {createRequire} from 'node:module';
+import {Agent} from 'node:https';
 import {createCloudConnection} from '/waitron/apps/server/src/cloud-client.ts';
+const require = createRequire('/waitron/apps/server/package.json');
 const nativeFetch = globalThis.fetch;
 globalThis.fetch = async (url, options) => {
   const response = await nativeFetch(url, options);
@@ -27,7 +31,48 @@ const cloud = createCloudConnection({stateDir: root, origin: 'https://waitron.lo
 const socket = root + '/proof.sock'; await rm(socket, {force: true});
 const control = createServer(async (req, res) => {
   try {
-    assert.equal(req.method, 'POST'); assert.equal(req.url, '/snapshot-refusal');
+    assert.equal(req.method, 'POST');
+    if (req.url === '/snapshot-publish') {
+      assert.equal(process.env.CLOUD_TEST_BACKUP_STATE, '1');
+      const grant = await cloud.reserveCapture(randomUUID());
+      const metadata = await new Promise((resolve, reject) => {
+        const child = spawn(process.execPath, ['--permission', '--allow-fs-read=*', '--allow-fs-write=' + root,
+          '--allow-worker', '--allow-child-process', '--allow-addons', '--import', require.resolve('tsx'),
+          '/waitron/apps/server/scripts/cloud-backup-fixture.ts'], {
+          cwd: '/waitron/apps/server', env: {...process.env, TSX_DISABLE_CACHE: '1'}, stdio: ['pipe', 'pipe', 'pipe'],
+        });
+        let output = '', invalid = false;
+        const timer = setTimeout(() => {invalid = true; child.kill('SIGKILL');}, 30000);
+        child.stdout.on('data', part => {if (output.length + part.length > 65536) {invalid = true; child.kill('SIGKILL');} else output += part;});
+        child.stderr.resume(); child.stdin.on('error', () => {});
+        child.once('error', () => {invalid = true;});
+        child.once('close', code => {
+          clearTimeout(timer);
+          try {assert.equal(invalid, false); assert.equal(code, 0); resolve(JSON.parse(output.trim().split('\n').at(-1)));}
+          catch {reject(Error('integration.capture_failed'));}
+        });
+        child.stdin.end(JSON.stringify({command: 'capture', recoveryKey: grant.recoveryKey}));
+      });
+      const saved = JSON.parse(await readFile(root + '/fixture-env.json', 'utf8'));
+      assert.equal(metadata.sourceNodeId, saved.WAITRON_NODE_ID);
+      assert.equal(metadata.networkDenied, true);
+      const bytes = await readFile(root + '/captured.backup.enc');
+      const digest = createHash('sha256').update(bytes).digest('hex');
+      const {S3Client, PutObjectCommand} = require('@aws-sdk/client-s3');
+      const storage = new S3Client({endpoint: grant.location.endpoint, region: grant.location.region,
+        credentials: grant.credentials, forcePathStyle: true, maxAttempts: 1,
+        requestHandler: {httpsAgent: new Agent({ca: await readFile('/proof/ca.pem')})}});
+      try {await storage.send(new PutObjectCommand({Bucket: grant.location.bucket, Key: grant.incomingKey, Body: bytes}), {abortSignal: AbortSignal.timeout(10000)});}
+      finally {storage.destroy();}
+      const point = await cloud.publishCapture(grant.id, {digest, size: bytes.length, capturedAt: metadata.manifest.createdAt,
+        retention: 'daily', sourceNodeId: metadata.sourceNodeId, modules: metadata.manifest.modules});
+      assert.equal(point.id, grant.id); assert.equal(point.digest, digest); assert.equal(point.size, bytes.length);
+      assert.equal(point.verification, 'pending');
+      res.end(JSON.stringify({status: 'published', pointId: point.id, sourceNodeId: metadata.sourceNodeId,
+        sha256: digest, bytes: bytes.length, verification: point.verification, networkDeniedDuringCapture: metadata.networkDenied, signedPublication: true}));
+      return;
+    }
+    assert.equal(req.url, '/snapshot-refusal');
     let refused = false;
     try {await cloud.reserveCapture(randomUUID());} catch {refused = true;}
     assert.equal(refused, true);

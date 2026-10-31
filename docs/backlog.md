@@ -834,13 +834,18 @@ implementation or production evidence.
   pinned demo venues, observes successful signed renewal/configuration and preserves
   identity across restart. The genuine free client receives `403 permission_denied`
   on snapshot reserve, without a grant. Its partial receipt records exact owned
-  cleanup and explicitly refuses to claim complete integration. The combined paid
-  snapshot/stream/remote, resource/rollback and deployment proof remains open.
-  A repeat run reached cleanup but Docker retained an owned bootstrap endpoint on
-  an otherwise empty network. Scoped removal and force-disconnect refuse, and the
-  retained subnet blocks another stack. Cleanup now attempts the other owned
-  resources independently; complete requalification and native fault controls
-  remain open until the shared Docker state is recovered safely.
+  cleanup and explicitly refuses to claim complete integration. The existing
+  client journey also passes on the isolated Linux test box. The optional paired
+  paid snapshot extension now captures from that venue, uploads with its scoped
+  grant and requests signed publication, followed by an independent storage read.
+  Its evidence checker passes eight native cases; nine omitted checks each fail
+  their tests. This qualifies evidence consistency only. The new complete journey
+  has not passed: test-box preflight refuses free disk below its unchanged 20 GiB
+  start requirement. Its earlier failing run established the missing journey before
+  implementation. Snapshot verification and ordinary restore, stream recovery and
+  independent fallback, remote withdrawal, active-verifier resources, rollback and
+  deployment remain open. The old Mac cleanup refusal stays historical evidence;
+  the isolated Linux client proof removes its owned resources successfully.
   The organisation plan store and operator command now persist free/paid metadata,
   advance revisions only on changes and refuse incompatible migration ledgers.
   Real PostgreSQL checks cover concurrent updates, rollback and separate organisations;
