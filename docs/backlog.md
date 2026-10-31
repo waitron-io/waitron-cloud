@@ -16,9 +16,9 @@ The interrupted-LIST control identifies its producer outcome; the matching
 storage-observer outcome remains unqualified in that scenario.
 Venue-refresh handler checks preserve the original cases, while their matrix
 and outer deadline control have the limits described below.
-Delayed passkey and authenticator handlers pause only the first recorded request,
-so their existing assertions can expose a second request before the journey ends.
-The sampled duplicate controls and open session-list cleanup limit are described below.
+Delayed passkey and authenticator fixtures stop adding their artificial pause
+once a request has been recorded. Their sampled duplicate controls and open timing
+and session-list cleanup limits are described below.
 See [the diagnostic qualification and open work](backlog/retrospective-reviews.md).
 
 ## Concurrent storage extraction and failed-startup cleanup (D454)
@@ -4571,11 +4571,11 @@ No remote setup or permission behaviour changes.
 
 The authenticator setup keyboard fixture waits for its route handler to record
 its request before checking the payload. The browser request event can arrive
-first; a delayed handler reproduces that empty-record refusal. Only the first
-recorded setup request is delayed, so later requests reach the existing assertions
-before the journey ends. Ordinary and delayed English/light/390 controls reject
-a real extra request during pending setup. Other duplicate fault combinations
-remain unqualified. All 39 native Chromium checks retain every original password,
+first; a delayed handler reproduces that empty-record refusal. Setup handlers
+pause only while no request has been recorded. Ordinary and delayed English/light/390
+controls submit a real extra request during pending setup and reject it at the
+later existing count assertion. Arbitrarily late duplicates and other fault
+combinations remain unqualified. All 39 native Chromium checks retain every original password,
 Enter-key, pending-state, activation, cooldown, clock and deadline assertion.
 These checks use stubbed HTTP; real account authority and the historical Linux
 failure cause remain unqualified.
