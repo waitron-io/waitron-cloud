@@ -79,6 +79,7 @@ for (const exhausted of [false, true]) test(exhausted
     const { stdout } = await promisify(childProcess.execFile)(process.execPath, ["--input-type=module", "-e", `
       import assert from "node:assert/strict";
       import crypto from "node:crypto";
+      import net from "node:net";
       import childProcess from "node:child_process";
       import { syncBuiltinESMExports } from "node:module";
       import {mkdtemp, cp, rm} from "node:fs/promises";
@@ -87,12 +88,21 @@ for (const exhausted of [false, true]) test(exhausted
       const temporary = await mkdtemp(join(tmpdir(), "storage-port-peer-"));
       await cp(join(tmpdir(), "waitron-cloud-test-binaries"), join(temporary, "waitron-cloud-test-binaries"), {recursive:true});
       process.env.TMPDIR = process.env.TMP = process.env.TEMP = temporary;
-      const choose = crypto.randomInt, spawn = childProcess.spawn;
+      const choose = crypto.randomInt, spawn = childProcess.spawn, create = net.createServer;
       const occupied = ${firstPort};
-      let tried = false;
+      let tried = false, legacySelected = false;
       crypto.randomInt = (...args) => {
         if (!tried) { tried = true; return occupied; }
         return choose(...args);
+      };
+      net.createServer = (...args) => {
+        const server = create(...args), listen = server.listen;
+        server.listen = function(port, ...rest) {
+          if (port === 0 && !legacySelected) { legacySelected = true; port = occupied; }
+          assert.notEqual(port, occupied, "a separate process must not temporarily bind an existing claim");
+          return listen.call(this, port, ...rest);
+        };
+        return server;
       };
       childProcess.spawn = (binary, args, options) => {
         const ports = args.filter(arg => /^-(s3|master|volume|filer)\\.port(?:\\.grpc)?=/.test(arg)).map(arg => Number(arg.split("=")[1]));
