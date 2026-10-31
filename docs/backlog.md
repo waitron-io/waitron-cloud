@@ -136,6 +136,17 @@ Fractional waits round up before reaching native timers to avoid an extra idle
 batch caused by truncation.
 Real database scheduling and production shutdown remain separate gates.
 
+## Translation consent during account changes (D392)
+
+**Open.** Qualify provider behavior and database authority separately from the
+browser controller. Late reads, agreements and withdrawals cannot change current
+choices or release a pending read after an account change, including signing back
+into the original account. They cannot add a warning or retry wait for that account.
+Preserving an existing warning or retry deadline still needs a separate check.
+The [remote-browser reconnect investigation](#platform-work-to-scope) retains the
+earlier reconnect/takings qualification failures; a clean qualification does not
+establish their cause.
+
 ## How to keep this file honest
 
 - Delete finished entries after checking main, the named pull requests and the code.
