@@ -72,6 +72,9 @@ for(const signal of ['SIGINT','SIGTERM'] as const){
     const child=worker();
     try{
       await untilIdle(child);
+      await delay(3000);
+      assert.equal(child.process.exitCode,null,'idle polling must stay live before the signal');
+      assert.equal(child.process.signalCode,null,'the idle command must not terminate before the signal');
       assert.deepEqual(child.output(),{stdout:'',stderr:''},'no drain is reported while the worker is live');
       assert.equal(child.process.kill(signal),true);
       // Default idle connections keep Node alive; six seconds precedes their ten-second expiry.
