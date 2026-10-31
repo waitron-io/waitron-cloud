@@ -123,3 +123,17 @@ test('streamResultReporterRetainsAnAlreadyRejectedWorkerTraceWithoutPublishingIt
   assert.equal(report.refusal.traceInvalid, true);
   assert.equal(Object.hasOwn(report.refusal, 'trace'), false);
 });
+
+test('streamResultReporterRetainsTheFirstCheckpointTransportRefusalAtTheHostBoundary', async () => {
+  const trace = [
+    { kind: 'checkpoint-transport', reason: 'request-validation', validationStage: 'identity', pending: 0, completed: 3 },
+    { kind: 'measurement-refusal', stage: 'checkpoint-admission' },
+  ];
+  const report = await failedControl({ refusal: Object.assign(refusal(), { diagnostic: { stage: 'replay', trace } }) });
+  assert.deepEqual(report.refusal.trace, [
+    { kind: 'checkpoint-transport', reason: 'request-validation', validationStage: 'identity', pending: 0, completed: 3 },
+    { kind: 'measurement-refusal', stage: 'checkpoint-admission' },
+  ]);
+  assert.equal(report.resultRead, false);
+  assert.equal(report.changed, false);
+});

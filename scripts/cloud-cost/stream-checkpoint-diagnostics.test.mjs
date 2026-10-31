@@ -128,3 +128,81 @@ test('checkpointDistinguishesARacingWriteFromAccountingFailure', async t => {
   await stopped(f.session.url);
   await assert.rejects(f.session.finish(), bad);
 });
+
+// Losing the transport's first refusal hides a request rejected after the idle callback.
+for (const mode of ['identity', 'retry-sequence'])
+  test('checkpointRetainsTheTransportRefusalAfterIdle_' + mode, async t => {
+    const trace = [], f = await fixture(t, event => trace.push(event));
+    await f.session.whenIdle(() => {});
+    if (mode === 'retry-sequence') await upload(f.session.url);
+    await new Promise((resolve, reject) => {
+      const req = request(f.session.url + '/private-checkpoint/PRIVATE_REJECTED_KEY', {
+        method: 'PUT', agent: false, headers: mode === 'identity' ? {} : {
+          'amz-sdk-invocation-id': '11111111-2222-4333-8444-000000000001',
+          'amz-sdk-request': 'attempt=1; max=1',
+        },
+      }, res => { res.resume(); res.on('end', () => {
+        assert.equal(res.statusCode, 400); resolve();
+      }); });
+      req.on('error', reject); req.end();
+    });
+    const before = f.state.requests;
+    await assert.rejects(f.session.checkpoint(), bad);
+    assert.equal(f.state.requests, before, 'no inventory begins after transport refusal');
+    assert.deepEqual(trace, [
+      { kind: 'checkpoint-transport', reason: 'request-validation', validationStage: mode,
+        pending: 0, completed: mode === 'identity' ? 0 : 1 },
+      { kind: 'measurement-refusal', stage: 'checkpoint-admission' },
+    ]);
+    assert.deepEqual(workerFailureTrace(trace), trace, 'the actual worker and host retain the bounded refusal');
+    assert.doesNotMatch(JSON.stringify(trace), /PRIVATE|private-checkpoint|127\.0\.0\.1/);
+    await stopped(f.session.url);
+    await assert.rejects(f.session.finish(), bad);
+  });
+
+const transportEvent = { kind: 'checkpoint-transport', reason: 'phase-change', validationStage: 'none', pending: 1, completed: 2 };
+for (const [name, value] of [
+  ['reason', { ...transportEvent, reason: 'PRIVATE_REASON' }],
+  ['stage', { ...transportEvent, validationStage: 'PRIVATE_STAGE' }],
+  ['pending', { ...transportEvent, pending: -1 }],
+  ['completed', { ...transportEvent, completed: 1e20 }],
+  ['extra', { ...transportEvent, path: 'PRIVATE_PATH' }],
+  ['getter', { ...transportEvent, get pending() { throw Error('PRIVATE_GETTER'); } }],
+]) test('checkpointTransportAdmissionRefusesPrivateOrUnboundedEvidence_' + name, () => {
+  assert.throws(() => workerFailureTrace([value]), { message: 'Invalid cloud cost worker diagnostic' });
+});
+
+test('checkpointTransportAdmissionCopiesItsValidatedObservation', () => {
+  const trace = [{ ...transportEvent }], admitted = workerFailureTrace(trace);
+  assert.deepEqual(admitted, [{ kind: 'checkpoint-transport', reason: 'phase-change', validationStage: 'none', pending: 1, completed: 2 }]);
+  trace[0].pending = 99;
+  assert.equal(admitted[0].pending, 1);
+});
+
+// An idle callback does not prevent a separate producer from admitting another request.
+test('checkpointRetainsARequestAdmittedAfterIdleBeforeItClosesTheTransport', async t => {
+  const trace = [], f = await fixture(t, event => trace.push(event));
+  await f.session.whenIdle(() => {});
+  let entered, release;
+  const held = new Promise(resolve => { entered = resolve; });
+  f.state.holdList = respond => { release = respond; entered(); };
+  t.after(() => release?.());
+  const reply = new Promise(resolve => {
+    const req = request(f.session.url + '/private-checkpoint?list-type=2', { agent: false, headers: {
+      'amz-sdk-invocation-id': '11111111-2222-4333-8444-000000000002',
+      'amz-sdk-request': 'attempt=1; max=1',
+    } }, res => { res.resume(); res.on('end', resolve); res.on('error', resolve); });
+    req.on('error', resolve); req.end();
+  });
+  await held;
+  const before = f.state.requests;
+  await assert.rejects(f.session.checkpoint(), bad);
+  release(); await reply;
+  assert.equal(f.state.requests, before, 'the checkpoint refuses before issuing inventory');
+  assert.deepEqual(trace, [
+    { kind: 'checkpoint-transport', reason: 'phase-change', validationStage: 'none', pending: 1, completed: 0 },
+    { kind: 'measurement-refusal', stage: 'checkpoint-admission' },
+  ]);
+  assert.deepEqual(workerFailureTrace(trace), trace);
+  await stopped(f.session.url);
+});

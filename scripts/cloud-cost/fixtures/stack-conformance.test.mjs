@@ -695,7 +695,7 @@ test('genuineAmbiguousMultipartReplacementKeepsDuplicateInventoryRefused', async
 // The composed session must agree with a real backend, not just a generated HTTP inventory.
 test('genuineStreamMeasurementJoinsPhasesInventoriesAndIndependentRequestCounters', async t => {
   const f = fixture(t), plan = local.prepareIsolatedStack(f);
-  for (const name of ['litestream.mjs', 'storage-lifetimes.mjs', 'stream-versions.mjs', 's3-deletion.mjs', 'stream-measurement.mjs'])
+  for (const name of ['litestream.mjs', 'storage-lifetimes.mjs', 'stream-versions.mjs', 's3-deletion.mjs', 'stream-measurement.mjs', 'worker-diagnostic.mjs'])
     cpSync(new URL('../' + name, import.meta.url), join(f.codeRoot, name));
   cpSync(new URL('./stream-measurement-smoke.mjs', import.meta.url), join(f.codeRoot, 'cost-stream-measurement-smoke.mjs'));
   let stack; f.onCleanup(async () => { await stack?.close(); });
