@@ -62,6 +62,15 @@ followed by normal exit with no database sessions remaining. Job, body and usage
 tables end empty, and the local provider receives no request.
 Active retention changes, database failure and production shutdown remain open.
 
+The [translation cancellation shutdown checks](backlog/worker-scheduling.md#translation-command-shutdown-after-database-query-cancellation-d542)
+cover SIGINT and SIGTERM while startup retention waits on a PostgreSQL table lock.
+After a one-second hold, cancelling that query produces one fixed diagnostic and
+code-zero exit with no remaining database sessions. Without a signal, the command
+stays live for one second after cancellation; shutdown then ends the current
+60-second retry wait within six seconds. A shortened wait that ignores shutdown
+can pass. Actual retry expiry, active retention changes, natural exit, explicit
+pool cleanup, other database failures and production shutdown remain open.
+
 Run `node --test packages/registration/test/worker-loop-schedule-timer.test.ts`
 to check that startup and recurring scheduling failures enter a real retry timer
 before shutdown. At two and 32 slots, reporting keeps the original error and

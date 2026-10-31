@@ -120,6 +120,30 @@ Retention that changes stored jobs, query cancellation, database failures and
 production deployment retain separate qualification gates. Existing idle and
 active-provider signal checks stay in `packages/translation/test/worker-cli.test.ts`.
 
+### Translation command shutdown after database query cancellation (D542)
+
+Run `node scripts/test-postgres.mjs exec pnpm --dir packages/translation exec
+node --test test/worker-cancellation-shutdown.test.ts` to check a real retention
+query failure during translation-command shutdown. SIGINT and SIGTERM each leave
+the query blocked on an owned table lock for one second. Cancelling only that
+command's observed query then produces one fixed cleanup-failure diagnostic,
+empty standard output and code-zero exit with no remaining database sessions.
+The table stays locked through exit, so another cleanup query cannot complete.
+
+A no-signal control stays live with an idle database connection for one second
+after cancellation and reports the failure once. SIGTERM then ends the command
+within six seconds with the current 60-second cleanup retry wait. With that
+long wait, this catches ignoring shutdown during retry. A shortened wait that
+ignores shutdown but expires within six seconds can pass. The control also catches
+quitting after every cleanup error and immediately starting another retention
+query. It does not observe the full retry interval or its eventual expiry.
+
+The job, body and usage tables start and end empty, and the loopback provider
+receives no requests. These are fixture boundaries, not proof about retention
+that changes stored jobs. Natural exit, explicit pool cleanup, longer waits,
+statement timeouts, connection loss and production shutdown remain open. A forced
+successful exit after error reporting can also satisfy the signalled cases.
+
 ## Worker scheduling deadlines and polling failures (D468)
 
 Run `node --test packages/registration/test/worker-loop-callback-refusals.test.ts`
