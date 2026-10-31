@@ -83,9 +83,11 @@ HTTP; real server authority and the historical Linux cause remain unqualified.
 A delay on every passkey-options request can hide a duplicate until after the
 last count assertion. The fixture now delays only the first request, so you can
 observe a second request with the existing assertions before the journey ends.
-A disposable controller injects a real browser request on the second Enter:
-both ordinary and delayed cases reject it. Removing only the first-request
-condition makes the delayed case pass despite that duplicate. After restoring
+A disposable controller injects a real browser request on the second Enter.
+The English, light, 390-pixel ordinary and delayed controls both reject it;
+duplicate faults in the other matrix combinations remain unqualified. Removing
+only the first-request condition makes the delayed control pass despite that
+duplicate. After restoring
 the controller, all 39 cases pass with every original assertion and deadline.
 Run `pnpm --dir apps/portal exec node --test test/passkey-enter-browser.test.ts`
 to check the fixture. These stubbed HTTP journeys leave real server authority

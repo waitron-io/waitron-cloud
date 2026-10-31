@@ -3500,9 +3500,10 @@ before checking the exact password and pending enrollment. A browser request eve
 can arrive before that record. The observation uses the existing four-second page
 budget; delayed-handler journeys and an absent-record control retain all original
 keyboard, enrollment, unsupported-browser, cooldown, clock and deadline checks.
-Only the first options request is delayed, so an injected second request reaches
-the existing count assertions in both ordinary and delayed journeys. All 39
-cases pass after restoring the controller. Historical browser failures remain
+Only the first options request is delayed. An injected second request reaches
+the existing count assertions in the English, light, 390-pixel ordinary and
+delayed controls. All 39 cases pass after restoring the controller. Historical
+browser failures remain
 unattributed; these stubbed HTTP checks do not qualify real server authority.
 
 ## Portal session test startup
