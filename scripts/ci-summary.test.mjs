@@ -253,6 +253,10 @@ test('deadline explains the unmet step evidence without disclosing arbitrary rec
     [{steps: finishedSteps().map((step, i) => i === 2 ? {...step, name: ''} : step)}, 'step names'],
     [{steps: finishedSteps().map((step, i) => i === 2 ? {...step, status: 'private-status'} : step)}, 'completed steps'],
     [{steps: finishedSteps().map((step, i) => i === 2 ? {...step, conclusion: 'private-result'} : step)}, 'step results'],
+    [{steps: finishedSteps().map((step, i) => i === 0 ? {...step, number: 0} : step)}, 'step number order'],
+    [{steps: finishedSteps().map((step, i) => i === 0 ? {...step, number: -1} : step)}, 'step number order'],
+    [{steps: finishedSteps().map((step, i) => i === 0 ? {...step, number: 1.5} : step)}, 'step number order'],
+    [{steps: finishedSteps().map((step, i) => i === 0 ? {...step, number: '1'} : step)}, 'step number order'],
     [{steps: finishedSteps().map((step, i) => i === 2 ? {...step, number: 1} : step)}, 'step number order'],
   ];
   for (const [change, reason] of cases) {
