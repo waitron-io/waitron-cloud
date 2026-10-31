@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import {randomUUID} from 'node:crypto';
+import {randomUUID,randomBytes} from 'node:crypto';
 import {setTimeout as delay} from 'node:timers/promises';
 import {test} from 'node:test';
 import {SMTPServer} from 'smtp-server';
@@ -31,7 +31,9 @@ for(const level of ['registered','connected','hosted'] as const)test(`venue rela
  const f=await setup(t),s=await smtp(t);await f.set(level);
  const before=(await f.pool.query('SELECT * FROM relay_grants')).rows;await f.set(level==='registered'?'hosted':'registered');await f.set(level);
  assert.deepEqual((await f.pool.query('SELECT * FROM relay_grants')).rows,before,'billing transitions cannot grant mail authority');
- const body=await f.v.submit(),envelope=f.v.proof('email-submit',body);
+ const grant=await f.grants.approve(f.v.session.token,f.v.session.csrfToken,f.input());assert.equal(grant.revision,2);
+ const body={version:1,messageId:randomUUID(),grantId:grant.id,grantRevision:grant.revision,class:'password_reset',recipient:`${randomUUID()}@example.test`,displayName:'Ana',locale:'es-ES',timeZone:'Europe/Madrid',expiresAt:new Date(Date.now()+1800000).toISOString(),token:randomBytes(32).toString('base64url')},envelope=f.v.proof('email-submit',body);
+ assert.equal((await f.messages.execute('email-submit',envelope)).created,true);
  assert.equal((await f.messages.execute('email-submit',envelope)).created,false);
  const worker=new api.RelayWorker(f.pool,{...f.config,smtpPort:s.port},mode);assert.equal(await worker.runOnce(),true);
  assert.deepEqual([(await f.row(body.messageId)).state,(await f.row(body.messageId)).attempts,s.captured.length],['accepted',1,1]);
@@ -81,4 +83,21 @@ for(const change of ['revoked grant','owner removed','expired grant','changed or
  if(change==='changed allowance policy')await assert.rejects(worker.runOnce(),/policy_conflict/);
  else {assert.equal(await worker.runOnce(),change!=='stop');assert.equal((await f.row(body.messageId)).state,change==='stop'?'queued':'cancelled');}
  assert.equal(s.captured.length,0);assert.equal((await f.pool.query('SELECT count(*) FROM relay_reservations')).rows[0].count,'1');
+});
+for(const change of [{consent:false},{consentVersion:'outdated'},{managementOrigin:'https://elsewhere.example.test/path'}])test(`venue relay keeps explicit consent and canonical origin validation for ${Object.keys(change)[0]}`,async t=>{
+ const f=await setup(t);await f.set('registered');
+ await assert.rejects(f.grants.approve(f.v.session.token,f.v.session.csrfToken,{...f.input(),...change} as any),(error:any)=>error.code==='invalid_input');
+ assert.equal((await f.pool.query('SELECT revision FROM relay_grants')).rows[0].revision,1);
+ assert.equal((await f.pool.query('SELECT count(*) FROM email_outbox')).rows[0].count,'0');
+});
+test('venue relay new mode preserves its account allowance at registered level',async t=>{
+ const f=await setup(t);await f.set('registered');
+ const config={...f.relay,grants:{...f.config.grants,policy:{...f.config.grants.policy,version:'one-local-v1',units:1}}};
+ const messages:RelayMessages=new api.RelayMessages(f.pool,f.issuer,'http://localhost',config,undefined,mode);
+ const body={version:1,messageId:randomUUID(),grantId:f.v.grant.id,grantRevision:1,class:'password_reset',recipient:`${randomUUID()}@example.test`,displayName:'Ana',locale:'es-ES',timeZone:'Europe/Madrid',expiresAt:new Date(Date.now()+1800000).toISOString(),token:randomBytes(32).toString('base64url')};
+ assert.equal((await messages.execute('email-submit',f.v.proof('email-submit',body))).created,true);
+ const next={...body,messageId:randomUUID()};
+ await assert.rejects(messages.execute('email-submit',f.v.proof('email-submit',next)),(error:any)=>error.code==='allowance_exhausted');
+ assert.equal((await f.pool.query('SELECT count(*) FROM relay_messages')).rows[0].count,'1');
+ assert.equal((await f.pool.query('SELECT count(*) FROM relay_reservations')).rows[0].count,'1');
 });
