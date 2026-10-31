@@ -101,6 +101,8 @@ delay or accelerate the next scheduling pass. Run `node --test
 packages/registration/test/worker-loop-clock.test.ts` to check forward and backward
 clock changes with busy and idle batches at two and 32 slots. Scheduling still
 starts its next interval after completion, and idle polling meets that deadline.
+Fractional waits round up before reaching native timers to avoid an extra idle
+batch caused by truncation.
 Real database scheduling and production shutdown remain separate gates.
 
 ## How to keep this file honest

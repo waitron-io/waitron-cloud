@@ -36,3 +36,20 @@ for(const slots of [2,32])for(const busy of [true,false])for(const jump of [-3_6
     assert.deepEqual(waits,busy?[]:[25,25,10]);
   });
 }
+
+for(const slots of [2,32]){
+  test(`${slots}-slot scheduling rounds its remaining interval up before timer truncation`,async t=>{
+    const stop=new AbortController();let elapsed=100.25;
+    const schedules:number[]=[],claims:number[]=[],waits:number[]=[];
+    t.mock.method(performance,'now',()=>elapsed);
+    await runWorkerLoop({
+      signal:stop.signal,concurrency:slots,scheduleIntervalMs:60,pollIntervalMs:1000,
+      async schedule(){schedules.push(elapsed);if(schedules.length===1)elapsed+=50;else stop.abort();},
+      async runOnce(){claims.push(elapsed);if(claims.length%slots===0)elapsed+=0.5;return false;},
+      async wait(milliseconds){waits.push(milliseconds);elapsed+=Math.trunc(milliseconds);},
+    });
+    assert.deepEqual(schedules,[100.25,210.75]);
+    assert.deepEqual(claims,Array<number>(slots).fill(150.25),'a truncated wait must not admit an extra idle batch');
+    assert.deepEqual(waits,[60]);
+  });
+}
