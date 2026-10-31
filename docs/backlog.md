@@ -2794,6 +2794,14 @@ implementation or production evidence.
   archive. Run `node --test scripts/ci-browser-apt-diagnostics.test.mjs` on any
   platform to check timeout evidence, nonzero exits, output bounds and silent
   success. The original exception, result, checks and deadlines are preserved.
+  On the Ubuntu 26 test box, the archive fixture reproduced three unexpected
+  TLS closes before signed-index validation. Its HTTP handler now sends the
+  TLS shutdown notification, with a one-second limit for the peer to reply.
+  Run `node --test scripts/ci-browser-apt-tls.test.mjs` for strict clients that
+  reply, stay silent or disconnect. All three original component journeys and
+  the original signature/package-hash refusal journey pass on that box with
+  their assertions and deadlines unchanged. This repairs the local fixture
+  transport; the historical Actions timeout below remains unexplained.
   The compressed-index update timeout in
   [run40536424286](https://github.com/waitron-io/waitron-cloud/actions/runs/40536424286/job/122302974742)
   remains unexplained; the missing temporary configuration warning's relation to

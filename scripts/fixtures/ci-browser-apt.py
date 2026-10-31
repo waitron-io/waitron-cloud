@@ -144,6 +144,15 @@ with tempfile.TemporaryDirectory(prefix='cloud-browser-apt-') as directory:
             def log_message(self, *_args):
                 pass
 
+            def finish(self):
+                super().finish()
+                # TLS clients need close_notify to distinguish completion from truncation.
+                try:
+                    self.connection.settimeout(1)
+                    self.connection.unwrap()
+                except OSError:
+                    pass
+
             def do_GET(self):
                 requests.append(self.path)
                 if mode == 'exhausted':
