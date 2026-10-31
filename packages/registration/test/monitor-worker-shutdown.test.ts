@@ -61,7 +61,7 @@ async function finish(child:ReturnType<typeof worker>){
   try{
     assert.deepEqual(await child.exited,{code:0,signal:null},'the command must finish normally after shutdown');
     assert.deepEqual(child.output(),{stdout:'',stderr:''});
-    assert.deepEqual(await sessions(child),[],'shutdown must close every worker database connection');
+    assert.deepEqual(await sessions(child),[],'no worker database sessions remain after command exit');
   }finally{clearTimeout(timer);}
 }
 
@@ -69,9 +69,9 @@ async function dispose(child:ReturnType<typeof worker>){
   if(children.has(child)){child.process.kill('SIGKILL');await child.exited;}
 }
 
-// Signals must keep scheduling alive until it finishes; pool cleanup closes idle sockets.
+// Signals must keep scheduling alive until it finishes; idle commands must exit normally.
 for(const signal of ['SIGINT','SIGTERM'] as const){
-  test(`${signal} stops the idle monitoring command and closes its real database pool`,async()=>{
+  test(`${signal} stops the idle monitoring command and leaves no database sessions`,async()=>{
     const child=worker();
     try{
       await until(async()=>{
@@ -81,6 +81,7 @@ for(const signal of ['SIGINT','SIGTERM'] as const){
       assert.equal(child.process.kill(signal),true);
       await finish(child);
       assert.equal((await pool.query('SELECT count(*) FROM venue_monitors')).rows[0].count,'0');
+      assert.equal((await pool.query('SELECT count(*) FROM email_outbox')).rows[0].count,'0');
     }finally{await dispose(child);}
   });
 

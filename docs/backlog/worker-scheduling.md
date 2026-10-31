@@ -39,14 +39,15 @@ loop, rather than pool cleanup, keeps those connections open.
 
 Run `node scripts/test-postgres.mjs exec pnpm --dir packages/registration exec
 node --test test/monitor-worker-shutdown.test.ts` to check the actual monitoring
-command under SIGINT and SIGTERM. Each signal stops idle polling normally and
-closes the command's database connections. When an owned installations-table
+command under SIGINT and SIGTERM. Each signal stops idle polling normally,
+with no database sessions remaining after exit. When an owned installations-table
 lock blocks startup scheduling, the command retains its connection during a
 one-second hold after the signal and exits normally after lock release.
 The empty tables prevent observations and alert mail.
 
 These checks protect orderly command shutdown while database work finishes.
-They do not prove cancellation of an active query or distinguish waiting in the
+They do not prove explicit pool cleanup or cancellation of an active query,
+or distinguish waiting in the
 worker loop from waiting in pool cleanup. Active monitoring, other commands,
 database failures and production deployment retain separate qualification gates.
 

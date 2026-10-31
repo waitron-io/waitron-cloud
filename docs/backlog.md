@@ -32,7 +32,7 @@ Other worker commands, active delivery and production shutdown remain open.
 
 The [monitoring command signal checks](backlog/worker-scheduling.md#monitoring-command-shutdown-with-real-database-scheduling-d537)
 cover idle shutdown and a one-second hold of blocked startup scheduling under
-SIGINT and SIGTERM, followed by normal exit and closed database connections.
+SIGINT and SIGTERM, followed by normal exit with no remaining database sessions.
 Active monitoring, database failure and production shutdown remain open.
 
 Run `node --test packages/registration/test/worker-loop-schedule-timer.test.ts`
