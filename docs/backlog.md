@@ -24,7 +24,8 @@ See [the storage qualification boundaries](backlog/storage-cache-fixture.md#conc
 The earlier conformance archive stall (run 40811399202, job 123243127986) remains
 in [D311's download investigation](backlog/cost-conformance-fixtures.md#fixture-archive-download-retries-d311).
 PR #788 adds an inactivity retry for that download; it does not identify the
-upstream stall's cause.
+upstream stall's cause. A recurring npm abort-diagnostic refusal remains separate
+in [the setup investigation](backlog/ci-pnpm-setup.md).
 
 ## Storage archive publication refusals (D449)
 
