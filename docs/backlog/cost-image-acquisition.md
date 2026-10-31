@@ -54,3 +54,27 @@ outage causes remain unknown. A passing control or later CI run does not repair
 the authentication failure or explain any of these historical outages. Preserve
 the existing image pins, deadlines and immediate authentication refusal.
 
+### Isolation-test Node image (D530)
+
+[D462's later receipts job](https://github.com/waitron-io/waitron-cloud/actions/runs/41209487824/job/124561374894)
+fails an implicit `node:26-slim` pull with HTTP 502 before the isolation canary
+starts. Six source-copy checks then fail because that image is absent. This is
+a separate acquisition path from the conformance preparer and its pinned runner.
+
+The isolation tests now prepare their existing image before creating their own
+resources. Cache inspection, at most three pulls, one- and two-second retry
+pauses, and the final immutable-image-ID lookup share a 120-second preparation
+budget. Only recognised temporary transport and registry HTTP 5xx failures retry;
+authentication, permission, missing-manifest and rate-limit refusals stop immediately,
+including messages that also contain a temporary failure. An unavailable daemon
+stops at inspection. Container creation is never retried, and the tests retain
+every isolation assertion and existing test deadline. Image preparation finishes
+before the cancellation test schedules its abort.
+
+Run `node --test scripts/cloud-cost/isolation-image-acquisition.test.mjs` for
+controlled acquisition checks. On the authorised Linux test box, also run
+`node --test --test-concurrency=1 scripts/cloud-cost/local.test.mjs scripts/cloud-cost/source-copy.test.mjs`
+to exercise the actual isolation and source-copy boundaries. The historical
+Docker Hub outage cause remains unknown; this recovery does not repair the
+provider or the separate authentication refusal.
+

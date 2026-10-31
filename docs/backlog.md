@@ -3590,6 +3590,10 @@ inventory separates launcher HTTP 500, build-metadata HTTP 502 and later Node-pu
 authentication refusals; the first two already have bounded recovery on main.
 The authentication cause remains open and must retain immediate refusal. Use
 the authorised Linux test box for reproduction and current-head CI for landing.
+The separate isolation-test Node acquisition now retries temporary HTTP 5xx and
+transport failures before creating resources, within a shared 120-second
+preparation budget; it retains every isolation assertion and immediate permanent
+refusal. The historical provider outage remains unexplained.
 See the
 [image acquisition detail](backlog/cost-image-acquisition.md).
 
