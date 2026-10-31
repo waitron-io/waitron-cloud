@@ -156,10 +156,9 @@ replies and 401/403/429/503 refusals preserve current choices, the pending read,
 venue warning and retry deadline. Production provider and database authority still
 need their separate qualification; these checks cover only browser-side state.
 
-Qualification is blocked by the remote-browser conformance journey timing out at
-dashboard reconnect/takings. The underlying connection cause remains unknown;
-resume after the owning remote-browser investigation identifies a fix or supplies
-new evidence. Local reproduction waits for Docker availability.
+The earlier remote-browser qualification timed out at dashboard reconnect/takings
+(run40634383638, job122638801183). D530 owns that unresolved connection failure;
+a later clean qualification does not establish its cause or repair it.
 
 ## Decisions and deliberate limits
 
