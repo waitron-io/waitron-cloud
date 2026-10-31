@@ -3,6 +3,7 @@ import {randomUUID} from 'node:crypto';
 import {mkdtemp,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
+import {request} from 'node:http';
 import {test} from 'node:test';
 import {database} from '../../packages/account-http/test/fixtures.ts';
 import {BillingStore,EmailWorker,SignupStore,PasswordRecoveryStore,parsePlanMode} from '../../packages/registration/src/index.ts';
@@ -68,7 +69,13 @@ for(const level of ['registered','connected','hosted'])test(`venue basic ${level
   for(const key of ['CLOUD_ADDRESS_LOOKUP','GOOGLE_MAPS_API_KEY','GEOAPIFY_API_KEY'])assert.equal(environment[key],undefined);
   running=await startAccountServer({pool:db.pool,outbox:db.outbox,port:0,planMode:parsePlanMode(environment.CLOUD_TEST_SERVICE_PLANS,environment.CLOUD_VENUE_SERVICE_LEVELS),translation:environment.CLOUD_TRANSLATION==='1',config:{portalOrigin:'http://localhost',production:false,rateKey:db.rateKey,trustedProxyIps:[]}});
   const port=running.server.address().port;
-  const post=(path,browser=true)=>fetch(`http://127.0.0.1:${port}${path}`,{method:'POST',headers:{host:'localhost',...(browser?{origin:'http://localhost'}:{}),'content-type':'application/json'},body:'{}',signal:AbortSignal.timeout(5000)});
+  const post=(path,browser=true)=>new Promise((resolve,reject)=>{
+   const req=request({hostname:'127.0.0.1',port,path,method:'POST',timeout:5000,signal:AbortSignal.timeout(5000),headers:{host:'localhost',...(browser?{origin:'http://localhost'}:{}),'content-type':'application/json'}},response=>{
+    let body='';response.on('data',chunk=>body+=chunk);response.once('error',reject);
+    response.once('end',()=>resolve(new Response(body,{status:response.statusCode})));
+   });
+   req.once('error',reject);req.once('timeout',()=>req.destroy(new Error('fixture request timeout')));req.end('{}');
+  });
   for(const action of ['request','start','status','autocomplete','validate','confirm','cancel']){
    const response=await post(`/v1/address-lookup/${action}`);assert.equal(response.status,404);await response.text();
   }
