@@ -92,3 +92,34 @@ test('venue HTTP translation production refusal precedes all new model work',asy
   assert.deepEqual(await error(await f.post('translation-submit',{...proof,body:text})),[403,{error:'permission_denied'}]);assert.equal(await f.count(),0);
  }finally{await f.close();}
 });
+
+// A sibling's paid authority cannot replace the authenticated installation's venue.
+test('venue HTTP translation ignores paid sibling selectors and isolates same organisation jobs',async()=>{
+ const f=await fixture();try{
+  await f.set('registered');
+  const {generateKeyPairSync,sign}=await import('node:crypto'),{RegistrationStore,InstallationStore,encodeMachine}=await import('@waitron-cloud/registration');
+  const key=generateKeyPairSync('ed25519'),installationKey=key.publicKey.export({type:'spki',format:'der'}).toString('base64url');
+  const binding={operationId:randomUUID(),installationKey,localVenueId:randomUUID(),environment:'test',organisationId:f.v.organisationId,legalBusinessId:f.v.legalBusinessId};
+  const registrations=new RegistrationStore(f.db.pool);await registrations.start(binding);await registrations.approveCloud(binding,f.v.accountId);await registrations.approveLocal(binding,randomUUID());
+  const sibling=await registrations.complete(binding),store=new BillingStore(f.db.pool),scope={organisationId:f.v.organisationId,legalBusinessId:f.v.legalBusinessId};
+  const event=()=>({key:randomUUID(),occurredAt:new Date().toISOString(),source:{kind:'internal' as const}});
+  await store.transition(scope,event(),{type:'set_venue',venueId:sibling.venueId,expectedRevision:0,value:{level:'connected',connectedFrom:null,lapsedOn:null,scheduledLevel:null,scheduledOn:null}});
+  await readyForTranslation(f.db,sibling);await giveConsent(f.db,{...f.v,venueId:sibling.venueId});
+  const proof=(action:string,body:string,lease='')=>{const payload=encodeMachine({origin,action:action as any,installationId:sibling.installationId,operationId:randomUUID(),issuedAt:Date.now(),lease,body});return {payload:payload.toString('base64url'),signature:sign(null,payload,key.privateKey).toString('base64url')};};
+  const lease=(await new InstallationStore(f.db.pool,f.issuer,origin).execute('renew',proof('renew','{}'))).lease!;
+  const {jobFingerprint}=await import('@waitron-cloud/translation');
+  const admitted=await f.post('translation-submit',{...proof('translation-submit',JSON.stringify({version:1,...jobFingerprint(text)}),JSON.stringify(lease)),body:text});
+  assert.equal(admitted.status,200);const job=await admitted.json() as {jobId:string};
+  assert.deepEqual(await error(await f.post('translation-submit',f.v.submit(text))),[403,{error:'permission_denied'}]);
+  for(const selector of [{venueId:sibling.venueId},{installationId:sibling.installationId},{organisationId:f.v.organisationId,legalBusinessId:f.v.legalBusinessId,venueId:sibling.venueId}]){
+   const body=JSON.stringify({...JSON.parse(text),...selector});
+   assert.deepEqual(await error(await f.post('translation-submit',f.v.submit(body))),[400,{error:'invalid_request'}]);
+   const forged=f.v.proof('translation-submit',{},randomUUID(),f.v.lease,JSON.stringify({version:1,...jobFingerprint(text),...selector}));
+   assert.deepEqual(await error(await f.post('translation-submit',{...forged,body:text})),[401,{error:'invalid_proof'}]);
+  }
+  for(const action of ['translation-status','translation-collect','translation-release'])
+   assert.deepEqual(await error(await f.act(action,job.jobId,action==='translation-collect'?{cursor:-1}:{})),[404,{error:'translation_job_not_found'}]);
+  assert.equal(await f.count(),1);assert.equal((await f.db.pool.query('SELECT state FROM translation_jobs WHERE id=$1',[job.jobId])).rows[0].state,'queued');
+  assert.deepEqual((await f.db.pool.query('SELECT DISTINCT venue_id FROM translation_jobs')).rows,[{venue_id:sibling.venueId}]);
+ }finally{await f.close();}
+});
