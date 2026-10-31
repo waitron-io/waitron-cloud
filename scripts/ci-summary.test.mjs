@@ -240,6 +240,96 @@ function finishedShard() {
 }
 const withShard = shard => [...jobs.slice(0, -1), shard];
 
+test('deadline explains the unmet step evidence without disclosing arbitrary record data', async () => {
+  const cases = [
+    [{run_id: 41}, 'run identity'],
+    [{run_attempt: 1}, 'run attempt'],
+    [{head_sha: 'private-commit-data'}, 'source commit'],
+    [{status: 'queued'}, 'job status'],
+    [{conclusion: 'private-result'}, 'job result'],
+    [{steps: null}, 'step list'],
+    [{steps: finishedSteps().map((step, i) => i === 0 ? {...step, name: 'private-setup'} : step)}, 'successful setup'],
+    [{steps: finishedSteps().slice(0, -1)}, 'successful final step'],
+    [{steps: finishedSteps().map((step, i) => i === 2 ? {...step, name: ''} : step)}, 'step names'],
+    [{steps: finishedSteps().map((step, i) => i === 2 ? {...step, status: 'private-status'} : step)}, 'completed steps'],
+    [{steps: finishedSteps().map((step, i) => i === 2 ? {...step, conclusion: 'private-result'} : step)}, 'step results'],
+    [{steps: finishedSteps().map((step, i) => i === 2 ? {...step, number: 1} : step)}, 'step number order'],
+  ];
+  for (const [change, reason] of cases) {
+    const clock = publication([withShard({...finishedShard(), ...change, privateField: 'private-field'})]);
+    await assert.rejects(() => summary.waitForSummary(plan, results, {...clock, identity}), error => {
+      assert.ok(error.message.startsWith('Timed out waiting for job records:'));
+      assert.ok(error.message.includes(`; last observed unmet step evidence: ${jobs.at(-1).name} [${reason}]`), error.message);
+      assert.doesNotMatch(error.message, /private-/);
+      return true;
+    });
+    assert.equal(clock.elapsed(), 50);
+    assert.equal(clock.reads(), 3);
+  }
+});
+
+test('deadline identifies invalid current identity and simultaneous unmet checks', async () => {
+  for (const invalid of [null, {...identity, runId: 0}, {...identity, runAttempt: 0}, {...identity, headSha: 'private-sha'}]) {
+    await assert.rejects(() => summary.waitForSummary(plan, results, {
+      ...publication([withShard(finishedShard())]), identity: invalid,
+    }), /last observed unmet step evidence: .*\[current run identity\]/);
+  }
+  await assert.rejects(() => summary.waitForSummary(plan, results, {
+    ...publication([withShard({...finishedShard(), run_id: 41, run_attempt: 1, steps: []})]), identity,
+  }), /\[run identity, run attempt, step list\]/);
+});
+
+test('deadline describes only the latest unresolved evidence and no resolved or unplanned step data', async () => {
+  const earlier = {...finishedShard(), run_id: 41};
+  const latest = {...finishedShard(), steps: finishedSteps().slice(0, -1)};
+  const unplanned = {name: 'documentation', status: 'queued', conclusion: null, steps: [{name: 'private-step'}]};
+  const clock = publication([withShard(earlier), [...withShard(latest), unplanned]]);
+  await assert.rejects(() => summary.waitForSummary(plan, results, {...clock, identity}), error => {
+    assert.ok(error.message.includes(`${jobs.at(-1).name} [successful final step]`), error.message);
+    assert.doesNotMatch(error.message, /\[run identity\]|private-step|documentation \[/);
+    return true;
+  });
+  const resolved = publication([[...withShard(finishedShard()), unplanned]]);
+  await assert.rejects(() => summary.waitForSummary(plan, results, {...resolved, identity, report: () => {}}), error => {
+    assert.match(error.message, /Timed out.*documentation/);
+    assert.doesNotMatch(error.message, /unmet step evidence/);
+    return true;
+  });
+});
+
+test('a timed-out read retains the last observed reason within the same deadline', async () => {
+  let elapsed = 0, reads = 0;
+  await assert.rejects(() => summary.waitForSummary(plan, results, {
+    identity, timeoutMs: 50, pollMs: 20, now: () => elapsed,
+    sleep: async ms => { elapsed += ms; },
+    readJobs: () => {
+      if (reads++ === 0) return withShard({...finishedShard(), run_attempt: 1});
+      elapsed = 50;
+      throw Object.assign(new Error('lookup deadline'), {code: 'ETIMEDOUT'});
+    },
+  }), error => {
+    assert.match(error.message, /last lookup: lookup deadline/);
+    assert.match(error.message, /last observed unmet step evidence: .*\[run attempt\]/);
+    return true;
+  });
+  assert.equal(elapsed, 50);
+  assert.equal(reads, 2);
+});
+
+test('a late successful API read preserves the prior snapshot explanation and still refuses', async () => {
+  let elapsed = 0, reads = 0;
+  await assert.rejects(() => summary.waitForSummary(plan, results, {
+    identity, timeoutMs: 50, pollMs: 20, now: () => elapsed,
+    sleep: async ms => { elapsed += ms; },
+    readJobs: () => {
+      if (reads++ === 0) return withShard({...finishedShard(), run_id: 41});
+      elapsed = 51;
+      return jobs;
+    },
+  }), /Timed out reading job records: .*last observed unmet step evidence: .*\[run identity\]/);
+  assert.equal(reads, 2);
+});
+
 test('final successful needs plus same-attempt finished steps resolve a permanently stale shard', async () => {
   const clock = publication([withShard(finishedShard())]);
   await summary.waitForSummary(plan, results, {...clock, identity});

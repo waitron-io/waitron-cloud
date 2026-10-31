@@ -1679,7 +1679,8 @@ implementation or production evidence.
   passing repeats alone do not explain a failure. See [the ordering receipt](#portal-lost-reply-test-ordering).
 
 - **CI job record publication.** The historical GitHub publication delay remains
-  unexplained. Preserve the summary's run identity, final dependency results and time
+  unexplained. Deadline diagnostics identify unmet identity and completed-step checks
+  from the last observed record. Preserve final dependency results and time
   limits; landing still requires every actual job record final. See the
   [investigation and qualification limits](backlog/ci-job-record-publication.md).
 
