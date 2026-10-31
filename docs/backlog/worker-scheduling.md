@@ -35,6 +35,21 @@ production deployment still need separate qualification. These checks do not
 claim that shutdown cancels an active database query or that awaiting the worker
 loop, rather than pool cleanup, keeps those connections open.
 
+### Email command shutdown during local SMTP delivery (D539)
+
+Run `node scripts/test-postgres.mjs exec pnpm --dir packages/registration exec
+node --test test/email-worker-delivery-shutdown.test.ts` to check shutdown while
+the local SMTP server holds its acknowledgement of a complete message. Under
+SIGINT and SIGTERM, the command stays live for a one-second hold and keeps the
+message processing. After acknowledgement, it records one sent message, clears
+its payload and claim, and exits normally with no database sessions remaining.
+Mail queued during the hold stays pending without a delivery attempt, so shutdown
+does not start another batch after the accepted delivery finishes.
+
+These checks use a loopback SMTP server and test addresses. Real provider failure,
+delivery timeout, explicit pool cleanup and production deployment still need
+separate qualification.
+
 ### Monitoring command shutdown with real database scheduling (D537)
 
 Run `node scripts/test-postgres.mjs exec pnpm --dir packages/registration exec
