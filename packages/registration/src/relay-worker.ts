@@ -1,3 +1,4 @@
+import {requireTestPlanVenue,type PlanMode} from './organisation-plans.ts';
 import {createHmac,randomUUID} from 'node:crypto';
 import type {Pool,PoolClient} from 'pg';
 import {normaliseEmail} from './account-input.ts';
@@ -22,11 +23,12 @@ export class RelayWorker {
  readonly #pool:Pool;readonly #grants:RelayGrantStore|undefined;readonly #payload:RelayKeys|undefined;
  readonly #suppression=new Map<string,Buffer>();readonly #active:string|undefined;
  readonly #send:ReturnType<typeof localRelaySmtp>|undefined;readonly #timeout:number;
- constructor(pool:Pool,config?:RelayWorkerConfig){
+ constructor(pool:Pool,config?:RelayWorkerConfig,planMode:PlanMode='existing'){
+  requireTestPlanVenue('test',planMode);
   this.#pool=pool;this.#timeout=config?.sendTimeoutMs??20000;
   if(!config)return;
   if(config.mode!=='local-proof'||!Number.isInteger(this.#timeout)||this.#timeout<1||this.#timeout>20000)messageError('relay_unavailable');
-  this.#grants=new RelayGrantStore(pool,config.grants);this.#payload=new RelayKeys(config.payloadKeys);
+  this.#grants=new RelayGrantStore(pool,config.grants,planMode);this.#payload=new RelayKeys(config.payloadKeys);
   new RelayKeys(config.suppressionKeys);
   for(const [id,value] of Object.entries(config.suppressionKeys.keys))this.#suppression.set(id,Buffer.from(value,'hex'));
   this.#active=config.suppressionKeys.activeKeyId;this.#send=localRelaySmtp(config.smtpPort);
