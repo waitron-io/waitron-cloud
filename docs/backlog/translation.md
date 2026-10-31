@@ -477,3 +477,60 @@ to check that timeout and caller cancellation close unfinished successful HTTP
 responses, discard uncompleted usage and permit a later request on the same
 client. A caller cancelled before submission sends no request. These local
 checks keep real provider activation and wider release qualification open.
+
+## Translation consent during account changes (D392)
+
+**Open.** Qualify provider behavior and database authority separately from the
+browser controller. Late reads, agreements and withdrawals cannot change current
+choices or release a pending read after an account change, including signing back
+into the original account. They cannot add a warning or retry wait for that account.
+Preserving an existing warning or retry deadline still needs a separate check.
+The [remote-browser reconnect investigation](../backlog.md#platform-work-to-scope) retains the
+earlier reconnect/takings qualification failures; a clean qualification does not
+establish their cause.
+
+## Translation-consent HTTP retry deadlines (D430)
+
+Switching accounts keeps the server's translation-consent retry wait, so another
+account cannot bypass it. Run `node --test apps/portal/test/translation-consent-retry-boundary.test.ts`
+to check seconds and HTTP-date waits for reads, agreement and withdrawal through
+the request client and controller with native HTTP responses. Requests resume
+only at the deadline and after an explicit retry; native timer expiry sends no
+request itself. A backward clock change during a later refusal with no new wait
+cannot shorten an earlier deadline.
+
+## Retention cadence and additional HTTP boundaries
+
+The translation worker runs retention cleanup at startup and hourly. One-second job
+polling and one-minute cleanup-failure retries remain separate. Run `node --test
+packages/translation/test/retention-worker-cadence.test.ts` for the native CLI
+boundaries; CI also checks retained-body deletion through the accelerated hourly
+PostgreSQL case. See [the translation backlog](translation.md) for the
+account-server cadence and remaining release gates.
+
+Real database recovery, provider activation and release qualification remain open.
+See [the native callback and deadline boundaries](translation.md#callback-admission-and-request-deadlines).
+
+Run `node --test packages/translation/test/batch-runner-retry-ordering.test.ts`
+to check that each pass waits for its retry pause to finish before admitting
+another call. Delayed cancellation and wait failures preserve billed usage and
+stop further calls. Production activation and wider runtime qualification remain
+open in the [translation backlog](translation.md).
+
+Run `node --test packages/translation/test/batch-runner-http-retry.test.ts`
+to check server retry headers through both batch passes. Zero, seconds and dates
+reach the wait callback; invalid headers keep the retry schedule. Each pause must
+finish before another call, and exhaustion preserves accepted first-pass names
+without inventing usage for HTTP refusals. Real database recovery, provider
+activation and wider release qualification remain separate translation gates.
+
+Run `node --test packages/translation/test/openai-client-concurrency.test.ts`
+to check that an aborted, oversized, truncated or refused HTTP response leaves a
+simultaneous request through the same client usable in either completion order.
+The checks overlap successful body readers and retain the healthy reply's text
+and usage. Oversized and refused responses must close their unfinished
+connections. Real provider and release qualification remain separate gates in
+the linked translation backlog.
+
+See [the native HTTP and batch boundaries](translation.md#http-body-and-batch-callback-boundaries)
+for completed transport checks and their remaining production limits.

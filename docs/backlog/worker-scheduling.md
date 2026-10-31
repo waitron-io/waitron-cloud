@@ -267,3 +267,150 @@ and retry waits, shutdown waits for the report, and an immediate reporter throw
 stops the loop with its original error. Successful reporting waits before retrying
 and preserves the scheduling deadline. Real database failures and production
 shutdown remain separate qualification gates.
+
+## Additional shutdown and timer qualification
+
+The [idle command drain checks](worker-scheduling.md#idle-email-and-monitoring-commands-drain-naturally-d543)
+require email and monitoring commands to drain naturally after SIGINT and SIGTERM,
+with no remaining database sessions. They catch forced successful exit and, while
+idle connections keep Node alive under the default pool settings, omitted pool
+cleanup. Natural drain during active work beyond the local SMTP acceptance and
+refusal checks, database failures and production shutdown remain open.
+
+The [idle translation drain checks](worker-scheduling.md#idle-translation-commands-drain-naturally-d544)
+observe three seconds of live idle polling before SIGINT or SIGTERM, then require
+natural event-loop drain. No database sessions remain after exit, and the loopback
+provider receives no requests. They catch forced successful exit and omitted pool
+cleanup while default idle connections keep Node alive. Active work, database
+failures and production shutdown remain open.
+
+The [email command signal checks](worker-scheduling.md#email-command-shutdown-with-real-database-claims-d536)
+cover idle shutdown and a one-second hold of four blocked PostgreSQL connections
+under SIGINT and SIGTERM, followed by normal exit after lock release.
+Other worker commands, active delivery and production shutdown remain open.
+
+The [email delivery shutdown checks](worker-scheduling.md#email-command-shutdown-during-local-smtp-delivery-d539)
+hold a local SMTP acknowledgement for one second under SIGINT and SIGTERM.
+During that hold the message stays processing. After acknowledgement, the command
+records it as sent, leaves later mail pending and drains naturally with code zero
+and no database sessions remaining. The wrapper's `beforeExit` observation (D545)
+catches a forced successful exit after delivery. Provider failures,
+delivery timeouts and production shutdown remain open.
+
+The [email refusal shutdown checks](worker-scheduling.md#email-command-shutdown-after-a-local-smtp-refusal-d540)
+hold a local SMTP reply for one second, then refuse it under SIGINT and SIGTERM.
+The command records a delayed retry, retains the encrypted payload, releases the
+claim and leaves later mail untouched before draining naturally. The wrapper's
+`beforeExit` observation (D545) catches a forced successful exit after retry recording.
+Production SMTP classification, delivery timeouts and production shutdown remain
+open.
+
+The [monitoring command signal checks](worker-scheduling.md#monitoring-command-shutdown-with-real-database-scheduling-d537)
+cover idle shutdown and a one-second hold of blocked startup scheduling under
+SIGINT and SIGTERM, followed by normal exit with no remaining database sessions.
+Active monitoring, database failure and production shutdown remain open.
+
+The [monitoring cancellation shutdown checks](worker-scheduling.md#monitoring-command-shutdown-after-database-query-cancellation-d541)
+cover SIGINT and SIGTERM while startup scheduling waits on a PostgreSQL table lock.
+After a one-second hold, cancelling that query produces one fixed diagnostic and
+code-zero command exit with no database sessions remaining, even while the table
+stays locked. Without a signal, the command retries the cancelled schedule.
+Natural exit, explicit pool cleanup, other database failures, active observations
+and production shutdown remain open.
+
+The [translation command signal checks](worker-scheduling.md#translation-command-shutdown-with-blocked-database-cleanup-d538)
+cover a one-second hold of blocked startup retention under SIGINT and SIGTERM,
+followed by normal exit with no database sessions remaining. Job, body and usage
+tables end empty, and the local provider receives no request.
+Active retention changes, database failure and production shutdown remain open.
+
+The [translation cancellation shutdown checks](worker-scheduling.md#translation-command-shutdown-after-database-query-cancellation-d542)
+cover SIGINT and SIGTERM while startup retention waits on a PostgreSQL table lock.
+After a one-second hold, cancelling that query produces one fixed diagnostic and
+code-zero exit with no remaining database sessions. Without a signal, the command
+stays live for one second after cancellation; shutdown then ends the current
+60-second retry wait within six seconds. A shortened wait that ignores shutdown
+can pass. Actual retry expiry, active retention changes, natural exit, explicit
+pool cleanup, other database failures and production shutdown remain open.
+
+Run `node --test packages/registration/test/worker-loop-schedule-timer.test.ts`
+to check that startup and recurring scheduling failures enter a real retry timer
+before shutdown. At two and 32 slots, reporting keeps the original error and
+failed schedules admit no new claims; cancellation releases the native timer and
+lets the process exit. Production signals and real database failures remain open.
+
+Run `node --test packages/registration/test/worker-loop-native-isolation.test.ts`
+to check two workers using real idle and failure-retry timers at two and 32 slots.
+Stopping either worker releases its timer while the other keeps waiting with its
+own signal. Claim and schedule failures report their original error once; the
+surviving worker exits after its own shutdown. Production signals and real
+database failures remain separate gates.
+
+Run `node --test packages/registration/test/worker-loop-native-recovery.test.ts`
+to check that idle and failure-retry timers actually expire before work resumes
+at two and 32 slots. Claims and startup or recurring schedules recover after
+one native timer, keep the original refusal and exit after shutdown. Production
+signals and real database recovery remain separate gates.
+
+Run `node --test packages/registration/test/worker-loop-native-cadence.test.ts`
+to check real timer expiry against the next scheduling deadline at two and 32
+slots. The interval starts after scheduling completes; idle polling shortens
+either its only wait or its final wait to meet that deadline. Every active claim
+finishes before polling, and shutdown prevents further claims. Production
+scheduling and real database failures remain separate gates.
+
+Run `node --test packages/registration/test/worker-loop-native-reporting.test.ts`
+to check pending startup and claim error reports at two and 32 slots. Native retry
+timers start only after reporting completes, then expire before work resumes.
+Shutdown waits for reporting without a retry timer; a refused report keeps its
+original error and stops a live worker. Real database failures and production
+shutdown remain separate gates.
+
+Run `node --test packages/registration/test/worker-loop-native-recurring.test.ts`
+to check a recurring schedule failure after busy or idle batches at two and 32
+slots. Pending reporting preserves the original error and prevents retry timer
+creation. Recovery follows real timer expiry, starts its next interval after
+scheduling completes and shortens idle polling to the next deadline. Shutdown
+after that interval admits no further claims. Real database recovery and
+production signals remain separate gates.
+
+Run `node --test packages/registration/test/worker-loop-native-recurring-stop.test.ts`
+to check shutdown and reporter rejection during a pending recurring schedule
+error report. After busy or idle batches at two and 32 slots, cleanup finishes
+before return, original errors survive, and no new claims, schedules or retry
+timers start. Real database failures and production signals remain separate gates.
+
+Run `node --test packages/registration/test/worker-loop-native-cancellation.test.ts`
+to check shutdown while two or 32 active claims wait on real Node timers.
+Cancellation releases every timer; the loop waits for the last claim's cleanup
+and any pending error report before returning. Unreported claim failures and
+reporting failures keep their original errors, and shutdown starts no new claims
+or timers. Each child exits naturally. Real database cancellation and production
+signals remain separate qualification gates.
+
+## Cancellation and empty failure values
+
+Run `node --test packages/registration/test/worker-loop-cancellation.test.ts` to
+check claims that finish or reject when shutdown cancels them. At two and 32 active
+slots, shutdown waits for every claim's cleanup and any pending error report,
+without scheduling, polling or retrying. Cancellation and reporting failures keep
+their original errors. Real database cancellation and production shutdown remain
+separate qualification gates.
+
+Run `node --test packages/registration/test/worker-loop-empty-failures.test.ts`
+to check rejection with undefined, null, false, zero or an empty string. Scheduling,
+claim and polling failures keep their original values through reporting or
+propagation; failed claims wait for sibling cleanup and pending reports. Empty
+reporter failures remain rejections. Real database errors and production shutdown
+remain separate qualification gates.
+
+## Recurring intervals across clock corrections
+
+Recurring worker intervals now use elapsed time, so system-clock corrections cannot
+delay or accelerate the next scheduling pass. Run `node --test
+packages/registration/test/worker-loop-clock.test.ts` to check forward and backward
+clock changes with busy and idle batches at two and 32 slots. Scheduling still
+starts its next interval after completion, and idle polling meets that deadline.
+Fractional waits round up before reaching native timers to avoid an extra idle
+batch caused by truncation.
+Real database scheduling and production shutdown remain separate gates.

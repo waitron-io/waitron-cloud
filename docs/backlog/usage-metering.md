@@ -75,3 +75,13 @@ delay to the shared countdown. Backup catalogue waits also use elapsed time. The
 remaining portal controllers retain their existing clock policy and can revive an expired wait after a backward clock correction;
 that separate issue remains open. Server authority and production metering remain separate
 qualification gates; database suites run in CI while local Docker is unavailable.
+
+## Usage HTTP response boundaries (D409)
+
+Your usage view keeps its earlier measurements when a response is malformed or
+names another organisation. Native checks exercise the HTTP parser and controller
+together: unexpected fields, numeric or malformed counts and invalid freshness
+are refused, while an explicit valid retry still completes. Signed storage bytes
+and decimal counts keep their exact precision. Production deployment, monitoring
+and billing policy remain open in [usage metering](usage-metering.md).
+Run `node --test apps/portal/test/usage-response-boundary.test.ts`.

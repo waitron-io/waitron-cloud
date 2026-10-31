@@ -256,3 +256,40 @@ to return HTTP 200 after real sign-in; browser accounting checks stay intact. Ru
 `pnpm test:cloud-cost:conformance --only remote-browser-conformance.test.mjs`
 for the native startup check and all seven browser journeys. The historical Linux
 bind failure and original reconnect cause remain unproved.
+
+## Cooperative native storage port ownership
+
+Run `node --test scripts/ci-backup-storage-port-ownership.test.mjs` to check
+port ownership across the socket-to-child handoff. Each fixture holds atomic
+filesystem claims until its child stops. Other cooperating fixtures, including
+separate processes with different temporary directories, skip those ports
+while selecting their own batch. A paused native child makes the gap reproducible.
+The checks retain usable storage, release after stop and bounded refusal after
+256 claimed candidates without starting another child. Existing restart limits,
+readiness budgets and error assertions remain.
+
+Run `node --test scripts/ci-backup-storage-claim-cleanup.test.mjs` to check
+missing or replaced claims and an unlink refusal. Cleanup checks link targets,
+leaves replacement claims in place and finishes closing owned resources before
+reporting an unlink failure. Startup retains its original error. The shared
+directory must be a real directory owned by your user with no access for other
+users; a permissive directory, symlink or different owner is refused.
+
+The Linux investigation captured two live fixtures requesting the same port
+before either exited. This identifies an allocation race; it does not identify
+the historical competing processes. Claims prevent that reuse between these
+fixtures. Other programs, native fallback choices and outgoing connections can
+still compete for a port; those causes remain open. A killed driver can leave
+claims under `/tmp/waitron-cloud-storage-ports-<uid>`; later fixtures skip them
+rather than remove another process's state. Cleanup removes only claims this
+fixture created.
+
+## Separate-process storage extraction and failed-startup cleanup (D457)
+
+Run `node --test scripts/ci-backup-storage-process-extraction.test.mjs` to
+check two independent Node processes extracting one read-only archive. Each
+certificate-read refusal removes its own root while preserving the other
+process's executable, certificates and shared cache, in both completion orders.
+The probes pause before listeners and store startup. An unexpected refusal retry
+is caught by the existing 30-second test deadline; prompt refusal is unproved.
+See [the storage qualification boundaries](storage-cache-fixture.md#concurrent-storage-extraction-and-failed-startup-cleanup-d454).
