@@ -144,6 +144,22 @@ that changes stored jobs. Natural exit, explicit pool cleanup, longer waits,
 statement timeouts, connection loss and production shutdown remain open. A forced
 successful exit after error reporting can also satisfy the signalled cases.
 
+### Idle email and monitoring commands drain naturally (D543)
+
+Run `node scripts/test-postgres.mjs exec pnpm --dir packages/registration exec
+node --test test/worker-command-natural-exit.test.ts` to check idle email and
+monitoring shutdown under SIGINT and SIGTERM. Each command first reaches four
+idle connections after real empty-queue claims. A wrapper observes Node's
+`beforeExit` event, which runs when its work drains and is bypassed by a forced
+exit. Shutdown must reach that event with code zero within six seconds and leave
+no database sessions. The bound catches an omitted pool close before the default
+ten-second idle connection expiry can mask it.
+
+The wrapper observes the actual commands without replacing database or worker
+methods. These checks cover empty queues only. Natural drain during active work,
+database failures, translation shutdown and production remain open. They do not
+identify which cleanup method released the connections.
+
 ## Worker scheduling deadlines and polling failures (D468)
 
 Run `node --test packages/registration/test/worker-loop-callback-refusals.test.ts`

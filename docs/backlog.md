@@ -25,6 +25,12 @@ See [the boundaries and remaining work](backlog/storage-cache-fixture.md#storage
 **Open.** Production shutdown, real database failures and cancellation remain open.
 See [the boundaries and remaining work](backlog/worker-scheduling.md#worker-shutdown-during-polling-and-error-reporting-d459).
 
+The [idle command drain checks](backlog/worker-scheduling.md#idle-email-and-monitoring-commands-drain-naturally-d543)
+require email and monitoring commands to drain naturally after SIGINT and SIGTERM,
+with no remaining database sessions. They catch forced successful exit and retained
+idle pools. Natural drain during active work or database failures, translation
+and production shutdown remain open.
+
 The [email command signal checks](backlog/worker-scheduling.md#email-command-shutdown-with-real-database-claims-d536)
 cover idle shutdown and a one-second hold of four blocked PostgreSQL connections
 under SIGINT and SIGTERM, followed by normal exit after lock release.
