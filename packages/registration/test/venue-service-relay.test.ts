@@ -58,7 +58,7 @@ for(const operation of ['approval','reserve','messages','HTTP','handoff'] as con
   else if(operation==='messages')pending=f.messages.execute('email-submit',f.v.proof('email-submit',body));
   else if(operation==='HTTP'){
    const app=createAccountApp({pool:f.pool,outbox:{} as any,config:{portalOrigin:'http://localhost',production:false,rateKey:'ab'.repeat(32),trustedProxyIps:[]},relay:f.relay,leaseIssuer:f.issuer,planMode:mode});
-   pending=Promise.resolve(app.request('http://localhost/api/installations/email/submit',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(f.v.proof('email-submit',body))},{incoming:{socket:{remoteAddress:'203.0.113.1'}}} as any)).then(response=>{assert.equal(response.status,200);});
+   pending=Promise.resolve(app.request('http://localhost/v1/installations/email/submit',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(f.v.proof('email-submit',body))},{incoming:{socket:{remoteAddress:'203.0.113.1'}}} as any)).then(response=>{assert.equal(response.status,200);});
   }
   else pending=new api.RelayWorker(f.pool,{...f.config,smtpPort:s.port},mode).runOnce();
   void pending!.then(()=>{done=true;},()=>{done=true;});
