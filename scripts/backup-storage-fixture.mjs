@@ -114,7 +114,7 @@ async function startBackupStorageAttempt(options) {
   // Atomic claims in a common directory survive the socket-to-child handoff.
   const portClaimsDirectory = join("/tmp", "waitron-cloud-storage-ports-" + process.getuid());
   function listenerFailure(error, listener, reservation = null) {
-    // Fixed names and a reservation number identify binds without exposing keys
+    // Fixed names and a bind attempt number identify binds without exposing keys
     // or configuration. A broken output sink must preserve the original refusal.
     try { console.error("storage_listener_failure=" + JSON.stringify({ listener, reservation })); } catch {}
     throw error;
@@ -338,7 +338,7 @@ async function startBackupStorageAttempt(options) {
       await new Promise((resolve, reject) => {
         reservation.once("error", reject);
         reservation.listen(0, "127.0.0.1", resolve);
-      }).catch(error => listenerFailure(error, "reservation", ports.length + 1));
+      }).catch(error => listenerFailure(error, "reservation", candidates + 1));
       const port = reservation.address().port;
       const claim = join(portClaimsDirectory, String(port));
       try { await symlink(root, claim); }

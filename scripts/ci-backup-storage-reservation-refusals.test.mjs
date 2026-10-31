@@ -65,6 +65,18 @@ await fs.mkdir(join(tmpdir(), "unrelated-root"));
 await fs.writeFile(join(tmpdir(), "unrelated-root", "keep"), "unrelated state");
 const archiveBefore = await fs.stat(archive);
 const tcpServer = net.createServer, tlsServer = https.createServer, allocate = fs.mkdtemp;
+const skipClaim = process.argv[5] === "true";
+const claim = fs.symlink;
+let skippedClaims = 0;
+fs.symlink = async (...args) => {
+  if (skipClaim && skippedClaims === 0) {
+    skippedClaims++;
+    const error = Error("controlled existing port claim");
+    error.code = "EEXIST";
+    throw error;
+  }
+  return claim(...args);
+};
 const competitor = tcpServer(socket => socket.end("competing listener"));
 await new Promise(resolve => competitor.listen(0, "127.0.0.1", resolve));
 competitor.unref();
@@ -117,6 +129,7 @@ try {
   assert.equal(failure, original, "startup must return the original reservation socket error");
   assert.equal(failure.code, "EADDRINUSE");
   assert.equal(failure.port, competingPort);
+  assert.equal(skippedClaims, skipClaim ? 1 : 0, "the controlled claim collision must precede the refused bind");
   assert.deepEqual(diagnostics, [['storage_listener_failure=' + JSON.stringify({listener:"reservation", reservation:refusedPosition})]], "only the refused listener may emit a closed-label marker");
   assert.equal(failure.storageDownload, undefined);
   assert.equal(failure.storageStartup, undefined);
@@ -159,6 +172,7 @@ try {
   await Promise.all([issuer, ...servers, competitor].filter(server => server?.listening)
     .map(server => new Promise(resolve => server.close(resolve))));
 }
+
 `;
 
 // Omitting socket rejection, partial reservation release, identity-server closure
@@ -169,6 +183,23 @@ for (const position of [1, 4, 8]) for (const brokenSink of [false, true]) {
     t.after(() => rm(directory, { recursive: true, force: true }));
     const { stdout, stderr } = await execute(process.execPath,
       ["--input-type=module", "-e", probe, String(position), seed, archiveName, String(brokenSink)], {
+        cwd: new URL("..", import.meta.url),
+        env: { ...process.env, TMPDIR: directory, TMP: directory, TEMP: directory },
+        timeout: 25000, maxBuffer: 1024 * 1024,
+      });
+    assert.equal(stderr, "");
+    assert.deepEqual(JSON.parse(stdout), {refusedPosition: position, releasedReservations: position - 1, allocations: 1});
+  });
+}
+
+// A skipped claim still consumed a socket bind attempt. Counting only accepted
+// claims would label these real fourth/eighth bind refusals as third/seventh.
+for (const position of [4, 8]) for (const brokenSink of [false, true]) {
+  test(`storage bind attempt ${position} retains its diagnostic number after a skipped claim${brokenSink ? " with a refused diagnostic sink" : ""}`, { timeout: 30000 }, async t => {
+    const directory = await mkdtemp(join(tmpdir(), "cloud-storage-reservation-test-"));
+    t.after(() => rm(directory, { recursive: true, force: true }));
+    const { stdout, stderr } = await execute(process.execPath,
+      ["--input-type=module", "-e", probe, String(position), seed, archiveName, String(brokenSink), "true"], {
         cwd: new URL("..", import.meta.url),
         env: { ...process.env, TMPDIR: directory, TMP: directory, TEMP: directory },
         timeout: 25000, maxBuffer: 1024 * 1024,
