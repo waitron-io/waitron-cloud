@@ -36,6 +36,22 @@ that cleanup preserves unrelated files and the verified archive. The historical
 abort and later Linux internal error still need a labelled recurrence and a
 reproduction; this diagnostic change does not establish either cause.
 
+The readiness-count failure in [D525 CI](https://github.com/waitron-io/waitron-cloud/actions/runs/41155039593/job/124399925547)
+is reproduced natively (D526). A controlled S3 port collision consumes five
+creation and ownership checks before its child exits. The one permitted restart
+then consumes 120 of each. The test adds both clients' requests and fails at
+125, while the final diagnostic correctly reports 120. A no-collision control
+passes at 120; another collision control totals 130 from ten plus 120. Both
+children stop and the final refusal preserves the original SDK error.
+
+The proposed test correction checks each client's budget and diagnostics,
+requires exactly 120 requests on the final client, and checks every child's
+cleanup. All three refusal modes pass with and without the forced collision in
+an isolated proposal experiment. This changes the count assertion's meaning,
+so applying it waits for the owner's approval under the campaign's changed-test
+rule. The checked-in test and fixture remain unchanged. The proposal does not
+explain the historical provisioning timeout or internal error.
+
 Keep the label and original error at the next genuine Linux recurrence, then
 reproduce and repair that operation's cause. A passing controlled abort or native
 run does not close the historical timeout. Local Docker and PostgreSQL checks

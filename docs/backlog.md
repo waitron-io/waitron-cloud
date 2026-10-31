@@ -4047,7 +4047,11 @@ gate checks do not qualify that separate layer.
 **Historical cause unknown.** A later Linux run of the same case reports a
 startup `InternalError` before authority opening. The fixture now retains the last
 readiness request, attempt and request counts, and prints them when attempts run
-out, without changing its retry budget.
+out, without changing its retry budget. D526 reproduces a separate test-count
+failure after a port collision: five abandoned-client requests plus 120 final-client
+requests fail the test's aggregate 120 assertion. The final diagnostic correctly
+reports 120. A tested per-client assertion proposal waits for owner approval;
+the original test and fixture remain unchanged.
 Use that evidence to reproduce the refusal before a fix; preserve the existing
 assertions and deadlines. The labelled failure does not establish the historical
 timeout's cause. See the [investigation and qualification
