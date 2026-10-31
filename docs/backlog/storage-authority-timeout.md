@@ -36,9 +36,32 @@ that cleanup preserves unrelated files and the verified archive. The historical
 abort and later Linux internal error still need a labelled recurrence and a
 reproduction; this diagnostic change does not establish either cause.
 
+The readiness-count failure in [D525 CI](https://github.com/waitron-io/waitron-cloud/actions/runs/41155039593/job/124399925547)
+is reproduced natively (D526). A controlled S3 port collision consumes five
+creation and ownership checks before its child exits. The one permitted restart
+then consumes 120 of each. The test adds both clients' requests and fails at
+125, while the final diagnostic correctly reports 120. A no-collision control
+passes at 120; another collision control totals 130 from ten plus 120. Both
+children stop and the final refusal preserves the original SDK error.
+
+The owner-approved correction checks each client's budget and diagnostics,
+requires exactly 120 requests on the final client, and checks every child's
+cleanup. The same three refusal modes run with and without a forced native S3
+port collision. The controlled collision holds the first request until that child
+exits, so its single request stays separate from the final client's 120 requests.
+Every original assertion, request deadline and retry limit remains.
+
+A throwing retry logger previously replaced the storage error and prevented the
+permitted restart. The collision control reproduces that failure. The fixture now
+contains a failure to print the retry notice, just as it contains a failure to
+print the final readiness evidence. Both attempts stop, and the final refusal
+preserves the original SDK error. This fixes the reproduced logger failure and
+counting mismatch; it does not explain the historical provisioning timeout or
+internal error.
+
 Keep the label and original error at the next genuine Linux recurrence, then
 reproduce and repair that operation's cause. A passing controlled abort or native
-run does not close the historical timeout. Local Docker and PostgreSQL checks
-remain unavailable until 3 November; full qualification uses GitHub CI. D152's
-separate native-writer drain decision remains open.
+run does not close the historical timeout. Docker and PostgreSQL reproduction can
+run on the owner's test box while the Mac's Docker is off; full qualification
+uses GitHub CI. D152's separate native-writer drain decision remains open.
 

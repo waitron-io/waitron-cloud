@@ -92,7 +92,8 @@ export async function startBackupStorage(options = {}) {
       if (attempt >= 1 || options.retryPortCollision === false ||
           !error.message.startsWith("SeaweedFS exited: ") ||
           !Object.values(error.storageStartup?.ports ?? {}).includes(port)) throw error;
-      console.error("Storage fixture port handoff failed; retrying once:", error);
+      // A failed diagnostic sink must not cancel the already-qualified retry.
+      try { console.error("Storage fixture port handoff failed; retrying once:", error); } catch {}
     }
   }
 }

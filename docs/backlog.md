@@ -3637,17 +3637,16 @@ checksum requirements; see the
 
 ### Storage startup retry notice can replace the original refusal (D530)
 
-**Open; lane D owns this follow-up through D526 and D512's fixture reservation.**
+**Fixed by D526; the throwing notice preserves the permitted retry.**
 [PR788 root shard 2](https://github.com/waitron-io/waitron-cloud/actions/runs/41164895176/job/124430391561)
 reached the port-handoff retry notice in `startBackupStorage`, where a throwing
-reporter replaced the expected readiness error. A controlled probe of the actual
-retry wrapper injects a recognised port refusal followed by a readiness error.
-The notice aborts after one attempt; omitting it in the disposable probe permits
-the second attempt and preserves the readiness error. This isolates the wrapper
-defect without claiming to reproduce the native port collision. Remove or contain
-that notice under D512's reservation, retaining the existing original-error,
-bounded-reporting, retry-budget and cleanup assertions. Do not rerun an unchanged
-candidate as evidence of repair.
+reporter replaced the expected readiness error. A controlled wrapper probe
+isolated that defect; D526's native S3 port collision reproduces it and verifies
+the fix. The fixture contains the reporting failure, completes the one permitted
+restart and preserves the final readiness error. Original-error identity,
+bounded reporting, request budgets and every child's cleanup remain checked.
+The separate historical provisioning timeout and Linux internal error remain
+open under the [readiness investigation](backlog/storage-authority-timeout.md).
 
 ### Conformance image acquisition during D135 qualification
 
@@ -4047,7 +4046,14 @@ gate checks do not qualify that separate layer.
 **Historical cause unknown.** A later Linux run of the same case reports a
 startup `InternalError` before authority opening. The fixture now retains the last
 readiness request, attempt and request counts, and prints them when attempts run
-out, without changing its retry budget.
+out, without changing its retry budget. D526 reproduces a separate test-count
+failure after a port collision: five abandoned-client requests plus 120 final-client
+requests fail the test's aggregate 120 assertion. The final diagnostic correctly
+reports 120. The owner-approved correction checks each client separately,
+requires all 120 requests on the final client and verifies every child stops.
+A permanent native collision control also reproduces a throwing retry logger
+replacing the readiness error. Logging now preserves the permitted retry and
+the final SDK error; request budgets and retry limits are unchanged.
 Use that evidence to reproduce the refusal before a fix; preserve the existing
 assertions and deadlines. The labelled failure does not establish the historical
 timeout's cause. See the [investigation and qualification
