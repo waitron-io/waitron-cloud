@@ -12,6 +12,8 @@ import {
   rename,
   symlink,
   unlink,
+  readlink,
+  lstat,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -123,6 +125,7 @@ async function startBackupStorageAttempt(options) {
     ));
   }
   async function stop() {
+    let claimCleanupFailure;
     await releasePorts();
     adminClient?.destroy();
     if (child && child.exitCode === null && child.signalCode === null) {
@@ -136,10 +139,17 @@ async function startBackupStorageAttempt(options) {
         await new Promise((r) => child.once("exit", r));
       }
     }
-    await Promise.all(portClaims.splice(0).map(path => unlink(path)));
+    await Promise.all(portClaims.splice(0).map(async path => {
+      try {
+        if (await readlink(path) === root) await unlink(path);
+      } catch (error) {
+        if (error.code !== "ENOENT") claimCleanupFailure ??= error;
+      }
+    }));
     if (oidc) await new Promise((r) => oidc.close(r));
     await log?.close();
     await rm(root, { recursive: true, force: true });
+    if (claimCleanupFailure) throw claimCleanupFailure;
   }
   try {
     const bin = await binary(root);
@@ -314,6 +324,9 @@ async function startBackupStorageAttempt(options) {
     });
     await writeIdentities();
     await mkdir(portClaimsDirectory, { recursive: true, mode: 0o700 });
+    const claimDirectory = await lstat(portClaimsDirectory);
+    if (!claimDirectory.isDirectory() || claimDirectory.uid !== process.getuid() || (claimDirectory.mode & 0o077) !== 0)
+      throw Error("Storage port claim directory must be private and owned by this user");
     const ports = [];
     // Keep every listener open while choosing the batch so the kernel cannot
     // assign one port to two SeaweedFS services. Reject connections so releasing
@@ -603,7 +616,11 @@ async function startBackupStorageAttempt(options) {
       // Observe listeners before owned-child cleanup. Never stop a competing owner.
       error.storageStartup = { ports: allocatedPorts, socketOwners, ...(readiness ? { readiness } : {}) };
     }
-    await stop();
+    try { await stop(); }
+    catch {
+      // Cleanup evidence must not replace the startup refusal or its diagnostics.
+      try { console.error("storage_cleanup_failure"); } catch {}
+    }
     throw error;
   }
 }

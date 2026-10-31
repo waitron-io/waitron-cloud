@@ -529,6 +529,13 @@ The checks retain usable storage, release after stop and bounded refusal after
 256 claimed candidates without starting another child. Existing restart limits,
 readiness budgets and error assertions remain.
 
+Run `node --test scripts/ci-backup-storage-claim-cleanup.test.mjs` to check
+missing or replaced claims and an unlink refusal. Cleanup checks link targets,
+leaves replacement claims in place and finishes closing owned resources before
+reporting an unlink failure. Startup retains its original error. The shared
+directory must be a real directory owned by your user with no access for other
+users; a permissive directory, symlink or different owner is refused.
+
 The Linux investigation captured two live fixtures requesting the same port
 before either exited. This identifies an allocation race; it does not identify
 the historical competing processes. Claims prevent that reuse between these

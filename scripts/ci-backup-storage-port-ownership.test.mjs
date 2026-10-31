@@ -4,6 +4,8 @@ import net from "node:net";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { syncBuiltinESMExports } from "node:module";
 import { access } from "node:fs/promises";
+import fs from "node:fs/promises";
+import { basename, join } from "node:path";
 import { promisify } from "node:util";
 import test from "node:test";
 
@@ -14,17 +16,25 @@ for (const exhausted of [false, true]) test(exhausted
   : "concurrent native fixtures retain port ownership through startup and release it after stop", { timeout: 60000 }, async t => {
   const context = new AsyncLocalStorage();
   const spawn = childProcess.spawn, createServer = net.createServer;
+  const unlink = fs.unlink, portOwners = new Map();
   const children = [], stores = [], pending = [], stopped = new Set();
   let peerSelections = 0;
-  let firstPort, selectedSecond = false, selectedThird = false, firstSpawn;
+  let firstPort, firstOtherPort, selectedSecond = false, selectedThird = false, firstSpawn;
   const spawned = new Promise(resolve => { firstSpawn = resolve; });
   t.after(async () => {
     for (const child of children) if (child.exitCode === null && child.signalCode === null) child.kill("SIGCONT");
     const results = await Promise.allSettled(pending);
     for (const result of results) if (result.status === "fulfilled" && !stores.includes(result.value)) stores.push(result.value);
-    await Promise.all(stores.filter(store => !stopped.has(store)).map(store => store.stop()));
-    t.mock.restoreAll();
-    syncBuiltinESMExports();
+    try { await Promise.all(stores.filter(store => !stopped.has(store)).map(store => store.stop())); }
+    catch (error) {
+      for (const child of children) if (child.exitCode === null && child.signalCode === null) {
+        const exited = new Promise(resolve => child.once("exit", resolve));
+        child.kill("SIGKILL");
+        await exited;
+      }
+      await Promise.allSettled(stores.filter(store => !stopped.has(store)).map(store => store.stop()));
+      throw error;
+    } finally { t.mock.restoreAll(); syncBuiltinESMExports(); }
   });
   t.mock.method(net, "createServer", (...args) => {
     const server = createServer(...args), listen = server.listen;
@@ -39,6 +49,11 @@ for (const exhausted of [false, true]) test(exhausted
     };
     return server;
   });
+  t.mock.method(fs, "unlink", path => {
+    const owner = portOwners.get(Number(basename(path)));
+    if (owner) assert.ok(owner.exitCode !== null || owner.signalCode !== null, "claim release must follow its native child's exit");
+    return unlink(path);
+  });
   t.mock.method(childProcess, "spawn", (binary, args, options) => {
     const ports = args.filter(arg => /^-(s3|master|volume|filer)\.port(?:\.grpc)?=/.test(arg)).map(arg => Number(arg.split("=")[1]));
     if (context.getStore() === "second") {
@@ -50,7 +65,8 @@ for (const exhausted of [false, true]) test(exhausted
       ? spawn("sh", ["-c", 'kill -STOP $$; exec "$@"', "sh", binary, ...args], options)
       : spawn(binary, args, options);
     children.push(child);
-    if (context.getStore() === "first") { firstPort = ports[0]; firstSpawn(); }
+    for (const port of ports) portOwners.set(port, child);
+    if (context.getStore() === "first") { firstPort = ports[0]; firstOtherPort = ports[1]; firstSpawn(); }
     return child;
   });
   syncBuiltinESMExports();
@@ -119,6 +135,9 @@ for (const exhausted of [false, true]) test(exhausted
   assert.equal((await a.bucket("first-port-owner")).endpoint, a.endpoint);
   assert.equal((await b.bucket("second-port-owner")).endpoint, b.endpoint);
   const root = a.root;
+  const vanished = join("/tmp", "waitron-cloud-storage-ports-" + process.getuid(), String(firstOtherPort));
+  assert.equal(await fs.readlink(vanished), root);
+  await unlink(vanished);
   await a.stop();
   stopped.add(a);
   await assert.rejects(access(root), { code: "ENOENT" });
