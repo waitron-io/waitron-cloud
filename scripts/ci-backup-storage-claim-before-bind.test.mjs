@@ -84,23 +84,37 @@ test('an existing claim prevents binding throughout a native child handoff', {ti
   assert.equal(children.length, 2, 'neither native child may need a restart');
 });
 
-for (const exhausted of [false, true]) test(exhausted
+for (const [exhausted, position] of [[false, 1], [false, 4], [true, 1]]) test(exhausted
   ? 'occupied candidates stop after 256 selections and release only their own claims'
-  : 'an occupied candidate is released before another candidate starts', {timeout:60000}, async t => {
+  : `an occupied candidate at selection ${position} is released before another candidate starts`, {timeout:60000}, async t => {
   const competitor = net.createServer(socket => socket.end('outside listener'));
   await new Promise(resolve => competitor.listen(0, '127.0.0.1', resolve));
   t.after(() => new Promise(resolve => competitor.close(resolve)));
   const port = competitor.address().port;
   const path = join('/tmp', 'waitron-cloud-storage-ports-' + process.getuid(), String(port));
-  const choose = crypto.randomInt, spawn = childProcess.spawn, create = net.createServer;
-  let selections = 0, children = 0, storage, legacySelection = false;
-  t.after(() => storage?.stop());
+  assert.equal(existsSync(path), false, 'the controlled outside listener must have no existing fixture claim');
+  const choose = crypto.randomInt, spawn = childProcess.spawn, create = net.createServer, allocate = fs.mkdtemp, unlink = fs.unlink;
+  const claimed = [];
+  let selections = 0, children = 0, storage, legacySelection = false, fixtureRoot;
+  t.after(async () => {
+    await storage?.stop();
+    // A deliberately broken occupied-candidate cleanup must not leave this test's claim behind.
+    if (fixtureRoot && !existsSync(fixtureRoot)) {
+      try { if (await fs.readlink(path) === fixtureRoot) await unlink(path); }
+      catch (error) { if (error.code !== 'ENOENT') throw error; }
+    }
+  });
   t.after(() => { t.mock.restoreAll(); syncBuiltinESMExports(); });
+  t.mock.method(fs, 'mkdtemp', async (...args) => {
+    const root = await allocate(...args);
+    if (String(args[0]).includes('cloud-backup-storage-')) fixtureRoot = root;
+    return root;
+  });
   t.mock.method(crypto, 'randomInt', (...args) => {
     selections++;
     if (exhausted) assert.ok(selections <= 256, 'occupied selection must remain bounded');
     if (selections > 1) assert.equal(existsSync(path), false, 'an occupied candidate must release its claim before selecting again');
-    return exhausted || selections === 1 ? port : choose(...args);
+    return exhausted || selections === position ? port : choose(...args);
   });
   t.mock.method(net, 'createServer', (...args) => {
     const server = create(...args), listen = server.listen;
@@ -110,7 +124,11 @@ for (const exhausted of [false, true]) test(exhausted
     };
     return server;
   });
-  t.mock.method(childProcess, 'spawn', (...args) => { children++; return spawn(...args); });
+  t.mock.method(childProcess, 'spawn', (binary, args, options) => {
+    children++;
+    for (const arg of args) if (/^-(s3|master|volume|filer)\.port(?:\.grpc)?=/.test(arg)) claimed.push(arg.split('=')[1]);
+    return spawn(binary, args, options);
+  });
   syncBuiltinESMExports();
   const {startBackupStorage} = await import('./backup-storage-fixture.mjs');
   if (exhausted) {
@@ -119,6 +137,8 @@ for (const exhausted of [false, true]) test(exhausted
   } else {
     storage = await startBackupStorage({retryPortCollision:false});
     assert.ok(selections >= 9); assert.equal(children, 1);
+    assert.equal(claimed.length, 8);
+    for (const candidate of claimed) assert.equal(await fs.readlink(join('/tmp', 'waitron-cloud-storage-ports-' + process.getuid(), candidate)), storage.root);
     await storage.bucket('occupied-candidate-recovered');
   }
   assert.equal(existsSync(path), false);
