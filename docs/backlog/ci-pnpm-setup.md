@@ -49,6 +49,16 @@ connection setup. Creation-time observation covers npm's asynchronous agent;
 response observation preserves Node's automatic draining when no caller handles
 the reply. A real response reset emits one failure record. npm's own timeout
 records a client abort, which is evidence of cancellation, not its root cause.
+A caller can abort while waiting for a socket, or exit before socket cleanup
+emits an error. The observer now records the abort itself with `AbortError`
+and no network error code. It keeps one failure record per request and ignores
+cleanup aborts after a complete wire transfer. Native controls cover both
+missing-error boundaries, partial-response cancellation and completed-response
+cleanup without changing the caller's exit or response handling.
+The missing diagnostic in [merge run 41170351156, root partition 2](https://github.com/waitron-io/waitron-cloud/actions/runs/41170351156/job/124446923168)
+remains unattributed: its npm timeout check did not capture request lifecycle
+events. These controls repair a demonstrated observation gap; they do not
+establish which lifecycle stage that historical npm process reached.
 Other native controls cover cut-off tarballs, HTTP refusals, paused caller-owned
 bodies, unhandled errors, redaction and bounded output.
 This does not attribute the reset in [merge run 40712695671, root partition 4](https://github.com/waitron-io/waitron-cloud/actions/runs/40712695671/job/122902175152).

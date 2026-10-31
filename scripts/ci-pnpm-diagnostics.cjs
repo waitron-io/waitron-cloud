@@ -87,6 +87,11 @@ observe('http.client.request.created', ({request}) => {
   // npm's agent can fail before assigning a socket. Observe creation so its
   // connection failures remain visible without handling the error for npm.
   onceSafely(request, errorMonitor, error => nativeError(request, error));
+  // An abort may have no error event before the installer exits. Completed wire
+  // transfers can be aborted during caller cleanup and are not failed requests.
+  onceSafely(request, 'abort', () => {
+    if (request.res?.complete !== true) nativeError(request, {name: 'AbortError'});
+  });
 });
 observe('http.client.response.finish', ({request, response}) => {
   const record = requests.get(request);
