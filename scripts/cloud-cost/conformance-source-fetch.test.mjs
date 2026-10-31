@@ -14,15 +14,24 @@ async function prepare(t,scenario={}) {
   await mkdir(bin);
   await writeFile(state,JSON.stringify({calls:[],pids:[],failures:[],...scenario}));
   await writeFile(join(bin,'git'),`#!${process.execPath}
-import {readFileSync,writeFileSync,mkdirSync,existsSync} from 'node:fs';import {join,dirname} from 'node:path';
+import {readFileSync,writeFileSync as persistFileSync,openSync,closeSync,renameSync,mkdirSync,existsSync} from 'node:fs';import {join,dirname} from 'node:path';
 const path=${JSON.stringify(state)},data=JSON.parse(readFileSync(path)),args=process.argv.slice(2);
-data.calls.push(args);writeFileSync(path,JSON.stringify(data));
+const writeFileSync=(file,value,...options)=>{
+ if(data.pauseStateWrite&&args.includes('fetch')&&file.startsWith(path)&&!existsSync(path+'.paused')){
+  persistFileSync(path+'.paused','');closeSync(openSync(file,'w'));
+  console.error('PAUSED_STATE_WRITE');Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0);
+ }
+ return persistFileSync(file,value,...options);
+};
+// A supervisor can kill this helper during a write; readers need the last complete state.
+const save=()=>{writeFileSync(path+'.next',JSON.stringify(data));renameSync(path+'.next',path);};
+data.calls.push(args);save();
 if(args[0]==='init'){
  const source=args.at(-1);data.scratch=dirname(source);
  if(existsSync(join(source,'partial'))) {console.error('Uncollected partial checkout');process.exit(89);}
- mkdirSync(source,{recursive:true});writeFileSync(path,JSON.stringify(data));
+ mkdirSync(source,{recursive:true});save();
 }else if(args.includes('fetch')){
- data.pids.push(process.pid);const failure=data.failures.shift();writeFileSync(path,JSON.stringify(data));
+ data.pids.push(process.pid);const failure=data.failures.shift();save();
  if(failure){writeFileSync(join(args[args.indexOf('-C')+1],'partial'),'generated');
   if(failure==='hang')setInterval(()=>{},1000);
   else {console.error(failure);process.exit(128);}
@@ -126,6 +135,17 @@ test('browser preparation refuses the historical replay revision before installa
   const result=await prepare(t,{selected:'remote-browser-conformance.test.mjs'});
   assert.match(result.output,/Unexpected public source/);
   assert.equal(result.output.includes('REACHED_SOURCE_INSTALL'),false);
+});
+
+test('browser revision refusal survives a fetch killed during its fixture state write',async t=>{
+  const result=await prepare(t,{selected:'remote-browser-conformance.test.mjs',pauseStateWrite:true});
+  assert.match(result.output,/PAUSED_STATE_WRITE/);
+  assert.deepEqual(result.fetches.filter(record=>record.event==='start').map(record=>record.attempt),[1,2]);
+  assert.equal(result.fetches.filter(record=>record.event==='timeout').length,1);
+  assert.match(result.output,/Unexpected public source/);
+  assert.equal(result.output.includes('REACHED_SOURCE_INSTALL'),false);
+  for(const record of result.fetches.filter(record=>record.event==='start'))
+    assert.throws(()=>process.kill(record.pid,0),{code:'ESRCH'},'collect each timed-out or completed fetch child');
 });
 
 test('replay preparation retains its historical source independently of the browser pin',async t=>{

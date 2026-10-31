@@ -3628,6 +3628,19 @@ without raw output or URLs. A controlled native header-body stall and a successf
 fresh build qualify this distinction; the historical Linux cause remains unknown.
 Keep the source pin, integrity checks, deadlines and original assertions.
 
+### Interrupted source-fetch fixture state (D530)
+
+[D349's CI run](https://github.com/waitron-io/waitron-cloud/actions/runs/41169033630/job/124443297790)
+failed to read an empty generated JSON state file while checking the historical browser
+revision. A controlled interruption reproduces that read failure by stopping the
+fixture's Git helper between truncation and writing. The helper now writes a
+temporary file and renames it into place, so you retain the last complete state
+when the supervisor kills a fetch. The new case still requires revision refusal,
+one bounded retry and collection of both fetch children. All original assertions,
+source pins, deadlines and cleanup checks remain unchanged. The historical run
+did not capture the write boundary or explain the helper's delay; those details
+remain unknown.
+
 ### Fixture archive download retries (D311)
 
 **Open; the upstream 504 and later HTTP 500 causes remain unknown.** D457's
