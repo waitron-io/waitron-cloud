@@ -3,6 +3,20 @@ import { isProxy } from 'node:util/types';
 const nativeSignals = ['SIGTERM', 'SIGKILL', 'SIGSEGV', 'SIGABRT', 'SIGBUS', 'SIGILL', 'SIGPIPE', 'SIGINT', 'other'];
 export const nativeFailureSignal = signal => signal === null || nativeSignals.includes(signal) ? signal : 'other';
 
+const transportReasons = ['request-validation', 'lifetime-completion', 'body-accounting', 'transfer-interrupted',
+  'upstream-error', 'upstream-response-interrupted', 'client-error', 'phase-change', 'active-close', 'unknown'];
+const transportValidationStages = ['transport-state', 'copy-source', 'identity', 'operation', 'retry-sequence',
+  'after-stop-admission', 'content-length', 'mutation-body', 'lifetime-begin', 'lifetime-callback', 'unknown'];
+
+// A checkpoint includes accounting and request metadata; only these fixed codes and counts may leave the worker.
+export function checkpointTransportDiagnostic(snapshot) {
+  const reason = transportReasons.includes(snapshot.reason) ? snapshot.reason : 'unknown';
+  return { kind: 'checkpoint-transport', reason,
+    validationStage: reason === 'request-validation'
+      ? transportValidationStages.includes(snapshot.validationStage) ? snapshot.validationStage : 'unknown' : 'none',
+    pending: snapshot.pending, completed: snapshot.completed };
+}
+
 // Diagnostic stages are fixed codes. Raw worker errors never cross this boundary.
 export function workerFailureStage(value) {
   const fail = () => { throw Error('Invalid cloud cost worker diagnostic'); };
@@ -37,7 +51,13 @@ export function workerFailureTrace(value) {
   for (const event of value) {
     need(event && !isProxy(event) && Object.getPrototypeOf(event) === Object.prototype
       && Object.getOwnPropertyDescriptor(event, 'kind')?.get === undefined);
-    if (event.kind === 'measurement-refusal') {
+    if (event.kind === 'checkpoint-transport') {
+      exact(event, ['kind', 'reason', 'validationStage', 'pending', 'completed']);
+      need(transportReasons.includes(event.reason));
+      need(event.reason === 'request-validation' ? transportValidationStages.includes(event.validationStage) : event.validationStage === 'none');
+      for (const key of ['pending', 'completed'])
+        need(Number.isSafeInteger(event[key]) && event[key] >= 0 && event[key] <= 1000000000);
+    } else if (event.kind === 'measurement-refusal') {
       exact(event, ['kind', 'stage']);
       need(['checkpoint-admission', 'checkpoint-inventory', 'checkpoint-traffic', 'checkpoint-accounting'].includes(event.stage));
     } else if (event.kind === 'storage-refusal') {

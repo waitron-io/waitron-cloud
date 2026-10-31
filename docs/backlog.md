@@ -401,10 +401,17 @@ changing the ownership check. See the [investigation and diagnostic boundary](ba
 
 An altered-stream control refused before reading its changed worker result in
 [cost CI](https://github.com/waitron-io/waitron-cloud/actions/runs/40281251676/job/121434888588).
-Failure-only diagnostics now retain fixed preparation, worker and host stages,
-validated worker traces and result-read status without private output. The boundary
-assertion, deadlines and cleanup stay unchanged. The historical cause remains open;
-collect an instrumented recurrence before changing behavior.
+The counts variant failed again in [D543 merge CI](https://github.com/waitron-io/waitron-cloud/actions/runs/41202820800/job/124541925301)
+before the host read the result, after a clean native replication exit. That trace
+names checkpoint admission, but does not identify its refusing guard. A transport
+refusal now adds its first fixed reason, request-validation boundary and pending/completed
+request counts before cleanup. Controlled HTTP refusals after an idle callback and
+a request admitted after that callback retain distinct evidence through worker and
+host admission. The earlier preparation/worker/host stages and result-read status
+remain available without private output. Existing assertions, deadlines and refusal
+rules are unchanged. The unchanged counts case passed on the Linux test box; this
+is not a repair of its historical failure. Collect an instrumented recurrence to
+identify the cause before changing request or shutdown behavior.
 
 ## Isolated-replay CI work groups (D301)
 

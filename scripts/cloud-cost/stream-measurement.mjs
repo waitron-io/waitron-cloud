@@ -2,6 +2,7 @@ import { createMeter, createMeteringProxy, instrumentStorageClient, correlatedSt
 import { createLitestreamTransport } from './litestream.mjs';
 import { openLitestreamHistories } from './storage-lifetimes.mjs';
 import { openLitestreamVersionHistories } from './stream-versions.mjs';
+import { checkpointTransportDiagnostic } from './worker-diagnostic.mjs';
 
 const fail = () => { throw Error('Invalid cloud cost stream measurement'); };
 const need = value => { if (!value) fail(); };
@@ -117,11 +118,12 @@ export async function openStreamMeasurement({ target, sdk, bucket, versioned, cl
       } catch { invalid = true; await dispose().catch(() => {}); fail(); }
     },
     checkpoint: async () => {
-      let stage = 'checkpoint-admission';
+      let stage = 'checkpoint-admission', transportAdmission = false;
       try {
         need(!invalid && state === 'active' && !signal?.aborted);
         // A quiescent producer is required; a racing request poisons both counters.
-        front.setPhase(phase); checkpointTraffic = false; state = 'checking';
+        transportAdmission = true;
+        front.setPhase(phase); transportAdmission = false; checkpointTraffic = false; state = 'checking';
         stage = 'checkpoint-inventory'; await history.verify();
         need(!invalid && !signal?.aborted);
         stage = 'checkpoint-accounting';
@@ -129,6 +131,10 @@ export async function openStreamMeasurement({ target, sdk, bucket, versioned, cl
         need(requests.reconciled === true && requests.status === 'measured');
         state = 'active'; return { requests, storage };
       } catch {
+        // Preserve the first transport refusal before disposal can add active-close or destroy its counters.
+        if (transportAdmission) try {
+          Promise.resolve(onDiagnostic?.(checkpointTransportDiagnostic(front.checkpoint()))).catch(() => {});
+        } catch { /* Reporting cannot replace the measurement refusal or prevent collection. */ }
         // Rejected traffic poisons counters even when inventory and session health still pass.
         if (stage !== 'checkpoint-admission' && checkpointTraffic) stage = 'checkpoint-traffic';
         try { Promise.resolve(onDiagnostic?.({ kind: 'measurement-refusal', stage })).catch(() => {}); } catch { /* Reporting cannot prevent resource collection. */ }
