@@ -85,7 +85,7 @@ for(const signal of ['SIGINT','SIGTERM',null] as const){
       const cancelledAt=(await db.pool.query('SELECT clock_timestamp() AS now')).rows[0].now;
       const cancellationStarted=performance.now();
       await cancelOwned(blocked[0]!.pid);
-      let failures=1;
+      let failures=1,secondCancelledAt:Date|undefined;
       if(!signal){
         const retryDeadline=performance.now()+6000;
         let retried:{pid:number;query_start:Date}[]=[];
@@ -102,6 +102,7 @@ for(const signal of ['SIGINT','SIGTERM',null] as const){
         await delay(1000);
         assert.equal(exitedAt,null,'the retried observation stays live until cancellation');
         assert.deepEqual(await blockedObservation(),retried);
+        secondCancelledAt=(await db.pool.query('SELECT clock_timestamp() AS now')).rows[0].now;
         await cancelOwned(retried[0]!.pid);
         failures=2;
       }
@@ -112,17 +113,21 @@ for(const signal of ['SIGINT','SIGTERM',null] as const){
       }finally{clearTimeout(timer);}
       assert.ok(exitedAt!==null&&exitedAt>=cancellationStarted,'exit must follow query cancellation');
       assert.deepEqual({stdout,stderr},{stdout:'{"drained":true,"code":0}\n',stderr:'Monitor observation failed; retrying\n'.repeat(failures)});
+      const finishedAt=(await db.pool.query('SELECT clock_timestamp() AS now')).rows[0].now;
       const failed=(await db.pool.query('SELECT checked_at,next_check_at,contact_since FROM venue_monitors WHERE venue_id=$1',[first])).rows[0];
       assert.equal(failed.checked_at,null,'a cancelled observation must not commit a check');
       assert.equal(failed.contact_since,null,'a cancelled observation must not commit contact state');
-      const retryDelay=failed.next_check_at.getTime()-cancelledAt.getTime();
-      assert.ok(retryDelay>=30000&&retryDelay<36000,'the failed venue must retain its 30-second retry delay');
+      assert.ok(failed.next_check_at.getTime()>=cancelledAt.getTime()+30000,'the retry delay must be at least 30 seconds after cancellation starts');
+      assert.ok(failed.next_check_at.getTime()<=finishedAt.getTime()+30000,'the retry must be scheduled no later than 30 seconds after shutdown finishes');
       const next=(await db.pool.query('SELECT checked_at,next_check_at FROM venue_monitors WHERE venue_id=$1',[later])).rows[0];
       assert.equal(next.checked_at,null,'the later venue must remain unchecked');
       if(signal)assert.ok(next.next_check_at<=cancelledAt,'shutdown must not claim or defer the later due venue');
-      else assert.ok(next.next_check_at>cancelledAt,'the running command must retain retry state for the second cancelled observation');
+      else{
+        assert.ok(next.next_check_at.getTime()>=secondCancelledAt!.getTime()+30000,'the second cancelled observation must retain its 30-second retry delay');
+        assert.ok(next.next_check_at.getTime()<=finishedAt.getTime()+30000,'the second retry must be scheduled no later than 30 seconds after shutdown finishes');
+      }
       await lock.query('ROLLBACK');
-      assert.equal((await db.pool.query('SELECT count(*) FROM venue_incidents')).rows[0].count,'0','both cancelled observations must roll back their incidents');
+      assert.equal((await db.pool.query('SELECT count(*) FROM venue_incidents')).rows[0].count,'0','cancelled observations leave no incidents');
       assert.equal((await db.pool.query('SELECT count(*) FROM venue_alert_episodes')).rows[0].count,'0');
       assert.equal((await db.pool.query('SELECT count(*) FROM email_outbox')).rows[0].count,'0');
       assert.deepEqual((await admin.query('SELECT pid,query_start FROM pg_stat_activity WHERE application_name=$1',[name])).rows,[],'no command database sessions remain');

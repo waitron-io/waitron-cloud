@@ -135,8 +135,8 @@ Run `node scripts/test-postgres.mjs exec pnpm --dir packages/registration exec
 node --test test/monitor-worker-observation-cancellation-shutdown.test.ts` to check
 SIGINT and SIGTERM while an incident-table lock holds a claimed observation.
 Each signal retains the same blocked query for one second. Cancelling only that
-command's observed query produces one fixed failure diagnostic, rolls back the
-check and contact state, and retains the failed venue's 30-second retry delay.
+command's observed query produces one fixed failure diagnostic, leaves the
+check and contact state unset, and retains the failed venue's 30-second retry delay.
 The command drains naturally with code zero and no remaining database sessions.
 A venue made due after the signal stays unchecked and due, so shutdown cannot
 silently claim or defer it. The incident table stays locked until exit, preventing
@@ -150,7 +150,7 @@ episode or email is created. The wrapper observes Node's `beforeExit` event;
 forced successful exit bypasses it.
 
 These checks qualify PostgreSQL query cancellation during active observation.
-They do not identify an explicit pool-cleanup method or distinguish waiting in
+They do not identify an explicit rollback or pool-cleanup method, or distinguish waiting in
 the worker loop from waiting in pool cleanup. Statement timeouts, connection
 loss, longer waits, alert-recipient delivery and production shutdown remain open.
 
