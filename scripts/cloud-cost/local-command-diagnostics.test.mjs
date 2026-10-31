@@ -79,3 +79,38 @@ test('localCommandReporterRetainsAnActualChildExitWithoutPublishingItsStreams', 
   assert.equal(report.status, 7); assert.equal(report.signal, null); assert.equal(report.childClosed, true);
   assert.equal(report.stdoutBytes, 15); assert.equal(report.stderrBytes, 15);
 });
+
+for (const signal of ['SIGHUP', 'SIGABRT', 'SIGSEGV', 'SIGBUS']) {
+  test('localCommandReporterRetainsKnownChildSignal_' + signal, async () => {
+    const report = await failedControl({requestedSignal: signal, result: {status: null, signal}});
+    assert.equal(report.signal, signal);
+    assert.equal(report.status, null);
+    assert.equal(report.childClosed, true);
+    assert.equal(report.requestedSignal, 'unknown');
+  });
+}
+
+test('localCommandReporterRetainsAnActualChildHangup', async () => {
+  const child = spawn(process.execPath, ['-e', 'process.kill(process.pid,"SIGHUP")'],
+    {stdio: 'ignore', timeout: 5000});
+  const result = await new Promise((resolve, reject) => {
+    child.once('error', reject);
+    child.once('close', (status, signal) => resolve({status, signal}));
+  });
+  assert.deepEqual(result, {status: null, signal: 'SIGHUP'});
+  const report = await failedControl({result});
+  assert.equal(report.signal, 'SIGHUP');
+  assert.equal(report.status, null);
+  assert.equal(report.childClosed, true);
+  assert.equal(report.requestedSignal, 'SIGINT');
+});
+
+test('localCommandReporterPublishesTheSignalValueItValidated', async () => {
+  let reads = 0;
+  const report = await failedControl({result: {
+    status: null,
+    get signal() { return ++reads === 1 ? 'SIGHUP' : 'PRIVATE_SECOND_READ'; },
+  }});
+  assert.equal(report.signal, 'SIGHUP');
+  assert.equal(reads, 1);
+});
