@@ -132,10 +132,11 @@ The table stays locked through exit, so another cleanup query cannot complete.
 
 A no-signal control stays live with an idle database connection for one second
 after cancellation and reports the failure once. SIGTERM then ends the command
-within six seconds, interrupting the configured 60-second cleanup retry wait.
-This catches quitting after every cleanup error, ignoring shutdown during retry
-and immediately starting another retention query. It does not observe the full
-retry interval or its eventual expiry.
+within six seconds with the current 60-second cleanup retry wait. With that
+long wait, this catches ignoring shutdown during retry. A shortened wait that
+ignores shutdown but expires within six seconds can pass. The control also catches
+quitting after every cleanup error and immediately starting another retention
+query. It does not observe the full retry interval or its eventual expiry.
 
 The job, body and usage tables start and end empty, and the loopback provider
 receives no requests. These are fixture boundaries, not proof about retention
