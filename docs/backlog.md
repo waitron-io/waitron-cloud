@@ -35,6 +35,11 @@ cover idle shutdown and a one-second hold of blocked startup scheduling under
 SIGINT and SIGTERM, followed by normal exit with no remaining database sessions.
 Active monitoring, database failure and production shutdown remain open.
 
+The [translation command signal checks](backlog/worker-scheduling.md#translation-command-shutdown-with-blocked-database-cleanup-d538)
+cover a one-second hold of blocked startup retention under SIGINT and SIGTERM,
+followed by normal exit with no database sessions, queue writes or provider calls.
+Active retention changes, database failure and production shutdown remain open.
+
 Run `node --test packages/registration/test/worker-loop-schedule-timer.test.ts`
 to check that startup and recurring scheduling failures enter a real retry timer
 before shutdown. At two and 32 slots, reporting keeps the original error and

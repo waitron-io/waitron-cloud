@@ -51,6 +51,22 @@ or distinguish waiting in the
 worker loop from waiting in pool cleanup. Active monitoring, other commands,
 database failures and production deployment retain separate qualification gates.
 
+### Translation command shutdown with blocked database cleanup (D538)
+
+Run `node scripts/test-postgres.mjs exec pnpm --dir packages/translation exec
+node --test test/worker-shutdown.test.ts` to check the actual translation command
+under SIGINT and SIGTERM while startup retention waits for an owned table lock.
+Each signal leaves the command and its blocked connection alive during a
+one-second hold. After lock release, the command exits normally with no database
+sessions remaining. Empty job, body and usage tables stay empty, and the local
+provider receives no request.
+
+These checks protect the command while pending database cleanup finishes. They
+do not distinguish waiting in the worker loop from waiting in pool cleanup.
+Retention that changes stored jobs, query cancellation, database failures and
+production deployment retain separate qualification gates. Existing idle and
+active-provider signal checks stay in `packages/translation/test/worker-cli.test.ts`.
+
 ## Worker scheduling deadlines and polling failures (D468)
 
 Run `node --test packages/registration/test/worker-loop-callback-refusals.test.ts`
