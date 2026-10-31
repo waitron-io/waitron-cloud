@@ -72,6 +72,14 @@ error report. After busy or idle batches at two and 32 slots, cleanup finishes
 before return, original errors survive, and no new claims, schedules or retry
 timers start. Real database failures and production signals remain separate gates.
 
+Run `node --test packages/registration/test/worker-loop-native-cancellation.test.ts`
+to check shutdown while two or 32 active claims wait on real Node timers.
+Cancellation releases every timer; the loop waits for the last claim's cleanup
+and any pending error report before returning. Unreported claim failures and
+reporting failures keep their original errors, and shutdown starts no new claims
+or timers. Each child exits naturally. Real database cancellation and production
+signals remain separate qualification gates.
+
 ## Worker scheduling failures and error reporting (D467)
 
 **Open.** Production scheduling, real database failures and capacity remain separate gates.
