@@ -3635,6 +3635,20 @@ headers. Keep the bounded retries, shared download budget, cancellation and
 checksum requirements; see the
 [download handling and qualification limits](backlog/cost-conformance-fixtures.md#fixture-archive-download-retries-d311).
 
+### Storage startup retry notice can replace the original refusal (D530)
+
+**Open; coordinate with D512's storage-fixture reservation.**
+[PR788 root shard 2](https://github.com/waitron-io/waitron-cloud/actions/runs/41164895176/job/124430391561)
+reached the port-handoff retry notice in `startBackupStorage`, where a throwing
+reporter replaced the expected readiness error. A controlled probe of the actual
+retry wrapper injects a recognised port refusal followed by a readiness error.
+The notice aborts after one attempt; omitting it in the disposable probe permits
+the second attempt and preserves the readiness error. This isolates the wrapper
+defect without claiming to reproduce the native port collision. Remove or contain
+that notice under D512's reservation, retaining the existing original-error,
+bounded-reporting, retry-budget and cleanup assertions. Do not rerun an unchanged
+candidate as evidence of repair.
+
 ### Conformance image acquisition during D135 qualification
 
 **Open; the registry timeout and metadata HTTP 502 remain unexplained.** Fixture
