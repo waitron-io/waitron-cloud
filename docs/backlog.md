@@ -63,6 +63,10 @@ Active-observation cancellation now checks unset observation state, the failed v
 no later claim after a stop signal and natural exit. A running control continues to
 a later venue. See [the cancellation limits](backlog/worker-scheduling.md#monitoring-shutdown-after-active-observation-cancellation-d553).
 
+Active-observation statement timeouts now qualify both stop signals and a running
+control, with retained retry state, no later claim after shutdown and natural exit.
+See [the statement-timeout limits](backlog/worker-scheduling.md#monitoring-shutdown-after-an-observation-reaches-its-statement-timeout-d554).
+
 ## Worker scheduling failures and error reporting (D467)
 
 **Open.** Production scheduling, real database failures and capacity remain separate gates.
