@@ -3366,7 +3366,8 @@ requirements](backlog/diagnostic-permission-lock.md).
 ## Dependency-cache save stalls (D507)
 
 **Open.** Attribute the historical upload stall and qualify the five remaining
-setup-node cache consumers before changing them.
+setup-node cache consumers before changing them. Keep the portal shard within
+its overall job budget after passing tests.
 See [the boundaries and remaining work](backlog/ci-cache-saving.md#dependency-cache-save-stalls-d507).
 
 ## CI PostgreSQL image pull
