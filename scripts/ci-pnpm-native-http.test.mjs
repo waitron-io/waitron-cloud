@@ -252,3 +252,79 @@ test('a server reset is not reported as a caller abort', async () => {
     assert.ok(error); assert.equal(error.clientAborted, false);
   });
 });
+
+test('a caller abort queued behind an occupied native socket retains its diagnostic', async () => {
+  await registry(() => {}, async base => {
+    const result = await node(`import assert from 'node:assert/strict'; import {Agent, get} from 'node:http';
+      const agent = new Agent({maxSockets: 1});
+      const occupied = get(${JSON.stringify(base + '/private-secret')}, {agent});
+      occupied.on('error', () => {});
+      await new Promise(resolve => occupied.once('finish', resolve));
+      const request = get(${JSON.stringify(base + '/pnpm?query-secret')}, {agent, headers: {authorization: 'header-secret'}});
+      request.on('error', () => {});
+      assert.equal(request.socket, null);
+      await new Promise(resolve => {request.once('abort', resolve); request.abort();});
+      console.log('cancelled before socket');
+      occupied.destroy(); agent.destroy(); process.exitCode = 7;`);
+    assert.equal(result.code, 7); assert.equal(result.stdout, 'cancelled before socket\n');
+    const errors = result.records.filter(row => row.event === 'http-error');
+    assert.equal(errors.length, 1, 'a caller cancellation must not depend on a later request error');
+    assert.equal(errors[0].endpoint, '/pnpm'); assert.equal(errors[0].stage, 'request');
+    assert.equal(errors[0].clientAborted, true); assert.equal(errors[0].error.name, 'AbortError');
+    assert.equal(errors[0].error.code, undefined);
+    assert.doesNotMatch(result.stderr, /private-secret|query-secret|header-secret|127\.0\.0\.1/);
+  });
+});
+
+test('a caller exiting on native abort retains one diagnostic before socket close', async () => {
+  await registry(() => {}, async base => {
+    const result = await node(`import {get} from 'node:http';
+      const request = get(${JSON.stringify(base + '/pnpm')});
+      request.on('error', () => {});
+      request.once('abort', () => process.exit(7));
+      request.once('finish', () => request.abort());`);
+    assert.equal(result.code, 7);
+    const errors = result.records.filter(row => row.event === 'http-error');
+    assert.equal(errors.length, 1);
+    assert.equal(errors[0].stage, 'request'); assert.equal(errors[0].clientAborted, true);
+    assert.equal(errors[0].error.name, 'AbortError'); assert.equal(errors[0].error.code, undefined);
+    assert.equal(result.records.some(row => row.event === 'process-exit' && row.code === 7), true);
+  });
+});
+
+test('aborting native cleanup after a completed response does not invent a failure', async () => {
+  await registry((request, response) => response.end('complete caller body'), async base => {
+    const result = await node(`import {get} from 'node:http';
+      await new Promise(resolve => {
+        const request = get(${JSON.stringify(base + '/pnpm')}, response => {
+          let body = ''; response.on('data', data => {body += data;});
+          response.once('end', () => {request.abort(); console.log(body); resolve();});
+        }); request.on('error', () => {});
+      });`);
+    assert.equal(result.code, 0); assert.equal(result.stdout, 'complete caller body\n');
+    assert.equal(result.records.filter(row => row.event === 'http-error').length, 0);
+    assert.equal(result.records.filter(row => row.event === 'http-transfer-complete').length, 1);
+  });
+});
+
+test('aborting a partial native response emits one cancellation despite its later reset', async () => {
+  await registry((request, response) => {
+    response.writeHead(200, {'content-length': '1000'}); response.write('body-secret');
+  }, async base => {
+    const result = await node(`import {get} from 'node:http';
+      await new Promise(resolve => {
+        const request = get(${JSON.stringify(base + '/pnpm')}, response => {
+          response.once('error', error => {console.log(error.code); resolve();});
+          response.once('data', () => request.abort());
+        }); request.on('error', () => {});
+      }); process.exitCode = 7;`);
+    assert.equal(result.code, 7); assert.equal(result.stdout, 'ECONNRESET\n');
+    const errors = result.records.filter(row => row.event === 'http-error');
+    assert.equal(errors.length, 1);
+    assert.equal(errors[0].stage, 'response'); assert.equal(errors[0].status, 200);
+    assert.equal(errors[0].clientAborted, true);
+    assert.equal(errors[0].error.name, 'AbortError'); assert.equal(errors[0].error.code, undefined);
+    assert.equal(result.records.some(row => row.event === 'http-transfer-complete'), false);
+    assert.doesNotMatch(result.stderr, /body-secret|127\.0\.0\.1/);
+  });
+});

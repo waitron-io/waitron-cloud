@@ -3,7 +3,8 @@ const {writeSync} = require('node:fs');
 const {errorMonitor} = require('node:events');
 const {threadId} = require('node:worker_threads');
 
-// Observe the installer without changing its requests, retries, exit status or trust checks.
+// Diagnostic stderr also feeds bootstrap retry classification. Record caller
+// cancellation without inventing a transport code that could trigger a retry.
 const requests = new WeakMap();
 let sequence = 0;
 const budgets = {ordinary: 32, failure: 8, child: 8, lifecycle: 2};
@@ -87,6 +88,11 @@ observe('http.client.request.created', ({request}) => {
   // npm's agent can fail before assigning a socket. Observe creation so its
   // connection failures remain visible without handling the error for npm.
   onceSafely(request, errorMonitor, error => nativeError(request, error));
+  // An abort may have no error event before the installer exits. Completed wire
+  // transfers can be aborted during caller cleanup and are not failed requests.
+  onceSafely(request, 'abort', () => {
+    if (request.res?.complete !== true) nativeError(request, {name: 'AbortError'});
+  });
 });
 observe('http.client.response.finish', ({request, response}) => {
   const record = requests.get(request);

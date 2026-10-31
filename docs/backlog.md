@@ -2778,6 +2778,10 @@ implementation or production evidence.
   or configurations. All earlier compiler assertions remain in place.
   **pnpm setup:** capture a labelled recurrence to explain the historical network
   failures, and qualify cleanup when the supervisor itself is forcibly stopped.
+  Native cancellation now remains visible when no request error follows an
+  `.abort()` event, including before socket assignment or exit from an abort
+  handler. Cleanup after a complete wire transfer stays successful. The historical missing npm timeout diagnostic
+  remains unattributed; no existing assertion or deadline changed.
   Keep signature verification, version pins and deadlines; see the
   [setup boundaries and remaining work](backlog/ci-pnpm-setup.md).
   Package-only changes omit the two-venue milestone receipt when both immutable
