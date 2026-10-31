@@ -507,6 +507,17 @@ assertion fails. Both storage source and test match the branch's base exactly.
 Lane H's D530 investigation owns this recurrence; keep the single restart and
 every assertion. A later clean qualification does not repair this collision.
 
+A controlled current-main reproduction exposes a peer binding an already claimed
+filer port before its claim attempt returns `EEXIST`. The native owner then
+refuses that port. Candidates are now claimed before binding; existing claims
+cause no bind, occupied unclaimed candidates retry within 256 selections, and
+other bind errors retain their original object. New native handoff and occupied
+socket controls cover that order and cleanup. All eight reservations, the single
+native restart, readiness and authority checks, and deadlines remain. This
+repairs the demonstrated reservation intrusion; it does not identify historical
+Node or weed owners, prevent unrelated programs racing the later handoff, or
+qualify the separate native admin fallback.
+
 See [the cooperative port claims and cleanup limits](backlog/storage-cache-fixture.md#cooperative-native-storage-port-ownership).
 
 ## Repository licence

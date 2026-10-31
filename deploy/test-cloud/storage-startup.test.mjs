@@ -9,7 +9,7 @@ test('storage holds the complete eight-port allocation until child startup', {ti
   const held = new Set();
   let maximumHeld = 0;
   t.mock.method(Server.prototype, 'listen', function (...args) {
-    if (this.constructor === Server && args[0] === 0) {
+    if (this.constructor === Server && typeof args[0] === 'number' && args[0] > 0) {
       this.once('listening', () => {
         held.add(this);
         maximumHeld = Math.max(maximumHeld, held.size);
@@ -30,10 +30,10 @@ test('failed storage port allocation releases every earlier owned listener', {ti
   const listen = Server.prototype.listen;
   const reservations = [];
   t.mock.method(Server.prototype, 'listen', function (...args) {
-    if (this.constructor === Server && args[0] === 0) {
+    if (this.constructor === Server && typeof args[0] === 'number' && args[0] > 0) {
       reservations.push(this);
       if (reservations.length === 4) {
-        queueMicrotask(() => this.emit('error', Object.assign(Error('injected allocation failure'), {code:'EADDRINUSE'})));
+        queueMicrotask(() => this.emit('error', Object.assign(Error('injected allocation failure'), {code:'EACCES'})));
         return this;
       }
     }
@@ -85,7 +85,7 @@ test('storage reservations close promptly when another client connects', {timeou
   const connectionObserved = new Promise(resolve => connected = resolve);
   const releaseObserved = new Promise(resolve => released = resolve);
   t.mock.method(Server.prototype, 'listen', function (...args) {
-    if (this.constructor === Server && args[0] === 0 && ++allocations === 2) {
+    if (this.constructor === Server && typeof args[0] === 'number' && args[0] > 0 && ++allocations === 2) {
       const ready = args.pop();
       this.once('close', () => released(true));
       args.push(() => {

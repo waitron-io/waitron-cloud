@@ -136,10 +136,10 @@ unexpected startup failure prints its original error and stack before the
 assertion checks it. When a Node socket stack omits the calling bind, look for
 `storage_listener_failure`: it identifies the identity listener or the numbered
 storage bind attempt before the original failure propagates. A claim already held
-by another process consumes an attempt even though its port is not accepted. Run
+by another process consumes a candidate selection without performing a bind. Run
 `node --test scripts/ci-backup-storage-issuer-bind.test.mjs scripts/ci-backup-storage-reservation-refusals.test.mjs`
-to check real occupied sockets, stage markers and preserved cleanup even when
-diagnostic output throws. The marker contains only fixed labels and a reservation
+to check real identity-listener collisions, controlled nonretryable reservation
+refusals, stage markers and preserved cleanup even when diagnostic output throws. The marker contains only fixed labels and a reservation
 attempt number; it excludes configuration and keys. The historical failing bind remains
 unidentified. The issuer and reservation refusal fixtures inject failures at the
 actual bind and the first, fourth and eighth reservations, preserving their
@@ -148,7 +148,8 @@ original error-identity, cleanup and competing-listener assertions.
 The [D548 merge run](https://github.com/waitron-io/waitron-cloud/actions/runs/41221742864/job/124597610947)
 reports reservation three where the fourth actual bind was refused. Controlled
 skipped-claim cases reproduce this mismatch on macOS and Linux. The diagnostic
-now counts every bind attempt, including ports skipped after a claim collision.
+counts actual bind attempts. With claim-before-bind allocation, a skipped claim
+performs no bind and does not advance that diagnostic number.
 The four added cases retain the existing error, cleanup, cache and competing-listener
 checks, including a diagnostic sink that throws. The original CI peer or stale
 claim was not observed, so its identity remains unknown. The separate portal job
@@ -206,8 +207,9 @@ and historical causes remain open; see [the investigation](storage-cache-fixture
 ## Storage partial port-reservation refusals (D464)
 
 Run `node --test scripts/ci-backup-storage-reservation-refusals.test.mjs` to
-check occupied sockets at the first, fourth and eighth storage-port reservation.
-Failed startup returns the original socket error, releases earlier reservations
+check a controlled nonretryable socket refusal at the first, fourth and eighth
+storage-port bind. A genuine occupied candidate is retried within the allocation
+bound instead. Failed startup returns the original nonretryable socket error, releases earlier reservations
 and the identity server, and removes its extracted files and private key.
 The complete cache and a competing listener remain usable. Real store startup
 and historical failure causes retain their separate gates; see
@@ -270,13 +272,24 @@ bind failure and original reconnect cause remain unproved.
 ## Cooperative native storage port ownership
 
 Run `node --test scripts/ci-backup-storage-port-ownership.test.mjs` to check
-port ownership across the socket-to-child handoff. Each fixture holds atomic
-filesystem claims until its child stops. Other cooperating fixtures, including
-separate processes with different temporary directories, skip those ports
-while selecting their own batch. A paused native child makes the gap reproducible.
+port ownership across the socket-to-child handoff. Each fixture claims a numeric
+candidate before binding it, then holds that filesystem claim until its child
+stops. Other cooperating fixtures, including separate processes with different
+temporary directories, skip existing claims without opening a socket on those
+ports. If another program already occupies an unclaimed candidate, the fixture
+releases its own claim and tries another candidate within the same 256-selection
+bound. Other bind errors retain their original object and stop allocation. A paused native child makes the gap reproducible.
 The checks retain usable storage, release after stop and bounded refusal after
 256 claimed candidates without starting another child. Existing restart limits,
 readiness budgets and error assertions remain.
+
+Run `node --test scripts/ci-backup-storage-claim-before-bind.test.mjs` to check
+that a peer awaiting a real existing-claim refusal never binds the first child's
+filer port. The first native child starts while that refusal remains held; both
+fixtures retain usable storage without restarting. Separate controls occupy a
+real candidate socket, check recovery and 256-candidate exhaustion, and retain
+the competing listener. All eight accepted sockets remain held together before
+native startup. Bind diagnostics count actual binds, excluding skipped claims.
 
 Run `node --test scripts/ci-backup-storage-claim-cleanup.test.mjs` to check
 missing or replaced claims and an unlink refusal. Cleanup checks link targets,

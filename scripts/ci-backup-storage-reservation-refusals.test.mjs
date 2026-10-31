@@ -84,8 +84,8 @@ const competingPort = competitor.address().port;
 const servers = [], heldPorts = [];
 let root, issuer, original, allocations = 0, calls = 0, issuerPort;
 fs.mkdtemp = async (...args) => { allocations++; root = await allocate(...args); return root; };
-// Only the selected reservation changes destination; listen and its socket error
-// remain real. The identity server binds its own socket directly.
+// The selected real bind refusal carries a controlled nonretryable code.
+// Occupied-candidate recovery is covered separately; this error must retain its identity.
 net.createServer = (...args) => {
   const server = tcpServer(...args);
   server.unref();
@@ -97,7 +97,7 @@ net.createServer = (...args) => {
     if (index === refusedPosition) {
       const emit = this.emit;
       this.emit = function(event, ...values) {
-        if (event === "error") original = values[0];
+        if (event === "error") { original = values[0]; original.code = "EACCES"; }
         return emit.call(this, event, ...values);
       };
       return listen.call(this, competingPort, host, callback);
@@ -127,7 +127,7 @@ try {
   } catch (error) { failure = error; }
   assert.ok(original, "the selected real reservation must hit an occupied socket");
   assert.equal(failure, original, "startup must return the original reservation socket error");
-  assert.equal(failure.code, "EADDRINUSE");
+  assert.equal(failure.code, "EACCES");
   assert.equal(failure.port, competingPort);
   assert.equal(skippedClaims, skipClaim ? 1 : 0, "the controlled claim collision must precede the refused bind");
   assert.deepEqual(diagnostics, [['storage_listener_failure=' + JSON.stringify({listener:"reservation", reservation:refusedPosition})]], "only the refused listener may emit a closed-label marker");
@@ -192,8 +192,8 @@ for (const position of [1, 4, 8]) for (const brokenSink of [false, true]) {
   });
 }
 
-// A skipped claim still consumed a socket bind attempt. Counting only accepted
-// claims would label these real fourth/eighth bind refusals as third/seventh.
+// An existing claim must consume no bind attempt. Diagnostics still number
+// the actual fourth/eighth binds after skipping that candidate.
 for (const position of [4, 8]) for (const brokenSink of [false, true]) {
   test(`storage bind attempt ${position} retains its diagnostic number after a skipped claim${brokenSink ? " with a refused diagnostic sink" : ""}`, { timeout: 30000 }, async t => {
     const directory = await mkdtemp(join(tmpdir(), "cloud-storage-reservation-test-"));
