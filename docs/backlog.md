@@ -4050,8 +4050,11 @@ readiness request, attempt and request counts, and prints them when attempts run
 out, without changing its retry budget. D526 reproduces a separate test-count
 failure after a port collision: five abandoned-client requests plus 120 final-client
 requests fail the test's aggregate 120 assertion. The final diagnostic correctly
-reports 120. A tested per-client assertion proposal waits for owner approval;
-the original test and fixture remain unchanged.
+reports 120. The owner-approved correction checks each client separately,
+requires all 120 requests on the final client and verifies every child stops.
+A permanent native collision control also reproduces a throwing retry logger
+replacing the readiness error. Logging now preserves the permitted retry and
+the final SDK error; request budgets and retry limits are unchanged.
 Use that evidence to reproduce the refusal before a fix; preserve the existing
 assertions and deadlines. The labelled failure does not establish the historical
 timeout's cause. See the [investigation and qualification
