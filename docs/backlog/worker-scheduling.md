@@ -84,6 +84,25 @@ or distinguish waiting in the
 worker loop from waiting in pool cleanup. Active monitoring, other commands,
 database failures and production deployment retain separate qualification gates.
 
+### Monitoring command shutdown after database query cancellation (D541)
+
+Run `node scripts/test-postgres.mjs exec pnpm --dir packages/registration exec
+node --test test/monitor-worker-cancellation-shutdown.test.ts` to check a real
+PostgreSQL scheduling failure during command shutdown. SIGINT and SIGTERM each
+leave startup scheduling blocked on an owned table lock for one second. Cancelling
+only that command's observed query then produces one fixed observation-failure
+diagnostic, empty standard output and code-zero exit with no remaining database
+sessions. The table stays locked until exit, so scheduling cannot silently retry
+to completion. A no-signal control requires another scheduling query after the
+first cancellation, then stops it with SIGTERM and a second cancellation. This
+distinguishes signal-driven shutdown from quitting after every database error.
+
+The fixed diagnostic says retrying because it also serves the running worker;
+these checks observe shutdown after the failure. They do not prove natural exit
+or explicit pool cleanup, since an explicit successful process exit after reporting
+can also satisfy them. Connection loss, statement timeouts, active observations,
+other database failures, longer waits and production shutdown remain open.
+
 ### Translation command shutdown with blocked database cleanup (D538)
 
 Run `node scripts/test-postgres.mjs exec pnpm --dir packages/translation exec
