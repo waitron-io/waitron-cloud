@@ -104,6 +104,12 @@ async function startBackupStorageAttempt(options) {
   let oidc, child, log, adminClient, allocatedPorts, readiness;
   const managed = new Map();
   const portReservations = [];
+  function listenerFailure(error, listener, reservation = null) {
+    // Fixed names and a reservation number identify binds without exposing keys
+    // or configuration. A broken output sink must preserve the original refusal.
+    try { console.error("storage_listener_failure=" + JSON.stringify({ listener, reservation })); } catch {}
+    throw error;
+  }
   async function releasePorts() {
     await Promise.all(portReservations.splice(0).map(server =>
       server.listening ? new Promise(resolve => server.close(resolve)) : undefined,
@@ -182,7 +188,7 @@ async function startBackupStorageAttempt(options) {
         oidc.removeListener("error", reject);
         resolve();
       });
-    });
+    }).catch(error => listenerFailure(error, "identity"));
     // The identity server keeps its assigned socket; publishing a released probe
     // port would let another listener take it before HTTPS binds.
     issuer = "https://127.0.0.1:" + oidc.address().port;
@@ -309,7 +315,7 @@ async function startBackupStorageAttempt(options) {
       await new Promise((resolve, reject) => {
         reservation.once("error", reject);
         reservation.listen(0, "127.0.0.1", resolve);
-      });
+      }).catch(error => listenerFailure(error, "reservation", i + 1));
       ports.push(reservation.address().port);
     }
     const [s3, master, masterGrpc, volume, volumeGrpc, filer, filerGrpc, s3Grpc] =

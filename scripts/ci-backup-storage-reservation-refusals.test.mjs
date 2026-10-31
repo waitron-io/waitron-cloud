@@ -49,7 +49,13 @@ import https from "node:https";
 import { syncBuiltinESMExports } from "node:module";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-const [position, seed, archiveName] = process.argv.slice(1);
+const [position, seed, archiveName, brokenSink] = process.argv.slice(1);
+const diagnostics = [];
+const diagnosticFailure = Error("diagnostic sink refused");
+console.error = (...values) => {
+  diagnostics.push(values);
+  if (brokenSink === "true") throw diagnosticFailure;
+};
 const refusedPosition = Number(position);
 const bytes = await fs.readFile(seed);
 const cache = join(tmpdir(), "waitron-cloud-test-binaries"), archive = join(cache, archiveName);
@@ -111,6 +117,7 @@ try {
   assert.equal(failure, original, "startup must return the original reservation socket error");
   assert.equal(failure.code, "EADDRINUSE");
   assert.equal(failure.port, competingPort);
+  assert.deepEqual(diagnostics, [['storage_listener_failure=' + JSON.stringify({listener:"reservation", reservation:refusedPosition})]], "only the refused listener may emit a closed-label marker");
   assert.equal(failure.storageDownload, undefined);
   assert.equal(failure.storageStartup, undefined);
   assert.equal(allocations, 1, "reservation errors must not retry child startup");
@@ -156,12 +163,12 @@ try {
 
 // Omitting socket rejection, partial reservation release, identity-server closure
 // or private-file cleanup must fail these checks without starting a store.
-for (const position of [1, 4, 8]) {
-  test(`storage reservation ${position} refusal releases earlier listeners and only owned files`, { timeout: 30000 }, async t => {
+for (const position of [1, 4, 8]) for (const brokenSink of [false, true]) {
+  test(`storage reservation ${position} refusal releases earlier listeners and only owned files${brokenSink ? " with a refused diagnostic sink" : ""}`, { timeout: 30000 }, async t => {
     const directory = await mkdtemp(join(tmpdir(), "cloud-storage-reservation-test-"));
     t.after(() => rm(directory, { recursive: true, force: true }));
     const { stdout, stderr } = await execute(process.execPath,
-      ["--input-type=module", "-e", probe, String(position), seed, archiveName], {
+      ["--input-type=module", "-e", probe, String(position), seed, archiveName, String(brokenSink)], {
         cwd: new URL("..", import.meta.url),
         env: { ...process.env, TMPDIR: directory, TMP: directory, TEMP: directory },
         timeout: 25000, maxBuffer: 1024 * 1024,

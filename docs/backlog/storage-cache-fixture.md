@@ -132,9 +132,15 @@ which bind failed in the historical Linux run.
 Run `node --test deploy/test-cloud/storage-s3-grpc.test.mjs` to check the claimed
 probe-port regression, both-child exhaustion, disabled retries and successful
 recovery. The original S3 assertions and one-retry limit remain unchanged. An
-unexpected startup failure now prints its original error and stack before the
-assertion checks it. A Node socket stack can omit the calling bind, so identifying
-the listener stage remains separate diagnostic work. The issuer and reservation refusal fixtures inject failures at the
+unexpected startup failure prints its original error and stack before the
+assertion checks it. When a Node socket stack omits the calling bind, look for
+`storage_listener_failure`: it identifies the identity listener or the numbered
+storage reservation before the original failure propagates. Run
+`node --test scripts/ci-backup-storage-issuer-bind.test.mjs scripts/ci-backup-storage-reservation-refusals.test.mjs`
+to check real occupied sockets, stage markers and preserved cleanup even when
+diagnostic output throws. The marker contains only fixed labels and a reservation
+number; it excludes configuration and keys. The historical failing bind remains
+unidentified. The issuer and reservation refusal fixtures inject failures at the
 actual bind and the first, fourth and eighth reservations, preserving their
 original error-identity, cleanup and competing-listener assertions.
 
@@ -220,8 +226,8 @@ D499 reproduces the direct `EADDRINUSE` that can interrupt the S3 collision test
 before either child starts: another listener takes the identity probe's released
 port. Direct HTTPS allocation removes that race without adding retries. The S3
 refusal assertions remain intact, and unexpected failures now retain their
-original error and stack. A Node socket stack may omit the calling bind;
-listener-stage attribution and the historical CI bind remain unproved. Run `node --test deploy/test-cloud/storage-s3-grpc.test.mjs`
+original error and stack. Pre-child bind refusals now print their listener stage even when a Node stack
+omits it; the historical CI bind remains unproved. Run `node --test deploy/test-cloud/storage-s3-grpc.test.mjs`
 for the deterministic handoff regression and bound-identity configuration checks.
 The three TLS-refusal modes require zero TCP probes after the owner-approved
 count change; their TLS error, cleanup and competing-listener checks remain.
