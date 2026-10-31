@@ -141,3 +141,39 @@ for (const action of actions) for (const wait of waits) {
     assert.equal(controller.waiting, 0);
   });
 }
+
+for (const action of actions) for (const wait of waits) for (const status of [429, 503]) {
+  test(`translation consent ${action} requires explicit retry after ${status} ${wait.name} timers expire`, async t => {
+    browser(t);
+    t.mock.timers.enable({apis: ['Date', 'setTimeout'], now: 100000});
+    let refused = true;
+    let calls = 0;
+    t.mock.method(globalThis, 'fetch', async () => {
+      calls++;
+      return refused ? Response.json({error: status === 429 ? 'rate_limited' : 'temporarily_unavailable'},
+        {status, headers: {'Retry-After': wait.header}}) : Response.json(choices);
+    });
+    const controller = new TranslationConsentController(() => {});
+    controller.account('owner');
+    await perform(controller, action);
+    assert.equal(calls, 1);
+    assert.equal(controller.waiting, 7);
+    refused = false;
+    t.mock.timers.tick(6999);
+    await Promise.resolve();
+    assert.equal(calls, 1, 'the timer cannot send a request before expiry');
+    t.mock.timers.tick(1);
+    await Promise.resolve();
+    assert.equal(controller.waiting, 0);
+    assert.equal(calls, 1, 'expiry must not automatically repeat a request');
+    t.mock.timers.tick(1000);
+    await Promise.resolve();
+    assert.equal(calls, 1, 'passing the deadline still requires explicit retry');
+    await perform(controller, action);
+    assert.equal(calls, 2);
+    assert.equal(controller.loaded, true);
+    assert.deepEqual(controller.consents, choices.consents);
+    assert.equal(controller.pending, false);
+    assert.equal(controller.error, undefined);
+  });
+}

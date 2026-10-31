@@ -248,8 +248,9 @@ Switching accounts keeps the server's translation-consent retry wait, so another
 account cannot bypass it. Run `node --test apps/portal/test/translation-consent-retry-boundary.test.ts`
 to check seconds and HTTP-date waits for reads, agreement and withdrawal through
 the request client and controller with native HTTP responses. Requests resume
-only at the deadline and after an explicit retry. A backward clock change during
-a later request cannot shorten an earlier deadline.
+only at the deadline and after an explicit retry; native timer expiry sends no
+request itself. A backward clock change during a later refusal with no new wait
+cannot shorten an earlier deadline.
 
 Server authority, browser integration and translation release checks remain
 separate qualification gates. The historical genuine-browser reconnect refusal
