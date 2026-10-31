@@ -77,3 +77,20 @@ cover both languages, themes and widths. The separate Retry-After and
 pending/uncertain-write cases remain in both languages at width 390. Every
 original assertion and deadline remains unchanged. These checks use stubbed
 HTTP; real server authority and the historical Linux cause remain unqualified.
+
+## Open browser-fixture boundaries
+
+The delayed passkey-options handler pauses every request. An actual second
+options request can arrive after its last count assertion, so the delayed cases
+can pass despite that duplicate. The ordinary cases still catch it. Make later
+requests visible before the delayed journey completes, preserving the existing
+request counts, enrollment behavior and deadlines. A disposable first-request-only
+delay makes the same duplicate fail both cases; that change is not shipped here.
+
+Removing the session-list controller's pending-load guard exposes an older
+harness weakness. The duplicate read blocks in the browser evaluation while its
+reply waits for the test's cleanup. A controlled 30-second test timeout reports
+failure but leaves the process alive. The same experiment on the parent commit
+needs an external stop at 45 seconds. Make this regression fail and clean up
+within its existing bounds without weakening duplicate-read assertions. The
+ordinary suite passes; this is a limit of its failure path.

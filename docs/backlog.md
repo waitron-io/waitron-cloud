@@ -16,6 +16,8 @@ The interrupted-LIST control identifies its producer outcome; the matching
 storage-observer outcome remains unqualified in that scenario.
 Venue-refresh handler checks preserve the original cases, while their matrix
 and outer deadline control have the limits described below.
+Delayed passkey-handler duplicate detection and session-list failure cleanup
+remain open in the same qualification notes.
 See [the diagnostic qualification and open work](backlog/retrospective-reviews.md).
 
 ## Concurrent storage extraction and failed-startup cleanup (D454)
