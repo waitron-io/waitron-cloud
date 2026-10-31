@@ -536,10 +536,20 @@ passes its validated mode through lifecycle and remote certificate handlers.
 
 With test enforcement enabled, a free organisation cannot provision remote
 access, move cells, change hostnames, request DNS instructions or submit/read a
-staff certificate. Machine requests return `403 permission_denied`; account
-hostname requests return `403 forbidden`. You can still inspect public setup
-metadata. A paid organisation needs a test venue and explicit remote provisioning;
-the plan alone supplies neither a tunnel nor a certificate.
+staff certificate. Machine requests return `403 permission_denied`. Account
+hostname requests return `403 remote_plan_required` for a free plan,
+`403 remote_setup_required` for missing provisioning, `403 remote_test_only`
+for a venue outside the test-only trial, or `403 revoked` for stopped installation
+access. Unknown permission causes keep `403 forbidden`; ownership and request
+verification keep their separate refusal handling. You can still inspect public
+setup metadata. A paid organisation needs a test venue and explicit remote
+provisioning; the plan alone supplies neither a tunnel nor a certificate.
+
+Account explains these limits in English and Spanish. You can return to Account
+overview or refresh installations after a stopped-access refusal. Refresh reads
+current status; it does not restore access. Plan changes and gateway provisioning
+still use the operator commands below. Account has no customer control for those
+changes or for restoring stopped access.
 
 For a disposable organisation, set its plan with the
 [organisation plan command](local-deployment.md#inspect-the-test-organisation-plan).

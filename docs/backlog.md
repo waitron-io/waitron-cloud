@@ -4450,11 +4450,19 @@ Cloud follow-ups, each a separate small change with tests before implementation:
   overview without reloading and Sign out beside the refusal, with retry if sign-out
   fails. Native HTTP/controller and two-venue browser checks cover six reachable
   panels, heading focus and cleared private state; real database/locking checks run
-  in CI. Permission checks and transaction boundaries remain unchanged. Shared
+  in CI. Existing permission conditions remain; specific remote refusals get a
+  fresh session and ownership check before their cause is returned. Shared
   backup/installation reads on recovery/fiscal pages inherit the wording; their
   request-specific guidance stays in R3/R6/R7. Pairing keeps its existing guidance.
-  Shared remote plan/setup refusals and revoked installations still need their own
-  explanations. Membership changes need a real product path and remain open.
+  Remote setup now explains a missing paid trial plan, missing gateway setup,
+  a production venue outside the test-only trial and stopped installation access
+  in English and Spanish. Account overview and a read-only installation refresh
+  give you current context; plan changes, gateway provisioning and restoring stopped
+  access are unavailable here. Shared callers keep `permission_denied`; Account
+  exposes only a known refusal cause after its ownership check. Native SQL-boundary,
+  API/controller and browser checks cover the mapping; real database and late-DNS
+  rechecks run in CI. Customer plan/setup/restart controls and membership changes
+  still need real product paths and remain open.
 - R6: make outside fiscal-custodian, entitlement and identity-space guidance usable;
   record missing provisioning paths without changing fiscal authority or history.
 - R7: distinguish temporary fiscal continuity access from missing configuration,
@@ -4640,3 +4648,13 @@ existing Enter, installation-refresh and uncertain-save checks retain their
 assertions and deadlines with the three owner-approved setup changes. Server
 behaviour and the outstanding live DNS/ACME and deployment qualification are
 unchanged.
+
+## Isolated replay ownership-loss fixture
+
+An earlier remote-guidance qualification failed in
+`isolatedControllerNeverClaimsCleanupAfterLosingItsOwnership`: the fixture did not
+observe the replay worker's started journal state (conformance run 40265731418,
+job 121387722438). The cause remains unknown and belongs to D530's investigation.
+Keep the ownership assertion, deadlines, resource collection and refusal to claim
+cleanup after ownership loss. Qualify any repair with the genuine runtime fixture;
+a passing remote-guidance qualification does not establish a repair.
