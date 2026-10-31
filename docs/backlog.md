@@ -59,6 +59,9 @@ review and two concurrent jobs; explicit pool cleanup remains open. See [the add
 Active monitoring checks retain an observation through a database lock after either
 stop signal, commit it after release and leave a later due venue unchecked. See
 [the observation shutdown limits](backlog/worker-scheduling.md#monitoring-command-shutdown-during-an-active-observation-d552).
+Active-observation cancellation now checks unset observation state, the failed venue's retry delay,
+no later claim after a stop signal and natural exit. A running control continues to
+a later venue. See [the cancellation limits](backlog/worker-scheduling.md#monitoring-shutdown-after-active-observation-cancellation-d553).
 
 ## Worker scheduling failures and error reporting (D467)
 
