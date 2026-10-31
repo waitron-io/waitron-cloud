@@ -3637,17 +3637,16 @@ checksum requirements; see the
 
 ### Storage startup retry notice can replace the original refusal (D530)
 
-**Open; lane D owns this follow-up through D526 and D512's fixture reservation.**
+**Fixed by D526; the throwing notice preserves the permitted retry.**
 [PR788 root shard 2](https://github.com/waitron-io/waitron-cloud/actions/runs/41164895176/job/124430391561)
 reached the port-handoff retry notice in `startBackupStorage`, where a throwing
-reporter replaced the expected readiness error. A controlled probe of the actual
-retry wrapper injects a recognised port refusal followed by a readiness error.
-The notice aborts after one attempt; omitting it in the disposable probe permits
-the second attempt and preserves the readiness error. This isolates the wrapper
-defect without claiming to reproduce the native port collision. Remove or contain
-that notice under D512's reservation, retaining the existing original-error,
-bounded-reporting, retry-budget and cleanup assertions. Do not rerun an unchanged
-candidate as evidence of repair.
+reporter replaced the expected readiness error. A controlled wrapper probe
+isolated that defect; D526's native S3 port collision reproduces it and verifies
+the fix. The fixture contains the reporting failure, completes the one permitted
+restart and preserves the final readiness error. Original-error identity,
+bounded reporting, request budgets and every child's cleanup remain checked.
+The separate historical provisioning timeout and Linux internal error remain
+open under the [readiness investigation](backlog/storage-authority-timeout.md).
 
 ### Conformance image acquisition during D135 qualification
 
