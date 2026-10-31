@@ -47,7 +47,7 @@ for(const operation of ['approval','reserve','messages','HTTP','handoff'] as con
  let verified!:()=>void,releaseVerifier!:()=>void;
  const verifierEntered=new Promise<void>(resolve=>{verified=resolve;}),verifierWait=new Promise<void>(resolve=>{releaseVerifier=resolve;});
  const grants:RelayGrantStore=operation==='approval'?new api.RelayGrantStore(f.pool,{...f.config.grants,verifyOrigin:async(r:any)=>{verified();await verifierWait;return {...r,domainControl:true,httpsEndpoint:true,expiresAt:new Date(Date.now()+3600000).toISOString()};}},mode):f.grants;
- const blocker=await f.pool.connect();t.after(()=>blocker.release());
+ const blocker=await f.pool.connect();
  let done=false,pending:Promise<unknown>|undefined;
  try{
   if(operation==='approval'){
@@ -73,7 +73,7 @@ for(const operation of ['approval','reserve','messages','HTTP','handoff'] as con
   await transaction(f.pool,async c=>{assert.equal((await c.query('SELECT id FROM installations WHERE id=$1 FOR UPDATE NOWAIT',[f.v.installation])).rowCount,1);});
   await blocker.query('COMMIT');await pending;
   assert.equal(s.captured.length,operation==='handoff'?1:0);
- }finally{releaseVerifier();await blocker.query('ROLLBACK');await pending;}
+ }finally{releaseVerifier();try{await blocker.query('ROLLBACK');await pending;}finally{blocker.release();}}
 });
 for(const change of ['revoked grant','owner removed','expired grant','changed origin','stale revision','changed allowance policy','stop'] as const)test(`venue relay preserves ${change} refusal after level transition`,async t=>{
  const f=await setup(t),s=await smtp(t);await f.set('hosted');const body=await f.v.submit();await f.set('registered');
