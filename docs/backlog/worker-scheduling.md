@@ -159,7 +159,7 @@ let an omitted close pass; the session check cannot distinguish that case.
 
 The wrapper observes the actual commands without replacing database or worker
 methods. These checks cover empty queues only. Natural drain during active work,
-database failures, translation shutdown and production remain open. They do not
+database failures and production remain open. They do not
 identify which cleanup method released the connections.
 
 ### Idle translation commands drain naturally (D544)

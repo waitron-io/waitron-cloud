@@ -46,8 +46,8 @@ The [idle command drain checks](backlog/worker-scheduling.md#idle-email-and-moni
 require email and monitoring commands to drain naturally after SIGINT and SIGTERM,
 with no remaining database sessions. They catch forced successful exit and, while
 idle connections keep Node alive under the default pool settings, omitted pool
-cleanup. Natural drain during active work or database failures, translation
-and production shutdown remain open.
+cleanup. Natural drain during active work or database failures and production
+shutdown remain open.
 
 The [idle translation drain checks](backlog/worker-scheduling.md#idle-translation-commands-drain-naturally-d544)
 require SIGINT and SIGTERM to reach natural event-loop drain after real empty-queue
