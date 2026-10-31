@@ -4358,6 +4358,19 @@ page. The notification contains no reset token; you request a fresh reset there.
 origin, both languages, legacy messages and unchanged subjects. Live provider
 delivery remains part of the first working milestone's production qualification.
 
+## Passkey keyboard browser handler observation (D373)
+
+The keyboard fixture waits for its options handler before checking the exact
+password and pending controls. The waiter has its own four-second limit, matching
+the page timeout. Original journeys remain alongside delayed-handler and
+missing-record controls.
+
+Historical qualification recorded a [gateway reconnect refusal](https://github.com/waitron-io/waitron-cloud/actions/runs/40597914600/job/122518692085):
+the session was accepted but the request check failed. Its cause remains unknown;
+lane D's D201 owns the investigation. Keep the accounting checks and deadlines.
+The owner's test box now provides focused Docker reproduction. Fresh qualification
+does not identify the historical cause.
+
 ## A way forward after every refusal (D254)
 
 The [self-service refusal audit](refusal-self-service-audit.md) traces current

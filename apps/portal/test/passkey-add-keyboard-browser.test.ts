@@ -17,9 +17,11 @@ const at = '2026-10-24T12:00:00.000Z', password = ' Current account password ';
 const id = '12345678-1234-4234-8234-123456789abc';
 // The clock runs after installation; freeze before registering application timers.
 const clockStart = new Date(Date.parse(at) - 86_400_000);
+for (const handler of ['normal', 'delayed', 'missing'] as const)
 for (const setupDelay of [0, 100])
 for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'] as const) for (const width of [390, 1280]) {
-  test(`${locale} ${theme} ${width}${setupDelay ? ' with delayed clock setup' : ''}: Tab from a typed passkey password reaches Add a passkey`, async () => {
+  if (handler === 'missing' && (setupDelay !== 0 || locale !== 'en' || theme !== 'light' || width !== 390)) continue;
+  test(`${locale} ${theme} ${width}${setupDelay ? ' with delayed clock setup' : ''}${handler === 'normal' ? '' : ` with ${handler} options handler`}: Tab from a typed passkey password reaches Add a passkey`, async t => {
     const browser = await chromium.launch({headless: true});
     let releaseOptions!: () => void;
     const optionsReply = new Promise<void>(resolve => {releaseOptions = resolve;});
@@ -44,7 +46,8 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
         if (endpoint === '/passkeys') return route.fulfill({json: {passkeys: enrolled ? [{id, createdAt: at, lastUsedAt: null}] : []}});
         if (endpoint === '/authenticator') return route.fulfill({json: {active: false, version: 0, recoveryCodesRemaining: 0, available: true}});
         if (endpoint === '/installations') return route.fulfill({json: {installations: []}});
-        if (request.method() === 'POST') writes.push({path: endpoint, body: request.postDataJSON()});
+        if (endpoint === '/passkeys/registration/options' && handler === 'delayed') await delay(250);
+        if (request.method() === 'POST' && handler !== 'missing') writes.push({path: endpoint, body: request.postDataJSON()});
         if (endpoint === '/passkeys/registration/options') {
           await optionsReply;
           return route.fulfill({json: {ceremonyId: id, options: {
@@ -89,6 +92,20 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
       assert.equal(await button.evaluate(element => element.matches(':focus')), true);
       const requested = page.waitForRequest('**/passkeys/registration/options');
       await page.keyboard.press('Enter'); await requested;
+      // The browser request event may precede the handler recording its body.
+      const waitForOptionsHandler = () => t.waitFor(() => {
+        assert.ok(writes.length > 0, 'the options handler must record the pending enrollment');
+      }, {timeout: 4000});
+      if (handler === 'missing') {
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        try {
+          await assert.rejects(Promise.race([waitForOptionsHandler(), new Promise<void>(resolve => {timer = setTimeout(resolve, 5000);})]), /waitFor\(\) timed out/);
+          assert.deepEqual(writes, [], 'the absent record control never verifies enrollment');
+          assert.equal(await field.isDisabled(), true, 'enrollment remains pending during the missing record');
+        } finally {clearTimeout(timer);}
+        return;
+      }
+      await waitForOptionsHandler();
       const pending = section.getByRole('button', {name: c.wait, exact: true});
       assert.equal(await pending.isDisabled(), true, 'enrollment stays disabled while the request is pending');
       assert.equal(await field.isDisabled(), true);
