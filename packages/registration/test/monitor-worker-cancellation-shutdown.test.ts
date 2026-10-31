@@ -56,11 +56,11 @@ async function until(check:()=>Promise<boolean>,child:ReturnType<typeof worker>)
   assert.fail('monitor worker did not reach the expected database state');
 }
 
-async function finish(child:ReturnType<typeof worker>){
+async function finish(child:ReturnType<typeof worker>,stderr='Monitor observation failed; retrying\n'){
   const timer=setTimeout(()=>child.process.kill('SIGKILL'),6000);
   try{
     assert.deepEqual(await child.exited,{code:0,signal:null},'the command must finish normally after shutdown');
-    assert.deepEqual(child.output(),{stdout:'',stderr:'Monitor observation failed; retrying\n'});
+    assert.deepEqual(child.output(),{stdout:'',stderr});
     assert.deepEqual(await sessions(child),[],'no worker database sessions remain after command exit');
   }finally{clearTimeout(timer);}
 }
@@ -112,3 +112,40 @@ for(const signal of ['SIGINT','SIGTERM'] as const){
     }
   });
 }
+
+test('monitoring retries a cancelled PostgreSQL schedule before receiving shutdown',async()=>{
+  const lock=await pool.connect();
+  let child:ReturnType<typeof worker>|undefined;
+  try{
+    await lock.query('BEGIN');await lock.query('LOCK TABLE installations IN ACCESS EXCLUSIVE MODE');
+    child=worker();
+    const active=child;
+    await until(async()=>{
+      const rows=await sessions(active);
+      return rows.length===1&&rows[0].state==='active'&&rows[0].wait_event_type==='Lock'&&rows[0].query.startsWith('INSERT INTO venue_monitors');
+    },active);
+    const [first]=await sessions(child);
+    assert.deepEqual((await admin.query(
+      "SELECT pg_cancel_backend(pid) AS cancelled FROM pg_stat_activity WHERE pid=$1 AND application_name=$2 AND state='active' AND wait_event_type='Lock' AND query LIKE 'INSERT INTO venue_monitors%'",
+      [first.pid,child.name])).rows,[{cancelled:true}]);
+    await until(async()=>{
+      const rows=await sessions(active);
+      return rows.length===1&&rows[0].pid!==first.pid&&rows[0].state==='active'&&rows[0].wait_event_type==='Lock'&&rows[0].query.startsWith('INSERT INTO venue_monitors');
+    },active);
+    assert.equal(child.exitTime(),null,'a database scheduling failure alone must not stop the command');
+    assert.deepEqual(child.output(),{stdout:'',stderr:'Monitor observation failed; retrying\n'});
+    const [retried]=await sessions(child);
+    assert.equal(child.process.kill('SIGTERM'),true);
+    await delay(1000);
+    assert.equal(child.process.exitCode,null);
+    assert.equal(child.process.signalCode,null);
+    assert.equal(child.exitTime(),null,'the retried schedule stays live after shutdown until cancellation');
+    assert.deepEqual((await admin.query(
+      "SELECT pg_cancel_backend(pid) AS cancelled FROM pg_stat_activity WHERE pid=$1 AND application_name=$2 AND state='active' AND wait_event_type='Lock' AND query LIKE 'INSERT INTO venue_monitors%'",
+      [retried.pid,child.name])).rows,[{cancelled:true}]);
+    await finish(child,'Monitor observation failed; retrying\nMonitor observation failed; retrying\n');
+  }finally{
+    await lock.query('ROLLBACK');lock.release();
+    if(child)await dispose(child);
+  }
+});

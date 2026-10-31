@@ -93,7 +93,9 @@ leave startup scheduling blocked on an owned table lock for one second. Cancelli
 only that command's observed query then produces one fixed observation-failure
 diagnostic, empty standard output and code-zero exit with no remaining database
 sessions. The table stays locked until exit, so scheduling cannot silently retry
-to completion. Monitor and email tables end empty.
+to completion. A no-signal control requires another scheduling query after the
+first cancellation, then stops it with SIGTERM and a second cancellation. This
+distinguishes signal-driven shutdown from quitting after every database error.
 
 The fixed diagnostic says retrying because it also serves the running worker;
 these checks observe shutdown after the failure. They do not prove natural exit
