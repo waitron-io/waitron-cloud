@@ -21,9 +21,11 @@ function fixture(t: TestContext) {
   }
   const replies: Array<Response | Promise<Response>> = [];
   const calls: Array<{url: string; init: RequestInit | undefined}> = [];
+  const unplanned: string[] = [];
+  t.after(() => assert.deepEqual(unplanned, [], 'every pairing request needs a queued reply'));
   t.mock.method(globalThis, 'fetch', async (url: unknown, init?: RequestInit) => {
     calls.push({url: String(url), init});
-    assert.ok(replies.length, 'a retry must be explicit');
+    if (!replies.length) {unplanned.push(String(url)); throw new Error('unplanned pairing request');}
     return await replies.shift()!;
   });
   const c = new PairingController(() => {});
