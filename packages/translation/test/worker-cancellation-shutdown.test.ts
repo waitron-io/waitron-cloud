@@ -29,7 +29,13 @@ after(async()=>{
 
 function worker(){
   const name=`translation_cancel_${randomUUID()}`;
-  const child=spawn(process.execPath,[new URL('../src/worker-cli.ts',import.meta.url).pathname],{
+  const cli=new URL('../src/worker-cli.ts',import.meta.url);
+  // beforeExit observes natural drain; a forced successful exit bypasses it.
+  const source=`
+    process.once('beforeExit',code=>console.log(JSON.stringify({drained:true,code})));
+    await import(${JSON.stringify(cli.href)});
+  `;
+  const child=spawn(process.execPath,['--input-type=module','-e',source],{
     env:{PATH:process.env.PATH,DATABASE_URL:connection.href,PGAPPNAME:name,
       CLOUD_OPENAI_API_KEY:'local-cancellation-test',CLOUD_TRANSLATION_LOCAL_PROOF:'1',
       CLOUD_OPENAI_BASE_URL:provider.baseUrl},stdio:['ignore','pipe','pipe'],
@@ -81,7 +87,8 @@ async function finish(child:ReturnType<typeof worker>){
   const timer=setTimeout(()=>child.process.kill('SIGKILL'),6000);
   try{
     assert.deepEqual(await child.exited,{code:0,signal:null},'the command must finish normally after shutdown');
-    assert.deepEqual(child.output(),{stdout:'',stderr:'Translation worker cleanup failed; retrying\n'});
+    assert.equal(child.output().stdout,'{"drained":true,"code":0}\n','shutdown must reach natural event-loop drain');
+    assert.equal(child.output().stderr,'Translation worker cleanup failed; retrying\n');
     assert.deepEqual(await sessions(child),[],'no worker database sessions remain after command exit');
   }finally{clearTimeout(timer);}
 }
