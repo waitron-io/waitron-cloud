@@ -20,6 +20,21 @@ loop waits for polling and any late error report, preserves the original failure
 and starts no further work. A retry refusal stops without repeated reporting.
 Real database cancellation and production shutdown remain separate gates.
 
+### Email command shutdown with real database claims (D536)
+
+Run `node scripts/test-postgres.mjs exec pnpm --dir packages/registration exec
+node --test test/email-worker-shutdown.test.ts` to check the actual email worker
+command under SIGINT and SIGTERM. Each signal stops an idle command normally and
+closes its database connections. With four claims blocked by an owned table lock,
+the command retains all four connections during a one-second hold after the
+signal, then exits normally after lock release with no connections left.
+The queue stays empty, so these checks send no mail.
+
+Other worker commands, active mail delivery, database failure during shutdown and
+production deployment still need separate qualification. These checks do not
+claim that shutdown cancels an active database query or that awaiting the worker
+loop, rather than pool cleanup, keeps those connections open.
+
 ## Worker scheduling deadlines and polling failures (D468)
 
 Run `node --test packages/registration/test/worker-loop-callback-refusals.test.ts`
