@@ -103,6 +103,27 @@ not promise that a later retry avoids duplicate delivery. Production SMTP behavi
 other connection-loss stages, delivery timeouts, longer waits, explicit pool cleanup
 and production shutdown remain open in D459.
 
+### Email command shutdown before SMTP recipient acceptance (D557)
+
+Run `node scripts/test-postgres.mjs exec pnpm --dir packages/registration exec
+node --test test/email-worker-envelope-disconnect-shutdown.test.ts` to check a
+connection lost before the local SMTP server accepts a recipient. The server holds
+its recipient callback for one second after SIGINT or SIGTERM, then the test destroys
+only its owned connection. No message body reaches the server.
+
+The command keeps its processing claim and encrypted payload throughout the hold.
+After connection loss, it records one failed attempt with the fixed `delivery_failed`
+code, releases the claim and retains the same encrypted payload for the first retry
+30 seconds later. Mail queued during the hold stays untouched. No later SMTP connection
+opens, and the command drains naturally with code zero and no database sessions left.
+Only the observation wrapper prints the `beforeExit` marker, which a forced exit bypasses.
+
+These checks cover the actual command, local transport and PostgreSQL state. They do
+not qualify other SMTP stages, provider behavior, delivery timeouts, longer waits,
+explicit pool cleanup or production shutdown. Unlike the acknowledgement-loss case,
+this server receives no complete message; the checks make no general promise about
+duplicate delivery on a later retry.
+
 ### Monitoring command shutdown with real database scheduling (D537)
 
 Run `node scripts/test-postgres.mjs exec pnpm --dir packages/registration exec

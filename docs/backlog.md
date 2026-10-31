@@ -81,6 +81,10 @@ but before acknowledgement, including retained retry state, no later mail claim
 and natural exit under both stop signals. Remote acceptance remains uncertain.
 See [the SMTP connection-loss limits](backlog/worker-scheduling.md#email-command-shutdown-after-losing-an-smtp-acknowledgement-d556).
 
+Email shutdown also checks connection loss while the server holds recipient acceptance,
+before receiving a message body, under both stop signals. The command retains retry state,
+leaves later mail untouched and drains naturally. See [the recipient-stage limits](backlog/worker-scheduling.md#email-command-shutdown-before-smtp-recipient-acceptance-d557).
+
 ## Worker scheduling failures and error reporting (D467)
 
 **Open.** Production scheduling, real database failures and capacity remain separate gates.
