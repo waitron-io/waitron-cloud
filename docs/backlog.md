@@ -25,6 +25,10 @@ See [the boundaries and remaining work](backlog/storage-cache-fixture.md#storage
 **Open.** Production shutdown, real database failures and cancellation remain open.
 See [the boundaries and remaining work](backlog/worker-scheduling.md#worker-shutdown-during-polling-and-error-reporting-d459).
 
+The [email command signal checks](backlog/worker-scheduling.md#email-command-shutdown-with-real-database-claims-d536)
+cover idle shutdown and four blocked PostgreSQL claims under SIGINT and SIGTERM.
+Other worker commands, active delivery and production shutdown remain open.
+
 Run `node --test packages/registration/test/worker-loop-schedule-timer.test.ts`
 to check that startup and recurring scheduling failures enter a real retry timer
 before shutdown. At two and 32 slots, reporting keeps the original error and
