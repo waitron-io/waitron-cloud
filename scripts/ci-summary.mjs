@@ -131,6 +131,30 @@ function hasFinishedSteps(job, identity) {
     (index === 0 || step.number > steps[index - 1].number));
 }
 
+function unmetStepEvidence(job, identity) {
+  // Closed labels explain the last record without printing arbitrary API fields.
+  if (!identity || !Number.isSafeInteger(identity.runId) || identity.runId <= 0 ||
+      !Number.isSafeInteger(identity.runAttempt) || identity.runAttempt <= 0 ||
+      !/^[a-f0-9]{40}$/.test(identity.headSha)) return ['current run identity'];
+  const reasons = [];
+  if (job.status !== 'in_progress') reasons.push('job status');
+  if (job.conclusion !== null) reasons.push('job result');
+  if (job.run_id !== identity.runId) reasons.push('run identity');
+  if (job.run_attempt !== identity.runAttempt) reasons.push('run attempt');
+  if (job.head_sha !== identity.headSha) reasons.push('source commit');
+  const steps = job.steps;
+  if (!Array.isArray(steps) || steps.length < 2) return [...reasons, 'step list'];
+  if (steps[0]?.name !== 'Set up job' || steps[0].conclusion !== 'success') reasons.push('successful setup');
+  if (steps.at(-1)?.name !== 'Complete job' || steps.at(-1).conclusion !== 'success' ||
+      steps.filter(step => step?.name === 'Complete job').length !== 1) reasons.push('successful final step');
+  if (!steps.every(step => step && typeof step.name === 'string' && step.name.trim().length > 0)) reasons.push('step names');
+  if (!steps.every(step => step?.status === 'completed')) reasons.push('completed steps');
+  if (!steps.every(step => ['success', 'skipped'].includes(step?.conclusion))) reasons.push('step results');
+  if (!steps.every((step, index) => Number.isSafeInteger(step?.number) && step.number > 0 &&
+      (index === 0 || step.number > steps[index - 1]?.number))) reasons.push('step number order');
+  return reasons;
+}
+
 export async function waitForSummary(plan, results, {
   readJobs = readCurrentJobs,
   now = () => performance.now(),
@@ -144,11 +168,13 @@ export async function waitForSummary(plan, results, {
   const deadline = now() + timeoutMs;
   let waiting = [];
   let lookupError;
+  let evidence = [];
+  const evidenceMessage = () => evidence.length ? `; last observed unmet step evidence: ${evidence.join('; ')}` : '';
   const reported = new Set();
   for (;;) {
     const remaining = deadline - now();
     const names = waiting.join(', ') || expected.join(', ');
-    assert.ok(remaining > 0, `Timed out waiting for job records: ${names}${lookupError ? `; last lookup: ${lookupError.message}` : ''}`);
+    assert.ok(remaining > 0, `Timed out waiting for job records: ${names}${lookupError ? `; last lookup: ${lookupError.message}` : ''}${evidenceMessage()}`);
     let jobs;
     try {
       jobs = await readJobs(Math.ceil(remaining));
@@ -160,7 +186,7 @@ export async function waitForSummary(plan, results, {
       await sleep(Math.max(0, Math.min(pollMs, deadline - now())));
       continue;
     }
-    assert.ok(now() < deadline, `Timed out reading job records: ${names}`);
+    assert.ok(now() < deadline, `Timed out reading job records: ${names}${evidenceMessage()}`);
     lookupError = undefined;
     waiting = [];
     // The runner finishes its final step before uploads and job-result publication.
@@ -168,6 +194,8 @@ export async function waitForSummary(plan, results, {
     const resolved = jobs.map(job => expected.includes(job?.name) && hasFinishedSteps(job, identity)
       ? {...job, status: 'completed', conclusion: 'success'} : job);
     assertSummaryJobs(expected, resolved, waiting);
+    evidence = jobs.filter(job => expected.includes(job.name) && waiting.includes(job.name))
+      .map(job => `${job.name} [${unmetStepEvidence(job, identity).join(', ')}]`);
     for (let index = 0; index < jobs.length; index++) {
       if (resolved[index] !== jobs[index] && !reported.has(jobs[index].name)) {
         report(`Final needs and completed steps: ${jobs[index].name} (run ${identity.runId}, attempt ${identity.runAttempt}, ${identity.headSha})`);

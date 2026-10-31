@@ -24,6 +24,16 @@ the summary job retains its two-minute limit. Run
 `node --test scripts/ci-summary.test.mjs scripts/ci-cli.test.mjs` to check the
 command and refusal paths. Landing still requires every actual job record final.
 
+When that wait expires, you also see `last observed unmet step evidence` for
+each unresolved planned job. Fixed labels identify invalid current run identity,
+job status or result, a different run, attempt or source commit, missing steps,
+unsuccessful setup or final cleanup, and invalid step names, completion, results
+or number order. For example, `[run attempt]` means that the last record could
+not supply step evidence for the current attempt. The diagnostic uses the last
+successful read, including when a later read times out; it cannot explain changes
+GitHub has not published. It excludes arbitrary step names and API field values.
+These explanations preserve the acceptance checks and every existing time limit.
+
 Eight runs on 2026-10-22 include five failed summaries naming 32.8–41.6 KB
 package logs; successful root jobs had roughly 371 KB logs. This does not
 support log size as the cause. Run `39828383029` still had account HTTP shard
