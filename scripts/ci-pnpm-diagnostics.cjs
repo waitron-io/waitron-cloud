@@ -3,7 +3,8 @@ const {writeSync} = require('node:fs');
 const {errorMonitor} = require('node:events');
 const {threadId} = require('node:worker_threads');
 
-// Observe the installer without changing its requests, retries, exit status or trust checks.
+// Diagnostic stderr also feeds bootstrap retry classification. Record caller
+// cancellation without inventing a transport code that could trigger a retry.
 const requests = new WeakMap();
 let sequence = 0;
 const budgets = {ordinary: 32, failure: 8, child: 8, lifecycle: 2};
