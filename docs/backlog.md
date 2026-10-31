@@ -16,10 +16,12 @@ Run `node --test scripts/ci-backup-storage-process-extraction.test.mjs` to
 check two independent Node processes extracting one read-only archive. Each
 certificate-read refusal removes its own root while preserving the other
 process's executable, certificates and shared cache, in both completion orders.
-CI qualification also awaits investigation of a stalled Litestream fixture
-download before conformance tests start. Real store startup and historical
-failure causes remain open; see
-[the investigation](backlog/storage-cache-fixture.md).
+The probes pause before listeners and store startup. Real store startup and
+historical failure causes remain open; see
+[the investigation](backlog/storage-cache-fixture.md). The earlier conformance
+archive stall (run 40811399202, job 123243127986) remains recorded under D530.
+PR #788 adds an inactivity retry for that download; it does not identify the
+upstream stall's cause.
 
 ## Storage archive publication refusals (D449)
 
