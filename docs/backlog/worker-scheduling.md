@@ -51,6 +51,23 @@ delivery timeout, waits longer than one second, natural exit, explicit pool clea
 and production deployment still need separate qualification. A forced successful
 exit after acknowledgement also passes these checks.
 
+### Email command shutdown after a local SMTP refusal (D540)
+
+Run `node scripts/test-postgres.mjs exec pnpm --dir packages/registration exec
+node --test test/email-worker-refusal-shutdown.test.ts` to check SIGINT and
+SIGTERM while a loopback SMTP server holds a complete message for one second,
+then refuses it. The command stays live during the hold. After refusal, it records
+one failed attempt, retains the encrypted payload, releases the claim and schedules
+the first retry 30 seconds later. Mail queued during the hold stays untouched.
+The command exits with code zero, empty output and no remaining database sessions.
+The local transport records the fixed `delivery_failed` code rather than the
+server's recipient-bearing reply.
+
+These checks qualify the local transport's retry state during shutdown. Production
+SMTP classification, delivery timeouts, waits longer than one second, natural exit,
+explicit pool cleanup and production shutdown remain open. A forced successful
+exit after recording the retry can also satisfy these checks.
+
 ### Monitoring command shutdown with real database scheduling (D537)
 
 Run `node scripts/test-postgres.mjs exec pnpm --dir packages/registration exec

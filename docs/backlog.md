@@ -37,6 +37,12 @@ records it as sent, leaves later mail pending and exits with code zero and no
 database sessions remaining. Provider failures,
 delivery timeouts and production shutdown remain open.
 
+The [email refusal shutdown checks](backlog/worker-scheduling.md#email-command-shutdown-after-a-local-smtp-refusal-d540)
+hold a local SMTP reply for one second, then refuse it under SIGINT and SIGTERM.
+The command records a delayed retry, retains the encrypted payload, releases the
+claim and leaves later mail untouched before exiting normally. Production SMTP
+classification, delivery timeouts and production shutdown remain open.
+
 The [monitoring command signal checks](backlog/worker-scheduling.md#monitoring-command-shutdown-with-real-database-scheduling-d537)
 cover idle shutdown and a one-second hold of blocked startup scheduling under
 SIGINT and SIGTERM, followed by normal exit with no remaining database sessions.
