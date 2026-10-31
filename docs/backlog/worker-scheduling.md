@@ -141,8 +141,10 @@ node --test test/worker-cancellation-shutdown.test.ts` to check a real retention
 query failure during translation-command shutdown. SIGINT and SIGTERM each leave
 the query blocked on an owned table lock for one second. Cancelling only that
 command's observed query then produces one fixed cleanup-failure diagnostic,
-empty standard output and code-zero exit with no remaining database sessions.
-The table stays locked through exit, so another cleanup query cannot complete.
+natural code-zero exit with no remaining database sessions. The observation wrapper
+prints exactly `{"drained":true,"code":0}` only when Node reaches `beforeExit`,
+which observes that no work keeps its event loop running. The table stays locked
+through exit, so another cleanup query cannot complete.
 
 A no-signal control stays live with an idle database connection for one second
 after cancellation and reports the failure once. SIGTERM then ends the command
@@ -154,9 +156,14 @@ query. It does not observe the full retry interval or its eventual expiry.
 
 The job, body and usage tables start and end empty, and the loopback provider
 receives no requests. These are fixture boundaries, not proof about retention
-that changes stored jobs. Natural exit, explicit pool cleanup, longer waits,
-statement timeouts, connection loss and production shutdown remain open. A forced
-successful exit after error reporting can also satisfy the signalled cases.
+that changes stored jobs. The natural-drain observation (D548) catches a forced
+successful exit after error reporting in all three cases. Removing only the drain
+assertion lets that fault pass again; removing the signal handlers fails all three
+cases. Omitting the pool-close call also fails all three cases: the default idle
+connection keeps Node alive beyond the six-second deadline. This does not identify
+the cleanup path: allowing exit with idle connections can still pass without that
+call. Longer waits, statement timeouts, connection loss and production shutdown
+remain open.
 
 ### Idle email and monitoring commands drain naturally (D543)
 
@@ -331,11 +338,14 @@ Active retention changes, database failure and production shutdown remain open.
 The [translation cancellation shutdown checks](worker-scheduling.md#translation-command-shutdown-after-database-query-cancellation-d542)
 cover SIGINT and SIGTERM while startup retention waits on a PostgreSQL table lock.
 After a one-second hold, cancelling that query produces one fixed diagnostic and
-code-zero exit with no remaining database sessions. Without a signal, the command
-stays live for one second after cancellation; shutdown then ends the current
+natural code-zero exit with no remaining database sessions. The wrapper's drain
+marker is required in all three cases, including shutdown during retry. Without a
+signal, the command stays live for one second after cancellation; shutdown then ends the current
 60-second retry wait within six seconds. A shortened wait that ignores shutdown
-can pass. Actual retry expiry, active retention changes, natural exit, explicit
-pool cleanup, other database failures and production shutdown remain open.
+can pass. Forced exit fails the drain check, and omitting pool cleanup with default
+referenced idle connections fails the deadline. Allowing exit with idle connections
+can pass without that cleanup. Actual retry expiry, active retention changes,
+cleanup identity, other database failures and production shutdown remain open.
 
 Run `node --test packages/registration/test/worker-loop-schedule-timer.test.ts`
 to check that startup and recurring scheduling failures enter a real retry timer
