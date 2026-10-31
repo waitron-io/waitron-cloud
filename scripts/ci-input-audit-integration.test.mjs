@@ -155,7 +155,7 @@ test('one audited committed baseline admits isolated docs and scripts while unre
     git('reset', '--hard', base);
     for (const path of paths) appendFileSync(join(root, path), path === policyPath ? ' ' : '\n// Mixed input\n');
     const {selected} = plan(commit());
-    assert.equal(selected.packages.length, 17, paths.join(','));
+    assert.equal(selected.packages.length, 20, paths.join(','));
     assert.equal(selected.typecheck, true); assert.deepEqual(selected.receipts, receipts);
     assert.equal(selected.documentation, undefined); assert.equal(selected.scripts, undefined);
   }

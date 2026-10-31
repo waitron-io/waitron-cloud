@@ -7,9 +7,9 @@ import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {assertSummary} from './ci-summary.mjs';
 import * as summary from './ci-summary.mjs';
-const plan = {packages:[{package:'@waitron-cloud/portal',shard:1,shards:3},{package:'@waitron-cloud/portal',shard:2,shards:3},{package:'@waitron-cloud/portal',shard:3,shards:3}],receipts:[],typecheck:true,reuse:null};
+const plan = {packages:[1,2,3,4,5,6].map(shard=>({package:'@waitron-cloud/portal',shard,shards:6})),receipts:[],typecheck:true,reuse:null};
 const results = {changes:'success',typecheck:'success',root:'success',receipts:'skipped',packages:'success'};
-const jobs = ['changes','typecheck','root (1/4)','root (2/4)','root (3/4)','root (4/4)', ...[1,2,3].map(i=>`package (@waitron-cloud/portal, shard ${i}/3)`)].map(name=>({name,status:'completed',conclusion:'success'}));
+const jobs = ['changes','typecheck','root (1/4)','root (2/4)','root (3/4)','root (4/4)', ...[1,2,3,4,5,6].map(i=>`package (@waitron-cloud/portal, shard ${i}/6)`)].map(name=>({name,status:'completed',conclusion:'success'}));
 test('summary accepts precisely the planned work and skips only unnecessary receipts', () => {
   assert.doesNotThrow(()=>assertSummary(plan,results,jobs));
 });
@@ -96,7 +96,7 @@ fi
       encoding: 'utf8', timeout: 10_000,
     });
     assert.equal(run.status, 0, run.stderr);
-    assert.match(run.stdout, /Passed 3 package jobs/);
+    assert.match(run.stdout, /Passed 6 package jobs/);
   } finally {
     rmSync(root, {recursive: true, force: true});
   }
@@ -142,7 +142,7 @@ test('publication wait never turns absent or duplicate partitions into success',
 
 test('publication wait names the unfinished partition and stops at its deadline', async () => {
   const clock = publication([unfinishedJobs()]);
-  await assert.rejects(() => summary.waitForSummary(plan, results, clock), /Timed out.*package \(@waitron-cloud\/portal, shard 3\/3\)/);
+  await assert.rejects(() => summary.waitForSummary(plan, results, clock), /Timed out.*package \(@waitron-cloud\/portal, shard 6\/6\)/);
   assert.equal(clock.elapsed(), 50);
   assert.equal(clock.reads(), 3);
 });
@@ -175,7 +175,7 @@ test('publication wait names the unfinished job when its next API read times out
       elapsed = 50;
       throw new Error('spawnSync gh ETIMEDOUT');
     },
-  }), /package \(@waitron-cloud\/portal, shard 3\/3\).*spawnSync gh ETIMEDOUT/);
+  }), /package \(@waitron-cloud\/portal, shard 6\/6\).*spawnSync gh ETIMEDOUT/);
 });
 
 test('publication wait keeps unfinished unplanned jobs pending and requires their skipped result', async () => {
@@ -203,7 +203,7 @@ test('default publication allowance caps API calls, each read and the total wait
   try {
     await assert.rejects(() => summary.waitForSummary(plan, results, {
       now: () => elapsed, sleep: async ms => { elapsed += ms; },
-    }), /Timed out.*package \(@waitron-cloud\/portal, shard 3\/3\)/);
+    }), /Timed out.*package \(@waitron-cloud\/portal, shard 6\/6\)/);
     assert.equal(elapsed, 60_000);
     assert.equal(timeouts.length, 30);
     assert.equal(timeouts[0], 10_000);
@@ -264,17 +264,17 @@ test('step evidence cannot override cancelled, timed out, skipped or failed fina
 test('stale step evidence refuses another run, commit or attempt and missing identity', async () => {
   for (const change of [{run_id: 41}, {run_attempt: 1}, {run_attempt: 3}, {head_sha: 'b'.repeat(40)}, {run_id: undefined}, {run_attempt: undefined}, {head_sha: undefined}]) {
     const clock = publication([withShard({...finishedShard(), ...change})]);
-    await assert.rejects(() => summary.waitForSummary(plan, results, {...clock, identity}), /Timed out.*shard 3\/3/);
+    await assert.rejects(() => summary.waitForSummary(plan, results, {...clock, identity}), /Timed out.*shard 6\/6/);
   }
   const clock = publication([withShard(finishedShard())]);
-  await assert.rejects(() => summary.waitForSummary(plan, results, clock), /Timed out.*shard 3\/3/);
+  await assert.rejects(() => summary.waitForSummary(plan, results, clock), /Timed out.*shard 6\/6/);
   for (const badIdentity of [
     {...identity, runId: 0}, {...identity, runId: 1.5},
     {...identity, runAttempt: 0}, {...identity, runAttempt: 1.5},
     {...identity, headSha: 'bad'},
   ]) {
     const shard = {...finishedShard(), run_id: badIdentity.runId, run_attempt: badIdentity.runAttempt, head_sha: badIdentity.headSha};
-    await assert.rejects(() => summary.waitForSummary(plan, results, {...publication([withShard(shard)]), identity: badIdentity}), /Timed out.*shard 3\/3/);
+    await assert.rejects(() => summary.waitForSummary(plan, results, {...publication([withShard(shard)]), identity: badIdentity}), /Timed out.*shard 6\/6/);
   }
 });
 
@@ -300,11 +300,11 @@ test('step evidence must include successful final cleanup and no failed, unknown
   }
   for (const steps of variants) {
     const clock = publication([withShard({...finishedShard(), steps})]);
-    await assert.rejects(() => summary.waitForSummary(plan, results, {...clock, identity}), /Timed out.*shard 3\/3/);
+    await assert.rejects(() => summary.waitForSummary(plan, results, {...clock, identity}), /Timed out.*shard 6\/6/);
   }
   for (const change of [{status: 'queued'}, {conclusion: 'failure'}, {conclusion: 'unknown'}]) {
     const clock = publication([withShard({...finishedShard(), ...change})]);
-    await assert.rejects(() => summary.waitForSummary(plan, results, {...clock, identity}), /Timed out.*shard 3\/3/);
+    await assert.rejects(() => summary.waitForSummary(plan, results, {...clock, identity}), /Timed out.*shard 6\/6/);
   }
 });
 
@@ -312,7 +312,7 @@ test('a rerun can reuse a completed successful earlier attempt but never unfinis
   const earlier = {...finishedShard(), run_attempt: 1, status: 'completed', conclusion: 'success'};
   await summary.waitForSummary(plan, results, {...publication([withShard(earlier)]), identity});
   const clock = publication([withShard({...earlier, status: 'in_progress', conclusion: null})]);
-  await assert.rejects(() => summary.waitForSummary(plan, results, {...clock, identity}), /Timed out.*shard 3\/3/);
+  await assert.rejects(() => summary.waitForSummary(plan, results, {...clock, identity}), /Timed out.*shard 6\/6/);
 });
 
 test('executed summary binds completed shard steps to the workflow run, attempt and source commit', () => {
@@ -328,9 +328,9 @@ test('executed summary binds completed shard steps to the workflow run, attempt 
       encoding: 'utf8', timeout: 5_000,
     });
     assert.equal(run.status, 0, run.stderr);
-    assert.match(run.stdout, /Final needs and completed steps:.*shard 3\/3/);
+    assert.match(run.stdout, /Final needs and completed steps:.*shard 6\/6/);
     assert.match(run.stdout, /run 42, attempt 2, a{40}/);
-    assert.match(run.stdout, /Passed 3 package jobs/);
+    assert.match(run.stdout, /Passed 6 package jobs/);
   } finally {
     rmSync(root, {recursive: true, force: true});
   }
@@ -362,7 +362,7 @@ test('persistent transient reads stop at the deadline and retain the pending nam
   await assert.rejects(() => summary.waitForSummary(plan, results, {...clock, readJobs: () => {
     if (calls++ === 0) return unfinishedJobs();
     throw Object.assign(new Error('spawnSync gh ETIMEDOUT'), {code: 'ETIMEDOUT'});
-  }}), /shard 3\/3.*ETIMEDOUT/);
+  }}), /shard 6\/6.*ETIMEDOUT/);
   assert.equal(clock.elapsed(), 50);
   assert.equal(calls, 3);
 });
@@ -391,7 +391,7 @@ test('default identity refuses a missing attempt or commit instead of guessing f
       await assert.rejects(() => waitForSummary(${JSON.stringify(plan)}, ${JSON.stringify(results)}, {
         readJobs: () => ${JSON.stringify(withShard(shard))}, now: () => elapsed,
         sleep: async ms => { elapsed += ms; }, timeoutMs: 50, pollMs: 20,
-      }), /Timed out.*shard 3\\/3/);
+      }), /Timed out.*shard 6\\/6/);
     `;
     const run = spawnSync(process.execPath, ['--input-type=module', '-e', program], {env, encoding: 'utf8', timeout: 3_000});
     assert.equal(run.status, 0, `${missing}: ${run.stderr}`);
@@ -405,7 +405,7 @@ test('polling never requests a negative sleep when processing crosses the deadli
     readJobs: unfinishedJobs, timeoutMs: 50, pollMs: 20,
     now: () => ++calls >= 4 ? 55 : 0,
     sleep: async ms => { assert.ok(ms >= 0, 'Negative polling sleep'); sleeps.push(ms); },
-  }), /Timed out.*shard 3\/3/);
+  }), /Timed out.*shard 6\/6/);
   assert.deepEqual(sleeps, [0]);
 });
 
@@ -416,7 +416,7 @@ test('completed step evidence is reported once while another partition is still 
   await summary.waitForSummary(plan, results, {...clock, identity, report: message => reports.push(message)});
   assert.equal(clock.reads(), 3);
   assert.equal(reports.length, 1);
-  assert.match(reports[0], /shard 3\/3/);
+  assert.match(reports[0], /shard 6\/6/);
 });
 
 test('an API process ignoring termination cannot hold the read beyond its allowance', async () => {

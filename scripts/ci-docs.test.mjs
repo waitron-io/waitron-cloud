@@ -63,8 +63,8 @@ test('a new reader invalidates later docs-only exemptions and mixed changes', ()
   const reader = commit();
   put('docs/backlog.md', '# Updated\n');
   const head = commit();
-  assert.equal(plan(head, reader).packages.length, 17);
-  assert.equal(plan(head, base).packages.length, 17);
+  assert.equal(plan(head, reader).packages.length, 20);
+  assert.equal(plan(head, base).packages.length, 20);
 }));
 
 test('changed or removed audited inputs and missing, malformed or stale audit evidence keep full work', () => {
@@ -76,7 +76,7 @@ test('changed or removed audited inputs and missing, malformed or stale audit ev
     if (change === 'stale') put(policy, JSON.stringify(completeAudit({docsInputSha256: '0'.repeat(64)})) + '\n');
     const changed = commit();
     put('docs/backlog.md', '# Updated\n');
-    assert.equal(plan(commit(), changed).packages.length, 17, change);
+    assert.equal(plan(commit(), changed).packages.length, 20, change);
   });
 });
 
@@ -85,7 +85,7 @@ test('package Markdown, document data and unknown paths preserve their existing 
     fixture(({put, commit, plan}) => {
       put(path, '{}\n');
       const selected = plan(commit());
-      assert.equal(selected.packages.length, 17, path);
+      assert.equal(selected.packages.length, 20, path);
     });
   }
 });
@@ -94,7 +94,7 @@ test('mixed documents and portal code retain the full fallback', () => fixture((
   put('docs/backlog.md', '# Updated\n');
   put('apps/portal/src/change.ts', 'export const changed = true;\n');
   const selected = plan(commit());
-  assert.equal(selected.packages.length, 17);
+  assert.equal(selected.packages.length, 20);
   assert.equal(selected.typecheck, true);
 }));
 
@@ -118,7 +118,7 @@ test('document command reads exact immutable blobs and rejects invalid UTF-8, NU
   unlinkSync(join(root, 'docs/backlog.md'));
   symlinkSync('../README.md', join(root, 'docs/backlog.md'));
   const linked = plan(commit());
-  assert.equal(linked.packages.length, 17, 'linked Markdown cannot earn the exemption');
+  assert.equal(linked.packages.length, 20, 'linked Markdown cannot earn the exemption');
 }));
 
 test('document command accepts deletions and independently refuses a stale reader audit', () => fixture(({root, put, commit, plan}) => {

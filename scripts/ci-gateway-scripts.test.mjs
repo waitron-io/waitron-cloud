@@ -75,7 +75,7 @@ test('gateway caller, published evidence, new readers and installation changes r
     put(helper, 'export const result = 1; // changed validator\n');
     const head = commit();
     for (const base of [undefined, changed]) {
-      assert.equal(plan(head, base).packages.length, 17, path);
+      assert.equal(plan(head, base).packages.length, 20, path);
       assert.match(plan(head, base).reason, /verify-gateway-reconnection-receipt.mjs/);
     }
   });
@@ -99,7 +99,7 @@ test('gateway admission checks its independent certificate and complete inventor
       }
       return git(...args);
     };
-    assert.equal(plan(head, base, read).packages.length, 17, `${sha}: ${kind}`);
+    assert.equal(plan(head, base, read).packages.length, 20, `${sha}: ${kind}`);
   }
 }));
 
@@ -108,13 +108,13 @@ test('missing or nonregular gateway targets in either revision retain full check
     if (kind === 'executable') chmodSync(join(root, path), 0o755);
     else {unlinkSync(join(root, path)); if (kind === 'linked') symlinkSync('gateway-reconnection-receipt.mjs', join(root, path));}
     const changed = certify();
-    if (side === 'head') assert.equal(plan(changed).packages.length, 17, `${path}: ${kind}`);
+    if (side === 'head') assert.equal(plan(changed).packages.length, 20, `${path}: ${kind}`);
     else {
       if (kind === 'linked') unlinkSync(join(root, path));
       put(path, path === helper ? 'export const result = 1;\n' : 'import "./verify-gateway-reconnection-receipt.mjs";\n');
       chmodSync(join(root, path), 0o644);
       const head = commit();
-      assert.equal(plan(head, changed).packages.length, 17, `${path}: ${kind}`);
+      assert.equal(plan(head, changed).packages.length, 20, `${path}: ${kind}`);
     }
   });
 });
