@@ -18,7 +18,8 @@ Venue-refresh handler checks preserve the original cases, while their matrix
 and outer deadline control have the limits described below.
 Delayed passkey and authenticator fixtures stop adding their artificial pause
 once a request has been recorded. Their sampled duplicate controls and open timing
-and session-list cleanup limits are described below.
+and session-list cleanup limits are described below. The stale-draft and script
+recovery notes also distinguish delayed-handler scope from outer wait bounds.
 See [the diagnostic qualification and open work](backlog/retrospective-reviews.md).
 
 ## Concurrent storage extraction and failed-startup cleanup (D454)
