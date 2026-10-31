@@ -3989,6 +3989,17 @@ Read the [isolation and deadline investigation](backlog/cost-stack-isolation.md)
 before changing the fixture guards. Historical attribution and Linux qualification
 remain limited as described there; the separate replication interruption remains open.
 
+## Litestream LIST-response interruption (D352 qualification)
+
+[Cost run40546771851, job122339634344](https://github.com/waitron-io/waitron-cloud/actions/runs/40546771851/job/122339634344)
+refused the transport body-accounting case after10.20seconds. At stop/idle, a
+response listing storage objects closed prematurely after headers; the native
+process exited0 but the audit remained unfinished. Retain the parsed diagnostic
+with the [Litestream shutdown investigation](backlog/cost-stack-replication.md).
+The cause is unknown. Keep all accounting guards and deadlines unchanged.
+Use the owner's test box for focused Docker reproduction. Source equality is
+not causal proof.
+
 ## Public browser and network qualification
 
 Qualify the public browser check against the supported browsers and production
@@ -4267,6 +4278,10 @@ The translation-consent activity fixture also reproduces the refusal under a
 100 ms setup delay. Its four clock setups now start earlier and freeze at the
 original instant before loading the app. Original journeys and delayed variants
 retain every consent, retry, navigation, account, write and deadline check.
+The sign-in cooldown-scope fixture reproduces the refusal with a 1100 ms
+setup pause and now freezes from an earlier start at the original instant.
+Original journeys and delayed account/recovery variants retain every independent
+retry, request, navigation, countdown, duplicate-submit and deadline check.
 The account-security cooldown fixture also reproduces the refusal with a 100 ms
 setup delay and now freezes from the earlier start. Original and delayed journeys
 retain all six passkey/session actions, request counts, disabled-control, countdown,
