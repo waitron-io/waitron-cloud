@@ -33,9 +33,9 @@ test('--once sweeps retained text even when no queued job needs the provider',as
   assert.deepEqual(out,{code:0,signal:null,stdout:'',stderr:''});assert.deepEqual(await look(id),{state:'expired',bodies:0});assert.equal(fake.requests.length,0);
  }finally{await fake.close();}
 });
-test('the worker loop sweeps at startup and after a minute while idle',async()=>{
+test('the worker loop sweeps at startup and after an hour while idle',async()=>{
  const fake=await startFakeOpenAi(()=>{throw new Error('no job');});
- const preload=`const original=performance.now.bind(performance);const start=original();Object.defineProperty(performance,'now',{configurable:true,value:()=>start+(original()-start)*100});`;
+ const preload=`const original=performance.now.bind(performance);const start=original();Object.defineProperty(performance,'now',{configurable:true,value:()=>start+(original()-start)*6000});`;
  const id=await stale(),run=worker([],fake.baseUrl,['--import','data:text/javascript;base64,'+Buffer.from(preload).toString('base64')]);
  try{
   await until(async()=>(await look(id)).state==='expired');

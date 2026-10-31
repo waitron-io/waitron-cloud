@@ -192,8 +192,11 @@ revocation, replacement and upgrades from an existing schema.
 Task 18 deletes submitted menus and stored results in bounded 24-hour retention passes.
 Finished jobs age from completion; queued or running jobs age from submission. Each pass
 expires at most 100 jobs by default (an explicit limit may be 1–1,000), clears their leases
-and preserves job accounting and usage events. Both the worker and, when translation is on,
-the account server sweep at startup and every minute, so cleanup also runs without a worker.
+and preserves job accounting and usage events. The worker sweeps at startup and hourly,
+while keeping one-second job polling and one-minute cleanup-failure retries. When translation
+is on, the account server sweeps at startup and every minute, so cleanup also runs without
+a worker. Native CLI checks cover the hourly boundary, intervening polling and cleanup retry;
+PostgreSQL checks cover retained-body deletion through the accelerated hourly worker.
 PostgreSQL checks cover concurrent sweeps, locked collect rows, rollback, lost worker leases,
 repeat-page retention, release waiting for collect and expiry between real bounded pages.
 A fake-provider flow submits, finishes, durably stores collected pages and releases through

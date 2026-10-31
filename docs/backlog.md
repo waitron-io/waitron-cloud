@@ -762,6 +762,13 @@ GitHub CI qualifies the PostgreSQL journeys while local Docker is unavailable.
 
 ## Translate all: approved design, implementation still open
 
+The translation worker runs retention cleanup at startup and hourly. One-second job
+polling and one-minute cleanup-failure retries remain separate. Run `node --test
+packages/translation/test/retention-worker-cadence.test.ts` for the native CLI
+boundaries; CI also checks retained-body deletion through the accelerated hourly
+PostgreSQL case. See [the translation backlog](backlog/translation.md) for the
+account-server cadence and remaining release gates.
+
 Real database recovery, provider activation and release qualification remain open.
 See [the native callback and deadline boundaries](backlog/translation.md#callback-admission-and-request-deadlines).
 
