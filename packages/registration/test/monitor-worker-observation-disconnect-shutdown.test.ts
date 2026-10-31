@@ -97,6 +97,7 @@ for(const signal of ['SIGINT','SIGTERM',null] as const){
         }
         assert.equal(retried.length,1,'a later venue must be observed after the failure');
         assert.ok(retried[0]!.query_start>blocked[0]!.query_start,'monitoring must start a new observation after connection loss');
+        assert.ok(retried[0]!.query_start>=disconnectedAt,'the later observation must start after connection termination is requested');
         assert.notEqual(retried[0]!.pid,blocked[0]!.pid,'monitoring must continue through a different live database connection');
         assert.deepEqual({stdout,stderr},{stdout:'',stderr:'Monitor observation failed; retrying\n'});
         assert.equal(child.kill('SIGTERM'),true);
