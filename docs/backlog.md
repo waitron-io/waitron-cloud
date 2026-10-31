@@ -3350,6 +3350,9 @@ See [the boundaries and remaining work](backlog/storage-cache-fixture.md#storage
 
 ## Parallel storage-cache fixture failure on main
 
+Native admin-port fallback and explicit HTTP refusal now have controlled checks;
+see [the remaining collision boundaries](backlog/storage-cache-fixture.md).
+
 Retain diagnostics to explain the original read-only-cache rejection; the readiness
 and S3 port repairs do not establish its cause. Reproduce an admin-listener bind
 failure and reserve those ports if needed, without retrying unknown ports or other
@@ -3735,6 +3738,10 @@ pins, allowances and deadlines remain unchanged. This establishes a possible
 cause, not the historical Linux cause or real fiscal-workload qualification.
 Keep that attribution and any repair open; genuine local container reproduction
 waits until Docker returns. Do not delay stop or admit late uploads as a workaround.
+
+The native admin-port qualification also encounters an
+[initial PUT after stop](https://github.com/waitron-io/waitron-cloud/actions/runs/41037164023/job/124000805980).
+Its admin checks pass on Linux; the upload's underlying cause remains unproved.
 
 ## Held-list control failure ordering (D391)
 
