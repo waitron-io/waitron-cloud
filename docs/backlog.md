@@ -241,18 +241,17 @@ See [the boundaries and remaining work](backlog/account-http-boundaries.md#accou
 ## Signup and password-reset HTTP acknowledgements (D423)
 
 Native account-client tests reject malformed signup and password-reset replies
-before the forms can report success. They cover email-request acknowledgements,
+before callers can report success. They cover email-request acknowledgements,
 signup account and business fields, reset completion, unreadable JSON, network
 loss and refused replies. Uncertain operations remain single attempts; an explicit
 retry can accept a valid reply. Exact request bodies preserve passwords, link
 tokens and locale. Run `node --test apps/portal/test/signup-reset-response-boundary.test.ts`.
 Production email delivery, browser and server authority remain separate
-qualification gates; database suites run in CI while local Docker is unavailable.
+qualification gates. These client tests use controlled fetch responses.
 
-Qualification of this test change is blocked by [PR #669's cost stack run](https://github.com/waitron-io/waitron-cloud/actions/runs/40716310898/job/122914999702).
-The Litestream lifetime fixture refuses a prematurely closed LIST response during
-stop. Its cause remains unknown; lane D's shutdown investigation owns the next
-step. Preserve the audit guards and deadlines when reproducing it after Docker returns.
+The historical [PR #669 storage failure](https://github.com/waitron-io/waitron-cloud/actions/runs/40716310898/job/122914999702)
+was a prematurely closed LIST response during Litestream shutdown. D530 owns its
+cause investigation; successful delivery of these client tests does not repair it.
 
 ## Session HTTP response validation (D412)
 
