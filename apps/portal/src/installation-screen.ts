@@ -15,7 +15,6 @@ export function installationScreen(app:PortalApp){
  const health={unknown:c.healthUnknown,healthy:c.healthHealthy,degraded:c.healthDegraded,failed:c.healthFailed};
  return html`${alertScreen(app)}<section aria-label=${c.installations}><h2>${c.installations}</h2>
   ${controller.error?html`<p role="alert">${c[controller.error]}</p>`:nothing}${permissionActions(app,controller.error)}
-  ${app.diagnostics.error?html`<p role="alert">${c[app.diagnostics.error]}</p>`:nothing}${permissionActions(app,app.diagnostics.error)}
   ${!controller.loaded?html`<p role="status">${c.wait}</p>`:!controller.installations.length&&!controller.error?html`<p>${c.noInstallations}</p>`:nothing}
   ${controller.organisations.length>1?html`<div class="business-choice"><label for="venue-organisation">${c.chooseOrganisation}</label><select id="venue-organisation" ?disabled=${controller.pending} @change=${(e:Event)=>controller.selectOrganisation((e.target as HTMLSelectElement).value)}>${controller.organisations.map(o=>html`<option value=${o.id} .selected=${o.id===controller.selectedOrganisation}>${o.name}</option>`)}</select></div>`:controller.organisations.length?html`<p>${controller.organisations[0]!.name}</p>`:nothing}
   ${usageScreen(app)}
@@ -32,6 +31,7 @@ export function installationScreen(app:PortalApp){
     ${i.canRevoke?translationConsentScreen(app,i.venueId,i===controller.visible.find(venue=>venue.canRevoke)):nothing}
     ${i.canRevoke?html`<p class="help">${c.diagnosticHelp}</p><wt-button .disabled=${controller.pending||app.diagnostics.pending||!!app.diagnostics.waiting}
       .loading=${app.diagnostics.pending&&app.diagnostics.selected===i.installationId} @click=${()=>{void app.diagnostics.download(i.installationId);}}>${c.diagnosticDownload}</wt-button>`:nothing}
+    ${app.diagnostics.error&&app.diagnostics.errorInstallationId===i.installationId?html`<p role="alert">${c[app.diagnostics.error]}</p>${permissionActions(app,app.diagnostics.error)}`:nothing}
     ${controller.confirming===i.installationId?html`<div role="group" aria-label=${c.stopAccess}><p>${c.stopHelp}</p>
       <wt-form-actions><wt-button .disabled=${controller.pending} @click=${()=>controller.choose()}>${c.cancelStop}</wt-button><wt-button .disabled=${disabled} @click=${()=>{void controller.revoke();}}>${c.confirmStop}</wt-button></wt-form-actions></div>`
       :i.canRevoke&&!i.revokedAt?html`<wt-button .disabled=${disabled} @click=${()=>controller.choose(i.installationId)}>${c.stopAccess}</wt-button>`:nothing}
