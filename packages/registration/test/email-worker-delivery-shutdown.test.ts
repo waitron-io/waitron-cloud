@@ -24,7 +24,7 @@ after(async()=>{await pool.end();await admin.query(`DROP SCHEMA ${schema} CASCAD
 
 // Removing signal handling or exiting before SMTP acceptance must leave these checks red.
 for(const signal of ['SIGINT','SIGTERM'] as const){
-  test(`${signal} retains SMTP delivery for one second, records acceptance and leaves later mail pending`,async()=>{
+  test(`${signal} retains SMTP delivery for one second, records acceptance and drains naturally without later mail`,async()=>{
     await pool.query('DELETE FROM email_outbox');
     let acknowledge:(()=>void)|undefined;
     const messages:{to:string[];raw:string}[]=[];
@@ -42,7 +42,13 @@ for(const signal of ['SIGINT','SIGTERM'] as const){
     const address=smtp.server.address();assert.ok(address&&typeof address!=='string');
     const first=await transaction(pool,client=>outbox.enqueue(client,'password_changed',{email:'first@example.test'}));
     const name=`email_delivery_signal_${randomUUID()}`;
-    const child=spawn(process.execPath,[new URL('../src/email-worker-cli.ts',import.meta.url).pathname],{
+    const cli=new URL('../src/email-worker-cli.ts',import.meta.url);
+    // beforeExit observes work draining; a forced successful exit bypasses it.
+    const source=`
+      process.once('beforeExit',code=>console.log(JSON.stringify({drained:true,code})));
+      await import(${JSON.stringify(cli.href)});
+    `;
+    const child=spawn(process.execPath,['--input-type=module','-e',source],{
       env:{PATH:process.env.PATH,DATABASE_URL:connection.href,PGAPPNAME:name,NODE_ENV:'test',
         CLOUD_MAIL_TRANSPORT:'local',MAILPIT_SMTP_PORT:String(address.port),
         CLOUD_EMAIL_ACTIVE_KEY_ID:'test',CLOUD_EMAIL_KEYS:JSON.stringify(keys)},
@@ -80,7 +86,7 @@ for(const signal of ['SIGINT','SIGTERM'] as const){
       const acceptedAt=performance.now();acknowledge();
       assert.deepEqual(await exited,{code:0,signal:null});
       assert.ok(exitAt!>=acceptedAt,'command exit must follow SMTP acknowledgement');
-      assert.deepEqual({stdout,stderr},{stdout:'',stderr:''});
+      assert.deepEqual({stdout,stderr},{stdout:'{"drained":true,"code":0}\n',stderr:''},'shutdown must reach natural event-loop drain');
       assert.deepEqual(await sessions(),[],'no worker database session remains after exit');
       assert.equal(messages.length,1);assert.deepEqual(messages[0]!.to,['first@example.test']);
       assert.match(messages[0]!.raw,/Subject: /);

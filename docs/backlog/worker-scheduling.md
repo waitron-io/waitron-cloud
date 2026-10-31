@@ -42,14 +42,20 @@ node --test test/email-worker-delivery-shutdown.test.ts` to check shutdown while
 the local SMTP server holds its acknowledgement of a complete message. Under
 SIGINT and SIGTERM, the command stays live for a one-second hold and keeps the
 message processing. After acknowledgement, it records one sent message, clears
-its payload and claim, and exits with code zero and no database sessions remaining.
-Mail queued during the hold stays pending without a delivery attempt, so shutdown
+its payload and claim, and drains naturally with code zero and no database sessions
+remaining. The observation wrapper prints one `beforeExit` marker; the command
+stays quiet. Mail queued during the hold stays pending without a delivery attempt, so shutdown
 does not start another batch after the accepted delivery finishes.
 
+The natural-drain observation (D545) catches a forced successful exit after
+acknowledgement. Keeping the default referenced pool open also fails within the
+existing ten-second command deadline. These checks do not identify which cleanup
+method releases connections, and an unreferenced connection closed during exit
+can pass the session check.
+
 These checks use a loopback SMTP server and test addresses. Real provider failure,
-delivery timeout, waits longer than one second, natural exit, explicit pool cleanup
-and production deployment still need separate qualification. A forced successful
-exit after acknowledgement also passes these checks.
+delivery timeout, waits longer than one second, explicit pool cleanup and
+production deployment still need separate qualification.
 
 ### Email command shutdown after a local SMTP refusal (D540)
 
@@ -59,14 +65,19 @@ SIGTERM while a loopback SMTP server holds a complete message for one second,
 then refuses it. The command stays live during the hold. After refusal, it records
 one failed attempt, retains the encrypted payload, releases the claim and schedules
 the first retry 30 seconds later. Mail queued during the hold stays untouched.
-The command exits with code zero, empty output and no remaining database sessions.
+The command drains naturally with code zero and no remaining database sessions.
+The observation wrapper prints one `beforeExit` marker; the command stays quiet.
 The local transport records the fixed `delivery_failed` code rather than the
 server's recipient-bearing reply.
 
+The natural-drain observation (D545) catches a forced successful exit after retry
+recording. Keeping the default referenced pool open also fails within the existing
+ten-second command deadline. As with the acceptance checks, the session observation
+does not identify explicit cleanup or distinguish unreferenced sockets closed by exit.
+
 These checks qualify the local transport's retry state during shutdown. Production
-SMTP classification, delivery timeouts, waits longer than one second, natural exit,
-explicit pool cleanup and production shutdown remain open. A forced successful
-exit after recording the retry can also satisfy these checks.
+SMTP classification, delivery timeouts, waits longer than one second, explicit pool
+cleanup and production shutdown remain open.
 
 ### Monitoring command shutdown with real database scheduling (D537)
 

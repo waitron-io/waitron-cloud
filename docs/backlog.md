@@ -46,8 +46,8 @@ The [idle command drain checks](backlog/worker-scheduling.md#idle-email-and-moni
 require email and monitoring commands to drain naturally after SIGINT and SIGTERM,
 with no remaining database sessions. They catch forced successful exit and, while
 idle connections keep Node alive under the default pool settings, omitted pool
-cleanup. Natural drain during active work or database failures and production
-shutdown remain open.
+cleanup. Natural drain during active work beyond the local SMTP acceptance and
+refusal checks, database failures and production shutdown remain open.
 
 The [idle translation drain checks](backlog/worker-scheduling.md#idle-translation-commands-drain-naturally-d544)
 observe three seconds of live idle polling before SIGINT or SIGTERM, then require
@@ -64,15 +64,18 @@ Other worker commands, active delivery and production shutdown remain open.
 The [email delivery shutdown checks](backlog/worker-scheduling.md#email-command-shutdown-during-local-smtp-delivery-d539)
 hold a local SMTP acknowledgement for one second under SIGINT and SIGTERM.
 During that hold the message stays processing. After acknowledgement, the command
-records it as sent, leaves later mail pending and exits with code zero and no
-database sessions remaining. Provider failures,
+records it as sent, leaves later mail pending and drains naturally with code zero
+and no database sessions remaining. The wrapper's `beforeExit` observation (D545)
+catches a forced successful exit after delivery. Provider failures,
 delivery timeouts and production shutdown remain open.
 
 The [email refusal shutdown checks](backlog/worker-scheduling.md#email-command-shutdown-after-a-local-smtp-refusal-d540)
 hold a local SMTP reply for one second, then refuse it under SIGINT and SIGTERM.
 The command records a delayed retry, retains the encrypted payload, releases the
-claim and leaves later mail untouched before exiting normally. Production SMTP
-classification, delivery timeouts and production shutdown remain open.
+claim and leaves later mail untouched before draining naturally. The wrapper's
+`beforeExit` observation (D545) catches a forced successful exit after retry recording.
+Production SMTP classification, delivery timeouts and production shutdown remain
+open.
 
 The [monitoring command signal checks](backlog/worker-scheduling.md#monitoring-command-shutdown-with-real-database-scheduling-d537)
 cover idle shutdown and a one-second hold of blocked startup scheduling under
