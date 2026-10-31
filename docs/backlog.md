@@ -3386,6 +3386,15 @@ See [the boundaries and remaining work](backlog/storage-cache-fixture.md#storage
 or download failure; real storage qualification remains separate.
 See [the boundaries and remaining work](backlog/storage-cache-fixture.md#storage-archive-download-failure-reporting-d441).
 
+[PR794's root shard](https://github.com/waitron-io/waitron-cloud/actions/runs/41182674171/job/124483174725)
+fails the three storage TLS cases in their shared setup: fetching the pinned
+SeaweedFS 4.47 archive raises `fetch failed` before their assertions. The transport
+cause is absent from the test output. The unchanged TLS tests pass three cases
+locally, and a later archive GET on the authorised Linux test box returns HTTP
+200; neither control explains or repairs the CI failure. D530's investigation
+must capture the cold-download cause while preserving the original TLS checks,
+checksums and cleanup assertions.
+
 ## Parallel storage-cache fixture failure on main
 
 Native admin-port fallback and explicit HTTP refusal now have controlled checks;
