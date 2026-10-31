@@ -123,7 +123,7 @@ and a new server-issued prompt, not database expiry or cryptographic verificatio
 The browser's already-registered (`InvalidStateError`) refusal uses the same
 general registration guidance, without sending a verification request.
 Cancellations keep their existing feedback.
-Existing PostgreSQL store and HTTP tests run in CI; Docker is unavailable locally.
+Existing PostgreSQL store and HTTP tests run in CI.
 Oversized bodies (413), unsupported request formats (415) and interrupted bodies
 (408) still share generic feedback. Their cause-specific messages remain
 follow-ups. The server and its disclosure policy are unchanged.

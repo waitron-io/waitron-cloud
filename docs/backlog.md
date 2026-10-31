@@ -4298,15 +4298,10 @@ Cloud follow-ups, each a separate small change with tests before implementation:
   These failure checks explicitly provide a simulated passkey device; a paired
   native check records whether the machine can begin without it.
   Request-body limits/formats/interruption still need cause-specific feedback.
-  [PR491](https://github.com/waitron-io/waitron-cloud/pull/491) is blocked on Lane D's
-  D201 gateway browser investigation. Its [cost job](https://github.com/waitron-io/waitron-cloud/actions/runs/40246747289/job/121329853937)
-  refuses while checking requests after dashboard reload, with an accepted
-  session, no page error and no recorded relay refusal. The cause is unknown.
-  All 24 new portal checks and standard CI pass; Linux records unsupported native
-  admission and supported admission with the simulated device. The 239 cost and
-  remote-access files equal the candidate's base; identity is not causal proof.
-  Keep the accounting checks and deadlines, and qualify a changed candidate after
-  D201's repair before merging this cut.
+  An earlier [reconnect check](https://github.com/waitron-io/waitron-cloud/actions/runs/40246747289/job/121329853937)
+  refused with an accepted session and no page or relay error. Its historical
+  cause remains unknown and belongs to the shared CI-failure investigation;
+  a successful requalification does not establish a repair of that cause.
 - R3 delivered: recovery approval and replacement refusals now distinguish missing
   confirmations, unverified or incompatible sources, reused replacement keys,
   another open recovery, changed request bindings and missing approval in English
