@@ -9,6 +9,7 @@ import { tmpdir } from 'node:os';
 import { execFileSync, spawn } from 'node:child_process';
 import { setTimeout as delay } from 'node:timers/promises';
 import * as local from './local.mjs';
+import {isolationTestImage} from './fixtures/isolation-image.mjs';
 
 function fixture(t) {
   const parent = realpathSync(mkdtempSync(join(tmpdir(), 'cloud-cost-local-test-')));
@@ -266,13 +267,14 @@ test('copiedCodeMustBeReadOnlyAndStateWritableOnlyInsideOwnedRoot', t => {
   assert.throws(() => local.validateIsolationInspect(x), /Invalid cloud cost local run/);
 });
 test('realDockerCanaryDeniesInternetMetadataAndExternalDnsBeforeDataMounts', async t => {
+  const image = await isolationTestImage();
   available('proveDockerIsolation'); const f = fixture(t);
   const name = 'd68-isolation-' + randomUUID(); let networkId, containerId;
   const docker = (...args) => execFileSync('docker', args, { encoding: 'utf8', env: { PATH: process.env.PATH }, stdio: ['ignore', 'pipe', 'pipe'] }).trim();
   t.after(() => { if (containerId) docker('rm', '-f', containerId); if (networkId) docker('network', 'rm', networkId); });
   networkId = docker('network', 'create', '--internal', '--label', 'io.waitron.cloud-cost.owner=' + f.journal.token, name);
   containerId = docker('run', '-d', '--network', name, '--dns', '127.0.0.1', '--label', 'io.waitron.cloud-cost.owner=' + f.journal.token,
-    'node:26-slim', 'node', '-e', 'setInterval(()=>{},1000)');
+    image, 'node', '-e', 'setInterval(()=>{},1000)');
   const proof = await local.proveDockerIsolation({ ...f, codeRoot: join(f.root, 'code-copy'), stateRoot: join(f.root, 'state'), networkId, containerIds: [containerId] });
   assert.deepEqual(proof, { isolated: true, containers: 1, blockedConnections: 3, blockedDns: 2, localControl: true });
   const journal = JSON.parse(readFileSync(f.journal.path, 'utf8'));

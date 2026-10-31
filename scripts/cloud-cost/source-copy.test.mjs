@@ -8,6 +8,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { execFileSync } from 'node:child_process';
 import * as local from './local.mjs';
+import {isolationTestImage} from './fixtures/isolation-image.mjs';
 
 const invalid = { message: 'Invalid cloud cost local run' };
 const docker = (...argv) => execFileSync('docker', argv, { encoding: 'utf8',
@@ -31,7 +32,7 @@ const fingerprint = directory => readdirSync(directory).sort().map(name => {
   return { name, ino: s.ino, mode: s.mode, mtime: s.mtimeMs,
     hash: createHash('sha256').update(readFileSync(path)).digest('hex') };
 });
-const image = () => docker('image', 'inspect', 'node:26-slim', '--format', '{{.Id}}');
+const image = isolationTestImage;
 function ready(f) { return JSON.parse(readFileSync(f.journal.path)).localResources ?? []; }
 function noContainers(f) {
   assert.equal(docker('ps', '-aq', '--filter', `label=io.waitron.cloud-cost.owner=${f.journal.token}`), '');
@@ -48,9 +49,10 @@ test('hostCopyRefusesDormantWalWithoutChangingTheSourceDirectory', async t => {
 
 // Removing a source read-only mount or omitting WAL loses either isolation or committed sales.
 test('isolatedCopyIncludesActiveWalAndEnforcesSourceReadOnlyAtTheOperatingSystem', async t => {
+  const pinned = await image();
   assert.equal(typeof local.prepareIsolatedPrivateCopy, 'function');
   const f = fixture(t), before = fingerprint(f.source);
-  const copy = await local.prepareIsolatedPrivateCopy({ ...f, image: image() });
+  const copy = await local.prepareIsolatedPrivateCopy({ ...f, image: pinned });
   try {
     const db = new DatabaseSync(copy.database);
     try {
@@ -71,13 +73,14 @@ test('isolatedCopyIncludesActiveWalAndEnforcesSourceReadOnlyAtTheOperatingSystem
 });
 
 test('isolatedCopySupportsAClosedRollbackDatabaseAndRefusesDormantWal', async t => {
+  const pinned = await image();
   assert.equal(typeof local.prepareIsolatedPrivateCopy, 'function');
   for (const mode of ['delete', 'dormant']) {
     const f = fixture(t, mode), before = fingerprint(f.source); let copy;
     try {
-      if (mode === 'dormant') await assert.rejects(local.prepareIsolatedPrivateCopy({ ...f, image: image() }), invalid);
+      if (mode === 'dormant') await assert.rejects(local.prepareIsolatedPrivateCopy({ ...f, image: pinned }), invalid);
       else {
-        copy = await local.prepareIsolatedPrivateCopy({ ...f, image: image() });
+        copy = await local.prepareIsolatedPrivateCopy({ ...f, image: pinned });
         const db = new DatabaseSync(copy.database, { readOnly: true });
         try { assert.equal(db.prepare('SELECT sum(amount) AS n FROM sales').get().n, 42); } finally { db.close(); }
       }
@@ -89,10 +92,11 @@ test('isolatedCopySupportsAClosedRollbackDatabaseAndRefusesDormantWal', async t 
 
 // An abort after creation must remove both the worker and partial output, preserving foreign state.
 test('isolatedCopyCancellationReapsOnlyItsRecordedContainersAndPartialFiles', async t => {
+  const pinned = await image();
   const f = fixture(t), before = fingerprint(f.source), controller = new AbortController();
   writeFileSync(join(f.root, 'foreign.txt'), 'preserve', { mode: 0o600 });
   const abort = setImmediate(() => controller.abort());
-  try { await assert.rejects(local.prepareIsolatedPrivateCopy({ ...f, image: image(), signal: controller.signal }), invalid); }
+  try { await assert.rejects(local.prepareIsolatedPrivateCopy({ ...f, image: pinned, signal: controller.signal }), invalid); }
   finally { clearImmediate(abort); }
   assert.ok(ready(f).filter(v => v.kind === 'source-copy-container' && v.state === 'created').length >= 2);
   assert.deepEqual(fingerprint(f.source), before); noContainers(f);
@@ -102,7 +106,8 @@ test('isolatedCopyCancellationReapsOnlyItsRecordedContainersAndPartialFiles', as
 });
 
 test('isolatedCopyRejectsUnsafeSourcesAndConfigBeforeStartingAnyContainer', async t => {
-  const f = fixture(t), pinned = image(), controller = new AbortController(); controller.abort();
+  const pinned = await image();
+  const f = fixture(t), controller = new AbortController(); controller.abort();
   const foreign = new DatabaseSync(join(f.parent, 'foreign.db'));
   try { foreign.exec('CREATE TABLE sales(amount); INSERT INTO sales VALUES(999)'); } finally { foreign.close(); }
   for (const change of [{ image: 'node:26-slim' }, { image: 'sha256:bad' }, { signal: controller.signal },
@@ -121,7 +126,8 @@ test('isolatedCopyRejectsUnsafeSourcesAndConfigBeforeStartingAnyContainer', asyn
 });
 
 test('linkedOrMissingTransactionLogsCannotExtendTheRecordedSource', async t => {
-  const f = fixture(t), pinned = image();
+  const pinned = await image();
+  const f = fixture(t);
   for (const suffix of ['-wal', '-shm']) {
     const path = f.database + suffix, saved = join(f.source, 'saved' + suffix); renameSync(path, saved);
     try {
@@ -136,7 +142,8 @@ test('linkedOrMissingTransactionLogsCannotExtendTheRecordedSource', async t => {
 });
 
 test('isolatedCopyCleanupRefusesChangedOwnershipOrFileIdentity', async t => {
-  const f = fixture(t), copy = await local.prepareIsolatedPrivateCopy({ ...f, image: image() });
+  const pinned = await image();
+  const f = fixture(t), copy = await local.prepareIsolatedPrivateCopy({ ...f, image: pinned });
   try {
     writeFileSync(join(f.root, '.cloud-cost-owner'), '0'.repeat(64));
     await assert.rejects(copy.close(), invalid); assert.ok(existsSync(copy.database));
