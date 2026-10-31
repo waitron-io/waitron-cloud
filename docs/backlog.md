@@ -30,6 +30,13 @@ cover idle shutdown and a one-second hold of four blocked PostgreSQL connections
 under SIGINT and SIGTERM, followed by normal exit after lock release.
 Other worker commands, active delivery and production shutdown remain open.
 
+The [email delivery shutdown checks](backlog/worker-scheduling.md#email-command-shutdown-during-local-smtp-delivery-d539)
+hold a local SMTP acknowledgement for one second under SIGINT and SIGTERM.
+During that hold the message stays processing. After acknowledgement, the command
+records it as sent, leaves later mail pending and exits with code zero and no
+database sessions remaining. Provider failures,
+delivery timeouts and production shutdown remain open.
+
 The [monitoring command signal checks](backlog/worker-scheduling.md#monitoring-command-shutdown-with-real-database-scheduling-d537)
 cover idle shutdown and a one-second hold of blocked startup scheduling under
 SIGINT and SIGTERM, followed by normal exit with no remaining database sessions.
@@ -507,6 +514,14 @@ refusal. Keep the single-restart limit and original-error assertion while
 reproducing this collision under concurrent fixtures. The unchanged forced-collision
 case passes all three modes on the authorised Linux test box, including the
 throwing reporter; that control does not explain or repair the CI collision.
+
+[PR795's email shutdown qualification](https://github.com/waitron-io/waitron-cloud/actions/runs/41187136562/job/124496295046)
+repeats this failure in the same forced-collision `reporter-throws` subcase.
+The restarted store cannot bind S3 gRPC port 46747; its listener snapshot names
+`weed` PID 7112, with fixture ownership still unknown. The original SDK-error
+assertion fails. Both storage source and test match the branch's base exactly.
+Lane H's D530 investigation owns this recurrence; keep the single restart and
+every assertion. A later clean qualification does not repair this collision.
 
 ## Repository licence
 
