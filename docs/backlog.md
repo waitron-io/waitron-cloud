@@ -52,6 +52,9 @@ natural command exit, as do blocked translation retention, idle monitoring shutd
 and blocked monitoring startup after lock release.
 Active translation checks also require natural exit during the first provider call,
 review and two concurrent jobs; explicit pool cleanup remains open. See [the additional qualification detail](backlog/worker-scheduling.md#additional-shutdown-and-timer-qualification).
+Active monitoring checks retain an observation through a database lock after either
+stop signal, commit it after release and leave a later due venue unchecked. See
+[the observation shutdown limits](backlog/worker-scheduling.md#monitoring-command-shutdown-during-an-active-observation-d552).
 
 ## Worker scheduling failures and error reporting (D467)
 

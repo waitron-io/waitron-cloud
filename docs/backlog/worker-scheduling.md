@@ -103,6 +103,28 @@ unreferenced idle connection closed during process exit can satisfy the session
 check. Active monitoring, other command modes, database failures, longer waits and
 production deployment retain separate qualification gates.
 
+### Monitoring command shutdown during an active observation (D552)
+
+Run `node scripts/test-postgres.mjs exec pnpm --dir packages/registration exec
+node --test test/monitor-worker-observation-shutdown.test.ts` to check SIGINT and
+SIGTERM during a real monitoring observation. An owned incident-table lock blocks
+the observation after it claims a due venue. The command and the same database
+query stay live for one second after the signal. After lock release, the command
+commits that venue's check, next-check time and disconnected incident with its
+alert episode, then drains naturally with code zero and no remaining sessions.
+
+A second venue becomes due after the signal while the first observation remains
+blocked. It stays unchecked through exit, so the checks reject a new claim after
+shutdown. The fixtures have no alert recipients and the email queue stays empty;
+they do not qualify alert delivery. A wrapper observes Node's `beforeExit` event
+without replacing command or database methods. Forced successful exit bypasses
+that observation. Removing signal handlers, rolling back the observation or
+claiming another venue after shutdown also fails these checks.
+
+These checks do not identify explicit pool cleanup or distinguish waiting in the
+worker loop from waiting in pool cleanup. Longer waits, active-observation database
+failures, statement timeouts, connection loss and production shutdown remain open.
+
 ### Monitoring command shutdown after database query cancellation (D541)
 
 Run `node scripts/test-postgres.mjs exec pnpm --dir packages/registration exec
