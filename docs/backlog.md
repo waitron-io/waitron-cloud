@@ -3679,6 +3679,17 @@ response listing storage objects closed prematurely after headers; the native
 process exited0 but the audit remained unfinished. Retain the parsed diagnostic
 with the [Litestream shutdown investigation](backlog/cost-stack-replication.md).
 The cause is unknown. Keep all accounting guards and deadlines unchanged.
+A later [qualification run41183089824, job124484426019](https://github.com/waitron-io/waitron-cloud/actions/runs/41183089824/job/124484426019)
+failed two unchanged portal cases: translation consent waited five seconds for
+its uncertain-write message at `translation-consent-browser.test.ts:76`, and
+usage waited four seconds for its rate-limit state at
+`usage-read-message-browser.test.ts:46`. The consent trace ends with an activity
+request and consent write received by the server, without their finish events.
+The usage failure has no equivalent request trace. Both focused cases passed
+on the Linux test box (eight checks); the usage case also passed natively
+(seven checks). None of eight recent failed main runs contained these exact
+failures. D530 must capture the missing request/controller stages in a CI
+recurrence and reproduce the cause before changing behavior or deadlines.
 Use the owner's test box for focused Docker reproduction. Source equality is
 not causal proof.
 
