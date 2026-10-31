@@ -18,7 +18,8 @@ export async function runWorkerLoop(options:WorkerLoopOptions):Promise<void>{
     ||!Number.isInteger(options.scheduleIntervalMs)||options.scheduleIntervalMs<1
     // Native timers replace overflowing delays with a one-millisecond wait.
     ||!Number.isInteger(options.pollIntervalMs)||options.pollIntervalMs<1||options.pollIntervalMs>2147483647)throw new Error('invalid_worker_loop_config');
-  const now=options.now??Date.now;
+  // Scheduling intervals measure elapsed time, independent of system-clock corrections.
+  const now=options.now??(()=>performance.now());
   const wait=options.wait??(async(milliseconds,currentSignal)=>{
     try{await delay(milliseconds,undefined,{signal:currentSignal});}
     catch(error){if(!currentSignal.aborted)throw error;}

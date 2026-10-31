@@ -96,6 +96,13 @@ remain separate qualification gates.
 **Open.** Production scheduling, real database failures and recovery remain open.
 See [the boundaries and remaining work](backlog/worker-scheduling.md#worker-scheduling-deadlines-and-polling-failures-d468).
 
+Recurring worker intervals now use elapsed time, so system-clock corrections cannot
+delay or accelerate the next scheduling pass. Run `node --test
+packages/registration/test/worker-loop-clock.test.ts` to check forward and backward
+clock changes with busy and idle batches at two and 32 slots. Scheduling still
+starts its next interval after completion, and idle polling meets that deadline.
+Real database scheduling and production shutdown remain separate gates.
+
 ## How to keep this file honest
 
 - Delete finished entries after checking main, the named pull requests and the code.
