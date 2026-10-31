@@ -102,17 +102,20 @@ node --test test/monitor-worker-cancellation-shutdown.test.ts` to check a real
 PostgreSQL scheduling failure during command shutdown. SIGINT and SIGTERM each
 leave startup scheduling blocked on an owned table lock for one second. Cancelling
 only that command's observed query then produces one fixed observation-failure
-diagnostic, empty standard output and code-zero exit with no remaining database
-sessions. The table stays locked until exit, so scheduling cannot silently retry
+diagnostic and natural code-zero exit with no remaining database sessions.
+The observation wrapper prints one `beforeExit` marker; the command adds no
+standard output. The table stays locked until exit, so scheduling cannot silently retry
 to completion. A no-signal control requires another scheduling query after the
 first cancellation, then stops it with SIGTERM and a second cancellation. This
 distinguishes signal-driven shutdown from quitting after every database error.
 
 The fixed diagnostic says retrying because it also serves the running worker;
-these checks observe shutdown after the failure. They do not prove natural exit
-or explicit pool cleanup, since an explicit successful process exit after reporting
-can also satisfy them. Connection loss, statement timeouts, active observations,
-other database failures, longer waits and production shutdown remain open.
+these checks observe shutdown after the failure. The natural-drain observation
+(D547) rejects forced successful exit after reporting in both signalled cases and
+the retry control. It does not prove explicit pool cleanup: omitting the pool-close
+call also passes these cancelled-query cases. Connection loss, statement timeouts,
+active observations, other database failures, longer waits and production shutdown
+remain open.
 
 ### Translation command shutdown with blocked database cleanup (D538)
 
@@ -313,10 +316,11 @@ Active monitoring, database failure and production shutdown remain open.
 The [monitoring cancellation shutdown checks](worker-scheduling.md#monitoring-command-shutdown-after-database-query-cancellation-d541)
 cover SIGINT and SIGTERM while startup scheduling waits on a PostgreSQL table lock.
 After a one-second hold, cancelling that query produces one fixed diagnostic and
-code-zero command exit with no database sessions remaining, even while the table
+natural code-zero exit with no database sessions remaining, even while the table
 stays locked. Without a signal, the command retries the cancelled schedule.
-Natural exit, explicit pool cleanup, other database failures, active observations
-and production shutdown remain open.
+The wrapper's `beforeExit` marker (D547) rejects forced successful exit in all three
+cases. Explicit pool cleanup, other database failures, active observations and
+production shutdown remain open.
 
 The [translation command signal checks](worker-scheduling.md#translation-command-shutdown-with-blocked-database-cleanup-d538)
 cover a one-second hold of blocked startup retention under SIGINT and SIGTERM,
