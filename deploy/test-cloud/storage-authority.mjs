@@ -23,7 +23,8 @@ export async function atomicPrivateFile(path,bytes){
 
 // This owns one dedicated test IAM file. State is committed before IAM publication:
 // a crash can delay withdrawal, but reopening reapplies the durable intent before returning.
-export async function openStorageAuthority({directory,iamPath,admin,endpoint,region,ca,reload,authorizeWriter=async()=>true}){
+export async function openStorageAuthority({directory,iamPath,admin,endpoint,region,ca,reload,policyMode='existing',authorizeWriter=async()=>true}){
+ if(!['existing','test-free-paid','test-venue-levels'].includes(policyMode))throw Error('test_cloud.plan_mode');
  if(!validCredentials(admin)||typeof reload!=='function'||new URL(endpoint).protocol!=='https:'||!region)throw Error('test_cloud.storage_configuration');
  await privateDirectory(directory);const statePath=join(directory,'state.json');
  async function locked(fn){
@@ -35,17 +36,23 @@ export async function openStorageAuthority({directory,iamPath,admin,endpoint,reg
    if(e.code!=='ENOENT')throw e;
    try{const iam=JSON.parse(await readFile(iamPath,'utf8'));if(!Array.isArray(iam.identities)||iam.identities.some(v=>v.name.startsWith('managed-')))throw Error('test_cloud.storage_state');}
    catch(cause){if(cause.code!=='ENOENT')throw Error('test_cloud.storage_state');}
-   return {version:1,venues:{}};
+   return {version:policyMode==='test-venue-levels'?2:1,venues:{}};
   }
   if(!info.isFile()||(info.mode&0o777)!==0o600)throw Error('test_cloud.storage_permissions');
   try{
    const state=JSON.parse(await readFile(statePath,'utf8'));
-   if(state.version!==1||!state.venues||Array.isArray(state.venues)||typeof state.venues!=='object')throw Error();
+   if(![1,2].includes(state.version)||!state.venues||Array.isArray(state.venues)||typeof state.venues!=='object')throw Error();
    const refs=new Set();
    for(const [id,item] of Object.entries(state.venues)){
     scope({venueId:id,...item},endpoint,region);
     if(!Number.isSafeInteger(item.policyRevision)||item.policyRevision<0||!validCredentials(item.reader)||!uuid(item.readerId)||!Array.isArray(item.retired)||!item.retired.every(validCredentials)||item.writer!==null&&(!validCredentials(item.writer)||!uuid(item.writerId)))throw Error();
+    if(state.version===2&&!['existing','test-free-paid','test-venue-levels'].includes(item.policyMode))throw Error();
     for(const c of [item.reader,item.writer,...item.retired].filter(Boolean)){if(refs.has(c.accessKeyId))throw Error();refs.add(c.accessKeyId);}
+   }
+   if(state.version===1&&policyMode==='test-venue-levels'){
+    // Old state has no venue-mode authority, even when its numeric revision matches.
+    for(const item of Object.values(state.venues))item.policyMode='existing';
+    state.version=2;
    }
    return state;
   }catch{throw Error('test_cloud.storage_state');}
@@ -60,7 +67,7 @@ export async function openStorageAuthority({directory,iamPath,admin,endpoint,reg
  async function publish(state,held){
   let policyError;
   for(const [id,item] of Object.entries(state.venues))if(item.writer){
-   let allowed=false;try{allowed=await authorizeWriter(id,item.policyRevision);}catch(error){policyError??=error;}
+   let allowed=item.policyMode===undefined||item.policyMode===policyMode;try{allowed=allowed&&await authorizeWriter(id,item.policyRevision,item.policyMode??policyMode);}catch(error){allowed=false;policyError??=error;}
    if(!allowed){item.retired.push(item.writer);item.writer=null;item.writerId=null;}
   }
   await held.assertOwned();await atomicPrivateFile(statePath,JSON.stringify(state));
@@ -89,8 +96,9 @@ export async function openStorageAuthority({directory,iamPath,admin,endpoint,reg
     const state=await load();let item=state.venues[input.venueId];
     if(item&&(!same(item.location,input.location)||item.prefix!==input.prefix))throw Error('test_cloud.storage_scope');
     if(!item)item=state.venues[input.venueId]={location:{...input.location},prefix:input.prefix,reader:credentials(),readerId:randomUUID(),policyRevision:revision,writer:null,writerId:null,retired:[]};
-    if(item.writer&&item.policyRevision!==revision){item.retired.push(item.writer);item.writer=null;item.writerId=null;}
+    if(item.writer&&(item.policyRevision!==revision||state.version===2&&item.policyMode!==policyMode)){item.retired.push(item.writer);item.writer=null;item.writerId=null;}
     item.policyRevision=revision;
+    if(state.version===2)item.policyMode=policyMode;
     if(!item.writer){item.writer=credentials();item.writerId=randomUUID();}
     await publish(state,held);if(!item.writer)throw Error('permission_denied');return output(item);
    });

@@ -1,7 +1,7 @@
 import type {Pool,PoolClient} from 'pg';
 import {resolveCname} from 'node:dns/promises';
 import {dnsInstructions,verifyDelegation,validateCsr} from './certificates.ts';
-import {requireRemotePlan,eligibleRemoteInstallations} from './plan-permissions.ts';
+import {requireRemotePlan,eligibleRemoteInstallations,legacyRemoteExclusion,lockLegacyRemoteScope} from './plan-permissions.ts';
 import {transaction,type PlanMode} from '@waitron-cloud/registration';
 import {isUuid,isHostname,isPeerKey,type GatewayManifest,type GatewayRoute,type AcceptedGatewayManifest,type ReportingGatewayRoute} from './manifest.ts';
 export interface CellInput {id:string;country:string;provider:string;environment:string;suffix:string;subnet:number;publicKey:string;endpoint:string}
@@ -12,7 +12,7 @@ export interface CellMove {
  source:Placement;target:Placement;
 }
 export interface StageMoveInput {operationId:string;installationId:string;targetCellId:string;targetPeerPublicKey:string;port?:number;expectedRevision:number}
-export interface CertificateAuthorization {hostname:string;dnsName:string;revision:number}
+export interface CertificateAuthorization {hostname:string;dnsName:string;revision:number;binding?:{venueId:string;publicKey:string}}
 function fail(code:string):never {throw new Error(code);}
 const route=(p:GatewayRoute):GatewayRoute=>({installationId:p.installationId,venueId:p.venueId,staffHostname:p.staffHostname,publicHostname:p.publicHostname,address:p.address,port:p.port,peerPublicKey:p.peerPublicKey});
 // Peer keys are claimed in two tables, so both claim paths share this transaction lock.
@@ -27,12 +27,13 @@ async function placement(client:PoolClient,id:string):Promise<Placement|undefine
 }
 async function certificateAuthorization(client:PoolClient,id:string,kind:'staff'|'public',csr:string,lock:'share'|'update',mode:PlanMode):Promise<CertificateAuthorization>{
  await requireRemotePlan(client,id,mode);
- const row=(await client.query(`SELECT i.revoked_at,i.configuration_revision,p.venue_id,c.suffix,s.hostname AS staff_hostname,u.hostname AS public_hostname
+ const row=(await client.query(`SELECT i.revoked_at,i.configuration_revision,i.venue_id AS installation_venue_id,i.public_key,p.venue_id,c.suffix,s.hostname AS staff_hostname,u.hostname AS public_hostname
   FROM installations i JOIN remote_placements p ON p.installation_id=i.id JOIN remote_cells c ON c.id=p.cell_id
   JOIN remote_hostnames s ON s.venue_id=p.venue_id AND s.kind='staff' JOIN remote_hostnames u ON u.venue_id=p.venue_id AND u.kind='public'
   WHERE i.id=$1 FOR ${lock==='update'?'UPDATE':'SHARE'} OF i`,[id])).rows[0];
  if(!row)fail('installation_unavailable');if(row.revoked_at)fail('revoked');const hostname=kind==='staff'?row.staff_hostname:row.public_hostname;validateCsr(csr,hostname);
- return {hostname,dnsName:`_acme-challenge.${kind==='staff'?'staff-':''}v-${row.venue_id}.${row.suffix}`,revision:Number(row.configuration_revision)};
+ return {hostname,dnsName:`_acme-challenge.${kind==='staff'?'staff-':''}v-${row.venue_id}.${row.suffix}`,revision:Number(row.configuration_revision),
+  ...(mode==='test-venue-levels'?{binding:{venueId:row.installation_venue_id,publicKey:row.public_key}}:{})};
 }
 async function move(client:PoolClient,id:string,lock=false):Promise<CellMove|undefined>{
  const {rows}=await client.query(`SELECT m.id AS "operationId",m.installation_id AS "installationId",m.venue_id AS "venueId",
@@ -71,7 +72,7 @@ export class RemoteAccessStore {
    if(!cell||cell.environment!==install.environment)fail('cell_unavailable');
    const prior=await placement(client,installationId);
    if(prior){if(prior.cellId!==cellId||prior.peerPublicKey!==peerPublicKey||prior.port!==port)fail('placement_conflict');
-    if(this.#planMode==='test-free-paid'){
+    if(this.#planMode==='test-free-paid'||this.#planMode==='test-venue-levels'){
      const restored=await client.query("UPDATE installation_services SET state='provisioning',configuration=$2 WHERE installation_id=$1 AND service='remote_access' AND state='unconfigured' RETURNING 1",[installationId,{version:1,...prior}]);
      if(restored.rowCount)await client.query('UPDATE installations SET configuration_revision=configuration_revision+1 WHERE id=$1',[installationId]);
     }return prior;}
@@ -156,13 +157,15 @@ export class RemoteAccessStore {
   if(!isUuid(id)||!['staff','public'].includes(kind))fail('invalid_placement');
   return transaction(this.#pool,async client=>{
   await requireRemotePlan(client,id,this.#planMode);
-  const row=(await client.query(`SELECT p.venue_id,c.suffix,i.revoked_at FROM remote_placements p JOIN remote_cells c ON c.id=p.cell_id JOIN installations i ON i.id=p.installation_id WHERE i.id=$1`,[id])).rows[0];
-  if(!row)fail('installation_unavailable');if(row.revoked_at)fail('revoked');return `${kind==='staff'?'staff-':''}v-${row.venue_id}.${row.suffix}`;
+  const identity=this.#planMode==='test-venue-levels'?',i.venue_id AS installation_venue_id,i.public_key':'';
+  const row=(await client.query(`SELECT p.venue_id,c.suffix,i.revoked_at${identity} FROM remote_placements p JOIN remote_cells c ON c.id=p.cell_id JOIN installations i ON i.id=p.installation_id WHERE i.id=$1`,[id])).rows[0];
+  if(!row)fail('installation_unavailable');if(row.revoked_at)fail('revoked');return {hostname:`${kind==='staff'?'staff-':''}v-${row.venue_id}.${row.suffix}`,
+   binding:this.#planMode==='test-venue-levels'?{venueId:row.installation_venue_id,publicKey:row.public_key}:undefined};
   });
  }
- async hostnameInstructions(id:string,kind:'staff'|'public',custom:string){return dnsInstructions(custom,await this.#assigned(id,kind));}
+ async hostnameInstructions(id:string,kind:'staff'|'public',custom:string){return dnsInstructions(custom,(await this.#assigned(id,kind)).hostname);}
  async setHostname(id:string,kind:'staff'|'public',custom:string,expectedRevision:number,resolve:typeof resolveCname=resolveCname,authorize?:(client:PoolClient)=>Promise<string>):Promise<Placement>{
-  const assigned=await this.#assigned(id,kind);
+  const admitted=await this.#assigned(id,kind),assigned=admitted.hostname;
   if(!isHostname(custom)||custom.length>237||!Number.isSafeInteger(expectedRevision)||expectedRevision<0)fail('invalid_hostname');
   // The complete operator namespace is reserved, including names for venues not provisioned yet.
   if(custom!==assigned){
@@ -174,6 +177,8 @@ export class RemoteAccessStore {
    await requireRemotePlan(client,id,this.#planMode);
    const row=(await client.query('SELECT * FROM installations WHERE id=$1 FOR UPDATE',[id])).rows[0];
    if(!row)fail('installation_unavailable');if(row.revoked_at)fail('revoked');if(row.configuration_revision!==expectedRevision)fail('revision_conflict');
+   // DNS delegation belongs to the installation identity admitted before the lookup.
+   if(admitted.binding&&(row.venue_id!==admitted.binding.venueId||row.public_key!==admitted.binding.publicKey))fail('permission_denied');
    // Assigned names are reserved even when a venue elects to use a custom name.
    const reserved=(await client.query(`SELECT p.installation_id FROM remote_placements p JOIN remote_cells c ON c.id=p.cell_id WHERE $1 IN ('staff-v-'||p.venue_id||'.'||c.suffix,'v-'||p.venue_id||'.'||c.suffix) AND p.installation_id<>$2`,[custom,id])).rowCount;
    if(reserved)fail('hostname_conflict');
@@ -212,15 +217,21 @@ export class RemoteAccessStore {
   await transaction(this.#pool,async client=>{await publish(await this.#reportingManifest(client,cellId,now));});
  }
  async #reportingManifest(client:PoolClient,cellId:string,now:number):Promise<AcceptedGatewayManifest>{
-  const policies=(await client.query(`SELECT o.id FROM organisations o WHERE EXISTS(SELECT 1 FROM venues v JOIN remote_placements p ON p.venue_id=v.id
+  let ids:string[];
+  if(this.#planMode==='test-venue-levels')ids=(await eligibleRemoteInstallations(client,this.#planMode,cellId))!;
+  else {
+  const captured=this.#planMode==='test-free-paid'?await lockLegacyRemoteScope(client,cellId):undefined;
+  const exclusion=await legacyRemoteExclusion(client,this.#planMode,captured?.venue_authority);
+  const policies=captured?.organisations??(await client.query(`SELECT o.id FROM organisations o WHERE EXISTS(SELECT 1 FROM venues v JOIN remote_placements p ON p.venue_id=v.id
    WHERE v.organisation_id=o.id AND (p.cell_id=$1 OR EXISTS(SELECT 1 FROM remote_cell_moves m WHERE m.installation_id=p.installation_id
     AND m.target_cell_id=$1 AND m.state IN ('staged','ready')))) ORDER BY o.id FOR SHARE OF o`,[cellId])).rows.map(r=>r.id);
   // Freeze the candidate set before taking cell authority. A new placement waits for the next export.
-  const ids=(await client.query(`SELECT i.id FROM installations i JOIN venues v ON v.id=i.venue_id JOIN organisations o ON o.id=v.organisation_id
-   WHERE v.organisation_id=ANY($2::uuid[]) AND ($3='existing' OR (o.service_plan='paid' AND v.environment='test' AND EXISTS(SELECT 1 FROM installation_services s
-    WHERE s.installation_id=i.id AND s.service='remote_access' AND s.state<>'unconfigured')))
+  ids=(await client.query(`SELECT i.id FROM installations i JOIN venues v ON v.id=i.venue_id JOIN organisations o ON o.id=v.organisation_id
+   WHERE v.organisation_id=ANY($2::uuid[]) AND ($4::uuid[] IS NULL OR v.id=ANY($4::uuid[])) AND ($3='existing' OR (o.service_plan='paid' AND v.environment='test' AND EXISTS(SELECT 1 FROM installation_services s
+    WHERE s.installation_id=i.id AND s.service='remote_access' AND s.state<>'unconfigured'))${exclusion})
    AND (EXISTS(SELECT 1 FROM remote_placements p WHERE p.installation_id=i.id AND p.cell_id=$1)
-   OR EXISTS(SELECT 1 FROM remote_cell_moves m WHERE m.installation_id=i.id AND m.target_cell_id=$1 AND m.state IN ('staged','ready'))) ORDER BY i.id FOR SHARE OF i`,[cellId,policies,this.#planMode])).rows.map(r=>r.id);
+   OR EXISTS(SELECT 1 FROM remote_cell_moves m WHERE m.installation_id=i.id AND m.target_cell_id=$1 AND m.state IN ('staged','ready'))) ORDER BY i.id FOR SHARE OF i`,[cellId,policies,this.#planMode,captured?.venues??null])).rows.map(r=>r.id);
+  }
   const manifest=await this.#manifest(client,cellId,now,ids);
   const reporter=(await client.query('SELECT gateway_id,generation,revoked_at FROM remote_forward_reporters WHERE cell_id=$1 FOR SHARE',[cellId])).rows[0];
   if(!reporter||reporter.revoked_at)return {...manifest,routes:manifest.routes.map(route)};

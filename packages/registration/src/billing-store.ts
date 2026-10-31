@@ -1,9 +1,10 @@
 import {randomUUID} from 'node:crypto';
 import type {Pool,PoolClient} from 'pg';
 import {billingDate,billingRecord,billingWhole} from './billing-config.ts';
-import {BillingError,type BillingCommand,type BillingEvent,type BillingReceipt,type BillingScope,type BusinessBillingView,type ProviderMethod} from './billing-types.ts';
+import {BillingError,type BillingCommand,type BillingEvent,type BillingReceipt,type BillingScope,type PermissionCommand,type BusinessBillingView,type ProviderMethod} from './billing-types.ts';
 import {transaction} from './transaction.ts';
 import type {VenueChargeView} from './billing-charges.ts';
+import {applyPermissionTransition} from './venue-service-permissions.ts';
 import {applyVenueCommand,readBillingVenue,readVenueHistory,readRenewalViews,type VenueCommand} from './billing-venues.ts';
 import type {HostedWindow,VenueBillingView,VenueBillingHistory} from './billing-types.ts';
 import {applyPaymentCommand,readFrozenCharge,readChargePayments,type PaymentCommand} from './billing-payments.ts';
@@ -176,7 +177,14 @@ export class BillingStore{
   return transaction(this.pool,async client=>{await lockScope(client,scope);return readChargePayments({client,scope},chargeId);});
  }
  async execute(inputScope:BillingScope,inputEvent:BillingEvent,inputCommand:BillingCommand):Promise<BillingReceipt>{
+  return this.apply(inputScope,inputEvent,inputCommand,false);
+ }
+ async transition(scope:BillingScope,event:BillingEvent,command:PermissionCommand):Promise<BillingReceipt>{
+  return this.apply(scope,event,command,true);
+ }
+ private async apply(inputScope:BillingScope,inputEvent:BillingEvent,inputCommand:BillingCommand,enrol:boolean):Promise<BillingReceipt>{
   const scope=scopeInput(inputScope),event=eventInput(inputEvent),command=commandInput(inputCommand);
+  if(enrol&&!['set_venue','start_trial','extend_trial','end_trial'].includes(command.type))invalid();
   if(event.source.kind!=='internal'&&command.type!=='observe_payment')invalid();
   return transaction(this.pool,async client=>{
    await lockScope(client,scope);
@@ -200,7 +208,8 @@ export class BillingStore{
     ?await applyBusiness(client,scope,eventId,command,business)
     :command.type==='freeze_charge'||command.type==='begin_attempt'||command.type==='observe_payment'
     ?await applyPaymentCommand({client,scope,eventId,occurredAt:event.occurredAt,source},command)
-    :await applyVenueCommand({client,scope,eventId,occurredAt:event.occurredAt},command);
+    :command.type==='hosted_day'?await applyVenueCommand({client,scope,eventId,occurredAt:event.occurredAt},command)
+    :await applyPermissionTransition({client,scope,eventId,occurredAt:event.occurredAt},command,enrol);
    const inserted=await client.query(`INSERT INTO billing_events(id,organisation_id,legal_business_id,source,provider,provider_account_id,event_key,occurred_at,command,result)
     VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) ON CONFLICT DO NOTHING RETURNING id`,[eventId,...args,source.kind,source.kind==='provider'?source.provider:null,source.kind==='provider'?source.accountId:null,event.key,event.occurredAt,command,value]);
    if(!inserted.rowCount)throw new BillingError('billing_event_conflict');

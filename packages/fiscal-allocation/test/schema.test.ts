@@ -81,7 +81,7 @@ test('populated release37 upgrades concurrently without changing any old row or 
       'billing_businesses', 'billing_charge_lines', 'billing_charges', 'billing_events',
       'billing_hosted_days', 'billing_paid_periods', 'billing_payment_attempts',
       'billing_payment_methods', 'billing_payment_observations', 'billing_prices',
-      'billing_trials', 'billing_venues',
+      'billing_trials', 'billing_venues', 'billing_service_authority',
     ]) {
       assert.deepEqual(after[name], [], name);
       delete after[name];

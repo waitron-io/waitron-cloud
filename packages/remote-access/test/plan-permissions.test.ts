@@ -218,7 +218,7 @@ test('free retained staged setup never becomes a gateway route',async()=>{
 
 test('an export defers a new placement whose policy was not in its locked set',async()=>{
  const v=await venue(),newcomer=await venue('paid',false,v.cellId),b=barrier();let paused=false;
- const exporting=new Proxy(db.secondPool,{get(pool,name){if(name==='connect')return async()=>{const client=await pool.connect();return new Proxy(client,{get(c,key){if(key==='query')return async(...args:Parameters<typeof c.query>)=>{const result=await c.query(...args);if(!paused&&String(args[0]).startsWith('SELECT o.id FROM organisations')){paused=true;b.enter();await b.gate;}return result;};const value=Reflect.get(c,key);return typeof value==='function'?value.bind(c):value;}});};const value=Reflect.get(pool,name);return typeof value==='function'?value.bind(pool):value;}});
+ const exporting=new Proxy(db.secondPool,{get(pool,name){if(name==='connect')return async()=>{const client=await pool.connect();return new Proxy(client,{get(c,key){if(key==='query')return async(...args:Parameters<typeof c.query>)=>{const result=await c.query(...args);if(!paused&&String(args[0]).startsWith("WITH policies AS MATERIALIZED (")){paused=true;b.enter();await b.gate;}return result;};const value=Reflect.get(c,key);return typeof value==='function'?value.bind(c):value;}});};const value=Reflect.get(pool,name);return typeof value==='function'?value.bind(pool):value;}});
  const pending=new RemoteAccessStore(exporting,mode).manifest(v.cellId);void pending.catch(()=>{});
  try{await b.started;await store.provision(newcomer.installationId,v.cellId,newcomer.peerPublicKey);}finally{b.release();}
  assert.deepEqual((await pending).routes.map(r=>r.installationId),[v.installationId]);assert.equal((await store.manifest(v.cellId)).routes.length,2);
@@ -255,7 +255,7 @@ test('a target-cell publication holds the incoming organisation policy until pub
 
 test('a cell export defers an incoming move whose organisation was absent from its policy locks',async()=>{
  const local=await venue(),incoming=await venue(),b=barrier();let paused=false;
- const exporting=new Proxy(db.secondPool,{get(pool,name){if(name==='connect')return async()=>{const client=await pool.connect();return new Proxy(client,{get(c,key){if(key==='query')return async(...args:Parameters<typeof c.query>)=>{const result=await c.query(...args);if(!paused&&String(args[0]).startsWith('SELECT o.id FROM organisations')){paused=true;b.enter();await b.gate;}return result;};const value=Reflect.get(c,key);return typeof value==='function'?value.bind(c):value;}});};const value=Reflect.get(pool,name);return typeof value==='function'?value.bind(pool):value;}});
+ const exporting=new Proxy(db.secondPool,{get(pool,name){if(name==='connect')return async()=>{const client=await pool.connect();return new Proxy(client,{get(c,key){if(key==='query')return async(...args:Parameters<typeof c.query>)=>{const result=await c.query(...args);if(!paused&&String(args[0]).startsWith("WITH policies AS MATERIALIZED (")){paused=true;b.enter();await b.gate;}return result;};const value=Reflect.get(c,key);return typeof value==='function'?value.bind(c):value;}});};const value=Reflect.get(pool,name);return typeof value==='function'?value.bind(pool):value;}});
  const pending=new RemoteAccessStore(exporting,mode).manifest(local.cellId);void pending.catch(()=>{});
  try{
   await b.started;await store.stageMove({operationId:randomUUID(),installationId:incoming.installationId,targetCellId:local.cellId,targetPeerPublicKey:peer(),expectedRevision:1});

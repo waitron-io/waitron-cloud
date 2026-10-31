@@ -1,5 +1,7 @@
 import {transaction} from '../../packages/registration/src/transaction.ts';
 import {readVenuePlan} from '../../packages/registration/src/organisation-plans.ts';
+import {readVenuePermissions} from '../../packages/registration/src/venue-service-permissions.ts';
+import {levelAllows} from '../../packages/registration/src/venue-service-rules.ts';
 import {openStorageAuthority} from './storage-authority.mjs';
 import {readFile} from 'node:fs/promises';
 import {join} from 'node:path';
@@ -27,29 +29,34 @@ export async function openTestCaptureRuntime({pool,mode,directory}){
  runtime.options.planMode=mode;runtime.options.managedStreams=managedStreams;return runtime;
 }
 export async function openRuntimeStorage({mode,...options}){
- if(!['existing','test-free-paid'].includes(mode))throw Error('test_cloud.plan_mode');
- return mode==='test-free-paid'?openPlanStorage({...options,mode}):openStorageAuthority(options);
+ if(!['existing','test-free-paid','test-venue-levels'].includes(mode))throw Error('test_cloud.plan_mode');
+ return mode==='existing'?openStorageAuthority({...options,policyMode:mode}):openPlanStorage({...options,mode});
 }
 
 // Provider work runs without database locks. The final policy read checks the
-// original revision; a free/paid toggle must not revive a prior writer generation.
+// original mode and revision; a permission round trip must not revive an old writer.
 export async function openPlanStorage({pool,mode,...options}){
- if(mode!=='test-free-paid')throw Error('test_cloud.plan_mode');
+ if(!['test-free-paid','test-venue-levels'].includes(mode))throw Error('test_cloud.plan_mode');
  async function policy(venueId){
   return transaction(pool,async client=>{
+   if(mode==='test-venue-levels'){
+    const permission=await readVenuePermissions(client,venueId,mode);
+    if(!levelAllows(permission.level,'continuous_backup'))throw Error('permission_denied');
+    return permission.revision;
+   }
    if(await readVenuePlan(client,venueId,mode)!=='paid')throw Error('permission_denied');
    const row=(await client.query('SELECT o.service_plan_revision FROM organisations o JOIN venues v ON v.organisation_id=o.id WHERE v.id=$1',[venueId])).rows[0];
    if(!row)throw Error('permission_denied');return row.service_plan_revision;
   });
  }
- const authority=await openStorageAuthority({...options,authorizeWriter:async(id,revision)=>{try{return await policy(id)===revision;}catch(error){if(error?.message==='permission_denied')return false;throw error;}}});
+ const authority=await openStorageAuthority({...options,policyMode:mode,authorizeWriter:async(id,revision,writerMode)=>{try{return writerMode===mode&&await policy(id)===revision;}catch(error){if(error?.message==='permission_denied')return false;throw error;}}});
  return {
   async provision(input){
    const revision=await policy(input.venueId),result=await authority.provision({...input,policyRevision:revision});
    try{if(await policy(input.venueId)!==revision)throw Error('permission_denied');return result;}
    catch(error){await authority.withdrawWriter(input.venueId,revision);throw error;}
   },
-  async reader(input){await policy(input.venueId);const result=await authority.reader(input);await policy(input.venueId);return result;},
+  async reader(input){const revision=await policy(input.venueId),result=await authority.reader(input);if(revision!==await policy(input.venueId))throw Error('permission_denied');return result;},
   read:(...args)=>authority.read(...args),
   withdrawWriter:(...args)=>authority.withdrawWriter(...args),
   reconcile:()=>authority.reconcile()

@@ -1,5 +1,5 @@
 import type {Pool} from 'pg';
-import {createLeaseTrust,InstallationError,InstallationStore,readMachineClaims,transaction,verifyLease,verifyMachine,type LeaseIssuer} from '@waitron-cloud/registration';
+import {createLeaseTrust,InstallationError,InstallationStore,readMachineClaims,requireTestPlanVenue,requireVenueService,transaction,verifyLease,verifyMachine,type LeaseIssuer,type PlanMode} from '@waitron-cloud/registration';
 import {hasConsent} from './consent.ts';
 import {TranslationError} from './errors.ts';
 import {parseJob,writtenItems} from './job-body.ts';
@@ -38,8 +38,9 @@ function jobReference(body:string,collect:boolean):{jobId:string;cursor:unknown}
 }
 function checkAction(action:TranslationAction){if(!actions.includes(action))throw new InstallationError('invalid_proof');}
 export class TranslationMachine {
- readonly #pool:Pool;readonly #issuer:LeaseIssuer;readonly #origin:string;readonly #trusted:ReadonlyMap<string,string>;readonly #collectPageBytes:number;
- constructor(pool:Pool,issuer:LeaseIssuer,origin:string,trusted=createLeaseTrust(issuer),collectPageBytes:number=maxCollectBytes){
+ readonly #pool:Pool;readonly #issuer:LeaseIssuer;readonly #origin:string;readonly #trusted:ReadonlyMap<string,string>;readonly #collectPageBytes:number;readonly #planMode:PlanMode;
+ constructor(pool:Pool,issuer:LeaseIssuer,origin:string,trusted=createLeaseTrust(issuer),collectPageBytes:number=maxCollectBytes,planMode:PlanMode='existing'){
+  requireTestPlanVenue('test',planMode);this.#planMode=planMode;
   validateCollectLimit(collectPageBytes);this.#collectPageBytes=collectPageBytes;
   this.#pool=pool;this.#issuer=issuer;this.#origin=origin;this.#trusted=trusted;
  }
@@ -49,26 +50,46 @@ export class TranslationMachine {
  async execute(action:TranslationAction,envelope:unknown,jobBody?:string):Promise<Record<string,unknown>>{
   checkAction(action);const routing=readMachineClaims(envelope);
   return transaction(this.#pool,async client=>{
-   const row=(await client.query(`SELECT i.id,i.venue_id,i.public_key,i.revoked_at,v.environment,s.state AS translation_state
+   const query=`SELECT i.id,i.venue_id,i.public_key,i.revoked_at,v.environment,s.state AS translation_state
     FROM installations i JOIN venues v ON v.id=i.venue_id
     LEFT JOIN installation_services s ON s.installation_id=i.id AND s.service='content_translation'
-    WHERE i.id=$1 FOR SHARE OF i`,[routing.installationId])).rows[0];
-   if(!row)throw new InstallationError('invalid_proof');
-   const claims=verifyMachine(envelope,row.public_key,this.#origin,action);
-   if(row.revoked_at)throw new InstallationError('revoked');
-   let encoded:unknown;try{encoded=JSON.parse(claims.lease);}catch{throw new InstallationError('invalid_proof');}
-   if(JSON.stringify(encoded)!==claims.lease)throw new InstallationError('invalid_proof');
-   const lease=verifyLease(encoded,this.#trusted,this.#origin);
-   if(lease.installationId!==row.id||lease.venueId!==row.venue_id||lease.environment!==row.environment||lease.publicKey!==row.public_key)throw new InstallationError('invalid_proof');
+    WHERE i.id=$1`;
+   let row=(await client.query(query+(this.#planMode==='existing'?' FOR SHARE OF i':''),[routing.installationId])).rows[0];
+   const authorize=(row:Record<string,any>)=>{
+    if(!row)throw new InstallationError('invalid_proof');
+    const claims=verifyMachine(envelope,row.public_key,this.#origin,action);
+    if(row.revoked_at)throw new InstallationError('revoked');
+    let encoded:unknown;try{encoded=JSON.parse(claims.lease);}catch{throw new InstallationError('invalid_proof');}
+    if(JSON.stringify(encoded)!==claims.lease)throw new InstallationError('invalid_proof');
+    const lease=verifyLease(encoded,this.#trusted,this.#origin);
+    if(lease.installationId!==row.id||lease.venueId!==row.venue_id||lease.environment!==row.environment||lease.publicKey!==row.public_key)throw new InstallationError('invalid_proof');
+    try{requireTestPlanVenue(row.environment,this.#planMode);}catch(error){if(error instanceof Error&&error.message==='permission_denied')throw new InstallationError('permission_denied');throw error;}
+    return claims;
+   };
+   let claims=authorize(row);
    if(action==='translation-submit'){
     if(typeof jobBody!=='string')throw new InstallationError('invalid_proof');
     const fingerprint=checkSubmitBody(claims.body,jobBody),parsed=parseJob(jobBody);
+    let allowed=true;
+    if(this.#planMode!=='existing'){
+     // A retry owns its durable job independently of today's permission and consent.
+     const replay=await client.query('SELECT 1 FROM translation_jobs WHERE installation_id=$1 AND operation_id=$2',[row.id,claims.operationId]);
+     if(!replay.rowCount){
+      try{
+       await requireVenueService(client,row.venue_id,'content_translation',this.#planMode);
+      }catch(error){if(error instanceof Error&&error.message==='permission_denied')allowed=false;else throw error;}
+     }
+     row=(await client.query(query+' FOR SHARE OF i',[routing.installationId])).rows[0];claims=authorize(row);
+    }
     await lockVenue(client,row.venue_id);
     const prior=await findSubmitted(client,row.id,claims.operationId,fingerprint);
     if(prior)return submitView(prior);
-    if(row.translation_state!=='ready')throw new InstallationError('permission_denied');
+    if(!allowed||row.translation_state!=='ready')throw new InstallationError('permission_denied');
     if(!await hasConsent(client,row.venue_id))throw new TranslationError('consent_required');
     return submitView(await createJob(client,{installationId:row.id,venueId:row.venue_id,operationId:claims.operationId,fingerprint,body:jobBody,total:writtenItems(parsed).length}));
+   }
+   if(this.#planMode!=='existing'){
+    row=(await client.query(query+' FOR SHARE OF i',[routing.installationId])).rows[0];claims=authorize(row);
    }
    const reference=jobReference(claims.body,action==='translation-collect');
    const job=await readJob(client,row.id,reference.jobId);

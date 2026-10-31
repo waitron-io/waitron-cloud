@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import { resolveSession } from '@waitron-cloud/identity';
 import { transaction } from './transaction.ts';
+import { venueServiceAuthorityInstalled } from './venue-service-schema.ts';
 export {hostedDaysCents,renewalLines,chargeTotals,type PriceList,type VenueChargeView,type RenewalLine,type ChargeTotals} from './billing-charges.ts';
 export {trialEnd,trialReminderDates,trialWasUsed,trialAllowanceTier,trialOutcome,mayStartTrial,TRIAL_DAYS,TRIAL_EXTENSION_DAYS,type TrialUsage,type TrialOutcome} from './billing-trials.ts';
 export {addDays,renewalDateIn,nextRenewalAfter,renewalOnOrAfter,firstAttemptDate,firstChargedRenewal,failureTimeline,refundTimeline,ATTEMPT_LEAD_DAYS,HOSTED_GRACE_DAYS,DIRECT_DEBIT_RETRY_SPACING_DAYS,type CivilDate,type PaymentMethodKind,type PaidLevel,type FailureTimeline} from './billing-calendar.ts';
@@ -194,6 +195,15 @@ export class RegistrationStore {
       return await this.#request(input, async (client, row, binding) => {
         if (!row.local_receipt_id || !row.cloud_account_id) throw new RegistrationError('approval_required');
         if (row.result) {
+          const authority = await venueServiceAuthorityInstalled(client)
+            ? await client.query('SELECT 1 FROM billing_service_authority WHERE venue_id=$1', [row.result.venueId]) : {rowCount: 0};
+          if (authority.rowCount) {
+            await client.query('SELECT id FROM organisations WHERE id=$1 FOR SHARE', [binding.organisationId]);
+          }
+          const venue = await client.query(`SELECT id FROM venues WHERE id=$1 AND organisation_id=$2
+            AND legal_business_id=$3 AND local_venue_id=$4 AND environment=$5 FOR NO KEY UPDATE`,
+          [row.result.venueId, binding.organisationId, binding.legalBusinessId, binding.localVenueId, binding.environment]);
+          if (!venue.rowCount) throw new RegistrationError('registration_conflict');
           const active = await client.query('SELECT id FROM installations WHERE id = $1 AND revoked_at IS NULL FOR SHARE',
             [row.result.installationId]);
           if (!active.rowCount) throw new RegistrationError('installation_unavailable');
@@ -202,6 +212,13 @@ export class RegistrationStore {
         // Hold permission rows until commit so revocation cannot commit between checking and linking.
         await requirePermission(client, row.cloud_account_id, binding.organisationId);
         await requireUnexpired(client, binding);
+        // Unenrolled linking keeps its legacy path; the venue lock still serializes first enrolment.
+        const enrolled = await venueServiceAuthorityInstalled(client)
+          ? await client.query(`SELECT 1 FROM billing_service_authority a JOIN venues v ON v.id=a.venue_id
+          WHERE v.environment=$1 AND v.local_venue_id=$2`, [binding.environment, binding.localVenueId]) : {rowCount: 0};
+        if (enrolled.rowCount) {
+          await client.query('SELECT id FROM organisations WHERE id=$1 FOR SHARE', [binding.organisationId]);
+        }
         await client.query(`INSERT INTO venues (id, organisation_id, legal_business_id, local_venue_id, environment)
           VALUES ($1, $2, $3, $4, $5) ON CONFLICT (environment, local_venue_id) DO NOTHING`,
         [randomUUID(), binding.organisationId, binding.legalBusinessId, binding.localVenueId, binding.environment]);
@@ -295,3 +312,6 @@ export {BillingStore} from './billing-store.ts';
 
 export {projectBillingDisplay,billingDisplayDay,type BillingDisplayV1,type BillingDisplayFacts} from './billing-display.ts';
 export {BillingDisplayMachine,BillingDisplayError} from './billing-display-machine.ts';
+
+export {readVenuePermissions,requireVenueService,type VenuePermission} from './venue-service-permissions.ts';
+export type {PermissionCommand} from './billing-types.ts';
