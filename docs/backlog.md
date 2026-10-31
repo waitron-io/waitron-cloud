@@ -49,6 +49,12 @@ idle connections keep Node alive under the default pool settings, omitted pool
 cleanup. Natural drain during active work or database failures, translation
 and production shutdown remain open.
 
+The [idle translation drain checks](backlog/worker-scheduling.md#idle-translation-commands-drain-naturally-d544)
+require SIGINT and SIGTERM to reach natural event-loop drain after real empty-queue
+claims, with no remaining database sessions or provider requests. They catch forced
+successful exit and omitted pool cleanup while default idle connections keep Node
+alive. Active work, database failures and production shutdown remain open.
+
 The [email command signal checks](backlog/worker-scheduling.md#email-command-shutdown-with-real-database-claims-d536)
 cover idle shutdown and a one-second hold of four blocked PostgreSQL connections
 under SIGINT and SIGTERM, followed by normal exit after lock release.

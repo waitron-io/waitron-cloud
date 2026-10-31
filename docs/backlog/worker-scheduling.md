@@ -162,6 +162,23 @@ methods. These checks cover empty queues only. Natural drain during active work,
 database failures, translation shutdown and production remain open. They do not
 identify which cleanup method released the connections.
 
+### Idle translation commands drain naturally (D544)
+
+Run `node scripts/test-postgres.mjs exec pnpm --dir packages/translation exec
+node --test test/worker-natural-exit.test.ts` to check idle translation shutdown
+under SIGINT and SIGTERM. The command first reaches two idle connections after
+real empty-queue claims. A wrapper observes Node's `beforeExit` event, which runs
+when work drains and is bypassed by forced exit. Shutdown must reach that event
+with code zero within six seconds and leave no database sessions. The job, body
+and usage tables stay empty, and the loopback provider receives no requests.
+
+While default idle connections keep Node alive, the six-second bound catches
+omitted pool cleanup before their ten-second idle expiry. Allowing exit with idle
+connections would let that omission pass. The wrapper leaves database and worker
+methods intact; it does not identify which cleanup method released connections.
+Natural drain during active work, database failures and production shutdown remain
+separate qualification gates.
+
 ## Worker scheduling deadlines and polling failures (D468)
 
 Run `node --test packages/registration/test/worker-loop-callback-refusals.test.ts`
