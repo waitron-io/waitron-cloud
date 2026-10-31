@@ -104,3 +104,13 @@ test('localCommandReporterRetainsAnActualChildHangup', async () => {
   assert.equal(report.childClosed, true);
   assert.equal(report.requestedSignal, 'SIGINT');
 });
+
+test('localCommandReporterPublishesTheSignalValueItValidated', async () => {
+  let reads = 0;
+  const report = await failedControl({result: {
+    status: null,
+    get signal() { return ++reads === 1 ? 'SIGHUP' : 'PRIVATE_SECOND_READ'; },
+  }});
+  assert.equal(report.signal, 'SIGHUP');
+  assert.equal(reads, 1);
+});
