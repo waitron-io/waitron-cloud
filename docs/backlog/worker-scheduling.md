@@ -126,8 +126,8 @@ Removing the pool close fails these checks because the default ten-second idle
 connection expiry exceeds the six-second exit deadline. They do not identify the
 cleanup method or distinguish explicit cleanup from idle connections allowed to
 exit sooner. They also do not distinguish waiting in the worker loop from waiting
-in pool cleanup. Longer waits, active-observation database
-failures, statement timeouts, connection loss and production shutdown remain open.
+in pool cleanup. For observation failures during shutdown, see the cancellation and statement-timeout
+checks below. Longer waits, connection loss and production shutdown remain open.
 
 ### Monitoring shutdown after active-observation cancellation (D553)
 
@@ -151,8 +151,33 @@ forced successful exit bypasses it.
 
 These checks qualify PostgreSQL query cancellation during active observation.
 They do not identify an explicit rollback or pool-cleanup method, or distinguish waiting in
-the worker loop from waiting in pool cleanup. Statement timeouts, connection
-loss, longer waits, alert-recipient delivery and production shutdown remain open.
+the worker loop from waiting in pool cleanup. For automatic statement timeouts,
+see D554 below. Connection loss, longer waits, alert-recipient delivery and production
+shutdown remain open.
+
+### Monitoring shutdown after an observation reaches its statement timeout (D554)
+
+Run `node scripts/test-postgres.mjs exec pnpm --dir packages/registration exec
+node --test test/monitor-worker-observation-timeout-shutdown.test.ts` to check
+SIGINT and SIGTERM while an owned incident-table lock holds a claimed observation.
+The lock stays held until command exit. PostgreSQL's ten-second statement timeout
+ends the observation without an external cancellation request. Each stop signal
+retains the same blocked query for a one-second hold, then the command reports one
+fixed failure diagnostic and drains naturally with code zero and no remaining sessions.
+
+The failed venue retains unset check/contact state and its 30-second retry delay.
+A venue made due after the signal stays unchecked and due, so shutdown cannot
+claim or defer it. A control without a stop signal reaches that later venue after
+the first timeout. SIGTERM during its second blocked observation then ends the
+command after the second timeout and diagnostic. No incidents, alert episodes
+or email are created. The observation wrapper requires Node's `beforeExit` event;
+a forced successful exit bypasses that event.
+
+These checks cover automatic statement timeout during an active monitoring
+observation. They do not identify the explicit rollback or pool-cleanup method,
+or distinguish waiting in the worker loop from waiting in pool cleanup. Other
+command modes, connection loss, longer waits, alert recipients and production
+shutdown remain separate gates.
 
 ### Monitoring command shutdown after database query cancellation (D541)
 
