@@ -3333,6 +3333,18 @@ implementation or production evidence.
   including unresolved verifier failures and capacity qualification.
 
 
+## Diagnostic download replies after account changes (D400)
+
+Native controller checks hold diagnostic replies while you change accounts,
+return to the original account or sign out. Old documents, malformed replies,
+refusals and rate limits cannot save a file, end a newer download or change its
+selection, feedback or wait. Current downloads still finish, selecting the same
+account keeps pending work, and an existing server wait remains in force.
+The earlier PR #644 qualification timed out during source installation before
+private-replay checks began (run 40646201742, job 122675571593). D530 retains
+the unresolved cause; a passing retest does not repair it. Production permission
+checks and provider qualification remain separate.
+
 ## Backup catalogue replies after account and venue changes (D396)
 
 Native controller checks hold refresh and older-page replies while you change
