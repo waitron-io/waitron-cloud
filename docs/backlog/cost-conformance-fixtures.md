@@ -20,6 +20,21 @@ permanent refusals, checksum verification after a retry, cancellation and the
 shared deadline. Docker-backed qualification runs in CI during the local outage;
 these controls do not establish the cause of the historical upstream 504.
 
+[D457's cost run](https://github.com/waitron-io/waitron-cloud/actions/runs/40811399202/job/123243127986)
+received HTTP 200, then stayed at 10,237,952 bytes through 110 seconds before its
+first attempt exhausted the shared 120-second budget. You now get another attempt
+when no headers or body bytes arrive for 30 seconds. Each header response or body
+chunk restarts that inactivity timer; the total budget still includes all
+attempts and pauses. Partial data is discarded before retrying, and only the
+complete archive with its pinned checksum reaches extraction.
+
+Run `node --test scripts/cloud-cost/conformance-archive-idle.test.mjs` for local
+HTTP controls covering stalled headers, a stalled partial body, exhausted
+attempts, a progressing body, caller cancellation and the shared deadline.
+These reproduce the missing retry and its repair. The historical upstream
+stall and repeated HTTP 500/504 responses still need attribution; this handling
+does not repair a service that refuses all three attempts.
+
 [Merge cost run 41139422264](https://github.com/waitron-io/waitron-cloud/actions/runs/41139422264/job/124349848462)
 received HTTP 500 on all three pinned Litestream archive attempts, with zero
 bytes, before any of that group's 12 cases ran. The trace cannot identify the

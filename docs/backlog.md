@@ -3624,7 +3624,11 @@ Keep the source pin, integrity checks, deadlines and original assertions.
 
 ### Fixture archive download retries (D311)
 
-**Open; the upstream 504 and later HTTP 500 causes remain unknown.** Archive
+**Open; the upstream 504 and later HTTP 500 causes remain unknown.** D457's
+stalled successful response now gets another attempt after 30 seconds without
+headers or body progress, within the existing three attempts and shared
+120-second budget. Local HTTP controls prove recovery from stalled headers and
+partial bodies, ongoing progress, cancellation and exhausted attempts. Archive
 diagnostics retain known public response-service labels and validated request IDs
 so you can correlate a refusal without exposing signed redirect URLs or arbitrary
 headers. Keep the bounded retries, shared download budget, cancellation and
