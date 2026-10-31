@@ -10,6 +10,23 @@ See [the boundaries and remaining work](backlog/storage-cache-fixture.md#concurr
 **Open.** Real store startup and historical failure causes remain open.
 See [the boundaries and remaining work](backlog/storage-cache-fixture.md#concurrent-storage-extraction-and-failed-startup-cleanup-d454).
 
+## Separate-process storage extraction and failed-startup cleanup (D457)
+
+**Open.** Real store startup and historical failure causes remain open.
+
+Run `node --test scripts/ci-backup-storage-process-extraction.test.mjs` to
+check two independent Node processes extracting one read-only archive. Each
+certificate-read refusal removes its own root while preserving the other
+process's executable, certificates and shared cache, in both completion orders.
+The probes pause before listeners and store startup. An unexpected refusal retry
+is caught by the existing 30-second test deadline; prompt refusal is unproved.
+See [the storage qualification boundaries](backlog/storage-cache-fixture.md#concurrent-storage-extraction-and-failed-startup-cleanup-d454).
+The earlier conformance archive stall (run 40811399202, job 123243127986) remains
+in [D311's download investigation](backlog/cost-conformance-fixtures.md#fixture-archive-download-retries-d311).
+PR #788 adds an inactivity retry for that download; it does not identify the
+upstream stall's cause. A recurring npm abort-diagnostic refusal remains separate
+in [the setup investigation](backlog/ci-pnpm-setup.md).
+
 ## Storage archive publication refusals (D449)
 
 **Open.** Real extraction, store startup and concurrent successful publication remain open.
