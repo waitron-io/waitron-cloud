@@ -241,6 +241,22 @@ retry; permission loss clears it, and rate limits keep their server wait.
 Server authority, browser integration and the translation release gates remain
 separate qualification work; local database checks wait for Docker.
 
+
+## Translation-consent HTTP retry deadlines (D430)
+
+Switching accounts keeps the server's translation-consent retry wait, so another
+account cannot bypass it. Run `node --test apps/portal/test/translation-consent-retry-boundary.test.ts`
+to check seconds and HTTP-date waits for reads, agreement and withdrawal through
+the request client and controller with native HTTP responses. Requests resume
+only at the deadline and after an explicit retry; native timer expiry sends no
+request itself. A backward clock change during a later refusal with no new wait
+cannot shorten an earlier deadline.
+
+Server authority, browser integration and translation release checks remain
+separate qualification gates. The historical genuine-browser reconnect refusal
+(run 40746396664, job 123021488076) remains under D201/D530 investigation; a
+passing qualification does not establish its cause or repair it.
+
 ## Account request proof and transport boundaries (D406)
 
 **Open.** Qualify server authority, browser integration and live ingress; physical
