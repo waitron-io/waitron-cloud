@@ -9,7 +9,9 @@ create the temporary directory. A reporting timer observes the existing
 also checks the elapsed budget before replacing the operation label. You can
 therefore identify the operation that crossed the budget even when it finishes
 before the timer runs. Reporting observes the budget; it does not stop setup or
-extend a deadline. Setup that finishes within budget stays silent.
+extend a deadline. Setup that finishes within budget stays silent. A command
+that throws before the next stage still reports `failure`, with its operation
+and elapsed time, even if it has also exceeded the budget.
 
 Reports contain only fixed labels and timings, without caught errors, commands,
 credentials or receipt contents. Native controlled-boundary checks cover failed

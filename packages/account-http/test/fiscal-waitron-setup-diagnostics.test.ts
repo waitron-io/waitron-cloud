@@ -231,3 +231,19 @@ test('initial directory failure keeps its original error and clears its reportin
   assert.equal(f.timerCleared, true);
   assert.deepEqual(control.closed, []);
 });
+
+
+test('a stage ending exactly at the setup budget reports its deadline', async t => {
+  const f = prepare(t);
+  let now = 0;
+  t.mock.method(performance, 'now', () => now);
+  control.onStage = stage => { if (stage === 'source-install') now = 120000; };
+  const fixture = await jointFixture();
+  await fixture.close();
+  assert.equal(f.reports.length, 1);
+  const report = JSON.parse(f.reports[0]!);
+  assert.equal(report.reason, 'deadline');
+  assert.equal(report.stage, 'source-install');
+  assert.equal(report.elapsedMs, 120000);
+  assert.equal(f.timerCleared, true);
+});
