@@ -48,7 +48,8 @@ See [the boundaries and remaining work](backlog/storage-cache-fixture.md#storage
 See [the boundaries and remaining work](backlog/worker-scheduling.md#worker-shutdown-during-polling-and-error-reporting-d459).
 
 Cancelled monitoring startup scheduling and translation startup retention now require
-natural command exit, as does blocked translation retention after lock release.
+natural command exit, as do blocked translation retention, idle monitoring shutdown
+and blocked monitoring startup after lock release.
 Active translation checks also require natural exit during the first provider call,
 review and two concurrent jobs; explicit pool cleanup remains open. See [the additional qualification detail](backlog/worker-scheduling.md#additional-shutdown-and-timer-qualification).
 

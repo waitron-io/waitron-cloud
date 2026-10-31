@@ -86,14 +86,22 @@ node --test test/monitor-worker-shutdown.test.ts` to check the actual monitoring
 command under SIGINT and SIGTERM. Each signal stops idle polling normally,
 with no database sessions remaining after exit. When an owned installations-table
 lock blocks startup scheduling, the command retains its connection during a
-one-second hold after the signal and exits normally after lock release.
+one-second hold after the signal and drains naturally after lock release.
 The empty tables prevent observations and alert mail.
 
-These checks protect orderly command shutdown while database work finishes.
-They do not prove explicit pool cleanup or cancellation of an active query,
-or distinguish waiting in the
-worker loop from waiting in pool cleanup. Active monitoring, other commands,
-database failures and production deployment retain separate qualification gates.
+The natural-drain observation (D551) requires exactly `{"drained":true,"code":0}`
+from an observation wrapper at Node's `beforeExit` event in all four idle and
+blocked-startup cases. This event runs when no work keeps the process alive.
+A forced successful exit after cleanup bypasses it and fails all four checks;
+removing only the new output expectation lets that fault pass again. The command
+stays quiet. All other state, connection, one-second hold and six-second exit
+checks remain.
+
+These checks do not prove explicit pool cleanup or cancellation of an active query,
+or distinguish waiting in the worker loop from waiting in pool cleanup. An
+unreferenced idle connection closed during process exit can satisfy the session
+check. Active monitoring, other command modes, database failures, longer waits and
+production deployment retain separate qualification gates.
 
 ### Monitoring command shutdown after database query cancellation (D541)
 
