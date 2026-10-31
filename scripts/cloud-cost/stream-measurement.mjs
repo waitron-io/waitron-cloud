@@ -131,7 +131,7 @@ export async function openStreamMeasurement({ target, sdk, bucket, versioned, cl
         need(requests.reconciled === true && requests.status === 'measured');
         state = 'active'; return { requests, storage };
       } catch {
-        // Preserve the first transport refusal before disposal can add active-close or destroy its counters.
+        // Preserve the transport refusal counts before disposal settles pending requests.
         if (transportAdmission) try {
           Promise.resolve(onDiagnostic?.(checkpointTransportDiagnostic(front.checkpoint()))).catch(() => {});
         } catch { /* Reporting cannot replace the measurement refusal or prevent collection. */ }

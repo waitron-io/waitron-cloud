@@ -800,3 +800,47 @@ test('isolatedRefusalRetainsTraceWhenACompletedWorkerResultIsRejected', async t 
   assert.deepEqual(refusal.diagnostic.trace, [{ kind: 'replay', stage: 'verification' }]);
   clean(f, before);
 });
+
+// Dropping either forwarding hop or the worker trace file loses this real HTTP refusal at the host.
+test('isolatedHostRetainsCheckpointTransportEvidenceFromTheActualWorker', async t => {
+  const f = await streamedFixture(t), before = fingerprint(f.database);
+  const fs = (await import('node:fs')).default, { syncBuiltinESMExports } = await import('node:module');
+  const copy = fs.copyFileSync; let injected = false, refusal;
+  fs.copyFileSync = (source, destination, ...args) => {
+    const result = copy(source, destination, ...args);
+    if (destination === join(f.codeRoot, 'cloud-cost-runner/replay-stream.mjs')) {
+      const body = readFileSync(destination, 'utf8');
+      const marker = "at('quiesce-checkpoint'); return session.checkpoint();";
+      assert.equal(body.split(marker).length, 2, 'inject only at the completed writer checkpoint');
+      writeFileSync(destination, body.replace(marker, `at('quiesce-checkpoint');
+        const {request} = await import('node:http');
+        await new Promise((resolve,reject)=>{
+          const req=request(session.url+'/private-checkpoint/PRIVATE_REJECTED_KEY',{method:'PUT',agent:false},res=>{
+            res.resume();res.on('end',()=>res.statusCode===400?resolve():reject(Error('expected transport refusal')));
+          });req.on('error',reject);req.end();
+        });
+        return session.checkpoint();`));
+      injected = true;
+    }
+    return result;
+  }; syncBuiltinESMExports();
+  try {
+    await assert.rejects(controller.runIsolatedReplay(f), error => { refusal = error; return error.message === bad.message; });
+  } finally { fs.copyFileSync = copy; syncBuiltinESMExports(); }
+  assert.equal(injected, true);
+  assert.equal(refusal.diagnostic?.stage, 'replay');
+  const trace = refusal.diagnostic.trace, event = trace.find(event => event.kind === 'checkpoint-transport');
+  assert.ok(event, JSON.stringify(trace));
+  const { completed, ...fixed } = event;
+  assert.deepEqual(fixed, {
+    kind: 'checkpoint-transport', reason: 'request-validation', validationStage: 'identity', pending: 0,
+  });
+  assert.ok(Number.isSafeInteger(completed) && completed > 0);
+  const position = trace.indexOf(event);
+  assert.ok(trace.slice(0, position).some(event => event.kind === 'native' && event.operation === 'replicate' && event.code === 0));
+  assert.deepEqual(trace[position + 1], { kind: 'measurement-refusal', stage: 'checkpoint-admission' });
+  const entries = JSON.parse(readFileSync(f.journal.path, 'utf8')).localResources;
+  assert.deepEqual(entries.find(entry => entry.kind === 'worker-trace' && entry.state === 'recorded').trace, trace);
+  assert.doesNotMatch(JSON.stringify(refusal.diagnostic), /PRIVATE|private-checkpoint|127\.0\.0\.1/);
+  clean(f, before);
+});
