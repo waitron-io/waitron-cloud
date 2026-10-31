@@ -205,9 +205,32 @@ methods intact; it does not identify which cleanup method released connections.
 The session check cannot distinguish explicit cleanup from sockets closed by
 process exit, or detect an unreferenced connection closed during exit. A worker
 that stops on its own after the three-second live period can still pass.
-Natural drain during active work, database failures and production shutdown remain
-separate qualification gates. Longer idle periods and pre-signal live observation
-for the email and monitoring commands remain unqualified.
+The [active translation checks](#active-translation-commands-drain-naturally-d550)
+require natural drain in three provider-call cases. Other active-work combinations,
+database failures and production shutdown remain separate qualification gates.
+Longer idle periods and pre-signal live observation for the email and monitoring
+commands remain unqualified.
+
+### Active translation commands drain naturally (D550)
+
+Run `node scripts/test-postgres.mjs exec pnpm --dir packages/translation exec
+node --test test/worker-cli.test.ts` to check natural command exit after SIGTERM
+during the first provider call, SIGINT during review, and SIGTERM with two active
+jobs and a third queued. An observation-only preload prints exactly
+`{"drained":true,"code":0}` at Node's `beforeExit` event. A forced successful exit
+after cleanup bypasses that event and fails all three checks; reverting only the
+new output expectation lets the same fault pass again. The command stays quiet.
+
+The original checks still require the interrupted jobs to retain no partial batch
+and release their leases for another attempt. The two-job case leaves the third
+job queued and makes no further provider request. All existing signal, state,
+usage, privacy and deadline checks remain. The provider is a loopback fixture;
+these tests send no request to an outside service.
+
+These checks require natural exit within the existing twenty-second command
+deadline. They do not prove explicit pool cleanup or that every pending operation
+was awaited. Other signal and provider-phase combinations, provider timeouts,
+connection loss and production shutdown remain open.
 
 ## Worker scheduling deadlines and polling failures (D468)
 
