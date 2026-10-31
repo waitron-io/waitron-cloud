@@ -3479,6 +3479,16 @@ is only an inference. Retain this failure in the shared CI-failure investigation
 Fresh qualification preserves the original outside-request, accounting, cleanup
 and deadline checks; a passing run does not establish the historical cause.
 
+Fresh D349 qualification also fails the source-fetch fixture's “browser
+preparation refuses the historical replay revision before installation” case in
+[CI run 41169033630, job
+124443297790](https://github.com/waitron-io/waitron-cloud/actions/runs/41169033630/job/124443297790).
+Reading the generated state at `conformance-source-fetch.test.mjs:60` throws
+`Unexpected end of JSON input`; 2,506 other cases in that suite pass. The
+unchanged case passes alone on macOS and the Linux test box. The cause remains
+unknown; D530 owns the investigation. Preserve its source-revision refusal and
+cleanup checks while collecting evidence of the state writer's completion.
+
 ## Public browser and network qualification
 
 Qualify the public browser check against the supported browsers and production
