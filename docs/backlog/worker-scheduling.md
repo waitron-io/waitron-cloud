@@ -35,6 +35,21 @@ production deployment still need separate qualification. These checks do not
 claim that shutdown cancels an active database query or that awaiting the worker
 loop, rather than pool cleanup, keeps those connections open.
 
+### Monitoring command shutdown with real database scheduling (D537)
+
+Run `node scripts/test-postgres.mjs exec pnpm --dir packages/registration exec
+node --test test/monitor-worker-shutdown.test.ts` to check the actual monitoring
+command under SIGINT and SIGTERM. Each signal stops idle polling normally and
+closes the command's database connections. When an owned installations-table
+lock blocks startup scheduling, the command retains its connection during a
+one-second hold after the signal and exits normally after lock release.
+The empty tables prevent observations and alert mail.
+
+These checks protect orderly command shutdown while database work finishes.
+They do not prove cancellation of an active query or distinguish waiting in the
+worker loop from waiting in pool cleanup. Active monitoring, other commands,
+database failures and production deployment retain separate qualification gates.
+
 ## Worker scheduling deadlines and polling failures (D468)
 
 Run `node --test packages/registration/test/worker-loop-callback-refusals.test.ts`

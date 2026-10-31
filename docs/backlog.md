@@ -30,6 +30,11 @@ cover idle shutdown and a one-second hold of four blocked PostgreSQL connections
 under SIGINT and SIGTERM, followed by normal exit after lock release.
 Other worker commands, active delivery and production shutdown remain open.
 
+The [monitoring command signal checks](backlog/worker-scheduling.md#monitoring-command-shutdown-with-real-database-scheduling-d537)
+cover idle shutdown and a one-second hold of blocked startup scheduling under
+SIGINT and SIGTERM, followed by normal exit and closed database connections.
+Active monitoring, database failure and production shutdown remain open.
+
 Run `node --test packages/registration/test/worker-loop-schedule-timer.test.ts`
 to check that startup and recurring scheduling failures enter a real retry timer
 before shutdown. At two and 32 slots, reporting keeps the original error and
