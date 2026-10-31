@@ -245,17 +245,16 @@ separate qualification work; local database checks wait for Docker.
 ## Translation-consent HTTP retry deadlines (D430)
 
 Switching accounts keeps the server's translation-consent retry wait, so another
-account cannot bypass it. Native HTTP/client/controller tests cover seconds and
-HTTP-date waits for reads, agreement and withdrawal. Requests resume only after
-the deadline and an explicit retry. A backward clock change during a later
-request cannot shorten an earlier deadline.
-Server authority, browser integration and translation release checks remain
-separate qualification gates; database suites run in CI while Docker is down.
+account cannot bypass it. Run `node --test apps/portal/test/translation-consent-retry-boundary.test.ts`
+to check seconds and HTTP-date waits for reads, agreement and withdrawal through
+the request client and controller with native HTTP responses. Requests resume
+only at the deadline and after an explicit retry. A backward clock change during
+a later request cannot shorten an earlier deadline.
 
-Full qualification still needs D201's reconnect-refusal investigation. The
-strict genuine-browser check refuses at reconnect/requests; its cause is
-unknown. Keep its assertions and deadlines and qualify with the genuine Linux
-fixture after a demonstrated repair.
+Server authority, browser integration and translation release checks remain
+separate qualification gates. The historical genuine-browser reconnect refusal
+(run 40746396664, job 123021488076) remains under D201/D530 investigation; a
+passing qualification does not establish its cause or repair it.
 
 ## Account request proof and transport boundaries (D406)
 
