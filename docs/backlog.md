@@ -4364,10 +4364,11 @@ The keyboard fixture waits for its options handler before checking the exact
 password and pending controls, within the existing four-second budget. Original
 journeys remain alongside delayed-handler and missing-record controls.
 
-Qualification is blocked by a [gateway reconnect refusal](https://github.com/waitron-io/waitron-cloud/actions/runs/40597914600/job/122518692085):
+Historical qualification recorded a [gateway reconnect refusal](https://github.com/waitron-io/waitron-cloud/actions/runs/40597914600/job/122518692085):
 the session was accepted but the request check failed. Its cause remains unknown;
 lane D's D201 owns the investigation. Keep the accounting checks and deadlines.
-Local Docker reproduction waits until 3 November.
+The owner's test box now provides focused Docker reproduction. Fresh qualification
+does not identify the historical cause.
 
 ## A way forward after every refusal (D254)
 
