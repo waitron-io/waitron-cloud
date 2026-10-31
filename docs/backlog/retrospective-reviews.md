@@ -30,6 +30,18 @@ assertions and add real hook and filesystem refusals plus controlled error and
 clock boundaries. See [the setup investigation](joint-fiscal-fixture-setup.md)
 for the historical cause and remaining timing limits.
 
+## Interrupted LIST evidence
+
+The pre-acknowledgement interruption control leaves the storage observer's LIST
+response unfinished. You can use it to check the producer's interruption and
+the refusal, but it does not qualify the historical pairing of producer
+interruption and observer success. The test title states that narrower scope.
+
+Run `node --test scripts/cloud-cost/litestream-held-list-evidence.test.mjs` for
+the five native controls. The other cases cover settlement of both counters,
+stop ordering, invalid replies, truncation and capture before cleanup. They do
+not establish the historical Linux cause or qualify the official writer.
+
 ## Registry refusal qualification
 
 The image launcher's immediate refusal of client errors has a limit: a message

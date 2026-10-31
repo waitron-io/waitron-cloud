@@ -110,7 +110,7 @@ test('excess LISTs truncate evidence while leaving the held request and refusal 
 });
 
 
-test('a real pre-acknowledgement initial LIST interruption stays refused and identifies its two outcomes', () => {
+test('a real pre-acknowledgement initial LIST interruption stays refused and identifies its producer outcome', () => {
   const result=run('initial-interrupted-before-ack');
   assert.equal(result.error,undefined);assert.equal(result.status,1);assert.equal(result.stdout,'');
   assert.doesNotMatch(result.stderr,/PRIVATE_CANARY|11111111|synthetic|\.ltx|\/tmp\//);
