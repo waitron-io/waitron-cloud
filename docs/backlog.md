@@ -494,24 +494,21 @@ Run `node --test deploy/test-cloud/storage-admin-exhaustion.test.mjs` to check
 usable S3 storage when all 101 admin gRPC choices are occupied, preservation of
 every competing listener, cleanup and later clean startup. The native fallback
 warning does not imply S3 startup refusal. Admin-worker functionality, an actual
-admin bind refusal and later bind races remain open.
+admin bind refusal and bind races involving other programs remain open.
 
 [PR790 qualification](https://github.com/waitron-io/waitron-cloud/actions/runs/41172266544/job/124452925371)
 failed before these checks when SeaweedFS refused its allocated master port.
 The listener snapshot names a `weed` process; its fixture owner remains
 unknown. This case deliberately disables the fixture's handoff retry to prove
 that admin exhaustion does not restart storage. The unchanged Linux control
-passes, which does not explain or fix the CI collision. Reproduce the handoff
-under concurrent fixtures and preserve the no-restart, competing-listener and
-cleanup assertions when fixing this separate cause.
+passes, which does not explain or fix that historical collision.
 
 [PR793's unrelated documentation qualification](https://github.com/waitron-io/waitron-cloud/actions/runs/41182496471/job/124482642911)
 also reaches a later handoff refusal in the existing forced-collision readiness
 test. Its restarted native store cannot bind the allocated S3 gRPC port; the
 listener snapshot names another `weed` PID without identifying its fixture.
 The expected original SDK error is therefore replaced by the genuine startup
-refusal. Keep the single-restart limit and original-error assertion while
-reproducing this collision under concurrent fixtures. The unchanged forced-collision
+refusal. The unchanged forced-collision
 case passes all three modes on the authorised Linux test box, including the
 throwing reporter; that control does not explain or repair the CI collision.
 
@@ -522,6 +519,31 @@ The restarted store cannot bind S3 gRPC port 46747; its listener snapshot names
 assertion fails. Both storage source and test match the branch's base exactly.
 Lane H's D530 investigation owns this recurrence; keep the single restart and
 every assertion. A later clean qualification does not repair this collision.
+
+Run `node --test scripts/ci-backup-storage-port-ownership.test.mjs` to check
+port ownership across the socket-to-child handoff. Each fixture holds atomic
+filesystem claims until its child stops. Other cooperating fixtures, including
+separate processes with different temporary directories, skip those ports
+while selecting their own batch. A paused native child makes the gap reproducible.
+The checks retain usable storage, release after stop and bounded refusal after
+256 claimed candidates without starting another child. Existing restart limits,
+readiness budgets and error assertions remain.
+
+Run `node --test scripts/ci-backup-storage-claim-cleanup.test.mjs` to check
+missing or replaced claims and an unlink refusal. Cleanup checks link targets,
+leaves replacement claims in place and finishes closing owned resources before
+reporting an unlink failure. Startup retains its original error. The shared
+directory must be a real directory owned by your user with no access for other
+users; a permissive directory, symlink or different owner is refused.
+
+The Linux investigation captured two live fixtures requesting the same port
+before either exited. This identifies an allocation race; it does not identify
+the historical competing processes. Claims prevent that reuse between these
+fixtures. Other programs, native fallback choices and outgoing connections can
+still compete for a port; those causes remain open. A killed driver can leave
+claims under `/tmp/waitron-cloud-storage-ports-<uid>`; later fixtures skip them
+rather than remove another process's state. Cleanup removes only claims this
+fixture created.
 
 ## Repository licence
 

@@ -10,6 +10,10 @@ import {
   rm,
   open,
   rename,
+  symlink,
+  unlink,
+  readlink,
+  lstat,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -105,6 +109,10 @@ async function startBackupStorageAttempt(options) {
   let oidc, child, log, adminClient, allocatedPorts, readiness;
   const managed = new Map();
   const portReservations = [];
+  const portClaims = [];
+  // TMPDIR can differ between test processes sharing the same network ports.
+  // Atomic claims in a common directory survive the socket-to-child handoff.
+  const portClaimsDirectory = join("/tmp", "waitron-cloud-storage-ports-" + process.getuid());
   function listenerFailure(error, listener, reservation = null) {
     // Fixed names and a reservation number identify binds without exposing keys
     // or configuration. A broken output sink must preserve the original refusal.
@@ -117,6 +125,7 @@ async function startBackupStorageAttempt(options) {
     ));
   }
   async function stop() {
+    let claimCleanupFailure;
     await releasePorts();
     adminClient?.destroy();
     if (child && child.exitCode === null && child.signalCode === null) {
@@ -130,9 +139,17 @@ async function startBackupStorageAttempt(options) {
         await new Promise((r) => child.once("exit", r));
       }
     }
+    await Promise.all(portClaims.splice(0).map(async path => {
+      try {
+        if (await readlink(path) === root) await unlink(path);
+      } catch (error) {
+        if (error.code !== "ENOENT") claimCleanupFailure ??= error;
+      }
+    }));
     if (oidc) await new Promise((r) => oidc.close(r));
     await log?.close();
     await rm(root, { recursive: true, force: true });
+    if (claimCleanupFailure) throw claimCleanupFailure;
   }
   try {
     const bin = await binary(root);
@@ -306,18 +323,33 @@ async function startBackupStorageAttempt(options) {
       secretAccessKey: randomBytes(32).toString("base64url"),
     });
     await writeIdentities();
+    await mkdir(portClaimsDirectory, { recursive: true, mode: 0o700 });
+    const claimDirectory = await lstat(portClaimsDirectory);
+    if (!claimDirectory.isDirectory() || claimDirectory.uid !== process.getuid() || (claimDirectory.mode & 0o077) !== 0)
+      throw Error("Storage port claim directory must be private and owned by this user");
     const ports = [];
     // Keep every listener open while choosing the batch so the kernel cannot
     // assign one port to two SeaweedFS services. Reject connections so releasing
     // the reservations cannot wait for a peer before handing them to the child.
-    for (let i = 0; i < 8; i++) {
+    for (let candidates = 0; ports.length < 8; candidates++) {
+      if (candidates === 256) throw Error("Could not reserve unclaimed storage ports");
       const reservation = netServer(socket => socket.destroy());
       portReservations.push(reservation);
       await new Promise((resolve, reject) => {
         reservation.once("error", reject);
         reservation.listen(0, "127.0.0.1", resolve);
-      }).catch(error => listenerFailure(error, "reservation", i + 1));
-      ports.push(reservation.address().port);
+      }).catch(error => listenerFailure(error, "reservation", ports.length + 1));
+      const port = reservation.address().port;
+      const claim = join(portClaimsDirectory, String(port));
+      try { await symlink(root, claim); }
+      catch (error) {
+        if (error.code !== "EEXIST") throw error;
+        await new Promise(resolve => reservation.close(resolve));
+        portReservations.pop();
+        continue;
+      }
+      portClaims.push(claim);
+      ports.push(port);
     }
     const [s3, master, masterGrpc, volume, volumeGrpc, filer, filerGrpc, s3Grpc] =
       ports;
@@ -584,7 +616,11 @@ async function startBackupStorageAttempt(options) {
       // Observe listeners before owned-child cleanup. Never stop a competing owner.
       error.storageStartup = { ports: allocatedPorts, socketOwners, ...(readiness ? { readiness } : {}) };
     }
-    await stop();
+    try { await stop(); }
+    catch {
+      // Cleanup evidence must not replace the startup refusal or its diagnostics.
+      try { console.error("storage_cleanup_failure"); } catch {}
+    }
     throw error;
   }
 }
