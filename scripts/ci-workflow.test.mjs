@@ -29,7 +29,7 @@ test('all existing receipt suites and workflow guards remain available in CI',()
 test('slow packages run every file shard with their original test deadlines',()=>{
   const members=loadWorkspace();
   const full=workPlan(scopeForPaths([],members),members);
-  for (const [name,count] of [['registration',5],['account-http',3],['backups',2],['portal',3]]) {
+  for (const [name,count] of [['registration',5],['account-http',3],['backups',2],['portal',6]]) {
     const rows=full.packages.filter(row=>row.package===`@waitron-cloud/${name}`);
     assert.deepEqual(rows.map(row=>row.shard),Array.from({length:count},(_,i)=>i+1));
     assert.ok(rows.every(row=>row.shards===count));

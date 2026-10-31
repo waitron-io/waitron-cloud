@@ -9,7 +9,7 @@ import {loadWorkspace, workPlan} from './ci-scope.mjs';
 
 const {assertSummary} = summary;
 const results = {changes: 'success', typecheck: 'success', root: 'success', packages: 'success', receipts: 'skipped'};
-const partitions = [['registration', 5], ['account-http', 3], ['backups', 2], ['portal', 3]];
+const partitions = [['registration', 5], ['account-http', 3], ['backups', 2], ['portal', 6]];
 const rowsFor = (name, count) => Array.from({length: count}, (_, i) => ({package: `@waitron-cloud/${name}`, shard: i + 1, shards: count}));
 
 test('summary policy contains exactly the real workspace packages, including no obsolete names', () => {
@@ -43,7 +43,7 @@ test('summary refuses every omitted shard even when all remaining planned jobs p
 
 test('summary refuses self-consistent plans that change the registered partition count', () => {
   for (const [name, count] of partitions) {
-    for (const declared of new Set([1, count - 1, count + 1, ...(name === 'registration' ? [6, 7, 8] : [])])) {
+    for (const declared of new Set([1, count - 1, count + 1, ...(name === 'registration' ? [6, 7, 8] : name === 'portal' ? [3] : [])])) {
       assert.throws(() => summarize(rowsFor(name, declared)), /Invalid package allocation/, `${name}: declared ${declared}`);
     }
     assert.throws(() => summarize([{package: `@waitron-cloud/${name}`, shard: 1}]), /Invalid package allocation/);
@@ -61,12 +61,12 @@ test('summary refuses malformed rows before matching their successful job names'
     {...regular, shard: 0}, {...regular, shard: 2}, {...regular, shard: '1'},
     {...regular, shards: 0}, {...regular, shards: null}, {...regular, shards: false},
     {...regular, command: 'proof:local-stack'},
-    ...[0, 4, 1.5, '1', null, true].map(shard => ({package: '@waitron-cloud/portal', shard, shards: 3})),
+    ...[0, 7, 1.5, '1', null, true].map(shard => ({package: '@waitron-cloud/portal', shard, shards: 6})),
   ]) assert.throws(() => summarize([invalid]), /Invalid package allocation/);
 });
 
 test('summary refuses inconsistent shard denominators and mixed valid package allocations', () => {
-  const rows = rowsFor('portal', 3);
+  const rows = rowsFor('portal', 6);
   assert.throws(() => summarize([rows[0], {...rows[1], shards: 2}, rows[2]]), /Invalid package allocation/);
   assert.throws(() => summarize([{package: '@waitron-cloud/identity', shard: 1}, ...rows.slice(1)]), /Incomplete package allocation/);
 });

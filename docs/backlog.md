@@ -1682,8 +1682,8 @@ implementation or production evidence.
 - **CI execution budget.** You can read one summary job and the individual package
   and receipt jobs to check a candidate. The summary also checks the plan's
   package allocation against the planner's registered package names and shard
-  counts. Registration uses five partitions; account HTTP and portal use three
-  each, and backups uses two. The summary requires every registration partition
+  counts. Registration uses five partitions, account HTTP uses three, portal uses six
+  and backups uses two. The summary requires every registration partition
   and rejects the former six- and seven-partition allocations. A Node subprocess
   check partitions copies of every current registration filename plus a new
   filename and requires each to execute exactly once. Its file workers run one
@@ -1732,6 +1732,8 @@ implementation or production evidence.
   cost reduction is claimed by this guard. The reviewed
   [precise-selection design](superpowers/specs/2026-10-14-precise-ci-selection.md)
   and [implementation plan](superpowers/plans/2026-10-14-precise-ci-selection.md)
+  remain the guide for the parked `feat/precise-ci-selection` branch. Rebase that
+  branch over the six-partition portal allocation before resuming it. They
   define how documentation, scripts, configuration, resolved lockfile changes and
   receipt inputs can select their actual checks. The first implementation selects
   one Markdown check for a documentation-only change under `docs/` (excluding
@@ -2664,7 +2666,7 @@ implementation or production evidence.
   Unknown/full changes retain all five;
   portal source changes also omit local-stack when its audit holds, otherwise they
   retain it. Isolated ui-smoke needs no receipt. Registration
-  uses five file shards, account HTTP and portal use three each, and backups uses
+  uses five file shards, account HTTP uses three, portal uses six and backups uses
   two. Selected identity, operations and remote-access suites share one job when at
   least two are needed. Each keeps its full package command and deadline, runs
   once in sequence, and reports its own result. One PostgreSQL/Mailpit setup
@@ -3404,8 +3406,9 @@ requirements](backlog/diagnostic-permission-lock.md).
 ## Dependency-cache save stalls (D507)
 
 **Open.** Attribute the historical upload stall and qualify the five remaining
-setup-node cache consumers before changing them. Keep the portal shard within
-its overall job budget after passing tests.
+setup-node cache consumers before changing them. Portal work now uses six
+file partitions to leave room for setup and cleanup within its eight-minute
+job limit; every case keeps its original assertions and deadline.
 See [the boundaries and remaining work](backlog/ci-cache-saving.md#dependency-cache-save-stalls-d507).
 
 ## CI PostgreSQL image pull

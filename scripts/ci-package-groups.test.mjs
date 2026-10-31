@@ -13,12 +13,12 @@ const row = selected => ({package: selected.join(' + '), members: selected, shar
 test('full plan packs all short packages exactly once while preserving every other shard', () => {
   const workspace = loadWorkspace();
   const plan = workPlan(scopeForPaths([], workspace), workspace);
-  assert.equal(plan.packages.length, 17);
+  assert.equal(plan.packages.length, 20);
   assert.deepEqual(plan.packages.find(item => item.members), row(members));
   const logical = plan.packages.flatMap(item => item.members ?? [item.package]);
   for (const name of members) assert.equal(logical.filter(value => value === name).length, 1);
   assert.deepEqual([...new Set(logical)].sort(), workspace.map(pkg => pkg.name).sort());
-  for (const [name, count] of [['registration', 5], ['account-http', 3], ['backups', 2], ['portal', 3]]) {
+  for (const [name, count] of [['registration', 5], ['account-http', 3], ['backups', 2], ['portal', 6]]) {
     assert.deepEqual(plan.packages.filter(item => item.package === `@waitron-cloud/${name}`),
       Array.from({length: count}, (_, i) => ({package: `@waitron-cloud/${name}`, shard: i + 1, shards: count})));
   }
@@ -106,8 +106,8 @@ test('summary validates grouped members and requires the successful exact group 
 });
 
 test('summary rejects a package scheduled both whole and in a shard', () => {
-  const plan = {packages: [{package: '@waitron-cloud/portal', shard: 1}, {package: '@waitron-cloud/portal', shard: 1, shards: 3}], receipts: [], typecheck: true};
+  const plan = {packages: [{package: '@waitron-cloud/portal', shard: 1}, {package: '@waitron-cloud/portal', shard: 1, shards: 6}], receipts: [], typecheck: true};
   const results = {changes: 'success', typecheck: 'success', root: 'success', packages: 'success', receipts: 'skipped'};
-  const jobs = ['changes', 'typecheck', 'root (1/4)', 'root (2/4)', 'root (3/4)', 'root (4/4)', 'package (@waitron-cloud/portal)', 'package (@waitron-cloud/portal, shard 1/3)'].map(name => ({name, status: 'completed', conclusion: 'success'}));
+  const jobs = ['changes', 'typecheck', 'root (1/4)', 'root (2/4)', 'root (3/4)', 'root (4/4)', 'package (@waitron-cloud/portal)', 'package (@waitron-cloud/portal, shard 1/6)'].map(name => ({name, status: 'completed', conclusion: 'success'}));
   assert.throws(() => assertSummary(plan, results, jobs), /Duplicate package execution/);
 });

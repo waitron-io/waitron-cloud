@@ -69,7 +69,7 @@ test('unrelated package changes omit public gateway while retaining packages, ty
     assert.deepEqual(select().receipts, expected);
     const plan = createPlan({pull_request: {base: {sha: base}, head: {sha: head}}}, {}, workspace, git, () => {throw Error('No reuse');});
     assert.deepEqual(plan.receipts, expected);
-    assert.equal(plan.packages.length, 16);
+    assert.equal(plan.packages.length, 19);
     assert.equal(plan.typecheck, true);
     assert.match(plan.reason, /omitted public gateway receipt.*both revisions/i);
     assert.doesNotMatch(plan.reason, /Unverified package revisions:/);
