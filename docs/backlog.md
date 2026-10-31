@@ -3996,8 +3996,9 @@ refused the transport body-accounting case after10.20seconds. At stop/idle, a
 response listing storage objects closed prematurely after headers; the native
 process exited0 but the audit remained unfinished. Retain the parsed diagnostic
 with the [Litestream shutdown investigation](backlog/cost-stack-replication.md).
-The cause is unknown. Keep all accounting guards and deadlines unchanged;
-genuine local reproduction waits for Docker. Source equality is not causal proof.
+The cause is unknown. Keep all accounting guards and deadlines unchanged.
+Use the owner's test box for focused Docker reproduction. Source equality is
+not causal proof.
 
 ## Public browser and network qualification
 
