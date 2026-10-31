@@ -35,7 +35,7 @@ reading the body consumes that same wait. Native clock checks and the English an
 Spanish browser matrix cover retained choices and explicit retry through expiry.
 A retry keeps the existing request proof and binding. Server permission checks,
 local confirmation and live deployment remain separate qualification gates;
-database suites run in CI during the local Docker outage.
+database suites run in CI.
 
 ## Pairing HTTP replies and binding checks (D414)
 
