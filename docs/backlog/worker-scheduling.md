@@ -100,8 +100,8 @@ checks remain.
 These checks do not prove explicit pool cleanup or cancellation of an active query,
 or distinguish waiting in the worker loop from waiting in pool cleanup. An
 unreferenced idle connection closed during process exit can satisfy the session
-check. Active monitoring, other database failures, longer waits and production
-deployment retain separate qualification gates.
+check. Active monitoring, other command modes, database failures, longer waits and
+production deployment retain separate qualification gates.
 
 ### Monitoring command shutdown after database query cancellation (D541)
 
