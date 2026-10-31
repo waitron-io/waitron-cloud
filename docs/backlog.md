@@ -43,7 +43,8 @@ See [the boundaries and remaining work](backlog/storage-cache-fixture.md#storage
 **Open.** Production shutdown, real database failures and cancellation remain open.
 See [the boundaries and remaining work](backlog/worker-scheduling.md#worker-shutdown-during-polling-and-error-reporting-d459).
 
-See [the additional qualification detail](backlog/worker-scheduling.md#additional-shutdown-and-timer-qualification).
+Cancelled monitoring startup scheduling now requires natural command exit; explicit pool
+cleanup remains open. See [the additional qualification detail](backlog/worker-scheduling.md#additional-shutdown-and-timer-qualification).
 
 ## Worker scheduling failures and error reporting (D467)
 
