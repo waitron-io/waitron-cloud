@@ -228,9 +228,10 @@ usage, privacy and deadline checks remain. The provider is a loopback fixture;
 these tests send no request to an outside service.
 
 These checks require natural exit within the existing twenty-second command
-deadline. They do not prove explicit pool cleanup or that every pending operation
-was awaited. Other signal and provider-phase combinations, provider timeouts,
-connection loss and production shutdown remain open.
+deadline. Omitting the pool-close call also passes all three: idle connections
+expire after ten seconds, inside that limit. Explicit pool cleanup and proof that
+every pending operation was awaited remain open. Other signal and provider-phase
+combinations, provider timeouts, connection loss and production shutdown remain open.
 
 ## Worker scheduling deadlines and polling failures (D468)
 
