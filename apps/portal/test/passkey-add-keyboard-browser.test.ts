@@ -92,7 +92,7 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
       assert.equal(await button.evaluate(element => element.matches(':focus')), true);
       const requested = page.waitForRequest('**/passkeys/registration/options');
       await page.keyboard.press('Enter'); await requested;
-      // The browser request event precedes the handler recording its body.
+      // The browser request event may precede the handler recording its body.
       const waitForOptionsHandler = () => t.waitFor(() => {
         assert.ok(writes.length > 0, 'the options handler must record the pending enrollment');
       }, {timeout: 4000});

@@ -4361,8 +4361,9 @@ delivery remains part of the first working milestone's production qualification.
 ## Passkey keyboard browser handler observation (D373)
 
 The keyboard fixture waits for its options handler before checking the exact
-password and pending controls, within the existing four-second budget. Original
-journeys remain alongside delayed-handler and missing-record controls.
+password and pending controls. The waiter has its own four-second limit, matching
+the page timeout. Original journeys remain alongside delayed-handler and
+missing-record controls.
 
 Historical qualification recorded a [gateway reconnect refusal](https://github.com/waitron-io/waitron-cloud/actions/runs/40597914600/job/122518692085):
 the session was accepted but the request check failed. Its cause remains unknown;
