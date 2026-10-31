@@ -79,6 +79,30 @@ These checks qualify the local transport's retry state during shutdown. Producti
 SMTP classification, delivery timeouts, waits longer than one second, explicit pool
 cleanup and production shutdown remain open.
 
+### Email command shutdown after losing an SMTP acknowledgement (D556)
+
+Run `node scripts/test-postgres.mjs exec pnpm --dir packages/registration exec
+node --test test/email-worker-disconnect-shutdown.test.ts` to check SIGINT and
+SIGTERM while a loopback SMTP server holds a complete message for one second.
+After the signal, the command retains the processing claim and encrypted payload
+until the test destroys its owned SMTP connection without acknowledging the message.
+The command then records one failed attempt with the fixed `delivery_failed` code,
+releases the claim and retains the encrypted payload for the first retry 30 seconds
+later. Mail queued during the hold stays untouched; the command opens no later
+SMTP connection. The command drains naturally with code zero and no remaining
+database sessions. Only the observation wrapper prints the `beforeExit` marker.
+
+The controls reject missing signal handlers, a forced successful exit, omitted
+failure recording, a false delivery success, a missing retry delay and a later
+claim after shutdown. The real worker, local mail transport and database methods
+are unchanged. The session check does not identify the pool cleanup method or
+distinguish an unreferenced socket closed at exit.
+
+A lost acknowledgement leaves remote acceptance uncertain: this local check does
+not promise that a later retry avoids duplicate delivery. Production SMTP behavior,
+other connection-loss stages, delivery timeouts, longer waits, explicit pool cleanup
+and production shutdown remain open in D459.
+
 ### Monitoring command shutdown with real database scheduling (D537)
 
 Run `node scripts/test-postgres.mjs exec pnpm --dir packages/registration exec

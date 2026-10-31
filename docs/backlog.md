@@ -74,6 +74,11 @@ after either stop signal, retain retry state and require natural exit without a
 later claim. A running control reaches another venue through a different live
 connection. See [the single-connection failure limits](backlog/worker-scheduling.md#monitoring-shutdown-after-losing-an-active-observation-connection-d555).
 
+Email shutdown now checks connection loss after a complete local SMTP message
+but before acknowledgement, including retained retry state, no later mail claim
+and natural exit under both stop signals. Remote acceptance remains uncertain.
+See [the SMTP connection-loss limits](backlog/worker-scheduling.md#email-command-shutdown-after-losing-an-smtp-acknowledgement-d556).
+
 ## Worker scheduling failures and error reporting (D467)
 
 **Open.** Production scheduling, real database failures and capacity remain separate gates.
