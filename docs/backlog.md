@@ -46,7 +46,8 @@ See [the boundaries and remaining work](backlog/storage-cache-fixture.md#storage
 See [the boundaries and remaining work](backlog/worker-scheduling.md#worker-shutdown-during-polling-and-error-reporting-d459).
 
 Cancelled monitoring startup scheduling and translation startup retention now require
-natural command exit; explicit pool cleanup remains open. See [the additional qualification detail](backlog/worker-scheduling.md#additional-shutdown-and-timer-qualification).
+natural command exit, as does blocked translation retention after lock release;
+explicit pool cleanup remains open. See [the additional qualification detail](backlog/worker-scheduling.md#additional-shutdown-and-timer-qualification).
 
 ## Worker scheduling failures and error reporting (D467)
 

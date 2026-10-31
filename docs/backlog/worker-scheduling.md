@@ -123,12 +123,15 @@ Run `node scripts/test-postgres.mjs exec pnpm --dir packages/translation exec
 node --test test/worker-shutdown.test.ts` to check the actual translation command
 under SIGINT and SIGTERM while startup retention waits for an owned table lock.
 Each signal leaves the command and its blocked connection alive during a
-one-second hold. After lock release, the command exits normally with no database
-sessions remaining. Empty job, body and usage tables stay empty, and the local
-provider receives no request.
+one-second hold. After lock release, the command drains naturally with code zero
+and no database sessions remaining. A wrapper prints one `beforeExit` marker,
+which a forced successful exit bypasses; the command stays quiet. Empty job,
+body and usage tables stay empty, and the local provider receives no request.
 
-These checks observe the blocked connection and command exit. They do not prove
-explicit pool cleanup: a process exit can close its sockets too. They also do not
+The natural-drain observation (D549) catches forced successful exit after lock
+release. Removing only that observation check lets the same fault pass again.
+These checks do not prove explicit pool cleanup: an unreferenced connection
+closed during process exit can pass the session check. They also do not
 distinguish waiting in the worker loop from waiting in pool cleanup.
 Retention that changes stored jobs, query cancellation, database failures and
 production deployment retain separate qualification gates. Existing idle and
@@ -331,8 +334,10 @@ production shutdown remain open.
 
 The [translation command signal checks](worker-scheduling.md#translation-command-shutdown-with-blocked-database-cleanup-d538)
 cover a one-second hold of blocked startup retention under SIGINT and SIGTERM,
-followed by normal exit with no database sessions remaining. Job, body and usage
-tables end empty, and the local provider receives no request.
+followed by natural event-loop drain with no database sessions remaining. The
+wrapper's `beforeExit` observation (D549) catches forced successful exit after
+lock release. Job, body and usage tables end empty, and the local provider
+receives no request. Explicit pool cleanup remains open.
 Active retention changes, database failure and production shutdown remain open.
 
 The [translation cancellation shutdown checks](worker-scheduling.md#translation-command-shutdown-after-database-query-cancellation-d542)
