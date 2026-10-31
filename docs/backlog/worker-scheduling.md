@@ -159,8 +159,31 @@ let an omitted close pass; the session check cannot distinguish that case.
 
 The wrapper observes the actual commands without replacing database or worker
 methods. These checks cover empty queues only. Natural drain during active work,
-database failures, translation shutdown and production remain open. They do not
+database failures and production remain open. They do not
 identify which cleanup method released the connections.
+
+### Idle translation commands drain naturally (D544)
+
+Run `node scripts/test-postgres.mjs exec pnpm --dir packages/translation exec
+node --test test/worker-natural-exit.test.ts` to check idle translation shutdown
+under SIGINT and SIGTERM. The command first reaches two idle connections after
+real empty-queue claims and stays live for three seconds before the signal. This
+catches a worker that stops on its own during that observation period. A wrapper
+observes Node's `beforeExit` event, which runs
+when work drains and is bypassed by forced exit. Shutdown must reach that event
+with code zero within six seconds and leave no database sessions after exit. The job, body
+and usage tables stay empty, and the loopback provider receives no requests.
+
+While default idle connections keep Node alive, the six-second bound catches
+omitted pool cleanup before their ten-second idle expiry. Allowing exit with idle
+connections would let that omission pass. The wrapper leaves database and worker
+methods intact; it does not identify which cleanup method released connections.
+The session check cannot distinguish explicit cleanup from sockets closed by
+process exit, or detect an unreferenced connection closed during exit. A worker
+that stops on its own after the three-second live period can still pass.
+Natural drain during active work, database failures and production shutdown remain
+separate qualification gates. Longer idle periods and pre-signal live observation
+for the email and monitoring commands remain unqualified.
 
 ## Worker scheduling deadlines and polling failures (D468)
 
