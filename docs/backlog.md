@@ -32,8 +32,9 @@ Other worker commands, active delivery and production shutdown remain open.
 
 The [email delivery shutdown checks](backlog/worker-scheduling.md#email-command-shutdown-during-local-smtp-delivery-d539)
 hold a local SMTP acknowledgement for one second under SIGINT and SIGTERM.
-The command waits, records the accepted message as sent, leaves later mail pending
-and exits normally with no database sessions remaining. Provider failures,
+During that hold the message stays processing. After acknowledgement, the command
+records it as sent, leaves later mail pending and exits with code zero and no
+database sessions remaining. Provider failures,
 delivery timeouts and production shutdown remain open.
 
 The [monitoring command signal checks](backlog/worker-scheduling.md#monitoring-command-shutdown-with-real-database-scheduling-d537)

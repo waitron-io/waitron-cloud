@@ -24,7 +24,7 @@ after(async()=>{await pool.end();await admin.query(`DROP SCHEMA ${schema} CASCAD
 
 // Removing signal handling or exiting before SMTP acceptance must leave these checks red.
 for(const signal of ['SIGINT','SIGTERM'] as const){
-  test(`${signal} waits for local SMTP acceptance, records delivery and leaves later mail pending`,async()=>{
+  test(`${signal} retains SMTP delivery for one second, records acceptance and leaves later mail pending`,async()=>{
     await pool.query('DELETE FROM email_outbox');
     let acknowledge:(()=>void)|undefined;
     const messages:{to:string[];raw:string}[]=[];
