@@ -78,6 +78,30 @@ pending/uncertain-write cases remain in both languages at width 390. Every
 original assertion and deadline remains unchanged. These checks use stubbed
 HTTP; real server authority and the historical Linux cause remain unqualified.
 
+## Stale-draft and script-recovery wait boundaries
+
+The stale-draft delayed journeys pause the first gated installation read in each
+of eight language, theme and width combinations. Their later twelve reads run
+without that pause. All 130 historical checks and 64 parent checks pass; removing
+the observation still passes the disabled-control assertions because the page
+already marks the read pending before the handler enters. These runs qualify the
+fixture observation, not delayed handling of every later read. The full historical
+file took about 150 seconds against 57 seconds for its parent during review on a
+shared machine; those measurements are not a general performance bound.
+
+The stale-draft missing-signal control wraps its configured 30-second observation
+in a 31-second race. It catches the old unresolved wait, but removing the explicit
+timeout uses Node's shorter default and still passes. The script-fallback control
+similarly checks its configured four-second observation through a five-second
+race. Its 50 historical checks and 25 parent checks pass. Omitting observation
+fails eight delayed-script journeys; sixteen reload journeys pass because reload
+already establishes ordering. All 24 screenshot pairs from the historical and
+parent runs are byte-identical, before recovery or handler variation.
+
+Keep these boundaries when using the receipts. Every original assertion, expected
+value and deadline remains. Real account or fiscal authority, supported browsers,
+production networks and the historical Linux causes remain unqualified.
+
 ## Open browser-fixture boundaries
 
 A delay on every passkey-options request can hide a duplicate until after the
@@ -92,6 +116,21 @@ the controller, all 39 cases pass with every original assertion and deadline.
 Run `pnpm --dir apps/portal exec node --test test/passkey-enter-browser.test.ts`
 to check the fixture. These stubbed HTTP journeys leave real server authority
 and the historical Linux failure cause unqualified.
+
+A delay on every authenticator setup request can also hide a duplicate while
+setup is pending. Setup handlers pause only while no request has been recorded.
+A disposable controller issues a real extra browser request when Enter reaches
+the disabled password field. The English, light, 390-pixel ordinary and delayed
+controls reject it at the final recount after the setup reply is released, using
+the original assertions. Removing the record-count condition lets the delayed
+control pass despite that duplicate. Arbitrarily late arrivals and other duplicate
+fault combinations remain unqualified. D535 still needs to qualify later arrivals
+without weakening the current bounds. After restoring the controller, run
+`pnpm --dir apps/portal exec node --test test/authenticator-setup-enter-browser.test.ts`
+for all 39 checks. The missing-record control bounds its configured four-second
+wait through a five-second race; it does not independently assert the exact
+four-second value. Stubbed HTTP leaves real account authority and the historical
+Linux failure cause unqualified.
 
 Removing the session-list controller's pending-load guard exposes an older
 harness weakness. The duplicate read blocks in the browser evaluation while its

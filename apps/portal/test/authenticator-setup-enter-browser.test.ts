@@ -38,7 +38,7 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
         const request = route.request(), path = new URL(request.url()).pathname.replace('/api/account', '');
         if (path === '/session' || path === '/session/activity') return route.fulfill({json: {accountId: 'owner', expiresAt: '2026-10-25T12:00:00Z'}});
         if (path === '/authenticator') return route.fulfill({json: {active: false, version: 0, recoveryCodesRemaining: 0, available: true}});
-        if (path === '/authenticator/begin' && handler === 'delayed') await delay(100);
+        if (path === '/authenticator/begin' && handler === 'delayed' && writes.length === 0) await delay(100);
         if (request.method() === 'POST' && !(path === '/authenticator/begin' && handler === 'missing')) writes.push({path, body: request.postDataJSON()});
         if (path === '/authenticator/begin') { await reply; return route.fulfill({json: enrolment}); }
         return route.fulfill({status: 503, json: {error: 'unavailable'}});

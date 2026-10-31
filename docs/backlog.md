@@ -16,8 +16,10 @@ The interrupted-LIST control identifies its producer outcome; the matching
 storage-observer outcome remains unqualified in that scenario.
 Venue-refresh handler checks preserve the original cases, while their matrix
 and outer deadline control have the limits described below.
-Delayed passkey-handler checks now expose a second options request before the
-journey completes. Session-list failure cleanup remains open in the same notes.
+Delayed passkey and authenticator fixtures stop adding their artificial pause
+once a request has been recorded. Their sampled duplicate controls and open timing
+and session-list cleanup limits are described below. The stale-draft and script
+recovery notes also distinguish delayed-handler scope from outer wait bounds.
 See [the diagnostic qualification and open work](backlog/retrospective-reviews.md).
 
 ## Concurrent storage extraction and failed-startup cleanup (D454)
@@ -4570,11 +4572,14 @@ No remote setup or permission behaviour changes.
 
 The authenticator setup keyboard fixture waits for its route handler to record
 its request before checking the payload. The browser request event can arrive
-first; a delayed handler reproduces that empty-record refusal. Missing records
-now fail within the existing four-second page budget. Original and delayed
-handler journeys retain every password, Enter-key, pending-state, activation,
-cooldown, clock and deadline assertion across both languages, themes and widths.
-These native Chromium checks use stubbed HTTP; account authority is unchanged.
+first; a delayed handler reproduces that empty-record refusal. Setup handlers
+pause only while no request has been recorded. Ordinary and delayed English/light/390
+controls submit a real extra request during pending setup and reject it at the
+later existing count assertion. Arbitrarily late duplicates and other fault
+combinations remain unqualified. All 39 native Chromium checks retain every original password,
+Enter-key, pending-state, activation, cooldown, clock and deadline assertion.
+These checks use stubbed HTTP; real account authority and the historical Linux
+failure cause remain unqualified.
 
 ## Recovery-session browser handler wait (D360)
 
