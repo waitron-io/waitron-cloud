@@ -35,6 +35,12 @@ cover idle shutdown and a one-second hold of blocked startup scheduling under
 SIGINT and SIGTERM, followed by normal exit with no remaining database sessions.
 Active monitoring, database failure and production shutdown remain open.
 
+The [translation command signal checks](backlog/worker-scheduling.md#translation-command-shutdown-with-blocked-database-cleanup-d538)
+cover a one-second hold of blocked startup retention under SIGINT and SIGTERM,
+followed by normal exit with no database sessions remaining. Job, body and usage
+tables end empty, and the local provider receives no request.
+Active retention changes, database failure and production shutdown remain open.
+
 Run `node --test packages/registration/test/worker-loop-schedule-timer.test.ts`
 to check that startup and recurring scheduling failures enter a real retry timer
 before shutdown. At two and 32 slots, reporting keeps the original error and
@@ -3379,6 +3385,15 @@ See [the boundaries and remaining work](backlog/storage-cache-fixture.md#storage
 **Open.** Capture an instrumented recurrence before attributing the historical startup
 or download failure; real storage qualification remains separate.
 See [the boundaries and remaining work](backlog/storage-cache-fixture.md#storage-archive-download-failure-reporting-d441).
+
+[PR794's root shard](https://github.com/waitron-io/waitron-cloud/actions/runs/41182674171/job/124483174725)
+fails the three storage TLS cases in their shared setup: fetching the pinned
+SeaweedFS 4.47 archive raises `fetch failed` before their assertions. The transport
+cause is absent from the test output. The unchanged TLS tests pass three cases
+locally, and a later archive GET on the authorised Linux test box returns HTTP
+200; neither control explains or repairs the CI failure. D530's investigation
+must capture the cold-download cause while preserving the original TLS checks,
+checksums and cleanup assertions.
 
 ## Parallel storage-cache fixture failure on main
 
