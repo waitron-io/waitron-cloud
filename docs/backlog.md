@@ -12,6 +12,8 @@ that was checked. Joint-fixture setup reports retain the operation that crossed
 the budget before a stage change and cover initial directory refusal. Historical
 Linux failure causes, mixed registry-error handling and enclosing CI job budgets
 remain separate limits.
+The interrupted-LIST control identifies its producer outcome; the matching
+storage-observer outcome remains unqualified in that scenario.
 See [the diagnostic qualification and open work](backlog/retrospective-reviews.md).
 
 ## Concurrent storage extraction and failed-startup cleanup (D454)
@@ -3794,7 +3796,9 @@ The record holds at most sixteen LISTs, marks truncation, omits private request
 identities and freezes before cleanup. Native HTTP/process controls cover ordering,
 invalid replies, truncation and an actual pre-acknowledgement interruption. That
 controlled partial response remains refused at a different boundary from the
-historical Linux event; it does not identify the historical cause. The official
+historical Linux event. It records the producer's interrupted response while the
+storage observer is still pending, so it does not qualify the historical pair of
+producer interruption and observer success or identify that event's cause. The official
 0.5.17 binary, allowance, both counters, assertions and deadlines remain unchanged.
 Genuine local Docker reproduction waits until Docker returns. Use a labelled
 recurrence to establish the cause before changing any shutdown rule.
