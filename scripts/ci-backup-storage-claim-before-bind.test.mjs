@@ -81,6 +81,7 @@ test('an existing claim prevents binding throughout a native child handoff', {ti
   releaseConflict();
   const b = await peer;
   await b.bucket('nonintrusive-claim-peer');
+  assert.equal(peerListeners.length, 0, 'delivering the existing-claim refusal must not trigger a later bind');
   assert.equal(children.length, 2, 'neither native child may need a restart');
 });
 
