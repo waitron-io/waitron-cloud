@@ -28,8 +28,13 @@ async function freePort() {
 
 export async function jointFixture() {
   const started = performance.now();
+  const setupDeadline = 120000;
   let stage = 'temporary-directory', stageStarted = started, reported = false;
-  function enter(next: string) { stage = next; stageStarted = performance.now(); }
+  function enter(next: string) {
+    // Blocking commands defer timers; attribute an elapsed budget before changing stages.
+    if (performance.now() - started >= setupDeadline) report('deadline');
+    stage = next; stageStarted = performance.now();
+  }
   function report(reason: 'failure' | 'deadline') {
     if (reported) return;
     reported = true;
@@ -38,7 +43,7 @@ export async function jointFixture() {
     try { console.error(JSON.stringify({ event: 'cloud-fiscal-joint-setup-failed', reason, stage,
       elapsedMs: Math.round(now - started), stageElapsedMs: Math.round(now - stageStarted) })); } catch {}
   }
-  const root = await mkdtemp(join(tmpdir(), 'cloud-waitron-joint-'));
+  let root: string | undefined;
   let cloud: Awaited<ReturnType<typeof storeFixture>> | undefined;
   let server: Awaited<ReturnType<typeof startAccountServer>> | undefined;
   let child: ReturnType<typeof spawn> | undefined;
@@ -53,13 +58,13 @@ export async function jointFixture() {
     }
     await server?.close();
     await cloud?.close();
-    await rm(root, { recursive: true, force: true });
+    if (root !== undefined) await rm(root, { recursive: true, force: true });
   }
   // Observe the hook's existing budget without enforcing a second deadline.
-  const setupDeadline = 120000;
   const deadline = setTimeout(() => report('deadline'), setupDeadline);
   deadline.unref();
   try {
+    root = await mkdtemp(join(tmpdir(), 'cloud-waitron-joint-'));
     let candidate = process.env.WAITRON_FISCAL_TEST_CANDIDATE;
     if (!candidate) {
       candidate = join(root, 'waitron');

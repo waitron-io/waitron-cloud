@@ -15,6 +15,21 @@ original checks for bounded output and preservation of the original failure.
 These checks qualify the report. They do not reproduce the historical Linux
 worker-admission failure or qualify the Docker-backed integration.
 
+## Joint fixture setup reporting
+
+A blocking source command can consume the setup budget while deferring its
+reporting timer. Before entering another stage, the fixture now reports the
+operation that crossed the budget. Initial temporary-directory refusal also
+passes through the bounded reporter and preserves its original error. Reports
+keep the same fixed labels and numeric fields. No setup operation is cancelled
+by this observation.
+
+Run `node --test packages/account-http/test/fiscal-waitron-setup-diagnostics.test.ts packages/account-http/test/fiscal-waitron-setup-boundaries.test.ts` for the native checks.
+They retain the original privacy, cleanup, pinned-source and command-budget
+assertions and add real hook and filesystem refusals plus controlled error and
+clock boundaries. See [the setup investigation](joint-fiscal-fixture-setup.md)
+for the historical cause and remaining timing limits.
+
 ## Registry refusal qualification
 
 The image launcher's immediate refusal of client errors has a limit: a message
