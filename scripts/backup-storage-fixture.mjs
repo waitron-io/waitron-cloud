@@ -334,7 +334,8 @@ async function startBackupStorageAttempt(options) {
     // that has not bound it yet. Hold all eight reservations through selection.
     for (let candidates = 0; ports.length < 8; candidates++) {
       if (candidates === 256) throw Error("Could not reserve unclaimed storage ports");
-      const port = randomInt(32768, 61000);
+      // Preserve Linux's usual odd-listener/even-outgoing port preference.
+      const port = randomInt(32768, 61000) | 1;
       const claim = join(portClaimsDirectory, String(port));
       try { await symlink(root, claim); }
       catch (error) {

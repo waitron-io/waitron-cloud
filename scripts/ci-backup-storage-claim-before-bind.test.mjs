@@ -88,8 +88,14 @@ test('an existing claim prevents binding throughout a native child handoff', {ti
 for (const [exhausted, position] of [[false, 1], [false, 4], [true, 1]]) test(exhausted
   ? 'occupied candidates stop after 256 selections and release only their own claims'
   : `an occupied candidate at selection ${position} is released before another candidate starts`, {timeout:60000}, async t => {
-  const competitor = net.createServer(socket => socket.end('outside listener'));
-  await new Promise(resolve => competitor.listen(0, '127.0.0.1', resolve));
+  let competitor;
+  for (let attempt = 0; attempt < 64; attempt++) {
+    const server = net.createServer(socket => socket.end('outside listener'));
+    await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+    if (server.address().port % 2 === 1) { competitor = server; break; }
+    await new Promise(resolve => server.close(resolve));
+  }
+  assert.ok(competitor, 'the occupied control needs an odd server port');
   t.after(() => new Promise(resolve => competitor.close(resolve)));
   const port = competitor.address().port;
   const path = join('/tmp', 'waitron-cloud-storage-ports-' + process.getuid(), String(port));
@@ -144,6 +150,32 @@ for (const [exhausted, position] of [[false, 1], [false, 4], [true, 1]]) test(ex
   }
   assert.equal(existsSync(path), false);
   assert.equal(competitor.listening, true, 'the occupied listener belongs to someone else');
+});
+
+test('numeric reservations retain the Linux odd server-port preference', {timeout:30000}, async t => {
+  const choose = crypto.randomInt, create = net.createServer;
+  const attempted = [];
+  let first = true, storage;
+  t.after(() => storage?.stop());
+  t.after(() => { t.mock.restoreAll(); syncBuiltinESMExports(); });
+  t.mock.method(crypto, 'randomInt', (...args) => {
+    if (first) { first = false; return 49152; }
+    return choose(...args);
+  });
+  t.mock.method(net, 'createServer', (...args) => {
+    const server = create(...args), listen = server.listen;
+    server.listen = function(port, ...rest) {
+      attempted.push(port);
+      return listen.call(this, port, ...rest);
+    };
+    return server;
+  });
+  syncBuiltinESMExports();
+  const {startBackupStorage} = await import('./backup-storage-fixture.mjs');
+  storage = await startBackupStorage({retryPortCollision:false});
+  assert.ok(attempted.length >= 8);
+  assert.ok(attempted.every(port => port % 2 === 1), 'server reservations must leave the usual Linux outgoing even-port group alone');
+  await storage.bucket('odd-server-port-control');
 });
 
 test('an unreadable bind error code preserves its original nonretryable refusal', {timeout:30000}, async t => {

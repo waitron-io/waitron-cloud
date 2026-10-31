@@ -288,8 +288,10 @@ that a peer awaiting a real existing-claim refusal never binds the first child's
 filer port. The first native child starts while that refusal remains held; both
 fixtures retain usable storage without restarting. Separate controls occupy a
 real candidate socket, check recovery and 256-candidate exhaustion, and retain
-the competing listener. All eight accepted sockets remain held together before
-native startup. Bind diagnostics count actual binds, excluding skipped claims.
+the competing listener. Run `node --test deploy/test-cloud/storage-startup.test.mjs`
+to check that all eight accepted sockets remain held together before native
+startup. Run `node --test scripts/ci-backup-storage-reservation-refusals.test.mjs`
+to check that bind diagnostics count actual binds, excluding skipped claims.
 
 Run `node --test scripts/ci-backup-storage-claim-cleanup.test.mjs` to check
 missing or replaced claims and an unlink refusal. Cleanup checks link targets,
@@ -297,6 +299,14 @@ leaves replacement claims in place and finishes closing owned resources before
 reporting an unlink failure. Startup retains its original error. The shared
 directory must be a real directory owned by your user with no access for other
 users; a permissive directory, symlink or different owner is refused.
+
+Numeric candidates keep odd server ports, matching the
+[Linux listener preference with its usual temporary-port range](https://code.googlesource.com/linux/torvalds/linux/+/586b5dfb51b962c1b6c06495715e4c4f76a7fc5a/net/ipv4/inet_connection_sock.c).
+The new port-selection control injects an even random draw and observes the
+real reservation attempts. This preserves the usual split from outgoing
+connections; it does not close the socket-to-child gap or measure its failure
+frequency. Different kernel port ranges and competing outgoing traffic still
+need a controlled Linux comparison.
 
 The Linux investigation captured two live fixtures requesting the same port
 before either exited. This identifies an allocation race; it does not identify
