@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import childProcess from "node:child_process";
-import net from "node:net";
+import crypto from "node:crypto";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { syncBuiltinESMExports } from "node:module";
 import { access } from "node:fs/promises";
@@ -15,7 +15,7 @@ for (const exhausted of [false, true]) test(exhausted
   ? "native port claim conflicts have a bounded refusal and preserve their first owner"
   : "concurrent native fixtures retain port ownership through startup and release it after stop", { timeout: 60000 }, async t => {
   const context = new AsyncLocalStorage();
-  const spawn = childProcess.spawn, createServer = net.createServer;
+  const spawn = childProcess.spawn, choose = crypto.randomInt;
   const unlink = fs.unlink, portOwners = new Map();
   const children = [], stores = [], pending = [], stopped = new Set();
   let peerSelections = 0;
@@ -36,18 +36,14 @@ for (const exhausted of [false, true]) test(exhausted
       throw error;
     } finally { t.mock.restoreAll(); syncBuiltinESMExports(); }
   });
-  t.mock.method(net, "createServer", (...args) => {
-    const server = createServer(...args), listen = server.listen;
+  t.mock.method(crypto, "randomInt", (...args) => {
     const owner = context.getStore();
-    server.listen = function(port, ...rest) {
-      if (owner === "second") {
-        peerSelections++;
-        if (exhausted || !selectedSecond) { selectedSecond = true; port = firstPort; }
-      }
-      if (owner === "third" && !selectedThird) { selectedThird = true; port = firstPort; }
-      return listen.call(this, port, ...rest);
-    };
-    return server;
+    if (owner === "second") {
+      peerSelections++;
+      if (exhausted || !selectedSecond) { selectedSecond = true; return firstPort; }
+    }
+    if (owner === "third" && !selectedThird) { selectedThird = true; return firstPort; }
+    return choose(...args);
   });
   t.mock.method(fs, "unlink", path => {
     const owner = portOwners.get(Number(basename(path)));
@@ -82,6 +78,7 @@ for (const exhausted of [false, true]) test(exhausted
   if (!exhausted) {
     const { stdout } = await promisify(childProcess.execFile)(process.execPath, ["--input-type=module", "-e", `
       import assert from "node:assert/strict";
+      import crypto from "node:crypto";
       import net from "node:net";
       import childProcess from "node:child_process";
       import { syncBuiltinESMExports } from "node:module";
@@ -91,13 +88,18 @@ for (const exhausted of [false, true]) test(exhausted
       const temporary = await mkdtemp(join(tmpdir(), "storage-port-peer-"));
       await cp(join(tmpdir(), "waitron-cloud-test-binaries"), join(temporary, "waitron-cloud-test-binaries"), {recursive:true});
       process.env.TMPDIR = process.env.TMP = process.env.TEMP = temporary;
-      const create = net.createServer, spawn = childProcess.spawn;
+      const choose = crypto.randomInt, spawn = childProcess.spawn, create = net.createServer;
       const occupied = ${firstPort};
-      let tried = false;
+      let tried = false, legacySelected = false;
+      crypto.randomInt = (...args) => {
+        if (!tried) { tried = true; return occupied; }
+        return choose(...args);
+      };
       net.createServer = (...args) => {
         const server = create(...args), listen = server.listen;
         server.listen = function(port, ...rest) {
-          if (!tried) { tried = true; port = occupied; }
+          if (port === 0 && !legacySelected) { legacySelected = true; port = occupied; }
+          assert.notEqual(port, occupied, "a separate process must not temporarily bind an existing claim");
           return listen.call(this, port, ...rest);
         };
         return server;

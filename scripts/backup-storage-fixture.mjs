@@ -17,7 +17,7 @@ import {
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createHash, generateKeyPairSync, randomBytes } from "node:crypto";
+import { createHash, generateKeyPairSync, randomBytes, randomInt } from "node:crypto";
 import { StorageAuthority } from "../packages/backups/src/storage.ts";
 const require = createRequire(
   new URL("../packages/backups/package.json", import.meta.url),
@@ -124,6 +124,10 @@ async function startBackupStorageAttempt(options) {
       server.listening ? new Promise(resolve => server.close(resolve)) : undefined,
     ));
   }
+  async function releasePortClaim(path) {
+    try { if (await readlink(path) === root) await unlink(path); }
+    catch (error) { if (error.code !== "ENOENT") throw error; }
+  }
   async function stop() {
     let claimCleanupFailure;
     await releasePorts();
@@ -140,11 +144,8 @@ async function startBackupStorageAttempt(options) {
       }
     }
     await Promise.all(portClaims.splice(0).map(async path => {
-      try {
-        if (await readlink(path) === root) await unlink(path);
-      } catch (error) {
-        if (error.code !== "ENOENT") claimCleanupFailure ??= error;
-      }
+      try { await releasePortClaim(path); }
+      catch (error) { claimCleanupFailure ??= error; }
     }));
     if (oidc) await new Promise((r) => oidc.close(r));
     await log?.close();
@@ -328,27 +329,38 @@ async function startBackupStorageAttempt(options) {
     if (!claimDirectory.isDirectory() || claimDirectory.uid !== process.getuid() || (claimDirectory.mode & 0o077) !== 0)
       throw Error("Storage port claim directory must be private and owned by this user");
     const ports = [];
-    // Keep every listener open while choosing the batch so the kernel cannot
-    // assign one port to two SeaweedFS services. Reject connections so releasing
-    // the reservations cannot wait for a peer before handing them to the child.
+    let bindAttempts = 0;
+    // Claim before binding: a peer may already have handed this port to a child
+    // that has not bound it yet. Hold all eight reservations through selection.
     for (let candidates = 0; ports.length < 8; candidates++) {
       if (candidates === 256) throw Error("Could not reserve unclaimed storage ports");
-      const reservation = netServer(socket => socket.destroy());
-      portReservations.push(reservation);
-      await new Promise((resolve, reject) => {
-        reservation.once("error", reject);
-        reservation.listen(0, "127.0.0.1", resolve);
-      }).catch(error => listenerFailure(error, "reservation", candidates + 1));
-      const port = reservation.address().port;
+      // Preserve Linux's usual odd-listener/even-outgoing port preference.
+      const port = randomInt(32768, 61000) | 1;
       const claim = join(portClaimsDirectory, String(port));
       try { await symlink(root, claim); }
       catch (error) {
         if (error.code !== "EEXIST") throw error;
-        await new Promise(resolve => reservation.close(resolve));
-        portReservations.pop();
         continue;
       }
       portClaims.push(claim);
+      const reservation = netServer(socket => socket.destroy());
+      portReservations.push(reservation);
+      bindAttempts++;
+      try {
+        await new Promise((resolve, reject) => {
+          reservation.once("error", reject);
+          reservation.listen(port, "127.0.0.1", resolve);
+        });
+      }
+      catch (error) {
+        let occupied = false;
+        try { occupied = error?.code === "EADDRINUSE"; } catch {}
+        if (!occupied) listenerFailure(error, "reservation", bindAttempts);
+        portReservations.pop();
+        await releasePortClaim(claim);
+        portClaims.pop();
+        continue;
+      }
       ports.push(port);
     }
     const [s3, master, masterGrpc, volume, volumeGrpc, filer, filerGrpc, s3Grpc] =
