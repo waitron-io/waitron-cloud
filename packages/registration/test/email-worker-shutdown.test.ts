@@ -29,13 +29,14 @@ function worker(){
       CLOUD_EMAIL_KEYS:JSON.stringify({test:randomBytes(32).toString('hex')})},
     stdio:['ignore','pipe','pipe'],
   });
-  let stdout='',stderr='';
+  let stdout='',stderr='',exitedAt:number|null=null;
+  child.once('exit',()=>{exitedAt=performance.now();});
   child.stdout.on('data',chunk=>{stdout+=chunk;});
   child.stderr.on('data',chunk=>{stderr+=chunk;});
   const exited=new Promise<{code:number|null;signal:NodeJS.Signals|null}>((resolve,reject)=>{
     child.once('error',reject);child.once('close',(code,signal)=>resolve({code,signal}));
   });
-  const result={process:child,name,exited,output:()=>({stdout,stderr})};
+  const result={process:child,name,exited,exitTime:()=>exitedAt,output:()=>({stdout,stderr})};
   children.add(result);void exited.then(()=>children.delete(result));
   return result;
 }
@@ -83,7 +84,7 @@ for(const signal of ['SIGINT','SIGTERM'] as const){
     }finally{await dispose(child);}
   });
 
-  test(`${signal} drains all four blocked email claims before command exit`,async()=>{
+  test(`${signal} retains four blocked email connections for one second and exits after lock release`,async()=>{
     const lock=await pool.connect();
     let child:ReturnType<typeof worker>|undefined;
     try{
@@ -95,12 +96,15 @@ for(const signal of ['SIGINT','SIGTERM'] as const){
         return rows.length===4&&rows.every(row=>row.state==='active'&&row.wait_event_type==='Lock'&&row.query.includes('SELECT * FROM email_outbox'));
       },active);
       assert.equal(child.process.kill(signal),true);
-      await delay(100);
+      await delay(1000);
       assert.equal(child.process.exitCode,null,'shutdown must await active database claims');
       assert.equal(child.process.signalCode,null,'shutdown must retain active database claims');
+      assert.equal(child.exitTime(),null,'the process must remain live for the full one-second hold');
       assert.equal((await sessions(child)).length,4,'all blocked claims remain owned until lock release');
+      const releasedAt=performance.now();
       await lock.query('ROLLBACK');
       await finish(child);
+      assert.ok(child.exitTime()!>=releasedAt,'command exit must follow database lock release');
       assert.equal((await pool.query('SELECT count(*) FROM email_outbox')).rows[0].count,'0');
     }finally{
       await lock.query('ROLLBACK');lock.release();

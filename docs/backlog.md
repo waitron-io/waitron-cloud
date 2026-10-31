@@ -26,7 +26,8 @@ See [the boundaries and remaining work](backlog/storage-cache-fixture.md#storage
 See [the boundaries and remaining work](backlog/worker-scheduling.md#worker-shutdown-during-polling-and-error-reporting-d459).
 
 The [email command signal checks](backlog/worker-scheduling.md#email-command-shutdown-with-real-database-claims-d536)
-cover idle shutdown and four blocked PostgreSQL claims under SIGINT and SIGTERM.
+cover idle shutdown and a one-second hold of four blocked PostgreSQL connections
+under SIGINT and SIGTERM, followed by normal exit after lock release.
 Other worker commands, active delivery and production shutdown remain open.
 
 Run `node --test packages/registration/test/worker-loop-schedule-timer.test.ts`
