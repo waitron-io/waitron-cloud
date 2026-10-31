@@ -492,6 +492,16 @@ passes, which does not explain or fix the CI collision. Reproduce the handoff
 under concurrent fixtures and preserve the no-restart, competing-listener and
 cleanup assertions when fixing this separate cause.
 
+[PR793's unrelated documentation qualification](https://github.com/waitron-io/waitron-cloud/actions/runs/41182496471/job/124482642911)
+also reaches a later handoff refusal in the existing forced-collision readiness
+test. Its restarted native store cannot bind the allocated S3 gRPC port; the
+listener snapshot names another `weed` PID without identifying its fixture.
+The expected original SDK error is therefore replaced by the genuine startup
+refusal. Keep the single-restart limit and original-error assertion while
+reproducing this collision under concurrent fixtures. The unchanged forced-collision
+case passes all three modes on the authorised Linux test box, including the
+throwing reporter; that control does not explain or repair the CI collision.
+
 ## Repository licence
 
 The root `LICENSE` is copied byte for byte from Waitron's Elastic License 2.0 text.
