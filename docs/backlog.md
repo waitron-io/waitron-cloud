@@ -478,6 +478,15 @@ every competing listener, cleanup and later clean startup. The native fallback
 warning does not imply S3 startup refusal. Admin-worker functionality, an actual
 admin bind refusal and later bind races remain open.
 
+[PR790 qualification](https://github.com/waitron-io/waitron-cloud/actions/runs/41172266544/job/124452925371)
+failed before these checks when SeaweedFS refused its allocated master port.
+The listener snapshot names a `weed` process; its fixture owner remains
+unknown. This case deliberately disables the fixture's handoff retry to prove
+that admin exhaustion does not restart storage. The unchanged Linux control
+passes, which does not explain or fix the CI collision. Reproduce the handoff
+under concurrent fixtures and preserve the no-restart, competing-listener and
+cleanup assertions when fixing this separate cause.
+
 ## Repository licence
 
 The root `LICENSE` is copied byte for byte from Waitron's Elastic License 2.0 text.
@@ -3627,6 +3636,22 @@ progress now retains fixed node-gyp milestones and header/checksum HTTP status,
 without raw output or URLs. A controlled native header-body stall and a successful
 fresh build qualify this distinction; the historical Linux cause remains unknown.
 Keep the source pin, integrity checks, deadlines and original assertions.
+
+### Interrupted source-fetch fixture state (D530)
+
+**Interrupted writes reproduced and handled; historical timing remains unknown.**
+[D349's CI run](https://github.com/waitron-io/waitron-cloud/actions/runs/41169033630/job/124443297790)
+failed to read an empty generated JSON state file while checking the historical browser
+revision. A controlled interruption reproduces that read failure by stopping the
+fixture's Git helper between truncation and writing. The helper now writes a
+temporary file and renames it into place, so you retain the last complete state
+when the supervisor kills a fetch. The new case still requires revision refusal,
+one bounded retry and collection of both fetch children. All original assertions,
+source pins, deadlines and cleanup checks remain unchanged. The historical run
+did not capture the write boundary or explain the helper's delay; those details
+remain unknown. A separate control kills the supervisor while its helper is
+paused; fixture cleanup records that helper's PID independently and waits for
+it to exit, so a failing supervisor cannot leave the test process behind.
 
 ### Fixture archive download retries (D311)
 
