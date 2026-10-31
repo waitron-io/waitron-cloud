@@ -35,7 +35,7 @@ test('--once sweeps retained text even when no queued job needs the provider',as
 });
 test('the worker loop sweeps at startup and after a minute while idle',async()=>{
  const fake=await startFakeOpenAi(()=>{throw new Error('no job');});
- const preload=`const original=Date.now;const start=original();Date.now=()=>start+(original()-start)*100;`;
+ const preload=`const original=performance.now.bind(performance);const start=original();Object.defineProperty(performance,'now',{configurable:true,value:()=>start+(original()-start)*100});`;
  const id=await stale(),run=worker([],fake.baseUrl,['--import','data:text/javascript;base64,'+Buffer.from(preload).toString('base64')]);
  try{
   await until(async()=>(await look(id)).state==='expired');

@@ -18,7 +18,8 @@ export async function runWorkerLoop(options:WorkerLoopOptions):Promise<void>{
     ||!Number.isInteger(options.scheduleIntervalMs)||options.scheduleIntervalMs<1
     // Native timers replace overflowing delays with a one-millisecond wait.
     ||!Number.isInteger(options.pollIntervalMs)||options.pollIntervalMs<1||options.pollIntervalMs>2147483647)throw new Error('invalid_worker_loop_config');
-  const now=options.now??Date.now;
+  // Scheduling intervals measure elapsed time, independent of system-clock corrections.
+  const now=options.now??(()=>performance.now());
   const wait=options.wait??(async(milliseconds,currentSignal)=>{
     try{await delay(milliseconds,undefined,{signal:currentSignal});}
     catch(error){if(!currentSignal.aborted)throw error;}
@@ -38,7 +39,8 @@ export async function runWorkerLoop(options:WorkerLoopOptions):Promise<void>{
       if(failure)throw failure.reason;
       if(signal.aborted)break;
       if(results.some(result=>result.status==='fulfilled'&&result.value))continue;
-      const untilSchedule=options.schedule?Math.max(1,nextScheduleAt-now()):options.pollIntervalMs;
+      // Native timers truncate fractions; round up to avoid polling just before the deadline.
+      const untilSchedule=options.schedule?Math.max(1,Math.ceil(nextScheduleAt-now())):options.pollIntervalMs;
       await wait(Math.min(options.pollIntervalMs,untilSchedule),signal);
     }catch(error){
       if(!options.onError)throw error;
