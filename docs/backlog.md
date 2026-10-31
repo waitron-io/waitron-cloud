@@ -8,8 +8,10 @@ See [the boundaries and remaining work](backlog/storage-cache-fixture.md#concurr
 ## Retrospective review qualification (D535)
 
 Child exit reports retain known operating-system signals and publish the value
-that was checked. Historical Linux failure causes, mixed registry-error handling
-and enclosing CI job budgets remain separate limits.
+that was checked. Joint-fixture setup reports retain the operation that crossed
+the budget before a stage change and cover initial directory refusal. Historical
+Linux failure causes, mixed registry-error handling and enclosing CI job budgets
+remain separate limits.
 See [the diagnostic qualification and open work](backlog/retrospective-reviews.md).
 
 ## Concurrent storage extraction and failed-startup cleanup (D454)
@@ -4489,8 +4491,9 @@ review and owner gates. This audit does not enable services or change policy.
 
 ## D413 — Locate a failed joint fiscal fixture setup
 
-**Open.** Capture the failing operation behind the historical setup timeout; keep the
-pinned source, fiscal assertions and deadlines unchanged.
+**Open.** Initial directory refusals and completed blocking setup overruns now
+produce bounded reports. Capture the operation behind the historical setup
+timeout; keep the pinned source, fiscal assertions and deadlines unchanged.
 See [the boundaries and remaining work](backlog/joint-fiscal-fixture-setup.md#d413--locate-a-failed-joint-fiscal-fixture-setup).
 
 ## Cost-mail reconciliation refusal observed during D262

@@ -202,3 +202,32 @@ test('reporting never reads a hostile thrown object', async t => {
   assert.equal(JSON.parse(f.reports[0]!).stage, 'consume');
   assert.deepEqual(control.closed, ['server', 'database']); assert.equal(f.timerCleared, true);
 });
+
+
+test('a source overrun is reported before later synchronous stages even when setup succeeds', async t => {
+  const f = prepare(t);
+  let now = 0;
+  t.mock.method(performance, 'now', () => now);
+  control.onStage = stage => { if (stage === 'source-install') now = 120001; };
+  const fixture = await jointFixture();
+  await fixture.close();
+  assert.equal(f.reports.length, 1);
+  assert.deepEqual(JSON.parse(f.reports[0]!), {
+    event: 'cloud-fiscal-joint-setup-failed', reason: 'deadline', stage: 'source-install',
+    elapsedMs: 120001, stageElapsedMs: 120001,
+  });
+  assert.equal(f.timerCleared, true);
+  assert.deepEqual(control.closed, ['server', 'database']);
+});
+
+test('initial directory failure keeps its original error and clears its reporting timer', async t => {
+  const f = prepare(t);
+  t.mock.method(fs, 'mkdtemp', async () => { throw control.error; });
+  syncBuiltinESMExports();
+  await assert.rejects(jointFixture(), error => error === control.error);
+  assert.equal(f.reports.length, 1);
+  assert.equal(JSON.parse(f.reports[0]!).stage, 'temporary-directory');
+  assert.equal(JSON.parse(f.reports[0]!).reason, 'failure');
+  assert.equal(f.timerCleared, true);
+  assert.deepEqual(control.closed, []);
+});
