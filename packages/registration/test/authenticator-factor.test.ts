@@ -64,8 +64,17 @@ beforeEach(async () => {
     VALUES($1,$2,$3,clock_timestamp())`,[accountId,email,await hashSecret(password)]);
 });
 
-for (const activationOffset of [0, -1]) test('enrolment leaves password login unchanged until confirmation, then ends every session and returns hashed recovery codes once' + (activationOffset ? ' with previous-step enrolment' : ''), async () => {
-  const a=await authority();await authority();const s=store();
+for (const hostClockShift of [0, 180_000]) for (const activationOffset of [0, -1]) test('enrolment leaves password login unchanged until confirmation, then ends every session and returns hashed recovery codes once' + (activationOffset ? ' with previous-step enrolment' : '') + (hostClockShift ? ' after the host clock shifts' : ''), async t => {
+  const clockPool=new Pool({connectionString:process.env.TEST_DATABASE_URL,
+    options:`-c search_path=${schema},pg_catalog -c statement_timeout=10000`,application_name:schema});
+  t.after(async()=>{
+    try {await clockPool.end();}
+    finally {
+      try {await pool.query(`DROP FUNCTION IF EXISTS ${schema}.clock_timestamp()`);}
+      finally {await pool.query('DROP TABLE IF EXISTS factor_enrolment_clock');}
+    }
+  });
+  const a=await authority();await authority();const s=store(keys,policy,clockPool);
   assert.deepEqual(await s.status(a.token),{active:false,version:0,recoveryCodesRemaining:0,available:true});
   const pending=await s.begin(a);
   assert.match(pending.secret,/^[A-Z2-7]{32}$/);assert.match(pending.pendingToken,/^[A-Za-z0-9_-]{43}$/);
@@ -77,12 +86,20 @@ for (const activationOffset of [0, -1]) test('enrolment leaves password login un
   assert.equal(row.session_id,(await pool.query('SELECT id FROM cloud_sessions WHERE token_hash=$1',[digest(a.token)])).rows[0].id);
   assert.equal(row.expires_at-row.created_at,300_000);assert.equal(row.attempt_limit,3);
   assert.equal(JSON.stringify(row).includes(pending.secret),false);assert.equal(JSON.stringify(row).includes(pending.pendingToken),false);
-  // A previous-step code needs time to activate before its accepted window ends.
-  if (activationOffset) {
-    const now=(await pool.query('SELECT clock_timestamp() AS now')).rows[0].now.getTime();
-    if (now%30_000>25_000) await delay(30_000-now%30_000);
+  // Successful enrolment and replay share one verifier time; password derivation
+  // and database waits must not turn this success fixture into an expiry test.
+  // The offset makes a real-clock pool fail while staying inside enrolment expiry.
+  const verifierNow=new Date((await pool.query('SELECT clock_timestamp() AS now')).rows[0].now.getTime()+90_000);
+  await pool.query('CREATE TABLE factor_enrolment_clock(moment timestamptz NOT NULL)');
+  await pool.query('INSERT INTO factor_enrolment_clock VALUES($1)',[verifierNow]);
+  await pool.query(`CREATE FUNCTION ${schema}.clock_timestamp() RETURNS timestamptz LANGUAGE SQL VOLATILE
+    AS 'SELECT moment FROM ${schema}.factor_enrolment_clock'`);
+  if(hostClockShift) {
+    const shiftedNow=Date.now()+hostClockShift;
+    const clock=mock.method(Date,'now',()=>shiftedNow);
+    t.after(()=>clock.mock.restore());
   }
-  const activationCode=totp(pending.secret,Date.now()+activationOffset*30_000);
+  const activationCode=totp(pending.secret,verifierNow.getTime()+activationOffset*30_000);
   const changed=await s.activate(a,pending.pendingToken,activationCode);
   assert.equal(changed.status,'changed');assert.equal(changed.active,true);assert.equal(changed.recoveryCodes.length,10);
   assert.equal(new Set(changed.recoveryCodes).size,10);assert.ok(changed.recoveryCodes.every(c=>/^[0-9A-F]{32}$/.test(c)));
@@ -90,8 +107,8 @@ for (const activationOffset of [0, -1]) test('enrolment leaves password login un
   const codes=(await pool.query('SELECT * FROM cloud_factor_recovery_codes')).rows;
   assert.equal(codes.length,10);assert.ok(codes.every(r=>!changed.recoveryCodes.includes(r.code_hash)));
   const challenge=await loginChallenge();
-  await refused(new registration.PasswordLoginStore(pool,keys,loginPolicy).complete(challenge,proof(activationCode)),'credentials_invalid');
-  const credentials=await new registration.PasswordLoginStore(pool,keys,loginPolicy).complete(challenge,recovery(changed.recoveryCodes[0]!));
+  await refused(new registration.PasswordLoginStore(clockPool,keys,loginPolicy).complete(challenge,proof(activationCode)),'credentials_invalid');
+  const credentials=await new registration.PasswordLoginStore(clockPool,keys,loginPolicy).complete(challenge,recovery(changed.recoveryCodes[0]!));
   assert.deepEqual(await s.status(credentials.token),{active:true,version:1,recoveryCodesRemaining:9,available:true});
   assert.equal('recoveryCodes' in await s.status(credentials.token),false);
 });
