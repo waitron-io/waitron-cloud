@@ -8,6 +8,7 @@ import {createRequire} from 'node:module';
 import {Agent} from 'node:https';
 import {lookup} from 'node:dns';
 import {createCloudConnection} from '/waitron/apps/server/src/cloud-client.ts';
+import {pendingRequest} from '/waitron/apps/server/src/cloud-installation.ts';
 const require = createRequire('/waitron/apps/server/package.json');
 if (process.env.CLOUD_TEST_STREAM === '1') {
   const {startIntegrationTransport} = await import('/proof/integration-transport.mjs');
@@ -37,6 +38,13 @@ const socket = root + '/proof.sock'; await rm(socket, {force: true});
 const control = createServer(async (req, res) => {
   try {
     assert.equal(req.method, 'POST');
+    if (req.url === '/rollback-refresh') {
+      const {prepareIntegrationRenewal} = await import('/proof/integration-renewal.mjs');
+      await prepareIntegrationRenewal(root, pendingRequest);
+      await cloud.refresh();
+      res.end(JSON.stringify({renewed: true}));
+      return;
+    }
     if (req.url === '/paid-remote') {
       let input = '';
       for await (const part of req) {input += part; assert.ok(input.length < 16384);}

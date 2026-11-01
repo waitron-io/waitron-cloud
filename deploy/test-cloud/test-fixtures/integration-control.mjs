@@ -19,7 +19,7 @@ const post = (path, body, cookie = '') => fetch(ready.origin + path, {method: 'P
 const login = await post('/management-api/session', {email: 'owner@example.test', password: 'Local integration password'});
 assert.equal(login.status, 200, 'integration.local_login');
 const cookie = login.headers.getSetCookie().map(value => value.split(';')[0]).join('; ');
-if (phase === 'snapshot-refusal' || phase === 'snapshot-publish' || phase === 'verification-state' || phase === 'recovery-authority' || phase === 'stream-start' || phase === 'free-remote' || phase === 'paid-remote') {
+if (phase === 'snapshot-refusal' || phase === 'snapshot-publish' || phase === 'verification-state' || phase === 'recovery-authority' || phase === 'stream-start' || phase === 'free-remote' || phase === 'paid-remote' || phase === 'rollback-refresh') {
   const result = await new Promise((resolve, reject) => {
     const req = request({socketPath: root + '/proof.sock', path: '/' + phase, method: 'POST'}, res => {
       let text = ''; res.on('data', part => text += part);

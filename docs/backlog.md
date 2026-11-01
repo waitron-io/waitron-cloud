@@ -955,8 +955,18 @@ implementation or production evidence.
   without activation, replacement or a Cloud restored report. Its 63 samples stay
   above 3,213 MiB available memory and 12.55 GiB free disk; owned cleanup and
   protected Waitron state are checked. This fresh demo does not qualify trading
-  history. Full capacity, rollback, the shipping Alpine release, the strict complete
-  producer receipt and deployment remain open. The combined test's nine-second
+  history. A separate same-image rollback journey now passes one Linux case without
+  skips in 122.4 seconds. It stops and restarts all 11 recorded running Cloud
+  containers while preserving image IDs, volume bindings, the schema ledger,
+  private runtime configuration and public CA. Both paired clients then complete
+  fresh signed renewal and configuration requests with their original identities.
+  A private fixture queues an ordinary native renewal while retaining the valid
+  cached lease; this does not qualify automatic expiry. The proof refreshes the
+  random loopback port after restart without changing TLS trust. Its 29 samples
+  stay above 3,903 MiB available memory and 13.98 GiB free disk; owned cleanup and
+  protected Waitron state are checked. Full capacity, schema-changing rollback,
+  the shipping Alpine release, the strict complete producer receipt and deployment
+  remain open. The combined test's nine-second
   margin needs attention before adding further fixture work to its unchanged
   300-second limit. The old Mac cleanup refusal stays
   historical evidence;

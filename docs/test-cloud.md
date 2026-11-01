@@ -19,8 +19,9 @@ node --test scripts/verify-test-cloud-receipt.test.mjs
 ```
 
 The paired-client journey below now combines continuous recovery, independent
-snapshot fallback and remote isolation and withdrawal. The combined receipt
-producer, full capacity, rollback and shipping image qualification remain open.
+snapshot fallback and remote isolation and withdrawal. A separate same-image
+rollback journey preserves Cloud identity and both pairings. The combined receipt
+producer, full capacity, schema-changing rollback and shipping image qualification remain open.
 There is no completed PR7 receipt to validate yet. Keep plan enforcement off
 before the test-box deployment.
 
@@ -875,5 +876,33 @@ One real Linux journey passes without skips in 290.8 seconds, within the unchang
 stay above 3,213 MiB available memory and 12.55 GiB free disk, with no observed
 out-of-memory kill. Owned cleanup and the protected Waitron containers are checked.
 This fresh demo and isolated recovery clock do not qualify existing trading
-history. Full settled and active-verifier capacity, rollback, the shipping Alpine
+history. Full settled and active-verifier capacity, schema-changing rollback, the shipping Alpine
+release and the strict complete receipt remain open. Keep plan enforcement off.
+
+## Stop and restart Cloud without losing pairings
+
+You can check a same-image rollback without extending the combined recovery test:
+
+```sh
+node --test scripts/test-cloud-rollback.test.mjs
+```
+
+Use the same immutable image inputs. The journey stops only its recorded running
+Cloud containers and preserves their volumes. It restarts the same containers,
+reads the proxy's newly assigned loopback port and checks trusted HTTPS again.
+Image IDs, volume bindings, the schema ledger, private runtime configuration and
+public CA must match their observations before stopping.
+
+Both paired venues must then complete fresh successful renewal and configuration
+requests with their original identities. A private fixture queues the native
+renewal request without replacing the saved lease; Waitron's unchanged client
+signs, sends and saves it. This explicit fixture step exercises renewal while the
+existing lease is still valid. It does not qualify automatic lease expiry.
+
+One Linux journey passes without skips in 122.4 seconds. All 11 Cloud containers
+restart, and both pairings survive. Its 29 resource samples stay above 3,903 MiB
+available memory and 13.98 GiB free disk, with no observed out-of-memory kill.
+Owned cleanup and the protected Waitron containers are checked. This proof makes
+no schema change. A schema upgrade still needs its matching private database,
+configuration and storage backup/restore proof. Full capacity, the shipping Alpine
 release and the strict complete receipt remain open. Keep plan enforcement off.

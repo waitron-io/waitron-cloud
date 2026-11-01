@@ -63,7 +63,7 @@ export function checkProtectedContainers(before, after, ids) {
   return true;
 }
 
-export async function runTestCloudClients({image, waitronImage, protectedContainerIds = [], paidSnapshot = false, paidVerification = false, paidRecovery = false, paidAuthorisedRecovery = false, paidStream = false, paidContinuousRecovery = false, freeRemote = false, paidRemote = false} = {}) {
+export async function runTestCloudClients({image, waitronImage, protectedContainerIds = [], paidSnapshot = false, paidVerification = false, paidRecovery = false, paidAuthorisedRecovery = false, paidStream = false, paidContinuousRecovery = false, freeRemote = false, paidRemote = false, cloudRollback = false} = {}) {
   paidStream ||= paidContinuousRecovery;
   paidAuthorisedRecovery ||= paidStream;
   paidRecovery ||= paidAuthorisedRecovery;
@@ -125,7 +125,7 @@ export async function runTestCloudClients({image, waitronImage, protectedContain
     const network = project + '_default';
     const ca = await docker(['exec', proxy, 'cat', '/run/local-stack/lan/ca.pem']);
     assert.match(ca, /BEGIN CERTIFICATE/); assert.doesNotMatch(ca, /PRIVATE/);
-    const port = Number((await compose(['port', 'proxy', '3000'])).split(':').at(-1));
+    let port = Number((await compose(['port', 'proxy', '3000'])).split(':').at(-1));
     const mailPort = Number((await compose(['port', 'mailpit', '8025'])).split(':').at(-1));
     const api = (path, body, credentials = {}, trust = ca, servername = 'waitron.local') => new Promise((resolve, reject) => {
       const req = request({hostname: '127.0.0.1', port, servername, ca: trust, path, method: body === undefined ? 'GET' : 'POST',
@@ -441,13 +441,44 @@ export async function runTestCloudClients({image, waitronImage, protectedContain
         paid: remoteClients.find(value => value.plan === 'paid'), free: remoteClients.find(value => value.plan === 'free'), image, runId,
         own: id => {owned.push(id); record('container', id);}});
     }
+    let cloudRollbackEvidence;
+    if (cloudRollback) {
+      const {proveIntegrationRollback, checkRollbackClient} = await import('../deploy/test-cloud/test-fixtures/integration-rollback.mjs');
+      const exchanges = async client => parseIntegrationJson(await docker(['exec', client.id, 'node', '-e',
+        "const fs=require('node:fs');const rows=fs.readFileSync(process.argv[1]+'/exchanges.jsonl','utf8').trim().split('\\n').map(JSON.parse);const count=path=>rows.filter(row=>row.path===path&&row.status===200).length;console.log(JSON.stringify({renewals:count('/api/installations/renew'),configurations:count('/api/installations/configuration')}));",
+        client.venueRoot], '', 'rollback-client-exchanges'));
+      const clients = [];
+      const previous = await Promise.all(remoteClients.map(async client => ({client,
+        evidence: await control(client.id, 'evidence'), exchanges: await exchanges(client)})));
+      cloudRollbackEvidence = await proveIntegrationRollback({docker, compose, project, image, account,
+        readIdentity: async () => parseIntegrationJson(await docker(['exec', account, 'node', 'deploy/test-cloud/test-fixtures/integration-deployment-identity.mjs'], '', 'rollback-deployment-identity')),
+        probe: async () => {
+          // Docker assigns a new random loopback port when the stopped proxy starts again.
+          port = Number((await compose(['port', 'proxy', '3000'])).split(':').at(-1));
+          let ready = false;
+          for (let attempt = 0; attempt < 100; attempt++) {
+            try {if ((await api('/api/health/ready')).status === 200) {ready = true; break;}} catch {}
+            await delay(100);
+          }
+          assert.equal(ready, true, 'integration.rollback_unavailable');
+          for (const before of previous) {
+            assert.deepEqual(await control(before.client.id, 'rollback-refresh'), {renewed: true});
+            const after = await control(before.client.id, 'evidence');
+            const counts = await exchanges(before.client);
+            checkRollbackClient(before.evidence, after, before.exchanges, counts);
+            clients.push({installationId: before.client.installationId, before: before.exchanges, after: counts, identityPreserved: true});
+          }
+        }});
+      cloudRollbackEvidence.clients = clients;
+      cloudRollbackEvidence.pairedClientsPreserved = clients.length;
+    }
     for (const key of ['organisationId', 'venueId', 'installationId', 'localVenueId', 'stateSha256']) assert.equal(new Set(organisations.map(value => value[key])).size, 2, 'integration.distinct_' + key);
     result = {version: 1, kind: 'test-cloud-clients', runId, completeIntegration: false, origin, waitronHead: revision, image, waitronImage,
       accountMail: {free: 'proved', paid: 'proved', transport: 'mailpit'}, clients: {status: 'proved', actions: ['pair', 'renew', 'configuration'], demoVenues: 2, restartIdentity: 'proved'},
       tls: {untrustedRefused: true, wrongHostnameRefused: true}, organisations, freeSnapshot, restarts,
       ...(publishedSnapshot ? {paidSnapshot: publishedSnapshot} : {}), ...(observedStream ? {paidStream: observedStream} : {}),
       ...(continuousRecovery ? {paidContinuousRecovery: continuousRecovery} : {}), ...(freeRemoteEvidence ? {freeRemote: freeRemoteEvidence} : {}),
-      ...(paidRemoteEvidence ? {paidRemote: paidRemoteEvidence} : {})};
+      ...(paidRemoteEvidence ? {paidRemote: paidRemoteEvidence} : {}), ...(cloudRollbackEvidence ? {cloudRollback: cloudRollbackEvidence} : {})};
   } finally {
     try {
       await completeCleanup([
