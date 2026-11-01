@@ -937,7 +937,15 @@ implementation or production evidence.
   stay above 3,860 MiB available memory and 13.92 GiB free disk; owned cleanup
   and unchanged protected Waitron containers are checked. This is explicit
   fixture orchestration, not an automatic Waitron remote client or a browser
-  session. Combining it with recovery, full capacity, rollback, the strict complete
+  session. The combined snapshot/remote journey now publishes a real encrypted
+  archive and exercises the remote routes from that same paired HTTPS venue.
+  The adapter verifies the venue's own certificate authority for upstream TLS;
+  native tests refuse missing or unrelated trust and the wrong hostname, and
+  retain HTTP forwarding. One Linux journey passes without skips in 132.4 seconds,
+  with withdrawal in 2.201 seconds. Its 31 samples stay above 3,600 MiB available
+  memory and 14.30 GiB free disk. The archive stays pending verification; this
+  journey performs no recovery. Owned cleanup and protected Waitron state are
+  checked. Combining it with recovery, full capacity, rollback, the strict complete
   producer receipt and deployment remain open. The old Mac cleanup refusal stays
   historical evidence;
   the isolated Linux client proof removes its owned resources successfully.

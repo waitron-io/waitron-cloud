@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import {readFile, writeFile, mkdir} from 'node:fs/promises';
 import {createPrivateKey, generateKeyPairSync, randomUUID, sign, X509Certificate, createHash} from 'node:crypto';
 import {createServer} from 'node:https';
-import {request} from 'node:http';
+import {requestIntegrationVenue} from './integration-venue-request.mjs';
 import {setTimeout as delay} from 'node:timers/promises';
 
 // The paired venue keeps both private keys; the account receives only its public peer key and CSR.
@@ -70,11 +70,22 @@ export async function paidRemoteClient(root, {phase, placement, gatewayIp, reque
   const certificate = await readFile(root + '/cloud-staff.crt', 'utf8');
   assert.equal(certificate, reply.certificate);
   const ready = JSON.parse(await readFile(root + '/ready.json', 'utf8'));
-  const availability = await (await localFetch(ready.origin + '/public/availability')).json();
+  const upstreamTrust = ready.origin.startsWith('https:') ? {ca: await readFile(root + '/tls/ca.crt')} : {};
+  const availability = await new Promise((resolve, reject) => {
+    const req = requestIntegrationVenue(ready.origin, '/public/availability', upstreamTrust, response => {
+      let text = '';
+      response.on('data', part => {text += part; if (text.length > 65536) req.destroy(Error('integration.remote_upstream_large'));});
+      response.once('error', reject);
+      response.once('end', () => {
+        try {assert.equal(response.statusCode, 200); resolve(JSON.parse(text));} catch (error) {reject(error);}
+      });
+    });
+    req.setTimeout(5000, () => req.destroy(Error('integration.remote_upstream_timeout')));
+    req.once('error', reject); req.end();
+  });
   // This TLS adapter forwards to the running native venue; it supplies no application responses.
   const server = createServer({key: await readFile(root + '/cloud-staff.key'), cert: certificate}, (req, res) => {
-    const target = new URL(req.url, ready.origin);
-    const upstream = request(target, {method: req.method, headers: {...req.headers, host: target.host}}, response => {
+    const upstream = requestIntegrationVenue(ready.origin, req.url, {...upstreamTrust, method: req.method, headers: req.headers}, response => {
       res.writeHead(response.statusCode, response.headers); response.pipe(res);
     });
     upstream.setTimeout(5000, () => upstream.destroy());

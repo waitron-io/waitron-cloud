@@ -806,8 +806,9 @@ existing submit/status protocol with the pairing key and current lease. The
 pinned Waitron source has no automatic exchange caller, so this is explicit
 fixture orchestration. A TLS adapter forwards requests to the running demo
 venue, and a real WireGuard peer connects it to the gateway. The adapter supplies
-no application responses. This extension runs separately from snapshot and
-stream recovery; their complete combined journey remains unqualified.
+no application responses. You can also combine remote access with snapshot
+publication on the same HTTPS venue, as shown below. The complete combination
+with stream and snapshot recovery remains unqualified.
 
 The staff route returns the venue's native availability response and requires
 authentication for its private status path. The public route refuses that
@@ -832,3 +833,24 @@ resources are removed and the three protected Waitron containers remain
 unchanged. These disposable Debian images and the partial receipt do not qualify
 the shipping Alpine release, full settled or active-verifier capacity, rollback,
 the complete producer or deployment activation. Plan enforcement stays off.
+
+To publish a snapshot and exercise remote access from the same paid venue, run:
+
+```sh
+node --test scripts/test-cloud-paid-snapshot-remote.test.mjs
+```
+
+Use the same immutable image inputs. This journey starts the HTTPS venue used
+for real backup capture, publishes its encrypted archive, then checks the remote
+routes and paid-to-free withdrawal against that same paired installation. The
+adapter trusts the venue's own certificate authority when forwarding HTTPS
+requests. Native checks reject missing or unrelated trust and the wrong hostname;
+they also check HTTP forwarding for the simpler demo venue.
+
+One real Linux journey passes without skips in 132.4 seconds. Its 31 samples
+stay above 3,600 MiB available memory and 14.30 GiB free disk. Remote withdrawal
+takes 2.201 seconds from the plan setter's return. The archive remains pending
+verification and this journey performs no recovery. Owned resources are removed
+and the three protected Waitron containers remain unchanged. Full capacity,
+rollback, the combined recovery proof, the shipping Alpine release and the
+complete receipt remain open. Keep plan enforcement off.
