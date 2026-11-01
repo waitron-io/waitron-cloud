@@ -71,6 +71,23 @@ test('one project recovers both copies, withdraws remote access, measures capaci
   assert.equal(receipt.capacity.shippingQualification, false);
   assert.ok(receipt.capacity.samples.some(value => value.phase === 'verification' &&
     value.verifierIds.includes(snapshot.workerVerification.childId) && value.verifierMiB > 0));
+  const journeySamples = receipt.capacity.integration?.samples;
+  assert.ok(journeySamples?.length > 2, 'Resources must be sampled throughout the same integration');
+  assert.equal(journeySamples[0].stage, 'clients'); assert.equal(journeySamples.at(-1).stage, 'rollback');
+  for (const stage of ['verification', 'continuous-recovery', 'snapshot-recovery', 'remote-withdrawal', 'rollback']) {
+    assert.ok(journeySamples.some(value => value.stage === stage), stage);
+  }
+  let previous = -1;
+  for (const value of journeySamples) {
+    assert.equal(value.phase, 'integration');
+    assert.ok(value.elapsedMs > previous && value.elapsedMs - Math.max(0, previous) <= 5000);
+    assert.ok(Number.isFinite(value.freeGiB) && value.freeGiB >= 0);
+    assert.ok(value.availableMiB >= 0 && value.cloudMiB <= 2048 && value.verifierMiB <= 1024);
+    assert.ok(value.scratchMiB <= 256 && value.fixtureBytes <= 1073741824);
+    assert.equal(value.oom, false); assert.equal(value.protectedUnchanged, true);
+    previous = value.elapsedMs;
+  }
+  assert.ok(journeySamples.some(value => value.verifierIds.includes(snapshot.workerVerification.childId) && value.verifierMiB > 0));
   const rollback = receipt.schemaRollback;
   assert.equal(rollback?.kind, 'controlled-schema-change'); assert.equal(rollback.shippingQualification, false);
   assert.deepEqual(rollback.before, rollback.after);

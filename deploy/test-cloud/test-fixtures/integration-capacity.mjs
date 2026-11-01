@@ -89,10 +89,18 @@ export async function measureCapacityWindow({observe, verify, stop, now = () => 
 }
 
 export async function measureStartupCapacity({observe, start, stop, now = () => performance.now(), wait = ms => new Promise(resolve => setTimeout(resolve, ms))}) {
+  return measureOperationCapacity({observe, run: start, stop, now, wait, phase: 'startup'});
+}
+
+export async function measureIntegrationCapacity(options) {
+  return measureOperationCapacity({...options, phase: 'integration'});
+}
+
+async function measureOperationCapacity({observe, run, stop, phase, now = () => performance.now(), wait = ms => new Promise(resolve => setTimeout(resolve, ms))}) {
   const samples = [], began = now();
   const sample = async () => {
     const elapsedMs = Math.round(now() - began);
-    const value = {...await observe(), elapsedMs, phase: 'startup'};
+    const value = {...await observe(), elapsedMs, phase};
     checkCapacitySample(value);
     assert.ok(Number.isSafeInteger(elapsedMs) && elapsedMs >= 0);
     const previous = samples.at(-1)?.elapsedMs ?? -1;
@@ -101,7 +109,7 @@ export async function measureStartupCapacity({observe, start, stop, now = () => 
   };
   await sample();
   let done = false, error, value;
-  const operation = Promise.resolve().then(start).then(result => {value = result;}, failure => {error = failure;}).finally(() => {done = true;});
+  const operation = Promise.resolve().then(run).then(result => {value = result;}, failure => {error = failure;}).finally(() => {done = true;});
   try {
     do {await wait(1000); await sample();} while (!done);
     if (!error) {await wait(1); await sample();}

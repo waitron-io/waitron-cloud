@@ -59,7 +59,7 @@ const lines = text => text.split(/\s+/).filter(Boolean);
 export async function runTestCloudCombined({image, waitronImage, protectedContainerIds = []} = {}) {
   return runTestCloudClients({image, waitronImage, protectedContainerIds,
     paidContinuousRecovery: true, freeRemote: true, paidRemote: true,
-    measureCapacity: true, schemaRollback: true, sourceProvenance: true});
+    measureCapacity: true, measureIntegration: true, schemaRollback: true, sourceProvenance: true});
 }
 
 export function checkProtectedContainers(before, after, ids) {
@@ -71,7 +71,8 @@ export function checkProtectedContainers(before, after, ids) {
   return true;
 }
 
-export async function runTestCloudClients({image, waitronImage, protectedContainerIds = [], paidSnapshot = false, paidVerification = false, paidRecovery = false, paidAuthorisedRecovery = false, paidStream = false, paidContinuousRecovery = false, freeRemote = false, paidRemote = false, cloudRollback = false, measureCapacity = false, schemaRollback = false, sourceProvenance = false} = {}) {
+export async function runTestCloudClients({image, waitronImage, protectedContainerIds = [], paidSnapshot = false, paidVerification = false, paidRecovery = false, paidAuthorisedRecovery = false, paidStream = false, paidContinuousRecovery = false, freeRemote = false, paidRemote = false, cloudRollback = false, measureCapacity = false, measureIntegration = false, schemaRollback = false, sourceProvenance = false} = {}) {
+  measureCapacity ||= measureIntegration;
   paidStream ||= paidContinuousRecovery;
   paidAuthorisedRecovery ||= paidStream;
   paidRecovery ||= paidAuthorisedRecovery;
@@ -153,6 +154,8 @@ export async function runTestCloudClients({image, waitronImage, protectedContain
           protectedUnchanged: async () => checkProtectedContainers(before, await inventory(), protectedContainerIds)}),
         stop: () => compose(['stop', '--timeout', '10'])});
     } else await start();
+    let journeyStage = 'clients';
+    const journey = async () => {
     const account = await compose(['ps', '-q', 'account']), proxy = await compose(['ps', '-q', 'proxy']);
     const network = project + '_default';
     const ca = await docker(['exec', proxy, 'cat', '/run/local-stack/lan/ca.pem']);
@@ -268,6 +271,7 @@ export async function runTestCloudClients({image, waitronImage, protectedContain
         publishedSnapshot = {...captured, ...independent, organisationId, venueId: evidence.registration.venueId,
           installationId: evidence.registration.installationId, localVenueId: evidence.localVenueId, recovery: 'not-run'};
         if (paidVerification || paidRecovery) {
+          journeyStage = 'verification';
           const verify = async () => {
           await accountPhase('configure-verification', {image: waitronImage});
           const [accountInfo] = parseIntegrationJson(await docker(['inspect', account]));
@@ -326,6 +330,7 @@ export async function runTestCloudClients({image, waitronImage, protectedContain
           } else await verify();
         }
         if (paidStream) {
+          journeyStage = 'stream';
           const streamed = await control(id, 'stream-start');
           assert.equal(streamed.sourceNodeId, captured.sourceNodeId);
           assert.equal(streamed.localVenueId, evidence.localVenueId);
@@ -360,6 +365,7 @@ export async function runTestCloudClients({image, waitronImage, protectedContain
             publishedSnapshot.snapshotFallback.observations.push(phase);
           };
           if (paidContinuousRecovery) {
+            journeyStage = 'continuous-recovery';
             const streamPhase = async (phase, extra = {}) => parseIntegrationJson(await docker(['exec', '-i', target,
               'node', '/waitron/apps/server/dist/cloud-continuous-target.js'], JSON.stringify({phase, ...extra}), 'continuous-' + phase));
             const requested = await streamPhase('start', {ca});
@@ -404,6 +410,7 @@ export async function runTestCloudClients({image, waitronImage, protectedContain
             // Start the snapshot fault matrix after the continuous client's 60-second IP window expires.
             await delay(61000);
           }
+          journeyStage = 'snapshot-recovery';
           const request = await targetPhase('start', {ca});
           assert.equal(request.targetDigest, publishedSnapshot.workerVerification.targetDigest);
           // The unavailable source stays stopped during every recovery read and fiscal refusal.
@@ -491,6 +498,7 @@ export async function runTestCloudClients({image, waitronImage, protectedContain
       remoteClients.push({id, stateVolume, venueRoot, ...organisations.at(-1)});
     }
     if (paidRemote) {
+      journeyStage = 'remote-withdrawal';
       const {proveIntegrationPaidRemote} = await import('../deploy/test-cloud/test-fixtures/integration-paid-remote.mjs');
       paidRemoteEvidence = await proveIntegrationPaidRemote({docker, compose, control, account,
         paid: remoteClients.find(value => value.plan === 'paid'), free: remoteClients.find(value => value.plan === 'free'), image, runId,
@@ -498,6 +506,7 @@ export async function runTestCloudClients({image, waitronImage, protectedContain
     }
     let cloudRollbackEvidence, schemaRollbackEvidence;
     if (cloudRollback || schemaRollback) {
+      journeyStage = 'rollback';
       const {proveIntegrationRollback, checkRollbackClient} = await import('../deploy/test-cloud/test-fixtures/integration-rollback.mjs');
       const exchanges = async client => parseIntegrationJson(await docker(['exec', client.id, 'node', '-e',
         "const fs=require('node:fs');const rows=fs.readFileSync(process.argv[1]+'/exchanges.jsonl','utf8').trim().split('\\n').map(JSON.parse);const count=path=>rows.filter(row=>row.path===path&&row.status===200).length;console.log(JSON.stringify({renewals:count('/api/installations/renew'),configurations:count('/api/installations/configuration')}));",
@@ -539,6 +548,17 @@ export async function runTestCloudClients({image, waitronImage, protectedContain
       ...(continuousRecovery ? {paidContinuousRecovery: continuousRecovery} : {}), ...(freeRemoteEvidence ? {freeRemote: freeRemoteEvidence} : {}),
       ...(paidRemoteEvidence ? {paidRemote: paidRemoteEvidence} : {}), ...(cloudRollbackEvidence ? {cloudRollback: cloudRollbackEvidence} : {}),
       ...(schemaRollbackEvidence ? {schemaRollback: schemaRollbackEvidence} : {})};
+    };
+    if (measureIntegration) {
+      const {measureIntegrationCapacity, observeCapacity} = await import('../deploy/test-cloud/test-fixtures/integration-capacity.mjs');
+      const measured = await measureIntegrationCapacity({run: journey,
+        observe: async () => ({stage: journeyStage,
+          ...await observeCapacity({docker, project, runId, verifierScope, waitronImage,
+            workerId: verifierWorker, diskPath: hostCapacity.diskPath,
+            protectedUnchanged: async () => checkProtectedContainers(before, await inventory(), protectedContainerIds)})}),
+        stop: () => compose(['stop', '--timeout', '10'])});
+      capacityEvidence.integration = {samples: measured.samples};
+    } else await journey();
   } finally {
     try {
       await completeCleanup([

@@ -813,6 +813,10 @@ implementation or production evidence.
   parked until 3 November; current-head CI runs the genuine gateway journeys.
 
 - **LAN test Cloud with free and paid organisations.** The capacity journey now
+  has continuous integration sampling wired across recovery, remote withdrawal
+  and matching-volume rollback; its genuine combined qualification remains due.
+  The sampler observes before and after the journey and stops and drains owned
+  work on measurement failure. The capacity journey also
   collects host memory and available disk on Docker's data filesystem before
   project startup, throughout startup and settled/verification sampling,
   and after owned cleanup. Startup includes a reading before allocation and one

@@ -1099,6 +1099,13 @@ refusals, paid remote withdrawal, settled and active-verifier capacity, and matc
 database/configuration/storage rollback in one disposable project. Its ten-minute
 limit covers all those stages; the separate journeys keep their existing limits.
 
+The combined command also collects `capacity.integration.samples` from before the
+client journeys through the final rollback exchange. Each reading names its stage,
+so you can distinguish recovery, remote withdrawal and rollback from the separate
+settled window. Missing readings, gaps over five seconds, resource-budget failures
+or changed protected containers stop and drain the owned journey before cleanup.
+The complete receipt and shipping deployment qualification remain separate gates.
+
 Another queued archive can become eligible while the selected archive is being
 verified. The fixture runs ordinary one-job worker commands until the selected
 archive is admitted, then waits for shutdown without taking another job. It still
