@@ -63,7 +63,10 @@ function run(holdReply) {
       export const createLitestreamTransport=async options=>{
         if(options.phase==='restore')return {url:options.target,whenIdle:async action=>action(),snapshot:()=>({}),close:async()=>{}};
         const transport=await open(options);
-        return globalThis.transport={...transport,whenIdle:action=>{
+        return globalThis.transport={...transport,pendingTransfers:()=>{
+          console.error(JSON.stringify({kind:'transfer-snapshot',writerClosed:globalThis.writerClosed===true}));
+          return transport.pendingTransfers();
+        },whenIdle:action=>{
           console.error(JSON.stringify({kind:'idle-admission',writerClosed:globalThis.writerClosed,pending:transport.checkpoint().pending}));
           return transport.whenIdle(action);
         }};
@@ -150,6 +153,10 @@ for (const held of [true, false]) test(`real writer exit before final smoke rest
     assert.equal(records.some(row => row.kind === 'restore-admission'), false, result.stderr);
     const stop = records.find(row => row.kind === 'litestream-stop');
     assert.equal(stop?.step, 'idle', result.stderr);
+    const firstSnapshot = records.findIndex(row => row.kind === 'transfer-snapshot');
+    assert.ok(firstSnapshot >= 0 && firstSnapshot < records.findIndex(row => row.kind === 'writer-signal'),
+      'capture pending transfers before the signal call, while the real writer is still running');
+    assert.equal(records[firstSnapshot].writerClosed, false);
     assert.ok(stop.beforeSignal, 'retain the transport state before signalling the writer');
     assert.equal(stop.beforeSignal.pending, 1, 'retain active transfers before the real writer closes');
     assert.equal(stop.beforeSignal.truncated, false);
