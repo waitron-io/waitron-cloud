@@ -1,6 +1,8 @@
 import {execFile} from 'node:child_process';
-import {readFile,writeFile} from 'node:fs/promises';
-import {join} from 'node:path';
+import {mkdtemp,readFile,writeFile,rm,mkdir,cp} from 'node:fs/promises';
+import {join,dirname,resolve} from 'node:path';
+import {tmpdir} from 'node:os';
+import {fileURLToPath} from 'node:url';
 import {promisify} from 'node:util';
 
 const exec=promisify(execFile);
@@ -45,4 +47,43 @@ export async function qualifyVenueGuard(candidate,guard,inheritedEnv=process.env
  if(!exactResult(omitted,guard,true)||!(/code: '?ERR_ASSERTION'?/.test(omitted.output))
   ||!guard.expected||!omitted.output.includes(guard.expected))throw failure('assertion_required');
  return {guard:guard.name,baseline:1,detected:1,restored:1};
+}
+
+const guards={pure:[
+ {name:'translation level floor',file:'packages/registration/src/venue-service-rules.ts',needle:"return level!=='registered'&&",replacement:'return ',test:'packages/registration/test/venue-service-rules.test.ts',pattern:'venue levels have exact service floors',expected:'false'},
+ {name:'exclusive trial end',file:'packages/registration/src/venue-service-rules.ts',needle:'today<trial.endsOn){',replacement:'today<=trial.endsOn){',test:'packages/registration/test/venue-service-rules.test.ts',pattern:'trial dates grant only the stored half open interval',expected:"'connected'"},
+],database:[]};
+
+export async function qualifyVenueGuards(mode){
+ if(!Object.hasOwn(guards,mode))throw failure('invalid_mode');
+ if(mode==='database'&&!process.env.TEST_DATABASE_URL)throw failure('database_required');
+ const root=fileURLToPath(new URL('../',import.meta.url)),scratch=await mkdtemp(join(tmpdir(),'venue-service-guards-')),candidate=join(scratch,'candidate');
+ const env={...process.env};delete env.NODE_TEST_CONTEXT;delete env.NODE_OPTIONS;
+ if(mode==='pure')delete env.TEST_DATABASE_URL;
+ try{
+  await exec('git',['clone','--quiet','--no-hardlinks',root,candidate],{env,timeout:10000});
+  const {stdout:patch}=await exec('git',['diff','--binary','HEAD'],{cwd:root,env,maxBuffer:16*1024*1024});
+  if(patch){
+   const file=join(scratch,'candidate.patch');await writeFile(file,patch);
+   await exec('git',['apply','--index','--binary',file],{cwd:candidate,env});
+  }
+  const {stdout:untracked}=await exec('git',['ls-files','--others','--exclude-standard','-z'],{cwd:root,env});
+  for(const path of untracked.split('\0').filter(Boolean)){
+   await mkdir(dirname(join(candidate,path)),{recursive:true});
+   await cp(join(root,path),join(candidate,path),{recursive:true,dereference:false});
+  }
+  await exec('pnpm',['install','--frozen-lockfile'],{cwd:candidate,env,timeout:30000,maxBuffer:4*1024*1024});
+  if(!guards[mode].length)throw failure('empty_guard_set');
+  const results=[];
+  for(const guard of guards[mode])results.push(await qualifyVenueGuard(candidate,guard,env));
+  return {mode,results};
+ }finally{await rm(scratch,{recursive:true,force:true});}
+}
+if(process.argv[1]&&resolve(process.argv[1])===fileURLToPath(import.meta.url)){
+ try{
+  if(process.argv.length!==3||!['--pure','--database'].includes(process.argv[2]))throw failure('invalid_mode');
+  console.log(JSON.stringify(await qualifyVenueGuards(process.argv[2].slice(2))));
+ }catch(error){
+  console.error(/^venue_service_guard\.[a-z_]+$/.test(error.message)?error.message:'venue_service_guard.execution_failed');process.exitCode=1;
+ }
 }
