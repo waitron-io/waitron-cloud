@@ -264,14 +264,32 @@ one failure in 80 trials: control acknowledged at 1,517 ms and the writer exited
 1,520 ms, but a complete PUT had started only 612 ms before the 2,001 ms cutoff.
 Its injected 1,500 ms reply hold could not finish within that stop budget.
 
-The delayed-reply fixture now waits for a successful backend PUT admitted after
-the final sale completes before asking the writer to stop, while that reply
-remains held. Admission is captured when the proxy receives the request, so an
-earlier PUT with a later reply cannot release readiness. Every
-successful PUT reply still waits 1,500 ms. The shared two-second stop budget,
-accounting guards and all original assertions remain. Native checks refuse
-requests admitted before sale completion, failed PUTs and unrelated operations
-as readiness evidence. The bounded wait reports its own readiness phase on failure.
+An older compacted upload can arrive after the final sale without containing it.
+The delayed-reply fixture now captures the highest known LTX transaction from
+requests admitted before that sale, including uploads whose replies remain pending.
+It also requires a successful initial upload and a successful later-transaction upload,
+admitted after the sale finishes. Unknown object names, invalid transaction ranges
+and multipart part acknowledgements cannot release readiness. A multipart part
+alone does not acknowledge a complete object.
+
+The initial smoke barrier still requires its observed transfers to be idle.
+Readiness waits for older post-sale uploads already admitted when the new upload's
+backend response arrives. Their delayed replies must finish forwarding while the
+new reply remains held; forwarding the new reply first cannot release readiness
+later. An interrupted older reply instead refuses at the five-second readiness
+limit. This orders the controlled replies without expanding the single prior-upload
+settlement allowance. It cannot see transactions still inside the writer, predict
+uploads arriving after readiness, or prove that all background requests have drained. Every successful PUT reply still
+waits 1,500 ms, within the unchanged five-second readiness bound and shared
+two-second stop budget. Accounting, restore and cleanup assertions remain.
+Run `node --test scripts/cloud-cost/litestream-delayed-put-readiness.test.mjs`
+for real HTTP ordering controls and the transaction-boundary refusals. The bounded
+wait reports its own readiness phase on failure. A controlled Linux run with the
+official binary holds an old compacted upload until after the final sale. Its
+reply forwards before stop begins, the new transaction's reply forwards during
+stop, and the unchanged genuine case passes with one late upload settlement and
+both sales restored. This qualifies that ordering, not the historical timeout or
+all native background requests.
 Stop refusals also include control/exit timings and active transfer progress,
 using operation names and byte counts without paths, credentials or invocation IDs.
 The two-row restore and full accounting checks still decide whether a run passes.
@@ -301,9 +319,10 @@ These records omit request paths,
 transaction ranges, invocation IDs, credentials and body bytes. Truncation is
 explicit, including whether the readiness upload was retained. The existing
 failure record captures a copy before cleanup; successful stops emit no new
-record. Readiness, every 1,500 ms reply hold, the two-second stop deadline and
-accounting assertions stay unchanged. Use a new recurrence to establish the
-remaining cause before changing those rules.
+record. The transaction-aware readiness rule changes which upload can release
+the barrier; every 1,500 ms reply hold, the two-second stop deadline and accounting
+assertion stays. Use a new labelled recurrence before attributing the remaining
+historical timeout or changing the shutdown rules.
 
 
 ### Stop exit diagnostics (D325)

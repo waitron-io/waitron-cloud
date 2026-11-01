@@ -76,6 +76,7 @@ test('the delayed PUT injection refuses missing or ambiguous anchors in the real
 const delayedStopSource = `let stage = 'prepare'; const version='0.5.17',injectedFailures=1;
   const admit=req=>{let requestBytes = 0; return (incoming,res)=>{${forwarding}};};
   const sale=async number=>onSale(number,admit);
+  await sale(1); delayedPutReplies = 0;
   try { stage='second-sale'; await sale(2); stage = 'stop'; stopping();
   const result = { version, injectedFailures, stage }; publish(result);
   } finally { if (typeof publishPhase === 'function') publishPhase(stage); }`;
@@ -85,21 +86,25 @@ test('the delayed stop proof requires a post-sale PUT admission while keeping it
   assert.equal(typeof checks.prepareDelayedLitestreamStop, 'function');
   const timers = [], stopped = [], published = [];
   let admit, earlierPut, forwarded = 0;
+  const respond = (complete, statusCode) => complete({statusCode, headers:{}, on(){}, pipe(){forwarded++;}}, {writeHead(){}});
   const done = new AsyncFunction('onSale','stopping','publish','setTimeout','clearTimeout',checks.prepareDelayedLitestreamStop(delayedStopSource))(
     async (number, admission) => {
-      assert.equal(number, 2); admit = admission; earlierPut = admit({method:'PUT'});
+      if (number === 1) {
+        respond(admission({method:'PUT',url:'/stream/0000/0000000000000001-0000000000000001.ltx'}),200);
+        timers.pop().action(); forwarded = 0; return;
+      }
+      assert.equal(number, 2); admit = admission; earlierPut = admit({method:'PUT',url:'/stream/0000/0000000000000001-0000000000000001.ltx'});
     }, () => stopped.push(true), result => published.push(result),
     (action, milliseconds) => { const timer = { action, milliseconds }; timers.push(timer); return timer; }, () => {});
   await new Promise(resolve => setImmediate(resolve));
   assert.equal(stopped.length, 0, 'do not spend the stop budget waiting for the final upload to start');
-  const respond = (complete, statusCode) => complete({statusCode, headers:{}, on(){}, pipe(){forwarded++;}}, {writeHead(){}});
   respond(earlierPut,200);
   await new Promise(resolve => setImmediate(resolve));
   assert.equal(stopped.length, 0, 'a PUT admitted before the final sale cannot release readiness with a later reply');
-  respond(admit({method:'GET'}),200); respond(admit({method:'POST'}),200); respond(admit({method:'PUT'}),503);
+  respond(admit({method:'GET'}),200); respond(admit({method:'POST'}),200); respond(admit({method:'PUT',url:'/stream/0000/0000000000000002-0000000000000002.ltx'}),503);
   await new Promise(resolve => setImmediate(resolve));
   assert.equal(stopped.length, 0, 'only a successful post-sale PUT can release the barrier');
-  respond(admit({method:'PUT'}),200); await done;
+  respond(admit({method:'PUT',url:'/stream/0000/0000000000000002-0000000000000002.ltx'}),200); await done;
   assert.equal(stopped.length, 1);
   assert.equal(forwarded, 3, 'the post-sale committed upload reply is still held when stop begins');
   const held = timers.filter(timer => timer.milliseconds === 1500);
