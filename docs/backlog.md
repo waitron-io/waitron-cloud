@@ -3801,9 +3801,11 @@ still needs fresh qualification on the acquisition repair; see the
 
 **Open; the historical close refusal and later result-assembly failures remain
 unexplained.** Meter snapshot refusals now identify the failed check and first
-invalidation boundary without exposing request details. The D513 meter recurrence
-and G474 PUT recurrence still need Linux attribution, preserving redaction,
-cleanup, accounting and deadlines; see the
+invalidation boundary without exposing request details. D513's historical failure
+is the body-byte comparison, not the storage-lifetime comparison named in the
+initial inventory. The unchanged body-byte case passes on the Linux test box;
+this does not identify or repair the old refusal. D513 and G474 still need causal
+attribution, preserving redaction, cleanup, accounting and deadlines; see the
 [transport and result diagnostics](backlog/cost-conformance-fixtures.md#litestream-conformance-transport-close-refusal-d141).
 
 ## Cloud cost Mailpit fixture startup

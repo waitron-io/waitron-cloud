@@ -119,10 +119,10 @@ byte accounting. The network cause is retained before a lifetime tracker refuses
 the interrupted transfer. Reporting failures cannot prevent cleanup or replace
 its outcome. The smoke script's main and cleanup wiring is exercised with external
 workload dependencies replaced at module boundaries. All existing storage,
-inventory and accounting checks and deadlines remain in place. Local Docker-backed
-qualification is unavailable while Docker is down. Use GitHub CI for Linux
-qualification; investigate a diagnostic recurrence before claiming or changing
-the cause.
+inventory and accounting checks and deadlines remain in place. While Mac Docker
+is off, use the authorised Linux test box for reproduction and GitHub CI for
+release qualification. Investigate a diagnostic recurrence before claiming or
+changing the cause.
 
 [PR556 cost run 40433930926](https://github.com/waitron-io/waitron-cloud/actions/runs/40433930926/job/121958110536)
 fails the native stream-history case after all transport closes report success.
@@ -155,13 +155,16 @@ substituted. A later response-error event can supplement the first record with a
 known network error code; the progress fields still describe the original abort. Run
 `node --test scripts/cloud-cost/litestream-response-progress.test.mjs` for these
 controls. The genuine Linux cause remains unknown. Reproduce it with the pinned
-writer and storage backend when Docker is available, or investigate the next CI
+writer and storage backend on the authorised test box, or investigate the next CI
 event carrying this evidence; do not infer a repair from a passing run.
 
 [D513 merge cost run 41105691430](https://github.com/waitron-io/waitron-cloud/actions/runs/41105691430/job/124234895797)
-refuses the body-byte comparison at `replication-meter-snapshot` after both
-transport closes succeed. Its `Invalid cloud cost meter` message does not identify
-the failed check. You now get the most recent snapshot refusal category, the first invalidation
+refuses `genuineLitestreamTransportBodyBytesAgreeWithSeparateStorageObserver` at
+`replication-meter-snapshot` after both transport closes succeed. The initial
+campaign inventory incorrectly names the storage-lifetime case; the raw job log
+shows that case passing and the body-byte case failing after 9.92 seconds. Its
+`Invalid cloud cost meter` message does not identify the failed check. You now get
+the most recent snapshot refusal category, the first invalidation
 boundary and the unfinished request count in the result diagnostic. The categories
 distinguish invalidated state, unfinished requests, clock validation, storage
 integration overflow, after-stop accounting, aggregation and aggregate attempt totals. Earlier
@@ -175,8 +178,33 @@ including the actual smoke sequencing with the real meter and substituted extern
 workload boundaries. Reading the diagnosis cannot settle a request or advance
 accounting. An unreadable diagnosis still permits the original result error to be
 reported and cleanup to complete. Existing refusal checks, errors, accounting and
-deadlines remain in place. The Linux trigger remains unknown; investigate a failure
-carrying the new categories before claiming a repair. Genuine local qualification
-with the pinned writer and backend remains blocked while Docker is down.
+deadlines remain in place.
+
+On 1 November 2026, the authorised Linux test box passes the unchanged body-byte case
+in 12.71 seconds on Cloud `80b994e481de3d6fc1b6a0641437aa2ebeb110d4`:
+
+```sh
+node scripts/cloud-cost/conformance.mjs --only stack-conformance.test.mjs \
+  --pattern '^genuineLitestreamTransportBodyBytesAgreeWithSeparateStorageObserver$'
+```
+
+The case uses the genuine pinned writer and storage backend, and its complete
+test body matches historical Cloud `7469d45ff89a09cdce7ea97de3ebbc04c3c8a1b1`.
+`litestream.mjs` also matches that revision. The meter, smoke script, preparation
+and shared fixture utilities have later changes, including diagnostics; this is
+current qualification, not a recreation of the complete historical environment.
+The current second conformance group passes all ten cases in 120.43 seconds,
+including the body-byte case in 15.09 seconds. This keeps the group's normal
+ordering rather than testing the failed case alone. All 34 native meter and
+result-diagnostic checks pass. No runtime, assertion,
+accounting guard or deadline changes in this investigation.
+
+The Linux trigger remains unknown. Preserve the next failure's
+`litestream-result` record before cleanup. If its stage is
+`replication-meter-snapshot`, use `meter.snapshotRefusal`,
+`meter.firstInvalidation` and `meter.pendingAttempts` to distinguish an unfinished
+request from invalidated state, a clock refusal or a later accounting check.
+Reproduce that category before changing behavior. A passing current run does not
+repair the historical failure; do not repeat this baseline without a new trigger.
 
 Return to the [backlog index](../backlog.md).
