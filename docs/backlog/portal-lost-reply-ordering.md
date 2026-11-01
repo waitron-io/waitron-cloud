@@ -71,7 +71,7 @@ boundary evidence. You cannot infer a shared cause from their occurrence in one
 job. The unchanged usage journey passes all 56 local checks; that does not repair
 or explain either historical failure.
 
-When the usage journey fails, you now get its named stage, the browser's last
+When a usage page wait or setup step fails, you now get its named stage, the browser's last
 100 static endpoint events, and a controller snapshot: pending, loaded, an
 allowlisted error, remaining wait, and whether an organisation and earlier totals
 are present. Session reporting includes only its state. Query strings, bodies,
@@ -80,9 +80,13 @@ response event records headers; a finished event records request completion.
 Neither proves that the controller accepted the body. A request with no response
 does not identify the browser, interception, network or server as the cause.
 
-The snapshot has a separate 250 ms budget after the original failure. A closed
+Node reports failed subtest assertions separately; those failures do not enter
+the journey's catch handler and do not get this snapshot.
+
+The snapshot has a separate 250 ms timer budget after the original failure. A closed
 or unresponsive page produces an unavailable marker. A reporting failure retains
-the original error. Every existing usage assertion, four-second page wait,
+the original error, including an immediate snapshot throw. A controlled clock
+checks the timer at 249 and 250 ms; real scheduling can return later. Every existing usage assertion, four-second page wait,
 61-second simulated cooldown advance and two-minute test deadline remains.
 Run `pnpm --dir apps/portal exec node --test test/portal-failure-evidence.test.ts`
 for controlled lifecycle, redaction and reporting failures, and the adjacent

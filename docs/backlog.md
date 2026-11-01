@@ -3556,7 +3556,7 @@ attributing the initial signed-in timeout. See the [investigation and diagnostic
 D530 records the unresolved consent-uncertainty and usage rate-limit waits from
 [PR #598's CI run](https://github.com/waitron-io/waitron-cloud/actions/runs/41183089824/job/124484426019).
 The usage journey now reports its named stage, static request lifecycle events
-and a bounded controller snapshot when an existing check fails. Read
+and a bounded controller snapshot when a page wait or setup step fails. Read
 [the diagnostic limits and next reproduction](backlog/portal-lost-reply-ordering.md#usage-rate-limit-wait-d530)
 before attributing either failure. All usage assertions and deadlines remain.
 

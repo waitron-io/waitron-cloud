@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import {test} from 'node:test';
 import {createServer} from 'node:http';
 import {once} from 'node:events';
+import {setImmediate as nextTurn} from 'node:timers/promises';
 import {chromium,type Page} from 'playwright';
 import * as evidence from './portal-trace.ts';
 
@@ -97,4 +98,25 @@ test('a closed or unresponsive page has bounded failure reporting and retains th
   await assert.rejects(evidence.failPortalWait(page,evidence.portalTrace(page),'usage retry',original,value=>{report=value;}),error=>error===original);
   assert.deepEqual(JSON.parse(report).snapshot,{unavailable:true});
  });
+});
+
+test('an immediate snapshot throw cannot replace the original failure',async()=>{
+ const original=new Error('original'),reports:string[]=[];
+ const broken={evaluate(){throw new Error('private-immediate-error');}} as unknown as Page;
+ await assert.rejects(evidence.failPortalWait(broken,{events:[],stage:()=>{}},'usage retry',original,value=>reports.push(value)),error=>error===original);
+ assert.deepEqual(JSON.parse(reports[0]!).snapshot,{unavailable:true});
+ assert.equal(reports[0]!.includes('private-immediate-error'),false);
+});
+
+test('an unanswered snapshot stops at 250 ms without ending its budget early',async t=>{
+ t.mock.timers.enable({apis:['setTimeout']});
+ const original=new Error('original'),reports:string[]=[];
+ const stalled={evaluate:()=>new Promise(()=>{})} as unknown as Page;
+ const failed=evidence.failPortalWait(stalled,{events:[],stage:()=>{}},'usage retry',original,value=>reports.push(value));
+ const rejected=assert.rejects(failed,error=>error===original);
+ t.mock.timers.tick(249);await nextTurn();
+ assert.deepEqual(reports,[]);
+ t.mock.timers.tick(1);await nextTurn();
+ assert.equal(reports.length,1);await rejected;
+ assert.deepEqual(JSON.parse(reports[0]!).snapshot,{unavailable:true});
 });

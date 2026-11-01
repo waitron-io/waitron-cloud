@@ -40,7 +40,7 @@ export async function waitForInitialSession(page:Page,origin:string,report:(deta
 export async function failPortalWait(page:Page,trace:ReturnType<typeof portalTrace>,stage:string,error:unknown,report:(details:string)=>void):Promise<never>{
  let timer:ReturnType<typeof setTimeout>|undefined;
  const snapshot=await Promise.race([
-  page.evaluate(()=>{
+  Promise.resolve().then(()=>page.evaluate(()=>{
    const app=(window as any).app,usage=app?.usage;
    const flag=(value:unknown)=>typeof value==='boolean'?value:'unavailable';
    const session=app?.session?.state?.kind;
@@ -51,7 +51,7 @@ export async function failPortalWait(page:Page,trace:ReturnType<typeof portalTra
      error:failure===undefined?'absent':['limited','unavailable','pairSession','permissionBusiness','forbidden'].includes(failure)?failure:'other',
      waiting:Number.isFinite(usage.waiting)&&usage.waiting>=0?Math.ceil(usage.waiting):'unavailable',
      organisationSelected:typeof usage.organisationId==='string',hasSummary:usage.summary!==undefined}: {unavailable:true}};
-  }).catch(()=>({unavailable:true})),
+  })).catch(()=>({unavailable:true})),
   new Promise<{unavailable:true}>(resolve=>{timer=setTimeout(()=>resolve({unavailable:true}),250);}),
  ]).finally(()=>clearTimeout(timer));
  try{report(JSON.stringify({stage,browser:trace.events,snapshot}));}catch{}
