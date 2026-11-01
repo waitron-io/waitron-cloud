@@ -185,7 +185,7 @@ The current model reports 37 named capability or evidence gaps.
 | mail | required | external | messages, attachments, retries and provider tier | Spain mail provider not selected; no live mail authorised. |
 | ses-candidate | candidate | usage | Stockholm SES recipients/attachments | Attachments/extras unknown; not an adopted relay. |
 | ci | required | external | rounded job minutes, cache/artifact storage | Standard Linux minute price is separate from AWS; included account allowance and monthly quantity unknown. |
-| fiscal-api | required | usage | measured registry calls/retries | Measure registry usage without altering fiscal allocation. No external fee established. |
+| fiscal-api | historical | usage | retained registry calls/retries | The obsolete registry and live producer are removed. Saved measurements remain historical; no current registry service or external fee is selected. |
 | kubernetes | candidate | platform | cluster count, support mode, nodes | Extended support, Auto Mode, node/volume/LB topology remain unknown. |
 | paid-support | candidate | platform | selected provider support plan | Unknown tier and rate. |
 | hosted-waitron | excluded | venue | dedicated venue CPU/RAM/storage | No usage or price selected for this candidate. |
@@ -204,7 +204,7 @@ The current model reports 37 named capability or evidence gaps.
 Gross AWS subtotals apply no free allowance, discount, credit or tax. Allowances
 may be shared across an account and cannot be applied once per venue. Customer
 credits are not a reduction in the service's underlying list cost. Tax, exchange
-rates and external mail/fiscal API prices remain unknown. GitHub's standard-runner
+rates and external mail API prices remain unknown. GitHub's standard-runner
 CI is free for this public repository under the owner's current operating decision;
 paid/private/special runner use is a separate quantity and is not included here.
 The historical paid-minute snapshot in prices.json is not a monthly CI charge.
@@ -346,3 +346,10 @@ Before using a complete figure for a launch decision, establish each remaining
 driver and billing path, validate provider capacity and costs, and review the
 [launch evidence boundary](launch-evidence.md). An offline subtotal supplies no
 deployment or recovery authority.
+
+The registry measurements in `docs/cost-model/`, including
+`service-mail-retry-fiscal-lifecycle.json` and
+`service-signup-recovery-fiscal-refusal.json`, are historical receipts for the
+retired service. Their formats, numbers and parsers remain unchanged. Current
+mixed conformance journeys retain mail delivery, signup, password recovery,
+privacy and owned cleanup; they do not generate a replacement fiscal measurement.

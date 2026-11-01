@@ -114,7 +114,7 @@ export async function prepareConformance(selected) {
   const json=(name,value)=>{const path=join(root,name);writeFileSync(path,JSON.stringify(value),{mode:0o600});return path;};
   try {
     const env={COST_CLOUD_REVISION:(await run('git',['rev-parse','HEAD'],{cwd:repository,encoding:'utf8',stdio:'pipe'})).trim()};
-    const needsRuntime=selected.some(name=>!/^(fiscal|mail|service-receipt|foreground|remote|worker-storage)-conformance/.test(name));
+    const needsRuntime=selected.some(name=>!/^(mail|service-receipt|foreground|remote|worker-storage)-conformance/.test(name));
     let code, stackCode, runtime, migrations;
     if(needsRuntime) {
       const source=join(root,'public-source');

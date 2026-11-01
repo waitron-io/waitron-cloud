@@ -10,10 +10,15 @@ test('integration discovery includes every nested conformance file', () => {
   const result = spawnSync(process.execPath, [command.pathname, '--list'], {encoding:'utf8'});
   assert.equal(result.status, 0, result.stderr);
   assert.deepEqual(JSON.parse(result.stdout), [
-    'cadence','day','fiscal','foreground','isolated-replay','mail','paced-replay','private-replay',
+    'cadence','day','foreground','isolated-replay','mail','paced-replay','private-replay',
     'remote-browser','remote','remote-waitron','replay','service-receipt','source-bills','source-clock',
     'source-days','stack','worker-storage',
   ].map(name => name + '-conformance.test.mjs').sort());
+});
+
+test('retired registry measurement is absent from the live local API', async () => {
+  const local = await import('./local.mjs');
+  assert.equal('openFiscalMeasurement' in local, false);
 });
 
 // Ignoring a nested test's nonzero exit would silently admit a broken rehearsal.
@@ -46,7 +51,7 @@ test('CI stack groups select every current and future case exactly once', () => 
     'genuineAmbiguousMultipartRepliesReconcileEveryCommittedStage_true',
     'generatedArchiveStoragePublishesACompleteAnonymousReceiptAfterCleanup','futureStackCheck',
   ]) assert.equal(stack.filter(row=>new RegExp(row.pattern).test(name)).length,1,name);
-  assert.equal(new Set(rows.map(row=>row.file)).size,18);
+  assert.equal(new Set(rows.map(row=>row.file)).size,17);
 });
 
 test('a CI group executes only its selected cases in the real test runner', async () => {

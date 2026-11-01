@@ -886,25 +886,18 @@ The local proof calls the existing Waitron commands explicitly.
 
 ## Fiscal allocation and reconciliation endpoint
 
-Cloud now implements the [fiscal registry HTTP contract](fiscal-allocation-registry.md#call-the-account-service-and-recover-a-lost-reply).
-Your full Cloud session can reserve, consume, abandon, inspect and import signed
-paper facts through the six account POST routes. Missing production custody,
-entitlement, independent continuity or signing capabilities still refuse.
+The obsolete registry is retired. Waitron's caller removal landed in
+[PR2228](https://github.com/clintongormley/waitron/pull/2228) at
+`2297688a6bbaa29eaa11cbee283681d388efd069`. Cloud removes the six account
+actions and `/api/installations/fiscal-allocations/report`; old callers receive
+ordinary `404 not_found` responses. The portal document uses the ordinary
+translated missing page.
 
-An installation can report signed Cloud or paper evidence through
-`/api/installations/fiscal-allocations/report`. Cloud verifies its current key and
-active registration lease under revocation locks. The result records matching,
-conflicting or previously unimported evidence; it never activates the installation
-or releases an occupied identity. An exact retry recovers the retained result
-when the outside append survived a failed PostgreSQL commit.
-
-The [joint HTTP/client test](fiscal-allocation-registry.md#qualify-the-pinned-waitron-client)
-now exercises the real Cloud PostgreSQL service with the separately pinned Waitron
-adapter. Its consumed packet passes local manual preparation and its committed
-result returns as a signed machine report. Waitron owns and lands its adapter
-independently. Preserve the complete consumed
-receipt and local authenticated recovery checks. Cloud operator attribution is
-not local operator authentication, and no registry call belongs on the sale path.
+The [historical contract](fiscal-allocation-registry.md) preserves its old anchors.
+Migration 038, dormant rows and schema/recovery expectations remain unchanged.
+See the [removal design](superpowers/specs/2026-10-29-remove-fiscal-registry-design.md).
+Local recovery, backup verification and activation retain their existing authority
+checks; retirement does not authorize rewriting fiscal records or shipped history.
 
 ## Translate all, version 1
 
