@@ -69,6 +69,29 @@ qualification. The interrupted session remains refused. Keep the existing
 acceptance guard and investigate avoiding the cancellation before proposing
 any different accepted evidence.
 
+You can now compare a stop refusal's `beforeSignal` transfer snapshots with its
+later `pendingTransfers` list. The earlier record retains at most sixteen active
+transfers, their total count and a truncation flag, using the transport's existing
+operation, phase, byte-count and completion fields. An unavailable marker means
+that read failed or the transport did not expose it. Capturing this evidence does
+not wait for a transfer or change the signal, acceptance guard or two-second
+budget. A generated Node writer and real HTTP forwarding prove that a partial
+reply is visible before signalling even after writer exit removes the pending
+transfer. Run `node --test scripts/cloud-cost/litestream-process-exit.test.mjs`
+for this control. It substitutes the writer and venue; it does not identify a
+historical native request or qualify production shutdown.
+
+A separate controlled macOS experiment with the checksum-verified official
+0.5.17 binary completes the held retention LIST before SIGTERM. Another LIST can
+then begin and be cancelled with writer exit zero. Waiting for that one idle
+boundary therefore does not prove all native background work is finished. The
+original controlled ordering passes its existing allowance; the variation refuses
+at its final snapshot. Neither run establishes the historical Linux cancellation
+cause or proves that every possible cancellation is unavoidable. Keep the signal
+order and accepted error codes unchanged until a labelled recurrence and causal
+experiment justify a change.
+
+
 The four bounded Linux jobs in [run 40101340028](https://github.com/waitron-io/waitron-cloud/actions/runs/40101340028)
 ran 27 genuine delayed-reply cases: 25 passed and two refused. Both refusals
 record `ERR_STREAM_UNABLE_TO_PIPE`, `list`, a closed client, response headers,
