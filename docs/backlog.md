@@ -858,7 +858,19 @@ implementation or production evidence.
   that exact verifier child, with at least 3,627 MiB available memory and 12.38 GiB
   free disk. This small archive does not qualify the full settled capacity budget.
   Thirty-six evidence and nine cleanup-ownership checks pass; removing each of
-  34 guards fails its tests in an installed disposable checkout. Ordinary restore,
+  34 guards fails its tests in an installed disposable checkout. The optional
+  paired-recovery extension now connects the same archive to a separate compiled
+  version 2 client and normal owner approval. Its summary-only download keeps
+  archive bytes and keys inside the target. Independent database checks bind the
+  pending operation to its current verification attempt; altered runtime and
+  damaged bytes refuse before placement, and ordinary restore still requires
+  separate fiscal authority. The source stays stopped during reads and retains
+  its identity after restart. The operation closes without a restored report,
+  replacement or activation. One real Linux recovery-boundary case passes without
+  skips in 146.5 seconds. Eighteen native evidence checks pass and catch all 17
+  deliberate guard omissions in an installed disposable checkout. Its 35 samples
+  stay above 3,462 MiB available memory and 15.22 GiB free disk, without qualifying
+  the full settled capacity budget. Successful authorised ordinary restore,
   stream recovery and independent fallback, remote withdrawal, complete capacity
   qualification, rollback and deployment remain open. The old Mac cleanup refusal stays historical evidence;
   the isolated Linux client proof removes its owned resources successfully.

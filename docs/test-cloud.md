@@ -607,3 +607,41 @@ cleanup-ownership checks pass locally; removing any of their 34 guards fails its
 tests in a fully installed disposable checkout. These results cover this small
 paired archive. You still need the full settled capacity checks, remaining
 recovery journeys and pinned Alpine release qualification.
+
+To exercise owner-approved recovery of that same paired archive, run:
+
+```sh
+node --test scripts/test-cloud-paid-recovery.test.mjs
+```
+
+This extension stops the disposable source and creates a separate recovery target.
+The owner approves the verified snapshot through the normal HTTPS account API.
+The compiled version 2 client downloads it and independently measures its digest
+and size before placement. A summary-only response keeps archive bytes and keys
+inside the target; the existing private-delivery fixture remains available to
+its original caller.
+
+The target must refuse an altered runtime before making another remote read and
+must refuse damaged archive bytes before placement. It then stages the genuine
+archive and attempts an ordinary restore without fiscal authority. Waitron's
+fiscal hook must refuse with `FISCAL_RESTORE`. Successful data verification and
+owner approval to download do not grant permission to activate fiscal state.
+
+Cloud must still report the operation as pending. An independent database read
+binds that state to the same organisation, venue, point, current verification
+attempt and target. Deliberately wrong point, attempt and digest claims refuse.
+The test closes the operation, restarts the original source and checks its saved
+identity. It records neither restored status, replacement nor activation.
+
+This check qualifies the download and refusal boundary. You still need successful
+recovery with separately prepared fiscal authority, stream recovery and independent
+snapshot fallback, remote isolation and withdrawal, complete capacity checks,
+rollback and the pinned Alpine release. The complete integration reader continues
+to reject this partial result, and deployment plan enforcement stays off.
+
+The recovery-boundary test passes on the isolated Linux box without skips in
+146.5 seconds. Its 35 resource samples stay above 3,462 MiB available memory and
+15.22 GiB free disk, with no out-of-memory kill among the sampled containers.
+All 18 native recovery-evidence checks pass; removing each of their 17 guards
+fails its tests in an installed disposable checkout. These measurements still
+do not qualify the full settled or active-verifier capacity budget.

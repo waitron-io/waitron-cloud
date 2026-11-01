@@ -54,13 +54,13 @@ export function checkProtectedContainers(before, after, ids) {
   return true;
 }
 
-export async function runTestCloudClients({image, waitronImage, protectedContainerIds = [], paidSnapshot = false, paidVerification = false} = {}) {
+export async function runTestCloudClients({image, waitronImage, protectedContainerIds = [], paidSnapshot = false, paidVerification = false, paidRecovery = false} = {}) {
   if (!digest.test(image) || !digest.test(waitronImage)) throw Error('integration.image_invalid');
   const runId = randomUUID(), project = 'waitron-cloud-test-integration-' + runId.slice(0, 8);
   const directory = await mkdtemp(join(tmpdir(), 'cloud-integration-run-'));
-  const override = join(directory, 'proof.yaml'), clientTag = project + '-venue:local';
+  const override = join(directory, 'proof.yaml'), clientTag = project + '-venue:local', recoveryTag = project + '-recovery:local';
   const owned = [], created = [], removed = [], venueCAs = new Map();
-  let built = false, started = false, result;
+  let built = false, recoveryBuilt = false, started = false, result;
   let verifierWorker, verifierStarted = false, verifierScope, verifierUncertain = false;
   const docker = (args, input = '', phase) => command(args, input, phase, {TEST_CLOUD_IMAGE: image});
   const prefix = ['compose', '--project-name', project, '--env-file', 'deploy/test-cloud/test.env', '-f', 'compose.yaml', '-f', 'deploy/test-cloud/compose.yaml', '-f', override];
@@ -154,7 +154,7 @@ export async function runTestCloudClients({image, waitronImage, protectedContain
       const caFile = join(directory, 'ca.pem'); await writeFile(caFile, ca + '\n', {mode: 0o644});
       const stateVolume = await docker(['volume', 'create', '--label', 'com.docker.compose.project=' + project, project + '-' + plan + '-state']);
       record('volume', stateVolume);
-      const captureSnapshot = (paidSnapshot || paidVerification) && plan === 'paid';
+      const captureSnapshot = (paidSnapshot || paidVerification || paidRecovery) && plan === 'paid';
       const venueRoot = captureSnapshot ? '/tmp/cloud-integration-state/cloud-integration-backup-' + runId + '/paid' : '/tmp/cloud-integration-state/' + plan;
       const id = await docker(['create', '--pull=never', '--label', 'cloud.integration.owner=' + runId, '--network', network,
         '--add-host', 'waitron.local:10.79.0.2', '--memory', '1024m', '--memory-swap', '1024m', '--read-only', '--cap-drop', 'ALL',
@@ -201,7 +201,7 @@ export async function runTestCloudClients({image, waitronImage, protectedContain
           JSON.stringify({phase, organisationId, installationId: evidence.registration.installationId, ...extra}), 'snapshot-' + phase);
         await accountPhase('provision-snapshot');
         await control(id, 'refresh');
-        if (paidVerification) assert.deepEqual(await control(id, 'verification-state'), {testCertificateInstalled: true});
+        if (paidVerification || paidRecovery) assert.deepEqual(await control(id, 'verification-state'), {testCertificateInstalled: true});
         const captured = await control(id, 'snapshot-publish');
         for (const [name, extra] of [
           ['stored-digest', {sha256: '0'.repeat(64)}],
@@ -212,7 +212,7 @@ export async function runTestCloudClients({image, waitronImage, protectedContain
         assert.equal(independent.independentStoredDigest, true);
         publishedSnapshot = {...captured, ...independent, organisationId, venueId: evidence.registration.venueId,
           installationId: evidence.registration.installationId, localVenueId: evidence.localVenueId, recovery: 'not-run'};
-        if (paidVerification) {
+        if (paidVerification || paidRecovery) {
           await accountPhase('configure-verification', {image: waitronImage});
           const [accountInfo] = parseIntegrationJson(await docker(['inspect', account]));
           const configVolume = accountInfo.Mounts.find(value => value.Destination === '/run/local-stack').Name;
@@ -247,6 +247,58 @@ export async function runTestCloudClients({image, waitronImage, protectedContain
           publishedSnapshot.verification = 'verified';
           publishedSnapshot.workerVerification = {...admission, childAbsent: true, workerStoppedNaturally: true};
         }
+        if (paidRecovery) {
+          await docker(['build', '--pull=false', '--build-arg', 'VERIFIER_IMAGE=' + baseTag,
+            '--label', 'cloud.integration.owner=' + runId, '-f', 'deploy/test-cloud/test-fixtures/snapshot-recovery.Dockerfile',
+            '-t', recoveryTag, 'deploy/test-cloud/test-fixtures'], '', 'recovery-build');
+          recoveryBuilt = true;
+          const recoveryImage = parseIntegrationJson(await docker(['image', 'inspect', recoveryTag]))[0].Id;
+          record('image', recoveryImage);
+          const target = await docker(['create', '--pull=never', '--label', 'cloud.integration.owner=' + runId,
+            '--network', network, '--memory', '1024m', '--memory-swap', '1024m', '--read-only', '--cap-drop', 'ALL',
+            '--security-opt', 'no-new-privileges', '--user', '1000:1000', '--pids-limit', '128',
+            '--tmpfs', '/tmp:rw,noexec,nosuid,nodev,size=256m,mode=1777', '--entrypoint', 'node', recoveryImage,
+            '-e', 'setInterval(()=>{},1000)'], '', 'recovery-create');
+          owned.push(target); record('container', target); await docker(['start', target]);
+          const targetPhase = async (phase, extra = {}) => parseIntegrationJson(await docker(['exec', '-i', target,
+            'node', '/waitron/apps/server/dist/cloud-joint-proof.js'], JSON.stringify({phase, ...extra}), 'recovery-' + phase));
+          const request = await targetPhase('start', {ca});
+          assert.equal(request.targetDigest, publishedSnapshot.workerVerification.targetDigest);
+          // The unavailable source stays stopped during every recovery read and fiscal refusal.
+          await docker(['stop', '--time', '10', id], '', 'recovery-source-stop');
+          assert.equal(await docker(['inspect', '--format', '{{.State.Running}}', id]), 'false');
+          const ownerPost = async (action, extra = {}) => {
+            const response = await api('/api/account/recovery/' + action, {requestId: request.requestId, code: request.code, ...extra}, browser);
+            assert.equal(response.status, 200, 'integration.owner_recovery_' + action);
+            return response.body;
+          };
+          assert.equal((await ownerPost('inspect')).state, 'awaiting_owner');
+          const choice = {source: 'snapshot', pointId: captured.pointId, oldServerUnavailable: 'true', acceptDataLoss: 'true'};
+          const approved = await ownerPost('approve', choice);
+          assert.equal(approved.state, 'approved'); assert.equal(approved.operation.pointId, captured.pointId);
+          assert.deepEqual(await ownerPost('approve', choice), approved);
+          const selected = {pointId: captured.pointId, digest: captured.sha256, bytes: captured.bytes};
+          const delivered = await targetPhase('read-summary', selected);
+          assert.equal(delivered.independentDigest, true); assert.equal(delivered.prePlacement, true);
+          assert.equal(delivered.client, 'pinned-compiled-waitron'); assert.equal(delivered.targetDigest, request.targetDigest);
+          assert.equal(delivered.sha256, captured.sha256); assert.equal(delivered.bytes, captured.bytes);
+          const refusals = await targetPhase('delivery-refusals', selected);
+          assert.deepEqual(refusals, {alternateTargetRefused: true, damagedArchiveRefused: true, placementCalls: 0, restoredReports: 0, stateUnchanged: true});
+          const refusal = await targetPhase('restore-refusal', selected);
+          assert.equal(refusal.ordinaryRestore, 'FISCAL_RESTORE'); assert.equal(refusal.activation, 'not_attempted');
+          assert.equal(refusal.routeMoved, false); assert.equal(refusal.reportedRestored, false);
+          assert.equal(await docker(['inspect', '--format', '{{.State.Running}}', id]), 'false');
+          const independent = extra => accountPhase('inspect-recovery', {...captured, requestId: request.requestId,
+            attemptId: publishedSnapshot.workerVerification.attemptId, targetDigest: request.targetDigest, ...extra});
+          for (const extra of [{pointId: randomUUID()}, {attemptId: randomUUID()}, {sha256: '0'.repeat(64)}]) await assert.rejects(independent({desiredStatus: 'pending', ...extra}));
+          const persisted = parseIntegrationJson(await independent({desiredStatus: 'pending'}));
+          await ownerPost('close');
+          assert.equal(parseIntegrationJson(await independent({desiredStatus: 'closed'})).cloudStatus, 'closed');
+          publishedSnapshot.recovery = 'fiscal-authority-required';
+          publishedSnapshot.ownerRecovery = {...persisted, client: delivered.client, independentDigest: delivered.independentDigest,
+            prePlacement: delivered.prePlacement, refusals, ordinaryRestore: refusal.ordinaryRestore, activation: refusal.activation,
+            routeMoved: refusal.routeMoved, reportedRestored: refusal.reportedRestored, sourceStoppedDuringRead: true, requestClosed: true};
+        }
       }
       const beforeRestart = await docker(['inspect', '--format', '{{.State.StartedAt}}', id]);
       await docker(['restart', '--time', '10', id]); await ready(); await control(id, 'refresh');
@@ -255,6 +307,7 @@ export async function runTestCloudClients({image, waitronImage, protectedContain
       const restarted = await control(id, 'evidence');
       assert.deepEqual(restarted.registration, evidence.registration); assert.equal(restarted.identitySha256, evidence.identitySha256);
       assert.equal(restarted.localVenueId, evidence.localVenueId);
+      if (plan === 'paid' && paidRecovery) publishedSnapshot.ownerRecovery.sourceIdentityPreserved = true;
       restarts.push({installationId: evidence.registration.installationId, before: beforeRestart, after: afterRestart});
       organisations.push({plan, organisationId, venueId: evidence.registration.venueId, installationId: evidence.registration.installationId,
         localVenueId: evidence.localVenueId, stateSha256: restarted.stateSha256, installationState: restarted.installationState, planRevision: planResult.revision});
@@ -293,6 +346,13 @@ export async function runTestCloudClients({image, waitronImage, protectedContain
           if (!built) return;
           const [info] = JSON.parse(await docker(['image', 'inspect', clientTag])); assert.equal(info.Config.Labels['cloud.integration.owner'], runId);
           await docker(['image', 'rm', clientTag], '', 'owned-image-cleanup'); removed.push(created.find(value => value.kind === 'image' && value.id === info.Id));
+        }},
+        {phase: 'recovery-image', run: async () => {
+          if (!recoveryBuilt) return;
+          const [info] = parseIntegrationJson(await docker(['image', 'inspect', recoveryTag]));
+          assert.equal(info.Config.Labels['cloud.integration.owner'], runId);
+          await docker(['image', 'rm', recoveryTag], '', 'owned-recovery-image-cleanup');
+          removed.push(created.find(value => value.kind === 'image' && value.id === info.Id));
         }},
         {phase: 'inventory', run: async () => {
           const after = await inventory();

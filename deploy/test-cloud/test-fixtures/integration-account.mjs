@@ -11,11 +11,12 @@ import {BackupCatalogue} from '../../../packages/backups/src/catalogue.ts';
 import {setVerificationPolicy} from '../../../packages/backups/src/verification-admission.ts';
 import {transaction} from '../../../packages/registration/src/transaction.ts';
 import {inspectIntegrationVerification} from './integration-verification-evidence.mjs';
+import {inspectIntegrationRecovery} from './integration-recovery-evidence.mjs';
 const {Pool} = createRequire(new URL('../../../packages/registration/package.json', import.meta.url))('pg');
 const {S3Client, CreateBucketCommand} = createRequire(new URL('../../../packages/backups/package.json', import.meta.url))('@aws-sdk/client-s3');
 let input = '';
 for await (const part of process.stdin) {input += part; assert.ok(input.length < 16384);}
-const {organisationId, plan, installationId, phase, pointId, sha256, bytes, sourceNodeId, image} = JSON.parse(input);
+const {organisationId, plan, installationId, phase, pointId, sha256, bytes, sourceNodeId, image, requestId, attemptId, targetDigest, desiredStatus} = JSON.parse(input);
 const config = await loadRuntime('/run/local-stack');
 const pool = new Pool({connectionString: `postgres://${config.database.user}:${config.database.password}@postgres:5432/${config.database.name}`, connectionTimeoutMillis: 5000, statement_timeout: 10000});
 try {
@@ -31,7 +32,16 @@ try {
   } else {
     const {rows} = await pool.query('SELECT v.organisation_id,v.local_venue_id,i.venue_id FROM installations i JOIN venues v ON v.id=i.venue_id WHERE i.id=$1', [installationId]);
     assert.equal(rows.length, 1); assert.equal(rows[0].organisation_id, organisationId);
-    if (phase === 'configure-verification' || phase === 'inspect-verification') {
+    if (phase === 'inspect-recovery') {
+      const row = (await pool.query(`SELECT r.*,q.id AS request_id,q.operation_id,q.protocol_version,q.verification_target AS request_target,
+        p.current_evidence_id,p.digest,p.size,v.organisation_id,i.superseded_by,i.revoked_at
+        FROM backup_recoveries r JOIN backup_recovery_requests q ON q.operation_id=r.id
+        JOIN backup_points p ON p.id=r.point_id JOIN venues v ON v.id=r.venue_id
+        JOIN installations i ON i.id=p.installation_id WHERE r.id=$1 AND i.id=$2`, [requestId, installationId])).rows[0];
+      assert.ok(row, 'integration.recovery_missing');
+      console.log(JSON.stringify(inspectIntegrationRecovery(row,
+        {requestId, venueId: rows[0].venue_id, organisationId, pointId, attemptId, targetDigest, sha256, bytes}, desiredStatus)));
+    } else if (phase === 'configure-verification' || phase === 'inspect-verification') {
       assert.match(image ?? '', /^sha256:[a-f0-9]{64}$/);
       const target = JSON.parse(await readFile(new URL('../../backup-verifier/target.json', import.meta.url), 'utf8'));
       if (phase === 'configure-verification') {

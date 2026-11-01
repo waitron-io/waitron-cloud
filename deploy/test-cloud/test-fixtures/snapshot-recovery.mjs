@@ -29,13 +29,13 @@ if(phase==='start'){
  const started=await client.start();assert.equal(started.state,'awaiting_owner');assert.deepEqual(actions,['start']);
  // The code stays on the private stdin path to the owner fixture; it is never printed by the outer test.
  console.log(JSON.stringify({requestId:started.requestId,code:started.code,targetDigest:currentBackupVerificationTarget().digest}));
-}else if(phase==='read'){
+}else if(phase==='read'||phase==='read-summary'){
  const approved=await client.status();assert.equal(approved.state,'approved');assert.equal(approved.point.id,input.pointId);
  const checked=await client.preview(async archive=>{
   assert.equal(archive.managedCloud.pointId,input.pointId);assert.equal(archive.snapshotVerification.target.digest,currentBackupVerificationTarget().digest);
   assert.equal(archive.artifact.length,input.bytes);assert.equal(createHash('sha256').update(archive.artifact).digest('hex'),input.digest);
   assert.equal(await absent('venue/venue.db'),true);assert.equal(await absent('restore-request.json'),true);
-  return{independentDigest:true,prePlacement:true,privateDelivery:{archive:Buffer.from(archive.artifact).toString('base64'),recoveryKey:archive.recoveryKey,digest:input.digest}};
+  return{independentDigest:true,prePlacement:true,...(phase==='read'?{privateDelivery:{archive:Buffer.from(archive.artifact).toString('base64'),recoveryKey:archive.recoveryKey,digest:input.digest}}:{sha256:createHash('sha256').update(archive.artifact).digest('hex'),bytes:archive.artifact.length})};
  },input.pointId);
  assert(actions.includes('info'));assert(actions.includes('read'));
  console.log(JSON.stringify({...checked,client:'pinned-compiled-waitron',targetDigest:currentBackupVerificationTarget().digest,actions}));
