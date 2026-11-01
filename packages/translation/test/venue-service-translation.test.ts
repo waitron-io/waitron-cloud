@@ -66,6 +66,18 @@ test('venue translation durable results survive downgrade missing consent and un
   assert.equal(fake.requests.length,2);
  }finally{await fake.close();await f.close();}
 });
+
+test('venue translation queued connected work retains consent_required after consent withdrawal',async()=>{
+ const f=await fixture(),fake=await startFakeOpenAi(r=>isReview(r)?emptyReview():echoFirstPass(r));try{
+  await f.set('connected');const queued=await f.queue();
+  await f.db.pool.query('UPDATE translation_consents SET withdrawn_at=clock_timestamp() WHERE venue_id=$1',[f.v.venueId]);
+  assert.equal(await f.worker(fake.baseUrl).runOnce(new AbortController().signal),true);
+  const row=await f.row(queued.id);
+  assert.deepEqual([row.state,row.reason,row.done,row.failed,row.lease_id,row.lease_until],['failed','consent_required',0,1,null,null]);
+  assert.equal(fake.requests.length,0);
+  assert.equal((await f.db.pool.query('SELECT count(*) AS n FROM usage_events WHERE source_reference=$1',[queued.id])).rows[0].n,'0');
+ }finally{await fake.close();await f.close();}
+});
 test('venue translation ownership precedes cursor validation after downgrade',async()=>{
  const f=await fixture();try{
   await f.set('connected');const first=await f.submit();await f.set('registered');
