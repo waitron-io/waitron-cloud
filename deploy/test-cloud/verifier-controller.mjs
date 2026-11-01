@@ -8,8 +8,9 @@ import {atomicPrivateFile} from './storage-authority.mjs';
 import {readBackupVerificationRequest,backupVerificationRequestDigest,parseBackupVerificationJson} from '../../packages/backups/src/verification-protocol.ts';
 const execute=promisify(execFile),idPattern=/^[a-f0-9]{64}$/,imagePattern=/^sha256:[a-f0-9]{64}$/;
 async function docker(args,{missing}={}){
+ const started=performance.now();
  try{return (await execute('docker',args,{timeout:10000,maxBuffer:65536})).stdout.trim();}
- catch(error){if(missing&&error.code===1&&!error.signal&&!error.killed&&[`error: no such object: ${missing}`,`error response from daemon: no such container: ${missing}`].includes(error.stderr?.trim().toLowerCase()))return '';throw Error('test_cloud.verifier_docker');}
+ catch(error){if(missing&&error.code===1&&!error.signal&&!error.killed&&[`error: no such object: ${missing}`,`error response from daemon: no such container: ${missing}`].includes(error.stderr?.trim().toLowerCase()))return '';throw Error('test_cloud.verifier_docker',{cause:{operation:args[0],code:Number.isInteger(error.code)?error.code:['ENOENT','ETIMEDOUT','ERR_CHILD_PROCESS_STDIO_MAXBUFFER'].includes(error.code)?error.code:null,signal:['SIGTERM','SIGKILL','SIGABRT'].includes(error.signal)?error.signal:null,killed:error.killed===true,elapsedMs:Math.max(0,Math.round(performance.now()-started))}});}
 }
 async function privateState(path){
  const file=await open(path,constants.O_RDONLY|constants.O_NOFOLLOW);
@@ -64,13 +65,22 @@ export async function openVerifierController({directory,owner,image}){
   return state.id??ids[0]??null;
  }
  async function remove(id,supplied){
-  const state=await journal();if(!state||!idPattern.test(id))throw Error('test_cloud.verifier_ownership');
-  if(state.version===2){if(backupVerificationRequestDigest(binding(supplied))!==state.requestDigest)throw Error('test_cloud.verifier_ownership');}
-  else if(supplied!==undefined)throw Error('test_cloud.verifier_ownership');
-  if(await discover(state)!==id)throw Error('test_cloud.verifier_ownership');
-  if(await inspect(id,state))await docker(['rm','-f',id],{missing:id});
-  if(state.version===2&&await inspect(id,state))throw Error('test_cloud.verifier_ownership');
-  await rm(child);
+  let stage='journal';
+  try{
+   const state=await journal();if(!state||!idPattern.test(id))throw Error('test_cloud.verifier_ownership');
+   stage='request-binding';
+   if(state.version===2){if(backupVerificationRequestDigest(binding(supplied))!==state.requestDigest)throw Error('test_cloud.verifier_ownership');}
+   else if(supplied!==undefined)throw Error('test_cloud.verifier_ownership');
+   stage='discover';if(await discover(state)!==id)throw Error('test_cloud.verifier_ownership');
+   stage='inspect-owned';
+   if(await inspect(id,state)){stage='remove-child';await docker(['rm','-f',id],{missing:id});}
+   stage='confirm-absent';if(state.version===2&&await inspect(id,state))throw Error('test_cloud.verifier_ownership');
+   stage='remove-journal';await rm(child);
+  }catch(error){
+   // Only fixed controller errors carry command diagnostics; daemon text stays private.
+   if(error.message==='test_cloud.verifier_docker'||error.message==='test_cloud.verifier_ownership')throw Error(error.message,{cause:{stage,...(error.message==='test_cloud.verifier_docker'?error.cause:{})}});
+   throw error;
+  }
  }
  async function reclaim(){
   const state=await journal();if(!state){

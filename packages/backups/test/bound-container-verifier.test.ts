@@ -166,3 +166,28 @@ for(const field of ['entrypoint','command'])test(`a different ${field} cannot re
  const verify=await factory.createBoundContainerWaitronVerifier({image,owner,controller,memoryMiB:192,scratchMiB:16});let opened=0;
  await assert.rejects(verify({...source(),open(){opened++;return source().open();}},key,base.req,new AbortController().signal),/^Error: backup.verifier_container$/);assert.equal(opened,0);empty();
 });
+
+test('a refused removal reports its boundary without publishing the archive verdict',async()=>{
+ const base=await setup(),scratch=await mkdtemp(join(tmpdir(),'bound-remove-refusal-')),realDocker=execFileSync('which',['docker'],{encoding:'utf8'}).trim(),oldPath=process.env.PATH;
+ await writeFile(join(scratch,'docker'),`#!${process.execPath}
+const cp=require('node:child_process'),args=process.argv.slice(2);
+if(args[0]==='rm'){process.stderr.write('private-fixture-key /private/archive');process.exit(42);}
+const result=cp.spawnSync(${JSON.stringify(realDocker)},args,{stdio:'inherit'});process.exit(result.status??1);
+`,{mode:0o700});process.env.PATH=scratch+':'+oldPath;
+ try{
+  await assert.rejects(base.verify(source(4),key,base.req,new AbortController().signal),(error:any)=>{
+   assert.equal(error.message,'backup.verifier_cleanup');assert.equal(error.cause.stage,'controller-remove');
+   assert.equal(error.cause.reason,'test_cloud.verifier_docker');assert.equal(error.cause.controllerStage,'remove-child');
+   assert.equal(error.cause.operation,'rm');assert.equal(error.cause.code,42);
+   assert.equal(error.cause.signal,null);assert.equal(error.cause.killed,false);assert(Number.isSafeInteger(error.cause.elapsedMs));
+   assert(!JSON.stringify(error.cause).includes('private-fixture-key'));assert(!JSON.stringify(error.cause).includes('/private/archive'));return true;
+  });
+  const journal=JSON.parse(await readFile(join(base.controlDirectory,'child.json'),'utf8'));
+  assert.equal(JSON.parse(execFileSync(realDocker,['inspect',journal.id],{encoding:'utf8'}))[0].State.Status,'exited');
+ }finally{
+  process.env.PATH=oldPath;
+  try{const journal=JSON.parse(await readFile(join(base.controlDirectory,'child.json'),'utf8'));await base.controller.remove(journal.id,base.req);}
+  finally{await rm(scratch,{recursive:true,force:true});}
+ }
+ empty();
+});

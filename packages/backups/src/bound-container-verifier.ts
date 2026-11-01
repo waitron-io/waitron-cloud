@@ -36,7 +36,25 @@ export async function createBoundContainerWaitronVerifier(options:BoundContainer
   await controller.reclaim();
   const digest=backupVerificationRequestDigest(request),labels={'cloud.backup-verifier.owner':owner,'cloud.backup-verifier.scope':controller.scope,'cloud.backup-verifier.token':request.attempt.childToken,'cloud.backup-verifier.claim':request.attempt.claimId,'cloud.backup-verifier.request':digest,'cloud.backup-verifier.deadline':String(Date.parse(request.attempt.deadline))};
   let id:string|undefined,child:ChildProcess|undefined,closed:Promise<number|null>|undefined,input:Readable|undefined,upload:Promise<void>|undefined,failure:string|undefined,removal:Promise<void>|undefined;
-  const remove=()=>removal??=(async()=>{try{await controller.remove(id!,request);if(await docker(['inspect',id!],id))throw Error();}catch{throw Error('backup.verifier_cleanup');}})();
+  const remove=()=>removal??=(async()=>{
+   let stage='controller-remove';
+   try{await controller.remove(id!,request);stage='confirm-absent';if(await docker(['inspect',id!],id))throw Error();}
+   catch(error){
+    const detail=error as {message?:unknown;cause?:{stage?:unknown;operation?:unknown;code?:unknown;signal?:unknown;killed?:unknown;elapsedMs?:unknown}},cause:Record<string,unknown>={stage};
+    if(typeof detail?.message==='string'&&['test_cloud.verifier_docker','test_cloud.verifier_ownership'].includes(detail.message)){
+     cause.reason=detail.message;const diagnostic=detail.cause;
+     if(typeof diagnostic?.stage==='string'&&['journal','request-binding','discover','inspect-owned','remove-child','confirm-absent','remove-journal'].includes(diagnostic.stage))cause.controllerStage=diagnostic!.stage;
+     if(typeof diagnostic?.operation==='string'&&['ps','inspect','rm'].includes(diagnostic.operation)){
+      cause.operation=diagnostic!.operation;
+      cause.code=Number.isInteger(diagnostic!.code)?diagnostic!.code:typeof diagnostic!.code==='string'&&['ENOENT','ETIMEDOUT','ERR_CHILD_PROCESS_STDIO_MAXBUFFER'].includes(diagnostic!.code)?diagnostic!.code:null;
+      cause.signal=typeof diagnostic!.signal==='string'&&['SIGTERM','SIGKILL','SIGABRT'].includes(diagnostic!.signal)?diagnostic!.signal:null;
+      cause.killed=diagnostic!.killed===true;
+      if(Number.isSafeInteger(diagnostic!.elapsedMs)&&Number(diagnostic!.elapsedMs)>=0)cause.elapsedMs=diagnostic!.elapsedMs;
+     }
+    }
+    throw Error('backup.verifier_cleanup',{cause});
+   }
+  })();
   const stop=(code:string)=>{failure??=code;input?.destroy();if(id)remove().catch(()=>{});child?.kill('SIGKILL');};
   const abort=()=>stop('backup.verifier_cancelled');signal.addEventListener('abort',abort,{once:true});
   const timer=setTimeout(()=>stop('backup.verifier_timeout'),Math.max(1,Date.parse(request.attempt.deadline)-Date.now()));
