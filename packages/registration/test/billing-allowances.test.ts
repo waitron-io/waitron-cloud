@@ -111,7 +111,7 @@ test('reservation replay retains its original receipt and refuses changed immuta
  const f=await fixture();try{
   await f.config.publish(TEST_ALLOWANCES);const saved=await f.reserve();
   assert.deepEqual(await f.reserve({},f.peer),saved);
-  for(const changed of [{accountId:f.otherAccount},{venueId:f.venues[1]!,installationId:await f.installation(f.venues[1]!)},{binding:'changed-body'},{units:2n}])await assert.rejects(f.reserve(changed),{code:'allowance_conflict'});
+  for(const changed of [{accountId:f.otherAccount},{venueId:f.venues[1]!},{binding:'changed-body'},{units:2n}])await assert.rejects(f.reserve(changed),{code:'allowance_conflict'});
   assert.deepEqual(await f.reserve({},f.peer),saved);assert.equal(await f.total(),1n);
   const separate=await f.reserve({service:'address_lookup'});assert.notEqual(separate.id,saved.id);assert.equal(await f.total('service=$1',['address_lookup']),1n);
  }finally{await f.close();}
@@ -190,6 +190,20 @@ test('retained reservations allow owner removal and refuse its later replay',asy
  }finally{await f.close();}
 });
 
+test('a replacement installation has its own operation receipt and shares the venue budget',async()=>{
+ const f=await fixture();try{
+  await f.config.publish(TEST_ALLOWANCES);const original=await f.reserve(),replacement=randomUUID();
+  await transaction(f.pool,async client=>{
+   await client.query('UPDATE installations SET revoked_at=clock_timestamp(),superseded_by=$2 WHERE id=$1',[f.input.installationId,replacement]);
+   await client.query('INSERT INTO installations(id,venue_id,public_key) VALUES($1,$2,$3)',[replacement,f.input.venueId,replacement]);
+  });
+  const next=await f.reserve({installationId:replacement});assert.notEqual(next.id,original.id);assert.equal(next.month,original.month);
+  assert.deepEqual(await f.reserve({installationId:replacement}),next);assert.equal(await f.total('venue_id=$1',[f.input.venueId]),2n);
+  await assert.rejects(f.reserve({installationId:replacement,operationId:randomUUID()}),{code:'allowance_exhausted'});
+  assert.equal((await f.pool.query('SELECT count(*) FROM billing_allowance_reservations')).rows[0].count,'2');
+ }finally{await f.close();}
+});
+
 async function translationJob(f:Awaited<ReturnType<typeof fixture>>,operationId:string,units=2){
  const id=randomUUID();
  await f.pool.query(`INSERT INTO translation_jobs(id,installation_id,venue_id,operation_id,job_sha256,job_bytes,total,provider,model,prompt_version)
@@ -250,6 +264,13 @@ test('SQL preserves reservation identity ownership whole units and monotone stat
   const select='SELECT gen_random_uuid(),account_id,organisation_id,legal_business_id,venue_id,installation_id,service,gen_random_uuid(),binding,units,month,revision,state FROM billing_allowance_reservations WHERE id=$1';
   await assert.rejects(f.pool.query(insert+select.replace('gen_random_uuid(),binding','operation_id,binding'),[held.id]),{code:'23505'});
   for(const quantity of ['0','-1','1.5','2','9223372036854775808'])await assert.rejects(f.pool.query(insert+select.replace('binding,units,month',`binding,${quantity},month`),[held.id]),{code:'23514'});
+  const translation=select.replace('service,gen_random_uuid()',"'content_translation',gen_random_uuid()");
+  for(const quantity of ['1.5','9223372036854775808'])await assert.rejects(f.pool.query(insert+translation.replace('binding,units,month',`binding,${quantity},month`),[held.id]),{code:'23514'});
+  const client=await f.pool.connect();try{
+   await client.query('BEGIN');
+   const maximum=await client.query(insert+translation.replace('binding,units,month','binding,9223372036854775807,month')+' RETURNING units',[held.id]);
+   assert.equal(maximum.rows[0].units,'9223372036854775807');
+  }finally{await client.query('ROLLBACK');client.release();}
   await assert.rejects(f.pool.query(insert+select.replace('organisation_id,legal_business_id,venue_id,installation_id,service,gen_random_uuid()',`organisation_id,legal_business_id,'${f.foreignVenue}'::uuid,installation_id,service,gen_random_uuid()`),[held.id]),{code:'23503'});
   for(const sql of ["UPDATE billing_allowance_reservations SET binding='other'","UPDATE billing_allowance_reservations SET month='2020-01-01'","DELETE FROM billing_allowance_reservations"])await assert.rejects(f.pool.query(sql),{code:'55000'});
   await f.spend(held.id);
