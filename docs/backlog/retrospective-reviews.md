@@ -181,9 +181,14 @@ now describes the missing-signal helper's five-second outer race; it does not cl
 that omitting either normal observation must fail. Every behavioral assertion,
 clock and deadline remains unchanged.
 
-D535 still needs the separate PR612 follow-up for distinct ordinary and delayed
-captures and a precise wait comment, preserving historical names and every
-behavioral assertion.
+The PR612 script-failure reload fixture now retains 41 captures: 24 ordinary,
+16 delayed and the reachable English/light/390 missing-signal case after a 503.
+The 24 historical filenames stay unchanged. Before the repair, all 41 browser
+checks passed while a separate 41-file review check failed with only 24 images.
+After the filename change, both checks pass. Unique paths retain each capture;
+they do not promise different pixels. The missing-signal comment describes the
+five-second outer race rather than claiming that omitting the normal observation
+must fail. Every behavioral assertion, expected value, clock and deadline remains.
 The PR613 proof-count fault and fresh-restart product fault, disabled-script
 product faults in PR612, other failure-state images and real authority remain
 unverified. These are qualification limits, not claims of production repairs.
@@ -191,6 +196,7 @@ unverified. These are qualification limits, not claims of production repairs.
 Run `pnpm --dir apps/portal exec node --test test/public-challenge-noscript-browser.test.ts test/public-challenge-failure-reload-browser.test.ts test/public-challenge-reload-browser.test.ts`
 for the three local browser files. Set `PUBLIC_CHALLENGE_RECEIPT_DIR` to a fresh
 directory when checking the JavaScript-disabled fixture's 24 retained images or
-the running-failure reload fixture's 17 retained images.
+the running-failure reload fixture's 17 retained images, or the script-failure
+reload fixture's 41 retained images.
 Use separate directories for the three files, because their historical filename
 schemes do not promise uniqueness across files.
