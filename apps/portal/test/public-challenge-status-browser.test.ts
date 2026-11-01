@@ -80,7 +80,7 @@ for (const locale of ['en', 'es']) for (const theme of ['light', 'dark'] as cons
         assert.equal(gate.stats().forwarded, 0); assert.equal((await context.cookies()).length, 0);
         if (process.env.PUBLIC_CHALLENGE_RECEIPT_DIR && failure === 'challenge') {
           await mkdir(process.env.PUBLIC_CHALLENGE_RECEIPT_DIR, {recursive: true});
-          await page.screenshot({path: `${process.env.PUBLIC_CHALLENGE_RECEIPT_DIR}/${locale}-${theme}-${width}.png`});
+          await page.screenshot({path: `${process.env.PUBLIC_CHALLENGE_RECEIPT_DIR}/${locale}-${theme}-${width}${handler === 'ordinary' ? '' : `-${handler}`}.png`});
         }
       } finally {
         release(); await context?.close(); server.closeAllConnections();

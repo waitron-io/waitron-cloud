@@ -22,7 +22,8 @@ and session-list cleanup limits are described below. The stale-draft and script
 recovery notes also distinguish delayed-handler scope from outer wait bounds.
 The JavaScript-disabled fixture retains ordinary and delayed screenshots separately.
 Both reload fixtures also retain their reachable handler variants separately.
-Their missing-signal comments describe the outer refusal check.
+The live-status fixture keeps its ordinary and delayed captures separately too.
+The missing-signal controls qualify the outer refusal bound.
 See [the diagnostic qualification and open work](backlog/retrospective-reviews.md).
 
 ## Concurrent storage extraction and failed-startup cleanup (D454)
@@ -3990,12 +3991,15 @@ prove an old server has stopped, or change the existing recovery source limits.
 
 ## Public browser-check status handler wait (D366)
 
-The live-status browser fixture bounds its challenge-handler wait at the existing
-four-second page budget. An absent signal fails promptly; delayed handlers repeat
-all language, theme, width and failure journeys. Every original live-region,
-accessibility-tree, reload, focus, cookie and forwarding assertion remains.
-These native Chromium and local HTTP checks leave production-network qualification
-open and do not change product behaviour.
+The live-status browser fixture configures a four-second challenge-handler wait.
+Its missing-signal control checks a five-second outer race, so it does not prove
+the exact configured value or that every ordinary observation is necessary.
+Delayed handlers repeat every language, theme, width and failure journey. All
+33 browser checks pass, and ordinary and delayed challenge-failure captures now
+retain 16 separate files with all eight historical names. Every original
+live-region, accessibility-tree, reload, focus, cookie, forwarding assertion and
+deadline remains. Native Chromium and local HTTP checks leave other browser
+engines, worker-failure images and production-network qualification open.
 
 ## Recovery-choice browser handler wait (D362)
 

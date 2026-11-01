@@ -200,3 +200,24 @@ the running-failure reload fixture's 17 retained images, or the script-failure
 reload fixture's 41 retained images.
 Use separate directories for the three files, because their historical filename
 schemes do not promise uniqueness across files.
+
+## Public browser-check live-status captures
+
+The PR611 live-status fixture now retains sixteen challenge-failure screenshots:
+eight ordinary and eight delayed. The eight historical names stay unchanged;
+delayed captures add `-delayed`. Before the repair, all 33 browser checks passed
+while a separate sixteen-path review check failed with only eight images. After
+the filename change, both checks pass. Every behavioral assertion, expected
+value, clock and deadline remains unchanged. Separate names preserve captures;
+they do not promise different pixels. Seven of eight historical image pairs
+match byte-for-byte in the driver's compared runs; general byte stability is
+unqualified.
+
+Run `pnpm --dir apps/portal exec node --test test/public-challenge-status-browser.test.ts`
+with `PUBLIC_CHALLENGE_RECEIPT_DIR` set to a fresh directory. Use a separate
+directory from other public browser-check fixtures, whose filenames can overlap.
+The missing-signal control returns before capture; worker failures are checked
+without screenshots. Its configured four-second observation sits inside a
+five-second race. The control does not independently prove the exact four-second
+value or that ordinary observations are necessary. Other engines, real networks
+and authority remain unqualified.
