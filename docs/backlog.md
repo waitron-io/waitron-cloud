@@ -892,21 +892,29 @@ implementation or production evidence.
   checks catch all 28 installed guard omissions. The fixture drives the existing
   signed setup protocol and native stream host; it does not qualify automatic
   managed-stream setup, place a continuous restore or prove snapshot fallback
-  with continuous data absent. A further opt-in continuous-recovery fixture obtains
-  Cloud's real owner-approved version 1 kit and uses the pinned native bucket
-  engine. A Linux run reaches stream download, matching source/generation,
-  source-key verification and the normal fiscal refusal, then fails its newly
-  added assertion that the target database file is absent. The pinned engine
-  places database bytes before its hooks and promises no bootable identity after
-  failure. That new assertion is retained pending the owner's changed-check
-  decision. A second Linux run reproduces the refusal with unchanged records and
-  absent trading identity, first-start marker, Cloud connection and ready file,
-  without weakening the assertion. Thirty-six native evidence checks pass and catch 33 deliberate
-  guard omissions in an installed disposable copy. Independent database readers
-  bind continuous recovery to the approved request, generation, source and pending
-  or closed state. Successful continuous restore and absent-stream snapshot
-  fallback are still unqualified. Stream recovery and independent fallback, remote withdrawal, complete capacity
-  qualification, rollback and deployment remain open. The old Mac cleanup refusal stays historical evidence;
+  with continuous data absent. The paired continuous-recovery extension now
+  passes one real Linux case without
+  skips in 254.4 seconds. It restores the owner-approved stream through the
+  pinned native engine, then removes only this test's stream objects and pointer
+  row and restores the original retained snapshot with separate source authority.
+  Both paths preserve the source node, venue and six record tables. The exact
+  missing-preparation and wrong-key refusals remain. Under the owner's approved
+  check, a refused continuous restore may leave the copied database but must leave
+  no trading identity, first-start marker, Cloud connection or ready file; the
+  same records and identity are checked after the wrong-key refusal. Independent
+  database reads bind both requests to their approved sources and pending/closed
+  state, with no source replacement, server activation or Cloud restored report.
+  The combined runner waits for the earlier client's recovery rate window to
+  expire before signing snapshot requests; production limits and every existing
+  snapshot assertion remain unchanged. The earlier HTTP 429 failure is retained
+  as evidence. Its 55 samples stay above 3,337 MiB available memory and
+  13.42 GiB free disk. The test removes its owned resources and preserves all
+  three protected Waitron containers. Thirty-six native evidence checks and the
+  earlier 33 installed guard-omission controls remain. This fresh demo and its
+  isolated target clock do not qualify existing trading history or the shipping
+  Alpine release. Remote withdrawal, full capacity, rollback, the strict complete
+  producer receipt and deployment remain open. The old Mac cleanup refusal stays
+  historical evidence;
   the isolated Linux client proof removes its owned resources successfully.
   The organisation plan store and operator command now persist free/paid metadata,
   advance revisions only on changes and refuse incompatible migration ledgers.

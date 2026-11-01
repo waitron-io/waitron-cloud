@@ -709,8 +709,9 @@ False source, generation and observation-time claims must refuse.
 
 The ordinary snapshot recovery path still runs with its separate source authority.
 This stream observation does not qualify continuous restore or a snapshot fallback
-with continuous data absent. Those checks, remote boundaries, complete capacity,
-rollback and the pinned release remain before deployment plan enforcement.
+with continuous data absent. Use the following extension for those checks. Remote
+boundaries, complete capacity, rollback and the pinned release remain before
+deployment plan enforcement.
 
 The Linux journey passes one case without skips in 169.5 seconds. Its 38 samples
 stay above 3,351 MiB available memory and 13.21 GiB free disk, without a sampled
@@ -736,14 +737,30 @@ The later fallback removes only this disposable test's stream objects and pointe
 row, then requires the original verified snapshot and its stored bytes to remain
 unchanged during snapshot recovery.
 
-This extension is not qualified. Its Linux run reaches native stream download,
-checks the source identity and generation, verifies the source recovery key and
-gets the expected fiscal refusal without module preparation. It then fails a new
-assertion that the target database file must be absent. The pinned restore engine
-places data before its hooks; its documented failure guarantee concerns bootable
-identity. The assertion remains intact pending an owner decision about this new
-recovery-authority check. A second Linux run reproduces that refusal and measures
-unchanged records, absent trading identity, no first-start marker, no Cloud
-connection and no ready file, without changing the assertion. Successful continuous restore and subsequent
-snapshot fallback remain unproved. The complete integration reader still refuses
-partial evidence, and deployment plan enforcement stays off.
+The extension passes one real Linux journey without skips in 254.4 seconds.
+Both restore paths preserve the source node, venue and six record tables. The
+continuous restore also checks the exact missing-preparation and wrong-key
+refusals. A refused restore may leave the copied database in place, but must leave
+no trading identity, first-start marker, Cloud connection or ready file. The same
+record and identity checks apply after the wrong-key refusal.
+
+The two clients share Cloud's recovery request limit. The combined runner waits
+61 seconds after closing continuous recovery before starting the snapshot
+handshake, so the earlier client's request window can expire. It generates fresh
+signed requests after that wait. The production limits and refusal checks remain
+unchanged. Without that gap, the combined check reached HTTP 429 on its final
+snapshot information read, before placement.
+
+The fallback checks absent stream objects and pointers before its request, after
+its read and after its separately authorised restore and closure. No server
+starts, no source installation is replaced and Cloud receives no restored report.
+The 55 resource samples stay above 3,337 MiB available memory and 13.42 GiB
+free disk, without a sampled out-of-memory kill. Owned resources are removed and
+the three protected Waitron containers remain unchanged.
+
+This proof uses a fresh demo venue and disposable Debian measurement images.
+Only the isolated recovery target's clock advances. Existing trading history,
+the shipping Alpine release, remote boundaries, full settled and active-verifier
+capacity, rollback and the complete combined receipt remain unqualified. The
+complete integration reader still refuses partial evidence, and deployment plan
+enforcement stays off.

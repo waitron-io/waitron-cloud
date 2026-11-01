@@ -337,6 +337,8 @@ export async function runTestCloudClients({image, waitronImage, protectedContain
             const fallback = parseIntegrationJson(await accountPhase('remove-test-stream', fallbackInput));
             assert.deepEqual(fallback, {streamObjects: 0, pointerRows: 0, retainedSnapshotUnchanged: true});
             publishedSnapshot.snapshotFallback = {...fallback, observations: ['before-snapshot-request']};
+            // Start the snapshot fault matrix after the continuous client's 60-second IP window expires.
+            await delay(61000);
           }
           const request = await targetPhase('start', {ca});
           assert.equal(request.targetDigest, publishedSnapshot.workerVerification.targetDigest);

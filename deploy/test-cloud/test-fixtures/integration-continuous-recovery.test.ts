@@ -93,8 +93,11 @@ it('restores the native paired stream using its owner-approved kit and separate 
       tradingIdentityAbsent: await absent('trading.env'), rebuildMarkerAbsent: await absent(REBUILD_MARKER),
       cloudConnectionAbsent: await absent('cloud-connection.json'), readyAbsent: await absent('ready.json'),
     }));
-    await expect(stat(join(venueDir, 'venue.db'))).rejects.toMatchObject({code: 'ENOENT'});
+    expect((await stat(join(venueDir, 'venue.db'))).isFile()).toBe(true);
+    expect(records(join(venueDir, 'venue.db'))).toEqual(originalRecords);
+    await expect(stat(join(stateDir, REBUILD_MARKER))).rejects.toMatchObject({code: 'ENOENT'});
     await expect(stat(join(stateDir, 'trading.env'))).rejects.toMatchObject({code: 'ENOENT'});
+    for (const name of ['cloud-connection.json', 'ready.json']) await expect(stat(join(stateDir, name))).rejects.toMatchObject({code: 'ENOENT'});
     const kitPath = join(root, 'kit.txt'), operationPath = join(root, 'operation.json');
     await writeFile(kitPath, input.kit, {mode: 0o600});
     await writeFile(operationPath, JSON.stringify(operation), {mode: 0o600});
@@ -105,6 +108,9 @@ it('restores the native paired stream using its owner-approved kit and separate 
     let wrongOutput = '';
     expect(await runRestore({argv, env: {...env, WAITRON_NODE_RECOVERY_KEY: 'wrong node key'}, out: line => {wrongOutput += line;}})).toBe(1);
     expect(wrongOutput.includes('promotion.break_glass_invalid')).toBe(true);
+    expect(records(join(venueDir, 'venue.db'))).toEqual(originalRecords);
+    await expect(stat(join(stateDir, 'trading.env'))).rejects.toMatchObject({code: 'ENOENT'});
+    for (const name of [REBUILD_MARKER, 'cloud-connection.json', 'ready.json']) await expect(stat(join(stateDir, name))).rejects.toMatchObject({code: 'ENOENT'});
     let output = '';
     const exit = await runRestore({argv, env, out: line => {output += line + '\n';}});
     const safe = [input.kit, input.authority.secret, kit.recoveryKey, kit.bucket.secretAccessKey].reduce((text, secret) => text.replaceAll(secret, '[redacted]'), output);
