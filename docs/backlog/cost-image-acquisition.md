@@ -61,8 +61,11 @@ fails an implicit `node:26-slim` pull with HTTP 502 before the isolation canary
 starts. Six source-copy checks then fail because that image is absent. This is
 a separate acquisition path from the conformance preparer and its pinned runner.
 
-The isolation tests now prepare their existing image before creating their own
-resources. Cache inspection, at most three pulls, one- and two-second retry
+[PR #816](https://github.com/waitron-io/waitron-cloud/pull/816) delivered recovery
+for this exact path. Both `local.test.mjs` and `source-copy.test.mjs` call
+`isolationTestImage` before creating resources. The original canary failure was
+an implicit pull inside `docker run`; preparation now obtains the image first.
+Cache inspection, at most three pulls, one- and two-second retry
 pauses, and the final immutable-image-ID lookup share a 120-second preparation
 budget. Only recognised temporary transport and registry HTTP 5xx failures retry;
 authentication, permission, missing-manifest and rate-limit refusals stop immediately,
