@@ -26,6 +26,7 @@ The live-status and landmark fixtures keep ordinary and delayed captures separat
 Their notes describe the missing-signal controls' outer refusal checks.
 The recovery-width fixture also keeps each reachable handler capture separately.
 The pending-session sign-out fixture retains ordinary and delayed captures separately.
+The recovery-choice fixture also keeps its ordinary and delayed captures separately.
 See [the diagnostic qualification and open work](backlog/retrospective-reviews.md).
 
 ## Concurrent storage extraction and failed-startup cleanup (D454)
@@ -4030,11 +4031,22 @@ engines, worker-failure images and production-network qualification open.
 
 ## Recovery-choice browser handler wait (D362)
 
-The recovery-choice browser fixture refuses an absent installation-handler signal
-within its existing four-second page budget. A delayed handler still runs every
-language, theme and viewport journey. Original organisation and venue selection,
-recovery permission, source clearing, approval payload, pairing, layout and
-deadline assertions remain.
+Set `RECOVERY_PORTAL_RECEIPT_DIR` to a fresh directory when checking the recovery
+choice fixture. It retains sixteen recovery captures: eight ordinary and eight
+delayed, keeping all eight original names. Separate names prevent a later handler
+variant from overwriting earlier evidence. The missing-signal control runs only
+the first four subtests, then returns before the disabled-choice assertions,
+source clearing, recovery submission, pairing and screenshots. Its title names
+the submission boundary.
+Every original organisation and venue selection, recovery permission, source
+clearing, approval payload, pairing, layout, observation and deadline check remains.
+
+The missing-signal control wraps a configured four-second observation in a
+five-second race. It does not independently establish the exact four-second
+boundary. Native Chromium with stubbed HTTP leaves real recovery authority,
+other browser engines, production networks and the historical Linux cause
+unqualified. Delayed handlers still repeat all eight language, theme and width
+journeys.
 
 ## Recovery organisation-width browser handler wait (D364)
 

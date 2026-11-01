@@ -25,7 +25,7 @@ const styles = await readFile(new URL('../src/styles.css', import.meta.url), 'ut
 
 for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'] as const) for (const width of [390, 1280]) {
  const handlers = locale === 'en' && theme === 'light' && width === 390 ? ['ordinary', 'delayed', 'missing'] as const : ['ordinary', 'delayed'] as const;
- for (const handler of handlers) test(`${locale} ${theme} ${width}: recovery and account choices agree with their supplied values${handler === 'ordinary' ? '' : ` (${handler} handler)`}`, async t => {
+ for (const handler of handlers) test(`${locale} ${theme} ${width}: ${handler === 'missing' ? 'installation-handler observation times out before recovery submission' : 'recovery and account choices agree with their supplied values'}${handler === 'ordinary' ? '' : ` (${handler} handler)`}`, async t => {
   const browser = await chromium.launch({headless: true});
   try {
     const page = await browser.newPage({locale, colorScheme: theme, viewport: {width, height: 900}}); page.setDefaultTimeout(4000);
@@ -129,7 +129,7 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
     await venue.selectOption(second); await page.getByLabel(c.chooseSnapshot, {exact: true}).waitFor();
     assert.equal(await venue.inputValue(), second);
     await page.getByRole('checkbox', {name: c.recoveryStopped, exact: true}).check(); await page.getByRole('checkbox', {name: c.recoveryAcceptLoss, exact: true}).check();
-    if (process.env.RECOVERY_PORTAL_RECEIPT_DIR) {await mkdir(process.env.RECOVERY_PORTAL_RECEIPT_DIR, {recursive: true}); await page.screenshot({path: `${process.env.RECOVERY_PORTAL_RECEIPT_DIR}/${locale}-${theme}-${width}-recovery.png`, fullPage: true});}
+    if (process.env.RECOVERY_PORTAL_RECEIPT_DIR) {await mkdir(process.env.RECOVERY_PORTAL_RECEIPT_DIR, {recursive: true}); await page.screenshot({path: `${process.env.RECOVERY_PORTAL_RECEIPT_DIR}/${locale}-${theme}-${width}-recovery${handler === 'ordinary' ? '' : `-${handler}`}.png`, fullPage: true});}
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
     await page.getByRole('button', {name: c.recoveryApprove, exact: true}).click(); await page.waitForFunction(() => !(window as any).app.recovery.pending);
     assert.deepEqual(approvals, [{requestId: request, code: '12345678', source: 'snapshot', pointId: point, oldServerUnavailable: 'true', acceptDataLoss: 'true'}]);
