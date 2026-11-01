@@ -77,7 +77,7 @@ test('venue remote incoming routes exclude a denied sibling even with a current 
   const sibling=f.ids[1]!,move=await f.ordinary.stageMove({operationId:randomUUID(),installationId:sibling,targetCellId:f.target,targetPeerPublicKey:peer(),expectedRevision:await f.revision(sibling)});
   await disableSibling(f);
   // A stale staged row can match the current installation revision without granting permission.
-  await f.pool.query('UPDATE remote_cell_moves SET expected_revision=$2 WHERE operation_id=$1',[move.operationId,await f.revision(sibling)]);
+  await f.pool.query('UPDATE remote_cell_moves SET expected_revision=$2 WHERE id=$1',[move.operationId,await f.revision(sibling)]);
   assert.deepEqual((await f.ordinary.manifest(f.target)).routes.map(r=>r.installationId).sort(),[...f.ids].sort());
   assert.deepEqual((await f.remote.manifest(f.target)).routes.map(r=>r.installationId),[f.ids[0]]);
   assert.deepEqual((await f.remote.reportingManifest(f.target)).routes.map(r=>r.installationId),[f.ids[0]]);
