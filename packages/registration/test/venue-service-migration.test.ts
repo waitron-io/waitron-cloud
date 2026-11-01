@@ -17,9 +17,9 @@ test('045 upgrades to venue service authority without changing old bytes',async(
  const f=await upgrade();try{
   const before=(await f.pool.query('SELECT * FROM schema_migrations ORDER BY name')).rows;assert.equal(before.length,45);
   await Promise.all([migrate(f.pool),migrate(f.pool)]);
-  assert.equal(migrationNames.length,46);assert.equal(migrationNames.at(45),'046_venue_service_authority.sql');
+  assert.equal(migrationNames.length,47);assert.equal(migrationNames.at(46),'047_billing_allowances_traffic.sql');assert.equal(migrationNames.at(45),'046_venue_service_authority.sql');
   const after=(await f.pool.query('SELECT * FROM schema_migrations ORDER BY name')).rows;
-  assert.deepEqual(after.slice(0,45),before);assert.equal(after.length,46);assert.equal(after[45].name,'046_venue_service_authority.sql');
+  assert.deepEqual(after.slice(0,45),before);assert.equal(after.length,47);assert.equal(after[45].name,'046_venue_service_authority.sql');
   assert.equal((await f.pool.query('SELECT count(*) FROM billing_service_authority')).rows[0].count,'0');
   await migrate(f.pool);assert.deepEqual((await f.pool.query('SELECT * FROM schema_migrations ORDER BY name')).rows,after);
  }finally{await f.close();}
@@ -33,7 +33,7 @@ test('interrupted venue service migration rolls back DDL ledger and retries',asy
   assert.equal((await f.pool.query("SELECT to_regclass('billing_service_authority') AS relation")).rows[0].relation,null);
   assert.deepEqual((await f.pool.query('SELECT * FROM schema_migrations ORDER BY name')).rows,before);
   await f.pool.query('DROP TRIGGER reject_046 ON schema_migrations');await migrate(f.pool);
-  const final=(await f.pool.query('SELECT * FROM schema_migrations ORDER BY name')).rows;assert.equal(final.length,46);assert.deepEqual(final.slice(0,45),before);
+  const final=(await f.pool.query('SELECT * FROM schema_migrations ORDER BY name')).rows;assert.equal(final.length,47);assert.deepEqual(final.slice(0,45),before);
   await migrate(f.pool);assert.deepEqual((await f.pool.query('SELECT * FROM schema_migrations ORDER BY name')).rows,final);
  }finally{await f.close();}
 });
