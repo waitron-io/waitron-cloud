@@ -124,6 +124,7 @@ These controls qualify reporting, not the historical cause or server authority.
 
 **Open:** capture a recurrence and reproduce the recorded request or database wait
 before changing runtime behavior. Query families are coarse text classifications;
-they do not identify a complete transaction. The sample can omit connections beyond
+they inspect only the stored statement text and use the first matching family.
+They do not identify a complete transaction. The sample can omit connections beyond
 its limit, and an unavailable snapshot cannot distinguish a database outage from
 a slow diagnostic connection.

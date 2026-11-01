@@ -1,9 +1,13 @@
 import assert from 'node:assert/strict';
-import {createServer,type Socket} from 'node:net';
+import {createServer,type Server,type Socket} from 'node:net';
 import {once} from 'node:events';
-import {test} from 'node:test';
+import {test,type TestContext} from 'node:test';
 import {Pool} from 'pg';
 import * as evidence from './consent-database-evidence.ts';
+
+function closeOnAbort(t:TestContext,server:Server,sockets:Set<Socket>){
+ t.signal.addEventListener('abort',()=>{for(const socket of sockets)socket.destroy();if(server.listening)server.close();},{once:true});
+}
 
 for(const brokenReporter of [false,true])test(`a refused diagnostic connection retains the original consent failure with reporter failure ${brokenReporter}`,async()=>{
  const server=createServer();server.listen(0,'127.0.0.1');await once(server,'listening');
@@ -19,10 +23,11 @@ for(const brokenReporter of [false,true])test(`a refused diagnostic connection r
  }finally{await pool.end();}
 });
 
-test('an unanswered database handshake ends its own connection and retains the consent failure',async()=>{
+test('an unanswered database handshake ends its own connection and retains the consent failure',async t=>{
  const sockets=new Set<Socket>();let handshakes=0;
  const server=createServer(socket=>{sockets.add(socket);socket.on('data',()=>{handshakes++;});socket.on('close',()=>sockets.delete(socket));});
  server.listen(0,'127.0.0.1');await once(server,'listening');
+ closeOnAbort(t,server,sockets);
  const pool=new Pool({host:'127.0.0.1',port:(server.address() as {port:number}).port,user:'private-user',database:'private-database',ssl:false});
  const original=new Error('original');let report='';
  try{
@@ -36,7 +41,7 @@ test('an unanswered database handshake ends its own connection and retains the c
  }finally{await pool.end();for(const socket of sockets)socket.destroy();await new Promise<void>(resolve=>server.close(()=>resolve()));}
 });
 
-test('a connected database that never answers the snapshot query cannot retain the diagnostic connection',async()=>{
+test('a connected database that never answers the snapshot query cannot retain the diagnostic connection',async t=>{
  const sockets=new Set<Socket>();let queries=0;
  const server=createServer(socket=>{
   sockets.add(socket);let startup=true;
@@ -47,6 +52,7 @@ test('a connected database that never answers the snapshot query cannot retain t
   socket.on('close',()=>sockets.delete(socket));
  });
  server.listen(0,'127.0.0.1');await once(server,'listening');
+ closeOnAbort(t,server,sockets);
  const pool=new Pool({host:'127.0.0.1',port:(server.address() as {port:number}).port,user:'private-user',database:'private-database',ssl:false});
  const original=new Error('original');let report='';
  try{
@@ -72,6 +78,7 @@ test('the consent diagnostic query budget expires at 250 ms rather than one seco
   socket.on('close',()=>sockets.delete(socket));
  });
  server.listen(0,'127.0.0.1');await once(server,'listening');
+ closeOnAbort(t,server,sockets);
  const pool=new Pool({host:'127.0.0.1',port:(server.address() as {port:number}).port,user:'test',database:'test',ssl:false});
  const original=new Error('original'),reports:string[]=[];
  t.mock.timers.enable({apis:['setTimeout']});
@@ -85,14 +92,14 @@ test('the consent diagnostic query budget expires at 250 ms rather than one seco
   assert.equal(reports.length,1);assert.deepEqual(JSON.parse(reports[0]!),{unavailable:true});
   await failed;
  }finally{
-  t.mock.timers.tick(2000);
+  t.mock.timers.reset();for(const socket of sockets)socket.destroy();
   try{await failed;}finally{
    await pool.end();for(const socket of sockets)socket.destroy();await new Promise<void>(resolve=>server.close(()=>resolve()));
   }
  }
 });
 
-test('a completed snapshot does not wait for the database peer to acknowledge disconnect',async()=>{
+test('a completed snapshot does not wait for the database peer to acknowledge disconnect',async t=>{
  const sockets=new Set<Socket>();let completed=false,disconnect=false;
  const server=createServer({allowHalfOpen:true},socket=>{
   sockets.add(socket);let startup=true;
@@ -105,6 +112,7 @@ test('a completed snapshot does not wait for the database peer to acknowledge di
   socket.on('end',()=>{disconnect=true;});socket.on('close',()=>sockets.delete(socket));
  });
  server.listen(0,'127.0.0.1');await once(server,'listening');
+ closeOnAbort(t,server,sockets);
  const pool=new Pool({host:'127.0.0.1',port:(server.address() as {port:number}).port,user:'test',database:'test',ssl:false});
  const original=new Error('original');let returned=false;
  const failed=assert.rejects(evidence.failConsentDatabaseWait(pool,'schema',original,()=>{returned=true;}),error=>error===original);void failed.catch(()=>{});
@@ -119,7 +127,7 @@ test('a completed snapshot does not wait for the database peer to acknowledge di
  }
 });
 
-for(const mode of ['fin','reset'] as const)test(`a database peer ${mode} during the query preserves only the consent failure`,async()=>{
+for(const mode of ['fin','reset'] as const)test(`a database peer ${mode} during the query preserves only the consent failure`,async t=>{
  const sockets=new Set<Socket>();
  const server=createServer(socket=>{
   sockets.add(socket);let startup=true;socket.on('error',()=>{});
@@ -130,6 +138,7 @@ for(const mode of ['fin','reset'] as const)test(`a database peer ${mode} during 
   socket.on('close',()=>sockets.delete(socket));
  });
  server.listen(0,'127.0.0.1');await once(server,'listening');
+ closeOnAbort(t,server,sockets);
  const pool=new Pool({host:'127.0.0.1',port:(server.address() as {port:number}).port,user:'test',database:'test',ssl:false});
  const original=new Error('original'),reports:string[]=[];
  try{
