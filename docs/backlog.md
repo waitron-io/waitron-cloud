@@ -4305,6 +4305,14 @@ overwrites the other's.
 Every original assertion, observation and deadline remains. Native Chromium with
 stubbed HTTP does not qualify real session authority, other engines or networks,
 or explain the historical Linux failure.
+Sampled omission of the handler observation still passes twelve head cases and
+six parent cases. A single reply-filter omission passes four cases on each;
+a separate omission of both check-reply filters also leaves the focused current
+case passing on head and parent. Guard necessity remains unqualified. Preserve
+the checks and reproduce an actual ordering failure before changing them.
+One native full-file sample takes 325 seconds for 53 cases versus the parent's
+157 seconds for 26. Collect captures into a fresh `PENDING_SIGNOUT_RECEIPT_DIR`
+and check all sixteen names; browser assertions alone do not check filenames.
 
 ## Sign-out failure browser handler wait (D361)
 
