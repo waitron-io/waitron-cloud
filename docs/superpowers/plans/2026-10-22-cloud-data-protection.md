@@ -117,16 +117,24 @@ refusal remains; it does not implement a country-to-adapter integration.
 
 ## Slice 4: Durable venue lifecycle journal, disabled
 
-**Prerequisites:** Driver resolves D79's migration slot; separate build authority. No migration item starts earlier. This slice supplies persistence, not the effects or a cancellation route.
+**Prerequisites:** Slices 1–3 and the owner's local slice 4 build authority. Build on current main. If another migration lands first, rebase and regenerate this slice's unlanded migration at the next number; a shared filename is not a reason to wait. This slice supplies persistence, not the effects or a cancellation route.
 
 **Files:** Create `packages/registration/src/data-lifecycle.ts`, `test/data-lifecycle.test.ts`, `test/data-lifecycle-restart.test.ts`, export from `src/index.ts`; add a newly allocated migration under `packages/registration/migrations/` and include it through existing `src/migrate.ts`. Do not edit historical migration files.
 
 **Proposed interfaces:** `LifecycleRef={venueId:string;revision:number}`. `LifecycleState` is exactly the five states above. `LifecycleStore.request({venueId,operationId,expectedRevision,kind:'cancel'|'delete'|'resubscribe'|'export',fingerprint,effectiveEndAt?}):Promise<LifecycleRef>` serializes on the venue. `claim(ref,operationId):Promise<{claimRevision:number}|null>`, `recordEffect(ref,operationId,claimRevision,{effectId,requestFingerprint,phase:'intent'|'uncertain'|'confirmed'|'refused',resourceReference?:string}):Promise<void>` and `read(venueId:string):Promise<LifecycleView>` retain state/times/operations/effects for later slices. `LifecycleView` exposes `ref:LifecycleRef`, `state:LifecycleState`, `requestedAt:string`, `effectiveEndAt:string|null`, `deadlineAt:string|null` and the recorded operations/effects; timestamps are canonical UTC ISO strings. Export `LifecycleRef`, `LifecycleState` and `LifecycleView` for consumers. Recheck the active claim revision under the same venue/operation lock on every effect mutation; lifecycle revision alone cannot distinguish a replaced worker. Persist tombstones after purge without payloads. Same ID/changed fingerprint conflicts. Every effect records intent before the outside call and observation afterward; uncertain effects require status lookup before retry. Never hold a database transaction across a provider call.
 
-- [ ] Write red tests `fixed_utc_deadline_survives_retry_restart`, `two_claimants_one_outcome`, `changed_input_conflicts`, `stale_completion_refused`, `purging_blocks_resubscribe`, `lost_reply_requires_lookup`. Include leap/daylight-saving transitions, exact deadline equality, process death between each intent/call/observation boundary and cross-venue refusal. Reclaim at the same lifecycle revision and resume the old claimant: its effect completion must fail while the new claim succeeds. Deadline belongs to effective end, not request receipt or latest retry.
-- [ ] Implement minimum schema/store and run `node scripts/test-postgres.mjs exec pnpm --dir packages/registration exec node --test test/data-lifecycle.test.ts test/data-lifecycle-restart.test.ts` red then green, plus migration upgrade/digest checks by extending `test/schema-compatibility.test.ts` for applied-digest refusal and previous-schema upgrade, and run that file plus `pnpm typecheck`. No destructive deletion worker yet.
+- [x] Write red tests `fixed_utc_deadline_survives_retry_restart`, `two_claimants_one_outcome`, `changed_input_conflicts`, `stale_completion_refused`, `purging_blocks_resubscribe`, `lost_reply_requires_lookup`. Include leap/daylight-saving transitions, exact deadline equality, process death between each intent/call/observation boundary and cross-venue refusal. Reclaim at the same lifecycle revision and resume the old claimant: its effect completion must fail while the new claim succeeds. Deadline belongs to effective end, not request receipt or latest retry.
+- [x] Implement minimum schema/store and run `node scripts/test-postgres.mjs exec pnpm --dir packages/registration exec node --test test/data-lifecycle.test.ts test/data-lifecycle-restart.test.ts` red then green, plus migration upgrade/digest checks by extending `test/schema-compatibility.test.ts` for applied-digest refusal and previous-schema upgrade, and run that file plus `pnpm typecheck`. No destructive deletion worker yet.
 
 **Stop:** No live service stop, purge, export link or customer route. A durable local state machine can land independently while effects remain disabled.
+
+The [implemented journal](../../data-lifecycle-journal.md) uses the sibling workers'
+60-second database lease. Operation IDs are scoped to a venue, matching the compound
+journal keys; this internal store does not authenticate its caller. New requests invalidate old claims; a current claim may
+reconcile a historical operation without rewriting its original request result.
+Resubscription records intent only, preserving state and clocks until a later
+adapter proves retained data and activation authority. Read-only/purge states are
+seeded in tests; this slice supplies no transition that asserts outside effects.
 
 ## Slice 5: Bind placement, credentials and outbound effects to policy
 
