@@ -967,9 +967,10 @@ remains unknown. Keep its failed receipt and capture the refused command's
 category and container state on its next occurrence.
 
 These measurements do not qualify the full deployment. The receipt continues to
-report `shippingQualification: false` and `completeIntegration: false`. Whole
-integration sampling, direct-storage withdrawal, published-release upgrade
-and the unchanged 20 GiB startup / 15 GiB running floors remain required.
+report `shippingQualification: false` and `completeIntegration: false`. The
+combined journey below adds continuous integration sampling and direct storage
+withdrawal. The published-release upgrade, complete receipt and unchanged
+20 GiB startup / 15 GiB running floors remain required.
 
 ## Stop and restart Cloud without losing pairings
 
@@ -1140,6 +1141,42 @@ samples. Disk is 12.92 GiB before startup and 12.88 GiB after cleanup under the
 campaign-only disk policy. Independent cleanup checks all five attempted projects
 and 306 recorded container IDs, with protected Waitron IDs, start times and health
 unchanged. The output keeps `completeIntegration: false` and
-`shippingQualification: false`. Direct-storage withdrawal, the strict complete
-receipt, published-release upgrade and the unchanged shipping 20/15 GiB floors
-remain open. Keep plan enforcement off.
+`shippingQualification: false`. The strict complete receipt, published-release
+upgrade and the unchanged shipping 20/15 GiB floors remain open. Keep plan
+enforcement off.
+
+### Check direct storage after downgrade
+
+An API refusal cannot stop a key that already writes directly to storage. The
+combined journey keeps the paired source's original stream key in its private
+venue volume, then uses it against the real storage server. Before downgrade,
+it writes and reads probe bytes and requires permission refusals outside its
+prefix and at its neighbour's bucket.
+
+The journey stops storage before committing the downgrade and starts that same
+container again afterward. Both the old write and the old read must receive
+`403` from storage within thirty seconds of the committed change. A network
+error cannot stand in for that refusal. Cloud then reads the same probe bytes
+through its saved reader reference and checks the original installation key,
+venue and organisation. Private keys and credentials stay in private volumes.
+
+You can check the refusal, timing, stored-byte and identity controls without
+starting containers:
+
+```bash
+node --test deploy/test-cloud/integration-storage-withdrawal.test.mjs
+```
+
+The shipping-Dockerfile candidate at `af33ad0b` passes both combined cases without
+skips in 416.0 seconds under the unchanged 600-second limit. Its
+`paidStorageWithdrawal` result records accepted writes and reads before the
+change, both old-key refusals after 3.444 seconds, an observed storage
+restart and the retained probe bytes under the original reader and installation.
+Remote access withdraws in 3.135 seconds during that same downgrade. Both
+original pairings still complete fresh exchanges after the four-volume rollback.
+
+The 38 focused controls pass; all 22 deliberate guard omissions fail in an
+installed disposable checkout. The output still declares incomplete integration
+and shipping qualification. Snapshot credential expiry keeps its separate
+provider-lifetime proof, and the published-release upgrade, strict complete
+receipt and shipping resource floors remain open. Keep plan enforcement off.

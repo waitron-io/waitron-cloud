@@ -831,9 +831,18 @@ implementation or production evidence.
   IDs absent, with protected Waitron IDs, start times and health unchanged.
   These are raw measurements under the temporary campaign disk policy: baseline
   disk is 12.92 GiB, above 12.48 GiB during the journey and 12.88 GiB after cleanup.
-  Complete integration and shipping qualification stay false. Direct-storage
-  withdrawal, the strict complete receipt, published releases and the shipping
-  20/15 GiB floors remain due.
+  Complete integration and shipping qualification stay false. The strict
+  complete receipt, published releases and the shipping 20/15 GiB floors remain
+  due. The combined candidate at `af33ad0b` also proves direct storage withdrawal
+  for that same paired source, including a storage restart across the pending
+  downgrade. Its original key writes and reads probe bytes before downgrade;
+  writes outside its prefix and into its neighbour's bucket are refused. After
+  downgrade, that key receives actual storage `403` responses for both reads and
+  writes in 3.444 seconds. Cloud's original reader still returns the probe
+  bytes, with the installation identity unchanged. Both combined cases pass
+  without skips in 416.0 seconds under the unchanged 600-second limit.
+  The focused controls pass 318 cases with four explicit image skips; 22
+  installed guard omissions fail and the 38 restored controls pass.
   The separate capacity journey also
   collects host memory and available disk on Docker's data filesystem before
   project startup, throughout startup and settled/verification sampling,
@@ -847,8 +856,7 @@ implementation or production evidence.
   Docker exec; a diagnostic repeat did not reproduce it, so its cause remains
   unknown. Capture the refused command's category and container state on its
   next occurrence before attributing it. These are raw measurements;
-  direct-storage withdrawal, published-release qualification and shipping
-  20/15 GiB floors remain due. The
+  published-release qualification and shipping 20/15 GiB floors remain due. The
   [test deployment design](superpowers/specs/2026-10-17-test-cloud-free-paid-design.md)
   and [implementation plan](superpowers/plans/2026-10-17-test-cloud-free-paid.md)
   describe a separate Cloud Compose project on the owner's test box, with an
