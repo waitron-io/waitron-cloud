@@ -856,7 +856,18 @@ implementation or production evidence.
   child appears in both cleanup lists. No recovery or source replacement occurs,
   and activation stays unattempted. Thirty samples include one observation of
   that exact verifier child, with at least 3,627 MiB available memory and 12.38 GiB
-  free disk. This small archive does not qualify the full settled capacity budget.
+  free disk. A separate capacity journey now samples a full settled minute before
+  that same delivered worker verifies the paired archive. The real Linux run passes
+  in 189.3 seconds under its unchanged 300-second limit. Its 27 samples span
+  62.4 settled seconds, include two measurements of the exact admitted child and
+  stay at most 3.1 seconds apart. Linux accounting includes temporary files:
+  peak Cloud memory is 999.3 MiB, verifier memory 174.5 MiB and temporary memory
+  15.8 MiB; owned volume data stays below 197 MiB and host availability above
+  3,637 MiB. It counts each private data volume once, preserves the protected
+  containers and cleans its owned resources. Fifteen native cases and 17 deliberate
+  guard omissions qualify its evidence and refusal paths. This disposable Debian
+  measurement leaves shipping Alpine capacity, schema-changing rollback and the
+  complete producer receipt open; enforcement remains off.
   Thirty-six evidence and nine cleanup-ownership checks pass; removing each of
   34 guards fails its tests in an installed disposable checkout. The optional
   paired-recovery extension now connects the same archive to a separate compiled
@@ -964,7 +975,7 @@ implementation or production evidence.
   cached lease; this does not qualify automatic expiry. The proof refreshes the
   random loopback port after restart without changing TLS trust. Its 29 samples
   stay above 3,903 MiB available memory and 13.98 GiB free disk; owned cleanup and
-  protected Waitron state are checked. Full capacity, schema-changing rollback,
+  protected Waitron state are checked. Shipping-image capacity, schema-changing rollback,
   the shipping Alpine release, the strict complete producer receipt and deployment
   remain open. The combined test's nine-second
   margin needs attention before adding further fixture work to its unchanged

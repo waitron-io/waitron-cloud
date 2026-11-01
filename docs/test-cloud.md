@@ -21,7 +21,7 @@ node --test scripts/verify-test-cloud-receipt.test.mjs
 The paired-client journey below now combines continuous recovery, independent
 snapshot fallback and remote isolation and withdrawal. A separate same-image
 rollback journey preserves Cloud identity and both pairings. The combined receipt
-producer, full capacity, schema-changing rollback and shipping image qualification remain open.
+producer, schema-changing rollback and shipping image capacity qualification remain open.
 There is no completed PR7 receipt to validate yet. Keep plan enforcement off
 before the test-box deployment.
 
@@ -876,8 +876,39 @@ One real Linux journey passes without skips in 290.8 seconds, within the unchang
 stay above 3,213 MiB available memory and 12.55 GiB free disk, with no observed
 out-of-memory kill. Owned cleanup and the protected Waitron containers are checked.
 This fresh demo and isolated recovery clock do not qualify existing trading
-history. Full settled and active-verifier capacity, schema-changing rollback, the shipping Alpine
-release and the strict complete receipt remain open. Keep plan enforcement off.
+history. Shipping-image capacity, schema-changing rollback and the strict complete
+receipt remain open. Keep plan enforcement off.
+
+## Measure settled and active-verifier capacity
+
+You need measurements while Cloud is settled and while its verifier runs; container
+memory limits alone do not establish actual use. On an isolated Linux Docker host,
+with the same immutable image variables and protected-container list above, run:
+
+```sh
+node --test scripts/test-cloud-capacity.test.mjs
+```
+
+The opt-in journey pairs both venues, publishes the paid archive, samples a full
+settled minute, then runs the existing worker against those same bytes. It reads
+Linux memory accounting directly, including temporary files in memory, and measures
+each owned data volume once. It requires Cloud at or below 2,048 MiB, at most one
+1,024 MiB verifier, temporary memory at or below 256 MiB and fixture data at or below
+1 GiB. A missing active child, a sampling gap above five seconds, an out-of-memory
+kill or a protected-container change refuses the result. A measurement failure stops
+the owned worker and waits for its operation to finish before project cleanup.
+
+The disposable test-box run measured 62.4 settled seconds and two samples of the
+exact admitted verifier child. Its 27 samples were at most 3.1 seconds apart.
+Peak Cloud memory was 999.3 MiB; the verifier used 174.5 MiB, including 15.8 MiB of
+temporary memory. Owned volume data stayed below 197 MiB, with at least 3,637 MiB
+available host memory. The journey passed in 189.3 seconds under its 300-second
+limit, and its resource cleanup completed.
+
+This is a disposable Debian-image measurement under the owner's campaign-only
+10 GiB disk policy. It leaves `completeIntegration` and `shippingQualification`
+false. You still need the pinned Alpine release, its deployment capacity check,
+schema-changing rollback and the complete integration receipt. Keep enforcement off.
 
 ## Stop and restart Cloud without losing pairings
 
@@ -904,5 +935,5 @@ restart, and both pairings survive. Its 29 resource samples stay above 3,903 MiB
 available memory and 13.98 GiB free disk, with no observed out-of-memory kill.
 Owned cleanup and the protected Waitron containers are checked. This proof makes
 no schema change. A schema upgrade still needs its matching private database,
-configuration and storage backup/restore proof. Full capacity, the shipping Alpine
-release and the strict complete receipt remain open. Keep plan enforcement off.
+configuration and storage backup/restore proof. Shipping-image capacity and the
+strict complete receipt remain open. Keep plan enforcement off.

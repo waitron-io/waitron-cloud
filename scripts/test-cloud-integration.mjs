@@ -63,7 +63,7 @@ export function checkProtectedContainers(before, after, ids) {
   return true;
 }
 
-export async function runTestCloudClients({image, waitronImage, protectedContainerIds = [], paidSnapshot = false, paidVerification = false, paidRecovery = false, paidAuthorisedRecovery = false, paidStream = false, paidContinuousRecovery = false, freeRemote = false, paidRemote = false, cloudRollback = false} = {}) {
+export async function runTestCloudClients({image, waitronImage, protectedContainerIds = [], paidSnapshot = false, paidVerification = false, paidRecovery = false, paidAuthorisedRecovery = false, paidStream = false, paidContinuousRecovery = false, freeRemote = false, paidRemote = false, cloudRollback = false, measureCapacity = false} = {}) {
   paidStream ||= paidContinuousRecovery;
   paidAuthorisedRecovery ||= paidStream;
   paidRecovery ||= paidAuthorisedRecovery;
@@ -73,7 +73,7 @@ export async function runTestCloudClients({image, waitronImage, protectedContain
   const override = join(directory, 'proof.yaml'), clientTag = project + '-venue:local', recoveryTag = project + '-recovery:local';
   const owned = [], created = [], removed = [], venueCAs = new Map();
   let built = false, recoveryBuilt = false, started = false, result;
-  let verifierWorker, verifierStarted = false, verifierScope, verifierUncertain = false;
+  let verifierWorker, verifierStarted = false, verifierScope, verifierUncertain = false, capacityEvidence;
   const docker = (args, input = '', phase) => command(args, input, phase, {TEST_CLOUD_IMAGE: image});
   const prefix = ['compose', '--project-name', project, '--env-file', 'deploy/test-cloud/test.env', '-f', 'compose.yaml', '-f', 'deploy/test-cloud/compose.yaml', '-f', override];
   const compose = args => docker([...prefix, ...args], '', 'compose-' + args[0]);
@@ -236,6 +236,7 @@ export async function runTestCloudClients({image, waitronImage, protectedContain
         publishedSnapshot = {...captured, ...independent, organisationId, venueId: evidence.registration.venueId,
           installationId: evidence.registration.installationId, localVenueId: evidence.localVenueId, recovery: 'not-run'};
         if (paidVerification || paidRecovery) {
+          const verify = async () => {
           await accountPhase('configure-verification', {image: waitronImage});
           const [accountInfo] = parseIntegrationJson(await docker(['inspect', account]));
           const configVolume = accountInfo.Mounts.find(value => value.Destination === '/run/local-stack').Name;
@@ -269,6 +270,26 @@ export async function runTestCloudClients({image, waitronImage, protectedContain
           assert.equal(await docker(['inspect', '--format', '{{.State.ExitCode}}', verifierWorker]), '0', 'integration.verifier_forced_shutdown');
           publishedSnapshot.verification = 'verified';
           publishedSnapshot.workerVerification = {...admission, childAbsent: true, workerStoppedNaturally: true};
+          };
+          if (measureCapacity) {
+            const {measureCapacityWindow, observeCapacity} = await import('../deploy/test-cloud/test-fixtures/integration-capacity.mjs');
+            const measured = await measureCapacityWindow({
+              observe: async () => {
+                if (verifierWorker && !verifierScope) {
+                  const text = await docker(['logs', verifierWorker], '', 'capacity-controller-scope');
+                  for (const line of text.split('\n')) {
+                    let value; try {value = JSON.parse(line);} catch {continue;}
+                    if (value.controllerScope) {assert.match(value.controllerScope, /^[a-f0-9-]{36}$/); verifierScope = value.controllerScope;}
+                  }
+                }
+                return observeCapacity({docker, project, runId, verifierScope, waitronImage, workerId: verifierWorker,
+                  protectedUnchanged: async () => checkProtectedContainers(before, await inventory(), protectedContainerIds)});
+              },
+              verify,
+              stop: async () => {if (verifierStarted) await docker(['stop', '--time', '15', verifierWorker], '', 'capacity-refusal-stop');},
+            });
+            capacityEvidence = {measurement: 'linux-cgroup-v2-including-tmpfs', shippingQualification: false, samples: measured.samples};
+          } else await verify();
         }
         if (paidStream) {
           const streamed = await control(id, 'stream-start');
@@ -476,7 +497,7 @@ export async function runTestCloudClients({image, waitronImage, protectedContain
     result = {version: 1, kind: 'test-cloud-clients', runId, completeIntegration: false, origin, waitronHead: revision, image, waitronImage,
       accountMail: {free: 'proved', paid: 'proved', transport: 'mailpit'}, clients: {status: 'proved', actions: ['pair', 'renew', 'configuration'], demoVenues: 2, restartIdentity: 'proved'},
       tls: {untrustedRefused: true, wrongHostnameRefused: true}, organisations, freeSnapshot, restarts,
-      ...(publishedSnapshot ? {paidSnapshot: publishedSnapshot} : {}), ...(observedStream ? {paidStream: observedStream} : {}),
+      ...(capacityEvidence ? {capacity: capacityEvidence} : {}), ...(publishedSnapshot ? {paidSnapshot: publishedSnapshot} : {}), ...(observedStream ? {paidStream: observedStream} : {}),
       ...(continuousRecovery ? {paidContinuousRecovery: continuousRecovery} : {}), ...(freeRemoteEvidence ? {freeRemote: freeRemoteEvidence} : {}),
       ...(paidRemoteEvidence ? {paidRemote: paidRemoteEvidence} : {}), ...(cloudRollbackEvidence ? {cloudRollback: cloudRollbackEvidence} : {})};
   } finally {
