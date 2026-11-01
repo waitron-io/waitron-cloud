@@ -25,6 +25,7 @@ Both reload fixtures also retain their reachable handler variants separately.
 The live-status and landmark fixtures keep ordinary and delayed captures separately.
 Their notes describe the missing-signal controls' outer refusal checks.
 The recovery-width fixture also keeps each reachable handler capture separately.
+The pending-session sign-out fixture retains ordinary and delayed captures separately.
 See [the diagnostic qualification and open work](backlog/retrospective-reviews.md).
 
 ## Concurrent storage extraction and failed-startup cleanup (D454)
@@ -4293,10 +4294,25 @@ this corrects test readiness without changing product authentication or routing.
 
 ## Pending-session sign-out browser handler wait (D363)
 
-The pending-session sign-out browser fixture bounds its old-read handler wait
-at the existing four-second page budget. An absent signal fails promptly; delayed
-handlers retain the original revocation and stale-session journeys across both
-languages, themes and widths. Production session authority is unchanged.
+The pending-session sign-out browser fixture configures a four-second old-read
+handler observation. Its missing-signal control requires a timeout within a
+five-second outer race and returns before revocation and screenshot checks;
+that control does not establish the exact observation deadline. Delayed handlers
+repeat the original revocation and stale-session journeys across both languages,
+themes and widths. The eight ordinary screenshot names remain; delayed current-session
+captures use separate names, retaining sixteen files so neither handler's capture
+overwrites the other's.
+Every original assertion, observation and deadline remains. Native Chromium with
+stubbed HTTP does not qualify real session authority, other engines or networks,
+or explain the historical Linux failure.
+Sampled omission of the handler observation still passes twelve head cases and
+six parent cases. A single reply-filter omission passes four cases on each;
+a separate omission of both check-reply filters also leaves the focused current
+case passing on head and parent. Guard necessity remains unqualified. Preserve
+the checks and reproduce an actual ordering failure before changing them.
+One native full-file sample takes 325 seconds for 53 cases versus the parent's
+157 seconds for 26. Collect captures into a fresh `PENDING_SIGNOUT_RECEIPT_DIR`
+and check all sixteen names; browser assertions alone do not check filenames.
 
 ## Sign-out failure browser handler wait (D361)
 

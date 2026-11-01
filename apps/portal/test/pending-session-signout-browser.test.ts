@@ -21,7 +21,7 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
   ? ['current','lost-reply','expired','unavailable','navigate','new-session','older-first','rate','passive','generic'] : ['current'];
  for (const handler of ['normal','delayed','missing'] as const) for (const scenario of scenarios) {
   if(handler==='missing'&&(locale!=='en'||theme!=='light'||width!==390||scenario!=='current'))continue;
-  test(`${locale} ${theme} ${width}${handler==='normal'?'':` with ${handler} old-read handler`}: ${scenario} revocation with a pending session snapshot`, async t => {
+  test(handler==='missing'?`${locale} ${theme} ${width}: missing old-read handler times out before revocation`:`${locale} ${theme} ${width}${handler==='normal'?'':` with ${handler} old-read handler`}: ${scenario} revocation with a pending session snapshot`, async t => {
   const browser = await chromium.launch({headless: true});
   let releaseOld!:()=>void, releaseFresh!:()=>void, oldEntered!:()=>void, freshEntered!:()=>void;
   const oldReply=new Promise<void>(resolve=>{releaseOld=resolve;});
@@ -123,7 +123,7 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
    assert.equal(new URL(page.url()).pathname,scenario==='navigate'?'/signup':'/login','the late authenticated snapshot cannot restore the account');
    assert.equal(await page.getByText(c.signedOut,{exact:true}).count(),expected===c.signedOut?1:0);
    assert.deepEqual(writes,[{path:'/sessions/revoke',body:{id:current.id}}],'reconciliation never repeats the revoke');
-   if(scenario==='current'&&process.env.PENDING_SIGNOUT_RECEIPT_DIR){await mkdir(process.env.PENDING_SIGNOUT_RECEIPT_DIR,{recursive:true});await page.screenshot({path:`${process.env.PENDING_SIGNOUT_RECEIPT_DIR}/${locale}-${theme}-${width}.png`});}
+   if(scenario==='current'&&process.env.PENDING_SIGNOUT_RECEIPT_DIR){await mkdir(process.env.PENDING_SIGNOUT_RECEIPT_DIR,{recursive:true});await page.screenshot({path:`${process.env.PENDING_SIGNOUT_RECEIPT_DIR}/${locale}-${theme}-${width}${handler==='normal'?'':`-${handler}`}.png`});}
   }finally{releaseOld();releaseFresh();await browser.close();}
  });
  }
