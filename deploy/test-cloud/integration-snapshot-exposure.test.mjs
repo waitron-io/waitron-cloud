@@ -69,3 +69,15 @@ test('a provider reply crossing the expiry boundary cannot establish pre-expiry 
   await assert.rejects(observeSnapshotExposure({saved, selected, downgradedAt: 300000,
     put: async () => {clock = 901001; return accepted();}, now: () => clock}));
 });
+for (const extra of [
+  {id: 'other', incomingKey: 'incoming/other'},
+  {requestedAt: 0.5}, {requestedAt: -1, expiresAt: new Date(900000).toISOString()}, {acceptedAt: 2000.5},
+]) test('snapshot evidence refuses internally consistent malformed identity or time ' + JSON.stringify(extra), async () => {
+  const {observeSnapshotExposure} = await load();
+  await assert.rejects(observeSnapshotExposure({saved: {...saved, ...extra}, selected, downgradedAt: 300000, put: accepted, now: () => 301000}));
+});
+for (const observedAt of [300999, NaN, 301000.5]) test('snapshot evidence refuses a changed observation clock ' + observedAt, async () => {
+  const {observeSnapshotExposure} = await load(); let clock = 301000;
+  await assert.rejects(observeSnapshotExposure({saved, selected, downgradedAt: 300000,
+    put: async () => {clock = observedAt; return accepted();}, now: () => clock}));
+});
