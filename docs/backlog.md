@@ -2850,7 +2850,7 @@ implementation or production evidence.
   [index-hash recurrence](https://github.com/waitron-io/waitron-cloud/actions/runs/41276827214/job/124760631141)
   recorded the expected hash mismatch and 47 local requests before the eight-second
   supervisor expired. Neither historical run captured packet timing, so the exact
-  historical cause remains unqualified. Run the Linux component journeys and
+  historical cause remains unknown. Run the Linux component journeys and
   retain their labelled failure evidence on another recurrence; a passing retry
   alone does not repair a timeout.
   The public mirror's underlying
