@@ -128,7 +128,7 @@ async function smoke() {
     }
     if (!uploaded) fail(); stage = 'second-sale'; await sale(2);
     stage = 'stop';
-    let drainTimer, control, stopStep = 'control', controlMs, exitMs, stopOutcome;
+    let drainTimer, control, stopStep = 'control', controlMs, exitMs, stopOutcome, beforeSignal;
     const stopStarted = performance.now(), stopElapsed = () => Math.max(0, Math.round(performance.now() - stopStarted));
     try {
       await Promise.race([
@@ -160,6 +160,12 @@ async function smoke() {
           ]);
           controlMs = stopElapsed();
           stopStep = 'exit';
+          // A later idle refusal may have lost transfers cancelled by the signal.
+          beforeSignal = { unavailable: true };
+          try {
+            const transfers = replication.transport?.pendingTransfers?.();
+            if (transfers) beforeSignal = { pending: transfers.length, truncated: transfers.length > 16, transfers: transfers.slice(0, 16) };
+          } catch {}
           const ended = stopOutcome = await stop(replicator);
           if (ended.invalid || ended.code !== 0) fail();
           exitMs = stopElapsed();
@@ -179,12 +185,15 @@ async function smoke() {
         const frame = /\/litestream-smoke\.mjs:(\d+):(\d+)\)?$/.exec(line);
         return frame ? [`    at litestream-smoke.mjs:${frame[1]}:${frame[2]}`] : [];
       })].join('\n') : undefined;
+      let pendingTransfers;
+      try { pendingTransfers = replication.transport?.pendingTransfers?.(); } catch {}
       try { console.error(JSON.stringify({ kind: 'litestream-stop', status: 'rejected', step: stopStep,
         error: { name: 'Error', message: known ? message : 'Unclassified Litestream stop error', ...(typeof stack === 'string' ? { stack } : {}) },
         ...(stopOutcome ? { process: stopOutcome } : {}),
+        ...(beforeSignal ? { beforeSignal } : {}),
         ...(replication.audit.checkpoint ? { audit: replication.audit.checkpoint() } : {}),
         timing: { elapsedMs: stopElapsed(), controlMs, exitMs },
-        ...(replication.transport?.pendingTransfers ? { pendingTransfers: replication.transport.pendingTransfers() } : {}),
+        ...(pendingTransfers ? { pendingTransfers } : {}),
         ...(replication.transport?.checkpoint ? { diagnostic: replication.transport.checkpoint() } : {}) })); } catch {}
       throw error;
     } finally { clearTimeout(drainTimer); control?.destroy(); }

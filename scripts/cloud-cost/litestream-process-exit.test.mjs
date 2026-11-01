@@ -58,12 +58,18 @@ function run(holdReply) {
       }});`,
     '/code/meter.mjs': `export {createMeter,createMeteringProxy,classifyStorageOperation,correlatedStorageAttempt} from ${JSON.stringify(meter)};
       export const instrumentStorageClient=()=>{};`,
-    '/code/litestream.mjs': `import {createLitestreamTransport as open} from ${JSON.stringify(actual)};
+    '/code/litestream.mjs': `import {createLitestreamTransport as open,createLitestreamAfterStop as tracker} from ${JSON.stringify(actual)};
       export * from ${JSON.stringify(actual)};
+      export const createLitestreamAfterStop=options=>{const session=tracker(options);return {...session,acknowledgeStop:input=>{
+        session.acknowledgeStop(input);console.error(JSON.stringify({kind:'stop-acknowledged'}));
+      }};};
       export const createLitestreamTransport=async options=>{
         if(options.phase==='restore')return {url:options.target,whenIdle:async action=>action(),snapshot:()=>({}),close:async()=>{}};
         const transport=await open(options);
-        return globalThis.transport={...transport,whenIdle:action=>{
+        return globalThis.transport={...transport,pendingTransfers:()=>{
+          console.error(JSON.stringify({kind:'transfer-snapshot',writerClosed:globalThis.writerClosed===true}));
+          return transport.pendingTransfers();
+        },whenIdle:action=>{
           console.error(JSON.stringify({kind:'idle-admission',writerClosed:globalThis.writerClosed,pending:transport.checkpoint().pending}));
           return transport.whenIdle(action);
         }};
@@ -150,6 +156,29 @@ for (const held of [true, false]) test(`real writer exit before final smoke rest
     assert.equal(records.some(row => row.kind === 'restore-admission'), false, result.stderr);
     const stop = records.find(row => row.kind === 'litestream-stop');
     assert.equal(stop?.step, 'idle', result.stderr);
+    const firstSnapshot = records.findIndex(row => row.kind === 'transfer-snapshot');
+    assert.ok(firstSnapshot >= 0 && firstSnapshot < records.findIndex(row => row.kind === 'writer-signal'),
+      'capture pending transfers before the signal call, while the real writer is still running');
+    const acknowledged = records.findIndex(row => row.kind === 'stop-acknowledged');
+    assert.ok(acknowledged >= 0 && acknowledged < firstSnapshot, 'capture after the stop reply is actually validated');
+    assert.equal(records[firstSnapshot].writerClosed, false);
+    assert.ok(stop.beforeSignal, 'retain the transport state before signalling the writer');
+    assert.equal(stop.beforeSignal.pending, 1, 'retain active transfers before the real writer closes');
+    assert.equal(stop.beforeSignal.truncated, false);
+    assert.equal(stop.beforeSignal.transfers.length, 1);
+    const transfer = stop.beforeSignal.transfers[0];
+    assert.equal(transfer.operation, 'put');
+    assert.equal(transfer.phase, 'workload');
+    assert.equal(transfer.retryOrdinal, 0);
+    assert.equal(transfer.bytesIn, 1);
+    assert.equal(transfer.expectedIn, 4);
+    assert.equal(transfer.bytesOut, 4);
+    assert.equal(transfer.expectedOut, 4);
+    assert.equal(transfer.requestSent, true);
+    assert.equal(transfer.responseReceived, false);
+    assert.equal(transfer.statusCode, 200);
+    assert.equal(transfer.clientClosed, false);
+    assert.ok(Number.isInteger(transfer.elapsedMs) && transfer.elapsedMs >= 0);
     assert.equal(stop.diagnostic.clientClosed, true, result.stderr);
     assert.equal(stop.diagnostic.responseHeadersSeen, true, result.stderr);
     assert.deepEqual(stop.diagnostic.accounting.producer, { attempts: 3, bytesIn: 5, bytesOut: 12 });

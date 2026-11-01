@@ -3705,7 +3705,12 @@ reproduce a complete upstream LIST followed by a downstream close, including
 equal producer/observer byte totals but different outcomes. The session remains
 refused before and after a validated stop acknowledgement. These controlled
 exchanges do not establish the historical cancellation cause or change which
-shutdown evidence is accepted. The historical stop/exit cause still needs a
+shutdown evidence is accepted. Stop refusals after a validated acknowledgement also retain up to sixteen active
+transfer snapshots from immediately before the signal helper, with the total
+pending count and a truncation flag. A failed diagnostic read leaves an
+unavailable marker and shutdown continues. A generated writer with a real HTTP
+socket proves that this earlier snapshot survives cancellation and writer exit;
+it does not identify the native writer's historical request. The historical stop/exit cause still needs a
 labelled recurrence; see the linked investigation before changing the stop rule.
 The delayed-PUT fixture also records up to sixteen uploads on a stop refusal,
 including which upload released readiness and their arrival, backend-response and

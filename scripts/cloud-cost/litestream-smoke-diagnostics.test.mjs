@@ -28,9 +28,15 @@ function run(failure) {
       verify:async()=>({ok:true,issues:0}),close:async()=>{}});`,
     '/code/litestream.mjs': `export {createLitestreamAfterStop,litestreamAfterStopOutput,withLitestreamCloseDiagnostics} from ${JSON.stringify(actual)};
       export const createLitestreamRequestAudit=()=>({write(){},end(){},snapshot:()=>({})});
+      let captureReads=0;
       export const createLitestreamTransport=async({phase})=>({url:'http://127.0.0.1:1',checkpoint:()=>({pending:0}),snapshot:()=>({}),
-        pendingTransfers:()=>[{operation:'put',phase:'workload',retryOrdinal:0,elapsedMs:1501,bytesOut:5,expectedOut:5,bytesIn:0,expectedIn:0,requestSent:true,responseReceived:false,statusCode:null,clientClosed:true}],
-        whenIdle:async action=>{if(process.env.CLOSE_FAILURE==='idle'&&phase==='workload')throw Error('PRIVATE_CANARY');return action();},
+        pendingTransfers:process.env.CLOSE_FAILURE==='idle-missing'?undefined:()=>{
+          if(process.env.CLOSE_FAILURE==='idle-persistent-throw')throw Error('PRIVATE_CANARY');
+          if(process.env.CLOSE_FAILURE==='idle-capture-throw'&&captureReads++===0)throw Error('PRIVATE_CANARY');
+          if(['idle-capture-throw','idle-empty'].includes(process.env.CLOSE_FAILURE))return [];
+          if(['idle-many','idle-limit'].includes(process.env.CLOSE_FAILURE))return Array.from({length:process.env.CLOSE_FAILURE==='idle-many'?17:16},()=>({operation:'list',phase:'workload',retryOrdinal:0,elapsedMs:0,bytesOut:0,expectedOut:0,bytesIn:0,expectedIn:4,requestSent:true,responseReceived:false,statusCode:200,clientClosed:false}));
+          return [{operation:'put',phase:'workload',retryOrdinal:0,elapsedMs:1501,bytesOut:5,expectedOut:5,bytesIn:0,expectedIn:0,requestSent:true,responseReceived:false,statusCode:null,clientClosed:true}];},
+        whenIdle:async action=>{if(process.env.CLOSE_FAILURE.startsWith('idle')&&phase==='workload')throw Error('PRIVATE_CANARY');return action();},
         close:async()=>{if(process.env.CLOSE_FAILURE===(phase==='workload'?'replication-transport':'restore-transport'))throw Error('PRIVATE_CANARY');}});`,
     '/code/meter.mjs': `export const createMeter=({phase})=>({phase,snapshot:()=>({})});
       export const createMeteringProxy=async({meter})=>({url:'http://127.0.0.1:1',snapshot:()=>({}),close:async()=>{
@@ -82,3 +88,23 @@ for (const failure of ['', 'replication-transport', 'restore-transport', 'cleanu
     else if (failure!=='cleanup-admin-proxy') assert.ok(result.stderr.includes('Synthetic Litestream phase: '+failure+'-close'));
   });
 }
+
+// Missing bounds or exception containment must lose a usable failure report here.
+for (const scenario of ['idle-many', 'idle-empty', 'idle-capture-throw', 'idle-persistent-throw', 'idle-missing', 'idle-limit']) test(`signal-boundary evidence preserves shutdown with ${scenario}`, () => {
+  const result = run(scenario);
+  assert.equal(result.error, undefined); assert.equal(result.signal, null); assert.equal(result.status, 1);
+  assert.equal(result.stdout, '');
+  const records = result.stderr.split('\n').filter(line => line.startsWith('{')).map(JSON.parse);
+  const refusal = records.find(row => row.kind === 'litestream-stop');
+  assert.equal(refusal?.step, 'idle', 'diagnostic capture cannot prevent signalling and collecting the writer');
+  assert.ok(records.some(row => row.stage === 'cleanup-admin-proxy' && row.status === 'fulfilled'));
+  assert.doesNotMatch(result.stderr, /PRIVATE_CANARY/);
+  if (['idle-capture-throw', 'idle-persistent-throw', 'idle-missing'].includes(scenario)) assert.deepEqual(refusal.beforeSignal, { unavailable: true });
+  else if (scenario === 'idle-empty') assert.deepEqual(refusal.beforeSignal, { pending: 0, truncated: false, transfers: [] });
+  else {
+    assert.equal(refusal.beforeSignal.pending, scenario === 'idle-limit' ? 16 : 17);
+    assert.equal(refusal.beforeSignal.truncated, scenario !== 'idle-limit');
+    assert.equal(refusal.beforeSignal.transfers.length, 16);
+    assert.ok(refusal.beforeSignal.transfers.every(row => row.operation === 'list' && row.clientClosed === false));
+  }
+});

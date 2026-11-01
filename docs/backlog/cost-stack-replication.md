@@ -69,6 +69,20 @@ qualification. The interrupted session remains refused. Keep the existing
 acceptance guard and investigate avoiding the cancellation before proposing
 any different accepted evidence.
 
+After a validated stop acknowledgement, you can compare a refusal's
+`beforeSignal` transfer snapshots with its later `pendingTransfers` list. The earlier record retains at most sixteen active
+transfers, their total count and a truncation flag, using the transport's existing
+operation, phase, byte-count and completion fields. An unavailable marker means
+that read failed or the transport did not expose it. If the later read also
+fails, its list is omitted while the rest of the stop refusal remains available. Capturing this evidence does
+not wait for a transfer or change the signal, acceptance guard or two-second
+budget. A generated Node writer and real HTTP forwarding prove that a partial
+reply is visible before signalling even after writer exit removes the pending
+transfer. Run `node --test scripts/cloud-cost/litestream-process-exit.test.mjs`
+for this control. It substitutes the writer and venue; it does not identify a
+historical native request or qualify production shutdown.
+
+
 The four bounded Linux jobs in [run 40101340028](https://github.com/waitron-io/waitron-cloud/actions/runs/40101340028)
 ran 27 genuine delayed-reply cases: 25 passed and two refused. Both refusals
 record `ERR_STREAM_UNABLE_TO_PIPE`, `list`, a closed client, response headers,
