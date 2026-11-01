@@ -76,6 +76,7 @@ test('the consent diagnostic query budget expires at 250 ms rather than one seco
  const original=new Error('original'),reports:string[]=[];
  t.mock.timers.enable({apis:['setTimeout']});
  const failed=assert.rejects(evidence.failConsentDatabaseWait(pool,'schema',original,value=>reports.push(value)),error=>error===original);
+ void failed.catch(()=>{});
  try{
   await queryEntered;
   t.mock.timers.tick(249);await new Promise<void>(resolve=>setImmediate(resolve));assert.deepEqual(reports,[]);
@@ -84,7 +85,9 @@ test('the consent diagnostic query budget expires at 250 ms rather than one seco
   assert.equal(reports.length,1);assert.deepEqual(JSON.parse(reports[0]!),{unavailable:true});
   await failed;
  }finally{
-  t.mock.timers.tick(2000);await failed;await pool.end();
-  for(const socket of sockets)socket.destroy();await new Promise<void>(resolve=>server.close(()=>resolve()));
+  t.mock.timers.tick(2000);
+  try{await failed;}finally{
+   await pool.end();for(const socket of sockets)socket.destroy();await new Promise<void>(resolve=>server.close(()=>resolve()));
+  }
  }
 });

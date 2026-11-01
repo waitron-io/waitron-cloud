@@ -50,3 +50,24 @@ test('consent failure evidence excludes another fixture and distinguishes an idl
   assert.equal(result.sampleLimit,20);
  }finally{await other.end();await db.close();}
 });
+
+test('consent evidence limits its sample to 20 connections and retains a newer lock waiter',async()=>{
+ const db=await database(),pool=new Pool({...db.pool.options,max:22}),clients:PoolClient[]=[];
+ let pending:Promise<unknown>|undefined;
+ try{
+  for(let n=0;n<22;n++)clients.push(await pool.connect());
+  await clients[0]!.query('BEGIN');await clients[0]!.query('LOCK TABLE cloud_sessions IN ACCESS EXCLUSIVE MODE');
+  pending=clients[21]!.query('SELECT count(*) FROM cloud_sessions');
+  for(let n=0;n<100;n++){
+   const blocked=await db.secondPool.query("SELECT count(*)::int AS count FROM pg_stat_activity WHERE application_name=$1 AND wait_event_type='Lock'",[db.schema]);
+   if(blocked.rows[0].count===1)break;
+   assert.ok(n<99,'the newest connection must reach its lock wait');await new Promise(resolve=>setTimeout(resolve,10));
+  }
+  const result=await report(pool,db.schema);
+  assert.equal(result.connections.length,20);
+  assert.equal(result.connections[0].waitType,'Lock');assert.equal(result.connections[0].blockedBy,1);
+ }finally{
+  await clients[0]?.query('ROLLBACK');await pending;
+  for(const client of clients)client.release();await pool.end();await db.close();
+ }
+});
