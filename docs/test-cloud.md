@@ -932,6 +932,28 @@ This is a disposable Debian-image measurement under the owner's campaign-only
 false. You still need the pinned Alpine release, its deployment capacity check,
 schema-changing rollback and the complete integration receipt. Keep enforcement off.
 
+### Host disk measurements during the capacity proof
+
+The disposable capacity journey records available host memory and disk before it
+creates containers, in each settled and verification sample, and after owned
+cleanup. Disk is measured on the filesystem containing Docker's data directory,
+reported by `docker info`, so a checkout on another disk cannot supply the result.
+Missing memory data, an inaccessible data directory or a relative directory
+refuses the run.
+
+A shipping-Dockerfile capacity run on the test box passed in 200.1 seconds under
+the unchanged 300-second limit. It records 27 samples with gaps at most 3.2
+seconds and 62.6 settled seconds. Free disk is 15.54 GiB before startup, at least
+15.32 GiB during measurement and 15.53 GiB after cleanup. Available memory stays
+above 3,887 MiB during the measured window. Peak Cloud memory is below 879 MiB; the
+verifier stays below 184 MiB, including 19.7 MiB of temporary memory. Both samples
+of the active verifier identify the admitted child.
+
+These measurements do not qualify the full deployment. The receipt continues to
+report `shippingQualification: false` and `completeIntegration: false`. Startup
+and integration sampling, direct-storage withdrawal, published-release upgrade
+and the unchanged 20 GiB startup / 15 GiB running floors remain required.
+
 ## Stop and restart Cloud without losing pairings
 
 You can check a same-image rollback without extending the combined recovery test:
@@ -1075,17 +1097,3 @@ restoring four volumes. Available memory stays above 3,666 MiB and free disk abo
 12.65 GiB under the campaign-only disk policy. Its output keeps
 `completeIntegration: false`; the strict complete receipt, published-release upgrade
 and deployment checks remain open. Keep plan enforcement off.
-
-### Host disk measurements during the capacity proof
-
-The disposable capacity journey records available host memory and disk before it
-creates containers, in each settled and verification sample, and after owned
-cleanup. Disk is measured on the filesystem containing Docker's data directory,
-reported by `docker info`, so a checkout on another disk cannot supply the result.
-Missing memory data, an inaccessible data directory or a relative directory
-refuses the run.
-
-These measurements do not qualify the full deployment. The receipt continues to
-report `shippingQualification: false` and `completeIntegration: false`. Startup
-and integration sampling, direct-storage withdrawal, published-release upgrade
-and the unchanged 20 GiB startup / 15 GiB running floors remain required.

@@ -812,11 +812,15 @@ implementation or production evidence.
   do not explain the historical Docker delay. Local Docker qualification stays
   parked until 3 November; current-head CI runs the genuine gateway journeys.
 
-- **LAN test Cloud with free and paid organisations.** The capacity journey now collects host memory and available disk on Docker's
-  data filesystem before allocation, throughout settled/verification sampling
-  and after owned cleanup. Missing host data refuses the run. This adds raw
-  measurements; full startup/integration sampling, direct-storage withdrawal,
-  published-release qualification and shipping 20/15 GiB floors remain due. The
+- **LAN test Cloud with free and paid organisations.** The capacity journey now
+  collects host memory and available disk on Docker's data filesystem before
+  project startup, throughout settled/verification sampling
+  and after owned cleanup. Missing host data refuses the run. The shipping-Dockerfile
+  journey passes one case without skips in 200.1 seconds under its unchanged
+  300-second limit, with 27 samples, 62.6 settled seconds and gaps below 3.2 seconds.
+  Free disk is 15.54 GiB before startup, at least 15.32 GiB during measurement and
+  15.53 GiB after cleanup. This adds raw measurements; full startup/integration
+  sampling, direct-storage withdrawal, published-release qualification and shipping 20/15 GiB floors remain due. The
   [test deployment design](superpowers/specs/2026-10-17-test-cloud-free-paid-design.md)
   and [implementation plan](superpowers/plans/2026-10-17-test-cloud-free-paid.md)
   describe a separate Cloud Compose project on the owner's test box, with an
