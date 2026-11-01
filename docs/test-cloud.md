@@ -21,8 +21,9 @@ node --test scripts/verify-test-cloud-receipt.test.mjs
 The paired-client journey below now combines continuous recovery, independent
 snapshot fallback and remote isolation and withdrawal. A separate same-image
 rollback journey preserves Cloud identity and both pairings. The combined receipt
-producer and shipping image capacity qualification remain open. A separate
-controlled schema-change journey now checks a matching private-volume restore.
+producer and final release qualification remain open. The shipping Cloud Dockerfile
+now passes the separate capacity and controlled schema-change journeys below,
+using a pinned disposable Waitron image. The deployment capacity gate remains open.
 There is no completed PR7 receipt to validate yet. Keep plan enforcement off
 before the test-box deployment.
 
@@ -991,3 +992,35 @@ complete restore journey passes in 137.7 seconds under the unchanged 300-second
 limit. The normal journey also passes in 131.0 seconds with the same paired-client
 and matching-volume checks. An earlier undiagnosed refusal remains historical evidence without an
 assigned cause; this result does not identify that earlier occurrence.
+
+## Check the shipping Cloud image in isolation
+
+A disposable probe image can hide a missing Alpine dependency. Build Cloud with
+the [shipping Dockerfile](../deploy/local-stack/Dockerfile), then use that immutable
+image for the existing capacity and matching-backup journeys:
+
+```sh
+node --test scripts/test-cloud-capacity.test.mjs
+node --test scripts/test-cloud-schema-rollback.test.mjs
+```
+
+The candidate built from Cloud commit `765417e043b8d1eccd0c51de6997bf2ec81bcba9`
+matches all 1,676 recorded runtime source inputs inside the image. On the isolated
+Linux box, capacity passes in 198.4 seconds and controlled rollback in 131.4 seconds,
+each under its existing 300-second limit with no skips. Capacity has 26 samples,
+62.5 settled seconds and gaps no larger than 3.2 seconds. Observed Cloud memory
+peaks at 996.9 MiB; one sample observes the admitted verifier at 140.5 MiB, with no
+temporary-memory use observed in that sample. Owned volume data stays below
+197 MiB, and available host memory stays above 3,983 MiB in the capacity samples.
+
+Rollback restores the same four private volumes, removes the controlled extra
+migration and completes fresh exchanges from both original pairings. Independent
+cleanup checks find both disposable projects and all 39 recorded container IDs
+absent, with the three existing Waitron IDs, start times and health unchanged.
+
+These runs use the campaign-only 10 GiB disk policy and a disposable Debian-based
+Waitron image pinned to `ec91a9e34d2daba146f4ee61850ea4136ad5cfb7`. They establish
+compatibility with this Cloud image, while `completeIntegration` and
+`shippingQualification` remain false. You still need the combined receipt,
+published-release upgrade checks and deployment qualification under the unchanged
+20 GiB start and 15 GiB running disk limits. Keep plan enforcement off.

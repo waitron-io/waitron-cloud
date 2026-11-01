@@ -868,6 +868,16 @@ implementation or production evidence.
   guard omissions qualify its evidence and refusal paths. This disposable Debian
   measurement leaves shipping Alpine capacity, schema-changing rollback and the
   complete producer receipt open; enforcement remains off.
+  The [shipping Cloud image checks](test-cloud.md#check-the-shipping-cloud-image-in-isolation)
+  now use the unchanged Alpine Dockerfile at `765417e0`. All 1,676 recorded runtime
+  inputs match inside the image. Capacity and controlled matching-volume rollback
+  each pass without skips in 198.4 and 131.4 seconds, below their original
+  300-second limits. The capacity samples cover 62.5 settled seconds and the actual
+  verifier child. Independent cleanup checks both projects and 39 owned container
+  IDs absent, preserving the existing Waitron containers. These candidate-image
+  checks retain the campaign-only disk policy and disposable pinned Waitron image;
+  the complete receipt, published-release upgrade and deployment capacity gates
+  remain open. Plan enforcement stays off.
   Thirty-six evidence and nine cleanup-ownership checks pass; removing each of
   34 guards fails its tests in an installed disposable checkout. The optional
   paired-recovery extension now connects the same archive to a separate compiled
