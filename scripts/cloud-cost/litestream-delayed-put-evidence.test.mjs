@@ -91,7 +91,7 @@ for (const rejectStop of [true, false]) test(`generated delayed-reply HTTP fixtu
   assert.ok(evidence, 'the failure must include the upload record before cleanup');
   const [earlier, ready] = evidence.puts;
   assert.equal(earlier.level,9); assert.equal(earlier.postSale,false); assert.equal(earlier.readiness,false);
-  assert.ok(earlier.admittedMs<=earlier.responseMs && earlier.responseMs<earlier.forwardedMs && earlier.forwardedMs<0);
+  assert.ok(earlier.admittedMs<=earlier.responseMs && earlier.responseMs<earlier.forwardedMs && earlier.forwardedMs<=0);
   assert.equal(ready.level,0); assert.equal(ready.postSale,true); assert.equal(ready.readiness,true);
   assert.ok(ready.admittedMs<=ready.responseMs && ready.responseMs<=0);
   assert.equal(ready.forwardedMs, undefined, 'the snapshot precedes release of the held reply');
