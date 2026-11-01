@@ -3558,7 +3558,9 @@ D530 records the unresolved consent-uncertainty and usage rate-limit waits from
 The usage journey now reports its named stage, static request lifecycle events
 and a bounded controller snapshot when a page wait or setup step fails. Read
 [the diagnostic limits and next reproduction](backlog/portal-lost-reply-ordering.md#usage-rate-limit-wait-d530)
-before attributing either failure. All usage assertions and deadlines remain.
+before attributing either failure. Consent failures also report a separately bounded,
+redacted [database wait snapshot](backlog/portal-lost-reply-ordering.md#consent-database-waits-d530).
+All existing usage and consent assertions and deadlines remain.
 
 **Open:** the historical reset-link, lost-reply and translation-control failures
 remain unexplained. Capture a diagnostic recurrence, reproduce its named stage

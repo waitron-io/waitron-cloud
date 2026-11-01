@@ -96,3 +96,32 @@ for controlled lifecycle, redaction and reporting failures, and the adjacent
 then fix that cause without changing the original checks. Consent's unfinished
 server requests need a separate real PostgreSQL reproduction. These synthetic
 HTTP diagnostics do not qualify server authority or repair the historical waits.
+
+
+## Consent database waits (D530)
+
+The consent failure above reaches the server without recording request completion.
+If the journey fails again, you now get a separate database snapshot before fixture
+cleanup. It uses its own connection because the application pool may be full.
+You see up to 20 connections from that fixture, with lock waiters first: database
+state, wait type, blocker count and a fixed session, consent, idle or other query
+family. Query text stays inside PostgreSQL. No query values, connection strings,
+process IDs or account identifiers enter this report.
+
+The snapshot has a separate 250 ms timer budget covering connection setup and the
+query. A failed connection or unanswered database produces an unavailable marker
+and closes that connection. A failed reporter retains the original test error.
+Scheduling and connection teardown can finish later than the timer. The original
+five-second page wait and every existing assertion remain.
+
+Run `pnpm --dir apps/portal exec node --test test/consent-failure-evidence.test.ts`
+for refused and stalled connections. Run `node scripts/test-postgres.mjs exec pnpm
+--dir apps/portal exec node --test test/consent-database-evidence.test.ts` for real
+PostgreSQL lock waits, a full application pool and exclusion of another fixture.
+These controls qualify reporting, not the historical cause or server authority.
+
+**Open:** capture a recurrence and reproduce the recorded request or database wait
+before changing runtime behavior. Query families are coarse text classifications;
+they do not identify a complete transaction. The sample can omit connections beyond
+its limit, and an unavailable snapshot cannot distinguish a database outage from
+a slow diagnostic connection.

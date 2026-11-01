@@ -7,6 +7,7 @@ import {RegistrationStore,SignupStore} from '@waitron-cloud/registration';
 import {startPortalFixture} from './fixtures.ts';
 import {translations} from '../src/locale.ts';
 import {portalTrace} from './portal-trace.ts';
+import {failConsentDatabaseWait} from './consent-database-evidence.ts';
 for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as const)for(const width of [390,1280])test(`${locale} ${theme} ${width}: owners allow and stop translation, reconcile lost replies and retain their choice`,async()=>{
  const f=await startPortalFixture();let releaseActivity=()=>{};const events:string[]=[];let trace:ReturnType<typeof portalTrace>|undefined;try{
   const email='owner@example.test',password='A long enough venue owner password';
@@ -80,7 +81,7 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
   await page.reload();await section.getByRole('button',{name:allow,exact:true}).waitFor();
   await f.db.pool.query('UPDATE organisation_memberships SET is_owner=false WHERE account_id=$1',[owner.accountId]);
   await page.reload();await page.getByRole('heading',{name:/Sol SL/}).waitFor();assert.equal(await section.count(),0);
- }catch(error){console.error('Translation consent browser stages',JSON.stringify({locale,theme,width,events,trace:trace?.events,server:f.trace}));throw error;}finally{releaseActivity();await f.close();}
+ }catch(error){console.error('Translation consent browser stages',JSON.stringify({locale,theme,width,events,trace:trace?.events,server:f.trace}));await failConsentDatabaseWait(f.db.pool,f.db.schema,error,value=>console.error('Translation consent database',value));}finally{releaseActivity();await f.close();}
 });
 
 for(const locale of ['en','es'] as const)test(`${locale}: two venues keep accessible controls and write warnings in the affected venue`,async()=>{
