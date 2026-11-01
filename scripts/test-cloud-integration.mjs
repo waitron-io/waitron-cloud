@@ -119,6 +119,21 @@ export async function runTestCloudClients({image, waitronImage, protectedContain
     }
     return children;
   };
+  // Recovery leaves the original stopped; measure its retained volume without restarting it.
+  const measureStoppedVolume = measureCapacity ? async name => {
+    const id = await docker(['create', '--pull=never', '--label', 'cloud.integration.capacity=' + runId,
+      '--network', 'none', '--read-only', '--user', '0:0', '--cap-drop', 'ALL', '--cap-add', 'DAC_OVERRIDE',
+      '--security-opt', 'no-new-privileges', '--pids-limit', '16', '--memory', '32m', '--memory-swap', '32m',
+      '--mount', 'type=volume,src=' + name + ',dst=/capacity,readonly',
+      '--entrypoint', 'du', image, '-sk', '--', '/capacity'], '', 'capacity-volume-create');
+    owned.push(id); record('container', id);
+    try {return await docker(['start', '--attach', id], '', 'capacity-volume-read');}
+    finally {
+      await docker(['rm', '-f', id], '', 'capacity-volume-cleanup');
+      owned.splice(owned.indexOf(id), 1);
+      removed.push(created.find(value => value.kind === 'container' && value.id === id));
+    }
+  } : undefined;
   try {
     if (measureCapacity) {
       const {readHostCapacity} = await import('../deploy/test-cloud/test-fixtures/integration-capacity.mjs');
@@ -150,7 +165,7 @@ export async function runTestCloudClients({image, waitronImage, protectedContain
     if (measureCapacity) {
       const {measureStartupCapacity, observeCapacity} = await import('../deploy/test-cloud/test-fixtures/integration-capacity.mjs');
       startupCapacity = await measureStartupCapacity({start,
-        observe: () => observeCapacity({docker, project, runId, waitronImage, startup: true, diskPath: hostCapacity.diskPath,
+        observe: () => observeCapacity({docker, project, runId, waitronImage, startup: true, diskPath: hostCapacity.diskPath, measureStoppedVolume,
           protectedUnchanged: async () => checkProtectedContainers(before, await inventory(), protectedContainerIds)}),
         stop: () => compose(['stop', '--timeout', '10'])});
     } else await start();
@@ -319,7 +334,7 @@ export async function runTestCloudClients({image, waitronImage, protectedContain
                     if (value.controllerScope) {assert.match(value.controllerScope, /^[a-f0-9-]{36}$/); verifierScope = value.controllerScope;}
                   }
                 }
-                return observeCapacity({docker, project, runId, verifierScope, waitronImage, workerId: verifierWorker, diskPath: hostCapacity.diskPath,
+                return observeCapacity({docker, project, runId, verifierScope, waitronImage, workerId: verifierWorker, diskPath: hostCapacity.diskPath, measureStoppedVolume,
                   protectedUnchanged: async () => checkProtectedContainers(before, await inventory(), protectedContainerIds)});
               },
               verify,
@@ -551,21 +566,6 @@ export async function runTestCloudClients({image, waitronImage, protectedContain
     };
     if (measureIntegration) {
       const {measureIntegrationCapacity, observeCapacity} = await import('../deploy/test-cloud/test-fixtures/integration-capacity.mjs');
-      // Recovery leaves the original stopped; measure its retained volume without restarting it.
-      const measureStoppedVolume = async name => {
-        const id = await docker(['create', '--pull=never', '--label', 'cloud.integration.capacity=' + runId,
-          '--network', 'none', '--read-only', '--user', '0:0', '--cap-drop', 'ALL', '--cap-add', 'DAC_OVERRIDE',
-          '--security-opt', 'no-new-privileges', '--pids-limit', '16', '--memory', '32m', '--memory-swap', '32m',
-          '--mount', 'type=volume,src=' + name + ',dst=/capacity,readonly',
-          '--entrypoint', 'du', image, '-sk', '--', '/capacity'], '', 'capacity-volume-create');
-        owned.push(id); record('container', id);
-        try {return await docker(['start', '--attach', id], '', 'capacity-volume-read');}
-        finally {
-          await docker(['rm', '-f', id], '', 'capacity-volume-cleanup');
-          owned.splice(owned.indexOf(id), 1);
-          removed.push(created.find(value => value.kind === 'container' && value.id === id));
-        }
-      };
       const measured = await measureIntegrationCapacity({run: journey,
         observe: async () => ({stage: journeyStage,
           ...await observeCapacity({docker, project, runId, verifierScope, waitronImage,
