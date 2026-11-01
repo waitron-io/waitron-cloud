@@ -4,8 +4,6 @@ import {TranslationMachine} from '@waitron-cloud/translation';
 import {translationPaths,translationResponse} from './translation.ts';
 import {RelayMessages,type RelayAdmissionConfig} from '@waitron-cloud/registration';
 import {relayMessageResponse} from './relay-messages.ts';
-import {fiscalAllocationResponse} from './fiscal-allocations.ts';
-import {FiscalAllocationError,type RegistryOptions} from '@waitron-cloud/fiscal-allocation';
 import {StaffCertificateExchange} from '@waitron-cloud/remote-access/staff-exchange';
 import {staffCertificateResponse} from './staff-certificates.ts';
 import {recoveryCodeKeysFromEnv,type RecoveryCodeKeys} from '@waitron-cloud/backups/recovery-codes';
@@ -53,11 +51,6 @@ function protect(c: Context) {
 }
 function publicError(error: unknown): AccountHttpError {
   if (error instanceof AccountHttpError) return error;
-  if(error instanceof FiscalAllocationError){
-    const code=error.code;
-    return new AccountHttpError(code==='invalid_input'?400:code==='permission_denied'?403:code==='binding_conflict'?409:503,code,
-      ['invalid_input','permission_denied','binding_conflict'].includes(code)?undefined:1);
-  }
   if(error instanceof FactorError)return new AccountHttpError(error.code==='temporarily_unavailable'?503:401,error.code,error.code==='temporarily_unavailable'?1:undefined);
   if (error instanceof IdentityError) {
     if (error.code === 'credentials_invalid') return new AccountHttpError(401, 'credentials_invalid');
@@ -78,7 +71,7 @@ function publicError(error: unknown): AccountHttpError {
   }
   return new AccountHttpError(503, 'temporarily_unavailable', 1);
 }
-export function createAccountApp(options: {pool: Pool; outbox: EmailOutbox; config: AccountHttpConfig;factor?:FactorConfig;fiscalAllocation?:RegistryOptions;relay?:RelayAdmissionConfig;staffCertificates?:boolean;translation?:boolean;translationMachine?:TranslationMachine;leaseIssuer?:LeaseIssuer;leaseTrust?:ReadonlyMap<string,string>;billingDisplay?:BillingDisplayOptions;captures?:CaptureOptions;planMode?:PlanMode;remoteResolve?:RemoteResolver;passwordScreening?:PasswordScreeningProvider;passkeyAdapter?:PasskeyCeremonyAdapter;pairingCodeKeys?:PairingCodeKeys|null;recoveryCodeKeys?:RecoveryCodeKeys|null}) {
+export function createAccountApp(options: {pool: Pool; outbox: EmailOutbox; config: AccountHttpConfig;factor?:FactorConfig;relay?:RelayAdmissionConfig;staffCertificates?:boolean;translation?:boolean;translationMachine?:TranslationMachine;leaseIssuer?:LeaseIssuer;leaseTrust?:ReadonlyMap<string,string>;billingDisplay?:BillingDisplayOptions;captures?:CaptureOptions;planMode?:PlanMode;remoteResolve?:RemoteResolver;passwordScreening?:PasswordScreeningProvider;passkeyAdapter?:PasskeyCeremonyAdapter;pairingCodeKeys?:PairingCodeKeys|null;recoveryCodeKeys?:RecoveryCodeKeys|null}) {
   const config = validateConfig(options.config);
   if(options.relay&&!options.leaseIssuer)throw Error('relay.installation_issuer_required');
   if(options.translation&&!options.leaseIssuer)throw Error('translation.installation_issuer_required');
@@ -131,7 +124,6 @@ export function createAccountApp(options: {pool: Pool; outbox: EmailOutbox; conf
     }
     await consume([{scope: 'all-ip', subject: ip, limit: 120, windowSeconds: 60}]);
     if(relay&&['/v1/installations/email/submit','/v1/installations/email/status','/v1/installations/email/cancel'].includes(c.req.path))return relayMessageResponse(c,{relay,ip,consume});
-    if(c.req.path.startsWith('/api/account/fiscal-allocations/')||c.req.path==='/api/installations/fiscal-allocations/report')return fiscalAllocationResponse(c,{pool,registry:options.fiscalAllocation??null,origin:config.portalOrigin,ip,consume});
     if(c.req.path.startsWith('/api/account/diagnostics/'))return diagnosticsResponse(c,{pool,origin:config.portalOrigin,secure,consume});
     if(c.req.path.startsWith('/api/account/usage/'))return usageResponse(c,{pool,origin:config.portalOrigin,secure,consume});
     if(c.req.path.startsWith('/api/account/security-audit/'))return securityAuditResponse(c,{pool,origin:config.portalOrigin,secure,consume});
