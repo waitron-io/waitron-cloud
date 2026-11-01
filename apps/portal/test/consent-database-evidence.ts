@@ -23,7 +23,7 @@ export async function failConsentDatabaseWait(pool:Pool,schema:string,error:unkn
    })(),
    new Promise<{unavailable:true}>(resolve=>{timer=setTimeout(()=>resolve({unavailable:true}),250);}),
   ]);
- }catch{}finally{clearTimeout(timer);await client.end().catch(()=>{});}
+ }catch{}finally{clearTimeout(timer);const ended=client.end().catch(()=>{});client.connection.stream.destroy();await ended;}
  try{report(JSON.stringify(snapshot));}catch{}
  throw error;
 }

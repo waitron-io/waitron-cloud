@@ -91,3 +91,29 @@ test('the consent diagnostic query budget expires at 250 ms rather than one seco
   }
  }
 });
+
+test('a completed snapshot does not wait for the database peer to acknowledge disconnect',async()=>{
+ const sockets=new Set<Socket>();let completed=false,disconnect=false;
+ const server=createServer({allowHalfOpen:true},socket=>{
+  sockets.add(socket);let startup=true;
+  socket.on('data',bytes=>{
+   if(startup){startup=false;socket.write(Buffer.from([82,0,0,0,8,0,0,0,0,90,0,0,0,5,73]));}
+   else if(bytes[0]===80){
+    socket.write(Buffer.from([49,0,0,0,4,50,0,0,0,4,110,0,0,0,4,67,0,0,0,13,83,69,76,69,67,84,32,48,0,90,0,0,0,5,73]));completed=true;
+   }else if(bytes[0]===88)disconnect=true;
+  });
+  socket.on('end',()=>{disconnect=true;});socket.on('close',()=>sockets.delete(socket));
+ });
+ server.listen(0,'127.0.0.1');await once(server,'listening');
+ const pool=new Pool({host:'127.0.0.1',port:(server.address() as {port:number}).port,user:'test',database:'test',ssl:false});
+ const original=new Error('original');let returned=false;
+ const failed=assert.rejects(evidence.failConsentDatabaseWait(pool,'schema',original,()=>{returned=true;}),error=>error===original);void failed.catch(()=>{});
+ try{
+  await new Promise(resolve=>setTimeout(resolve,500));
+  assert.equal(completed,true,'the peer must complete the snapshot before withholding disconnect');
+  assert.equal(disconnect,true,'the diagnostic must initiate disconnect');
+  assert.equal(returned,true,'disconnect acknowledgement cannot hold the failed consent check');
+ }finally{
+  for(const socket of sockets)socket.destroy();await failed;await pool.end();await new Promise<void>(resolve=>server.close(()=>resolve()));
+ }
+});
