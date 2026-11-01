@@ -18,10 +18,11 @@ Run the reader tests with:
 node --test scripts/verify-test-cloud-receipt.test.mjs
 ```
 
-The combined receipt producer, two paired disposable Waitron venues, continuous
-recovery and independent snapshot fallback still need implementation and execution.
-There is no completed PR7 receipt to validate yet. Keep plan enforcement off and
-complete image qualification before the test-box deployment.
+The paired-client journey below now combines continuous recovery, independent
+snapshot fallback and remote isolation and withdrawal. The combined receipt
+producer, full capacity, rollback and shipping image qualification remain open.
+There is no completed PR7 receipt to validate yet. Keep plan enforcement off
+before the test-box deployment.
 
 ## What is reachable
 
@@ -807,8 +808,7 @@ pinned Waitron source has no automatic exchange caller, so this is explicit
 fixture orchestration. A TLS adapter forwards requests to the running demo
 venue, and a real WireGuard peer connects it to the gateway. The adapter supplies
 no application responses. You can also combine remote access with snapshot
-publication on the same HTTPS venue, as shown below. The complete combination
-with stream and snapshot recovery remains unqualified.
+publication or both recovery paths on the same HTTPS venue, as shown below.
 
 The staff route returns the venue's native availability response and requires
 authentication for its private status path. The public route refuses that
@@ -851,6 +851,29 @@ One real Linux journey passes without skips in 132.4 seconds. Its 31 samples
 stay above 3,600 MiB available memory and 14.30 GiB free disk. Remote withdrawal
 takes 2.201 seconds from the plan setter's return. The archive remains pending
 verification and this journey performs no recovery. Owned resources are removed
-and the three protected Waitron containers remain unchanged. Full capacity,
-rollback, the combined recovery proof, the shipping Alpine release and the
-complete receipt remain open. Keep plan enforcement off.
+and the three protected Waitron containers remain unchanged. The next journey
+combines recovery with remote access. Full capacity, rollback, the shipping Alpine
+release and the complete receipt remain open. Keep plan enforcement off.
+
+To exercise both recovery paths before remote access on the same paired source,
+run:
+
+```sh
+node --test scripts/test-cloud-paid-recovery-remote.test.mjs
+```
+
+Use the same immutable image inputs. This journey verifies the published archive,
+restores the continuous copy, removes that test's stream and restores the unchanged
+snapshot with separate source authority. It then restarts the original source,
+checks its remote routes and withdraws them after downgrade and worker restart.
+The free neighbour must still refuse both backup and remote access. Both recovery
+operations close without starting a recovery target's server, replacing the source
+or sending a Cloud restored report.
+
+One real Linux journey passes without skips in 290.8 seconds, within the unchanged
+300-second limit. Remote withdrawal takes 2.639 seconds. Its 63 resource samples
+stay above 3,213 MiB available memory and 12.55 GiB free disk, with no observed
+out-of-memory kill. Owned cleanup and the protected Waitron containers are checked.
+This fresh demo and isolated recovery clock do not qualify existing trading
+history. Full settled and active-verifier capacity, rollback, the shipping Alpine
+release and the strict complete receipt remain open. Keep plan enforcement off.

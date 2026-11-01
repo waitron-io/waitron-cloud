@@ -945,8 +945,20 @@ implementation or production evidence.
   with withdrawal in 2.201 seconds. Its 31 samples stay above 3,600 MiB available
   memory and 14.30 GiB free disk. The archive stays pending verification; this
   journey performs no recovery. Owned cleanup and protected Waitron state are
-  checked. Combining it with recovery, full capacity, rollback, the strict complete
-  producer receipt and deployment remain open. The old Mac cleanup refusal stays
+  checked. The same-source continuous/snapshot recovery and remote journey now
+  passes one real Linux case without skips in 290.8 seconds, within the unchanged
+  300-second limit. It verifies the archive, restores the continuous copy, removes
+  the test stream and restores the unchanged retained snapshot with separate
+  authority. The original source restarts with its identity before remote isolation
+  and downgrade/worker-restart withdrawal, which takes 2.639 seconds. The free
+  neighbour still refuses backup and remote access. Both recovery operations close
+  without activation, replacement or a Cloud restored report. Its 63 samples stay
+  above 3,213 MiB available memory and 12.55 GiB free disk; owned cleanup and
+  protected Waitron state are checked. This fresh demo does not qualify trading
+  history. Full capacity, rollback, the shipping Alpine release, the strict complete
+  producer receipt and deployment remain open. The combined test's nine-second
+  margin needs attention before adding further fixture work to its unchanged
+  300-second limit. The old Mac cleanup refusal stays
   historical evidence;
   the isolated Linux client proof removes its owned resources successfully.
   The organisation plan store and operator command now persist free/paid metadata,
