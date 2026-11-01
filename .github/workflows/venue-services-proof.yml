@@ -1,0 +1,57 @@
+name: Venue service proof
+on:
+  push:
+    branches: [main]
+  pull_request:
+permissions:
+  contents: read
+  packages: read
+concurrency:
+  group: venue-services-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+jobs:
+  service-receipts:
+    name: service-receipts (${{ matrix.receipt }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - receipt: legacy
+            file: scripts/legacy-service-proof.test.ts
+          - receipt: venue
+            file: scripts/venue-service-proof.test.ts
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '26'
+          package-manager-cache: false
+      - run: node scripts/ci-setup-pnpm.mjs
+        env:
+          NODE_OPTIONS: --require=${{ github.workspace }}/scripts/ci-pnpm-diagnostics.cjs
+          npm_config_fetch_timeout: '15000'
+          npm_config_fetch_retries: '1'
+          npm_config_fetch_retry_mintimeout: '1000'
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '26'
+          cache: pnpm
+          registry-url: https://npm.pkg.github.com
+          scope: '@waitron-io'
+      - run: pnpm install --frozen-lockfile
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Record proof runner capacity
+        run: |
+          node -e "const os=require('node:os'),fs=require('node:fs');const read=p=>fs.existsSync(p)?fs.readFileSync(p,'utf8').trim():null;console.log(JSON.stringify({node:process.version,architecture:process.arch,parallelism:os.availableParallelism(),cpus:os.cpus().length,cpuModel:os.cpus()[0]?.model,totalMemory:os.totalmem(),freeMemory:os.freemem(),cpuQuota:read('/sys/fs/cgroup/cpu.max'),memoryLimit:read('/sys/fs/cgroup/memory.max')}));"
+      - if: matrix.receipt == 'venue'
+        run: node --test --test-reporter=tap scripts/test-cloud-venue-services.test.mjs
+      - run: node --test --test-reporter=tap '${{ matrix.file }}'
+        env:
+          CLOUD_SERVICE_PROOF_TIMINGS: '1'

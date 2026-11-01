@@ -1,3 +1,4 @@
+import {requireTestPlanVenue,type PlanMode} from './organisation-plans.ts';
 import {RelayBounds,RelayBoundsError,type RelayBoundsConfig} from './relay-bounds.ts';
 import type {Pool} from 'pg';
 import {InstallationStore} from './installations.ts';
@@ -14,10 +15,11 @@ function view(row:MessageRow){return {version:1,messageId:row.message_id,state:r
 export class RelayMessages {
  readonly #pool:Pool;readonly #origin:string;readonly #trusted:ReadonlyMap<string,string>;readonly #installations:InstallationStore;
  readonly #bounds:RelayBounds;readonly #grants:RelayGrantStore;readonly #payload:RelayKeys;readonly #replay:RelayKeys;
- constructor(pool:Pool,issuer:LeaseIssuer,origin:string,config:RelayAdmissionConfig,trusted=createLeaseTrust(issuer)){
+ constructor(pool:Pool,issuer:LeaseIssuer,origin:string,config:RelayAdmissionConfig,trusted=createLeaseTrust(issuer),planMode:PlanMode='existing'){
+  requireTestPlanVenue('test',planMode);
   if(config?.mode!=='local-proof')messageError('relay_unavailable');
-  this.#pool=pool;this.#origin=origin;this.#trusted=trusted;this.#installations=new InstallationStore(pool,issuer,origin,trusted);
-  this.#bounds=new RelayBounds(pool,config.bounds);this.#grants=new RelayGrantStore(pool,config.grants);this.#payload=new RelayKeys(config.payloadKeys);this.#replay=new RelayKeys(config.replayKeys);
+  this.#pool=pool;this.#origin=origin;this.#trusted=trusted;this.#installations=new InstallationStore(pool,issuer,origin,trusted,planMode);
+  this.#bounds=new RelayBounds(pool,config.bounds);this.#grants=new RelayGrantStore(pool,config.grants,planMode);this.#payload=new RelayKeys(config.payloadKeys);this.#replay=new RelayKeys(config.replayKeys);
  }
  authenticate(action:RelayAction,envelope:unknown){return this.#installations.authenticate(action,envelope);}
  async execute(action:RelayAction,envelope:unknown){

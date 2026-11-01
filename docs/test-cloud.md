@@ -26,6 +26,38 @@ Both plans receive Cloud signup and password-recovery mail. Paid status creates 
 
 These are Cloud fixture results. They leave deployed translation off, address providers disabled and normal relay startup unavailable. Waitron commit `e2ca1ca487412a2bb7ef1277e48c6adad6068c85` has a paged translation reader, but this proof does not qualify that client or satisfy the separate joint and owner gates. Its email transport still selects SMTP, local capture or unconfigured delivery; this proof supplies no Cloud relay caller. The receipt marks both Waitron journeys `not-qualified`. Final integration, image qualification and test-box deployment remain separate work.
 
+## Check venue-level services
+
+Use the separate venue-level proof to check that a registered venue cannot start
+paid work while a connected venue can. From a clean, committed checkout, run:
+
+```sh
+node scripts/test-postgres.mjs exec node scripts/test-cloud-free-services.mjs --venue-levels > /tmp/cloud-venue-services.json
+```
+
+This version-2 receipt records nine groups: rules, installations, backups,
+recovery, remote access, translation, relay, runtime and storage. It includes the
+commit, tree and passing test counts, and refuses missing, failing or skipped
+groups. The original command and its version-1 free/paid receipt remain available.
+Neither command qualifies a Waitron client or a live provider.
+
+The ordinary command runs one file at a time. CI sets
+`CLOUD_SERVICE_PROOF_CONCURRENCY=2` to share one queue of at most four files
+across the groups, retaining every check and the same receipt fields. Values
+other than `1` or `2` refuse the proof. The `Venue service proof` workflow runs
+each receipt in its own eight-minute job, keeping the 330-second child and
+360-second test limits. The runtime check stays with the venue receipt. To run
+both receipts locally, use `node --test --test-concurrency=1
+scripts/legacy-service-proof.test.ts scripts/venue-service-proof.test.ts` from a
+clean, committed checkout.
+
+For private fixtures, select venue-level authority with
+`CLOUD_VENUE_SERVICE_LEVELS=test` and `CLOUD_TEST_SERVICE_PLANS=0`. Account,
+translation, backup and remote worker commands pass that choice to their service
+checks. A conflicting or invalid setting refuses startup before database work.
+The checked-in deployment leaves this mode dormant; production enforcement,
+deployment and the upgrade/recovery qualification remain separate gates.
+
 ## Build and transfer an image
 
 Build on your Mac using your existing package-read token as a BuildKit secret. The target box builds nothing and receives no source checkout or token. From the reviewed Cloud checkout:

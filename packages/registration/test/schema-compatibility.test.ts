@@ -17,8 +17,8 @@ test('migration refuses a newer release ledger without writing',async()=>{
 test('target verification release checks every applied SQL digest',async()=>{
  const {checkConsumerSchema}=await import(new URL('../../../deploy/local-stack/runtime.mjs',import.meta.url).href);
  const root=new URL('../../../',import.meta.url).pathname;
- assert.equal(migrations.migrationNames.at(-1),'045_billing_store.sql');
- assert.equal(migrations.migrationNames[43],'044_remote_forward_observations.sql');
+ assert.equal(migrations.migrationNames.at(-1),'046_venue_service_authority.sql');
+ assert.equal(migrations.migrationNames[44],'045_billing_store.sql');assert.equal(migrations.migrationNames[43],'044_remote_forward_observations.sql');
  assert.equal(migrations.migrationNames[42],'043_backup_target_verification.sql');
  const row=(await pool.query("SELECT * FROM schema_migrations WHERE name='043_backup_target_verification.sql'")).rows[0];
  assert.ok(row);

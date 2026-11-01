@@ -51,3 +51,10 @@ test('billing proof failures preserve known error codes without leaking private 
  assert.deepEqual(fixture.upgradeFailure(null,'restore'),{event:'schema-upgrade-failed',phase:'restore',code:'proof_failed',location:'unknown'});
  assert.equal(JSON.stringify(fixture.upgradeFailure({code:'billing_state_conflict',stack,message:'never-log-this',secret:'never-log-this'},'upgrade')).includes('private'),false);
 });
+
+test('venue service upgrades select only their own complete distinct pinned pair',()=>{
+ const pair=['--old','a'.repeat(40),'--new','b'.repeat(40)],want={oldHead:'a'.repeat(40),newHead:'b'.repeat(40),factor:false,venueServices:true};
+ assert.deepEqual(fixture.upgradeRevisions(['--venue-services',...pair]),want);
+ assert.deepEqual(fixture.upgradeRevisions([...pair,'--venue-services']),want);
+ for(const args of [['--venue-services'],['--venue-services','--old','main','--new','b'.repeat(40)],['--venue-services','--old','a'.repeat(40),'--new','a'.repeat(40)],['--venue-services',...pair,'--venue-services'],...['--billing','--backup-verification','--monitoring-quiet','--relay-stop'].flatMap(mode=>[[mode,'--venue-services',...pair],['--venue-services',mode,...pair]])])assert.throws(()=>fixture.upgradeRevisions(args),/revisions/);
+});

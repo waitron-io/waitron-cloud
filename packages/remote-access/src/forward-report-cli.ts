@@ -15,7 +15,7 @@ try{
  if(!config||typeof config!=='object'||Object.keys(config).join(',')!=='mappings'||!('mappings'in config)||!Array.isArray(config.mappings))throw new Error();
  const mappings:ForwardReportMapping[]=[];const cells=new Set<string>();
  for(const mapping of config.mappings){validateForwardMapping(mapping);if(cells.has(mapping.cellId))throw new Error();cells.add(mapping.cellId);mappings.push(mapping);}
- const planMode=parsePlanMode(process.env.CLOUD_TEST_SERVICE_PLANS);
+ const planMode=parsePlanMode(process.env.CLOUD_TEST_SERVICE_PLANS,process.env.CLOUD_VENUE_SERVICE_LEVELS);
  pool=new Pool({connectionString:process.env.DATABASE_URL,max:2,connectionTimeoutMillis:5000,statement_timeout:5000});
  pool.on('error',()=>console.error('remote.forward_collection_failed'));
  const poller=new ForwardReportPoller(mappings,new ForwardObservationStore(pool,planMode),message=>console.error(message));

@@ -14,23 +14,24 @@ import {storedRows,relayState,identityAccountState,seedRelay,stoppedRelay,restor
 import {seedMonitoring,monitoringState,legacyMonitoring,restoredMonitoring} from './schema-upgrade-monitoring-fixture.mjs';
 import {seedBackupMonitoring,seedLegacyBackups,upgradedBackups,freshBackupEvidence,backupState,restoredBackups} from './schema-upgrade-backup-fixture.mjs';
 import {seedBilling,billingState,restoredBilling,emptyBilling} from './schema-upgrade-billing-fixture.mjs';
+import {seedVenueServiceAuthority,venueServiceAuthorityState,restoredVenueServiceAuthority,qualifyRestoredVenueWriter} from './schema-upgrade-venue-service-fixture.mjs';
 import {privateObservationDumpArgs} from './database-backup-policy.mjs';
 import {verifySchemaUpgradeReceipt} from './verify-schema-upgrade-receipt.mjs';
 
 const driver=resolve(fileURLToPath(new URL('..',import.meta.url)));
-const {oldHead,newHead,factor,relayStop=false,monitoringQuiet=false,backupVerification=false,billing=false}=upgradeRevisions(process.argv.slice(3));
+const {oldHead,newHead,factor,relayStop=false,monitoringQuiet=false,backupVerification=false,billing=false,venueServices=false}=upgradeRevisions(process.argv.slice(3));
 const output=resolve(process.argv[2]??'/tmp/cloud-schema-upgrade-receipt.json');
 
 const {Pool}=createRequire(new URL('../packages/registration/package.json',import.meta.url))('pg');
 const root=await mkdtemp(join(tmpdir(),'cloud-schema-upgrade-')),old=join(root,'old'),next=join(root,'new');
 const id=randomUUID().slice(0,8),containers=[`cloud-upgrade-${id}`,`cloud-recovery-${id}`,`cloud-upgrade-mail-${id}`];
-if(factor||relayStop||monitoringQuiet||backupVerification||billing)containers.push(`cloud-factor-recovery-${id}`);
+if(factor||relayStop||monitoringQuiet||backupVerification||billing||venueServices)containers.push(`cloud-factor-recovery-${id}`);
 const factorKeys={activeKeyId:'factor-v1',keys:{'factor-v1':randomBytes(32).toString('hex')}};
 const password=randomBytes(24).toString('hex'),email={activeKeyId:'upgrade-v1',keys:{'upgrade-v1':randomBytes(32).toString('hex')}};
 const pairing={activeKeyId:'pairing-v1',keys:{'pairing-v1':randomBytes(32).toString('hex')}};
 const rateKey=randomBytes(32).toString('hex'),issuer=generateKeyPairSync('ed25519').privateKey.export({type:'pkcs8',format:'der'}).toString('base64url');
 const handles=new Set(),pools=[],checks={},timings={},volumes=[];
-let receipt,failure,phase='checkouts';
+let receipt,failure,venueProof,phase='checkouts';
 function run(command,args,options={}){
  try{return execFileSync(command,args,{cwd:driver,encoding:'utf8',timeout:120000,stdio:['pipe','pipe','pipe'],...options});}
  catch{throw new Error(`schema upgrade command failed: ${command} (arguments and output withheld)`);}
@@ -117,22 +118,23 @@ try{
  const smtp=docker('port',containers[2],'1025/tcp').split(':').at(-1),mailPort=docker('port',containers[2],'8025/tcp').split(':').at(-1);
  await until(async()=>{try{return(await fetch(`http://127.0.0.1:${mailPort}/api/v1/messages`)).ok;}catch{return false;}},'mailpit');
  node(old,['packages/registration/src/migrate-cli.ts'],environment(primary.url));
- const state=await seed(old,primary.pool,email,(factor||relayStop||monitoringQuiet||backupVerification||billing)?pairing:undefined);
- if(factor||relayStop||monitoringQuiet||backupVerification||billing)await seedAccountState(old,primary.pool,state);
+ const state=await seed(old,primary.pool,email,(factor||relayStop||monitoringQuiet||backupVerification||billing||venueServices)?pairing:undefined);
+ if(factor||relayStop||monitoringQuiet||backupVerification||billing||venueServices)await seedAccountState(old,primary.pool,state);
  let relayProof,relayAccounts,monitoringProof,monitoringBackup,monitoringBefore,backupProof,backupBefore,backupAfter,backupDump;
- const backupChecks={},billingChecks={};
- let billingProof,billingBefore,billingDump;
- if(relayStop||monitoringQuiet||backupVerification||billing){await enrolFactor(old,primary.pool,state,factorKeys);relayProof=await seedRelay(old,primary.pool,state,issuer);relayAccounts=await identityAccountState(primary.pool);}
+ const backupChecks={},billingChecks={},venueChecks={};
+ let billingProof,billingBefore,billingDump,venueBefore,venueDump,venueLedger,oldBilling;
+ if(relayStop||monitoringQuiet||backupVerification||billing||venueServices){await enrolFactor(old,primary.pool,state,factorKeys);relayProof=await seedRelay(old,primary.pool,state,issuer);relayAccounts=await identityAccountState(primary.pool);}
  if(monitoringQuiet)await seedMonitoring(old,primary.pool,state,email);
- if(backupVerification||billing)await seedBackupMonitoring(old,primary.pool,email);
- if(backupVerification||billing){backupProof=await seedLegacyBackups(old,primary.pool,state);backupBefore=await backupState(primary.pool);monitoringBefore=await monitoringState(primary.pool);}
+ if(backupVerification||billing||venueServices)await seedBackupMonitoring(old,primary.pool,email);
+ if(backupVerification||billing||venueServices){backupProof=await seedLegacyBackups(old,primary.pool,state);backupBefore=await backupState(primary.pool);monitoringBefore=await monitoringState(primary.pool);}
+ if(venueServices){await seedBilling(old,primary.pool,state);oldBilling=await billingState(primary.pool);}
  const beforeAccounts=factor?await accountState(primary.pool):null,beforeIdentity=await identity(primary.pool),oldLedger=await ledger(primary.pool);
- assert.equal(oldLedger.length,billing?44:backupVerification?42:monitoringQuiet?36:relayStop?35:factor?34:26);
+ assert.equal(oldLedger.length,venueServices?45:billing?44:backupVerification?42:monitoringQuiet?36:relayStop?35:factor?34:26);
  const oldAccount=await startAccount(old,primary.url);checks.oldStarted=true;
  await tenantRequests(old,oldAccount,state);await stop(oldAccount.handle);
  // Freeze the recovery point with no running consumers; keys stay outside pg_dump.
- const fullOldLedger=(relayStop||monitoringQuiet||backupVerification||billing)?(await primary.pool.query('SELECT * FROM schema_migrations ORDER BY name')).rows:null;
- const beforeRows=(relayStop||monitoringQuiet||backupVerification||billing)?await storedRows(primary.pool,monitoringQuiet||backupVerification||billing):null,beforeRelay=(relayStop||monitoringQuiet||backupVerification||billing)?await relayState(primary.pool):null;
+ const fullOldLedger=(relayStop||monitoringQuiet||backupVerification||billing||venueServices)?(await primary.pool.query('SELECT * FROM schema_migrations ORDER BY name')).rows:null;
+ const beforeRows=(relayStop||monitoringQuiet||backupVerification||billing||venueServices)?await storedRows(primary.pool,monitoringQuiet||backupVerification||billing||venueServices):null,beforeRelay=(relayStop||monitoringQuiet||backupVerification||billing||venueServices)?await relayState(primary.pool):null;
  const backup=run('docker',['exec',containers[0],'pg_dump','-U','postgres','-d','cloud','-Fc',...privateObservationDumpArgs],{encoding:null});
  const pendingBefore=(await primary.pool.query('SELECT * FROM email_outbox WHERE id=$1',[state.messageId])).rows[0];
  checks.newRefusedOld=await startAccount(next,primary.url,true);
@@ -140,15 +142,18 @@ try{
  const upgradeStart=Date.now(),lock=await primary.pool.connect();
  try{
   await lock.query('BEGIN');const blocker=(await lock.query('SELECT pg_backend_pid() AS pid')).rows[0].pid;
-  await lock.query((relayStop||monitoringQuiet||backupVerification||billing)?'LOCK TABLE schema_migrations IN SHARE MODE':factor?'LOCK TABLE cloud_sessions IN ACCESS SHARE MODE':'LOCK TABLE pairing_requests IN ACCESS SHARE MODE');
+  await lock.query((relayStop||monitoringQuiet||backupVerification||billing||venueServices)?'LOCK TABLE schema_migrations IN SHARE MODE':factor?'LOCK TABLE cloud_sessions IN ACCESS SHARE MODE':'LOCK TABLE pairing_requests IN ACCESS SHARE MODE');
   const migration=child(next,['packages/registration/src/migrate-cli.ts'],{...environment(primary.url),PGAPPNAME:`upgrade-${id}`});
-  const blocked=await until(async()=>{const result=await primary.pool.query("SELECT pid,query,pg_blocking_pids(pid) AS blockers FROM pg_stat_activity WHERE application_name=$1 AND wait_event_type='Lock'",[`upgrade-${id}`]);const row=result.rows[0];return row&&row.blockers.includes(blocker)&&(!(relayStop||monitoringQuiet||backupVerification||billing)||row.query.startsWith('INSERT INTO schema_migrations'))?row:false;},'migration blocked on schema lock');
+  const blocked=await until(async()=>{const result=await primary.pool.query("SELECT pid,query,pg_blocking_pids(pid) AS blockers FROM pg_stat_activity WHERE application_name=$1 AND wait_event_type='Lock'",[`upgrade-${id}`]);const row=result.rows[0];return row&&row.blockers.includes(blocker)&&(!(relayStop||monitoringQuiet||backupVerification||billing||venueServices)||row.query.startsWith('INSERT INTO schema_migrations'))?row:false;},'migration blocked on schema lock');
   await primary.pool.query('SELECT pg_terminate_backend($1)',[blocked.pid]);
   await until(()=>migration.done,'interrupted migration exit');assert.notEqual(migration.code,0);checks.migrationInterrupted=true;
  }finally{await lock.query('ROLLBACK');lock.release();}
  assert.deepEqual(await ledger(primary.pool),oldLedger);
- if(relayStop||monitoringQuiet||backupVerification||billing)assert.deepEqual((await primary.pool.query('SELECT * FROM schema_migrations ORDER BY name')).rows,fullOldLedger);
- if(billing){
+ if(relayStop||monitoringQuiet||backupVerification||billing||venueServices)assert.deepEqual((await primary.pool.query('SELECT * FROM schema_migrations ORDER BY name')).rows,fullOldLedger);
+ if(venueServices){
+  assert.equal((await primary.pool.query("SELECT to_regclass('billing_service_authority') AS table_name")).rows[0].table_name,null);
+  assert.deepEqual(await storedRows(primary.pool,true),beforeRows);venueChecks.interruptedRollback=true;
+ }else if(billing){
   assert.equal((await primary.pool.query("SELECT to_regclass('billing_businesses') AS table_name")).rows[0].table_name,null);
   assert.deepEqual(await storedRows(primary.pool,true),beforeRows);
  }else if(backupVerification){
@@ -169,7 +174,33 @@ try{
  checks.newRefusedInterrupted=await startAccount(next,primary.url,true);
  node(next,['packages/registration/src/migrate-cli.ts'],environment(primary.url));
  node(next,['packages/registration/src/migrate-cli.ts'],environment(primary.url));
- const newLedger=await ledger(primary.pool);assert.equal(newLedger.length,billing?45:backupVerification?43:monitoringQuiet?37:relayStop?36:factor?35:27);checks.retryApplied=true;
+ const newLedger=await ledger(primary.pool);assert.equal(newLedger.length,venueServices?46:billing?45:backupVerification?43:monitoringQuiet?37:relayStop?36:factor?35:27);checks.retryApplied=true;
+ if(venueServices){
+  assert.deepEqual(newLedger.slice(0,45),oldLedger);
+  assert.deepEqual((await primary.pool.query('SELECT * FROM schema_migrations ORDER BY name')).rows.slice(0,45),fullOldLedger);
+  for(const row of oldLedger)assert.deepEqual(await readFile(join(next,'packages/registration/migrations',row.name)),await readFile(join(old,'packages/registration/migrations',row.name)),row.name);
+  venueChecks.oldSqlUnchanged=true;
+  const currentRows=await storedRows(primary.pool,true);
+  for(const name of Object.keys(beforeRows))assert.deepEqual(currentRows[name],beforeRows[name],name+' preserved by authority migration');
+  venueChecks.oldRowsPreserved=true;
+  assert.equal((await primary.pool.query('SELECT count(*) FROM billing_service_authority')).rows[0].count,'0');venueChecks.defaultOff=true;
+  assert.deepEqual(await relayState(primary.pool),beforeRelay);checks.relayStatePreserved=true;
+  assert.deepEqual(await identityAccountState(primary.pool),relayAccounts);checks.accountStatePreserved=true;
+  assert.deepEqual(await monitoringState(primary.pool),monitoringBefore);checks.monitoringStatePreserved=true;
+  const allBefore=await storedRows(primary.pool,true),ledgerBefore=(await primary.pool.query('SELECT * FROM schema_migrations ORDER BY name')).rows;
+  const parallel=[child(next,['packages/registration/src/migrate-cli.ts'],environment(primary.url)),child(next,['packages/registration/src/migrate-cli.ts'],environment(primary.url))];
+  for(const migration of parallel)assert.equal(await migration.exit,0);
+  assert.deepEqual(await storedRows(primary.pool,true),allBefore);
+  assert.deepEqual((await primary.pool.query('SELECT * FROM schema_migrations ORDER BY name')).rows,ledgerBefore);venueChecks.restartIdempotent=true;
+  const tail=ledgerBefore.at(-1);
+  await primary.pool.query('DELETE FROM schema_migrations WHERE name=$1',[tail.name]);
+  try{await startAccount(next,primary.url,true);}finally{await primary.pool.query('INSERT INTO schema_migrations(name,digest,applied_at) VALUES($1,$2,$3)',[tail.name,tail.digest,tail.applied_at]);}
+  await primary.pool.query('UPDATE schema_migrations SET digest=$2 WHERE name=$1',[tail.name,'0'.repeat(64)]);
+  try{await startAccount(next,primary.url,true);}finally{await primary.pool.query('UPDATE schema_migrations SET digest=$2 WHERE name=$1',[tail.name,tail.digest]);}
+  await primary.pool.query("INSERT INTO schema_migrations(name,digest) VALUES('999_fixture_future.sql',$1)",['0'.repeat(64)]);
+  try{await startAccount(next,primary.url,true);}finally{await primary.pool.query("DELETE FROM schema_migrations WHERE name='999_fixture_future.sql'");}
+  assert.deepEqual((await primary.pool.query('SELECT * FROM schema_migrations ORDER BY name')).rows,ledgerBefore);
+ }
  if(billing){
   assert.deepEqual(newLedger.slice(0,44),oldLedger);
   assert.deepEqual((await primary.pool.query('SELECT * FROM schema_migrations ORDER BY name')).rows.slice(0,44),fullOldLedger);
@@ -223,7 +254,7 @@ try{
   assert.deepEqual(await identityAccountState(primary.pool),relayAccounts);checks.accountStatePreserved=true;
   assert.deepEqual(JSON.parse(node(next,['packages/registration/src/relay-control-cli.ts','--status'],environment(primary.url))),{stopped:false});checks.defaultRunning=true;
  }
- if(!factor&&!relayStop&&!monitoringQuiet&&!backupVerification&&!billing){
+ if(!factor&&!relayStop&&!monitoringQuiet&&!backupVerification&&!billing&&!venueServices){
  assert.equal(JSON.parse(node(next,['packages/registration/src/pairing-codes-cli.ts','--once'],environment(primary.url))).upgraded,1);
  assert.equal(JSON.parse(node(next,['packages/registration/src/pairing-codes-cli.ts','--once'],environment(primary.url))).upgraded,0);
  const {PairingStore}=await source(next,'packages/registration/src/pairing.ts');
@@ -269,6 +300,12 @@ try{
   for(const name of ['billingRowsPreserved','pricesFrozen','eventRetryStable','eventCollisionRefused','foreignScopeRefused'])billingChecks[name]=true;
   billingDump=run('docker',['exec',containers[0],'pg_dump','-U','postgres','-d','cloud','-Fc',...privateObservationDumpArgs],{encoding:null});
  }
+ if(venueServices){
+  venueProof=await seedVenueServiceAuthority(next,primary.pool,{...state,backupProof});
+  venueBefore=await venueServiceAuthorityState(primary.pool);venueLedger=(await primary.pool.query('SELECT * FROM schema_migrations ORDER BY name')).rows;
+  await restoredVenueServiceAuthority(next,primary.pool,venueProof,venueBefore);venueChecks.foreignScopeRefused=true;
+  venueDump=run('docker',['exec',containers[0],'pg_dump','-U','postgres','-d','cloud','-Fc',...privateObservationDumpArgs],{encoding:null});
+ }
  timings.upgradeMs=Date.now()-upgradeStart;
  if(monitoringQuiet){email.smtpPort=Number(smtp);monitoringProof=await seedMonitoring(next,primary.pool,state,email);monitoringBefore=await monitoringState(primary.pool);monitoringBackup=run('docker',['exec',containers[0],'pg_dump','-U','postgres','-d','cloud','-Fc',...privateObservationDumpArgs],{encoding:null});}
  const upgradedMonitoringDigest=monitoringQuiet?digest(await storedRows(primary.pool,true)):null;
@@ -285,10 +322,34 @@ try{
  assert.equal(new EmailOutbox(email).open(restoredMail).email,'upgrade-one@example.test');checks.wrongKeyRefused=true;
  const recoveredAccount=await startAccount(old,recovered.url);
  await tenantRequests(old,recoveredAccount,state);await completionRetry(old,recovered.pool,state);
- const oldPairing=await source(old,'packages/registration/src/pairing.ts');assert.equal((await new oldPairing.PairingStore(recovered.pool,(factor||relayStop||monitoringQuiet||backupVerification||billing)?pairing:undefined).start(state.pending)).state,'awaiting_cloud');
+ const oldPairing=await source(old,'packages/registration/src/pairing.ts');assert.equal((await new oldPairing.PairingStore(recovered.pool,(factor||relayStop||monitoringQuiet||backupVerification||billing||venueServices)?pairing:undefined).start(state.pending)).state,'awaiting_cloud');
  node(old,[gate,'packages/registration/src/email-worker-cli.ts','--once'],{...mailEnv,DATABASE_URL:recovered.url});
  assert.equal((await recovered.pool.query('SELECT status FROM email_outbox WHERE id=$1',[state.messageId])).rows[0].status,'sent');
  checks.oldRecovered=true;await stop(recoveredAccount.handle);
+ if(venueServices){
+  assert.deepEqual(await billingState(recovered.pool),oldBilling);
+  assert.deepEqual(await backupState(recovered.pool),backupBefore);
+  assert.deepEqual(await identityAccountState(recovered.pool),relayAccounts);
+  assert.deepEqual(await relayState(recovered.pool),beforeRelay);assert.deepEqual(await monitoringState(recovered.pool),monitoringBefore);
+  const key=(await recovered.pool.query('SELECT sealed FROM backup_key_versions WHERE venue_id=$1',[backupProof.venueId])).rows[0];
+  assert.deepEqual(backupProof.vault.open(backupProof.venueId,1,key.sealed),backupProof.keys);
+  node(next,['packages/registration/src/migrate-cli.ts'],environment(recovered.url));
+  assert.equal((await recovered.pool.query('SELECT count(*) FROM billing_service_authority')).rows[0].count,'0');
+  const {transaction,readVenuePermissions}=await source(next,'packages/registration/src/index.ts');
+  for(const installation of state.installations){const permission=await transaction(recovered.pool,c=>readVenuePermissions(c,installation.venueId,'test-venue-levels'));assert.equal(permission.level,'registered');assert.equal(permission.revision,0);}
+  venueChecks.oldBackupUpgradeUnenrolled=true;
+  const restored=await database(containers[3]);run('docker',['exec','-i',containers[3],'pg_restore','-U','postgres','-d','cloud','--exit-on-error'],{input:venueDump,encoding:null});
+  assert.deepEqual((await restored.pool.query('SELECT * FROM schema_migrations ORDER BY name')).rows,venueLedger);
+  await restoredVenueServiceAuthority(next,restored.pool,venueProof,venueBefore);
+  const beforeRestart=await venueServiceAuthorityState(restored.pool);
+  node(next,['packages/registration/src/migrate-cli.ts'],environment(restored.url));
+  assert.deepEqual(await venueServiceAuthorityState(restored.pool),beforeRestart);
+  const restarted=await startAccount(next,restored.url);await stop(restarted.handle);
+  await restoredVenueServiceAuthority(next,restored.pool,venueProof,venueBefore);
+  venueChecks.staleWriterRefused=await qualifyRestoredVenueWriter(next,restored.pool,venueProof);
+  for(const name of ['newBackupRestored','restoredAuthority','restoredTrials','restoredEvents','restoredKeysAndHolds','restoredRetryStable'])venueChecks[name]=true;
+  assert.deepEqual(await venueServiceAuthorityState(primary.pool),venueBefore);
+ }
  if(billing){
   assert.deepEqual(await backupState(recovered.pool),backupBefore);
   assert.deepEqual(await identityAccountState(recovered.pool),relayAccounts);
@@ -369,9 +430,10 @@ try{
  if(monitoringQuiet)assert.equal(digest(await storedRows(primary.pool,true)),upgradedMonitoringDigest);
  if(relayStop)assert.equal(digest({ledger:(await primary.pool.query('SELECT * FROM schema_migrations ORDER BY name')).rows,rows:await storedRows(primary.pool,true)}),upgradedRelayDigest);
  assert.equal(digest({ledger:await ledger(primary.pool),identity:await identity(primary.pool),mail:(await primary.pool.query('SELECT * FROM email_outbox ORDER BY id')).rows,pairing:(await primary.pool.query('SELECT * FROM pairing_requests ORDER BY id')).rows}),upgradedDigest);checks.upgradedUnchanged=true;
- receipt={schemaVersion:billing?6:backupVerification?5:monitoringQuiet?4:relayStop?3:factor?2:1,driver:{head:git('rev-parse','HEAD'),dirty:git('status','--porcelain')!==''},releases:{old:{head:oldHead,migrations:oldLedger.length,digest:digest(oldLedger)},new:{head:newHead,migrations:newLedger.length,digest:digest(newLedger)}},checks,...(billing?{billingStore:billingChecks}:backupVerification?{backupVerification:backupChecks}:{}),timings,measuredAt:new Date().toISOString(),limitations:[billing?'Only the supplied 44-to-45 pair, synthetic account/factor/relay/monitoring, backups and country billing state, PostgreSQL 18 and local Mailpit; no provider, invoice, enforcement or live recovery.':backupVerification?'Only the supplied 42-to-43 pair with synthetic account/factor/relay/monitoring and backup evidence, PostgreSQL 18 and local Mailpit. Evidence is synthetic; this proves no archive, image, provider or fiscal operation.':monitoringQuiet?'Only the supplied 36-to-37 pair, synthetic accounts/factors/relay and monitoring state, PostgreSQL 18 and local Mailpit; no provider or customer data.':relayStop?'Only the supplied 35-to-36 pair, populated synthetic account/factor/relay state, PostgreSQL 18 and local Mailpit; no provider or customer data.':factor?'Only the supplied 34-to-35 pair, synthetic passkey rows, PostgreSQL 18 and local Mailpit; no provider or customer data.':'Only this pinned 26-to-27 pair, PostgreSQL 18 and local Mailpit; no provider or customer data.','Consumers run as real host Node processes through the current deployment gate; historical binaries have no intrinsic future-schema gate. Container image rebuild remains the separate local-stack proof.','Consumers stop during migration; no mixed-version or online upgrade, downgrade migration, traffic routing or availability target.','Recovery restores the pre-upgrade logical backup and matching external keys into another database; post-backup writes are not recovered.',...(monitoringQuiet?['A separate post-upgrade backup preserves captured notification deadlines and recipients; restored workers refuse wrong or missing email keys. A valid late sent receipt authorizes one recovery; uncertainty and inbox delivery remain outside this receipt.']:[]),...(relayStop?['The stopped backup is restored separately with matching external relay keys; an older pre-stop backup starts not-stopped after upgrade. Ordinary consumer startup remains relay-off.']:[])]};
-}catch(error){failure=error;if(billing)console.error(JSON.stringify(upgradeFailure(error,phase)));}
+ receipt={schemaVersion:venueServices?7:billing?6:backupVerification?5:monitoringQuiet?4:relayStop?3:factor?2:1,driver:{head:git('rev-parse','HEAD'),dirty:git('status','--porcelain')!==''},releases:{old:{head:oldHead,migrations:oldLedger.length,digest:digest(oldLedger)},new:{head:newHead,migrations:newLedger.length,digest:digest(newLedger)}},checks,...(venueServices?{venueServices:venueChecks}:billing?{billingStore:billingChecks}:backupVerification?{backupVerification:backupChecks}:{}),timings,measuredAt:new Date().toISOString(),limitations:[venueServices?'Only the supplied 45-to-46 pair, synthetic country authority, PostgreSQL 18, local Mailpit and native SeaweedFS; separate old and populated backups with matching external keys, and stale private writer state; no provider, deployment, fiscal operation or live recovery.':billing?'Only the supplied 44-to-45 pair, synthetic account/factor/relay/monitoring, backups and country billing state, PostgreSQL 18 and local Mailpit; no provider, invoice, enforcement or live recovery.':backupVerification?'Only the supplied 42-to-43 pair with synthetic account/factor/relay/monitoring and backup evidence, PostgreSQL 18 and local Mailpit. Evidence is synthetic; this proves no archive, image, provider or fiscal operation.':monitoringQuiet?'Only the supplied 36-to-37 pair, synthetic accounts/factors/relay and monitoring state, PostgreSQL 18 and local Mailpit; no provider or customer data.':relayStop?'Only the supplied 35-to-36 pair, populated synthetic account/factor/relay state, PostgreSQL 18 and local Mailpit; no provider or customer data.':factor?'Only the supplied 34-to-35 pair, synthetic passkey rows, PostgreSQL 18 and local Mailpit; no provider or customer data.':'Only this pinned 26-to-27 pair, PostgreSQL 18 and local Mailpit; no provider or customer data.','Consumers run as real host Node processes through the current deployment gate; historical binaries have no intrinsic future-schema gate. Container image rebuild remains the separate local-stack proof.','Consumers stop during migration; no mixed-version or online upgrade, downgrade migration, traffic routing or availability target.','Recovery restores the pre-upgrade logical backup and matching external keys into another database; post-backup writes are not recovered.',...(monitoringQuiet?['A separate post-upgrade backup preserves captured notification deadlines and recipients; restored workers refuse wrong or missing email keys. A valid late sent receipt authorizes one recovery; uncertainty and inbox delivery remain outside this receipt.']:[]),...(relayStop?['The stopped backup is restored separately with matching external relay keys; an older pre-stop backup starts not-stopped after upgrade. Ordinary consumer startup remains relay-off.']:[])]};
+}catch(error){failure=error;if(billing||venueServices)console.error(JSON.stringify(upgradeFailure(error,phase)));}
 finally{
+ await venueProof?.storage.stop();
  for(const handle of handles)await stop(handle);
  for(const pool of pools)await pool.end();
  for(const name of containers)try{docker('rm','-f','-v',name);}catch{}
@@ -380,5 +442,5 @@ finally{
 const remainingContainers=new Set(docker('ps','-a','--format','{{.Names}}').split('\n'));
 const remainingVolumes=new Set(docker('volume','ls','--format','{{.Name}}').split('\n'));
 const cleanup={containers:containers.filter(name=>remainingContainers.has(name)).length,volumes:volumes.filter(name=>remainingVolumes.has(name)).length,checkouts:Number(existsSync(root))};
-if(failure)throw new Error(`Schema upgrade proof failed; cleanup ${JSON.stringify(cleanup)}`,billing?undefined:{cause:failure});
+if(failure)throw new Error(`Schema upgrade proof failed; cleanup ${JSON.stringify(cleanup)}`,(billing||venueServices)?undefined:{cause:failure});
 receipt.cleanup=cleanup;verifySchemaUpgradeReceipt(receipt);await writeFile(output,JSON.stringify(receipt,null,2)+'\n',{mode:0o600});console.log(JSON.stringify({output,checks,timings,cleanup}));

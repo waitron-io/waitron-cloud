@@ -24,7 +24,7 @@ const stop = () => {
 process.once('SIGINT', stop); process.once('SIGTERM', stop);
 try {
   if (process.argv.length !== 2 || !process.env.DATABASE_URL || !process.env.CLOUD_EMAIL_ACTIVE_KEY_ID || !process.env.CLOUD_EMAIL_KEYS) throw new Error();
-  const planMode=parsePlanMode(process.env.CLOUD_TEST_SERVICE_PLANS);
+  const planMode=parsePlanMode(process.env.CLOUD_TEST_SERVICE_PLANS,process.env.CLOUD_VENUE_SERVICE_LEVELS);
   const staffFlag=process.env.CLOUD_STAFF_CERTIFICATES??'0';if(!['0','1'].includes(staffFlag))throw new Error();
   const staffCertificates=staffFlag==='1';
   const translationFlag=process.env.CLOUD_TRANSLATION??'0';if(!['0','1'].includes(translationFlag))throw new Error();
@@ -44,7 +44,7 @@ try {
     const leaseIssuer=process.env.CLOUD_INSTALLATION_ISSUER_KEY ? createLeaseIssuer(process.env.CLOUD_INSTALLATION_ISSUER_KEY) : undefined;
     if(process.env.CLOUD_INSTALLATION_TRUSTED_KEYS&&!leaseIssuer)throw new Error();
     const leaseTrust=leaseIssuer?createLeaseTrust(leaseIssuer,process.env.CLOUD_INSTALLATION_TRUSTED_KEYS):undefined;
-    captures=planMode==='test-free-paid'?await openTestCaptureRuntime({pool,mode:planMode,directory:process.env.LOCAL_STACK_CONFIG_DIR??'/run/local-stack'}):undefined;
+    captures=planMode!=='existing'?await openTestCaptureRuntime({pool,mode:planMode,directory:process.env.LOCAL_STACK_CONFIG_DIR??'/run/local-stack'}):undefined;
     running = await startAccountServer({planMode,staffCertificates,translation,captures:captures?.options,pool, outbox, config, factor, portalAssets, leaseIssuer, leaseTrust, passwordScreening, host: process.env.CLOUD_HTTP_HOST ?? '127.0.0.1', port: Number(portText)});
     const address = running.server.address();
     if (!address || typeof address === 'string') throw new Error();

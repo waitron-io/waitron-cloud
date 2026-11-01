@@ -3,6 +3,7 @@ import type {Pool,PoolClient} from 'pg';
 import {transaction,type PlanMode} from '@waitron-cloud/registration';
 import {isUuid,type GatewayRoute} from './manifest.ts';
 import {routeBinding,verifyForwardReport,type ForwardObservation,type PublicForwardView} from './forward-report.ts';
+import {eligibleRemoteInstallations,legacyRemoteExclusion,lockLegacyRemoteScope} from './plan-permissions.ts';
 import type {ForwardReportMapping} from './forward-report-collector.ts';
 
 const fail=():never=>{throw new Error('invalid_forward_reporter');};
@@ -22,20 +23,26 @@ export async function revokeForwardReporter(client:PoolClient,cellId:string,gene
  const current=(await client.query('SELECT generation FROM remote_forward_reporters WHERE cell_id=$1 FOR UPDATE',[cellId])).rows[0];if(!current||Number(current.generation)!==generation)fail();
  await client.query('UPDATE remote_forward_reporters SET revoked_at=COALESCE(revoked_at,clock_timestamp()) WHERE cell_id=$1',[cellId]);
 }
-async function lockInstallations(client:PoolClient,ids:string[]):Promise<void>{
+async function lockInstallations(client:PoolClient,ids:string[],mode:PlanMode):Promise<Set<string>|undefined>{
+ if(mode==='test-venue-levels')return new Set(await eligibleRemoteInstallations(client,mode,undefined,{installationIds:ids}));
+ const captured=mode==='test-free-paid'?await lockLegacyRemoteScope(client,undefined,ids):undefined;
  // A batch can span organisations. Sorted policy locks precede every installation and cell lock.
- await client.query(`SELECT o.id FROM organisations o WHERE EXISTS(SELECT 1 FROM venues v JOIN installations i ON i.venue_id=v.id
+ if(!captured)await client.query(`SELECT o.id FROM organisations o WHERE EXISTS(SELECT 1 FROM venues v JOIN installations i ON i.venue_id=v.id
   WHERE v.organisation_id=o.id AND i.id=ANY($1::uuid[])) ORDER BY o.id FOR SHARE OF o`,[ids]);
- await client.query('SELECT id FROM installations WHERE id=ANY($1::uuid[]) ORDER BY id FOR SHARE',[ids]);
+ const locked=(await client.query('SELECT id FROM installations WHERE id=ANY($1::uuid[]) AND ($2::uuid[] IS NULL OR venue_id=ANY($2::uuid[])) ORDER BY id FOR SHARE',[ids,captured?.venues??null])).rows;
+ if(captured)return new Set(locked.map(row=>row.id));
 }
-async function currentRoute(client:PoolClient,id:string,mode:PlanMode){
+async function currentRoute(client:PoolClient,id:string,mode:PlanMode,eligible?:Set<string>){
+ if(mode==='test-venue-levels'&&!eligible?.has(id))return;
+ if(mode==='test-free-paid'&&!eligible?.has(id))return;
+ const exclusion=await legacyRemoteExclusion(client,mode);
  return (await client.query(`SELECT p.cell_id AS "cellId",p.installation_id AS "installationId",p.venue_id AS "venueId",host(p.address) AS address,
   p.port,p.peer_public_key AS "peerPublicKey",s.hostname AS "staffHostname",u.hostname AS "publicHostname",i.configuration_revision AS revision,v.environment
   FROM installations i JOIN venues v ON v.id=i.venue_id JOIN organisations o ON o.id=v.organisation_id
   JOIN remote_placements p ON p.installation_id=i.id AND p.venue_id=i.venue_id
   JOIN remote_hostnames s ON s.venue_id=i.venue_id AND s.kind='staff' JOIN remote_hostnames u ON u.venue_id=i.venue_id AND u.kind='public'
   JOIN installation_services service ON service.installation_id=i.id AND service.service='remote_access' AND service.state<>'unconfigured'
-  WHERE i.id=$1 AND i.revoked_at IS NULL AND i.superseded_by IS NULL AND ($2='existing' OR (o.service_plan='paid' AND v.environment='test'))`,[id,mode])).rows[0];
+  WHERE i.id=$1 AND i.revoked_at IS NULL AND i.superseded_by IS NULL AND ($2 IN ('existing','test-venue-levels') OR (o.service_plan='paid' AND v.environment='test'${exclusion}))`,[id,mode])).rows[0];
 }
 type Row=Record<string,any>;
 function bound(observation:ForwardObservation,route:Row|undefined,cell:Row|undefined,reporter:Row|undefined,now:number):boolean{
@@ -54,14 +61,14 @@ function fromRow(row:Row):ForwardObservation{
 }
 export class ForwardObservationStore {
  readonly #pool:Pool;readonly #mode:PlanMode;
- constructor(pool:Pool,planMode:PlanMode='existing'){if(!['existing','test-free-paid'].includes(planMode))fail();this.#pool=pool;this.#mode=planMode;}
+ constructor(pool:Pool,planMode:PlanMode='existing'){if(!['existing','test-free-paid','test-venue-levels'].includes(planMode))fail();this.#pool=pool;this.#mode=planMode;}
  async record(mapping:ForwardReportMapping,envelope:unknown):Promise<'accepted'|'ignored'>{
   if(mapping.country!=='ES'||!['test','production'].includes(mapping.environment)||!isUuid(mapping.cellId))return 'ignored';
   return transaction(this.#pool,async client=>{
    const initial=(await client.query('SELECT public_key FROM remote_forward_reporters WHERE cell_id=$1',[mapping.cellId])).rows[0];if(!initial)return 'ignored';
    let report;try{report=verifyForwardReport(envelope,createPublicKey(initial.public_key),(await client.query('SELECT clock_timestamp() AS now')).rows[0].now.getTime());}catch{return 'ignored';}
    if(report.cellId!==mapping.cellId)return 'ignored';
-   await lockInstallations(client,report.observations.map(o=>o.installationId));
+   const eligible=await lockInstallations(client,report.observations.map(o=>o.installationId),this.#mode);
    const cell=(await client.query('SELECT * FROM remote_cells WHERE id=$1 FOR SHARE',[mapping.cellId])).rows[0];
    const reporter=(await client.query('SELECT * FROM remote_forward_reporters WHERE cell_id=$1 FOR UPDATE',[mapping.cellId])).rows[0];
    const now:Date=(await client.query('SELECT clock_timestamp() AS now')).rows[0].now;
@@ -69,7 +76,7 @@ export class ForwardObservationStore {
     ||Number(reporter.generation)!==report.generation||Number(reporter.last_sequence)>=report.sequence||reporter.next_accept_at>now)return 'ignored';
    try{report=verifyForwardReport(envelope,createPublicKey(reporter.public_key),now.getTime());}catch{return 'ignored';}
    for(const observation of report.observations){
-    const route=await currentRoute(client,observation.installationId,this.#mode);if(!bound(observation,route,cell,reporter,now.getTime()))continue;
+    const route=await currentRoute(client,observation.installationId,this.#mode,eligible);if(!bound(observation,route,cell,reporter,now.getTime()))continue;
     const prior=(await client.query('SELECT * FROM remote_forward_observations WHERE venue_id=$1 FOR UPDATE',[observation.venueId])).rows[0];
     if(prior){
      const sameStream=prior.cell_id===observation.cellId&&prior.gateway_id===observation.gatewayId&&Number(prior.generation)===observation.generation;
@@ -91,7 +98,7 @@ export class ForwardObservationStore {
  }
  async readCurrent(client:PoolClient,installationId:string):Promise<PublicForwardView|null>{
   if(!isUuid(installationId))return null;
-  await lockInstallations(client,[installationId]);const route=await currentRoute(client,installationId,this.#mode);if(!route)return null;
+  const eligible=await lockInstallations(client,[installationId],this.#mode);const route=await currentRoute(client,installationId,this.#mode,eligible);if(!route)return null;
   const cell=(await client.query('SELECT * FROM remote_cells WHERE id=$1 FOR SHARE',[route.cellId])).rows[0];
   const reporter=(await client.query('SELECT * FROM remote_forward_reporters WHERE cell_id=$1 FOR SHARE',[route.cellId])).rows[0];
   const row=(await client.query('SELECT * FROM remote_forward_observations WHERE installation_id=$1',[installationId])).rows[0];if(!row)return null;

@@ -27,7 +27,7 @@ function validate(value:unknown):asserts value is Configuration {
  const url=new URL(config.acme.directoryUrl);if(url.protocol!=='https:'||url.username||url.password||!config.acme.email.includes('@'))throw new Error();
 }
 try{
- const planMode=parsePlanMode(process.env.CLOUD_TEST_SERVICE_PLANS);
+ const planMode=parsePlanMode(process.env.CLOUD_TEST_SERVICE_PLANS,process.env.CLOUD_VENUE_SERVICE_LEVELS);
  const [configFile,mode,...extra]=process.argv.slice(2);if(!configFile||extra.length||mode&&!['--once','--status'].includes(mode)||!process.env.DATABASE_URL)throw new Error();
  const config:unknown=JSON.parse(await readFile(configFile,'utf8'));validate(config);
  const artifacts=new FileReconcilerArtifacts({routes:config.routes,certificates:config.certificates}),keys=new Map<string,KeyObject>();

@@ -11,7 +11,8 @@ import {openTestBackupVerifier,claimTestBackupWorker} from './backup-verifier-ru
 export {openTestBackupVerifier,claimTestBackupWorker,verifierWaitronRevision} from './backup-verifier-runtime.mjs';
 const {Pool}=createRequire(new URL('../../packages/registration/package.json',import.meta.url))('pg');
 export async function runTestBackupWorker(env=process.env,args=process.argv.slice(2)){
- if(parsePlanMode(env.CLOUD_TEST_SERVICE_PLANS)!=='test-free-paid')throw Error('test_cloud.plan_mode');
+ const planMode=parsePlanMode(env.CLOUD_TEST_SERVICE_PLANS,env.CLOUD_VENUE_SERVICE_LEVELS);
+ if(!['test-free-paid','test-venue-levels'].includes(planMode))throw Error('test_cloud.plan_mode');
  const mode=args[0];if(args.length>1||mode&&!['--once','--status','--retry-failed'].includes(mode)||!env.DATABASE_URL)throw Error('test_cloud.backup_configuration');
  if(!['--status','--retry-failed'].includes(mode)){
   const state=env.CLOUD_VERIFIER_STATE_DIR,config=resolve(env.LOCAL_STACK_CONFIG_DIR??'/run/local-stack');
@@ -28,14 +29,14 @@ export async function runTestBackupWorker(env=process.env,args=process.argv.slic
   ownership=await claimTestBackupWorker(pool,shutdown);
   const {verify,controllerScope}=await openTestBackupVerifier({directory:env.CLOUD_VERIFIER_STATE_DIR,image:env.CLOUD_VERIFIER_IMAGE});
   const ca=await readFile(env.CLOUD_BACKUP_CA_FILE,'utf8');storage=workerObjects(env,ca);
-  const worker=new BackupWorker(pool,new BackupCatalogue(pool,new BackupKeyVault(Buffer.from(master,'hex')),storage.objects,'test-free-paid'),verify,controllerScope);
+  const worker=new BackupWorker(pool,new BackupCatalogue(pool,new BackupKeyVault(Buffer.from(master,'hex')),storage.objects,planMode),verify,controllerScope);
   if(mode==='--once'){await worker.schedule();await worker.runOnce(stop.signal);console.log(JSON.stringify(await worker.status()));}
   else await runWorkerLoop({signal:stop.signal,concurrency:1,scheduleIntervalMs:60000,pollIntervalMs:1000,schedule:()=>worker.schedule(),runOnce:async signal=>{try{return await worker.runOnce(signal);}finally{storage.close();}}});
  }finally{storage?.close();try{await ownership?.release();}finally{await pool.end();}process.removeListener('SIGINT',shutdown);process.removeListener('SIGTERM',shutdown);}
 }
 if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){
  try{
-  if(parsePlanMode(process.env.CLOUD_TEST_SERVICE_PLANS)==='existing')await import('../../packages/backups/src/worker-cli.ts');
+  if(parsePlanMode(process.env.CLOUD_TEST_SERVICE_PLANS,process.env.CLOUD_VENUE_SERVICE_LEVELS)==='existing')await import('../../packages/backups/src/worker-cli.ts');
   else await runTestBackupWorker();
  }catch{console.error('Test Cloud backup worker failed; check private configuration, pinned image and owned verifier state');process.exitCode=1;}
 }

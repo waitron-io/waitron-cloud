@@ -67,3 +67,18 @@ test('billing receipt requires every independent upgrade and restore fact',async
  }
  for(const change of [v=>delete v.billingStore,v=>v.billingStore.secret='private',v=>v.releases.new.migrations=44,v=>v.releases.old.migrations=43,v=>v.releases.new.migrations=46,v=>v.releases.new.digest=v.releases.old.digest,v=>v.releases.new.head=v.releases.old.head,v=>v.driver.head='c'.repeat(40),v=>v.driver.dirty=true,v=>v.cleanup.containers=1,v=>v.cleanup.volumes=1,v=>v.cleanup.checkouts=1,v=>v.schemaVersion=5,v=>v.extra=true,v=>v.checks.pairingUpgraded=true]){const v=structuredClone(valid);change(v);assert.throws(()=>verify(v),/schema_upgrade_receipt/);}
 });
+
+test('venue service receipt requires exact candidate and every independent upgrade and restoration fact',async()=>{
+ const {verifySchemaUpgradeReceipt:verify}=await import(path.href);
+ const checks=['oldStarted','newRefusedOld','migrationInterrupted','rollbackComplete','newRefusedInterrupted','retryApplied','oldRefusedNew','newStarted','identityPreserved','tenantsIsolated','completionRetry','pendingMailPreserved','mailDelivered','backupRestored','oldRecovered','wrongKeyRefused','upgradedUnchanged','accountStatePreserved','relayStatePreserved','monitoringStatePreserved'];
+ const authority=['oldSqlUnchanged','oldRowsPreserved','defaultOff','interruptedRollback','restartIdempotent','foreignScopeRefused','newBackupRestored','restoredAuthority','restoredTrials','restoredEvents','restoredKeysAndHolds','restoredRetryStable','staleWriterRefused','oldBackupUpgradeUnenrolled'];
+ const valid={schemaVersion:7,measuredAt:'2026-11-01T10:00:00.000Z',driver:{head:'b'.repeat(40),dirty:false},releases:{old:{head:'a'.repeat(40),migrations:45,digest:'a'.repeat(64)},new:{head:'b'.repeat(40),migrations:46,digest:'b'.repeat(64)}},checks:Object.fromEntries(checks.map(name=>[name,true])),venueServices:Object.fromEntries(authority.map(name=>[name,true])),timings:{upgradeMs:1,recoveryMs:2},cleanup:{containers:0,volumes:0,checkouts:0},limitations:['Synthetic venue authority and separate logical backups only.']};
+ assert.equal(verify(valid),valid);
+ for(const section of ['checks','venueServices'])for(const key of Object.keys(valid[section]))for(const value of [undefined,false,'true',1,null]){
+  const changed=structuredClone(valid);if(value===undefined)delete changed[section][key];else changed[section][key]=value;
+  assert.throws(()=>verify(changed),/schema_upgrade_receipt/,`${section}.${key}: ${value}`);
+ }
+ for(const mutate of [v=>delete v.venueServices,v=>v.venueServices.extra=true,v=>v.checks.extra=true,v=>v.extra=true,v=>v.driver.dirty=true,v=>v.driver.head='c'.repeat(40),v=>v.releases.old.head=v.releases.new.head,v=>v.releases.old.digest=v.releases.new.digest,v=>v.releases.old.migrations=44,v=>v.releases.new.migrations=45,v=>v.releases.new.migrations=47,v=>v.releases.new.head='HEAD',v=>v.cleanup.containers=1,v=>v.cleanup.volumes=1,v=>v.cleanup.checkouts=1,v=>v.schemaVersion=6]){
+  const changed=structuredClone(valid);mutate(changed);assert.throws(()=>verify(changed),/schema_upgrade_receipt/);
+ }
+});

@@ -8,7 +8,7 @@ let pool: Pool | undefined, result: OrganisationPlanView | undefined, failed = f
 try {
   const [command, option, organisationId, planOption, plan] = process.argv.slice(2);
   const count = process.argv.length - 2;
-  if (parsePlanMode(process.env.CLOUD_TEST_SERVICE_PLANS) !== 'test-free-paid'
+  if (parsePlanMode(process.env.CLOUD_TEST_SERVICE_PLANS,process.env.CLOUD_VENUE_SERVICE_LEVELS) !== 'test-free-paid'
     || option !== '--organisation' || !organisationId
     || !(command === 'show' && count === 3 || command === 'set' && count === 5 && planOption === '--plan' && (plan === 'free' || plan === 'paid'))
     || !process.env.DATABASE_URL) throw new Error();

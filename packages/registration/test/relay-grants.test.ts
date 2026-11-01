@@ -178,7 +178,7 @@ test('default startup refuses reservations against grants created by configured 
 
 test('a fresh process returns the original reservation after restart',async()=>{
  const s=store(),g=await approve(s),input=reservation(g),first:any=await reserve(s,g,input);
- const child=spawn(process.execPath,['test/fixtures/relay-restart.ts'],{env:{...process.env,TEST_DATABASE_OPTIONS:`-c search_path=${schema} -c statement_timeout=5000`},stdio:['pipe','pipe','pipe']});
+ const child=spawn(process.execPath,['test/fixtures/relay-restart.ts'],{cwd:new URL('../',import.meta.url),env:{...process.env,TEST_DATABASE_OPTIONS:`-c search_path=${schema} -c statement_timeout=5000`},stdio:['pipe','pipe','pipe']});
  let stdout='',stderr='';child.stdout.on('data',b=>{stdout+=b;});child.stderr.on('data',b=>{stderr+=b;});
  const exited=new Promise<number|null>((resolve,reject)=>{child.once('error',reject);child.once('exit',resolve);});
  child.stdin.end(JSON.stringify({config:configured(),authenticated:{installationId:installation,publicKey:`key-${installation}`},input}));

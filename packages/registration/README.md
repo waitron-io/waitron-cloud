@@ -291,3 +291,19 @@ results, and upgrade from the seven-migration schema with an existing installati
 PairingStore requires separately supplied verification keys for code checks. See
 [pairing key configuration, upgrade and rotation](../../docs/pairing-code-keys.md).
 Signed status and completion keep their existing machine-proof and approval checks.
+
+## Venue-level relay checks in test fixtures
+
+Use the explicit `test-venue-levels` permission mode for venue-level billing fixtures.
+Pass it as the third argument to `RelayGrantStore` and `RelayWorker`, or the sixth
+argument to `RelayMessages`. Their default remains `existing`; the account HTTP
+app passes its selected mode to message admission.
+
+Mail remains available at registered, connected and hosted levels. Each approval,
+message admission and handoff reads the venue policy before locking its installation.
+You still need a verified owner, explicit consent, verified origin, a current grant
+and an available account allowance. A billing transition creates no mail grant and
+cannot bypass an operator stop. For private fixtures, worker commands select this
+mode with `CLOUD_VENUE_SERVICE_LEVELS=test` and `CLOUD_TEST_SERVICE_PLANS=0`.
+Conflicting or invalid flags refuse startup before database work. The checked-in
+deployment keeps the mode dormant; production release qualification remains open.

@@ -57,6 +57,7 @@ export async function smtp(t: TestContext, options: SMTPServerOptions = {}) {
 export async function processWorker(t: TestContext, f: Awaited<ReturnType<typeof setup>>, port: number, suffix = randomUUID().slice(0, 8)) {
   const name = f.schema + '_' + suffix;
   const child = spawn(process.execPath, ['test/fixtures/relay-stop-process.ts'], {
+    cwd: new URL('../../', import.meta.url),
     env: {...process.env, RELAY_TEST_SCHEMA: f.schema}, stdio: ['ignore', 'pipe', 'pipe', 'ipc']});
   let error = '', closed = false, sequence = 0;
   child.stderr!.on('data', part => {error += part;});

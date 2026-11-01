@@ -1,6 +1,6 @@
 import {retentionExpirySql} from './retention.ts';
 import type { Pool, PoolClient } from "pg";
-import { readVenuePlan, type PlanMode, transaction } from "@waitron-cloud/registration";
+import { readVenuePlan, readVenuePermissions, requireVenueService, type PlanMode, transaction } from "@waitron-cloud/registration";
 import { BackupKeyVault, type BackupKeys } from "./keys.ts";
 import {
   validateLocation,
@@ -68,8 +68,39 @@ export function backupFail(code: string): never {
   throw new Error("backup." + code);
 }
 export async function backupPlan(client: PoolClient, venueId: string, mode: PlanMode): Promise<void> {
-  try { if (await readVenuePlan(client, venueId, mode) !== 'paid') backupFail('permission_denied'); }
+  try {
+    if (mode === 'test-venue-levels') return await requireVenueService(client,venueId,'retained_snapshots',mode);
+    if (await readVenuePlan(client, venueId, mode) !== 'paid') backupFail('permission_denied');
+  }
   catch (error) { if (error instanceof Error && error.message === 'permission_denied') backupFail('permission_denied'); throw error; }
+}
+async function snapshotsAllowed(client:PoolClient,venueId:string,mode:PlanMode):Promise<boolean>{
+  if(mode==='test-venue-levels')return (await readVenuePermissions(client,venueId,mode)).level!=='registered';
+  return await readVenuePlan(client,venueId,mode)==='paid';
+}
+async function publicationTransaction<T>(client:PoolClient,action:(client:PoolClient)=>Promise<T>):Promise<T>{
+  await client.query('BEGIN');
+  try{
+    const result=await action(client);await client.query('COMMIT');return result;
+  }catch(error){
+    try{await client.query('ROLLBACK');}catch{}
+    throw error;
+  }
+}
+async function publicationSession<T>(pool:Pool,id:string,action:(client:PoolClient)=>Promise<T>):Promise<T>{
+  const client=await pool.connect(),lock='snapshot-publication:'+id;
+  let discard=false;
+  const onError=()=>{discard=true;};client.on('error',onError);
+  try{
+    // One capture's canonical object stays exclusive while authority transactions release their locks.
+    await client.query('SELECT pg_advisory_lock(hashtextextended($1,0))',[lock]);
+    return await action(client);
+  }catch(error){discard=true;throw error;}
+  finally{
+    try{if(!discard)await client.query('SELECT pg_advisory_unlock(hashtextextended($1,0))',[lock]);}
+    catch(error){discard=true;throw error;}
+    finally{client.release(discard);client.removeListener('error',onError);}
+  }
 }
 export async function lockVenue(client: PoolClient, id: string) {
   const row = (
@@ -117,6 +148,7 @@ async function active(client: PoolClient, id: string, mode: PlanMode) {
     )
   ).rows[0];
   if (!row) backupFail("unavailable");
+  if(mode==='test-venue-levels'&&row.venue_id!==initial.venue_id)backupFail('permission_denied');
   if (row.revoked_at) backupFail("revoked");
   if (row.environment !== "test") backupFail("local_integration_only");
   return row;
@@ -244,7 +276,7 @@ export class BackupCatalogue {
         )
           backupFail("conflict");
         const setup=(await client.query("SELECT state FROM installation_services WHERE installation_id=$1 AND service='retained_snapshots'",[installationId])).rows[0];
-        if(this.#planMode==='test-free-paid' && setup?.state==='unconfigured') {
+        if((this.#planMode==='test-free-paid'||this.#planMode==='test-venue-levels') && setup?.state==='unconfigured') {
           await client.query("UPDATE installation_services SET state='provisioning',configuration=$2 WHERE installation_id=$1 AND service='retained_snapshots'",[installationId,{version:1,provider:'local-s3',bucket:l.bucket}]);
           await client.query('UPDATE installations SET configuration_revision=configuration_revision+1 WHERE id=$1',[installationId]);
         }
@@ -334,6 +366,7 @@ export class BackupCatalogue {
   ): Promise<BackupPoint> {
     if (!uuid(id)) backupFail("unavailable");
     validateMetadata(m);
+    if(this.#planMode==='test-venue-levels')return this.#publishVenue(installationId,id,m,fence);
     const published = await transaction(this.#pool, async (client) => {
       const install = await active(client, installationId, this.#planMode),
         l = await lockVenue(client, install.venue_id),
@@ -386,6 +419,49 @@ export class BackupCatalogue {
     await this.#objects(published.location).remove("incoming/" + id);
     return published.point;
   }
+  async #publishVenue(installationId:string,id:string,m:PointMetadata,fence?:MutationFence):Promise<BackupPoint>{
+    return publicationSession(this.#pool,id,async client=>{
+      const first=await publicationTransaction(client,async client=>{
+        const install=await active(client,installationId,this.#planMode),l=await lockVenue(client,install.venue_id);
+        const capture=(await client.query("SELECT *,expired_at IS NOT NULL OR created_at+interval '24 hours'<=clock_timestamp() AS expired FROM backup_captures WHERE id=$1 AND installation_id=$2",[id,installationId])).rows[0];
+        if(!capture)backupFail('unavailable');
+        await fence?.(client);
+        const prior=await point(client,id);
+        if(prior&&!sameMetadata(prior,m))backupFail('conflict');
+        if(!prior&&capture.expired)backupFail('capture_expired');
+        const permission=await readVenuePermissions(client,install.venue_id,'test-venue-levels');
+        return {prior,venueId:install.venue_id as string,publicKey:install.public_key as string,generation:permission.revision,keyVersion:capture.key_version as number,location:location(l)};
+      });
+      const objects=this.#objects(first.location);
+      if(first.prior){await objects.remove('incoming/'+id);return first.prior;}
+      // Object I/O holds no authority locks; only the captured generation may admit its result.
+      const source=await staged(objects,'incoming/'+id),objectKey='snapshots/'+id;
+      try{
+        if(source.receipt.digest!==m.digest||source.receipt.size!==m.size)backupFail('object_mismatch');
+        await putStaged(objects,objectKey,source);
+      }finally{await source.dispose();}
+      const published=await publicationTransaction(client,async client=>{
+        const install=await active(client,installationId,this.#planMode),l=await lockVenue(client,install.venue_id);
+        await fence?.(client);
+        const permission=await readVenuePermissions(client,install.venue_id,'test-venue-levels');
+        if(permission.revision!==first.generation)backupFail('conflict');
+        if(install.venue_id!==first.venueId)backupFail('conflict');
+        if(install.public_key!==first.publicKey)backupFail('conflict');
+        if(l.endpoint!==first.location.endpoint||l.bucket!==first.location.bucket||l.region!==first.location.region)backupFail('conflict');
+        const latest=(await client.query("SELECT *,expired_at IS NOT NULL OR created_at+interval '24 hours'<=clock_timestamp() AS expired FROM backup_captures WHERE id=$1 AND installation_id=$2",[id,installationId])).rows[0];
+        if(!latest)backupFail('unavailable');
+        if(latest.venue_id!==first.venueId||latest.key_version!==first.keyVersion)backupFail('conflict');
+        const prior=await point(client,id);
+        if(prior){if(!sameMetadata(prior,m))backupFail('conflict');return prior;}
+        if(latest.expired)backupFail('capture_expired');
+        await client.query(`INSERT INTO backup_points(id,venue_id,installation_id,key_version,kind,object_key,digest,size,captured_at,retention,source_node_id,modules) VALUES($1,$2,$3,$4,'snapshot',$5,$6,$7,$8,$9,$10,$11)`,
+          [id,first.venueId,installationId,first.keyVersion,objectKey,m.digest,m.size,m.capturedAt,m.retention,m.sourceNodeId,m.modules]);
+        return (await point(client,id))!;
+      });
+      await objects.remove('incoming/'+id);
+      return published;
+    });
+  }
   async verifyClaim(claim:VerificationClaim,verify:DataRestoreVerifier,signal:AbortSignal=new AbortController().signal) {
     const prepared=await transaction(this.#pool,async client=>{
       const attempt=await prepareVerification(client,claim);
@@ -426,7 +502,7 @@ export class BackupCatalogue {
     if (!uuid(venueId) || !Number.isFinite(now.getTime()))
       backupFail("unavailable");
     const selected = await transaction(this.#pool, async (client) => {
-      if (await readVenuePlan(client,venueId,this.#planMode) !== 'paid') return null;
+      if (!await snapshotsAllowed(client,venueId,this.#planMode)) return null;
       await lockVerificationPolicy(client);
       const l = await lockVenue(client, venueId);
       await fence?.(client);
@@ -451,9 +527,9 @@ export class BackupCatalogue {
       };
     });
     if (!selected) return null;
-    if(this.#planMode==='test-free-paid') {
+    if(this.#planMode==='test-free-paid'||this.#planMode==='test-venue-levels') {
       return transaction(this.#pool,async client=>{
-        if(await readVenuePlan(client,venueId,this.#planMode)!=='paid')return null;
+        if(!await snapshotsAllowed(client,venueId,this.#planMode))return null;
         await lockVerificationPolicy(client);await lockVenue(client,venueId);await fence?.(client);
         // Keep policy through deletion so a committed downgrade cannot be followed by expiry.
         await this.#objects(selected.location).remove(selected.key);

@@ -195,6 +195,7 @@ async function lockedInstallation(client: PoolClient, installationId: string, mo
     )
   ).rows[0];
   if (!row) backupFail("unavailable");
+  if (mode === 'test-venue-levels' && row.venue_id !== initial.venue_id) backupFail('permission_denied');
   if (row.revoked_at || row.superseded_by) backupFail("revoked");
   if (row.environment !== "test") backupFail("local_integration_only");
   if (row.id !== installationId) backupFail("conflict");
@@ -311,7 +312,7 @@ export class ManagedStreams {
       const install = await lockedInstallation(client, installationId, this.#planMode);
       await fence?.(client);
       const existing = await streamRow(client, install.venue_id);
-      const cleared=this.#planMode==='test-free-paid' && existing && install.configuration_revision===revision
+      const cleared=(this.#planMode==='test-free-paid'||this.#planMode==='test-venue-levels') && existing && install.configuration_revision===revision
         && (await client.query("SELECT state FROM installation_services WHERE installation_id=$1 AND service='continuous_backup'",[installationId])).rows[0]?.state==='unconfigured';
       if (existing && !sameInput(existing, revision, input) && !(cleared && existing.local_venue_id===input.localVenueId && existing.source_node_id===input.sourceNodeId && existing.pointer_signer_public_key===input.pointerSignerPublicKey)) backupFail("conflict");
       if (!existing && install.configuration_revision !== revision) backupFail("conflict");
@@ -327,6 +328,9 @@ export class ManagedStreams {
     return transaction(this.#pool, async (client) => {
       const install = await lockedInstallation(client, installationId, this.#planMode);
       await fence?.(client);
+      if (this.#planMode === 'test-venue-levels' &&
+          (install.venue_id !== initial.install.venue_id || install.endpoint !== initial.install.endpoint ||
+           install.bucket !== initial.install.bucket || install.region !== initial.install.region)) backupFail('conflict');
       let row = await streamRow(client, install.venue_id, true);
       if (row && initial.cleared) {
         if(install.configuration_revision!==revision || row.configuration_revision!==initial.existing!.configuration_revision)backupFail('conflict');
@@ -413,6 +417,9 @@ export class ManagedStreams {
         install.configuration_revision !== revision
       )
         backupFail("conflict");
+      if (this.#planMode === 'test-venue-levels' &&
+          (row.venue_id !== initial.venue_id || row.endpoint !== initial.endpoint ||
+           row.bucket !== initial.bucket || row.region !== initial.region)) backupFail('conflict');
       if (!row.recoverable_at || row.recoverable_at.getTime() < Date.parse(observed.writtenAt)) {
         const updated = (
           await client.query<StreamRow>(

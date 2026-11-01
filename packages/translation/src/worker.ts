@@ -1,7 +1,7 @@
 import {randomUUID} from 'node:crypto';
 import {setTimeout as delay} from 'node:timers/promises';
 import type {Pool,PoolClient} from 'pg';
-import {recordUsageEvent,transaction} from '@waitron-cloud/registration';
+import {readVenuePermissions,recordUsageEvent,requireTestPlanVenue,requireVenueService,transaction,type PlanMode} from '@waitron-cloud/registration';
 import {translateBatch,type BatchHooks} from './batch-runner.ts';
 import {hasConsent} from './consent.ts';
 import {planBatches} from './batching.ts';
@@ -20,8 +20,9 @@ async function recordJobUsage(client:PoolClient,job:JobRow&{finished_at:Date},or
   await recordUsageEvent(client,{organisationId,venueId:job.venue_id,type,quantity,sourceKind:'translation_job',sourceReference:job.id,occurredAt});
 }
 export class TranslationWorker {
- readonly #pool:Pool;readonly #client:ModelClient;readonly #concurrency:number;readonly #leaseMs:number;readonly #maxLeases:number;readonly #wait:BatchHooks['wait'];
- constructor(pool:Pool,client:ModelClient,options:{batchConcurrency?:number;leaseMs?:number;maxLeases?:number;wait?:BatchHooks['wait']}={}){
+ readonly #pool:Pool;readonly #client:ModelClient;readonly #concurrency:number;readonly #leaseMs:number;readonly #maxLeases:number;readonly #wait:BatchHooks['wait'];readonly #planMode:PlanMode;
+ constructor(pool:Pool,client:ModelClient,options:{batchConcurrency?:number;leaseMs?:number;maxLeases?:number;wait?:BatchHooks['wait'];planMode?:PlanMode}={}){
+  this.#planMode=options.planMode===undefined?'existing':options.planMode;requireTestPlanVenue('test',this.#planMode);
   this.#pool=pool;this.#client=client;this.#concurrency=options.batchConcurrency??4;this.#leaseMs=options.leaseMs??600000;
   this.#maxLeases=options.maxLeases??3;this.#wait=options.wait??defaultWait;
   if(this.#concurrency>4||![this.#concurrency,this.#leaseMs,this.#maxLeases].every(n=>Number.isSafeInteger(n)&&n>0))throw new Error('translation_worker_options_invalid');
@@ -49,7 +50,7 @@ export class TranslationWorker {
     for(const {batch,index} of pending)if(local.signal.aborted||!await this.#save(job.id,leaseId,index,{results:[],failed:failedRefs(batch)}))return true;
     if(!local.signal.aborted)await this.#finish(job.id,leaseId,batches.length);return true;
    }
-   const hooks=await this.#hooks(job,leaseId,local);
+   const hooks=await this.#hooks(job,leaseId,local,lease.permissionRevision);
    const run=async()=>{
     for(let next=pending.shift();next&&!local.signal.aborted;next=pending.shift()){
      const outcome=await translateBatch(parsed,next.batch,this.#client,hooks,local.signal);
@@ -67,26 +68,49 @@ export class TranslationWorker {
    return true;
   }finally{signal.removeEventListener('abort',stop);if(signal.aborted)await this.#handBack(job.id,leaseId);}
  }
- async #lease():Promise<{job:JobRow;leaseId:string}|undefined>{
+ async #lease():Promise<{job:JobRow;leaseId:string;permissionRevision?:number}|undefined>{
   return transaction(this.#pool,async client=>{
    // Bounded cleanup can leave old rows behind; they must not receive fresh work leases.
-   const candidate=(await client.query<{id:string}>(`SELECT id FROM translation_jobs WHERE state='queued'
-    AND created_at>clock_timestamp()-interval '24 hours'
-    OR (state='running' AND lease_until<clock_timestamp() AND created_at>clock_timestamp()-interval '24 hours')
-    ORDER BY created_at,id LIMIT 1 FOR UPDATE SKIP LOCKED`)).rows[0];
+   const projection=this.#planMode==='test-venue-levels'?'id,venue_id':'id';
+   // Test-only workers leave production jobs untouched and available to their own workers.
+   const environment=this.#planMode==='test-venue-levels'?" AND venue_id IN (SELECT id FROM venues WHERE environment='test')":'';
+   const candidate=(await client.query<{id:string;venue_id:string}>(`SELECT ${projection} FROM translation_jobs WHERE state='queued'
+    AND created_at>clock_timestamp()-interval '24 hours'${environment}
+    OR (state='running' AND lease_until<clock_timestamp() AND created_at>clock_timestamp()-interval '24 hours'${environment})
+    ORDER BY created_at,id LIMIT 1${this.#planMode==='test-venue-levels'?'':' FOR UPDATE SKIP LOCKED'}`)).rows[0];
    if(!candidate)return undefined;
+   let permissionRevision:number|undefined;
+   if(this.#planMode==='test-venue-levels'){
+    // Policy precedes job locks; a denied job still leases once so it can finish and free the queue.
+    permissionRevision=(await readVenuePermissions(client,candidate.venue_id,this.#planMode)).revision;
+    if(!(await client.query(`SELECT id FROM translation_jobs WHERE id=$1 AND venue_id=$2 AND
+     ((state='queued' AND created_at>clock_timestamp()-interval '24 hours') OR
+      (state='running' AND lease_until<clock_timestamp() AND created_at>clock_timestamp()-interval '24 hours')) FOR UPDATE SKIP LOCKED`,[candidate.id,candidate.venue_id])).rowCount)return undefined;
+   }
    const leaseId=randomUUID();
    const job=(await client.query<JobRow>(`UPDATE translation_jobs SET state='running',lease_id=$2,lease_until=clock_timestamp()+$3*interval '1 millisecond',
     lease_count=lease_count+1,started_at=COALESCE(started_at,clock_timestamp()) WHERE id=$1 RETURNING *`,[candidate.id,leaseId,this.#leaseMs])).rows[0]!;
-   return {job,leaseId};
+   return {job,leaseId,permissionRevision};
   });
  }
- async #hooks(job:JobRow,leaseId:string,local:AbortController):Promise<BatchHooks>{
+ async #permitted(job:JobRow,leaseId:string,revision:number):Promise<boolean>{
+  return transaction(this.#pool,async client=>{
+   let permission;
+   try{await requireVenueService(client,job.venue_id,'content_translation','test-venue-levels');permission=await readVenuePermissions(client,job.venue_id,'test-venue-levels');}
+   catch(error){if(error instanceof Error&&error.message==='permission_denied')return false;throw error;}
+   if(permission.revision!==revision)return false;
+   if(!(await client.query('SELECT id FROM installations WHERE id=$1 AND venue_id=$2 AND revoked_at IS NULL FOR SHARE',[job.installation_id,job.venue_id])).rowCount)return false;
+   if(!(await client.query("SELECT id FROM translation_jobs WHERE id=$1 AND lease_id=$2 AND state='running' AND lease_until>clock_timestamp() FOR SHARE",[job.id,leaseId])).rowCount)return false;
+   return hasConsent(client,job.venue_id);
+  });
+ }
+ async #hooks(job:JobRow,leaseId:string,local:AbortController,revision?:number):Promise<BatchHooks>{
   const price=(await this.#pool.query<{input:string;output:string}>('SELECT input_micro_usd_per_million::text AS input,output_micro_usd_per_million::text AS output FROM translation_prices WHERE model=$1',[job.model])).rows[0];
   if(!price)throw new Error('translation_price_missing');
   const input=BigInt(price.input),output=BigInt(price.output);
   const guarded=async(sql:string,values:unknown[])=>{if((await this.#pool.query(sql,values)).rowCount!==1)local.abort();};
   return {
+   ...(this.#planMode==='test-venue-levels'?{stillPermitted:()=>this.#permitted(job,leaseId,revision!)}:{}),
    mayCall:()=>transaction(this.#pool,async client=>(await monthSpend(client,job.venue_id))<(await spendingPolicy(client)).cap),
    spent:async usage=>{
     const cost=(BigInt(usage.inputTokens)*input+BigInt(usage.outputTokens)*output+999999n)/1000000n;
