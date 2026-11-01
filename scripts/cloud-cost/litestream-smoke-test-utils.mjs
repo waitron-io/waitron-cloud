@@ -39,6 +39,53 @@ export function prepareDelayedLitestreamStop(source) {
   return source;
 }
 
+export function createDelayedPutEvidence({ clock = () => performance.now() } = {}) {
+  const puts = []; let number = 0, truncated = false, readiness = false, readinessRecorded = false;
+  return {
+    admit(req, postSale) {
+      if (req.method !== 'PUT') return;
+      number++;
+      if (puts.length === 16) { truncated = true; return; }
+      const level = /\/(000[0-3]|0009)\/[a-f0-9]{16}-[a-f0-9]{16}\.ltx(?:\?|$)/.exec(req.url);
+      const row = { number, level: level ? Number(level[1]) : 'other', postSale, readiness: false, admitted: clock() };
+      puts.push(row); return row;
+    },
+    response(row) { if (row) row.response = clock(); },
+    forward(row) { if (row) row.forwarded = clock(); },
+    ready(row) {
+      if (readiness) return;
+      readiness = true;
+      if (row) { row.readiness = true; readinessRecorded = true; }
+    },
+    snapshot(stopStarted) {
+      return { truncated, readinessRecorded, puts: puts.map(row => ({
+        number: row.number, level: row.level, postSale: row.postSale, readiness: row.readiness,
+        ...Object.fromEntries(['admitted', 'response', 'forwarded'].filter(key => row[key] !== undefined)
+          .map(key => [key + 'Ms', Math.round(row[key] - stopStarted)])),
+      })) };
+    },
+  };
+}
+
+export function prepareDelayedLitestreamDiagnostics(source) {
+  for (const [anchor, replacement] of [
+    ['let finalPutCommit, finalSaleWritten = false;',
+      `const delayedPutEvidence = (${createDelayedPutEvidence.toString().replace(/\n\s*/g, ' ')})(); let finalPutCommit, finalSaleWritten = false;`],
+    ['const postSaleRequest = finalSaleWritten;',
+      'const postSaleRequest = finalSaleWritten; const delayedPutRecord = delayedPutEvidence.admit(req, postSaleRequest);'],
+    ['const forward = () => {',
+      'delayedPutEvidence.response(delayedPutRecord); const forward = () => { delayedPutEvidence.forward(delayedPutRecord);'],
+    ['if (postSaleRequest) finalPutCommit();',
+      'if (postSaleRequest) { delayedPutEvidence.ready(delayedPutRecord); finalPutCommit(); }'],
+    ['timing: { elapsedMs: stopElapsed(), controlMs, exitMs },',
+      'timing: { elapsedMs: stopElapsed(), controlMs, exitMs }, delayedPutEvidence: delayedPutEvidence.snapshot(stopStarted),'],
+  ]) {
+    assert.equal(source.split(anchor).length, 2, 'delayed PUT diagnostics require one unambiguous anchor');
+    source = source.replace(anchor, replacement);
+  }
+  return source;
+}
+
 export function assertSmokeAccounting(result) {
   const subset = result.afterStop;
   const output = litestreamAfterStopOutput(subset);

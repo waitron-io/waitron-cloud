@@ -278,6 +278,33 @@ The two-row restore and full accounting checks still decide whether a run passes
 This fixture sequencing correction does not attribute the separate historical list
 interruptions or qualify production shutdown.
 
+The [PR823 merge recurrence](https://github.com/waitron-io/waitron-cloud/actions/runs/41243190309/job/124661299921)
+still reaches the two-second idle deadline with a complete PUT awaiting its held
+reply. The writer exits after 1,516 ms, but that pending transfer is only 498 ms
+old at the 2,002 ms refusal. Its level and relationship to the readiness upload
+were not recorded. Eighteen earlier Linux passes and a later controlled held
+compaction pass do not repair or identify this failure. The held-compaction
+control shows that an upload prepared before the final sale can arrive afterward
+and release readiness, but the final upload follows within 28 ms and passes.
+
+On a stop refusal, you now get `delayedPutEvidence` alongside the existing
+diagnostic. It retains at most sixteen PUT arrivals, their numeric upload levels
+(or `other`), whether the final sale had finished at arrival, and which successful
+response first released readiness. Arrival, backend-response and reply-forwarding
+times are milliseconds relative to the start of stop, so negative times precede
+stop. A backend-response time means headers arrived; it does not independently
+prove a complete stored body. A missing forwarding time means the normal
+forwarding code had not run; it does not establish that a reply was still pending.
+The deliberate initial 503 is answered directly, before the backend callback,
+so its record has neither a backend-response nor a forwarding time.
+These records omit request paths,
+transaction ranges, invocation IDs, credentials and body bytes. Truncation is
+explicit, including whether the readiness upload was retained. The existing
+failure record captures a copy before cleanup; successful stops emit no new
+record. Readiness, every 1,500 ms reply hold, the two-second stop deadline and
+accounting assertions stay unchanged. Use a new recurrence to establish the
+remaining cause before changing those rules.
+
 
 ### Stop exit diagnostics (D325)
 

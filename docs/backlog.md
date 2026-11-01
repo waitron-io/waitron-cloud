@@ -3824,6 +3824,10 @@ The D325 stop diagnostic now distinguishes child exit code and signal from an
 invalid request audit, retains the first failed audit stage and identifies an
 interrupted producer attempt. The historical stop/exit cause still needs a
 labelled recurrence; see the linked investigation before changing the stop rule.
+The delayed-PUT fixture also records up to sixteen uploads on a stop refusal,
+including which upload released readiness and their arrival, backend-response and
+reply-forwarding times relative to stop. Use these records to investigate the
+remaining idle timeout; the diagnostic does not change or qualify shutdown.
 
 
 ## Initial upload admitted after stop (D393)
