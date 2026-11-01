@@ -32,7 +32,7 @@ test('a still-live writer reaches the unchanged thirty-second withdrawal deadlin
   assert.equal(typeof waitForStorageWithdrawal, 'function');
   let clock = 1000;
   await assert.rejects(waitForStorageWithdrawal({startedAt: 1000, now: () => clock,
-    pause: async ms => {clock += ms;}, put: async () => {}, get: async () => {throw denied();}}), /integration.storage_withdrawal_required/);
+    pause: async ms => {clock += ms;}, put: async () => {assert.ok(clock < 31000, 'The observer issued another write after its deadline');}, get: async () => {throw denied();}}), /integration.storage_withdrawal_required/);
   assert.equal(clock, 31000);
 });
 
@@ -95,5 +95,36 @@ for (const [key, value] of [['endpoint', 'http://waitron.local:8333'], ['region'
   test('a substituted direct storage '+key+' cannot qualify', async () => {
     const {checkStorageWithdrawalBucket} = await load(); assert.equal(typeof checkStorageWithdrawalBucket, 'function');
     assert.throws(() => checkStorageWithdrawalBucket({...bucket, [key]: value}, selected.venueId));
+  });
+}
+
+const beforeOperations = () => ({
+  put: async () => ({$metadata: {httpStatusCode: 200}}),
+  get: async () => ({$metadata: {httpStatusCode: 200}, Body: {transformToString: async () => 'paired integration retained storage'}}),
+  putOutside: async () => {throw denied();}, putNeighbour: async () => {throw denied();},
+});
+test('the before-downgrade proof requires real accepted bytes and both scope refusals', async () => {
+  const {proveStorageBefore} = await load(); assert.equal(typeof proveStorageBefore, 'function', 'The accepted direct storage proof is missing');
+  assert.deepEqual(await proveStorageBefore(beforeOperations()), {writeStatus: 200, readStatus: 200, outsidePrefixRefused: true, neighbourRefused: true});
+});
+for (const operation of ['put', 'get']) test('a missing accepted '+operation+' status refuses before-downgrade evidence', async () => {
+  const {proveStorageBefore} = await load(); assert.equal(typeof proveStorageBefore, 'function');
+  const ops = beforeOperations(); ops[operation] = async () => ({$metadata: {httpStatusCode: 204}, Body: {transformToString: async () => 'paired integration retained storage'}});
+  await assert.rejects(proveStorageBefore(ops));
+});
+test('a different stored body cannot qualify the retained-byte check', async () => {
+  const {proveStorageBefore} = await load(); assert.equal(typeof proveStorageBefore, 'function');
+  const ops = beforeOperations(); ops.get = async () => ({$metadata: {httpStatusCode: 200}, Body: {transformToString: async () => 'another object'}});
+  await assert.rejects(proveStorageBefore(ops));
+});
+for (const operation of ['putOutside', 'putNeighbour']) {
+  test('an accepted '+operation+' refuses scope-isolation evidence', async () => {
+    const {proveStorageBefore} = await load(); assert.equal(typeof proveStorageBefore, 'function');
+    await assert.rejects(proveStorageBefore({...beforeOperations(), [operation]: async () => {}}));
+  });
+  test('a network failure at '+operation+' cannot count as an ownership refusal', async () => {
+    const {proveStorageBefore} = await load(); assert.equal(typeof proveStorageBefore, 'function');
+    const failure = Error('private transport detail');
+    await assert.rejects(proveStorageBefore({...beforeOperations(), [operation]: async () => {throw failure;}}));
   });
 }

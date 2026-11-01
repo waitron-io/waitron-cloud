@@ -33,3 +33,12 @@ export function checkStorageWithdrawalBucket(bucket, venueId) {
   assert.equal(bucket.bucket, 'venue-' + venueId); assert.equal(bucket.prefix, 'streams/' + venueId + '/');
   return true;
 }
+
+export async function proveStorageBefore({put, get, putOutside, putNeighbour}) {
+  assert.equal((await put()).$metadata.httpStatusCode, 200);
+  const read = await get(); assert.equal(read.$metadata.httpStatusCode, 200);
+  assert.equal(await read.Body.transformToString(), 'paired integration retained storage');
+  await assert.rejects(putOutside, providerDenied);
+  await assert.rejects(putNeighbour, providerDenied);
+  return {writeStatus: 200, readStatus: 200, outsidePrefixRefused: true, neighbourRefused: true};
+}
