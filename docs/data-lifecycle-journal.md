@@ -7,11 +7,16 @@ Recording a request grants no permission to stop, export, restore or delete data
 
 Use the current venue revision when you record a new request. An identical
 operation ID returns its original revision, even after later requests. Reusing
-that ID with changed input conflicts. Different requests at the same revision
+that ID with changed input within the same venue conflicts. Another venue has its
+own operation namespace. Different requests at the same revision
 serialize, so only one can advance it. A cancellation records service end
 separately from request receipt and fixes recovery end at 2,160 hours later.
 An omitted service end uses the database clock. Retries and later cancellations
 retain that deadline, including across leap days and daylight-saving changes.
+Service end and the full recovery interval must fit within years 0001 through 9999.
+Views and time comparisons use milliseconds. Storage preserves finer existing
+timestamps; qualify matching comparison precision before another producer writes
+finer deadlines.
 
 The journal recognizes `active`, `exit preparing`, `read-only until deadline`,
 `purging` and `purged`. A cancellation or deletion request can enter
@@ -21,6 +26,11 @@ records intent only; a future adapter must prove that retained data exists befor
 reactivating service. This slice supplies no transition into read-only or purge.
 Tests seed those states directly. A recorded purged row remains a tombstone;
 this does not prove physical erasure or retention of every outside copy.
+
+The deadline describes ordinary cancellation recovery. A deletion intent proves
+neither verified deletion authority nor completed erasure. Later exit adapters
+must give an earlier verified delete instruction priority over ordinary retention;
+recording a cancellation cannot authorise a new waiting period for that deletion.
 
 Before work, claim the operation using the current lifecycle revision. Only one
 operation per venue can hold a live, 60-second database lease. Reclaiming expired
