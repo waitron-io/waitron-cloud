@@ -4076,10 +4076,14 @@ requires all 120 requests on the final client and verifies every child stops.
 A permanent native collision control also reproduces a throwing retry logger
 replacing the readiness error. Logging now preserves the permitted retry and
 the final SDK error; request budgets and retry limits are unchanged.
-Use that evidence to reproduce the refusal before a fix; preserve the existing
-assertions and deadlines. The labelled failure does not establish the historical
-timeout's cause. See the [investigation and qualification
-limits](backlog/storage-authority-timeout.md).
+All four unchanged authority cases pass on the Linux test box, including delayed
+identity publication in 5.01 seconds. The test and operation-label helper match
+the later failing revision; its runtime and dependencies differ. An isolated
+checkout of that exact historical revision with its frozen dependencies also
+passes all four cases. Neither run reproduces the failures or recreates the
+original CI job's concurrency. Use the next labelled recurrence to find the cause,
+preserving the existing assertions and deadlines. See the
+[investigation and qualification limits](backlog/storage-authority-timeout.md).
 
 ## Authenticator management transport and session rechecks (D431)
 

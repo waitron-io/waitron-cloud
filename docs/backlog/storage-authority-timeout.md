@@ -59,6 +59,35 @@ preserves the original SDK error. This fixes the reproduced logger failure and
 counting mismatch; it does not explain the historical provisioning timeout or
 internal error.
 
+## Linux reproduction check (D530)
+
+The owner's Linux test box runs all four unchanged authority cases at Cloud
+`8de195e8b34a9c154df74a13420037652bcfd9ad` without failures or skips. The
+following command checks writer withdrawal, durable state loss, delayed identity
+publication and concurrent provisioning:
+
+```sh
+~/waitron-campaign-shared/test-box-run.sh H <checkout> \
+  node --test deploy/test-cloud/storage-authority.test.mjs
+```
+
+The delayed-publication case takes 5.01 seconds; the file takes 22.02 seconds.
+Its test and operation-label helper match the later failing revision
+`f1a627a75d0c5557d2d8b0f28e7229c1c209f56d` byte for byte. The authority module,
+startup fixture and dependency lock differ, so this result alone cannot explain
+that revision's startup failure.
+
+An isolated checkout of that exact historical revision, installed with its own
+frozen dependency lock, also passes all four cases without failures or skips on
+the same Linux box. Its delayed-publication case takes 4.96 seconds and the file
+takes 22.22 seconds. The copied test, authority, startup fixture, operation-label
+helper and lockfile match that revision's hashes. This rules out neither
+scheduling pressure nor a startup race: the original CI job's concurrent files
+and resource conditions have not been recreated. Neither passing run is a fix.
+
+The earlier 14.72-second abort has no operation label; keep it separate from the
+later 33.53-second startup internal error.
+
 Keep the label and original error at the next genuine Linux recurrence, then
 reproduce and repair that operation's cause. A passing controlled abort or native
 run does not close the historical timeout. Docker and PostgreSQL reproduction can
