@@ -52,7 +52,7 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
   await page.getByLabel(c.recoveryVenue,{exact:true}).locator('option',{hasText:'Café Mar'}).waitFor({state:'attached'});
   const dimensions=await organisation.evaluate(el=>({window:innerWidth,scroll:document.documentElement.scrollWidth,select:el.getBoundingClientRect().width,parent:el.parentElement!.getBoundingClientRect().width}));
   console.log(`${locale} ${theme} ${width}: ${JSON.stringify(dimensions)}`);
-  if(process.env.RECOVERY_WIDTH_RECEIPT_DIR){await mkdir(process.env.RECOVERY_WIDTH_RECEIPT_DIR,{recursive:true});await page.screenshot({path:`${process.env.RECOVERY_WIDTH_RECEIPT_DIR}/${locale}-${theme}-${width}.png`,fullPage:true});}
+  if(process.env.RECOVERY_WIDTH_RECEIPT_DIR){await mkdir(process.env.RECOVERY_WIDTH_RECEIPT_DIR,{recursive:true});await page.screenshot({path:`${process.env.RECOVERY_WIDTH_RECEIPT_DIR}/${locale}-${theme}-${width}${handler==='ordinary'?'':`-${handler}`}.png`,fullPage:true});}
   assert.ok(dimensions.scroll<=width,`page width ${dimensions.scroll} exceeds viewport ${width}`);
   assert.ok(dimensions.select<=dimensions.parent,`select width ${dimensions.select} exceeds label ${dimensions.parent}`);
   let observed=false;entered=()=>{observed=true;};gate=new Promise<void>(resolve=>{release=resolve;});
