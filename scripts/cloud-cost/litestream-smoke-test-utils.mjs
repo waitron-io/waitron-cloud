@@ -70,7 +70,7 @@ export function createDelayedPutEvidence({ clock = () => performance.now() } = {
 export function prepareDelayedLitestreamDiagnostics(source) {
   for (const [anchor, replacement] of [
     ['let finalPutCommit, finalSaleWritten = false;',
-      `const delayedPutEvidence = (${createDelayedPutEvidence.toString()})(); let finalPutCommit, finalSaleWritten = false;`],
+      `const delayedPutEvidence = (${createDelayedPutEvidence.toString().replace(/\n\s*/g, ' ')})(); let finalPutCommit, finalSaleWritten = false;`],
     ['const postSaleRequest = finalSaleWritten;',
       'const postSaleRequest = finalSaleWritten; const delayedPutRecord = delayedPutEvidence.admit(req, postSaleRequest);'],
     ['const forward = () => {',

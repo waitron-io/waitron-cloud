@@ -109,3 +109,34 @@ test('delayed PUT diagnostic preparation refuses changed or repeated integration
     assert.throws(() => checks.prepareDelayedLitestreamDiagnostics(source+'\n'+anchor));
   }
 });
+
+test('diagnostic insertion preserves immediate readiness release without a new timer', async () => {
+  const source = `let finalPutCommit, finalSaleWritten = false;
+    const committed = new Promise(resolve => finalPutCommit = resolve);
+    const admit = req => { const postSaleRequest = finalSaleWritten;
+      return () => { const forward = () => {}; if (postSaleRequest) finalPutCommit(); };
+    };
+    const stopStarted=0,stopElapsed=()=>0,controlMs=0,exitMs=0;
+    const snapshot=()=>({timing: { elapsedMs: stopElapsed(), controlMs, exitMs },});
+    return { committed, admit, completeSale(){finalSaleWritten=true;} };`;
+  const timers = [];
+  const control = new Function('setTimeout',checks.prepareDelayedLitestreamDiagnostics(source))((fn,ms)=>timers.push({fn,ms}));
+  control.completeSale(); let committed = false;
+  control.committed.then(() => { committed = true; });
+  control.admit({method:'PUT',url:'/private/0000/0000000000000002-0000000000000002.ltx'})();
+  await Promise.resolve();
+  assert.equal(committed, true, 'the existing promise must release in the response turn');
+  assert.deepEqual(timers, [], 'diagnostics must not schedule readiness work');
+});
+
+test('embedding upload evidence preserves the generated fixture stack line numbers', async () => {
+  const source = httpSmoke.replace('const finalPutCommitted', "throw Error('SYNTHETIC_STACK_MARKER');\n  const finalPutCommitted");
+  const frame = async text => {
+    let caught;
+    try { await new AsyncFunction(text)(); } catch (error) { caught = error; }
+    assert.equal(caught?.message, 'SYNTHETIC_STACK_MARKER');
+    const line = /<anonymous>:(\d+):\d+/.exec(caught.stack);
+    assert.ok(line); return Number(line[1]);
+  };
+  assert.equal(await frame(checks.prepareDelayedLitestreamDiagnostics(source)), await frame(source));
+});

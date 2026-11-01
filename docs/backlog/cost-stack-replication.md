@@ -293,8 +293,11 @@ diagnostic. It retains at most sixteen PUT arrivals, their numeric upload levels
 response first released readiness. Arrival, backend-response and reply-forwarding
 times are milliseconds relative to the start of stop, so negative times precede
 stop. A backend-response time means headers arrived; it does not independently
-prove a complete stored body. A missing forwarding time means forwarding had not
-begun when the failure record was captured. These records omit request paths,
+prove a complete stored body. A missing forwarding time means the normal
+forwarding code had not run; it does not establish that a reply was still pending.
+The deliberate initial 503 is answered directly, before the backend callback,
+so its record has neither a backend-response nor a forwarding time.
+These records omit request paths,
 transaction ranges, invocation IDs, credentials and body bytes. Truncation is
 explicit, including whether the readiness upload was retained. The existing
 failure record captures a copy before cleanup; successful stops emit no new
