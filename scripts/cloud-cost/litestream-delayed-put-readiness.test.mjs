@@ -56,7 +56,7 @@ for (const ignored of [null, {name:'old compaction',path:'/private/ltx/0001/0000
   if(refusal)throw refusal;
 });
 
-// Removing prior-reply settlement would start stop with two committed replies held.
+// Removing settlement starts stop while an already-admitted older reply is still held.
 for (const releaseFinalFirst of [false, true]) test(`readiness requires an older post-sale reply to settle while the new reply stays held: finalFirst=${releaseFinalFirst}`, { timeout: 3000 }, async () => {
   const readiness = deferred(), cleanup = deferred();
   const held = [], waiters = []; let deadline, stopped = false, endpoint;
@@ -130,8 +130,9 @@ test('a failed pre-sale observation cannot establish the transaction boundary', 
 test('a new transaction admitted before the final sale cannot release readiness with a late response', () => {
   const gate = createDelayedPutGate(); let ready = 0;
   gate.response(gate.admit({method:'PUT',url:'/stream/0000/0000000000000001-0000000000000001.ltx'},false),200,()=>{ready++;});
+  gate.beforeSale();
   const early = gate.admit({method:'PUT',url:'/stream/0000/0000000000000002-0000000000000002.ltx'},false);
-  gate.beforeSale(); gate.response(early,200,()=>{ready++;});
+  gate.response(early,200,()=>{ready++;});
   assert.equal(ready,0);
   gate.response(gate.admit({method:'PUT',url:'/stream/0000/0000000000000002-0000000000000002.ltx'},true),200,()=>{ready++;});
   assert.equal(ready,1,'late replies must not move the captured boundary');
@@ -174,4 +175,21 @@ for (const interrupted of [true, false]) test(`an older reply releases readiness
   } finally {
     client.destroy(); server.closeAllConnections(); await new Promise(resolve=>server.close(resolve));
   }
+});
+
+for (const multipart of [false,true]) test(`an unacknowledged known pre-sale upload cannot become new evidence through later compaction: multipart=${multipart}`, () => {
+  const gate = createDelayedPutGate(); let ready = 0;
+  gate.response(gate.admit({method:'PUT',url:'/stream/0000/0000000000000001-0000000000000001.ltx'},false),200,()=>{ready++;});
+  gate.admit({method:'PUT',url:'/stream/0000/0000000000000002-0000000000000002.ltx'+(multipart?'?partNumber=1&uploadId=synthetic':'')},false);
+  gate.beforeSale();
+  gate.response(gate.admit({method:'PUT',url:'/stream/0001/0000000000000001-0000000000000002.ltx'},true),200,()=>{ready++;});
+  assert.equal(ready,0,'a transaction already observed before the sale is older even if its first reply was pending');
+});
+
+test('a successful multipart part cannot establish the required initial object acknowledgement', () => {
+  const gate = createDelayedPutGate(); let ready = 0;
+  gate.response(gate.admit({method:'PUT',url:'/stream/0000/0000000000000001-0000000000000001.ltx?partNumber=1&uploadId=synthetic'},false),200,()=>{ready++;});
+  gate.beforeSale();
+  gate.response(gate.admit({method:'PUT',url:'/stream/0000/0000000000000002-0000000000000002.ltx'},true),200,()=>{ready++;});
+  assert.equal(ready,0);
 });

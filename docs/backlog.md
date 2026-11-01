@@ -3826,8 +3826,9 @@ labelled recurrence; see the linked investigation before changing the stop rule.
 The delayed-PUT fixture also records up to sixteen uploads on a stop refusal,
 including which upload released readiness and their arrival, backend-response and
 reply-forwarding times relative to stop. Its readiness gate now requires a
-transaction newer than the pre-sale boundary, refuses multipart parts, and waits
-for older post-sale replies while the new reply remains held. Native HTTP controls
+transaction newer than every known pre-sale upload, including pending ones,
+refuses multipart parts, and waits for older post-sale replies already admitted
+when the new response arrives, while the new reply remains held. Native HTTP controls
 catch the earlier admission-only gate and the missing settlement order. Use the
 records to investigate the remaining historical idle timeout; this fixture change
 does not qualify production shutdown.

@@ -19,8 +19,8 @@ export function delayLitestreamPutReplies(source) {
 
 export function prepareDelayedLitestreamStop(source) {
   source = delayLitestreamPutReplies(source);
-  // A compacted copy of an older transaction must not stand in for the final sale.
-  // Otherwise periodic replication and the stop flush can incur successive 1,500 ms holds inside two seconds.
+  // An older compacted copy cannot stand in for a new upload at the final-sale boundary.
+  // The new upload's held reply must overlap stop to exercise the shared two-second drain budget.
   for (const [anchor, replacement] of [
     ["let delayedPutReplies = 0;", `const finalPutGate = (${createDelayedPutGate.toString().replace(/\n\s*/g, ' ')})(); let finalPutCommit, finalSaleWritten = false; const finalPutCommitted = new Promise(resolve => finalPutCommit = resolve); let delayedPutReplies = 0;`],
     ["await sale(2);", "finalPutGate.beforeSale(); await sale(2); finalSaleWritten = true;"],
@@ -40,19 +40,21 @@ export function prepareDelayedLitestreamStop(source) {
   return source;
 }
 
-// The initial smoke barrier drains pre-sale traffic; late compaction can add older replies afterwards.
+// An idle observed transport cannot exclude later compaction replies; those need their own gate.
 export function createDelayedPutGate() {
-  let highWater = 0n, boundary;
+  let knownWater = 0n, acknowledged = false, boundary;
   const olderReplies = new Set();
   return {
-    beforeSale() { boundary = highWater; },
+    beforeSale() { boundary = acknowledged ? knownWater : 0n; },
     admit(req, postSale) {
       const match = /\/(?:000[0-3]|0009)\/([a-f0-9]{16})-([a-f0-9]{16})\.ltx(?:\?|$)/.exec(req.url ?? '');
       const query = new URL(req.url ?? '/', 'http://synthetic.invalid').searchParams;
       const partial = query.has('partNumber') || query.has('uploadId');
       const first = match ? BigInt('0x' + match[1]) : 0n;
       const last = match ? BigInt('0x' + match[2]) : 0n;
-      const row = { txid: req.method === 'PUT' && !partial && first > 0n && last >= first ? last : 0n, postSale, forwarded: false };
+      const known = req.method === 'PUT' && first > 0n && last >= first ? last : 0n;
+      if (known > knownWater) knownWater = known;
+      const row = { txid: partial ? 0n : known, postSale, forwarded: false };
       if (row.postSale && row.txid > 0n && row.txid <= boundary) {
         row.settled = new Promise(resolve => { row.settle = resolve; });
         olderReplies.add(row.settled);
@@ -61,7 +63,7 @@ export function createDelayedPutGate() {
     },
     response(row, status, ready) {
       if (status < 200 || status >= 300) return;
-      if (row.txid > highWater) highWater = row.txid;
+      if (row.txid > 0n) acknowledged = true;
       if (boundary > 0n && row.txid > boundary && row.postSale) {
         const release = () => { if (!row.forwarded) ready(); };
         if (olderReplies.size) Promise.all([...olderReplies]).then(release);

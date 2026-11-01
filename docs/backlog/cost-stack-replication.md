@@ -265,18 +265,21 @@ one failure in 80 trials: control acknowledged at 1,517 ms and the writer exited
 Its injected 1,500 ms reply hold could not finish within that stop budget.
 
 An older compacted upload can arrive after the final sale without containing it.
-The delayed-reply fixture now captures the highest acknowledged LTX transaction
-before that sale and requires a successful upload covering a later transaction,
+The delayed-reply fixture now captures the highest known LTX transaction from
+requests admitted before that sale, including uploads whose replies remain pending.
+It also requires a successful initial upload and a successful later-transaction upload,
 admitted after the sale finishes. Unknown object names, invalid transaction ranges
 and multipart part acknowledgements cannot release readiness. A multipart part
 alone does not acknowledge a complete object.
 
-The initial smoke barrier still drains its pre-sale traffic. If an older upload
-arrives after the final sale, readiness also waits for its delayed reply to finish
-forwarding. The new upload's reply must remain held at that point; forwarding it
-first cannot release readiness later. This orders the controlled replies without
-expanding the single prior-upload settlement allowance. It does not prove that
-every native background request has drained. Every successful PUT reply still
+The initial smoke barrier still requires its observed transfers to be idle.
+Readiness waits for older post-sale uploads already admitted when the new upload's
+backend response arrives. Their delayed replies must finish forwarding while the
+new reply remains held; forwarding the new reply first cannot release readiness
+later. An interrupted older reply instead refuses at the five-second readiness
+limit. This orders the controlled replies without expanding the single prior-upload
+settlement allowance. It cannot see transactions still inside the writer, predict
+uploads arriving after readiness, or prove that all background requests have drained. Every successful PUT reply still
 waits 1,500 ms, within the unchanged five-second readiness bound and shared
 two-second stop budget. Accounting, restore and cleanup assertions remain.
 Run `node --test scripts/cloud-cost/litestream-delayed-put-readiness.test.mjs`
