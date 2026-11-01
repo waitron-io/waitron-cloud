@@ -4034,8 +4034,10 @@ engines, worker-failure images and production-network qualification open.
 Set `RECOVERY_PORTAL_RECEIPT_DIR` to a fresh directory when checking the recovery
 choice fixture. It retains sixteen recovery captures: eight ordinary and eight
 delayed, keeping all eight original names. Separate names prevent a later handler
-variant from overwriting earlier evidence. The missing-signal control returns
-before recovery submission, pairing and screenshots; its title states that scope.
+variant from overwriting earlier evidence. The missing-signal control runs only
+the first four subtests, then returns before the disabled-choice assertions,
+source clearing, recovery submission, pairing and screenshots. Its title names
+the submission boundary.
 Every original organisation and venue selection, recovery permission, source
 clearing, approval payload, pairing, layout, observation and deadline check remains.
 
