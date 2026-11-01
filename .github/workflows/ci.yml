@@ -172,6 +172,7 @@ jobs:
       - run: node scripts/ci-run-receipts.mjs
         env:
           CI_PLAN: ${{ needs.changes.outputs.plan }}
+          CI_RECEIPT_CONCURRENCY: '2'
   packages:
     needs: changes
     if: needs.changes.outputs.packages == 'true'

@@ -65,3 +65,43 @@ test('a command killed by a signal and a command that cannot start fail the grou
     assert.match(missing.stderr, /test:local-stack failed:.*ENOENT/);
   });
 });
+
+test('two receipt workers overlap independent suites, drain failures and never admit a third early', () => {
+  fixture(({execute, calls, pnpm}) => {
+    writeFileSync(pnpm, `#!/bin/sh
+printf '%s\\n' "$1" >> "$RECEIPT_CALLS"
+case "$1" in
+  test:backup-capacity|test:local-stack)
+    touch "$RECEIPT_CALLS.$1"
+    deadline=$(( $(date +%s) + 5 ))
+    until [ -f "$RECEIPT_CALLS.test:backup-capacity" ] && [ -f "$RECEIPT_CALLS.test:local-stack" ]; do
+      [ "$(date +%s)" -lt "$deadline" ] || exit 21
+      sleep 0.02
+    done
+    touch "$RECEIPT_CALLS.$1.done"
+    [ "$1" != test:backup-capacity ] || exit 7
+    ;;
+  test:database-recovery-receipt)
+    [ -f "$RECEIPT_CALLS.test:backup-capacity.done" ] || [ -f "$RECEIPT_CALLS.test:local-stack.done" ] || exit 22
+    ;;
+esac
+printf 'suite-output:%s\\n' "$1"
+`, {mode: 0o700});
+    const result = execute(['test:backup-capacity', 'test:local-stack', 'test:database-recovery-receipt'], {CI_RECEIPT_CONCURRENCY: '2'});
+    assert.equal(result.status, 1);
+    assert.deepEqual(calls().sort(), ['test:backup-capacity', 'test:database-recovery-receipt', 'test:local-stack']);
+    assert.match(result.stderr, /test:backup-capacity failed: 7/);
+    assert.doesNotMatch(result.stderr, /failed: (?:21|22)/);
+    assert.match(result.stdout, /suite-output:test:local-stack/);
+    assert.match(result.stdout, /suite-output:test:database-recovery-receipt/);
+  });
+});
+
+test('invalid receipt worker counts fail before any command starts', () => {
+  for (const value of ['', '0', '3', '1.5', 'two']) fixture(({execute, calls}) => {
+    const result = execute(['test:backup-capacity'], {CI_RECEIPT_CONCURRENCY: value});
+    assert.equal(result.status, 1);
+    assert.deepEqual(calls(), []);
+    assert.match(result.stderr, /concurrency/i);
+  });
+});
