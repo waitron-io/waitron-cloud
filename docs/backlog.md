@@ -634,7 +634,7 @@ Migration 038, its dormant tables and stored rows remain unchanged. Registration
 owns the seven retained schema tests and the digest/ledger-position check. Removal
 regressions compare every dormant table and the migration ledger before and after
 old calls and free/paid/free plan changes. Shared account, session, recovery and
-mail assertions remain. Live CI keeps nine packages, 21 logical shards in 19
+mail assertions remain. Live CI keeps nine packages, 24 logical shards in 23
 jobs and all six receipt suites, including all six portal shards. Saved historical
 manifests and cost receipts remain historical evidence; their parsers and positive
 receipt-selection checks remain. The [registry reference](fiscal-allocation-registry.md)

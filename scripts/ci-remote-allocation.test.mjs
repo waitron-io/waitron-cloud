@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import {execFileSync} from 'node:child_process';
-import {mkdtempSync,readdirSync,rmSync,writeFileSync} from 'node:fs';
+import {spawnSync} from 'node:child_process';
+import {mkdirSync,mkdtempSync,readFileSync,readdirSync,rmSync,writeFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {loadWorkspace,workPlan} from './ci-scope.mjs';
@@ -29,12 +29,23 @@ test('remote shards discover every current file and a future file exactly once t
  const workspace=loadWorkspace(),selected=workPlan({full:false,packages:[remote]},workspace).packages;
  assert.equal(selected.length,4);
  const files=readdirSync(new URL('../packages/remote-access/test/',import.meta.url)).filter(f=>f.endsWith('.test.ts')).concat('zz-future-remote.test.ts').sort();
- const root=mkdtempSync(join(tmpdir(),'cloud-remote-shards-'));
+ const workflow=readFileSync(new URL('../.github/workflows/ci.yml',import.meta.url),'utf8');
+ const command=workflow.match(/- if: matrix\.shards\n\s+run: ([^\n]+)/)?.[1];assert.ok(command,'workflow supplies the shard command');
+ const root=mkdtempSync(join(tmpdir(),'cloud-remote-shards-')),directory=join(root,'packages/remote-access/test');
  try{
-  for(const name of files)writeFileSync(join(root,name),`import test from 'node:test';test(${JSON.stringify(name)},()=>{});\n`);
+  mkdirSync(directory,{recursive:true});mkdirSync(join(root,'scripts'));
+  // The fixture replaces Docker setup while forwarding the workflow's actual Node arguments.
+  writeFileSync(join(root,'scripts/test-postgres.mjs'),`import assert from 'node:assert/strict';import {spawnSync} from 'node:child_process';
+assert.deepEqual(process.argv.slice(2,8),['exec','pnpm','--filter','@waitron-cloud/remote-access','exec','node']);
+const child=spawnSync(process.execPath,process.argv.slice(8),{cwd:'packages/remote-access',stdio:'inherit'});if(child.error)throw child.error;process.exit(child.status??1);`);
+  for(const name of files)writeFileSync(join(directory,name),`import test from 'node:test';test(${JSON.stringify(name)},()=>{});\n`);
   const seen=[],env={...process.env};delete env.NODE_TEST_CONTEXT;
-  for(const row of selected){const output=execFileSync(process.execPath,['--test','--test-reporter=tap','--test-timeout=30000',`--test-shard=${row.shard}/${row.shards}`,'*.test.ts'],{cwd:root,env,encoding:'utf8',timeout:30000});
-   const names=[...output.matchAll(/^ok \d+ - (.+)$/gm)].map(m=>m[1]);assert.ok(names.length>0);assert.match(output,/^# fail 0$/m);assert.match(output,/^# cancelled 0$/m);assert.match(output,/^# skipped 0$/m);seen.push(...names);}
+  env.NODE_TEST_REPORTER='tap';
+  for(const row of selected){const line=command.replaceAll('${{ matrix.package }}',remote).replaceAll('${{ matrix.shard }}',String(row.shard)).replaceAll('${{ matrix.shards }}',String(row.shards))
+    .replace("${{ matrix.package == '@waitron-cloud/portal' && '120000' || '30000' }}",'30000');
+   const result=spawnSync('sh',['-c',line],{cwd:root,env,encoding:'utf8',timeout:30000});assert.equal(result.status,0,result.stdout+result.stderr);
+   const output=result.stdout,names=[...output.matchAll(/^(?:ok \d+ - |✔ )(.+?)(?: \(.*ms\))?$/gm)].map(m=>m[1]);
+   assert.ok(names.length>0);assert.match(output,/^(?:# |ℹ )fail 0$/m);assert.match(output,/^(?:# |ℹ )cancelled 0$/m);assert.match(output,/^(?:# |ℹ )skipped 0$/m);seen.push(...names);}
   assert.deepEqual(seen.sort(),files);
  }finally{rmSync(root,{recursive:true,force:true});}
 });
