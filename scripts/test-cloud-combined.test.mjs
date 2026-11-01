@@ -28,6 +28,17 @@ test('one project recovers both copies, withdraws remote access, measures capaci
   assert.match(receipt.cloudSource.runtimeSha256, /^[a-f0-9]{64}$/);
   const free = receipt.organisations.find(value => value.plan === 'free');
   const direct = receipt.paidStorageWithdrawal;
+  const exposure = receipt.paidSnapshotExposure;
+  assert.ok(exposure, 'The paired snapshot residual-access proof is missing');
+  for (const key of ['organisationId', 'venueId', 'installationId']) assert.equal(exposure[key], paid[key], key);
+  assert.equal(exposure.pointId, receipt.paidSnapshot.pointId);
+  assert.equal(exposure.newGrantRefused, true);
+  assert.equal(exposure.writeStatus, 200);
+  assert.equal(exposure.expiryObserved, false);
+  assert.ok(exposure.acceptedAt >= exposure.requestedAt && exposure.acceptedAt <= exposure.downgradedAt);
+  assert.ok(exposure.observedAt >= exposure.downgradedAt);
+  assert.equal(exposure.remainingMs, Date.parse(exposure.expiresAt) - exposure.observedAt);
+  assert.ok(exposure.remainingMs > 0 && exposure.remainingMs <= 901000);
   assert.ok(direct, 'The paired direct-storage withdrawal proof is missing');
   for (const key of ['organisationId', 'venueId', 'installationId']) assert.equal(direct[key], paid[key], key);
   assert.deepEqual(direct.before, {writeStatus: 200, readStatus: 200, outsidePrefixRefused: true, neighbourRefused: true});
