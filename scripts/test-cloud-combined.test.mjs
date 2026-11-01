@@ -27,6 +27,15 @@ test('one project recovers both copies, withdraws remote access, measures capaci
   assert.ok(receipt.cloudSource.files > 1000);
   assert.match(receipt.cloudSource.runtimeSha256, /^[a-f0-9]{64}$/);
   const free = receipt.organisations.find(value => value.plan === 'free');
+  const direct = receipt.paidStorageWithdrawal;
+  assert.ok(direct, 'The paired direct-storage withdrawal proof is missing');
+  for (const key of ['organisationId', 'venueId', 'installationId']) assert.equal(direct[key], paid[key], key);
+  assert.deepEqual(direct.before, {writeStatus: 200, readStatus: 200, outsidePrefixRefused: true, neighbourRefused: true});
+  assert.equal(direct.after.writeStatus, 403); assert.equal(direct.after.readStatus, 403);
+  assert.ok(Number.isSafeInteger(direct.after.durationMs) && direct.after.durationMs >= 0 && direct.after.durationMs < 30000);
+  assert.equal(direct.retainedData, true); assert.equal(direct.readerPreserved, true);
+  assert.equal(direct.installationPreserved, true); assert.equal(direct.plan, 'free');
+
   const snapshot = receipt.paidSnapshot, stream = receipt.paidStream, remote = receipt.paidRemote;
   for (const value of [snapshot, remote]) for (const key of ['organisationId', 'venueId', 'installationId']) assert.equal(value?.[key], paid[key], key);
   for (const key of ['venueId', 'installationId']) assert.equal(stream?.[key], paid[key], key);
