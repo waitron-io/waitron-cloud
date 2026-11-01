@@ -36,11 +36,12 @@ const cloud = createCloudConnection({stateDir: root, origin: 'https://waitron.lo
 // The private socket calls the same module in the owning server process, preserving its state lock.
 const socket = root + '/proof.sock'; await rm(socket, {force: true});
 const control = createServer(async (req, res) => {
+  let diagnostic;
   try {
     assert.equal(req.method, 'POST');
     if (req.url === '/rollback-refresh') {
       const {renewIntegrationAfterRollback} = await import('/proof/integration-renewal.mjs');
-      res.end(JSON.stringify(await renewIntegrationAfterRollback(root, pendingRequest, () => cloud.refresh())));
+      res.end(JSON.stringify(await renewIntegrationAfterRollback(root, pendingRequest, () => cloud.refresh(), value => {diagnostic = value;})));
       return;
     }
     if (req.url === '/paid-remote') {
@@ -122,6 +123,6 @@ const control = createServer(async (req, res) => {
     const observed = lines.filter(value => value.path === '/api/installations/backup-reserve').at(-1);
     assert.deepEqual(observed, {path: '/api/installations/backup-reserve', status: 403, error: 'permission_denied', grantIssued: false});
     res.end(JSON.stringify({status: 'proved', httpStatus: observed.status, error: observed.error, grantIssued: observed.grantIssued}));
-  } catch {res.statusCode = 500; res.end(JSON.stringify({error: 'fixture_refused'}));}
+  } catch {res.statusCode = 500; res.end(JSON.stringify({error: 'fixture_refused', ...(diagnostic ? {diagnostic} : {})}));}
 });
 await new Promise(resolve => control.listen(socket, resolve)); await chmod(socket, 0o600);

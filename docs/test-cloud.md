@@ -971,6 +971,23 @@ One Linux journey passes without skips in 134.6 seconds. Its 31 outer resource
 samples stay above 3,936 MiB available memory and 12.08 GiB free disk. This uses
 the campaign's temporary disk policy and supplies no shipping capacity approval.
 The schema change is a controlled fixture; an upgrade between published releases
-still needs its release qualification. An intermittent fixture refusal during
-post-rollback renewal remains unresolved. The complete producer receipt, pinned
+still needs its release qualification. The complete producer receipt, pinned
 Alpine image and deployment remain open. Keep plan enforcement off.
+
+If a post-rollback renewal refuses, use its filtered diagnostic to find the failed
+step. For example, `integration.rollback_refused:drain:cloud.busy` means the native
+client found another operation holding the same saved-state lock before it could
+drain pending work. `prepare` identifies the private renewal preparation; `renew`
+identifies the subsequent native refresh. Only fixed step names and known error
+codes cross the private socket and command boundary. Unknown errors become
+`unknown`; their messages and saved credentials stay private.
+
+A Linux run reproduced that lock conflict during the drain. The fixture now waits
+up to two seconds for `cloud.busy` to clear on each native refresh. Other errors
+still refuse immediately, and persistent contention keeps its diagnostic. The
+pending-request check still prevents preparation from replacing saved work. A
+separate disposable control forces overlapping genuine native refreshes; its
+complete restore journey passes in 137.7 seconds under the unchanged 300-second
+limit. The normal journey also passes in 131.0 seconds with the same paired-client
+and matching-volume checks. An earlier undiagnosed refusal remains historical evidence without an
+assigned cause; this result does not identify that earlier occurrence.

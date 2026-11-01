@@ -987,9 +987,16 @@ implementation or production evidence.
   before queuing its explicit renewal, preserving the pending-request guard.
   Its 31 outer samples stay above 3,936 MiB available memory and 12.08 GiB free
   disk under the campaign-only disk policy. This controlled change leaves an
-  upgrade between published releases unqualified. An intermittent fixture refusal
-  during post-rollback renewal remains unresolved; the passing run does not repair
-  that occurrence. Shipping-image capacity,
+  upgrade between published releases unqualified. Persistent diagnostics identify
+  a reproduced Linux drain refusal as `cloud.busy`, the pinned native client's
+  same-state lock conflict. The fixture now waits at most two seconds per refresh
+  for that code alone, preserving immediate refusal for other errors and the
+  pending-request guard. A disposable control with overlapping genuine native
+  refreshes passes the complete restore journey in 137.7 seconds under its
+  unchanged 300-second limit; the normal journey passes in 131.0 seconds with
+  its original checks. Earlier undiagnosed evidence remains unattributed.
+  Only fixed step names and known error codes cross the private control channel.
+  Shipping-image capacity,
   the shipping Alpine release, the strict complete producer receipt and deployment
   remain open. The combined test's nine-second
   margin needs attention before adding further fixture work to its unchanged

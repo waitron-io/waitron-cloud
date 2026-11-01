@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import {createHash} from 'node:crypto';
 import {request} from 'node:http';
+import {rollbackRefusalDiagnostic} from './integration-renewal.mjs';
 const root = process.env.CLOUD_TEST_ROOT;
 let input = '';
 for await (const part of process.stdin) {input += part; assert.ok(input.length < 16384);}
@@ -23,7 +24,10 @@ if (phase === 'snapshot-refusal' || phase === 'snapshot-publish' || phase === 'v
   const result = await new Promise((resolve, reject) => {
     const req = request({socketPath: root + '/proof.sock', path: '/' + phase, method: 'POST'}, res => {
       let text = ''; res.on('data', part => text += part);
-      res.once('end', () => {try {assert.equal(res.statusCode, 200); resolve(JSON.parse(text));} catch (error) {reject(error);}});
+      res.once('end', () => {try {
+        assert.equal(res.statusCode, 200, 'integration.fixture_refused' + (phase === 'rollback-refresh' ? rollbackRefusalDiagnostic(text) : ''));
+        resolve(JSON.parse(text));
+      } catch (error) {reject(error);}});
     });
     req.setTimeout(phase === 'stream-start' ? 90000 : phase === 'snapshot-publish' || phase === 'paid-remote' ? 45000 : 15000, () => req.destroy(Error('integration.refusal_timeout'))); req.once('error', reject); req.end(phase === 'free-remote' || phase === 'paid-remote' ? JSON.stringify(choice) : undefined);
   });
