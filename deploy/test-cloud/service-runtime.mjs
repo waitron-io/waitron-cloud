@@ -20,11 +20,11 @@ export async function testStorageOptions({pool,directory,mode='test-free-paid',r
  const config=await loadRuntime(directory);
  return {pool,mode,directory:join(directory,'storage-authority/managed'),iamPath:join(directory,'storage-authority/iam.json'),admin:{accessKeyId:config.storage.accessKeyId,secretAccessKey:config.storage.secretAccessKey},endpoint:'https://waitron.local:8333',region:'local',ca:await readFile(join(directory,'lan/ca.pem'),'utf8'),reload};
 }
-export async function openTestCaptureRuntime({pool,mode,directory}){
+export async function openTestCaptureRuntime({pool,mode,directory,openStorage=openPlanStorage}){
  if(!['test-free-paid','test-venue-levels'].includes(mode))throw Error('test_cloud.plan_mode');
  await bootstrapStorageIssuer(directory);
  const config=await loadRuntime(directory),storage=await testStorageOptions({pool,directory,mode});
- const managedStreams=await openPlanStorage(storage);
+ const managedStreams=await openStorage(storage);
  const runtime=captureRuntime({CLOUD_BACKUP_MASTER_KEY:config.backup.masterKey,CLOUD_BACKUP_AUTHORITY:await readFile(join(directory,'storage-authority/issuer.json'),'utf8'),CLOUD_BACKUP_CA_FILE:join(directory,'lan/ca.pem'),CLOUD_BACKUP_ENDPOINT:storage.endpoint,CLOUD_BACKUP_REGION:storage.region,CLOUD_BACKUP_ACCESS_KEY:storage.admin.accessKeyId,CLOUD_BACKUP_SECRET_KEY:storage.admin.secretAccessKey});
  runtime.options.planMode=mode;runtime.options.managedStreams=managedStreams;return runtime;
 }

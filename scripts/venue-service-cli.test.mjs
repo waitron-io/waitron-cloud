@@ -7,9 +7,9 @@ import {createServer} from 'node:net';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {test} from 'node:test';
-import {bootstrapTestCloud} from './bootstrap.mjs';
+import {bootstrapTestCloud} from '../deploy/test-cloud/bootstrap.mjs';
 
-const root=new URL('../../',import.meta.url);
+const root=new URL('../',import.meta.url);
 async function command(file,args,env,stopOnChange){
  const child=spawn(process.execPath,[new URL(file,root).pathname,...args],{cwd:root,env:{...process.env,...env},stdio:['ignore','pipe','pipe']});
  let stdout='',stderr='';child.stdout.on('data',value=>stdout+=value);child.stderr.on('data',value=>stderr+=value);

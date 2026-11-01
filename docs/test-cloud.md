@@ -43,7 +43,8 @@ Neither command qualifies a Waitron client or a live provider.
 
 The ordinary command runs one group and one file at a time. CI sets
 `CLOUD_SERVICE_PROOF_CONCURRENCY=2` to run at most two groups of two files while
-retaining every check and the same receipt fields. Other values refuse the proof.
+retaining every check and the same receipt fields. Values other than `1` or `2`
+refuse the proof.
 
 For private fixtures, select venue-level authority with
 `CLOUD_VENUE_SERVICE_LEVELS=test` and `CLOUD_TEST_SERVICE_PLANS=0`. Account,
