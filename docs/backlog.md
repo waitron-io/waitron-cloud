@@ -22,8 +22,8 @@ and session-list cleanup limits are described below. The stale-draft and script
 recovery notes also distinguish delayed-handler scope from outer wait bounds.
 The JavaScript-disabled fixture retains ordinary and delayed screenshots separately.
 Both reload fixtures also retain their reachable handler variants separately.
-The live-status fixture keeps its ordinary and delayed captures separately too.
-Its notes describe the missing-signal control's outer refusal check.
+The live-status and landmark fixtures keep ordinary and delayed captures separately.
+Their notes describe the missing-signal controls' outer refusal checks.
 See [the diagnostic qualification and open work](backlog/retrospective-reviews.md).
 
 ## Concurrent storage extraction and failed-startup cleanup (D454)
@@ -4079,12 +4079,18 @@ bound rather than independently proving an exact four-second wait.
 
 ## Public browser-check landmark handler wait (D365)
 
-The landmark browser fixture refuses an absent challenge-handler signal within
-its existing four-second page budget. Delayed handlers repeat running-check
+The landmark browser fixture uses a four-second observation for an absent
+challenge-handler signal. Its missing-signal control checks a five-second outer
+bound; it does not independently pin the exact four-second value or prove that
+ordinary handler observation is necessary. Delayed handlers repeat running-check
 journeys in both languages, themes and phone/desktop widths. All original main
 region, bilingual guidance, reload link, cookie, forwarding and layout checks
-remain, including disabled JavaScript and unavailable-script journeys. These
-checks use native Chromium and local HTTP; production behaviour is unchanged.
+remain, including disabled JavaScript and unavailable-script journeys.
+Ordinary captures keep all 24 historical names; eight delayed running captures
+add a suffix, retaining 32 screenshots. Set `PUBLIC_CHALLENGE_RECEIPT_DIR` to a
+fresh directory for this file, separate from other browser fixtures. These checks
+use native Chromium and local HTTP; other browser engines and production networks
+remain unqualified. Production behaviour is unchanged.
 
 ## Public browser-check reload handler wait (D367)
 
