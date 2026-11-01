@@ -169,6 +169,18 @@ export async function readCapacityContainerMemory(row, {docker, lifecycle = fals
   }
 }
 
+export function parseCapacityVolumeReadings(names, text) {
+  const lines = text.split('\n');
+  assert.equal(lines.length, names.length);
+  return lines.map((line, i) => {
+    const match = /^(\d+)\s+(\/capacity\/\d+)$/.exec(line);
+    assert.ok(match && match[2] === '/capacity/' + i);
+    const bytes = Number(match[1]) * 1024;
+    assert.ok(Number.isSafeInteger(bytes) && bytes >= 0);
+    return {name: names[i], bytes};
+  });
+}
+
 export async function observeCapacity({docker, project, runId, verifierScope, waitronImage, workerId,
   protectedUnchanged, startup = false, measureStoppedVolume, measureVolumes, procRoot = '/proc', cgroupRoot = '/sys/fs/cgroup', meminfo = '/proc/meminfo', diskPath = '/'}) {
   const ids = text => text.split(/\s+/).filter(Boolean);

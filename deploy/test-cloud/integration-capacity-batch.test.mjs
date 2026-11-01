@@ -3,7 +3,20 @@ import {test} from 'node:test';
 import {mkdtemp, writeFile, rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
-import {observeCapacity} from './test-fixtures/integration-capacity.mjs';
+import * as capacity from './test-fixtures/integration-capacity.mjs';
+const {observeCapacity} = capacity;
+
+test('a batch volume reply binds every size to its exact read-only mount without unsafe byte counts', () => {
+  assert.equal(typeof capacity.parseCapacityVolumeReadings, 'function', 'Bound batch output parser is missing');
+  assert.deepEqual(capacity.parseCapacityVolumeReadings(['config', 'database'], '1\t/capacity/0\n2\t/capacity/1'),
+    [{name: 'config', bytes: 1024}, {name: 'database', bytes: 2048}]);
+  for (const text of ['1\t/capacity/0', '1\t/capacity/0\n2\t/capacity/0',
+    '1\t/capacity/1\n2\t/capacity/0', '1\t/foreign/0\n2\t/capacity/1',
+    '-1\t/capacity/0\n2\t/capacity/1', 'NaN\t/capacity/0\n2\t/capacity/1',
+    '9007199254740991\t/capacity/0\n2\t/capacity/1']) {
+    assert.throws(() => capacity.parseCapacityVolumeReadings(['config', 'database'], text));
+  }
+});
 
 // Cold rollback must measure every unique retained volume without one container start per volume.
 test('one capacity reader measures all unique cold volumes and refuses incomplete or substituted results', async () => {

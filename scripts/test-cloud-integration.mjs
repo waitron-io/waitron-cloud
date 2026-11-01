@@ -12,6 +12,7 @@ import {inspectIntegrationAuthorisedRecovery} from '../deploy/test-cloud/test-fi
 import {inspectIntegrationContinuousRecovery} from '../deploy/test-cloud/test-fixtures/integration-continuous-recovery-evidence.mjs';
 import {rollbackRefusalDiagnostic} from '../deploy/test-cloud/test-fixtures/integration-renewal.mjs';
 import {captureIntegrationSource, checkIntegrationSource, measureIntegrationFiles} from '../deploy/test-cloud/test-fixtures/integration-source.mjs';
+import {parseCapacityVolumeReadings} from '../deploy/test-cloud/test-fixtures/integration-capacity.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const origin = 'https://waitron.local:3000', revision = 'ec91a9e34d2daba146f4ee61850ea4136ad5cfb7';
@@ -128,13 +129,7 @@ export async function runTestCloudClients({image, waitronImage, protectedContain
       '--entrypoint', 'du', image, '-sk', '--', ...names.map((_, i) => '/capacity/' + i)], '', 'capacity-volume-create');
     owned.push(id); record('container', id);
     try {
-      const lines = (await docker(['start', '--attach', id], '', 'capacity-volume-read')).split('\n');
-      assert.equal(lines.length, names.length);
-      return lines.map((line, i) => {
-        const match = /^(\d+)\s+(\/capacity\/\d+)$/.exec(line);
-        assert.ok(match && match[2] === '/capacity/' + i);
-        return {name: names[i], bytes: Number(match[1]) * 1024};
-      });
+      return parseCapacityVolumeReadings(names, await docker(['start', '--attach', id], '', 'capacity-volume-read'));
     }
     finally {
       await docker(['rm', '-f', id], '', 'capacity-volume-cleanup');
