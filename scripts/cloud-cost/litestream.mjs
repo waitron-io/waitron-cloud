@@ -564,7 +564,8 @@ export async function createLitestreamTransport({ target, meter, phase, lifetime
     const rememberTransfer = (reason, error, ioEvent) => remember(reason, error, ioEvent, name, {
       attempt: { producerAttempt, retryOrdinal: id.ordinal, phase: requestPhase }, idleActionsAtAdmission,
       clientClosed: destination.destroyed, responseHeadersSeen: statusCode !== null,
-      ...(ioEvent === 'response-aborted' ? { bytesIn, expectedIn, bytesOut, expectedOut, statusCode,
+      ...(ioEvent === 'response-aborted' || ioEvent === 'response-pipeline' && own(error, 'code') === 'ERR_STREAM_PREMATURE_CLOSE'
+        ? { bytesIn, expectedIn, bytesOut, expectedOut, statusCode,
         requestComplete: source.complete, responseComplete: upstreamResponse?.complete ?? false,
         requestSent: sent, responseReceived: received } : {}),
     });

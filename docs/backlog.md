@@ -3699,7 +3699,13 @@ Docker proof waits for Docker to return; reproduce each new diagnostic recurrenc
 before changing transport, accounting or cleanup.
 The D325 stop diagnostic now distinguishes child exit code and signal from an
 invalid request audit, retains the first failed audit stage and identifies an
-interrupted producer attempt. The historical stop/exit cause still needs a
+interrupted producer attempt. Premature-close response-pipeline refusals now retain body counts,
+expected lengths and request/response completion flags. Real HTTP controls
+reproduce a complete upstream LIST followed by a downstream close, including
+equal producer/observer byte totals but different outcomes. The session remains
+refused before and after a validated stop acknowledgement. These controlled
+exchanges do not establish the historical cancellation cause or change which
+shutdown evidence is accepted. The historical stop/exit cause still needs a
 labelled recurrence; see the linked investigation before changing the stop rule.
 The delayed-PUT fixture also records up to sixteen uploads on a stop refusal,
 including which upload released readiness and their arrival, backend-response and
