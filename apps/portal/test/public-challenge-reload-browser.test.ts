@@ -57,7 +57,7 @@ for (const locale of ['en', 'es']) for (const theme of ['light', 'dark'] as cons
         assert.equal(gate.stats().forwarded, 0); assert.equal((await context.cookies()).length, 0);
         if (process.env.PUBLIC_CHALLENGE_RECEIPT_DIR) {
           await mkdir(process.env.PUBLIC_CHALLENGE_RECEIPT_DIR, {recursive: true});
-          await page.screenshot({path: `${process.env.PUBLIC_CHALLENGE_RECEIPT_DIR}/${locale}-${theme}-${width}-${failure}.png`});
+          await page.screenshot({path: `${process.env.PUBLIC_CHALLENGE_RECEIPT_DIR}/${locale}-${theme}-${width}-${failure}${handler === 'normal' ? '' : `-${handler}`}.png`});
         }
         recovered = true;
         if (locale === 'es') {
@@ -74,7 +74,7 @@ for (const locale of ['en', 'es']) for (const theme of ['light', 'dark'] as cons
           assert.doesNotMatch(await page.locator('body').innerText(), /Please wait a moment|Espera un momento/);
         } else {
           const waitForHandler = () => t.waitFor(() => {assert.equal(challengeEntered, true, 'the challenge route handler must enter');}, {timeout: 4000});
-          // An absent signal must refuse within the page budget; removing the wait must also fail.
+          // The missing-signal control requires refusal before its five-second outer race resolves.
           if (handler === 'missing') {
             let timer: ReturnType<typeof setTimeout> | undefined;
             try {

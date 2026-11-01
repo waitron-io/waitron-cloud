@@ -21,9 +21,8 @@ once a request has been recorded. Their sampled duplicate controls and open timi
 and session-list cleanup limits are described below. The stale-draft and script
 recovery notes also distinguish delayed-handler scope from outer wait bounds.
 The JavaScript-disabled fixture retains ordinary and delayed screenshots separately.
-The running-failure reload fixture also retains its reachable handler variants
-separately. The script-failure reload fixture still needs distinct captures and a
-clearer wait comment.
+Both reload fixtures also retain their reachable handler variants separately.
+Their missing-signal comments describe the outer refusal check.
 See [the diagnostic qualification and open work](backlog/retrospective-reviews.md).
 
 ## Concurrent storage extraction and failed-startup cleanup (D454)
@@ -4077,6 +4076,10 @@ The reload browser fixture refuses an absent challenge-handler signal within
 its existing four-second page budget. Delayed handlers repeat both script-failure
 journeys in both languages, themes and phone/desktop widths. All original reload,
 keyboard, request-count, cookie, forwarding and disabled-JavaScript checks remain.
+The fixture keeps its 24 historical screenshot names and retains 16 delayed
+captures plus the reachable missing-signal capture separately, for 41 images.
+The missing-signal control wraps its configured four-second observation in a
+five-second race; it does not independently prove the exact four-second value.
 These checks use native Chromium and local HTTP; production behaviour is unchanged.
 
 ## Running browser-check failure reload handler waits (D368)
