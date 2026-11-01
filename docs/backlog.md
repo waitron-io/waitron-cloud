@@ -3742,18 +3742,39 @@ binary and a toy SQLite database with two rows. A loopback relay holds a snapsho
 upload before the measuring transport receives it. The runtime confirms stop
 while that upload remains held; forwarding it then reproduces the same
 `after-stop-admission / post-stop-operation / put / initial` refusal.
-A private native stack identifies the controlled upload as `DB.Snapshot` under
-`Store.monitorCompactionLevel`. Completing it before stop passes the paired case.
+A private macOS stack identifies that controlled upload as `DB.Snapshot` under
+`Store.monitorCompactionLevel`. Completing it before stop passes the macOS paired case.
+
+The official Linux x86-64 release now reproduces that admission refusal on the
+authorised test box with the same two-row, loopback-storage probe and current
+Cloud modules. Its archive matches the pinned SHA-256
+`cfb371176d164437ae869f8351cfde49bd1804ae71c61923f75c9cba9c9c006d`.
+At stop confirmation, the measuring transport has zero pending exchanges and
+sixteen completed ones. Forwarding the held initial PUT afterward refuses
+measurement despite the writer's zero exit code. This establishes the mechanism
+on Linux; it does not identify the upload in the historical CI failure or its native task.
+
+The original Linux completed-upload control also refuses: a different LIST is
+active at stop confirmation, and signalling the writer is followed by
+`client-error / ECONNRESET`. A disposable control that waits for the transport to
+be idle before signalling passes with eighteen reconciled exchanges and no
+shutdown allowance used. That single controlled ordering result does not prove
+that all native background work has drained or qualify a production stop change.
+The failed original control remains part of the evidence.
+
+The unchanged genuine PostgreSQL/SeaweedFS request-log case also passes on the
+box: both sales restore, nineteen replication exchanges and thirty-three restore
+exchanges reconcile, and no shutdown allowance is used. This ordinary successful
+run does not reproduce the historical failure or turn either probe into a repair.
 
 You cannot infer first HTTP admission from the earlier SDK request log, an idle
 transfer count or a zero writer exit. Run `node --test
 scripts/cloud-cost/litestream-pre-admission-put.test.mjs` for the two real HTTP
 ordering controls. Removing the admission guard makes the late upload return
-200 instead of the required 400. Existing runtime code, assertions, accounting,
-pins, allowances and deadlines remain unchanged. This establishes a possible
-cause, not the historical Linux cause or real fiscal-workload qualification.
-Keep that attribution and any repair open; genuine local container reproduction
-waits until Docker returns. Do not delay stop or admit late uploads as a workaround.
+200 instead of the required 400; restoring it passes both checks. Runtime code,
+original assertions, accounting, pins, allowances and deadlines remain unchanged.
+D530 retains the historical cause and production shutdown qualification as open.
+Do not delay production stop or admit late uploads on the strength of these probes.
 
 The native admin-port qualification also encounters an
 [initial PUT after stop](https://github.com/waitron-io/waitron-cloud/actions/runs/41037164023/job/124000805980).
