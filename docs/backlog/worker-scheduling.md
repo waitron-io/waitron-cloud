@@ -101,7 +101,8 @@ distinguish an unreferenced socket closed at exit.
 The command must exit within two seconds of the fixture disconnect, before the local
 transport’s five-second inactivity timeout can hide a missing socket close. Removing
 the fixture disconnect fails this bound under both stop signals. This is a fixture
-check, not a production delivery deadline.
+check, not a production delivery deadline. Requalify the distinction if you shorten
+the local transport’s inactivity timeout.
 
 A lost acknowledgement leaves remote acceptance uncertain: this local check does
 not promise that a later retry avoids duplicate delivery. Production SMTP behavior,
