@@ -1112,6 +1112,10 @@ It also uses this helper if the source stops between inspection and measurement.
 Running-container errors, an unavailable Docker daemon, changed mount identity and
 out-of-memory state still refuse the measurement. Each helper is recorded and
 removed before its reading returns; the original source stays stopped.
+If a process disappears during rollback, the sampler rechecks Docker's container,
+image, labels and out-of-memory state. A confirmed stop contributes no process
+memory; a confirmed restart is measured from its new process. An unchanged process
+ID, substituted identity or unavailable inspection still refuses the reading.
 
 Another queued archive can become eligible while the selected archive is being
 verified. The fixture runs ordinary one-job worker commands until the selected

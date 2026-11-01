@@ -820,6 +820,10 @@ implementation or production evidence.
   volume-size race. Explicit integration sampling now reads retained stopped
   volumes through recorded read-only helpers instead of omitting their bytes or
   restarting the source; genuine qualification of that correction remains due.
+  A later run reaches rollback and identifies a process disappearing between
+  Docker inspection and its memory reading. Explicit capacity observation now
+  rechecks unchanged ownership and non-OOM state before accounting a confirmed
+  stop or reading a restarted process; genuine combined qualification remains due.
   The capacity journey also
   collects host memory and available disk on Docker's data filesystem before
   project startup, throughout startup and settled/verification sampling,

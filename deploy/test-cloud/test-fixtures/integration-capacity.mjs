@@ -152,6 +152,23 @@ export async function readCapacityVolume({docker, name, volume, measureStoppedVo
   return Number(size.split(/\s+/)[0]) * 1024;
 }
 
+export async function readCapacityContainerMemory(row, {docker, lifecycle = false, procRoot, cgroupRoot}) {
+  try {return await readContainerMemory(row.State.Pid, {procRoot, cgroupRoot});}
+  catch (error) {
+    if (!lifecycle || error.code !== 'ENOENT') throw error;
+    const rows = JSON.parse(await docker(['inspect', row.Id], '', 'capacity-lifecycle-inspect'));
+    assert.ok(Array.isArray(rows) && rows.length === 1 && rows[0]?.Id === row.Id);
+    const [current] = rows;
+    assert.equal(current.Image, row.Image);
+    assert.deepEqual(current.Config.Labels, row.Config.Labels);
+    assert.equal(current.State.OOMKilled, false);
+    if (current.State.Running === false) return;
+    assert.equal(current.State.Running, true);
+    assert.notEqual(current.State.Pid, row.State.Pid);
+    return readContainerMemory(current.State.Pid, {procRoot, cgroupRoot});
+  }
+}
+
 export async function observeCapacity({docker, project, runId, verifierScope, waitronImage, workerId,
   protectedUnchanged, startup = false, measureStoppedVolume, procRoot = '/proc', cgroupRoot = '/sys/fs/cgroup', meminfo = '/proc/meminfo', diskPath = '/'}) {
   const ids = text => text.split(/\s+/).filter(Boolean);
@@ -180,12 +197,14 @@ export async function observeCapacity({docker, project, runId, verifierScope, wa
   const verifierIds = [];
   for (const [rows, verifier] of [[cloud, false], [children, true]]) for (const row of rows.filter(row => row.State.Running)) {
     let memory;
-    try {memory = await readContainerMemory(row.State.Pid, {procRoot, cgroupRoot});}
+    try {memory = verifier ? await readContainerMemory(row.State.Pid, {procRoot, cgroupRoot}) :
+      await readCapacityContainerMemory(row, {docker, procRoot, cgroupRoot, lifecycle: Boolean(measureStoppedVolume)});}
     catch (error) {
       // A completed child can disappear between its inspect and cgroup read.
       if (verifier && error.code === 'ENOENT' && !(await list('id=' + row.Id)).length) continue;
       throw error;
     }
+    if (!memory) continue;
     if (verifier) {verifierMiB += memory.memoryMiB; scratchMiB += memory.shmemMiB; verifierIds.push(row.Id);}
     else cloudMiB += memory.memoryMiB;
   }
