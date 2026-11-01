@@ -11,11 +11,8 @@ const exec=promisify(execFile);
 // A removed guard must fail its behavioral assertion, then pass again after restoration.
 test('snapshot venue guards detect independent omissions',{timeout:180000},async()=>{
  const root=fileURLToPath(new URL('../../../',import.meta.url));
- const scratch=await mkdtemp(join(tmpdir(),'venue-catalogue-guards-')),candidate=join(scratch,'candidate');
+ const scratch=await mkdtemp(join(tmpdir(),'venue-catalogue-guards-'));
  try{
-  await exec('git',['clone','--quiet','--no-hardlinks',root,candidate],{timeout:10000});
-  await exec('pnpm',['install','--frozen-lockfile'],{cwd:candidate,timeout:20000});
-  const path=join(candidate,'packages/backups/src/catalogue.ts'),original=await readFile(path,'utf8');
   const cases=[
    {name:'current authority',needle:"if (mode === 'test-venue-levels') return await requireVenueService(client,venueId,'retained_snapshots',mode);",
     replacement:"if (mode === 'test-venue-levels') return;",pattern:'venue snapshot schema failure never creates keys or storage state',expected:'Missing expected rejection'},
@@ -46,13 +43,20 @@ test('snapshot venue guards detect independent omissions',{timeout:180000},async
    {name:'failed publication releases capture',needle:'client.release(discard);',replacement:'client.release(false);',
     pattern:'venue failed snapshot publication releases its capture for another publisher',expected:'a failed publication must release its capture lease'},
   ];
+  const qualified:string[]=[];
+  // Mutations stay in separate checkouts; both batches finish before either is removed.
+  const results=await Promise.allSettled([0,1].map(async index=>{
+  const candidate=join(scratch,'candidate-'+index);
+  await exec('git',['clone','--quiet','--no-hardlinks',root,candidate],{timeout:10000});
+  await exec('pnpm',['install','--frozen-lockfile'],{cwd:candidate,timeout:20000});
+  const path=join(candidate,'packages/backups/src/catalogue.ts'),original=await readFile(path,'utf8');
   const env={...process.env};delete env.NODE_TEST_CONTEXT;
   async function run(pattern:string){
    return exec(process.execPath,['--test','--test-reporter=tap','--test-name-pattern=^'+pattern+'$','test/venue-service-backups.test.ts'],
     {cwd:join(candidate,'packages/backups'),env,timeout:20000,maxBuffer:2*1024*1024})
     .then(r=>({code:0,output:r.stdout+r.stderr}),e=>({code:e.code,output:e.stdout+e.stderr}));
   }
-  for(const c of cases){
+  for(const c of cases.filter((_,i)=>i%2===index)){
    assert.equal(original.split(c.needle).length,2,c.name+' must target one guard');
    const before=await run(c.pattern);assert.equal(before.code,0,before.output);assert.match(before.output,/# pass 1\b/);assert.match(before.output,/# fail 0\b/);assert.match(before.output,/# skipped 0\b/);
    try{
@@ -61,7 +65,33 @@ test('snapshot venue guards detect independent omissions',{timeout:180000},async
     assert.match(omitted.output,/AssertionError|ERR_ASSERTION/);assert.ok(omitted.output.includes(c.expected),omitted.output);assert.ok(omitted.output.includes(c.pattern));
    }finally{await writeFile(path,original);}
    const restored=await run(c.pattern);assert.equal(restored.code,0,restored.output);assert.match(restored.output,/# pass 1\b/);assert.match(restored.output,/# skipped 0\b/);
+   qualified.push(c.name);
    console.log('VENUE_CATALOGUE_GUARD_DETECTED '+c.name);
   }
+  }));
+  const failures=results.filter(result=>result.status==='rejected');
+  // The TAP failure contains the first rejection; preserve the other batch's evidence.
+  for(const failure of failures.slice(1))console.error('Additional catalogue guard batch failure:',failure.reason);
+  for(const result of results)if(result.status==='rejected')throw result.reason;
+  assert.deepEqual(qualified.sort(),cases.map(c=>c.name).sort(),'every catalogue guard must be qualified once');
+ }finally{await rm(scratch,{recursive:true,force:true});}
+});
+
+// Select only the copied wrapper, so this native control cannot invoke itself.
+test('catalogue guard wrapper retains both batch failures',async()=>{
+ const scratch=await mkdtemp(join(tmpdir(),'catalogue-batch-errors-'));
+ try{
+  const source=await readFile(fileURLToPath(import.meta.url),'utf8');
+  const needle="  const candidate="+"join(scratch,'candidate-'+index);";
+  assert.equal(source.split(needle).length,2,'one candidate setup boundary');
+  const probe=join(scratch,'probe.mts');
+  await writeFile(probe,source.replace(needle,"  throw new Error('catalogue batch '+index+' failed');\n"+needle));
+  const env={...process.env};delete env.NODE_TEST_CONTEXT;
+  const result=await exec(process.execPath,['--test','--test-reporter=tap','--test-name-pattern=^snapshot venue guards detect independent omissions$',probe],
+   {env,timeout:5000,maxBuffer:2*1024*1024}).then(r=>({code:0,output:r.stdout+r.stderr}),e=>({code:e.code,output:e.stdout+e.stderr}));
+  assert.equal(result.code,1,result.output);
+  assert.match(result.output,/catalogue batch 0 failed/);
+  assert.match(result.output,/catalogue batch 1 failed/);
+  assert.match(result.output,/# fail 1\b/);
  }finally{await rm(scratch,{recursive:true,force:true});}
 });
