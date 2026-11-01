@@ -1,5 +1,14 @@
 # Waitron Cloud backlog
 
+## Cloud backup box identity (D451)
+
+Cloud's legacy archive verifier checks `WAITRON_NODE_ID`, and replay fixtures write
+that setting without a location setting. Source identity, integrity, restore hooks
+and private-file checks remain required. Joint qualification waits for Waitron
+[#2198](https://github.com/clintongormley/waitron/pull/2198) and a matching replay
+release: the current `fbadd157` restore reader requires the retired node/location
+settings. No compatibility fallback or replay pin change is included here.
+
 ## Concurrent storage archive publication (D450)
 
 **Open.** Real extraction, store startup and historical failure causes remain open.

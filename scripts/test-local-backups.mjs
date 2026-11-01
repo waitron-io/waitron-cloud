@@ -848,7 +848,7 @@ try {
     restoredHead = databaseHead(join(continuousTarget, "venue", "venue.db"));
   const continuousRestoredNodeId = await envValue(
     join(continuousTarget, "state", "trading.env"),
-    "WAITRON_TILL_NODE_ID",
+    "WAITRON_NODE_ID",
   );
   assert.equal(retried.exit, 0, retried.output);
   assert.equal(restoredHead, continuousEntry.sourceHead);
@@ -945,7 +945,7 @@ try {
     snapshotRestoreMs = performance.now() - snapshotRestoreStarted;
   const snapshotRestoredNodeId = await envValue(
     join(fallbackTarget, "trading.env"),
-    "WAITRON_TILL_NODE_ID",
+    "WAITRON_NODE_ID",
   );
   assert(fallbackRestored.integrityOk);
   assert.equal(snapshotRestoredNodeId, fallbackEntry.snapshot.point.sourceNodeId);
