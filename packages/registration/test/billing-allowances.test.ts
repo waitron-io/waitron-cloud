@@ -180,6 +180,16 @@ test('a saved older month replays without debiting the current month',async()=>{
  }finally{await f.close();}
 });
 
+test('retained reservations allow owner removal and refuse its later replay',async()=>{
+ const f=await fixture();try{
+  await f.config.publish(TEST_ALLOWANCES);const held=await f.reserve();
+  await f.pool.query('DELETE FROM organisation_memberships WHERE account_id=$1',[f.accountId]);
+  await assert.rejects(f.reserve(),{code:'allowance_scope_not_found'});
+  assert.equal((await f.pool.query('SELECT id FROM billing_allowance_reservations')).rows[0].id,held.id);
+  assert.equal(await f.total(),1n);
+ }finally{await f.close();}
+});
+
 async function translationJob(f:Awaited<ReturnType<typeof fixture>>,operationId:string,units=2){
  const id=randomUUID();
  await f.pool.query(`INSERT INTO translation_jobs(id,installation_id,venue_id,operation_id,job_sha256,job_bytes,total,provider,model,prompt_version)
@@ -239,7 +249,7 @@ test('SQL preserves reservation identity ownership whole units and monotone stat
   const insert='INSERT INTO billing_allowance_reservations(id,account_id,organisation_id,legal_business_id,venue_id,installation_id,service,operation_id,binding,units,month,revision,state) ';
   const select='SELECT gen_random_uuid(),account_id,organisation_id,legal_business_id,venue_id,installation_id,service,gen_random_uuid(),binding,units,month,revision,state FROM billing_allowance_reservations WHERE id=$1';
   await assert.rejects(f.pool.query(insert+select.replace('gen_random_uuid(),binding','operation_id,binding'),[held.id]),{code:'23505'});
-  for(const quantity of ['0','-1','1.5','9223372036854775808'])await assert.rejects(f.pool.query(insert+select.replace('binding,units,month',`binding,${quantity},month`),[held.id]),{code:'23514'});
+  for(const quantity of ['0','-1','1.5','2','9223372036854775808'])await assert.rejects(f.pool.query(insert+select.replace('binding,units,month',`binding,${quantity},month`),[held.id]),{code:'23514'});
   await assert.rejects(f.pool.query(insert+select.replace('organisation_id,legal_business_id,venue_id,installation_id,service,gen_random_uuid()',`organisation_id,legal_business_id,'${f.foreignVenue}'::uuid,installation_id,service,gen_random_uuid()`),[held.id]),{code:'23503'});
   for(const sql of ["UPDATE billing_allowance_reservations SET binding='other'","UPDATE billing_allowance_reservations SET month='2020-01-01'","DELETE FROM billing_allowance_reservations"])await assert.rejects(f.pool.query(sql),{code:'55000'});
   await f.spend(held.id);
