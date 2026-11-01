@@ -18,6 +18,17 @@ test('paired Cloud stays within measured budgets through a settled minute and ac
   assert.equal(receipt.capacity.measurement, 'linux-cgroup-v2-including-tmpfs');
   assert.equal(receipt.capacity.shippingQualification, false);
   assert.equal(receipt.capacity.diskMeasurement, 'docker-data-filesystem');
+  assert.ok(receipt.capacity.startup.samples.length > 1, 'Startup must be sampled through readiness');
+  assert.equal(receipt.capacity.startup.samples[0].cloudMiB, 0, 'Sample before allocating project containers');
+  assert.ok(receipt.capacity.startup.samples.at(-1).cloudMiB > 0);
+  let startupElapsed = -1;
+  for (const sample of receipt.capacity.startup.samples) {
+    assert.equal(sample.phase, 'startup'); assert.ok(sample.elapsedMs > startupElapsed);
+    assert.ok(sample.elapsedMs - Math.max(0, startupElapsed) <= 5000);
+    assert.ok(sample.freeGiB > 0); assert.ok(sample.availableMiB > 0);
+    assert.equal(sample.protectedUnchanged, true); assert.equal(sample.oom, false);
+    startupElapsed = sample.elapsedMs;
+  }
   for (const sample of [receipt.capacity.baseline, ...receipt.capacity.samples, receipt.capacity.after]) {
     assert.ok(Number.isFinite(sample?.availableMiB) && sample.availableMiB >= 0);
     assert.ok(Number.isFinite(sample?.freeGiB) && sample.freeGiB > 0);

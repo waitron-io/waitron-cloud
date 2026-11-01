@@ -88,6 +88,31 @@ export async function measureCapacityWindow({observe, verify, stop, now = () => 
   return {samples, value};
 }
 
+export async function measureStartupCapacity({observe, start, stop, now = () => performance.now(), wait = ms => new Promise(resolve => setTimeout(resolve, ms))}) {
+  const samples = [], began = now();
+  const sample = async () => {
+    const elapsedMs = Math.round(now() - began);
+    const value = {...await observe(), elapsedMs, phase: 'startup'};
+    checkCapacitySample(value);
+    assert.ok(Number.isSafeInteger(elapsedMs) && elapsedMs >= 0);
+    const previous = samples.at(-1)?.elapsedMs ?? -1;
+    assert.ok(elapsedMs > previous && elapsedMs - Math.max(0, previous) <= 5000, 'integration.capacity_sample_gap');
+    samples.push(value);
+  };
+  await sample();
+  let done = false, error, value;
+  const operation = Promise.resolve().then(start).then(result => {value = result;}, failure => {error = failure;}).finally(() => {done = true;});
+  try {
+    do {await wait(1000); await sample();} while (!done);
+  } catch (failure) {
+    try {await stop();} finally {await operation;}
+    throw failure;
+  }
+  await operation;
+  if (error) throw error;
+  return {samples, value};
+}
+
 export async function inspectCapacityVerifier(docker, id) {
   let raw;
   try {raw = await docker(['inspect', id], '', 'capacity-verifier-inspect');}
@@ -102,12 +127,12 @@ export async function inspectCapacityVerifier(docker, id) {
 }
 
 export async function observeCapacity({docker, project, runId, verifierScope, waitronImage, workerId,
-  protectedUnchanged, procRoot = '/proc', cgroupRoot = '/sys/fs/cgroup', meminfo = '/proc/meminfo', diskPath = '/'}) {
+  protectedUnchanged, startup = false, procRoot = '/proc', cgroupRoot = '/sys/fs/cgroup', meminfo = '/proc/meminfo', diskPath = '/'}) {
   const ids = text => text.split(/\s+/).filter(Boolean);
   const list = filter => docker(['ps', '-aq', '--no-trunc', '--filter', filter]).then(ids);
   const inspect = async (values, phase = 'capacity-cloud-inspect') => values.length ? JSON.parse(await docker(['inspect', ...values], '', phase)) : [];
   const cloud = await inspect(await list('label=com.docker.compose.project=' + project));
-  assert.ok(cloud.length > 0);
+  if (!startup) assert.ok(cloud.length > 0);
   for (const row of cloud) assert.equal(row.Config.Labels['com.docker.compose.project'], project);
   const clients = await inspect(await list('label=cloud.integration.owner=' + runId), 'capacity-clients-inspect');
   for (const row of clients) assert.equal(row.Config.Labels['cloud.integration.owner'], runId);

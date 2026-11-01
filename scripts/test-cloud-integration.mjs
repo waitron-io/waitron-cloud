@@ -94,7 +94,7 @@ export async function runTestCloudClients({image, waitronImage, protectedContain
   };
   const before = await inventory();
   checkProtectedContainers(before, before, protectedContainerIds);
-  let hostCapacity;
+  let hostCapacity, startupCapacity;
   const record = (kind, id) => {if (!created.some(value => value.kind === kind && value.id === id)) created.push({kind, id, owner: runId});};
   const control = async (id, phase, choice) => parseIntegrationJson(await docker(['exec', '-i',
     ...(venueCAs.has(id) ? ['--env', 'NODE_EXTRA_CA_CERTS=' + venueCAs.get(id)] : []),
@@ -145,7 +145,14 @@ export async function runTestCloudClients({image, waitronImage, protectedContain
     record('image', clientImage);
     await writeFile(override, `name: ${project}\nservices:\n  gateway-manifest:\n    environment:\n      CLOUD_TEST_SERVICE_PLANS: "${paidRemote ? 1 : 0}"\n  account:\n    environment:\n      CLOUD_TEST_SERVICE_PLANS: "1"\n  storage:\n    environment:\n      CLOUD_TEST_SERVICE_PLANS: "1"\n    ports: !override ["127.0.0.1::8333"]\n  postgres:\n    ports: !override ["127.0.0.1::5432"]\n  mailpit:\n    ports: !override ["127.0.0.1::1025", "127.0.0.1::8025"]\n  proxy:\n    ports: !override ["127.0.0.1::3000"]\n  gateway:\n    ports: !override ["127.0.0.1::443", "127.0.0.1::51820/udp"]\n`, {mode: 0o600});
     started = true;
-    await compose(['up', '--no-build', '--pull', 'never', '--detach', '--wait', '--wait-timeout', '90']);
+    const start = () => compose(['up', '--no-build', '--pull', 'never', '--detach', '--wait', '--wait-timeout', '90']);
+    if (measureCapacity) {
+      const {measureStartupCapacity, observeCapacity} = await import('../deploy/test-cloud/test-fixtures/integration-capacity.mjs');
+      startupCapacity = await measureStartupCapacity({start,
+        observe: () => observeCapacity({docker, project, runId, waitronImage, startup: true, diskPath: hostCapacity.diskPath,
+          protectedUnchanged: async () => checkProtectedContainers(before, await inventory(), protectedContainerIds)}),
+        stop: () => compose(['stop', '--timeout', '10'])});
+    } else await start();
     const account = await compose(['ps', '-q', 'account']), proxy = await compose(['ps', '-q', 'proxy']);
     const network = project + '_default';
     const ca = await docker(['exec', proxy, 'cat', '/run/local-stack/lan/ca.pem']);
@@ -315,7 +322,7 @@ export async function runTestCloudClients({image, waitronImage, protectedContain
               stop: async () => {if (verifierStarted) await docker(['stop', '--time', '15', verifierWorker], '', 'capacity-refusal-stop');},
             });
             capacityEvidence = {measurement: 'linux-cgroup-v2-including-tmpfs', diskMeasurement: 'docker-data-filesystem',
-              shippingQualification: false, baseline: hostCapacity.baseline, samples: measured.samples};
+              shippingQualification: false, baseline: hostCapacity.baseline, startup: {samples: startupCapacity.samples}, samples: measured.samples};
           } else await verify();
         }
         if (paidStream) {
