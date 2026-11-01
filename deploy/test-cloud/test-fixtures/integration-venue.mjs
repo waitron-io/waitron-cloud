@@ -39,10 +39,8 @@ const control = createServer(async (req, res) => {
   try {
     assert.equal(req.method, 'POST');
     if (req.url === '/rollback-refresh') {
-      const {prepareIntegrationRenewal} = await import('/proof/integration-renewal.mjs');
-      await prepareIntegrationRenewal(root, pendingRequest);
-      await cloud.refresh();
-      res.end(JSON.stringify({renewed: true}));
+      const {renewIntegrationAfterRollback} = await import('/proof/integration-renewal.mjs');
+      res.end(JSON.stringify(await renewIntegrationAfterRollback(root, pendingRequest, () => cloud.refresh())));
       return;
     }
     if (req.url === '/paid-remote') {

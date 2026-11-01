@@ -63,7 +63,7 @@ export function checkProtectedContainers(before, after, ids) {
   return true;
 }
 
-export async function runTestCloudClients({image, waitronImage, protectedContainerIds = [], paidSnapshot = false, paidVerification = false, paidRecovery = false, paidAuthorisedRecovery = false, paidStream = false, paidContinuousRecovery = false, freeRemote = false, paidRemote = false, cloudRollback = false, measureCapacity = false} = {}) {
+export async function runTestCloudClients({image, waitronImage, protectedContainerIds = [], paidSnapshot = false, paidVerification = false, paidRecovery = false, paidAuthorisedRecovery = false, paidStream = false, paidContinuousRecovery = false, freeRemote = false, paidRemote = false, cloudRollback = false, measureCapacity = false, schemaRollback = false} = {}) {
   paidStream ||= paidContinuousRecovery;
   paidAuthorisedRecovery ||= paidStream;
   paidRecovery ||= paidAuthorisedRecovery;
@@ -462,8 +462,8 @@ export async function runTestCloudClients({image, waitronImage, protectedContain
         paid: remoteClients.find(value => value.plan === 'paid'), free: remoteClients.find(value => value.plan === 'free'), image, runId,
         own: id => {owned.push(id); record('container', id);}});
     }
-    let cloudRollbackEvidence;
-    if (cloudRollback) {
+    let cloudRollbackEvidence, schemaRollbackEvidence;
+    if (cloudRollback || schemaRollback) {
       const {proveIntegrationRollback, checkRollbackClient} = await import('../deploy/test-cloud/test-fixtures/integration-rollback.mjs');
       const exchanges = async client => parseIntegrationJson(await docker(['exec', client.id, 'node', '-e',
         "const fs=require('node:fs');const rows=fs.readFileSync(process.argv[1]+'/exchanges.jsonl','utf8').trim().split('\\n').map(JSON.parse);const count=path=>rows.filter(row=>row.path===path&&row.status===200).length;console.log(JSON.stringify({renewals:count('/api/installations/renew'),configurations:count('/api/installations/configuration')}));",
@@ -471,7 +471,9 @@ export async function runTestCloudClients({image, waitronImage, protectedContain
       const clients = [];
       const previous = await Promise.all(remoteClients.map(async client => ({client,
         evidence: await control(client.id, 'evidence'), exchanges: await exchanges(client)})));
-      cloudRollbackEvidence = await proveIntegrationRollback({docker, compose, project, image, account,
+      const proveRollback = schemaRollback ? (await import('../deploy/test-cloud/test-fixtures/integration-schema-rollback.mjs')).proveIntegrationSchemaRollback : proveIntegrationRollback;
+      const evidence = await proveRollback({docker, compose, project, image, account,
+        own: id => {owned.push(id); record('container', id);},
         readIdentity: async () => parseIntegrationJson(await docker(['exec', account, 'node', 'deploy/test-cloud/test-fixtures/integration-deployment-identity.mjs'], '', 'rollback-deployment-identity')),
         probe: async () => {
           // Docker assigns a new random loopback port when the stopped proxy starts again.
@@ -490,8 +492,9 @@ export async function runTestCloudClients({image, waitronImage, protectedContain
             clients.push({installationId: before.client.installationId, before: before.exchanges, after: counts, identityPreserved: true});
           }
         }});
-      cloudRollbackEvidence.clients = clients;
-      cloudRollbackEvidence.pairedClientsPreserved = clients.length;
+      evidence.clients = clients;
+      evidence.pairedClientsPreserved = clients.length;
+      if (schemaRollback) schemaRollbackEvidence = evidence; else cloudRollbackEvidence = evidence;
     }
     for (const key of ['organisationId', 'venueId', 'installationId', 'localVenueId', 'stateSha256']) assert.equal(new Set(organisations.map(value => value[key])).size, 2, 'integration.distinct_' + key);
     result = {version: 1, kind: 'test-cloud-clients', runId, completeIntegration: false, origin, waitronHead: revision, image, waitronImage,
@@ -499,7 +502,8 @@ export async function runTestCloudClients({image, waitronImage, protectedContain
       tls: {untrustedRefused: true, wrongHostnameRefused: true}, organisations, freeSnapshot, restarts,
       ...(capacityEvidence ? {capacity: capacityEvidence} : {}), ...(publishedSnapshot ? {paidSnapshot: publishedSnapshot} : {}), ...(observedStream ? {paidStream: observedStream} : {}),
       ...(continuousRecovery ? {paidContinuousRecovery: continuousRecovery} : {}), ...(freeRemoteEvidence ? {freeRemote: freeRemoteEvidence} : {}),
-      ...(paidRemoteEvidence ? {paidRemote: paidRemoteEvidence} : {}), ...(cloudRollbackEvidence ? {cloudRollback: cloudRollbackEvidence} : {})};
+      ...(paidRemoteEvidence ? {paidRemote: paidRemoteEvidence} : {}), ...(cloudRollbackEvidence ? {cloudRollback: cloudRollbackEvidence} : {}),
+      ...(schemaRollbackEvidence ? {schemaRollback: schemaRollbackEvidence} : {})};
   } finally {
     try {
       await completeCleanup([

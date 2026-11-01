@@ -975,7 +975,21 @@ implementation or production evidence.
   cached lease; this does not qualify automatic expiry. The proof refreshes the
   random loopback port after restart without changing TLS trust. Its 29 samples
   stay above 3,903 MiB available memory and 13.98 GiB free disk; owned cleanup and
-  protected Waitron state are checked. Shipping-image capacity, schema-changing rollback,
+  protected Waitron state are checked. A separate controlled schema-change journey
+  now passes one Linux case without skips in 134.6 seconds. With Cloud stopped,
+  it saves the matching configuration, PostgreSQL, storage and gateway volumes.
+  A disposable table and migration entry trigger the normal consumer schema
+  refusal; private configuration and storage also change. Every archive and its
+  extracted contents are checked before replacing any volume. The restored
+  schema, image and volume bindings, runtime configuration and public CA match
+  their original observations. Both original pairings then complete fresh native
+  renewal and configuration exchanges. The fixture drains saved native work
+  before queuing its explicit renewal, preserving the pending-request guard.
+  Its 31 outer samples stay above 3,936 MiB available memory and 12.08 GiB free
+  disk under the campaign-only disk policy. This controlled change leaves an
+  upgrade between published releases unqualified. An intermittent fixture refusal
+  during post-rollback renewal remains unresolved; the passing run does not repair
+  that occurrence. Shipping-image capacity,
   the shipping Alpine release, the strict complete producer receipt and deployment
   remain open. The combined test's nine-second
   margin needs attention before adding further fixture work to its unchanged

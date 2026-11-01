@@ -21,7 +21,8 @@ node --test scripts/verify-test-cloud-receipt.test.mjs
 The paired-client journey below now combines continuous recovery, independent
 snapshot fallback and remote isolation and withdrawal. A separate same-image
 rollback journey preserves Cloud identity and both pairings. The combined receipt
-producer, schema-changing rollback and shipping image capacity qualification remain open.
+producer and shipping image capacity qualification remain open. A separate
+controlled schema-change journey now checks a matching private-volume restore.
 There is no completed PR7 receipt to validate yet. Keep plan enforcement off
 before the test-box deployment.
 
@@ -937,3 +938,39 @@ Owned cleanup and the protected Waitron containers are checked. This proof makes
 no schema change. A schema upgrade still needs its matching private database,
 configuration and storage backup/restore proof. Shipping-image capacity and the
 strict complete receipt remain open. Keep plan enforcement off.
+
+## Restore the matching private volumes after a controlled schema change
+
+A database backup alone cannot recover the configuration keys and stored objects
+that belong with it. Check their recovery together in a disposable project:
+
+```sh
+node --test scripts/test-cloud-schema-rollback.test.mjs
+```
+
+Use the same immutable image inputs as the other client journeys. The proof stops
+the recorded Cloud containers, then saves the configuration, PostgreSQL, storage
+and gateway volumes into a private backup volume. It records archive checksums,
+file contents, ownership and permissions. Before replacing any volume, it checks
+all four archives and their extracted contents.
+
+With only PostgreSQL running, the fixture adds a disposable table and migration
+entry. The normal consumer schema gate must refuse that database. It also changes
+the private configuration file and adds a storage marker. After another stop, the
+proof restores the complete saved set and checks the original schema before
+starting Cloud consumers. Their image IDs, volume bindings, runtime configuration
+and public CA must match their earlier observations.
+
+Both original paired clients must then complete fresh native renewal and
+configuration requests. The longer outage can leave a request pending in Waitron's
+ordinary background worker. The fixture first asks the unchanged native client
+to complete its saved work, then queues its explicit renewal. The existing check
+that refuses to overwrite pending work remains in place.
+
+One Linux journey passes without skips in 134.6 seconds. Its 31 outer resource
+samples stay above 3,936 MiB available memory and 12.08 GiB free disk. This uses
+the campaign's temporary disk policy and supplies no shipping capacity approval.
+The schema change is a controlled fixture; an upgrade between published releases
+still needs its release qualification. An intermittent fixture refusal during
+post-rollback renewal remains unresolved. The complete producer receipt, pinned
+Alpine image and deployment remain open. Keep plan enforcement off.

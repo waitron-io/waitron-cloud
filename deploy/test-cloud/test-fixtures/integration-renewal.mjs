@@ -17,3 +17,11 @@ export async function prepareIntegrationRenewal(root, pendingRequest) {
     await rename(temporary, path);
   } finally {await rm(temporary, {force: true});}
 }
+
+export async function renewIntegrationAfterRollback(root, pendingRequest, refresh) {
+  // The ordinary worker can leave an exact pending request during the Cloud outage.
+  await refresh();
+  await prepareIntegrationRenewal(root, pendingRequest);
+  await refresh();
+  return {renewed: true};
+}
