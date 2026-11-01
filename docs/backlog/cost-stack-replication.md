@@ -55,19 +55,19 @@ producer records interruption while the storage observer records success. You
 can now inspect body counts, expected lengths, HTTP status and request/response
 completion flags for this premature-close boundary as well as at
 `response-aborted`. Other pipeline error categories keep their existing
-diagnostic shape. These fields record
-transport progress, not whether the native writer consumed the response.
+diagnostic shape. These fields record transport progress, not whether the native writer consumed the response.
 
 Run `node --test scripts/cloud-cost/litestream-pipeline-diagnostics.test.mjs`
-for real HTTP controls with and without a validated stop acknowledgement. Each
-holds downstream response completion after the upstream's four bytes traverse
+for real HTTP controls with and without a validated stop acknowledgement. A
+completed preliminary LIST checks that storage admission observes that
+acknowledgement. Each control then holds downstream response completion after the upstream's four bytes traverse
 the counter, then closes the client socket. The upstream response is complete;
 the downstream pipeline still refuses with the same error category and unequal
 outcomes despite equal byte totals. These controls establish a possible ordering,
 not the historical cause, the official writer's behavior or Linux stack
-qualification. The interrupted session remains refused. The watcher
-confirmed that the existing acceptance guard must remain: investigate avoiding
-the cancellation before proposing any different accepted evidence.
+qualification. The interrupted session remains refused. Keep the existing
+acceptance guard and investigate avoiding the cancellation before proposing
+any different accepted evidence.
 
 The four bounded Linux jobs in [run 40101340028](https://github.com/waitron-io/waitron-cloud/actions/runs/40101340028)
 ran 27 genuine delayed-reply cases: 25 passed and two refused. Both refusals
