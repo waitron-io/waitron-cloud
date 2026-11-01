@@ -36,7 +36,10 @@ try {
   } else {
     const {rows} = await pool.query('SELECT v.organisation_id,v.local_venue_id,i.venue_id FROM installations i JOIN venues v ON v.id=i.venue_id WHERE i.id=$1', [installationId]);
     assert.equal(rows.length, 1); assert.equal(rows[0].organisation_id, organisationId);
-    if (phase === 'free-remote-prepare' || phase === 'free-remote-inspect') {
+    if (phase === 'paid-remote-provision' || phase === 'paid-remote-inspect' || phase === 'paid-remote-downgrade') {
+      const {paidRemoteAccount} = await import('./integration-paid-remote-account.mjs');
+      console.log(JSON.stringify(await paidRemoteAccount({pool, config, ...JSON.parse(input)})));
+    } else if (phase === 'free-remote-prepare' || phase === 'free-remote-inspect') {
       const {freeRemoteAccount} = await import('./integration-free-remote-account.mjs');
       console.log(JSON.stringify(await freeRemoteAccount({pool, config, installationId, organisationId, phase, csr: JSON.parse(input).csr})));
     } else if (phase === 'inspect-continuous-recovery') {

@@ -921,8 +921,23 @@ implementation or production evidence.
   certificate requests or jobs, with unchanged remote configuration. Both venues
   retain pairing identity after restart. Its 26 samples stay above 3,984 MiB
   available memory and 12.80 GiB free disk; owned resources are removed and the
-  protected Waitron containers stay unchanged. Paid routes, staff/public isolation,
-  downgrade withdrawal, full capacity, rollback, the strict complete
+  protected Waitron containers stay unchanged. The paired paid-remote extension
+  now passes one real Linux journey without skips in 115.0 seconds. Native
+  Waitron helpers create and install the staff certificate, while the fixture
+  drives the existing signed exchange with the actual paired key and lease.
+  A real WireGuard peer and TLS adapter forward to the running native demo
+  venue. Staff availability passes, private staff access requires authentication,
+  the public hostname refuses private paths, and a solved challenge admits
+  public availability. Both free-neighbour hostnames and invalid certificate
+  trust/hostname checks refuse. After stopping the worker, downgrading and
+  restarting that same worker, staff/public routes and the peer withdraw in
+  2.064 seconds from the plan setter's return. Replaying the earlier signed
+  configuration masks paid setup, a new signed certificate-status call refuses
+  403, and the source installation and pairing identity survive. Its 27 samples
+  stay above 3,860 MiB available memory and 13.92 GiB free disk; owned cleanup
+  and unchanged protected Waitron containers are checked. This is explicit
+  fixture orchestration, not an automatic Waitron remote client or a browser
+  session. Combining it with recovery, full capacity, rollback, the strict complete
   producer receipt and deployment remain open. The old Mac cleanup refusal stays
   historical evidence;
   the isolated Linux client proof removes its owned resources successfully.

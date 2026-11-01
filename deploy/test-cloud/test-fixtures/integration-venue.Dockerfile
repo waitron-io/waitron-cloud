@@ -7,6 +7,7 @@ RUN if [ "$WITH_STREAM" = 1 ]; then node --input-type=module -e "import assert f
 COPY integration-venue.mjs /waitron/apps/server/scripts/cloud-test-integration.mjs
 COPY integration-control.mjs /proof/integration-control.mjs
 COPY integration-free-remote.mjs /proof/integration-free-remote.mjs
+COPY integration-paid-remote-client.mjs /proof/integration-paid-remote-client.mjs
 COPY integration-verification-state.mjs /proof/integration-verification-state.mjs
 COPY integration-recovery-authority.mjs /proof/integration-recovery-authority.mjs
 COPY integration-stream.mjs /proof/integration-stream.mjs

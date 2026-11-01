@@ -63,7 +63,7 @@ export function checkProtectedContainers(before, after, ids) {
   return true;
 }
 
-export async function runTestCloudClients({image, waitronImage, protectedContainerIds = [], paidSnapshot = false, paidVerification = false, paidRecovery = false, paidAuthorisedRecovery = false, paidStream = false, paidContinuousRecovery = false, freeRemote = false} = {}) {
+export async function runTestCloudClients({image, waitronImage, protectedContainerIds = [], paidSnapshot = false, paidVerification = false, paidRecovery = false, paidAuthorisedRecovery = false, paidStream = false, paidContinuousRecovery = false, freeRemote = false, paidRemote = false} = {}) {
   paidStream ||= paidContinuousRecovery;
   paidAuthorisedRecovery ||= paidStream;
   paidRecovery ||= paidAuthorisedRecovery;
@@ -118,7 +118,7 @@ export async function runTestCloudClients({image, waitronImage, protectedContain
     built = true;
     const clientImage = JSON.parse(await docker(['image', 'inspect', clientTag]))[0].Id;
     record('image', clientImage);
-    await writeFile(override, `name: ${project}\nservices:\n  account:\n    environment:\n      CLOUD_TEST_SERVICE_PLANS: "1"\n  storage:\n    environment:\n      CLOUD_TEST_SERVICE_PLANS: "1"\n    ports: !override ["127.0.0.1::8333"]\n  postgres:\n    ports: !override ["127.0.0.1::5432"]\n  mailpit:\n    ports: !override ["127.0.0.1::1025", "127.0.0.1::8025"]\n  proxy:\n    ports: !override ["127.0.0.1::3000"]\n  gateway:\n    ports: !override ["127.0.0.1::443", "127.0.0.1::51820/udp"]\n`, {mode: 0o600});
+    await writeFile(override, `name: ${project}\nservices:\n  gateway-manifest:\n    environment:\n      CLOUD_TEST_SERVICE_PLANS: "${paidRemote ? 1 : 0}"\n  account:\n    environment:\n      CLOUD_TEST_SERVICE_PLANS: "1"\n  storage:\n    environment:\n      CLOUD_TEST_SERVICE_PLANS: "1"\n    ports: !override ["127.0.0.1::8333"]\n  postgres:\n    ports: !override ["127.0.0.1::5432"]\n  mailpit:\n    ports: !override ["127.0.0.1::1025", "127.0.0.1::8025"]\n  proxy:\n    ports: !override ["127.0.0.1::3000"]\n  gateway:\n    ports: !override ["127.0.0.1::443", "127.0.0.1::51820/udp"]\n`, {mode: 0o600});
     started = true;
     await compose(['up', '--no-build', '--pull', 'never', '--detach', '--wait', '--wait-timeout', '90']);
     const account = await compose(['ps', '-q', 'account']), proxy = await compose(['ps', '-q', 'proxy']);
@@ -142,7 +142,7 @@ export async function runTestCloudClients({image, waitronImage, protectedContain
     assert.equal((await api('/api/health/ready')).status, 200);
     await assert.rejects(api('/api/health/ready', undefined, {}, null), /certificate|issuer|verify/i);
     await assert.rejects(api('/api/health/ready', undefined, {}, ca, 'wrong.local'), /certificate|Hostname/i);
-    const organisations = [], restarts = []; let freeSnapshot, publishedSnapshot, observedStream, continuousRecovery, freeRemoteEvidence;
+    const organisations = [], restarts = [], remoteClients = []; let freeSnapshot, publishedSnapshot, observedStream, continuousRecovery, freeRemoteEvidence, paidRemoteEvidence;
     for (const plan of ['free', 'paid']) {
       const email = `integration-${plan}-${runId}@example.test`, password = 'Disposable account ' + randomUUID();
       assert.equal((await api('/api/account/signup/request', {email})).status, 202);
@@ -433,13 +433,21 @@ export async function runTestCloudClients({image, waitronImage, protectedContain
       restarts.push({installationId: evidence.registration.installationId, before: beforeRestart, after: afterRestart});
       organisations.push({plan, organisationId, venueId: evidence.registration.venueId, installationId: evidence.registration.installationId,
         localVenueId: evidence.localVenueId, stateSha256: restarted.stateSha256, installationState: restarted.installationState, planRevision: planResult.revision});
+      remoteClients.push({id, stateVolume, venueRoot, ...organisations.at(-1)});
+    }
+    if (paidRemote) {
+      const {proveIntegrationPaidRemote} = await import('../deploy/test-cloud/test-fixtures/integration-paid-remote.mjs');
+      paidRemoteEvidence = await proveIntegrationPaidRemote({docker, compose, control, account,
+        paid: remoteClients.find(value => value.plan === 'paid'), free: remoteClients.find(value => value.plan === 'free'), image, runId,
+        own: id => {owned.push(id); record('container', id);}});
     }
     for (const key of ['organisationId', 'venueId', 'installationId', 'localVenueId', 'stateSha256']) assert.equal(new Set(organisations.map(value => value[key])).size, 2, 'integration.distinct_' + key);
     result = {version: 1, kind: 'test-cloud-clients', runId, completeIntegration: false, origin, waitronHead: revision, image, waitronImage,
       accountMail: {free: 'proved', paid: 'proved', transport: 'mailpit'}, clients: {status: 'proved', actions: ['pair', 'renew', 'configuration'], demoVenues: 2, restartIdentity: 'proved'},
       tls: {untrustedRefused: true, wrongHostnameRefused: true}, organisations, freeSnapshot, restarts,
       ...(publishedSnapshot ? {paidSnapshot: publishedSnapshot} : {}), ...(observedStream ? {paidStream: observedStream} : {}),
-      ...(continuousRecovery ? {paidContinuousRecovery: continuousRecovery} : {}), ...(freeRemoteEvidence ? {freeRemote: freeRemoteEvidence} : {})};
+      ...(continuousRecovery ? {paidContinuousRecovery: continuousRecovery} : {}), ...(freeRemoteEvidence ? {freeRemote: freeRemoteEvidence} : {}),
+      ...(paidRemoteEvidence ? {paidRemote: paidRemoteEvidence} : {})};
   } finally {
     try {
       await completeCleanup([

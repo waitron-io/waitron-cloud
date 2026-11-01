@@ -788,6 +788,47 @@ venues still pair, renew, fetch configuration and retain their identity after
 restart. Its 26 resource samples stay above 3,984 MiB available memory and
 12.80 GiB free disk; owned resources are removed and the protected Waitron
 containers remain unchanged. The receipt contains only public observations.
-Paid routes, staff/public isolation, downgrade withdrawal and worker restart
-remain separate work. This small refusal journey does not qualify full capacity,
-rollback, the shipping release or deployment activation.
+The paired paid extension below covers LAN routes, staff/public isolation and
+withdrawal after worker restart. These small journeys do not qualify full
+capacity, rollback, the shipping release or deployment activation.
+
+To exercise the paired paid venue through the LAN gateway, run:
+
+```sh
+node --test scripts/test-cloud-paid-remote.test.mjs
+```
+
+Use the same immutable Cloud and pinned Waitron image inputs. The runner first
+repeats free remote refusals, then provisions the paid installation with a peer
+key created inside its actual venue. Waitron's native helpers create the staff
+certificate request and install the returned certificate. The fixture signs the
+existing submit/status protocol with the pairing key and current lease. The
+pinned Waitron source has no automatic exchange caller, so this is explicit
+fixture orchestration. A TLS adapter forwards requests to the running demo
+venue, and a real WireGuard peer connects it to the gateway. The adapter supplies
+no application responses. This extension runs separately from snapshot and
+stream recovery; their complete combined journey remains unqualified.
+
+The staff route returns the venue's native availability response and requires
+authentication for its private status path. The public route refuses that
+private path with HTTP 404. Its availability path requires the browser challenge;
+the fixture solves it locally and then gets the same native response. This
+qualifies the protocol, not a browser session. Both free-neighbour hostnames
+refuse, and untrusted or wrong-host certificate checks fail. The staff
+certificate observed through the gateway matches the one installed in the venue.
+
+The runner stops its remote worker while the paid route is live, changes that
+organisation to free and restarts the same worker. It checks a newer actual
+start time, staff/public refusal, peer removal and a healthy gateway. It then
+replays the exact signed configuration request admitted while paid; the reply
+must mask the old remote configuration. A new signed certificate-status request
+must return `403 permission_denied`. Fresh native configuration is also empty,
+and both the Cloud installation and paired venue identity remain intact.
+
+One real Linux journey passes without skips in 115.0 seconds. Withdrawal takes
+2.064 seconds from the plan setter's return, including worker startup. Its
+27 samples stay above 3,860 MiB available memory and 13.92 GiB free disk. Owned
+resources are removed and the three protected Waitron containers remain
+unchanged. These disposable Debian images and the partial receipt do not qualify
+the shipping Alpine release, full settled or active-verifier capacity, rollback,
+the complete producer or deployment activation. Plan enforcement stays off.

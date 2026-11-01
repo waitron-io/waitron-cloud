@@ -37,6 +37,13 @@ const socket = root + '/proof.sock'; await rm(socket, {force: true});
 const control = createServer(async (req, res) => {
   try {
     assert.equal(req.method, 'POST');
+    if (req.url === '/paid-remote') {
+      let input = '';
+      for await (const part of req) {input += part; assert.ok(input.length < 16384);}
+      const {paidRemoteClient} = await import('/proof/integration-paid-remote-client.mjs');
+      res.end(JSON.stringify(await paidRemoteClient(root, JSON.parse(input), nativeFetch)));
+      return;
+    }
     if (req.url === '/free-remote') {
       let input = '';
       for await (const part of req) {input += part; assert.ok(input.length < 16384);}
