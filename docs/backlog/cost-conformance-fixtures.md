@@ -81,7 +81,8 @@ The delayed-connection variant guards this fixture against a return to schedulin
 dependence. It adds no independent downloader guarantee. The controlled cases do
 not advance to the 1,200 ms total deadline; the existing `shared-deadline` case
 checks that refusal with a wall clock. The exhausted-attempt case below also
-uses controlled time; the remaining scenarios retain their wall clocks. Production download timeouts, retry limits and accounting are unchanged.
+uses controlled time; the remaining scenarios retain their wall clocks.
+Production download timeouts, retry limits and accounting are unchanged.
 The separate prematurely closed Litestream LIST response remains under
 investigation.
 
@@ -107,8 +108,9 @@ control or request admission fails the delayed-connection or outer-limit control
 
 This fixture separates connection scheduling from simulated download time. It
 does not measure the production network or qualify expiry before a request reaches
-the server. The existing wall-clock shared-deadline and cancellation cases remain
-separate. Production downloads and accounting are unchanged. The LIST shutdown
+the server. It also no longer runs three successive stalls on a wall clock;
+no claim of identical time-dependent coverage is made. The existing wall-clock
+shared-deadline and cancellation cases remain separate. Production downloads and accounting are unchanged. The LIST shutdown
 and bound-container verifier cleanup failures still need their own investigations.
 
 
