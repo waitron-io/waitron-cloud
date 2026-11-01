@@ -6,6 +6,7 @@ import {randomUUID, createHash} from 'node:crypto';
 import {spawn} from 'node:child_process';
 import {createRequire} from 'node:module';
 import {Agent} from 'node:https';
+import {lookup} from 'node:dns';
 import {createCloudConnection} from '/waitron/apps/server/src/cloud-client.ts';
 const require = createRequire('/waitron/apps/server/package.json');
 const nativeFetch = globalThis.fetch;
@@ -54,14 +55,16 @@ const control = createServer(async (req, res) => {
         child.stdin.end(JSON.stringify({command: 'capture', recoveryKey: grant.recoveryKey}));
       });
       const saved = JSON.parse(await readFile(root + '/fixture-env.json', 'utf8'));
-      assert.equal(metadata.sourceNodeId, saved.WAITRON_NODE_ID);
+      assert.equal(metadata.sourceNodeId, saved.WAITRON_TILL_NODE_ID);
       assert.equal(metadata.networkDenied, true);
       const bytes = await readFile(root + '/captured.backup.enc');
       const digest = createHash('sha256').update(bytes).digest('hex');
       const {S3Client, PutObjectCommand} = require('@aws-sdk/client-s3');
       const storage = new S3Client({endpoint: grant.location.endpoint, region: grant.location.region,
         credentials: grant.credentials, forcePathStyle: true, maxAttempts: 1,
-        requestHandler: {httpsAgent: new Agent({ca: await readFile('/proof/ca.pem')})}});
+        // The API hostname is pinned to the proxy; storage keeps that TLS name on its own service.
+        requestHandler: {httpsAgent: new Agent({ca: await readFile('/proof/ca.pem'),
+          lookup: (hostname, options, done) => lookup(hostname === 'waitron.local' ? 'storage' : hostname, options, done)})}});
       try {await storage.send(new PutObjectCommand({Bucket: grant.location.bucket, Key: grant.incomingKey, Body: bytes}), {abortSignal: AbortSignal.timeout(10000)});}
       finally {storage.destroy();}
       const point = await cloud.publishCapture(grant.id, {digest, size: bytes.length, capturedAt: metadata.manifest.createdAt,

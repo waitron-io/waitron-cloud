@@ -546,11 +546,19 @@ variables with:
 node --test scripts/test-cloud-paid-snapshot.test.mjs
 ```
 
-This extension is awaiting its first complete passing run. Its test first exposed
-the missing paid journey; the implementation attempt then stopped at the test
-box's unchanged 20 GiB free-disk preflight requirement. The eight native evidence
-checks and nine deliberate check omissions qualify the evidence reader only.
-Do not use them as evidence that an archive was uploaded or recovered.
+This extension passes on the isolated Linux test box with disposable Debian
+images and the pinned Waitron source above. Its unskipped test observes genuine
+capture, scoped upload, signed publication and an independent stored-byte check.
+The eight native evidence checks and nine deliberate check omissions separately
+qualify the evidence reader. Neither proof qualifies the pinned Alpine release
+or ordinary recovery.
+
+The campaign runner uses the owner's approved 10 GiB free-disk floor at start
+and during this test-box run, with the existing memory limits and deadlines.
+Across 28 samples, including both clients and capture, available memory stays
+above 3,748 MiB and free disk above 15.67 GiB. No out-of-memory kill is observed.
+These measurements do not cover an active verifier. The deployment helper keeps
+its separate capacity checks.
 
 The extension prepares backup state in the paid demo venue's own volume, trusts
 that venue's public CA for its manager API and uses its existing signed Cloud
@@ -559,3 +567,9 @@ stored object and compares its bytes, hash and source binding. Deliberately wron
 digest, organisation and source-node claims must refuse. A passing result still
 records verification as pending and recovery as not run; the final receipt reader
 continues to reject it as incomplete.
+
+Inside the disposable venue, the account hostname points to the HTTPS proxy.
+The storage client connects to the separate storage service while keeping the
+canonical URL, signed host and TLS certificate name. Cleanup removes the owned
+project, clients, volumes and image tags; the three existing Waitron containers
+keep the same IDs, start times and health.

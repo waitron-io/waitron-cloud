@@ -836,15 +836,21 @@ implementation or production evidence.
   on snapshot reserve, without a grant. Its partial receipt records exact owned
   cleanup and explicitly refuses to claim complete integration. The existing
   client journey also passes on the isolated Linux test box. The optional paired
-  paid snapshot extension now captures from that venue, uploads with its scoped
-  grant and requests signed publication, followed by an independent storage read.
+  paid snapshot extension now passes on that box: it captures from the paired
+  venue, uploads with its scoped grant and publishes through the signed client,
+  followed by an independent storage read. False digest, organisation and source
+  claims refuse. The source identity matches the pinned fixture, and storage
+  connects to its own service while preserving the canonical TLS and signed host.
   Its evidence checker passes eight native cases; nine omitted checks each fail
-  their tests. This qualifies evidence consistency only. The new complete journey
-  has not passed: test-box preflight refuses free disk below its unchanged 20 GiB
-  start requirement. Its earlier failing run established the missing journey before
-  implementation. Snapshot verification and ordinary restore, stream recovery and
-  independent fallback, remote withdrawal, active-verifier resources, rollback and
-  deployment remain open. The old Mac cleanup refusal stays historical evidence;
+  their tests. These native cases qualify evidence consistency only. The real
+  publication test runs without skips and removes its owned resources, leaving
+  the existing Waitron containers unchanged. The campaign-only disk floor is
+  10 GiB under the owner's test-box approval; shipping deployment checks remain
+  unchanged. Its 28 samples cover both clients and capture, with at least
+  3,748 MiB available memory and 15.67 GiB free disk. Disposable Debian images
+  do not qualify the pinned Alpine release. Snapshot verification and ordinary
+  restore, stream recovery and independent fallback, remote withdrawal,
+  active-verifier resources, rollback and deployment remain open. The old Mac cleanup refusal stays historical evidence;
   the isolated Linux client proof removes its owned resources successfully.
   The organisation plan store and operator command now persist free/paid metadata,
   advance revisions only on changes and refuse incompatible migration ledgers.
