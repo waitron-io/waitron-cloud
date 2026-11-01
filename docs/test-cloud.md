@@ -1106,6 +1106,13 @@ settled window. Missing readings, gaps over five seconds, resource-budget failur
 or changed protected containers stop and drain the owned journey before cleanup.
 The complete receipt and shipping deployment qualification remain separate gates.
 
+Recovery deliberately stops its source. The integration sampler keeps counting that
+source's retained data through a networkless, read-only helper with a 32 MiB limit.
+It also uses this helper if the source stops between inspection and measurement.
+Running-container errors, an unavailable Docker daemon, changed mount identity and
+out-of-memory state still refuse the measurement. Each helper is recorded and
+removed before its reading returns; the original source stays stopped.
+
 Another queued archive can become eligible while the selected archive is being
 verified. The fixture runs ordinary one-job worker commands until the selected
 archive is admitted, then waits for shutdown without taking another job. It still

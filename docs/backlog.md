@@ -816,7 +816,11 @@ implementation or production evidence.
   has continuous integration sampling wired across recovery, remote withdrawal
   and matching-volume rollback; its genuine combined qualification remains due.
   The sampler observes before and after the journey and stops and drains owned
-  work on measurement failure. The capacity journey also
+  work on measurement failure. A genuine combined run identifies a stopped-source
+  volume-size race. Explicit integration sampling now reads retained stopped
+  volumes through recorded read-only helpers instead of omitting their bytes or
+  restarting the source; genuine qualification of that correction remains due.
+  The capacity journey also
   collects host memory and available disk on Docker's data filesystem before
   project startup, throughout startup and settled/verification sampling,
   and after owned cleanup. Startup includes a reading before allocation and one

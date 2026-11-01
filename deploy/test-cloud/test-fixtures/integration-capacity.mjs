@@ -135,8 +135,25 @@ export async function inspectCapacityVerifier(docker, id) {
   return rows[0];
 }
 
+export async function readCapacityVolume({docker, name, volume, measureStoppedVolume}) {
+  let size;
+  if (measureStoppedVolume && !volume.running) size = await measureStoppedVolume(name);
+  else try {size = await docker(['exec', volume.container, 'du', '-sk', '--', volume.path]);}
+  catch (error) {
+    if (!measureStoppedVolume) throw error;
+    const rows = JSON.parse(await docker(['inspect', volume.container]));
+    assert.ok(Array.isArray(rows) && rows.length === 1 && rows[0]?.Id === volume.container);
+    const [current] = rows;
+    if (current.State.Running !== false || current.State.OOMKilled !== false) throw error;
+    assert.ok(current.Mounts.some(value => value.Type === 'volume' && value.Name === name && value.Destination === volume.path));
+    size = await measureStoppedVolume(name);
+  }
+  assert.match(size, /^\d+\s+[^\n]+$/);
+  return Number(size.split(/\s+/)[0]) * 1024;
+}
+
 export async function observeCapacity({docker, project, runId, verifierScope, waitronImage, workerId,
-  protectedUnchanged, startup = false, procRoot = '/proc', cgroupRoot = '/sys/fs/cgroup', meminfo = '/proc/meminfo', diskPath = '/'}) {
+  protectedUnchanged, startup = false, measureStoppedVolume, procRoot = '/proc', cgroupRoot = '/sys/fs/cgroup', meminfo = '/proc/meminfo', diskPath = '/'}) {
   const ids = text => text.split(/\s+/).filter(Boolean);
   const list = filter => docker(['ps', '-aq', '--no-trunc', '--filter', filter]).then(ids);
   const inspect = async (values, phase = 'capacity-cloud-inspect') => values.length ? JSON.parse(await docker(['inspect', ...values], '', phase)) : [];
@@ -173,15 +190,16 @@ export async function observeCapacity({docker, project, runId, verifierScope, wa
     else cloudMiB += memory.memoryMiB;
   }
   const volumes = new Map();
-  for (const row of [...cloud, ...clients].filter(row => row.State.Running)) for (const mount of row.Mounts.filter(value => value.Type === 'volume')) {
-    if (!volumes.has(mount.Name)) volumes.set(mount.Name, {container: row.Id, path: mount.Destination});
+  for (const row of [...cloud, ...clients].filter(row => row.State.Running || measureStoppedVolume)) for (const mount of row.Mounts.filter(value => value.Type === 'volume')) {
+    if (!volumes.has(mount.Name) || row.State.Running && !volumes.get(mount.Name).running) {
+      volumes.set(mount.Name, {container: row.Id, path: mount.Destination, running: row.State.Running});
+    }
   }
   let fixtureBytes = 0;
   for (const [name, volume] of volumes) {
     const [info] = JSON.parse(await docker(['volume', 'inspect', name]));
     assert.equal(info.Name, name); assert.equal(info.Labels['com.docker.compose.project'], project);
-    const size = await docker(['exec', volume.container, 'du', '-sk', '--', volume.path]);
-    assert.match(size, /^\d+\s+[^\n]+$/); fixtureBytes += Number(size.split(/\s+/)[0]) * 1024;
+    fixtureBytes += await readCapacityVolume({docker, name, volume, measureStoppedVolume});
   }
   const host = await readHostCapacity({meminfo, diskPath});
   return {cloudMiB, verifierMiB, scratchMiB, fixtureBytes, verifierIds, verifierCount: verifierIds.length,
