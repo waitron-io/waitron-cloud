@@ -27,6 +27,21 @@ using a pinned disposable Waitron image. The deployment capacity gate remains op
 There is no completed PR7 receipt to validate yet. Keep plan enforcement off
 before the test-box deployment.
 
+The combined journey requires a clean committed checkout. Before starting Cloud,
+it reads the selected immutable image in a disposable, networkless container and
+compares every tracked runtime input under `apps`, `packages`, `deploy` and
+`scripts`, plus the root dependency and Compose configuration, with that checkout.
+The receipt records the commit, tree, image ID, file count and SHA-256 of this
+manifest. A changed or missing image file, a symbolic link, or a checkout changed
+before the run finishes refuses the result. This binds tracked source inputs;
+it does not certify generated portal assets, the Waitron build or a published release.
+
+Run the source checks with:
+
+```sh
+node --test scripts/test-cloud-source.test.mjs
+```
+
 ## What is reachable
 
 Only the HTTPS proxy publishes to `192.168.10.10:3000`. It forwards to the unpublished account listener and accepts the exact canonical Host and, when present, Origin. It replaces forwarding headers and the account server trusts only its private address, `10.79.0.2`. Ordinary loopback deployment keeps `http://localhost:3000`.

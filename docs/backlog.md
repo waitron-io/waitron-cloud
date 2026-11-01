@@ -839,6 +839,11 @@ implementation or production evidence.
   One earlier generic Docker inspection refusal remains unattributed. Capacity
   inspection now names the service or verifier phase; retain the next labelled
   failure to identify its cause. The passing combined run does not explain it.
+  The combined runner now requires a clean committed checkout, measures the
+  selected Cloud image's tracked runtime inputs in a networkless disposable
+  container, and rechecks the checkout after owned cleanup. Its source record
+  binds the commit, tree, image and input manifest; generated assets and the
+  Waitron build still need release qualification. The complete receipt remains open.
   The [client proof](test-cloud.md#check-real-free-and-paid-clients) now creates both
   accounts through HTTPS signup and captured Mailpit links, pairs two separate
   pinned demo venues, observes successful signed renewal/configuration and preserves

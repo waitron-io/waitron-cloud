@@ -3,6 +3,7 @@ import {test} from 'node:test';
 import * as integration from './test-cloud-integration.mjs';
 import {checkCapacitySamples} from '../deploy/test-cloud/test-fixtures/integration-capacity.mjs';
 import {verifyTestCloudReceipt} from './verify-test-cloud-receipt.mjs';
+import {execFileSync} from 'node:child_process';
 
 test('the combined journey refuses mutable images before creating resources', async () => {
   assert.equal(typeof integration.runTestCloudCombined, 'function', 'The combined journey is not implemented');
@@ -18,6 +19,13 @@ test('one project recovers both copies, withdraws remote access, measures capaci
     waitronImage: process.env.TEST_CLOUD_INTEGRATION_WAITRON_IMAGE,
     protectedContainerIds: JSON.parse(process.env.TEST_CLOUD_PROTECTED_CONTAINER_IDS ?? '[]')});
   const paid = receipt.organisations.find(value => value.plan === 'paid');
+  const git = (...args) => execFileSync('git', args, {encoding: 'utf8'}).trim();
+  assert.equal(receipt.cloudSource?.head, git('rev-parse', 'HEAD'));
+  assert.equal(receipt.cloudSource.tree, git('rev-parse', 'HEAD^{tree}'));
+  assert.equal(receipt.cloudSource.image, process.env.TEST_CLOUD_INTEGRATION_IMAGE);
+  assert.equal(receipt.cloudSource.dirty, false);
+  assert.ok(receipt.cloudSource.files > 1000);
+  assert.match(receipt.cloudSource.runtimeSha256, /^[a-f0-9]{64}$/);
   const free = receipt.organisations.find(value => value.plan === 'free');
   const snapshot = receipt.paidSnapshot, stream = receipt.paidStream, remote = receipt.paidRemote;
   for (const value of [snapshot, remote]) for (const key of ['organisationId', 'venueId', 'installationId']) assert.equal(value?.[key], paid[key], key);
