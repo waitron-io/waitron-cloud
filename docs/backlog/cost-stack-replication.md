@@ -131,6 +131,12 @@ macOS task; it does not identify the historical Linux request. Waiting until jus
 one active stack frame disappears also fails to establish that all background
 work has finished. Native stack dumps remain local diagnostic evidence.
 
+The [initial-upload investigation](../backlog.md#initial-upload-admitted-after-stop-d393)
+also reproduces an initial PUT admitted after confirmed stop with the official
+Linux binary and controlled loopback storage. Its completed-upload control exposes
+a separate LIST reset; a pre-signal idle wait passes only the disposable control.
+These results do not identify either historical request or qualify production drain.
+
 The owner decided against a custom Litestream binary on 25 October. Keep the
 official 0.5.17 release and its pins. The revised [after-stop accounting design](../superpowers/specs/2026-10-24-litestream-native-drain-design.md)
 and [implementation plan](../superpowers/plans/2026-10-24-litestream-native-drain.md)
