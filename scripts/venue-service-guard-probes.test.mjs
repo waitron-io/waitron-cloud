@@ -52,6 +52,11 @@ test('venue guard harness requires the expected wrong value',async t=>{
  const qualify=await harness(),f=await fixture(t);
  await assert.rejects(qualify(f.candidate,{...f.guard,expected:'a different wrong value'}),/assertion_required/);
 });
+test('venue guard harness refuses a runtime error even when its text matches the expected value',async t=>{
+ const qualify=await harness(),f=await fixture(t);
+ await assert.rejects(qualify(f.candidate,{...f.guard,replacement:'return missingName;',expected:'missingName is not defined'}),/assertion_required/);
+ assert.equal(await readFile(join(f.candidate,'gate.mjs'),'utf8'),f.original);
+});
 for(const [label,source] of [
  ['zero cases',`import {test} from 'node:test';`],
  ['skipped case',`import {test} from 'node:test';test.skip('${name}',()=>{});`],
