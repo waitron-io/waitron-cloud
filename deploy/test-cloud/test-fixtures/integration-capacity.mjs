@@ -170,7 +170,7 @@ export async function readCapacityContainerMemory(row, {docker, lifecycle = fals
 }
 
 export async function observeCapacity({docker, project, runId, verifierScope, waitronImage, workerId,
-  protectedUnchanged, startup = false, measureStoppedVolume, procRoot = '/proc', cgroupRoot = '/sys/fs/cgroup', meminfo = '/proc/meminfo', diskPath = '/'}) {
+  protectedUnchanged, startup = false, measureStoppedVolume, measureVolumes, procRoot = '/proc', cgroupRoot = '/sys/fs/cgroup', meminfo = '/proc/meminfo', diskPath = '/'}) {
   const ids = text => text.split(/\s+/).filter(Boolean);
   const list = filter => docker(['ps', '-aq', '--no-trunc', '--filter', filter]).then(ids);
   const inspect = async (values, phase = 'capacity-cloud-inspect') => values.length ? JSON.parse(await docker(['inspect', ...values], '', phase)) : [];
@@ -198,7 +198,7 @@ export async function observeCapacity({docker, project, runId, verifierScope, wa
   for (const [rows, verifier] of [[cloud, false], [children, true]]) for (const row of rows.filter(row => row.State.Running)) {
     let memory;
     try {memory = verifier ? await readContainerMemory(row.State.Pid, {procRoot, cgroupRoot}) :
-      await readCapacityContainerMemory(row, {docker, procRoot, cgroupRoot, lifecycle: Boolean(measureStoppedVolume)});}
+      await readCapacityContainerMemory(row, {docker, procRoot, cgroupRoot, lifecycle: Boolean(measureStoppedVolume || measureVolumes)});}
     catch (error) {
       // A completed child can disappear between its inspect and cgroup read.
       if (verifier && error.code === 'ENOENT' && !(await list('id=' + row.Id)).length) continue;
@@ -209,7 +209,7 @@ export async function observeCapacity({docker, project, runId, verifierScope, wa
     else cloudMiB += memory.memoryMiB;
   }
   const volumes = new Map();
-  for (const row of [...cloud, ...clients].filter(row => row.State.Running || measureStoppedVolume)) for (const mount of row.Mounts.filter(value => value.Type === 'volume')) {
+  for (const row of [...cloud, ...clients].filter(row => row.State.Running || measureStoppedVolume || measureVolumes)) for (const mount of row.Mounts.filter(value => value.Type === 'volume')) {
     if (!volumes.has(mount.Name) || row.State.Running && !volumes.get(mount.Name).running) {
       volumes.set(mount.Name, {container: row.Id, path: mount.Destination, running: row.State.Running});
     }
@@ -218,7 +218,17 @@ export async function observeCapacity({docker, project, runId, verifierScope, wa
   for (const [name, volume] of volumes) {
     const [info] = JSON.parse(await docker(['volume', 'inspect', name]));
     assert.equal(info.Name, name); assert.equal(info.Labels['com.docker.compose.project'], project);
-    fixtureBytes += await readCapacityVolume({docker, name, volume, measureStoppedVolume});
+    if (!measureVolumes) fixtureBytes += await readCapacityVolume({docker, name, volume, measureStoppedVolume});
+  }
+  if (measureVolumes && volumes.size) {
+    const names = [...volumes.keys()], readings = await measureVolumes(names);
+    assert.ok(Array.isArray(readings) && readings.length === names.length);
+    for (const [i, value] of readings.entries()) {
+      assert.deepEqual(Object.keys(value).sort(), ['bytes', 'name']);
+      assert.equal(value.name, names[i]);
+      assert.ok(Number.isSafeInteger(value.bytes) && value.bytes >= 0);
+      fixtureBytes += value.bytes;
+    }
   }
   const host = await readHostCapacity({meminfo, diskPath});
   return {cloudMiB, verifierMiB, scratchMiB, fixtureBytes, verifierIds, verifierCount: verifierIds.length,

@@ -1108,7 +1108,8 @@ The complete receipt and shipping deployment qualification remain separate gates
 
 Recovery deliberately stops its source. The integration sampler keeps counting that
 source's retained data through a networkless, read-only helper with a 32 MiB limit.
-It also uses this helper if the source stops between inspection and measurement.
+One helper reads all unique volumes together, so a cold rollback does not pay a
+separate container start for each volume. The five-second sample bound stays fixed.
 Running-container errors, an unavailable Docker daemon, changed mount identity and
 out-of-memory state still refuse the measurement. Each helper is recorded and
 removed before its reading returns; the original source stays stopped.

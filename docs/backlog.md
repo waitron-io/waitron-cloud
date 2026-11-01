@@ -824,6 +824,9 @@ implementation or production evidence.
   Docker inspection and its memory reading. Explicit capacity observation now
   rechecks unchanged ownership and non-OOM state before accounting a confirmed
   stop or reading a restarted process; genuine combined qualification remains due.
+  The next native run refuses the unchanged five-second sampling bound during
+  cold rollback. Volume reads are now batched into one bounded read-only helper
+  per observation; genuine qualification of that sampler remains due.
   The capacity journey also
   collects host memory and available disk on Docker's data filesystem before
   project startup, throughout startup and settled/verification sampling,
