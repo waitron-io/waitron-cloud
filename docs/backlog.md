@@ -1,5 +1,19 @@
 # Waitron Cloud backlog
 
+## Cloud backup box identity (D451)
+
+**Open.** Waitron's node-only identity release is merged, but the Cloud repair in
+[PR #700](https://github.com/waitron-io/waitron-cloud/pull/700) remains unqualified.
+The [compatibility design](superpowers/specs/2026-11-01-replay-allocation-compatibility-design.md)
+and [implementation plan](superpowers/plans/2026-11-01-replay-allocation-compatibility.md)
+trace the real installation-allocation and authenticated recovery callers.
+A native check of the matching release's recovery guard rejects two invoice-series
+purposes and accepts standard, full and rectificative purposes. The existing restore
+checks require exactly two active and two retired series; the owner's current
+instruction forbids changing those assertions. Resolve that exact scope conflict
+before implementing the plan. Runtime qualification and historical evidence remain
+separate; no replay pin, fiscal result or restore assertion changes here.
+
 ## Concurrent storage archive publication (D450)
 
 **Open.** Real extraction, store startup and historical failure causes remain open.
