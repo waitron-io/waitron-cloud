@@ -21,7 +21,7 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
   ? ['current','lost-reply','expired','unavailable','navigate','new-session','older-first','rate','passive','generic'] : ['current'];
  for (const handler of ['normal','delayed','missing'] as const) for (const scenario of scenarios) {
   if(handler==='missing'&&(locale!=='en'||theme!=='light'||width!==390||scenario!=='current'))continue;
-  test(`${locale} ${theme} ${width}${handler==='normal'?'':` with ${handler} old-read handler`}: ${scenario} revocation with a pending session snapshot`, async t => {
+  test(handler==='missing'?`${locale} ${theme} ${width}: missing old-read handler times out before revocation`:`${locale} ${theme} ${width}${handler==='normal'?'':` with ${handler} old-read handler`}: ${scenario} revocation with a pending session snapshot`, async t => {
   const browser = await chromium.launch({headless: true});
   let releaseOld!:()=>void, releaseFresh!:()=>void, oldEntered!:()=>void, freshEntered!:()=>void;
   const oldReply=new Promise<void>(resolve=>{releaseOld=resolve;});

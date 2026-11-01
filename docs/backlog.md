@@ -4300,7 +4300,8 @@ five-second outer race and returns before revocation and screenshot checks;
 that control does not establish the exact observation deadline. Delayed handlers
 repeat the original revocation and stale-session journeys across both languages,
 themes and widths. The eight ordinary screenshot names remain; delayed current-session
-captures use separate names, retaining sixteen images instead of overwriting eight.
+captures use separate names, retaining sixteen files so neither handler's capture
+overwrites the other's.
 Every original assertion, observation and deadline remains. Native Chromium with
 stubbed HTTP does not qualify real session authority, other engines or networks,
 or explain the historical Linux failure.
