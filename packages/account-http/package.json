@@ -16,7 +16,6 @@
     "pg": "^8.23.0",
     "@waitron-cloud/backups": "workspace:*",
     "@waitron-cloud/remote-access": "workspace:*",
-    "@waitron-cloud/fiscal-allocation": "workspace:*",
     "@waitron-cloud/translation": "workspace:*"
   },
   "devDependencies": {

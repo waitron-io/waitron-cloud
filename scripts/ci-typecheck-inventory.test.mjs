@@ -8,7 +8,7 @@ import test from 'node:test';
 
 const repository = fileURLToPath(new URL('../', import.meta.url));
 const inventoryTest = 'all declared package compiler configurations are included in the consolidated check';
-const members = ['packages/account-http', 'packages/backups', 'packages/fiscal-allocation',
+const members = ['packages/account-http', 'packages/backups', 
   'packages/identity', 'packages/operations', 'packages/registration', 'packages/remote-access',
   'packages/translation', 'packages/ui-smoke', 'apps/portal'];
 

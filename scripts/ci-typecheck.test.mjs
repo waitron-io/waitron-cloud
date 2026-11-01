@@ -7,7 +7,7 @@ import {fileURLToPath, pathToFileURL} from 'node:url';
 import test from 'node:test';
 
 const repository = fileURLToPath(new URL('../', import.meta.url));
-const memberDirectories = ['packages/account-http', 'packages/backups', 'packages/fiscal-allocation',
+const memberDirectories = ['packages/account-http', 'packages/backups', 
   'packages/identity', 'packages/operations', 'packages/registration', 'packages/remote-access',
   'packages/translation', 'packages/ui-smoke', 'apps/portal'];
 

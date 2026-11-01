@@ -1,5 +1,5 @@
-import {copyFileSync, readFileSync, readdirSync, rmSync, writeFileSync} from 'node:fs';
-import {join} from 'node:path';
+import {copyFileSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync} from 'node:fs';
+import {dirname, join} from 'node:path';
 import {loadWorkspace} from './ci-scope.mjs';
 
 // Positive receipt fixtures need the exact audited installation, execution and
@@ -14,8 +14,13 @@ const inputs = {...deploymentInputs.files, ...schemaInputs.files, ...JSON.parse(
 
 export function receiptFixtureWorkspace() {
   // Compare seeded historical manifests with their own commands, not live package commands.
-  return loadWorkspace().filter(pkg => Object.hasOwn(inputs, `${pkg.directory}/package.json`))
-    .map(pkg => ({...pkg, scripts: JSON.parse(inputs[`${pkg.directory}/package.json`]).scripts}));
+  const live = new Map(loadWorkspace().map(pkg => [pkg.directory, pkg]));
+  return Object.entries(inputs).filter(([path]) => /^(apps|packages)\/[^/]+\/package\.json$/.test(path))
+    .map(([path, text]) => {
+      const saved = JSON.parse(text), directory = path.slice(0, -'/package.json'.length);
+      return {...saved, ...live.get(directory), directory, scripts: saved.scripts};
+    })
+    .sort((left, right) => left.name.localeCompare(right.name, 'en'));
 }
 
 export function copyReceiptFixtureInput(path, target) {
@@ -41,5 +46,8 @@ export function seedReceiptDependencyInputs(root) {
   for (const entry of readdirSync(root,{withFileTypes:true})) {
     if (entry.name!=='.git' && !entry.name.endsWith('.md') && !deploymentInputs.rootFiles.includes(entry.name) && (entry.isFile() || entry.isSymbolicLink())) rmSync(join(root,entry.name));
   }
-  for (const [path, text] of Object.entries(inputs)) writeFileSync(join(root, path), text);
+  for (const [path, text] of Object.entries(inputs)) {
+    mkdirSync(dirname(join(root, path)), {recursive: true});
+    writeFileSync(join(root, path), text);
+  }
 }

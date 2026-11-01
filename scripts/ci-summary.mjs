@@ -15,7 +15,6 @@ export const packageShards = Object.freeze({
   '@waitron-cloud/identity': 1,
   '@waitron-cloud/operations': 1,
   '@waitron-cloud/remote-access': 1,
-  '@waitron-cloud/fiscal-allocation': 1,
   '@waitron-cloud/translation': 1,
   '@waitron-cloud/ui-smoke': 1,
 });
