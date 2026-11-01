@@ -23,7 +23,11 @@ export async function failConsentDatabaseWait(pool:Pool,schema:string,error:unkn
    })(),
    new Promise<{unavailable:true}>(resolve=>{timer=setTimeout(()=>resolve({unavailable:true}),250);}),
   ]);
- }catch{}finally{clearTimeout(timer);const ended=client.end().catch(()=>{});client.connection.stream.destroy();await ended;}
+ }catch{}finally{
+  clearTimeout(timer);
+  // A completed snapshot must not wait for the peer to finish disconnecting.
+  const ended=client.end().catch(()=>{});client.connection.stream.destroy();await ended;
+ }
  try{report(JSON.stringify(snapshot));}catch{}
  throw error;
 }

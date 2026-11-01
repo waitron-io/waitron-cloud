@@ -114,6 +114,7 @@ test('a completed snapshot does not wait for the database peer to acknowledge di
   assert.equal(disconnect,true,'the diagnostic must initiate disconnect');
   assert.equal(returned,true,'disconnect acknowledgement cannot hold the failed consent check');
  }finally{
-  for(const socket of sockets)socket.destroy();await failed;await pool.end();await new Promise<void>(resolve=>server.close(()=>resolve()));
+  for(const socket of sockets)socket.destroy();
+  try{await failed;}finally{await pool.end();await new Promise<void>(resolve=>server.close(()=>resolve()));}
  }
 });

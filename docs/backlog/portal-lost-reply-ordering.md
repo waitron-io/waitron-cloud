@@ -18,8 +18,9 @@
   That does not explain the historical failures. Capture a diagnostic recurrence,
   reproduce its named stage, then fix the proved cause test-first. Every original
   session, ownership, reset, consent, cleanup and timeout assertion remains.
-  No product fix or longer deadline is claimed; local real-fixture reproduction
-  stays unavailable while Docker is down. Lane G owns the remaining diagnosis.
+  No product fix or longer deadline is claimed. Real-fixture reproduction runs on
+  the shared Linux test box while Mac Docker is off. D530 owns the separate
+  consent database-wait diagnosis; Lane G retains its parked branch.
 
 - **Resolved: reconciliation stalled after the reply was dropped.**
   [CI 36777640375](https://github.com/waitron-io/waitron-cloud/actions/runs/36777640375)
@@ -110,7 +111,8 @@ process IDs or account identifiers enter this report.
 
 The snapshot has a separate 250 ms timer budget covering connection setup and the
 query. A failed connection or unanswered database produces an unavailable marker
-and closes that connection. A failed reporter retains the original test error.
+and closes that connection. A completed snapshot also closes its socket without
+waiting for a disconnect acknowledgement. A failed reporter retains the original test error.
 Scheduling and connection teardown can finish later than the timer. The original
 five-second page wait and every existing assertion remain.
 
