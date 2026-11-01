@@ -17,6 +17,11 @@ test('paired Cloud stays within measured budgets through a settled minute and ac
   assert.equal(checkCapacitySamples(receipt.capacity.samples), true);
   assert.equal(receipt.capacity.measurement, 'linux-cgroup-v2-including-tmpfs');
   assert.equal(receipt.capacity.shippingQualification, false);
+  assert.equal(receipt.capacity.diskMeasurement, 'docker-data-filesystem');
+  for (const sample of [receipt.capacity.baseline, ...receipt.capacity.samples, receipt.capacity.after]) {
+    assert.ok(Number.isFinite(sample?.availableMiB) && sample.availableMiB >= 0);
+    assert.ok(Number.isFinite(sample?.freeGiB) && sample.freeGiB > 0);
+  }
   const child = receipt.paidSnapshot.workerVerification.childId;
   assert.ok(receipt.capacity.samples.some(value => value.phase === 'verification' && value.verifierIds.includes(child) && value.verifierMiB > 0));
   assert.equal(receipt.paidSnapshot.verification, 'verified');

@@ -94,6 +94,7 @@ export async function runTestCloudClients({image, waitronImage, protectedContain
   };
   const before = await inventory();
   checkProtectedContainers(before, before, protectedContainerIds);
+  let hostCapacity;
   const record = (kind, id) => {if (!created.some(value => value.kind === kind && value.id === id)) created.push({kind, id, owner: runId});};
   const control = async (id, phase, choice) => parseIntegrationJson(await docker(['exec', '-i',
     ...(venueCAs.has(id) ? ['--env', 'NODE_EXTRA_CA_CERTS=' + venueCAs.get(id)] : []),
@@ -118,6 +119,11 @@ export async function runTestCloudClients({image, waitronImage, protectedContain
     return children;
   };
   try {
+    if (measureCapacity) {
+      const {readHostCapacity} = await import('../deploy/test-cloud/test-fixtures/integration-capacity.mjs');
+      const diskPath = await docker(['info', '--format', '{{.DockerRootDir}}'], '', 'capacity-data-filesystem');
+      hostCapacity = {diskPath, baseline: await readHostCapacity({diskPath})};
+    }
     if (source) {
       const id = await docker(['create', '-i', '--pull=never', '--label', 'cloud.integration.owner=' + runId,
         '--network', 'none', '--read-only', '--cap-drop', 'ALL', '--security-opt', 'no-new-privileges',
@@ -302,13 +308,14 @@ export async function runTestCloudClients({image, waitronImage, protectedContain
                     if (value.controllerScope) {assert.match(value.controllerScope, /^[a-f0-9-]{36}$/); verifierScope = value.controllerScope;}
                   }
                 }
-                return observeCapacity({docker, project, runId, verifierScope, waitronImage, workerId: verifierWorker,
+                return observeCapacity({docker, project, runId, verifierScope, waitronImage, workerId: verifierWorker, diskPath: hostCapacity.diskPath,
                   protectedUnchanged: async () => checkProtectedContainers(before, await inventory(), protectedContainerIds)});
               },
               verify,
               stop: async () => {if (verifierStarted) await docker(['stop', '--time', '15', verifierWorker], '', 'capacity-refusal-stop');},
             });
-            capacityEvidence = {measurement: 'linux-cgroup-v2-including-tmpfs', shippingQualification: false, samples: measured.samples};
+            capacityEvidence = {measurement: 'linux-cgroup-v2-including-tmpfs', diskMeasurement: 'docker-data-filesystem',
+              shippingQualification: false, baseline: hostCapacity.baseline, samples: measured.samples};
           } else await verify();
         }
         if (paidStream) {
@@ -575,6 +582,10 @@ export async function runTestCloudClients({image, waitronImage, protectedContain
         result.cleanup = {created, removed, remaining: []}; result.protectedContainersUnchanged = true;
       }
     } finally {await rm(directory, {recursive: true, force: true});}
+  }
+  if (capacityEvidence) {
+    const {readHostCapacity} = await import('../deploy/test-cloud/test-fixtures/integration-capacity.mjs');
+    capacityEvidence.after = await readHostCapacity({diskPath: hostCapacity.diskPath});
   }
   if (source) await checkIntegrationSource(root, source);
   return result;

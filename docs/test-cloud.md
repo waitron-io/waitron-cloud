@@ -1075,3 +1075,17 @@ restoring four volumes. Available memory stays above 3,666 MiB and free disk abo
 12.65 GiB under the campaign-only disk policy. Its output keeps
 `completeIntegration: false`; the strict complete receipt, published-release upgrade
 and deployment checks remain open. Keep plan enforcement off.
+
+### Host disk measurements during the capacity proof
+
+The disposable capacity journey records available host memory and disk before it
+creates containers, in each settled and verification sample, and after owned
+cleanup. Disk is measured on the filesystem containing Docker's data directory,
+reported by `docker info`, so a checkout on another disk cannot supply the result.
+Missing memory data, an inaccessible data directory or a relative directory
+refuses the run.
+
+These measurements do not qualify the full deployment. The receipt continues to
+report `shippingQualification: false` and `completeIntegration: false`. Startup
+and integration sampling, direct-storage withdrawal, published-release upgrade
+and the unchanged 20 GiB startup / 15 GiB running floors remain required.

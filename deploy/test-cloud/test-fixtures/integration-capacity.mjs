@@ -1,6 +1,18 @@
 import assert from 'node:assert/strict';
-import {readFile} from 'node:fs/promises';
-import {join} from 'node:path';
+import {readFile, statfs} from 'node:fs/promises';
+import {isAbsolute, join} from 'node:path';
+
+export async function readHostCapacity({meminfo = '/proc/meminfo', diskPath = '/'} = {}) {
+  assert.ok(isAbsolute(diskPath), 'integration.capacity_disk_path');
+  const [mem, disk] = await Promise.all([readFile(meminfo, 'utf8'), statfs(diskPath, {bigint: true})]);
+  const matches = [...mem.matchAll(/^MemAvailable:\s+(\d+) kB$/gm)];
+  const availableKiB = matches.length === 1 ? Number(matches[0][1]) : NaN;
+  assert.ok(Number.isSafeInteger(availableKiB) && availableKiB >= 0, 'integration.capacity_host_memory');
+  assert.ok(disk.bavail >= 0n && disk.bsize > 0n, 'integration.capacity_host_disk');
+  const freeGiB = Number(disk.bavail * disk.bsize) / 1073741824;
+  assert.ok(Number.isFinite(freeGiB), 'integration.capacity_host_disk');
+  return {availableMiB: availableKiB / 1024, freeGiB};
+}
 
 function checkCapacitySample(value) {
     for (const [key, max] of [['availableMiB', Number.MAX_SAFE_INTEGER], ['cloudMiB', 2048], ['verifierMiB', 1024], ['scratchMiB', 256], ['fixtureBytes', 1073741824]]) {
@@ -90,7 +102,7 @@ export async function inspectCapacityVerifier(docker, id) {
 }
 
 export async function observeCapacity({docker, project, runId, verifierScope, waitronImage, workerId,
-  protectedUnchanged, procRoot = '/proc', cgroupRoot = '/sys/fs/cgroup', meminfo = '/proc/meminfo'}) {
+  protectedUnchanged, procRoot = '/proc', cgroupRoot = '/sys/fs/cgroup', meminfo = '/proc/meminfo', diskPath = '/'}) {
   const ids = text => text.split(/\s+/).filter(Boolean);
   const list = filter => docker(['ps', '-aq', '--no-trunc', '--filter', filter]).then(ids);
   const inspect = async (values, phase = 'capacity-cloud-inspect') => values.length ? JSON.parse(await docker(['inspect', ...values], '', phase)) : [];
@@ -137,8 +149,8 @@ export async function observeCapacity({docker, project, runId, verifierScope, wa
     const size = await docker(['exec', volume.container, 'du', '-sk', '--', volume.path]);
     assert.match(size, /^\d+\s+[^\n]+$/); fixtureBytes += Number(size.split(/\s+/)[0]) * 1024;
   }
-  const mem = await readFile(meminfo, 'utf8');
+  const host = await readHostCapacity({meminfo, diskPath});
   return {cloudMiB, verifierMiB, scratchMiB, fixtureBytes, verifierIds, verifierCount: verifierIds.length,
-    availableMiB: Number(/^MemAvailable:\s+(\d+)/m.exec(mem)?.[1]) / 1024,
+    ...host,
     oom: [...cloud, ...clients, ...children].some(row => row.State.OOMKilled), protectedUnchanged: await protectedUnchanged()};
 }

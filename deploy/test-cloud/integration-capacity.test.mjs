@@ -123,6 +123,7 @@ test('capacity sums owned cgroups and counts each private data volume once', asy
     const result = await observeCapacity(options);
     assert.equal(result.cloudMiB, 100); assert.equal(result.verifierMiB, 300); assert.equal(result.scratchMiB, 128);
     assert.equal(result.fixtureBytes, 1048576); assert.equal(result.availableMiB, 4096);
+    assert.ok(Number.isFinite(result.freeGiB) && result.freeGiB > 0, 'The sampled Docker data filesystem must report available disk');
     assert.deepEqual(result.verifierIds, [child]); assert.equal(result.verifierCount, 1);
     for (fault of ['foreign', 'foreign-volume', 'child-image', 'child-scope', 'child-owner']) await assert.rejects(observeCapacity(options));
     fault = 'oom'; assert.equal((await observeCapacity(options)).oom, true);
