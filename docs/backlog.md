@@ -59,7 +59,9 @@ PR #788 adds an inactivity retry for that download; it does not identify the
 upstream stall's cause. The separate
 [header-progress test scheduling repair](backlog/cost-conformance-fixtures.md#header-progress-fixture-scheduling-d530)
 retains the original assertions and controls its shortened clock independently
-of connection scheduling. A recurring npm abort-diagnostic refusal remains separate
+of connection scheduling. The [exhausted-attempt fixture](backlog/cost-conformance-fixtures.md#exhausted-archive-attempts-and-connection-scheduling-d530)
+also controls its shortened clock after each stalled request reaches the server,
+retaining three requests and every original check. A recurring npm abort-diagnostic refusal remains separate
 in [the setup investigation](backlog/ci-pnpm-setup.md).
 
 ## Storage archive publication refusals (D449)

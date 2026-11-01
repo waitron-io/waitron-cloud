@@ -80,10 +80,36 @@ timer cancellation fails the controls, as does preventing clock expiry.
 The delayed-connection variant guards this fixture against a return to scheduling
 dependence. It adds no independent downloader guarantee. The controlled cases do
 not advance to the 1,200 ms total deadline; the existing `shared-deadline` case
-checks that refusal with a wall clock. Other scenarios also retain their wall
-clocks. Production download timeouts, retry limits and accounting are unchanged.
+checks that refusal with a wall clock. The exhausted-attempt case below also
+uses controlled time; the remaining scenarios retain their wall clocks. Production download timeouts, retry limits and accounting are unchanged.
 The separate prematurely closed Litestream LIST response remains under
 investigation.
+
+
+### Exhausted archive attempts and connection scheduling (D530)
+
+[D462's later receipts job](https://github.com/waitron-io/waitron-cloud/actions/runs/41311315472/job/124862280267)
+records three stalled client attempts but only two server requests. Each attempt
+starts its shortened 150 ms inactivity clock before connecting. A connection
+that takes longer can expire before the server receives it, so counting requests
+no longer proves that all three attempts ran. Adding a 200 ms first-connection
+delay reproduces the same two-versus-three refusal. The historical connection
+and scheduling delays were not measured.
+
+Run `node --test --test-name-pattern=always-stalled
+scripts/cloud-cost/conformance-archive-idle.test.mjs` to check both ordinary and
+delayed connections. The server now advances the controlled clock by 150 ms only
+after receiving each stalled request. You still exercise real HTTP, three admitted
+requests, the downloader's inactivity refusal and exhausted retries, and the
+absence of an archive. Every original assertion remains. The 150 ms inactivity,
+1,200 ms total and real five-second outer limits are unchanged. Removing clock
+control or request admission fails the delayed-connection or outer-limit control.
+
+This fixture separates connection scheduling from simulated download time. It
+does not measure the production network or qualify expiry before a request reaches
+the server. The existing wall-clock shared-deadline and cancellation cases remain
+separate. Production downloads and accounting are unchanged. The LIST shutdown
+and bound-container verifier cleanup failures still need their own investigations.
 
 
 ### Conformance image acquisition during D135 qualification

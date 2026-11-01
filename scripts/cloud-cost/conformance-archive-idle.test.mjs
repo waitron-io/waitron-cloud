@@ -9,8 +9,8 @@ import {spawn} from 'node:child_process';
 
 // Without an inactivity bound, a stalled first response consumes the entire retry budget.
 for(const scenario of ['headers-stall','body-stall','always-stalled','progress','headers-progress','cancel','shared-deadline']) {
-  for(const variant of scenario==='headers-progress'?['ordinary','delayed connection','idle boundary']:['ordinary']) {
-  const connectionDelay=variant==='delayed connection'?80:0,expires=variant==='idle boundary';
+  for(const variant of scenario==='headers-progress'?['ordinary','delayed connection','idle boundary']:scenario==='always-stalled'?['ordinary','delayed connection']:['ordinary']) {
+  const connectionDelay=variant==='delayed connection'?(scenario==='always-stalled'?200:80):0,expires=variant==='idle boundary';
   test('archive inactivity: '+scenario+(variant==='ordinary'?'':' with '+variant),{timeout:5000},async t=>{
     const root=mkdtempSync(join(tmpdir(),'cost-archive-idle-')),path=join(root,'archive');
     const bytes=Buffer.from('complete verified archive'),digest=createHash('sha256').update(bytes).digest('hex');
@@ -26,7 +26,9 @@ for(const scenario of ['headers-stall','body-stall','always-stalled','progress',
     });
     const server=createServer((request,response)=>{
       const attempt=++requests;
-      if(['always-stalled','cancel','shared-deadline'].includes(scenario)||scenario==='headers-stall'&&attempt===1)return;
+      // Count the admitted stalled request before expiring its shortened clock.
+      if(scenario==='always-stalled'){void advanceClock(150);return;}
+      if(['cancel','shared-deadline'].includes(scenario)||scenario==='headers-stall'&&attempt===1)return;
       if(scenario==='headers-progress'){
         later(async()=>{
           if(expires&&attempt===1){await advanceClock(150);return;}
@@ -64,7 +66,7 @@ for(const scenario of ['headers-stall','body-stall','always-stalled','progress',
       globalThis.setTimeout=(fn,ms,...args)=>timeout(fn,ms===30000?150:ms,...args);
       const budget=AbortSignal.timeout;
       AbortSignal.timeout=ms=>budget(ms===120000?${scenario==='shared-deadline'?240:1200}:ms);
-      ${scenario==='headers-progress'?`
+      ${['headers-progress','always-stalled'].includes(scenario)?`
       // Only the download clocks advance here; HTTP and the outer test deadline stay real.
       const clear=globalThis.clearTimeout,pending=new Map();let now=0;
       const schedule=(fn,ms,args=[])=>{
