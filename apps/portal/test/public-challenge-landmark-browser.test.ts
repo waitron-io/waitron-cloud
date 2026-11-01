@@ -83,7 +83,7 @@ for (const locale of ['en', 'es']) for (const theme of ['light', 'dark'] as cons
         assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
         if (process.env.PUBLIC_CHALLENGE_RECEIPT_DIR) {
           await mkdir(process.env.PUBLIC_CHALLENGE_RECEIPT_DIR, {recursive: true});
-          await page.screenshot({path: `${process.env.PUBLIC_CHALLENGE_RECEIPT_DIR}/${locale}-${theme}-${width}-${mode}.png`});
+          await page.screenshot({path: `${process.env.PUBLIC_CHALLENGE_RECEIPT_DIR}/${locale}-${theme}-${width}-${mode}${handler === 'normal' ? '' : `-${handler}`}.png`});
         }
       } finally {
         release(); await context?.close(); server.closeAllConnections();
