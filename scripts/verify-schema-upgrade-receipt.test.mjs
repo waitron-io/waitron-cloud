@@ -82,3 +82,18 @@ test('venue service receipt requires exact candidate and every independent upgra
   const changed=structuredClone(valid);mutate(changed);assert.throws(()=>verify(changed),/schema_upgrade_receipt/);
  }
 });
+
+test('allowance receipt requires the exact 46-to-47 candidate and every separate restoration fact',async()=>{
+ const {verifySchemaUpgradeReceipt:verify}=await import(path.href);
+ const checks=['oldStarted','newRefusedOld','migrationInterrupted','rollbackComplete','newRefusedInterrupted','retryApplied','oldRefusedNew','newStarted','identityPreserved','tenantsIsolated','completionRetry','pendingMailPreserved','mailDelivered','backupRestored','oldRecovered','wrongKeyRefused','upgradedUnchanged','accountStatePreserved','relayStatePreserved','monitoringStatePreserved'];
+ const allowances=['oldSqlUnchanged','oldRowsPreserved','interruptedRollback','restartIdempotent','defaultOff','configRestored','reservationsRestored','spentNotReleased','trafficSourcesRestored','trafficLedgerRestored','trafficRetryStable','gapsRemainIncomplete','foreignScopeRefused','oldBackupUpgradeEmpty'];
+ const valid={schemaVersion:8,measuredAt:'2026-11-01T18:00:00.000Z',driver:{head:'b'.repeat(40),dirty:false},releases:{old:{head:'9a75808dd17a86f2dc1e9b87614be4e55e81deb2',migrations:46,digest:'a'.repeat(64)},new:{head:'b'.repeat(40),migrations:47,digest:'b'.repeat(64)}},checks:Object.fromEntries(checks.map(name=>[name,true])),allowances:Object.fromEntries(allowances.map(name=>[name,true])),timings:{upgradeMs:1,recoveryMs:2},cleanup:{containers:0,volumes:0,checkouts:0},limitations:['Synthetic country allowances, traffic and two separate logical backups only.']};
+ assert.equal(verify(valid),valid);
+ for(const section of ['checks','allowances'])for(const key of Object.keys(valid[section]))for(const value of [undefined,false,'true',1,null]){
+  const changed=structuredClone(valid);if(value===undefined)delete changed[section][key];else changed[section][key]=value;
+  assert.throws(()=>verify(changed),/schema_upgrade_receipt/,`${section}.${key}: ${value}`);
+ }
+ for(const mutate of [v=>delete v.allowances,v=>v.allowances.extra=true,v=>v.checks.extra=true,v=>v.checks.pairingUpgraded=true,v=>v.venueServices={},v=>v.extra=true,v=>v.driver.dirty=true,v=>v.driver.head='c'.repeat(40),v=>v.releases.old.head='c'.repeat(40),v=>v.releases.old.head=v.releases.new.head,v=>v.releases.old.digest=v.releases.new.digest,v=>v.releases.old.digest='not-a-digest',v=>v.releases.new.digest='not-a-digest',v=>v.releases.old.migrations=45,v=>v.releases.new.migrations=46,v=>v.releases.new.migrations=48,v=>v.releases.new.head='HEAD',v=>v.cleanup.containers=1,v=>v.cleanup.volumes=1,v=>v.cleanup.checkouts=1,v=>v.schemaVersion=7]){
+  const changed=structuredClone(valid);mutate(changed);assert.throws(()=>verify(changed),/schema_upgrade_receipt/);
+ }
+});

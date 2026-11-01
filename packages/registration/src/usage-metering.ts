@@ -7,9 +7,10 @@ export const usageEventTypes=[
  'operation.installation_completed','operation.monitoring_probe',
  'message.service_alert_sent','message.service_alert_failed','message.service_alert_expired','message.service_alert_cancelled',
  'translation.items_completed','translation.input_tokens','translation.output_tokens','translation.cost_micro_usd',
+ 'remote_access.traffic_bytes',
 ] as const;
 export type UsageEventType=typeof usageEventTypes[number];
-export const usageSourceKinds=['backup_point','backup_recovery','installation_operation','monitoring_probe','service_alert','translation_job'] as const;
+export const usageSourceKinds=['backup_point','backup_recovery','installation_operation','monitoring_probe','service_alert','translation_job','remote_traffic_sample'] as const;
 export type UsageSourceKind=typeof usageSourceKinds[number];
 export const usageReconciliationSourceNames=['backup_points','backup_recoveries','installation_operations','service_alerts'] as const;
 export type UsageReconciliationSource=typeof usageReconciliationSourceNames[number];
@@ -67,6 +68,7 @@ function validate(input:UsageEventInput){
   'message.service_alert_failed':'service_alert','message.service_alert_expired':'service_alert','message.service_alert_cancelled':'service_alert',
   'translation.items_completed':'translation_job','translation.input_tokens':'translation_job',
   'translation.output_tokens':'translation_job','translation.cost_micro_usd':'translation_job',
+  'remote_access.traffic_bytes':'remote_traffic_sample',
  };
  if(!input||typeof input!=='object'||!uuid.test(input.organisationId)
   ||(input.venueId!==null&&!uuid.test(input.venueId))
@@ -75,7 +77,9 @@ function validate(input:UsageEventInput){
   ||!(usageSourceKinds as readonly string[]).includes(input.sourceKind)
   ||typeof input.sourceReference!=='string'||!sourceReference.test(input.sourceReference)
   ||!validTimestamp(input.occurredAt))throw new UsageError('invalid_input');
- if(expectedSource[input.type]!==input.sourceKind||(!input.type.startsWith('backup.')&&!input.type.startsWith('translation.')&&input.quantity!==1n))throw new UsageError('invalid_input');
+ const traffic=input.type==='remote_access.traffic_bytes';
+ if(expectedSource[input.type]!==input.sourceKind||(traffic&&(input.venueId===null||input.quantity>9223372036854775807n))
+  ||(!traffic&&!input.type.startsWith('backup.')&&!input.type.startsWith('translation.')&&input.quantity!==1n))throw new UsageError('invalid_input');
 }
 function same(row:UsageRow,input:UsageEventInput){
  return row.organisation_id===input.organisationId&&row.venue_id===input.venueId

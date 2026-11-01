@@ -3,11 +3,11 @@ import {pathToFileURL} from 'node:url';
 export function verifySchemaUpgradeReceipt(value){
  const demand=(ok,field)=>{if(!ok)throw new Error(`schema_upgrade_receipt: ${field}`);};
  const exact=(object,keys)=>{demand(object&&typeof object==='object'&&!Array.isArray(object),'object');demand(JSON.stringify(Object.keys(object).sort())===JSON.stringify([...keys].sort()),'fields');};
- exact(value,['schemaVersion','driver','releases','checks','timings','cleanup','limitations','measuredAt',...(value?.schemaVersion===5?['backupVerification']:value?.schemaVersion===6?['billingStore']:value?.schemaVersion===7?['venueServices']:[])]);
+ exact(value,['schemaVersion','driver','releases','checks','timings','cleanup','limitations','measuredAt',...(value?.schemaVersion===5?['backupVerification']:value?.schemaVersion===6?['billingStore']:value?.schemaVersion===7?['venueServices']:value?.schemaVersion===8?['allowances']:[])]);
  exact(value.driver,['head','dirty']);exact(value.releases,['old','new']);
  exact(value.timings,['upgradeMs','recoveryMs']);exact(value.cleanup,['containers','volumes','checkouts']);
  demand(typeof value.measuredAt==='string'&&Number.isFinite(Date.parse(value.measuredAt))&&new Date(value.measuredAt).toISOString()===value.measuredAt,'measuredAt');
- demand([1,2,3,4,5,6,7].includes(value?.schemaVersion),'version');
+ demand([1,2,3,4,5,6,7,8].includes(value?.schemaVersion),'version');
  const sha=/^[0-9a-f]{40}$/,digest=/^[0-9a-f]{64}$/;
  demand(sha.test(value.driver?.head)&&value.driver.dirty===false,'driver');
  for(const role of ['old','new']){const release=value.releases?.[role];exact(release,['head','migrations','digest']);demand(sha.test(release?.head)&&digest.test(release?.digest)&&Number.isInteger(release?.migrations)&&release.migrations>0,role);}
@@ -46,6 +46,13 @@ export function verifySchemaUpgradeReceipt(value){
   checks.splice(checks.indexOf('pairingUpgraded'),1);checks.push('accountStatePreserved','relayStatePreserved','monitoringStatePreserved');
   const venueChecks=['oldSqlUnchanged','oldRowsPreserved','defaultOff','interruptedRollback','restartIdempotent','foreignScopeRefused','newBackupRestored','restoredAuthority','restoredTrials','restoredEvents','restoredKeysAndHolds','restoredRetryStable','staleWriterRefused','oldBackupUpgradeUnenrolled'];
   exact(value.venueServices,venueChecks);for(const key of venueChecks)demand(value.venueServices[key]===true,key);
+ }
+ if(value.schemaVersion===8){
+  demand(value.releases.old.head==='9a75808dd17a86f2dc1e9b87614be4e55e81deb2'&&value.releases.old.migrations===46&&value.releases.new.migrations===47,'allowance schemas');
+  demand(value.driver.head===value.releases.new.head,'allowance candidate');
+  checks.splice(checks.indexOf('pairingUpgraded'),1);checks.push('accountStatePreserved','relayStatePreserved','monitoringStatePreserved');
+  const allowanceChecks=['oldSqlUnchanged','oldRowsPreserved','interruptedRollback','restartIdempotent','defaultOff','configRestored','reservationsRestored','spentNotReleased','trafficSourcesRestored','trafficLedgerRestored','trafficRetryStable','gapsRemainIncomplete','foreignScopeRefused','oldBackupUpgradeEmpty'];
+  exact(value.allowances,allowanceChecks);for(const key of allowanceChecks)demand(value.allowances[key]===true,key);
  }
  exact(value.checks,checks);for(const key of checks)demand(value.checks[key]===true,key);
  for(const key of ['upgradeMs','recoveryMs'])demand(Number.isFinite(value.timings?.[key])&&value.timings[key]>=0,key);

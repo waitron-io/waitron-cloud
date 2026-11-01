@@ -58,3 +58,10 @@ test('venue service upgrades select only their own complete distinct pinned pair
  assert.deepEqual(fixture.upgradeRevisions([...pair,'--venue-services']),want);
  for(const args of [['--venue-services'],['--venue-services','--old','main','--new','b'.repeat(40)],['--venue-services','--old','a'.repeat(40),'--new','a'.repeat(40)],['--venue-services',...pair,'--venue-services'],...['--billing','--backup-verification','--monitoring-quiet','--relay-stop'].flatMap(mode=>[[mode,'--venue-services',...pair],['--venue-services',mode,...pair]])])assert.throws(()=>fixture.upgradeRevisions(args),/revisions/);
 });
+
+test('allowance upgrades select only their own complete distinct pinned pair',()=>{
+ const pair=['--old','a'.repeat(40),'--new','b'.repeat(40)],want={oldHead:'a'.repeat(40),newHead:'b'.repeat(40),factor:false,allowances:true};
+ assert.deepEqual(fixture.upgradeRevisions(['--allowances',...pair]),want);
+ assert.deepEqual(fixture.upgradeRevisions([...pair,'--allowances']),want);
+ for(const args of [['--allowances'],['--allowances','--old','a'.repeat(40)],['--allowances','--old','main','--new','b'.repeat(40)],['--allowances','--old','a'.repeat(40),'--new','a'.repeat(40)],['--allowances',...pair,'--allowances'],['--allowances',...pair,'--force'],...['--venue-services','--billing','--backup-verification','--monitoring-quiet','--relay-stop'].flatMap(mode=>[[mode,'--allowances',...pair],['--allowances',mode,...pair]])])assert.throws(()=>fixture.upgradeRevisions(args),/revisions/);
+});
