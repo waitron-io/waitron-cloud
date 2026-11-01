@@ -17,12 +17,14 @@ The wrapper now divides the existing cases between two disposable checkouts.
 Each batch changes only its own catalogue file and keeps its baseline, omission
 and restoration in sequence. Both batches settle before cleanup, including when
 one fails. A final check requires every original guard name exactly once, so a
-missing or repeated batch refuses qualification. Every original assertion, mutation target, expected failure, child
+missing or repeated batch refuses qualification. If both batches fail, their
+errors remain visible. A native control forces both setup failures before any
+database work and requires both errors in the test report. Every original assertion, mutation target, expected failure, child
 process limit and the 180-second wrapper limit remains.
 
 On the authorised Linux test box, the unchanged serial wrapper took 140.95
 seconds; a comparison with Node's compilation cache took 133.59 seconds. The
-cache is not enabled by this change. Two batches without that cache took 76.97
+cache is not enabled by this change. Two batches without that cache took 77.14
 seconds. Each run detected all fourteen independent omissions without skips.
 These are isolated wrapper measurements, not guarantees about a busy CI runner.
 The historical failing branch also had an additional unlanded migration; its
