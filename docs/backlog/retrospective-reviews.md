@@ -233,7 +233,6 @@ separately. Allowing worker failures to capture overwrites all sixteen images
 while preserving the path count, so the path check alone leaves content
 classification unqualified.
 
-
 ## Recovery organisation-width captures
 
 The PR609 fixture retains seventeen screenshots: eight ordinary, eight delayed
@@ -250,3 +249,12 @@ width, then returns before the pending and re-enabled choice assertions.
 Every original behavioral assertion, expected value, observation and deadline
 remains unchanged. Other engines, production networks, real recovery authority
 and the historical Linux cause remain unqualified.
+
+Removing the ordinary observation still passes sixteen historical ordinary and
+delayed cases, as well as all eight parent cases. Those runs leave its necessity
+unqualified; the repair retains every observation. Removing only the select's
+maximum width also leaves the nine historical and four parent phone cases
+passing without overflow. A separate, forced 1000-pixel minimum width fails all
+three English/light/390 historical variants and the matching parent case at the
+original page-width assertion. This samples a real overflow; it does not qualify
+every layout fault or prove any individual style rule necessary.
