@@ -65,8 +65,9 @@ the counter, then closes the client socket. The upstream response is complete;
 the downstream pipeline still refuses with the same error category and unequal
 outcomes despite equal byte totals. These controls establish a possible ordering,
 not the historical cause, the official writer's behavior or Linux stack
-qualification. The interrupted session remains refused. The separate owner
-decision about accepting this cancellation category remains open.
+qualification. The interrupted session remains refused. The watcher
+confirmed that the existing acceptance guard must remain: investigate avoiding
+the cancellation before proposing any different accepted evidence.
 
 The four bounded Linux jobs in [run 40101340028](https://github.com/waitron-io/waitron-cloud/actions/runs/40101340028)
 ran 27 genuine delayed-reply cases: 25 passed and two refused. Both refusals
