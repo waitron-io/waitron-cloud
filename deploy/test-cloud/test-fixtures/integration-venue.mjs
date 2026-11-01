@@ -33,6 +33,11 @@ const socket = root + '/proof.sock'; await rm(socket, {force: true});
 const control = createServer(async (req, res) => {
   try {
     assert.equal(req.method, 'POST');
+    if (req.url === '/verification-state') {
+      const {prepareIntegrationVerificationState} = await import('/proof/integration-verification-state.mjs');
+      res.end(JSON.stringify(await prepareIntegrationVerificationState(root)));
+      return;
+    }
     if (req.url === '/snapshot-publish') {
       assert.equal(process.env.CLOUD_TEST_BACKUP_STATE, '1');
       const grant = await cloud.reserveCapture(randomUUID());

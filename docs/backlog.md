@@ -848,9 +848,19 @@ implementation or production evidence.
   10 GiB under the owner's test-box approval; shipping deployment checks remain
   unchanged. Its 28 samples cover both clients and capture, with at least
   3,748 MiB available memory and 15.67 GiB free disk. Disposable Debian images
-  do not qualify the pinned Alpine release. Snapshot verification and ordinary
-  restore, stream recovery and independent fallback, remote withdrawal,
-  active-verifier resources, rollback and deployment remain open. The old Mac cleanup refusal stays historical evidence;
+  do not qualify the pinned Alpine release. The separate paired-verification
+  extension now passes one real Linux case without skips. It installs a test
+  certificate through the normal vault writer, verifies the same published bytes
+  through the delivered scoped worker and requires all 15 module results and
+  current target-bound catalogue evidence. The worker stops cleanly; its absent
+  child appears in both cleanup lists. No recovery or source replacement occurs,
+  and activation stays unattempted. Thirty samples include one observation of
+  that exact verifier child, with at least 3,627 MiB available memory and 12.38 GiB
+  free disk. This small archive does not qualify the full settled capacity budget.
+  Thirty-six evidence and nine cleanup-ownership checks pass; removing each of
+  34 guards fails its tests in an installed disposable checkout. Ordinary restore,
+  stream recovery and independent fallback, remote withdrawal, complete capacity
+  qualification, rollback and deployment remain open. The old Mac cleanup refusal stays historical evidence;
   the isolated Linux client proof removes its owned resources successfully.
   The organisation plan store and operator command now persist free/paid metadata,
   advance revisions only on changes and refuse incompatible migration ledgers.

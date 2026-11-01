@@ -573,3 +573,37 @@ The storage client connects to the separate storage service while keeping the
 canonical URL, signed host and TLS certificate name. Cleanup removes the owned
 project, clients, volumes and image tags; the three existing Waitron containers
 keep the same IDs, start times and health.
+
+
+To include the delivered backup worker in the paired journey, run:
+
+```sh
+node --test scripts/test-cloud-paid-verification.test.mjs
+```
+
+This extension installs a test certificate in the disposable paid venue through
+Waitron's normal vault writer before capture. The pinned fiscal verifier requires
+that credential to check a complete preproduction archive. The fixture does not
+change invoice allocation or captured fiscal records.
+
+The real test worker reads the published object and delivers it to its bounded
+verifier child. The independent evidence check requires the same paired source,
+archive bytes and hash, pinned target and all 15 module results. It also requires
+current catalogue admission, confirmed child cleanup and no activation attempt.
+The trusted worker alone receives the Docker socket. Its verifier child keeps
+its existing network, filesystem and resource restrictions.
+
+The receipt records the worker's clean stop, the absent verifier child and that
+child's ID in both cleanup lists. It checks that the source installation has no
+replacement and that no recovery operation was created. Recovery still records
+`not-run`, and the final integration reader still rejects this partial result.
+Keep deployment plan enforcement off until the remaining PR7 checks pass.
+
+
+This extension passes on the isolated Linux test box without skips in 125.2
+seconds. Its 30 resource samples include the exact verifier child, with at least
+3,627 MiB available memory and 12.38 GiB free disk. The 36 evidence checks and nine
+cleanup-ownership checks pass locally; removing any of their 34 guards fails its
+tests in a fully installed disposable checkout. These results cover this small
+paired archive. You still need the full settled capacity checks, remaining
+recovery journeys and pinned Alpine release qualification.

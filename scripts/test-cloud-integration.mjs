@@ -1,12 +1,13 @@
 import assert from 'node:assert/strict';
 import {spawn} from 'node:child_process';
-import {mkdtemp, writeFile, rm} from 'node:fs/promises';
+import {mkdtemp, writeFile, readFile, rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {fileURLToPath, pathToFileURL} from 'node:url';
 import {randomUUID} from 'node:crypto';
 import {request} from 'node:https';
 import {setTimeout as delay} from 'node:timers/promises';
+import {verifierIdentityScope, checkVerifierChild} from '../deploy/test-cloud/test-fixtures/integration-verifier-ownership.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const origin = 'https://waitron.local:3000', revision = 'ec91a9e34d2daba146f4ee61850ea4136ad5cfb7';
@@ -53,13 +54,14 @@ export function checkProtectedContainers(before, after, ids) {
   return true;
 }
 
-export async function runTestCloudClients({image, waitronImage, protectedContainerIds = [], paidSnapshot = false} = {}) {
+export async function runTestCloudClients({image, waitronImage, protectedContainerIds = [], paidSnapshot = false, paidVerification = false} = {}) {
   if (!digest.test(image) || !digest.test(waitronImage)) throw Error('integration.image_invalid');
   const runId = randomUUID(), project = 'waitron-cloud-test-integration-' + runId.slice(0, 8);
   const directory = await mkdtemp(join(tmpdir(), 'cloud-integration-run-'));
   const override = join(directory, 'proof.yaml'), clientTag = project + '-venue:local';
   const owned = [], created = [], removed = [], venueCAs = new Map();
   let built = false, started = false, result;
+  let verifierWorker, verifierStarted = false, verifierScope, verifierUncertain = false;
   const docker = (args, input = '', phase) => command(args, input, phase, {TEST_CLOUD_IMAGE: image});
   const prefix = ['compose', '--project-name', project, '--env-file', 'deploy/test-cloud/test.env', '-f', 'compose.yaml', '-f', 'deploy/test-cloud/compose.yaml', '-f', override];
   const compose = args => docker([...prefix, ...args], '', 'compose-' + args[0]);
@@ -75,6 +77,25 @@ export async function runTestCloudClients({image, waitronImage, protectedContain
   const control = async (id, phase, choice) => parseIntegrationJson(await docker(['exec', '-i',
     ...(venueCAs.has(id) ? ['--env', 'NODE_EXTRA_CA_CERTS=' + venueCAs.get(id)] : []),
     id, 'node', '/proof/integration-control.mjs'], JSON.stringify({phase, choice}), 'client-' + phase));
+  const readVerifierScope = async () => {
+    if (!verifierWorker || !verifierStarted) return;
+    const path = join(directory, 'verifier-identity.json');
+    try {
+      await docker(['cp', verifierWorker + ':/run/backup-verifier/verifier-controller/identity.json', path], '', 'verifier-identity');
+      const identity = parseIntegrationJson(await readFile(path, 'utf8'));
+      verifierScope = verifierIdentityScope(identity, waitronImage);
+    } catch (error) {verifierUncertain = true; throw error;}
+  };
+  const verifierChildren = async () => {
+    if (!verifierScope) return [];
+    const children = lines(await docker(['ps', '-aq', '--no-trunc', '--filter', 'label=cloud.backup-verifier.owner=waitron-cloud-test-backup', '--filter', 'label=cloud.backup-verifier.scope=' + verifierScope]));
+    for (const id of children) {
+      assert.match(id, /^[a-f0-9]{64}$/);
+      const [info] = parseIntegrationJson(await docker(['inspect', id]));
+      checkVerifierChild(info, {id, image: waitronImage, scope: verifierScope});
+    }
+    return children;
+  };
   try {
     const [base] = JSON.parse(await docker(['image', 'inspect', waitronImage]));
     assert.equal(base.Config.Labels?.['cloud.waitron-revision'], revision, 'integration.waitron_revision');
@@ -133,7 +154,7 @@ export async function runTestCloudClients({image, waitronImage, protectedContain
       const caFile = join(directory, 'ca.pem'); await writeFile(caFile, ca + '\n', {mode: 0o644});
       const stateVolume = await docker(['volume', 'create', '--label', 'com.docker.compose.project=' + project, project + '-' + plan + '-state']);
       record('volume', stateVolume);
-      const captureSnapshot = paidSnapshot && plan === 'paid';
+      const captureSnapshot = (paidSnapshot || paidVerification) && plan === 'paid';
       const venueRoot = captureSnapshot ? '/tmp/cloud-integration-state/cloud-integration-backup-' + runId + '/paid' : '/tmp/cloud-integration-state/' + plan;
       const id = await docker(['create', '--pull=never', '--label', 'cloud.integration.owner=' + runId, '--network', network,
         '--add-host', 'waitron.local:10.79.0.2', '--memory', '1024m', '--memory-swap', '1024m', '--read-only', '--cap-drop', 'ALL',
@@ -180,6 +201,7 @@ export async function runTestCloudClients({image, waitronImage, protectedContain
           JSON.stringify({phase, organisationId, installationId: evidence.registration.installationId, ...extra}), 'snapshot-' + phase);
         await accountPhase('provision-snapshot');
         await control(id, 'refresh');
+        if (paidVerification) assert.deepEqual(await control(id, 'verification-state'), {testCertificateInstalled: true});
         const captured = await control(id, 'snapshot-publish');
         for (const [name, extra] of [
           ['stored-digest', {sha256: '0'.repeat(64)}],
@@ -190,6 +212,41 @@ export async function runTestCloudClients({image, waitronImage, protectedContain
         assert.equal(independent.independentStoredDigest, true);
         publishedSnapshot = {...captured, ...independent, organisationId, venueId: evidence.registration.venueId,
           installationId: evidence.registration.installationId, localVenueId: evidence.localVenueId, recovery: 'not-run'};
+        if (paidVerification) {
+          await accountPhase('configure-verification', {image: waitronImage});
+          const [accountInfo] = parseIntegrationJson(await docker(['inspect', account]));
+          const configVolume = accountInfo.Mounts.find(value => value.Destination === '/run/local-stack').Name;
+          const stateVolume = await docker(['volume', 'create', '--label', 'com.docker.compose.project=' + project, project + '-verifier-state']);
+          record('volume', stateVolume);
+          verifierWorker = await docker(['create', '--label', 'com.docker.compose.project=' + project,
+            '--label', 'cloud.integration.owner=' + runId, '--network', network, '--memory', '128m', '--memory-swap', '128m',
+            '--read-only', '--cap-drop', 'ALL', '--security-opt', 'no-new-privileges', '--pids-limit', '128',
+            '--tmpfs', '/tmp:rw,nosuid,nodev,size=96m,mode=1777', '--env', 'CLOUD_TEST_SERVICE_PLANS=1', '--env', 'CLOUD_VERIFIER_IMAGE=' + waitronImage,
+            '--mount', 'type=volume,src=' + configVolume + ',dst=/run/local-stack,readonly',
+            '--mount', 'type=volume,src=' + stateVolume + ',dst=/run/backup-verifier',
+            '--mount', 'type=bind,src=/var/run/docker.sock,dst=/var/run/docker.sock',
+            '--entrypoint', 'node', image, 'deploy/test-cloud/test-fixtures/integration-verifier.mjs'], '', 'verifier-create');
+          owned.push(verifierWorker); record('container', verifierWorker);
+          verifierStarted = true; await docker(['start', verifierWorker]);
+          let admission;
+          for (let attempt = 0; attempt < 90; attempt++) {
+            try {admission = parseIntegrationJson(await accountPhase('inspect-verification', {...captured, image: waitronImage})); break;}
+            catch {
+              assert.equal(await docker(['inspect', '--format', '{{.State.Running}}', verifierWorker]), 'true', 'integration.verifier_worker_exited');
+              await delay(500);
+            }
+          }
+          assert.ok(admission, 'integration.verification_not_admitted');
+          await readVerifierScope(); assert.equal(admission.controllerScope, verifierScope);
+          assert.deepEqual(await verifierChildren(), [], 'integration.verifier_child_remains');
+          assert.equal(await docker(['ps', '-aq', '--no-trunc', '--filter', 'id=' + admission.childId]), '', 'integration.verifier_child_remains');
+          record('container', admission.childId);
+          removed.push(created.find(value => value.kind === 'container' && value.id === admission.childId));
+          await docker(['stop', '--time', '15', verifierWorker], '', 'verifier-stop');
+          assert.equal(await docker(['inspect', '--format', '{{.State.ExitCode}}', verifierWorker]), '0', 'integration.verifier_forced_shutdown');
+          publishedSnapshot.verification = 'verified';
+          publishedSnapshot.workerVerification = {...admission, childAbsent: true, workerStoppedNaturally: true};
+        }
       }
       const beforeRestart = await docker(['inspect', '--format', '{{.State.StartedAt}}', id]);
       await docker(['restart', '--time', '10', id]); await ready(); await control(id, 'refresh');
@@ -210,6 +267,12 @@ export async function runTestCloudClients({image, waitronImage, protectedContain
   } finally {
     try {
       await completeCleanup([
+        {phase: 'verifier', run: async () => {
+          if (!verifierWorker) return;
+          if (verifierStarted) await docker(['stop', '--time', '15', verifierWorker], '', 'verifier-cleanup-stop');
+          await readVerifierScope();
+          for (const id of await verifierChildren()) {owned.push(id); record('container', id);}
+        }},
         {phase: 'discover-containers', run: async () => {
           if (started) for (const id of lines(await docker(['ps', '-aq', '--no-trunc', '--filter', 'label=com.docker.compose.project=' + project]))) {owned.push(id); record('container', id);}
         }},
@@ -218,6 +281,8 @@ export async function runTestCloudClients({image, waitronImage, protectedContain
         }})))},
         ...['network', 'volume'].map(kind => ({phase: kind, run: async () => {
           if (!started) return;
+          // Keep durable ownership evidence if the trusted controller's scope could not be read.
+          if (kind === 'volume' && verifierUncertain) throw Error('integration.verifier_state_retained');
           const ids = lines(await docker([kind, 'ls', '-q', '--filter', 'label=com.docker.compose.project=' + project]));
           await completeCleanup(ids.map(id => ({phase: kind, run: async () => {
             record(kind, id); await docker([kind, 'rm', id], '', 'owned-' + kind + '-cleanup'); removed.push(created.find(value => value.kind === kind && value.id === id));
