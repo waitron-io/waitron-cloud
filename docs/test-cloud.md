@@ -719,3 +719,31 @@ Thirty-four focused local checks cover stream evidence, private transport, retai
 snapshot evidence and filtered diagnostics. Removing each of 28 guards in installed
 disposable copies fails the owning checks. Full settled and active-verifier capacity
 remain unqualified.
+
+To exercise the existing owner-approved continuous recovery protocol from the
+same paired source before trying independent snapshot fallback, run:
+
+```sh
+node --test scripts/test-cloud-paid-continuous-recovery.test.mjs
+```
+
+Use the same explicit image inputs. This extension asks Cloud for a version 1
+continuous recovery kit, stops the source and passes the kit to the pinned
+Waitron bucket restore engine. The separate source recovery key supplies ordinary
+recovery authority. Independent database reads must confirm that Cloud keeps the
+operation pending until you close it, without replacing the source installation.
+The later fallback removes only this disposable test's stream objects and pointer
+row, then requires the original verified snapshot and its stored bytes to remain
+unchanged during snapshot recovery.
+
+This extension is not qualified. Its Linux run reaches native stream download,
+checks the source identity and generation, verifies the source recovery key and
+gets the expected fiscal refusal without module preparation. It then fails a new
+assertion that the target database file must be absent. The pinned restore engine
+places data before its hooks; its documented failure guarantee concerns bootable
+identity. The assertion remains intact pending an owner decision about this new
+recovery-authority check. A second Linux run reproduces that refusal and measures
+unchanged records, absent trading identity, no first-start marker, no Cloud
+connection and no ready file, without changing the assertion. Successful continuous restore and subsequent
+snapshot fallback remain unproved. The complete integration reader still refuses
+partial evidence, and deployment plan enforcement stays off.

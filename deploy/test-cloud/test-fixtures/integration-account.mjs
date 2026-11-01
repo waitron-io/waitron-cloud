@@ -15,8 +15,9 @@ import {inspectIntegrationRecovery} from './integration-recovery-evidence.mjs';
 import {inspectIntegrationStream} from './integration-stream-evidence.mjs';
 import {inspectIntegrationRetainedSnapshot} from './integration-retained-snapshot-evidence.mjs';
 import {ManagedStreams} from '../../../packages/backups/src/managed-streams.ts';
+import {inspectIntegrationContinuousState} from './integration-continuous-recovery-evidence.mjs';
 const {Pool} = createRequire(new URL('../../../packages/registration/package.json', import.meta.url))('pg');
-const {S3Client, CreateBucketCommand} = createRequire(new URL('../../../packages/backups/package.json', import.meta.url))('@aws-sdk/client-s3');
+const {S3Client, CreateBucketCommand, ListObjectsV2Command, DeleteObjectsCommand} = createRequire(new URL('../../../packages/backups/package.json', import.meta.url))('@aws-sdk/client-s3');
 let input = '';
 for await (const part of process.stdin) {input += part; assert.ok(input.length < 16384);}
 const {organisationId, plan, installationId, phase, pointId, sha256, bytes, sourceNodeId, image, requestId, attemptId, targetDigest, desiredStatus, generation, recoverableAt} = JSON.parse(input);
@@ -35,7 +36,59 @@ try {
   } else {
     const {rows} = await pool.query('SELECT v.organisation_id,v.local_venue_id,i.venue_id FROM installations i JOIN venues v ON v.id=i.venue_id WHERE i.id=$1', [installationId]);
     assert.equal(rows.length, 1); assert.equal(rows[0].organisation_id, organisationId);
-    if (phase === 'inspect-stream') {
+    if (phase === 'inspect-continuous-recovery') {
+      const row = (await pool.query(`SELECT r.*,q.id AS request_id,q.operation_id,q.protocol_version,q.verification_target AS request_target,
+        v.organisation_id,i.superseded_by,i.revoked_at FROM backup_recoveries r
+        JOIN backup_recovery_requests q ON q.operation_id=r.id JOIN venues v ON v.id=r.venue_id
+        JOIN installations i ON i.id=$2 AND i.venue_id=r.venue_id WHERE r.id=$1`, [requestId, installationId])).rows[0];
+      assert.ok(row);
+      console.log(JSON.stringify(inspectIntegrationContinuousState(row, {requestId, venueId: rows[0].venue_id,
+        organisationId, sourceNodeId, generation, recoverableAt}, desiredStatus)));
+    } else if (phase === 'remove-test-stream' || phase === 'inspect-snapshot-fallback') {
+      assert.equal(process.env.CLOUD_TEST_SERVICE_PLANS, '1');
+      const venueId = rows[0].venue_id, prefix = 'streams/' + venueId + '/';
+      const runtime = await openTestCaptureRuntime({pool, directory: '/run/local-stack', mode: 'test-free-paid'});
+      const location = {endpoint: 'https://waitron.local:8333', bucket: 'venue-' + venueId, region: 'local'};
+      const storage = new S3Client({...location, forcePathStyle: true, maxAttempts: 1,
+        credentials: {accessKeyId: config.storage.accessKeyId, secretAccessKey: config.storage.secretAccessKey},
+        requestHandler: {httpsAgent: new Agent({ca: await readFile('/run/local-stack/lan/ca.pem')})}});
+      const list = async () => {
+        const objects = []; let continuation;
+        do {
+          assert.ok(objects.length < 10000);
+          const reply = await storage.send(new ListObjectsV2Command({Bucket: location.bucket, Prefix: prefix,
+            ...(continuation ? {ContinuationToken: continuation} : {})}), {abortSignal: AbortSignal.timeout(10000)});
+          for (const object of reply.Contents ?? []) {assert.ok(object.Key.startsWith(prefix)); objects.push({Key: object.Key});}
+          continuation = reply.IsTruncated ? reply.NextContinuationToken : undefined;
+          if (reply.IsTruncated) assert.ok(continuation);
+        } while (continuation);
+        return objects;
+      };
+      const retained = async () => {
+        const point = (await pool.query('SELECT * FROM backup_points WHERE id=$1 AND installation_id=$2 AND venue_id=$3', [pointId, installationId, venueId])).rows[0];
+        assert.ok(point);
+        inspectIntegrationRetainedSnapshot(point, await runtime.options.objects(location).read(point.object_key),
+          {pointId, installationId, venueId, sha256, bytes, sourceNodeId, attemptId});
+      };
+      try {
+        await retained();
+        if (phase === 'remove-test-stream') {
+          assert.equal(Number((await pool.query("SELECT count(*) FROM backup_recoveries WHERE venue_id=$1 AND source_kind='continuous' AND status<>'closed'", [venueId])).rows[0].count), 0);
+          const objects = await list(); assert.ok(objects.length > 0, 'integration.real_stream_required');
+          for (let offset = 0; offset < objects.length; offset += 1000) {
+            const result = await storage.send(new DeleteObjectsCommand({Bucket: location.bucket, Delete: {Objects: objects.slice(offset, offset + 1000)}}), {abortSignal: AbortSignal.timeout(10000)});
+            assert.equal(result.Errors?.length ?? 0, 0);
+          }
+          const removed = await pool.query('DELETE FROM backup_managed_streams WHERE venue_id=$1 AND installation_id=$2 AND source_node_id=$3 RETURNING venue_id', [venueId, installationId, sourceNodeId]);
+          assert.equal(removed.rowCount, 1);
+        }
+        const streamObjects = (await list()).length;
+        const pointerRows = Number((await pool.query('SELECT count(*) FROM backup_managed_streams WHERE venue_id=$1', [venueId])).rows[0].count);
+        assert.equal(streamObjects, 0); assert.equal(pointerRows, 0);
+        await retained();
+        console.log(JSON.stringify({streamObjects, pointerRows, retainedSnapshotUnchanged: true}));
+      } finally {storage.destroy(); runtime.close();}
+    } else if (phase === 'inspect-stream') {
       const runtime=await openTestCaptureRuntime({pool,directory:'/run/local-stack',mode:'test-free-paid'});
       let invariant='observer';
       try {

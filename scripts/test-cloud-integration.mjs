@@ -9,6 +9,7 @@ import {request} from 'node:https';
 import {setTimeout as delay} from 'node:timers/promises';
 import {verifierIdentityScope, checkVerifierChild} from '../deploy/test-cloud/test-fixtures/integration-verifier-ownership.mjs';
 import {inspectIntegrationAuthorisedRecovery} from '../deploy/test-cloud/test-fixtures/integration-recovery-evidence.mjs';
+import {inspectIntegrationContinuousRecovery} from '../deploy/test-cloud/test-fixtures/integration-continuous-recovery-evidence.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const origin = 'https://waitron.local:3000', revision = 'ec91a9e34d2daba146f4ee61850ea4136ad5cfb7';
@@ -62,7 +63,8 @@ export function checkProtectedContainers(before, after, ids) {
   return true;
 }
 
-export async function runTestCloudClients({image, waitronImage, protectedContainerIds = [], paidSnapshot = false, paidVerification = false, paidRecovery = false, paidAuthorisedRecovery = false, paidStream = false} = {}) {
+export async function runTestCloudClients({image, waitronImage, protectedContainerIds = [], paidSnapshot = false, paidVerification = false, paidRecovery = false, paidAuthorisedRecovery = false, paidStream = false, paidContinuousRecovery = false} = {}) {
+  paidStream ||= paidContinuousRecovery;
   paidAuthorisedRecovery ||= paidStream;
   paidRecovery ||= paidAuthorisedRecovery;
   if (!digest.test(image) || !digest.test(waitronImage)) throw Error('integration.image_invalid');
@@ -140,7 +142,7 @@ export async function runTestCloudClients({image, waitronImage, protectedContain
     assert.equal((await api('/api/health/ready')).status, 200);
     await assert.rejects(api('/api/health/ready', undefined, {}, null), /certificate|issuer|verify/i);
     await assert.rejects(api('/api/health/ready', undefined, {}, ca, 'wrong.local'), /certificate|Hostname/i);
-    const organisations = [], restarts = []; let freeSnapshot, publishedSnapshot, observedStream;
+    const organisations = [], restarts = []; let freeSnapshot, publishedSnapshot, observedStream, continuousRecovery;
     for (const plan of ['free', 'paid']) {
       const email = `integration-${plan}-${runId}@example.test`, password = 'Disposable account ' + randomUUID();
       assert.equal((await api('/api/account/signup/request', {email})).status, 202);
@@ -269,7 +271,7 @@ export async function runTestCloudClients({image, waitronImage, protectedContain
           observedStream = parseIntegrationJson(await inspect({}));
         }
         if (paidRecovery) {
-          await docker(['build', '--pull=false', '--build-arg', 'VERIFIER_IMAGE=' + baseTag,
+          await docker(['build', '--pull=false', '--build-arg', 'VERIFIER_IMAGE=' + (paidContinuousRecovery ? clientTag : baseTag),
             '--label', 'cloud.integration.owner=' + runId, '-f', 'deploy/test-cloud/test-fixtures/snapshot-recovery.Dockerfile',
             '-t', recoveryTag, 'deploy/test-cloud/test-fixtures'], '', 'recovery-build');
           recoveryBuilt = true;
@@ -279,6 +281,7 @@ export async function runTestCloudClients({image, waitronImage, protectedContain
             '--network', network, '--memory', '1024m', '--memory-swap', '1024m', '--read-only', '--cap-drop', 'ALL',
             '--security-opt', 'no-new-privileges', '--user', '1000:1000', '--pids-limit', '128',
             '--tmpfs', '/tmp:rw,noexec,nosuid,nodev,size=256m,mode=1777',
+            ...(paidContinuousRecovery ? ['--mount', 'type=bind,src=' + caFile + ',dst=/proof/ca.pem,readonly', '--env', 'NODE_EXTRA_CA_CERTS=/proof/ca.pem'] : []),
             ...(paidAuthorisedRecovery ? ['--tmpfs', '/waitron/apps/server/node_modules/.vite-temp:rw,nosuid,nodev,size=16m,mode=1777',
               '--tmpfs', '/waitron/apps/server/node_modules/.vite:rw,nosuid,nodev,size=32m,mode=1777'] : []),
             '--entrypoint', 'node', recoveryImage,
@@ -286,6 +289,55 @@ export async function runTestCloudClients({image, waitronImage, protectedContain
           owned.push(target); record('container', target); await docker(['start', target]);
           const targetPhase = async (phase, extra = {}) => parseIntegrationJson(await docker(['exec', '-i', target,
             'node', '/waitron/apps/server/dist/cloud-joint-proof.js'], JSON.stringify({phase, ...extra}), 'recovery-' + phase));
+          const fallbackInput = {...captured, attemptId: publishedSnapshot.workerVerification.attemptId};
+          const checkFallback = async phase => {
+            const value = parseIntegrationJson(await accountPhase('inspect-snapshot-fallback', fallbackInput));
+            assert.deepEqual(value, {streamObjects: 0, pointerRows: 0, retainedSnapshotUnchanged: true});
+            publishedSnapshot.snapshotFallback.observations.push(phase);
+          };
+          if (paidContinuousRecovery) {
+            const streamPhase = async (phase, extra = {}) => parseIntegrationJson(await docker(['exec', '-i', target,
+              'node', '/waitron/apps/server/dist/cloud-continuous-target.js'], JSON.stringify({phase, ...extra}), 'continuous-' + phase));
+            const requested = await streamPhase('start', {ca});
+            const owner = async (action, extra = {}) => {
+              const reply = await api('/api/account/recovery/' + action, {requestId: requested.requestId, code: requested.code, ...extra}, browser);
+              assert.equal(reply.status, 200, 'integration.continuous_owner_' + action); return reply.body;
+            };
+            assert.equal((await owner('inspect')).state, 'awaiting_owner');
+            const approved = await owner('approve', {source: 'continuous', venueId: observedStream.venueId,
+              oldServerUnavailable: 'true', acceptDataLoss: 'true'});
+            assert.equal(approved.operation.source.kind, 'continuous');
+            assert.equal(approved.operation.source.sourceNodeId, observedStream.sourceNodeId);
+            await docker(['stop', '--time', '10', id], '', 'continuous-source-stop');
+            assert.equal(await docker(['inspect', '--format', '{{.State.Running}}', id]), 'false');
+            const delivery = await streamPhase('read', {selected: observedStream, authority: recoveryAuthority});
+            assert.equal(delivery.ownerApprovedKit, true);
+            const checked = parseIntegrationJson(await docker(['exec', '--workdir', '/waitron/apps/server', target,
+              'node', '--input-type=module', '-e', `
+                import {spawnSync} from 'node:child_process';import {readFileSync} from 'node:fs';
+                const input=JSON.parse(readFileSync('/tmp/cloud-integration-stream-input.json','utf8'));
+                const kit=JSON.parse(Buffer.from(input.kit.split(':')[1],'base64url').toString());
+                const child=spawnSync('pnpm',['exec','vitest','run','src/cloud-paired-continuous-recovery.test.ts','--maxWorkers=1'],{encoding:'utf8',timeout:100000,maxBuffer:2*1024*1024});
+                let output=(child.stdout??'')+'\\n'+(child.stderr??'');
+                for(const secret of [input.kit,input.authority.secret,kit.recoveryKey,kit.bucket.secretAccessKey,kit.bucket.accessKeyId])output=output.replaceAll(secret,'[redacted]');
+                const matches=[...output.matchAll(/CLOUD_PAIRED_CONTINUOUS_RECOVERY=(\\{[^\\n]+)$/gm)];
+                const refused=[...output.matchAll(/CLOUD_CONTINUOUS_REFUSAL_STATE=(\\{[^\\n]+)$/gm)];
+                console.log(JSON.stringify({exit:child.status,report:matches.length===1?JSON.parse(matches[0][1]):null,
+                  diagnostic:child.status===0?null:output.slice(-5000)+'\\nREFUSAL_STATE='+(refused.length===1?refused[0][1]:'unavailable')}));
+              `], '', 'continuous-ordinary-restore'));
+            assert.equal(checked.exit, 0, 'integration.continuous_restore_failed:' + checked.diagnostic);
+            assert.equal(await docker(['inspect', '--format', '{{.State.Running}}', id]), 'false');
+            const inspect = desiredStatus => accountPhase('inspect-continuous-recovery', {...observedStream,
+              requestId: requested.requestId, desiredStatus});
+            const pending = parseIntegrationJson(await inspect('pending'));
+            await owner('close');
+            const closed = parseIntegrationJson(await inspect('closed'));
+            continuousRecovery = inspectIntegrationContinuousRecovery({...checked.report, ownerApprovedKit: delivery.ownerApprovedKit,
+              sourceStoppedDuringRead: true, noSupersession: pending.noSupersession, requestClosed: closed.cloudStatus === 'closed'}, observedStream);
+            const fallback = parseIntegrationJson(await accountPhase('remove-test-stream', fallbackInput));
+            assert.deepEqual(fallback, {streamObjects: 0, pointerRows: 0, retainedSnapshotUnchanged: true});
+            publishedSnapshot.snapshotFallback = {...fallback, observations: ['before-snapshot-request']};
+          }
           const request = await targetPhase('start', {ca});
           assert.equal(request.targetDigest, publishedSnapshot.workerVerification.targetDigest);
           // The unavailable source stays stopped during every recovery read and fiscal refusal.
@@ -306,6 +358,7 @@ export async function runTestCloudClients({image, waitronImage, protectedContain
           assert.equal(delivered.independentDigest, true); assert.equal(delivered.prePlacement, true);
           assert.equal(delivered.client, 'pinned-compiled-waitron'); assert.equal(delivered.targetDigest, request.targetDigest);
           assert.equal(delivered.sha256, captured.sha256); assert.equal(delivered.bytes, captured.bytes);
+          if (paidContinuousRecovery) await checkFallback('after-snapshot-read');
           const refusals = await targetPhase('delivery-refusals', selected);
           assert.deepEqual(refusals, {alternateTargetRefused: true, damagedArchiveRefused: true, placementCalls: 0, restoredReports: 0, stateUnchanged: true});
           if (paidAuthorisedRecovery) {
@@ -351,6 +404,7 @@ export async function runTestCloudClients({image, waitronImage, protectedContain
           const persisted = parseIntegrationJson(await independent({desiredStatus: 'pending'}));
           await ownerPost('close');
           assert.equal(parseIntegrationJson(await independent({desiredStatus: 'closed'})).cloudStatus, 'closed');
+          if (paidContinuousRecovery) await checkFallback('after-snapshot-restore-and-close');
           publishedSnapshot.recovery = 'fiscal-authority-required';
           publishedSnapshot.ownerRecovery = {...persisted, client: delivered.client, independentDigest: delivered.independentDigest,
             prePlacement: delivered.prePlacement, refusals, ordinaryRestore: refusal.ordinaryRestore, activation: refusal.activation,
@@ -373,7 +427,8 @@ export async function runTestCloudClients({image, waitronImage, protectedContain
     result = {version: 1, kind: 'test-cloud-clients', runId, completeIntegration: false, origin, waitronHead: revision, image, waitronImage,
       accountMail: {free: 'proved', paid: 'proved', transport: 'mailpit'}, clients: {status: 'proved', actions: ['pair', 'renew', 'configuration'], demoVenues: 2, restartIdentity: 'proved'},
       tls: {untrustedRefused: true, wrongHostnameRefused: true}, organisations, freeSnapshot, restarts,
-      ...(publishedSnapshot ? {paidSnapshot: publishedSnapshot} : {}), ...(observedStream ? {paidStream: observedStream} : {})};
+      ...(publishedSnapshot ? {paidSnapshot: publishedSnapshot} : {}), ...(observedStream ? {paidStream: observedStream} : {}),
+      ...(continuousRecovery ? {paidContinuousRecovery: continuousRecovery} : {})};
   } finally {
     try {
       await completeCleanup([

@@ -892,7 +892,20 @@ implementation or production evidence.
   checks catch all 28 installed guard omissions. The fixture drives the existing
   signed setup protocol and native stream host; it does not qualify automatic
   managed-stream setup, place a continuous restore or prove snapshot fallback
-  with continuous data absent. Stream recovery and independent fallback, remote withdrawal, complete capacity
+  with continuous data absent. A further opt-in continuous-recovery fixture obtains
+  Cloud's real owner-approved version 1 kit and uses the pinned native bucket
+  engine. A Linux run reaches stream download, matching source/generation,
+  source-key verification and the normal fiscal refusal, then fails its newly
+  added assertion that the target database file is absent. The pinned engine
+  places database bytes before its hooks and promises no bootable identity after
+  failure. That new assertion is retained pending the owner's changed-check
+  decision. A second Linux run reproduces the refusal with unchanged records and
+  absent trading identity, first-start marker, Cloud connection and ready file,
+  without weakening the assertion. Thirty-six native evidence checks pass and catch 33 deliberate
+  guard omissions in an installed disposable copy. Independent database readers
+  bind continuous recovery to the approved request, generation, source and pending
+  or closed state. Successful continuous restore and absent-stream snapshot
+  fallback are still unqualified. Stream recovery and independent fallback, remote withdrawal, complete capacity
   qualification, rollback and deployment remain open. The old Mac cleanup refusal stays historical evidence;
   the isolated Linux client proof removes its owned resources successfully.
   The organisation plan store and operator command now persist free/paid metadata,
