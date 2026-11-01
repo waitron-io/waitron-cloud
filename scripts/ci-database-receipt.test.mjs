@@ -69,7 +69,7 @@ test('unrelated package changes omit database recovery while retaining packages,
     assert.deepEqual(select().receipts, expected);
     const plan = createPlan({pull_request: {base: {sha: base}, head: {sha: head}}}, {}, workspace, git, () => {throw Error('No reuse');});
     assert.deepEqual(plan.receipts, expected);
-    assert.equal(plan.packages.length, 19);
+    assert.equal(plan.packages.length, 23);
     assert.equal(plan.typecheck, true);
     assert.match(plan.reason, /omitted database recovery receipt.*both revisions/i);
     assert.doesNotMatch(plan.reason, /Unverified package revisions:/);

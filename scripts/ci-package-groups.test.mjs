@@ -7,18 +7,18 @@ import test from 'node:test';
 import {loadWorkspace, scopeForPaths, workPlan} from './ci-scope.mjs';
 import {assertSummary} from './ci-summary.mjs';
 
-const members = ['identity', 'operations', 'remote-access'].map(name => `@waitron-cloud/${name}`);
+const members = ['identity', 'operations'].map(name => `@waitron-cloud/${name}`);
 const row = selected => ({package: selected.join(' + '), members: selected, shard: 1});
 
 test('full plan packs all short packages exactly once while preserving every other shard', () => {
   const workspace = loadWorkspace();
   const plan = workPlan(scopeForPaths([], workspace), workspace);
-  assert.equal(plan.packages.length, 19);
+  assert.equal(plan.packages.length, 23);
   assert.deepEqual(plan.packages.find(item => item.members), row(members));
   const logical = plan.packages.flatMap(item => item.members ?? [item.package]);
   for (const name of members) assert.equal(logical.filter(value => value === name).length, 1);
   assert.deepEqual([...new Set(logical)].sort(), workspace.map(pkg => pkg.name).sort());
-  for (const [name, count] of [['registration', 5], ['account-http', 3], ['backups', 2], ['portal', 6]]) {
+  for (const [name, count] of [['registration', 5], ['account-http', 3], ['backups', 2], ['portal', 6], ['remote-access', 4]]) {
     assert.deepEqual(plan.packages.filter(item => item.package === `@waitron-cloud/${name}`),
       Array.from({length: count}, (_, i) => ({package: `@waitron-cloud/${name}`, shard: i + 1, shards: count})));
   }
@@ -26,10 +26,16 @@ test('full plan packs all short packages exactly once while preserving every oth
 
 test('grouping packs only selected packages and keeps a singleton in its original job', () => {
   const workspace = loadWorkspace();
-  for (const selected of [members.slice(0, 2), members.slice(1), [members[0], members[2]], members]) {
+  for (const selected of [members]) {
     assert.deepEqual(workPlan({full: false, packages: selected}, workspace).packages, [row(selected)]);
   }
   for (const name of members) assert.deepEqual(workPlan({full: false, packages: [name]}, workspace).packages, [{package: name, shard: 1}]);
+  const remote = '@waitron-cloud/remote-access';
+  const shards = [1, 2, 3, 4].map(shard => ({package: remote, shard, shards: 4}));
+  for (const name of members) assert.deepEqual(workPlan({full: false, packages: [name, remote]}, workspace).packages,
+    [{package: name, shard: 1}, ...shards]);
+  assert.deepEqual(workPlan({full: false, packages: [...members, remote]}, workspace).packages, [...shards, row(members)]);
+
 });
 
 function fixture(run) {
@@ -59,12 +65,12 @@ test('a failed package fails the group while later selected packages still run',
     assert.equal(result.status, 1);
     assert.deepEqual(calls(), members.map(name => `--filter ${name} test`));
     assert.match(result.stderr, /identity failed/);
-    assert.ok(result.stdout.includes(`package-output:${members[2]}`));
+    assert.ok(result.stdout.includes(`package-output:${members.at(-1)}`));
   });
 });
 
 const invalid = [null, {}, {package: members[0], shard: 1}, {package: members.join(' + '), shard: 1}, row([]), row([members[0]]), row([...members, members[0]]), row([members[1], members[0]]),
-  row([members[0], '@waitron-cloud/portal']), {...row(members), package: 'forged'}, {...row(members), shard: 2},
+  row([members[0], '@waitron-cloud/portal']), row([members[0], '@waitron-cloud/remote-access']), {...row(members), package: 'forged'}, {...row(members), shard: 2},
   {...row(members), shards: 3}, {...row(members), command: 'proof:local-stack'}];
 test('group runner rejects empty, duplicate, unknown, reordered, partial and forged rows before executing', () => {
   for (const group of invalid) fixture(({execute, calls}) => {

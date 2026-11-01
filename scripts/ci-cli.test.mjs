@@ -32,11 +32,11 @@ test('real squash merges run full on main for equal trees and advanced main with
       const plan=createPlan({before:parent,commits:[{}]},{sha,repository,branch:'main'},workspace,git,path=>{greenCalls++;return api(path);});
       assert.equal(greenCalls, 0);
       const expectedPackages = [
-        ...[['account-http',3],['backups',2],['portal',6],['registration',5]].flatMap(([name, shards]) =>
+        ...[['account-http',3],['backups',2],['portal',6],['registration',5],['remote-access',4]].flatMap(([name, shards]) =>
           Array.from({length: shards}, (_,i) => ({package:`@waitron-cloud/${name}`, shard:i+1, shards}))),
         ...['translation','ui-smoke'].map(name=>({package:`@waitron-cloud/${name}`,shard:1})),
-        {package:'@waitron-cloud/identity + @waitron-cloud/operations + @waitron-cloud/remote-access',
-          members:['@waitron-cloud/identity','@waitron-cloud/operations','@waitron-cloud/remote-access'],shard:1},
+        {package:'@waitron-cloud/identity + @waitron-cloud/operations',
+          members:['@waitron-cloud/identity','@waitron-cloud/operations'],shard:1},
       ];
       assert.deepEqual([...plan.packages].sort((a,b)=>a.package.localeCompare(b.package)||a.shard-b.shard),
         [...expectedPackages].sort((a,b)=>a.package.localeCompare(b.package)||a.shard-b.shard));
