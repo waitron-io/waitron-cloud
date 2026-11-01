@@ -4087,9 +4087,10 @@ journeys in both languages, themes and phone/desktop widths. All original main
 region, bilingual guidance, reload link, cookie, forwarding and layout checks
 remain, including disabled JavaScript and unavailable-script journeys.
 Ordinary captures keep all 24 historical names; eight delayed running captures
-add a suffix, retaining 32 screenshots. These checks use native Chromium and
-local HTTP; other browser engines and production networks remain unqualified.
-Production behaviour is unchanged.
+add a suffix, retaining 32 screenshots. Set `PUBLIC_CHALLENGE_RECEIPT_DIR` to a
+fresh directory for this file, separate from other browser fixtures. These checks
+use native Chromium and local HTTP; other browser engines and production networks
+remain unqualified. Production behaviour is unchanged.
 
 ## Public browser-check reload handler wait (D367)
 
