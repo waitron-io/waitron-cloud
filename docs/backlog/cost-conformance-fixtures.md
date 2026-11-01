@@ -38,6 +38,32 @@ These reproduce the missing retry and its repair. The historical upstream
 stall and repeated HTTP 500/504 responses still need attribution; this handling
 does not repair a service that refuses all three attempts.
 
+### Header-progress fixture scheduling (D530)
+
+[D462's receipts job](https://github.com/waitron-io/waitron-cloud/actions/runs/41306500809/job/124848167543)
+retried the header-progress control after 169 ms without headers. The fixture
+shortens inactivity to 150 ms but starts its 100 ms header delay only after the
+server receives the request. Connection and process scheduling can consume the
+remaining margin. Adding an 80 ms connection delay reproduces the same two-request
+failure locally; it does not establish the historical runner's scheduling delay.
+
+Run `node --test scripts/cloud-cost/conformance-archive-idle.test.mjs` to check
+the repair. The header-progress cases now advance a controlled clock by 100 ms
+before headers and another 100 ms after the downloader observes them. The real
+HTTP response still has both 100 ms delays. The shortened 150 ms inactivity and
+1,200 ms total clocks advance independently of process scheduling; the outer
+five-second test limit stays real. All original assertions remain, with added
+checks for no retry after a delayed connection and an inactivity refusal exactly
+at 150 ms followed by a checksum-verified retry. Removing the header reset or
+timer cancellation fails the controls, as does preventing clock expiry.
+
+This corrects the positive header-progress fixture. The other scenarios retain
+their wall clocks. Production download timeouts, retry limits and accounting are
+unchanged. The separate prematurely closed Litestream LIST response remains
+under investigation.
+
+### Archive response identity
+
 [Merge cost run 41139422264](https://github.com/waitron-io/waitron-cloud/actions/runs/41139422264/job/124349848462)
 received HTTP 500 on all three pinned Litestream archive attempts, with zero
 bytes, before any of that group's 12 cases ran. The trace cannot identify the

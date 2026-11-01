@@ -56,7 +56,10 @@ See [the separate-process extraction limits](backlog/storage-cache-fixture.md#se
 The earlier conformance archive stall (run 40811399202, job 123243127986) remains
 in [D311's download investigation](backlog/cost-conformance-fixtures.md#fixture-archive-download-retries-d311).
 PR #788 adds an inactivity retry for that download; it does not identify the
-upstream stall's cause. A recurring npm abort-diagnostic refusal remains separate
+upstream stall's cause. The separate
+[header-progress test scheduling repair](backlog/cost-conformance-fixtures.md#header-progress-fixture-scheduling-d530)
+retains the original assertions and controls its shortened clock independently
+of connection scheduling. A recurring npm abort-diagnostic refusal remains separate
 in [the setup investigation](backlog/ci-pnpm-setup.md).
 
 ## Storage archive publication refusals (D449)
