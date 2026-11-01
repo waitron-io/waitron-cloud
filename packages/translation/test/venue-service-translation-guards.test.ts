@@ -17,6 +17,7 @@ test('venue translation detects admission callback and generation guard omission
    {name:'new job admission',file:'machine.ts',needle:'!allowed||',pattern:'venue translation denies a unenrolled venue despite ready setup and consent'},
    {name:'provider permission callback',file:'worker.ts',needle:"   ...(this.#planMode==='test-venue-levels'?{stillPermitted:()=>this.#permitted(job,leaseId,revision!)}:{}),",pattern:'venue translation success after downgrade starts no review or retry'},
    {name:'admitted permission generation',file:'worker.ts',needle:'   if(permission.revision!==revision)return false;',pattern:'venue translation success after round trip starts no review or retry'},
+   {name:'independent initial consent',file:'worker.ts',needle:'!await transaction(this.#pool,client=>hasConsent(client,job.venue_id))',replacement:'false',pattern:'venue translation queued connected work retains consent_required after consent withdrawal'},
   ];
   const env={...process.env};delete env.NODE_TEST_CONTEXT;
   async function run(pattern:string){
@@ -31,7 +32,7 @@ test('venue translation detects admission callback and generation guard omission
    const path=join(candidate,'packages/translation/src',c.file),original=await readFile(path,'utf8');
    assert.equal(original.split(c.needle).length,2,c.name+' must target one guard');green(await run(c.pattern));
    try{
-    await writeFile(path,original.replace(c.needle,''));const omitted=await run(c.pattern);
+    await writeFile(path,original.replace(c.needle,'replacement' in c?c.replacement:''));const omitted=await run(c.pattern);
     assert.equal(omitted.code,1,omitted.output);assert.match(omitted.output,/# tests 1\b/);assert.match(omitted.output,/# fail 1\b/);assert.match(omitted.output,/AssertionError|ERR_ASSERTION/);
    }finally{await writeFile(path,original);}
    green(await run(c.pattern));console.log('VENUE_TRANSLATION_GUARD_DETECTED '+c.name);

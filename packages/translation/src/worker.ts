@@ -36,7 +36,7 @@ export class TranslationWorker {
   signal.addEventListener('abort',stop,{once:true});
   if(signal.aborted)stop();
   try{
-   if(this.#planMode!=='test-venue-levels'&&!await transaction(this.#pool,client=>hasConsent(client,job.venue_id))){
+   if(!await transaction(this.#pool,client=>hasConsent(client,job.venue_id))){
     await this.#pool.query(`UPDATE translation_jobs SET state='failed',reason='consent_required',done=0,failed=total,finished_at=clock_timestamp(),lease_id=NULL,lease_until=NULL
      WHERE id=$1 AND lease_id=$2 AND state='running'`,[job.id,leaseId]);
     return true;
