@@ -7,7 +7,7 @@ import {Pool} from 'pg';
 import {migrate,migrationNames} from '../src/migrate.ts';
 import {migrationRelease} from './fixtures/migration-release.ts';
 
-const added=['billing_allowance_versions','billing_allowance_reservations','remote_traffic_processes','remote_traffic_samples','remote_traffic_coverage'];
+const added=['billing_allowance_versions','billing_allowance_reservations','remote_traffic_processes','remote_traffic_samples','remote_traffic_coverage','remote_traffic_reports'];
 async function fixture(){
  const schema='allowance_upgrade_'+randomUUID().replaceAll('-',''),admin=new Pool({connectionString:process.env.TEST_DATABASE_URL});
  const pool=new Pool({connectionString:process.env.TEST_DATABASE_URL,options:`-c search_path=${schema}`,application_name:schema}),old=await migrationRelease(46);
