@@ -87,7 +87,7 @@ test('every changed or removed database recovery input in either revision retain
       assert.deepEqual(select(base, commit()).receipts, receiptSuites, path);
     });
     fixture(({root, base, select, commit}) => {
-      copyFileSync(path, join(root, path));
+      copyReceiptFixtureInput(path, join(root, path));
       assert.deepEqual(select(base, commit()).receipts, receiptSuites, path);
     }, root => writeFileSync(join(root, path), '// Unaudited base input\n'));
   }
@@ -184,7 +184,7 @@ test('combined audits retain earlier omissions and ignore unrelated top-level pr
       'scripts/verify-two-venue-milestone-receipt.mjs', 'scripts/verify-two-venue-milestone-receipt.test.mjs',
     ]) {
       mkdirSync(dirname(join(root, path)), {recursive: true});
-      copyFileSync(path, join(root, path));
+      copyReceiptFixtureInput(path, join(root, path));
     }
   });
 });
