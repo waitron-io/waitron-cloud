@@ -72,6 +72,18 @@ test('venue remote eligibility retains the undefined legacy sentinel and exact e
  }finally{await f.close();}
 });
 
+test('venue remote incoming routes exclude a denied sibling even with a current staged revision',async()=>{
+ const f=await fixture();try{
+  const sibling=f.ids[1]!,move=await f.ordinary.stageMove({operationId:randomUUID(),installationId:sibling,targetCellId:f.target,targetPeerPublicKey:peer(),expectedRevision:await f.revision(sibling)});
+  await disableSibling(f);
+  // A stale staged row can match the current installation revision without granting permission.
+  await f.pool.query('UPDATE remote_cell_moves SET expected_revision=$2 WHERE operation_id=$1',[move.operationId,await f.revision(sibling)]);
+  assert.deepEqual((await f.ordinary.manifest(f.target)).routes.map(r=>r.installationId).sort(),[...f.ids].sort());
+  assert.deepEqual((await f.remote.manifest(f.target)).routes.map(r=>r.installationId),[f.ids[0]]);
+  assert.deepEqual((await f.remote.reportingManifest(f.target)).routes.map(r=>r.installationId),[f.ids[0]]);
+ }finally{await f.close();}
+});
+
 for(const action of ['provision','stage','dns','hostname','certificate'] as const)test(`venue remote ${action} refuses level one before external work`,async()=>{
  const f=await fixture();try{
   await set(f,'registered');const before=await f.revision();let resolved=0;
