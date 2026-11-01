@@ -46,8 +46,9 @@ test('usage response headers do not claim body completion or an accepted control
   }else response.end('<h1>Account</h1>');
  });
  server.listen(0,'127.0.0.1');await once(server,'listening');
- const browser=await chromium.launch({headless:true});
+ let browser:Awaited<ReturnType<typeof chromium.launch>>|undefined;
  try{
+  browser=await chromium.launch({headless:true});
   const page=await browser.newPage();page.setDefaultTimeout(300);
   await page.goto(`http://127.0.0.1:${(server.address() as {port:number}).port}`);
   const trace=evidence.portalTrace(page);
@@ -70,7 +71,7 @@ test('usage response headers do not claim body completion or an accepted control
   const completed=JSON.parse(reports[1]!);
   assert.ok(completed.browser.some((event:{event:string})=>event.event==='finished'));
   assert.equal(completed.snapshot.usage.pending,false);assert.equal(completed.snapshot.usage.error,'limited');
- }finally{release();await browser.close();await new Promise<void>(resolve=>server.close(()=>resolve()));}
+ }finally{release();await browser?.close();await new Promise<void>(resolve=>server.close(()=>resolve()));}
 });
 
 test('unexpected controller values and a broken reporter cannot replace the original failure',async()=>{
