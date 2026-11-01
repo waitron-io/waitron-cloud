@@ -24,6 +24,7 @@ The JavaScript-disabled fixture retains ordinary and delayed screenshots separat
 Both reload fixtures also retain their reachable handler variants separately.
 The live-status and landmark fixtures keep ordinary and delayed captures separately.
 Their notes describe the missing-signal controls' outer refusal checks.
+The recovery-width fixture also keeps each reachable handler capture separately.
 See [the diagnostic qualification and open work](backlog/retrospective-reviews.md).
 
 ## Concurrent storage extraction and failed-startup cleanup (D454)
@@ -4020,12 +4021,18 @@ deadline assertions remain.
 
 ## Recovery organisation-width browser handler wait (D364)
 
-The recovery organisation-width fixture refuses an absent refresh-handler signal
-within its existing four-second page budget. Delayed handlers repeat all eight
-English and Spanish journeys across both themes and phone/desktop widths. Every
-original choice, page width, select width, pending state, selected value and
-deadline assertion remains. This qualifies the fixture's wait; it does not
-attribute a historical CI failure or qualify production recovery.
+Set `RECOVERY_WIDTH_RECEIPT_DIR` to a fresh directory when checking the recovery
+organisation-width fixture. It retains seventeen captures: eight ordinary,
+eight delayed and one English/light/390 absent-signal capture. The eight
+original names stay unchanged. All captures precede the gated refresh, so they
+show the initial choice and width, not its later pending state. Every original
+choice, width, pending-state, selected-value and deadline assertion remains.
+
+The missing-signal control wraps a configured four-second observation in a
+five-second race. It does not independently establish the exact four-second
+value. Delayed handlers repeat all eight language, theme and width journeys.
+See [the review boundaries](backlog/retrospective-reviews.md#recovery-organisation-width-captures).
+Real recovery authority and the historical Linux cause remain unqualified.
 
 
 ## Recovery HTTP replies before confirming an outcome (D419)
