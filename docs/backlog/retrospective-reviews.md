@@ -221,3 +221,14 @@ without screenshots. Its configured four-second observation sits inside a
 five-second race. The control does not independently prove the exact four-second
 value or that ordinary observations are necessary. Other engines, real networks
 and authority remain unqualified.
+
+The historical review passes all 33 checks with the ordinary observation removed;
+the parent likewise passes all sixteen original checks without its observation.
+The delayed cases repeat the journeys without proving that this wait is necessary.
+Removing the signal instead fails all sixteen selected ordinary and delayed
+cases. Replacing the live-status element on failure fails both head and parent
+checks. The review preserves these existing assertions and records their limits.
+The path check proves file retention; the review checks capture selection
+separately. Allowing worker failures to capture overwrites all sixteen images
+while preserving the path count, so the path check alone leaves content
+classification unqualified.

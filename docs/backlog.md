@@ -23,7 +23,7 @@ recovery notes also distinguish delayed-handler scope from outer wait bounds.
 The JavaScript-disabled fixture retains ordinary and delayed screenshots separately.
 Both reload fixtures also retain their reachable handler variants separately.
 The live-status fixture keeps its ordinary and delayed captures separately too.
-The missing-signal controls qualify the outer refusal bound.
+Its notes describe the missing-signal control's outer refusal check.
 See [the diagnostic qualification and open work](backlog/retrospective-reviews.md).
 
 ## Concurrent storage extraction and failed-startup cleanup (D454)
