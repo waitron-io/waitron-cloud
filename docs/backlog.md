@@ -2838,11 +2838,21 @@ implementation or production evidence.
   reply, stay silent or disconnect. All three original component journeys and
   the original signature/package-hash refusal journey pass on that box with
   their assertions and deadlines unchanged. This repairs the local fixture
-  transport; the historical Actions timeout below remains unexplained.
+  transport. The handler also disables TCP coalescing, which can hold small TLS
+  writes while earlier bytes await acknowledgement. The same three transport
+  checks now inspect both accepted sockets as well as response bytes and bounded
+  shutdown. All original APT assertions, signature and hash checks, retry limits
+  and deadlines remain unchanged.
   The compressed-index update timeout in
   [run40536424286](https://github.com/waitron-io/waitron-cloud/actions/runs/40536424286/job/122302974742)
   remains unexplained; the missing temporary configuration warning's relation to
-  that timeout is unknown. A labelled recurrence is still needed.
+  that timeout is unknown. A later
+  [index-hash recurrence](https://github.com/waitron-io/waitron-cloud/actions/runs/41276827214/job/124760631141)
+  recorded the expected hash mismatch and 47 local requests before the eight-second
+  supervisor expired. Neither historical run captured packet timing, so the exact
+  historical cause remains unknown. Run the Linux component journeys and
+  retain their labelled failure evidence on another recurrence; a passing retry
+  alone does not repair a timeout.
   The public mirror's underlying
   network failure remains unexplained; this change addresses index selection.
   Real Actions qualification must show two consecutive full runs of the same
