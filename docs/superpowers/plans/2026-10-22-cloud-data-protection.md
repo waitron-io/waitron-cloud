@@ -129,7 +129,8 @@ refusal remains; it does not implement a country-to-adapter integration.
 **Stop:** No live service stop, purge, export link or customer route. A durable local state machine can land independently while effects remain disabled.
 
 The [implemented journal](../../data-lifecycle-journal.md) uses the sibling workers'
-60-second database lease. New requests invalidate old claims; a current claim may
+60-second database lease. Operation IDs are scoped to a venue, matching the compound
+journal keys; this internal store does not authenticate its caller. New requests invalidate old claims; a current claim may
 reconcile a historical operation without rewriting its original request result.
 Resubscription records intent only, preserving state and clocks until a later
 adapter proves retained data and activation authority. Read-only/purge states are

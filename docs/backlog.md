@@ -339,6 +339,9 @@ same-revision claim takeover and unchanged migration history. Recording a reques
 grants no service or deletion authority; no customer route or effects worker is
 enabled. Resubscription still needs a future retained-data check and activation
 adapter. Durable placement/credential bindings in slice 5 remain unbuilt. The
+later exit adapter must preserve priority for an earlier verified delete, perform
+independent status lookup and qualify finer deadline comparisons if another
+producer writes timestamps beyond millisecond precision. The
 outbound AI refusal and explicit synthetic loopback transport are implemented
 locally; later runtime controls remain **unbuilt**. One venue approval permits at most **24 hours**
 of support access, shorter where practical and fresh approval to extend. **Paris

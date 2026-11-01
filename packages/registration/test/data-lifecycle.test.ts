@@ -248,3 +248,70 @@ test('claim references and effect fingerprints stay bound across the lifecycle l
   assert.equal(recorded.effectId,original.effectId);assert.equal(recorded.requestFingerprint,original.requestFingerprint);
  }finally{await held.query('ROLLBACK');held.release();await pending?.catch(()=>{});}
 });
+
+test('uncertainty on an older operation blocks a new operation for the same venue',async()=>{
+ const input=request(),ref=await store.request(input),first=await store.claim(ref,input.operationId);assert.ok(first);
+ const effect={effectId:randomUUID(),requestFingerprint:'b'.repeat(64),phase:'intent' as const};
+ await store.recordEffect(ref,input.operationId,first.claimRevision,effect);
+ const newer=request({expectedRevision:ref.revision,kind:'export',effectiveEndAt:undefined}),current=await store.request(newer);
+ const second=await store.claim(current,newer.operationId);assert.ok(second);
+ const pending={effectId:randomUUID(),requestFingerprint:'c'.repeat(64),phase:'intent' as const};
+ await assert.rejects(store.recordEffect(current,newer.operationId,second.claimRevision,pending),{message:'effect_uncertain'});
+ assert.equal((await store.read(f.venueId)).effects.length,1);
+});
+
+for(const end of ['+275760-09-13T00:00:00.000Z','+275760-06-01T00:00:00.000Z','-000001-01-01T00:00:00.000Z','0000-06-01T00:00:00.000Z','9999-12-31T00:00:00.000Z'])
+ test(`unsupported service end refuses before database mutation: ${end}`,async()=>{
+  await assert.rejects(store.request(request({effectiveEndAt:end})),{message:'invalid_lifecycle_input'});
+  assert.equal((await f.pool.query('SELECT count(*) FROM data_lifecycles')).rows[0].count,'0');
+ });
+
+test('the largest issued claim revision remains usable and exhaustion refuses explicitly',async()=>{
+ const input=request(),ref=await store.request(input);
+ await f.pool.query('UPDATE data_lifecycle_operations SET claim_revision=2147483646 WHERE venue_id=$1',[f.venueId]);
+ const claim=await store.claim(ref,input.operationId);assert.ok(claim);assert.equal(claim.claimRevision,2147483647);
+ await assert.doesNotReject(()=>store.recordEffect(ref,input.operationId,claim.claimRevision,{effectId:randomUUID(),requestFingerprint:'b'.repeat(64),phase:'intent'}));
+ await f.pool.query("UPDATE data_lifecycle_operations SET lease_until=clock_timestamp()-interval '1 second' WHERE venue_id=$1",[f.venueId]);
+ await assert.rejects(store.claim(ref,input.operationId),{message:'lifecycle_conflict'});
+});
+
+test('the largest issued lifecycle revision can finish work without overflowing on a new request',async()=>{
+ const input=request(),first=await store.request(input);
+ await f.pool.query('UPDATE data_lifecycles SET revision=2147483646 WHERE venue_id=$1',[f.venueId]);
+ const last=request({expectedRevision:2147483646,kind:'export',effectiveEndAt:undefined}),ref=await store.request(last);
+ assert.equal(first.revision,1);assert.equal(ref.revision,2147483647);
+ const claim=await store.claim(ref,last.operationId);assert.ok(claim);
+ await store.recordEffect(ref,last.operationId,claim.claimRevision,{effectId:randomUUID(),requestFingerprint:'b'.repeat(64),phase:'intent'});
+ await assert.rejects(store.request(request({expectedRevision:2147483647,kind:'export',effectiveEndAt:undefined})),{message:'lifecycle_conflict'});
+ assert.deepEqual(await store.request(last),ref);
+});
+
+test('operation IDs are scoped to their venue and a delete intent grants no service authority',async()=>{
+ const input=request({kind:'delete',effectiveEndAt:undefined});
+ const first=await store.request(input),other=await store.request({...input,venueId:f.foreignVenueId});
+ assert.deepEqual(first,{venueId:f.venueId,revision:1});assert.deepEqual(other,{venueId:f.foreignVenueId,revision:1});
+ const view=await store.read(f.venueId);
+ assert.equal(view.state,'exit preparing');assert.equal(view.deadlineAt,null);assert.equal(view.effectiveEndAt,null);
+ const current=await store.request(request({expectedRevision:first.revision}));
+ const next=await store.read(f.venueId);
+ assert.equal(next.ref.revision,current.revision);assert.deepEqual(next.operations.map(op=>op.kind),['delete','cancel']);
+ assert.equal(next.state,'exit preparing','neither request attests a verified delete or completed stop');
+});
+
+test('lease equality refuses the old completion and admits a fresh claimant',async()=>{
+ await f.pool.query("CREATE FUNCTION clock_timestamp() RETURNS timestamptz LANGUAGE sql AS $$SELECT '2027-01-01T12:00:00.000Z'::timestamptz$$");
+ const input=request(),ref=await store.request(input),first=await store.claim(ref,input.operationId);assert.ok(first);
+ assert.equal((await store.read(f.venueId)).operations[0]!.leaseUntil,'2027-01-01T12:01:00.000Z');
+ await f.pool.query("CREATE OR REPLACE FUNCTION clock_timestamp() RETURNS timestamptz LANGUAGE sql AS $$SELECT '2027-01-01T12:01:00.000Z'::timestamptz$$");
+ await assert.rejects(store.recordEffect(ref,input.operationId,first.claimRevision,{effectId:randomUUID(),requestFingerprint:'b'.repeat(64),phase:'intent'}),{message:'stale_lifecycle_claim'});
+ const next=await store.claim(ref,input.operationId);assert.ok(next);assert.equal(next.claimRevision,first.claimRevision+1);
+});
+
+test('reads acknowledge the lifecycle row lock before observing operations and effects',async()=>{
+ await store.request(request());const held=await f.pool.connect();let reading:Promise<unknown>|undefined;
+ try{
+  await held.query('BEGIN');await held.query('SELECT * FROM data_lifecycles WHERE venue_id=$1 FOR UPDATE',[f.venueId]);
+  reading=store.read(f.venueId);await waitForLock('SELECT * FROM data_lifecycles WHERE venue_id=',reading);
+  await held.query('COMMIT');await reading;
+ }finally{await held.query('ROLLBACK');held.release();await reading?.catch(()=>{});}
+});

@@ -27,13 +27,17 @@ function fail(code:LifecycleError['code']):never{throw new LifecycleError(code);
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const fingerprint=/^[a-f0-9]{64}$/;
 const id=(value:unknown)=>typeof value==='string'&&uuid.test(value);
-const revision=(value:unknown)=>Number.isInteger(value)&&Number(value)>=0&&Number(value)<2147483647;
+const revision=(value:unknown)=>Number.isInteger(value)&&Number(value)>=0&&Number(value)<=2147483647;
+function serviceEnd(value:unknown):boolean {
+ if(typeof value!=='string')return false;
+ const instant=new Date(value),deadline=new Date(instant.getTime()+90*24*60*60*1000);
+ return Number.isFinite(instant.getTime())&&instant.getUTCFullYear()>=1&&deadline.getUTCFullYear()<=9999&&instant.toISOString()===value;
+}
 function validateRequest(input:LifecycleRequest):void {
  if(!input||typeof input!=='object'||Object.keys(input).some(key=>!['venueId','operationId','expectedRevision','kind','fingerprint','effectiveEndAt'].includes(key))
   ||!id(input.venueId)||!id(input.operationId)||!revision(input.expectedRevision)
   ||!['cancel','delete','resubscribe','export'].includes(input.kind)||typeof input.fingerprint!=='string'||!fingerprint.test(input.fingerprint)
-  ||input.effectiveEndAt!==undefined&&(input.kind!=='cancel'||typeof input.effectiveEndAt!=='string'
-   ||!Number.isFinite(Date.parse(input.effectiveEndAt))||new Date(input.effectiveEndAt).toISOString()!==input.effectiveEndAt))fail('invalid_lifecycle_input');
+  ||input.effectiveEndAt!==undefined&&(input.kind!=='cancel'||!serviceEnd(input.effectiveEndAt)))fail('invalid_lifecycle_input');
 }
 interface Row {venue_id:string;revision:number;state:LifecycleState;requested_at:Date;effective_end_at:Date|null;deadline_at:Date|null}
 interface OperationRow {
@@ -66,7 +70,7 @@ export class LifecycleStore {
      ||iso(prior.requested_effective_end_at)!==(input.effectiveEndAt??null))fail('lifecycle_conflict');
     return {venueId:input.venueId,revision:prior.revision};
    }
-   if((row?.revision??0)!==input.expectedRevision)fail('lifecycle_conflict');
+   if((row?.revision??0)!==input.expectedRevision||input.expectedRevision===2147483647)fail('lifecycle_conflict');
    const now:Date=(await client.query('SELECT clock_timestamp() AS now')).rows[0].now;
    if(row&&(row.state==='purging'||row.state==='purged'||input.kind==='resubscribe'&&row.deadline_at!==null&&row.deadline_at.getTime()<=now.getTime()))fail('lifecycle_unavailable');
    let end=row?.effective_end_at??null;
