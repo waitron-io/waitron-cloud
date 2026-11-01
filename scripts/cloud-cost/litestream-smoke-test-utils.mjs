@@ -19,13 +19,14 @@ export function delayLitestreamPutReplies(source) {
 
 export function prepareDelayedLitestreamStop(source) {
   source = delayLitestreamPutReplies(source);
-  // Start the stop budget with a post-sale upload committed and its delayed reply still outstanding.
+  // A compacted copy of an older transaction must not stand in for the final sale.
   // Otherwise periodic replication and the stop flush can incur successive 1,500 ms holds inside two seconds.
   for (const [anchor, replacement] of [
-    ["let delayedPutReplies = 0;", "let finalPutCommit, finalSaleWritten = false; const finalPutCommitted = new Promise(resolve => finalPutCommit = resolve); let delayedPutReplies = 0;"],
-    ["await sale(2);", "await sale(2); finalSaleWritten = true;"],
-    ["let requestBytes = 0;", "const postSaleRequest = finalSaleWritten; let requestBytes = 0;"],
-    ["delayedPutReplies++; setTimeout(forward, 1500);", "delayedPutReplies++; if (postSaleRequest) finalPutCommit(); setTimeout(forward, 1500);"],
+    ["let delayedPutReplies = 0;", `const finalPutGate = (${createDelayedPutGate.toString().replace(/\n\s*/g, ' ')})(); let finalPutCommit, finalSaleWritten = false; const finalPutCommitted = new Promise(resolve => finalPutCommit = resolve); let delayedPutReplies = 0;`],
+    ["await sale(2);", "finalPutGate.beforeSale(); await sale(2); finalSaleWritten = true;"],
+    ["let requestBytes = 0;", "const postSaleRequest = finalSaleWritten; const finalPut = finalPutGate.admit(req, postSaleRequest); let requestBytes = 0;"],
+    ["const forward = () => {", "const forward = () => { finalPutGate.forward(finalPut, res);"],
+    ["delayedPutReplies++; setTimeout(forward, 1500);", "delayedPutReplies++; finalPutGate.response(finalPut, incoming.statusCode, () => { if (postSaleRequest) finalPutCommit(); }); setTimeout(forward, 1500);"],
     ["stage = 'stop';", `let finalPutTimer;
       stage = 'final-put-readiness';
       try { await Promise.race([finalPutCommitted, new Promise((_, reject) => {
@@ -37,6 +38,40 @@ export function prepareDelayedLitestreamStop(source) {
     source = source.replace(anchor, replacement);
   }
   return source;
+}
+
+// The initial smoke barrier drains pre-sale traffic; late compaction can add older replies afterwards.
+export function createDelayedPutGate() {
+  let highWater = 0n, boundary;
+  const olderReplies = new Set();
+  return {
+    beforeSale() { boundary = highWater; },
+    admit(req, postSale) {
+      const match = /\/(?:000[0-3]|0009)\/([a-f0-9]{16})-([a-f0-9]{16})\.ltx(?:\?|$)/.exec(req.url ?? '');
+      const partial = /[?&](?:partNumber|uploadId)=/.test(req.url ?? '');
+      const first = match ? BigInt('0x' + match[1]) : 0n;
+      const last = match ? BigInt('0x' + match[2]) : 0n;
+      const row = { txid: req.method === 'PUT' && !partial && first > 0n && last >= first ? last : 0n, postSale, forwarded: false };
+      if (row.postSale && row.txid > 0n && row.txid <= boundary) {
+        row.settled = new Promise(resolve => { row.settle = resolve; });
+        olderReplies.add(row.settled);
+      }
+      return row;
+    },
+    response(row, status, ready) {
+      if (status < 200 || status >= 300) return;
+      if (row.txid > highWater) highWater = row.txid;
+      if (boundary > 0n && row.txid > boundary && row.postSale) {
+        const release = () => { if (!row.forwarded) ready(); };
+        if (olderReplies.size) Promise.all([...olderReplies]).then(release);
+        else release();
+      }
+    },
+    forward(row, res) {
+      row.forwarded = true;
+      if (row.settle) res.once('finish', () => { olderReplies.delete(row.settled); row.settle(); });
+    },
+  };
 }
 
 export function createDelayedPutEvidence({ clock = () => performance.now() } = {}) {
