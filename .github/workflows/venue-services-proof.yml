@@ -38,4 +38,10 @@ jobs:
       - run: pnpm install --frozen-lockfile
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Record proof runner capacity
+        run: |
+          node -e "const os=require('node:os'),fs=require('node:fs');const read=p=>fs.existsSync(p)?fs.readFileSync(p,'utf8').trim():null;console.log(JSON.stringify({node:process.version,architecture:process.arch,parallelism:os.availableParallelism(),cpus:os.cpus().length,cpuModel:os.cpus()[0]?.model,totalMemory:os.totalmem(),freeMemory:os.freemem(),cpuQuota:read('/sys/fs/cgroup/cpu.max'),memoryLimit:read('/sys/fs/cgroup/memory.max')}));"
+      - run: node --test --test-reporter=tap scripts/test-cloud-venue-services.test.mjs
       - run: node --test --test-reporter=tap scripts/venue-service-proof.test.ts
+        env:
+          CLOUD_SERVICE_PROOF_TIMINGS: '1'

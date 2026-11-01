@@ -16,22 +16,19 @@ export async function venueServiceFixture(){
   const scope={organisationId:randomUUID(),legalBusinessId:randomUUID()};
   const other={organisationId:scope.organisationId,legalBusinessId:randomUUID()};
   const foreign={organisationId:randomUUID(),legalBusinessId:randomUUID()};
+  await pool.query('INSERT INTO organisations(id) VALUES($1),($2)',[scope.organisationId,foreign.organisationId]);
+  for(const s of [scope,other,foreign])await pool.query('INSERT INTO legal_businesses(id,organisation_id) VALUES($1,$2)',[s.legalBusinessId,s.organisationId]);
   const venues=[randomUUID(),randomUUID()].sort(),otherVenue=randomUUID(),foreignVenue=randomUUID(),production=randomUUID();
-  // Seed the isolated fixture atomically so each row does not require its own durable commit.
-  await transaction(pool,async client=>{
-  await client.query('INSERT INTO organisations(id) VALUES($1),($2)',[scope.organisationId,foreign.organisationId]);
-  for(const s of [scope,other,foreign])await client.query('INSERT INTO legal_businesses(id,organisation_id) VALUES($1,$2)',[s.legalBusinessId,s.organisationId]);
   for(const [s,id,environment] of [[scope,venues[0],'test'],[scope,venues[1],'test'],[other,otherVenue,'test'],[foreign,foreignVenue,'test'],[scope,production,'production']] as const){
-   await client.query('INSERT INTO venues(id,organisation_id,legal_business_id,local_venue_id,environment) VALUES($1,$2,$3,$1,$4)',[id,s.organisationId,s.legalBusinessId,environment]);
+   await pool.query('INSERT INTO venues(id,organisation_id,legal_business_id,local_venue_id,environment) VALUES($1,$2,$3,$1,$4)',[id,s.organisationId,s.legalBusinessId,environment]);
    const current=randomUUID();
    for(let i=0;i<2;i++){
     const installation=i===0?current:randomUUID();
-    if(i===0)await client.query('INSERT INTO installations(id,venue_id,public_key) VALUES($1,$2,$3)',[installation,id,installation]);
-    else await client.query('INSERT INTO installations(id,venue_id,public_key,revoked_at,superseded_by) VALUES($1,$2,$3,clock_timestamp(),$4)',[installation,id,installation,current]);
-    for(const service of ['continuous_backup','retained_snapshots','remote_access','content_translation'])await client.query("INSERT INTO installation_services(installation_id,service,state,configuration) VALUES($1,$2,'ready',$3)",[installation,service,{synthetic:service}]);
+    if(i===0)await pool.query('INSERT INTO installations(id,venue_id,public_key) VALUES($1,$2,$3)',[installation,id,installation]);
+    else await pool.query('INSERT INTO installations(id,venue_id,public_key,revoked_at,superseded_by) VALUES($1,$2,$3,clock_timestamp(),$4)',[installation,id,installation,current]);
+    for(const service of ['continuous_backup','retained_snapshots','remote_access','content_translation'])await pool.query("INSERT INTO installation_services(installation_id,service,state,configuration) VALUES($1,$2,'ready',$3)",[installation,service,{synthetic:service}]);
    }
   }
-  });
   const api=await import(new URL('../../src/index.ts',import.meta.url).href),store=new api.BillingStore(pool);
   for(const s of [scope,other,foreign])await store.execute(s,event(),{type:'ensure_business'});
   const today=(await pool.query("SELECT (clock_timestamp() AT TIME ZONE 'UTC')::date::text AS day")).rows[0].day;

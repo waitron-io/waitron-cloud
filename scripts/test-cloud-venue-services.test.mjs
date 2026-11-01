@@ -1,9 +1,39 @@
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
 import {spawnSync} from 'node:child_process';
+import {mkdtempSync,writeFileSync,rmSync} from 'node:fs';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
 import * as api from './test-cloud-free-services.mjs';
 
 const ids=['rules','installations','backups','recovery','remote','translation','relay','runtime','storage'];
+
+test('matrix timing diagnostics identify real cases and files without printing paths or names',()=>{
+ const root=mkdtempSync(join(tmpdir(),'service-timings-'));
+ try{
+  const file=new URL('../packages/registration/test/venue-service-rules.test.ts',import.meta.url).pathname;
+  const program=join(root,'probe.mjs');
+  writeFileSync(program,`import {run} from 'node:test';import {summariseServiceMatrix} from ${JSON.stringify(new URL('./test-cloud-free-services.mjs',import.meta.url).href)};const suites=[{id:'rules',files:[${JSON.stringify(file)}]}];console.log(JSON.stringify(await summariseServiceMatrix(run({files:suites[0].files,execArgv:[]}),suites)));`);
+  const env={...process.env,CLOUD_SERVICE_PROOF_TIMINGS:'1'};delete env.NODE_TEST_CONTEXT;delete env.NODE_OPTIONS;
+  const result=spawnSync(process.execPath,[program],{env,encoding:'utf8',timeout:30000});
+  assert.equal(result.status,0,result.stderr);
+  assert.deepEqual(JSON.parse(result.stdout),[{id:'rules',tests:14,passed:14,failed:0,cancelled:0,skipped:0,todo:0}]);
+  const rows=result.stderr.trim().split('\n').filter(Boolean).map(line=>{assert.ok(line.startsWith('SERVICE_PROOF_TIMING '));return JSON.parse(line.slice('SERVICE_PROOF_TIMING '.length));});
+  assert.equal(rows.filter(row=>row.kind==='case').length,14);
+  assert.equal(rows.filter(row=>row.kind==='file').length,1);
+  for(const row of rows){
+   assert.equal(row.suite,'rules');assert.equal(row.fileIndex,0);
+   assert.ok(Number.isFinite(row.durationMs)&&row.durationMs>=0);
+   assert.ok(Number.isFinite(row.elapsedMs)&&row.elapsedMs>=0);
+   assert.deepEqual(Object.keys(row).sort(),['durationMs','elapsedMs','fileIndex','kind','suite',...(row.kind==='file'?['tests']:['line','testNumber','nesting','caseType'])].sort());
+   if(row.kind==='case'){assert.equal(row.nesting,0);assert.equal(row.caseType,'test');}
+  }
+  assert.equal(rows.find(row=>row.kind==='file').tests,14);
+  delete env.CLOUD_SERVICE_PROOF_TIMINGS;
+  const quiet=spawnSync(process.execPath,[program],{env,encoding:'utf8',timeout:30000});
+  assert.equal(quiet.status,0,quiet.stderr);assert.equal(quiet.stderr,'');assert.equal(quiet.stdout,result.stdout);
+ }finally{rmSync(root,{recursive:true,force:true});}
+});
 function receipt(){return {version:2,kind:'test-cloud-venue-services',cloudHead:'a'.repeat(40),cloudTree:'b'.repeat(40),scope:'local-fixtures',mode:'test-venue-levels',productionEnforcement:'off',suites:ids.map(id=>({id,tests:2,passed:2,failed:0,cancelled:0,skipped:0,todo:0}))};}
 test('venue service receipt qualifies the complete local matrix separately from legacy evidence',()=>{
  assert.equal(typeof api.validateVenueServiceReceipt,'function','venue service proof validator is required');

@@ -101,8 +101,18 @@ export async function summariseServiceMatrix(events,selected){
   assert.equal(new Set(selected.map(suite=>suite.id)).size,selected.length,'Duplicate matrix suite');
   assert.ok(selected.length>0&&selected.every(suite=>suite.files.length>0),'Empty matrix suite');
   const summaries=new Map();
+  const started=performance.now(),timings=process.env.CLOUD_SERVICE_PROOF_TIMINGS==='1';
+  const positions=new Map(selected.flatMap(suite=>suite.files.map((file,fileIndex)=>[resolve(file),{suite:suite.id,fileIndex}])));
   async function* observed(){
     for await(const event of events){
+      const data=event.data,position=typeof data?.file==='string'?positions.get(resolve(data.file)):undefined;
+      const duration=event.type==='test:complete'?data?.details?.duration_ms:data?.duration_ms;
+      if(timings&&position&&Number.isFinite(duration)&&duration>=0){
+        const base={...position,durationMs:duration,elapsedMs:performance.now()-started};
+        if(event.type==='test:complete'&&data.name!==data.file&&Number.isSafeInteger(data.line)&&data.line>0&&Number.isSafeInteger(data.testNumber)&&data.testNumber>0)
+          process.stderr.write('SERVICE_PROOF_TIMING '+JSON.stringify({kind:'case',...base,line:data.line,testNumber:data.testNumber,nesting:data.nesting,caseType:data.details.type==='suite'?'suite':'test'})+'\n');
+        if(event.type==='test:summary')process.stderr.write('SERVICE_PROOF_TIMING '+JSON.stringify({kind:'file',...base,tests:data.counts.tests})+'\n');
+      }
       if(event.type==='test:summary'&&event.data.file!==undefined)summaries.set(resolve(event.data.file),event.data.counts);
       yield event;
     }
