@@ -21,24 +21,28 @@ test('startup capacity is observed before allocation, while starting and after r
   });
   assert.equal(result.value, 'ready');
   assert.deepEqual(observations, [{allocated: false, ready: false}, {allocated: true, ready: false},
-    {allocated: true, ready: false}, {allocated: true, ready: true}]);
+    {allocated: true, ready: false}, {allocated: true, ready: true}, {allocated: true, ready: true}]);
   assert.deepEqual(result.samples.map(v => [v.elapsedMs, v.phase, v.cloudMiB]),
-    [[0, 'startup', 0], [1000, 'startup', 100], [2000, 'startup', 100], [3000, 'startup', 100]]);
+    [[0, 'startup', 0], [1000, 'startup', 100], [2000, 'startup', 100], [3000, 'startup', 100], [3001, 'startup', 100]]);
 });
 
 test('startup measurement failure stops and drains the owned operation', async () => {
   const {measureStartupCapacity} = await load();
   assert.equal(typeof measureStartupCapacity, 'function', 'Startup sampling is missing');
   for (const fault of ['observation', 'budget', 'gap', 'reversed-clock']) {
-    let time = 0, allocated = false, stopped = false, drained = false, finish;
+    let time = 0, turns = 0, allocated = false, stopped = false, drained = false, finish;
     await assert.rejects(measureStartupCapacity({
       now: () => time,
-      wait: async ms => {time += fault === 'gap' ? 5001 : fault === 'reversed-clock' ? -1 : ms;},
+      wait: async ms => {
+        time += fault === 'gap' ? 5001 : fault === 'reversed-clock' ? -1 : ms;
+        if (++turns === 6) finish();
+        await new Promise(resolve => setImmediate(resolve));
+      },
       observe: async () => {
         if (allocated && fault === 'observation') throw Error('observation refused');
         return {...sample(), cloudMiB: allocated && fault === 'budget' ? 2049 : 100};
       },
-      start: async () => {allocated = true; await new Promise(resolve => {finish = resolve;}); drained = true;},
+      start: async () => {allocated = true; await new Promise(resolve => {finish = resolve;}); await new Promise(resolve => setImmediate(resolve)); drained = true;},
       stop: async () => {stopped = true; finish();},
     }));
     assert.equal(stopped, true, fault); assert.equal(drained, true, fault);
@@ -73,4 +77,17 @@ test('only a startup observation permits an empty project before allocation', as
     assert.equal(observed.fixtureBytes, 0); assert.equal(observed.availableMiB, 4096);
     assert.ok(observed.freeGiB > 0); assert.equal(observed.protectedUnchanged, true);
   } finally {await rm(root, {recursive: true, force: true});}
+});
+
+test('the final startup sample begins after readiness even when readiness arrives during an observation', async () => {
+  const {measureStartupCapacity} = await load();
+  let time = 0, calls = 0, finish, ready = false;
+  const result = await measureStartupCapacity({now: () => time, wait: async ms => {time += ms;},
+    start: () => new Promise(resolve => {finish = resolve;}), stop: async () => assert.fail('Healthy startup'),
+    observe: async () => {
+      const memory = ready ? 200 : calls ? 100 : 0;
+      if (++calls === 2) {ready = true; finish(); await new Promise(resolve => setImmediate(resolve));}
+      return {...sample(), cloudMiB: memory};
+    }});
+  assert.equal(result.samples.at(-1).cloudMiB, 200, 'Read resources again after Compose reports readiness');
 });

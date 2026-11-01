@@ -104,6 +104,7 @@ export async function measureStartupCapacity({observe, start, stop, now = () => 
   const operation = Promise.resolve().then(start).then(result => {value = result;}, failure => {error = failure;}).finally(() => {done = true;});
   try {
     do {await wait(1000); await sample();} while (!done);
+    if (!error) {await wait(1); await sample();}
   } catch (failure) {
     try {await stop();} finally {await operation;}
     throw failure;
