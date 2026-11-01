@@ -197,3 +197,17 @@ ALTER TABLE usage_events
   OR (event_type LIKE 'translation.%' AND source_kind='translation_job')
   OR (event_type='remote_access.traffic_bytes' AND source_kind='remote_traffic_sample' AND venue_id IS NOT NULL)),
  ADD CONSTRAINT usage_events_unit_quantity_check CHECK(event_type LIKE 'backup.%' OR event_type LIKE 'translation.%' OR event_type='remote_access.traffic_bytes' OR quantity=1);
+
+-- A report with no route entries still needs an immutable receipt for lost acknowledgements.
+CREATE TABLE remote_traffic_reports (
+ process_id uuid NOT NULL REFERENCES remote_traffic_processes(process_id),
+ sequence billing_whole NOT NULL CHECK(sequence>0),
+ from_at traffic_instant NOT NULL,
+ until_at traffic_instant NOT NULL CHECK(until_at>from_at),
+ complete boolean NOT NULL,
+ report_digest traffic_digest NOT NULL,
+ report_payload traffic_payload NOT NULL,
+ report_signature traffic_signature NOT NULL,
+ PRIMARY KEY(process_id,sequence)
+);
+CREATE TRIGGER remote_traffic_reports_immutable BEFORE UPDATE OR DELETE ON remote_traffic_reports FOR EACH ROW EXECUTE FUNCTION reject_billing_fact_mutation();
