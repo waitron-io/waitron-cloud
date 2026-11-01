@@ -11,6 +11,15 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 jobs:
   service-receipts:
+    name: service-receipts (${{ matrix.receipt }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - receipt: legacy
+            file: scripts/legacy-service-proof.test.ts
+          - receipt: venue
+            file: scripts/venue-service-proof.test.ts
     runs-on: ubuntu-latest
     timeout-minutes: 8
     steps:
@@ -41,7 +50,8 @@ jobs:
       - name: Record proof runner capacity
         run: |
           node -e "const os=require('node:os'),fs=require('node:fs');const read=p=>fs.existsSync(p)?fs.readFileSync(p,'utf8').trim():null;console.log(JSON.stringify({node:process.version,architecture:process.arch,parallelism:os.availableParallelism(),cpus:os.cpus().length,cpuModel:os.cpus()[0]?.model,totalMemory:os.totalmem(),freeMemory:os.freemem(),cpuQuota:read('/sys/fs/cgroup/cpu.max'),memoryLimit:read('/sys/fs/cgroup/memory.max')}));"
-      - run: node --test --test-reporter=tap scripts/test-cloud-venue-services.test.mjs
-      - run: node --test --test-reporter=tap scripts/venue-service-proof.test.ts
+      - if: matrix.receipt == 'venue'
+        run: node --test --test-reporter=tap scripts/test-cloud-venue-services.test.mjs
+      - run: node --test --test-reporter=tap '${{ matrix.file }}'
         env:
           CLOUD_SERVICE_PROOF_TIMINGS: '1'

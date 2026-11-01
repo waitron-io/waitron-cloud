@@ -45,9 +45,11 @@ The ordinary command runs one file at a time. CI sets
 `CLOUD_SERVICE_PROOF_CONCURRENCY=2` to share one queue of at most four files
 across the groups, retaining every check and the same receipt fields. Values
 other than `1` or `2` refuse the proof. The `Venue service proof` workflow runs
-both receipts in a separate eight-minute job so ordinary package work cannot
-consume their time. To run the same combined check, use
-`node --test scripts/venue-service-proof.test.ts` from a clean, committed checkout.
+each receipt in its own eight-minute job, keeping the 330-second child and
+360-second test limits. The runtime check stays with the venue receipt. To run
+both receipts locally, use `node --test --test-concurrency=1
+scripts/legacy-service-proof.test.ts scripts/venue-service-proof.test.ts` from a
+clean, committed checkout.
 
 For private fixtures, select venue-level authority with
 `CLOUD_VENUE_SERVICE_LEVELS=test` and `CLOUD_TEST_SERVICE_PLANS=0`. Account,
