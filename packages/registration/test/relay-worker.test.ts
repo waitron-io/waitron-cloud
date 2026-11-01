@@ -154,7 +154,7 @@ test('global claim capacity limits parallel workers to four SMTP handoffs',async
 test('process death after DATA cannot cause resend on restart',async t=>{
  const f=await setup(t),v=await f.venue(),b=await v.submit();let received!:()=>void;const data=new Promise<void>(r=>received=r);let deliveries=0;
  const s=await smtp(t,{onData(stream,_session,_done){stream.resume();stream.on('end',()=>{deliveries++;received();});}});
- const child=spawn(process.execPath,['test/fixtures/relay-worker-process.ts'],{env:{...process.env,RELAY_TEST_SCHEMA:f.schema},stdio:['pipe','pipe','pipe']});
+ const child=spawn(process.execPath,['test/fixtures/relay-worker-process.ts'],{cwd:new URL('../',import.meta.url),env:{...process.env,RELAY_TEST_SCHEMA:f.schema},stdio:['pipe','pipe','pipe']});
  let error='';child.stderr.on('data',b=>error+=b);const exit=new Promise<number|null>((r,j)=>{child.once('error',j);child.once('exit',r);});
  t.after(()=>{if(child.exitCode===null)child.kill('SIGKILL');});child.stdin.end(JSON.stringify({...f.config,smtpPort:s.port}));
  await Promise.race([data,exit.then(code=>{throw new Error(`worker exited ${code}: ${error}`);})]);

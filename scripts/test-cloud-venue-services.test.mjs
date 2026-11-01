@@ -40,3 +40,17 @@ test('proof refuses concurrency beyond two without certifying any case',()=>{
  const result=spawnSync(process.execPath,['scripts/test-cloud-free-services.mjs','--venue-levels','--suite','runtime'],{env,encoding:'utf8',timeout:30000});
  assert.equal(result.status,1);assert.equal(result.stdout,'');assert.equal(result.stderr,'Free-service proof failed\n');
 });
+
+test('one file queue attributes every direct case to its original service suite',async()=>{
+ assert.equal(typeof api.summariseServiceMatrix,'function','the matrix must share one bounded file queue');
+ const suites=[{id:'backups',files:['/backup-one.test.mjs','/backup-two.test.mjs']},{id:'remote',files:['/remote.test.mjs']}];
+ const summary=(file,tests)=>({type:'test:summary',data:{success:true,...(file?{file}:{}),counts:{tests,passed:tests,failed:0,cancelled:0,skipped:0,todo:0}}});
+ const events=[summary('/remote.test.mjs',3),summary('/backup-one.test.mjs',2),summary('/backup-two.test.mjs',4),summary(undefined,9)];
+ async function* stream(values){yield* values;}
+ assert.deepEqual(await api.summariseServiceMatrix(stream(events),suites),[
+  {id:'backups',tests:6,passed:6,failed:0,cancelled:0,skipped:0,todo:0},
+  {id:'remote',tests:3,passed:3,failed:0,cancelled:0,skipped:0,todo:0},
+ ]);
+ for(const changed of [events.slice(1),[...events.slice(0,-1),events[0],events.at(-1)],[{type:'test:stdout',data:{message:'private'}},...events],events.map((e,i)=>i===0?summary('/unexpected.test.mjs',3):e),events.map((e,i)=>i===3?summary(undefined,10):e),events.map((e,i)=>i===0?{...e,data:{...e.data,counts:{...e.data.counts,skipped:1}}}:e)])await assert.rejects(api.summariseServiceMatrix(stream(changed),suites));
+ await assert.rejects(api.summariseServiceMatrix(stream(events),[...suites,{id:'duplicate',files:['/remote.test.mjs']}]));
+});

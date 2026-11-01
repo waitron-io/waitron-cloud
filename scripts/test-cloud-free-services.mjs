@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import {execFileSync, spawn} from 'node:child_process';
+import {execFileSync} from 'node:child_process';
 import {fileURLToPath, pathToFileURL} from 'node:url';
 import {run} from 'node:test';
 import {resolve} from 'node:path';
@@ -95,23 +95,23 @@ export async function summariseTestRun(events, expectedFiles = []) {
   return result;
 }
 
-async function runSuite(suite,venueLevels=false) {
-  return new Promise((resolve, reject) => {
-    const env = {...process.env}; delete env.NODE_TEST_CONTEXT; delete env.NODE_OPTIONS;
-    const child = spawn(process.execPath, [fileURLToPath(import.meta.url), ...(venueLevels?['--venue-levels']:[]), '--suite', suite.id], {cwd: new URL(`${suite.cwd}/`, pathToFileURL(root)), env, stdio: ['ignore', 'pipe', 'pipe']});
-    let output = '', bytes = 0, failed = false;
-    const stop = () => {failed = true; child.kill('SIGTERM');};
-    const timer = setTimeout(stop, 600000);
-    const terminate = () => stop();
-    process.once('SIGINT', terminate); process.once('SIGTERM', terminate);
-    child.stdout.on('data', chunk => {bytes += chunk.length; if (bytes > 4096) stop(); else output += chunk;});
-    child.stderr.on('data', stop);
-    child.once('error', reject);
-    child.once('close', code => {
-      clearTimeout(timer); process.removeListener('SIGINT', terminate); process.removeListener('SIGTERM', terminate);
-      if (failed || code !== 0) {reject(new Error(`Suite refused: ${suite.id}`)); return;}
-      try {resolve({id: suite.id, ...JSON.parse(output)});} catch {reject(new Error('Invalid suite summary'));}
-    });
+export async function summariseServiceMatrix(events,selected){
+  const files=selected.flatMap(suite=>suite.files.map(file=>resolve(file)));
+  assert.equal(new Set(files).size,files.length,'Duplicate matrix file');
+  assert.equal(new Set(selected.map(suite=>suite.id)).size,selected.length,'Duplicate matrix suite');
+  assert.ok(selected.length>0&&selected.every(suite=>suite.files.length>0),'Empty matrix suite');
+  const summaries=new Map();
+  async function* observed(){
+    for await(const event of events){
+      if(event.type==='test:summary'&&event.data.file!==undefined)summaries.set(resolve(event.data.file),event.data.counts);
+      yield event;
+    }
+  }
+  await summariseTestRun(observed(),files);
+  return selected.map(suite=>{
+    const value={id:suite.id,tests:0,passed:0,failed:0,cancelled:0,skipped:0,todo:0};
+    for(const file of suite.files)for(const field of ['tests','passed','failed','cancelled','skipped','todo'])value[field]+=summaries.get(resolve(file))[field];
+    return value;
   });
 }
 const git = (...args) => execFileSync('git', args, {cwd: root, encoding: 'utf8', timeout: 30000, maxBuffer: 1048576}).trim();
@@ -119,16 +119,17 @@ async function proof(venueLevels=false) {
   const concurrency=proofConcurrency();
   assert.equal(git('status', '--porcelain'), '', 'Proof requires a clean committed checkout');
   assert.ok(process.env.TEST_DATABASE_URL && process.env.MAILPIT_TEST_URL && process.env.MAILPIT_TEST_SMTP_PORT, 'Use scripts/test-postgres.mjs');
-  const cloudHead = git('rev-parse', 'HEAD'), cloudTree = git('rev-parse', 'HEAD^{tree}'), results = [];
-  const selected=venueLevels?venueSuites:suites;let next=0,failure;
-  // Two groups of two files bound the proof to four active test files.
-  await Promise.all(Array.from({length:concurrency},async()=>{
-    for(let index=next++;index<selected.length&&!failure;index=next++){
-      const suite=selected[index];process.stderr.write(`Free-service proof: ${suite.id}\n`);
-      try{results[index]=await runSuite(suite,venueLevels);}catch(error){failure=error;}
-    }
-  }));
-  if(failure)throw failure;
+  const cloudHead = git('rev-parse', 'HEAD'), cloudTree = git('rev-parse', 'HEAD^{tree}');
+  const selected=(venueLevels?venueSuites:suites).map(suite=>({...suite,files:suite.files.map(file=>resolve(root,suite.cwd,file))}));
+  // A single queue bounds the whole proof, including work from different suites.
+  const controller=new AbortController(),stop=()=>controller.abort();
+  const timer=setTimeout(stop,600000);
+  process.once('SIGTERM',stop);process.once('SIGINT',stop);
+  let results;
+  try{
+    for(const suite of selected)process.stderr.write(`Free-service proof: ${suite.id}\n`);
+    results=await summariseServiceMatrix(run({files:selected.flatMap(suite=>suite.files),concurrency,timeout:120000,execArgv:[],signal:controller.signal}),selected);
+  }finally{clearTimeout(timer);controller.abort();process.removeListener('SIGTERM',stop);process.removeListener('SIGINT',stop);}
   assert.equal(git('rev-parse', 'HEAD'), cloudHead); assert.equal(git('status', '--porcelain'), '');
   assert.equal(git('rev-parse','HEAD^{tree}'),cloudTree);
   if(venueLevels){
