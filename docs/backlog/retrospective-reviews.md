@@ -169,16 +169,28 @@ URL does expose the bounded refusal in the JavaScript-disabled and reload
 fixtures; the parent controls need external stops. Hiding or redirecting the
 running-failure fixture's reload link fails its original product checks.
 
-D535 still needs separate PR613 and PR612 follow-ups to keep their ordinary,
-delayed and reachable missing-signal screenshots separately, preserving historical
-names. Their wait comments also need to distinguish the missing-signal helper
-from the normal journey, without weakening or removing any behavioral assertion.
+The PR613 running-failure reload fixture now retains 17 captures: eight ordinary,
+eight delayed and the reachable English/light/390 missing-next case. The eight
+historical filenames stay unchanged. Before the repair, all 66 browser checks
+passed while the separate 17-file review check failed with only eight images.
+After the filename change, both checks pass. The eight original image bytes match
+in the driver's compared runs; the review also observes byte differences between
+repeated runs of unchanged code. Byte equality is a run-specific observation.
+The missing-first control returns before capture. The wait comment
+now describes the missing-signal helper's five-second outer race; it does not claim
+that omitting either normal observation must fail. Every behavioral assertion,
+clock and deadline remains unchanged.
+
+D535 still needs the separate PR612 follow-up for distinct ordinary and delayed
+captures and a precise wait comment, preserving historical names and every
+behavioral assertion.
 The PR613 proof-count fault and fresh-restart product fault, disabled-script
 product faults in PR612, other failure-state images and real authority remain
 unverified. These are qualification limits, not claims of production repairs.
 
 Run `pnpm --dir apps/portal exec node --test test/public-challenge-noscript-browser.test.ts test/public-challenge-failure-reload-browser.test.ts test/public-challenge-reload-browser.test.ts`
 for the three local browser files. Set `PUBLIC_CHALLENGE_RECEIPT_DIR` to a fresh
-directory when checking the JavaScript-disabled fixture's 24 retained images.
+directory when checking the JavaScript-disabled fixture's 24 retained images or
+the running-failure reload fixture's 17 retained images.
 Use separate directories for the three files, because their historical filename
 schemes do not promise uniqueness across files.

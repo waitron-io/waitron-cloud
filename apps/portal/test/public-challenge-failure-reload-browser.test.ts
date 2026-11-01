@@ -56,7 +56,7 @@ for (const locale of ['en', 'es']) for (const theme of ['light', 'dark'] as cons
         assert.equal((await page.goto(url))?.status(), 403);
         const waitForFirstHandler = () => t.waitFor(() => {assert.equal(firstEntered, true, 'the first challenge handler must enter');}, {timeout: 4000});
         const waitForNextHandler = () => t.waitFor(() => {assert.equal(nextEntered, true, 'the restarted challenge handler must enter');}, {timeout: 4000});
-        // Missing signals must refuse within the page budget; omitting either wait must fail.
+        // Each missing-signal helper must time out before its five-second outer race resolves.
         const expectMissingHandler = async (wait: () => Promise<unknown>) => {
           let timer: ReturnType<typeof setTimeout> | undefined;
           try {
@@ -82,7 +82,7 @@ for (const locale of ['en', 'es']) for (const theme of ['light', 'dark'] as cons
         assert.equal(gate.stats().forwarded, 0); assert.equal((await context.cookies()).length, 0);
         if (process.env.PUBLIC_CHALLENGE_RECEIPT_DIR && failure === 'challenge') {
           await mkdir(process.env.PUBLIC_CHALLENGE_RECEIPT_DIR, {recursive: true});
-          await page.screenshot({path: `${process.env.PUBLIC_CHALLENGE_RECEIPT_DIR}/${locale}-${theme}-${width}.png`});
+          await page.screenshot({path: `${process.env.PUBLIC_CHALLENGE_RECEIPT_DIR}/${locale}-${theme}-${width}${handler === 'normal' ? '' : `-${handler}`}.png`});
         }
         restarting = true;
         if (locale === 'es') {
