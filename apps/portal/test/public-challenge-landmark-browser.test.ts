@@ -12,12 +12,12 @@ let browser: Awaited<ReturnType<typeof chromium.launch>>;
 before(async () => {browser = await chromium.launch({headless: true});});
 after(async () => {await browser?.close();});
 
-// Losing the main region, or leaving guidance outside it, must break these journeys.
+// Losing the main region or leaving guidance outside it must break guidance journeys.
 for (const locale of ['en', 'es']) for (const theme of ['light', 'dark'] as const) for (const width of [390, 1280]) {
   for (const mode of ['disabled', 'script-unavailable', 'running'] as const) for (const handler of ['normal', 'delayed', 'missing'] as const) {
     if (handler !== 'normal' && mode !== 'running') continue;
     if (handler === 'missing' && (locale !== 'en' || theme !== 'light' || width !== 390)) continue;
-    test(`${locale} ${theme} ${width}${handler === 'normal' ? '' : ` with ${handler} challenge handler`}: main region contains browser-check ${mode} guidance`, async t => {
+    test(`${locale} ${theme} ${width}${handler === 'normal' ? '' : ` with ${handler} challenge handler`}: ${handler === 'missing' ? 'absent challenge-handler signal refuses within the outer budget' : `main region contains browser-check ${mode} guidance`}`, async t => {
       const gate = createPublicGate({key: randomBytes(32), difficulty: 8, routes: () => [
         {publicHostname: 'sol.example.test', staffHostname: 'staff.sol.example.test', address: '127.0.0.1', port: 1},
       ]});
@@ -44,7 +44,7 @@ for (const locale of ['en', 'es']) for (const theme of ['light', 'dark'] as cons
         assert.equal((await page.goto(`http://127.0.0.1:${address.port}/public/availability`))?.status(), 403);
         if (mode === 'running') {
           const waitForHandler = () => t.waitFor(() => {assert.equal(challengeEntered, true, 'the challenge route handler must enter');}, {timeout: 4000});
-          // An absent signal must refuse within the page budget; removing the wait must also fail.
+          // The absent-signal control must fail when its observation outlasts the outer timer.
           if (handler === 'missing') {
             let timer: ReturnType<typeof setTimeout> | undefined;
             try {
