@@ -159,3 +159,91 @@ test('reservation insertion failure rolls back service effects and its monthly d
   assert.equal((await f.reserve()).units,'1');assert.equal(await f.total(),1n);
  }finally{await f.close();}
 });
+
+test('allowance admission rejects malformed units and production scope before writing',async()=>{
+ const f=await fixture();try{
+  await f.config.publish(TEST_ALLOWANCES);
+  for(const changed of [{units:0n},{units:-1n},{units:9223372036854775808n},{service:'transactional_email' as const,units:2n},{operationId:'bad-id'},{binding:''}])await assert.rejects(f.reserve(changed),{code:'invalid_allowance_input'});
+  await assert.rejects(f.reserve({venueId:f.production,installationId:await f.installation(f.production)}),{code:'allowance_scope_not_found'});
+  assert.equal(await f.total(),0n);
+ }finally{await f.close();}
+});
+
+test('a saved older month replays without debiting the current month',async()=>{
+ const f=await fixture();try{
+  await f.config.publish(TEST_ALLOWANCES);const id=randomUUID();
+  await f.pool.query(`INSERT INTO billing_allowance_reservations(id,account_id,organisation_id,legal_business_id,venue_id,installation_id,service,operation_id,binding,units,month,revision,state)
+   VALUES($1,$2,$3,$4,$5,$6,'transactional_email',$7,$8,1,'2020-01-01',1,'spent')`,[id,f.accountId,f.scope.organisationId,f.scope.legalBusinessId,f.input.venueId,f.input.installationId,f.input.operationId,f.input.binding]);
+  assert.deepEqual(await f.reserve(),{id,month:'2020-01-01',revision:1,units:'1',state:'spent'});
+  assert.equal((await f.reserve({operationId:randomUUID()})).month,f.today.slice(0,7)+'-01');
+  assert.equal(await f.total("month='2020-01-01'"),1n);assert.equal(await f.total('month=$1',[f.today.slice(0,7)+'-01']),1n);
+ }finally{await f.close();}
+});
+
+async function translationJob(f:Awaited<ReturnType<typeof fixture>>,operationId:string,units=2){
+ const id=randomUUID();
+ await f.pool.query(`INSERT INTO translation_jobs(id,installation_id,venue_id,operation_id,job_sha256,job_bytes,total,provider,model,prompt_version)
+  VALUES($1,$2,$3,$4,$5,1,$6,'openai','gpt-6-luna','translate-all-v1')`,[id,f.input.installationId,f.input.venueId,operationId,'b'.repeat(64),units]);
+ return id;
+}
+
+test('held translation release needs the matching never-started job and refunds once',async()=>{
+ const f=await fixture();try{
+  await f.config.publish(TEST_ALLOWANCES);await set(f,'connected');
+  const held=await f.reserve({service:'content_translation',units:2n});
+  const release=()=>transaction(f.pool,c=>f.methods.releaseUnstartedAllowance(c,held.id));
+  await assert.rejects(release(),{code:'allowance_conflict'});
+  const job=await translationJob(f,f.input.operationId,1);
+  await assert.rejects(release(),{code:'allowance_conflict'});
+  await f.pool.query('UPDATE translation_jobs SET total=2 WHERE id=$1',[job]);
+  assert.deepEqual(await release(),{...held,state:'released'});
+  assert.deepEqual(await release(),{...held,state:'released'});assert.equal(await f.total(),0n);
+  await assert.rejects(f.spend(held.id),{code:'allowance_conflict'});
+ }finally{await f.close();}
+});
+
+test('spent and observed translation attempts retain their debit and first timestamp',async()=>{
+ const f=await fixture();try{
+  await f.config.publish(TEST_ALLOWANCES);await set(f,'connected');
+  const held=await f.reserve({service:'content_translation',units:2n});await translationJob(f,f.input.operationId);
+  const attempt=(at:string)=>transaction(f.pool,c=>f.methods.recordAllowanceAttempt(c,held.id,at));
+  await assert.rejects(attempt('2026-11-01T00:00:00.000Z'),{code:'allowance_conflict'});
+  assert.deepEqual(await f.spend(held.id),{...held,state:'spent'});assert.deepEqual(await f.spend(held.id),{...held,state:'spent'});
+  await assert.rejects(transaction(f.pool,c=>f.methods.releaseUnstartedAllowance(c,held.id)),{code:'allowance_conflict'});
+  await assert.rejects(attempt('invalid'),{code:'invalid_allowance_input'});
+  await attempt('2026-11-01T00:00:00.000Z');await attempt('2026-11-01T00:00:01.000Z');
+  assert.equal((await f.pool.query('SELECT attempted_at FROM billing_allowance_reservations WHERE id=$1',[held.id])).rows[0].attempted_at.toISOString(),'2026-11-01T00:00:00.000Z');
+  assert.equal(await f.total(),2n);
+ }finally{await f.close();}
+});
+
+test('translation release waits for its job before locking the reservation',async()=>{
+ const f=await fixture();let blocker:PoolClient|undefined,pending:Promise<Reservation>|undefined;
+ try{
+  await f.config.publish(TEST_ALLOWANCES);await set(f,'connected');
+  const held=await f.reserve({service:'content_translation',units:2n}),job=await translationJob(f,f.input.operationId);
+  blocker=await f.pool.connect();await blocker.query('BEGIN');await blocker.query('SELECT id FROM translation_jobs WHERE id=$1 FOR UPDATE',[job]);
+  const pid=Number((await blocker.query('SELECT pg_backend_pid() AS pid')).rows[0].pid);
+  pending=transaction(f.peer,c=>f.methods.releaseUnstartedAllowance(c,held.id));
+  const until=performance.now()+5000;let waiting=false;
+  do{waiting=(await f.admin.query("SELECT 1 FROM pg_stat_activity WHERE application_name=$1 AND $2=ANY(pg_blocking_pids(pid))",[f.schema+'_peer',pid])).rowCount===1;if(!waiting)await setImmediate();}while(!waiting&&performance.now()<until);
+  assert.equal(waiting,true,'the release must reach its locked job');
+  await transaction(f.pool,c=>c.query('SELECT id FROM billing_allowance_reservations WHERE id=$1 FOR UPDATE NOWAIT',[held.id]));
+  await blocker.query('ROLLBACK');assert.equal((await pending).state,'released');
+ }finally{if(blocker){await blocker.query('ROLLBACK');blocker.release();}await pending;await f.close();}
+});
+
+test('SQL preserves reservation identity ownership whole units and monotone state',async()=>{
+ const f=await fixture();try{
+  await f.config.publish(TEST_ALLOWANCES);const held=await f.reserve();
+  const insert='INSERT INTO billing_allowance_reservations(id,account_id,organisation_id,legal_business_id,venue_id,installation_id,service,operation_id,binding,units,month,revision,state) ';
+  const select='SELECT gen_random_uuid(),account_id,organisation_id,legal_business_id,venue_id,installation_id,service,gen_random_uuid(),binding,units,month,revision,state FROM billing_allowance_reservations WHERE id=$1';
+  await assert.rejects(f.pool.query(insert+select.replace('gen_random_uuid(),binding','operation_id,binding'),[held.id]),{code:'23505'});
+  for(const quantity of ['0','-1','1.5','9223372036854775808'])await assert.rejects(f.pool.query(insert+select.replace('binding,units,month',`binding,${quantity},month`),[held.id]),{code:'23514'});
+  await assert.rejects(f.pool.query(insert+select.replace('organisation_id,legal_business_id,venue_id,installation_id,service,gen_random_uuid()',`organisation_id,legal_business_id,'${f.foreignVenue}'::uuid,installation_id,service,gen_random_uuid()`),[held.id]),{code:'23503'});
+  for(const sql of ["UPDATE billing_allowance_reservations SET binding='other'","UPDATE billing_allowance_reservations SET month='2020-01-01'","DELETE FROM billing_allowance_reservations"])await assert.rejects(f.pool.query(sql),{code:'55000'});
+  await f.spend(held.id);
+  for(const state of ['held','released'])await assert.rejects(f.pool.query('UPDATE billing_allowance_reservations SET state=$1',[state]),{code:'55000'});
+  await assert.rejects(f.pool.query("UPDATE billing_allowance_reservations SET state='invalid'"),{code:'23514'});
+ }finally{await f.close();}
+});
