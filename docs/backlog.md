@@ -3705,7 +3705,7 @@ reproduce a complete upstream LIST followed by a downstream close, including
 equal producer/observer byte totals but different outcomes. The session remains
 refused before and after a validated stop acknowledgement. These controlled
 exchanges do not establish the historical cancellation cause or change which
-shutdown evidence is accepted. Stop refusals also retain up to sixteen active
+shutdown evidence is accepted. Stop refusals after a validated acknowledgement also retain up to sixteen active
 transfer snapshots from immediately before the signal helper, with the total
 pending count and a truncation flag. A failed diagnostic read leaves an
 unavailable marker and shutdown continues. A generated writer with a real HTTP

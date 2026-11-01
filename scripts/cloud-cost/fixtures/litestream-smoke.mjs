@@ -185,13 +185,15 @@ async function smoke() {
         const frame = /\/litestream-smoke\.mjs:(\d+):(\d+)\)?$/.exec(line);
         return frame ? [`    at litestream-smoke.mjs:${frame[1]}:${frame[2]}`] : [];
       })].join('\n') : undefined;
+      let pendingTransfers;
+      try { pendingTransfers = replication.transport?.pendingTransfers?.(); } catch {}
       try { console.error(JSON.stringify({ kind: 'litestream-stop', status: 'rejected', step: stopStep,
         error: { name: 'Error', message: known ? message : 'Unclassified Litestream stop error', ...(typeof stack === 'string' ? { stack } : {}) },
         ...(stopOutcome ? { process: stopOutcome } : {}),
         ...(beforeSignal ? { beforeSignal } : {}),
         ...(replication.audit.checkpoint ? { audit: replication.audit.checkpoint() } : {}),
         timing: { elapsedMs: stopElapsed(), controlMs, exitMs },
-        ...(replication.transport?.pendingTransfers ? { pendingTransfers: replication.transport.pendingTransfers() } : {}),
+        ...(pendingTransfers ? { pendingTransfers } : {}),
         ...(replication.transport?.checkpoint ? { diagnostic: replication.transport.checkpoint() } : {}) })); } catch {}
       throw error;
     } finally { clearTimeout(drainTimer); control?.destroy(); }

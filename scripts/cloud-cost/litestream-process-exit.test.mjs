@@ -58,8 +58,11 @@ function run(holdReply) {
       }});`,
     '/code/meter.mjs': `export {createMeter,createMeteringProxy,classifyStorageOperation,correlatedStorageAttempt} from ${JSON.stringify(meter)};
       export const instrumentStorageClient=()=>{};`,
-    '/code/litestream.mjs': `import {createLitestreamTransport as open} from ${JSON.stringify(actual)};
+    '/code/litestream.mjs': `import {createLitestreamTransport as open,createLitestreamAfterStop as tracker} from ${JSON.stringify(actual)};
       export * from ${JSON.stringify(actual)};
+      export const createLitestreamAfterStop=options=>{const session=tracker(options);return {...session,acknowledgeStop:input=>{
+        session.acknowledgeStop(input);console.error(JSON.stringify({kind:'stop-acknowledged'}));
+      }};};
       export const createLitestreamTransport=async options=>{
         if(options.phase==='restore')return {url:options.target,whenIdle:async action=>action(),snapshot:()=>({}),close:async()=>{}};
         const transport=await open(options);
@@ -156,6 +159,8 @@ for (const held of [true, false]) test(`real writer exit before final smoke rest
     const firstSnapshot = records.findIndex(row => row.kind === 'transfer-snapshot');
     assert.ok(firstSnapshot >= 0 && firstSnapshot < records.findIndex(row => row.kind === 'writer-signal'),
       'capture pending transfers before the signal call, while the real writer is still running');
+    const acknowledged = records.findIndex(row => row.kind === 'stop-acknowledged');
+    assert.ok(acknowledged >= 0 && acknowledged < firstSnapshot, 'capture after the stop reply is actually validated');
     assert.equal(records[firstSnapshot].writerClosed, false);
     assert.ok(stop.beforeSignal, 'retain the transport state before signalling the writer');
     assert.equal(stop.beforeSignal.pending, 1, 'retain active transfers before the real writer closes');
