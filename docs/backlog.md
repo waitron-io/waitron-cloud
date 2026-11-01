@@ -3682,9 +3682,11 @@ that authentication refusals stop immediately.
 
 ### Installation renewal accepted during owner revocation
 
-**Open; historical cause unknown.** Capture a diagnostic recurrence and qualify
-the missing caller-helper omission check, preserving the existing security checks
-and deadlines. See [the observer investigation and remaining work](backlog/installation-renewal-revocation.md).
+A controlled Linux scheduler pause reproduces the accepted renewal after an
+observed revocation wait. The test now queues renewal behind revocation before
+releasing the held installation. Existing security checks and deadlines remain;
+production locking is unchanged. The historical scheduling was not captured.
+See [the reproduction and qualification](backlog/installation-renewal-revocation.md).
 
 ### Cost conformance setup timeout (D131)
 

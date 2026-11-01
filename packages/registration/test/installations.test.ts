@@ -93,7 +93,7 @@ async function waitForInstallationLock(blockerPid:number){
     const result=await installationWaiters(blockerPid);if(result.rowCount)return result.rows;
     await new Promise(resolve=>setTimeout(resolve,10));
   }
-  throw new Error('revocation did not reach the held installation lock');
+  throw new Error('installation request did not reach the held installation lock');
 }
 test('installation lock observation excludes revocation waiting on its session',async t=>{
   const blocker=await db.pool.connect();let revoke:Promise<unknown>|undefined;
@@ -118,15 +118,23 @@ test('installation lock observation excludes revocation waiting on its session',
 });
 test('owner revocation serializes with renewal, persists and preserves the other venue and services',async t=>{
   const proof=request();await store.execute('renew',proof);
-  const blocker=await db.pool.connect();await blocker.query('BEGIN');await blocker.query('SELECT 1 FROM installations WHERE id=$1 FOR UPDATE',[a.installationId]);
-  const revoke=other.revokeWithSession(session.token,session.csrfToken,a.installationId);
+  const blocker=await db.pool.connect();let released=false,revoke:Promise<unknown>|undefined,pending:Promise<void>|undefined;
+  t.after(async()=>{
+    try{if(!released)await blocker.query('ROLLBACK');}
+    finally{if(!released)blocker.release();await Promise.allSettled([revoke,pending]);}
+  });
+  await blocker.query('BEGIN');await blocker.query('SELECT 1 FROM installations WHERE id=$1 FOR UPDATE',[a.installationId]);
+  revoke=other.revokeWithSession(session.token,session.csrfToken,a.installationId);void revoke.catch(()=>{});
   const blockerPid=(await blocker.query('SELECT pg_backend_pid() AS pid')).rows[0].pid;
-  // A session wait does not establish which request reaches the installation first.
-  t.diagnostic(JSON.stringify({step:'before competing renewal',waiting:await waitForInstallationLock(blockerPid)}));
-  const pending=assert.rejects(store.execute('renew',request()).then(result=>{
+  const waiting=await waitForInstallationLock(blockerPid);
+  t.diagnostic(JSON.stringify({step:'before competing renewal',waiting}));
+  pending=assert.rejects(store.execute('renew',request()).then(result=>{
     t.diagnostic(JSON.stringify({step:'renewal accepted',revokedAt:result.revokedAt,leaseExpiresAt:result.leaseExpiresAt}));return result;
   }),/revoked/);
-  await blocker.query('COMMIT');blocker.release();await revoke;await pending;
+  void pending.catch(()=>{});
+  // Queue both requests before release: a new arrival can overtake a waking row-lock waiter.
+  t.diagnostic(JSON.stringify({step:'competing renewal queued',waiting:await waitForInstallationLock(waiting[0].pid)}));
+  await blocker.query('COMMIT');blocker.release();released=true;await revoke;await pending;
   const audit=(await db.pool.query('SELECT * FROM installation_revocations WHERE installation_id=$1',[a.installationId])).rows[0];assert.equal(audit.actor_kind,'account');assert.equal(audit.actor_id,owner.accountId);assert.equal(audit.reason,'user_requested');assert.ok(audit.result.revokedAt);
   const security=(await db.pool.query("SELECT * FROM security_audit_events WHERE event_type='installation.revoked'")).rows[0];assert.equal(security.actor_kind,'account');assert.equal(security.actor_id,owner.accountId);assert.equal(security.subject_id,a.installationId);assert.equal(security.source_id,a.installationId);
   await assert.rejects(store.execute('renew',proof),/revoked/);await assert.rejects(config(a),/revoked/);
