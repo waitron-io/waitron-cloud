@@ -55,6 +55,12 @@ function command(args, input = '', phase = args[0], env = {}) {
 }
 const lines = text => text.split(/\s+/).filter(Boolean);
 
+export async function runTestCloudCombined({image, waitronImage, protectedContainerIds = []} = {}) {
+  return runTestCloudClients({image, waitronImage, protectedContainerIds,
+    paidContinuousRecovery: true, freeRemote: true, paidRemote: true,
+    measureCapacity: true, schemaRollback: true});
+}
+
 export function checkProtectedContainers(before, after, ids) {
   for (const id of ids) {
     const row = before.find(value => value.startsWith(id + ' '));
@@ -247,6 +253,7 @@ export async function runTestCloudClients({image, waitronImage, protectedContain
             '--label', 'cloud.integration.owner=' + runId, '--network', network, '--memory', '128m', '--memory-swap', '128m',
             '--read-only', '--cap-drop', 'ALL', '--security-opt', 'no-new-privileges', '--pids-limit', '128',
             '--tmpfs', '/tmp:rw,nosuid,nodev,size=96m,mode=1777', '--env', 'CLOUD_TEST_SERVICE_PLANS=1', '--env', 'CLOUD_VERIFIER_IMAGE=' + waitronImage,
+            '--env', 'CLOUD_INTEGRATION_POINT_ID=' + captured.pointId,
             '--mount', 'type=volume,src=' + configVolume + ',dst=/run/local-stack,readonly',
             '--mount', 'type=volume,src=' + stateVolume + ',dst=/run/backup-verifier',
             '--mount', 'type=bind,src=/var/run/docker.sock,dst=/var/run/docker.sock',

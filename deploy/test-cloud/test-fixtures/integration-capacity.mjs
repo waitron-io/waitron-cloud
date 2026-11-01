@@ -76,21 +76,38 @@ export async function measureCapacityWindow({observe, verify, stop, now = () => 
   return {samples, value};
 }
 
+export async function inspectCapacityVerifier(docker, id) {
+  let raw;
+  try {raw = await docker(['inspect', id], '', 'capacity-verifier-inspect');}
+  catch (error) {
+    // The controller removes completed children while the host samples them.
+    if (await docker(['ps', '-aq', '--no-trunc', '--filter', 'id=' + id], '', 'capacity-verifier-presence')) throw error;
+    return;
+  }
+  const rows = JSON.parse(raw);
+  assert.ok(Array.isArray(rows) && rows.length === 1 && rows[0]?.Id === id, 'integration.capacity_verifier_identity');
+  return rows[0];
+}
+
 export async function observeCapacity({docker, project, runId, verifierScope, waitronImage, workerId,
   protectedUnchanged, procRoot = '/proc', cgroupRoot = '/sys/fs/cgroup', meminfo = '/proc/meminfo'}) {
   const ids = text => text.split(/\s+/).filter(Boolean);
   const list = filter => docker(['ps', '-aq', '--no-trunc', '--filter', filter]).then(ids);
-  const inspect = async values => values.length ? JSON.parse(await docker(['inspect', ...values])) : [];
+  const inspect = async (values, phase = 'capacity-cloud-inspect') => values.length ? JSON.parse(await docker(['inspect', ...values], '', phase)) : [];
   const cloud = await inspect(await list('label=com.docker.compose.project=' + project));
   assert.ok(cloud.length > 0);
   for (const row of cloud) assert.equal(row.Config.Labels['com.docker.compose.project'], project);
-  const clients = await inspect(await list('label=cloud.integration.owner=' + runId));
+  const clients = await inspect(await list('label=cloud.integration.owner=' + runId), 'capacity-clients-inspect');
   for (const row of clients) assert.equal(row.Config.Labels['cloud.integration.owner'], runId);
   if (workerId && !cloud.some(row => row.Id === workerId)) {
     const [worker] = await inspect([workerId]);
     assert.equal(worker.Config.Labels['com.docker.compose.project'], project); cloud.push(worker);
   }
-  const children = verifierScope ? await inspect(await list('label=cloud.backup-verifier.scope=' + verifierScope)) : [];
+  const children = [];
+  if (verifierScope) for (const id of await list('label=cloud.backup-verifier.scope=' + verifierScope)) {
+    const child = await inspectCapacityVerifier(docker, id);
+    if (child) children.push(child);
+  }
   for (const row of children) {
     assert.equal(row.Image, waitronImage);
     assert.equal(row.Config.Labels['cloud.backup-verifier.owner'], 'waitron-cloud-test-backup');

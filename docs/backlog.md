@@ -829,6 +829,16 @@ implementation or production evidence.
   and test-box deployment remain open; plan enforcement stays off. PR7 now has a
   strict receipt reader with synthetic rejection tests for client/refusal evidence,
   protected container IDs, resource sampling, owned cleanup and rollback identity.
+  A [combined journey](test-cloud.md#run-the-journeys-in-one-project) now requires
+  recovery, remote withdrawal, measured capacity and matching-set rollback in one
+  disposable project. It passes on the isolated Linux box in 385 seconds without
+  skips, preserving both pairings through recovery and four-volume rollback. The
+  worker fixture stops taking jobs after the selected archive is admitted; sampling tolerates a removed
+  verifier only after confirming absence. Existing child-removal and ownership
+  assertions remain, and complete release qualification stays open.
+  One earlier generic Docker inspection refusal remains unattributed. Capacity
+  inspection now names the service or verifier phase; retain the next labelled
+  failure to identify its cause. The passing combined run does not explain it.
   The [client proof](test-cloud.md#check-real-free-and-paid-clients) now creates both
   accounts through HTTPS signup and captured Mailpit links, pairs two separate
   pinned demo venues, observes successful signed renewal/configuration and preserves

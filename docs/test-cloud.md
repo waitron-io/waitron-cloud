@@ -1024,3 +1024,34 @@ compatibility with this Cloud image, while `completeIntegration` and
 `shippingQualification` remain false. You still need the combined receipt,
 published-release upgrade checks and deployment qualification under the unchanged
 20 GiB start and 15 GiB running disk limits. Keep plan enforcement off.
+
+## Run the journeys in one project
+
+Separate successful runs cannot show that recovery, remote withdrawal and rollback
+leave the same pairings usable. With the immutable Cloud and Waitron image variables
+from the earlier commands, run:
+
+```sh
+node --test scripts/test-cloud-combined.test.mjs
+```
+
+This command requires continuous recovery, independent snapshot fallback, free remote
+refusals, paid remote withdrawal, settled and active-verifier capacity, and matching
+database/configuration/storage rollback in one disposable project. Its ten-minute
+limit covers all those stages; the separate journeys keep their existing limits.
+
+Another queued archive can become eligible while the selected archive is being
+verified. The fixture runs ordinary one-job worker commands until the selected
+archive is admitted, then waits for shutdown without taking another job. It still
+requires every verifier child to be absent before shutdown. Capacity inspection
+accepts a child removed between listing and inspection only after confirming that
+its exact ID is absent. A present child, an unavailable Docker daemon or a malformed
+inspection still refuses the measurement.
+
+The combined journey passes on the isolated Linux box in 385 seconds without skips.
+It measures 62.2 settled seconds, observes the admitted verifier, withdraws remote
+access in 5.8 seconds and completes fresh exchanges from both original pairings after
+restoring four volumes. Available memory stays above 3,666 MiB and free disk above
+12.65 GiB under the campaign-only disk policy. Its output keeps
+`completeIntegration: false`; the strict complete receipt, published-release upgrade
+and deployment checks remain open. Keep plan enforcement off.
