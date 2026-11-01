@@ -112,7 +112,7 @@ process IDs or account identifiers enter this report.
 The snapshot has a separate 250 ms timer budget covering connection setup and the
 query. A failed connection or unanswered database produces an unavailable marker
 and closes that connection. A completed snapshot also closes its socket without
-waiting for a disconnect acknowledgement. A failed reporter retains the original test error.
+waiting for a disconnect acknowledgement. A failed reporter or a database transport error retains the original test error.
 Scheduling and connection teardown can finish later than the timer. The original
 five-second page wait and every existing assertion remain.
 

@@ -3,6 +3,8 @@ import {Client,type Pool} from 'pg';
 // Use a separate connection so a stalled application pool cannot hide its own waiters.
 export async function failConsentDatabaseWait(pool:Pool,schema:string,error:unknown,report:(details:string)=>void):Promise<never>{
  const client=new Client({...pool.options,application_name:'consent_failure_evidence',connectionTimeoutMillis:250});
+ // PostgreSQL reports transport failure through both query rejection and client events.
+ client.on('error',()=>{});
  let timer:ReturnType<typeof setTimeout>|undefined;
  let snapshot:object={unavailable:true};
  try{

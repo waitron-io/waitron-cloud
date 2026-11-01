@@ -118,3 +118,22 @@ test('a completed snapshot does not wait for the database peer to acknowledge di
   try{await failed;}finally{await pool.end();await new Promise<void>(resolve=>server.close(()=>resolve()));}
  }
 });
+
+for(const mode of ['fin','reset'] as const)test(`a database peer ${mode} during the query preserves only the consent failure`,async()=>{
+ const sockets=new Set<Socket>();
+ const server=createServer(socket=>{
+  sockets.add(socket);let startup=true;socket.on('error',()=>{});
+  socket.on('data',bytes=>{
+   if(startup){startup=false;socket.write(Buffer.from([82,0,0,0,8,0,0,0,0,90,0,0,0,5,73]));}
+   else if(bytes[0]===81||bytes[0]===80){if(mode==='fin')socket.end();else socket.resetAndDestroy();}
+  });
+  socket.on('close',()=>sockets.delete(socket));
+ });
+ server.listen(0,'127.0.0.1');await once(server,'listening');
+ const pool=new Pool({host:'127.0.0.1',port:(server.address() as {port:number}).port,user:'test',database:'test',ssl:false});
+ const original=new Error('original'),reports:string[]=[];
+ try{
+  await assert.rejects(evidence.failConsentDatabaseWait(pool,'schema',original,value=>reports.push(value)),error=>error===original);
+  assert.deepEqual(reports.map(value=>JSON.parse(value)),[{unavailable:true}]);
+ }finally{await pool.end();for(const socket of sockets)socket.destroy();await new Promise<void>(resolve=>server.close(()=>resolve()));}
+});
