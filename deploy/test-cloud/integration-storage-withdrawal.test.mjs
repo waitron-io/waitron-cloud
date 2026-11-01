@@ -49,3 +49,21 @@ for (const startedAt of [undefined, '1000', -1, 1001, NaN]) test('withdrawal ref
   await assert.rejects(waitForStorageWithdrawal({startedAt, now: () => 1000,
     put: async () => {throw denied();}, get: async () => {throw denied();}}), /integration.storage_commit_time/);
 });
+
+for (const status of [401, 404, 500]) for (const stage of ['put', 'get']) {
+  test(stage+' status '+status+' cannot stand in for the provider’s explicit permission refusal', async () => {
+    const {waitForStorageWithdrawal} = await load();
+    const failure = Object.assign(Error('other provider status'), {$metadata: {httpStatusCode: status}});
+    await assert.rejects(waitForStorageWithdrawal({startedAt: 1000, now: () => 1000,
+      put: async () => {throw stage === 'put' ? failure : denied();},
+      get: async () => {throw failure;}}), error => error === failure);
+  });
+}
+
+test('a delayed provider reply after the withdrawal deadline cannot produce accepted evidence', async () => {
+  const {waitForStorageWithdrawal} = await load();
+  let clock = 1000;
+  await assert.rejects(waitForStorageWithdrawal({startedAt: 1000, now: () => clock,
+    put: async () => {clock = 31000; throw denied();},
+    get: async () => {throw denied();}}), /integration.storage_withdrawal_required/);
+});
