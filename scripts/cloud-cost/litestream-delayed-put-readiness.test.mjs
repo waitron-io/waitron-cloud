@@ -72,7 +72,7 @@ for (const releaseFinalFirst of [false, true]) test(`readiness requires an older
   const done = new AsyncFunction('createServer','request','once','fetch','onStop','cleanup','setTimeout','clearTimeout','expose',generated)(
     createServer,request,once,fetch,()=>{ stopped = true; },cleanup,timer,()=>{},value=>{ endpoint = value; });
   const result = done.then(value=>({value}),error=>({error}));
-  const requests = [];
+  const requests = []; let failure;
   try {
     await waitForHeld(1); held[0].action(); await readiness.promise;
     requests.push(fetch(endpoint+'/private/ltx/0001/0000000000000001-0000000000000001.ltx',{method:'PUT',body:'old'}));
@@ -85,12 +85,15 @@ for (const releaseFinalFirst of [false, true]) test(`readiness requires an older
     assert.equal(stopped, !releaseFinalFirst, 'readiness must still have an outstanding new-transaction reply');
     if (!releaseFinalFirst) { held[2].action(); await requests[1]; }
     else deadline.action();
+  } catch (error) {
+    failure = error; throw error;
   } finally {
     for (const entry of held) { try { entry.action(); } catch {} }
+    deadline?.action();
     cleanup.resolve();
     const settled = await result;
     await Promise.allSettled(requests);
-    if (settled.error && !(releaseFinalFirst && /Final synthetic PUT did not commit/.test(settled.error.message))) throw settled.error;
+    if (!failure && settled.error && !(releaseFinalFirst && /Final synthetic PUT did not commit/.test(settled.error.message))) throw settled.error;
   }
 });
 
