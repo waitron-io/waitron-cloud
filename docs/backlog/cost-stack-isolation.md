@@ -89,6 +89,44 @@ for the native controls, including a real child exit.
 
 Keep the admission, cleanup and private-output assertions and both existing
 timers. Attribute any new failure from this evidence before changing the
-controller or signal handling. Faithful local container reproduction remains
-blocked while Docker is down until 3 November; native controls alone do not
-establish the historical Linux cause.
+controller or signal handling. Use the shared Linux test box through the
+campaign's `test-box-run.sh` helper while the Mac's Docker is off.
+
+#### Linux reproduction on 1 November 2026
+
+At Cloud commit
+[`7e1b76c0`](https://github.com/waitron-io/waitron-cloud/commit/7e1b76c0cc876f2099fde0dcdd5c2b13de95a49c),
+both unchanged signal checks pass: SIGINT in 6.35 seconds and SIGTERM in
+5.22 seconds. Run this selection on the test box:
+
+```sh
+node scripts/cloud-cost/conformance.mjs \
+  --only isolated-replay-conformance.test.mjs \
+  --pattern '^localCommandWaitsForOwnedCleanupOn_'
+```
+
+The current third conformance group also passes all 25 cases in its original
+order, including the preceding genuine-writer check. SIGINT takes 5.28 seconds
+and SIGTERM 5.27 seconds; the complete group takes 194.70 seconds. Run it with:
+
+```sh
+node scripts/cloud-cost/conformance.mjs \
+  --only isolated-replay-conformance.test.mjs \
+  --pattern '^(?!(?:^isolatedController|^(?:isolatedHost|streamResultReporter)))' \
+  --skip-pattern '^isolatedController|^(?:isolatedHost|streamResultReporter)'
+```
+
+The controller, local execution helper, command reader and command entry point
+are byte-identical to historical head `d94391a341a6d8fb96ca74aa548e04a4eaf73dde`,
+checked with `git diff --exit-code d94391a341a6d8fb96ca74aa548e04a4eaf73dde 7e1b76c0 -- scripts/cloud-cost/isolated-replay.mjs scripts/cloud-cost/local.mjs scripts/cloud-cost/run-local.mjs scripts/cloud-cost/cli.mjs`.
+The current fixture includes later failure reporting. All original signal-case
+assertions, the 10 ms observer interval, 20-second forced collection and
+30-second synthetic writer hold remain. The native diagnostic suite passes
+eighteen checks, including real child exit and hangup controls.
+
+These observations do not reproduce the historical 31.69-second failure or
+qualify its complete environment. Keep the cause open and collect a labelled
+recurrence. Read `local-command-refusal` first: `childClosed`, `status`, `signal`
+and `timerFired` distinguish the recorded child outcome from forced collection;
+`workerStarted` and `lastPreparation` locate its recorded progress. These are
+directions for investigation, not an explanation of the historical event.

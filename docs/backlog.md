@@ -4092,8 +4092,9 @@ See [the boundaries and remaining work](backlog/backup-recovery-http.md#delayed-
 
 ## Cost-stack isolation command refusal (D152)
 
-**Open.** Attribute any new signal-check failure from the retained child evidence;
-local container reproduction waits for Docker. See [the diagnostic boundary](backlog/cost-stack-isolation.md#local-signal-check-stopped-before-worker-admission-d502).
+**Open.** Both unchanged signal checks pass on the shared Linux test box, without
+reproducing the historical missed admission. Attribute a new failure from the
+retained child evidence before changing signal handling. See [the diagnostic boundary and reproduction results](backlog/cost-stack-isolation.md#local-signal-check-stopped-before-worker-admission-d502).
 
 Read the [isolation and deadline investigation](backlog/cost-stack-isolation.md)
 before changing the fixture guards. Historical attribution and Linux qualification
