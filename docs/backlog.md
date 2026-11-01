@@ -4691,9 +4691,11 @@ See [the boundaries and remaining work](backlog/joint-fiscal-fixture-setup.md#d4
 
 ## Cost-mail reconciliation refusal observed during D262
 
-The historical mail measurement-close refusal remains unexplained. Use a labelled
-recurrence to reproduce and fix its cause while preserving measurement guards,
-accounting and deadlines. See [the investigation and qualification limits](backlog/cost-mail-reconciliation.md).
+The historical mail measurement-close refusal remains unexplained. Both unchanged
+PostgreSQL/Mailpit cases pass on the Linux test box, alongside all 20 mail controls
+on Linux and macOS. These results do not identify or repair the old failure.
+Use the next labelled close-error diagnostic to reproduce its cause while preserving
+measurement guards, accounting and deadlines. See [the investigation and qualification limits](backlog/cost-mail-reconciliation.md).
 
 ## Remote hostname browser-test request observation (D315)
 
