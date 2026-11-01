@@ -633,11 +633,12 @@ attempt and target. Deliberately wrong point, attempt and digest claims refuse.
 The test closes the operation, restarts the original source and checks its saved
 identity. It records neither restored status, replacement nor activation.
 
-This check qualifies the download and refusal boundary. You still need successful
-recovery with separately prepared fiscal authority, stream recovery and independent
-snapshot fallback, remote isolation and withdrawal, complete capacity checks,
-rollback and the pinned Alpine release. The complete integration reader continues
-to reject this partial result, and deployment plan enforcement stays off.
+This check qualifies the download and refusal boundary. Use the extension below
+to test recovery with separately prepared fiscal authority. Stream recovery and
+independent snapshot fallback, remote isolation and withdrawal, complete capacity
+checks, rollback and the pinned Alpine release remain open. The complete
+integration reader continues to reject this partial result, and deployment plan
+enforcement stays off.
 
 The recovery-boundary test passes on the isolated Linux box without skips in
 146.5 seconds. Its 35 resource samples stay above 3,462 MiB available memory and
@@ -645,3 +646,40 @@ The recovery-boundary test passes on the isolated Linux box without skips in
 All 18 native recovery-evidence checks pass; removing each of their 17 guards
 fails its tests in an installed disposable checkout. These measurements still
 do not qualify the full settled or active-verifier capacity budget.
+
+To prove ordinary recovery of the same paired snapshot with separate source
+authority, run:
+
+```sh
+node --test scripts/test-cloud-paid-authorised-recovery.test.mjs
+```
+
+This extension creates the source's membership identity and recovery key through
+Waitron's normal helpers before capture. The verifier then checks that actual
+archive. After owner approval, the compiled version 2 client delivers it privately
+inside the target, before the deliberate fiscal refusal. Archive bytes and keys
+stay inside the disposable containers.
+
+The ordinary restore fixture reads the source's installation codes from the
+delivered database and prepares recovery for those exact bytes. It uses the
+pinned source's generated release stamp and a local clock observation. It first
+proves that the source's hour is refused, then advances only the isolated test
+process's clock to the following hour. This is a simulated later-hour recovery;
+your host and the source server retain their real clocks.
+
+The wrong source recovery key and a restore without preparation must still refuse before
+placement. The prepared restore must succeed, pass SQLite's integrity check and
+preserve the source's sales, lines, tenders, settlements, fiscal records and
+submissions. This uses a fresh demo venue; it does not qualify recovery of an
+existing trading history. The restored node and venue must match the paired
+source. No server starts, no Cloud credentials are restored and Cloud receives no
+restored report or replacement request. The original source restarts with its
+saved identity after the recovery operation closes.
+
+The complete Linux journey passes without skips in 168.6 seconds. Its 39 resource
+samples stay above 3,330 MiB available memory and 12.40 GiB free disk, without a
+sampled out-of-memory kill. Sixteen native evidence checks pass and catch all 15
+deliberate evidence-guard omissions in an installed disposable checkout. These
+measurements do not qualify the full settled or active-verifier capacity budget.
+Keep deployment plan enforcement off until the remaining integration and release
+checks pass.

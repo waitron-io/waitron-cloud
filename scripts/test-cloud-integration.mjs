@@ -8,6 +8,7 @@ import {randomUUID} from 'node:crypto';
 import {request} from 'node:https';
 import {setTimeout as delay} from 'node:timers/promises';
 import {verifierIdentityScope, checkVerifierChild} from '../deploy/test-cloud/test-fixtures/integration-verifier-ownership.mjs';
+import {inspectIntegrationAuthorisedRecovery} from '../deploy/test-cloud/test-fixtures/integration-recovery-evidence.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const origin = 'https://waitron.local:3000', revision = 'ec91a9e34d2daba146f4ee61850ea4136ad5cfb7';
@@ -54,7 +55,8 @@ export function checkProtectedContainers(before, after, ids) {
   return true;
 }
 
-export async function runTestCloudClients({image, waitronImage, protectedContainerIds = [], paidSnapshot = false, paidVerification = false, paidRecovery = false} = {}) {
+export async function runTestCloudClients({image, waitronImage, protectedContainerIds = [], paidSnapshot = false, paidVerification = false, paidRecovery = false, paidAuthorisedRecovery = false} = {}) {
+  paidRecovery ||= paidAuthorisedRecovery;
   if (!digest.test(image) || !digest.test(waitronImage)) throw Error('integration.image_invalid');
   const runId = randomUUID(), project = 'waitron-cloud-test-integration-' + runId.slice(0, 8);
   const directory = await mkdtemp(join(tmpdir(), 'cloud-integration-run-'));
@@ -201,6 +203,7 @@ export async function runTestCloudClients({image, waitronImage, protectedContain
           JSON.stringify({phase, organisationId, installationId: evidence.registration.installationId, ...extra}), 'snapshot-' + phase);
         await accountPhase('provision-snapshot');
         await control(id, 'refresh');
+        const recoveryAuthority = paidAuthorisedRecovery ? await control(id, 'recovery-authority') : undefined;
         if (paidVerification || paidRecovery) assert.deepEqual(await control(id, 'verification-state'), {testCertificateInstalled: true});
         const captured = await control(id, 'snapshot-publish');
         for (const [name, extra] of [
@@ -257,7 +260,10 @@ export async function runTestCloudClients({image, waitronImage, protectedContain
           const target = await docker(['create', '--pull=never', '--label', 'cloud.integration.owner=' + runId,
             '--network', network, '--memory', '1024m', '--memory-swap', '1024m', '--read-only', '--cap-drop', 'ALL',
             '--security-opt', 'no-new-privileges', '--user', '1000:1000', '--pids-limit', '128',
-            '--tmpfs', '/tmp:rw,noexec,nosuid,nodev,size=256m,mode=1777', '--entrypoint', 'node', recoveryImage,
+            '--tmpfs', '/tmp:rw,noexec,nosuid,nodev,size=256m,mode=1777',
+            ...(paidAuthorisedRecovery ? ['--tmpfs', '/waitron/apps/server/node_modules/.vite-temp:rw,nosuid,nodev,size=16m,mode=1777',
+              '--tmpfs', '/waitron/apps/server/node_modules/.vite:rw,nosuid,nodev,size=32m,mode=1777'] : []),
+            '--entrypoint', 'node', recoveryImage,
             '-e', 'setInterval(()=>{},1000)'], '', 'recovery-create');
           owned.push(target); record('container', target); await docker(['start', target]);
           const targetPhase = async (phase, extra = {}) => parseIntegrationJson(await docker(['exec', '-i', target,
@@ -284,10 +290,43 @@ export async function runTestCloudClients({image, waitronImage, protectedContain
           assert.equal(delivered.sha256, captured.sha256); assert.equal(delivered.bytes, captured.bytes);
           const refusals = await targetPhase('delivery-refusals', selected);
           assert.deepEqual(refusals, {alternateTargetRefused: true, damagedArchiveRefused: true, placementCalls: 0, restoredReports: 0, stateUnchanged: true});
+          if (paidAuthorisedRecovery) {
+            assert.equal(recoveryAuthority.sourceNodeId, captured.sourceNodeId);
+            assert.equal(recoveryAuthority.localVenueId, evidence.localVenueId);
+            // Archive bytes and both keys stay inside the disposable target; the host receives measurements only.
+            const delivery = parseIntegrationJson(await docker(['exec', '-i', target, 'node', '--input-type=module', '-e', `
+              import assert from 'node:assert/strict';import {spawnSync} from 'node:child_process';import {writeFileSync} from 'node:fs';
+              let s='';for await(const b of process.stdin){s+=b;assert(s.length<16384);}const input=JSON.parse(s);
+              const child=spawnSync(process.execPath,['/waitron/apps/server/dist/cloud-joint-proof.js'],{
+                input:JSON.stringify({phase:'read',...input.selected}),encoding:'utf8',timeout:30000,maxBuffer:8*1024*1024});
+              assert.equal(child.status,0,'fixture.private_read_failed');const value=JSON.parse(child.stdout.trim());
+              writeFileSync('/tmp/cloud-integration-authorised-input.json',JSON.stringify({delivery:value.privateDelivery,
+                authority:input.authority,sha256:input.selected.digest,bytes:input.selected.bytes}),{mode:0o600});
+              console.log(JSON.stringify({independentDigest:value.independentDigest,prePlacement:value.prePlacement}));
+            `], JSON.stringify({selected, authority: recoveryAuthority}), 'authorised-private-delivery'));
+            assert.equal(delivery.independentDigest, true); assert.equal(delivery.prePlacement, true);
+          }
           const refusal = await targetPhase('restore-refusal', selected);
           assert.equal(refusal.ordinaryRestore, 'FISCAL_RESTORE'); assert.equal(refusal.activation, 'not_attempted');
           assert.equal(refusal.routeMoved, false); assert.equal(refusal.reportedRestored, false);
           assert.equal(await docker(['inspect', '--format', '{{.State.Running}}', id]), 'false');
+          if (paidAuthorisedRecovery) {
+            const checked = parseIntegrationJson(await docker(['exec', '--workdir', '/waitron/apps/server', target,
+              'node', '--input-type=module', '-e', `
+                import {spawnSync} from 'node:child_process';import {readFileSync} from 'node:fs';
+                const input=JSON.parse(readFileSync('/tmp/cloud-integration-authorised-input.json','utf8'));
+                const child=spawnSync('pnpm',['exec','vitest','run','src/cloud-paired-authorised-recovery.test.ts','--maxWorkers=1'],{encoding:'utf8',timeout:100000,maxBuffer:2*1024*1024});
+                let output=(child.stdout??'')+'\\n'+(child.stderr??'');
+                for(const secret of [input.authority.secret,input.delivery.recoveryKey,input.delivery.archive])output=output.replaceAll(secret,'[redacted]');
+                const matches=[...output.matchAll(/CLOUD_PAIRED_AUTHORISED_RECOVERY=(\\{[^\\n]+)$/gm)];
+                console.log(JSON.stringify({exit:child.status,report:matches.length===1?JSON.parse(matches[0][1]):null,
+                  diagnostic:child.status===0?null:output.slice(-6000)}));
+              `], '', 'authorised-ordinary-restore'));
+            assert.equal(checked.exit, 0, 'integration.authorised_restore_failed:' + checked.diagnostic);
+            publishedSnapshot.authorisedRecovery = inspectIntegrationAuthorisedRecovery(checked.report,
+              {sha256: captured.sha256, bytes: captured.bytes, sourceNodeId: captured.sourceNodeId, localVenueId: evidence.localVenueId});
+            assert.equal(await docker(['inspect', '--format', '{{.State.Running}}', id]), 'false');
+          }
           const independent = extra => accountPhase('inspect-recovery', {...captured, requestId: request.requestId,
             attemptId: publishedSnapshot.workerVerification.attemptId, targetDigest: request.targetDigest, ...extra});
           for (const extra of [{pointId: randomUUID()}, {attemptId: randomUUID()}, {sha256: '0'.repeat(64)}]) await assert.rejects(independent({desiredStatus: 'pending', ...extra}));

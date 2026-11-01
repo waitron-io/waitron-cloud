@@ -870,8 +870,20 @@ implementation or production evidence.
   skips in 146.5 seconds. Eighteen native evidence checks pass and catch all 17
   deliberate guard omissions in an installed disposable checkout. Its 35 samples
   stay above 3,462 MiB available memory and 15.22 GiB free disk, without qualifying
-  the full settled capacity budget. Successful authorised ordinary restore,
-  stream recovery and independent fallback, remote withdrawal, complete capacity
+  the full settled capacity budget. The separately authorised extension now
+  restores that same paired archive through the normal preparation and restore
+  entry points. It creates the source's membership identity and recovery key
+  before capture, reads actual source installation codes from the delivered copy,
+  preserves the same-hour refusal and simulates the permitted following hour in
+  the isolated test process. The host and source clocks stay unchanged. Wrong-key
+  and missing-preparation refusals, database integrity, preserved source records,
+  matching node and venue, absence of Cloud credentials and no server start or
+  Cloud restored report are checked. This fresh demo venue does not qualify an
+  existing trading history. One real Linux journey passes without skips in 168.6
+  seconds; 16 native evidence checks catch all 15 deliberate guard omissions in
+  an installed disposable checkout. Its 39 samples stay above 3,330 MiB available
+  memory and 12.40 GiB free disk. Stream recovery and independent fallback,
+  remote withdrawal, complete capacity
   qualification, rollback and deployment remain open. The old Mac cleanup refusal stays historical evidence;
   the isolated Linux client proof removes its owned resources successfully.
   The organisation plan store and operator command now persist free/paid metadata,

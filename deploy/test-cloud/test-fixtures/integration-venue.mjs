@@ -33,6 +33,11 @@ const socket = root + '/proof.sock'; await rm(socket, {force: true});
 const control = createServer(async (req, res) => {
   try {
     assert.equal(req.method, 'POST');
+    if (req.url === '/recovery-authority') {
+      const {prepareIntegrationRecoveryAuthority} = await import('/proof/integration-recovery-authority.mjs');
+      res.end(JSON.stringify(await prepareIntegrationRecoveryAuthority(root)));
+      return;
+    }
     if (req.url === '/verification-state') {
       const {prepareIntegrationVerificationState} = await import('/proof/integration-verification-state.mjs');
       res.end(JSON.stringify(await prepareIntegrationVerificationState(root)));

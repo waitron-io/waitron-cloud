@@ -23,3 +23,12 @@ export function inspectIntegrationRecovery(row, expected, status) {
     attemptId: row.verification_attempt_id, targetDigest: row.verification_target.digest,
     sha256: row.digest, bytes: Number(row.size), cloudStatus: row.status, noSupersession: true};
 }
+
+export function inspectIntegrationAuthorisedRecovery(row, expected) {
+  for (const name of ['sha256', 'bytes', 'sourceNodeId', 'localVenueId']) assert.equal(row[name], expected[name]);
+  const observed = {exit: 0, preparationBoundToDeliveredArchive: true, sourceAuthorityVerified: true,
+    wrongAuthorityRefused: true, missingPreparationRefused: true, integrity: 'ok',
+    sourceRecordsPreserved: true, noServerStarted: true, noCloudCredentials: true, cloudReportedRestored: false};
+  for (const [name, value] of Object.entries(observed)) assert.equal(row[name], value);
+  return {sha256: row.sha256, bytes: row.bytes, sourceNodeId: row.sourceNodeId, localVenueId: row.localVenueId, ...observed};
+}
