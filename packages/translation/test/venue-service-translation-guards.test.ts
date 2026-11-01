@@ -32,7 +32,7 @@ test('venue translation detects admission callback and generation guard omission
    const path=join(candidate,'packages/translation/src',c.file),original=await readFile(path,'utf8');
    assert.equal(original.split(c.needle).length,2,c.name+' must target one guard');green(await run(c.pattern));
    try{
-    await writeFile(path,original.replace(c.needle,'replacement' in c?c.replacement:''));const omitted=await run(c.pattern);
+    await writeFile(path,original.replace(c.needle,c.replacement??''));const omitted=await run(c.pattern);
     assert.equal(omitted.code,1,omitted.output);assert.match(omitted.output,/# tests 1\b/);assert.match(omitted.output,/# fail 1\b/);assert.match(omitted.output,/AssertionError|ERR_ASSERTION/);
    }finally{await writeFile(path,original);}
    green(await run(c.pattern));console.log('VENUE_TRANSLATION_GUARD_DETECTED '+c.name);
