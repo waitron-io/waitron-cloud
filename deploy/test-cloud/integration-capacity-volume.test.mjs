@@ -53,6 +53,7 @@ test('volume sampling preserves running-container errors and refuses OOM, substi
   assert.equal(typeof capacity.readCapacityVolume, 'function', 'Stopped-volume measurement is missing');
   const failure = Error('exec refused');
   for (const fault of ['running', 'oom', 'identity', 'mount', 'unavailable', 'malformed']) {
+    let fallbacks = 0;
     const docker = async args => {
       if (args[0] === 'exec') throw failure;
       if (fault === 'unavailable') throw Error('Docker unavailable');
@@ -62,10 +63,13 @@ test('volume sampling preserves running-container errors and refuses OOM, substi
         Mounts: [{Type: 'volume', Name: fault === 'mount' ? 'foreign' : name, Destination: '/state'}]}]);
     };
     await assert.rejects(capacity.readCapacityVolume({docker, name, volume,
-      measureStoppedVolume: async () => assert.fail('No fallback for ' + fault)}));
+      measureStoppedVolume: async () => {fallbacks++; return '1024\t/capacity';}}));
+    assert.equal(fallbacks, 0, 'No fallback for ' + fault);
   }
+  let fallbacks = 0;
   await assert.rejects(capacity.readCapacityVolume({docker: async () => 'not a size', name, volume,
-    measureStoppedVolume: async () => assert.fail('Malformed live output must refuse')}));
+    measureStoppedVolume: async () => {fallbacks++; return '1024\t/capacity';}}));
+  assert.equal(fallbacks, 0, 'Malformed live output must refuse');
   await assert.rejects(capacity.readCapacityVolume({docker: async () => assert.fail('Already stopped'), name,
     volume: {...volume, running: false}, measureStoppedVolume: async () => 'not a size'}));
 });
