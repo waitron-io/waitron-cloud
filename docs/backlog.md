@@ -609,211 +609,30 @@ to reproduce the cause before changing allocation behavior or expected values.
 
 ## Fiscal allocation registry
 
-The owner requested removal of this obsolete registry on 29 October 2026
-because Waitron now generates time-based codes. The
+Cloud no longer runs the obsolete fiscal allocation registry. Waitron generates
+time-based codes; its caller removal landed in
+[Waitron PR2228](https://github.com/clintongormley/waitron/pull/2228) at
+`2297688a6bbaa29eaa11cbee283681d388efd069`. The
 [removal design](superpowers/specs/2026-10-29-remove-fiscal-registry-design.md)
 and [implementation plan](superpowers/plans/2026-10-29-remove-fiscal-registry.md)
-cover its Cloud package, HTTP routes, portal and measurement consumers. This is
-planning only; the registry still runs. Runtime removal must wait for Waitron
-A1189 to land. The proposal retains migration 038 and stored records unchanged;
-removing shipped migration history or stored fiscal data needs a separate decision.
+record the boundary. The workspace package, account and installation HTTP routes,
+portal journey and live cost producer are removed. Old document links receive the
+ordinary translated missing page; old API calls return `404 not_found` with the
+same host, query and security checks as other missing routes.
 
-The [shared registry plan](https://github.com/clintongormley/waitron/blob/main/docs/superpowers/plans/2026-10-12-cloud-fiscal-allocation-registry.md)
-defines the implemented Cloud service. The
-[contract and storage stage](fiscal-allocation-registry.md) defines strict signed
-receipts, complete series and binding snapshots, separate paper custody trust,
-explicit unavailable capabilities and append-only migration 038. Local tests
-exercise the actual fiscal validator, populated concurrent 37-to-38 upgrades,
-interrupted migration rollback, namespace uniqueness, retained runtime history
-and exact schema gates. Production authority is unavailable.
-
-The current-history stage adds challenged signed journal reads, signed expiring
-writer grants, exact full-history replay and permanent unknown outcomes. Local
-PostgreSQL dump/restore and independent Node workers prove that missing C000042
-cannot be reissued, the previous writer is refused, and lost replies or failed
-database commits reconcile the same signed result. The external fixture survives
-process restart; no production continuity provider is supplied.
-
-The authenticated store stage adds current session, venue ownership, custody and
-entitlement rechecks; terminal consumption and abandonment; signed bounded receipt
-pages; and monotonic signed S/P imports with complete venue-transfer chains. Local
-PostgreSQL tests cover independent authenticated workers, authority lost during a
-wait, omitted full series, ended entitlement with retained reads, old uploads,
-forged or consumed transfers, partial transfers and matching exact retries.
-Account HTTP routes require a full session, CSRF and current venue authority;
-shared PostgreSQL limits protect account and authorized namespace budgets. A
-durable routing hint recovers the exact outside receipt after a first-projection
-rollback. Machine reports verify the current installation key and active lease
-under revocation locks, retain exact retry results and record matching or
-conflicting paper evidence without activation or name issuance. Real listener
-tests exercise factor challenges, shared limits, revocation and expiry waits,
-discarded TCP replies, independent authority restart and failed PostgreSQL commits.
-Indexed venue/operation queries avoid whole-table tenant scans. Current custody
-checks protect both receipt pages and post-append consumption; fresh signed machine
-authentication recovers the same immutable operation after a proof expires. Paper
-import status records completion without inventing a Cloud receipt.
-Registration tests run in five CI file shards. Every case and the 30-second
-test deadline remain; work jobs stop after eight minutes.
-The phone journey at `/fiscal-allocations` now reserves and explicitly consumes
-identities, reconciles uncertain replies using the same operation, exports the
-complete signed manual packet, pages retained receipts and imports existing signed
-paper history. Local real-server/browser tests cover English and Spanish, light
-and dark, 390 and 1280 pixels, with accessibility checks in ready, uncertain,
-error and retained states. On-prem venues need no managed backup to use the journey.
-Adding or removing a fiscal series clears stale series-field errors while keeping
-feedback on other fields. English/Spanish browser checks retain valid series codes
-and purposes and confirm that Reserve still flags empty series before sending.
-Fiscal drafts name a missing Standard series and mark every repeated code.
-Correcting series clears stale feedback. English/Spanish browser checks cover
-both refusals together, leave unrelated codes unmarked and submit corrected drafts
-with existing case-sensitive codes and normalized taxpayer/software fields.
-Browser checks observe the screen-to-controller call before the controller can
-reject an invalid draft. Missing Standard, duplicate and combined series errors
-stay in the screen; a corrected draft reaches the controller exactly once.
-Browser validation checks structure; local recovery must verify cryptographic
-trust and authority before activation. Cloud now preserves the exact person or recovery-key event operator through
-reserve validation, consumption approval, signed manual packets and retained
-browser receipts. Tagged key operators must match the recovery event and target
-node; malformed objects and person substitutions refuse. Focused contract and
-real HTTP tests cover those boundaries, and eight browser cases cover retained
-key-event packets in both languages, themes and widths. The actual PostgreSQL joint test now pins Waitron adapter candidate
-`2293a60a311e20b227029782ba75048ee1fff241`. Its 15 cases cover real account status,
-independent verification of Cloud's signed packet, source/target/event/operator and
-full-purpose refusals, missing trust, reserved-state refusal, retained read access,
-session/CSRF refusals, complete manual activation and a matched machine report.
-A lost committed report reply retries the same operation with fresh authentication;
-the independent journal returns a retained result without sending again and refuses
-changed evidence. These are local synthetic fixtures, with no production policy enabled.
-The test uses an explicitly pinned installed Waitron checkout, or fetches and installs
-that public commit in its own temporary directory. Waitron
-owns the adapter and its delivery. The joint fixture now observes actual HTTP
-401/403 responses and checks that a conflicting report leaves its retained result
-usable without another send. Its report cases share one activation; independently
-runnable name-filter cases and removal of the temporary port's release/rebind
-interval remain fixture follow-ups. The installed-checkout override verifies the
-tracked tree; its dependencies and untracked files are developer supplied.
-Production continuity
-storage, taxpayer custody and operator attribution, subscription policy and the
-signing-key custodian remain owner enablement gates. Before enabling recovery,
-qualify how the service discovers custody-approved namespaces when an old database
-backup lacks both allocations and routing hints, and measure full-journal replay
-and indexed paging with launch-scale history. Exhausted identity space and
-unverified signed evidence now direct you to your custodian in English and Spanish,
-alongside the original uncertain-result warning when a write is unresolved.
-The page retains status checking and exact-request resends; temporary continuity
-failures still suggest a later retry. Controller checks and real-server Chromium
-journeys cover both themes at 390 and 1280 pixels. The exhaustion browser response
-is synthetic; the untrusted-paper response comes from the real signed-evidence check.
-When you inspect a retained receipt, its disabled draft selectors now show each
-signed purpose: Standard, Full and Rectificative. Selection is applied to the
-rendered options so the first option cannot replace a purpose before the options
-exist. Chromium checks cover English and Spanish, both themes and 390/1280 widths,
-new-draft edits and the unchanged signed packet. The real-server key-event journey
-also checks all three displayed purposes. Before reserving a new draft, your NIF
-and software ID are trimmed and uppercased; lowercase entries reach the strict
-endpoint as uppercase values. Stubbed Chromium checks cover both languages,
-themes and widths, complete padded input and malformed-input refusals.
-The shared input does not pass its declared length limits to the native field:
-padded values arrive complete, and overlong identifiers are refused on Reserve.
-Passing those limits through the shared input remains a separate follow-up.
-Organisation and venue selections now
-apply to their rendered options too, so your first view matches the supplied draft.
-The pre-fix real-server journey showed the first organisation and an empty venue
-while an untouched submission reserved the supplied second organisation's venue.
-The server derives the organisation from that venue; it receives no organisation
-field. Chromium checks cover the display, untouched request and stored reservation,
-and native checks cover edits, organisation changes and clearing a venue. Initial
-setup already displayed correctly because its mode options are static; both mode
-edits and the submitted mode remain checked. Allocation and receipt fields are
-unchanged. All checks cover English and Spanish, both themes and 390/1280 widths.
-While your installation list refreshes, fiscal choices and submission now wait
-for it to settle. A missing or no-longer-permitted venue clears an unsent draft;
-a new reservation is refused when its venue is absent from the current list.
-In-flight writes, unresolved replies and issued receipts keep their reconciliation
-evidence. A definite refusal also clears a draft whose venue became unavailable
-during the request. Pre-fix real-server journeys reserved for a different organisation from
-the one shown during a refresh, and sent a hidden venue after permission removal
-(the server refused it with HTTP 403). Chromium checks cover both cases, no stale
-request or stored reservation, and a subsequent permitted choice whose displayed,
-sent and stored venue agree, in English and Spanish, both themes and 390/1280 widths.
-If your venue list cannot be read, Fiscal allocations now shows the existing
-error and offers Refresh status. Refresh waits for an ongoing list read, any
-pending or uncertain fiscal operation and Retry-After delays. Stubbed Chromium
-checks cover failed and recovered reads in both languages, themes and widths,
-plus rate-limit waits and retained write evidence. Existing draft, selection,
-request and receipt rules remain covered by the fiscal browser journeys.
-When several venues share a business name, the Venue choices now include the
-translated fiscal environment and short venue ID, so you can tell them apart
-before selecting one. Chromium checks cover both environments, two production
-venues of one business, unchanged full venue IDs and the resulting draft, in
-both languages, themes and phone/desktop widths. The creation date remains a
-follow-up: the venue read and venue table have no creation timestamp. Add a
-persisted venue creation date and its overview read before showing a localised
-date here; a connection-request timestamp is not a substitute.
-Stored fiscal status reads check entitlement and custody once before returning the exact
-receipt. PostgreSQL checks cover that count and refusal after entitlement, custody or
-venue ownership is withdrawn; history reconstruction keeps its checks around database work.
-No production defaults are selected. Fiscal records, invoice hashes and Waitron's allocation code stay outside
-this Cloud change.
-
-**Fiscal session-expiry test ordering.** The store test now expires its session
-on the reservation's own PostgreSQL client after the real external append commits.
-Both the normal case and a 350 ms pre-reservation pause retain the strict
-`session_expired` refusal, one permanent name and zero projected events. Boundary
-diagnostics record database time, expiry and authorization/append stages without
-credentials. Boundary assertions run after reservation settles, so append
-reconciliation cannot swallow them. The earlier 300 ms setup deadline failed under the controlled pause:
-it expired before authorization and the append never began. Twelve unchanged
-isolated runs and a diagnostic full run did not reproduce that original failure;
-its exact historical cause remains unproved. If this test fails again, use its
-boundary diagnostics before changing authority checks or deadlines.
-
-**Continuity fixture diagnostics.** A package-only CI-selection control passed
-131 of 133 fiscal tests: `continuity.test.ts` reached an absent worker receipt in
-the replacement-fence case, and the 150 ms witness case did not observe its
-projection waiting on the held PostgreSQL lock. The same fiscal tree passed all
-133 tests in the candidate gate. An isolated diagnostic run passed both cases
-and observed the lock after 15 ms, then refused projection after 192 ms. These
-passes do not explain the original failures. The machine also ran concurrent
-review mutations; resource pressure is an assumption, not an established cause.
-The fixture now emits elapsed timing stages before and after dump, restore and
-worker calls, including the returned refusal code and receipt presence before
-receipt access. The short-witness case records verification, client acquisition,
-projection, lock observation, release and refusal, with the elapsed age since
-verification and the estimated witness age. Diagnostics omit raw errors, receipt
-contents and identifiers; an output failure cannot replace the original assertion.
-You can run the six diagnostic checks without PostgreSQL using
-`node --test packages/fiscal-allocation/test/continuity-trace.test.ts`. They also
-exercise a real fenced-worker refusal and expiry before any database query.
-The writer/witness policies, lock observation, identity and refusal assertions stay intact.
-Do not overlap a large review mutation batch with full package qualification.
-A later local full fiscal run also reached the old-backup case's 30-second
-deadline and missed the same lock observation. A diagnostic-only run completed
-that backup case in 5,238 ms, observed the lock after 25 ms and refused expired
-history after 206 ms. These passes do not resolve the failures. Use the emitted dump,
-restore and worker-result stages on recurrence; both
-the 30-second deadline and the 150 ms witness policy remain unchanged.
-The two cases are `a restored old PostgreSQL backup cannot reissue C000042 and
-complete reconciliation permits C000043` and `a verified history that expires
-during a PostgreSQL lock wait cannot project`, both in
-`packages/fiscal-allocation/test/continuity.test.ts`. That run overlapped review
-and other local qualification work; resource pressure remains an assumption.
-The 16 October five-shard qualification also passed 132 of 133 fiscal checks:
-the same 150 ms witness case did not observe its held lock. The fixture and
-fiscal sources match the preceding main tree. An isolated diagnostic run observed
-the lock and passed; a separate 200 ms pause before projection reproduced the
-assertion after the witness had expired and projection returned `history_uncertain`.
-This establishes an early-expiry mechanism, not the precise cause of the original
-failure. Read the emitted verification, client-acquisition, projection and lock-observation
-ages on recurrence. Evidence is under
-`~/waitron-campaign-d/receipts/d69/registration-shard-budget/fiscal-*.log`.
-The 150 ms policy, lock assertion and 30-second deadline remain unchanged.
-The retained local evidence is under
-`~/waitron-campaign-d/receipts/d69/dependency-fixtures/`: the failures are in
-`gate-packages-fiscal-allocation.log`, the stage observations and diagnostic-only
-patch are `fiscal-diagnostic.log` and `fiscal-diagnostic.patch`, and the later
-133-case passing run is `fiscal-final.log`. Use those stages to investigate the
-next failure; a passing repeat does not resolve this defect.
+Migration 038, its dormant tables and stored rows remain unchanged. Registration
+owns the seven retained schema tests and the digest/ledger-position check. Removal
+regressions compare every dormant table and the migration ledger before and after
+old calls and free/paid/free plan changes. Shared account, session, recovery and
+mail assertions remain. Live CI keeps nine packages, 21 logical shards in 19
+jobs and all six receipt suites, including all six portal shards. Saved historical
+manifests and cost receipts remain historical evidence; their parsers and positive
+receipt-selection checks remain. The [registry reference](fiscal-allocation-registry.md)
+preserves the withdrawn contract and its old anchors. No outside journal, custodian,
+registry signing service or registry enablement work remains in the Cloud product.
+Destructive retirement of stored records or shipped migration history still needs
+a separate owner decision. Ordinary backup verification and local recovery keep
+their existing authority checks.
 
 **Maximum-hour lease fixture timing.** Full main CI `39247738663` failed
 `staff-certificates.test.ts` before its production-installation HTTP 403 check:

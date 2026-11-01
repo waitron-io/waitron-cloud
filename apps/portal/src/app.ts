@@ -1,5 +1,4 @@
 import {validEmail} from './email.ts';
-import {FiscalAllocationController} from './fiscal-allocation-controller.ts';
 import {AuthenticatorController} from './authenticator-controller.ts';
 import {RecoveryController} from './recovery-controller.ts';
 import {RemoteController} from './remote-controller.ts';
@@ -40,7 +39,6 @@ export class PortalApp {
   installations: InstallationController;
   backups: BackupController;
   recovery: RecoveryController;
-  fiscal: FiscalAllocationController;
   remote: RemoteController;
   alerts: AlertController;
   translationConsent: TranslationConsentController;
@@ -74,7 +72,6 @@ export class PortalApp {
     this.usage = new UsageController(() => this.draw());
     this.diagnostics = new DiagnosticController(() => this.draw());
     this.remote = new RemoteController(() => this.draw());
-    this.fiscal = new FiscalAllocationController(() => {this.#clearUnavailableFiscalDraft();this.draw();});
     this.recovery = new RecoveryController(() => this.draw());
     this.recovery.open(this.link.recoveryId);
     this.backups = new BackupController(() => {
@@ -88,16 +85,15 @@ export class PortalApp {
       if(this.session?.state.kind==='authenticated'&&this.usage.organisationId&&!this.usage.loaded)void this.usage.load();
       if(this.remote.installationId&&!this.installations.visible.some(i=>i.installationId===this.remote.installationId&&i.canRevoke&&!i.revokedAt))this.remote.close();
       if(this.backups.venueId&&!this.installations.visible.some(i=>i.venueId===this.backups.venueId&&i.canRevoke)){this.backups.close();this.recovery.choose(undefined,undefined);}
-      this.#clearUnavailableFiscalDraft();
       this.draw();
     });
     this.pairing = new PairingController(() => this.draw());
     this.pairing.open(this.link.requestId);
     this.session = this.#session();
     window.addEventListener('popstate', () => this.navigate(location.pathname, false));
-    document.addEventListener('keydown', event => { if (['/account','/connect','/recover','/fiscal-allocations'].includes(this.path)) void this.session.activity(event); });
-    document.addEventListener('pointerdown', event => { if (['/account','/connect','/recover','/fiscal-allocations'].includes(this.path)) void this.session.activity(event); });
-    window.addEventListener('pagehide', () => { this.remote.account(undefined); this.session.dispose(); this.authenticator.account(undefined); this.authenticator.fence(); this.fiscal.fence(); this.factorCodes = []; this.fields.password = ''; this.root.querySelectorAll('canvas').forEach(canvas => {canvas.width=0;}); this.draw(); this.pairing.account(undefined); this.installations.account(undefined); this.backups.account(undefined); this.recovery.account(undefined); this.fiscal.account(undefined); this.alerts.account(undefined); this.translationConsent.account(undefined); this.usage.account(undefined); this.diagnostics.account(undefined); this.passkeys.account(undefined); this.security.account(undefined); clearTimeout(this.#timer); }, {once: true});
+    document.addEventListener('keydown', event => { if (['/account','/connect','/recover'].includes(this.path)) void this.session.activity(event); });
+    document.addEventListener('pointerdown', event => { if (['/account','/connect','/recover'].includes(this.path)) void this.session.activity(event); });
+    window.addEventListener('pagehide', () => { this.remote.account(undefined); this.session.dispose(); this.authenticator.account(undefined); this.authenticator.fence(); this.factorCodes = []; this.fields.password = ''; this.root.querySelectorAll('canvas').forEach(canvas => {canvas.width=0;}); this.draw(); this.pairing.account(undefined); this.installations.account(undefined); this.backups.account(undefined); this.recovery.account(undefined); this.alerts.account(undefined); this.translationConsent.account(undefined); this.usage.account(undefined); this.diagnostics.account(undefined); this.passkeys.account(undefined); this.security.account(undefined); clearTimeout(this.#timer); }, {once: true});
     window.addEventListener('pageshow', event => {
       if (event.persisted) { this.session = this.#session(); void this.session.check(); }
     });
@@ -116,7 +112,6 @@ export class PortalApp {
     if (['/account','/'].includes(this.path) && state.kind === 'authenticated' && !this.security.loadAttempted) void this.security.load();
     this.passkeys.account(state.kind === 'authenticated' ? state.accountId : undefined);
     if (['/account','/'].includes(this.path) && state.kind === 'authenticated' && !this.passkeys.loaded) void this.passkeys.load();
-    this.fiscal.account(state.kind === 'authenticated' ? state.accountId : undefined);
     this.recovery.account(state.kind === 'authenticated' ? state.accountId : undefined);
     this.alerts.account(state.kind === 'authenticated' ? state.accountId : undefined);
     if (['/account','/'].includes(this.path) && state.kind === 'authenticated' && !this.alerts.loaded && !this.alerts.loadAttempted) void this.alerts.load();
@@ -125,10 +120,10 @@ export class PortalApp {
     this.remote.account(state.kind === 'authenticated' ? state.accountId : undefined);
     this.backups.account(state.kind === 'authenticated' ? state.accountId : undefined);
     this.installations.account(state.kind === 'authenticated' ? state.accountId : undefined);
-    if (['/account','/','/recover','/fiscal-allocations'].includes(this.path) && state.kind === 'authenticated' && !this.installations.loaded) void this.installations.load();
+    if (['/account','/','/recover'].includes(this.path) && state.kind === 'authenticated' && !this.installations.loaded) void this.installations.load();
     this.pairing.account(state.kind === 'authenticated' ? state.accountId : undefined);
     if (this.path === '/connect' && state.kind === 'authenticated' && !this.pairing.loaded) void this.pairing.load();
-    if ((['/', '/account', '/connect', '/recover', '/fiscal-allocations'].includes(this.path)) && state.kind === 'anonymous') {
+    if ((['/', '/account', '/connect', '/recover'].includes(this.path)) && state.kind === 'anonymous') {
       const signedOut = this.#signOutCheck === this.session;
       this.navigate('/login');
       if (state.expired || signedOut) { this.notice = state.expired ? 'sessionExpired' : 'signedOut'; this.draw(); }
@@ -144,15 +139,10 @@ export class PortalApp {
     return this.path;
   }
   get waiting() {
-    if (this.path === '/fiscal-allocations') return Math.max(this.fiscal.waiting,this.installations.waiting,Math.max(0,Math.ceil((this.session.retryAt-Date.now())/1000)));
     if (this.path === '/recover') return Math.max(this.recovery.waiting,this.backups.waiting,this.installations.waiting,Math.max(0,Math.ceil((this.session.retryAt-Date.now())/1000)));
     if (this.path === '/connect') return Math.max(this.pairing.waiting, Math.max(0, Math.ceil((this.session.retryAt - Date.now()) / 1000)));
     const deadline = ['/', '/account'].includes(this.path) ? Math.max(this.session.retryAt,this.installations.retryAt,this.backups.retryAt,this.alerts.retryAt,this.translationConsent.retryAt,this.remote.retryAt,this.usage.retryAt,this.diagnostics.retryAt,this.authenticator.retryAt,this.passkeys.retryAt,this.security.retryAt) : Math.max(this.#emailCooldowns.get(`${this.operation}:${this.fields.email.trim().toLowerCase()}`) ?? 0, this.cooldownOperation === this.operation ? this.cooldownUntil : 0, this.path === '/login' ? Math.max(this.authenticator.retryAt,this.passkeys.retryAt) : 0);
     return Math.max(0, Math.ceil((deadline - Date.now()) / 1000));
-  }
-  #clearUnavailableFiscalDraft() {
-    // Keep in-flight writes, unresolved replies and issued receipts available for reconciliation.
-    if(this.fiscal.venueId&&!this.fiscal.pending&&!this.fiscal.uncertain&&!this.fiscal.receipt&&!this.installations.visible.some(i=>i.venueId===this.fiscal.venueId&&i.canRevoke))this.fiscal.open(undefined);
   }
   draw() {
     this.remote.expireForward();
@@ -162,13 +152,12 @@ export class PortalApp {
     const title = this.title(); document.title = `${title} · Waitron Cloud`;
     render(screen(this), this.root);
     clearTimeout(this.#timer);
-    if (this.waiting || (['/account','/recover','/fiscal-allocations'].includes(this.path) && this.session.state.kind === 'authenticated')) this.#timer = setTimeout(() => this.draw(), 1000);
+    if (this.waiting || (['/account','/recover'].includes(this.path) && this.session.state.kind === 'authenticated')) this.#timer = setTimeout(() => this.draw(), 1000);
   }
   title(): string {
     const c = this.copy;
     if (this.path === '/login' && this.factorCodes.length) return c.factorCodesTitle;
     if (this.path === '/login' && this.authenticator.challenge) return c.factorTitle;
-    if (this.path === '/fiscal-allocations') return c.fiscalTitle;
     if (this.path === '/recover') return c.recoveryTitle;
     if (this.path === '/connect') return c.connect;
     if (this.notice) return c[this.notice === 'signupReady' ? 'completeSignup' : this.notice === 'resetReady' ? 'reset' : 'login'];
@@ -181,7 +170,7 @@ export class PortalApp {
   }
   navigate(path: string, push = true) {
     this.#signOutCheck = undefined;
-    this.#route++; this.path = path; this.passkeys.fence(); this.security.fence(); this.authenticator.fence(); this.fiscal.fence(); this.factorCodes = [];
+    this.#route++; this.path = path; this.passkeys.fence(); this.security.fence(); this.authenticator.fence(); this.factorCodes = [];
     // Only failed preferences need a new navigation attempt; pending work keeps its attempt.
     if(!this.alerts.pending&&!this.alerts.loaded)this.alerts.loadAttempted=false;
     if(!this.translationConsent.pending&&!this.translationConsent.loaded)this.translationConsent.loadAttempted=false;
@@ -195,7 +184,7 @@ export class PortalApp {
     this.pending = false; this.reveal = false; this.differentOrg = false;
     // Keep the cooldown across navigation so returning cannot bypass a Retry-After.
     this.draw(); this.focusHeading();
-    if (['/account','/','/connect','/recover','/fiscal-allocations'].includes(path)) void this.session.check();
+    if (['/account','/','/connect','/recover'].includes(path)) void this.session.check();
   }
   follow(event: MouseEvent, path: string) {
     if (event.button || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
@@ -237,7 +226,6 @@ export class PortalApp {
   async submit() {
     if(this.path==='/login' && this.authenticator.challenge){await this.completeFactorLogin();return;}
     if(this.path==='/login' && this.factorCodes.length)return;
-    if(this.path==='/fiscal-allocations')return;
     if(this.path==='/recover'){this.readFields();await this.recovery.inspect();return;}
     if (['/','/account'].includes(this.path)) return;
     if (this.path === '/connect') { await this.submitPairing(); return; }
@@ -337,7 +325,7 @@ export class PortalApp {
   async revokeSession(id: string) { await this.security.revoke(id); }
   get logoutWaiting() { return Math.max(0, Math.ceil((this.session.retryAt - Date.now()) / 1000)); }
   // Share admission with the buttons so startup reads cannot leave an enabled, ignored sign-out.
-  get logoutDisabled() { return this.pending || !!this.logoutWaiting || this.pairing.pending || this.installations.pending || this.remote.pending || this.recovery.pending || this.fiscal.pending || this.security.pending || this.usage.pending || this.authenticator.pending; }
+  get logoutDisabled() { return this.pending || !!this.logoutWaiting || this.pairing.pending || this.installations.pending || this.remote.pending || this.recovery.pending || this.security.pending || this.usage.pending || this.authenticator.pending; }
   async logout() {
     if (this.logoutDisabled) return;
     this.pending = true; this.error = undefined; this.draw();

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import {execFileSync} from 'node:child_process';
-import {chmodSync, copyFileSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync} from 'node:fs';
+import {chmodSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {dirname, join} from 'node:path';
 import test from 'node:test';
@@ -87,7 +87,7 @@ test('every changed or removed public gateway input in either revision retains p
       assert.deepEqual(select(base, commit()).receipts, receiptSuites, path);
     });
     fixture(({root, base, select, commit}) => {
-      copyFileSync(path, join(root, path));
+      copyReceiptFixtureInput(path, join(root, path));
       assert.deepEqual(select(base, commit()).receipts, receiptSuites, path);
     }, root => writeFileSync(join(root, path), '// Unaudited base input\n'));
   }

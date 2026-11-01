@@ -231,3 +231,37 @@ test('receipt selector fixtures retain positive checks after gateway authority c
     assert.match(result.stdout, /^ok 1 - unrelated package changes omit all audited receipts and retain actual package and type checks$/m);
   } finally { rmSync(root, {recursive: true, force: true}); }
 });
+
+
+test('historical receipt fixtures reconstruct a removed registry package and retain positive omissions', () => {
+  const root = mkdtempSync(join(tmpdir(), 'cloud-retired-package-fixture-'));
+  try {
+    execFileSync('git', ['clone', '--shared', '--quiet', process.cwd(), root], {stdio: 'pipe'});
+    cpSync('scripts', join(root, 'scripts'), {recursive: true});
+    rmSync(join(root, 'packages/fiscal-allocation'), {recursive: true, force: true});
+    const env = {...process.env}; delete env.NODE_TEST_CONTEXT;
+    const restored = spawnSync('node', ['--input-type=module', '-e', `
+      import assert from 'node:assert/strict';
+      import {readFileSync} from 'node:fs';
+      import {receiptFixtureWorkspace,seedReceiptDependencyInputs} from './scripts/ci-dependency-fixture.mjs';
+      const saved=JSON.parse(readFileSync('scripts/fixtures/ci-historical-manifests.json','utf8'));
+      assert.deepEqual(receiptFixtureWorkspace().map(p=>p.directory+'/package.json').sort(),Object.keys(saved.manifests).sort());
+      seedReceiptDependencyInputs(process.cwd());
+      assert.equal(JSON.parse(readFileSync('packages/fiscal-allocation/package.json','utf8')).name,'@waitron-cloud/fiscal-allocation');
+    `], {cwd: root, env, encoding: 'utf8', timeout: 60_000});
+    assert.equal(restored.error, undefined);
+    assert.equal(restored.status, 0, restored.stdout + restored.stderr);
+    cpSync('scripts', join(root, 'scripts'), {recursive: true});
+    // Repeat with the absent directory so each positive selector has to reconstruct it itself.
+    rmSync(join(root, 'packages/fiscal-allocation'), {recursive: true, force: true});
+    const result = spawnSync('node', ['--test', '--test-reporter=tap', '--test-concurrency=1',
+      '--test-name-pattern=^unrelated package changes omit', 'scripts/ci-capacity-receipt.test.mjs',
+      'scripts/ci-database-receipt.test.mjs', 'scripts/ci-gateway-receipt.test.mjs', 'scripts/ci-local-stack-receipt.test.mjs'],
+      {cwd: root, env, encoding: 'utf8', timeout: 60_000});
+    assert.equal(result.error, undefined);
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    assert.match(result.stdout, /# tests 4\b/);
+    assert.match(result.stdout, /# pass 4\b/);
+    assert.match(result.stdout, /# fail 0\b/);
+  } finally {rmSync(root, {recursive: true, force: true});}
+});

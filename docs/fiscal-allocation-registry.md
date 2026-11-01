@@ -1,5 +1,14 @@
 # Fiscal allocation registry
 
+**Historical reference.** The service described below is retired. You receive the
+ordinary missing-route response from its old API and portal addresses. Waitron's
+[caller removal](https://github.com/clintongormley/waitron/pull/2228) is landed.
+Cloud retains migration 038, dormant rows and schema/recovery expectations; it
+removes the runtime package and live measurement producer. The
+[removal design](superpowers/specs/2026-10-29-remove-fiscal-registry-design.md)
+records this boundary. The remaining sections preserve the withdrawn contract
+and existing anchors; their commands and journeys describe the earlier release.
+
 You cannot enable new fiscal allocations with an organisation login or a taxpayer
 number alone. The registry requires independently verified taxpayer custody,
 subscription entitlement, a current outside history and an externally supplied

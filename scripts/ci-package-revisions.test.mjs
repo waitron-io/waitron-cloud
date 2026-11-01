@@ -670,7 +670,7 @@ test('unresolved live repository readers keep every package consumer', () => {
     changed.readBlobs = git.readBlobs;
     const result = createPlan({pull_request: {base: {sha}, head: {sha}}}, {sha}, workspace, changed, () => {throw Error('No API expected');});
     assert.deepEqual([...new Set(result.packages.flatMap(row => row.members ?? [row.package]))].sort(),
-      ['@waitron-cloud/account-http', '@waitron-cloud/backups', '@waitron-cloud/fiscal-allocation', '@waitron-cloud/identity',
+      ['@waitron-cloud/account-http', '@waitron-cloud/backups',  '@waitron-cloud/identity',
         '@waitron-cloud/operations', '@waitron-cloud/portal', '@waitron-cloud/registration', '@waitron-cloud/remote-access', '@waitron-cloud/translation', '@waitron-cloud/ui-smoke']);
     if (path.startsWith('apps/portal/')) assert.match(result.reason, /Unresolved directory input/);
   }

@@ -187,7 +187,7 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
           # Upgrade tests run against pinned historical releases.
-          fetch-depth: ${{ (matrix.package == '@waitron-cloud/registration' || matrix.package == '@waitron-cloud/fiscal-allocation' || matrix.package == '@waitron-cloud/translation') && '0' || '1' }}
+          fetch-depth: ${{ (matrix.package == '@waitron-cloud/registration' || matrix.package == '@waitron-cloud/translation') && '0' || '1' }}
       - uses: actions/setup-node@v5
         with:
           node-version: '26'

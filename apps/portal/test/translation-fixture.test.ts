@@ -8,7 +8,7 @@ import {connectedVenue,giveConsent,readyForTranslation} from '../../../packages/
 import {startPortalFixture} from './fixtures.ts';
 
 async function fixture(t:TestContext,options?:{pageBytes?:number}){
- const f=await startPortalFixture(undefined,undefined,undefined,undefined,options);
+ const f=await startPortalFixture(undefined,undefined,undefined,options);
  let closed=false;const close=async()=>{if(!closed){closed=true;await f.close();}};t.after(close);
  return {...f,close};
 }

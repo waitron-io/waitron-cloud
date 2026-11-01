@@ -181,11 +181,11 @@ for(const context of ['()','(peer)','(peer@1.0)','(peer@)'])test(`resolved graph
 
 test('current lock matches independently recorded importer closure counts',()=>{
   const lock=parseLock(readFileSync(new URL('../pnpm-lock.yaml',import.meta.url),'utf8'));
-  assert.equal(Object.keys(lock.packages).length,215);
-  assert.equal(Object.keys(lock.snapshots).length,215);
+  assert.equal(Object.keys(lock.packages).length,206);
+  assert.equal(Object.keys(lock.snapshots).length,206);
   assert.deepEqual(Object.fromEntries(Object.entries(lock.closures).map(([id,closure])=>[id,closure.snapshots.length])),{
-    '.':23,'apps/portal':194,'packages/account-http':126,'packages/backups':83,
-    'packages/fiscal-allocation':66,'packages/identity':20,'packages/operations':17,
+    '.':23,'apps/portal':185,'packages/account-http':117,'packages/backups':83,
+    'packages/identity':20,'packages/operations':17,
     'packages/registration':57,'packages/remote-access':88,'packages/translation':57,'packages/ui-smoke':36,
   });
 });

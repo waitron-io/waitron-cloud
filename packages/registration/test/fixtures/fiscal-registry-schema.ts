@@ -1,5 +1,3 @@
-import { createHash, generateKeyPairSync } from 'node:crypto';
-
 export const scope = {
   taxpayerNif: '89890001K',
   softwareId: 'WT',
@@ -22,28 +20,6 @@ export const venueId = '10000000-0000-4000-8000-000000000002';
 export const allocationId = '10000000-0000-4000-8000-000000000003';
 export const accountId = '10000000-0000-4000-8000-000000000004';
 export const date = '2026-10-13T10:00:00.000Z';
-export function reserve() {
-  return {
-    version: 1 as const,
-    operationId,
-    venueId,
-    scope: { ...scope },
-    bases: bases.map((x) => ({ ...x })),
-    binding: { ...binding },
-    mode: 'recovery' as const,
-  };
-}
-export function key() {
-  const pair = generateKeyPairSync('ed25519');
-  const publicKey = pair.publicKey.export({ type: 'spki', format: 'der' }).toString('base64url');
-  return {
-    issuer: 'fixture-registry',
-    keyId: createHash('sha256').update(Buffer.from(publicKey, 'base64url')).digest('hex'),
-    publicKey,
-    privateKey: pair.privateKey.export({ type: 'pkcs8', format: 'der' }).toString('base64url'),
-    active: true,
-  };
-}
 export function payload() {
   return {
     version: 1 as const,

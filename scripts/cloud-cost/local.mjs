@@ -10,7 +10,6 @@ import { assertOwnedRoot } from './schema.mjs';
 import { recordOwnedResource as record } from './owned-journal.mjs';
 import { readReplayBills } from './source-bills.mjs';
 import { discoverReplayDay } from './source-days.mjs';
-export { openFiscalMeasurement } from './fiscal.mjs';
 export { openMailMeasurement } from './mail.mjs';
 export { openRemoteMeasurement } from './remote.mjs';
 export { replayScheduledSales } from './cadence.mjs';

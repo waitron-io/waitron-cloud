@@ -95,7 +95,7 @@ test('usage retry timing starts when headers arrive, including time spent readin
   f.responses.push(refusal()); await f.controller.load(); assert.equal(f.calls.length, 2);
 });
 
-for (const path of ['/session', '/login', '/remote-access/status', '/fiscal-allocations/list']) test(`${path} retains its existing date retry policy`, async t => {
+for (const path of ['/session', '/login', '/remote-access/status']) test(`${path} retains its existing date retry policy`, async t => {
   fixture(t);
   t.mock.method(globalThis, 'fetch', async () => refusal('Wed, 28 Oct 2026 11:00:02 GMT', 'Wed, 28 Oct 2026 11:00:00 GMT'));
   const result = await accountRequest(path);
