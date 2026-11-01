@@ -63,7 +63,7 @@ export function checkProtectedContainers(before, after, ids) {
   return true;
 }
 
-export async function runTestCloudClients({image, waitronImage, protectedContainerIds = [], paidSnapshot = false, paidVerification = false, paidRecovery = false, paidAuthorisedRecovery = false, paidStream = false, paidContinuousRecovery = false} = {}) {
+export async function runTestCloudClients({image, waitronImage, protectedContainerIds = [], paidSnapshot = false, paidVerification = false, paidRecovery = false, paidAuthorisedRecovery = false, paidStream = false, paidContinuousRecovery = false, freeRemote = false} = {}) {
   paidStream ||= paidContinuousRecovery;
   paidAuthorisedRecovery ||= paidStream;
   paidRecovery ||= paidAuthorisedRecovery;
@@ -142,7 +142,7 @@ export async function runTestCloudClients({image, waitronImage, protectedContain
     assert.equal((await api('/api/health/ready')).status, 200);
     await assert.rejects(api('/api/health/ready', undefined, {}, null), /certificate|issuer|verify/i);
     await assert.rejects(api('/api/health/ready', undefined, {}, ca, 'wrong.local'), /certificate|Hostname/i);
-    const organisations = [], restarts = []; let freeSnapshot, publishedSnapshot, observedStream, continuousRecovery;
+    const organisations = [], restarts = []; let freeSnapshot, publishedSnapshot, observedStream, continuousRecovery, freeRemoteEvidence;
     for (const plan of ['free', 'paid']) {
       const email = `integration-${plan}-${runId}@example.test`, password = 'Disposable account ' + randomUUID();
       assert.equal((await api('/api/account/signup/request', {email})).status, 202);
@@ -206,6 +206,15 @@ export async function runTestCloudClients({image, waitronImage, protectedContain
       await control(id, 'refresh'); await control(id, 'refresh');
       const evidence = await control(id, 'evidence');
       if (plan === 'free') freeSnapshot = await control(id, 'snapshot-refusal');
+      if (plan === 'free' && freeRemote) {
+        const remotePhase = (phase, extra = {}) => docker(['exec', '-i', account, 'node', 'deploy/test-cloud/test-fixtures/integration-account.mjs'],
+          JSON.stringify({phase, organisationId, installationId: evidence.registration.installationId, ...extra}), 'remote-' + phase);
+        const prepared = parseIntegrationJson(await remotePhase('free-remote-prepare'));
+        const {csr, ...refused} = await control(id, 'free-remote', prepared);
+        assert.equal(refused.installationId, evidence.registration.installationId);
+        const independent = parseIntegrationJson(await remotePhase('free-remote-inspect', {csr}));
+        freeRemoteEvidence = {organisationId, ...refused, provision: prepared.provision, ...independent};
+      }
       const persisted = JSON.parse(await docker(['exec', '-i', account, 'node', 'deploy/test-cloud/test-fixtures/integration-account.mjs'],
         JSON.stringify({organisationId, installationId: evidence.registration.installationId}), 'persisted-binding'));
       assert.equal(persisted.venueId, evidence.registration.venueId); assert.equal(persisted.localVenueId, evidence.localVenueId);
@@ -430,7 +439,7 @@ export async function runTestCloudClients({image, waitronImage, protectedContain
       accountMail: {free: 'proved', paid: 'proved', transport: 'mailpit'}, clients: {status: 'proved', actions: ['pair', 'renew', 'configuration'], demoVenues: 2, restartIdentity: 'proved'},
       tls: {untrustedRefused: true, wrongHostnameRefused: true}, organisations, freeSnapshot, restarts,
       ...(publishedSnapshot ? {paidSnapshot: publishedSnapshot} : {}), ...(observedStream ? {paidStream: observedStream} : {}),
-      ...(continuousRecovery ? {paidContinuousRecovery: continuousRecovery} : {})};
+      ...(continuousRecovery ? {paidContinuousRecovery: continuousRecovery} : {}), ...(freeRemoteEvidence ? {freeRemote: freeRemoteEvidence} : {})};
   } finally {
     try {
       await completeCleanup([

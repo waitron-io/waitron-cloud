@@ -37,6 +37,13 @@ const socket = root + '/proof.sock'; await rm(socket, {force: true});
 const control = createServer(async (req, res) => {
   try {
     assert.equal(req.method, 'POST');
+    if (req.url === '/free-remote') {
+      let input = '';
+      for await (const part of req) {input += part; assert.ok(input.length < 16384);}
+      const {proveIntegrationFreeRemote} = await import('/proof/integration-free-remote.mjs');
+      res.end(JSON.stringify(await proveIntegrationFreeRemote(root, JSON.parse(input))));
+      return;
+    }
     if (req.url === '/stream-start') {
       const {startIntegrationStream} = await import('/proof/integration-stream.mjs');
       res.end(JSON.stringify(await startIntegrationStream(root)));

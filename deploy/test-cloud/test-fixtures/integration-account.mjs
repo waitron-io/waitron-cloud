@@ -36,7 +36,10 @@ try {
   } else {
     const {rows} = await pool.query('SELECT v.organisation_id,v.local_venue_id,i.venue_id FROM installations i JOIN venues v ON v.id=i.venue_id WHERE i.id=$1', [installationId]);
     assert.equal(rows.length, 1); assert.equal(rows[0].organisation_id, organisationId);
-    if (phase === 'inspect-continuous-recovery') {
+    if (phase === 'free-remote-prepare' || phase === 'free-remote-inspect') {
+      const {freeRemoteAccount} = await import('./integration-free-remote-account.mjs');
+      console.log(JSON.stringify(await freeRemoteAccount({pool, config, installationId, organisationId, phase, csr: JSON.parse(input).csr})));
+    } else if (phase === 'inspect-continuous-recovery') {
       const row = (await pool.query(`SELECT r.*,q.id AS request_id,q.operation_id,q.protocol_version,q.verification_target AS request_target,
         v.organisation_id,i.superseded_by,i.revoked_at FROM backup_recoveries r
         JOIN backup_recovery_requests q ON q.operation_id=r.id JOIN venues v ON v.id=r.venue_id

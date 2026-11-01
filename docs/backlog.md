@@ -912,7 +912,17 @@ implementation or production evidence.
   three protected Waitron containers. Thirty-six native evidence checks and the
   earlier 33 installed guard-omission controls remain. This fresh demo and its
   isolated target clock do not qualify existing trading history or the shipping
-  Alpine release. Remote withdrawal, full capacity, rollback, the strict complete
+  Alpine release. The paired free-remote extension now passes one real Linux
+  journey without skips in 107.3 seconds. Operator provisioning refuses the free
+  organisation. Its real paired venue uses Waitron's native staff-request helper,
+  retaining its staff key locally; valid signed submit/status calls return 403
+  permission_denied and a damaged signature returns 401 invalid_proof. Independent
+  Cloud checks validate the request and confirm no placements, hostnames,
+  certificate requests or jobs, with unchanged remote configuration. Both venues
+  retain pairing identity after restart. Its 26 samples stay above 3,984 MiB
+  available memory and 12.80 GiB free disk; owned resources are removed and the
+  protected Waitron containers stay unchanged. Paid routes, staff/public isolation,
+  downgrade withdrawal, full capacity, rollback, the strict complete
   producer receipt and deployment remain open. The old Mac cleanup refusal stays
   historical evidence;
   the isolated Linux client proof removes its owned resources successfully.

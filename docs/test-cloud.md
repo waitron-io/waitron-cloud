@@ -764,3 +764,30 @@ the shipping Alpine release, remote boundaries, full settled and active-verifier
 capacity, rollback and the complete combined receipt remain unqualified. The
 complete integration reader still refuses partial evidence, and deployment plan
 enforcement stays off.
+
+
+To exercise remote refusals from the paired free venue, run:
+
+```sh
+node --test scripts/test-cloud-free-remote.test.mjs
+```
+
+Use the same immutable Cloud and pinned Waitron image inputs. The operator
+provisioning call must refuse `permission_denied`. The venue creates its staff
+certificate request with Waitron's native helper, keeping the private key in its
+own state directory. It signs submit and status requests with its actual pairing
+key and lease. Both must return `403 permission_denied`; a damaged signature must
+return `401 invalid_proof` so authentication failure cannot stand in for a plan
+refusal. Cloud independently validates the certificate request's signature and
+hostname, then reads the database again. No placement, hostname, certificate
+request or remote job may exist, and the installation's remote configuration
+must be unchanged.
+
+One real Linux journey passes without skips in 107.3 seconds. Both signup-created
+venues still pair, renew, fetch configuration and retain their identity after
+restart. Its 26 resource samples stay above 3,984 MiB available memory and
+12.80 GiB free disk; owned resources are removed and the protected Waitron
+containers remain unchanged. The receipt contains only public observations.
+Paid routes, staff/public isolation, downgrade withdrawal and worker restart
+remain separate work. This small refusal journey does not qualify full capacity,
+rollback, the shipping release or deployment activation.
