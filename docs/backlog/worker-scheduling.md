@@ -98,6 +98,12 @@ claim after shutdown. The real worker, local mail transport and database methods
 are unchanged. The session check does not identify the pool cleanup method or
 distinguish an unreferenced socket closed at exit.
 
+The command must exit within two seconds of the fixture disconnect, before the local
+transport’s five-second inactivity timeout can hide a missing socket close. Removing
+the fixture disconnect fails this bound under both stop signals. This is a fixture
+check, not a production delivery deadline. Requalify the distinction if you shorten
+the local transport’s inactivity timeout.
+
 A lost acknowledgement leaves remote acceptance uncertain: this local check does
 not promise that a later retry avoids duplicate delivery. Production SMTP behavior,
 other connection-loss stages, delivery timeouts, longer waits, explicit pool cleanup
@@ -119,8 +125,8 @@ opens, and the command drains naturally with code zero and no database sessions 
 Only the observation wrapper prints the `beforeExit` marker, which a forced exit bypasses.
 A two-second bound after the disconnect step rejects a fixture that never closes
 its socket; the transport's existing five-second inactivity timeout cannot satisfy
-that bound. This distinction remains unqualified in the earlier acknowledgement-loss
-checks (D556).
+that bound. The acknowledgement-loss checks (D556) also reject a missing disconnect
+with this bound.
 
 These checks cover the actual command, local transport and PostgreSQL state. They do
 not qualify other SMTP stages, provider behavior, delivery timeouts, longer waits,

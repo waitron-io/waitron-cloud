@@ -81,7 +81,9 @@ connection. See [the single-connection failure limits](backlog/worker-scheduling
 
 Email shutdown now checks connection loss after a complete local SMTP message
 but before acknowledgement, including retained retry state, no later mail claim
-and natural exit under both stop signals. Remote acceptance remains uncertain.
+and natural exit under both stop signals. A two-second drain check distinguishes
+the fixture disconnect from the local transport’s five-second inactivity timeout.
+Remote acceptance remains uncertain.
 See [the SMTP connection-loss limits](backlog/worker-scheduling.md#email-command-shutdown-after-losing-an-smtp-acknowledgement-d556).
 
 Email shutdown also checks connection loss while the server holds recipient acceptance,
