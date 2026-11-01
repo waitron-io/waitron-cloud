@@ -81,3 +81,20 @@ for(const mode of ['unknown','forged'])test(`bound cleanup diagnostic omits ${mo
   });
  });
 });
+test('bound cleanup diagnostic filters individual private fields after an accepted operation',async()=>{
+ await fixture('',async({controller,request})=>{
+  const verify=await createBoundContainerWaitronVerifier({image,owner:'diagnostic',controller:{...controller,async reclaim(){},async create(){return id;},async remove(){throw Error('test_cloud.verifier_docker',{cause:{stage:'remove-child',operation:'rm',code:secret,signal:secret,killed:secret,elapsedMs:secret}});}}});
+  await assert.rejects(verify(bufferObject(Buffer.from([0])),{version:1,reference:'key-1',secret:'private-fixture-key'},request,new AbortController().signal),(error:any)=>{
+   assert.equal(error.message,'backup.verifier_cleanup');
+   assert.deepEqual(error.cause,{stage:'controller-remove',reason:'test_cloud.verifier_docker',controllerStage:'remove-child',operation:'rm',code:null,signal:null,killed:false});return true;
+  });
+ });
+});
+test('bound parent still refuses when removal returns without making the child absent',async()=>{
+ await fixture('',async({controller,request})=>{
+  const verify=await createBoundContainerWaitronVerifier({image,owner:'diagnostic',controller:{...controller,async reclaim(){},async create(){return id;},async remove(){}}});
+  await assert.rejects(verify(bufferObject(Buffer.from([0])),{version:1,reference:'key-1',secret:'private-fixture-key'},request,new AbortController().signal),(error:any)=>{
+   assert.equal(error.message,'backup.verifier_cleanup');assert.deepEqual(error.cause,{stage:'confirm-absent'});return true;
+  });
+ });
+});
