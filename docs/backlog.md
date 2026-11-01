@@ -3433,8 +3433,12 @@ See [the boundaries and remaining work](backlog/storage-cache-fixture.md#storage
 
 ## Storage archive download failure reporting (D441)
 
-**Open.** Capture an instrumented recurrence before attributing the historical startup
-or download failure; real storage qualification remains separate.
+**Open; historical cause unknown.** The Linux test box passes five download
+controls and all four unchanged service-runtime checks from a private empty
+archive cache. A controlled local HTTP/2 truncation confirms archive-body
+reporting but has a different protocol error number from the historical refusal.
+Capture an instrumented recurrence before attributing that old failure or changing
+the single download attempt; full CI qualification remains separate.
 See [the boundaries and remaining work](backlog/storage-cache-fixture.md#storage-archive-download-failure-reporting-d441).
 
 [PR794's root shard](https://github.com/waitron-io/waitron-cloud/actions/runs/41182674171/job/124483174725)

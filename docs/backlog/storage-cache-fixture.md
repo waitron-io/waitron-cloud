@@ -110,9 +110,39 @@ cold-cache controls, including a genuinely truncated local HTTP response. Failed
 startup removes its private directory and publishes no archive; a complete
 archive with the wrong digest remains refused. The fixture still makes exactly one download attempt; archive pins,
 cache publication and permission checks are unchanged. These controls qualify
-reporting, not the historical Linux failure. Capture an instrumented recurrence
-before changing transport or startup behavior; the full PostgreSQL and storage
-journey still belongs to CI while local Docker is unavailable.
+reporting, not the historical Linux failure.
+
+On 1 November, the authorised Linux test box passes all five download controls
+and all four unchanged `service-runtime.test.mjs` checks. The first plan journey
+starts with a private empty archive cache, downloads the pinned Linux archive
+and passes in 9.37 seconds; the complete runtime file takes 24.15 seconds. The
+archive matches the existing SHA-256 pin, and no private storage directory remains
+after the run. You can repeat that selection with an empty private temporary
+directory and:
+
+```sh
+TMPDIR=/path/to/private-empty-directory node scripts/test-postgres.mjs exec \
+  node --test deploy/test-cloud/service-runtime.test.mjs
+```
+
+The runtime and original test match historical head
+`d58cbe85efad8795e65dceb0048aaefc5bf3d0d2` byte-for-byte. The storage fixture has
+later diagnostics and port/readiness repairs, so this run does not recreate the
+complete historical environment. The successful download also does not establish
+which HTTP protocol the public release server used.
+
+A separate native macOS probe confirms the diagnostic with a real local TLS
+HTTP/2 response: it advertises 4,096 bytes but sends an 18-byte body. One request
+fails with `UND_ERR_RES_CONTENT_LENGTH_MISMATCH`; the fixture names the public
+archive request, status 200 and phase `body`, then removes its private directory.
+That controlled response reports HTTP/2 error 1; the historical response reports
+error 2. This proves that the existing diagnostic can identify this kind of archive
+failure, not that the old failure came from the archive server.
+
+Keep the historical cause open. At a new instrumented recurrence, inspect the
+named request and phase before changing transport, startup behavior or the single
+download attempt. The Linux run replaces the earlier wait for Mac Docker;
+full current-head and merge CI remain separate qualification gates.
 
 ## Identity-port allocation race (D499)
 
