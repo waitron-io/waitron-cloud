@@ -4,7 +4,7 @@ import {once} from 'node:events';
 import {generateKeyPairSync,randomUUID} from 'node:crypto';
 import {after,afterEach,before,beforeEach,test} from 'node:test';
 import {setTimeout as delay} from 'node:timers/promises';
-import {createLeaseIssuer,transaction} from '@waitron-cloud/registration';
+import {BillingStore,createLeaseIssuer,transaction} from '@waitron-cloud/registration';
 import {createJob,jobFingerprint,lockVenue,parseJob,writtenItems} from '../src/index.ts';
 import {connectedVenue,database,giveConsent} from './fixtures.ts';
 import {echoFirstPass,emptyReview,isReview,startFakeOpenAi} from './fake-openai.ts';
@@ -37,6 +37,23 @@ async function queue(){
   return createJob(c,{installationId:v.installationId,venueId:v.venueId,operationId:randomUUID(),fingerprint:jobFingerprint(text),body:text,total:writtenItems(parseJob(text)).length});});
 }
 async function until(check:()=>boolean|Promise<boolean>,ms=10000){const end=Date.now()+ms;while(!await check()){if(Date.now()>end)throw new Error('condition timed out');await delay(20);}}
+for(const level of ['registered','connected'] as const)test(`venue-level worker command enforces ${level} before provider work`,async()=>{
+ const fake=await startFakeOpenAi(r=>isReview(r)?emptyReview():echoFirstPass(r));
+ try{
+  const job=await queue();
+  const venue=(await db.pool.query(`SELECT v.id,v.organisation_id,v.legal_business_id FROM venues v JOIN translation_jobs j ON j.venue_id=v.id WHERE j.id=$1`,[job.id])).rows[0];
+  const scope={organisationId:venue.organisation_id,legalBusinessId:venue.legal_business_id},store=new BillingStore(db.pool);
+  const event=()=>({key:randomUUID(),occurredAt:new Date().toISOString(),source:{kind:'internal' as const}});
+  await store.execute(scope,event(),{type:'ensure_business'});
+  await store.transition(scope,event(),{type:'set_venue',venueId:venue.id,expectedRevision:0,value:{level,connectedFrom:null,lapsedOn:null,scheduledLevel:null,scheduledOn:null}});
+  const result=await command(['--once'],{CLOUD_TEST_SERVICE_PLANS:'0',CLOUD_VENUE_SERVICE_LEVELS:'test',CLOUD_TRANSLATION_LOCAL_PROOF:'1',CLOUD_OPENAI_BASE_URL:fake.baseUrl}).exited;
+  assert.deepEqual([result.code,result.signal,result.stdout,result.stderr],[0,null,'','']);
+  assert.equal(fake.requests.length,level==='registered'?0:2);
+  assert.deepEqual((await db.pool.query('SELECT state,done,failed,reason FROM translation_jobs WHERE id=$1',[job.id])).rows,[
+   level==='registered'?{state:'failed',done:0,failed:1,reason:'provider_unavailable'}:{state:'done',done:1,failed:0,reason:null},
+  ]);
+ }finally{await fake.close();}
+});
 test('bad settings exit 1 with one fixed line and no private value',async()=>{
  const cases:[string[],NodeJS.ProcessEnv][]=[[['--once'],{CLOUD_OPENAI_API_KEY:''}],[['--once'],{CLOUD_OPENAI_BASE_URL:'http://private-host.example/v1'}],
   [['--private-flag'],{}],[['--once','--once'],{}],[['--once'],{DATABASE_URL:''}]];
