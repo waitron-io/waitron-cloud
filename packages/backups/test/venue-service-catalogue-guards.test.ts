@@ -11,11 +11,8 @@ const exec=promisify(execFile);
 // A removed guard must fail its behavioral assertion, then pass again after restoration.
 test('snapshot venue guards detect independent omissions',{timeout:180000},async()=>{
  const root=fileURLToPath(new URL('../../../',import.meta.url));
- const scratch=await mkdtemp(join(tmpdir(),'venue-catalogue-guards-')),candidate=join(scratch,'candidate');
+ const scratch=await mkdtemp(join(tmpdir(),'venue-catalogue-guards-'));
  try{
-  await exec('git',['clone','--quiet','--no-hardlinks',root,candidate],{timeout:10000});
-  await exec('pnpm',['install','--frozen-lockfile'],{cwd:candidate,timeout:20000});
-  const path=join(candidate,'packages/backups/src/catalogue.ts'),original=await readFile(path,'utf8');
   const cases=[
    {name:'current authority',needle:"if (mode === 'test-venue-levels') return await requireVenueService(client,venueId,'retained_snapshots',mode);",
     replacement:"if (mode === 'test-venue-levels') return;",pattern:'venue snapshot schema failure never creates keys or storage state',expected:'Missing expected rejection'},
@@ -46,13 +43,20 @@ test('snapshot venue guards detect independent omissions',{timeout:180000},async
    {name:'failed publication releases capture',needle:'client.release(discard);',replacement:'client.release(false);',
     pattern:'venue failed snapshot publication releases its capture for another publisher',expected:'a failed publication must release its capture lease'},
   ];
+  const qualified:string[]=[];
+  // Mutations stay in separate checkouts; both batches finish before either is removed.
+  const results=await Promise.allSettled([0,1].map(async index=>{
+  const candidate=join(scratch,'candidate-'+index);
+  await exec('git',['clone','--quiet','--no-hardlinks',root,candidate],{timeout:10000});
+  await exec('pnpm',['install','--frozen-lockfile'],{cwd:candidate,timeout:20000});
+  const path=join(candidate,'packages/backups/src/catalogue.ts'),original=await readFile(path,'utf8');
   const env={...process.env};delete env.NODE_TEST_CONTEXT;
   async function run(pattern:string){
    return exec(process.execPath,['--test','--test-reporter=tap','--test-name-pattern=^'+pattern+'$','test/venue-service-backups.test.ts'],
     {cwd:join(candidate,'packages/backups'),env,timeout:20000,maxBuffer:2*1024*1024})
     .then(r=>({code:0,output:r.stdout+r.stderr}),e=>({code:e.code,output:e.stdout+e.stderr}));
   }
-  for(const c of cases){
+  for(const c of cases.filter((_,i)=>i%2===index)){
    assert.equal(original.split(c.needle).length,2,c.name+' must target one guard');
    const before=await run(c.pattern);assert.equal(before.code,0,before.output);assert.match(before.output,/# pass 1\b/);assert.match(before.output,/# fail 0\b/);assert.match(before.output,/# skipped 0\b/);
    try{
@@ -61,7 +65,11 @@ test('snapshot venue guards detect independent omissions',{timeout:180000},async
     assert.match(omitted.output,/AssertionError|ERR_ASSERTION/);assert.ok(omitted.output.includes(c.expected),omitted.output);assert.ok(omitted.output.includes(c.pattern));
    }finally{await writeFile(path,original);}
    const restored=await run(c.pattern);assert.equal(restored.code,0,restored.output);assert.match(restored.output,/# pass 1\b/);assert.match(restored.output,/# skipped 0\b/);
+   qualified.push(c.name);
    console.log('VENUE_CATALOGUE_GUARD_DETECTED '+c.name);
   }
+  }));
+  for(const result of results)if(result.status==='rejected')throw result.reason;
+  assert.deepEqual(qualified.sort(),cases.map(c=>c.name).sort(),'every catalogue guard must be qualified once');
  }finally{await rm(scratch,{recursive:true,force:true});}
 });
