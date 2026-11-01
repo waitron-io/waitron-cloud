@@ -59,3 +59,36 @@
   passed all 18 English, Spanish and delayed-injection journeys; each status read
   was explicitly continued before interception was disabled. Temporary Ubuntu
   workflows, control switches and protocol tracing are removed.
+
+
+## Usage rate-limit wait (D530)
+
+[PR #598's CI run](https://github.com/waitron-io/waitron-cloud/actions/runs/41183089824/job/124484426019)
+failed the translation-consent uncertainty wait after five seconds and the usage
+rate-limit wait after four seconds. The consent trace ends with server-received
+activity and consent requests without completion. The usage failure lacks that
+boundary evidence. You cannot infer a shared cause from their occurrence in one
+job. The unchanged usage journey passes all 56 local checks; that does not repair
+or explain either historical failure.
+
+When the usage journey fails, you now get its named stage, the browser's last
+100 static endpoint events, and a controller snapshot: pending, loaded, an
+allowlisted error, remaining wait, and whether an organisation and earlier totals
+are present. Session reporting includes only its state. Query strings, bodies,
+account and organisation identifiers, headings and raw errors are omitted. A
+response event records headers; a finished event records request completion.
+Neither proves that the controller accepted the body. A request with no response
+does not identify the browser, interception, network or server as the cause.
+
+The snapshot has a separate 250 ms budget after the original failure. A closed
+or unresponsive page produces an unavailable marker. A reporting failure retains
+the original error. Every existing usage assertion, four-second page wait,
+61-second simulated cooldown advance and two-minute test deadline remains.
+Run `pnpm --dir apps/portal exec node --test test/portal-failure-evidence.test.ts`
+for controlled lifecycle, redaction and reporting failures, and the adjacent
+`test/usage-read-message-browser.test.ts` for the full usage journey.
+
+**Open:** capture a recurrence, reproduce its named request/controller boundary,
+then fix that cause without changing the original checks. Consent's unfinished
+server requests need a separate real PostgreSQL reproduction. These synthetic
+HTTP diagnostics do not qualify server authority or repair the historical waits.
