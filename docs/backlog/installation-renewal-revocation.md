@@ -8,8 +8,9 @@ held installation, then received a renewal with `revokedAt: null`.
 A controlled Linux reproduction pauses that waiting PostgreSQL backend, releases
 the holder and starts renewal. Renewal acquires the row before the paused backend
 wakes, reproducing the existing missing-refusal assertion. A separate single-row
-experiment reproduces the same ordering. Forty ordinary installation runs and
-1,000 ordinary single-row iterations pass; they do not exclude this scheduling.
+experiment reproduces the same ordering. Before this change, driver Linux receipts record 40 ordinary installation runs
+and 1,000 ordinary single-row iterations without failure. These baseline runs do
+not exclude this scheduling.
 The historical runs did not capture backend scheduling, so their exact timing
 remains unattributed.
 
@@ -23,6 +24,14 @@ connection and collects both requests when an ordering check fails.
 
 The controlled pause passes with the second queue observation, fails the original
 `revoked` refusal when that observation is removed, then passes after restoration.
+Further controls hold revocation at its real session lock until the first empty
+installation observation, and hold renewal until an empty observation for the
+revocation backend. These controls use the real query results. Replacing the
+first wait with one lookup fails naturally because no waiter was observed.
+Pointing the second wait at the holder instead fails the original `revoked`
+refusal. Both controls pass after restoration. This qualifies the previously
+open caller-wait omission check and the second wait's connection target.
+
 All 14 installation tests pass. All 97 original assertion expressions and the
 existing deadlines remain unchanged. Forced observation failures before and
 after renewal starts exit naturally with cleanup; without cleanup, the first
