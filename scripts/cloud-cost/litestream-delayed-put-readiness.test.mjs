@@ -100,6 +100,8 @@ for (const [name, method, path, status] of [
   ['informational response', 'PUT', '/stream/0000/0000000000000002-0000000000000002.ltx', 100],
   ['read of new transaction', 'GET', '/stream/0000/0000000000000002-0000000000000002.ltx', 200],
   ['multipart completion identifier', 'PUT', '/stream/0000/0000000000000002-0000000000000002.ltx?uploadId=synthetic', 200],
+  ['encoded multipart identifier', 'PUT', '/stream/0000/0000000000000002-0000000000000002.ltx?%75ploadId=synthetic', 200],
+  ['bare multipart part parameter', 'PUT', '/stream/0000/0000000000000002-0000000000000002.ltx?partNumber', 200],
   ['reversed transaction range', 'PUT', '/stream/0000/0000000000000003-0000000000000002.ltx', 200],
   ['zero transaction', 'PUT', '/stream/0000/0000000000000000-0000000000000002.ltx', 200],
   ['unknown compaction level', 'PUT', '/stream/0008/0000000000000002-0000000000000002.ltx', 200],

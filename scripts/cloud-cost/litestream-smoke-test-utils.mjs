@@ -48,7 +48,8 @@ export function createDelayedPutGate() {
     beforeSale() { boundary = highWater; },
     admit(req, postSale) {
       const match = /\/(?:000[0-3]|0009)\/([a-f0-9]{16})-([a-f0-9]{16})\.ltx(?:\?|$)/.exec(req.url ?? '');
-      const partial = /[?&](?:partNumber|uploadId)=/.test(req.url ?? '');
+      const query = new URL(req.url ?? '/', 'http://synthetic.invalid').searchParams;
+      const partial = query.has('partNumber') || query.has('uploadId');
       const first = match ? BigInt('0x' + match[1]) : 0n;
       const last = match ? BigInt('0x' + match[2]) : 0n;
       const row = { txid: req.method === 'PUT' && !partial && first > 0n && last >= first ? last : 0n, postSale, forwarded: false };
