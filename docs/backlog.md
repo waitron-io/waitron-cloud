@@ -347,7 +347,10 @@ The published plan records the reviewed roadmap; local build authority for slice
 2–5 leaves every legal, provider, shared-contract and enablement gate in place. This does not approve broader D88 hosting/isolation/shared contracts,
 spending, deployment, provider resources or contracts. D103's first C39 monitoring
 design is approved for planning only; C41 release/upgrade and C60 compute decisions remain separate.
-D102/D104 hands-on work waits until 3 November. D68 is landed, including
+D102's [feedback and suppression design](superpowers/specs/2026-11-01-ses-feedback-design.md)
+recommends Paris and authenticated private-queue intake. Full-design approval and
+build-plan authority remain open; intake and shared suppression are unimplemented.
+D102/D104 hands-on account setup and live tests wait until 3 November. D68 is landed, including
 `b8ff5555c996c5dec1086be49f7d046018bd3187`, but does not price hosting. D79's local
 backup verification includes migration 043 and the complete same-run recovery proof.
 Snapshots remain unavailable in the delivered deployment and plan enforcement stays

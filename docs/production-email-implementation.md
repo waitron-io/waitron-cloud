@@ -1,7 +1,7 @@
 # Production account email
 
 The owner selected **Amazon SES in an EU region** on 2026-10-21. D102 owns the
-Paris/Frankfurt recommendation, account setup and live qualification. The
+region recommendation, account setup and live qualification. The
 [SES endpoint table](https://docs.aws.amazon.com/general/latest/gr/ses.html) lists
 those regions but no Spain endpoint. This is an approved email-processing exception,
 not a claim about recipient mail providers, transit or every subprocessor. The
@@ -80,6 +80,14 @@ messages cannot be replayed after their encrypted payload has been erased.
 
 ## Before enabling live delivery
 
+The [feedback and suppression proposal](superpowers/specs/2026-11-01-ses-feedback-design.md)
+recommends Paris and private queue intake for authenticated bounce and complaint
+events. It binds feedback before sending, keeps provider IDs separate from the
+original Message-ID and blocks future handoffs without replaying accepted mail.
+The proposal needs full-design approval and build-plan authority; intake and the
+shared account/venue suppression boundary are unimplemented. Paris remains a
+recommendation pending qualification.
+
 D102 must qualify and configure the selected SES account/region and verified sender
 domain. Confirm the processing/storage locations, retention, subcontractors and suppression rules for the
 chosen service. Disable open/click tracking and link rewriting for account emails;
@@ -87,8 +95,10 @@ confirm with a real delivered message. Configure SPF, DKIM and DMARC as instruct
 the provider. Use an application credential, configure a monitored bounce address and
 prove delivery, permanent bounce and complaint handling.
 
-Authenticated delivery-event ingestion, suppression reconciliation, alerts, production
-secret provisioning and a live delivery proof need the selected account/provider.
+You can design and test intake locally before live setup. Production authentication,
+suppression reconciliation, alerts, secret provisioning and live delivery proof need
+the qualified account/provider. Hands-on account, sender/domain and live testing
+wait for the owner on 3 November.
 The transport implementation does not pretend those operational pieces are deployed.
 There is no automatic cross-country or provider fallback. D102 must qualify the
 selected EU SES path before enabling it. The public portal routes are still a
