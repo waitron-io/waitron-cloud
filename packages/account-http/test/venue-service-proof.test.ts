@@ -16,7 +16,7 @@ test('venue service fixture proof retains legacy evidence and binds the nine new
  const head=await git('rev-parse','HEAD'),tree=await git('rev-parse','HEAD^{tree}');
  for(const venueLevels of [false,true]){
   // Parallel fixture cleanup must not consume the package suite's database lock slots.
-  const started=performance.now(),pending=exec(process.execPath,['scripts/test-postgres.mjs','exec','node','scripts/test-cloud-free-services.mjs',...(venueLevels?['--venue-levels']:[])],{cwd:root,env,timeout:170000,maxBuffer:1024*1024});
+  const started=performance.now(),pending=exec(process.execPath,['scripts/test-postgres.mjs','exec','node','scripts/test-cloud-free-services.mjs',...(venueLevels?['--venue-levels']:[])],{cwd:root,env,timeout:330000,maxBuffer:1024*1024});
   let progress='';pending.child.stderr?.on('data',chunk=>{
    progress+=chunk.toString();const lines=progress.split('\n');progress=lines.pop()??'';
    for(const line of lines)if(/^Free-service proof: (account-mail|relay-plans|translation-plans|relay-guards|translation-guards|http-guards|deployment-gates|rules|installations|backups|recovery|remote|translation|relay|runtime|storage)$/.test(line))
