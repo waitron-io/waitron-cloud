@@ -949,9 +949,26 @@ above 3,887 MiB during the measured window. Peak Cloud memory is below 879 MiB; 
 verifier stays below 184 MiB, including 19.7 MiB of temporary memory. Both samples
 of the active verifier identify the admitted child.
 
+The journey also records a separate `capacity.startup.samples` sequence from
+before Compose allocates containers through a final reading after readiness.
+It measures the same host disk, memory, owned container memory and private-volume
+sizes as the settled window. Missing readings, a gap over five seconds, budget
+violations or changed protected containers refuse startup. The sampler stops and
+waits for its own startup operation before cleanup, so Compose cannot continue
+creating containers during cleanup.
+
+A later shipping-image run passed in 195.2 seconds, without skips, under the
+unchanged 300-second bound. Twelve startup readings span 18 seconds, with gaps
+at most 3.3 seconds; the final reading follows readiness. The same project then
+records 62.9 settled seconds and two active-verifier samples. Free disk starts
+at 14.25 GiB and stays above 14.04 GiB. The first startup run refused a generic
+Docker exec. A diagnostic repeat does not reproduce that refusal; its cause
+remains unknown. Keep its failed receipt and capture the refused command's
+category and container state on its next occurrence.
+
 These measurements do not qualify the full deployment. The receipt continues to
-report `shippingQualification: false` and `completeIntegration: false`. Startup
-and integration sampling, direct-storage withdrawal, published-release upgrade
+report `shippingQualification: false` and `completeIntegration: false`. Whole
+integration sampling, direct-storage withdrawal, published-release upgrade
 and the unchanged 20 GiB startup / 15 GiB running floors remain required.
 
 ## Stop and restart Cloud without losing pairings

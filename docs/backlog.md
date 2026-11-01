@@ -814,13 +814,19 @@ implementation or production evidence.
 
 - **LAN test Cloud with free and paid organisations.** The capacity journey now
   collects host memory and available disk on Docker's data filesystem before
-  project startup, throughout settled/verification sampling
-  and after owned cleanup. Missing host data refuses the run. The shipping-Dockerfile
-  journey passes one case without skips in 200.1 seconds under its unchanged
-  300-second limit, with 27 samples, 62.6 settled seconds and gaps below 3.2 seconds.
-  Free disk is 15.54 GiB before startup, at least 15.32 GiB during measurement and
-  15.53 GiB after cleanup. This adds raw measurements; full startup/integration
-  sampling, direct-storage withdrawal, published-release qualification and shipping 20/15 GiB floors remain due. The
+  project startup, throughout startup and settled/verification sampling,
+  and after owned cleanup. Startup includes a reading before allocation and one
+  after readiness; observation failures stop and wait for its own Compose command.
+  The shipping-Dockerfile journey passes one case without skips in 195.2 seconds
+  under its unchanged 300-second limit. Twelve startup samples span 18 seconds;
+  26 settled/verification samples cover 62.9 settled seconds. All gaps stay below
+  3.3 seconds. Free disk is 14.25 GiB before startup, above 14.04 GiB during
+  measurement and 14.25 GiB after cleanup. The first startup run failed a generic
+  Docker exec; a diagnostic repeat did not reproduce it, so its cause remains
+  unknown. Capture the refused command's category and container state on its
+  next occurrence before attributing it. These are raw measurements;
+  whole-integration sampling, direct-storage withdrawal, published-release
+  qualification and shipping 20/15 GiB floors remain due. The
   [test deployment design](superpowers/specs/2026-10-17-test-cloud-free-paid-design.md)
   and [implementation plan](superpowers/plans/2026-10-17-test-cloud-free-paid.md)
   describe a separate Cloud Compose project on the owner's test box, with an
