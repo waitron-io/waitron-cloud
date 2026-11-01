@@ -57,11 +57,14 @@ test('the image reader measures actual files and refuses altered, missing or uns
     assert.deepEqual(JSON.parse(result.stdout), {files: 2, runtimeSha256: sha(JSON.stringify(files))});
     for (const input of [{files: []}, {files: [...files, files[0]]}, {files: [...files].reverse()},
       {files: [{path: '../PRIVATE_SOURCE_CANARY', sha256: '0'.repeat(64)}]}, {files, extra: 'PRIVATE_SOURCE_CANARY'},
+      {files: [{path: 'packages/../package.json', sha256: sha('{"type":"module"}\n')}]},
       {files: [{path: 'packages/account/src/missing.ts', sha256: '0'.repeat(64)}]},
       {files: [{...files[0], sha256: '0'.repeat(64)}]}]) {
       const refused = run(input); assert.equal(refused.status, 1);
       assert.equal(refused.stdout, ''); assert.equal(refused.stderr, 'Integration image source refused\n');
     }
+    const oversized = spawnSync(process.execPath, [reader], {cwd: root, input: ' '.repeat(2 * 1024 * 1024) + JSON.stringify({files}), encoding: 'utf8'});
+    assert.equal(oversized.status, 1); assert.equal(oversized.stdout + oversized.stderr, 'Integration image source refused\n');
     await writeFile(join(root, files[1].path), 'PRIVATE_SOURCE_CANARY');
     const refused = run({files}); assert.equal(refused.status, 1);
     assert.equal(refused.stdout + refused.stderr, 'Integration image source refused\n');
