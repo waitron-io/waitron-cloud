@@ -27,13 +27,21 @@ node --test test/email-worker-shutdown.test.ts` to check the actual email worker
 command under SIGINT and SIGTERM. Each signal stops an idle command normally and
 closes its database connections. With four claims blocked by an owned table lock,
 the command retains all four connections during a one-second hold after the
-signal, then exits normally after lock release with no connections left.
+signal, then drains naturally after lock release with no connections left.
 The queue stays empty, so these checks send no mail.
+
+The natural-drain observation (D559) requires exactly `{"drained":true,"code":0}`
+from a wrapper at Node's `beforeExit` event in all four idle and blocked-claim
+cases. This event runs when no work keeps the process alive. A forced successful
+exit after cleanup bypasses it; the command itself stays quiet. All other state,
+connection, one-second hold and six-second exit checks remain.
 
 Other worker commands, active mail delivery, database failure during shutdown and
 production deployment still need separate qualification. These checks do not
 claim that shutdown cancels an active database query or that awaiting the worker
 loop, rather than pool cleanup, keeps those connections open.
+The session observation does not identify an explicit pool-cleanup method or
+distinguish an unreferenced connection closed during process exit.
 
 ### Email command shutdown during local SMTP delivery (D539)
 
