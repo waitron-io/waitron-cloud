@@ -69,8 +69,3 @@ button:disabled { cursor: default; opacity: .6; }
 .factor-codes { padding-inline-start: 1.25rem; }
 .factor-codes li { margin-block: .5rem; }
 
-.fiscal-allocation { min-width: 0; }
-.fiscal-allocation dd { margin-inline-start: 0; overflow-wrap: anywhere; }
-.fiscal-allocation textarea { box-sizing: border-box; width: 100%; max-width: 100%; color: var(--wt-color-text); background: var(--wt-color-bg); border: 1px solid var(--wt-color-text-muted); border-radius: .35rem; font: .9rem/1.5 ui-monospace, monospace; padding: .5rem; }
-.fiscal-allocation li { overflow-wrap: anywhere; }
-.fiscal-series { border-block-start: 1px solid var(--wt-color-border); margin-block: 1rem; padding-block: .5rem; }

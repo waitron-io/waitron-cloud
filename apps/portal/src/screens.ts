@@ -1,4 +1,3 @@
-import {fiscalAllocationScreen} from './fiscal-allocation-screen.ts';
 import {authenticatorLoginScreen,authenticatorCodesScreen} from './authenticator-screen.ts';
 import {recoveryScreen} from './recovery-screen.ts';
 import {installationScreen} from './installation-screen.ts';
@@ -30,15 +29,14 @@ export function screen(app: PortalApp) {
     .loading=${app.pending} @click=${fn}>${app.pending ? c.wait : label}</wt-button></wt-form-actions>`;
   const retryLink = app.path === '/signup' ? '/signup' : '/forgot-password';
   let content;
-  if (app.path === '/fiscal-allocations') content = fiscalAllocationScreen(app);
-  else if (app.path === '/recover') content = recoveryScreen(app);
+  if (app.path === '/recover') content = recoveryScreen(app);
   else if (app.path === '/connect') content = pairingScreen(app);
   else if (app.path === '/login' && app.factorCodes.length) content = authenticatorCodesScreen(app);
   else if (app.path === '/login' && app.authenticator.challenge) content = authenticatorLoginScreen(app);
   else if (app.notice && !['signedOut', 'sessionExpired','factorChanged','factorRemoved','factorChangeUncertain'].includes(app.notice)) content = html`<p role="status">${c[app.notice]}</p>${link('/login', c.login)}`;
   else if (app.path === '/' || app.path === '/account') {
     content = app.session.state.kind === 'authenticated'
-      ? html`<p>${c.accountIntro}</p><p>${link('/fiscal-allocations',c.fiscalTitle)}</p>${accountSecurityScreen(app)}${installationScreen(app)}<wt-form-actions><wt-button .disabled=${app.logoutDisabled||app.diagnostics.pending} @click=${()=>{void app.logout();}}>${c.signout}</wt-button></wt-form-actions><p>${link('/forgot-password', c.forgot)}</p>`
+      ? html`<p>${c.accountIntro}</p>${accountSecurityScreen(app)}${installationScreen(app)}<wt-form-actions><wt-button .disabled=${app.logoutDisabled||app.diagnostics.pending} @click=${()=>{void app.logout();}}>${c.signout}</wt-button></wt-form-actions><p>${link('/forgot-password', c.forgot)}</p>`
       : html`<p role="status">${app.session.state.kind === 'unavailable' ? c.sessionUnavailable : c.checking}</p>
           ${app.session.state.kind === 'unavailable' ? html`<wt-button .disabled=${!!app.waiting} @click=${() => {void app.session.check();}}>${c.retry}</wt-button>` : html`<wt-spinner .label=${c.checking}></wt-spinner>`}`;
   } else if (app.link.invalid || (app.path === '/reset-password' && !app.link.token)) {
@@ -69,6 +67,6 @@ export function screen(app: PortalApp) {
         <wt-form-error-summary tabindex="-1" .heading=${c.errors} .errors=${errors}></wt-form-error-summary>
         ${content}
         ${app.error === 'uncertain' || app.error === 'linkUnavailable' ? html`<nav>${link('/login', c.login)} ${link(retryLink, c.requestLink)}</nav>` : nothing}
-        ${app.waiting ? html`<p class="help" role="status">${app.path==='/fiscal-allocations'?c.fiscalCooldown:c.cooldown} ${app.waiting} ${app.waiting===1?c.second:c.seconds}</p>` : nothing}
+        ${app.waiting ? html`<p class="help" role="status">${c.cooldown} ${app.waiting} ${app.waiting===1?c.second:c.seconds}</p>` : nothing}
       </form></wt-card></main>`;
 }

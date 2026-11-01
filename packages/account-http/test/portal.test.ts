@@ -96,3 +96,20 @@ test('portal unavailability remains retryable and translated without an applicat
   assert.match(response.headers.get('content-security-policy')!, /style-src 'self' 'unsafe-inline'/);
   assert.match(await response.text(), /Servicio no disponible/);
 });
+
+test('retired_registry_document uses the ordinary translated missing page for GET and HEAD', async () => {
+  const running = await host();
+  try {
+    for (const locale of ['en', 'es']) for (const method of ['GET', 'HEAD']) {
+      const headers = {'accept-language': locale};
+      const missing = await send(running.port, '/missing', method, 'localhost', false, headers).result;
+      const retired = await send(running.port, '/fiscal-allocations', method, 'localhost', false, headers).result;
+      assert.equal(retired.status, 404);
+      assert.equal(retired.status, missing.status);
+      assert.equal(retired.body, missing.body);
+      if (method === 'HEAD') assert.equal(retired.body, '');
+      for (const name of ['cache-control', 'referrer-policy', 'x-content-type-options', 'content-security-policy', 'content-type', 'content-length', 'set-cookie'])
+        assert.deepEqual(retired.headers[name], missing.headers[name], name);
+    }
+  } finally {await running.close();}
+});
