@@ -1,0 +1,3 @@
+#!/bin/sh
+# The pinned launcher passes only stream credentials; this fixture must also trust its private CA.
+SSL_CERT_FILE=/proof/ca.pem exec /usr/local/bin/litestream-native "$@"

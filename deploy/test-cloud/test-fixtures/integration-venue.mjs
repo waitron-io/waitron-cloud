@@ -9,6 +9,10 @@ import {Agent} from 'node:https';
 import {lookup} from 'node:dns';
 import {createCloudConnection} from '/waitron/apps/server/src/cloud-client.ts';
 const require = createRequire('/waitron/apps/server/package.json');
+if (process.env.CLOUD_TEST_STREAM === '1') {
+  const {startIntegrationTransport} = await import('/proof/integration-transport.mjs');
+  await startIntegrationTransport();
+}
 const nativeFetch = globalThis.fetch;
 globalThis.fetch = async (url, options) => {
   const response = await nativeFetch(url, options);
@@ -33,6 +37,11 @@ const socket = root + '/proof.sock'; await rm(socket, {force: true});
 const control = createServer(async (req, res) => {
   try {
     assert.equal(req.method, 'POST');
+    if (req.url === '/stream-start') {
+      const {startIntegrationStream} = await import('/proof/integration-stream.mjs');
+      res.end(JSON.stringify(await startIntegrationStream(root)));
+      return;
+    }
     if (req.url === '/recovery-authority') {
       const {prepareIntegrationRecoveryAuthority} = await import('/proof/integration-recovery-authority.mjs');
       res.end(JSON.stringify(await prepareIntegrationRecoveryAuthority(root)));

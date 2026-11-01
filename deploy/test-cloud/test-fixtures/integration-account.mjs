@@ -12,11 +12,14 @@ import {setVerificationPolicy} from '../../../packages/backups/src/verification-
 import {transaction} from '../../../packages/registration/src/transaction.ts';
 import {inspectIntegrationVerification} from './integration-verification-evidence.mjs';
 import {inspectIntegrationRecovery} from './integration-recovery-evidence.mjs';
+import {inspectIntegrationStream} from './integration-stream-evidence.mjs';
+import {inspectIntegrationRetainedSnapshot} from './integration-retained-snapshot-evidence.mjs';
+import {ManagedStreams} from '../../../packages/backups/src/managed-streams.ts';
 const {Pool} = createRequire(new URL('../../../packages/registration/package.json', import.meta.url))('pg');
 const {S3Client, CreateBucketCommand} = createRequire(new URL('../../../packages/backups/package.json', import.meta.url))('@aws-sdk/client-s3');
 let input = '';
 for await (const part of process.stdin) {input += part; assert.ok(input.length < 16384);}
-const {organisationId, plan, installationId, phase, pointId, sha256, bytes, sourceNodeId, image, requestId, attemptId, targetDigest, desiredStatus} = JSON.parse(input);
+const {organisationId, plan, installationId, phase, pointId, sha256, bytes, sourceNodeId, image, requestId, attemptId, targetDigest, desiredStatus, generation, recoverableAt} = JSON.parse(input);
 const config = await loadRuntime('/run/local-stack');
 const pool = new Pool({connectionString: `postgres://${config.database.user}:${config.database.password}@postgres:5432/${config.database.name}`, connectionTimeoutMillis: 5000, statement_timeout: 10000});
 try {
@@ -32,7 +35,32 @@ try {
   } else {
     const {rows} = await pool.query('SELECT v.organisation_id,v.local_venue_id,i.venue_id FROM installations i JOIN venues v ON v.id=i.venue_id WHERE i.id=$1', [installationId]);
     assert.equal(rows.length, 1); assert.equal(rows[0].organisation_id, organisationId);
-    if (phase === 'inspect-recovery') {
+    if (phase === 'inspect-stream') {
+      const runtime=await openTestCaptureRuntime({pool,directory:'/run/local-stack',mode:'test-free-paid'});
+      let invariant='observer';
+      try {
+        const row=(await pool.query('SELECT configuration_revision,superseded_by,revoked_at FROM installations WHERE id=$1',[installationId])).rows[0];
+        assert.equal(row.superseded_by,null);assert.equal(row.revoked_at,null);
+        const streams=new ManagedStreams(pool,runtime.options.vault,runtime.options.managedStreams,'test-free-paid');
+        const observed=await streams.observe(installationId,row.configuration_revision);
+        invariant='snapshot';
+        const point=(await pool.query('SELECT * FROM backup_points WHERE id=$1 AND installation_id=$2 AND venue_id=$3',[pointId,installationId,rows[0].venue_id])).rows[0];
+        assert.ok(point);
+        const location={endpoint:'https://waitron.local:8333',bucket:'venue-'+rows[0].venue_id,region:'local'};
+        const stored=await runtime.options.objects(location).read(point.object_key);
+        inspectIntegrationRetainedSnapshot(point,stored,{pointId,installationId,venueId:rows[0].venue_id,sha256,bytes,sourceNodeId,attemptId});
+        assert.equal(point.verification,'verified');
+        console.log(JSON.stringify(inspectIntegrationStream({venueId:observed.venueId,installationId:observed.installationId,
+          sourceNodeId:observed.sourceNodeId,localVenueId:observed.localVenueId,generation:observed.generation,
+          recoverableAt:observed.recoverableAt,checkedAt:observed.checkedAt,nativeStreaming:true,signedPointerVerified:true,
+          retainedSnapshotUnchanged:true,noSupersession:true,noActivation:true},
+          {venueId:rows[0].venue_id,installationId,sourceNodeId,localVenueId:rows[0].local_venue_id,generation,recoverableAt})));
+      } catch(error) {
+        const named=/^integration\.stream_[A-Za-z0-9_]+/.exec(error.message)?.[0];
+        console.error(named??'integration.stream_'+invariant);
+        throw error;
+      } finally {runtime.close();}
+    } else if (phase === 'inspect-recovery') {
       const row = (await pool.query(`SELECT r.*,q.id AS request_id,q.operation_id,q.protocol_version,q.verification_target AS request_target,
         p.current_evidence_id,p.digest,p.size,v.organisation_id,i.superseded_by,i.revoked_at
         FROM backup_recoveries r JOIN backup_recovery_requests q ON q.operation_id=r.id

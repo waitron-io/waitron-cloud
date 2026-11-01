@@ -24,21 +24,28 @@ export async function completeCleanup(steps) {
   if (failed.length) throw Error('integration.cleanup_failed:' + failed.join(','));
 }
 
-// Child output may contain account links or local credentials; only fixed phases escape failures.
+export function streamCommandDiagnostic(text) {
+  const names=['shape','venueId','installationId','sourceNodeId','localVenueId','generation','recoverableAt','observation','identity',
+    'nativeStreaming','signedPointerVerified','retainedSnapshotUnchanged','noSupersession','noActivation','observer','snapshot'];
+  const found=/integration\.stream_([A-Za-z0-9_]+)/.exec(text)?.[1];
+  return names.includes(found) ? ':integration.stream_'+found : '';
+}
+
+// Child output may contain account links or local credentials; only fixed phases and invariants escape failures.
 function command(args, input = '', phase = args[0], env = {}) {
   return new Promise((resolve, reject) => {
     const child = spawn('docker', args, {cwd: root, env: {...process.env, ...env}, stdio: ['pipe', 'pipe', 'pipe']});
-    let output = '', size = 0, invalid = false;
+    let output = '', diagnostic = '', size = 0, invalid = false;
     const timer = setTimeout(() => {invalid = true; child.kill('SIGKILL');}, 120000);
     const stop = () => {invalid = true; child.kill('SIGTERM');};
     process.once('SIGINT', stop); process.once('SIGTERM', stop);
     child.stdout.on('data', part => {size += part.length; if (size > 2 * 1024 * 1024) stop(); else output += part;});
-    child.stderr.on('data', part => {size += part.length; if (size > 2 * 1024 * 1024) stop(); else if (phase === 'client-diagnostics') output += part;});
+    child.stderr.on('data', part => {size += part.length; if (size > 2 * 1024 * 1024) stop(); else if (phase === 'client-diagnostics') output += part; else if (phase === 'snapshot-inspect-stream') diagnostic=(diagnostic+part).slice(-4096);});
     child.stdin.on('error', () => {});
     child.once('error', () => {invalid = true;});
     child.once('close', code => {
       clearTimeout(timer); process.removeListener('SIGINT', stop); process.removeListener('SIGTERM', stop);
-      if (invalid || code !== 0) reject(new Error('integration.command_failed:' + phase));
+      if (invalid || code !== 0) reject(new Error('integration.command_failed:' + phase + streamCommandDiagnostic(diagnostic)));
       else resolve(output.trim());
     });
     child.stdin.end(input);
@@ -55,7 +62,8 @@ export function checkProtectedContainers(before, after, ids) {
   return true;
 }
 
-export async function runTestCloudClients({image, waitronImage, protectedContainerIds = [], paidSnapshot = false, paidVerification = false, paidRecovery = false, paidAuthorisedRecovery = false} = {}) {
+export async function runTestCloudClients({image, waitronImage, protectedContainerIds = [], paidSnapshot = false, paidVerification = false, paidRecovery = false, paidAuthorisedRecovery = false, paidStream = false} = {}) {
+  paidAuthorisedRecovery ||= paidStream;
   paidRecovery ||= paidAuthorisedRecovery;
   if (!digest.test(image) || !digest.test(waitronImage)) throw Error('integration.image_invalid');
   const runId = randomUUID(), project = 'waitron-cloud-test-integration-' + runId.slice(0, 8);
@@ -103,7 +111,7 @@ export async function runTestCloudClients({image, waitronImage, protectedContain
     assert.equal(base.Config.Labels?.['cloud.waitron-revision'], revision, 'integration.waitron_revision');
     const baseTag = base.RepoTags?.[0]; assert.ok(baseTag, 'integration.waitron_tag');
     assert.equal(JSON.parse(await docker(['image', 'inspect', baseTag]))[0].Id, waitronImage);
-    await docker(['build', '--pull=false', '--build-arg', 'WAITRON_IMAGE=' + baseTag, '--label', 'cloud.integration.owner=' + runId,
+    await docker(['build', '--pull=false', '--build-arg', 'WAITRON_IMAGE=' + baseTag, '--build-arg', 'WITH_STREAM=' + (paidStream ? '1' : '0'), '--label', 'cloud.integration.owner=' + runId,
       '-f', 'deploy/test-cloud/test-fixtures/integration-venue.Dockerfile', '-t', clientTag, 'deploy/test-cloud/test-fixtures'], '', 'client-build');
     built = true;
     const clientImage = JSON.parse(await docker(['image', 'inspect', clientTag]))[0].Id;
@@ -132,7 +140,7 @@ export async function runTestCloudClients({image, waitronImage, protectedContain
     assert.equal((await api('/api/health/ready')).status, 200);
     await assert.rejects(api('/api/health/ready', undefined, {}, null), /certificate|issuer|verify/i);
     await assert.rejects(api('/api/health/ready', undefined, {}, ca, 'wrong.local'), /certificate|Hostname/i);
-    const organisations = [], restarts = []; let freeSnapshot, publishedSnapshot;
+    const organisations = [], restarts = []; let freeSnapshot, publishedSnapshot, observedStream;
     for (const plan of ['free', 'paid']) {
       const email = `integration-${plan}-${runId}@example.test`, password = 'Disposable account ' + randomUUID();
       assert.equal((await api('/api/account/signup/request', {email})).status, 202);
@@ -159,11 +167,12 @@ export async function runTestCloudClients({image, waitronImage, protectedContain
       const captureSnapshot = (paidSnapshot || paidVerification || paidRecovery) && plan === 'paid';
       const venueRoot = captureSnapshot ? '/tmp/cloud-integration-state/cloud-integration-backup-' + runId + '/paid' : '/tmp/cloud-integration-state/' + plan;
       const id = await docker(['create', '--pull=never', '--label', 'cloud.integration.owner=' + runId, '--network', network,
-        '--add-host', 'waitron.local:10.79.0.2', '--memory', '1024m', '--memory-swap', '1024m', '--read-only', '--cap-drop', 'ALL',
+        '--add-host', 'waitron.local:' + (paidStream && plan === 'paid' ? '127.0.0.1' : '10.79.0.2'), '--memory', '1024m', '--memory-swap', '1024m', '--read-only', '--cap-drop', 'ALL',
         '--security-opt', 'no-new-privileges', '--pids-limit', '128', '--user', '1000:1000', '--tmpfs', '/tmp:rw,nosuid,nodev,size=256m,mode=1777',
         '--mount', 'type=bind,src=' + caFile + ',dst=/proof/ca.pem,readonly', '--mount', 'type=volume,src=' + stateVolume + ',dst=/tmp/cloud-integration-state',
         '--env', 'CLOUD_TEST_ROOT=' + venueRoot, '--env', 'CLOUD_TEST_ORIGIN=' + origin,
         ...(captureSnapshot ? ['--env', 'CLOUD_TEST_BACKUP_STATE=1'] : []),
+        ...(paidStream && plan === 'paid' ? ['--env', 'CLOUD_TEST_STREAM=1', '--env', 'SSL_CERT_FILE=/proof/ca.pem'] : []),
         '--env', 'NODE_EXTRA_CA_CERTS=/proof/ca.pem', clientImage], '', 'client-create');
       owned.push(id); record('container', id);
       if (captureSnapshot) venueCAs.set(id, venueRoot + '/tls/ca.crt');
@@ -249,6 +258,15 @@ export async function runTestCloudClients({image, waitronImage, protectedContain
           assert.equal(await docker(['inspect', '--format', '{{.State.ExitCode}}', verifierWorker]), '0', 'integration.verifier_forced_shutdown');
           publishedSnapshot.verification = 'verified';
           publishedSnapshot.workerVerification = {...admission, childAbsent: true, workerStoppedNaturally: true};
+        }
+        if (paidStream) {
+          const streamed = await control(id, 'stream-start');
+          assert.equal(streamed.sourceNodeId, captured.sourceNodeId);
+          assert.equal(streamed.localVenueId, evidence.localVenueId);
+          assert.equal(streamed.nativeStreaming, true);
+          const inspect = extra => accountPhase('inspect-stream', {...captured, ...streamed, attemptId: publishedSnapshot.workerVerification.attemptId, ...extra});
+          for (const extra of [{sourceNodeId: randomUUID()}, {generation: 'another-generation'}, {recoverableAt: '2026-01-01T00:00:00.000Z'}]) await assert.rejects(inspect(extra));
+          observedStream = parseIntegrationJson(await inspect({}));
         }
         if (paidRecovery) {
           await docker(['build', '--pull=false', '--build-arg', 'VERIFIER_IMAGE=' + baseTag,
@@ -355,7 +373,7 @@ export async function runTestCloudClients({image, waitronImage, protectedContain
     result = {version: 1, kind: 'test-cloud-clients', runId, completeIntegration: false, origin, waitronHead: revision, image, waitronImage,
       accountMail: {free: 'proved', paid: 'proved', transport: 'mailpit'}, clients: {status: 'proved', actions: ['pair', 'renew', 'configuration'], demoVenues: 2, restartIdentity: 'proved'},
       tls: {untrustedRefused: true, wrongHostnameRefused: true}, organisations, freeSnapshot, restarts,
-      ...(publishedSnapshot ? {paidSnapshot: publishedSnapshot} : {})};
+      ...(publishedSnapshot ? {paidSnapshot: publishedSnapshot} : {}), ...(observedStream ? {paidStream: observedStream} : {})};
   } finally {
     try {
       await completeCleanup([

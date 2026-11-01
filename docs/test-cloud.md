@@ -683,3 +683,39 @@ deliberate evidence-guard omissions in an installed disposable checkout. These
 measurements do not qualify the full settled or active-verifier capacity budget.
 Keep deployment plan enforcement off until the remaining integration and release
 checks pass.
+
+To capture a continuous stream from that same paired paid source, run:
+
+```sh
+node --test scripts/test-cloud-paid-stream.test.mjs
+```
+
+Use the same explicit image inputs as the snapshot proof. This opt-in image adds
+checksum-verified Litestream 0.5.17 for Linux x86-64. The disposable venue forwards
+its canonical Cloud hostname to fixed API and storage services through private TCP
+bridges. These bridges carry TLS bytes; the clients still verify the certificate
+and hostname and sign requests for the original HTTPS destination.
+
+The fixture supplies the setup steps for the pinned source; it does not qualify
+an automatic managed-stream setup journey. It seeds the source's normal membership
+document, obtains managed stream
+configuration through the existing signed machine protocol and saves the bucket
+through Waitron's management API. It waits for the native stream host to confirm
+an upload. Cloud must then observe the source's signed generation, the identifier of one
+uninterrupted stream. A separate
+account process reads it again through Cloud's normal observer, checks the same
+source and venue, and independently reads the retained verified snapshot's bytes.
+False source, generation and observation-time claims must refuse.
+
+The ordinary snapshot recovery path still runs with its separate source authority.
+This stream observation does not qualify continuous restore or a snapshot fallback
+with continuous data absent. Those checks, remote boundaries, complete capacity,
+rollback and the pinned release remain before deployment plan enforcement.
+
+The Linux journey passes one case without skips in 169.5 seconds. Its 38 samples
+stay above 3,351 MiB available memory and 13.21 GiB free disk, without a sampled
+out-of-memory kill. The same run completes separately authorised snapshot recovery.
+Thirty-four focused local checks cover stream evidence, private transport, retained
+snapshot evidence and filtered diagnostics. Removing each of 28 guards in installed
+disposable copies fails the owning checks. Full settled and active-verifier capacity
+remain unqualified.

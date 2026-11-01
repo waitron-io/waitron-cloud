@@ -882,8 +882,17 @@ implementation or production evidence.
   existing trading history. One real Linux journey passes without skips in 168.6
   seconds; 16 native evidence checks catch all 15 deliberate guard omissions in
   an installed disposable checkout. Its 39 samples stay above 3,330 MiB available
-  memory and 12.40 GiB free disk. Stream recovery and independent fallback,
-  remote withdrawal, complete capacity
+  memory and 12.40 GiB free disk. The optional paired-stream extension now
+  drives native Waitron stream setup and requires a confirmed upload, a signed
+  Cloud-observed generation, an independent account-side observation and retained
+  snapshot bytes from the same source, bound to its current verification attempt.
+  One real Linux case now passes without skips in 169.5 seconds, including ordinary
+  snapshot recovery with separate source authority. Its 38 samples stay above
+  3,351 MiB available memory and 13.21 GiB free disk. Thirty-four focused native
+  checks catch all 28 installed guard omissions. The fixture drives the existing
+  signed setup protocol and native stream host; it does not qualify automatic
+  managed-stream setup, place a continuous restore or prove snapshot fallback
+  with continuous data absent. Stream recovery and independent fallback, remote withdrawal, complete capacity
   qualification, rollback and deployment remain open. The old Mac cleanup refusal stays historical evidence;
   the isolated Linux client proof removes its owned resources successfully.
   The organisation plan store and operator command now persist free/paid metadata,
