@@ -24,7 +24,7 @@ const venueSuites = [
   {id:'translation',files:['packages/translation/test/venue-service-translation.test.ts','packages/translation/test/venue-service-queue.test.ts','packages/translation/test/worker-cli.test.ts']},
   {id:'relay',files:['packages/registration/test/venue-service-relay.test.ts']},
   {id:'runtime',files:['deploy/test-cloud/venue-service-runtime.test.mjs','deploy/test-cloud/venue-service-cli.test.mjs','deploy/test-cloud/venue-service-startup.test.mjs']},
-  {id:'storage',files:['deploy/test-cloud/venue-service-storage.test.mjs','packages/backups/test/venue-service-storage.test.ts','packages/backups/test/venue-service-streams.test.ts']},
+  {id:'storage',files:['deploy/test-cloud/venue-service-storage.test.mjs','deploy/test-cloud/venue-service-composition.test.mjs','packages/backups/test/venue-service-storage.test.ts','packages/backups/test/venue-service-streams.test.ts']},
 ].map(suite=>({...suite,cwd:'.'}));
 function keys(value, names) {
   assert.ok(value && typeof value === 'object' && !Array.isArray(value), 'Invalid proof object');

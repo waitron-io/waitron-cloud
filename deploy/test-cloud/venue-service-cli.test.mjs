@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import {spawn} from 'node:child_process';
 import {once} from 'node:events';
+import {readFileSync} from 'node:fs';
 import {mkdtemp,writeFile,readFile,rm} from 'node:fs/promises';
 import {createServer} from 'node:net';
 import {tmpdir} from 'node:os';
@@ -13,7 +14,7 @@ async function command(file,args,env,stopOnChange){
  const child=spawn(process.execPath,[new URL(file,root).pathname,...args],{cwd:root,env:{...process.env,...env},stdio:['ignore','pipe','pipe']});
  let stdout='',stderr='';child.stdout.on('data',value=>stdout+=value);child.stderr.on('data',value=>stderr+=value);
  const deadline=setTimeout(()=>child.kill('SIGKILL'),10000);
- const changed=stopOnChange?setInterval(()=>{void readFile(stopOnChange.file,'utf8').then(value=>{if(value!==stopOnChange.before)child.kill('SIGTERM');});},20):undefined;
+ const changed=stopOnChange?setInterval(()=>{try{if(readFileSync(stopOnChange.file,'utf8')!==stopOnChange.before)child.kill('SIGTERM');}catch{child.kill('SIGTERM');}},20):undefined;
  try{const [code,signal]=await once(child,'close');return {code,signal,stdout,stderr};}
  finally{clearTimeout(deadline);clearInterval(changed);}
 }
