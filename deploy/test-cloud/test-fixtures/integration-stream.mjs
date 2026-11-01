@@ -41,6 +41,7 @@ export async function startIntegrationStream(root) {
   const configured=await machine('backup-stream-configure',{revision:state.lifecycle.view.revision,localVenueId:ready.localVenueId,
     sourceNodeId:saved.WAITRON_TILL_NODE_ID,pointerSignerPublicKey:signer});
   await writeFile(root+'/backup.env','WAITRON_BACKUP_RECOVERY_KEY='+configured.recoveryKey+'\n',{mode:0o600});
+  await writeFile(root+'/direct-storage.json',JSON.stringify(configured.bucket),{mode:0o600});
   const ca=await readFile(root+'/tls/ca.crt');
   const local=(method,path,body,cookie='')=>new Promise((resolve,reject)=>{
     const req=request(new URL(path,ready.origin),{method,ca,headers:{origin:ready.origin,cookie,'content-type':'application/json'}},res=>{

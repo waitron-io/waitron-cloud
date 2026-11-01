@@ -34,7 +34,7 @@ test('one project recovers both copies, withdraws remote access, measures capaci
   assert.equal(direct.after.writeStatus, 403); assert.equal(direct.after.readStatus, 403);
   assert.ok(Number.isSafeInteger(direct.after.durationMs) && direct.after.durationMs >= 0 && direct.after.durationMs < 30000);
   assert.equal(direct.retainedData, true); assert.equal(direct.readerPreserved, true);
-  assert.equal(direct.installationPreserved, true); assert.equal(direct.plan, 'free');
+  assert.equal(direct.installationPreserved, true); assert.equal(direct.plan, 'free'); assert.equal(direct.restartObserved, true);
 
   const snapshot = receipt.paidSnapshot, stream = receipt.paidStream, remote = receipt.paidRemote;
   for (const value of [snapshot, remote]) for (const key of ['organisationId', 'venueId', 'installationId']) assert.equal(value?.[key], paid[key], key);

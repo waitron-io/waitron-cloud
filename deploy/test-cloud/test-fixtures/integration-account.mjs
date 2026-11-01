@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import {createRequire} from 'node:module';
 import {execFile} from 'node:child_process';
 import {promisify} from 'node:util';
+import {checkStorageWithdrawalReader} from './integration-storage-withdrawal.mjs';
+import {atomicPrivateFile} from '../storage-authority.mjs';
 import {loadRuntime} from '../../local-stack/runtime.mjs';
 import {Agent} from 'node:https';
 import {readFile} from 'node:fs/promises';
@@ -39,6 +41,19 @@ try {
     if (phase === 'paid-remote-provision' || phase === 'paid-remote-inspect' || phase === 'paid-remote-downgrade') {
       const {paidRemoteAccount} = await import('./integration-paid-remote-account.mjs');
       console.log(JSON.stringify(await paidRemoteAccount({pool, config, ...JSON.parse(input)})));
+    } else if (phase === 'inspect-storage-withdrawal') {
+      assert.equal(process.env.CLOUD_TEST_SERVICE_PLANS, '1');
+      const saved = JSON.parse(await readFile('/run/local-stack/integration-storage-' + installationId + '.json', 'utf8'));
+      const binding = (await pool.query(`SELECT i.public_key,i.revoked_at,i.superseded_by,v.environment,o.service_plan
+        FROM installations i JOIN venues v ON v.id=i.venue_id JOIN organisations o ON o.id=v.organisation_id WHERE i.id=$1`, [installationId])).rows[0];
+      checkStorageWithdrawalReader(saved, binding, {organisationId, venueId: rows[0].venue_id});
+      const runtime = await openTestCaptureRuntime({pool, directory: '/run/local-stack', mode: 'test-free-paid'});
+      try {
+        const bytes = await runtime.options.managedStreams.read(saved.readerReference, saved.location,
+          'streams/' + rows[0].venue_id + '/integration-withdrawal');
+        assert.equal(bytes.toString(), 'paired integration retained storage');
+        console.log(JSON.stringify({retainedData: true, readerPreserved: true, installationPreserved: true, plan: 'free'}));
+      } finally {runtime.close();}
     } else if (phase === 'free-remote-prepare' || phase === 'free-remote-inspect') {
       const {freeRemoteAccount} = await import('./integration-free-remote-account.mjs');
       console.log(JSON.stringify(await freeRemoteAccount({pool, config, installationId, organisationId, phase, csr: JSON.parse(input).csr})));
@@ -109,6 +124,11 @@ try {
         const stored=await runtime.options.objects(location).read(point.object_key);
         inspectIntegrationRetainedSnapshot(point,stored,{pointId,installationId,venueId:rows[0].venue_id,sha256,bytes,sourceNodeId,attemptId});
         assert.equal(point.verification,'verified');
+        const saved = (await pool.query('SELECT s.reader_reference,i.public_key FROM backup_managed_streams s JOIN installations i ON i.id=s.installation_id WHERE s.venue_id=$1 AND s.installation_id=$2', [rows[0].venue_id, installationId])).rows[0];
+        assert.ok(saved);
+        await atomicPrivateFile('/run/local-stack/integration-storage-' + installationId + '.json', JSON.stringify({organisationId,
+          venueId: rows[0].venue_id, publicKey: saved.public_key, readerReference: saved.reader_reference, location}));
+
         console.log(JSON.stringify(inspectIntegrationStream({venueId:observed.venueId,installationId:observed.installationId,
           sourceNodeId:observed.sourceNodeId,localVenueId:observed.localVenueId,generation:observed.generation,
           recoverableAt:observed.recoverableAt,checkedAt:observed.checkedAt,nativeStreaming:true,signedPointerVerified:true,

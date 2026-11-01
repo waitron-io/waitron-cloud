@@ -58,6 +58,13 @@ const control = createServer(async (req, res) => {
       res.end(JSON.stringify(await proveIntegrationFreeRemote(root, JSON.parse(input))));
       return;
     }
+    if (req.url === '/storage-withdrawal') {
+      let input = '';
+      for await (const part of req) {input += part; assert.ok(input.length < 16384);}
+      const {probeIntegrationStorage} = await import('/proof/integration-storage-client.mjs');
+      res.end(JSON.stringify(await probeIntegrationStorage(root, JSON.parse(input))));
+      return;
+    }
     if (req.url === '/stream-start') {
       const {startIntegrationStream} = await import('/proof/integration-stream.mjs');
       res.end(JSON.stringify(await startIntegrationStream(root)));

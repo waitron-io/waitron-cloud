@@ -20,3 +20,16 @@ export async function waitForStorageWithdrawal({put, get, startedAt, now = Date.
   }
   throw Error('integration.storage_withdrawal_required');
 }
+
+export function checkStorageWithdrawalReader(saved, binding, selected) {
+  assert.equal(binding.environment, 'test'); assert.equal(binding.service_plan, 'free');
+  assert.equal(saved.organisationId, selected.organisationId); assert.equal(saved.venueId, selected.venueId);
+  assert.equal(binding.public_key, saved.publicKey); assert.equal(binding.revoked_at, null); assert.equal(binding.superseded_by, null);
+  return true;
+}
+
+export function checkStorageWithdrawalBucket(bucket, venueId) {
+  assert.equal(bucket.endpoint, 'https://waitron.local:8333'); assert.equal(bucket.region, 'local');
+  assert.equal(bucket.bucket, 'venue-' + venueId); assert.equal(bucket.prefix, 'streams/' + venueId + '/');
+  return true;
+}

@@ -519,7 +519,7 @@ export async function runTestCloudClients({image, waitronImage, protectedContain
       journeyStage = 'remote-withdrawal';
       const {proveIntegrationPaidRemote} = await import('../deploy/test-cloud/test-fixtures/integration-paid-remote.mjs');
       paidRemoteEvidence = await proveIntegrationPaidRemote({docker, compose, control, account,
-        paid: remoteClients.find(value => value.plan === 'paid'), free: remoteClients.find(value => value.plan === 'free'), image, runId,
+        paid: remoteClients.find(value => value.plan === 'paid'), free: remoteClients.find(value => value.plan === 'free'), image, runId, storageWithdrawal: paidStream,
         own: id => {owned.push(id); record('container', id);}});
     }
     let cloudRollbackEvidence, schemaRollbackEvidence;
@@ -564,7 +564,7 @@ export async function runTestCloudClients({image, waitronImage, protectedContain
       tls: {untrustedRefused: true, wrongHostnameRefused: true}, organisations, freeSnapshot, restarts,
       ...(capacityEvidence ? {capacity: capacityEvidence} : {}), ...(publishedSnapshot ? {paidSnapshot: publishedSnapshot} : {}), ...(observedStream ? {paidStream: observedStream} : {}),
       ...(continuousRecovery ? {paidContinuousRecovery: continuousRecovery} : {}), ...(freeRemoteEvidence ? {freeRemote: freeRemoteEvidence} : {}),
-      ...(paidRemoteEvidence ? {paidRemote: paidRemoteEvidence} : {}), ...(cloudRollbackEvidence ? {cloudRollback: cloudRollbackEvidence} : {}),
+      ...(paidRemoteEvidence ? {paidRemote: paidRemoteEvidence} : {}), ...(paidRemoteEvidence?.directStorage ? {paidStorageWithdrawal: paidRemoteEvidence.directStorage} : {}), ...(cloudRollbackEvidence ? {cloudRollback: cloudRollbackEvidence} : {}),
       ...(schemaRollbackEvidence ? {schemaRollback: schemaRollbackEvidence} : {})};
     };
     if (measureIntegration) {

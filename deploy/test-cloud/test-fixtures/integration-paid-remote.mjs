@@ -4,7 +4,7 @@ import {request} from 'node:https';
 import {checkServerIdentity} from 'node:tls';
 import {setTimeout as delay} from 'node:timers/promises';
 
-export async function proveIntegrationPaidRemote({docker, compose, control, account, paid, free, image, runId, own}) {
+export async function proveIntegrationPaidRemote({docker, compose, control, account, paid, free, image, runId, own, storageWithdrawal = false}) {
   const phase = async (phase, extra = {}) => JSON.parse(await docker(['exec', '-i', account, 'node', 'deploy/test-cloud/test-fixtures/integration-account.mjs'],
     JSON.stringify({phase, organisationId: paid.organisationId, installationId: paid.installationId, ...extra}), 'remote-' + phase));
   const gateway = await compose(['ps', '-q', 'gateway']);
@@ -60,11 +60,25 @@ export async function proveIntegrationPaidRemote({docker, compose, control, acco
   await assert.rejects(probe(placement.staffHostname, '/public/availability', {trust: null}), /certificate|issuer|verify/i);
   await assert.rejects(probe(placement.staffHostname, '/public/availability', {verificationHostname: placement.publicHostname}), /certificate|Hostname/i);
   assert.ok((await docker(['exec', gateway, 'wg', 'show', 'wg-cloud', 'peers'])).split(/\s+/).includes(peer.peerPublicKey));
+  let storage, storageBefore, storageStartedAt;
+  if (storageWithdrawal) {
+    storageBefore = await control(paid.id, 'storage-withdrawal', {phase: 'before', foreignVenueId: free.venueId});
+    assert.deepEqual(storageBefore, {writeStatus: 200, readStatus: 200, outsidePrefixRefused: true, neighbourRefused: true});
+    storage = await compose(['ps', '-q', 'storage']);
+    storageStartedAt = await docker(['inspect', '--format', '{{.State.StartedAt}}', storage]);
+    await docker(['stop', '--time', '10', storage], '', 'storage-withdrawal-stop');
+  }
   const worker = await compose(['ps', '-q', 'gateway-manifest']);
   const beforeRestart = await docker(['inspect', '--format', '{{.State.StartedAt}}', worker]);
   await docker(['stop', '--time', '10', worker]);
   assert.deepEqual(await phase('paid-remote-downgrade'), {plan: 'free', configurationCleared: true, installationPreserved: true});
   const committed = Date.now();
+  if (storageWithdrawal) {
+    await docker(['start', storage], '', 'storage-withdrawal-start');
+    const restartedAt = await docker(['inspect', '--format', '{{.State.StartedAt}}', storage]);
+    assert.ok(Date.parse(restartedAt) > Date.parse(storageStartedAt), 'integration.storage_restart_not_observed');
+  }
+
   await docker(['start', worker]);
   const afterRestart = await docker(['inspect', '--format', '{{.State.StartedAt}}', worker]);
   assert.ok(Date.parse(afterRestart) > Date.parse(beforeRestart), 'integration.remote_worker_restart');
@@ -80,6 +94,17 @@ export async function proveIntegrationPaidRemote({docker, compose, control, acco
   }
   assert.equal(withdrawn, true, 'integration.remote_withdrawal_required');
   const durationMs = Date.now() - committed;
+  let directStorage;
+  if (storageWithdrawal) {
+    const after = await control(paid.id, 'storage-withdrawal', {phase: 'after', startedAt: committed});
+    assert.equal(after.writeStatus, 403); assert.equal(after.readStatus, 403);
+    assert.ok(Number.isSafeInteger(after.durationMs) && after.durationMs >= 0 && after.durationMs < 30000);
+    const retained = await phase('inspect-storage-withdrawal');
+    assert.deepEqual(retained, {retainedData: true, readerPreserved: true, installationPreserved: true, plan: 'free'});
+    directStorage = {organisationId: paid.organisationId, venueId: paid.venueId, installationId: paid.installationId,
+      before: storageBefore, after, restartObserved: true, ...retained};
+  }
+
   await control(paid.id, 'refresh');
   assert.deepEqual(await control(paid.id, 'paid-remote', {phase: 'withdrawn', placement, requestId: client.requestId}),
     {cachedConfigurationMasked: true, signedCertificateRefused: true});
@@ -88,6 +113,7 @@ export async function proveIntegrationPaidRemote({docker, compose, control, acco
   assert.equal(sourceAfter.localVenueId, sourceBefore.localVenueId);
   return {organisationId: paid.organisationId, installationId: paid.installationId, venueId: paid.venueId,
     client: client.client, peerPresent: true,
+    ...(directStorage ? {directStorage} : {}),
     withdrawal: {staffRefused: true, publicRefused: true, peerRemoved: true, cachedConfigurationMasked: true,
       installationPreserved: true, restartObserved: true, plan: 'free', durationMs},
     routes: {staffAvailability: 200, staffPrivateWithoutLogin: 401, publicBeforeChallenge: 403, publicAfterChallenge: 200,

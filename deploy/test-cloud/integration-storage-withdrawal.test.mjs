@@ -67,3 +67,33 @@ test('a delayed provider reply after the withdrawal deadline cannot produce acce
     put: async () => {clock = 31000; throw denied();},
     get: async () => {throw denied();}}), /integration.storage_withdrawal_required/);
 });
+
+const selected = {organisationId: '11111111-1111-4111-8111-111111111111', venueId: '22222222-2222-4222-8222-222222222222'};
+const saved = {...selected, publicKey: 'the-original-paired-key'};
+const binding = {environment: 'test', service_plan: 'free', public_key: 'the-original-paired-key', revoked_at: null, superseded_by: null};
+test('the retained reader proof keeps the original paired identity after the plan changes', async () => {
+  const {checkStorageWithdrawalReader} = await load();
+  assert.equal(typeof checkStorageWithdrawalReader, 'function', 'The retained reader binding check is missing');
+  assert.equal(checkStorageWithdrawalReader(saved, binding, selected), true);
+});
+for (const [key, value] of [['environment', 'production'], ['service_plan', 'paid'], ['public_key', 'another-key'], ['revoked_at', new Date()], ['superseded_by', selected.venueId]]) {
+  test('a retained read cannot qualify a changed '+key, async () => {
+    const {checkStorageWithdrawalReader} = await load(); assert.equal(typeof checkStorageWithdrawalReader, 'function');
+    assert.throws(() => checkStorageWithdrawalReader(saved, {...binding, [key]: value}, selected));
+  });
+}
+for (const key of ['organisationId', 'venueId']) test('a retained reader from another '+key+' cannot qualify', async () => {
+  const {checkStorageWithdrawalReader} = await load(); assert.equal(typeof checkStorageWithdrawalReader, 'function');
+  assert.throws(() => checkStorageWithdrawalReader({...saved, [key]: '33333333-3333-4333-8333-333333333333'}, binding, selected));
+});
+const bucket = {endpoint: 'https://waitron.local:8333', region: 'local', bucket: 'venue-' + selected.venueId, prefix: 'streams/' + selected.venueId + '/'};
+test('the old direct key is tested only against its canonical paired storage scope', async () => {
+  const {checkStorageWithdrawalBucket} = await load(); assert.equal(typeof checkStorageWithdrawalBucket, 'function', 'The direct key scope check is missing');
+  assert.equal(checkStorageWithdrawalBucket(bucket, selected.venueId), true);
+});
+for (const [key, value] of [['endpoint', 'http://waitron.local:8333'], ['region', 'another-region'], ['bucket', 'another-venue'], ['prefix', 'streams/another-venue/']]) {
+  test('a substituted direct storage '+key+' cannot qualify', async () => {
+    const {checkStorageWithdrawalBucket} = await load(); assert.equal(typeof checkStorageWithdrawalBucket, 'function');
+    assert.throws(() => checkStorageWithdrawalBucket({...bucket, [key]: value}, selected.venueId));
+  });
+}
