@@ -63,6 +63,11 @@ test('a write accepted after expiry cannot be called bounded access', async () =
   const {observeSnapshotExposure} = await load(); assert.equal(typeof observeSnapshotExposure, 'function');
   await assert.rejects(observeSnapshotExposure({saved, selected, downgradedAt: 300000, put: accepted, now: () => 902000}));
 });
+for (const status of [201, 403, 500]) test('unexpected snapshot write status ' + status + ' cannot count as accepted access', async () => {
+  const {observeSnapshotExposure} = await load();
+  await assert.rejects(observeSnapshotExposure({saved, selected, downgradedAt: 300000,
+    put: async () => ({$metadata: {httpStatusCode: status}}), now: () => 301000}));
+});
 test('a provider reply crossing the expiry boundary cannot establish pre-expiry access', async () => {
   const {observeSnapshotExposure} = await load(); assert.equal(typeof observeSnapshotExposure, 'function');
   let clock = 900999;
