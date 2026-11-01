@@ -812,22 +812,29 @@ implementation or production evidence.
   do not explain the historical Docker delay. Local Docker qualification stays
   parked until 3 November; current-head CI runs the genuine gateway journeys.
 
-- **LAN test Cloud with free and paid organisations.** The capacity journey now
-  has continuous integration sampling wired across recovery, remote withdrawal
-  and matching-volume rollback; its genuine combined qualification remains due.
-  The sampler observes before and after the journey and stops and drains owned
-  work on measurement failure. A genuine combined run identifies a stopped-source
-  volume-size race. Explicit integration sampling now reads retained stopped
-  volumes through recorded read-only helpers instead of omitting their bytes or
-  restarting the source; genuine qualification of that correction remains due.
-  A later run reaches rollback and identifies a process disappearing between
-  Docker inspection and its memory reading. Explicit capacity observation now
-  rechecks unchanged ownership and non-OOM state before accounting a confirmed
-  stop or reading a restarted process; genuine combined qualification remains due.
-  The next native run refuses the unchanged five-second sampling bound during
-  cold rollback. Volume reads are now batched into one bounded read-only helper
-  per observation; genuine qualification of that sampler remains due.
-  The capacity journey also
+- **LAN test Cloud with free and paid organisations.** The source-bound combined
+  journey now measures resources across clients, verification, both recovery
+  paths, remote withdrawal and matching-volume rollback in one disposable project.
+  The shipping-Dockerfile candidate at `085569cf` passes the genuine journey in
+  396.5 seconds without skips under its unchanged 600-second limit. All 1,681
+  runtime inputs match the independently measured checkout. Its 172 integration
+  samples span 364 seconds, with gaps no larger than 3.73 seconds. The same project
+  records startup, sixty settled seconds and the admitted verifier. Both original
+  pairings complete fresh exchanges after four-volume rollback.
+  A bounded read-only helper measures every unique retained volume together,
+  including stopped sources. A vanished process requires fresh unchanged
+  container/image/label evidence and no out-of-memory event before accounting a
+  stop or reading a restarted process. Missing or substituted measurements still
+  refuse; the five-second bound remains fixed. Focused checks pass 280 cases with
+  four explicit image skips; thirty installed guard omissions are caught.
+  Independent cleanup verifies five projects and all 306 recorded owned container
+  IDs absent, with protected Waitron IDs, start times and health unchanged.
+  These are raw measurements under the temporary campaign disk policy: baseline
+  disk is 12.92 GiB, above 12.48 GiB during the journey and 12.88 GiB after cleanup.
+  Complete integration and shipping qualification stay false. Direct-storage
+  withdrawal, the strict complete receipt, published releases and the shipping
+  20/15 GiB floors remain due.
+  The separate capacity journey also
   collects host memory and available disk on Docker's data filesystem before
   project startup, throughout startup and settled/verification sampling,
   and after owned cleanup. Startup includes a reading before allocation and one
@@ -840,8 +847,8 @@ implementation or production evidence.
   Docker exec; a diagnostic repeat did not reproduce it, so its cause remains
   unknown. Capture the refused command's category and container state on its
   next occurrence before attributing it. These are raw measurements;
-  whole-integration sampling, direct-storage withdrawal, published-release
-  qualification and shipping 20/15 GiB floors remain due. The
+  direct-storage withdrawal, published-release qualification and shipping
+  20/15 GiB floors remain due. The
   [test deployment design](superpowers/specs/2026-10-17-test-cloud-free-paid-design.md)
   and [implementation plan](superpowers/plans/2026-10-17-test-cloud-free-paid.md)
   describe a separate Cloud Compose project on the owner's test box, with an

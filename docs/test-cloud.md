@@ -1110,9 +1110,9 @@ Recovery deliberately stops its source. The integration sampler keeps counting t
 source's retained data through a networkless, read-only helper with a 32 MiB limit.
 One helper reads all unique volumes together, so a cold rollback does not pay a
 separate container start for each volume. The five-second sample bound stays fixed.
-Running-container errors, an unavailable Docker daemon, changed mount identity and
-out-of-memory state still refuse the measurement. Each helper is recorded and
-removed before its reading returns; the original source stays stopped.
+An unavailable Docker daemon, changed volume ownership or a malformed or failed
+measurement still refuses the reading. Each helper is recorded and removed before
+its reading returns; it never starts the original source.
 If a process disappears during rollback, the sampler rechecks Docker's container,
 image, labels and out-of-memory state. A confirmed stop contributes no process
 memory; a confirmed restart is measured from its new process. An unchanged process
@@ -1126,10 +1126,20 @@ accepts a child removed between listing and inspection only after confirming tha
 its exact ID is absent. A present child, an unavailable Docker daemon or a malformed
 inspection still refuses the measurement.
 
-The combined journey passes on the isolated Linux box in 385 seconds without skips.
-It measures 62.2 settled seconds, observes the admitted verifier, withdraws remote
-access in 5.8 seconds and completes fresh exchanges from both original pairings after
-restoring four volumes. Available memory stays above 3,666 MiB and free disk above
-12.65 GiB under the campaign-only disk policy. Its output keeps
-`completeIntegration: false`; the strict complete receipt, published-release upgrade
-and deployment checks remain open. Keep plan enforcement off.
+The shipping-Dockerfile candidate at `085569cf` passes the genuine combined journey
+on the isolated Linux box in 396.5 seconds under the unchanged 600-second limit.
+Both test cases execute without skips. The image matches all 1,681 tracked runtime
+inputs from the independently measured checkout. Twelve startup readings span
+19.8 seconds; 172 integration readings span 364 seconds, with gaps at most 3.73
+seconds. Every named stage is measured. The same project records sixty settled
+seconds and the admitted verifier, withdraws remote access in 5.47 seconds, then
+completes fresh exchanges from both original pairings after restoring four volumes.
+
+Available memory stays above 3,425 MiB and disk above 12.48 GiB in the integration
+samples. Disk is 12.92 GiB before startup and 12.88 GiB after cleanup under the
+campaign-only disk policy. Independent cleanup checks all five attempted projects
+and 306 recorded container IDs, with protected Waitron IDs, start times and health
+unchanged. The output keeps `completeIntegration: false` and
+`shippingQualification: false`. Direct-storage withdrawal, the strict complete
+receipt, published-release upgrade and the unchanged shipping 20/15 GiB floors
+remain open. Keep plan enforcement off.
