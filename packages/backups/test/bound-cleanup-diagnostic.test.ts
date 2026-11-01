@@ -20,6 +20,12 @@ async function fixture(fault:string,run:(f:any)=>Promise<void>){
  await writeFile(join(bin,'docker'),`#!${process.execPath}
 const fs=require('node:fs'),args=process.argv.slice(2),fault=fs.readFileSync(${JSON.stringify(faultFile)},'utf8'),id=${JSON.stringify(id)},image=${JSON.stringify(image)};
 if(args[0]==='image'){console.log(JSON.stringify([{Id:image,Config:{}}]));process.exit(0);}
+if(args[0]==='rm'&&['self-kill','timeout','overflow'].includes(fault)){
+ process.stderr.write(${JSON.stringify(secret)});
+ if(fault==='self-kill')process.kill(process.pid,'SIGTERM');
+ else if(fault==='overflow')process.stdout.write('x'.repeat(131072));
+ setInterval(()=>{},1000);
+}
 if(args[0]===fault){process.stderr.write(${JSON.stringify(secret)});process.exit(42);}
 if(args[0]==='create'){fs.writeFileSync(${JSON.stringify(present)},'');console.log(id);}
 else if(args[0]==='ps'){if(fs.existsSync(${JSON.stringify(present)}))console.log(id);}
@@ -95,6 +101,29 @@ test('bound parent still refuses when removal returns without making the child a
   const verify=await createBoundContainerWaitronVerifier({image,owner:'diagnostic',controller:{...controller,async reclaim(){},async create(){return id;},async remove(){}}});
   await assert.rejects(verify(bufferObject(Buffer.from([0])),{version:1,reference:'key-1',secret:'private-fixture-key'},request,new AbortController().signal),(error:any)=>{
    assert.equal(error.message,'backup.verifier_cleanup');assert.deepEqual(error.cause,{stage:'confirm-absent'});return true;
+  });
+ });
+});
+test('bound cleanup diagnostic omits a private controller step even with a recognised operation',async()=>{
+ await fixture('',async({controller,request})=>{
+  const verify=await createBoundContainerWaitronVerifier({image,owner:'diagnostic',controller:{...controller,async reclaim(){},async create(){return id;},async remove(){throw Error('test_cloud.verifier_ownership',{cause:{stage:secret}});}}});
+  await assert.rejects(verify(bufferObject(Buffer.from([0])),{version:1,reference:'key-1',secret:'private-fixture-key'},request,new AbortController().signal),(error:any)=>{
+   assert.equal(error.message,'backup.verifier_cleanup');assert.deepEqual(error.cause,{stage:'controller-remove',reason:'test_cloud.verifier_ownership'});return true;
+  });
+ });
+});
+for(const [fault,code,signal,killed] of [['self-kill',null,'SIGTERM',false],['timeout',null,'SIGTERM',true],['overflow','ERR_CHILD_PROCESS_STDIO_MAXBUFFER',null,false],['missing','ENOENT',null,false]] as const)test(`bound cleanup diagnostic retains real process ${fault} details without private output`,{timeout:15000},async()=>{
+ await fixture(fault,async({controller,request,directory})=>{
+  // The adapter refuses active inspection, then must preserve the real failed removal.
+  const verify=await createBoundContainerWaitronVerifier({image,owner:'diagnostic',controller:{...controller,async reclaim(){},async create(){return id;}}});
+  if(fault==='missing'){await rm(join(directory,'bin','docker'));process.env.PATH=join(directory,'bin');}
+  await assert.rejects(verify(bufferObject(Buffer.from([0])),{version:1,reference:'key-1',secret:'private-fixture-key'},request,new AbortController().signal),(error:any)=>{
+   assert.equal(error.message,'backup.verifier_cleanup');assert.equal(error.cause.stage,'controller-remove');
+   assert.equal(error.cause.controllerStage,fault==='missing'?'discover':'remove-child');
+   assert.equal(error.cause.operation,fault==='missing'?'ps':'rm');assert.equal(error.cause.code,code);
+   assert.equal(error.cause.signal,signal);assert.equal(error.cause.killed,killed);
+   assert(Number.isSafeInteger(error.cause.elapsedMs));assert(error.cause.elapsedMs>=0);
+   assert(!JSON.stringify(error.cause).includes(secret));return true;
   });
  });
 });
