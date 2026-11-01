@@ -36,6 +36,11 @@ manifest. A changed or missing image file, a symbolic link, or a checkout change
 before the run finishes refuses the result. This binds tracked source inputs;
 it does not certify generated portal assets, the Waitron build or a published release.
 
+The shipping-Dockerfile candidate at `6bdea472` passes the combined journey in
+395.6 seconds, with two tests and no skips. Its image matches 1,675 tracked runtime
+inputs from that clean commit. The run uses the campaign's temporary disk policy;
+it leaves the shipping capacity gate and complete integration receipt open.
+
 Run the source checks with:
 
 ```sh

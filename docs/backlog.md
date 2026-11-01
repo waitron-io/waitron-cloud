@@ -844,6 +844,10 @@ implementation or production evidence.
   container, and rechecks the checkout after owned cleanup. Its source record
   binds the commit, tree, image and input manifest; generated assets and the
   Waitron build still need release qualification. The complete receipt remains open.
+  The shipping-Dockerfile candidate at `6bdea472` passes this source-bound combined
+  journey in 395.6 seconds without skips, matching 1,675 tracked inputs. Independent
+  cleanup confirms all 25 recorded owned containers absent and the protected
+  Waitron containers' IDs, start times and health unchanged.
   The [client proof](test-cloud.md#check-real-free-and-paid-clients) now creates both
   accounts through HTTPS signup and captured Mailpit links, pairs two separate
   pinned demo venues, observes successful signed renewal/configuration and preserves
