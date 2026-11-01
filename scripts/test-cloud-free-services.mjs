@@ -15,6 +15,11 @@ const suites = [
   {id: 'deployment-gates', cwd: '.', files: ['deploy/test-cloud/runtime.test.mjs', 'deploy/test-cloud/deployment.test.mjs']},
 ];
 const suiteIds = suites.map(suite => suite.id);
+function proofConcurrency(){
+  const value=process.env.CLOUD_SERVICE_PROOF_CONCURRENCY;
+  assert.ok(value===undefined||value==='1'||value==='2','Invalid proof concurrency');
+  return value==='2'?2:1;
+}
 const venueSuites = [
   {id:'rules',files:['packages/registration/test/venue-service-rules.test.ts']},
   {id:'installations',files:['packages/registration/test/venue-service-installations.test.ts','packages/registration/test/venue-service-registration-races.test.ts']},
@@ -110,13 +115,19 @@ async function runSuite(suite,venueLevels=false) {
 }
 const git = (...args) => execFileSync('git', args, {cwd: root, encoding: 'utf8', timeout: 30000, maxBuffer: 1048576}).trim();
 async function proof(venueLevels=false) {
+  const concurrency=proofConcurrency();
   assert.equal(git('status', '--porcelain'), '', 'Proof requires a clean committed checkout');
   assert.ok(process.env.TEST_DATABASE_URL && process.env.MAILPIT_TEST_URL && process.env.MAILPIT_TEST_SMTP_PORT, 'Use scripts/test-postgres.mjs');
   const cloudHead = git('rev-parse', 'HEAD'), cloudTree = git('rev-parse', 'HEAD^{tree}'), results = [];
-  for (const suite of venueLevels?venueSuites:suites) {
-    process.stderr.write(`Free-service proof: ${suite.id}\n`);
-    results.push(await runSuite(suite,venueLevels));
-  }
+  const selected=venueLevels?venueSuites:suites;let next=0,failure;
+  // Two groups of two files bound the proof to four active test files.
+  await Promise.all(Array.from({length:concurrency},async()=>{
+    for(let index=next++;index<selected.length&&!failure;index=next++){
+      const suite=selected[index];process.stderr.write(`Free-service proof: ${suite.id}\n`);
+      try{results[index]=await runSuite(suite,venueLevels);}catch(error){failure=error;}
+    }
+  }));
+  if(failure)throw failure;
   assert.equal(git('rev-parse', 'HEAD'), cloudHead); assert.equal(git('status', '--porcelain'), '');
   assert.equal(git('rev-parse','HEAD^{tree}'),cloudTree);
   if(venueLevels){
@@ -131,6 +142,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   try {
     // Node test filters can omit cases without incrementing the skipped count.
     assert.equal(process.env.NODE_OPTIONS, undefined, 'Proof requires default Node options');
+    proofConcurrency();
     const args=process.argv.slice(2),venueLevels=args[0]==='--venue-levels';if(venueLevels)args.shift();
     if (args.length === 0) process.stdout.write(JSON.stringify(await proof(venueLevels)) + '\n');
     else {
@@ -140,7 +152,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
       const stop = () => controller.abort();
       process.once('SIGTERM', stop); process.once('SIGINT', stop);
       try {
-        process.stdout.write(JSON.stringify(await summariseTestRun(run({files: suite.files, concurrency: 1, timeout: 120000, execArgv: [], signal: controller.signal}), suite.files)) + '\n');
+        process.stdout.write(JSON.stringify(await summariseTestRun(run({files: suite.files, concurrency: proofConcurrency(), timeout: 120000, execArgv: [], signal: controller.signal}), suite.files)) + '\n');
       } finally {controller.abort(); process.removeListener('SIGTERM', stop); process.removeListener('SIGINT', stop);}
     }
   } catch {process.stderr.write('Free-service proof failed\n'); process.exitCode = 1;}

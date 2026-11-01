@@ -5,7 +5,7 @@ import {promisify} from 'node:util';
 
 const exec=promisify(execFile);
 test('venue service fixture proof retains legacy evidence and binds the nine new suites to this candidate',{timeout:360000},async()=>{
- const root=new URL('../../../',import.meta.url).pathname,env={...process.env};delete env.NODE_TEST_CONTEXT;
+ const root=new URL('../../../',import.meta.url).pathname,env:NodeJS.ProcessEnv={...process.env,CLOUD_SERVICE_PROOF_CONCURRENCY:'2'};delete env.NODE_TEST_CONTEXT;
  const git=async(...args:string[])=>(await exec('git',args,{cwd:root})).stdout.trim();
  const head=await git('rev-parse','HEAD'),tree=await git('rev-parse','HEAD^{tree}');
  for(const venueLevels of [false,true]){

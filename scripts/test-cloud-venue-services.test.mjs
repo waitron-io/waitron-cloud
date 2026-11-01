@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
+import {spawnSync} from 'node:child_process';
 import * as api from './test-cloud-free-services.mjs';
 
 const ids=['rules','installations','backups','recovery','remote','translation','relay','runtime','storage'];
@@ -32,4 +33,16 @@ test('venue service receipt refuses partial suites, nonpassing cases and hidden 
  for(const [field,values] of Object.entries({tests:[0,-1,1.5,'2',Number.MAX_SAFE_INTEGER+1],passed:[0,1,'2'],failed:[1,'0'],cancelled:[1,'0'],skipped:[1,'0'],todo:[1,'0']})){
   for(const value of values){const r=receipt();r.suites[0][field]=value;assert.throws(()=>api.validateVenueServiceReceipt(r),field);}
  }
+});
+
+test('proof refuses concurrency beyond two without certifying any case',()=>{
+ const env={...process.env,CLOUD_SERVICE_PROOF_CONCURRENCY:'3'};delete env.NODE_TEST_CONTEXT;delete env.NODE_OPTIONS;
+ const result=spawnSync(process.execPath,['scripts/test-cloud-free-services.mjs','--venue-levels','--suite','runtime'],{env,encoding:'utf8',timeout:30000});
+ assert.equal(result.status,1);assert.equal(result.stdout,'');assert.equal(result.stderr,'Free-service proof failed\n');
+});
+test('parallel runtime proof retains every selected case and rejects hidden omissions',()=>{
+ const env={...process.env,CLOUD_SERVICE_PROOF_CONCURRENCY:'2'};delete env.NODE_TEST_CONTEXT;delete env.NODE_OPTIONS;
+ const result=spawnSync(process.execPath,['scripts/test-cloud-free-services.mjs','--venue-levels','--suite','runtime'],{env,encoding:'utf8',timeout:30000});
+ assert.equal(result.status,0,result.stderr);
+ assert.deepEqual(JSON.parse(result.stdout),{tests:38,passed:38,failed:0,cancelled:0,skipped:0,todo:0});
 });
