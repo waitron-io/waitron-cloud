@@ -169,10 +169,19 @@ URL does expose the bounded refusal in the JavaScript-disabled and reload
 fixtures; the parent controls need external stops. Hiding or redirecting the
 running-failure fixture's reload link fails its original product checks.
 
-D535 still needs separate PR613 and PR612 follow-ups to keep their ordinary,
-delayed and reachable missing-signal screenshots separately, preserving historical
-names. Their wait comments also need to distinguish the missing-signal helper
-from the normal journey, without weakening or removing any behavioral assertion.
+The PR613 running-failure reload fixture now retains 17 captures: eight ordinary,
+eight delayed and the reachable English/light/390 missing-next case. The eight
+historical filenames stay unchanged. Before the repair, all 66 browser checks
+passed while the separate 17-file review check failed with only eight images.
+After the filename change, both checks pass and the eight original image bytes
+stay unchanged. The missing-first control returns before capture. The wait comment
+now describes the missing-signal helper's five-second outer race; it does not claim
+that omitting either normal observation must fail. Every behavioral assertion,
+clock and deadline remains unchanged.
+
+D535 still needs the separate PR612 follow-up for distinct ordinary and delayed
+captures and a precise wait comment, preserving historical names and every
+behavioral assertion.
 The PR613 proof-count fault and fresh-restart product fault, disabled-script
 product faults in PR612, other failure-state images and real authority remain
 unverified. These are qualification limits, not claims of production repairs.
