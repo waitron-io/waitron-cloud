@@ -141,6 +141,9 @@ with tempfile.TemporaryDirectory(prefix='cloud-browser-apt-') as directory:
         mode = 'fallback'
 
         class Handler(http.server.SimpleHTTPRequestHandler):
+            # Small TLS responses must not wait for acknowledgements of earlier writes.
+            disable_nagle_algorithm = True
+
             def log_message(self, *_args):
                 pass
 

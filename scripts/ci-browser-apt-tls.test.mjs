@@ -24,6 +24,11 @@ namespace = {'http': http, 'requests': [], 'mode': 'fallback'}
 exec(compile(ast.Module(body=[handler], type_ignores=[]), '<archive-handler>', 'exec'), namespace)
 finished = threading.Event()
 errors = []
+coalescing = []
+class ObservedHandler(namespace['Handler']):
+    def setup(self):
+        super().setup()
+        coalescing.append(bool(self.connection.getsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY)))
 class TrackedServer(http.server.ThreadingHTTPServer):
     def process_request_thread(self, request, address):
         try:
@@ -41,7 +46,7 @@ with tempfile.TemporaryDirectory(prefix='cloud-apt-tls-') as directory:
     context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
     context.load_cert_chain(cert, key)
     server = TrackedServer(('127.0.0.1', 0),
-        functools.partial(namespace['Handler'], directory=directory))
+        functools.partial(ObservedHandler, directory=directory))
     server.handle_error = lambda *_args: errors.append(type(sys.exc_info()[1]).__name__)
     server.socket = context.wrap_socket(server.socket, server_side=True)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
@@ -64,6 +69,7 @@ with tempfile.TemporaryDirectory(prefix='cloud-apt-tls-') as directory:
                     assert finished.wait(2), 'server waits indefinitely for the peer shutdown'
                     assert errors == [], errors
         assert namespace['requests'] == ['/second/Release', '/second/Release']
+        assert coalescing == [True, True], f'TCP coalescing remains enabled: {coalescing}'
         print('two verified responses and bounded TLS shutdowns')
     finally:
         server.shutdown()
