@@ -9,7 +9,7 @@ import {loadWorkspace, workPlan} from './ci-scope.mjs';
 
 const {assertSummary} = summary;
 const results = {changes: 'success', typecheck: 'success', root: 'success', packages: 'success', receipts: 'skipped'};
-const partitions = [['registration', 5], ['account-http', 3], ['backups', 2], ['portal', 6]];
+const partitions = [['registration', 5], ['account-http', 3], ['backups', 2], ['portal', 6], ['remote-access', 4]];
 const rowsFor = (name, count) => Array.from({length: count}, (_, i) => ({package: `@waitron-cloud/${name}`, shard: i + 1, shards: count}));
 
 test('summary policy contains exactly the real workspace packages, including no obsolete names', () => {

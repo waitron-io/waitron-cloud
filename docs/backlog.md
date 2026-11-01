@@ -133,6 +133,16 @@ See [the additional qualification detail](backlog/worker-scheduling.md#recurring
 warning or retry deadline still needs a separate controller check.
 See [the boundaries and remaining work](backlog/translation.md#translation-consent-during-account-changes-d392).
 
+## Remote-access CI budget (D463 prerequisite)
+
+Remote-access tests run in four independent jobs, while identity and operations
+retain their shared job. The final CI check requires all four remote shards and
+refuses a grouped remote suite or an incomplete allocation. A Node discovery
+check runs every current remote test filename and a future filename exactly once.
+All existing test files, assertions and deadlines remain. Current-head CI must
+still measure the jobs against the roughly four-minute target; no job limit is
+raised. D463's collector and remaining billing work stay on their separate branch.
+
 ## How to keep this file honest
 
 - Delete finished entries after checking main, the named pull requests and the code.
@@ -624,7 +634,7 @@ Migration 038, its dormant tables and stored rows remain unchanged. Registration
 owns the seven retained schema tests and the digest/ledger-position check. Removal
 regressions compare every dormant table and the migration ledger before and after
 old calls and free/paid/free plan changes. Shared account, session, recovery and
-mail assertions remain. Live CI keeps nine packages, 21 logical shards in 19
+mail assertions remain. Live CI keeps nine packages, 24 logical shards in 23
 jobs and all six receipt suites, including all six portal shards. Saved historical
 manifests and cost receipts remain historical evidence; their parsers and positive
 receipt-selection checks remain. The [registry reference](fiscal-allocation-registry.md)

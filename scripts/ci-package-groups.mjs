@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 
-const shortPackages = ['@waitron-cloud/identity', '@waitron-cloud/operations', '@waitron-cloud/remote-access'];
+const shortPackages = ['@waitron-cloud/identity', '@waitron-cloud/operations'];
 
 export function packageMembers(row) {
   assert.ok(row && typeof row.package === 'string' && row.package.length > 0, 'Invalid package group row');
