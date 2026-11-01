@@ -331,9 +331,16 @@ separate Cloud-own purposes, explicitly unqualified supplier evidence and all si
 open lawyer questions. These are unsigned drafting records, not legal or provider
 qualification. Slice 3 adds the SQL-free [country decision function](country-policy.md):
 exact qualified destination matching, positive policy revisions and evidence-only results.
-The production Spain default has no qualified flows. Durable placement/credential
-bindings remain unbuilt. The outbound AI refusal and explicit synthetic loopback
-transport are implemented locally; remaining runtime controls are **unbuilt**. One venue approval permits at most **24 hours**
+The production Spain default has no qualified flows. Slice 4 adds the disabled
+[venue lifecycle journal](data-lifecycle-journal.md): fixed UTC deadlines,
+idempotent requests, venue revisions, expiring worker claims and bound outside-call
+intent/uncertainty. PostgreSQL checks include process death at four boundaries,
+same-revision claim takeover and unchanged migration history. Recording a request
+grants no service or deletion authority; no customer route or effects worker is
+enabled. Resubscription still needs a future retained-data check and activation
+adapter. Durable placement/credential bindings in slice 5 remain unbuilt. The
+outbound AI refusal and explicit synthetic loopback transport are implemented
+locally; later runtime controls remain **unbuilt**. One venue approval permits at most **24 hours**
 of support access, shorter where practical and fresh approval to extend. **Paris
 `eu-west-3`** is the approved extra encrypted backup destination, subject to service,
 contract and recovery qualification; Spain data/logs/keys remain in `eu-south-2`.
@@ -352,7 +359,7 @@ D102/D104 hands-on work waits until 3 November. D68 is landed, including
 backup verification includes migration 043 and the complete same-run recovery proof.
 Snapshots remain unavailable in the delivered deployment and plan enforcement stays
 off until release qualification. Recheck active migration reservations before new
-database work; D101 slices 1–3 are SQL-free.
+database work; D101 slices 1–3 are SQL-free and slice 4 adds the lifecycle journal.
 
 **D103 / C41 release and upgrade design, published proposal:** the
 [engineering proposal](superpowers/specs/2026-10-22-cloud-release-upgrade-design.md)
