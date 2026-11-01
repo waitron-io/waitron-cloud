@@ -121,14 +121,14 @@ async function proof(venueLevels=false) {
   assert.ok(process.env.TEST_DATABASE_URL && process.env.MAILPIT_TEST_URL && process.env.MAILPIT_TEST_SMTP_PORT, 'Use scripts/test-postgres.mjs');
   const cloudHead = git('rev-parse', 'HEAD'), cloudTree = git('rev-parse', 'HEAD^{tree}');
   const selected=(venueLevels?venueSuites:suites).map(suite=>({...suite,files:suite.files.map(file=>resolve(root,suite.cwd,file))}));
-  // A single queue bounds the whole proof, including work from different suites.
+  // Parallel mode permits four files in total; serial mode runs one.
   const controller=new AbortController(),stop=()=>controller.abort();
   const timer=setTimeout(stop,600000);
   process.once('SIGTERM',stop);process.once('SIGINT',stop);
   let results;
   try{
     for(const suite of selected)process.stderr.write(`Free-service proof: ${suite.id}\n`);
-    results=await summariseServiceMatrix(run({files:selected.flatMap(suite=>suite.files),concurrency,timeout:120000,execArgv:[],signal:controller.signal}),selected);
+    results=await summariseServiceMatrix(run({files:selected.flatMap(suite=>suite.files),concurrency:concurrency===2?4:1,timeout:120000,execArgv:[],signal:controller.signal}),selected);
   }finally{clearTimeout(timer);controller.abort();process.removeListener('SIGTERM',stop);process.removeListener('SIGINT',stop);}
   assert.equal(git('rev-parse', 'HEAD'), cloudHead); assert.equal(git('status', '--porcelain'), '');
   assert.equal(git('rev-parse','HEAD^{tree}'),cloudTree);
