@@ -20,16 +20,17 @@ function proofConcurrency(){
   assert.ok(value===undefined||value==='1'||value==='2','Invalid proof concurrency');
   return value==='2'?2:1;
 }
+// Start provider and larger database suites first so their tails overlap.
 const venueSuites = [
-  {id:'rules',files:['packages/registration/test/venue-service-rules.test.ts']},
-  {id:'installations',files:['packages/registration/test/venue-service-installations.test.ts','packages/registration/test/venue-service-registration-races.test.ts']},
-  {id:'backups',files:['packages/backups/test/venue-service-backups.test.ts','packages/backups/test/venue-service-captures.test.ts','packages/backups/test/venue-service-replacement.test.ts']},
-  {id:'recovery',files:['packages/account-http/test/venue-service-recovery.test.ts','packages/account-http/test/venue-service-replacement.test.ts']},
-  {id:'remote',files:['packages/remote-access/test/venue-service-remote.test.ts','packages/remote-access/test/venue-service-remote-boundaries.test.ts','packages/remote-access/test/venue-service-report-authority.test.ts']},
-  {id:'translation',files:['packages/translation/test/venue-service-translation.test.ts','packages/translation/test/venue-service-queue.test.ts','packages/translation/test/worker-cli.test.ts']},
-  {id:'relay',files:['packages/registration/test/venue-service-relay.test.ts']},
-  {id:'runtime',files:['deploy/test-cloud/venue-service-runtime.test.mjs','scripts/venue-service-cli.test.mjs','deploy/test-cloud/venue-service-startup.test.mjs']},
   {id:'storage',files:['deploy/test-cloud/venue-service-storage.test.mjs','deploy/test-cloud/venue-service-composition.test.mjs','packages/backups/test/venue-service-streams.test.ts']},
+  {id:'backups',files:['packages/backups/test/venue-service-backups.test.ts','packages/backups/test/venue-service-captures.test.ts','packages/backups/test/venue-service-replacement.test.ts']},
+  {id:'remote',files:['packages/remote-access/test/venue-service-remote.test.ts','packages/remote-access/test/venue-service-remote-boundaries.test.ts','packages/remote-access/test/venue-service-report-authority.test.ts']},
+  {id:'recovery',files:['packages/account-http/test/venue-service-recovery.test.ts','packages/account-http/test/venue-service-replacement.test.ts']},
+  {id:'installations',files:['packages/registration/test/venue-service-installations.test.ts','packages/registration/test/venue-service-registration-races.test.ts']},
+  {id:'translation',files:['packages/translation/test/venue-service-translation.test.ts','packages/translation/test/venue-service-queue.test.ts','packages/translation/test/worker-cli.test.ts']},
+  {id:'runtime',files:['deploy/test-cloud/venue-service-runtime.test.mjs','scripts/venue-service-cli.test.mjs','deploy/test-cloud/venue-service-startup.test.mjs']},
+  {id:'relay',files:['packages/registration/test/venue-service-relay.test.ts']},
+  {id:'rules',files:['packages/registration/test/venue-service-rules.test.ts']},
 ].map(suite=>({...suite,cwd:'.'}));
 function keys(value, names) {
   assert.ok(value && typeof value === 'object' && !Array.isArray(value), 'Invalid proof object');
