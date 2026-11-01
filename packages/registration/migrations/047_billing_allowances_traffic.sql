@@ -39,10 +39,10 @@ CREATE TABLE billing_allowance_reservations (
  revision billing_whole NOT NULL REFERENCES billing_allowance_versions(revision),
  state text NOT NULL DEFAULT 'held' CHECK(state IN ('held','spent','released')),
  attempted_at timestamptz CHECK(isfinite(attempted_at)),
- FOREIGN KEY(account_id,organisation_id) REFERENCES organisation_memberships(account_id,organisation_id),
  FOREIGN KEY(venue_id,organisation_id,legal_business_id) REFERENCES venues(id,organisation_id,legal_business_id),
  FOREIGN KEY(installation_id,venue_id) REFERENCES installations(id,venue_id),
  UNIQUE(service,installation_id,operation_id),
+ CHECK(service<>'transactional_email' OR units=1),
  CHECK(attempted_at IS NULL OR state='spent')
 );
 CREATE INDEX billing_allowance_account_month ON billing_allowance_reservations(account_id,service,month) WHERE state IN ('held','spent');

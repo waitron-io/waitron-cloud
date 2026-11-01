@@ -72,6 +72,8 @@ export async function reserveAllowance(client:PoolClient,input:Input):Promise<Al
  const venue=(await client.query("SELECT id FROM venues WHERE id=$1 AND organisation_id=$2 AND legal_business_id=$3 AND environment='test' FOR NO KEY UPDATE",[input.venueId,...args])).rows[0];
  if(!venue)fail('allowance_scope_not_found');
  await client.query('SELECT venue_id FROM billing_service_authority WHERE venue_id=$1 FOR SHARE',[input.venueId]);
+ const original=(await client.query('SELECT venue_id FROM billing_allowance_reservations WHERE service=$1 AND installation_id=$2 AND operation_id=$3',[input.service,input.installationId,input.operationId])).rows[0];
+ if(original&&original.venue_id!==input.venueId)fail('allowance_conflict');
  if(!(await client.query('SELECT id FROM installations WHERE id=$1 AND venue_id=$2 AND revoked_at IS NULL FOR SHARE',[input.installationId,input.venueId])).rowCount)fail('allowance_scope_not_found');
  await lock(client,'allowance-operation:'+input.service+':'+input.installationId+':'+input.operationId);
  const saved=(await client.query<Saved>(reservationSelect+' WHERE service=$1 AND installation_id=$2 AND operation_id=$3 FOR UPDATE',[input.service,input.installationId,input.operationId])).rows[0];
@@ -115,10 +117,14 @@ export async function recordAllowanceAttempt(client:PoolClient,id:string,attempt
  await client.query('UPDATE billing_allowance_reservations SET attempted_at=coalesce(attempted_at,$2::timestamptz) WHERE id=$1',[id,attemptStartedAt]);
 }
 export async function releaseUnstartedAllowance(client:PoolClient,id:string):Promise<AllowanceReservation>{
+ if(!uuid(id))fail('invalid_allowance_input');await requireTransaction(client);
+ const candidate=(await client.query<Saved>(reservationSelect+' WHERE id=$1',[id])).rows[0];
+ if(!candidate)fail('allowance_scope_not_found');
+ // Workers hold the job before the reservation; release must use the same order.
+ const job=candidate.service==='content_translation'?(await client.query('SELECT total,started_at,lease_count,state FROM translation_jobs WHERE installation_id=$1 AND operation_id=$2 AND venue_id=$3 FOR UPDATE',[candidate.installation_id,candidate.operation_id,candidate.venue_id])).rows[0]:undefined;
  const row=await savedReservation(client,id);
  if(row.state==='released')return receipt(row);
  if(row.state!=='held'||row.attempted_at!==null||row.service!=='content_translation')fail('allowance_conflict');
- const job=(await client.query('SELECT total,started_at,lease_count,state FROM translation_jobs WHERE installation_id=$1 AND operation_id=$2 AND venue_id=$3 FOR UPDATE',[row.installation_id,row.operation_id,row.venue_id])).rows[0];
  if(!job||BigInt(job.total)!==BigInt(row.units)||job.started_at!==null||job.lease_count!==0||job.state!=='queued')fail('allowance_conflict');
  await client.query("UPDATE billing_allowance_reservations SET state='released' WHERE id=$1",[id]);return {...receipt(row),state:'released'};
 }

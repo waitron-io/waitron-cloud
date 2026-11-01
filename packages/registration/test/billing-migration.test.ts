@@ -29,7 +29,8 @@ async function rows(pool:Pool,names?:string[]){
 }
 async function emptyBilling(pool:Pool){
  const names=(await pool.query("SELECT tablename FROM pg_tables WHERE schemaname=current_schema() AND tablename LIKE 'billing_%' ORDER BY tablename")).rows;
- assert.equal(names.length,13);
+ assert.equal(names.length,15);
+ for(const name of ['billing_allowance_versions','billing_allowance_reservations'])assert.ok(names.some(row=>row.tablename===name),name);
  for(const {tablename} of names)assert.equal((await pool.query(`SELECT count(*) FROM ${tablename}`)).rows[0].count,'0',tablename);
 }
 
@@ -47,7 +48,7 @@ test('044 upgrades to billing without changing old rows or digests',async()=>{
   assert.deepEqual(await rows(f.pool,Object.keys(before)),before);
   const current=(await rows(f.pool,['schema_migrations'])).schema_migrations as unknown[];
   assert.equal(current.length,migrationNames.length);assert.deepEqual(current.slice(0,44),ledger);
-  assert.equal(current.length-(ledger as unknown[]).length,2);assert.equal((current[44] as {row:{name:string}}).row.name,'045_billing_store.sql');assert.equal((current[45] as {row:{name:string}}).row.name,'046_venue_service_authority.sql');await emptyBilling(f.pool);
+  assert.equal(current.length-(ledger as unknown[]).length,3);assert.equal((current[46] as {row:{name:string}}).row.name,'047_billing_allowances_traffic.sql');assert.equal((current[44] as {row:{name:string}}).row.name,'045_billing_store.sql');assert.equal((current[45] as {row:{name:string}}).row.name,'046_venue_service_authority.sql');await emptyBilling(f.pool);
  }finally{await f.close();}
 });
 
