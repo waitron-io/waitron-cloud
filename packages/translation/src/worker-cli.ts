@@ -1,7 +1,7 @@
 import {validateHeaderValue} from 'node:http';
 import {setTimeout as delay} from 'node:timers/promises';
 import {Pool} from 'pg';
-import {migrationNames,runWorkerLoop} from '@waitron-cloud/registration';
+import {migrationNames,parsePlanMode,runWorkerLoop} from '@waitron-cloud/registration';
 import {createOpenAiClient,createLoopbackOpenAiClient,openAiBaseUrl} from './openai-client.ts';
 import {TranslationWorker} from './worker.ts';
 import {sweepTranslationJobs} from './retention.ts';
@@ -27,7 +27,7 @@ function fail(){
 }
 process.once('SIGINT',shutdown);process.once('SIGTERM',shutdown);
 try{
- const args=process.argv.slice(2);
+ const args=process.argv.slice(2),planMode=parsePlanMode(process.env.CLOUD_TEST_SERVICE_PLANS,process.env.CLOUD_VENUE_SERVICE_LEVELS);
  if(args.length>1||(args.length===1&&args[0]!=='--once')||!process.env.DATABASE_URL||!process.env.CLOUD_OPENAI_API_KEY?.trim())throw Error();
  validateHeaderValue('authorization',`Bearer ${process.env.CLOUD_OPENAI_API_KEY}`);
  const client=process.env.CLOUD_TRANSLATION_LOCAL_PROOF==='1'
@@ -39,7 +39,7 @@ try{
  pool.on('error',fail);
  const installed=await pool.query<{count:number}>('SELECT count(*)::integer AS count FROM schema_migrations WHERE name=ANY($1::text[])',[migrationNames]);
  if(installed.rows[0]?.count!==migrationNames.length)throw Error();
- const worker=new TranslationWorker(pool,client);
+ const worker=new TranslationWorker(pool,client,{planMode});
  if(args[0]==='--once'){await sweepTranslationJobs(pool);await worker.runOnce(stop.signal);}
  else await runWorkerLoop({signal:stop.signal,concurrency:jobConcurrency,scheduleIntervalMs:3600000,pollIntervalMs:1000,
   schedule:sweepUntilReady,runOnce:signal=>worker.runOnce(signal),onError(error){

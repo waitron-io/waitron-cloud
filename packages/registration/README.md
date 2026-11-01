@@ -303,5 +303,7 @@ Mail remains available at registered, connected and hosted levels. Each approval
 message admission and handoff reads the venue policy before locking its installation.
 You still need a verified owner, explicit consent, verified origin, a current grant
 and an available account allowance. A billing transition creates no mail grant and
-cannot bypass an operator stop. These are local fixture interfaces; deployment
-wiring and production release qualification remain separate gates.
+cannot bypass an operator stop. For private fixtures, worker commands select this
+mode with `CLOUD_VENUE_SERVICE_LEVELS=test` and `CLOUD_TEST_SERVICE_PLANS=0`.
+Conflicting or invalid flags refuse startup before database work. The checked-in
+deployment keeps the mode dormant; production release qualification remains open.

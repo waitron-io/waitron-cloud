@@ -28,7 +28,7 @@ export async function prepareStorageBoot(directory){
  }finally{await held.release();}
 }
 export async function runTestStorage({directory='/run/local-stack',mode,signal}={}){
- if(!['existing','test-free-paid'].includes(mode))throw Error('test_cloud.plan_mode');
+ if(!['existing','test-free-paid','test-venue-levels'].includes(mode))throw Error('test_cloud.plan_mode');
  await bootstrapStorageIssuer(directory);
  const held=await claimLease(join(directory,'storage-authority/.controller.lock'));if(!held)throw Error('test_cloud.storage_busy');
  const socket=join(directory,'storage-authority/reload.sock'),ready='/tmp/test-cloud-storage-ready';
@@ -61,7 +61,7 @@ export async function runTestStorage({directory='/run/local-stack',mode,signal}=
 }
 if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){
  const stop=new AbortController(),shutdown=()=>stop.abort();process.once('SIGINT',shutdown);process.once('SIGTERM',shutdown);
- try{if(process.argv.length!==2)throw Error();await runTestStorage({directory:process.env.LOCAL_STACK_CONFIG_DIR,mode:parsePlanMode(process.env.CLOUD_TEST_SERVICE_PLANS),signal:stop.signal});}
+ try{if(process.argv.length!==2)throw Error();await runTestStorage({directory:process.env.LOCAL_STACK_CONFIG_DIR,mode:parsePlanMode(process.env.CLOUD_TEST_SERVICE_PLANS,process.env.CLOUD_VENUE_SERVICE_LEVELS),signal:stop.signal});}
  catch{console.error('Test storage failed; check private state, schema and owned provider');process.exitCode=1;}
  finally{process.removeListener('SIGINT',shutdown);process.removeListener('SIGTERM',shutdown);}
 }

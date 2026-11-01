@@ -6,7 +6,7 @@ const {Pool}=createRequire(new URL('../../packages/registration/package.json',im
 const stop=new AbortController(),shutdown=()=>stop.abort();let pool;
 process.once('SIGINT',shutdown);process.once('SIGTERM',shutdown);
 try{
- const mode=parsePlanMode(process.env.CLOUD_TEST_SERVICE_PLANS),directory=process.env.LOCAL_STACK_CONFIG_DIR??'/run/local-stack';
+ const mode=parsePlanMode(process.env.CLOUD_TEST_SERVICE_PLANS,process.env.CLOUD_VENUE_SERVICE_LEVELS),directory=process.env.LOCAL_STACK_CONFIG_DIR??'/run/local-stack';
  if(mode==='existing')await runManifestWorker({directory,signal:stop.signal});
  else{
   if(!process.env.DATABASE_URL)throw Error();

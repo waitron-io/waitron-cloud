@@ -11,7 +11,7 @@ let pool:Pool|undefined,storage:ReturnType<typeof workerObjects>|undefined,owner
 const stop=new AbortController(),shutdown=()=>stop.abort();
 process.once('SIGINT',shutdown);process.once('SIGTERM',shutdown);
 try{
- const args=process.argv.slice(2),mode=args[0],planMode=parsePlanMode(process.env.CLOUD_TEST_SERVICE_PLANS);
+ const args=process.argv.slice(2),mode=args[0],planMode=parsePlanMode(process.env.CLOUD_TEST_SERVICE_PLANS,process.env.CLOUD_VENUE_SERVICE_LEVELS);
  if(args.length>1||(mode&&!['--once','--status','--retry-failed'].includes(mode))||!process.env.DATABASE_URL)throw Error();
  pool=new Pool({connectionString:process.env.DATABASE_URL,max:3,connectionTimeoutMillis:5000,statement_timeout:10000});
  pool.on('error',()=>{console.error('Backup worker database connection failed');process.exitCode=1;stop.abort();});

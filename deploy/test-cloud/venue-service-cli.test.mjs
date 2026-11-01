@@ -22,12 +22,16 @@ for(const flags of [
 ])for(const [file,args] of [
  ['packages/translation/src/worker-cli.ts',['--once']],
  ['packages/backups/src/worker-cli.ts',['--status']],
+ ['deploy/test-cloud/backup-worker.mjs',['--status']],
+ ['packages/account-http/src/server-cli.ts',[]],
+ ['deploy/test-cloud/account-worker.mjs',[]],
+ ['packages/registration/src/organisation-plan-cli.ts',['show','--organisation','11111111-1111-4111-8111-111111111111']],
 ])test(`${file} refuses ${JSON.stringify(flags)} before connecting to a database`,async()=>{
  let connections=0;
  const server=createServer(socket=>{connections++;socket.destroy();});
  await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
  try{
-  const result=await command(file,args,{...flags,DATABASE_URL:`postgres://fixture:fixture@127.0.0.1:${server.address().port}/fixture`,CLOUD_OPENAI_API_KEY:'local-fixture-key',CLOUD_OPENAI_BASE_URL:''});
+  const result=await command(file,args,{...flags,NODE_ENV:'test',DATABASE_URL:`postgres://fixture:fixture@127.0.0.1:${server.address().port}/fixture`,CLOUD_OPENAI_API_KEY:'local-fixture-key',CLOUD_OPENAI_BASE_URL:'',CLOUD_PORTAL_ORIGIN:'https://cloud.example.test',CLOUD_HTTP_RATE_KEY:'a'.repeat(64),CLOUD_EMAIL_ACTIVE_KEY_ID:'fixture',CLOUD_EMAIL_KEYS:JSON.stringify({fixture:'b'.repeat(64)})});
   assert.equal(result.signal,null);assert.equal(result.code,1);assert.equal(result.stdout,'');
   assert.equal(connections,0,'invalid authority settings must fail before database work');
  }finally{await new Promise(resolve=>server.close(resolve));}
@@ -49,4 +53,20 @@ test('forward collector validates venue authority even with no configured mappin
    assert.equal(result.stderr,code?'remote.forward_collector_failed\n':'');
   }
  }finally{await rm(directory,{recursive:true,force:true});}
+});
+
+for(const flags of [
+ {CLOUD_TEST_SERVICE_PLANS:'0',CLOUD_VENUE_SERVICE_LEVELS:'production'},
+ {CLOUD_TEST_SERVICE_PLANS:'1',CLOUD_VENUE_SERVICE_LEVELS:'test'},
+])for(const role of ['reconciler','operator'])test(`${role} command refuses invalid authority before database work ${JSON.stringify(flags)}`,async()=>{
+ const directory=await mkdtemp(join(tmpdir(),'venue-remote-cli-'));let connections=0;
+ const server=createServer(socket=>{connections++;socket.destroy();});await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
+ try{
+  const file=join(directory,'config.json'),dns=join(directory,'dns.mjs'),key=join(directory,'key.pem');
+  await writeFile(dns,'export default {async present(){},async remove(){}};');await writeFile(key,'local-fixture');
+  await writeFile(file,JSON.stringify(role==='operator'?{id:'11111111-1111-4111-8111-111111111111',country:'ES',provider:'aws',environment:'test',suffix:'example.test',subnet:1,publicKey:Buffer.alloc(32,1).toString('base64'),endpoint:'gateway.example.test:51820'}:{routes:[],certificates:[],acme:{directoryUrl:'https://acme.example.test/directory',email:'fixture@example.test',accountKeyFile:key,dnsModule:dns}}));
+  const result=await command(`packages/remote-access/src/${role==='operator'?'operator-cli':'reconciler-cli'}.ts`,role==='operator'?['cell',file]:[file,'--status'],{...flags,DATABASE_URL:`postgres://fixture:fixture@127.0.0.1:${server.address().port}/fixture`});
+  assert.equal(result.code,1);assert.equal(result.signal,null);assert.equal(result.stdout,'');
+  assert.equal(connections,0,'invalid authority must be refused before a remote operation');
+ }finally{await new Promise(resolve=>server.close(resolve));await rm(directory,{recursive:true,force:true});}
 });

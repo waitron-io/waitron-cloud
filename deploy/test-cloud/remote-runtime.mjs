@@ -45,7 +45,7 @@ export async function issueTestRemoteCertificate(directory,target){
  }finally{await rm(scratch,{recursive:true,force:true});}
 }
 export async function openTestRemoteRuntime({pool,directory,mode}){
- if(!['existing','test-free-paid'].includes(mode))throw Error('test_cloud.plan_mode');
+ if(!['existing','test-free-paid','test-venue-levels'].includes(mode))throw Error('test_cloud.plan_mode');
  const config=await loadRuntime(directory),cellId=config.gateway.cellId;
  const key=createPrivateKey(await privateFile(join(directory,'gateway-signing-key.pem'))),trust=createPublicKey(await privateFile(join(directory,'gateway-issuer.pem')));
  if(!createPublicKey(key).equals(trust))throw Error('test_cloud.remote_state_invalid');

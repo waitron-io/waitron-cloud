@@ -25,7 +25,7 @@ const stop = () => {
 process.once('SIGINT', stop); process.once('SIGTERM', stop);
 try {
   if (process.argv.length !== 2 || !process.env.DATABASE_URL || !process.env.CLOUD_EMAIL_ACTIVE_KEY_ID || !process.env.CLOUD_EMAIL_KEYS) throw new Error();
-  const planMode=parsePlanMode(process.env.CLOUD_TEST_SERVICE_PLANS);
+  const planMode=parsePlanMode(process.env.CLOUD_TEST_SERVICE_PLANS,process.env.CLOUD_VENUE_SERVICE_LEVELS);
   const staffFlag=process.env.CLOUD_STAFF_CERTIFICATES??'0';if(!['0','1'].includes(staffFlag))throw new Error();
   const staffCertificates=staffFlag==='1';
   const translationFlag=process.env.CLOUD_TRANSLATION??'0';if(!['0','1'].includes(translationFlag))throw new Error();
