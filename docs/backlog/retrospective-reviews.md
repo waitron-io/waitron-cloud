@@ -173,8 +173,10 @@ The PR613 running-failure reload fixture now retains 17 captures: eight ordinary
 eight delayed and the reachable English/light/390 missing-next case. The eight
 historical filenames stay unchanged. Before the repair, all 66 browser checks
 passed while the separate 17-file review check failed with only eight images.
-After the filename change, both checks pass and the eight original image bytes
-stay unchanged. The missing-first control returns before capture. The wait comment
+After the filename change, both checks pass. The eight original image bytes match
+in the driver's compared runs; the review also observes byte differences between
+repeated runs of unchanged code. Byte equality is a run-specific observation.
+The missing-first control returns before capture. The wait comment
 now describes the missing-signal helper's five-second outer race; it does not claim
 that omitting either normal observation must fail. Every behavioral assertion,
 clock and deadline remains unchanged.
@@ -188,6 +190,7 @@ unverified. These are qualification limits, not claims of production repairs.
 
 Run `pnpm --dir apps/portal exec node --test test/public-challenge-noscript-browser.test.ts test/public-challenge-failure-reload-browser.test.ts test/public-challenge-reload-browser.test.ts`
 for the three local browser files. Set `PUBLIC_CHALLENGE_RECEIPT_DIR` to a fresh
-directory when checking the JavaScript-disabled fixture's 24 retained images.
+directory when checking the JavaScript-disabled fixture's 24 retained images or
+the running-failure reload fixture's 17 retained images.
 Use separate directories for the three files, because their historical filename
 schemes do not promise uniqueness across files.
