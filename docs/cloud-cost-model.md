@@ -185,7 +185,7 @@ The current model reports 37 named capability or evidence gaps.
 | mail | required | external | messages, attachments, retries and provider tier | Spain mail provider not selected; no live mail authorised. |
 | ses-candidate | candidate | usage | Stockholm SES recipients/attachments | Attachments/extras unknown; not an adopted relay. |
 | ci | required | external | rounded job minutes, cache/artifact storage | Standard Linux minute price is separate from AWS; included account allowance and monthly quantity unknown. |
-| fiscal-api | historical | usage | retained registry calls/retries | The obsolete registry and live producer are removed. Saved measurements remain historical; no current registry service or external fee is selected. |
+| fiscal-api | historical | usage | measured registry calls/retries | The obsolete registry and live producer are removed. Saved measurements remain historical; no current registry service or external fee is selected. |
 | kubernetes | candidate | platform | cluster count, support mode, nodes | Extended support, Auto Mode, node/volume/LB topology remain unknown. |
 | paid-support | candidate | platform | selected provider support plan | Unknown tier and rate. |
 | hosted-waitron | excluded | venue | dedicated venue CPU/RAM/storage | No usage or price selected for this candidate. |

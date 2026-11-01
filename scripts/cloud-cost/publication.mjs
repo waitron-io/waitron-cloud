@@ -12,7 +12,10 @@ const cell = value => String(value).replaceAll('|', '\\|').replaceAll('\n', ' ')
 export function renderModel({ data, inventory, assessment }) {
   const result = calculateCosts({ data, controls: defaultControls(data) });
   const prices = data.prices.map(rate => `| ${rate.id} | ${rate.region} | ${rate.value} | ${rate.unit} | ${rate.tier.begin}–${rate.tier.end ?? 'unbounded'} | ${rate.sku} / ${rate.rateCode} | [${rate.retrievedAt.slice(0, 10)}](${rate.source}) | ${rate.effectiveAt} |`).join('\n');
-  const capabilities = inventory.rows.map(row => `| ${row.id} | ${row.inclusion} | ${row.scope} | ${cell(row.driver)} | ${cell(row.gap ?? row.reason)} |`).join('\n');
+  const capabilities = inventory.rows.map(row => {
+    const shown = row.id === 'fiscal-api' ? {...row, inclusion: 'historical', gap: 'The obsolete registry and live producer are removed. Saved measurements remain historical; no current registry service or external fee is selected.'} : row;
+    return `| ${shown.id} | ${shown.inclusion} | ${shown.scope} | ${cell(shown.driver)} | ${cell(shown.gap ?? shown.reason)} |`;
+  }).join('\n');
   return `# Estimate what serving a venue could cost
 
 You need both a running platform and enough capacity for each venue. The
@@ -165,7 +168,7 @@ ${capabilities}
 Gross AWS subtotals apply no free allowance, discount, credit or tax. Allowances
 may be shared across an account and cannot be applied once per venue. Customer
 credits are not a reduction in the service's underlying list cost. Tax, exchange
-rates and external mail/fiscal API prices remain unknown. GitHub's standard-runner
+rates and external mail API prices remain unknown. GitHub's standard-runner
 CI is free for this public repository under the owner's current operating decision;
 paid/private/special runner use is a separate quantity and is not included here.
 The historical paid-minute snapshot in prices.json is not a monthly CI charge.
@@ -186,6 +189,13 @@ Before using a complete figure for a launch decision, establish each remaining
 driver and billing path, validate provider capacity and costs, and review the
 [launch evidence boundary](launch-evidence.md). An offline subtotal supplies no
 deployment or recovery authority.
+
+The registry measurements in \`docs/cost-model/\`, including
+\`service-mail-retry-fiscal-lifecycle.json\` and
+\`service-signup-recovery-fiscal-refusal.json\`, are historical receipts for the
+retired service. Their formats, numbers and parsers remain unchanged. Current
+mixed conformance journeys retain mail delivery, signup, password recovery,
+privacy and owned cleanup; they do not generate a replacement fiscal measurement.
 `;
 }
 

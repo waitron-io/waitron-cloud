@@ -10,6 +10,15 @@ const module = await import('./publication.mjs').catch(error => {
 });
 const cli = new URL('./cli.mjs', import.meta.url).pathname;
 
+test('published cost model marks the retired registry as historical', async () => {
+  const artifacts = await module.generatePublicArtifacts();
+  const model = artifacts['docs/cloud-cost-model.md'];
+  assert.match(model, /\| fiscal-api \| historical \|/);
+  assert.doesNotMatch(model, /\| fiscal-api \| required \|/);
+  assert.match(model, /service-mail-retry-fiscal-lifecycle\.json/);
+  assert.match(model, /service-signup-recovery-fiscal-refusal\.json/);
+});
+
 // Publication compares the actual artifacts, not just their stored hashes.
 test('verificationRefusesAnyChangedOrMissingArtifactWhileReportingCostGaps', async () => {
   assert.equal(typeof module.generatePublicArtifacts, 'function', 'build only the public offline deliverables');
