@@ -13,6 +13,7 @@ export interface CellMove {
 }
 export interface StageMoveInput {operationId:string;installationId:string;targetCellId:string;targetPeerPublicKey:string;port?:number;expectedRevision:number}
 export interface CertificateAuthorization {hostname:string;dnsName:string;revision:number;binding?:{venueId:string;publicKey:string}}
+export interface TrafficCoverageJournal {expect(client:PoolClient,manifest:AcceptedGatewayManifest):Promise<void>}
 function fail(code:string):never {throw new Error(code);}
 const route=(p:GatewayRoute):GatewayRoute=>({installationId:p.installationId,venueId:p.venueId,staffHostname:p.staffHostname,publicHostname:p.publicHostname,address:p.address,port:p.port,peerPublicKey:p.peerPublicKey});
 // Peer keys are claimed in two tables, so both claim paths share this transaction lock.
@@ -54,8 +55,11 @@ async function move(client:PoolClient,id:string,lock=false):Promise<CellMove|und
 }
 /** Operator provisioning only. Customer calls must not choose cells, addresses or peer keys here. */
 export class RemoteAccessStore {
- readonly #pool:Pool;readonly #planMode:PlanMode;
- constructor(pool:Pool,planMode:PlanMode='existing'){this.#pool=pool;this.#planMode=planMode;}
+ readonly #pool:Pool;readonly #planMode:PlanMode;readonly #trafficCoverage:TrafficCoverageJournal|undefined;
+ constructor(pool:Pool,planMode:PlanMode='existing',trafficCoverage?:TrafficCoverageJournal){
+  if(trafficCoverage&&planMode!=='test-venue-levels')fail('invalid_traffic_options');
+  this.#pool=pool;this.#planMode=planMode;this.#trafficCoverage=trafficCoverage;
+ }
  async createCell(c:CellInput){
   const endpoint=c.endpoint.split(':');
   if(!isUuid(c.id)||c.country!=='ES'||c.provider!=='aws'||!['test','production'].includes(c.environment)||!isHostname(c.suffix)||c.suffix.length>180
@@ -206,6 +210,7 @@ export class RemoteAccessStore {
  }
  async publishManifest(cellId:string,publish:(manifest:GatewayManifest)=>Promise<void>,now=Date.now()):Promise<void>{
   if(!isUuid(cellId))fail('invalid_cell');
+  if(this.#trafficCoverage)fail('traffic_authority_unavailable');
   await transaction(this.#pool,async client=>{await publish(await this.#manifest(client,cellId,now));});
  }
  async reportingManifest(cellId:string,now=Date.now()):Promise<AcceptedGatewayManifest>{
@@ -214,7 +219,17 @@ export class RemoteAccessStore {
  }
  async publishReportingManifest(cellId:string,publish:(manifest:AcceptedGatewayManifest)=>Promise<void>,now=Date.now()):Promise<void>{
   if(!isUuid(cellId))fail('invalid_cell');
-  await transaction(this.#pool,async client=>{await publish(await this.#reportingManifest(client,cellId,now));});
+  await transaction(this.#pool,async client=>{
+   const manifest=await this.#reportingManifest(client,cellId,now);
+   await this.journalTrafficManifest(client,manifest);await publish(manifest);
+  });
+ }
+ // The publisher retains this transaction through both the journal and artifact callback.
+ async journalTrafficManifest(client:PoolClient,manifest:AcceptedGatewayManifest):Promise<void>{
+  if(!this.#trafficCoverage)return;
+  const cell=(await client.query('SELECT country,environment FROM remote_cells WHERE id=$1 FOR SHARE',[manifest.cellId])).rows[0];
+  if(manifest.version!==2||cell?.country!=='ES'||cell.environment!=='test')fail('traffic_authority_unavailable');
+  await this.#trafficCoverage.expect(client,manifest);
  }
  async #reportingManifest(client:PoolClient,cellId:string,now:number):Promise<AcceptedGatewayManifest>{
   let ids:string[];

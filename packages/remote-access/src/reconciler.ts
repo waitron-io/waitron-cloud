@@ -3,7 +3,7 @@ import {createHash,randomUUID,type KeyObject} from 'node:crypto';
 import type {Pool,PoolClient} from 'pg';
 import {transaction,type PlanMode} from '@waitron-cloud/registration';
 import {eligibleRemoteInstallations,legacyRemoteExclusion,lockLegacyRemoteScope} from './plan-permissions.ts';
-import {RemoteAccessStore,type CertificateAuthorization} from './placement.ts';
+import {RemoteAccessStore,type CertificateAuthorization,type TrafficCoverageJournal} from './placement.ts';
 import {certificateNeedsRenewal} from './renewal.ts';
 import {signManifest,type GatewayRoute,type ReportingGatewayRoute} from './manifest.ts';
 
@@ -23,6 +23,7 @@ interface ReconcilerOptions {
  planMode?:PlanMode;
  staffExchange?:boolean;
  forwardReports?:boolean;
+ trafficCoverage?:TrafficCoverageJournal;
  execute?:(job:RemoteConfigurationJob,context:ExecuteContext)=>Promise<void>;
  artifacts?:ReconcilerArtifacts;
  issueCertificate?:(target:CertificateIssueTarget)=>Promise<string>;
@@ -107,7 +108,10 @@ async function desiredTargets(client:PoolClient,staffExchange:boolean,mode:PlanM
 export class RemoteConfigurationReconciler {
  readonly #forwardReports:boolean;readonly #planMode:PlanMode;readonly #staffExchange:boolean;readonly #pool:Pool;readonly #execute:ReconcilerOptions['execute'];readonly #artifacts:ReconcilerArtifacts|undefined;
  readonly #issueCertificate:ReconcilerOptions['issueCertificate'];readonly #signingKeyForCell:ReconcilerOptions['signingKeyForCell'];readonly #now:()=>number;readonly #store:RemoteAccessStore;
- constructor(pool:Pool,options:ReconcilerOptions={}){this.#forwardReports=options.forwardReports??false;this.#planMode=options.planMode??'existing';this.#staffExchange=options.staffExchange??false;this.#pool=pool;this.#store=new RemoteAccessStore(pool,this.#planMode);this.#execute=options.execute;this.#artifacts=options.artifacts;this.#issueCertificate=options.issueCertificate;this.#signingKeyForCell=options.signingKeyForCell;this.#now=options.now??Date.now;}
+ constructor(pool:Pool,options:ReconcilerOptions={}){
+  if(options.trafficCoverage&&(!options.forwardReports||options.execute))throw new Error('invalid_traffic_options');
+  this.#forwardReports=options.forwardReports??false;this.#planMode=options.planMode??'existing';this.#staffExchange=options.staffExchange??false;this.#pool=pool;this.#store=new RemoteAccessStore(pool,this.#planMode,options.trafficCoverage);this.#execute=options.execute;this.#artifacts=options.artifacts;this.#issueCertificate=options.issueCertificate;this.#signingKeyForCell=options.signingKeyForCell;this.#now=options.now??Date.now;
+ }
  async schedule():Promise<number>{return transaction(this.#pool,async client=>{
   await client.query("SELECT pg_advisory_xact_lock(hashtext(current_schema()),hashtext('remote_configuration_schedule'))");
   const desired=await desiredTargets(client,this.#staffExchange,this.#planMode,this.#forwardReports),keys=new Set(desired.map(target=>`${target.kind}:${target.targetId}`));let changed=0;
@@ -171,7 +175,10 @@ export class RemoteConfigurationReconciler {
   // Venue generations fence the job privately, including when the gateway wire has no reporter or revision.
   if(this.#planMode==='test-venue-levels'?!await this.#current(job):publicationDigest(manifest.routes,manifest.version===2?manifest.reporter:undefined)!==job.desiredDigest)throw new Error('stale_configuration');
   const key=await this.#signingKeyForCell(job.targetId),envelope=JSON.stringify(signManifest(manifest,key,now));
-  await this.#complete(job,()=>this.#artifacts!.publishManifest(job.targetId,envelope));
+  await this.#complete(job,async client=>{
+   await this.#store.journalTrafficManifest(client,manifest);
+   await this.#artifacts!.publishManifest(job.targetId,envelope);
+  });
  }
  async #certificate(job:RemoteConfigurationJob,signal:AbortSignal){
   if(job.kind==='certificate_staff'&&this.#staffExchange)return this.#staffCertificate(job,signal);
