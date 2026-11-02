@@ -33,9 +33,13 @@ const pairing={activeKeyId:'pairing-v1',keys:{'pairing-v1':randomBytes(32).toStr
 const rateKey=randomBytes(32).toString('hex'),issuer=generateKeyPairSync('ed25519').privateKey.export({type:'pkcs8',format:'der'}).toString('base64url');
 const handles=new Set(),pools=[],checks={},timings={},volumes=[];
 let receipt,failure,venueProof,phase='checkouts';
-function run(command,args,options={}){
+function run(command,args,options={},checkout){
  try{return execFileSync(command,args,{cwd:driver,encoding:'utf8',timeout:120000,stdio:['pipe','pipe','pipe'],...options});}
- catch{throw new Error(`schema upgrade command failed: ${command} (arguments and output withheld)`);}
+ catch(error){
+  const failure=new Error(`schema upgrade command failed: ${command} (arguments and output withheld)`);
+  if(checkout)failure.upgradeCommand={...checkout,status:error.status,signal:error.signal,code:error.code};
+  throw failure;
+ }
 }
 const docker=(...args)=>run('docker',args).trim();
 const git=(...args)=>run('git',args).trim();
@@ -108,9 +112,10 @@ async function tenantRequests(root,account,state){
 try{
  await rm(output,{force:true});
  console.log(JSON.stringify({phase:'checkouts',oldHead,newHead}));
- for(const [path,head] of [[old,oldHead],[next,newHead]]){
-  run('git',['clone','--quiet','--no-hardlinks','--no-checkout',driver,path]);run('git',['checkout','--quiet','--detach',head],{cwd:path});
-  run('pnpm',['install','--frozen-lockfile'],{cwd:path,timeout:180000});
+ for(const [path,head,release] of [[old,oldHead,'old'],[next,newHead,'new']]){
+  run('git',['clone','--quiet','--no-hardlinks','--no-checkout',driver,path],{},{release,operation:'clone'});
+  run('git',['checkout','--quiet','--detach',head],{cwd:path},{release,operation:'checkout'});
+  run('pnpm',['install','--frozen-lockfile'],{cwd:path,timeout:180000},{release,operation:'install'});
  }
  phase='databases';console.log(JSON.stringify({phase}));
  const primary=await database(containers[0]);

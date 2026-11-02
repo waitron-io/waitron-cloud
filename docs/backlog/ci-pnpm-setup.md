@@ -18,9 +18,14 @@ the configured credential. The registry receives only a synthetic credential. Ex
 tests, permission checks, retries and deadlines stay unchanged.
 
 Why that historical job needed another fetch after its initial download remains
-unknown. The separate lifecycle proof's opaque failure during checkout also
-remains unknown; this change does not establish that it was another 401. Preserve
-those distinctions when investigating a recurrence.
+unknown. The separate lifecycle proof's checkout failure remains unattributed;
+this does not establish that it was another 401. Its failure record now identifies
+the old or new release and whether cloning, checkout or installation failed,
+with a bounded exit status, signal and process error code. Arguments, paths,
+child output and environment values stay withheld. Native CLI controls force
+each of the six boundaries to refuse and cover a missing executable and a
+signal termination. Keep the next labelled recurrence to identify the underlying
+command failure; a passing qualification does not explain the historical cause.
 
 ## Bootstrap transport failures and bounded recovery (D154)
 
