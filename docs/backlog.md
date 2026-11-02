@@ -3388,7 +3388,7 @@ The refusal fixture now uses OS-assigned ports for earlier successful listeners.
 Two occupied-candidate controls reproduce and prevent the six-versus-seven
 listener-count failure from run41422295053 while retaining every original
 assertion and deadline. Runtime port selection is unchanged; see
-[the fixture qualification](backlog/storage-cache-fixture.md#storage-port-claim-before-bind-d506).
+[the fixture qualification](backlog/storage-cache-fixture.md#cooperative-native-storage-port-ownership).
 Identity-server errors after startup and historical failure causes remain open;
 see [the storage investigation](backlog/storage-cache-fixture.md#identity-port-allocation-race-d499).
 
