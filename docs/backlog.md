@@ -2,17 +2,17 @@
 
 ## Cloud backup box identity (D451)
 
-**Open.** Waitron's node-only identity release is merged, but the Cloud repair in
-[PR #700](https://github.com/waitron-io/waitron-cloud/pull/700) remains unqualified.
+**Open.** PR #700 prepares the matching node-only Waitron release
+`b1b0f10952a59eb59f7358bd681a3cdc94d9b61c`, checks its bundle digest and copies the
+pinned invoice font. Native preparation and admission checks pass; deliberate
+omissions of release, digest, asset and command-admission guards are caught in an
+independent installed copy. The actual sale replay still refuses at setup.
 The [compatibility design](superpowers/specs/2026-11-01-replay-allocation-compatibility-design.md)
 and [implementation plan](superpowers/plans/2026-11-01-replay-allocation-compatibility.md)
-trace the real installation-allocation and authenticated recovery callers.
-A native check of the matching release's recovery guard rejects two invoice-series
-purposes and accepts standard, full and rectificative purposes. The existing restore
-checks require exactly two active and two retired series; the owner's current
-instruction forbids changing those assertions. Resolve that exact scope conflict
-before implementing the plan. Runtime qualification and historical evidence remain
-separate; no replay pin, fiscal result or restore assertion changes here.
+cover ordinary allocation and authenticated recovery. The owner approved the
+bounded three-purpose fixture amendment; those callers and complete runtime
+qualification remain unfinished. Historical cost measurements retain their original
+release. No fiscal implementation, golden result or immutable row changes here.
 
 ## Concurrent storage archive publication (D450)
 

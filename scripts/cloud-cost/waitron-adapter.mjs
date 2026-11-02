@@ -1,8 +1,8 @@
+import {assertReplayBundle,assertReplayAssets} from './replay-release.mjs';
 
 import { readFileSync, realpathSync, lstatSync, writeFileSync, readdirSync, mkdirSync, rmSync } from 'node:fs';
 import { join, relative, isAbsolute, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { createHash } from 'node:crypto';
 
 const fail = () => { throw new Error('Invalid cloud cost replay configuration'); };
 const requireThat = value => { if (!value) fail(); };
@@ -74,8 +74,8 @@ function replayPaths(codeRoot, stateRoot, initial) {
   }
   const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
   exact(manifest, ['schemaVersion', 'revision', 'sha256']);
-  requireThat(manifest.schemaVersion === 1 && manifest.revision === 'fbadd15785464e59747e697c11048bfbc6e4938f');
-  requireThat(manifest.sha256 === createHash('sha256').update(readFileSync(runtime)).digest('hex'));
+  assertReplayBundle(manifest,readFileSync(runtime));
+  assertReplayAssets(codeRoot);
   const sets = JSON.parse(readFileSync(join(codeRoot, 'packages/migrations/migrations.manifest.json'), 'utf8'));
   requireThat(Array.isArray(sets) && sets.length > 0);
   const migrations = sets.map(set => {

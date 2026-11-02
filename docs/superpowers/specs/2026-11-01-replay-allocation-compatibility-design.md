@@ -17,8 +17,7 @@ keeps allocation and restore implementation in Waitron; Cloud owns its caller.
 This is the separate high-effort design required by RUNNER section 0. The returning
 driver must check it, obtain the section 5.2 fresh-context read, and land the two
 documents as a docs-only milestone before implementation. Routine execution stays
-inline. **A protected-check conflict below prevents implementing the complete
-proposal under the present answer.** Landing this document does not resolve it.
+inline. The owner’s 1 November 13:10 answer approves the exact bounded amendment below, resolving the protected-check conflict for implementation. All other fiscal, restore and cleanup outcomes remain required.
 
 ## Evidence and its limits
 
@@ -68,10 +67,7 @@ codes to three allocated codes, and the two restore series counts changing from
 2 to 3. The replaced-destination control would use a genuine owned capture instead
 of empty bytes so it still reaches and checks destination ownership. Retain every
 numeric sale, invoice-number, hash, rollback, two-SIF/new-installation, private-state
-and cleanup assertion, including all replacement/sentinel checks. This complete
-fixture/check amendment is **not approved by this spec**. Alternatively the owner
-must choose a different scope or name an upstream dependency. Until then, keep PR700 and its
-published `1fc9003b99ffd7bd8680809ce310d59c8ed6e60a` head intact.
+and cleanup assertion, including all replacement/sentinel checks. The owner approved exactly this complete fixture/check amendment on 1 November at 13:10. Resume PR700 within these limits and retain its original review and historical receipts.
 
 ## Required caller, after the conflict is resolved
 

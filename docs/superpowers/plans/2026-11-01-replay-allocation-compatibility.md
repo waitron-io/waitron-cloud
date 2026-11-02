@@ -4,7 +4,7 @@
 
 **Goal:** Qualify PR700's node-only identity against Waitron's real allocation and authenticated restore caller without weakening protected checks.
 
-**Architecture:** Prepare the literal Waitron release and call its preproduction provisioning and recovery services. Keep allocation, authentication and fiscal writes inside Waitron; Cloud manages generated state and release provenance. A protected-check conflict blocks the complete implementation under current authority.
+**Architecture:** Prepare the literal Waitron release and call its preproduction provisioning and recovery services. Keep allocation, authentication and fiscal writes inside Waitron; Cloud manages generated state and release provenance. The owner approved the bounded fixture/check amendment on 1 November at 13:10; implementation is authorised within that exact scope.
 
 **Tech stack:** Node 26, ESM, pnpm, pinned Waitron TypeScript bundled with esbuild, SQLite, node:test; Docker checks only on the approved Linux box or CI.
 
@@ -12,7 +12,7 @@
 
 ## Global constraints
 
-- Owner option 1 authorizes the existing real allocation caller; no arbitrary installation number, fallback, bypass, golden or restore assertion change.
+- Owner option 1 authorizes the existing real allocation caller and the 13:10 bounded amendment: W1, three generated purposes, exact allocated-series selectors with unchanged counters, exactly three fresh source-bills rows, restore series counts 2 to 3, and an owned capture for the replaced-destination control. Every other protected outcome stays unchanged.
 - Replay revision: `b1b0f10952a59eb59f7358bd681a3cdc94d9b61c`. Historical revision: `fbadd15785464e59747e697c11048bfbc6e4938f`. Browser revision: `99c265981ba98f1afd0e5fc822624a9a91822ad2`.
 - Replay font SHA256: `bfb7bb691513f12e734dc346c03a03f784912432d7e3fa8e56efcf906fe86b3d`.
 - No Waitron edit, fiscal implementation, immutable-row or generated historical evidence change; no live provider calls, customer mail, spending or deployment.
@@ -35,10 +35,10 @@
 
 - [ ] Returning driver reads both documents and obtains one fresh-context builder read; correct concrete findings. Check Markdown encoding, links and `git diff --check`; use normal docs-only finish/land, with no external Claude run-it for prose alone. This author does not commit, push or land.
 - [ ] Report the real conflict: `replay-conformance.test.mjs:137–138` requires 2 active/2 retired series, while Waitron's `readHourRecoveryState` requires standard/full/rectificative. Also enumerate bare `R` selectors and the `WR` input. Do not silently treat this spec as permission to change protected assertions.
-- [ ] **STOP implementation pending resolution.** A possible narrowly bounded owner amendment is three fixture purposes, `W1`, exact allocated-series selectors, and the exact fresh source-bills rows changing to three allocated rows, the two restore series counts changing 2 to 3, and a genuine owned capture replacing empty bytes in the destination-replacement control. Preserve all sale/number/hash/rollback/new-installation/private-state and cleanup outcomes. It is not authorized now. If granted, record its exact limits and revise these documents before executing Tasks 1–5; if denied, report the dependency or revised scope. No workaround with extra rows, hidden purposes or alternate allocation authority.
+- [x] **Owner resolution received, 2026-11-01 13:10.** A possible narrowly bounded owner amendment is three fixture purposes, `W1`, exact allocated-series selectors, and the exact fresh source-bills rows changing to three allocated rows, the two restore series counts changing 2 to 3, and a genuine owned capture replacing empty bytes in the destination-replacement control. Preserve all sale/number/hash/rollback/new-installation/private-state and cleanup outcomes. The owner approved exactly this amendment; execute Tasks 1–5 within those limits. No workaround with extra rows, hidden purposes or alternate allocation authority.
 - [ ] Specify the synthetic clock boundary from Task 3. Use controlled observations for generated replay; do not impose production clock qualification or issue the default external HEAD. The host clock seam alone does not replace the network observer.
 
-The tasks below describe the required implementation boundaries and verification sequence **after** these gates. They do not authorize the proposed three-series amendment or any egress change.
+The tasks below describe the required implementation boundaries and verification sequence **after** these gates. The owner’s separate answer authorizes the three-series amendment. No egress change is authorized.
 
 ## File and changed-check inventory
 

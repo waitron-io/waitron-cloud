@@ -1,3 +1,4 @@
+import {copyPreparedReplayAssets} from '../replay-release.mjs';
 // Explicit local integration: pinned Waitron routes, generated venue and real gateway.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -107,6 +108,7 @@ test('pinnedWaitronOwnerReadsReconnectAndLogoutThroughTheGateway_' + fault, { ti
     }
     secret('peer/backend.mjs', backend);
     cpSync(fixture.runtime, join(root, 'peer/runtime.mjs'));
+    copyPreparedReplayAssets(join(fixture.runtime,'..'),join(root,'peer'));
     cpSync(fixture.migrations, join(root, 'peer/migrations'), { recursive: true });
     const peer = start(['-v', join(root, 'src') + ':/app/src:ro', '-v', join(root, 'peer') + ':/input:ro', image, 'node', '/input/backend.mjs']);
     await waitForGatewayReady(() => JSON.parse(docker('exec', gateway, 'node', '/measure/remote-waitron-smoke.mjs', 'ready')));

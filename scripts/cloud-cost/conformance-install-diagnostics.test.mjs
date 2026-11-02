@@ -14,7 +14,7 @@ for(const outcome of ['timeout','failure','complete','interrupt'])test('setup id
   writeFileSync(join(bin,'git'),`#!${process.execPath}
 import {mkdirSync} from 'node:fs';
 const a=process.argv.slice(2);if(a[0]==='init')mkdirSync(a.at(-1),{recursive:true});
-if(a.includes('rev-parse'))console.log('fbadd15785464e59747e697c11048bfbc6e4938f');
+if(a.includes('rev-parse'))console.log('b1b0f10952a59eb59f7358bd681a3cdc94d9b61c');
 `,{mode:0o700});
   writeFileSync(join(bin,'pnpm'),`#!${process.execPath}
 import {writeFileSync} from 'node:fs';import {dirname} from 'node:path';

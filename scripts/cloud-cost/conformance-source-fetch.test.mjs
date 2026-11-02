@@ -36,7 +36,7 @@ if(args[0]==='init'){
   if(failure==='hang')setInterval(()=>{},1000);
   else {console.error(failure);process.exit(128);}
  }
-}else if(args.includes('rev-parse'))console.log(data.wrongRevision?'wrong-revision':data.sourceRevision??'fbadd15785464e59747e697c11048bfbc6e4938f');
+}else if(args.includes('rev-parse'))console.log(data.wrongRevision?'wrong-revision':data.sourceRevision??'b1b0f10952a59eb59f7358bd681a3cdc94d9b61c');
 else if(!args.includes('checkout'))process.exit(90);
 `,{mode:0o700});
   await writeFile(join(bin,'pnpm'),`#!${process.execPath}\nconsole.error('REACHED_SOURCE_INSTALL');process.exit(73);\n`,{mode:0o700});
@@ -101,7 +101,7 @@ for(const failure of ['hang',"fatal: unable to access 'https://github.com/clinto
       assert.equal(record.timeoutMs,75000);
       assert.ok(record.args.includes('http.lowSpeedLimit=1000'));
       assert.ok(record.args.includes('http.lowSpeedTime=60'));
-      assert.equal(record.args.at(-1),'fbadd15785464e59747e697c11048bfbc6e4938f');
+      assert.equal(record.args.at(-1),'b1b0f10952a59eb59f7358bd681a3cdc94d9b61c');
     }
     assert.equal(result.fetches.at(-1).event,'complete');
     assert.ok(result.fetches.every(record=>Number.isFinite(record.elapsedMs)));
@@ -177,13 +177,13 @@ test('fixture cleanup collects a paused fetch after its supervisor dies',async t
 
 test('replay preparation retains its historical source independently of the browser pin',async t=>{
   const result=await prepare(t);
-  assert.equal(result.calls.find(args=>args.includes('fetch')).at(-1),'fbadd15785464e59747e697c11048bfbc6e4938f');
+  assert.equal(result.calls.find(args=>args.includes('fetch')).at(-1),'b1b0f10952a59eb59f7358bd681a3cdc94d9b61c');
   assert.match(result.output,/REACHED_SOURCE_INSTALL/);
 });
 
 test('combined preparation begins with the historical replay source',async t=>{
   const result=await prepare(t,{selected:['cadence-conformance.test.mjs','remote-browser-conformance.test.mjs']});
-  assert.equal(result.calls.find(args=>args.includes('fetch')).at(-1),'fbadd15785464e59747e697c11048bfbc6e4938f');
+  assert.equal(result.calls.find(args=>args.includes('fetch')).at(-1),'b1b0f10952a59eb59f7358bd681a3cdc94d9b61c');
   assert.match(result.output,/REACHED_SOURCE_INSTALL/);
 });
 

@@ -1,3 +1,4 @@
+import {createHash} from 'node:crypto';
 // This explicit local integration command uses prepared public code and synthetic sales only.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -264,4 +265,13 @@ test('archiveOptionsRefuseExtraFieldsBeforeWriting', async t => {
   await assert.rejects(replay.restore({ artifact: capture.bytes, recoveryKey: 'synthetic-key', payload: 'SYNTHETIC_PRIVATE_CANARY' }),
     /Invalid cloud cost replay runtime/);
   assert.equal(existsSync(join(stateRoot, 'restored')), false);
+});
+
+// The asset is read beside the actual prepared bundle, not from the test fixture.
+test('replayBundleCarriesMatchingReleaseAndFont',()=>{
+ const manifest=JSON.parse(readFileSync(join(fixture.codeRoot,'runtime-manifest.json'),'utf8'));
+ assert.equal(manifest.revision,'b1b0f10952a59eb59f7358bd681a3cdc94d9b61c');
+ assert.equal(manifest.sha256,createHash('sha256').update(readFileSync(join(fixture.codeRoot,'runtime.mjs'))).digest('hex'));
+ assert.equal(createHash('sha256').update(readFileSync(join(fixture.codeRoot,'assets/invoice-noto-sans.ttf'))).digest('hex'),
+  'bfb7bb691513f12e734dc346c03a03f784912432d7e3fa8e56efcf906fe86b3d');
 });

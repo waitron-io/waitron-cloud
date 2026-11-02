@@ -9,8 +9,9 @@ import {execFileSync,spawn} from 'node:child_process';
 import {setTimeout as delay} from 'node:timers/promises';
 import {downloadConformanceArchive} from './conformance-archive.mjs';
 import {createInstallObserver} from './conformance-install-observer.mjs';
+import {REPLAY_REVISION,copyReplayAssets} from './replay-release.mjs';
 
-const replayRevision='fbadd15785464e59747e697c11048bfbc6e4938f';
+const replayRevision=REPLAY_REVISION;
 const browserRevision='99c265981ba98f1afd0e5fc822624a9a91822ad2';
 const repository=fileURLToPath(new URL('../..',import.meta.url));
 const sha=bytes=>createHash('sha256').update(bytes).digest('hex');
@@ -47,8 +48,8 @@ export async function prepareConformance(selected) {
         cleanup:()=>{try {browser.cleanup();} finally {replay.cleanup();}}};
     } catch(error) {replay.cleanup();throw error;}
   }
-  // Browser qualification needs stream and unload repairs; replay measurements
-  // retain their original source so their fiscal and accounting inputs agree.
+  // Browser and generated replay have independent release contracts. Historical
+  // measurements retain their own recorded revision outside this preparation.
   const revision=selected.includes('remote-browser-conformance.test.mjs')?browserRevision:replayRevision;
   const controller=new AbortController();
   const interrupt=()=>controller.abort();
@@ -147,6 +148,7 @@ export async function prepareConformance(selected) {
       writeFileSync(entry,(selected.includes('remote-browser-conformance.test.mjs')?[...exports,...browserExports]:exports).map(([names,path])=>`export {${names}} from ${JSON.stringify('./'+path)};`).join('\n'));
       await build({entryPoints:[entry],outfile:runtime,bundle:true,platform:'node',format:'esm',target:'node26',
         banner:{js:'import {createRequire as cloudCostRequire} from "node:module"; const require=cloudCostRequire(import.meta.url);'},logLevel:'warning'});
+      if(revision===replayRevision)copyReplayAssets(source,code);
       if(selected.includes('remote-browser-conformance.test.mjs')) {
         mkdirSync(join(code,'assets'));
         cpSync(join(source,'apps/server/src/assets/invoice-noto-sans.ttf'),join(code,'assets/invoice-noto-sans.ttf'));

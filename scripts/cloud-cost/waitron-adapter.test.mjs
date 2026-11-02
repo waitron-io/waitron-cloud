@@ -50,6 +50,8 @@ function runtimeFixture(t) {
   const root = realpathSync(mkdtempSync(join(tmpdir(), 'cloud-cost-replay-test-')));
   const codeRoot = join(root, 'code'); const stateRoot = join(root, 'state');
   mkdirSync(codeRoot, { mode: 0o700 }); mkdirSync(stateRoot, { mode: 0o700 });
+  mkdirSync(join(codeRoot, 'assets'));
+  writeFileSync(join(codeRoot, 'assets/invoice-noto-sans.ttf'), readFileSync(new URL('./fixtures/replay-font/invoice-noto-sans.ttf', import.meta.url)));
   mkdirSync(join(codeRoot, 'packages/migrations'), { recursive: true });
   mkdirSync(join(codeRoot, 'packages/db/drizzle'), { recursive: true });
   writeFileSync(join(codeRoot, 'packages/migrations/migrations.manifest.json'), JSON.stringify([
@@ -59,7 +61,7 @@ function runtimeFixture(t) {
   const text = `import {writeFileSync} from 'node:fs';writeFileSync(${JSON.stringify(marker)},'RAW_CANARY');throw Error('RAW_CANARY_RUNTIME_IMPORTED');`;
   writeFileSync(join(codeRoot, 'runtime.mjs'), text);
   writeFileSync(join(codeRoot, 'runtime-manifest.json'), JSON.stringify({ schemaVersion: 1,
-    revision: 'fbadd15785464e59747e697c11048bfbc6e4938f', sha256: createHash('sha256').update(text).digest('hex') }));
+    revision: 'b1b0f10952a59eb59f7358bd681a3cdc94d9b61c', sha256: createHash('sha256').update(text).digest('hex') }));
   t.after(() => rmSync(root, { recursive: true, force: true }));
   return { codeRoot, stateRoot, config: config(), marker, initial: {
     taxpayer: { country: 'ES', taxId: '40000001K', legalName: 'Synthetic SL' },
@@ -91,7 +93,7 @@ test('runtimeRefusesChangedBundleAndMigrationPathBeforeImport', async t => {
   const args = runtimeFixture(t);
   const manifestPath = join(args.codeRoot, 'runtime-manifest.json');
   const valid = JSON.parse(readFileSync(manifestPath, 'utf8'));
-  for (const changed of [{ revision: 'a'.repeat(40) }, { sha256: '0'.repeat(64) }, { schemaVersion: 2 }, { private: 'RAW_CANARY' }]) {
+  for (const changed of [{ revision: 'fbadd15785464e59747e697c11048bfbc6e4938f' }, { revision: '99c265981ba98f1afd0e5fc822624a9a91822ad2' }, { revision: 'a'.repeat(40) }, { sha256: '0'.repeat(64) }, { schemaVersion: 2 }, { private: 'RAW_CANARY' }]) {
     writeFileSync(manifestPath, JSON.stringify({ ...valid, ...changed }));
     await assert.rejects(adapter.openReplay(args), /Invalid cloud cost replay runtime/);
     assert.equal(existsSync(args.marker), false);
@@ -169,11 +171,25 @@ export class VerifactuBackend{}
 `;
   writeFileSync(join(args.codeRoot, 'runtime.mjs'), runtime);
   writeFileSync(join(args.codeRoot, 'runtime-manifest.json'), JSON.stringify({schemaVersion: 1,
-    revision: 'fbadd15785464e59747e697c11048bfbc6e4938f', sha256: createHash('sha256').update(runtime).digest('hex')}));
+    revision: 'b1b0f10952a59eb59f7358bd681a3cdc94d9b61c', sha256: createHash('sha256').update(runtime).digest('hex')}));
   const replay = await adapter.openReplay(args);
   try {
     const identity = join(args.stateRoot, 'trading.env');
     assert.equal(readFileSync(identity, 'utf8'), 'WAITRON_NODE_ID=node-a\n');
     assert.equal(statSync(identity).mode & 0o777, 0o600);
   } finally { await replay.close(); }
+});
+
+test('runtimeRefusesMissingChangedAndLinkedFontBeforeImport',async t=>{
+ const args=runtimeFixture(t),path=join(args.codeRoot,'assets/invoice-noto-sans.ttf');
+ const font=readFileSync(path);rmSync(path);
+ for(const kind of ['missing','changed','linked']){
+  if(kind==='changed')writeFileSync(path,'changed');
+  if(kind==='linked'){rmSync(path);symlinkSync(new URL('./fixtures/replay-font/invoice-noto-sans.ttf',import.meta.url),path);}
+  await assert.rejects(adapter.openReplay(args),/Invalid cloud cost replay runtime/);
+  assert.equal(existsSync(args.marker),false,'invalid assets refuse before runtime import');
+ }
+ rmSync(path);writeFileSync(path,font);
+ await assert.rejects(adapter.openReplay(args),/Invalid cloud cost replay runtime/);
+ assert.equal(existsSync(args.marker),true);
 });

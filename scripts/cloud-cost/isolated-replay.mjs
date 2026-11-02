@@ -1,3 +1,4 @@
+import {assertReplayBundle,assertReplayAssets} from './replay-release.mjs';
 import { readFileSync, writeFileSync, lstatSync, realpathSync, mkdirSync, rmSync, existsSync, readdirSync, copyFileSync, constants } from 'node:fs';
 import { join, relative, isAbsolute } from 'node:path';
 import { randomUUID, createHash } from 'node:crypto';
@@ -86,8 +87,8 @@ function admit(args) {
   const manifest = JSON.parse(readFileSync(join(codeRoot, 'runtime-manifest.json'), 'utf8'));
   exact(manifest, ['schemaVersion', 'revision', 'sha256']);
   file(join(codeRoot, 'runtime.mjs')); file(join(codeRoot, 'runtime-manifest.json'));
-  need(manifest.schemaVersion === 1 && manifest.revision === 'fbadd15785464e59747e697c11048bfbc6e4938f'
-    && manifest.sha256 === createHash('sha256').update(readFileSync(join(codeRoot, 'runtime.mjs'))).digest('hex'));
+  assertReplayBundle(manifest,readFileSync(join(codeRoot,'runtime.mjs')));
+  assertReplayAssets(codeRoot);
   need(typeof args.locationId === 'string' && args.locationId.length > 0 && args.locationId.length <= 128);
   exact(args.expected, ['sales', 'paid', 'tradingDays', 'busiest']);
   need(Object.values(args.expected).every(v => count(v) && v > 0 && v <= 100000)

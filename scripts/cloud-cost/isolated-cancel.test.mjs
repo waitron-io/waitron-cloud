@@ -16,7 +16,7 @@ test('anAlreadyCancelledReplayRefusesBeforeAnyExternalCommandOrJournalWrite', t 
   writeFileSync(journal.path, JSON.stringify({ schemaVersion: 1, source, root, ownershipToken: token }), { mode: 0o600 });
   const runtime = 'export const synthetic=true;'; writeFileSync(join(codeRoot, 'runtime.mjs'), runtime);
   writeFileSync(join(codeRoot, 'runtime-manifest.json'), JSON.stringify({ schemaVersion: 1,
-    revision: 'fbadd15785464e59747e697c11048bfbc6e4938f', sha256: createHash('sha256').update(runtime).digest('hex') }));
+    revision: 'b1b0f10952a59eb59f7358bd681a3cdc94d9b61c', sha256: createHash('sha256').update(runtime).digest('hex') }));
   const database = join(source, 'venue.db'); writeFileSync(database, 'Synthetic input must not be opened');
   const marker = join(parent, 'external-command');
   const quote = text => "'" + text.replaceAll("'", "'\\''") + "'";
