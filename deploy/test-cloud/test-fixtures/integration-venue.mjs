@@ -1,6 +1,6 @@
 // Observe successful native exchanges without replacing transport, signatures or responses.
 import assert from 'node:assert/strict';
-import {appendFile, readFile, rm, chmod} from 'node:fs/promises';
+import {appendFile, readFile, writeFile, rm, chmod} from 'node:fs/promises';
 import {createServer} from 'node:http';
 import {randomUUID, createHash} from 'node:crypto';
 import {spawn} from 'node:child_process';
@@ -65,6 +65,13 @@ const control = createServer(async (req, res) => {
       res.end(JSON.stringify(await probeIntegrationStorage(root, JSON.parse(input))));
       return;
     }
+    if (req.url === '/snapshot-exposure') {
+      let input = '';
+      for await (const part of req) {input += part; assert.ok(input.length < 16384);}
+      const {probeIntegrationSnapshotExposure} = await import('/proof/integration-snapshot-client.mjs');
+      res.end(JSON.stringify(await probeIntegrationSnapshotExposure(root, JSON.parse(input))));
+      return;
+    }
     if (req.url === '/stream-start') {
       const {startIntegrationStream} = await import('/proof/integration-stream.mjs');
       res.end(JSON.stringify(await startIntegrationStream(root)));
@@ -82,6 +89,7 @@ const control = createServer(async (req, res) => {
     }
     if (req.url === '/snapshot-publish') {
       assert.equal(process.env.CLOUD_TEST_BACKUP_STATE, '1');
+      const requestedAt = Date.now();
       const grant = await cloud.reserveCapture(randomUUID());
       const metadata = await new Promise((resolve, reject) => {
         const child = spawn(process.execPath, ['--permission', '--allow-fs-read=*', '--allow-fs-write=' + root,
@@ -112,7 +120,15 @@ const control = createServer(async (req, res) => {
         // The API hostname is pinned to the proxy; storage keeps that TLS name on its own service.
         requestHandler: {httpsAgent: new Agent({ca: await readFile('/proof/ca.pem'),
           lookup: (hostname, options, done) => lookup(hostname === 'waitron.local' ? 'storage' : hostname, options, done)})}});
-      try {await storage.send(new PutObjectCommand({Bucket: grant.location.bucket, Key: grant.incomingKey, Body: bytes}), {abortSignal: AbortSignal.timeout(10000)});}
+      try {
+        const written = await storage.send(new PutObjectCommand({Bucket: grant.location.bucket, Key: grant.incomingKey, Body: bytes}), {abortSignal: AbortSignal.timeout(10000)});
+        assert.equal(written.$metadata.httpStatusCode, 200);
+        const state = JSON.parse(await readFile(root + '/cloud-connection.json', 'utf8'));
+        await writeFile(root + '/snapshot-access.json', JSON.stringify({id: grant.id, venueId: grant.venueId, installationId: grant.installationId,
+          identitySha256: createHash('sha256').update(state.publicKey).digest('hex'), archiveSha256: digest,
+          location: grant.location, incomingKey: grant.incomingKey, credentials: grant.credentials,
+          expiresAt: grant.expiresAt, requestedAt, acceptedAt: Date.now(), writeStatus: written.$metadata.httpStatusCode}), {mode: 0o600});
+      }
       finally {storage.destroy();}
       const point = await cloud.publishCapture(grant.id, {digest, size: bytes.length, capturedAt: metadata.manifest.createdAt,
         retention: 'daily', sourceNodeId: metadata.sourceNodeId, modules: metadata.manifest.modules});

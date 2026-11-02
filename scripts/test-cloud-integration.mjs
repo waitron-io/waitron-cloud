@@ -565,6 +565,7 @@ export async function runTestCloudClients({image, waitronImage, protectedContain
       ...(capacityEvidence ? {capacity: capacityEvidence} : {}), ...(publishedSnapshot ? {paidSnapshot: publishedSnapshot} : {}), ...(observedStream ? {paidStream: observedStream} : {}),
       ...(continuousRecovery ? {paidContinuousRecovery: continuousRecovery} : {}), ...(freeRemoteEvidence ? {freeRemote: freeRemoteEvidence} : {}),
       ...(paidRemoteEvidence ? {paidRemote: paidRemoteEvidence} : {}), ...(paidRemoteEvidence?.directStorage ? {paidStorageWithdrawal: paidRemoteEvidence.directStorage} : {}), ...(cloudRollbackEvidence ? {cloudRollback: cloudRollbackEvidence} : {}),
+      ...(paidRemoteEvidence?.snapshotExposure ? {paidSnapshotExposure: paidRemoteEvidence.snapshotExposure} : {}),
       ...(schemaRollbackEvidence ? {schemaRollback: schemaRollbackEvidence} : {})};
     };
     if (measureIntegration) {

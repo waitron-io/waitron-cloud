@@ -15,6 +15,8 @@ COPY integration-recovery-authority.mjs /proof/integration-recovery-authority.mj
 COPY integration-stream.mjs /proof/integration-stream.mjs
 COPY integration-storage-client.mjs /proof/integration-storage-client.mjs
 COPY integration-storage-withdrawal.mjs /proof/integration-storage-withdrawal.mjs
+COPY integration-snapshot-client.mjs /proof/integration-snapshot-client.mjs
+COPY integration-snapshot-exposure.mjs /proof/integration-snapshot-exposure.mjs
 COPY integration-transport.mjs /proof/integration-transport.mjs
 WORKDIR /waitron/apps/server
 RUN --network=none pnpm --dir ../dashboard build

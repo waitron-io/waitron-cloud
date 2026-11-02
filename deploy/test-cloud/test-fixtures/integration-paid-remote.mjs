@@ -94,7 +94,7 @@ export async function proveIntegrationPaidRemote({docker, compose, control, acco
   }
   assert.equal(withdrawn, true, 'integration.remote_withdrawal_required');
   const durationMs = Date.now() - committed;
-  let directStorage;
+  let directStorage, snapshotExposure;
   if (storageWithdrawal) {
     const after = await control(paid.id, 'storage-withdrawal', {phase: 'after', startedAt: committed});
     assert.equal(after.writeStatus, 403); assert.equal(after.readStatus, 403);
@@ -103,6 +103,9 @@ export async function proveIntegrationPaidRemote({docker, compose, control, acco
     assert.deepEqual(retained, {retainedData: true, readerPreserved: true, installationPreserved: true, plan: 'free'});
     directStorage = {organisationId: paid.organisationId, venueId: paid.venueId, installationId: paid.installationId,
       before: storageBefore, after, restartObserved: true, ...retained};
+    assert.deepEqual(await control(paid.id, 'snapshot-refusal'), {status: 'proved', httpStatus: 403, error: 'permission_denied', grantIssued: false});
+    snapshotExposure = {organisationId: paid.organisationId, venueId: paid.venueId, installationId: paid.installationId,
+      ...await control(paid.id, 'snapshot-exposure', {downgradedAt: committed}), newGrantRefused: true};
   }
 
   await control(paid.id, 'refresh');
@@ -114,6 +117,7 @@ export async function proveIntegrationPaidRemote({docker, compose, control, acco
   return {organisationId: paid.organisationId, installationId: paid.installationId, venueId: paid.venueId,
     client: client.client, peerPresent: true,
     ...(directStorage ? {directStorage} : {}),
+    ...(snapshotExposure ? {snapshotExposure} : {}),
     withdrawal: {staffRefused: true, publicRefused: true, peerRemoved: true, cachedConfigurationMasked: true,
       installationPreserved: true, restartObserved: true, plan: 'free', durationMs},
     routes: {staffAvailability: 200, staffPrivateWithoutLogin: 401, publicBeforeChallenge: 403, publicAfterChallenge: 200,
