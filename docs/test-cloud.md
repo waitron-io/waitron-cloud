@@ -230,6 +230,36 @@ TEST_CLOUD_REAL_STS_EXPIRY=1 node --test \
 
 Use `TEST_CLOUD_STS_EXPIRY_SECONDS=12` only for a short diagnostic of the provider's refusal. The output labels it separately; it cannot count as the fifteen-minute proof. The S3 request after an issued credential expires must return `403 InvalidAccessKeyId`. An expired identity token at the STS endpoint has a different error.
 
+Run this proof from a clean, committed checkout. It now emits a redacted
+`SNAPSHOT_LIFETIME_RECEIPT` after stopping its native storage process and checking
+that the source stayed unchanged. The report records the checkout, runtime-file
+manifest, measured storage-binary digest, accepted write and actual refusal.
+It compares elapsed time from a monotonic clock, which advances independently of
+wall-clock adjustments, with the request and refusal timestamps. An advertised
+expiry alone cannot establish that the credential stopped working.
+
+You can check the reader without starting storage:
+
+```sh
+node --test deploy/test-cloud/integration-lifetime-receipt.test.mjs
+```
+
+The committed candidate at `869d140e` passes both native operator checks on the
+Linux test box. The twelve-second diagnostic remains `short-diagnostic`. The
+full credential expires at `2026-11-02T01:55:03Z`; its original write is accepted,
+and the request at `01:55:04.024Z` returns `403 InvalidAccessKeyId` after
+900.464 seconds of measured elapsed time. All 1,694 runtime inputs match the
+committed checkout. The 46 reader controls pass, and all 23 deliberate guard
+omissions are caught in an installed copy. Independent inspection confirms the
+recorded native process, temporary storage root and port claims are gone, with
+protected Waitron IDs, start times and health unchanged.
+
+This is a native provider-lifetime report. It supplies no withdrawal duration for
+the separate paired downgrade, delivered-container qualification or published
+release proof. Both `completeIntegration` and `shippingQualification` stay false.
+Keep the earlier combined report's residual snapshot access and the shipping
+resource gates separate.
+
 The corrected fifteen-minute proof passed on 18 October 2026. Its write was accepted before the recorded `02:43:00Z` expiry; the request at `02:43:01.013Z` returned `403 InvalidAccessKeyId`. This measures an issued credential at the native storage boundary. The earlier run with an incorrect error predicate remains failed evidence; the short diagnostic is separate. The delivered container proof below also obtains and uses a real scoped grant from the persistent issuer, but it does not repeat the full-duration wait.
 
 The dedicated storage process now runs the persistent issuer and SeaweedFS in the same container. Both use the private configuration volume. Inside the project, `waitron.local` resolves to storage; clients receive `https://waitron.local:8333` with the same trusted LAN CA. Account and storage containers have no Docker socket. The account asks for reload through a private Unix socket, a local connection stored in that volume. The storage process signals only the child it started, then the adapter verifies the changed permissions with signed requests.

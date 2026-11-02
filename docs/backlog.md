@@ -879,6 +879,20 @@ implementation or production evidence.
   seconds. A later instrumented pass does not identify its cause. Keep that failure
   and the command timing capture; on recurrence, capture adjacent sample times
   and the command category before attributing the gap. No guard or limit changed.
+  A separate strict provider-lifetime report now binds native expiry observations
+  to committed source, the runtime manifest and the measured storage binary. It
+  compares real elapsed time with wall time and keeps the twelve-second diagnostic
+  distinct. At `869d140e`, both Linux operator checks pass without skips. The
+  fifteen-minute credential's initial write succeeds; storage returns
+  `403 InvalidAccessKeyId` at `2026-11-02T01:55:04.024Z`, after its `01:55:03Z`
+  expiry and 900.464 seconds of measured elapsed time. All 1,694 runtime inputs
+  match. The 46 reader controls pass and all 23 installed guard omissions are
+  caught; every original expiry predicate remains. Independent inspection finds
+  the native process, temporary root and owned port claims gone, with protected
+  Waitron unchanged. This supplies no paired-downgrade duration or shipping
+  verdict. The strict complete producer, delivered release/generated assets,
+  published-release upgrade and shipping deployment resource qualification remain
+  open; plan enforcement stays off.
   The separate capacity journey also
   collects host memory and available disk on Docker's data filesystem before
   project startup, throughout startup and settled/verification sampling,
