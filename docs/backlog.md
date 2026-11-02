@@ -616,6 +616,16 @@ and cleanup. Startup still combines download, configuration, port selection and
 readiness; the trace cannot distinguish those internal steps. A blocked event
 loop can delay reports. The historical timeout and port owner remain unexplained.
 
+Three Linux waves of four concurrent unchanged exhaustion cases pass on
+2 November at Cloud `601cf19f`. Each case retains all 101 competing listeners,
+both storage lifetimes, every original assertion and the 90-second limit. An
+independent controller records all 24 native children and verifies their exit,
+scratch removal and release of claims naming those exact scratch roots. All
+reported operations finish. This tests concurrent native stores, but does not
+recreate the original GitHub runner or explain its timeout or earlier port
+collision. Do not repeat this passing probe without a new hypothesis or a fresh
+operation trace; use that trace to select the next reproduction.
+
 See [the cooperative port claims and cleanup limits](backlog/storage-cache-fixture.md#cooperative-native-storage-port-ownership).
 
 ## Repository licence
