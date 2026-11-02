@@ -2654,6 +2654,9 @@ implementation or production evidence.
   loopback-registry control reproduces the placeholder-token 401 and loads the
   installed package with each workflow binding. See the
   [failure receipt and remaining unknowns](backlog/ci-pnpm-setup.md#nested-package-installs-d530).
+  The separate schema-upgrade checkout refusal now retains fixed release and
+  operation labels with bounded child exit facts, while withholding arguments
+  and output. The historical lifecycle failure remains unattributed.
   Package-only changes omit the two-venue milestone receipt when both immutable
   revisions retain its audited regular-file inputs, test command and CI wiring.
   These tests exercise validators and receipt composition; their guarded CLI
