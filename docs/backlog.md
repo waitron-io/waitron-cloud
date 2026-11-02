@@ -341,7 +341,27 @@ both examples and retained defaults are approved at Waitron
 amendments, separate A1018 build authority and runtime proof remain open.
 G owns P3/P4 plan revisions and priority-5 single-owner lifecycle; production
 section 4 names the changed dependencies. A951 owns the lasting Waitron tunnel/certificate client; its accepted
-implementation and landing pin remain required. The [D123 scoped review](waitron-integration-contract.md#a951-cut-a-contract-review-2026-10-23) records the owner-approved Waitron build and test-only staff-v1 bindings. The [D130 response](waitron-integration-contract.md#a951-helper-and-routing-response-2026-10-23-d130) accepts the exact local-helper profile for isolated T3 implementation and the 83-byte empty production manifest. Lane E recorded matching helper acceptance and the focused T3 plan amendment at Waitron `4fbb76eaf`. The [D136 response](waitron-integration-contract.md#a951-routing-revision-2-response-2026-10-23-d136) accepts full routing edition proposal-2026-10-23.2 with its suspend-aware boot-bound contexts and literal read-boundary vectors for isolated T4 work, after E records matching routing acceptance. The manifest remains the original 83 bytes; actual executable consumer pins and runtime qualification remain absent. Source pins are not running consumers. The [D132 appliance response](waitron-integration-contract.md#a951-appliance-response-2026-10-23-d132) returns concrete approval/provisioning, helper safety/custody and complete byte-corpus amendments to appliance edition proposal-2026-10-23.1. Its encoding, counters, fixed topology, replay/recovery profile and numerical limits are agreed for revision; no full appliance artifact or executable pair is accepted. Lane E returns the revised digest and focused T1/T2/T5 mappings; G records acceptance and both consumer pins before affected adapters. G1–G7 retain the remaining authority, staff policy, independent upstream, movement, diagnostics/privacy and runtime gates; real admission stays closed.
+implementation and landing pin remain required. The [D123 scoped review](waitron-integration-contract.md#a951-cut-a-contract-review-2026-10-23), [D130 helper response](waitron-integration-contract.md#a951-helper-and-routing-response-2026-10-23-d130) and [D136 routing response](waitron-integration-contract.md#a951-routing-revision-2-response-2026-10-23-d136)
+retain their scopes: exact helper accepted for isolated T3 with matching E acceptance
+at Waitron `4fbb76eaf`, routing edition proposal-2026-10-23.2 accepted by G with
+E's matching record still required, and the original 83-byte empty manifest unchanged.
+The [D132 appliance response](waitron-integration-contract.md#a951-appliance-response-2026-10-23-d132)
+still accepts no full appliance artifact or executable pair. The [D560 mapping response](waitron-integration-contract.md#a951-g1-hostcustody-mapping-response-2026-11-02-d560)
+returns immutable `cloud-a951-g1-host-custody-v1` / `proposal-2026-11-02.1` for E/G
+engineering planning against exact helper and host digests; Cloud's scoped
+acceptance still needs E's matching record. It maps closures,
+complete 256-entry lifetime trust history within each 64 KiB safety cap, the shared
+256 KiB journal, all-store crash reconciliation with protected PP participants
+and separate role-local replay progress, approval dependencies and intact reboot, preserving every D132/H bound. E must record matching mapping acceptance
+and focused T1/T2/T3/T5/T14 amendments, then return a revised full appliance edition
+and complete signed-byte corpus. Actual establish/recover/reconnect approval
+consumers, authenticated one-use channel/ledger, registration/node mapping,
+root/origin/peer provisioning and separate issuer custody remain named missing
+engineering dependencies. G2 actual A947 authority, G3 test-only staff policy,
+G4 independent upstream, G5 movement, G6 routing/diagnostics/privacy and G7 exact
+host/device/runtime evidence retain their path-scoped gates. Source pins are not
+running consumers; no runtime proof is supplied. Admission stays CLOSED and
+`.local` independent.
 
 **D101 data protection, approved design and published build planning:** the owner
 approved the complete D101/D88 data-protection engineering design from PR283

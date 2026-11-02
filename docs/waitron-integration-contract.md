@@ -1926,3 +1926,68 @@ calendar with no production default; it does not choose between country-wide
 and per-venue production calendars. Production prices, retention, collection,
 hosted-stop legality and provider/invoice qualification retain their existing
 gates. Emergency hosting facts need a separate agreed read or a later version.
+
+## A951 G1 host/custody mapping response, 2026-11-02 (D560)
+
+Cloud returns the standalone immutable
+[G1 host/custody mapping](superpowers/specs/2026-11-02-a951-g1-host-custody-mapping.md),
+artifact `cloud-a951-g1-host-custody-v1`, edition `proposal-2026-11-02.1`.
+Full-file publication SHA-256: `2f16bd7c01c12849897501fae3bccabb770f9db4006e917b9964573bf994a9cf`,
+covering all UTF-8 bytes including the final newline. The artifact contains no
+self-hash. Cloud accepts this documented mapping for isolated engineering
+planning, conditional on E's matching acceptance at this exact edition/digest.
+Affected adapters still require every named prerequisite. This accepts no
+complete appliance, host amendment or runtime. Historical
+D123/D130/D132/D136 response bytes and dispositions remain intact.
+
+The mapping uses the complete Waitron source at
+`bfb185b60bfe241b713fde536ddf87cbf4bb1ffc`, including the host amendment
+`waitron-a951-host-custody-v1` / `proposal-2026-11-02.1`, full SHA-256
+`50001abafc7c3edea270821e0a8570f8c722969d62132070a46d9cd3729956d2`,
+and exact accepted isolated helper profile `waitron-a951-helper-v1` /
+`proposal-2026-10-23.1`, SHA-256
+`da433f66a7dcb835e99eeb4a7e5c6f01f2bc9c69db369c44a5131247a4ab008f`.
+Cloud's source review base is `b522fa943a15badafbb4e88e9e7c637f2bd58d51`.
+These identify documentation/source inputs, not executable consumers.
+
+The mapping fills the G1 acceptance matrix and proposes private closure
+classifications, complete non-evicting trust history, four-store transaction/crash
+rules and authenticated intact-reboot revalidation distinct from damaged-state
+recovery. Protected internal participants use shared admission heads independently
+of helper-owned replay and observation/custody progress; their unbuilt consumers
+and acceptance prerequisite are named PP. H messages remain unchanged. It retains 256 lifetime trust entries, every 64 KiB safety cap, the one
+shared 256 KiB journal budget and all other D132/H bounds. Its compact safety
+representation reserves at most 55,801 bytes per record, including maximum
+history and the complete envelope. Supervisor receipts, live metadata and
+unfinished retirements consume the shared journal. Temporary closure cannot
+clear a latched stop; a root-owned checksum supplies no Cloud authorization or
+privileged-tamper proof. No helper field or location parameter is added.
+
+D132's complete appliance acceptance remains **NONE**. The mapping names missing
+establish/recover/reconnect decision consumers, authenticated approval transport/
+one-use ledger, registration-to-node mapping, origin/root/peer provisioning and
+purpose-specific issuer custody. Existing registration, owner permission used for
+revocation, a local role boolean or supplied reference cannot substitute for those
+consumers. The revised full appliance edition and complete expanded signed-byte
+corpus remain missing. Proposed E G1-row and focused T1/T2/T3/T5/T14 amendments
+appear in the artifact for E to record without rewriting historical sources.
+
+E reviews the final edition/digest and records matching engineering acceptance or
+returns a precise successor amendment through the existing handoff. G then records
+the disposition and resulting full executable consumer pins before connecting
+affected adapters. Accepted Waitron executable consumer: **NONE**; accepted Cloud
+executable consumer: **NONE**; qualified runtime pair: **NONE**. All validation and
+guard-removal/host vectors in the mapping are UNRUN future work. No runtime proof
+or new owner build approval is claimed.
+
+G2 remains actual A947 current-authority/freshness/withdrawal; G3 remains unchanged
+opt-in test-only staff v1; G4 independent public-upstream trust/mTLS; G5 movement/
+replacement; G6 accepted routing plus diagnostics and flow-scoped A980/D101 privacy;
+G7 exact host/device/runtime evidence. Each retains its affected-path gate.
+D136's routing acceptance stands; E's matching record remains required. Admission
+stays **CLOSED**, `.local` independent, and the production manifest remains the
+original 83 bytes without final newline, SHA-256
+`271fefd892b2c0f10ffab42f8e4a832a163b244733285f08d5a0ea1dfab1b012`.
+No provider, deployment, publication/pause, customer-product, writer or fiscal
+permission follows. This edition raises no new owner decision; the proposed
+representation, reserve and permission/commit mappings need E/G engineering acceptance.
