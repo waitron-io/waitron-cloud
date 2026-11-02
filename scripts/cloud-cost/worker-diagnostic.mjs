@@ -7,14 +7,29 @@ const transportReasons = ['request-validation', 'lifetime-completion', 'body-acc
   'upstream-error', 'upstream-response-interrupted', 'client-error', 'phase-change', 'active-close', 'unknown'];
 const transportValidationStages = ['transport-state', 'copy-source', 'identity', 'operation', 'retry-sequence',
   'after-stop-admission', 'content-length', 'mutation-body', 'lifetime-begin', 'lifetime-callback', 'unknown'];
+const transportDetails = {
+  code: value => ['ECONNRESET', 'ECONNREFUSED', 'EPIPE', 'ETIMEDOUT', 'ERR_STREAM_PREMATURE_CLOSE', 'ERR_STREAM_UNABLE_TO_PIPE'].includes(value),
+  ioEvent: value => ['request-pipeline', 'response-aborted', 'response-error', 'response-headers', 'response-pipeline',
+    'upstream-error', 'upstream-timeout', 'client-error'].includes(value),
+  operation: value => ['put', 'get', 'head', 'list', 'delete', 'delete-many',
+    'multipart-create', 'multipart-upload', 'multipart-complete', 'multipart-abort'].includes(value),
+  idleActionsAtAdmission: value => Number.isSafeInteger(value) && value >= 0 && value <= 1000000000,
+  clientClosed: value => typeof value === 'boolean',
+  responseHeadersSeen: value => typeof value === 'boolean',
+};
 
 // A checkpoint includes accounting and request metadata; only these fixed codes and counts may leave the worker.
 export function checkpointTransportDiagnostic(snapshot) {
   const reason = transportReasons.includes(snapshot.reason) ? snapshot.reason : 'unknown';
+  const details = {};
+  for (const [key, valid] of Object.entries(transportDetails)) {
+    const value = Object.getOwnPropertyDescriptor(snapshot, key)?.value;
+    if (valid(value)) details[key] = value;
+  }
   return { kind: 'checkpoint-transport', reason,
     validationStage: reason === 'request-validation'
       ? transportValidationStages.includes(snapshot.validationStage) ? snapshot.validationStage : 'unknown' : 'none',
-    pending: snapshot.pending, completed: snapshot.completed };
+    pending: snapshot.pending, completed: snapshot.completed, ...details };
 }
 
 // Diagnostic stages are fixed codes. Raw worker errors never cross this boundary.
@@ -52,7 +67,9 @@ export function workerFailureTrace(value) {
     need(event && !isProxy(event) && Object.getPrototypeOf(event) === Object.prototype
       && Object.getOwnPropertyDescriptor(event, 'kind')?.get === undefined);
     if (event.kind === 'checkpoint-transport') {
-      exact(event, ['kind', 'reason', 'validationStage', 'pending', 'completed']);
+      const details = Object.keys(transportDetails).filter(key => Object.hasOwn(event, key));
+      exact(event, ['kind', 'reason', 'validationStage', 'pending', 'completed', ...details]);
+      for (const key of details) need(transportDetails[key](event[key]));
       need(transportReasons.includes(event.reason));
       need(event.reason === 'request-validation' ? transportValidationStages.includes(event.validationStage) : event.validationStage === 'none');
       for (const key of ['pending', 'completed'])

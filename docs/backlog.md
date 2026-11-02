@@ -1464,6 +1464,21 @@ implementation or production evidence.
   scripts/cloud-cost/replay-stream.test.mjs`. These controls reproduce diagnostic
   boundaries; the historical Linux checkpoint cause remains unknown. Capture the
   new code on recurrence before changing accounting, ownership or deadline checks.
+  The checkpoint boundary recurred in [run 41449381877, job 125290693382](https://github.com/waitron-io/waitron-cloud/actions/runs/41449381877/job/125290693382)
+  with `transfer-interrupted`, zero pending and 111 completed transfers. Its trace
+  discarded the HTTP details already recorded by the transport. You now retain
+  the first HTTP event, network error code, storage operation, count of idle
+  callbacks at admission, closed-client flag and response-header flag through
+  the worker and host. These optional fields accept only fixed codes, booleans
+  and a bounded count. Raw paths, headers, bodies and error text stay private.
+  A real HTTP control cancels a LIST after an idle callback and verifies that
+  the details survive while accounting still refuses publication. Run
+  `node --test scripts/cloud-cost/checkpoint-transport-details.test.mjs`.
+  The unchanged paced case passes once on the shared Linux test box with
+  `node scripts/cloud-cost/conformance.mjs --only paced-replay-conformance.test.mjs`;
+  that does not reproduce the historical failure.
+  This repairs evidence loss, not the historical paced-replay failure. Capture
+  the next trace and reproduce its first event before changing measurement guards.
   The D121 recurrence in [cost run 40144665901, job 121023380173](https://github.com/waitron-io/waitron-cloud/actions/runs/40144665901/job/121023380173)
   reaches `storage-cleanup` after successful native replicate and restore exits.
   Cleanup now retains its first refused operation as a fixed `storage-refusal`
