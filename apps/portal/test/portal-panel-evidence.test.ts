@@ -1,7 +1,58 @@
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
 import {chromium} from 'playwright';
+import {build} from 'esbuild';
 import {portalTrace,failPortalWait} from './portal-trace.ts';
+
+test('one throwing panel getter preserves the other panel, session and usage evidence',async()=>{
+ const browser=await chromium.launch({headless:true});
+ try{
+  const page=await browser.newPage();await page.setContent('<main></main>');
+  for(const broken of ['recovery','remote','installations']){
+   await page.evaluate(broken=>{
+    const app=(window as any).app={path:'/account',session:{state:{kind:'authenticated'}},usage:{pending:true,loaded:false,waiting:0},
+     recovery:{pending:false,uncertain:false,code:''},remote:{pending:false,hostnameChanged:false},installations:{loaded:true,pending:false}};
+    Object.defineProperty(app,broken,{get(){throw new Error('private-getter');}});
+   },broken);
+   const original=new Error('original'),reports:string[]=[];
+   await assert.rejects(failPortalWait(page,portalTrace(page),'panel snapshot',original,details=>reports.push(details)),error=>error===original);
+   const snapshot=JSON.parse(reports[0]!).snapshot;
+   assert.equal(snapshot.session,'authenticated');assert.equal(snapshot.usage.pending,true);
+   assert.deepEqual(snapshot[broken],{unavailable:true});
+   for(const intact of ['recovery','remote','installations'].filter(name=>name!==broken))assert.equal(snapshot[intact].pending,false);
+   assert.equal(reports[0]!.includes('private-getter'),false);
+  }
+ }finally{await browser.close();}
+});
+
+test('panel evidence follows real controller inspection, preview and installation reads',async()=>{
+ const bundle=await build({stdin:{contents:`
+  import {RecoveryController} from './src/recovery-controller.ts';
+  import {RemoteController} from './src/remote-controller.ts';
+  import {InstallationController} from './src/installation-controller.ts';
+  const id='12345678-1234-4234-8234-123456789abc';
+  const recovery=new RecoveryController(()=>{},async()=>({ok:true,value:{requestId:id,state:'awaiting_owner',expiresAt:'2099-01-01T00:00:00.000Z',operation:null,operationId:null}}));
+  const remote=new RemoteController(()=>{},async path=>path==='/remote-access/status'?{ok:true,value:{installationId:id,revision:1,revoked:false,names:{staff:{assigned:'staff.venue.example',current:'staff.cafe.example'},public:{assigned:'venue.example',current:'venue.example'}},service:{state:'ready',health:'healthy',observedAt:null,validUntil:null}}}:{ok:false,status:503,code:'unavailable',retryAfterMs:0});
+  const installations=new InstallationController(()=>{},async()=>({ok:true,value:{installations:[]}}));
+  window.app={path:'/recover',session:{state:{kind:'authenticated'}},recovery,remote,installations};
+  window.ready=(async()=>{recovery.open(id);recovery.account('owner');recovery.code='00123456';await recovery.inspect();remote.account('owner');await remote.open(id);remote.edit('staff.changed.example');await remote.preview();installations.account('owner');await installations.load();})();
+ `,resolveDir:new URL('..',import.meta.url).pathname},bundle:true,write:false,format:'iife',target:'es2023'});
+ const browser=await chromium.launch({headless:true});
+ try{
+  const page=await browser.newPage();await page.setContent('<main></main>');
+  await page.addScriptTag({content:bundle.outputFiles[0]!.text});await page.evaluate(()=>(window as any).ready);
+  const original=new Error('original'),reports:string[]=[];
+  await assert.rejects(failPortalWait(page,portalTrace(page),'controller reads',original,details=>reports.push(details)),error=>error===original);
+  const snapshot=JSON.parse(reports[0]!).snapshot;
+  assert.deepEqual(snapshot.recovery,{pending:false,uncertain:false,codePresent:true,viewPresent:true});
+  assert.deepEqual(snapshot.remote,{pending:false,viewPresent:true,confirmationPresent:false,errorPresent:true,hostnameChanged:true});
+  assert.deepEqual(snapshot.installations,{loaded:true,pending:false});
+  await page.evaluate(async()=>{const remote=(window as any).app.remote;remote.edit('staff.venue.example');await remote.preview();});
+  await assert.rejects(failPortalWait(page,portalTrace(page),'assigned-name confirmation',original,details=>reports.push(details)),error=>error===original);
+  assert.deepEqual(JSON.parse(reports[1]!).snapshot.remote,{pending:false,viewPresent:true,confirmationPresent:true,errorPresent:false,hostnameChanged:true});
+  assert.equal(reports.join('').includes('00123456'),false);assert.equal(reports.join('').includes('example'),false);
+ }finally{await browser.close();}
+});
 
 test('panel wait evidence reports progress without recovery codes, hostnames or identifiers',async()=>{
  const browser=await chromium.launch({headless:true});

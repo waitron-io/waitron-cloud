@@ -42,16 +42,17 @@ export async function failPortalWait(page:Page,trace:ReturnType<typeof portalTra
  let timer:ReturnType<typeof setTimeout>|undefined;
  const snapshot=await Promise.race([
   Promise.resolve().then(()=>page.evaluate(()=>{
-   const app=(window as any).app,usage=app?.usage,recovery=app?.recovery,remote=app?.remote,installations=app?.installations;
+   const app=(window as any).app,usage=app?.usage;
    const flag=(value:unknown)=>typeof value==='boolean'?value:'unavailable';
+   const panel=(read:()=>object)=>{try{return read();}catch{return {unavailable:true};}};
    const session=app?.session?.state?.kind;
    const failure=usage?.error;
    return {clock:new Date().toISOString(),
     path:['/account','/recover','/login'].includes(app?.path)?app.path:'other',
     session:['checking','unavailable','anonymous','authenticated'].includes(session)?session:'other',
-    recovery:recovery?{pending:flag(recovery.pending),uncertain:flag(recovery.uncertain),codePresent:typeof recovery.code==='string'&&recovery.code.length>0,viewPresent:recovery.view!==undefined}:{unavailable:true},
-    remote:remote?{pending:flag(remote.pending),viewPresent:remote.view!==undefined,confirmationPresent:remote.confirmation!==undefined,errorPresent:remote.error!==undefined,hostnameChanged:flag(remote.hostnameChanged)}:{unavailable:true},
-    installations:installations?{loaded:flag(installations.loaded),pending:flag(installations.pending)}:{unavailable:true},
+    recovery:panel(()=>{const recovery=app?.recovery;return recovery?{pending:flag(recovery.pending),uncertain:flag(recovery.uncertain),codePresent:typeof recovery.code==='string'&&recovery.code.length>0,viewPresent:recovery.view!==undefined}:{unavailable:true};}),
+    remote:panel(()=>{const remote=app?.remote;return remote?{pending:flag(remote.pending),viewPresent:remote.view!==undefined,confirmationPresent:remote.confirmation!==undefined,errorPresent:remote.error!==undefined,hostnameChanged:flag(remote.hostnameChanged)}:{unavailable:true};}),
+    installations:panel(()=>{const installations=app?.installations;return installations?{loaded:flag(installations.loaded),pending:flag(installations.pending)}:{unavailable:true};}),
     usage:usage?{pending:flag(usage.pending),loaded:flag(usage.loaded),
      error:failure===undefined?'absent':['limited','unavailable','pairSession','permissionBusiness','forbidden'].includes(failure)?failure:'other',
      waiting:Number.isFinite(usage.waiting)&&usage.waiting>=0?Math.ceil(usage.waiting):'unavailable',

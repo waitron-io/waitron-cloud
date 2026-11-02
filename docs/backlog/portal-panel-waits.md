@@ -17,12 +17,19 @@ remote-name operations. Main-frame page changes record only Account, Recover,
 Login or an `other` marker; they do not identify a pending navigation. Response headers do not prove body completion or that
 the controller accepted the reply. A missing completion does not identify the
 browser, interception or server as the cause.
+History and fragment updates can also emit these page-change events; an event
+does not prove a reload.
 
 The snapshot records the current allowlisted page and session state, recovery
 pending/uncertain flags and whether a code and view exist, remote pending/change
 flags and whether a view, confirmation and error exist, and installation loading
 flags. It omits codes, identifiers, hostnames, query strings, fragments, bodies,
 cookies, headings and raw errors. Unknown flags have an unavailable marker.
+Each panel is read separately, so a throwing panel getter does not erase the
+session, usage or other panel evidence. Presence flags mean the current controller
+field is defined; they do not validate its value. Real-controller controls check
+inspection, a refused preview, confirmation and installation loading to catch
+field changes that would make those flags misleading.
 
 Reporting has a separate 250 ms timer after the original failure. A closed,
 unresponsive or throwing page produces an unavailable snapshot. A failed reporter
