@@ -1,3 +1,4 @@
+import {copyPreparedReplayAssets} from '../replay-release.mjs';
 // Explicit local integration: pinned Waitron routes, generated venue and real gateway.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -35,15 +36,15 @@ const wire = id => {
 };
 const difference = (before, after) => ({ received: after.received - before.received, sent: after.sent - before.sent });
 
-for (const fault of ['none', 'missing-person', 'invalid-canvases', 'false-availability', 'missing-cookie', 'anonymous-status', 'extra-config'])
+for (const fault of ['none', 'missing-person', 'invalid-device-profiles', 'empty-device-profiles', 'retired-canvas-id', 'invalid-themes', 'missing-in-use', 'false-availability', 'missing-cookie', 'anonymous-status', 'extra-config'])
 test('pinnedWaitronOwnerReadsReconnectAndLogoutThroughTheGateway_' + fault, { timeout: 120000 }, async t => {
   assert.equal(typeof journey.measureRemoteJourneys, 'function', 'measure genuine owner and public routes');
   const fixture = JSON.parse(readFileSync(process.env.COST_OWNER_FIXTURE, 'utf8'));
-  assert.equal(fixture.revision, 'fbadd15785464e59747e697c11048bfbc6e4938f');
+  assert.equal(fixture.revision, 'b1b0f10952a59eb59f7358bd681a3cdc94d9b61c');
   assert.equal(createHash('sha256').update(readFileSync(fixture.runtime)).digest('hex'), fixture.runtimeSha256);
   const root = realpathSync(mkdtempSync(join(tmpdir(), 'cloud-cost-owner-'))), owner = randomUUID();
   const label = 'io.waitron.cloud-cost.remote-owner=' + owner, network = 'cost-remote-' + owner;
-  const containers = []; let networkId;
+  const containers = []; let networkId, readyPeer;
   const secret = (path, value) => writeFileSync(join(root, path), value, { mode: 0o600 });
   const journal = entries => secret('ownership.json', JSON.stringify({ owner, containers, networkId, entries }));
   const start = args => {
@@ -95,7 +96,11 @@ test('pinnedWaitronOwnerReadsReconnectAndLogoutThroughTheGateway_' + fault, { ti
     const corruption = {
       'anonymous-status': "if (c.req.path === '/management-api/staff' && !c.req.header('cookie')) c.res = new Response(c.res.body, {status:200, headers:c.res.headers});",
       'missing-person': "if (c.req.path === '/management-api/session' && c.res.status === 200) c.res = new Response(JSON.stringify({offerPasskey:false}), {status:200, headers:c.res.headers});",
-      'invalid-canvases': "if (c.req.path === '/management-api/canvases') c.res = new Response(JSON.stringify({canvases:null}), {status:200, headers:c.res.headers});",
+      'invalid-device-profiles': "if (c.req.path === '/management-api/device-profiles') c.res = new Response(JSON.stringify({deviceProfiles:null}), {status:200, headers:c.res.headers});",
+      'empty-device-profiles': "if (c.req.path === '/management-api/device-profiles') c.res = new Response(JSON.stringify({deviceProfiles:[]}), {status:200, headers:c.res.headers});",
+      'retired-canvas-id': "if (c.req.path === '/management-api/device-profiles') {const body=await c.res.json(); body.deviceProfiles[0].canvasId='retired'; c.res = new Response(JSON.stringify(body), {status:200, headers:c.res.headers});}",
+      'invalid-themes': "if (c.req.path === '/management-api/themes') c.res = new Response(JSON.stringify({themes:null,inUse:null}), {status:200, headers:c.res.headers});",
+      'missing-in-use': "if (c.req.path === '/management-api/themes') c.res = new Response(JSON.stringify({themes:[]}), {status:200, headers:c.res.headers});",
       'false-availability': "if (c.req.path === '/public/availability') c.res = new Response(JSON.stringify({available:false}), {status:200, headers:c.res.headers});",
       'missing-cookie': "if (c.req.path === '/management-api/session') c.res.headers.delete('set-cookie');",
     };
@@ -107,9 +112,12 @@ test('pinnedWaitronOwnerReadsReconnectAndLogoutThroughTheGateway_' + fault, { ti
     }
     secret('peer/backend.mjs', backend);
     cpSync(fixture.runtime, join(root, 'peer/runtime.mjs'));
+    cpSync(join(fixture.runtime, '../node_modules'), join(root, 'peer/node_modules'), { recursive: true });
+    copyPreparedReplayAssets(join(fixture.runtime,'..'),join(root,'peer'));
     cpSync(fixture.migrations, join(root, 'peer/migrations'), { recursive: true });
     const peer = start(['-v', join(root, 'src') + ':/app/src:ro', '-v', join(root, 'peer') + ':/input:ro', image, 'node', '/input/backend.mjs']);
     await waitForGatewayReady(() => JSON.parse(docker('exec', gateway, 'node', '/measure/remote-waitron-smoke.mjs', 'ready')));
+    readyPeer = peer;
     assert.equal(docker('network', 'inspect', networkId, '--format', '{{.Internal}}'), 'true');
     // Effective mounts contain no source database or staff private key on the gateway.
     for (const id of containers) {
@@ -133,7 +141,7 @@ test('pinnedWaitronOwnerReadsReconnectAndLogoutThroughTheGateway_' + fault, { ti
     assert.deepEqual(result.evidence.map(e => [e.audience, e.requests]), [['staff', 9], ['public', 6]]);
     assert.deepEqual(result.evidence[0].actions.map(a => [a.action, a.status]), [
       ['anonymous-read-refused',401], ['invalid-sign-in-refused',401], ['sign-in',200], ['staff-read',200],
-      ['dashboard-canvases-read',200], ['dashboard-theme-read',200], ['staff-reconnect-read',200],
+      ['dashboard-device-profiles-read',200], ['dashboard-themes-read',200], ['staff-reconnect-read',200],
       ['sign-out',204], ['signed-out-read-refused',401]]);
     for (const entry of result.evidence) {
       assert.equal(entry.actions.reduce((n,a) => n + a.requestBodyBytes, 0), entry.requestBodyBytes);
@@ -147,6 +155,11 @@ test('pinnedWaitronOwnerReadsReconnectAndLogoutThroughTheGateway_' + fault, { ti
     assert.equal(Object.keys(JSON.parse(docker('inspect', gateway))[0].HostConfig.PortBindings ?? {}).length, 0);
     t.diagnostic(JSON.stringify({ ...result, waitronRevision: fixture.revision, runtimeSha256: fixture.runtimeSha256, nodeVersion, image, tunnelTotals: gatewayDelta }));
   } finally {
+    let peerExit;
+    if (readyPeer) {
+      docker('stop', '--time', '5', readyPeer);
+      peerExit = Number(docker('inspect', '--format', '{{.State.ExitCode}}', readyPeer));
+    }
     const ownedContainers = new Set([...containers,
       ...docker('ps', '-aq', '--no-trunc', '--filter', 'label=' + label).split('\n').filter(Boolean)]);
     for (const id of [...ownedContainers].reverse()) {
@@ -162,5 +175,6 @@ test('pinnedWaitronOwnerReadsReconnectAndLogoutThroughTheGateway_' + fault, { ti
     assert.equal(docker('ps', '-aq', '--filter', 'label=' + label), '');
     assert.equal(docker('network', 'ls', '-q', '--filter', 'label=' + label), '');
     rmSync(root, { recursive: true });
+    if (readyPeer) assert.equal(peerExit, 0, 'the real management runtime settles before its database closes');
   }
 });

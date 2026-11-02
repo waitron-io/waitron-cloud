@@ -21,7 +21,7 @@ const config = { localEndpoints: { s3: 'http://s3:8333', postgres: 'postgresql:/
 const initial = { taxpayer: { country: 'ES', taxId: '12345678Z', legalName: 'Synthetic SL' },
   location: { name: 'Synthetic venue', invoiceLocales: ['es'], operationDescription: 'Servicio',
     timeZone: 'Europe/Madrid', dayCutover: '06:00:00' },
-  nodeName: 'Synthetic node', seriesCode: 'R', fullSeriesCode: 'F', idSistemaInformatico: 'WR' };
+  nodeName: 'Synthetic node', seriesCode: 'R', fullSeriesCode: 'F', rectificativeSeriesCode: 'C', idSistemaInformatico: 'W1' };
 const docker = argv => execFileSync('docker', argv, { env: { PATH: process.env.PATH, LANG: 'C', TZ: 'UTC' },
   encoding: 'utf8', timeout: 15000, stdio: ['ignore', 'pipe', 'pipe'] }).trim();
 const fingerprint = database => ['', '-wal', '-shm'].map(suffix => existsSync(database + suffix)
@@ -578,7 +578,7 @@ test('localCommandPublishesClosedStreamReceiptAfterOwnedCleanup', async t => {
   assert.deepEqual(exportAggregate(output.receipt), output.receipt);
   const r = output.receipt, inputs = Object.fromEntries(r.inputs.map(row => [row.id, row]));
   assert.equal(r.cloudRevision, execFileSync('git', ['rev-parse', 'HEAD'], { cwd: new URL('../../..', import.meta.url), encoding: 'utf8' }).trim());
-  assert.equal(r.waitronRevision, 'fbadd15785464e59747e697c11048bfbc6e4938f');
+  assert.equal(r.waitronRevision, 'b1b0f10952a59eb59f7358bd681a3cdc94d9b61c');
   assert.ok(Date.parse(r.window.startedAt) >= startedBefore);
   assert.ok(Date.parse(r.window.endedAt) <= Date.now());
   assert.ok(r.window.elapsedSeconds >= 4);

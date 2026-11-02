@@ -1,8 +1,9 @@
+import {assertReplayBundle,assertReplayAssets} from './replay-release.mjs';
 
-import { readFileSync, realpathSync, lstatSync, writeFileSync, readdirSync, mkdirSync, rmSync } from 'node:fs';
-import { join, relative, isAbsolute, resolve } from 'node:path';
+import { readFileSync, realpathSync, lstatSync, writeFileSync, readdirSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs';
+import { join, relative, isAbsolute, resolve, dirname } from 'node:path';
+import { createHash, randomUUID } from 'node:crypto';
 import { pathToFileURL } from 'node:url';
-import { createHash } from 'node:crypto';
 
 const fail = () => { throw new Error('Invalid cloud cost replay configuration'); };
 const requireThat = value => { if (!value) fail(); };
@@ -53,7 +54,7 @@ function replayPaths(codeRoot, stateRoot, initial) {
   requireThat(!contained(codeRoot, stateRoot) && !contained(stateRoot, codeRoot));
   requireThat((lstatSync(stateRoot).mode & 0o777) === 0o700);
   requireThat(!directoryEntryExists(join(stateRoot, 'venue')));
-  exact(initial, ['taxpayer', 'location', 'nodeName', 'seriesCode', 'fullSeriesCode', 'idSistemaInformatico']);
+  exact(initial, ['taxpayer', 'location', 'nodeName', 'seriesCode', 'fullSeriesCode', 'rectificativeSeriesCode', 'idSistemaInformatico']);
   const hasDomicile = Object.hasOwn(initial.taxpayer, 'taxpayerDomicile');
   exact(initial.taxpayer, ['country', 'taxId', 'legalName', ...(hasDomicile ? ['taxpayerDomicile'] : [])]);
   if (hasDomicile) requireThat(typeof initial.taxpayer.taxpayerDomicile === 'string'
@@ -65,17 +66,17 @@ function replayPaths(codeRoot, stateRoot, initial) {
   requireThat(Array.isArray(initial.location.invoiceLocales) && initial.location.invoiceLocales.length >= 1
     && initial.location.invoiceLocales.length <= 2 && initial.location.invoiceLocales.every(v => typeof v === 'string' && /^[a-z]{2}$/.test(v)));
   requireThat(typeof initial.location.dayCutover === 'string' && /^(?:[01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]$/.test(initial.location.dayCutover));
-  requireThat([initial.seriesCode, initial.fullSeriesCode].every(v => typeof v === 'string' && /^[A-Z0-9]{1,8}$/.test(v))
-    && initial.seriesCode !== initial.fullSeriesCode);
-  requireThat(typeof initial.idSistemaInformatico === 'string' && /^[A-Z0-9]{1,2}$/.test(initial.idSistemaInformatico));
+  requireThat([initial.seriesCode, initial.fullSeriesCode, initial.rectificativeSeriesCode].every(v => typeof v === 'string' && /^[A-Z0-9]{1,8}$/.test(v))
+    && new Set([initial.seriesCode, initial.fullSeriesCode, initial.rectificativeSeriesCode]).size === 3);
+  requireThat(initial.idSistemaInformatico === 'W1');
   const runtime = join(codeRoot, 'runtime.mjs'); const manifestPath = join(codeRoot, 'runtime-manifest.json');
   for (const path of [runtime, manifestPath]) {
     const s = lstatSync(path); requireThat(realpathSync(path) === path && s.isFile() && !s.isSymbolicLink() && s.nlink === 1);
   }
   const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
   exact(manifest, ['schemaVersion', 'revision', 'sha256']);
-  requireThat(manifest.schemaVersion === 1 && manifest.revision === 'fbadd15785464e59747e697c11048bfbc6e4938f');
-  requireThat(manifest.sha256 === createHash('sha256').update(readFileSync(runtime)).digest('hex'));
+  assertReplayBundle(manifest,readFileSync(runtime));
+  assertReplayAssets(codeRoot);
   const sets = JSON.parse(readFileSync(join(codeRoot, 'packages/migrations/migrations.manifest.json'), 'utf8'));
   requireThat(Array.isArray(sets) && sets.length > 0);
   const migrations = sets.map(set => {
@@ -100,17 +101,40 @@ export async function openReplay({ codeRoot, stateRoot, config, initial }) {
     await r.applyMigrations(join(stateRoot, 'venue'), migrations);
     store = await r.openVenueDatabase(join(stateRoot, 'venue'));
     const db = store.venue;
-    const { nodeId, locationId, standard, full } = await r.withTransaction(db, async tx => {
-      await tx.insert(r.tenants).values({ id: 1, ...initial.taxpayer });
-      const [location] = await tx.insert(r.locations).values(initial.location).returning({ id: r.locations.id });
-      const [node] = await tx.insert(r.nodes).values({ locationId: location.id, name: initial.nodeName }).returning({ id: r.nodes.id });
-      const [standard] = await tx.insert(r.invoiceSeries).values({ nodeId: node.id, code: initial.seriesCode }).returning({ id: r.invoiceSeries.id });
-      const [full] = await tx.insert(r.invoiceSeries).values({ nodeId: node.id, code: initial.fullSeriesCode, purpose: 'full' }).returning({ id: r.invoiceSeries.id });
-      await r.registerSif(tx, { nodeId: node.id, nif: initial.taxpayer.taxId, idSistemaInformatico: initial.idSistemaInformatico });
-      return { nodeId: node.id, locationId: location.id, standard: standard.id, full: full.id };
-    });
+    r.registerModulePermissions(r.ALL_MODULE_PERMISSIONS);
+    const provisioned = await r.provisionVenue({ ownerDb: db,
+      moduleConfig: r.venueModuleConfig({ overrides: new Map() }, 'ES-common'),
+      database: 'generated-cost-replay', stateDir: stateRoot }, {
+      environment: 'preproduction', initialAllocation: { kind: 'throwaway', hostEnvironment: 'preproduction' },
+      venue: { ...initial.taxpayer,
+        location: { ...initial.location, fiscalTerritory: 'ES-common', addressLine1: 'Synthetic street 1',
+          addressLine2: null, postalCode: '28013', city: 'Madrid', province: 'Madrid' },
+        seriesCode: initial.seriesCode, fullSeriesCode: initial.fullSeriesCode,
+        rectificativeSeriesCode: initial.rectificativeSeriesCode,
+        admin: { displayName: 'Generated replay owner', pinHash: r.hashPin('1234'),
+          passwordHash: r.hashPassword('Generated local replay password'), email: 'owner@example.test', locale: 'en-GB' },
+      },
+    }, r.ALL_MODULES);
+    const nodeId = provisioned.nodeId;
+    const series = (await db.execute(r.sql`SELECT id, node_id, code, purpose FROM invoice_series
+      WHERE node_id=${nodeId} AND retired_at IS NULL`)).rows;
+    const identities = (await db.execute(r.sql`SELECT numero_instalacion, id_sistema_informatico FROM registro_sif
+      WHERE node_id=${nodeId} AND revocado_en IS NULL`)).rows;
+    requireThat(identities.length === 1 && identities[0].id_sistema_informatico === initial.idSistemaInformatico);
+    requireThat(series.length === 3 && new Set(series.map(row => row.id)).size === 3
+      && provisioned.seriesIds.length === 3 && new Set(provisioned.seriesIds).size === 3
+      && series.every(row => row.node_id === nodeId && provisioned.seriesIds.includes(row.id)));
+    const selected = new Map();
+    for (const [purpose, base] of [['standard', initial.seriesCode], ['full', initial.fullSeriesCode],
+      ['rectificative', initial.rectificativeSeriesCode]]) {
+      const matches = series.filter(row => row.purpose === purpose && row.code === `${base}-${identities[0].numero_instalacion}`);
+      requireThat(matches.length === 1); selected.set(purpose, matches[0].id);
+    }
+    const standard = selected.get('standard'), full = selected.get('full');
+    // Provisioning uses the venue label; replay retains its independently supplied node label.
+    await db.execute(r.sql`UPDATE nodes SET name=${initial.nodeName} WHERE id=${nodeId}`);
     writeFileSync(join(stateRoot, 'trading.env'),
-      `WAITRON_TILL_NODE_ID=${nodeId}\nWAITRON_TILL_LOCATION_ID=${locationId}\n`, { mode: 0o600, flag: 'wx' });
+      `WAITRON_NODE_ID=${nodeId}\n`, { mode: 0o600, flag: 'wx' });
     const backend = new r.VerifactuBackend({ db, clock: { now: runtimeFail }, environment: 'preproduction',
       deploymentEnvironment: 'preproduction', resolveClient: async () => runtimeFail() });
     const stateIdentity = lstatSync(stateRoot);
@@ -128,9 +152,13 @@ export async function openReplay({ codeRoot, stateRoot, config, initial }) {
       scan(stateRoot);
     };
     let attempted = 0, successful = 0, failed = 0, closing = false, closePromise;
-    let pending = Promise.resolve();
-    const admit = action => {
-      if (closing) return Promise.reject(new Error('Invalid cloud cost replay runtime'));
+    let pending = Promise.resolve(), writerClose;
+    let sourceClosed = false, disposed = false, nodeRecoverySecret;
+    const captures = new Set();
+    const digest = bytes => createHash('sha256').update(bytes).digest('hex');
+    const closeWriter = () => writerClose ??= store.close().then(() => { sourceClosed = true; });
+    const admit = (action, recovery = false) => {
+      if (closing && !recovery) return Promise.reject(new Error('Invalid cloud cost replay runtime'));
       const result = pending.then(action).catch(() => runtimeFail());
       pending = result.catch(() => {});
       return result;
@@ -154,35 +182,105 @@ export async function openReplay({ codeRoot, stateRoot, config, initial }) {
         });
       },
       verify() {
+        if (disposed) return Promise.reject(new Error('Invalid cloud cost replay runtime'));
         return admit(async () => {
+          if (sourceClosed) {
+            // Integrity remains readable after recovery without reopening the source writer.
+            validateState();
+            const directory = mkdtempSync(join(stateRoot, 'integrity-copy-'));
+            const identity = lstatSync(directory);
+            let copy;
+            try {
+              writeFileSync(join(directory, 'venue.db'), readFileSync(join(stateRoot, 'venue/venue.db')),
+                { mode: 0o600, flag: 'wx' });
+              copy = await r.openVenueDatabase(directory);
+              const result = await r.withTransaction(copy.venue, tx => backend.checkIntegrity(tx, nodeId));
+              return { ok: result.ok, issues: result.issues.length };
+            } finally {
+              try { await copy?.close(); } finally {
+                validateState(); const current = lstatSync(directory);
+                requireThat(current.ino === identity.ino && current.dev === identity.dev);
+                rmSync(directory, { recursive: true });
+              }
+            }
+          }
           const result = await r.withTransaction(db, tx => backend.checkIntegrity(tx, nodeId));
           return { ok: result.ok, issues: result.issues.length };
-        });
+        }, true);
       },
       capture(options) {
-        return admit(() => {
+        return admit(async () => {
           exact(options, ['recoveryKey', 'at', 'signal']);
           const { recoveryKey, at, signal } = options;
           requireThat(typeof recoveryKey === 'string' && recoveryKey.length > 0);
           validateState();
-          return r.createCloudSnapshotArchive({ db, modules: archiveModules(),
+          nodeRecoverySecret ??= (await r.mintBreakGlassKey(db, nodeId)).secret;
+          const captured = await r.createCloudSnapshotArchive({ db, modules: archiveModules(),
             environment: 'preproduction', stateDir: stateRoot }, recoveryKey, at, signal);
+          captures.add(digest(captured.bytes));
+          return captured;
         });
       },
       restore(options) {
-        return admit(async () => {
+        if (disposed) return Promise.reject(new Error('Invalid cloud cost replay runtime'));
+        let artifact, recoveryKey;
+        try {
           exact(options, ['artifact', 'recoveryKey']);
-          const { artifact, recoveryKey } = options;
+          recoveryKey = options.recoveryKey;
           requireThat(typeof recoveryKey === 'string' && recoveryKey.length > 0);
+          requireThat(options.artifact instanceof Uint8Array);
+          artifact = Uint8Array.from(options.artifact);
+          requireThat(captures.has(digest(artifact)));
+        } catch { return Promise.reject(new Error('Invalid cloud cost replay runtime')); }
+        closing = true;
+        return admit(async () => {
           validateState();
+          await closeWriter();
           const restoredRoot = join(stateRoot, 'restored');
           requireThat(!directoryEntryExists(restoredRoot));
           mkdirSync(restoredRoot, { mode: 0o700 });
           const restoredIdentity = lstatSync(restoredRoot);
+          let inspection, inspected;
           try {
+            const modules = archiveModules();
+            const deps = { artifact, recoveryKey, stateDir: restoredRoot,
+              stagingDir: join(restoredRoot, 'staging'), modules, migrationsRoot: null, environment: 'preproduction' };
+            inspection = await r.validateArtifact(deps);
+            const selected = await r.readRecoveryCopyPreview(inspection, inspection.sourceId, deps);
+            const node = await r.readArtifactNode(inspection);
+            requireThat(node.nodeId === nodeId && selected.nodeId === nodeId);
+            inspected = await r.openVenueDatabase(dirname(inspection.databasePath));
+            const binding = { module: 'fiscal-verifactu', action: 'restore', eventId: randomUUID(),
+              sourceId: inspection.sourceId, targetNodeId: nodeId };
+            const clock = r.replayClock;
+            clock.advance(Math.max(120000, Date.now() + 120000 - clock.wall()));
+            const service = r.createSelectedRecoveryPreparation({ stateDir: restoredRoot,
+              venueDir: join(restoredRoot, 'venue'), coordinator: r.createFirstSetupCoordinator(),
+              modules, binding, node, selected, secret: nodeRecoverySecret,
+              database: () => inspected.venue, testClock: clock,
+              readIsolation: async () => {
+                requireThat(sourceClosed && writerClose !== undefined && closing);
+                return { oldMachineOffline: true, oldMachineAbsent: false, noParallelRecovery: true };
+              },
+            });
+            let prepared;
+            for (let round = 0; round < 4; round++) {
+              const client = { onBox: false };
+              const challenge = await service.prepare({ action: 'clock-challenge' }, client);
+              const compared = await service.prepare({ action: 'compare-clocks',
+                browser: { challengeId: challenge.id, instantMs: clock.wall() } }, client);
+              await service.prepare({ action: 'preview' }, client);
+              prepared = await service.prepare({ action: 'select', comparisonId: compared.id }, client);
+              if (prepared.status !== 'waiting') break;
+              requireThat(Number.isSafeInteger(prepared.targetMs));
+              clock.advance(Math.max(0, prepared.targetMs + 1 - clock.wall()));
+            }
+            requireThat(prepared.status === 'selected');
+            const withModuleOperations = service.runner(prepared.input, { refresh: true });
+            await inspected.close(); inspected = undefined;
             await r.restoreFromArtifact({ artifact, recoveryKey, stateDir: restoredRoot,
               stagingDir: join(restoredRoot, 'staging'), venueDir: join(restoredRoot, 'venue'),
-              modules: archiveModules(), migrationsRoot: null, environment: 'preproduction', log: () => {} });
+              modules: service.modules, withModuleOperations, migrationsRoot: null, environment: 'preproduction', log: () => {} });
             const restored = await r.openVenueDatabase(join(restoredRoot, 'venue'));
             try {
               const restoredBackend = new r.VerifactuBackend({ db: restored.venue, clock: { now: runtimeFail },
@@ -192,18 +290,24 @@ export async function openReplay({ codeRoot, stateRoot, config, initial }) {
               return { ok: integrity.ok, issues: integrity.issues.length, sales: Number(sales.rows[0].n) };
             } finally { await restored.close(); }
           } catch (error) {
+            // One inspection cleanup refusal must not skip the other owned cleanup steps.
+            try { await inspected?.close(); } catch {} finally { inspected = undefined; }
+            try { await inspection?.discard(); } catch {} finally { inspection = undefined; }
             validateState();
             const s = lstatSync(restoredRoot);
             requireThat(s.ino === restoredIdentity.ino && s.dev === restoredIdentity.dev);
             rmSync(restoredRoot, { recursive: true });
             throw error;
+          } finally {
+            try { await inspected?.close(); } finally { await inspection?.discard(); }
           }
-        });
+        }, true);
       },
       counts: () => ({ attempted, successful, failed }),
       close() {
+        disposed = true;
         closing = true;
-        closePromise ??= pending.then(() => store.close()).catch(() => runtimeFail());
+        closePromise ??= pending.then(closeWriter).catch(() => runtimeFail());
         return closePromise;
       },
     };

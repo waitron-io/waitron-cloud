@@ -14,7 +14,7 @@ const config = { localEndpoints:{s3:'http://s3:8333',postgres:'postgresql://fixt
   senders:{fiscal:'disabled',mail:'capture',acme:'disabled',dns:'disabled'} };
 const initial = { taxpayer:{country:'ES',taxId:'12345678Z',legalName:'Synthetic SL',taxpayerDomicile:'Synthetic issuer street'},
   location:{name:'Synthetic venue',invoiceLocales:['es'],operationDescription:'Servicio',timeZone:'Europe/Madrid',dayCutover:'06:00:00'},
-  nodeName:'Synthetic node',seriesCode:'R',fullSeriesCode:'F',idSistemaInformatico:'WR' };
+  nodeName:'Synthetic node',seriesCode:'R',fullSeriesCode:'F',rectificativeSeriesCode:'C',idSistemaInformatico:'W1' };
 function sale(at,n) {
   return {origin:{source:'operator_script',deviceId:null},locale:'es',invoiceLocales:['es','en'],total:'12.10',
     vatBreakdown:[{rate:'21.00',base:'10.00',tax:'2.10'}],
@@ -105,6 +105,10 @@ test('copiedBadPaymentStillUsesRealWriterRollbackAndStopsRemainingSales',async t
     assert.equal(target.prepare('SELECT count(*) AS n FROM sales').get().n,0);
     assert.equal(target.prepare('SELECT count(*) AS n FROM tenders').get().n,0);
     assert.equal(target.prepare('SELECT count(*) AS n FROM registros_facturacion').get().n,0);
-    assert.deepEqual(rows(target,"SELECT code,next_number FROM invoice_series ORDER BY code"),[{code:'F',next_number:1},{code:'R',next_number:1}]);
+    const node=readFileSync(join(f.stateRoot,'trading.env'),'utf8').match(/^WAITRON_NODE_ID=([^\n]+)\n$/)?.[1];
+    assert.ok(node);
+    const identity=target.prepare('SELECT numero_instalacion FROM registro_sif WHERE node_id=? AND revocado_en IS NULL').get(node).numero_instalacion;
+    assert.deepEqual(rows(target,"SELECT code,next_number FROM invoice_series ORDER BY code"),[
+      {code:'C-'+identity,next_number:1},{code:'F-'+identity,next_number:1},{code:'R-'+identity,next_number:1}]);
   } finally {target.close();}
 });

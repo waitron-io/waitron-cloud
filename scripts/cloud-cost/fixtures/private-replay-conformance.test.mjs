@@ -1,3 +1,4 @@
+import {standardNextNumber} from './replay-series-fixture.mjs';
 // Generated sales and the pinned public runtime only; never supply a real venue to this fixture.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -18,7 +19,7 @@ const config = { localEndpoints: { s3: 'http://s3:8333', postgres: 'postgresql:/
 const initial = { taxpayer: { country: 'ES', taxId: '12345678Z', legalName: 'Synthetic SL' },
   location: { name: 'Synthetic venue', invoiceLocales: ['es'], operationDescription: 'Servicio',
     timeZone: 'Europe/Madrid', dayCutover: '06:00:00' },
-  nodeName: 'Synthetic node', seriesCode: 'R', fullSeriesCode: 'F', idSistemaInformatico: 'WR' };
+  nodeName: 'Synthetic node', seriesCode: 'R', fullSeriesCode: 'F', rectificativeSeriesCode: 'C', idSistemaInformatico: 'W1' };
 function sale(at, n) {
   const instant = new Date(at);
   return { origin: { source: 'operator_script', deviceId: null }, locale: 'es', invoiceLocales: ['es'], total: '12.10',
@@ -91,7 +92,7 @@ test('privateDayReplaysTheEntireSelectedDayAndReturnsOnlyCountsAndSizes', async 
           ['PRIVATE_SYNTHETIC_ITEM_1', 'PRIVATE_SYNTHETIC_ITEM_2', 'PRIVATE_SYNTHETIC_ITEM_3']);
         assert.equal(db.prepare('SELECT count(*) AS n FROM tenders').get().n, 3);
         assert.equal(db.prepare('SELECT count(*) AS n FROM registros_facturacion').get().n, 3);
-        assert.equal(db.prepare("SELECT next_number AS n FROM invoice_series WHERE code='R'").get().n, 4);
+        assert.equal(standardNextNumber(db,f.stateRoot), 4);
       }
     } finally { db.close(); }
   } });
@@ -180,11 +181,12 @@ test('privateDayRefusesNoncanonicalStateBeforeItCanLeaveAnUnremovableDestination
 function wrappedRuntime(f, body) {
   const codeRoot = join(f.root, 'code'); mkdirSync(codeRoot, { mode: 0o700 });
   cpSync(join(f.codeRoot, 'packages'), join(codeRoot, 'packages'), { recursive: true });
+  cpSync(join(f.codeRoot, 'assets'), join(codeRoot, 'assets'), { recursive: true });
   const url = JSON.stringify(pathToFileURL(join(f.codeRoot, 'runtime.mjs')).href);
   const source = `export * from ${url}; import * as actual from ${url}; ${body}`;
   writeFileSync(join(codeRoot, 'runtime.mjs'), source, { mode: 0o600 });
   writeFileSync(join(codeRoot, 'runtime-manifest.json'), JSON.stringify({ schemaVersion: 1,
-    revision: 'fbadd15785464e59747e697c11048bfbc6e4938f', sha256: createHash('sha256').update(source).digest('hex') }), { mode: 0o600 });
+    revision: 'b1b0f10952a59eb59f7358bd681a3cdc94d9b61c', sha256: createHash('sha256').update(source).digest('hex') }), { mode: 0o600 });
   return codeRoot;
 }
 test('privateDayRefusesAFailedFinalIntegrityCheckAfterAllNormalSales', async t => {

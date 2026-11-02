@@ -1,6 +1,6 @@
 # Replay allocation compatibility
 
-Cloud's replay runtime still pins Waitron
+Before this compatibility change, Cloud's replay runtime pinned Waitron
 `fbadd15785464e59747e697c11048bfbc6e4938f`, whose restore reader requires retired
 node and location settings. D451/PR700 writes only `WAITRON_NODE_ID`. You need a
 matching release and its real allocation callers before you can qualify that repair.
@@ -9,16 +9,16 @@ matching release and its real allocation callers before you can qualify that rep
 
 The owner's answer in Lane D `questions.md`, 2026-11-01 around 11:10, authorizes
 option 1: adapt Cloud to Waitron's existing installation allocation exactly as
-Waitron's own callers do. It forbids arbitrary installation numbers, fallbacks,
-bypasses, and golden or restore assertion changes. This is compatibility work,
+Waitron's own callers do. The initial answer forbids arbitrary installation numbers, fallbacks,
+bypasses, and golden or restore assertion changes. The later 13:10 answer approves the complete
+bounded fixture/check amendment below, including the two series counts from 2 to 3. This is compatibility work,
 not permission to change fiscal policy. [Documentation ownership](../../documentation-ownership.md)
 keeps allocation and restore implementation in Waitron; Cloud owns its caller.
 
 This is the separate high-effort design required by RUNNER section 0. The returning
 driver must check it, obtain the section 5.2 fresh-context read, and land the two
 documents as a docs-only milestone before implementation. Routine execution stays
-inline. **A protected-check conflict below prevents implementing the complete
-proposal under the present answer.** Landing this document does not resolve it.
+inline. The owner’s 1 November 13:10 answer approves the exact bounded amendment below, resolving the protected-check conflict for implementation. All other fiscal, restore and cleanup outcomes remain required.
 
 ## Evidence and its limits
 
@@ -45,7 +45,7 @@ while standard, full and rectificative pass. Its source bytes match this literal
 release (SHA256 `5c830bc8a93a283ba1108e0d0b760ae0c75e979e57fc3b6799891e14fe50cfb2`).
 The command used esbuild on `src/hour-series-configuration.ts`, then Node assertions
 against the resulting module. This narrow native experiment proves that guard,
-not replay, restore, Docker or interoperability. The caller design is unexecuted.
+not replay, restore, Docker or interoperability. The implementation plan records the subsequently qualified caller steps; this narrow guard receipt remains separate.
 
 ## The protected-check conflict
 
@@ -53,8 +53,8 @@ not replay, restore, Docker or interoperability. The caller design is unexecuted
 | --- | --- |
 | Waitron `software.ts:1` fixes `WAITRON_ID_SISTEMA = "W1"`; `hour-throwaway-allocation.ts` generates the minute identity and `${base}-${identity}` series. | Cloud's `WR` fixture input cannot select software identity. Bare `R` and `F` are bases, not allocated codes. |
 | `packages/provisioning/src/venue-plan.ts` requires `rectificativeSeriesCode` and plans standard, full and rectificative series. `hour-recovery-state.ts:61–63` calls `assertHourSeriesConfiguration`; `hour-series-configuration.ts:4–13` requires exactly those three purposes. | The normal provision-and-restore caller needs three series. A two-series throwaway setup does not establish a supported recovery path. |
-| Cloud `fixtures/replay-conformance.test.mjs:136–138` requires two SIF rows, exactly two active series and exactly two retired series after restore. | Normal three-purpose setup would require three active and three retired series. Changing those two expected counts is an explicitly forbidden restore assertion change. |
-| The same file selects `code='R'` at lines 49, 93 and 105; private and cadence checks also select bare `R`. | Keeping their numeric assertions requires selecting the actual allocated standard series. Silently rewriting the selector is still a changed check and needs to be inventoried. |
+| The original `captureAndRestoreUseRealArchiveAndRestoreHooks` check in `fixtures/replay-conformance.test.mjs` requires two SIF rows, exactly two active series and exactly two retired series after restore. | Normal three-purpose setup requires three active and three retired series. The owner’s 13:10 amendment permits exactly those two expected-count changes. |
+| The original replay, private and cadence checks select bare `R`. | Keeping their numeric assertions requires selecting the actual allocated standard series. The changed-check inventory records every replacement. |
 
 The native guard result confirms the two-purpose mismatch. The normal recovery
 caller cannot qualify those exact two-series expectations through this guard.
@@ -68,10 +68,7 @@ codes to three allocated codes, and the two restore series counts changing from
 2 to 3. The replaced-destination control would use a genuine owned capture instead
 of empty bytes so it still reaches and checks destination ownership. Retain every
 numeric sale, invoice-number, hash, rollback, two-SIF/new-installation, private-state
-and cleanup assertion, including all replacement/sentinel checks. This complete
-fixture/check amendment is **not approved by this spec**. Alternatively the owner
-must choose a different scope or name an upstream dependency. Until then, keep PR700 and its
-published `1fc9003b99ffd7bd8680809ce310d59c8ed6e60a` head intact.
+and cleanup assertion, including all replacement/sentinel checks. The owner approved exactly this complete fixture/check amendment on 1 November at 13:10. Resume PR700 within these limits and retain its original review and historical receipts.
 
 ## Required caller, after the conflict is resolved
 
@@ -138,7 +135,9 @@ or setting `skipSecrets` cannot replace it. Recovery retains local node identity
 but activates a new fiscal installation and retires the old series.
 
 Clock observations for this generated replay are synthetic. Keep the real
-provisioning, clock-decision, prepared allocation and restore code. Use the host's
+provisioning, clock-decision, prepared allocation and restore code. Embed the
+literal release's timestamp with its own `scripts/generate-hour-release.mjs`;
+without it the ordinary recovery clock guard correctly refuses admission. Use the host's
 explicit `testClock` seam for wall/monotonic readings and a test-only bundle adapter
 around `observeInternetHourClock` that supplies its existing `deps.request` seam
 with controlled responses. Preserve the real observer's date, freshness, timeout

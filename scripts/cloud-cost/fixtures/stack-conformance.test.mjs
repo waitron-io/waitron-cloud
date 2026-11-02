@@ -25,7 +25,7 @@ function fixture(t) {
       taxpayer: { country: 'ES', taxId: '12345678Z', legalName: 'Synthetic SL' },
       location: { name: 'Synthetic venue', invoiceLocales: ['es'], operationDescription: 'Servicio',
         timeZone: 'Europe/Madrid', dayCutover: '06:00:00' },
-      nodeName: 'Synthetic node', seriesCode: 'R', fullSeriesCode: 'F', idSistemaInformatico: 'WR',
+      nodeName: 'Synthetic node', seriesCode: 'R', fullSeriesCode: 'F', rectificativeSeriesCode: 'C', idSistemaInformatico: 'W1',
     },
     config: {
       localEndpoints: { s3: 'http://s3:8333', postgres: 'postgresql://fixture:fixture@postgres:5432/postgres',
@@ -782,7 +782,7 @@ test('generatedArchiveStoragePublishesACompleteAnonymousReceiptAfterCleanup', as
   const endedAt = new Date().toISOString();
   const cloudRevision = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: new URL('../../..', import.meta.url), encoding: 'utf8' }).trim();
   const receipt = buildArchiveStorageReceipt({ metadata: { runId: crypto.randomUUID(), cloudRevision,
-    waitronRevision: 'fbadd15785464e59747e697c11048bfbc6e4938f',
+    waitronRevision: 'b1b0f10952a59eb59f7358bd681a3cdc94d9b61c',
     window: { startedAt, endedAt, elapsedSeconds: (Date.parse(endedAt) - Date.parse(startedAt)) / 1000 } }, result,
     cleanup: { ownedProcesses: 0, ownedContainers: 0, ownedNetworks: 0, ownedVolumes: 0, ownedObjects: 0, residualKinds: [] } });
   assert.equal(receipt.accounting.producer.attempts, 11);

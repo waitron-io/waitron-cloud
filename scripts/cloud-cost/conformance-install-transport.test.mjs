@@ -47,7 +47,7 @@ if(a[0]==='init'){
  writeFileSync(join(source,'pnpm-lock.yaml'),${JSON.stringify(lock)});
  writeFileSync(join(source,'.npmrc'),'fetch-timeout=250\\nfetch-retries=0\\nignore-scripts=true\\nstore-dir='+join(source,'store')+'\\ncache-dir='+join(source,'cache')+'\\n');
 }
-if(a.includes('rev-parse'))console.log('fbadd15785464e59747e697c11048bfbc6e4938f');
+if(a.includes('rev-parse'))console.log('b1b0f10952a59eb59f7358bd681a3cdc94d9b61c');
 `,{mode:0o700});
       // Accelerate only the supervisor's unchanged five-minute limit in this child.
       const clock='const timeout=setTimeout,interval=setInterval;globalThis.setTimeout=(fn,ms,...args)=>timeout(fn,ms===300000?4000:ms,...args);globalThis.setInterval=(fn,ms,...args)=>interval(fn,ms===10000?50:ms,...args);';
