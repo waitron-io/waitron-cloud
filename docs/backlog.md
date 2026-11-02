@@ -977,7 +977,7 @@ implementation or production evidence.
   Separate Linux image probes measure three Cloud files (278,240 bytes) and
   772 pinned Waitron dashboard/server files (198,965,873 bytes); 18 focused
   Linux controls pass without skips. The Cloud image matches all 1,708 current
-  runtime inputs. The combined journey has not been rerun with this wiring.
+  runtime inputs in that standalone qualification.
   A separate Waitron source reader now captures every tracked regular file from
   the exact clean pin and reconstructs Git's tree from the selected image's
   actual bytes and executable permissions. Missing files, changed bytes and
@@ -987,9 +987,25 @@ implementation or production evidence.
   generated-file manifest; 25 focused Linux checks pass without skips.
   Independent cleanup confirms all four owned containers and both tags absent,
   with quarantined Waitron unchanged.
-  Combined source binding, a genuine passing resource record, actual matching
+  The combined runner now captures a clean pinned Waitron checkout before Docker,
+  measures both selected base and derived client source trees, and rechecks the
+  checkout after cleanup. Its raw report publishes aggregate asset measurements;
+  the standalone reader retains the full per-file manifest. The original
+  restricted-field checks remain unchanged.
+  At `5ef3a0ce`, both Linux combined cases pass without skips in 436.4 seconds.
+  The Cloud image matches 1,713 runtime inputs; both Waitron images match all
+  9,357 tracked files and the exact pinned tree. The same run measures three
+  Cloud and 772 Waitron generated files and preserves both pairings through
+  rollback. Its 201 shared resource observations retain an 18.332-second
+  preparation gap and a 7.192-second cleanup gap. Its 13.191 GiB baseline still
+  refuses the unchanged shipping floors; neither gap is interpolated away.
+  A genuine passing resource record, actual matching
   deployment identity, published-release upgrade and shipping qualification
   remain open.
+  A separate cleanup follow-up remains: a refused initial Docker inventory can
+  leave an empty host run directory because allocation precedes both that read
+  and the cleanup scope. Four controlled calls reproduce this; their four
+  empty directories were identified and removed independently.
   A [combined journey](test-cloud.md#run-the-journeys-in-one-project) now requires
   recovery, remote withdrawal, measured capacity and matching-set rollback in one
   disposable project. It passes on the isolated Linux box in 385 seconds without

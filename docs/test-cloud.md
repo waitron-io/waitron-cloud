@@ -27,14 +27,16 @@ using a pinned disposable Waitron image. The deployment capacity gate remains op
 There is no completed PR7 receipt to validate yet. Keep plan enforcement off
 before the test-box deployment.
 
-The combined journey requires a clean committed checkout. Before starting Cloud,
+The combined journey requires clean committed Cloud and pinned Waitron checkouts. Before starting Cloud,
 it reads the selected immutable image in a disposable, networkless container and
 compares every tracked runtime input under `apps`, `packages`, `deploy` and
 `scripts`, plus the root dependency and Compose configuration, with that checkout.
 The receipt records the commit, tree, image ID, file count and SHA-256 of this
 manifest. A changed or missing image file, a symbolic link, or a checkout changed
-before the run finishes refuses the result. This binds tracked source inputs;
-it does not certify generated portal assets, the Waitron build or a published release.
+before the run finishes refuses the result. It also captures every tracked Waitron
+file and checks the selected base image and derived client image against that
+manifest. Both measured source trees enter the raw report. A source match alone
+does not certify generated assets or a published release.
 
 The shipping-Dockerfile candidate at `6bdea472` passes the combined journey in
 395.6 seconds, with two tests and no skips. Its image matches 1,675 tracked runtime
@@ -1172,6 +1174,7 @@ leave the same pairings usable. With the immutable Cloud and Waitron image varia
 from the earlier commands, run:
 
 ```sh
+export TEST_CLOUD_INTEGRATION_WAITRON_CHECKOUT=/path/to/pinned-waitron
 node --test scripts/test-cloud-combined.test.mjs
 ```
 
@@ -1352,6 +1355,7 @@ To measure when that same grant expires, use the separate operator journey with
 the same pinned image variables and protected container IDs:
 
 ```bash
+export TEST_CLOUD_INTEGRATION_WAITRON_CHECKOUT=/path/to/pinned-waitron
 TEST_CLOUD_PAIRED_EXPIRY=1 node --test scripts/test-cloud-paired-expiry.test.mjs
 ```
 
@@ -1477,6 +1481,10 @@ the Waitron source tree and published release match them. The raw combined
 report remains incomplete until resource, deployment and release qualification
 pass; an asset manifest alone supplies none of those verdicts.
 
+The combined report publishes each image's file count, total bytes and manifest
+hash. Per-file paths stay in the standalone reader's output, so build filenames
+cannot enter the report's restricted fields.
+
 On Linux, the shipping Cloud Dockerfile produces three measured portal files
 totalling 278,240 bytes. A disposable image built from pinned Waitron source
 `ec91a9e` produces 772 measured dashboard/server files totalling 198,965,873
@@ -1492,6 +1500,9 @@ Capture a manifest from a clean checkout at the pinned Waitron commit before
 adding proof fixtures. The manifest lists every tracked regular file, its
 executable permission and its SHA-256 hash. It includes the tracked environment
 examples, but refuses environment files and symbolic links in the manifest.
+Keep tracked build configuration unchanged when preparing fixture images. Use a
+Dockerfile-specific ignore file for fixture exclusions; replacing the tracked
+`.dockerignore` changes the source tree and refuses the image.
 
 ```sh
 node deploy/test-cloud/test-fixtures/integration-waitron-source.mjs capture \
@@ -1511,9 +1522,18 @@ addition to the tracked source; measure generated assets separately.
 The reader processes one file at a time, with a 64 MiB per-file bound, a 512 MiB
 cumulative processing bound and at most 20,000 files. Those limits bound source
 inspection, independently of the deployment's startup and running resource floors.
-The command prints only `Waitron source refused` on failure. This source check
-still needs to be connected to the combined journey and its final receipt. It
-does not qualify a published release or an upgrade between releases.
+The command prints only `Waitron source refused` on failure. To use the check
+within the combined journey, set `TEST_CLOUD_INTEGRATION_WAITRON_CHECKOUT` to your
+clean checkout at the pinned commit. The runner captures its manifest before any
+Docker command, measures both the selected base image and derived client image,
+then checks the checkout again after owned cleanup. A missing checkout, a
+different commit or a failed image check refuses the run. Each probe enters
+owned cleanup before it starts, so a failed read still releases its container.
+
+The raw report records both measurements under `waitronSource.base` and
+`waitronSource.client`, including the actual image IDs, commit, tree, file count
+and manifest hash. The final complete receipt remains unbuilt. These checks do
+not qualify a published release or an upgrade between releases.
 
 A separate Linux qualification checks all 9,357 tracked files at `ec91a9e`
 against both the base image and its derived proof client. Both reconstruct tree
@@ -1521,5 +1541,17 @@ against both the base image and its derived proof client. Both reconstruct tree
 files have the same measured manifest, covering 198,965,873 bytes. All 25 focused
 Linux controls pass without skips. Independent cleanup checks find all four
 recorded containers and both owned tags absent, with the quarantined Waitron
-containers unchanged. The combined journey and published-release checks remain
-separate work.
+containers unchanged.
+
+The combined candidate at `5ef3a0ce` now passes both Linux cases without skips in
+436.4 seconds. Its selected base and client images match that same complete
+Waitron source manifest, and its raw report measures three Cloud and 772 Waitron
+generated files. Both pairings survive matching-volume rollback. Independent
+cleanup checks find all 258 recorded container IDs absent across the attempts,
+with protected Waitron IDs, start times and health unchanged.
+
+The strict resource mapper still refuses the measured 13.191 GiB baseline. The
+raw chronology preserves an 18.332-second preparation gap and a 7.192-second
+cleanup gap, both beyond the five-second limit. Keep these incomplete measurements
+at their actual source; they do not qualify deployment, a published release or
+the complete integration receipt.
