@@ -322,6 +322,15 @@ the competing listener. Run `node --test deploy/test-cloud/storage-startup.test.
 to check that all eight accepted sockets remain held together before native
 startup. Run `node --test scripts/ci-backup-storage-reservation-refusals.test.mjs`
 to check that bind diagnostics count actual binds, excluding skipped claims.
+The refusal fixture lets the operating system select its earlier successful
+listener ports, so an unrelated occupied random candidate cannot consume a bind
+and invalidate the expected successful-listener count. Two controls select a
+real competing socket before the eighth refusal, with working and throwing
+diagnostic sinks. They first reproduce the recorded six-versus-seven failure,
+then pass with all original diagnostic, cleanup and deadline assertions intact.
+The selected refusal still comes from a real occupied socket. The runtime
+allocator and its separate occupied-candidate recovery checks are unchanged;
+the historical competing socket on run41422295053 remains unidentified.
 
 Run `node --test scripts/ci-backup-storage-claim-cleanup.test.mjs` to check
 missing or replaced claims and an unlink refusal. Cleanup checks link targets,

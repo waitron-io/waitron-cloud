@@ -45,6 +45,7 @@ import fs from "node:fs/promises";
 import { existsSync } from "node:fs";
 import childProcess from "node:child_process";
 import net from "node:net";
+import crypto from "node:crypto";
 import https from "node:https";
 import { syncBuiltinESMExports } from "node:module";
 import { tmpdir } from "node:os";
@@ -78,9 +79,19 @@ fs.symlink = async (...args) => {
   return claim(...args);
 };
 const competitor = tcpServer(socket => socket.end("competing listener"));
-await new Promise(resolve => competitor.listen(0, "127.0.0.1", resolve));
+// The allocator selects odd ports; keep the controlled occupied candidate in that range.
+do {
+  await new Promise(resolve => competitor.listen(0, "127.0.0.1", resolve));
+  if (competitor.address().port % 2 === 1) break;
+  await new Promise(resolve => competitor.close(resolve));
+} while (true);
 competitor.unref();
 const competingPort = competitor.address().port;
+const occupiedCandidate = process.argv[6] === "true";
+const choosePort = crypto.randomInt;
+let candidates = 0;
+crypto.randomInt = (...args) => ++candidates === 3 && occupiedCandidate
+  ? competingPort : choosePort(...args);
 const servers = [], heldPorts = [];
 let root, issuer, original, allocations = 0, calls = 0, issuerPort;
 fs.mkdtemp = async (...args) => { allocations++; root = await allocate(...args); return root; };
@@ -102,7 +113,8 @@ net.createServer = (...args) => {
       };
       return listen.call(this, competingPort, host, callback);
     }
-    return listen.call(this, port, host, () => {
+    // Earlier successful listeners need real sockets, not random candidate availability.
+    return listen.call(this, 0, host, () => {
       heldPorts.push(this.address().port);
       callback();
     });
@@ -206,5 +218,21 @@ for (const position of [4, 8]) for (const brokenSink of [false, true]) {
       });
     assert.equal(stderr, "");
     assert.deepEqual(JSON.parse(stdout), {refusedPosition: position, releasedReservations: position - 1, allocations: 1});
+  });
+}
+
+// An earlier occupied random candidate must not change a selected refusal scenario.
+for (const brokenSink of [false, true]) {
+  test(`storage refusal fixture isolates earlier candidates from occupied sockets after a skipped claim${brokenSink ? " with a refused diagnostic sink" : ""}`, { timeout: 30000 }, async t => {
+    const directory = await mkdtemp(join(tmpdir(), "cloud-storage-reservation-test-"));
+    t.after(() => rm(directory, { recursive: true, force: true }));
+    const { stdout, stderr } = await execute(process.execPath,
+      ["--input-type=module", "-e", probe, "8", seed, archiveName, String(brokenSink), "true", "true"], {
+        cwd: new URL("..", import.meta.url),
+        env: { ...process.env, TMPDIR: directory, TMP: directory, TEMP: directory },
+        timeout: 25000, maxBuffer: 1024 * 1024,
+      });
+    assert.equal(stderr, "");
+    assert.deepEqual(JSON.parse(stdout), {refusedPosition: 8, releasedReservations: 7, allocations: 1});
   });
 }

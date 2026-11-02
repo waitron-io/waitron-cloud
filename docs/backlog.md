@@ -3382,8 +3382,13 @@ Run `node --test scripts/ci-backup-storage-issuer-bind.test.mjs` to check real
 bind refusals, later setup failure and preservation of another listener. Failed
 identity and numbered reservation binds print only their name and bind attempt number while
 preserving their original error and cleanup, even when diagnostic output fails.
-Skipped port claims count toward that number; four regression cases cover the
+Skipped port claims consume no bind attempt; four regression cases cover the
 D548 diagnostic mismatch without changing existing assertions or deadlines.
+The refusal fixture now uses OS-assigned ports for earlier successful listeners.
+Two occupied-candidate controls reproduce and prevent the six-versus-seven
+listener-count failure from run41422295053 while retaining every original
+assertion and deadline. Runtime port selection is unchanged; see
+[the fixture qualification](backlog/storage-cache-fixture.md#cooperative-native-storage-port-ownership).
 Identity-server errors after startup and historical failure causes remain open;
 see [the storage investigation](backlog/storage-cache-fixture.md#identity-port-allocation-race-d499).
 
