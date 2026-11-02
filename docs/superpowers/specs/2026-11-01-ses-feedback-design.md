@@ -1,17 +1,19 @@
 # Stop sending to destinations that reject your mail
 
-**D102 proposal, 2026-11-01. Documentation authority only.** You need authenticated
-bounce and complaint feedback before enabling Amazon Simple Email Service (SES).
-This proposal supplies neither
-implementation authority nor live configuration. Source inspection uses main/base
+**D102 design, approved 2026-11-01. Planning authority only.** The owner approved
+this full design at 13:08 on 2026-11-01 and authorised the
+[implementation plan](../plans/2026-11-02-ses-feedback-implementation.md). You need
+authenticated bounce and complaint feedback before enabling Amazon Simple Email
+Service (SES). Approval supplies neither implementation authority nor live
+configuration. Source inspection uses main/base
 `e797dbf0`; public AWS sources were checked on 2026-11-01. This design does not
 depend on a lifecycle-journal implementation.
 
 ## Keep the email exception narrow
 
-Recommend **Paris `eu-west-3`**, because it fits the existing operational region
-set, including the separately approved extra backup destination. This is a
-recommendation, not owner-approved email qualification. Frankfurt remains an
+Use **Paris `eu-west-3`**, because it fits the existing operational region
+set, including the separately approved extra backup destination. The owner approved
+this region choice; account/provider qualification remains open. Frankfurt remains an
 alternative requiring its own qualification. AWS lists Paris SMTP at
 `email-smtp.eu-west-3.amazonaws.com` and no Spain SES endpoint.
 [AWS endpoints](https://docs.aws.amazon.com/general/latest/gr/ses.html).
@@ -122,7 +124,7 @@ events do not become permanent suppression without explicit classification. Know
 failures add no resend because SES may already retry. Feedback never starts a send or
 replays an erased token.
 
-**Proposed policy requiring full-design approval:** block the exact recipient across
+**Approved policy:** block the exact recipient across
 account and venue purposes within the same provider account/region and country.
 Keep attribution and Cloud records separate across countries. SES suppression is
 account/region-wide, so a country-scoped Cloud record cannot limit a provider block.
@@ -211,8 +213,10 @@ Alert on aggregate queue age, dead-letter count, consumer health and provider
 configuration drift through [D104's independent channel](../../incident-response.md#prepare-your-independent-route).
 Age/rate thresholds await D103 approval. Add no dashboards or identifying metric labels.
 
-You must approve the full proposal and grant build-plan authority before planning
-implementation. Landing this document authorises no code build.
+The owner approved the full design and planning on 2026-11-01. The linked
+implementation plan records the future build stages; neither document authorises
+a code build. Build and live work need separate owner authority on or after
+3 November; reaching that date alone grants no permission.
 
 AWS account, sender, domain and controlled live-test authority remain owner-only on
 3 November. No spending, resources, DNS changes, provider calls, live mail, customer

@@ -16,7 +16,9 @@ These are source observations, not executed relay guarantees. The grant/admissio
 base `7483d6f1010663878076d00dfe7f2dcdcb5db6c7`; the inspected Waitron base is
 `0fbcde00151f47b5e300d4adad8d297f92d3bed3`. No provider terms or location claims are
 made here. The [account SMTP guide](production-email-implementation.md) describes
-the existing transport; its historical provider research needs a separate decision.
+the existing transport. The owner approved the [Paris SES feedback design](superpowers/specs/2026-11-01-ses-feedback-design.md)
+on 2026-11-01 for planning only; provider qualification and production relay
+enablement remain separate gates.
 
 | Boundary | Current consumer and gap |
 | --- | --- |
