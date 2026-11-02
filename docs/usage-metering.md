@@ -123,4 +123,9 @@ The [allowance guard qualification](../packages/registration/README.md#monthly-a
 checks traffic authority, exact replay, operational-probe exclusion and incomplete
 trial evidence alongside service limits. It removes one guard at a time in a
 separate installed copy and requires a failing behavioral assertion before
-restoring the source. Upgrade and backup recovery need their own qualification.
+restoring the source. The separate upgrade wrapper restores both a pre-upgrade
+backup and a populated allowance backup. It retains unfinished provider calls,
+original reservation states and signed pending traffic reports. A missing interval
+stays incomplete after recovery, and replay cannot add traffic bytes. Run the
+[upgrade and recovery command](../packages/registration/README.md#monthly-allowances-in-test-fixtures)
+separately; neither proof enables production enforcement.

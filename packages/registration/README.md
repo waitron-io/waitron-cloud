@@ -345,3 +345,21 @@ rendered HAProxy and PostgreSQL fixture with real TLS probes over three controll
 UTC dates. It requires Docker. Missing cases, skipped tests, setup failures and
 undetected changes refuse qualification. Upgrade and two-backup recovery remain
 separate checks; passing the guard wrapper does not qualify either recovery path.
+
+To check the current migration and both backup paths, run:
+
+```sh
+node scripts/test-postgres.mjs exec pnpm --dir packages/registration exec node --test --test-timeout=360000 test/billing-allowance-upgrade-recovery.test.ts
+```
+
+Schema receipt version 9 binds the exact 47-to-48 predecessor and clean candidate.
+The proof interrupts the migration, checks complete rollback, then retries with
+concurrent consumers stopped. It restores the old backup to an empty, unenabled
+allowance schema, and separately restores a populated new backup. Matching external
+keys and signed spool bytes retain configuration revisions, held/spent/released
+units, unfinished-call markers, reporter identity, gaps and exact traffic totals.
+Replaying pending or older spool checkpoints cannot add bytes or reset identity.
+Wrong keys and foreign owners refuse access. Historical proofs 1–8 keep their
+original schema pairs; their wrappers execute the original installed release.
+These are local PostgreSQL and synthetic-account checks, not a live recovery or
+production billing qualification.
