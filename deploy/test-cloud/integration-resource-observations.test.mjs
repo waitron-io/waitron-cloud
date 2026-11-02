@@ -30,6 +30,7 @@ for (const [name, alter] of [
   ['unhealthy process', row => {row.State.Health.Status = 'unhealthy';}],
   ['missing start time', row => {delete row.State.StartedAt;}],
   ['missing name', row => {row.Name = ''; }],
+  ['malformed public name', row => {row.Name = '/not a container name';}],
 ]) test('protected reader refuses ' + name, async () => {
   const {readProtectedContainerStates} = await load();
   assert.equal(typeof readProtectedContainerStates, 'function');
@@ -44,7 +45,7 @@ test('an empty protected set performs no inspection and duplicate IDs refuse', a
   assert.equal(typeof readProtectedContainerStates, 'function');
   const docker = async () => {throw Error('No inspection expected');};
   assert.deepEqual(await readProtectedContainerStates({ids: [], docker}), []);
-  await assert.rejects(readProtectedContainerStates({ids: [id, id], docker}));
+  await assert.rejects(readProtectedContainerStates({ids: [id, id], docker}), {code: 'ERR_ASSERTION'});
 });
 
 async function fixture() {
@@ -120,7 +121,7 @@ test('observations require the baseline and cannot restart or extend a sealed co
   await assert.rejects(collector.finish());
 });
 
-test('captured protected states and returned reports cannot be edited through callers', async () => {
+test('captured protected states cannot be edited through callers', async () => {
   const {collector, set} = await fixture();
   const state = container(); set(state);
   await collector.start();
