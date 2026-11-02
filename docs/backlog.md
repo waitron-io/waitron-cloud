@@ -843,6 +843,22 @@ implementation or production evidence.
   without skips in 416.0 seconds under the unchanged 600-second limit.
   The focused controls pass 318 cases with four explicit image skips; 22
   installed guard omissions fail and the 38 restored controls pass.
+  The candidate at `984a6f8a` adds truthful snapshot access after that same paired
+  downgrade: a fresh signed reserve is refused, while the original snapshot
+  credential still accepts a write with 618,671 milliseconds of announced
+  validity remaining. It records expiry as unobserved. Both combined cases pass
+  without skips in 420.6 seconds under the unchanged 600-second limit, with all
+  1,689 measured runtime inputs matching the checkout. The 182 integration
+  readings span 389 seconds with gaps at most 3.72 seconds; both pairings survive
+  matching-volume rollback. A captured inventory failure identifies a
+  non-protected container disappearing between listing and inspection. State
+  inspection now targets the protected IDs while every listed ID remains visible
+  to the unchanged owned-container cleanup check. A controlled Docker boundary
+  and 57 snapshot/inventory checks pass; all 25 installed guard omissions fail.
+  Focused checks pass 375 cases with four explicit image skips. The earlier
+  generic inspection/startup failures remain unattributed. The strict complete
+  producer, published releases and shipping deployment qualification remain due;
+  the measured 13.46 GiB baseline does not meet the unchanged 20 GiB startup floor.
   The separate capacity journey also
   collects host memory and available disk on Docker's data filesystem before
   project startup, throughout startup and settled/verification sampling,

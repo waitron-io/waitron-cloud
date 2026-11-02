@@ -1180,3 +1180,51 @@ installed disposable checkout. The output still declares incomplete integration
 and shipping qualification. Snapshot credential expiry keeps its separate
 provider-lifetime proof, and the published-release upgrade, strict complete
 receipt and shipping resource floors remain open. Keep plan enforcement off.
+
+### Check snapshot access that survives downgrade
+
+A snapshot upload has temporary credentials with their own lifetime. Withdrawing
+the stream writer does not establish when those credentials stop working. The
+combined journey keeps the original snapshot credentials in its private venue
+volume after capturing the archive, then tries the same archive and incoming key
+after the paired organisation's downgrade and storage restart. It checks the
+original installation, venue, public identity, archive digest and storage scope
+before sending that request. A separate signed reserve request must return
+`403 permission_denied` without issuing a fresh grant.
+
+Read `paidSnapshotExposure` alongside `paidStorageWithdrawal`. Its `writeStatus`
+records the actual snapshot write response, and `remainingMs` records the
+milliseconds from that response to the original announced `expiresAt`. An accepted
+write before expiry keeps `expiryObserved: false`. Only storage's actual
+`403 InvalidAccessKeyId` response after expiry can establish observed expiry.
+A network failure, another provider error or a write accepted after expiry refuses
+the observation. Keep the separate fifteen-minute provider proof when assessing
+the maximum access window; the combined journey has a ten-minute limit.
+
+You can check the snapshot binding, timing and refusal controls without containers:
+
+```bash
+node --test deploy/test-cloud/integration-snapshot-exposure.test.mjs
+```
+
+The shipping-Dockerfile candidate at `984a6f8a` passes both combined cases without
+skips in 420.6 seconds under the unchanged 600-second limit. Its original snapshot
+credential still accepts the archive write after downgrade, with 618,671
+milliseconds of announced validity remaining. The new signed reserve is refused.
+The same run withdraws the stream key in 3.477 seconds and remote access in 3.166
+seconds, then preserves both original pairings through matching-volume rollback.
+All 1,689 measured runtime inputs match the independently captured checkout.
+
+The protected-container inventory now inspects process state only for the three
+protected IDs. It retains every listed ID for the original cleanup check. A
+captured failure identified another container disappearing between the full list
+and inspection; a controlled Docker test reproduces that boundary and passes
+with the new reader. The 57 snapshot and inventory controls pass, and 25 guard
+omissions fail in an installed disposable copy. Older generic startup and
+inspection failures still lack attribution.
+
+The run records 182 whole-journey readings over 389 seconds, with gaps at most
+3.72 seconds, alongside startup, 63 settled seconds and the admitted verifier.
+Baseline disk is 13.46 GiB, below the unchanged 20 GiB shipping startup floor.
+Complete integration and shipping qualification remain false. Keep enforcement
+off until the strict complete receipt and release/deployment gates pass.
