@@ -1,0 +1,16 @@
+import assert from 'node:assert/strict';
+import {readFile} from 'node:fs/promises';
+
+export async function probeIntegrationAssets({docker, image, kind, runId, own}) {
+  assert.match(image, /^sha256:[a-f0-9]{64}$/);
+  assert.ok(kind === 'cloud' || kind === 'waitron');
+  assert.match(runId, /^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$/);
+  const script = await readFile(new URL('./integration-assets.mjs', import.meta.url), 'utf8');
+  const id = await docker(['create', '-i', '--pull=never', '--label', 'cloud.integration.owner=' + runId,
+    '--network', 'none', '--read-only', '--cap-drop', 'ALL', '--security-opt', 'no-new-privileges',
+    '--memory', '128m', '--memory-swap', '128m', '--pids-limit', '32', '--workdir', kind === 'cloud' ? '/app' : '/waitron',
+    '--entrypoint', 'node', image, '--input-type=module', '-', kind], '', 'assets-create');
+  assert.match(id, /^[a-f0-9]{64}$/);
+  own(id);
+  return {image, ...JSON.parse(await docker(['start', '-ai', id], script, 'assets-measure'))};
+}

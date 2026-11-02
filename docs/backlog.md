@@ -967,8 +967,19 @@ implementation or production evidence.
   resource budgets, protected identities and closed output. Replaying that saved
   Linux record refuses its 14.632 GiB baseline; its 6.511-second cleanup gap also
   exceeds the five-second limit. No interpolated readings or shipping verdict are
-  emitted. A genuine passing resource record, measured Waitron/generated assets,
-  actual matching deployment identity, published-release upgrade and shipping
+  emitted. The combined runner now also measures the generated Cloud portal and
+  Waitron dashboard/server files inside the selected images. Its asset record
+  binds sorted file hashes and byte counts to the actual image IDs, including
+  the Waitron client's base image. Networkless, read-only probes enter owned
+  cleanup before execution; missing, empty, linked or oversized builds refuse.
+  Focused controls exercise real file reads and the streamed command. These
+  measurements do not certify the Waitron source tree or a published release.
+  Separate Linux image probes measure three Cloud files (278,240 bytes) and
+  772 pinned Waitron dashboard/server files (198,965,873 bytes); 18 focused
+  Linux controls pass without skips. The Cloud image matches all 1,708 current
+  runtime inputs. The combined journey has not been rerun with this wiring.
+  A genuine passing resource record, Waitron source/release evidence, actual
+  matching deployment identity, published-release upgrade and shipping
   qualification remain open.
   A [combined journey](test-cloud.md#run-the-journeys-in-one-project) now requires
   recovery, remote withdrawal, measured capacity and matching-set rollback in one

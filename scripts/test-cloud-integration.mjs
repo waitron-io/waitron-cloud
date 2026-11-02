@@ -16,6 +16,7 @@ import {parseCapacityVolumeReadings} from '../deploy/test-cloud/test-fixtures/in
 import {createResourceObservationCollector, readProtectedContainerStates} from '../deploy/test-cloud/test-fixtures/integration-resource-observations.mjs';
 import {createTestCloudWithdrawalReceipt} from '../deploy/test-cloud/test-fixtures/integration-withdrawal-receipt.mjs';
 import {readIntegrationInventory} from '../deploy/test-cloud/test-fixtures/integration-inventory.mjs';
+import {probeIntegrationAssets} from '../deploy/test-cloud/test-fixtures/integration-asset-probe.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const origin = 'https://waitron.local:3000', revision = 'ec91a9e34d2daba146f4ee61850ea4136ad5cfb7';
@@ -96,7 +97,7 @@ export async function runTestCloudClients({image, waitronImage, protectedContain
   const directory = await mkdtemp(join(tmpdir(), 'cloud-integration-run-'));
   const override = join(directory, 'proof.yaml'), clientTag = project + '-venue:local', recoveryTag = project + '-recovery:local';
   const owned = [], created = [], removed = [], venueCAs = new Map();
-  let built = false, recoveryBuilt = false, started = false, result, cloudSource;
+  let built = false, recoveryBuilt = false, started = false, result, cloudSource, cloudAssets, waitronAssets;
   let verifierWorker, verifierStarted = false, verifierScope, verifierUncertain = false, capacityEvidence;
   const docker = (args, input = '', phase) => command(args, input, phase, {TEST_CLOUD_IMAGE: image});
   const prefix = ['compose', '--project-name', project, '--env-file', 'deploy/test-cloud/test.env', '-f', 'compose.yaml', '-f', 'deploy/test-cloud/compose.yaml', '-f', override];
@@ -163,6 +164,8 @@ export async function runTestCloudClients({image, waitronImage, protectedContain
       const measured = parseIntegrationJson(await docker(['start', '-ai', id], JSON.stringify({files: source.files}), 'source-measure'));
       assert.deepEqual(measured, await measureIntegrationFiles(root, source.files), 'integration.image_source_mismatch');
       cloudSource = {head: source.head, tree: source.tree, image, dirty: false, ...measured};
+      cloudAssets = await probeIntegrationAssets({docker, image, kind: 'cloud', runId,
+        own: id => {owned.push(id); record('container', id);}});
     }
     const [base] = JSON.parse(await docker(['image', 'inspect', waitronImage]));
     assert.equal(base.Config.Labels?.['cloud.waitron-revision'], revision, 'integration.waitron_revision');
@@ -173,6 +176,8 @@ export async function runTestCloudClients({image, waitronImage, protectedContain
     built = true;
     const clientImage = JSON.parse(await docker(['image', 'inspect', clientTag]))[0].Id;
     record('image', clientImage);
+    if (source) waitronAssets = {...await probeIntegrationAssets({docker, image: clientImage, kind: 'waitron', runId,
+      own: id => {owned.push(id); record('container', id);}}), baseImage: waitronImage};
     await writeFile(override, `name: ${project}\nservices:\n  gateway-manifest:\n    environment:\n      CLOUD_TEST_SERVICE_PLANS: "${paidRemote ? 1 : 0}"\n  account:\n    environment:\n      CLOUD_TEST_SERVICE_PLANS: "1"\n  storage:\n    environment:\n      CLOUD_TEST_SERVICE_PLANS: "1"\n    ports: !override ["127.0.0.1::8333"]\n  postgres:\n    ports: !override ["127.0.0.1::5432"]\n  mailpit:\n    ports: !override ["127.0.0.1::1025", "127.0.0.1::8025"]\n  proxy:\n    ports: !override ["127.0.0.1::3000"]\n  gateway:\n    ports: !override ["127.0.0.1::443", "127.0.0.1::51820/udp"]\n`, {mode: 0o600});
     started = true;
     const start = () => compose(['up', '--no-build', '--pull', 'never', '--detach', '--wait', '--wait-timeout', '90']);
@@ -584,6 +589,7 @@ export async function runTestCloudClients({image, waitronImage, protectedContain
     for (const key of ['organisationId', 'venueId', 'installationId', 'localVenueId', 'stateSha256']) assert.equal(new Set(organisations.map(value => value[key])).size, 2, 'integration.distinct_' + key);
     result = {version: 1, kind: 'test-cloud-clients', runId, completeIntegration: false, origin, waitronHead: revision, image, waitronImage,
       ...(cloudSource ? {cloudSource} : {}),
+      ...(cloudAssets && waitronAssets ? {assets: {cloud: cloudAssets, waitron: waitronAssets}} : {}),
       accountMail: {free: 'proved', paid: 'proved', transport: 'mailpit'}, clients: {status: 'proved', actions: ['pair', 'renew', 'configuration'], demoVenues: 2, restartIdentity: 'proved'},
       tls: {untrustedRefused: true, wrongHostnameRefused: true}, organisations, freeSnapshot, restarts,
       ...(capacityEvidence ? {capacity: capacityEvidence} : {}), ...(publishedSnapshot ? {paidSnapshot: publishedSnapshot} : {}), ...(observedStream ? {paidStream: observedStream} : {}),

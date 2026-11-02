@@ -1449,3 +1449,38 @@ qualify a new image or deployment. The command does not produce a complete
 integration verdict. A genuinely passing resource record, measured Waitron and
 generated assets, actual matching deployment identity, published-release upgrade
 and shipping qualification remain open.
+
+### Measure the generated files in each image
+
+Source checks do not cover the files produced by a build. The combined runner
+also measures the Cloud portal bundle and the Waitron dashboard and server
+builds inside the selected images. Its `assets` record includes each relative
+path, byte count and SHA-256 hash, plus a hash of the sorted manifest. The
+Waitron record names both the derived client image and its selected base image.
+
+You can run the same reader from the image's checkout root:
+
+```sh
+node deploy/test-cloud/test-fixtures/integration-assets.mjs cloud
+node --test deploy/test-cloud/integration-assets.test.mjs
+```
+
+For Waitron, the runner streams the reader into a disposable container rooted
+at `/waitron` and selects `waitron`. Both probes have no network or host mounts,
+a read-only filesystem and a 128 MiB memory limit. They enter the run's owned
+cleanup set before starting. Missing or empty builds, symlinks, hidden paths,
+excessive file counts and oversized data refuse measurement. The command prints
+`Integration assets refused` without file contents or private paths on failure.
+
+These hashes identify the built bytes. You still need separate evidence that
+the Waitron source tree and published release match them. The raw combined
+report remains incomplete until resource, deployment and release qualification
+pass; an asset manifest alone supplies none of those verdicts.
+
+On Linux, the shipping Cloud Dockerfile produces three measured portal files
+totalling 278,240 bytes. A disposable image built from pinned Waitron source
+`ec91a9e` produces 772 measured dashboard/server files totalling 198,965,873
+bytes. The same Cloud image matches all 1,708 current runtime inputs. Both
+asset probes use the committed reader's code; all 18 focused Linux controls
+pass without skips. This separate image check does not requalify the combined
+journey, the Waitron source tree or an upgrade between published releases.
