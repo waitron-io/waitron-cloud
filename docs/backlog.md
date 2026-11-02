@@ -3311,6 +3311,16 @@ must be absent. The parent has an independent rescue if that control fails, and
 retains both the original assertion and a later rescue failure. These controls
 also run in ordinary package CI; the cascade control builds its own fixture image.
 Every original verifier assertion, authority check and deadline remains unchanged.
+
+On the Linux test box at `c9130ab7`, the unchanged invalid-archive case passes
+once alone and in three waves of four concurrent copies (twelve more passes).
+Each copy keeps the original assertions and deadlines, with its own random owner,
+image tag and controller directory. Run the selected case with
+`node --test --test-name-pattern='^invalid archive is a bounded verdict' packages/backups/test/bound-container-verifier.test.ts`.
+This bounded concurrency probe does not reproduce the historical 20.197-second
+cleanup failure or establish its cause. Keep that investigation open; do not
+repeat this passing probe without a new failure or hypothesis.
+
 The controller's existing diagnostics must identify a recurrence before you can
 attribute or repair the historical Docker failure. A lost create response before
 an ID is returned and a child created by a separate host remain outside this rescue.
