@@ -1422,6 +1422,30 @@ interrupted attempt.
 
 The record preserves a 2.114-second preparation gap before its first sample and
 a 6.511-second cleanup gap before the final host/protected reading. Its 14.632 GiB
-baseline is below the unchanged 20 GiB shipping startup floor. Complete resource
-normalization, measured Waitron/generated assets, actual matching deployment
-identity, published-release upgrade and shipping qualification remain open.
+baseline is below the unchanged 20 GiB shipping startup floor.
+
+### Convert measured resources for the complete receipt
+
+The complete reader needs one ordered resource sequence. Save the report's
+`capacity.observations` object as `observations.json`, then run:
+
+```sh
+node scripts/test-cloud-resource-evidence.mjs observations.json > resources.json
+node --test deploy/test-cloud/integration-resource-evidence.test.mjs
+```
+
+The command emits only the `baseline`, `samples` and `after` resource fields.
+It uses each read's completion time from the original shared clock, rounded up
+to a whole millisecond. It checks the precise intervals first, so rounding cannot
+hide a gap or turn a short settled window into sixty seconds. Every boundary and
+sample must complete within five seconds of the preceding reading. Measurements,
+protected identities and resource limits keep their original values.
+
+The saved `1c7b725` observations print `Test Cloud resource evidence refused`
+because their disk baseline is below 20 GiB. Their cleanup gap also exceeds five
+seconds. Keep the raw record; do not adjust values or insert samples to obtain a
+resource section. These focused tests use synthetic measurements and do not
+qualify a new image or deployment. The command does not produce a complete
+integration verdict. A genuinely passing resource record, measured Waitron and
+generated assets, actual matching deployment identity, published-release upgrade
+and shipping qualification remain open.

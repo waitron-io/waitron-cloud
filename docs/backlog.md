@@ -960,7 +960,14 @@ implementation or production evidence.
   Independent audit verifies both projects and 249 recorded owned container IDs
   absent, including the interrupted attempt. Real preparation/cleanup gaps remain
   visible, and the 14.632 GiB baseline fails the unchanged 20 GiB shipping start
-  floor. Complete resource normalization, measured Waitron/generated assets,
+  floor. A resource mapper now converts the shared-clock observations into the
+  strict reader's resource section. It preserves measured values and the original
+  clock, checking precise read/boundary gaps and settled duration before rounding
+  completion times up to milliseconds. Synthetic controls cover the unchanged
+  resource budgets, protected identities and closed output. Replaying that saved
+  Linux record refuses its 14.632 GiB baseline; its 6.511-second cleanup gap also
+  exceeds the five-second limit. No interpolated readings or shipping verdict are
+  emitted. A genuine passing resource record, measured Waitron/generated assets,
   actual matching deployment identity, published-release upgrade and shipping
   qualification remain open.
   A [combined journey](test-cloud.md#run-the-journeys-in-one-project) now requires
