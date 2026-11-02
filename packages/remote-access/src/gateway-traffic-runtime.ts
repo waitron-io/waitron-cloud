@@ -2,7 +2,7 @@ import {createPublicKey,type KeyObject} from 'node:crypto';
 import {constants} from 'node:fs';
 import {lstat,mkdir,open,opendir,realpath} from 'node:fs/promises';
 import {join} from 'node:path';
-import {isUuid,type ManifestEnvelope} from './manifest.ts';
+import {isUuid,verifyManifest,type ManifestEnvelope} from './manifest.ts';
 import {type GatewayTrafficRuntimeOptions} from './gateway-traffic-runtime-options.ts';
 import {TrafficChildProcess} from './traffic-child-process.ts';
 import {TrafficChildJournal} from './traffic-child-journal.ts';
@@ -11,14 +11,14 @@ import {sendTrafficLifetime} from './traffic-lifetime-transport.ts';
 import {verifyTrafficLifecycle} from './traffic-lifecycle.ts';
 
 interface Start {manifest:ManifestEnvelope;processId:string;startedAt:string;predecessorId:string|null;socket:string;command:string;args:readonly string[]}
-interface Entry {journal:TrafficChildJournal;spool:TrafficSpool;child?:TrafficChildProcess}
+interface Entry {journal:TrafficChildJournal;spool:TrafficSpool;child?:TrafficChildProcess;expiresAt?:number}
 function unavailable():never{throw new Error('gateway_traffic_unavailable');}
 
 /** Retained bytes confer retry authority only; process ownership never survives this instance. */
 export class GatewayTrafficRuntime {
  readonly #options:GatewayTrafficRuntimeOptions;readonly #issuer:KeyObject;readonly #now:()=>number;
  readonly #entries=new Map<string,Entry>();#pending:Promise<void>=Promise.resolve();#ready=false;#stopping=false;#stop:Promise<void>|undefined;
- #identity:string|undefined;
+ #identity:string|undefined;#withdrawals=0;
  constructor(options:GatewayTrafficRuntimeOptions,issuer:KeyObject,now:()=>number=Date.now){
   this.#options={...options,mapping:{...options.mapping}};this.#issuer=issuer;this.#now=now;
  }
@@ -53,9 +53,10 @@ export class GatewayTrafficRuntime {
   });
  }
  start(input:Start):Promise<void>{
-  const start=structuredClone(input);
+  const start=structuredClone(input),withdrawals=this.#withdrawals;
   return this.#run(async()=>{
-   if(!this.#ready||this.#stopping||!isUuid(start.processId)||this.#entries.has(start.processId)||this.#entries.size>=128)unavailable();await this.#root();
+   if(!this.#ready||this.#stopping||withdrawals!==this.#withdrawals||!isUuid(start.processId)||this.#entries.has(start.processId)||this.#entries.size>=128)unavailable();await this.#root();
+   const manifest=verifyManifest(start.manifest,this.#issuer,this.#options.mapping.cellId,this.#now());
    const home=join(this.#options.directory,start.processId);
    const entry=this.#entry(home);
    const o=this.#options;
@@ -68,11 +69,25 @@ export class GatewayTrafficRuntime {
     const d=await open(path,constants.O_RDONLY|constants.O_DIRECTORY|constants.O_NOFOLLOW);try{await d.sync();}finally{await d.close();}
    }
    await this.#root();
+   if(withdrawals!==this.#withdrawals)unavailable();
+   entry.expiresAt=manifest.expiresAt;
    this.#entries.set(start.processId,entry);
    try{await entry.child.start();}catch{await entry.child.stop();unavailable();}
   });
  }
  pid(processId:string):number|undefined{return this.#entries.get(processId)?.child?.pid;}
+ /** Signalling uses captured handles immediately; persistence still drains through each child's queue. */
+ withdraw():Promise<void>{
+  this.#withdrawals++;
+  return this.#withdraw([...this.#entries.values()]);
+ }
+ expire():Promise<void>{
+  return this.#withdraw([...this.#entries.values()].filter(e=>e.expiresAt!==undefined&&e.expiresAt<=this.#now()));
+ }
+ async #withdraw(entries:Entry[]):Promise<void>{
+  const results=await Promise.allSettled(entries.flatMap(e=>e.child?[e.child.withdraw()]:[]));
+  if(results.some(r=>r.status==='rejected'))unavailable();
+ }
  tick():Promise<void>{
   return this.#run(async()=>{
    if(!this.#ready||this.#stopping)unavailable();await this.#root();let failed=false;

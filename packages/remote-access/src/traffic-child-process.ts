@@ -43,6 +43,7 @@ export class TrafficChildProcess {
    try{await lstat(o.socket);unavailable();}catch(error){if(!error||typeof error!=='object'||!('code'in error)||error.code!=='ENOENT')throw error;}
    await this.#journal.prepare({manifest:o.manifest,processId:o.processId,startedAt:o.startedAt,predecessorId:o.predecessorId});
    await this.#journal.claimSpawn();
+   if(this.#stopping)unavailable();
    const child=spawn(o.command,[...o.args],{stdio:'ignore'});this.#child=child;
    this.#exited=new Promise<void>(resolve=>{
     const ended=()=>{
@@ -68,6 +69,12 @@ export class TrafficChildProcess {
    await this.#journal.flush(envelope=>sendTrafficLifetime(this.#options.lifetimeSocket,envelope));
    await this.#options.spool.transfer(this.#options.mapping);
   });
+ }
+ /** Authority withdrawal cannot wait behind a socket read or country acknowledgement. */
+ withdraw():Promise<void>{
+  this.#stopping=true;
+  if(this.running)this.#child!.kill('SIGKILL');
+  return this.stop();
  }
  stop():Promise<void>{
   if(this.#stop)return this.#stop;this.#stopping=true;
