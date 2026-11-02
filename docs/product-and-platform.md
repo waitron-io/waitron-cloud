@@ -605,7 +605,7 @@ operation or automatic failover across providers is a separate, unresolved requi
 | --- | --- | --- |
 | Object storage | S3 | Cloud Storage |
 | Compute | EC2, with the workload packaging still to choose | Compute Engine, with the same workload packaging goal |
-| Administrative email | Prefer a Spain-hosted provider through TLS SMTP; SES only where its location and policies fit | An approved email provider through the same email interface |
+| Administrative email | Amazon SES in Paris, approved for planning; account/provider qualification required | An approved email provider through the same email interface |
 | Mobile notifications | SNS with the selected mobile delivery service | FCM or another delivery service appropriate to the client |
 | Jobs, secrets and monitoring | Choose services against required behaviour | Choose services against the same required behaviour |
 
@@ -624,13 +624,15 @@ browser push, SMS or several of these.
 
 Provider service coverage must be checked country by country. For example, the
 [SES endpoint list](https://docs.aws.amazon.com/general/latest/gr/ses.html) checked on
-2026-09-27 does not list Spain. Prefer Spain for administrative email processing too.
-The [production email adapter](production-email-implementation.md) uses authenticated
-TLS SMTP so the relay can be chosen independently of compute. Acumbamail's terms
-place its servers in Madrid; verify the selected service's processing, retention and
-tracking before choosing an account. This does not locate recipients' mail systems
-or all transit in Spain. These are
-documentation checks, not deployment tests or a legal assessment.
+2026-09-27 does not list Spain. The owner selected SES as an email-processing
+exception and approved the [Paris feedback design](superpowers/specs/2026-11-01-ses-feedback-design.md)
+on 2026-11-01. The [production email adapter](production-email-implementation.md)
+uses authenticated TLS SMTP independently of compute. Follow the
+[implementation plan](superpowers/plans/2026-11-02-ses-feedback-implementation.md)
+only after separate build authority. Acumbamail is no longer a candidate. SES
+account, supplier, retention, tracking and live qualification remain open; the
+region choice does not locate recipients' mail systems or transit. No deployment
+or legal qualification follows from these documentation decisions.
 
 ## Signup from Waitron
 

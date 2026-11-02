@@ -377,9 +377,15 @@ The published plan records the reviewed roadmap; local build authority for slice
 spending, deployment, provider resources or contracts. D103's first C39 monitoring
 design is approved for planning only; C41 release/upgrade and C60 compute decisions remain separate.
 D102's [feedback and suppression design](superpowers/specs/2026-11-01-ses-feedback-design.md)
-recommends Paris and authenticated private-queue intake. Full-design approval and
-build-plan authority remain open; intake and shared suppression are unimplemented.
-D102/D104 hands-on account setup and live tests wait until 3 November. D68 is landed, including
+is approved for Paris and authenticated private-queue intake (owner, 2026-11-01).
+The [implementation plan](superpowers/plans/2026-11-02-ses-feedback-implementation.md)
+sets out test-first stages for attempt binding, shared suppression, private feedback
+intake and separate provider qualification. Planning alone is authorised; intake and
+shared suppression remain unimplemented. Build, AWS resources, spending, sender/domain
+setup and live mail need separate owner authority on or after 3 November. D101's
+legal, retention and supplier gates, D103's alert thresholds and D104's independent
+alert route remain open; a second country needs its own approved provider-account
+policy. D68 is landed, including
 `b8ff5555c996c5dec1086be49f7d046018bd3187`, but does not price hosting. D79's local
 backup verification includes migration 043 and the complete same-run recovery proof.
 Snapshots remain unavailable in the delivered deployment and plan enforcement stays

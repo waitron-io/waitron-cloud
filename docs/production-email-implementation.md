@@ -1,7 +1,7 @@
 # Production account email
 
 The owner selected **Amazon SES in an EU region** on 2026-10-21. D102 owns the
-region recommendation, account setup and live qualification. The
+approved Paris (`eu-west-3`) plan, account setup and live qualification. The
 [SES endpoint table](https://docs.aws.amazon.com/general/latest/gr/ses.html) lists
 those regions but no Spain endpoint. This is an approved email-processing exception,
 not a claim about recipient mail providers, transit or every subprocessor. The
@@ -80,13 +80,14 @@ messages cannot be replayed after their encrypted payload has been erased.
 
 ## Before enabling live delivery
 
-The [feedback and suppression proposal](superpowers/specs/2026-11-01-ses-feedback-design.md)
-recommends Paris and private queue intake for authenticated bounce and complaint
-events. It binds feedback before sending, keeps provider IDs separate from the
-original Message-ID and blocks future handoffs without replaying accepted mail.
-The proposal needs full-design approval and build-plan authority; intake and the
-shared account/venue suppression boundary are unimplemented. Paris remains a
-recommendation pending qualification.
+The owner approved the [feedback and suppression design](superpowers/specs/2026-11-01-ses-feedback-design.md)
+on 2026-11-01, including Paris and private queue intake for authenticated bounce and
+complaint events. It binds feedback before sending, keeps provider IDs separate from
+the original Message-ID and blocks future handoffs without replaying accepted mail.
+The [implementation plan](superpowers/plans/2026-11-02-ses-feedback-implementation.md)
+covers the local build and separate provider qualification. Only planning is
+authorised. Intake and the shared account/venue suppression boundary remain
+unimplemented; Paris account/provider qualification is still required.
 
 D102 must qualify and configure the selected SES account/region and verified sender
 domain. Confirm the processing/storage locations, retention, subcontractors and suppression rules for the
@@ -95,7 +96,8 @@ confirm with a real delivered message. Configure SPF, DKIM and DMARC as instruct
 the provider. Use an application credential, configure a monitored bounce address and
 prove delivery, permanent bounce and complaint handling.
 
-You can design and test intake locally before live setup. Production authentication,
+The plan separates future local intake tests from live setup. Local implementation
+also needs separate owner authority. Production authentication,
 suppression reconciliation, alerts, secret provisioning and live delivery proof need
 the qualified account/provider. Hands-on account, sender/domain and live testing
 wait for the owner on 3 November.
