@@ -27,16 +27,15 @@ test('fixed project admission holds its exclusive lock through the entire proof 
   for (const resource of ['ps', 'network', 'volume', 'image']) assert.ok(calls.some(args => args[0] === resource), resource);
 });
 
-for (const resource of ['container-label', 'container-name', 'network-label', 'network-name', 'volume-label', 'volume-name', 'image-tag']) {
+for (const resource of ['container-label', 'container-name', 'network-label', 'network-name', 'volume-label', 'volume-name', 'venue-image', 'recovery-image']) {
   test('fixed project admission refuses existing ' + resource + ' before running or cleaning it', async t => {
     const f = await setup(t); const calls = [];
     await assert.rejects(f.run({lock: f.lock, docker: async args => {
       calls.push(args);
       const kind = args[0] === 'ps' ? 'container' : args[0];
-      const selector = args.join(' ');
-      const matches = resource === kind + '-label' && selector.includes('label=') ||
-        resource === kind + '-name' && selector.includes('name=') ||
-        resource === 'image-tag' && kind === 'image';
+      const matches = resource === kind + '-label' && args.includes('label=com.docker.compose.project=waitron-cloud-test') ||
+        resource === kind + '-name' && args.includes('name=^waitron-cloud-test[-_]') ||
+        resource.endsWith('-image') && kind === 'image' && args.includes('reference=waitron-cloud-test-' + resource.split('-')[0] + ':*');
       return matches ? 'existing-resource' : '';
     }, run: () => assert.fail('An existing resource was admitted')}), /integration.fixed_project_in_use/);
     assert.ok(calls.every(args => args[0] === 'ps' || args[1] === 'ls'), 'Only read operations are allowed on refusal');
