@@ -1657,5 +1657,19 @@ refuses admission. Never remove an existing lock or deployment to make it pass.
 This remains a temporary integration proof with random loopback ports. It does
 not publish the LAN service or enable plan enforcement in a deployed release.
 The existing combined proof retains its randomly named project and all its
-checks. Native qualification of this new fixed-project entry point is pending;
-published-release upgrade and complete receipt assembly remain open.
+checks.
+
+At source `6d04d3e3`, both fixed-project cases pass without skips in 459.9 seconds.
+The image matches all 1,721 committed runtime inputs. Both original paired clients
+complete fresh renewal and configuration exchanges after restoring the matching
+configuration, database, storage and gateway volumes. The strict resource reader
+accepts 237 observations, with no interval above 3.061 seconds. Available memory
+stays above 3,019 MiB; disk measures 48.842 GiB before and 48.728 GiB after.
+Eight cleanup readings end with zero owned memory and fixture data. An independent
+audit finds all 246 recorded owned container IDs absent, no owned project resources
+or tags, and the protected Waitron IDs, start times and health unchanged.
+
+This proves the fixed project identity in the temporary journey. Published-release
+upgrade, current-source paired snapshot expiry, complete receipt assembly and the
+later LAN deployment remain open. Keep complete integration and shipping
+qualification false, and deployed plan enforcement off.

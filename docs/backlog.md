@@ -1565,7 +1565,15 @@ implementation or production evidence.
   The separate fixed-project entry point now admits only an empty
   `waitron-cloud-test` namespace under a host lock. It exercises the actual
   Compose project through matching restore, retaining random loopback ports.
-  Native qualification is pending; it does not deploy or enable enforcement.
+  At source `6d04d3e3`, both genuine fixed-project cases pass without skips in
+  459.9 seconds, preserving both paired clients through matching four-volume
+  restore. The strict resource reader accepts 237 observations, with a maximum
+  3.061-second interval and unchanged floors. Independent audit verifies all
+  246 recorded owned container IDs absent and protected Waitron unchanged.
+  Fourteen installed guard omissions are caught; all original tests and SQL stay
+  unchanged. This proves temporary project identity only. Published-release
+  upgrade, current-source paired expiry, complete assembly and later LAN deployment
+  remain open; enforcement stays off.
   See [the fixed-project proof](test-cloud.md#prove-the-fixed-project-without-adopting-an-existing-deployment).
 
 
