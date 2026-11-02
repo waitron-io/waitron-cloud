@@ -94,6 +94,23 @@ test('one project recovers both copies, withdraws remote access, measures capaci
   assert.deepEqual(receipt.freeSnapshot, {status: 'proved', httpStatus: 403, error: 'permission_denied', grantIssued: false});
   assert.equal(checkCapacitySamples(receipt.capacity?.samples), true);
   const chronology = receipt.capacity.chronology;
+  const observations = receipt.capacity.observations;
+  assert.equal(observations?.clock, 'shared-monotonic');
+  assert.ok(observations.baseline.finishedMs <= observations.samples[0].startedMs);
+  assert.ok(observations.after.startedMs >= observations.samples.at(-1).finishedMs);
+  assert.deepEqual(observations.after.reading.quarantined, observations.baseline.reading.quarantined);
+  assert.deepEqual(observations.baseline.reading.quarantined.map(value => value.id).sort(),
+    JSON.parse(process.env.TEST_CLOUD_PROTECTED_CONTAINER_IDS ?? '[]').sort());
+  assert.equal(observations.samples.length, chronology.samples.length);
+  for (const [i, sample] of observations.samples.entries()) {
+    const {quarantined, ...reading} = sample.reading;
+    assert.deepEqual({...sample, reading}, chronology.samples[i]);
+    assert.deepEqual(quarantined, observations.baseline.reading.quarantined);
+    for (const row of quarantined) {
+      assert.equal(row.state, 'running'); assert.equal(row.health, 'healthy');
+      assert.deepEqual(Object.keys(row).sort(), ['health', 'id', 'name', 'state']);
+    }
+  }
   assert.equal(chronology?.clock, 'shared-monotonic');
   assert.deepEqual([...new Set(chronology.samples.map(value => value.phase))].sort(), ['integration', 'settled', 'startup', 'verification']);
   assert.equal(chronology.samples.length, receipt.capacity.startup.samples.length + receipt.capacity.samples.length + receipt.capacity.integration.samples.length);

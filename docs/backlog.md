@@ -950,8 +950,13 @@ implementation or production evidence.
   monotonic clock across startup, settled time, verification and integration.
   Concurrent samplers serialize their reads; the original local times and checks
   remain. Focused controls cover chronology, failures and sampler composition.
-  The changed combined journey still needs a genuine image run. This intermediate
-  record does not supply final protected-container evidence or a complete receipt.
+  Timed baseline and after-cleanup observations now accompany each resource read's
+  actual protected container names, IDs, running state and health. Process start
+  times are compared internally to refuse restarts; private Docker metadata stays
+  out of the record. Focused collector controls pass. The changed image path still
+  needs native qualification. Real preparation/cleanup gaps remain visible;
+  complete resource normalization, release/generated assets, actual matching
+  deployment identity and shipping qualification remain open.
   A [combined journey](test-cloud.md#run-the-journeys-in-one-project) now requires
   recovery, remote withdrawal, measured capacity and matching-set rollback in one
   disposable project. It passes on the isolated Linux box in 385 seconds without

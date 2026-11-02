@@ -12,7 +12,8 @@ import {inspectIntegrationAuthorisedRecovery} from '../deploy/test-cloud/test-fi
 import {inspectIntegrationContinuousRecovery} from '../deploy/test-cloud/test-fixtures/integration-continuous-recovery-evidence.mjs';
 import {rollbackRefusalDiagnostic} from '../deploy/test-cloud/test-fixtures/integration-renewal.mjs';
 import {captureIntegrationSource, checkIntegrationSource, measureIntegrationFiles} from '../deploy/test-cloud/test-fixtures/integration-source.mjs';
-import {parseCapacityVolumeReadings, createCapacityChronology} from '../deploy/test-cloud/test-fixtures/integration-capacity.mjs';
+import {parseCapacityVolumeReadings} from '../deploy/test-cloud/test-fixtures/integration-capacity.mjs';
+import {createResourceObservationCollector, readProtectedContainerStates} from '../deploy/test-cloud/test-fixtures/integration-resource-observations.mjs';
 import {createTestCloudWithdrawalReceipt} from '../deploy/test-cloud/test-fixtures/integration-withdrawal-receipt.mjs';
 import {readIntegrationInventory} from '../deploy/test-cloud/test-fixtures/integration-inventory.mjs';
 
@@ -149,6 +150,9 @@ export async function runTestCloudClients({image, waitronImage, protectedContain
       const {readHostCapacity} = await import('../deploy/test-cloud/test-fixtures/integration-capacity.mjs');
       const diskPath = await docker(['info', '--format', '{{.DockerRootDir}}'], '', 'capacity-data-filesystem');
       hostCapacity = {diskPath, baseline: await readHostCapacity({diskPath})};
+      capacityChronology = createResourceObservationCollector({readHost: () => readHostCapacity({diskPath}),
+        readProtected: () => readProtectedContainerStates({docker, ids: protectedContainerIds})});
+      await capacityChronology.start();
     }
     if (source) {
       const id = await docker(['create', '-i', '--pull=never', '--label', 'cloud.integration.owner=' + runId,
@@ -174,7 +178,6 @@ export async function runTestCloudClients({image, waitronImage, protectedContain
     const start = () => compose(['up', '--no-build', '--pull', 'never', '--detach', '--wait', '--wait-timeout', '90']);
     if (measureCapacity) {
       const {measureStartupCapacity, observeCapacity} = await import('../deploy/test-cloud/test-fixtures/integration-capacity.mjs');
-      capacityChronology = createCapacityChronology();
       startupCapacity = await measureStartupCapacity({start,
         observe: () => capacityChronology.observe('startup', () => observeCapacity({docker, project, runId, waitronImage, startup: true, diskPath: hostCapacity.diskPath, measureVolumes,
           protectedUnchanged: async () => checkProtectedContainers(before, await inventory(), protectedContainerIds)})),
@@ -654,6 +657,7 @@ export async function runTestCloudClients({image, waitronImage, protectedContain
   if (capacityEvidence) {
     const {readHostCapacity} = await import('../deploy/test-cloud/test-fixtures/integration-capacity.mjs');
     capacityEvidence.after = await readHostCapacity({diskPath: hostCapacity.diskPath});
+    capacityEvidence.observations = await capacityChronology.finish();
   }
   if (source) await checkIntegrationSource(root, source);
   return result;

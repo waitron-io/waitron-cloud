@@ -1397,7 +1397,21 @@ Docker and volume observations cannot overlap.
 
 Inspect the shared intervals for gaps; the collector preserves them without
 interpolation or invented readings. A failed read makes the chronology unusable.
-The original sampler assertions and deadlines remain. Focused controls exercise
-the shared clock and sampler composition; the changed combined journey still
-needs a genuine image run. This intermediate record supplies neither the final
-protected-container evidence nor a complete integration or shipping verdict.
+The original sampler assertions and deadlines remain. The additional
+`capacity.observations` record includes timed host readings before image preparation
+and after owned cleanup. Each sample includes the protected containers' measured
+names, IDs, running state and health. The collector also compares their real
+process start times, so a restart refuses the observation even when health returns.
+Docker configuration and private environment values never enter this record.
+
+Run the focused collector controls with:
+
+```sh
+node --test deploy/test-cloud/integration-resource-observations.test.mjs
+```
+
+These controls cover protected changes, read intervals, boundary readings and
+unfinished observations. Native image qualification of the changed path remains
+due. This intermediate record preserves real preparation and cleanup gaps. It
+does not normalize them into a complete resource receipt or provide release,
+deployment or shipping qualification.

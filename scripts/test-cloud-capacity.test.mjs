@@ -18,6 +18,23 @@ test('paired Cloud stays within measured budgets through a settled minute and ac
   assert.equal(receipt.capacity.measurement, 'linux-cgroup-v2-including-tmpfs');
   assert.equal(receipt.capacity.shippingQualification, false);
   assert.equal(receipt.capacity.diskMeasurement, 'docker-data-filesystem');
+  const observations = receipt.capacity.observations;
+  assert.equal(observations?.clock, 'shared-monotonic');
+  const protectedIds = JSON.parse(process.env.TEST_CLOUD_PROTECTED_CONTAINER_IDS ?? '[]');
+  assert.deepEqual(observations.baseline.reading.quarantined.map(value => value.id).sort(), [...protectedIds].sort());
+  assert.deepEqual(observations.after.reading.quarantined, observations.baseline.reading.quarantined);
+  assert.ok(observations.baseline.finishedMs <= observations.samples[0].startedMs);
+  assert.ok(observations.after.startedMs >= observations.samples.at(-1).finishedMs);
+  assert.equal(observations.samples.length, receipt.capacity.chronology.samples.length);
+  for (const [i, sample] of observations.samples.entries()) {
+    const {quarantined, ...reading} = sample.reading;
+    assert.deepEqual({...sample, reading}, receipt.capacity.chronology.samples[i]);
+    assert.deepEqual(quarantined, observations.baseline.reading.quarantined);
+    for (const row of quarantined) {
+      assert.equal(row.state, 'running'); assert.equal(row.health, 'healthy');
+      assert.deepEqual(Object.keys(row).sort(), ['health', 'id', 'name', 'state']);
+    }
+  }
   assert.ok(receipt.capacity.startup.samples.length > 1, 'Startup must be sampled through readiness');
   assert.equal(receipt.capacity.startup.samples[0].cloudMiB, 0, 'Sample before allocating project containers');
   assert.ok(receipt.capacity.startup.samples.at(-1).cloudMiB > 0);
