@@ -220,14 +220,19 @@ jobs:
             -- pnpm --filter @waitron-cloud/ui-smoke exec playwright install --with-deps chromium
       - if: ${{ !matrix.shards && !matrix.members }}
         run: node scripts/test-postgres.mjs --filter ${{ matrix.package }} test
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - if: matrix.members
         run: node scripts/test-postgres.mjs exec node scripts/ci-run-package-group.mjs
         env:
           CI_PACKAGE_GROUP: ${{ toJSON(matrix) }}
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - if: matrix.package == '@waitron-cloud/portal'
         run: pnpm --filter ${{ matrix.package }} build
       - if: matrix.shards
         run: node scripts/test-postgres.mjs exec pnpm --filter ${{ matrix.package }} exec node --test --test-timeout=${{ matrix.package == '@waitron-cloud/portal' && '120000' || '30000' }} --test-shard=${{ matrix.shard }}/${{ matrix.shards }} "test/*.test.ts"
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
   summary:
     if: ${{ always() }}
     needs: [changes, root, typecheck, receipts, packages, documentation, scripts]

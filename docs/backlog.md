@@ -2628,6 +2628,11 @@ implementation or production evidence.
   remains unattributed; no existing assertion or deadline changed.
   Keep signature verification, version pins and deadlines; see the
   [setup boundaries and remaining work](backlog/ci-pnpm-setup.md).
+  **Nested package authentication (D530).** All three package-test entry points
+  now pass the existing read-only package token to descendant installs. A cold
+  loopback-registry control reproduces the placeholder-token 401 and loads the
+  installed package with each workflow binding. See the
+  [failure receipt and remaining unknowns](backlog/ci-pnpm-setup.md#nested-package-installs-d530).
   Package-only changes omit the two-venue milestone receipt when both immutable
   revisions retain its audited regular-file inputs, test command and CI wiring.
   These tests exercise validators and receipt composition; their guarded CLI
