@@ -1602,3 +1602,19 @@ its own error. These focused controls use controlled Docker boundaries and real
 subprocesses and files; they do not certify the shipping disk floors or close a
 historical gap. Long individual commands remain visible in measured intervals
 and must pass the unchanged five-second check.
+
+The shipping-Dockerfile run at `2e46a9b0` passes the genuine combined journey in
+463.4 seconds under its unchanged 600-second deadline. All 1,718 Cloud runtime
+inputs and both complete pinned Waitron source trees match. Its 231 shared-clock
+readings, including eight during 14.1 seconds of cleanup, have no interval above
+4.394 seconds. The first preparation reading begins 0.86 milliseconds after the
+baseline; the final boundary starts 8.1 milliseconds after the last cleanup read.
+The final cleanup sample reports zero owned container memory and fixture data.
+Independent audit finds all 238 recorded owned container IDs absent and the
+protected Waitron IDs, start times and health unchanged.
+
+The resource reader still refuses `resource_evidence.baseline`: the measured
+13.799 GiB disk baseline is below 20 GiB, and the after-cleanup reading is
+13.686 GiB. Matching deployment identity, published-release upgrade and shipping
+qualification remain open. Complete integration stays false and enforcement stays
+off. Historical gaps remain attached to their earlier sources.

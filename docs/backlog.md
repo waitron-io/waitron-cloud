@@ -1019,9 +1019,14 @@ implementation or production evidence.
   cleanup steps running after a measurement refuses. A separate cleanup array
   participates in full chronology accounting; the final reading must report zero
   owned container memory and fixture data. Focused timing, refusal, recursion and
-  real subprocess/filesystem controls cover this path. Genuine image-backed
-  qualification remains due, as do matching deployment identity, published-release
-  upgrade and the unchanged shipping resource floors.
+  real subprocess/filesystem controls cover this path. The genuine combined run
+  at `2e46a9b0` passes in 463.4 seconds: all 231 shared-clock intervals stay below
+  4.394 seconds, including eight readings across 14.1 seconds of cleanup. Final
+  owned usage is zero; independent audit verifies all 238 recorded owned container
+  IDs absent and protected Waitron unchanged. The strict resource reader still
+  refuses the measured 13.799 GiB baseline against the unchanged 20 GiB startup
+  floor. Matching deployment identity, published-release upgrade and shipping
+  qualification remain open; enforcement stays off.
   A [combined journey](test-cloud.md#run-the-journeys-in-one-project) now requires
   recovery, remote withdrawal, measured capacity and matching-set rollback in one
   disposable project. It passes on the isolated Linux box in 385 seconds without
