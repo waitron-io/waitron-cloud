@@ -51,7 +51,8 @@ Run the focused PostgreSQL checks from the repository root:
 
 ```sh
 node scripts/test-postgres.mjs exec pnpm --dir packages/registration exec node --test \
-  test/data-lifecycle.test.ts test/data-lifecycle-restart.test.ts test/schema-compatibility.test.ts
+  test/data-lifecycle.test.ts test/data-lifecycle-restart.test.ts test/schema-compatibility.test.ts \
+  test/data-lifecycle-upgrade-fixture.test.ts test/data-lifecycle-upgrade-recovery.test.ts
 ```
 
 The restart fixture kills its own child after claim, intent, a simulated outside
@@ -59,3 +60,19 @@ call and observation. Its independent call ledger distinguishes a lost reply
 from a call that never happened. These are local journal checks, not provider or
 application stop, export, recovery, purge or deployment qualification.
 Country bindings remain [D101 slice 5](superpowers/plans/2026-10-22-cloud-data-protection.md#slice-5-bind-placement-credentials-and-outbound-effects-to-policy).
+
+The version 8 schema receipt binds the clean candidate to the actual 044-to-047
+upgrade. Migration 046 already supplies venue service authority; migration 047
+adds the journal. Upgrade checks retain every old row and SQL digest and require
+the three new journal tables to start empty. Separate logical backups cover the
+pre-upgrade database and the populated journal. After restoring the latter,
+checks require the original operations, pending effects and fixed UTC deadlines,
+then reclaim the expired claims and refuse the replaced worker. An uncertain call
+cannot be retried as a new intent; its simulated status observation can be
+recorded once and retried without changing the result.
+
+The billing version 6 and venue-authority version 7 proofs still execute their
+original tests in their exact delivered trees. Their schema pairs and strict
+receipt validators remain fixed. The new lifecycle receipt adds current-candidate
+coverage; these synthetic recovery checks grant no outside effect or activation
+authority.

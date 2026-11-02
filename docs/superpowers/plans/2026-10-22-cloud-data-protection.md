@@ -136,6 +136,21 @@ Resubscription records intent only, preserving state and clocks until a later
 adapter proves retained data and activation authority. Read-only/purge states are
 seeded in tests; this slice supplies no transition that asserts outside effects.
 
+### Slice 4 qualification addendum
+
+The owner approved the bounded upgrade-check extension on 1 November. Preserve
+every historical row, fiscal value, SQL digest and version 1–6 receipt check.
+Current main has since shipped venue-authority migration 046 and its version 7
+proof; retain that original proof too. Regenerate only the unlanded lifecycle
+migration as 047 and qualify the actual 044-to-047 pair with receipt version 8.
+Require empty new journal tables, interrupted rollback, concurrent/repeated
+migration, both pre-upgrade and populated backups, exact restored operations and
+effects, fixed UTC deadlines, stale-worker refusal and uncertain-call
+reconciliation. Delete or falsify each required receipt fact to check refusal.
+The original billing and venue-authority tests execute in their delivered trees;
+new journal recovery coverage runs against the clean current candidate. No
+customer route, provider call, service stop or destructive operation is enabled.
+
 ## Slice 5: Bind placement, credentials and outbound effects to policy
 
 **Prerequisites:** Slices 2–4; migration slot resolved. Qualification is required for real flows, never fabricated to make a local test pass.

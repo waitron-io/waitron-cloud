@@ -386,7 +386,11 @@ The production Spain default has no qualified flows. Slice 4 adds the disabled
 [venue lifecycle journal](data-lifecycle-journal.md): fixed UTC deadlines,
 idempotent requests, venue revisions, expiring worker claims and bound outside-call
 intent/uncertainty. PostgreSQL checks include process death at four boundaries,
-same-revision claim takeover and unchanged migration history. Recording a request
+same-revision claim takeover and unchanged migration history. The version 8
+upgrade receipt covers the actual 044-to-047 candidate, separate pre-upgrade and
+populated-journal backups, retained deadlines and stale-worker refusal. The
+original billing and venue-authority proofs remain pinned to their delivered
+trees with their original strict checks. Recording a request
 grants no service or deletion authority; no customer route or effects worker is
 enabled. Resubscription still needs a future retained-data check and activation
 adapter. Durable placement/credential bindings in slice 5 remain unbuilt. The
