@@ -79,9 +79,10 @@ timer cancellation fails the controls, as does preventing clock expiry.
 
 The delayed-connection variant guards this fixture against a return to scheduling
 dependence. It adds no independent downloader guarantee. The controlled cases do
-not advance to the 1,200 ms total deadline; the existing `shared-deadline` case
-checks that refusal with a wall clock. The exhausted-attempt case below also
-uses controlled time; the remaining scenarios retain their wall clocks.
+not advance to the 1,200 ms total deadline; the `shared-deadline` case
+below checks that refusal with controlled time. The separate archive-retry
+shared-deadline case keeps its wall clock. Exhausted attempts and body stalls
+also use controlled time; the remaining scenarios retain their wall clocks.
 Production download timeouts, retry limits and accounting are unchanged.
 The separate prematurely closed Litestream LIST response remains under
 investigation.
@@ -109,9 +110,42 @@ control or request admission fails the delayed-connection or outer-limit control
 This fixture separates connection scheduling from simulated download time. It
 does not measure the production network or qualify expiry before a request reaches
 the server. It also no longer runs three successive stalls on a wall clock;
-no claim of identical time-dependent coverage is made. The existing wall-clock
-shared-deadline and cancellation cases remain separate. Production downloads and accounting are unchanged. The LIST shutdown
+no claim of identical time-dependent coverage is made. The separate archive-retry
+shared-deadline journey and the idle suite’s cancellation case keep their wall
+clocks. Production downloads and accounting are unchanged. The LIST shutdown
 and bound-container verifier cleanup failures still need their own investigations.
+
+
+### Body-stall and total-deadline scheduling (D530)
+
+[D102's merge receipts job](https://github.com/waitron-io/waitron-cloud/actions/runs/41375579216/job/125055342971)
+records zero partial-body bytes instead of 23, and one stalled request instead
+of two before the shared deadline. The fixtures use a 150 ms inactivity limit
+and, for the latter case, a 240 ms total budget. A controlled 200 ms connection
+delay reproduces both assertions: before the first connection for body-stall,
+and before the second connection for shared-deadline. The historical connection
+and callback scheduling were not measured.
+
+Run `node --test scripts/cloud-cost/conformance-archive-idle.test.mjs` to check
+the ordinary and delayed variants. The body-stall control waits for the real
+downloader's report of 23 consumed bytes before advancing inactivity by 150 ms.
+Only that control reports progress every 10 ms so it can observe consumed bytes;
+the downloader itself is unchanged. The deadline control advances 150 ms after
+the first request reaches the server and the remaining 90 ms after the second.
+Both attempts share one deadline. HTTP, retry pauses, connection delays and the
+outer five-second limit still use real time.
+
+Every original assertion and shortened limit remains, including partial-byte
+accounting, two requests, checksum-verified recovery, no failed archive and the
+`TimeoutError` refusal. The separate `conformance-archive-retry.test.mjs`
+shared-deadline journey still tests wall-clock expiry across an HTTP refusal,
+backoff and the next request. These controls separate simulated timeout boundaries
+from connection scheduling; they do not measure the production network or prove
+expiry before server admission. Production timeouts, attempts, backoff, integrity
+checks and cancellation are unchanged. Upstream archive failures and the separate
+LIST shutdown cause remain open. If the consumed-byte report, diagnostic cadence
+or timeout signal is missing, these controls fail at their real five-second
+outer limit; that failure does not identify which signal is missing.
 
 
 ### Conformance image acquisition during D135 qualification

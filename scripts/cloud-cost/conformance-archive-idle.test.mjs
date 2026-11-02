@@ -9,8 +9,8 @@ import {spawn} from 'node:child_process';
 
 // Without an inactivity bound, a stalled first response consumes the entire retry budget.
 for(const scenario of ['headers-stall','body-stall','always-stalled','progress','headers-progress','cancel','shared-deadline']) {
-  for(const variant of scenario==='headers-progress'?['ordinary','delayed connection','idle boundary']:scenario==='always-stalled'?['ordinary','delayed connection']:['ordinary']) {
-  const connectionDelay=variant==='delayed connection'?(scenario==='always-stalled'?200:80):0,expires=variant==='idle boundary';
+  for(const variant of scenario==='headers-progress'?['ordinary','delayed connection','idle boundary']:['always-stalled','body-stall','shared-deadline'].includes(scenario)?['ordinary','delayed connection']:['ordinary']) {
+  const connectionDelay=variant==='delayed connection'?(scenario==='headers-progress'?80:200):0,expires=variant==='idle boundary';
   test('archive inactivity: '+scenario+(variant==='ordinary'?'':' with '+variant),{timeout:5000},async t=>{
     const root=mkdtempSync(join(tmpdir(),'cost-archive-idle-')),path=join(root,'archive');
     const bytes=Buffer.from('complete verified archive'),digest=createHash('sha256').update(bytes).digest('hex');
@@ -28,7 +28,8 @@ for(const scenario of ['headers-stall','body-stall','always-stalled','progress',
       const attempt=++requests;
       // Count the admitted stalled request before expiring its shortened clock.
       if(scenario==='always-stalled'){void advanceClock(150);return;}
-      if(['cancel','shared-deadline'].includes(scenario)||scenario==='headers-stall'&&attempt===1)return;
+      if(scenario==='shared-deadline'){void advanceClock(attempt===1?150:90);return;}
+      if(scenario==='cancel'||scenario==='headers-stall'&&attempt===1)return;
       if(scenario==='headers-progress'){
         later(async()=>{
           if(expires&&attempt===1){await advanceClock(150);return;}
@@ -66,7 +67,7 @@ for(const scenario of ['headers-stall','body-stall','always-stalled','progress',
       globalThis.setTimeout=(fn,ms,...args)=>timeout(fn,ms===30000?150:ms,...args);
       const budget=AbortSignal.timeout;
       AbortSignal.timeout=ms=>budget(ms===120000?${scenario==='shared-deadline'?240:1200}:ms);
-      ${['headers-progress','always-stalled'].includes(scenario)?`
+      ${['headers-progress','always-stalled','body-stall','shared-deadline'].includes(scenario)?`
       // Only the download clocks advance here; HTTP and the outer test deadline stay real.
       const clear=globalThis.clearTimeout,pending=new Map();let now=0;
       const schedule=(fn,ms,args=[])=>{
@@ -77,7 +78,7 @@ for(const scenario of ['headers-stall','body-stall','always-stalled','progress',
       AbortSignal.timeout=ms=>{
         if(ms!==120000)return budget(ms);
         const controller=new AbortController();
-        schedule(()=>controller.abort(new DOMException('Download deadline','TimeoutError')),1200);
+        schedule(()=>controller.abort(new DOMException('Download deadline','TimeoutError')),${scenario==='shared-deadline'?240:1200});
         return controller.signal;
       };
       process.on('message',({id,advance})=>{
@@ -86,9 +87,14 @@ for(const scenario of ['headers-stall','body-stall','always-stalled','progress',
         process.send({id});
       });
       `:''}
-      const realFetch=globalThis.fetch;let firstFetch=true;
+      ${scenario==='body-stall'?`
+      // Observe the downloader's consumed-byte report before expiring its body clock.
+      const interval=globalThis.setInterval;
+      globalThis.setInterval=(fn,ms,...args)=>interval(fn,ms===10000?10:ms,...args);
+      `:''}
+      const realFetch=globalThis.fetch;let fetchAttempts=0;
       globalThis.fetch=async(...args)=>{
-        if(firstFetch){firstFetch=false;await sleep(${connectionDelay});}
+        if(++fetchAttempts===${scenario==='shared-deadline'?2:1})await sleep(${connectionDelay});
         return realFetch(...args);
       };
       const {downloadConformanceArchive}=await import(${JSON.stringify(new URL('./conformance-archive.mjs',import.meta.url).href)});
@@ -103,8 +109,14 @@ for(const scenario of ['headers-stall','body-stall','always-stalled','progress',
     child=spawn(process.execPath,['--input-type=module','-e',program],{stdio:['ignore','pipe','pipe','ipc']});
     child.on('message',({id})=>{ticks.get(id)?.(true);ticks.delete(id);});
     child.on('disconnect',()=>{for(const resolve of ticks.values())resolve(false);ticks.clear();headersSeen();});
+    let bodyClockAdvanced=false;
     let output='';child.stdout.on('data',chunk=>output+=chunk);child.stderr.on('data',chunk=>{
       output+=chunk;if(output.includes('"event":"headers"'))headersSeen();
+      if(scenario==='body-stall'&&!bodyClockAdvanced&&output.split('\n').some(line=>
+        line.startsWith('conformance_archive=')&&line.endsWith('}')&&
+        JSON.parse(line.slice('conformance_archive='.length)).bytesReceived===23)){
+        bodyClockAdvanced=true;void advanceClock(150);
+      }
     });
     const closed=new Promise(resolve=>child.once('close',(code,signal)=>resolve({code,signal})));
     t.after(async()=>{if(child.exitCode===null&&child.signalCode===null)child.kill('SIGKILL');await closed;});
