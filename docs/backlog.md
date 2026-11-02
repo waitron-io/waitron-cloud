@@ -3553,6 +3553,14 @@ unattributed; these stubbed HTTP checks do not qualify real server authority.
 **Open; historical cause unknown.** Capture a diagnostic recurrence before
 attributing the initial signed-in timeout. See the [investigation and diagnostic boundaries](backlog/portal-session-startup.md).
 
+## Recovery and remote browser waits (D530)
+
+**Open; both historical causes remain unknown.** The two affected browser files
+pass 88 unchanged Linux checks. Recovery and remote-name failures now report their
+named step, bounded request progress and redacted panel state, while retaining
+every original assertion and deadline. Read the [evidence and next reproduction](backlog/portal-panel-waits.md)
+before attributing either timeout or repeating the passing baseline.
+
 ## Portal lost-reply test ordering
 
 D530 records the unresolved consent-uncertainty and usage rate-limit waits from

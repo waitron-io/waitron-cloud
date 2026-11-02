@@ -3,7 +3,7 @@ import type {Page,Request} from 'playwright';
 // Record only static endpoint names and timing, never reset tokens, cookies or bodies.
 export function portalTrace(page:Page) {
  const started=performance.now(),events:object[]=[],requests=new WeakMap<Request,number>();
- const paths=new Set(['/api/account/session','/api/account/session/activity','/api/account/login','/api/account/password-reset/request','/api/account/password-reset/complete','/api/account/translation-consent','/api/account/signup/complete','/api/account/usage/read']);
+ const paths=new Set(['/api/account/session','/api/account/session/activity','/api/account/login','/api/account/password-reset/request','/api/account/password-reset/complete','/api/account/translation-consent','/api/account/signup/complete','/api/account/usage/read','/api/account/installations','/api/account/backups/list','/api/account/recovery/inspect','/api/account/recovery/approve','/api/account/recovery/replace','/api/account/recovery/close','/api/account/remote-access/status','/api/account/remote-access/dns','/api/account/remote-access/apply']);
  const record=(event:object)=>{events.push({ms:Math.round(performance.now()-started),...event});if(events.length>100)events.shift();};
  const details=(request:Request)=>{const path=new URL(request.url()).pathname;return paths.has(path)?{method:request.method(),path}:undefined;};
  page.on('request',request=>{const data=details(request);if(data){requests.set(request,performance.now());record({event:'request',...data});}});
@@ -11,6 +11,7 @@ export function portalTrace(page:Page) {
  page.on('requestfinished',request=>{const data=details(request);if(data)record({event:'finished',...data,elapsed:Math.round(performance.now()-(requests.get(request)??performance.now()))});});
  page.on('requestfailed',request=>{const data=details(request);if(data)record({event:'failed',...data,elapsed:Math.round(performance.now()-(requests.get(request)??performance.now()))});});
  page.on('pageerror',()=>record({event:'pageerror'}));
+ page.on('framenavigated',frame=>{if(frame===page.mainFrame()){const path=new URL(frame.url()).pathname;record({event:'navigation',path:['/account','/recover','/login'].includes(path)?path:'other'});}});
  return {events,stage:(stage:string)=>record({stage})};
 }
 
@@ -43,10 +44,15 @@ export async function failPortalWait(page:Page,trace:ReturnType<typeof portalTra
   Promise.resolve().then(()=>page.evaluate(()=>{
    const app=(window as any).app,usage=app?.usage;
    const flag=(value:unknown)=>typeof value==='boolean'?value:'unavailable';
+   const panel=(read:()=>object)=>{try{return read();}catch{return {unavailable:true};}};
    const session=app?.session?.state?.kind;
    const failure=usage?.error;
    return {clock:new Date().toISOString(),
+    path:['/account','/recover','/login'].includes(app?.path)?app.path:'other',
     session:['checking','unavailable','anonymous','authenticated'].includes(session)?session:'other',
+    recovery:panel(()=>{const recovery=app?.recovery;return recovery?{pending:flag(recovery.pending),uncertain:flag(recovery.uncertain),codePresent:typeof recovery.code==='string'&&recovery.code.length>0,viewPresent:recovery.view!==undefined}:{unavailable:true};}),
+    remote:panel(()=>{const remote=app?.remote;return remote?{pending:flag(remote.pending),viewPresent:remote.view!==undefined,confirmationPresent:remote.confirmation!==undefined,errorPresent:remote.error!==undefined,hostnameChanged:flag(remote.hostnameChanged)}:{unavailable:true};}),
+    installations:panel(()=>{const installations=app?.installations;return installations?{loaded:flag(installations.loaded),pending:flag(installations.pending)}:{unavailable:true};}),
     usage:usage?{pending:flag(usage.pending),loaded:flag(usage.loaded),
      error:failure===undefined?'absent':['limited','unavailable','pairSession','permissionBusiness','forbidden'].includes(failure)?failure:'other',
      waiting:Number.isFinite(usage.waiting)&&usage.waiting>=0?Math.ceil(usage.waiting):'unavailable',
