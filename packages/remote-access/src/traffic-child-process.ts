@@ -3,6 +3,7 @@ import {type KeyObject} from 'node:crypto';
 import {lstat} from 'node:fs/promises';
 import {type ManifestEnvelope} from './manifest.ts';
 import {TrafficChildJournal} from './traffic-child-journal.ts';
+import {readQuiescentTrafficSocket} from './traffic-quiescence.ts';
 import {TrafficSampler} from './traffic-sampler.ts';
 import {TrafficSpool} from './traffic-spool.ts';
 import {sendTrafficLifetime} from './traffic-lifetime-transport.ts';
@@ -19,7 +20,7 @@ function unavailable():never{throw new Error('traffic_child_process_unavailable'
 export class TrafficChildProcess {
  readonly #options:Options;readonly #journal:TrafficChildJournal;readonly #sampler:TrafficSampler;
  #child:ChildProcess|undefined;#exited:Promise<void>=Promise.resolve();#pending:Promise<void>=Promise.resolve();
- #attempted=false;#stopping=false;#stop:Promise<void>|undefined;
+ #attempted=false;#stopping=false;#finished=false;#finish:Promise<void>|undefined;#stop:Promise<void>|undefined;
  constructor(options:Options){
   try{
    validateTrafficMapping(options.mapping);if(options.mapping.cellId!==options.cellId)unavailable();
@@ -49,7 +50,7 @@ export class TrafficChildProcess {
     const ended=()=>{
      resolve();
      // Country coverage also detects the missing tail if local gap persistence fails.
-     void this.#run(()=>o.spool.markGap()).catch(()=>{});
+     if(!this.#finished)void this.#run(()=>o.spool.markGap()).catch(()=>{});
     };
     child.once('exit',ended);child.once('error',ended);
    });
@@ -69,6 +70,20 @@ export class TrafficChildProcess {
    await this.#journal.flush(envelope=>sendTrafficLifetime(this.#options.lifetimeSocket,envelope));
    await this.#options.spool.transfer(this.#options.mapping);
   });
+ }
+ /** Only paused listeners and a drained final snapshot can authenticate the end of this owned lifetime. */
+ finish():Promise<void>{
+  if(this.#finish)return this.#finish;this.#stopping=true;
+  this.#finish=this.#run(async()=>{
+   try{
+    if(!this.running)unavailable();
+    const csv=await readQuiescentTrafficSocket(this.#options.socket,()=>this.running&&this.#child!.kill('SIGTTOU'));
+    if(!this.running)unavailable();
+    const until=new Date((this.#options.now??Date.now)()).toISOString();
+    await this.#sampler.sample(csv,until);
+    await this.#journal.finish(this.#options.spool,until);this.#finished=true;
+   }catch{await this.#options.spool.markGap();unavailable();}
+  }).then(()=>this.stop());return this.#finish;
  }
  /** Authority withdrawal cannot wait behind a socket read or country acknowledgement. */
  withdraw():Promise<void>{
@@ -91,7 +106,7 @@ export class TrafficChildProcess {
     }finally{clearTimeout(timer);}
    }
    // A pre-stop sample cannot cover bytes arriving before exit. Only independently proved quiescence may close a lifetime.
-   await this.#options.spool.markGap();
+   if(!this.#finished)await this.#options.spool.markGap();
   });
   // Exit can enqueue its durable gap behind the stop operation itself.
   this.#stop=stopped.then(()=>this.#pending);return this.#stop;
