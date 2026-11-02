@@ -3,7 +3,8 @@ import {chmod,lstat,realpath} from 'node:fs/promises';
 import {connect,createServer,type Socket} from 'node:net';
 import {dirname,isAbsolute,normalize} from 'node:path';
 import {trafficEnvelopeLifecycle} from './traffic-lifecycle.ts';
-import {validateTrafficMapping,type TrafficMapping,type TrafficCoverageStore} from './traffic-coverage.ts';
+import {validateTrafficMapping,type TrafficMapping} from './traffic-mapping.ts';
+import type {TrafficCoverageStore} from './traffic-coverage.ts';
 import type {ManifestEnvelope} from './manifest.ts';
 
 function unavailable():never{throw new Error('traffic_lifetime_transport_unavailable');}

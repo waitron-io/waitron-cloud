@@ -6,7 +6,7 @@ import {TrafficChildJournal} from './traffic-child-journal.ts';
 import {TrafficSampler} from './traffic-sampler.ts';
 import {TrafficSpool} from './traffic-spool.ts';
 import {sendTrafficLifetime} from './traffic-lifetime-transport.ts';
-import {validateTrafficMapping,type TrafficMapping} from './traffic-coverage.ts';
+import {validateTrafficMapping,type TrafficMapping} from './traffic-mapping.ts';
 
 interface Options {
  directory:string;country:'ES';environment:'test';cellId:string;issuerKey:KeyObject;reporterKey:KeyObject;
@@ -30,6 +30,7 @@ export class TrafficChildProcess {
   }catch{unavailable();}
  }
  get running():boolean{return !!this.#child&&this.#child.exitCode===null&&this.#child.signalCode===null;}
+ get pid():number|undefined{return this.running?this.#child?.pid:undefined;}
  #run(operation:()=>Promise<void>):Promise<void>{
   const next=this.#pending.then(async()=>{try{await operation();}catch{unavailable();}});
   this.#pending=next.catch(()=>{});return next;

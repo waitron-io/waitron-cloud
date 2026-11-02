@@ -1,19 +1,13 @@
 import {createPublicKey} from 'node:crypto';
-import {isAbsolute,normalize} from 'node:path';
 import type {Pool,PoolClient} from 'pg';
 import {transaction} from '@waitron-cloud/registration';
 import {isUuid,type AcceptedGatewayManifest,type ManifestEnvelope} from './manifest.ts';
 import {routeBinding} from './forward-report.ts';
 import {trafficEnvelopeLifecycle,trafficManifestDigest,verifyTrafficLifecycle} from './traffic-lifecycle.ts';
+import {validateTrafficMapping,type TrafficMapping} from './traffic-mapping.ts';
+export {validateTrafficMapping,type TrafficMapping} from './traffic-mapping.ts';
 
-export interface TrafficMapping {country:'ES';environment:'test';cellId:string;directory:string;writerUid:number;readerGid:number}
 function fail(code='traffic_authority_unavailable'):never{throw new Error(code);}
-export function validateTrafficMapping(value:unknown):asserts value is TrafficMapping {
- if(!value||typeof value!=='object'||Array.isArray(value))fail();const m=value as TrafficMapping;
- if(Object.keys(m).sort().join(',')!=='cellId,country,directory,environment,readerGid,writerUid'||m.country!=='ES'||m.environment!=='test'||!isUuid(m.cellId)
-  ||typeof m.directory!=='string'||!isAbsolute(m.directory)||normalize(m.directory)!==m.directory
-  ||!Number.isSafeInteger(m.writerUid)||m.writerUid<0||!Number.isSafeInteger(m.readerGid)||m.readerGid<0)fail();
-}
 
 /** Expected serving authority is country evidence, separate from the exporter's signed claims. */
 export class TrafficCoverageStore {

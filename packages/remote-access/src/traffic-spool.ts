@@ -6,7 +6,7 @@ import {isDeepStrictEqual} from 'node:util';
 import {isUuid,type ManifestEnvelope} from './manifest.ts';
 import {trafficDelta,type TrafficCounter} from './traffic-counters.ts';
 import {trafficEnvelopeReport,validateTrafficReport,type TrafficReport} from './traffic-report.ts';
-import {validateTrafficMapping,type TrafficMapping} from './traffic-coverage.ts';
+import {validateTrafficMapping,type TrafficMapping} from './traffic-mapping.ts';
 
 interface State {
  version:1;processId:string;sequence:number;until:string;complete:boolean;lastDigest:string;
