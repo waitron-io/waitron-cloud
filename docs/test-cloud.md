@@ -1586,3 +1586,19 @@ They do not replace a genuine image-backed journey or change any resource floor.
 The saved `5ef3a0ce` preparation and cleanup gaps remain visible at that source.
 Complete cleanup sampling, matching deployment identity, published-release
 upgrade and shipping qualification remain open.
+
+### Resource readings during cleanup
+
+Container removal takes time, and the after-cleanup reading alone leaves that
+interval unmeasured. The runner now reads resources between Docker cleanup
+commands on the same clock as startup and the journey. It records these readings
+in `capacity.cleanup.samples` and includes them in the full chronology. Detached
+project volumes still count until Docker removes them. Resource inspection cannot
+race the cleanup commands or recursively measure its own Docker commands.
+
+A refused reading stops further measurements but lets every independent cleanup
+step finish. The runner then refuses the report. A cleanup command failure keeps
+its own error. These focused controls use controlled Docker boundaries and real
+subprocesses and files; they do not certify the shipping disk floors or close a
+historical gap. Long individual commands remain visible in measured intervals
+and must pass the unchanged five-second check.

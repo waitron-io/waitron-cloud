@@ -123,7 +123,10 @@ test('one project recovers both copies, withdraws remote access, measures capaci
   }
   assert.equal(chronology?.clock, 'shared-monotonic');
   assert.deepEqual([...new Set(chronology.samples.map(value => value.phase))].sort(), ['integration', 'settled', 'startup', 'verification']);
-  assert.equal(chronology.samples.length, receipt.capacity.startup.samples.length + receipt.capacity.samples.length + receipt.capacity.integration.samples.length);
+  assert.equal(chronology.samples.length, receipt.capacity.startup.samples.length + receipt.capacity.samples.length + receipt.capacity.integration.samples.length + receipt.capacity.cleanup.samples.length);
+  assert.ok(receipt.capacity.cleanup.samples.length >= 2, 'Cleanup needs before and after measurements');
+  const cleaned = receipt.capacity.cleanup.samples.at(-1);
+  for (const key of ['cloudMiB', 'verifierMiB', 'verifierCount', 'scratchMiB', 'fixtureBytes']) assert.equal(cleaned[key], 0, key);
   let observedEnd = 0;
   for (const value of chronology.samples) {
     assert.ok(value.startedMs >= observedEnd && value.finishedMs >= value.startedMs);

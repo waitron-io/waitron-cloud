@@ -98,7 +98,11 @@ export async function runTestCloudClients({image, waitronImage, protectedContain
   const waitronSource = sourceProvenance ? await captureWaitronSource(waitronCheckout, revision) : undefined;
   const source = sourceProvenance ? await captureIntegrationSource(root) : undefined;
   const runId = randomUUID(), project = 'waitron-cloud-test-integration-' + runId.slice(0, 8);
-  const docker = (args, input = '', phase) => command(args, input, phase, {TEST_CLOUD_IMAGE: image});
+  let cleanupCheckpoint;
+  const docker = async (args, input = '', phase) => {
+    try {return await command(args, input, phase, {TEST_CLOUD_IMAGE: image});}
+    finally {if (cleanupCheckpoint) await cleanupCheckpoint();}
+  };
   const inventory = () => readIntegrationInventory({docker, protectedIds: protectedContainerIds});
   // Initial inventory can refuse before owned cleanup begins, so allocate no host scratch yet.
   const before = await inventory();
@@ -623,10 +627,9 @@ export async function runTestCloudClients({image, waitronImage, protectedContain
         stop: () => compose(['stop', '--timeout', '10'])});
       capacityEvidence.integration = {samples: measured.samples};
     } else await journey();
-    if (capacityEvidence) capacityEvidence.chronology = capacityChronology.snapshot();
   } finally {
     try {
-      await completeCleanup([
+      const cleanup = () => completeCleanup([
         {phase: 'verifier', run: async () => {
           if (!verifierWorker) return;
           if (verifierStarted) await docker(['stop', '--time', '15', verifierWorker], '', 'verifier-cleanup-stop');
@@ -668,6 +671,19 @@ export async function runTestCloudClients({image, waitronImage, protectedContain
           for (const id of owned) assert.ok(!after.some(row => row.startsWith(id + ' ')), 'integration.owned_container_remains');
         }},
       ]);
+      if (capacityChronology) {
+        const {measureCleanupCapacity, observeCapacity} = await import('../deploy/test-cloud/test-fixtures/integration-capacity.mjs');
+        const measured = await measureCleanupCapacity({
+          observe: () => capacityChronology.observe('integration', () => observeCapacity({docker, project, runId, verifierScope, waitronImage,
+            startup: true, cleanup: true, diskPath: hostCapacity.diskPath, measureVolumes,
+            protectedUnchanged: async () => checkProtectedContainers(before, await inventory(), protectedContainerIds)})),
+          run: async checkpoint => {
+            cleanupCheckpoint = checkpoint;
+            try {await cleanup();} finally {cleanupCheckpoint = undefined;}
+          },
+        });
+        if (capacityEvidence) capacityEvidence.cleanup = {samples: measured.samples};
+      } else await cleanup();
       if (result) {
         const order = values => values.sort((a, b) => (a.kind + ':' + a.id).localeCompare(b.kind + ':' + b.id));
         assert.deepEqual(order(removed), order(created));
@@ -678,6 +694,7 @@ export async function runTestCloudClients({image, waitronImage, protectedContain
   if (capacityEvidence) {
     const {readHostCapacity} = await import('../deploy/test-cloud/test-fixtures/integration-capacity.mjs');
     capacityEvidence.after = await readHostCapacity({diskPath: hostCapacity.diskPath});
+    capacityEvidence.chronology = capacityChronology.snapshot();
     capacityEvidence.observations = await capacityChronology.finish();
   }
   if (source) await checkIntegrationSource(root, source);

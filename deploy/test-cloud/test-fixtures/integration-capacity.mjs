@@ -165,6 +165,32 @@ async function measureOperationCapacity({observe, run, stop, phase, now = () => 
   return {samples, value};
 }
 
+// Read only between cleanup commands; a failed measurement must not strand owned resources.
+export async function measureCleanupCapacity({observe, run, now = () => performance.now(), wait = ms => new Promise(resolve => setTimeout(resolve, ms))}) {
+  const samples = [], began = now();
+  let reading = false, failure, finished;
+  const checkpoint = async (force = false) => {
+    if (reading || failure || !force && finished !== undefined && now() - finished < 1000) return;
+    reading = true;
+    try {
+      const elapsedMs = Math.round(now() - began);
+      const value = {...await observe(), elapsedMs, phase: 'integration'};
+      checkCapacitySample(value);
+      const previous = samples.at(-1)?.elapsedMs ?? -1;
+      assert.ok(Number.isSafeInteger(elapsedMs) && elapsedMs > previous && elapsedMs - Math.max(0, previous) <= 5000, 'integration.capacity_sample_gap');
+      samples.push(value);
+      finished = now();
+    } catch (error) {failure = error;}
+    finally {reading = false;}
+  };
+  await checkpoint(true);
+  const value = await run(checkpoint);
+  await wait(1);
+  await checkpoint(true);
+  if (failure) throw failure;
+  return {samples, value};
+}
+
 export async function inspectCapacityVerifier(docker, id) {
   let raw;
   try {raw = await docker(['inspect', id], '', 'capacity-verifier-inspect');}
@@ -225,7 +251,7 @@ export function parseCapacityVolumeReadings(names, text) {
 }
 
 export async function observeCapacity({docker, project, runId, verifierScope, waitronImage, workerId,
-  protectedUnchanged, startup = false, measureStoppedVolume, measureVolumes, procRoot = '/proc', cgroupRoot = '/sys/fs/cgroup', meminfo = '/proc/meminfo', diskPath = '/'}) {
+  protectedUnchanged, startup = false, cleanup = false, measureStoppedVolume, measureVolumes, procRoot = '/proc', cgroupRoot = '/sys/fs/cgroup', meminfo = '/proc/meminfo', diskPath = '/'}) {
   const ids = text => text.split(/\s+/).filter(Boolean);
   const list = filter => docker(['ps', '-aq', '--no-trunc', '--filter', filter]).then(ids);
   const inspect = async (values, phase = 'capacity-cloud-inspect') => values.length ? JSON.parse(await docker(['inspect', ...values], '', phase)) : [];
@@ -268,6 +294,12 @@ export async function observeCapacity({docker, project, runId, verifierScope, wa
     if (!volumes.has(mount.Name) || row.State.Running && !volumes.get(mount.Name).running) {
       volumes.set(mount.Name, {container: row.Id, path: mount.Destination, running: row.State.Running});
     }
+  }
+  if (cleanup) {
+    assert.equal(typeof measureVolumes, 'function', 'integration.capacity_cleanup_volumes');
+    // Detached volumes still occupy disk after their containers have been removed.
+    const names = ids(await docker(['volume', 'ls', '-q', '--filter', 'label=com.docker.compose.project=' + project]));
+    for (const name of names) if (!volumes.has(name)) volumes.set(name, {});
   }
   let fixtureBytes = 0;
   for (const [name, volume] of volumes) {

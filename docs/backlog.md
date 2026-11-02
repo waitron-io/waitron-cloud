@@ -1014,6 +1014,14 @@ implementation or production evidence.
   This change has not yet requalified the complete Linux journey. The saved
   preparation gap stays attached to its original source; cleanup collection,
   deployment identity and release/resource qualification remain open.
+  Cleanup now reads resources between owned Docker commands on the existing
+  clock, counts detached project volumes until removal and keeps all independent
+  cleanup steps running after a measurement refuses. A separate cleanup array
+  participates in full chronology accounting; the final reading must report zero
+  owned container memory and fixture data. Focused timing, refusal, recursion and
+  real subprocess/filesystem controls cover this path. Genuine image-backed
+  qualification remains due, as do matching deployment identity, published-release
+  upgrade and the unchanged shipping resource floors.
   A [combined journey](test-cloud.md#run-the-journeys-in-one-project) now requires
   recovery, remote withdrawal, measured capacity and matching-set rollback in one
   disposable project. It passes on the isolated Linux box in 385 seconds without
@@ -1542,6 +1550,8 @@ implementation or production evidence.
   leave its running containers and data untouched. Keep address providers disabled
   and the existing translation release gates in place. A free plan permits a
   service only after that service's independent prerequisites pass.
+
+
 - **Translation worker lock-probe timing is now independently exercised.** The
   existing review-totals case put a PostgreSQL lock probe inside its fake HTTP
   response while the real client allowed 100 ms. A controlled 150 ms probe on
