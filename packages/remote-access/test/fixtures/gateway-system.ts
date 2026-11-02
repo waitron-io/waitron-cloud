@@ -23,10 +23,22 @@ if(command==='wg'){
    const names=[...config.matchAll(/^backend (traffic_user_\w+)$/gm)].map(m=>m[1]);
    assert.equal(names.length,2);
    process.on('SIGTERM',()=>{});
-   const server=createServer(s=>s.once('data',async bytes=>{
-    assert.equal(bytes.toString(),'show stat\n');await appendFile(join(root,'samples'),processId+'\n');
-    s.end('# pxname,svname,bin,bout,type\n'+names.map(n=>`${n},BACKEND,10,25,1\n`).join(''));
-   }));
+   let paused=false;
+   process.on('SIGTTOU',()=>{paused=true;void appendFile(join(root,'paused'),processId+'\n');});
+   const server=createServer(s=>{let buffer='',interactive=false;s.on('data',bytes=>{
+    buffer+=bytes;for(;;){const i=buffer.indexOf('\n');if(i<0)break;const command=buffer.slice(0,i);buffer=buffer.slice(i+1);
+     if(command==='prompt'){interactive=true;s.write('\n> ');continue;}
+     assert.equal(command,'show stat');
+     void(async()=>{
+      await appendFile(join(root,'samples'),processId+'\n');let active=false;
+      try{await readFile(join(root,'hold-drain'));active=true;}catch(e){if((e as NodeJS.ErrnoException).code!=='ENOENT')throw e;}
+      const csv='# pxname,svname,bin,bout,type,scur,qcur,status\n'+
+       `ingress,FRONTEND,0,0,0,${active?1:0},,${paused?'PAUSED':'OPEN'}\npublic_https,FRONTEND,0,0,0,0,,${paused?'PAUSED':'OPEN'}\n`+
+       names.map(n=>`${n},BACKEND,${paused?'20,50':'10,25'},1,0,0,UP\n`).join('');
+      if(interactive)s.write(csv+'\n> ');else s.end(csv);
+     })().catch(()=>s.destroy());
+    }
+   });});
    await new Promise<void>(resolve=>server.listen(socket,resolve));await chmod(socket,0o600);
    await writeFile(join(root,processId+'.ready'),'1');
   }else{

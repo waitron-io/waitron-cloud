@@ -76,6 +76,17 @@ export class GatewayTrafficRuntime {
   });
  }
  pid(processId:string):number|undefined{return this.#entries.get(processId)?.child?.pid;}
+ /** Finish only a captured predecessor; failure still stops it, while retained bytes remain retryable. */
+ finish(processId:string):Promise<void>{
+  return this.#run(async()=>{
+   const child=this.#entries.get(processId)?.child;if(!child)unavailable();
+   try{
+    if(!this.#ready||this.#stopping)unavailable();await this.#root();
+    await child.finish();
+   }finally{await child.stop();}
+   await child.flush();
+  });
+ }
  /** Signalling uses captured handles immediately; persistence still drains through each child's queue. */
  withdraw():Promise<void>{
   this.#withdrawals++;

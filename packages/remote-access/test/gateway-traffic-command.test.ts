@@ -71,7 +71,34 @@ test('gateway command reloads the same routes with a new signed process and pred
  const f=await fixture(t),held=await f.holdCountry();f.launch();const first=await f.prepared();await held.accepted();held.release();await f.publish({...f.manifest,sequence:2});
  const second=await waitFor(async()=>{const cs=await f.children();assert.equal(cs.length,2,f.output());return cs[1]!;});
  const saved=JSON.parse(await readFile(join(f.state,second.processId,'journal','prepared.json'),'utf8'));
- assert.equal(verifyTrafficLifecycle(saved.start,f.reporter.publicKey).predecessorId,first.processId);assert.ok(second.args.includes('-sf'));assert.ok(second.args.includes(String(first.pid)));
+ assert.equal(verifyTrafficLifecycle(saved.start,f.reporter.publicKey).predecessorId,first.processId);
+ assert.equal(second.args.includes('-sf'),false,'the predecessor statistics socket must survive successor launch');assert.equal(second.args.includes(String(first.pid)),false);
+ const end=await waitFor(async()=>{const envelopes=f.lifetimes.map(e=>verifyTrafficLifecycle(e,f.reporter.publicKey));const e=envelopes.find(e=>e.processId===first.processId&&e.kind==='end');assert.ok(e,f.output());return e;});
+ await waitFor(async()=>assert.throws(()=>process.kill(first.pid,0),/ESRCH/));assert.doesNotThrow(()=>process.kill(second.pid,0));
+ const reports=await waitFor(async()=>{
+  const names=(await readdir(f.reports)).filter(n=>n.startsWith(first.processId+'.'));const values=await Promise.all(names.map(async n=>verifyTrafficReport(JSON.parse(await readFile(join(f.reports,n),'utf8')),f.reporter.publicKey)));
+  assert.equal(values.length,end.finalSequence);return values;
+ });
+ assert.ok(reports.every(r=>r.complete));assert.equal(reports.at(-1)!.until,end.endedAt);
+ assert.equal(reports.flatMap(r=>r.entries).reduce((sum,e)=>sum+BigInt(e.ingress)+BigInt(e.egress),0n),140n);
+});
+
+// Awaiting graceful drain in authority.apply would delay an authenticated route removal by five seconds.
+test('gateway command processes route withdrawal while predecessor quiescence is still draining',async t=>{
+ const f=await fixture(t),held=await f.holdCountry();await writeFile(join(f.root,'hold-drain'),'active');f.launch();const first=await f.prepared();await held.accepted();held.release();await f.publish({...f.manifest,sequence:2});
+ const second=await waitFor(async()=>{const cs=await f.children();assert.equal(cs.length,2,f.output());assert.ok((await readFile(join(f.root,'paused'),'utf8').catch(e=>{if(e.code!=='ENOENT')throw e;return '';})).includes(first.processId),'predecessor must enter controlled quiescence after successor launch');return cs[1]!;});
+ await f.publish({...f.manifest,sequence:3,routes:[]});await waitFor(async()=>{
+  for(const c of [first,second])assert.throws(()=>process.kill(c.pid,0),/ESRCH/);
+  const network=(await readFile(join(f.root,'network'),'utf8')).trim().split('\n').map(s=>JSON.parse(s));assert.ok(!network.at(-1).wireguard.includes('[Peer]'));
+ },2200);
+ const endPath=join(f.state,first.processId,'journal','end.json');await assert.rejects(readFile(endPath),/ENOENT/);
+});
+
+test('gateway command independently expires a draining predecessor while retaining its live successor',async t=>{
+ const f=await fixture(t,5000),held=await f.holdCountry();await writeFile(join(f.root,'hold-drain'),'active');f.launch();const first=await f.prepared();await held.accepted();held.release();await f.publish({...f.manifest,sequence:2,expiresAt:f.manifest.expiresAt+60000});
+ const second=await waitFor(async()=>{const cs=await f.children();assert.equal(cs.length,2,f.output());assert.ok((await readFile(join(f.root,'paused'),'utf8').catch(e=>{if(e.code!=='ENOENT')throw e;return '';})).includes(first.processId),'predecessor must enter controlled quiescence after successor launch');return cs[1]!;});
+ await waitFor(async()=>assert.throws(()=>process.kill(first.pid,0),/ESRCH/),Math.max(1,f.manifest.expiresAt+1600-Date.now()));
+ assert.ok(Date.now()<=f.manifest.expiresAt+1600);assert.doesNotThrow(()=>process.kill(second.pid,0));await assert.rejects(readFile(join(f.state,first.processId,'journal','end.json')),/ENOENT/);
 });
 
 test('gateway command withdraws a changed route before its replacement waits on delivery',async t=>{

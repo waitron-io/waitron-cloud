@@ -56,11 +56,15 @@ async function apply(routes:GatewayRoute[]){
  await atomic('haproxy.cfg',renderHaproxy(routes,{port:443,publicTlsPort:8444,gatePort:8080,certificateDirectory:'/input/public-certs',traffic}));
  run('haproxy',['-c','-f',join(root,'haproxy.cfg')]);
  const previousPid=trafficRuntime&&currentTraffic?trafficRuntime.pid(currentTraffic):current?.pid;
- const args=['-db','-f',join(root,'haproxy.cfg'),...(alive()&&previousPid?['-sf',String(previousPid)]:[])];
+ // The traffic supervisor must retain the predecessor's stats socket through its final sample.
+ const args=['-db','-f',join(root,'haproxy.cfg'),...(!trafficRuntime&&alive()&&previousPid?['-sf',String(previousPid)]:[])];
  if(trafficRuntime&&traffic){
   await trafficRuntime.start({manifest:envelope,processId:processId!,startedAt:new Date().toISOString(),predecessorId:currentTraffic??null,socket:traffic.socket,command:'haproxy',args});
   await delay(200);if(trafficRuntime.pid(processId!)===undefined)throw new Error('gateway_start_failed');
-  currentTraffic=processId;lastRoutes=fingerprint;lastTrafficRoutes=JSON.stringify(routes);return;
+  const predecessor=currentTraffic;currentTraffic=processId;lastRoutes=fingerprint;lastTrafficRoutes=JSON.stringify(routes);
+  // Drain and country delivery must not hold up the next authenticated withdrawal.
+  if(predecessor)void trafficRuntime.finish(predecessor).catch(trafficError);
+  return;
  }
  const child=spawn('haproxy',args,{stdio:['ignore','ignore','pipe']});children.add(child);child.stderr?.on('data',()=>{});child.once('exit',()=>children.delete(child));
  await new Promise<void>((resolve,reject)=>{child.once('error',reject);const timer=setTimeout(resolve,200);child.once('exit',()=>{clearTimeout(timer);reject(new Error('gateway_start_failed'));});});
