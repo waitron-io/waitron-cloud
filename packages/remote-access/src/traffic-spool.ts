@@ -251,6 +251,15 @@ export class TrafficSpool {
    }finally{await directory.close();}
   });
  }
+ /** Unlike the legacy recovery view, an unreadable sampling cursor must never look unused. */
+ async cursor():Promise<{processId:string;sequence:number;until:string;counters:Map<string,TrafficCounter>;complete:boolean}|null>{
+  return this.#locked(async()=>{
+   const state=await this.#load(),gap=await this.#read('gap',16);
+   if(!state){if(gap!==undefined)unavailable();return null;}
+   return {processId:state.processId,sequence:state.sequence,until:state.until,counters:new Map(state.counters),complete:state.complete&&gap===undefined};
+  });
+ }
+ async markGap():Promise<void>{return this.#locked(()=>this.#gap());}
  async restore():Promise<{processId:string;sequence:number;counters:Map<string,TrafficCounter>;complete:boolean}>{
   // Local continuity is not trial coverage: the country route/process journal must also cover unsampled tails.
   try{return await this.#locked(async()=>{
