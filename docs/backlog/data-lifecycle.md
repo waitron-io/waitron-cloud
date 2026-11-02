@@ -1,5 +1,12 @@
 # Data lifecycle
 
+D101 slice 4 supplies a disabled [venue lifecycle journal](../data-lifecycle-journal.md).
+It records fixed cancellation deadlines, worker claims and uncertain effects in
+PostgreSQL. Its separate current-candidate upgrade receipt requires both backup
+recoveries, retained UTC deadlines and refusal of replaced claims; historical
+billing and venue-authority proofs keep their original release pairs. It does not implement service exit, full download, reactivation or
+all-copy purge; the operational controls below retain their separate scope.
+
 The internal managed-backup catalogue now protects the latest
 successfully verified snapshot (or newest snapshot when none has verified) and active
 recoveries, with automatic operation expiry, resumable deletion and
