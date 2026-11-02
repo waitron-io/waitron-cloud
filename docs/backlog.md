@@ -1562,6 +1562,11 @@ implementation or production evidence.
   leave its running containers and data untouched. Keep address providers disabled
   and the existing translation release gates in place. A free plan permits a
   service only after that service's independent prerequisites pass.
+  The separate fixed-project entry point now admits only an empty
+  `waitron-cloud-test` namespace under a host lock. It exercises the actual
+  Compose project through matching restore, retaining random loopback ports.
+  Native qualification is pending; it does not deploy or enable enforcement.
+  See [the fixed-project proof](test-cloud.md#prove-the-fixed-project-without-adopting-an-existing-deployment).
 
 
 - **Translation worker lock-probe timing is now independently exercised.** The

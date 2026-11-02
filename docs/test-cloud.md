@@ -1633,3 +1633,29 @@ These readings qualify resources for this disposable run and its exact measured
 source. They do not certify the fixed deployment project or a published-release
 upgrade. Complete integration and shipping qualification stay false; enforcement
 stays off. Historical gaps remain attached to their earlier sources.
+
+## Prove the fixed project without adopting an existing deployment
+
+A randomly named integration project cannot prove that the fixed project keeps
+its private identity. Use the separate fixed-project proof on an empty Docker
+namespace, with immutable Cloud and pinned Waitron images:
+
+```sh
+TEST_CLOUD_INTEGRATION_IMAGE=sha256:<cloud-image> \
+TEST_CLOUD_INTEGRATION_WAITRON_IMAGE=sha256:<waitron-image> \
+TEST_CLOUD_INTEGRATION_WAITRON_CHECKOUT=<clean-pinned-checkout> \
+TEST_CLOUD_PROTECTED_CONTAINER_IDS='<three-protected-ids-as-json>' \
+node --test scripts/test-cloud-fixed-project.test.mjs
+```
+
+The proof uses the actual Compose name `waitron-cloud-test` throughout creation,
+measurement, matching backup restore and cleanup. It holds a host lock until the
+proof finishes and refuses existing project containers, networks, volumes or
+fixture image tags before allocating anything. An inspection failure also
+refuses admission. Never remove an existing lock or deployment to make it pass.
+
+This remains a temporary integration proof with random loopback ports. It does
+not publish the LAN service or enable plan enforcement in a deployed release.
+The existing combined proof retains its randomly named project and all its
+checks. Native qualification of this new fixed-project entry point is pending;
+published-release upgrade and complete receipt assembly remain open.

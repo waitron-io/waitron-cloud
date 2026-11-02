@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import {setTimeout as delay} from 'node:timers/promises';
 
 export function checkColdRollbackProject(rows, {project, image, account, expectedIds}) {
-  assert.match(project, /^waitron-cloud-test-integration-[a-f0-9]{8}$/);
+  assert.match(project, /^waitron-cloud-test(?:-integration-[a-f0-9]{8})?$/);
   assert.match(image, /^sha256:[a-f0-9]{64}$/);
   assert.ok(expectedIds.length > 0 && expectedIds.includes(account));
   assert.equal(new Set(expectedIds).size, expectedIds.length);

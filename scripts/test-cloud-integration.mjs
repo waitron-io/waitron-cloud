@@ -19,6 +19,7 @@ import {readIntegrationInventory} from '../deploy/test-cloud/test-fixtures/integ
 import {probeIntegrationAssets, integrationAssetSummary} from '../deploy/test-cloud/test-fixtures/integration-asset-probe.mjs';
 import {captureWaitronSource} from '../deploy/test-cloud/test-fixtures/integration-waitron-source.mjs';
 import {probeWaitronSource} from '../deploy/test-cloud/test-fixtures/integration-waitron-source-probe.mjs';
+import {withFixedIntegrationProject} from '../deploy/test-cloud/test-fixtures/integration-fixed-project.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const origin = 'https://waitron.local:3000', revision = 'ec91a9e34d2daba146f4ee61850ea4136ad5cfb7';
@@ -71,6 +72,14 @@ export async function runTestCloudCombined({image, waitronImage, protectedContai
   return receipt;
 }
 
+export async function runTestCloudFixedProject({image, waitronImage, protectedContainerIds = [], waitronCheckout} = {}) {
+  const receipt = await runTestCloudClients({image, waitronImage, protectedContainerIds, waitronCheckout,
+    fixedProject: true, paidContinuousRecovery: true, freeRemote: true, paidRemote: true,
+    measureCapacity: true, measureIntegration: true, schemaRollback: true, sourceProvenance: true});
+  receipt.withdrawal = createTestCloudWithdrawalReceipt(receipt);
+  return receipt;
+}
+
 export async function runTestCloudPairedExpiry({image, waitronImage, protectedContainerIds = [], waitronCheckout} = {}) {
   const receipt = await runTestCloudClients({image, waitronImage, protectedContainerIds, waitronCheckout,
     paidContinuousRecovery: true, freeRemote: true, paidRemote: true,
@@ -88,7 +97,14 @@ export function checkProtectedContainers(before, after, ids) {
   return true;
 }
 
-export async function runTestCloudClients({image, waitronImage, protectedContainerIds = [], waitronCheckout = process.env.TEST_CLOUD_INTEGRATION_WAITRON_CHECKOUT, paidSnapshot = false, paidVerification = false, paidRecovery = false, paidAuthorisedRecovery = false, paidStream = false, paidContinuousRecovery = false, freeRemote = false, paidRemote = false, cloudRollback = false, measureCapacity = false, measureIntegration = false, schemaRollback = false, sourceProvenance = false, pairedExpiry = false} = {}) {
+export async function runTestCloudClients(options = {}) {
+  if (!digest.test(options.image) || !digest.test(options.waitronImage)) throw Error('integration.image_invalid');
+  if (options.fixedProject) return withFixedIntegrationProject({docker: command,
+    run: project => runClients(options, project)});
+  return runClients(options);
+}
+
+async function runClients({image, waitronImage, protectedContainerIds = [], waitronCheckout = process.env.TEST_CLOUD_INTEGRATION_WAITRON_CHECKOUT, paidSnapshot = false, paidVerification = false, paidRecovery = false, paidAuthorisedRecovery = false, paidStream = false, paidContinuousRecovery = false, freeRemote = false, paidRemote = false, cloudRollback = false, measureCapacity = false, measureIntegration = false, schemaRollback = false, sourceProvenance = false, pairedExpiry = false}, fixedProject) {
   measureCapacity ||= measureIntegration;
   paidStream ||= paidContinuousRecovery;
   paidAuthorisedRecovery ||= paidStream;
@@ -97,7 +113,7 @@ export async function runTestCloudClients({image, waitronImage, protectedContain
   if (sourceProvenance) assert.ok(typeof waitronCheckout === 'string' && waitronCheckout.length > 0, 'integration.waitron_checkout_required');
   const waitronSource = sourceProvenance ? await captureWaitronSource(waitronCheckout, revision) : undefined;
   const source = sourceProvenance ? await captureIntegrationSource(root) : undefined;
-  const runId = randomUUID(), project = 'waitron-cloud-test-integration-' + runId.slice(0, 8);
+  const runId = randomUUID(), project = fixedProject ?? 'waitron-cloud-test-integration-' + runId.slice(0, 8);
   let cleanupCheckpoint;
   const docker = async (args, input = '', phase) => {
     try {return await command(args, input, phase, {TEST_CLOUD_IMAGE: image});}
@@ -605,7 +621,7 @@ export async function runTestCloudClients({image, waitronImage, protectedContain
       if (schemaRollback) schemaRollbackEvidence = evidence; else cloudRollbackEvidence = evidence;
     }
     for (const key of ['organisationId', 'venueId', 'installationId', 'localVenueId', 'stateSha256']) assert.equal(new Set(organisations.map(value => value[key])).size, 2, 'integration.distinct_' + key);
-    result = {version: 1, kind: 'test-cloud-clients', runId, completeIntegration: false, origin, waitronHead: revision, image, waitronImage,
+    result = {version: 1, kind: 'test-cloud-clients', runId, ...(fixedProject ? {project} : {}), completeIntegration: false, origin, waitronHead: revision, image, waitronImage,
       ...(cloudSource ? {cloudSource} : {}),
       ...(waitronBaseSource && waitronClientSource ? {waitronSource: {base: waitronBaseSource, client: waitronClientSource}} : {}),
       ...(cloudAssets && waitronAssets ? {assets: {cloud: cloudAssets, waitron: waitronAssets}} : {}),
