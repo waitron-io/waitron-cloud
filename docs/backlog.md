@@ -929,6 +929,23 @@ implementation or production evidence.
   observation times; independent native provider expiry cannot substitute. Its
   controls use synthetic observations. The complete observation producer remains
   unbuilt, so this boundary supplies no complete integration or shipping verdict.
+  A separate [paired-expiry operator journey](test-cloud.md#observe-the-paired-snapshot-grant-until-expiry)
+  now retains the same combined run's paid installation and original snapshot
+  grant through real waiting. Its observer checks both clocks, unchanged grant
+  identity and the existing provider-expiry refusal before matching rollback.
+  The original ten-minute combined case and every old assertion remain unchanged;
+  the new operator has a separate twenty-minute deadline and opt-in. Its focused
+  controls pass. At `59f33cfc`, both source-bound Linux operator cases pass without
+  skips in 1,053.2 seconds under their separate 1,200-second deadline. The original
+  paired grant receives storage `403 InvalidAccessKeyId` at
+  `2026-11-02T03:38:53.342Z`, after its `03:38:52Z` expiry. Its observed downgrade
+  withdrawal bound is 625.605 seconds; stream withdrawal is 6.680 seconds and
+  gateway withdrawal 6.388 seconds. All 1,699 runtime inputs match. Both original
+  pairings survive rollback; 470 whole-journey readings span 1,008.8 seconds with
+  gaps at most 3.990 seconds. All 27 observer controls pass and ten installed guard
+  faults are caught. The original tests, SQL and dependencies remain unchanged.
+  The 13.376 GiB disk baseline remains below the unchanged shipping floor.
+  Complete resources, release/generated assets and shipping qualification stay open.
   A [combined journey](test-cloud.md#run-the-journeys-in-one-project) now requires
   recovery, remote withdrawal, measured capacity and matching-set rollback in one
   disposable project. It passes on the isolated Linux box in 385 seconds without

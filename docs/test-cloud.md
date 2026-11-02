@@ -1344,3 +1344,43 @@ records residual access. Do not fill missing observations with synthetic values
 or attach the independent provider test as paired expiry. Complete observation
 collection, published-release qualification and the unchanged shipping resource
 floors remain required. Keep plan enforcement off.
+
+### Observe the paired snapshot grant until expiry
+
+The ten-minute combined journey ends while its saved snapshot grant still works.
+To measure when that same grant expires, use the separate operator journey with
+the same pinned image variables and protected container IDs:
+
+```bash
+TEST_CLOUD_PAIRED_EXPIRY=1 node --test scripts/test-cloud-paired-expiry.test.mjs
+```
+
+This journey keeps its original paid installation and private grant through the
+real remaining lifetime. It compares the wall clock with an elapsed-time clock,
+then asks storage to use the original grant again. A changed point, owner, grant
+lifetime or downgrade time refuses the result. Only the existing provider check's
+post-expiry `403 InvalidAccessKeyId` can establish expiry. The journey then restores
+its matching four-volume backup, checks both original pairings and removes its
+owned resources. Resource observations continue during the wait.
+
+The operator case has its own twenty-minute deadline and an explicit opt-in. The
+original combined case keeps its ten-minute deadline and residual-access checks.
+You can exercise the new observer's clock and identity controls without images:
+
+```bash
+node --test deploy/test-cloud/integration-paired-expiry.test.mjs
+```
+
+At source `59f33cfc`, both Linux operator cases pass without skips in 1,053.2
+seconds. All 1,699 runtime inputs match the committed checkout. The paired grant
+expires at `2026-11-02T03:38:52Z`; storage returns `403 InvalidAccessKeyId` at
+`03:38:53.342Z`. The time from downgrade to that observation is 625.605 seconds.
+Both original pairings make fresh exchanges after the matching four-volume
+rollback. The 470 whole-journey resource readings have gaps at most 3.990 seconds.
+All 27 observer controls pass; ten deliberately omitted guards fail in an
+independently installed checkout, then the restored controls pass again.
+
+The operator still emits an incomplete client report. Its 13.376 GiB baseline
+fails the unchanged 20 GiB shipping start floor. Complete resource chronology,
+release/generated-asset provenance, matching deployment identity, published-release
+upgrade and shipping resource qualification remain required.
