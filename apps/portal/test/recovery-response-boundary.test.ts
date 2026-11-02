@@ -194,6 +194,7 @@ for (const action of ['inspect', ...actions] as const) {
 test('recovery HTTP Retry-After blocks inspection and approval until the stated wait ends', async t => {
   const {c, replies, calls} = harness(t);
   let clock = now; t.mock.method(Date, 'now', () => clock);
+  t.mock.method(performance, 'now', () => clock - now);
   replies.inspect = {body: pending}; await c.inspect(); select(c, 'approve');
   replies.approve = {body: {error: 'rate_limited'}, status: 429, retry: '30'};
   await c.approve();

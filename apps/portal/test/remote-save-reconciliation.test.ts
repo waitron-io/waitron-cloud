@@ -9,7 +9,7 @@ const original={installationId:id,revision:1,revoked:false,names:{staff:{assigne
 const dns={installationId:id,kind:'staff',hostname,records:[{type:'CNAME',name:hostname,value:assigned},{type:'CNAME',name:'_acme-challenge.staff.cafe.example',value:'_acme-challenge.staff.venue.example'}]};
 
 for(const committed of [true,false])test(`a 503 save with Retry-After re-reads once when the name ${committed?'was':'was not'} saved`,async t=>{
- let now=1_800_000_000_000;t.mock.method(Date,'now',()=>now);
+ let now=1_800_000_000_000;t.mock.method(Date,'now',()=>now);t.mock.method(performance,'now',()=>now-1_800_000_000_000);
  const starting={...original,names:{...original.names,staff:{assigned,current:committed?assigned:'staff.previous.example'}}};
  let saves=0,current=starting;const calls:Array<{path:string;body?:Record<string,unknown>}>=[];
  const controller=new RemoteController(()=>{},async<T>(path:string,body?:Record<string,unknown>):Promise<ApiResult<T>>=>{

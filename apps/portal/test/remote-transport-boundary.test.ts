@@ -26,6 +26,7 @@ type Reply = 'network' | {body?: unknown; status?: number; raw?: string; brokenB
 function fixture(t: TestContext) {
   let now = Date.parse(stamp);
   t.mock.method(Date, 'now', () => now);
+  t.mock.method(performance, 'now', () => now - Date.parse(stamp));
   for (const [name, value] of [
     ['location', {protocol: 'https:'}], ['document', {cookie: '__Host-cloud_csrf=remote-proof'}],
   ] as const) {

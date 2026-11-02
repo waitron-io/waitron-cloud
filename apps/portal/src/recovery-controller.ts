@@ -3,7 +3,7 @@ import type {Copy} from './locale.ts';
 import type {RecoveryView} from './recovery-types.ts';
 export class RecoveryController {
  requestId:string|undefined;code='';view:RecoveryView|undefined;venueId:string|undefined;pointId:string|undefined;source:'continuous'|'snapshot'|undefined;
- stopped=false;acceptLoss=false;uncertain=false;pending=false;retryAt=0;error:keyof Copy|undefined;
+ stopped=false;acceptLoss=false;uncertain=false;pending=false;error:keyof Copy|undefined;
  #confirmedReplacement:string|undefined;
  #account:string|undefined;#generation=0;#changed:()=>void;#request:typeof accountRequest;
  constructor(changed:()=>void,request:typeof accountRequest=accountRequest){this.#changed=changed;this.#request=request;}
@@ -13,7 +13,10 @@ export class RecoveryController {
  choose(venueId:string|undefined,pointId:string|undefined){this.#choose(venueId,pointId?'snapshot':undefined,pointId);}
  chooseContinuous(venueId:string|undefined){this.#choose(venueId,venueId?'continuous':undefined,undefined);}
  #choose(venueId:string|undefined,source:'continuous'|'snapshot'|undefined,pointId:string|undefined){if(venueId!==this.venueId||pointId!==this.pointId||source!==this.source){this.venueId=venueId;this.pointId=pointId;this.source=source;this.stopped=false;this.acceptLoss=false;}}
- get waiting(){return Math.max(0,Math.ceil((this.retryAt-Date.now())/1000));}
+ // Relative server waits keep their deadline across wall-clock corrections and account changes.
+ #retryUntil=0;
+ get retryAt(){const remaining=this.#retryUntil-performance.now();return remaining>0?Date.now()+remaining:0;}
+ get waiting(){return Math.max(0,Math.ceil((this.#retryUntil-performance.now())/1000));}
  inspect(){return this.#exchange('inspect');}
  approve(){return this.#exchange('approve');}
  close(){return this.#exchange('close');}
@@ -41,7 +44,7 @@ export class RecoveryController {
      400:{confirmation_required:action==='replace'?'recoveryReplacementConfirmation':'recoveryConfirmation',unverified:'recoveryUnverified',invalid_input:'recoveryInput'},
      409:{approval_required:'recoveryApprovalRequired',conflict:action==='replace'?'recoveryReplacementConflict':'recoveryConflict',target_not_fresh:'recoveryFreshTarget',recovery_active:'recoveryActive'},
     };
-    this.retryAt=Math.max(this.retryAt,Date.now()+result.retryAfterMs);
+    this.#retryUntil=Math.max(this.#retryUntil,performance.now()+result.retryAfterMs);
     this.error=result.status===429?'limited':result.status===401?'pairSession':result.status===403?(result.code==='local_integration_only'?'recoveryTestOnly':'forbidden'):result.status===410?'recoveryExpired':refusals[result.status]?.[result.code]??'unavailable';
     if(result.status===401||result.status===403){this.view=undefined;this.#confirmedReplacement=undefined;this.choose(undefined,undefined);}
    }

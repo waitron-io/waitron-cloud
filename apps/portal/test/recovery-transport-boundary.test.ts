@@ -29,6 +29,7 @@ function harness(t: TestContext, action: Action) {
   t.mock.timers.enable({apis: ['setTimeout']});
   let clock = now;
   t.mock.method(Date, 'now', () => clock);
+  t.mock.method(performance, 'now', () => clock - now);
   for (const [name, value] of [
     ['location', {protocol: 'https:'}], ['document', {cookie: '__Host-cloud_csrf=recovery-transport'}],
   ] as const) {

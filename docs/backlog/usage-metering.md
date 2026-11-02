@@ -72,8 +72,7 @@ without clearing the remaining alert wait. Run
 `node --test apps/portal/test/usage-shared-countdown-browser.test.ts` (D444).
 Usage and alert retry waits both use elapsed time and contribute their remaining
 delay to the shared countdown. Backup catalogue waits also use elapsed time. The
-remaining portal controllers retain their existing clock policy and can revive an expired wait after a backward clock correction;
-that separate issue remains open. Server authority and production metering remain separate
+installation, diagnostic, remote, recovery and translation-consent waits now measure elapsed time too. Their request gates and shared countdown keep a live wait through clock corrections and never revive an expired wait. HTTP date waits use the server Date header when available, and reading the response body consumes the original wait. Run `node --test apps/portal/test/panel-retry-clock.test.ts apps/portal/test/panel-retry-clock-browser.test.ts` for native and bilingual browser controls. Passkey, authenticator, account-security, session/logout and email waits retain their existing clock policy and remain open. Server authority and production metering remain separate
 qualification gates; database suites run in CI while local Docker is unavailable.
 
 ## Usage HTTP response boundaries (D409)

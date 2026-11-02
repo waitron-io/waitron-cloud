@@ -9,11 +9,14 @@ function browserSave(value:DiagnosticExport,name:string){
  try{link.href=url;link.download=name;link.click();}finally{URL.revokeObjectURL(url);}
 }
 export class DiagnosticController{
- pending=false;selected:string|undefined;error:keyof Copy|undefined;errorInstallationId:string|undefined;retryAt=0;
+ pending=false;selected:string|undefined;error:keyof Copy|undefined;errorInstallationId:string|undefined;
  #account:string|undefined;#generation=0;readonly #changed:()=>void;readonly #request:typeof accountRequest;readonly #save:Saver;
  constructor(changed:()=>void,request:typeof accountRequest=accountRequest,save:Saver=browserSave){this.#changed=changed;this.#request=request;this.#save=save;}
  account(id:string|undefined){if(id!==this.#account){this.#account=id;this.#generation++;this.pending=false;this.selected=undefined;this.error=undefined;this.errorInstallationId=undefined;}}
- get waiting(){return Math.max(0,Math.ceil((this.retryAt-Date.now())/1000));}
+ // Relative server waits keep their deadline across wall-clock corrections and account changes.
+ #retryUntil=0;
+ get retryAt(){const remaining=this.#retryUntil-performance.now();return remaining>0?Date.now()+remaining:0;}
+ get waiting(){return Math.max(0,Math.ceil((this.#retryUntil-performance.now())/1000));}
  async download(installationId:string){
   if(!this.#account||this.pending||this.waiting||!uuid.test(installationId))return;const generation=this.#generation;
   this.pending=true;this.selected=installationId;this.error=undefined;this.errorInstallationId=undefined;this.#changed();
@@ -27,7 +30,7 @@ export class DiagnosticController{
   this.#changed();
  }
  #failure(result:Extract<ApiResult<unknown>,{ok:false}>){
-  this.retryAt=Math.max(this.retryAt,Date.now()+result.retryAfterMs);
+  this.#retryUntil=Math.max(this.#retryUntil,performance.now()+result.retryAfterMs);
   this.error=result.status===429?'limited':result.status===401?'pairSession':result.status===403?(result.code==='permission_denied'?'permissionBusiness':'forbidden'):'diagnosticUnavailable';
  }
 }

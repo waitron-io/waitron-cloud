@@ -546,8 +546,7 @@ See [the boundaries and remaining work](backlog/diagnostic-download-http.md#diag
 
 ## Usage-read transport refusals and retry waits (D434, D436)
 
-**Open.** Fix the separate backward-clock revival of panels other than usage, alerts, backup catalogues and pairing; server
-authority and production metering remain unqualified.
+**Open.** Installation, diagnostic, remote, recovery and translation-consent retry waits now survive clock corrections. Passkey, authenticator, account-security, session/logout and email waits still need the same change; server authority and production metering remain unqualified.
 See [the boundaries and remaining work](backlog/usage-metering.md#usage-read-transport-refusals-and-retry-waits-d434-d436).
 
 ## Native storage admin fallback exhaustion (D506)
