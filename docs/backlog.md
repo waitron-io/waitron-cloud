@@ -1467,10 +1467,11 @@ implementation or production evidence.
   The checkpoint boundary recurred in [run 41449381877, job 125290693382](https://github.com/waitron-io/waitron-cloud/actions/runs/41449381877/job/125290693382)
   with `transfer-interrupted`, zero pending and 111 completed transfers. Its trace
   discarded the HTTP details already recorded by the transport. You now retain
-  the first HTTP event, network error code, storage operation, count of idle
+  the recorded HTTP event, network error code, storage operation, count of idle
   callbacks at admission, closed-client flag and response-header flag through
   the worker and host. These optional fields accept only fixed codes, booleans
   and a bounded count. Raw paths, headers, bodies and error text stay private.
+  Read these as recorded transport fields, rather than proof of one exception.
   A real HTTP control cancels a LIST after an idle callback and verifies that
   the details survive while accounting still refuses publication. Run
   `node --test scripts/cloud-cost/checkpoint-transport-details.test.mjs`.

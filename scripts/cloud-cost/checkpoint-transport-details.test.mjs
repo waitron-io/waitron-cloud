@@ -51,6 +51,12 @@ const base = { kind: 'checkpoint-transport', reason: 'transfer-interrupted', val
 const details = { code: 'ECONNRESET', ioEvent: 'response-aborted', operation: 'get',
   idleActionsAtAdmission: 0, clientClosed: false, responseHeadersSeen: true };
 
+test('checkpoint accepts the inclusive idle callback count limit', () => {
+  const event = { ...base, idleActionsAtAdmission: 1000000000 };
+  assert.deepEqual(checkpointTransportDiagnostic(event), event);
+  assert.deepEqual(workerFailureTrace([event]), [event]);
+});
+
 // A stale host validator would erase the whole trace even if the worker writes the new details.
 test('checkpoint HTTP evidence survives worker serialization and is copied', () => {
   const trace = [{ ...base, ...details }];
@@ -64,6 +70,7 @@ test('checkpoint HTTP evidence survives worker serialization and is copied', () 
 for (const [key, value] of [
   ['code', 'PRIVATE_CODE'], ['ioEvent', 'PRIVATE_EVENT'], ['operation', 'PRIVATE_PATH'],
   ['idleActionsAtAdmission', -1], ['idleActionsAtAdmission', 1e20], ['idleActionsAtAdmission', 1.5],
+  ['idleActionsAtAdmission', 1000000001],
   ['clientClosed', 'PRIVATE_STATE'], ['responseHeadersSeen', 'PRIVATE_HEADERS'],
 ]) test(`checkpoint filters and worker refuses invalid HTTP detail ${key}=${value}`, () => {
   assert.deepEqual(checkpointTransportDiagnostic({ ...base, [key]: value, path: 'PRIVATE_PATH' }), base);

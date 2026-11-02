@@ -18,7 +18,7 @@ const transportDetails = {
   responseHeadersSeen: value => typeof value === 'boolean',
 };
 
-// A checkpoint includes accounting and request metadata; only these fixed codes and counts may leave the worker.
+// Checkpoint metadata can be private; publish only fixed codes, bounded counts and boolean flags.
 export function checkpointTransportDiagnostic(snapshot) {
   const reason = transportReasons.includes(snapshot.reason) ? snapshot.reason : 'unknown';
   const details = {};
