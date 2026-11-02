@@ -1023,10 +1023,17 @@ implementation or production evidence.
   at `2e46a9b0` passes in 463.4 seconds: all 231 shared-clock intervals stay below
   4.394 seconds, including eight readings across 14.1 seconds of cleanup. Final
   owned usage is zero; independent audit verifies all 238 recorded owned container
-  IDs absent and protected Waitron unchanged. The strict resource reader still
-  refuses the measured 13.799 GiB baseline against the unchanged 20 GiB startup
-  floor. Matching deployment identity, published-release upgrade and shipping
-  qualification remain open; enforcement stays off.
+  IDs absent and protected Waitron unchanged. Those original observations still
+  refuse the unchanged 20 GiB startup floor at their measured 13.799 GiB baseline.
+  After the owner-authorised test-box cleanup, a fresh run from `4c21d45e` passes
+  both combined cases in 460.4 seconds and the strict resource reader accepts all
+  239 readings. The longest interval is 3.649 seconds; available memory stays
+  above 3,061 MiB, with 50.784 GiB disk before and 50.671 GiB after. Peak Cloud
+  memory is 1,046.3 MiB and verifier memory is 276.2 MiB, including scratch.
+  Independent audit verifies all 247 recorded owned container IDs absent and
+  protected Waitron unchanged. This qualifies the measured resources for that
+  disposable source-bound run only. Matching deployment identity, published-release
+  upgrade and shipping qualification remain open; enforcement stays off.
   A [combined journey](test-cloud.md#run-the-journeys-in-one-project) now requires
   recovery, remote withdrawal, measured capacity and matching-set rollback in one
   disposable project. It passes on the isolated Linux box in 385 seconds without

@@ -1613,8 +1613,23 @@ The final cleanup sample reports zero owned container memory and fixture data.
 Independent audit finds all 238 recorded owned container IDs absent and the
 protected Waitron IDs, start times and health unchanged.
 
-The resource reader still refuses `resource_evidence.baseline`: the measured
-13.799 GiB disk baseline is below 20 GiB, and the after-cleanup reading is
-13.686 GiB. Matching deployment identity, published-release upgrade and shipping
-qualification remain open. Complete integration stays false and enforcement stays
-off. Historical gaps remain attached to their earlier sources.
+The earlier observations still refuse `resource_evidence.baseline`: their measured
+13.799 GiB disk baseline is below 20 GiB, and their after-cleanup reading is
+13.686 GiB. Keep those original results attached to their source.
+
+After the owner-authorised test-box cleanup, a fresh run from `4c21d45e` passes
+both combined cases without skips in 460.4 seconds. You can validate its raw
+measurements with `node scripts/test-cloud-resource-evidence.mjs <observations.json>`.
+The strict reader accepts all 239 readings with the original 20/15 GiB disk and
+4,096/2,048 MiB memory floors. No interval exceeds 3.649 seconds. Available memory
+stays above 3,061 MiB; disk measures 50.784 GiB before and 50.671 GiB after.
+Peak Cloud memory is 1,046.3 MiB; the verifier reaches 276.2 MiB, including
+7.852 MiB scratch. Fixture data peaks at 416,915,456 bytes. The seven cleanup
+readings end with zero owned memory and fixture data. Independent audit verifies
+all 247 recorded owned container IDs absent and the protected Waitron IDs, start
+times and health unchanged.
+
+These readings qualify resources for this disposable run and its exact measured
+source. They do not certify the fixed deployment project or a published-release
+upgrade. Complete integration and shipping qualification stay false; enforcement
+stays off. Historical gaps remain attached to their earlier sources.
