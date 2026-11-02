@@ -53,10 +53,13 @@ export async function measureRemoteJourneys(options) {
         need(cookie.length > 0);
         const staff = await call('staff-read', '/management-api/staff', 200, { cookie });
         need(Array.isArray(JSON.parse(staff.bytes)) && JSON.parse(staff.bytes).length > 0);
-        const canvases = await call('dashboard-canvases-read', '/management-api/canvases', 200, { cookie });
-        need(Array.isArray(JSON.parse(canvases.bytes).canvases));
-        const theme = await call('dashboard-theme-read', '/management-api/theme', 200, { cookie });
-        need(Object.hasOwn(JSON.parse(theme.bytes), 'theme'));
+        const profiles = await call('dashboard-device-profiles-read', '/management-api/device-profiles', 200, { cookie });
+        const { deviceProfiles } = JSON.parse(profiles.bytes);
+        need(Array.isArray(deviceProfiles) && deviceProfiles.length > 0
+          && deviceProfiles.every(profile => profile && typeof profile === 'object' && !Object.hasOwn(profile, 'canvasId')));
+        const theme = await call('dashboard-themes-read', '/management-api/themes', 200, { cookie });
+        const themes = JSON.parse(theme.bytes);
+        need(Array.isArray(themes.themes) && Object.hasOwn(themes, 'inUse'));
         const again = await call('staff-reconnect-read', '/management-api/staff', 200, { cookie });
         need(again.bytes.equals(staff.bytes));
         await call('sign-out', '/management-api/session', 204, { cookie, method: 'DELETE' });

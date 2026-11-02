@@ -34,8 +34,9 @@ const exports=[
  ['createAlertRegistry','apps/server/src/alerts.ts'],['mountSpa','apps/server/src/spa-api.ts'],
 ];
 
+const ownerExports=[['mountThemesApi','apps/server/src/themes-api.ts']];
 const browserExports=[
- ['mountThemesApi','apps/server/src/themes-api.ts'],['mountDiskStopApi','apps/server/src/disk-stop-api.ts'],
+ ...ownerExports,['mountDiskStopApi','apps/server/src/disk-stop-api.ts'],
 ];
 
 function replayClockBuild(source) {
@@ -181,7 +182,8 @@ export async function prepareConformance(selected) {
       }
       code=join(root,'runtime');mkdirSync(code,{mode:0o700});runtime=join(code,'runtime.mjs');
       const entry=join(source,'cloud-cost-entry.mjs');
-      writeFileSync(entry,(selected.includes('remote-browser-conformance.test.mjs')?[...exports,...browserExports]:exports).map(([names,path])=>`export {${names}} from ${JSON.stringify('./'+path)};`).join('\n')
+      writeFileSync(entry,(selected.includes('remote-browser-conformance.test.mjs')?[...exports,...browserExports]
+        :selected.includes('remote-waitron-conformance.test.mjs')?[...exports,...ownerExports]:exports).map(([names,path])=>`export {${names}} from ${JSON.stringify('./'+path)};`).join('\n')
         +(revision===replayRevision?replayEntry(source):''));
       await build({entryPoints:[entry],outfile:runtime,bundle:true,platform:'node',format:'esm',target:'node26',
         ...replayBuild,
@@ -190,6 +192,8 @@ export async function prepareConformance(selected) {
       if(selected.includes('remote-browser-conformance.test.mjs')) {
         mkdirSync(join(code,'assets'));
         cpSync(join(source,'apps/server/src/assets/invoice-noto-sans.ttf'),join(code,'assets/invoice-noto-sans.ttf'));
+      }
+      if(selected.some(name=>['remote-browser-conformance.test.mjs','remote-waitron-conformance.test.mjs'].includes(name))) {
         const tokens=join(code,'node_modules/@waitron/ui-core');
         mkdirSync(join(tokens,'src/tokens'),{recursive:true});
         cpSync(join(source,'packages/ui-core/package.json'),join(tokens,'package.json'));

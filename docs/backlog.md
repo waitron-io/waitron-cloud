@@ -2,29 +2,38 @@
 
 ## Cloud backup box identity (D451)
 
-**Open.** PR #700 prepares the matching node-only Waitron release
-`b1b0f10952a59eb59f7358bd681a3cdc94d9b61c`, checks its bundle digest and copies the
-pinned invoice font. Native checks prove that the generated test venue uses
-Waitron's ordinary installation allocation and retains standard, full and
-rectificative invoice series. Sale totals, invoice counters, hashes, rollback,
-source identity and private-file checks remain required. The peer's provisioning
-caller uses the same preproduction allocation path.
-The generated recovery caller now accepts only its own captured archive, drains and
-closes the source writer, authenticates with the node recovery key, and uses
-Waitron's prepared recovery runner. Native checks retain the real restore hooks,
-private state, sales and new installation. Wrong keys, altered recovery bindings,
-expired callback permissions and replaced destinations refuse. Clock observations
-are explicitly synthetic; the real observer and admission checks still run, with
-the pinned release's actual generated timestamp and no external clock request.
-Current receipt builders require the new release. Historical archives retain their
-original revision and validation; historical reports reject mixed releases.
-The [compatibility design](superpowers/specs/2026-11-01-replay-allocation-compatibility-design.md)
-and [implementation plan](superpowers/plans/2026-11-01-replay-allocation-compatibility.md)
-retain the qualification gates. Linux container interoperability, complete backup
-readbacks, whole-branch review and current-head CI remain unfinished. The owner
-approved the bounded three-purpose fixture amendment; all other fiscal and restore
-outcomes stay unchanged. No fiscal implementation, golden result or immutable row
-changes here.
+Cloud's backup verifier reads `WAITRON_NODE_ID`, and generated replay state writes
+only that identity with private permissions. Replay uses the matching Waitron
+release `b1b0f10952a59eb59f7358bd681a3cdc94d9b61c`, checks its bundle digest,
+and carries the pinned invoice font. Generated setup uses Waitron's ordinary
+preproduction allocation with standard, full and rectificative series. Sale totals,
+invoice counters, hashes, rollback, source identity and private-file checks remain.
+
+Generated recovery accepts only its own captured archive, drains and closes the
+source writer, authenticates with the stored node recovery key, and uses Waitron's
+prepared runner and real restore hooks. Wrong keys, changed bindings, expired
+permissions and replaced destinations refuse. Clock observations are synthetic;
+the actual observer and admission checks still validate them, with the release's
+generated timestamp and no external clock request. This does not qualify production
+time sources.
+
+The gateway scenario reads the release's authenticated device profiles and themes.
+It requires nonempty profiles without retired canvas identifiers, a theme list and
+its `inUse` field. The private peer carries the real theme handler and its CSS token
+files. Authentication refusals, logout, reconnect, nine staff requests, six public
+requests, isolation and independent socket and byte accounting remain. Historical
+archive validation, measurements and browser qualification retain their original
+revisions and checks; current receipt builders require the matching replay release.
+
+**Still open under D79:** the genuine full-backup readback pairs both real servers,
+then ordinary native restore refuses `restore.hook_failed` for `fiscal-verifactu`
+with `sif.allocation_invalid`, before the container verifier runs. Preserve that
+refusal: restoring without allocation authority must not activate a fiscal server.
+The approved [non-activating verification contract](superpowers/specs/2026-10-18-backup-verification-without-fiscal-authority.md)
+and its [Cloud implementation plan](superpowers/plans/2026-10-21-cloud-backup-verification.md)
+own this remaining qualification. The [compatibility plan](superpowers/plans/2026-11-01-replay-allocation-compatibility.md)
+records the bounded fixture and route amendments. No fiscal implementation,
+immutable row, historical result or deployment authority changes here.
 
 ## Concurrent storage archive publication (D450)
 
