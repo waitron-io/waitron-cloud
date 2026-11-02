@@ -141,8 +141,9 @@ export class PortalApp {
   get waiting() {
     if (this.path === '/recover') return Math.max(this.recovery.waiting,this.backups.waiting,this.installations.waiting,Math.max(0,Math.ceil((this.session.retryAt-Date.now())/1000)));
     if (this.path === '/connect') return Math.max(this.pairing.waiting, Math.max(0, Math.ceil((this.session.retryAt - Date.now()) / 1000)));
-    const deadline = ['/', '/account'].includes(this.path) ? Math.max(this.session.retryAt,this.installations.retryAt,this.backups.retryAt,this.alerts.retryAt,this.translationConsent.retryAt,this.remote.retryAt,this.usage.retryAt,this.diagnostics.retryAt,this.authenticator.retryAt,this.passkeys.retryAt,this.security.retryAt) : Math.max(this.#emailCooldowns.get(`${this.operation}:${this.fields.email.trim().toLowerCase()}`) ?? 0, this.cooldownOperation === this.operation ? this.cooldownUntil : 0, this.path === '/login' ? Math.max(this.authenticator.retryAt,this.passkeys.retryAt) : 0);
-    return Math.max(0, Math.ceil((deadline - Date.now()) / 1000));
+    const deadline = ['/', '/account'].includes(this.path) ? Math.max(this.session.retryAt,this.authenticator.retryAt,this.passkeys.retryAt,this.security.retryAt) : Math.max(this.#emailCooldowns.get(`${this.operation}:${this.fields.email.trim().toLowerCase()}`) ?? 0, this.cooldownOperation === this.operation ? this.cooldownUntil : 0, this.path === '/login' ? Math.max(this.authenticator.retryAt,this.passkeys.retryAt) : 0);
+    const panelWait = ['/', '/account'].includes(this.path) ? Math.max(this.installations.waiting,this.backups.waiting,this.alerts.waiting,this.translationConsent.waiting,this.remote.waiting,this.usage.waiting,this.diagnostics.waiting) : 0;
+    return Math.max(panelWait, 0, Math.ceil((deadline - Date.now()) / 1000));
   }
   draw() {
     this.remote.expireForward();

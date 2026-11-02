@@ -32,8 +32,9 @@ function perform(controller: TranslationConsentController, action: Action) {
 for (const action of actions) for (const wait of waits) for (const status of [429, 503]) {
   test(`translation consent ${action} keeps ${status} ${wait.name} waits across account changes until exact expiry`, async t => {
     browser(t);
-    let now = 100000;
+    let now = 100000, elapsed = 0;
     t.mock.method(Date, 'now', () => now);
+    t.mock.method(performance, 'now', () => elapsed);
     let refused = false;
     const calls: RequestInit[] = [];
     t.mock.method(globalThis, 'fetch', async (url: unknown, init?: RequestInit) => {
@@ -65,11 +66,11 @@ for (const action of actions) for (const wait of waits) for (const status of [42
     refused = false;
     for (const candidate of actions) await perform(controller, candidate);
     assert.equal(calls.length, 2, 'switching accounts cannot bypass the server wait');
-    now = 106999;
+    now = 106999; elapsed = 6999;
     assert.equal(controller.waiting, 1);
     for (const candidate of actions) await perform(controller, candidate);
     assert.equal(calls.length, 2, 'no request is sent one millisecond before expiry');
-    now = 107000;
+    now = 107000; elapsed = 7000;
     assert.equal(controller.waiting, 0);
     assert.equal(calls.length, 2, 'expiry does not automatically repeat a request');
     await perform(controller, action);
@@ -95,10 +96,11 @@ for (const action of actions) for (const wait of waits) for (const status of [42
 }
 
 for (const action of actions) for (const wait of waits) {
-  test(`translation consent ${action} retains an earlier ${wait.name} deadline when the clock moves backward during HTTP`, async t => {
+  test(`translation consent ${action} does not revive an expired ${wait.name} deadline when the clock moves backward during HTTP`, async t => {
     browser(t);
-    let now = 100000;
+    let now = 100000, elapsed = 0;
     t.mock.method(Date, 'now', () => now);
+    t.mock.method(performance, 'now', () => elapsed);
     let mode: 'limited' | 'pending' | 'ready' = 'limited';
     let finish!: (response: Response) => void;
     let calls = 0;
@@ -113,7 +115,7 @@ for (const action of actions) for (const wait of waits) {
     await perform(controller, action);
     assert.equal(controller.retryAt, 107000);
     assert.equal(controller.waiting, 7);
-    now = 107001;
+    now = 107001; elapsed = 7001;
     mode = 'pending';
     const pending = perform(controller, action);
     assert.equal(controller.pending, true);
@@ -125,13 +127,10 @@ for (const action of actions) for (const wait of waits) {
     await pending;
     assert.equal(controller.pending, false);
     assert.equal(controller.error, action === 'read' ? 'unavailable' : 'translationConsentUncertain');
-    assert.equal(controller.retryAt, 107000, 'a shorter later wait cannot erase the preceding deadline');
-    assert.equal(controller.waiting, 3);
+    assert.equal(controller.retryAt, 0, 'a refusal without a delay cannot revive the expired wait');
+    assert.equal(controller.waiting, 0);
     mode = 'ready';
-    now = 106999;
-    for (const candidate of actions) await perform(controller, candidate);
-    assert.equal(calls, 2);
-    now = 107000;
+    assert.equal(calls, 2, 'rollback and refusal cannot retry automatically');
     await perform(controller, action);
     assert.equal(calls, 3);
     assert.equal(controller.loaded, true);
@@ -146,6 +145,7 @@ for (const action of actions) for (const wait of waits) for (const status of [42
   test(`translation consent ${action} requires explicit retry after ${status} ${wait.name} timers expire`, async t => {
     browser(t);
     t.mock.timers.enable({apis: ['Date', 'setTimeout'], now: 100000});
+    t.mock.method(performance, 'now', () => Date.now() - 100000);
     let refused = true;
     let calls = 0;
     t.mock.method(globalThis, 'fetch', async () => {

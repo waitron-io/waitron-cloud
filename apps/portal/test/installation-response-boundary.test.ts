@@ -196,6 +196,7 @@ for (const operation of ['load', 'revoke'] as const) {
     const {controller: c, replies, calls} = harness(t);
     let now = 1_800_000_000_000;
     t.mock.method(Date, 'now', () => now);
+    t.mock.method(performance, 'now', () => now - 1_800_000_000_000);
     await c.load();
     c.choose(installationId);
     const path = `/api/account/installations${operation === 'revoke' ? '/revoke' : ''}`;

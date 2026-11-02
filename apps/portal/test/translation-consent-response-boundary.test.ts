@@ -151,6 +151,7 @@ for (const operation of ['reload', 'agree', 'withdraw'] as const) {
   test(`translation consent ${operation} retains a server retry wait before retrying`, async t => {
     browser(t);
     t.mock.timers.enable({apis: ['Date'], now: 100000});
+    t.mock.method(performance, 'now', () => Date.now() - 100000);
     let limited = false;
     let requests = 0;
     t.mock.method(globalThis, 'fetch', async () => {

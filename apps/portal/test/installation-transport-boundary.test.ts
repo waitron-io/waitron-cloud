@@ -129,8 +129,9 @@ for (const operation of ['load', 'revoke'] as const) {
   for (const retry of ['30', 'Wed, 28 Oct 2026 12:00:30 GMT']) {
     test(`installation ${operation} Retry-After ${retry} survives account changes and clock rollback`, async t => {
       const {controller: c, calls, enqueue, seed} = harness(t);
-      let now = start;
+      let now = start, elapsed = 0;
       t.mock.method(Date, 'now', () => now);
+      t.mock.method(performance, 'now', () => elapsed);
       await seed();
       enqueue(operation, () => Response.json({error: 'rate_limited'}, {
         status: 429, headers: {'Retry-After': retry},
@@ -151,13 +152,13 @@ for (const operation of ['load', 'revoke'] as const) {
       }
       now = start - 5_000;
       await c.load(); await c.revoke();
-      assert.equal(c.waiting, 35);
+      assert.equal(c.waiting, 30);
       assert.equal(calls.length, 2);
-      now = start + 29_999;
+      now = start + 29_999; elapsed = 29_999;
       await c.load(); await c.revoke();
       assert.equal(c.waiting, 1);
       assert.equal(calls.length, 2);
-      now = start + 30_000;
+      now = start + 30_000; elapsed = 30_000;
       enqueue('load');
       await c.load();
       assert.equal(c.waiting, 0);

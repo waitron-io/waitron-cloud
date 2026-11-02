@@ -3,19 +3,22 @@ import type {Copy} from './locale.ts';
 import {remoteHostname,validRemoteView,validRemoteDns,type RemoteView,type RemoteDns,type RemoteKind} from './remote-types.ts';
 export class RemoteController {
  installationId:string|undefined;view:RemoteView|undefined;kind:RemoteKind='staff';hostname='';confirmation:{kind:RemoteKind;hostname:string;revision:number;records:RemoteDns['records']}|undefined;
- error:keyof Copy|undefined;notice:keyof Copy|undefined;pending=false;retryAt=0;
+ error:keyof Copy|undefined;notice:keyof Copy|undefined;pending=false;
  #account:string|undefined;#generation=0;#changed:()=>void;#request:typeof accountRequest;
  constructor(changed:()=>void,request:typeof accountRequest=accountRequest){this.#changed=changed;this.#request=request;}
  account(id:string|undefined){if(id!==this.#account){this.#account=id;this.close();}}
  get hostnameChanged(){return !!this.view?.names&&this.hostname.trim().toLowerCase().replace(/\.$/,'')!==this.view.names[this.kind].current;}
- get waiting(){return Math.max(0,Math.ceil((this.retryAt-Date.now())/1000));}
+ // Relative server waits keep their deadline across wall-clock corrections and account changes.
+ #retryUntil=0;
+ get retryAt(){const remaining=this.#retryUntil-performance.now();return remaining>0?Date.now()+remaining:0;}
+ get waiting(){return Math.max(0,Math.ceil((this.#retryUntil-performance.now())/1000));}
  close(){this.#generation++;this.installationId=undefined;this.view=undefined;this.hostname='';this.confirmation=undefined;this.pending=false;this.error=undefined;this.notice=undefined;}
  async open(id:string){if(!this.#account)return;this.close();this.installationId=id;this.kind='staff';await this.load();this.#changed();}
  choose(kind:RemoteKind){if(this.pending)return;this.kind=kind;this.edit(this.view?.names?.[kind].current??'');}
  edit(value:string){this.hostname=value;this.confirmation=undefined;this.error=undefined;this.notice=undefined;this.#changed();}
  #failure(result:Extract<ApiResult<unknown>,{ok:false}>){
   this.#clearForward();
-  this.retryAt=Math.max(this.retryAt,Date.now()+result.retryAfterMs);
+  this.#retryUntil=Math.max(this.#retryUntil,performance.now()+result.retryAfterMs);
   this.error=result.code==='remote_not_placed'?'remoteNotPlaced':result.status===429?'limited':result.status===401?'pairSession':result.status===403?(result.code==='permission_denied'?'permissionBusiness':result.code==='remote_plan_required'?'remotePlanRequired':result.code==='remote_setup_required'?'remoteSetupRequired':result.code==='remote_test_only'?'remoteTestOnly':result.code==='revoked'?'remoteRevoked':'forbidden'):result.code==='dns_not_verified'?'remoteDnsWait':result.code==='hostname_conflict'?'remoteNameTaken':result.status===409?'remoteConflict':result.status===400?'remoteInvalid':'unavailable';
   if(result.status===401||result.status===403){this.view=undefined;this.confirmation=undefined;this.hostname='';}
  }

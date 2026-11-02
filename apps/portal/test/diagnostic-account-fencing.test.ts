@@ -64,6 +64,7 @@ for (const account of ['different', 'return'] as const) {
     for (const [outcome, oldReply] of Object.entries(outcomes)) {
       test(`old diagnostic ${outcome} cannot affect ${account} account with ${current} download`, {timeout: 5_000}, async t => {
         t.mock.timers.enable({apis: ['Date'], now: Date.parse('2026-10-28T00:00:00Z')});
+  t.mock.method(performance, 'now', () => Date.now() - Date.parse('2026-10-28T00:00:00Z'));
         const {controller, replies, calls, saved, snapshot} = fixture();
         controller.account('first');
         const oldDownload = controller.download(first);
@@ -123,6 +124,7 @@ for (const account of ['different', 'return'] as const) {
 for (const [outcome, reply] of Object.entries(outcomes)) {
   test(`signing out discards a delayed diagnostic ${outcome}`, {timeout: 5_000}, async t => {
     t.mock.timers.enable({apis: ['Date'], now: Date.parse('2026-10-28T00:00:00Z')});
+  t.mock.method(performance, 'now', () => Date.now() - Date.parse('2026-10-28T00:00:00Z'));
     const {controller, replies, calls, saved, snapshot} = fixture();
     controller.account('first');
     const download = controller.download(first);
@@ -179,6 +181,7 @@ test('selecting the same account keeps its pending diagnostic download', async (
 
 test('changing accounts clears diagnostic feedback while preserving an existing server wait', async t => {
   t.mock.timers.enable({apis: ['Date'], now: Date.parse('2026-10-28T00:00:00Z')});
+  t.mock.method(performance, 'now', () => Date.now() - Date.parse('2026-10-28T00:00:00Z'));
   const {controller, replies, calls} = fixture();
   controller.account('first');
   const download = controller.download(first);

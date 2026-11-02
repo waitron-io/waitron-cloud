@@ -59,7 +59,7 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
       refreshed = installations; refreshFails = false;
       await page.evaluate(async ({installations, second, request, path}) => {
         const app = (window as any).app;
-        app.installations.installations = installations; app.installations.selectOrganisation(second); app.installations.retryAt = 0;
+        app.installations.installations = installations; app.installations.selectOrganisation(second); if (app.installations.waiting) throw Error('unexpected installation wait in fixture');
         app.remote.close(); app.backups.close(); app.path = path;
         app.recovery.open(undefined); app.recovery.open(request); app.recovery.code = '12345678';
         app.recovery.view = {requestId: request, state: 'awaiting_owner', expiresAt: new Date(Date.now() + 600000).toISOString(), operationId: null, operation: null};
