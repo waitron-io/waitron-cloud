@@ -1308,3 +1308,39 @@ The run records 182 whole-journey readings over 389 seconds, with gaps at most
 Baseline disk is 13.46 GiB, below the unchanged 20 GiB shipping startup floor.
 Complete integration and shipping qualification remain false. Keep enforcement
 off until the strict complete receipt and release/deployment gates pass.
+
+### Bind completion to the paired withdrawal
+
+A complete receipt must describe the withdrawal observed by its own paired
+installation. The separate native provider-lifetime test cannot establish when
+that installation's snapshot credentials stopped working.
+
+The final assembly command accepts a JSON object with two fields: `receipt`, the
+complete observation record in the existing strict format, and `withdrawal`, the
+source-bound paired withdrawal component. Both readers must accept their record,
+and the run, Cloud commit, tree, image and paid installation must match. The paired
+snapshot must have an observed post-expiry refusal. Its reported withdrawal time
+is the time from downgrade to that refusal observation, an upper bound on when
+access ended. Advertised lifetime and remaining validity cannot replace it.
+
+Once a producer supplies that complete observation bundle, you can assemble it
+without starting containers:
+
+```bash
+node scripts/complete-test-cloud-receipt.mjs /private/completion-input.json > /private/complete-receipt.json
+```
+
+On refusal, the command emits no receipt and exits with status 1. It prints a fixed
+message without echoing the rejected input. You can exercise this boundary with
+synthetic observations:
+
+```bash
+node --test deploy/test-cloud/integration-completion.test.mjs
+```
+
+The combined journey does not yet produce this complete input bundle. Its raw
+client report remains incomplete, and its paired snapshot observation still
+records residual access. Do not fill missing observations with synthetic values
+or attach the independent provider test as paired expiry. Complete observation
+collection, published-release qualification and the unchanged shipping resource
+floors remain required. Keep plan enforcement off.

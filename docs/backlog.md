@@ -923,6 +923,12 @@ implementation or production evidence.
   and test-box deployment remain open; plan enforcement stays off. PR7 now has a
   strict receipt reader with synthetic rejection tests for client/refusal evidence,
   protected container IDs, resource sampling, owned cleanup and rollback identity.
+  The [completion assembly boundary](test-cloud.md#bind-completion-to-the-paired-withdrawal)
+  now binds that record to the same run, Cloud source and paid installation's
+  withdrawal component. It requires observed paired snapshot expiry and matching
+  observation times; independent native provider expiry cannot substitute. Its
+  controls use synthetic observations. The complete observation producer remains
+  unbuilt, so this boundary supplies no complete integration or shipping verdict.
   A [combined journey](test-cloud.md#run-the-journeys-in-one-project) now requires
   recovery, remote withdrawal, measured capacity and matching-set rollback in one
   disposable project. It passes on the isolated Linux box in 385 seconds without
