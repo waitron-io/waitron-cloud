@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import {spawnSync} from 'node:child_process';
 
 const helper = await import('./storage-admin-diagnostics.mjs').catch(error => {
   if (error.code === 'ERR_MODULE_NOT_FOUND') return {};
@@ -118,4 +119,14 @@ test('a known operation does not inspect an opaque rejection', async () => {
   assert.equal(result.error, refusal);
   assert.equal(inspections, 0);
   assert.equal(decode(messages.at(-1)).state, 'refused');
+});
+
+
+test('a diagnostic timer cannot keep an otherwise idle control process alive', () => {
+  const program = `import {storageAdminOperations} from ${JSON.stringify(new URL('./storage-admin-diagnostics.mjs', import.meta.url).href)};
+    storageAdminOperations(() => {})('cleanup', () => new Promise(() => {}));`;
+  const result = spawnSync(process.execPath, ['--input-type=module','-e',program], {encoding:'utf8',timeout:2000});
+  assert.equal(result.error, undefined, result.stderr);
+  assert.equal(result.signal, null, result.stderr);
+  assert.equal(result.status, 0, result.stderr);
 });

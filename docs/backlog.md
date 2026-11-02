@@ -601,7 +601,9 @@ and monotonic elapsed times at entry, every five seconds while waiting and on
 settlement. Each operation permits sixteen waiting reports, marks the last one
 `waiting-limit` and releases its diagnostic timer. Reporter failures preserve the
 original result or refusal. Controlled held-bucket checks exercise the installed
-case and verify owned-child and scratch cleanup. All original assertions and the
+case and verify owned-child and scratch cleanup. Private cancellation controls
+also collect the captured native child and scratch, including cancellation before
+the native child is spawned. All original assertions and the
 90-second limit remain. Use the last `storage_admin_progress` record to separate
 reservation, exhausted or recovered startup, bucket creation, owner verification
 and cleanup. Startup still combines download, configuration, port selection and
