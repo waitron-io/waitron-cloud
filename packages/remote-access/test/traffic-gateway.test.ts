@@ -27,7 +27,7 @@ test('candidate gateway and PostgreSQL qualify a clean bound traffic receipt',{t
   const files={
    counters:['packages/remote-access/test/traffic-counters.test.ts'],
    collector:['packages/remote-access/test/traffic-exporter-store.test.ts','packages/remote-access/test/traffic-collector-store.test.ts'],
-   gateway:['deploy/test-cloud/allowance-traffic-proof.test.mjs','packages/remote-access/test/fixtures/traffic-rendered-haproxy.ts'],
+   gateway:['deploy/test-cloud/test-fixtures/allowance-traffic-proof.test.mjs','packages/remote-access/test/fixtures/traffic-rendered-haproxy.ts'],
   };
   for(const [id,paths]of Object.entries(files)){
    const container=docker(['create','--name',tag+'-'+id,'--network','container:'+database,'--cap-add','NET_ADMIN','--memory=512m','--cpus=1',
