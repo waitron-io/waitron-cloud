@@ -66,5 +66,6 @@ test('cold rollback accepts the specified fixed project and still rejects foreig
   assert.equal(checkColdRollbackProject([row], options), true);
   for (const changed of [{...row, Image: 'sha256:' + 'c'.repeat(64)}, {...row, State: {Running: true}},
     {...row, Config: {Labels: {'com.docker.compose.project': 'waitron'}}}]) assert.throws(() => checkColdRollbackProject([changed], options));
-  assert.throws(() => checkColdRollbackProject([row], {...options, project: 'waitron'}));
+  const foreign = {...row, Config: {Labels: {'com.docker.compose.project': 'waitron'}}};
+  assert.throws(() => checkColdRollbackProject([foreign], {...options, project: 'waitron'}));
 });
