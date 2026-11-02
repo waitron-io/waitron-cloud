@@ -99,3 +99,31 @@ test('allowance harness runs all three cases through the selected executable',as
  assert.equal(runs,'run\nrun\nrun\n','baseline, omission and restored tests must all execute inside the selected runtime');
  assert.equal(await readFile(join(f.candidate,'gate.mjs'),'utf8'),f.original);
 });
+
+async function batchHarness(){const module=await import('./allowance-traffic-guard-probes.mjs');assert.equal(typeof module.qualifyAllowanceBatches,'function');return module.qualifyAllowanceBatches;}
+test('allowance batches require every original guard exactly once before running work',async()=>{
+ const qualify=await batchHarness(),a={name:'a'},b={name:'b'};
+ for(const batches of [[],[[a]],[[a],[a,b]],[[a],[]],[[a],[{name:'b'}]],[[a],[b],[a]]])
+  await assert.rejects(qualify([a,b],batches,async()=>{assert.fail('invalid work must never begin');}),/batch_guard_set/);
+});
+test('allowance batches reject missing duplicate foreign or incomplete result receipts',async()=>{
+ const qualify=await batchHarness(),a={name:'a'},b={name:'b'},ok={guard:'a',baseline:1,detected:1,restored:1};
+ for(const results of [[],[ok],[ok,ok],[ok,{...ok,guard:'foreign'}],[ok,{...ok,guard:'b',restored:0}],[ok,{...ok,guard:'b',extra:true}]])
+  await assert.rejects(qualify([a,b],[[a,b]],async()=>results),/batch_results/);
+});
+test('allowance batches collect both failures before returning an error',async()=>{
+ const qualify=await batchHarness(),a={name:'a'},b={name:'b'},errors=[Error('first batch'),Error('second batch')];
+ let release;const blocked=new Promise(resolve=>{release=resolve;});let finished=false;
+ const pending=qualify([a,b],[[a],[b]],async(_batch,index)=>{if(index)await blocked;throw errors[index];});
+ void pending.then(()=>{finished=true;},()=>{finished=true;});
+ try{
+  await new Promise(resolve=>setImmediate(resolve));assert.equal(finished,false,'the second batch must finish before any failure is reported');
+  release();await assert.rejects(pending,error=>{assert.ok(error instanceof AggregateError);assert.deepEqual(error.errors,errors);return true;});
+ }finally{release();await pending.catch(()=>{});}
+});
+test('allowance batches retain the original guard order after independent completion',async()=>{
+ const qualify=await batchHarness(),a={name:'a'},b={name:'b'};
+ assert.deepEqual(await qualify([a,b],[[b],[a]],async batch=>batch.map(g=>({guard:g.name,baseline:1,detected:1,restored:1}))),[
+  {guard:'a',baseline:1,detected:1,restored:1},{guard:'b',baseline:1,detected:1,restored:1},
+ ]);
+});

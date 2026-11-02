@@ -97,31 +97,52 @@ async function qualifyGatewayGuard(candidate,guard,env){
  }
 }
 
+export async function qualifyAllowanceBatches(planned,batches,runBatch){
+ if(!Array.isArray(planned)||!planned.length||new Set(planned).size!==planned.length||planned.some(g=>!g||typeof g.name!=='string'||!g.name)
+  ||new Set(planned.map(g=>g.name)).size!==planned.length||!Array.isArray(batches)||batches.length<1||batches.length>2
+  ||batches.some(batch=>!Array.isArray(batch)||!batch.length))throw failure('batch_guard_set');
+ const work=batches.flat();
+ if(work.length!==planned.length||new Set(work).size!==work.length||work.some(g=>!planned.includes(g)))throw failure('batch_guard_set');
+ // Both independent candidates finish before the caller removes their shared preparation root.
+ const settled=await Promise.allSettled(batches.map((batch,index)=>runBatch(batch,index)));
+ const errors=settled.filter(value=>value.status==='rejected').map(value=>value.reason);
+ if(errors.length)throw new AggregateError(errors,'allowance_traffic_guard.batch_failed');
+ const results=settled.flatMap(value=>value.value);
+ if(results.length!==planned.length||new Set(results.map(r=>r?.guard)).size!==planned.length
+  ||results.some(r=>!r||typeof r!=='object'||Object.keys(r).sort().join(',')!=='baseline,detected,guard,restored'
+   ||!planned.some(g=>g.name===r.guard)||r.baseline!==1||r.detected!==1||r.restored!==1))throw failure('batch_results');
+ return planned.map(g=>results.find(r=>r.guard===g.name));
+}
 export async function qualifyAllowanceGuards(mode){
  if(!Object.hasOwn(guards,mode))throw failure('invalid_mode');
  if(mode==='database'&&!process.env.TEST_DATABASE_URL)throw failure('database_required');
- const root=fileURLToPath(new URL('../',import.meta.url)),scratch=await mkdtemp(join(tmpdir(),'allowance-traffic-guards-')),candidate=join(scratch,'candidate');
+ const root=fileURLToPath(new URL('../',import.meta.url)),scratch=await mkdtemp(join(tmpdir(),'allowance-traffic-guards-'));
  const env={...process.env};delete env.NODE_TEST_CONTEXT;delete env.NODE_OPTIONS;
  if(mode==='pure')delete env.TEST_DATABASE_URL;
  try{
-  await exec('git',['clone','--quiet','--shared',root,candidate],{env,timeout:10000});
-  const {stdout:patch}=await exec('git',['diff','--binary','HEAD'],{cwd:root,env,maxBuffer:16*1024*1024});
-  if(patch){
-   const file=join(scratch,'candidate.patch');await writeFile(file,patch);
-   await exec('git',['apply','--index','--binary',file],{cwd:candidate,env});
-  }
-  const {stdout:untracked}=await exec('git',['ls-files','--others','--exclude-standard','-z'],{cwd:root,env});
-  for(const path of untracked.split('\0').filter(Boolean)){
-   await mkdir(dirname(join(candidate,path)),{recursive:true});
-   await cp(join(root,path),join(candidate,path),{recursive:true,dereference:false});
-  }
-  await exec('pnpm',['install','--frozen-lockfile'],{cwd:candidate,env,timeout:30000,maxBuffer:4*1024*1024});
   if(!guards[mode].length)throw failure('empty_guard_set');
-  const results=[];
-  for(const guard of guards[mode]){
-   process.stderr.write('Allowance guard: '+guard.name+'\n');
-   results.push(guard.gateway?await qualifyGatewayGuard(candidate,guard,env):await qualifyAllowanceGuard(candidate,guard,env));
-  }
+  const {stdout:patch}=await exec('git',['diff','--binary','HEAD'],{cwd:root,env,maxBuffer:16*1024*1024});
+  const {stdout:untracked}=await exec('git',['ls-files','--others','--exclude-standard','-z'],{cwd:root,env});
+  const planned=guards[mode],batches=mode==='database'?[planned.slice(0,7),planned.slice(7)]:[planned];
+  const results=await qualifyAllowanceBatches(planned,batches,async(batch,index)=>{
+   const candidate=join(scratch,'candidate-'+index);
+   await exec('git',['clone','--quiet','--shared',root,candidate],{env,timeout:10000});
+   if(patch){
+    const file=join(scratch,'candidate-'+index+'.patch');await writeFile(file,patch);
+    await exec('git',['apply','--index','--binary',file],{cwd:candidate,env});
+   }
+   for(const path of untracked.split('\0').filter(Boolean)){
+    await mkdir(dirname(join(candidate,path)),{recursive:true});
+    await cp(join(root,path),join(candidate,path),{recursive:true,dereference:false});
+   }
+   await exec('pnpm',['install','--frozen-lockfile'],{cwd:candidate,env,timeout:30000,maxBuffer:4*1024*1024});
+   const output=[];
+   for(const guard of batch){
+    process.stderr.write('Allowance guard: '+guard.name+'\n');
+    output.push(guard.gateway?await qualifyGatewayGuard(candidate,guard,env):await qualifyAllowanceGuard(candidate,guard,env));
+   }
+   return output;
+  });
   return {mode,results};
  }finally{await rm(scratch,{recursive:true,force:true});}
 }
