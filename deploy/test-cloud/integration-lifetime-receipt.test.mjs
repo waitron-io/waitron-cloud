@@ -43,7 +43,9 @@ const changes = [
   ['file count', v => v.cloud.files = 0], ['fractional file count', v => v.cloud.files = 1693.5],
   ['runtime manifest', v => v.cloud.runtimeSha256 = 'mutable'], ['binary digest', v => v.storage.binarySha256 = 'mutable'],
   ['storage boundary', v => v.storage.kind = 'deployed-issuer'], ['classification', v => v.purpose = 'short-diagnostic'],
-  ['unexpected lifetime', v => v.requestedSeconds = 899], ['text lifetime', v => v.requestedSeconds = '900'],
+  ['unexpected lifetime', v => {v.requestedSeconds = 899; v.purpose = 'short-diagnostic';
+    v.expiresAt = '1970-01-01T00:31:39.000Z'; v.refusedAt = 1900000; v.elapsedMs = 900000;}],
+  ['text lifetime', v => v.requestedSeconds = '900'],
   ['grant before request', v => v.acceptedAt = 999999], ['grant after expiry', v => v.acceptedAt = 1900000],
   ['invalid expiry', v => v.expiresAt = 'invalid'], ['numeric expiry', v => v.expiresAt = 1900000],
   ['early refusal', v => {v.refusedAt = 1899999; v.elapsedMs = 899999;}],
@@ -79,4 +81,10 @@ test('the producer projects only public evidence and does not retain input refer
   const receipt = createSnapshotLifetimeReceipt(value);
   assert.deepEqual(receipt, expected()); value.cloud.head = 'e'.repeat(40);
   assert.equal(receipt.cloud.head, 'a'.repeat(40));
+});
+
+test('clock agreement cannot replace the minimum actual provider lifetime', async () => {
+  const {verifySnapshotLifetimeReceipt} = await load();
+  assert.throws(() => verifySnapshotLifetimeReceipt({...expected(),
+    expiresAt: '1970-01-01T00:31:39.000Z', refusedAt: 1899001, elapsedMs: 898999}));
 });
