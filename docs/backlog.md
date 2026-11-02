@@ -978,9 +978,18 @@ implementation or production evidence.
   772 pinned Waitron dashboard/server files (198,965,873 bytes); 18 focused
   Linux controls pass without skips. The Cloud image matches all 1,708 current
   runtime inputs. The combined journey has not been rerun with this wiring.
-  A genuine passing resource record, Waitron source/release evidence, actual
-  matching deployment identity, published-release upgrade and shipping
-  qualification remain open.
+  A separate Waitron source reader now captures every tracked regular file from
+  the exact clean pin and reconstructs Git's tree from the selected image's
+  actual bytes and executable permissions. Missing files, changed bytes and
+  false tree claims refuse; generated assets remain a separate measurement.
+  A separate Linux check matches all 9,357 tracked files and Git tree at the
+  pin in both base and derived client images. Both images have the same 772
+  generated-file manifest; 25 focused Linux checks pass without skips.
+  Independent cleanup confirms all four owned containers and both tags absent,
+  with quarantined Waitron unchanged.
+  Combined source binding, a genuine passing resource record, actual matching
+  deployment identity, published-release upgrade and shipping qualification
+  remain open.
   A [combined journey](test-cloud.md#run-the-journeys-in-one-project) now requires
   recovery, remote withdrawal, measured capacity and matching-set rollback in one
   disposable project. It passes on the isolated Linux box in 385 seconds without

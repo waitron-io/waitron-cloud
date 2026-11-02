@@ -1484,3 +1484,42 @@ bytes. The same Cloud image matches all 1,708 current runtime inputs. Both
 asset probes use the committed reader's code; all 18 focused Linux controls
 pass without skips. This separate image check does not requalify the combined
 journey, the Waitron source tree or an upgrade between published releases.
+
+### Bind the Waitron image to its complete source tree
+
+An image label names a revision without proving which files the image contains.
+Capture a manifest from a clean checkout at the pinned Waitron commit before
+adding proof fixtures. The manifest lists every tracked regular file, its
+executable permission and its SHA-256 hash. It includes the tracked environment
+examples, but refuses environment files and symbolic links in the manifest.
+
+```sh
+node deploy/test-cloud/test-fixtures/integration-waitron-source.mjs capture \
+  /path/to/pinned-waitron ec91a9e34d2daba146f4ee61850ea4136ad5cfb7 \
+  > /tmp/waitron-source.json
+node --test deploy/test-cloud/integration-waitron-source.test.mjs
+```
+
+The image probe streams this manifest and the reader into a disposable container
+rooted at `/waitron`. It has no network or host mounts, a read-only filesystem
+and a 256 MiB memory limit, and enters owned cleanup before execution. The reader
+checks the actual bytes and executable permissions, then reconstructs Git's tree
+hash. Missing files and changed bytes refuse even if someone updates the manifest's
+individual hashes to match. Generated and proof-only files may be present in
+addition to the tracked source; measure generated assets separately.
+
+The reader processes one file at a time, with a 64 MiB per-file bound, a 512 MiB
+cumulative processing bound and at most 20,000 files. Those limits bound source
+inspection, independently of the deployment's startup and running resource floors.
+The command prints only `Waitron source refused` on failure. This source check
+still needs to be connected to the combined journey and its final receipt. It
+does not qualify a published release or an upgrade between releases.
+
+A separate Linux qualification checks all 9,357 tracked files at `ec91a9e`
+against both the base image and its derived proof client. Both reconstruct tree
+`8e833687e870cc3939d23bbb31e2e6bb88f60b2d`. Their 772 generated dashboard/server
+files have the same measured manifest, covering 198,965,873 bytes. All 25 focused
+Linux controls pass without skips. Independent cleanup checks find all four
+recorded containers and both owned tags absent, with the quarantined Waitron
+containers unchanged. The combined journey and published-release checks remain
+separate work.
