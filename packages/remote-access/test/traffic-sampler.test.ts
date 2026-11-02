@@ -138,7 +138,7 @@ test('sampler cannot adopt saved intervals from before the recorded child start'
 
 async function socketFixture(t:{after:(fn:()=>Promise<void>)=>void},f:Awaited<ReturnType<typeof fixture>>,responses:string[]){
  const {createServer}=await import('node:net'),{chmod}=await import('node:fs/promises');let requests=0;
- const path=join(f.directory,'stats.sock'),server=createServer(socket=>socket.on('data',data=>{assert.equal(data.toString(),'show stat\n');socket.end(responses[requests++]);}));
+ const path=join(f.directory,'stats.sock'),server=createServer(socket=>socket.on('data',data=>{assert.equal(data.toString(),'show stat\n');const response=responses[requests++];assert.ok(response!==undefined,'fixture must provide every socket reply');socket.end(response);}));
  await new Promise<void>(resolve=>server.listen(path,resolve));await chmod(path,0o600);t.after(()=>new Promise<void>(resolve=>server.close(()=>resolve())));
  return {path,requests:()=>requests};
 }
