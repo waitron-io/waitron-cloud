@@ -13,9 +13,11 @@ SHA-256 inventories: documentation, identity scripts, gateway scripts and
 lockfile readers. Each excludes the policy itself and only its existing audited
 content. Documentation excludes regular root and `docs/` Markdown; package
 Markdown, receipt data, executable Markdown, links and submodules remain pinned.
-The published translation vectors in `docs/waitron-integration-contract.md` and
-the generated `docs/cloud-cost-model.md` also remain pinned because executable
-checks consume them.
+The entire `docs/waitron-integration-contract.md` is now pinned because the
+translation package checks its published vectors. The generated
+`docs/cloud-cost-model.md` remains pinned for artifact verification. Any edit to
+either file, including prose, keeps full CI and invalidates the documentation
+inventory for later pull requests until you review and renew it.
 Both immutable trees must match the selected inventory. Mixed changes, unknown
 paths or missing or stale evidence retain full work. A fresh head cannot qualify
 an unaudited base.
@@ -26,8 +28,8 @@ hash records your review boundary; it does not prove that the review was correct
 
 ## Contract reader and renewal
 
-At commit
-`b1a8d7cee1056a0aac14adba53e03f270ac4263c`, you can reproduce the refusal:
+With commit
+`b1a8d7cee1056a0aac14adba53e03f270ac4263c` checked out, you can reproduce the refusal:
 
 ```sh
 node scripts/ci-input-audit.mjs --check b1a8d7cee1056a0aac14adba53e03f270ac4263c
@@ -79,7 +81,7 @@ are already pinned or refer to another checkout:
 
 | Reference | Review boundary |
 | --- | --- |
-| Cost publication and browser calculator | The generated model is already excluded; HTML and JSON inputs never qualify as prose. Inventory links name documents without reading their contents. |
+| Cost publication and browser calculator | The generated model is already excluded from unread prose; HTML and JSON inputs never qualify as prose. Inventory links name documents without reading their contents. |
 | Identity source map | `packages/identity/SOURCE.md` is package Markdown, already pinned. |
 | UI release notices | The release helper reads `LICENSE-GRANTS.md` from the separately pinned Waitron checkout and its packed distribution, not this repository. |
 | CI fixture documents | Test helpers create their own documents inside disposable repositories. |
