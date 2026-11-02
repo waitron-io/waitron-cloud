@@ -7,15 +7,18 @@ import {join} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {Readable} from 'node:stream';
 import {setTimeout as delay} from 'node:timers/promises';
-import {before,after,test} from 'node:test';
+import {before,after,afterEach,test} from 'node:test';
 import * as factory from '../src/container-verifier.ts';
 import {bufferObject} from '../src/object-transfer.ts';
 import {backupVerificationRequestDigest,type BackupVerificationRequest} from '../src/verification-protocol.ts';
+import {boundFixtureCleanup} from './fixtures/bound-fixture-cleanup.ts';
 // @ts-expect-error deployment controller is JavaScript
 import {openVerifierController} from '../../../deploy/test-cloud/verifier-controller.mjs';
 const vector=JSON.parse(await readFile(new URL('./fixtures/verification-vector.json',import.meta.url),'utf8'));
 const root=fileURLToPath(new URL('../../../',import.meta.url)),owner='bound-'+randomUUID(),tag='cloud-bound-test:'+owner;
 const docker=(...args:string[])=>execFileSync('docker',args,{encoding:'utf8',timeout:120000,stdio:['pipe','pipe','pipe']}).trim();
+const cleanup=boundFixtureCleanup((...args)=>execFileSync('docker',args,{encoding:'utf8',timeout:10000,maxBuffer:65536,stdio:['pipe','pipe','pipe']}).trim());
+afterEach(()=>cleanup.release());
 let image:string,directory:string;
 const key={version:1,reference:'key-1',secret:'private-fixture-key'};
 before(async()=>{
@@ -37,7 +40,13 @@ after(async()=>{
 });
 async function setup(extra:object={}){
  assert.equal(typeof factory.createBoundContainerWaitronVerifier,'function','bound container factory is missing');
- const controlDirectory=join(directory,randomUUID()),controller=await openVerifierController({directory:controlDirectory,owner,image});
+ const controlDirectory=join(directory,randomUUID()),originalController=await openVerifierController({directory:controlDirectory,owner,image});
+ const controller={...originalController,async create(args:string[],request:BackupVerificationRequest){
+  const captured=structuredClone(request),id=await originalController.create(args,request);
+  // Rescue runs after the assertions, so failed product cleanup remains visible.
+  cleanup.record({id,image,labels:{'cloud.backup-verifier.owner':owner,'cloud.backup-verifier.scope':captured.attempt.controllerScope,'cloud.backup-verifier.token':captured.attempt.childToken,'cloud.backup-verifier.claim':captured.attempt.claimId,'cloud.backup-verifier.request':backupVerificationRequestDigest(captured),'cloud.backup-verifier.deadline':String(Date.parse(captured.attempt.deadline))}});
+  return id;
+ }};
  const verify=await factory.createBoundContainerWaitronVerifier({image,owner,controller,memoryMiB:192,scratchMiB:16,...extra});
  const req:BackupVerificationRequest={...structuredClone(vector),verifierImage:'local.waitron-verifier@'+image,attempt:{...vector.attempt,controllerScope:controller.scope,childToken:randomUUID(),deadline:new Date(Date.now()+25000).toISOString()}};
  return {controller,controlDirectory,verify,req};
