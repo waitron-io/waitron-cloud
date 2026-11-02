@@ -1,5 +1,10 @@
 import assert from 'node:assert/strict';
 
+export function checkSnapshotGrantRefusal(value) {
+  assert.deepEqual(value, {status: 'proved', httpStatus: 403, error: 'permission_denied', grantIssued: false});
+  return true;
+}
+
 // A live pre-existing snapshot grant is residual access, never completed withdrawal.
 export async function observeSnapshotExposure({saved, selected, downgradedAt, put, now = Date.now}) {
   for (const key of ['venueId', 'installationId', 'identitySha256', 'archiveSha256']) assert.equal(saved[key], selected[key]);

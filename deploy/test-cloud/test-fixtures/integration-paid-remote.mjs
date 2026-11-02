@@ -3,6 +3,7 @@ import {createHash} from 'node:crypto';
 import {request} from 'node:https';
 import {checkServerIdentity} from 'node:tls';
 import {setTimeout as delay} from 'node:timers/promises';
+import {checkSnapshotGrantRefusal} from './integration-snapshot-exposure.mjs';
 
 export async function proveIntegrationPaidRemote({docker, compose, control, account, paid, free, image, runId, own, storageWithdrawal = false}) {
   const phase = async (phase, extra = {}) => JSON.parse(await docker(['exec', '-i', account, 'node', 'deploy/test-cloud/test-fixtures/integration-account.mjs'],
@@ -103,9 +104,9 @@ export async function proveIntegrationPaidRemote({docker, compose, control, acco
     assert.deepEqual(retained, {retainedData: true, readerPreserved: true, installationPreserved: true, plan: 'free'});
     directStorage = {organisationId: paid.organisationId, venueId: paid.venueId, installationId: paid.installationId,
       before: storageBefore, after, restartObserved: true, ...retained};
-    assert.deepEqual(await control(paid.id, 'snapshot-refusal'), {status: 'proved', httpStatus: 403, error: 'permission_denied', grantIssued: false});
+    const newGrantRefused = checkSnapshotGrantRefusal(await control(paid.id, 'snapshot-refusal'));
     snapshotExposure = {organisationId: paid.organisationId, venueId: paid.venueId, installationId: paid.installationId,
-      ...await control(paid.id, 'snapshot-exposure', {downgradedAt: committed}), newGrantRefused: true};
+      ...await control(paid.id, 'snapshot-exposure', {downgradedAt: committed}), newGrantRefused};
   }
 
   await control(paid.id, 'refresh');

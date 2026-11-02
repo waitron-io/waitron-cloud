@@ -11,6 +11,17 @@ const saved = {...selected, id: '44444444-4444-4444-8444-444444444444', requeste
   location: {endpoint: 'https://waitron.local:8333', bucket: 'venue-' + selected.venueId, region: 'local'}};
 const accepted = async () => ({$metadata: {httpStatusCode: 200}});
 const expired = () => Object.assign(Error('private provider detail'), {$metadata: {httpStatusCode: 403}, name: 'InvalidAccessKeyId'});
+const refusal = {status: 'proved', httpStatus: 403, error: 'permission_denied', grantIssued: false};
+test('the downgraded paired client must receive an explicit refusal without a fresh snapshot grant', async () => {
+  const {checkSnapshotGrantRefusal} = await load(); assert.equal(typeof checkSnapshotGrantRefusal, 'function', 'Fresh snapshot grant refusal checking is missing');
+  assert.equal(checkSnapshotGrantRefusal(refusal), true);
+});
+for (const extra of [{status: 'not-run'}, {httpStatus: 200}, {error: 'unavailable'}, {grantIssued: true}, {unexpected: 'private'}]) {
+  test('fresh snapshot grant refusal rejects ' + JSON.stringify(extra), async () => {
+    const {checkSnapshotGrantRefusal} = await load(); assert.equal(typeof checkSnapshotGrantRefusal, 'function');
+    assert.throws(() => checkSnapshotGrantRefusal({...refusal, ...extra}));
+  });
+}
 
 test('a snapshot write still accepted after downgrade reports remaining exposure without claiming expiry', async () => {
   const {observeSnapshotExposure} = await load();
