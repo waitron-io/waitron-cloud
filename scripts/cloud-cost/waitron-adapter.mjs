@@ -153,7 +153,7 @@ export async function openReplay({ codeRoot, stateRoot, config, initial }) {
     };
     let attempted = 0, successful = 0, failed = 0, closing = false, closePromise;
     let pending = Promise.resolve(), writerClose;
-    let sourceClosed = false, nodeRecoverySecret;
+    let sourceClosed = false, disposed = false, nodeRecoverySecret;
     const captures = new Set();
     const digest = bytes => createHash('sha256').update(bytes).digest('hex');
     const closeWriter = () => writerClose ??= store.close().then(() => { sourceClosed = true; });
@@ -201,6 +201,7 @@ export async function openReplay({ codeRoot, stateRoot, config, initial }) {
         });
       },
       restore(options) {
+        if (disposed) return Promise.reject(new Error('Invalid cloud cost replay runtime'));
         closing = true;
         return admit(async () => {
           exact(options, ['artifact', 'recoveryKey']);
@@ -277,6 +278,7 @@ export async function openReplay({ codeRoot, stateRoot, config, initial }) {
       },
       counts: () => ({ attempted, successful, failed }),
       close() {
+        disposed = true;
         closing = true;
         closePromise ??= pending.then(closeWriter).catch(() => runtimeFail());
         return closePromise;

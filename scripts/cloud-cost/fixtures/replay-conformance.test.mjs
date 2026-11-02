@@ -225,6 +225,17 @@ test('restoreDrainsSourceAndPreservesItsClosedDatabase',async t=>{
  finally {db.close();}
 });
 
+test('explicitCloseDrainsRecoveryAndRefusesAnotherAttempt',async t=>{
+ const {replay,stateRoot}=await archiveFixture(t);
+ const capture=await replay.capture({recoveryKey:'synthetic-key',at:new Date(),signal:new AbortController().signal});
+ const refused=replay.restore({artifact:capture.bytes,recoveryKey:'wrong-key'});
+ const closing=replay.close();
+ await assert.rejects(refused,/Invalid cloud cost replay runtime/);
+ await closing;await replay.close();
+ await assert.rejects(replay.restore({artifact:capture.bytes,recoveryKey:'synthetic-key'}),/Invalid cloud cost replay runtime/);
+ assert.equal((await import('node:fs')).existsSync(join(stateRoot,'restored')),false);
+});
+
 test('wrongRecoveryKeyCannotPrepareAllocation',async t=>{
  const {existsSync}=await import('node:fs');
  const f=await wrappedArchiveFixture(t,`
