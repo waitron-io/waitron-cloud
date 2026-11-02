@@ -14,7 +14,7 @@ install had the package token, but the test step retained setup-node's placehold
 The native `node --test scripts/ci-nested-install-auth.test.mjs` control uses a
 fresh store, a loopback registry and a synthetic token. Each test-step binding
 first refuses the placeholder with 401, then installs and loads the package with
-the configured credential. No real credential enters that fixture. Existing
+the configured credential. The registry receives only a synthetic credential. Existing
 tests, permission checks, retries and deadlines stay unchanged.
 
 Why that historical job needed another fetch after its initial download remains

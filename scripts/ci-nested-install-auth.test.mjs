@@ -50,7 +50,9 @@ for (const step of steps) {
       const stepEnv = Object.fromEntries(bindings.map(([, key, value]) => [key, value === '${{ secrets.GITHUB_TOKEN }}' ? token : value]));
       const install = env => exec('pnpm', ['install', '--frozen-lockfile', '--ignore-scripts', '--store-dir', join(root, 'store'), '--fetch-retries=0'], {cwd: checkout, env, timeout: 20_000, maxBuffer: 1024 * 1024});
       await assert.rejects(install(baseEnv), error => /ERR_PNPM_FETCH_401/.test(error.stdout));
-      const installed = await install({...baseEnv, ...stepEnv});
+      const installed = await install({...baseEnv, ...stepEnv}).catch(error => {
+        assert.fail(`Nested install failed:\n${error.stdout ?? ''}${error.stderr ?? ''}`);
+      });
       assert.doesNotMatch(installed.stdout + installed.stderr, /ERR_PNPM_FETCH/);
       const loaded = await exec(process.execPath, ['-e', "console.log(require('synthetic-private-package'))"], {cwd: checkout, env: baseEnv});
       assert.equal(loaded.stdout.trim(), '42');
