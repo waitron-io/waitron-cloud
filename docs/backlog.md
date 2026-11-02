@@ -1669,19 +1669,20 @@ implementation or production evidence.
   certificate. The planner now emits a prominent GitHub warning on every run when
   that audit is unavailable or stale, including non-document changes, with the
   [review and renewal procedure](ci-documentation-audit.md).
-  **Documentation audit renewal (D530).** The current policy was last renewed
-  in #210 (`33eef7c8`), and #212 (`eb21d579`) first changed inventoried code
-  without renewing it. At `b1a8d7ce`, the committed documentation hash differs
-  from the actual inventory, so prose changes retain full CI. A disposable
-  renewal exposes an existing reader gap: changing a published translation
-  vector in `docs/waitron-integration-contract.md` passes the document check and
-  selects no package tests, but the unchanged translation contract-vector test
-  fails. Its reader predates #210. Original and restored controls pass.
-  Renewal remains open pending approval to exclude that contract from unread
-  prose, an additive regression and the full reader review since #210.
-  Keep the existing assertions and full fallback. The
-  [diagnosis and reproduction](ci-documentation-audit.md#current-renewal-blocker)
-  record the boundary; no inventory or selection rule is changed by this evidence.
+  **Documentation audit renewal (D530).** The stale policy at `b1a8d7ce`
+  was last renewed in #210; #212 first changed inventoried code without renewing
+  it. A disposable renewal reproduced an existing reader gap: changing a published
+  translation vector passed the document check while its original package test
+  failed. The integration contract is now excluded from unread prose, so its
+  changes retain full work. An additive real-planner regression requires the
+  translation package and observes the unchanged vector test pass, fail on the
+  altered issuer key ID and pass after restoration. Review covers all 1,131 changed
+  non-prose paths since #210 and their document readers; the four inventories
+  are renewed together. Other exemptions, existing assertions and independent
+  receipt certificates stay unchanged. The
+  [reader review and reproduction](ci-documentation-audit.md#contract-reader-and-renewal)
+  record the review boundary. Later inventoried changes still require review
+  and renewal; this does not automate approval or establish arbitrary reader discovery.
   The identity source map and gateway JSON reader remain covered by
   their existing full checks. When its input audit is current, an isolated change
   to `scripts/identity-upstream.mjs` or its behavioral test can select only syntax

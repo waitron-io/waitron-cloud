@@ -13,6 +13,9 @@ SHA-256 inventories: documentation, identity scripts, gateway scripts and
 lockfile readers. Each excludes the policy itself and only its existing audited
 content. Documentation excludes regular root and `docs/` Markdown; package
 Markdown, receipt data, executable Markdown, links and submodules remain pinned.
+The published translation vectors in `docs/waitron-integration-contract.md` and
+the generated `docs/cloud-cost-model.md` also remain pinned because executable
+checks consume them.
 Both immutable trees must match the selected inventory. Mixed changes, unknown
 paths or missing or stale evidence retain full work. A fresh head cannot qualify
 an unaudited base.
@@ -21,9 +24,9 @@ The planner checks its committed checkout on every run and emits a GitHub warnin
 when the documentation inventory is stale, including for code changes. A matching
 hash records your review boundary; it does not prove that the review was correct.
 
-## Current renewal blocker
+## Contract reader and renewal
 
-Do not renew the current policy without reviewing its readers. At commit
+At commit
 `b1a8d7cee1056a0aac14adba53e03f270ac4263c`, you can reproduce the refusal:
 
 ```sh
@@ -31,16 +34,16 @@ node scripts/ci-input-audit.mjs --check b1a8d7cee1056a0aac14adba53e03f270ac4263c
 ```
 
 The recorded documentation inventory starts `ccd8dc95`; the actual inventory
-starts `8d0f7fda`. The last policy renewal was #210 (`33eef7c8`). The first
+starts `8d0f7fda`. The policy at that revision was last renewed in #210 (`33eef7c8`). The first
 later inventoried change was #212 (`eb21d579`), which changed verifier and test
 inputs without renewing the policy. A changed inventoried input deliberately
-invalidates this certificate. The policy has not been renewed since then.
+invalidates this certificate.
 
 There is also an existing reader gap. The unchanged test in
 `packages/translation/test/submit-proof.test.ts` reads the published JSON vectors
 in `docs/waitron-integration-contract.md` and compares them with the committed
 fixture. The reader was introduced in #183 (`48227c7e`), before #210, but the
-contract still qualifies as unread Markdown when the inventory is current.
+contract qualified as unread Markdown when the old selection rule had a current inventory.
 
 A controlled experiment on the above commit uses a disposable clone with its own
 locked dependency installation. The original contract-vector test passes. After
@@ -61,13 +64,32 @@ You can run the unchanged package check without a database:
 node --test --test-name-pattern='the contract publishes exactly the committed vectors' packages/translation/test/submit-proof.test.ts
 ```
 
-This experiment establishes that simply renewing the hash would let a contract
-change skip a test that consumes it. It does not establish a complete inventory
-of Markdown readers. The full fallback remains in force. Renewal needs a decision
-on excluding this contract from unread prose, an additive planner regression and
-review of all reader changes since #210. Preserve the package assertion and all
-other acceptance checks. No policy, exemption or package check is changed by this
-diagnosis.
+The selection rule now excludes exactly this contract from unread prose. Its
+changes retain full work, including the translation package. The additive
+regression renews a complete disposable candidate, alters the published issuer
+key ID, runs the real planner, and requires the package whose original vector
+check fails. It also runs that original check before the edit and after restoring
+the contract. Every earlier assertion and every other exemption remains intact.
+
+The renewal review inventories all 1,131 non-prose paths changed since #210,
+including removed inputs, and searches current tests, scripts, embedded fixture
+programs, manifests, installation hooks and workflow wiring for document readers.
+The only newly excluded Cloud Markdown is this contract. Other relevant references
+are already pinned or refer to another checkout:
+
+| Reference | Review boundary |
+| --- | --- |
+| Cost publication and browser calculator | The generated model is already excluded; HTML and JSON inputs never qualify as prose. Inventory links name documents without reading their contents. |
+| Identity source map | `packages/identity/SOURCE.md` is package Markdown, already pinned. |
+| UI release notices | The release helper reads `LICENSE-GRANTS.md` from the separately pinned Waitron checkout and its packed distribution, not this repository. |
+| CI fixture documents | Test helpers create their own documents inside disposable repositories. |
+| Directory scans and source copies | Workspace discovery filters source extensions; cost code copies filter executable sources and manifests; private resource scans inspect their owned scratch roots. |
+
+The four inventories are renewed from the reviewed staged candidate using the
+procedure below. This is a review boundary for those inputs, not proof that an
+arbitrary future program cannot read Markdown. Any later inventoried change
+invalidates the relevant certificate and retains conservative work until review.
+The separate receipt certificates and historical fixture evidence stay unchanged.
 
 ## Review before renewal
 
