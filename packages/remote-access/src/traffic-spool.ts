@@ -14,7 +14,7 @@ interface State {
 }
 interface Options {directory:string;maxBytes:number}
 interface Delivery {
- version:1;mapping:TrafficMapping;device:string;inode:string;processId:string;receipts:{sequence:number;digest:string}[];
+ version:2;mapping:TrafficMapping;device:string;inode:string;birthtime:string;processId:string;receipts:{sequence:number;digest:string}[];
 }
 function unavailable():never{throw new Error('traffic_spool_unavailable');}
 const missing=(error:unknown)=>!!error&&typeof error==='object'&&'code'in error&&error.code==='ENOENT';
@@ -162,7 +162,7 @@ export class TrafficSpool {
    await this.#publish({...state,pending});
   });
  }
- /** Only a saved publication in the same collector directory can turn absence into an acknowledgement. */
+ /** Device/inode numbers can be reused after deletion; creation time binds a retained receipt to its directory incarnation. */
  async transfer(input:TrafficMapping):Promise<void>{
   let mapping:TrafficMapping;
   try{validateTrafficMapping(input);mapping={...input};if(mapping.writerUid!==process.geteuid!()||mapping.directory===this.#directory)unavailable();}
@@ -172,9 +172,10 @@ export class TrafficSpool {
    const directory=await open(mapping.directory,constants.O_RDONLY|constants.O_DIRECTORY|constants.O_NOFOLLOW);
    try{
     const initial=await directory.stat({bigint:true});
+    if(initial.birthtimeNs<=0n)unavailable();
     const checkDirectory=async()=>{
      const s=await lstat(mapping.directory,{bigint:true});
-     if(!s.isDirectory()||s.dev!==initial.dev||s.ino!==initial.ino||s.uid!==BigInt(mapping.writerUid)||s.gid!==BigInt(mapping.readerGid)
+     if(!s.isDirectory()||s.dev!==initial.dev||s.ino!==initial.ino||s.birthtimeNs!==initial.birthtimeNs||s.uid!==BigInt(mapping.writerUid)||s.gid!==BigInt(mapping.readerGid)
       ||(s.mode&0o7777n)!==0o2750n||await realpath(mapping.directory)!==mapping.directory)unavailable();
     };
     await checkDirectory();
@@ -183,8 +184,8 @@ export class TrafficSpool {
     const raw=await this.#read('delivery.json'),delivered=new Map<number,string>();
     if(raw!==undefined){
      const value:unknown=JSON.parse(raw);
-     if(!object(value,['version','mapping','device','inode','processId','receipts'])||value.version!==1
-      ||!isDeepStrictEqual(value.mapping,mapping)||value.device!==String(initial.dev)||value.inode!==String(initial.ino)
+     if(!object(value,['version','mapping','device','inode','birthtime','processId','receipts'])||value.version!==2
+      ||!isDeepStrictEqual(value.mapping,mapping)||value.device!==String(initial.dev)||value.inode!==String(initial.ino)||value.birthtime!==String(initial.birthtimeNs)
       ||value.processId!==state.processId||!Array.isArray(value.receipts))unavailable();
      let previous=0;
      for(const entry of value.receipts){
@@ -196,7 +197,7 @@ export class TrafficSpool {
     let markerExists=raw!==undefined;
     const saveDelivery=async()=>{
      if(!delivered.size){if(markerExists){await unlink(join(this.#directory,'delivery.json'));await this.#syncDirectory();markerExists=false;}return;}
-     const marker:Delivery={version:1,mapping,device:String(initial.dev),inode:String(initial.ino),processId:state!.processId,
+     const marker:Delivery={version:2,mapping,device:String(initial.dev),inode:String(initial.ino),birthtime:String(initial.birthtimeNs),processId:state!.processId,
       receipts:[...delivered].sort(([a],[b])=>a-b).map(([sequence,digest])=>({sequence,digest}))};
      const text=JSON.stringify(marker);if(Buffer.byteLength(text)>this.#maxBytes)unavailable();
      await this.#create('delivery.tmp',text);await rename(join(this.#directory,'delivery.tmp'),join(this.#directory,'delivery.json'));await this.#syncDirectory();markerExists=true;
