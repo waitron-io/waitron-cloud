@@ -1411,7 +1411,17 @@ node --test deploy/test-cloud/integration-resource-observations.test.mjs
 ```
 
 These controls cover protected changes, read intervals, boundary readings and
-unfinished observations. Native image qualification of the changed path remains
-due. This intermediate record preserves real preparation and cleanup gaps. It
-does not normalize them into a complete resource receipt or provide release,
-deployment or shipping qualification.
+unfinished observations. At source `1c7b725`, Linux passes all 35 collector and
+chronology controls and both combined tests without skips in 416.8 seconds. The
+shipping-Dockerfile image matches all 1,702 runtime inputs. The run records 209
+shared observations across all four phases, including the admitted verifier;
+the three protected containers keep their measured identities and health.
+Both pairings survive matching rollback. An independent audit verifies two
+projects and all 249 recorded owned container IDs absent, including the earlier
+interrupted attempt.
+
+The record preserves a 2.114-second preparation gap before its first sample and
+a 6.511-second cleanup gap before the final host/protected reading. Its 14.632 GiB
+baseline is below the unchanged 20 GiB shipping startup floor. Complete resource
+normalization, measured Waitron/generated assets, actual matching deployment
+identity, published-release upgrade and shipping qualification remain open.

@@ -953,10 +953,16 @@ implementation or production evidence.
   Timed baseline and after-cleanup observations now accompany each resource read's
   actual protected container names, IDs, running state and health. Process start
   times are compared internally to refuse restarts; private Docker metadata stays
-  out of the record. Focused collector controls pass. The changed image path still
-  needs native qualification. Real preparation/cleanup gaps remain visible;
-  complete resource normalization, release/generated assets, actual matching
-  deployment identity and shipping qualification remain open.
+  out of the record. At source `1c7b725`, all 35 Linux collector/chronology controls
+  and both combined tests pass without skips in 416.8 seconds. The image matches
+  all 1,702 runtime inputs; 209 shared observations retain all three protected
+  containers' measured identities and health. Both pairings survive rollback.
+  Independent audit verifies both projects and 249 recorded owned container IDs
+  absent, including the interrupted attempt. Real preparation/cleanup gaps remain
+  visible, and the 14.632 GiB baseline fails the unchanged 20 GiB shipping start
+  floor. Complete resource normalization, measured Waitron/generated assets,
+  actual matching deployment identity, published-release upgrade and shipping
+  qualification remain open.
   A [combined journey](test-cloud.md#run-the-journeys-in-one-project) now requires
   recovery, remote withdrawal, measured capacity and matching-set rollback in one
   disposable project. It passes on the isolated Linux box in 385 seconds without
