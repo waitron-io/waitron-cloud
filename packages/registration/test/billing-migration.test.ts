@@ -47,7 +47,7 @@ test('044 upgrades to billing without changing old rows or digests',async()=>{
   assert.deepEqual(await rows(f.pool,Object.keys(before)),before);
   const current=(await rows(f.pool,['schema_migrations'])).schema_migrations as unknown[];
   assert.equal(current.length,migrationNames.length);assert.deepEqual(current.slice(0,44),ledger);
-  assert.equal(current.length-(ledger as unknown[]).length,2);assert.equal((current[44] as {row:{name:string}}).row.name,'045_billing_store.sql');assert.equal((current[45] as {row:{name:string}}).row.name,'046_venue_service_authority.sql');await emptyBilling(f.pool);
+  assert.equal(current.length-(ledger as unknown[]).length,3);assert.equal((current[46] as {row:{name:string}}).row.name,'047_data_lifecycle.sql');assert.equal((current[44] as {row:{name:string}}).row.name,'045_billing_store.sql');assert.equal((current[45] as {row:{name:string}}).row.name,'046_venue_service_authority.sql');await emptyBilling(f.pool);
  }finally{await f.close();}
 });
 

@@ -44,7 +44,7 @@ test('lifecycle upgrade preserves the full previous ledger and rejects changed a
  try{
   await admin.query(`CREATE SCHEMA ${name}`);
   await p.query('CREATE TABLE schema_migrations(name text PRIMARY KEY,digest text NOT NULL,applied_at timestamptz NOT NULL DEFAULT clock_timestamp())');
-  const priorNames=migrations.migrationNames.slice(0,45);
+  const priorNames=migrations.migrationNames.slice(0,46);
   await mkdir(join(previous,'packages/registration/src'),{recursive:true});
   await mkdir(join(previous,'packages/registration/migrations'));
   await writeFile(join(previous,'packages/registration/src/migrate.ts'),'export const migrationNames='+JSON.stringify(priorNames)+';');
@@ -63,10 +63,10 @@ test('lifecycle upgrade preserves the full previous ledger and rejects changed a
   assert.equal(hasReleaseMigrationCount('45'),false);assert.equal(hasReleaseMigrationCount('46'),false);
   await Promise.all([migrations.migrate(p),migrations.migrate(p)]);await migrations.migrate(p);
   const rows=(await p.query('SELECT * FROM schema_migrations ORDER BY name')).rows;
-  assert.equal(rows.length,46);assert.deepEqual(rows.slice(0,45),ledger);
+  assert.equal(rows.length,47);assert.deepEqual(rows.slice(0,46),ledger);
   assert.deepEqual((await p.query('SELECT * FROM venues')).rows,venues);
   assert.equal((await p.query('SELECT count(*) FROM data_lifecycles')).rows[0].count,'0');
-  assert.equal(hasReleaseMigrationCount('46'),true);
+  assert.equal(hasReleaseMigrationCount('47'),true);
   await assert.rejects(checkConsumerSchema(p,previous),/schema_incompatible/);
   await checkConsumerSchema(p,new URL('../../../',import.meta.url).pathname);
   const applied=rows.at(-1)!;
