@@ -110,8 +110,9 @@ control or request admission fails the delayed-connection or outer-limit control
 This fixture separates connection scheduling from simulated download time. It
 does not measure the production network or qualify expiry before a request reaches
 the server. It also no longer runs three successive stalls on a wall clock;
-no claim of identical time-dependent coverage is made. The existing wall-clock
-shared-deadline and cancellation cases remain separate. Production downloads and accounting are unchanged. The LIST shutdown
+no claim of identical time-dependent coverage is made. The separate archive-retry
+shared-deadline journey and the idle suite’s cancellation case keep their wall
+clocks. Production downloads and accounting are unchanged. The LIST shutdown
 and bound-container verifier cleanup failures still need their own investigations.
 
 
@@ -142,7 +143,9 @@ backoff and the next request. These controls separate simulated timeout boundari
 from connection scheduling; they do not measure the production network or prove
 expiry before server admission. Production timeouts, attempts, backoff, integrity
 checks and cancellation are unchanged. Upstream archive failures and the separate
-LIST shutdown cause remain open.
+LIST shutdown cause remain open. If the consumed-byte report, diagnostic cadence
+or timeout signal is missing, these controls fail at their real five-second
+outer limit; that failure does not identify which signal is missing.
 
 
 ### Conformance image acquisition during D135 qualification
