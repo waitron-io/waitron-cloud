@@ -21,6 +21,54 @@ The planner checks its committed checkout on every run and emits a GitHub warnin
 when the documentation inventory is stale, including for code changes. A matching
 hash records your review boundary; it does not prove that the review was correct.
 
+## Current renewal blocker
+
+Do not renew the current policy without reviewing its readers. At commit
+`b1a8d7cee1056a0aac14adba53e03f270ac4263c`, you can reproduce the refusal:
+
+```sh
+node scripts/ci-input-audit.mjs --check b1a8d7cee1056a0aac14adba53e03f270ac4263c
+```
+
+The recorded documentation inventory starts `ccd8dc95`; the actual inventory
+starts `8d0f7fda`. The last policy renewal was #210 (`33eef7c8`). The first
+later inventoried change was #212 (`eb21d579`), which changed verifier and test
+inputs without renewing the policy. A changed inventoried input deliberately
+invalidates this certificate. The policy has not been renewed since then.
+
+There is also an existing reader gap. The unchanged test in
+`packages/translation/test/submit-proof.test.ts` reads the published JSON vectors
+in `docs/waitron-integration-contract.md` and compares them with the committed
+fixture. The reader was introduced in #183 (`48227c7e`), before #210, but the
+contract still qualifies as unread Markdown when the inventory is current.
+
+A controlled experiment on the above commit uses a disposable clone with its own
+locked dependency installation. The original contract-vector test passes. After
+renewing the clone's staged inventory and committing that baseline, changing
+only the published JSON's `issuerKeyId` to `controlled-mismatch` produces these
+results:
+
+| Operation | Observed result |
+| --- | --- |
+| Real pull-request planner | Documentation only; zero packages and receipts, no compiler check |
+| Document checker | Passes the changed contract |
+| Original contract-vector test | Fails on the altered issuer key ID |
+| Same test after restoring the contract | Passes |
+
+You can run the unchanged package check without a database:
+
+```sh
+node --test --test-name-pattern='the contract publishes exactly the committed vectors' packages/translation/test/submit-proof.test.ts
+```
+
+This experiment establishes that simply renewing the hash would let a contract
+change skip a test that consumes it. It does not establish a complete inventory
+of Markdown readers. The full fallback remains in force. Renewal needs a decision
+on excluding this contract from unread prose, an additive planner regression and
+review of all reader changes since #210. Preserve the package assertion and all
+other acceptance checks. No policy, exemption or package check is changed by this
+diagnosis.
+
 ## Review before renewal
 
 Compare your candidate with the last reviewed tree. Inspect added, changed and
