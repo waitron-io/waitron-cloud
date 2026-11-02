@@ -3,7 +3,7 @@ import {generateKeyPairSync} from 'node:crypto';
 import {mkdtemp,readFile,writeFile,readdir,rm,symlink,chmod,realpath} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
-import {spawnSync} from 'node:child_process';
+import {spawn,spawnSync} from 'node:child_process';
 import {test} from 'node:test';
 import {signTrafficReport,type TrafficReport} from '../src/traffic-report.ts';
 
@@ -61,6 +61,46 @@ test('traffic spool recovers a dead owned writer lease but refuses a live compet
  await writeFile(join(d,'lease.json'),JSON.stringify({pid:child.pid,owner:'dead'}),{mode:0o600});
  assert.deepEqual(await a.pending(),[e]);assert.equal((await a.restore()).complete,false);
  await a.ack(r.processId,1);assert.deepEqual(await a.pending(),[]);assert.equal((await a.restore()).complete,false);
+});
+for(const target of process.platform==='linux'?['self','other']:['self'])test('traffic spool recovers signed retries when a crashed writer PID is reused by '+target,async t=>{
+ const d=await fixture(t),a=spool(d),r=report(),e=signTrafficReport(r,keys.privateKey);
+ const script=`import fs from 'node:fs';import {syncBuiltinESMExports} from 'node:module';
+  const rename=fs.promises.rename;fs.promises.rename=async(from,to)=>{await rename(from,to);if(String(from).endsWith('/checkpoint.tmp'))process.exit(91);};syncBuiltinESMExports();
+  const {TrafficSpool}=await import(process.argv[2]);const envelope=JSON.parse(process.argv[3]);
+  await new TrafficSpool({directory:process.argv[1],maxBytes:32768}).append(JSON.parse(Buffer.from(envelope.payload,'base64url')),envelope,new Map());`;
+ const child=spawnSync(process.execPath,['--input-type=module','-e',script,d,new URL('../src/traffic-spool.ts',import.meta.url).href,JSON.stringify(e)],{encoding:'utf8',timeout:10000});
+ assert.equal(child.status,91,child.stderr);
+ const lease=JSON.parse(await readFile(join(d,'lease.json'),'utf8'));
+ lease.pid=target==='self'?process.pid:process.ppid;process.kill(lease.pid,0);
+ await writeFile(join(d,'lease.json'),JSON.stringify(lease),{mode:0o600});
+ assert.deepEqual(await a.pending(),[e],'a different process incarnation cannot retain the old exclusive lease');
+ assert.equal((await a.restore()).complete,false);assert.equal((await a.restore()).processId,r.processId);
+ await a.ack(r.processId,1);assert.deepEqual(await a.pending(),[]);
+ assert.equal((await readdir(d)).includes('lease.json'),false);
+});
+test('traffic spool retains a live incarnation lease and recovers only after that writer exits',async t=>{
+ const d=await fixture(t),a=spool(d),r=report(),e=signTrafficReport(r,keys.privateKey);
+ const script=`import fs from 'node:fs';import {syncBuiltinESMExports} from 'node:module';
+  const rename=fs.promises.rename;fs.promises.rename=async(from,to)=>{if(String(from).endsWith('/checkpoint.tmp')){console.log('leased');setInterval(()=>{},1000);await new Promise(()=>{});}return rename(from,to);};syncBuiltinESMExports();
+  const {TrafficSpool}=await import(process.argv[2]);const envelope=JSON.parse(process.argv[3]);
+  await new TrafficSpool({directory:process.argv[1],maxBytes:32768}).append(JSON.parse(Buffer.from(envelope.payload,'base64url')),envelope,new Map());`;
+ const child=spawn(process.execPath,['--input-type=module','-e',script,d,new URL('../src/traffic-spool.ts',import.meta.url).href,JSON.stringify(e)],{stdio:['ignore','pipe','pipe']});
+ const exited=new Promise<void>(resolve=>child.once('exit',()=>resolve()));let timer:ReturnType<typeof setTimeout>|undefined;
+ try{
+  const ready=new Promise<string>((resolve,reject)=>{child.stdout.once('data',value=>resolve(String(value).trim()));child.once('error',reject);});
+  assert.equal(await Promise.race([ready,new Promise((_,reject)=>{timer=setTimeout(()=>reject(Error('owned writer did not acquire its lease')),5000);})]),'leased');clearTimeout(timer);
+  const lease=await readFile(join(d,'lease.json'));
+  await assert.rejects(a.pending(),/traffic_spool_unavailable/);assert.deepEqual(await readFile(join(d,'lease.json')),lease);
+  child.kill('SIGTERM');await exited;
+  assert.deepEqual(await a.pending(),[e]);assert.equal((await a.restore()).complete,false);
+ }finally{clearTimeout(timer);if(child.exitCode===null&&child.signalCode===null)child.kill('SIGKILL');await exited;}
+});
+test('traffic spool refuses an unrecognized process incarnation without removing the live lease',async t=>{
+ const d=await fixture(t),a=spool(d),r=report(),e=signTrafficReport(r,keys.privateKey);await a.append(r,e,counters());
+ for(const birth of ['unknown','linux:invalid:pid:[1]:1','native:NaN']){
+  const lease=JSON.stringify({pid:process.pid,owner:'retained',birth});await writeFile(join(d,'lease.json'),lease,{mode:0o600});
+  await assert.rejects(a.pending(),/traffic_spool_unavailable/);assert.equal(await readFile(join(d,'lease.json'),'utf8'),lease);
+ }
 });
 test('traffic spool rejects mismatched signed payload malformed counters and unsafe files',async t=>{
  const d=await fixture(t),a=spool(d),r=report(),e=signTrafficReport(r,keys.privateKey);

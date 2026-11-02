@@ -129,3 +129,14 @@ original reservation states and signed pending traffic reports. A missing interv
 stays incomplete after recovery, and replay cannot add traffic bytes. Run the
 [upgrade and recovery command](../packages/registration/README.md#monthly-allowances-in-test-fixtures)
 separately; neither proof enables production enforcement.
+
+A restarted Linux gateway can recover a crashed writer even when its process
+number is reused. Its private lease also records the boot, PID namespace and
+process start time. Recovery retains the original signed report and an incomplete
+coverage marker. A live writer or an identity that cannot be verified still
+refuses access; concurrent direct calls are not queued by the spool itself.
+
+An unconfirmed spent call deliberately leaves trial evidence incomplete, including
+a stop between spending and provider invocation. It is not replayed to create a
+confirmation. Production clock drift and calendar qualification remain separate
+from these controlled UTC fixtures.

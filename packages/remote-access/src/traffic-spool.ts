@@ -1,6 +1,6 @@
 import {createHash,randomUUID} from 'node:crypto';
 import {constants} from 'node:fs';
-import {lstat,mkdir,open,opendir,realpath,rename,unlink} from 'node:fs/promises';
+import {lstat,mkdir,open,opendir,readFile,readlink,realpath,rename,unlink} from 'node:fs/promises';
 import {isAbsolute,join,normalize} from 'node:path';
 import {isDeepStrictEqual} from 'node:util';
 import {isUuid,type ManifestEnvelope} from './manifest.ts';
@@ -17,6 +17,19 @@ interface Delivery {
  version:2;mapping:TrafficMapping;device:string;inode:string;birthtime:string;processId:string;receipts:{sequence:number;digest:string}[];
 }
 function unavailable():never{throw new Error('traffic_spool_unavailable');}
+const validBirth=(value:unknown):value is string=>typeof value==='string'&&value.length<=256&&
+ (/^native:\d+(?:\.\d+)?$/.test(value)||/^linux:[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}:pid:\[\d+\]:\d+$/.test(value));
+async function processBirth(pid:number):Promise<string|undefined>{
+ if(process.platform!=='linux')return pid===process.pid?`native:${performance.timeOrigin}`:undefined;
+ try{
+  // The command can contain ')'; field 22 is index 19 after its final closing parenthesis.
+  const stat=await readFile(`/proc/${pid}/stat`,'utf8'),end=stat.lastIndexOf(')');
+  const start=stat.slice(end+2).trim().split(/\s+/)[19];
+  const boot=(await readFile('/proc/sys/kernel/random/boot_id','utf8')).trim(),namespace=await readlink(`/proc/${pid}/ns/pid`);
+  if(end<0||!/^\d+$/.test(start??'')||!/^[-0-9a-f]{36}$/.test(boot)||!/^pid:\[\d+\]$/.test(namespace))return;
+  return `linux:${boot}:${namespace}:${start}`;
+ }catch{return;}
+}
 const missing=(error:unknown)=>!!error&&typeof error==='object'&&'code'in error&&error.code==='ENOENT';
 function object(value:unknown,keys:string[]):value is Record<string,unknown>{
  return !!value&&typeof value==='object'&&!Array.isArray(value)&&Object.keys(value).sort().join(',')===[...keys].sort().join(',');
@@ -81,7 +94,8 @@ export class TrafficSpool {
   try{await this.#create('gap','incomplete\n');}catch(error){if(!error||typeof error!=='object'||!('code'in error)||error.code!=='EEXIST')throw error;if(await this.#read('gap',16)!=='incomplete\n')unavailable();}
  }
  async #lease():Promise<()=>Promise<void>>{
-  const owner=randomUUID(),text=JSON.stringify({pid:process.pid,owner});
+  const birth=await processBirth(process.pid);if(birth===undefined)unavailable();
+  const owner=randomUUID(),text=JSON.stringify({pid:process.pid,owner,birth});
   for(let attempt=0;attempt<2;attempt++){
    // A recovery lease serializes dead-writer cleanup; a crashed recovery itself fails closed.
    if(await this.#read('recovery.json',1024)!==undefined)unavailable();
@@ -95,8 +109,11 @@ export class TrafficSpool {
     try{
      const raw=await this.#read('lease.json',1024);if(raw===undefined)continue;
      const held:unknown=JSON.parse(raw);
-     if(!object(held,['pid','owner'])||!Number.isSafeInteger(held.pid)||Number(held.pid)<1||typeof held.owner!=='string')unavailable();
+     if((!object(held,['pid','owner'])&&!object(held,['pid','owner','birth']))||!Number.isSafeInteger(held.pid)||Number(held.pid)<1||typeof held.owner!=='string'
+      ||'birth'in held&&!validBirth(held.birth))unavailable();
      let dead=false;try{process.kill(Number(held.pid),0);}catch(cause){dead=!!cause&&typeof cause==='object'&&'code'in cause&&cause.code==='ESRCH';}
+     // A live PID can belong to a later process; unknown identity never authorizes removing its lease.
+     if(!dead&&'birth'in held){const current=await processBirth(Number(held.pid));if(current!==undefined&&current!==held.birth)dead=true;}
      if(!dead)unavailable();await this.#gap();await unlink(join(this.#directory,'lease.json'));await this.#syncDirectory();
     }finally{await unlink(join(this.#directory,'recovery.json'));await this.#syncDirectory();}
    }

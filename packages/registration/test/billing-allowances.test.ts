@@ -290,3 +290,28 @@ test('persisted spent translation units cannot be refunded by a state update',as
   assert.equal((await f.pool.query('SELECT state FROM billing_allowance_reservations WHERE id=$1',[held.id])).rows[0].state,'spent');
  }finally{await f.close();}
 });
+
+// Without the post-wait clock read, the exhausted November pot would refuse valid December work.
+test('a month-end bucket wait uses the new database month and configuration without refilling history',async()=>{
+ const f=await fixture(),holder=await f.peer.connect(),client=await f.pool.connect();
+ const query=client.query.bind(client);let pending:Promise<Reservation>|undefined;
+ try{
+  await f.config.publish(TEST_ALLOWANCES);
+  await f.config.publish({...TEST_ALLOWANCES,revision:2,effectiveFrom:'2026-12-01',limits:{...TEST_ALLOWANCES.limits,registered:{...TEST_ALLOWANCES.limits.registered,transactional_email:'1'}}});
+  await f.pool.query('CREATE TABLE allowance_fixture_clock(day date NOT NULL)');await f.pool.query("INSERT INTO allowance_fixture_clock VALUES('2026-11-30')");
+  for(let n=0;n<2;n++)await f.pool.query(`INSERT INTO billing_allowance_reservations(id,account_id,organisation_id,legal_business_id,venue_id,installation_id,service,operation_id,binding,units,month,revision,state)
+   VALUES($1,$2,$3,$4,$5,$6,'transactional_email',$7,'retained-november',1,'2026-11-01',1,'spent')`,[randomUUID(),f.accountId,f.scope.organisationId,f.scope.legalBusinessId,f.input.venueId,f.input.installationId,randomUUID()]);
+  // Replace only the clock boundary; every transaction, ownership read and lock still uses PostgreSQL.
+  client.query=(async(text:any,args:any)=>text==="SELECT (clock_timestamp() AT TIME ZONE 'UTC')::date::text AS day"?query('SELECT day::text AS day FROM allowance_fixture_clock'):query(text,args)) as typeof client.query;
+  await holder.query('BEGIN');await holder.query('SELECT pg_advisory_xact_lock(hashtext(current_schema()),hashtext($1))',['allowance-account:'+f.accountId+':transactional_email:2026-11-01']);
+  const pid=Number((await holder.query('SELECT pg_backend_pid() AS pid')).rows[0].pid);
+  await client.query('BEGIN');pending=f.methods.reserveAllowance(client,f.input);void pending.catch(()=>{});
+  let waiting=false;const until=performance.now()+5000;
+  do{waiting=!!(await f.peer.query('SELECT 1 FROM pg_stat_activity WHERE application_name=$1 AND $2=ANY(pg_blocking_pids(pid))',[f.schema,pid])).rowCount;if(!waiting)await setImmediate();}while(!waiting&&performance.now()<until);
+  assert.equal(waiting,true,'admission must reach the real old-month bucket lock');
+  await f.peer.query("UPDATE allowance_fixture_clock SET day='2026-12-01'");await holder.query('COMMIT');
+  const admitted=await pending;await client.query('COMMIT');
+  assert.deepEqual([admitted.month,admitted.revision,admitted.units],['2026-12-01',2,'1']);
+  assert.equal(await f.total("month='2026-11-01'"),2n);assert.equal(await f.total("month='2026-12-01'"),1n);
+ }finally{await holder.query('ROLLBACK');await pending?.catch(()=>{});await client.query('ROLLBACK');client.query=query;client.release();holder.release();await f.close();}
+});
