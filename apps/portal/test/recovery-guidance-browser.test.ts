@@ -4,6 +4,7 @@ import {test} from 'node:test';
 import {build} from 'esbuild';
 import {chromium} from 'playwright';
 import {translations} from '../src/locale.ts';
+import {portalTrace,failPortalWait} from './portal-trace.ts';
 
 const id='12345678-1234-4234-8234-123456789abc',pointId='22345678-1234-4234-8234-123456789abc',venueId='32345678-1234-4234-8234-123456789abc',second='72345678-1234-4234-8234-123456789abc';
 const expiresAt='2099-01-01T00:00:00.000Z';
@@ -33,8 +34,9 @@ const scenarios=[
 for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as const)for(const width of [390,1280])test(`${locale} ${theme} ${width}: recovery refusals offer reachable status and source checks without another write`,async t=>{
  const browser=await chromium.launch({headless:true});
  try{
-  for(const scenario of scenarios)await t.test(`${scenario.action}/${scenario.code}`,async()=>{
+  for(const scenario of scenarios)await t.test(`${scenario.action}/${scenario.code}`,async t=>{
    const page=await browser.newPage({locale,colorScheme:theme,viewport:{width,height:1000}});page.setDefaultTimeout(4000);
+   const trace=portalTrace(page);let stage='recovery setup';
    try{
     const calls:{path:string;body:Record<string,unknown>}[]=[];let refused=false,snapshotReads=0;
     await page.route('https://portal.test/recover',route=>route.fulfill({contentType:'text/html',body:'<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><div id="portal" class="portal"></div>'}));
@@ -48,19 +50,25 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
      if(path.endsWith('/recovery/'+scenario.action)){refused=true;return route.fulfill({status:scenario.status,json:{error:scenario.code}});}
      return route.fulfill({status:503,json:{error:'temporarily_unavailable'}});
     });
+    stage='recovery navigation and startup';
     await page.goto('https://portal.test/recover#request='+id);await page.addStyleTag({content:styles});await page.addScriptTag({content:bundle.outputFiles[0]!.text});
+    stage='initial recovery code and inspection';
     const c=translations[locale];await page.getByRole('textbox',{name:c.pairCode,exact:true}).fill('00123456');await page.getByRole('button',{name:c.pairInspect,exact:true}).click();
     if(scenario.action==='approve'){
+     stage='recovery source and approval';
      await page.getByLabel(c.recoveryVenue,{exact:true}).selectOption(venueId);await page.getByLabel(c.recoveryStopped,{exact:true}).check();await page.getByLabel(c.recoveryAcceptLoss,{exact:true}).check();
      await page.getByRole('button',{name:c.recoveryApprove,exact:true}).click();
     }else if(scenario.action==='replace'){
+     stage='recovery replacement confirmation';
      await page.getByLabel(c.recoveryReplacementConfirm,{exact:true}).check();await page.getByRole('button',{name:c.recoveryReplacementApprove,exact:true}).click();
-    }else await page.getByRole('button',{name:c.recoveryCancel,exact:true}).click();
+    }else {stage='recovery close';await page.getByRole('button',{name:c.recoveryCancel,exact:true}).click();}
+    stage='recovery refusal message';
     const alert=page.getByRole('alert');await alert.waitFor();const text=await alert.innerText();
     assert.match(text,locale==='en'?scenario.en:scenario.es);assert.doesNotMatch(text,/temporarily unavailable|temporalmente|support|soporte/i);
     assert.equal(text,c[scenario.key as keyof typeof c]);assert.equal(await page.evaluate(()=>(window as any).app.recovery.uncertain),false);
     assert.deepEqual(calls.map(call=>call.path),['/api/account/recovery/inspect','/api/account/recovery/'+scenario.action]);
     if(scenario.code==='unverified'){
+     stage='recovery snapshot refresh';
      await page.getByRole('button',{name:c.latestSnapshots,exact:true}).click();await page.waitForFunction(() => !(window as any).app.backups.pending);
      assert.match(text,locale==='en'?/verified does not always mean compatible/i:/verificada no siempre significa compatible/i);
      assert.doesNotMatch(text,/choose a verified, compatible|elige una verificada y compatible/i);
@@ -70,11 +78,12 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
     }
     assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
     if(process.env.RECOVERY_GUIDANCE_RECEIPT_DIR){await mkdir(process.env.RECOVERY_GUIDANCE_RECEIPT_DIR,{recursive:true});await page.screenshot({path:`${process.env.RECOVERY_GUIDANCE_RECEIPT_DIR}/${locale}-${theme}-${width}-${scenario.action}-${scenario.code}.png`,fullPage:true});}
+    stage='recovery request status';
     await page.getByRole('button',{name:locale==='en'?'Check request status':'Comprobar estado de la solicitud',exact:true}).click();
     await page.getByText(c.recoveryApprovedSnapshot,{exact:true}).waitFor();assert.equal(await page.getByRole('alert').count(),0);
     assert.deepEqual(calls.map(call=>call.path),['/api/account/recovery/inspect','/api/account/recovery/'+scenario.action,'/api/account/recovery/inspect']);
     assert.equal(await page.getByRole('button',{name:c.recoveryApprove,exact:true}).count(),0);assert.equal(await page.getByRole('button',{name:c.recoveryReplacementApprove,exact:true}).count(),0);
-   }finally{await page.close();}
+   }catch(error){await failPortalWait(page,trace,stage,error,details=>t.diagnostic(details));}finally{await page.close();}
   });
  }finally{await browser.close();}
 });
