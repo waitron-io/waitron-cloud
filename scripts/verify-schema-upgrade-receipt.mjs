@@ -55,7 +55,7 @@ export function verifySchemaUpgradeReceipt(value){
   exact(value.lifecycle,lifecycleChecks);for(const key of lifecycleChecks)demand(value.lifecycle[key]===true,key);
  }
  if(value.schemaVersion===9){
-  demand(value.releases.old.head==='bb2fa407e3b6d5f10f01e86dbe1b04a8a112d1a9'&&value.releases.old.migrations===47&&value.releases.new.migrations===48,'allowance schemas');
+  demand(value.releases.old.head==='1aae8f14c05113cc2a2c71337940ff7721ad5f5b'&&value.releases.old.migrations===47&&value.releases.new.migrations===48,'allowance schemas');
   demand(value.driver.head===value.releases.new.head,'allowance candidate');
   checks.splice(checks.indexOf('pairingUpgraded'),1);checks.push('accountStatePreserved','relayStatePreserved','monitoringStatePreserved');
   const allowanceChecks=['oldSqlUnchanged','oldRowsPreserved','interruptedRollback','restartIdempotent','defaultOff','configRestored','reservationsRestored','spentNotReleased','trafficSourcesRestored','trafficLedgerRestored','trafficRetryStable','gapsRemainIncomplete','foreignScopeRefused','oldBackupUpgradeEmpty'];
