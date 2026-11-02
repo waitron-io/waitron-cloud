@@ -16,12 +16,13 @@ test('lifecycle recovery preserves pending effects and fixed dates then refuses 
  const after=await fixture.lifecycleState(f.pool);
  assert.equal(after.data_lifecycles.length,2);assert.equal(after.data_lifecycle_operations.length,2);assert.equal(after.data_lifecycle_effects.length,2);
 });
-for(const fault of ['operation','effect','deadline'])test('recovery refuses lost or changed lifecycle '+fault,async()=>{
+for(const fault of ['operation','effect','deadline','request-time'])test('recovery refuses lost or changed lifecycle '+fault,async()=>{
  const fixture=await load();assert.equal(typeof fixture.seedLifecycle,'function');
  const proof=await fixture.seedLifecycle(root,f.pool,{installations:[{venueId:f.venueId},{venueId:f.foreignVenueId}]});
  const before=await fixture.lifecycleState(f.pool);
  if(fault==='operation')await f.pool.query('DELETE FROM data_lifecycle_effects; DELETE FROM data_lifecycle_operations');
  if(fault==='effect')await f.pool.query('DELETE FROM data_lifecycle_effects');
+ if(fault==='request-time')await f.pool.query("UPDATE data_lifecycle_operations SET requested_at=requested_at+interval '1 second'");
  if(fault==='deadline')await f.pool.query("UPDATE data_lifecycles SET effective_end_at=effective_end_at+interval '1 second',deadline_at=deadline_at+interval '1 second'");
  await assert.rejects(fixture.restoredLifecycle(root,f.pool,proof,before));
 });
