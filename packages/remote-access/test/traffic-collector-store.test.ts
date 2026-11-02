@@ -1,9 +1,13 @@
 import assert from 'node:assert/strict';
 import {generateKeyPairSync,randomBytes,randomUUID} from 'node:crypto';
+import {spawn,spawnSync} from 'node:child_process';
 import {test} from 'node:test';
 import {chmod,mkdtemp,readFile,readdir,realpath,rm,writeFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
+import {fileURLToPath} from 'node:url';
+import {setTimeout as delay} from 'node:timers/promises';
+import {cliEnvironment} from './fixtures/cli-environment.ts';
 import {collectTraffic} from '../src/traffic-collector.ts';
 import {TrafficStore} from '../src/traffic-store.ts';
 import {transaction} from '@waitron-cloud/registration';
@@ -91,4 +95,78 @@ test('collector replay and subsequent report commit in sequence without losing a
   assert.equal((await f.pool.query('SELECT count(*) FROM remote_traffic_reports')).rows[0].count,'2');
   assert.equal((await f.pool.query('SELECT last_sequence FROM remote_traffic_processes')).rows[0].last_sequence,'2');
  }finally{await f.close();}
+});
+
+async function commandFixture(f:Awaited<ReturnType<typeof fixture>>){
+ const root=await realpath(await mkdtemp(join(tmpdir(),'traffic-command-db-'))),config=join(root,'config.json');
+ const schema=(await f.pool.query('SELECT current_schema() AS name')).rows[0].name;
+ const url=new URL(process.env.TEST_DATABASE_URL!);url.searchParams.set('options','-c search_path='+schema);
+ const application='traffic-cli-'+randomUUID();url.searchParams.set('application_name',application);
+ const env=cliEnvironment({DATABASE_URL:url.toString()}),command=fileURLToPath(new URL('../src/traffic-cli.ts',import.meta.url));
+ await writeFile(config,JSON.stringify({mappings:[f.mapping]}),{mode:0o600});
+ return {root,config,command,env,application,
+  run(){return spawnSync(process.execPath,[command,config,'--once'],{env,encoding:'utf8',timeout:10000});},
+  close(){return rm(root,{recursive:true,force:true});}};
+}
+function successfulCommand(result:ReturnType<typeof spawnSync>){
+ assert.equal(result.signal,null);assert.equal(result.status,0,String(result.stderr));assert.equal(result.stdout,'');assert.equal(result.stderr,'');
+}
+
+// Removing the real store call or choosing a different database schema loses or misattributes usage.
+test('traffic command commits and acknowledges reports and exact replay through separate database connections',async()=>{
+ const f=await fixture(),c=await commandFixture(f);try{
+  await publish(f);successfulCommand(c.run());assert.equal(await f.total(),'35');assert.deepEqual(await readdir(f.mapping.directory),[]);
+  await publish(f);successfulCommand(c.run());assert.equal(await f.total(),'35');assert.deepEqual(await readdir(f.mapping.directory),[]);
+  assert.equal((await f.pool.query('SELECT count(*) FROM remote_traffic_reports')).rows[0].count,'1');
+ }finally{await c.close();await f.close();}
+});
+test('traffic command failure keeps rollback bytes for a successful process restart',async()=>{
+ const f=await fixture(),c=await commandFixture(f);try{
+  const {file,text}=await publish(f),before=await f.snapshot();
+  await f.pool.query(`CREATE FUNCTION reject_traffic_cli() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'private-canary'; END $$`);
+  await f.pool.query('CREATE TRIGGER reject_traffic_cli BEFORE INSERT ON usage_events FOR EACH ROW EXECUTE FUNCTION reject_traffic_cli()');
+  const refused=c.run();assert.equal(refused.status,1);assert.equal(refused.signal,null);assert.equal(refused.stdout,'');assert.equal(refused.stderr,'remote.traffic_collection_failed\n');
+  assert.equal(await readFile(file,'utf8'),text);assert.deepEqual(await f.snapshot(),before);assert.equal(await f.total(),'0');
+  await f.pool.query('DROP TRIGGER reject_traffic_cli ON usage_events');
+  successfulCommand(c.run());assert.equal(await f.total(),'35');assert.deepEqual(await readdir(f.mapping.directory),[]);
+ }finally{await c.close();await f.close();}
+});
+test('traffic command validates all mappings before any report can commit',async()=>{
+ const f=await fixture(),c=await commandFixture(f);try{
+  const {file,text}=await publish(f);
+  await writeFile(c.config,JSON.stringify({mappings:[f.mapping,{...f.mapping,cellId:randomUUID(),directory:join(c.root,'other'),environment:'production'}]}));
+  const refused=c.run();
+  assert.equal(await readFile(file,'utf8').catch(()=>null),text);assert.equal(await f.total(),'0');assert.equal((await f.pool.query('SELECT count(*) FROM remote_traffic_reports')).rows[0].count,'0');
+  assert.equal(refused.status,1);assert.equal(refused.stdout,'');assert.equal(refused.stderr,'remote.traffic_collector_failed\n');
+ }finally{await c.close();await f.close();}
+});
+test('traffic command collects an independent mapped cell after a prior collection refusal',async()=>{
+ const f=await fixture(),c=await commandFixture(f);try{
+  await publish(f);await writeFile(c.config,JSON.stringify({mappings:[{...f.mapping,cellId:randomUUID(),directory:join(c.root,'missing')},f.mapping]}));
+  const result=c.run();
+  assert.equal(await f.total(),'35');assert.deepEqual(await readdir(f.mapping.directory),[]);assert.equal((await f.pool.query('SELECT count(*) FROM remote_traffic_reports')).rows[0].count,'1');
+  assert.equal(result.status,1);assert.equal(result.stdout,'');assert.equal(result.stderr,'remote.traffic_collection_failed\n');
+ }finally{await c.close();await f.close();}
+});
+test('traffic command drains an in-flight database acknowledgement before graceful shutdown',async()=>{
+ const f=await fixture(),c=await commandFixture(f),lock=await f.pool.connect();let child:ReturnType<typeof spawn>|undefined;
+ let exited:Promise<{code:number|null;signal:NodeJS.Signals|null}>|undefined,timer:ReturnType<typeof setTimeout>|undefined;
+ try{
+  await publish(f);await lock.query('BEGIN');await lock.query('SELECT * FROM remote_forward_reporters FOR UPDATE');
+  child=spawn(process.execPath,[c.command,c.config],{env:c.env,stdio:['ignore','pipe','pipe']});let stdout='',stderr='';
+  child.stdout!.on('data',value=>stdout+=value);child.stderr!.on('data',value=>stderr+=value);
+  exited=new Promise(resolve=>child!.once('exit',(code,signal)=>resolve({code,signal})));timer=setTimeout(()=>child!.kill('SIGKILL'),10000);
+  let waiting=false;
+  for(let n=0;n<100;n++){
+   waiting=(await f.peer.query("SELECT count(*)::integer AS n FROM pg_stat_activity WHERE application_name=$1 AND wait_event_type='Lock'",[c.application])).rows[0].n===1;
+   if(waiting||child.exitCode!==null)break;await delay(20);
+  }
+  assert.equal(waiting,true,stderr);child.kill('SIGTERM');await delay(100);assert.equal(child.exitCode,null,'shutdown must wait for the pending acknowledgement');await lock.query('COMMIT');
+  assert.deepEqual(await exited,{code:0,signal:null});assert.equal(stdout,'');assert.equal(stderr,'');
+  assert.equal(await f.total(),'35');assert.deepEqual(await readdir(f.mapping.directory),[]);assert.equal((await f.pool.query('SELECT count(*) FROM remote_traffic_reports')).rows[0].count,'1');
+ }finally{
+  await lock.query('ROLLBACK');lock.release();if(timer)clearTimeout(timer);
+  if(child&&child.exitCode===null&&child.signalCode===null){child.kill('SIGKILL');await exited;}
+  await c.close();await f.close();
+ }
 });
