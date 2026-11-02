@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import {test} from 'node:test';
 import * as integration from './test-cloud-integration.mjs';
 import {checkCapacitySamples} from '../deploy/test-cloud/test-fixtures/integration-capacity.mjs';
+import {verifyTestCloudWithdrawalReceipt} from '../deploy/test-cloud/test-fixtures/integration-withdrawal-receipt.mjs';
 import {verifyTestCloudReceipt} from './verify-test-cloud-receipt.mjs';
 import {execFileSync} from 'node:child_process';
 
@@ -18,6 +19,11 @@ test('one project recovers both copies, withdraws remote access, measures capaci
   const receipt = await integration.runTestCloudCombined({image: process.env.TEST_CLOUD_INTEGRATION_IMAGE,
     waitronImage: process.env.TEST_CLOUD_INTEGRATION_WAITRON_IMAGE,
     protectedContainerIds: JSON.parse(process.env.TEST_CLOUD_PROTECTED_CONTAINER_IDS ?? '[]')});
+  assert.equal(verifyTestCloudWithdrawalReceipt(receipt.withdrawal), true);
+  assert.equal(receipt.withdrawal.runId, receipt.runId);
+  assert.deepEqual(receipt.withdrawal.cloud, receipt.cloudSource);
+  assert.deepEqual(receipt.withdrawal.stream, receipt.paidStorageWithdrawal);
+  assert.deepEqual(receipt.withdrawal.snapshot, {...receipt.paidSnapshotExposure, status: 'residual-access'});
   const paid = receipt.organisations.find(value => value.plan === 'paid');
   const git = (...args) => execFileSync('git', args, {encoding: 'utf8'}).trim();
   assert.equal(receipt.cloudSource?.head, git('rev-parse', 'HEAD'));

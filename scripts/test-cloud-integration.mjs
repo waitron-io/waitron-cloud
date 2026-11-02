@@ -13,6 +13,7 @@ import {inspectIntegrationContinuousRecovery} from '../deploy/test-cloud/test-fi
 import {rollbackRefusalDiagnostic} from '../deploy/test-cloud/test-fixtures/integration-renewal.mjs';
 import {captureIntegrationSource, checkIntegrationSource, measureIntegrationFiles} from '../deploy/test-cloud/test-fixtures/integration-source.mjs';
 import {parseCapacityVolumeReadings} from '../deploy/test-cloud/test-fixtures/integration-capacity.mjs';
+import {createTestCloudWithdrawalReceipt} from '../deploy/test-cloud/test-fixtures/integration-withdrawal-receipt.mjs';
 import {readIntegrationInventory} from '../deploy/test-cloud/test-fixtures/integration-inventory.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
@@ -59,9 +60,11 @@ function command(args, input = '', phase = args[0], env = {}) {
 const lines = text => text.split(/\s+/).filter(Boolean);
 
 export async function runTestCloudCombined({image, waitronImage, protectedContainerIds = []} = {}) {
-  return runTestCloudClients({image, waitronImage, protectedContainerIds,
+  const receipt = await runTestCloudClients({image, waitronImage, protectedContainerIds,
     paidContinuousRecovery: true, freeRemote: true, paidRemote: true,
     measureCapacity: true, measureIntegration: true, schemaRollback: true, sourceProvenance: true});
+  receipt.withdrawal = createTestCloudWithdrawalReceipt(receipt);
+  return receipt;
 }
 
 export function checkProtectedContainers(before, after, ids) {
