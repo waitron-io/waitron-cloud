@@ -51,3 +51,18 @@ test('unexpected claim-directory failures are still reported without deleting th
   await assert.rejects(helper.releaseStorageControlClaims(new Set([root]),entry),{code:'ENOTDIR'});
   assert.equal(await readFile(entry,'utf8'),'keep this entry');
 });
+
+
+test('concurrent releases tolerate claims already removed by the other release', async t => {
+  const directory = await fixture(t), owned = join(directory,'owned-root'), peer = join(directory,'peer-root');
+  await Promise.all(Array.from({length:100},(_,index) => Promise.all([
+    symlink(owned,join(directory,'own-'+index)), symlink(peer,join(directory,'peer-'+index))])));
+  await Promise.all([
+    helper.releaseStorageControlClaims(new Set([owned]),directory),
+    helper.releaseStorageControlClaims(new Set([owned]),directory),
+  ]);
+  for (let index=0;index<100;index++) {
+    await assert.rejects(readlink(join(directory,'own-'+index)),{code:'ENOENT'});
+    assert.equal(await readlink(join(directory,'peer-'+index)),peer);
+  }
+});

@@ -605,8 +605,10 @@ case and verify owned-child and scratch cleanup. Private cancellation controls
 also collect the captured native child and scratch, including cancellation before
 the native child is spawned. Cancellation also releases cooperative port claims
 whose targets exactly match roots created by that control. Private-directory
-controls preserve other targets and ordinary files; real cancellation checks
-require no claims for the recorded roots. Claims without that ownership evidence
+controls preserve other targets and ordinary files. After-spawn cancellation
+qualifies release of eight claims; before-spawn cancellation verifies that no
+claims were allocated. Concurrent private-directory releases preserve other
+claims while tolerating claims the other release already removed. Claims without that ownership evidence
 remain untouched. All original assertions and the
 90-second limit remain. Use the last `storage_admin_progress` record to separate
 reservation, exhausted or recovered startup, bucket creation, owner verification
