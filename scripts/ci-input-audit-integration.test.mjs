@@ -160,3 +160,52 @@ test('one audited committed baseline admits isolated docs and scripts while unre
     assert.equal(selected.documentation, undefined); assert.equal(selected.scripts, undefined);
   }
 }));
+
+test('a changed published translation vector retains its real package check after audit renewal', () => completeFixture(({root, git, read, write, node, commit, renew}) => {
+  const contractPath = 'docs/waitron-integration-contract.md';
+  const original = read(contractPath);
+  const start = original.indexOf('```json\n', original.indexOf('### Shared test vectors')) + 8;
+  const end = original.indexOf('\n```', start);
+  const vectors = JSON.parse(original.slice(start, end));
+  const env = {...process.env};
+  delete env.NODE_TEST_CONTEXT;
+  const installed = spawnSync('pnpm', ['install', '--frozen-lockfile', '--offline'], {cwd: root, env, encoding: 'utf8', timeout: 60_000});
+  assert.equal(installed.status, 0, installed.stdout + installed.stderr);
+  const checkVector = () => spawnSync(process.execPath, ['--test', '--test-reporter=tap',
+    '--test-name-pattern=the contract publishes exactly the committed vectors', 'packages/translation/test/submit-proof.test.ts'],
+  {cwd: root, env, encoding: 'utf8', timeout: 30_000});
+  const originalCheck = checkVector();
+  assert.equal(originalCheck.status, 0, originalCheck.stdout + originalCheck.stderr);
+  assert.match(originalCheck.stdout, /# pass 1\b/);
+  const base = renew();
+  vectors.issuerKeyId = 'controlled-mismatch';
+  write(contractPath, original.slice(0, start) + JSON.stringify(vectors, null, 2) + original.slice(end));
+  const head = commit();
+  const scratch = mkdtempSync(join(tmpdir(), 'cloud-contract-plan-'));
+  try {
+    const event = join(scratch, 'event.json'), output = join(scratch, 'output');
+    writeFileSync(event, JSON.stringify({pull_request: {base: {sha: base}, head: {sha: head}}}));
+    writeFileSync(output, '');
+    const result = node('scripts/ci-plan.mjs', [], {GITHUB_EVENT_PATH: event, GITHUB_OUTPUT: output,
+      GITHUB_SHA: head, GITHUB_REPOSITORY: 'waitron-io/waitron-cloud', GITHUB_REF_NAME: 'feature'});
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    const planLine = readFileSync(output, 'utf8').split('\n').find(line => line.startsWith('plan='));
+    assert.ok(planLine, 'the real planner must emit its plan');
+    const selected = JSON.parse(planLine.slice(5));
+    assert.equal(selected.documentation, undefined, 'the consumed contract cannot qualify as unread prose');
+    assert.equal(selected.typecheck, true);
+    assert.equal(selected.packages.length, 23);
+    assert.ok(selected.packages.some(row => row.package === '@waitron-cloud/translation'), 'run the translation package');
+    assert.deepEqual(selected.receipts, receipts);
+    const manifest = JSON.parse(read('packages/translation/package.json'));
+    assert.match(manifest.scripts.test, /node --test .*test\/\*\.test\.ts/);
+    const changedCheck = checkVector();
+    assert.equal(changedCheck.status, 1, changedCheck.stdout + changedCheck.stderr);
+    assert.match(changedCheck.stdout, /controlled-mismatch/);
+    assert.match(changedCheck.stdout, /# fail 1\b/);
+    write(contractPath, original);
+    const restoredCheck = checkVector();
+    assert.equal(restoredCheck.status, 0, restoredCheck.stdout + restoredCheck.stderr);
+    assert.match(restoredCheck.stdout, /# pass 1\b/);
+  } finally {rmSync(scratch, {recursive: true, force: true});}
+}));

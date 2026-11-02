@@ -1669,9 +1669,20 @@ implementation or production evidence.
   certificate. The planner now emits a prominent GitHub warning on every run when
   that audit is unavailable or stale, including non-document changes, with the
   [review and renewal procedure](ci-documentation-audit.md).
-  The renewed audit covers CI reader/execution changes through #180; #144 was
-  the first unrenewed input change. Fixture-only checks had missed the real-tree
-  mismatch. Both immutable-tree checks and the conservative full fallback remain.
+  **Documentation audit renewal (D530).** The stale policy at `b1a8d7ce`
+  was last renewed in #210; #212 first changed inventoried code without renewing
+  it. A disposable renewal reproduced an existing reader gap: changing a published
+  translation vector passed the document check while its original package test
+  failed. The integration contract is now excluded from unread prose, so its
+  changes retain full work. An additive real-planner regression requires the
+  translation package and observes the unchanged vector test pass, fail on the
+  altered issuer key ID and pass after restoration. Review covers all 1,131 changed
+  non-prose paths since #210 and their document readers; the four inventories
+  are renewed together. Other exemptions, existing assertions and independent
+  receipt certificates stay unchanged. The
+  [reader review and reproduction](ci-documentation-audit.md#contract-reader-and-renewal)
+  record the review boundary. Later inventoried changes still require review
+  and renewal; this does not automate approval or establish arbitrary reader discovery.
   The identity source map and gateway JSON reader remain covered by
   their existing full checks. When its input audit is current, an isolated change
   to `scripts/identity-upstream.mjs` or its behavioral test can select only syntax
