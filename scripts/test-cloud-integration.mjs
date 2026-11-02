@@ -67,6 +67,14 @@ export async function runTestCloudCombined({image, waitronImage, protectedContai
   return receipt;
 }
 
+export async function runTestCloudPairedExpiry({image, waitronImage, protectedContainerIds = []} = {}) {
+  const receipt = await runTestCloudClients({image, waitronImage, protectedContainerIds,
+    paidContinuousRecovery: true, freeRemote: true, paidRemote: true,
+    measureCapacity: true, measureIntegration: true, schemaRollback: true, sourceProvenance: true, pairedExpiry: true});
+  receipt.withdrawal = createTestCloudWithdrawalReceipt(receipt);
+  return receipt;
+}
+
 export function checkProtectedContainers(before, after, ids) {
   for (const id of ids) {
     const row = before.find(value => value.startsWith(id + ' '));
@@ -76,7 +84,7 @@ export function checkProtectedContainers(before, after, ids) {
   return true;
 }
 
-export async function runTestCloudClients({image, waitronImage, protectedContainerIds = [], paidSnapshot = false, paidVerification = false, paidRecovery = false, paidAuthorisedRecovery = false, paidStream = false, paidContinuousRecovery = false, freeRemote = false, paidRemote = false, cloudRollback = false, measureCapacity = false, measureIntegration = false, schemaRollback = false, sourceProvenance = false} = {}) {
+export async function runTestCloudClients({image, waitronImage, protectedContainerIds = [], paidSnapshot = false, paidVerification = false, paidRecovery = false, paidAuthorisedRecovery = false, paidStream = false, paidContinuousRecovery = false, freeRemote = false, paidRemote = false, cloudRollback = false, measureCapacity = false, measureIntegration = false, schemaRollback = false, sourceProvenance = false, pairedExpiry = false} = {}) {
   measureCapacity ||= measureIntegration;
   paidStream ||= paidContinuousRecovery;
   paidAuthorisedRecovery ||= paidStream;
@@ -520,6 +528,19 @@ export async function runTestCloudClients({image, waitronImage, protectedContain
       paidRemoteEvidence = await proveIntegrationPaidRemote({docker, compose, control, account,
         paid: remoteClients.find(value => value.plan === 'paid'), free: remoteClients.find(value => value.plan === 'free'), image, runId, storageWithdrawal: paidStream,
         own: id => {owned.push(id); record('container', id);}});
+    }
+    if (pairedExpiry) {
+      journeyStage = 'snapshot-expiry';
+      const {observePairedSnapshotExpiry} = await import('../deploy/test-cloud/test-fixtures/integration-paired-expiry.mjs');
+      const withdrawal = createTestCloudWithdrawalReceipt({version: 1, kind: 'test-cloud-clients', completeIntegration: false,
+        runId, image, cloudSource, organisations, paidSnapshot: publishedSnapshot, paidRemote: paidRemoteEvidence,
+        paidStorageWithdrawal: paidRemoteEvidence.directStorage, paidSnapshotExposure: paidRemoteEvidence.snapshotExposure});
+      const paid = remoteClients.find(value => value.plan === 'paid');
+      const expired = await observePairedSnapshotExpiry({withdrawal, observe: async () => ({
+        ...withdrawal.snapshot,
+        ...await control(paid.id, 'snapshot-exposure', {downgradedAt: withdrawal.snapshot.downgradedAt}), status: 'expired'})});
+      const {status, ...snapshotExposure} = expired.snapshot;
+      paidRemoteEvidence.snapshotExposure = snapshotExposure;
     }
     let cloudRollbackEvidence, schemaRollbackEvidence;
     if (cloudRollback || schemaRollback) {
