@@ -83,6 +83,39 @@ for this control. It substitutes the writer and venue; it does not identify a
 historical native request or qualify production shutdown.
 
 
+A controlled Linux experiment with the checksum-verified official 0.5.17 writer
+narrows the gap between stopping one database and stopping background storage
+work. It uses a toy SQLite database and separate loopback body counters. The
+storage server holds the final byte of a 213-byte snapshot-retention LIST reply.
+The database stop acknowledges while the transport still has 212 bytes and one
+pending LIST.
+
+Five repetitions of each ordering give the following results:
+
+| Before signalling the writer | Observed result |
+| --- | --- |
+| Keep the final reply byte held until writer exit | The partial LIST is cancelled; the transport refuses with `response-aborted` and `ECONNRESET`, although the writer exits zero. |
+| Release the reply and wait for the transport's first idle observation | A later level-1 LIST starts after that observation and is interrupted; storage reports success while the first-hop counter reports a transport error. |
+| Release the reply and wait through the observed level-3 LIST settlement | All seven exchanges finish with matching body counters: 1,278 bytes in and 583 bytes out at each hop. The existing allowance records three successful late LIST admissions and no body mismatch. |
+
+The [pinned writer's store monitor](https://github.com/benbjohnson/litestream/blob/v0.5.17/store.go#L560)
+runs snapshot retention and then lower-level retention using the store context.
+The [database stop handler](https://github.com/benbjohnson/litestream/blob/v0.5.17/server.go#L221)
+disables the database; store shutdown separately cancels the background context.
+That source structure is consistent with the observed later requests. The
+controlled request ordering shows why one idle observation cannot stand in for
+completion of the background sequence.
+
+You cannot use this final-level observation as a production drain rule. The
+experiment has one database, empty retained snapshots and the default three
+compaction levels. It neither identifies the original Linux CI task nor
+reproduces its `ERR_STREAM_PREMATURE_CLOSE` boundary. It does show cancellation
+can be avoided in this controlled setup, so it does not establish unavoidable
+shutdown interruption. Keep the current acceptance guard and two-second stop
+budget. The remaining work is a trustworthy background-completion boundary
+that also survives the genuine storage and restore journeys.
+
+
 The four bounded Linux jobs in [run 40101340028](https://github.com/waitron-io/waitron-cloud/actions/runs/40101340028)
 ran 27 genuine delayed-reply cases: 25 passed and two refused. Both refusals
 record `ERR_STREAM_UNABLE_TO_PIPE`, `list`, a closed client, response headers,
