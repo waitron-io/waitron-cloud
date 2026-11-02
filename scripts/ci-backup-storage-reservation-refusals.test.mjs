@@ -223,7 +223,7 @@ for (const position of [4, 8]) for (const brokenSink of [false, true]) {
 
 // An earlier occupied random candidate must not change a selected refusal scenario.
 for (const brokenSink of [false, true]) {
-  test(`storage refusal fixture isolates earlier candidates from occupied sockets${brokenSink ? " with a refused diagnostic sink" : ""}`, { timeout: 30000 }, async t => {
+  test(`storage refusal fixture isolates earlier candidates from occupied sockets after a skipped claim${brokenSink ? " with a refused diagnostic sink" : ""}`, { timeout: 30000 }, async t => {
     const directory = await mkdtemp(join(tmpdir(), "cloud-storage-reservation-test-"));
     t.after(() => rm(directory, { recursive: true, force: true }));
     const { stdout, stderr } = await execute(process.execPath,
