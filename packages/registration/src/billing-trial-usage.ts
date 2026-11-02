@@ -25,8 +25,9 @@ export async function readTrialUsage(client:PoolClient,scope:BillingScope,venueI
  const runs=(await client.query(`SELECT
   count(*) FILTER(WHERE service='content_translation' AND attempted_at>=($4::date::timestamp AT TIME ZONE 'UTC') AND attempted_at<($5::date::timestamp AT TIME ZONE 'UTC'))::int AS translations,
   count(*) FILTER(WHERE service='rota_solver' AND attempted_at>=($4::date::timestamp AT TIME ZONE 'UTC') AND attempted_at<($5::date::timestamp AT TIME ZONE 'UTC'))::int AS solvers,
-  count(*) FILTER(WHERE attempted_at IS NULL AND month<$5::date)::int AS uncertain
-  FROM billing_allowance_reservations WHERE organisation_id=$1 AND legal_business_id=$2 AND venue_id=$3
+  count(*) FILTER(WHERE (attempted_at IS NULL OR EXISTS(SELECT 1 FROM translation_jobs j
+   WHERE j.installation_id=r.installation_id AND j.operation_id=r.operation_id AND j.venue_id=r.venue_id AND j.allowance_open_calls>0)) AND month<$5::date)::int AS uncertain
+  FROM billing_allowance_reservations r WHERE organisation_id=$1 AND legal_business_id=$2 AND venue_id=$3
    AND state='spent' AND service IN ('content_translation','rota_solver')`,[...args,saved.started_on,saved.ends_on])).rows[0];
  // Even an earlier admission may first call during this trial; its month cannot establish a call date.
  return {complete:traffic.complete&&runs.uncertain===0,usage:{remoteTrafficDays:traffic.days.length,translationRuns:runs.translations,solverRuns:runs.solvers}};

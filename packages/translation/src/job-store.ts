@@ -11,7 +11,7 @@ export interface ItemResult {ref:string;names:Record<string,string>;placeholder:
 export interface JobRow {id:string;installation_id:string;venue_id:string;operation_id:string;job_sha256:string;job_bytes:number;state:JobState;reason:string|null;
  total:number;done:number;failed:number;input_tokens:string;output_tokens:string;cost_micro_usd:string;review_applied:number;review_dropped:number;
  provider:string;model:string;prompt_version:string;lease_id:string|null;lease_until:Date|null;lease_count:number;
- created_at:Date;started_at:Date|null;finished_at:Date|null;collected_at:Date|null}
+ created_at:Date;started_at:Date|null;finished_at:Date|null;collected_at:Date|null;allowance_open_calls:number}
 export async function lockVenue(client:PoolClient,venueId:string){await client.query("SELECT pg_advisory_xact_lock(hashtextextended('translation-venue:'||$1,0))",[venueId]);}
 export async function findSubmitted(client:PoolClient,installationId:string,operationId:string,f:SubmitFingerprint){
  const row=(await client.query<JobRow>('SELECT * FROM translation_jobs WHERE installation_id=$1 AND operation_id=$2',[installationId,operationId])).rows[0];

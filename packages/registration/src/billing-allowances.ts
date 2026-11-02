@@ -121,10 +121,10 @@ export async function releaseUnstartedAllowance(client:PoolClient,id:string):Pro
  const candidate=(await client.query<Saved>(reservationSelect+' WHERE id=$1',[id])).rows[0];
  if(!candidate)fail('allowance_scope_not_found');
  // Workers hold the job before the reservation; release must use the same order.
- const job=candidate.service==='content_translation'?(await client.query('SELECT total,started_at,lease_count,state FROM translation_jobs WHERE installation_id=$1 AND operation_id=$2 AND venue_id=$3 FOR UPDATE',[candidate.installation_id,candidate.operation_id,candidate.venue_id])).rows[0]:undefined;
+ const job=candidate.service==='content_translation'?(await client.query('SELECT total,started_at,lease_count,state,allowance_open_calls FROM translation_jobs WHERE installation_id=$1 AND operation_id=$2 AND venue_id=$3 FOR UPDATE',[candidate.installation_id,candidate.operation_id,candidate.venue_id])).rows[0]:undefined;
  const row=await savedReservation(client,id);
  if(row.state==='released')return receipt(row);
  if(row.state!=='held'||row.attempted_at!==null||row.service!=='content_translation')fail('allowance_conflict');
- if(!job||BigInt(job.total)!==BigInt(row.units)||job.started_at!==null||job.lease_count!==0||job.state!=='queued')fail('allowance_conflict');
+ if(!job||BigInt(job.total)!==BigInt(row.units)||job.started_at!==null||job.lease_count!==0||job.allowance_open_calls!==0||job.state!=='queued')fail('allowance_conflict');
  await client.query("UPDATE billing_allowance_reservations SET state='released' WHERE id=$1",[id]);return {...receipt(row),state:'released'};
 }

@@ -1,5 +1,7 @@
 -- Exact numeric quantities reject fractions before they can be rounded into a debit.
 CREATE DOMAIN allowance_quantity AS numeric CHECK(VALUE=trunc(VALUE) AND VALUE BETWEEN 0 AND 9223372036854775807);
+-- Pending calls survive a worker crash and cannot be cleared by another call's callback.
+ALTER TABLE translation_jobs ADD COLUMN allowance_open_calls integer NOT NULL DEFAULT 0 CHECK(allowance_open_calls>=0);
 CREATE TABLE billing_allowance_versions (
  revision billing_whole PRIMARY KEY CHECK(revision>0),
  effective_from billing_date NOT NULL UNIQUE CHECK(extract(day FROM effective_from)=1),
