@@ -34,9 +34,12 @@ test('syntheticClockObserverPreservesAdmissionAndNeverOpensEgress', async t=>{
  const r=await import((await import('node:url')).pathToFileURL(join(fixture.codeRoot,'runtime.mjs')).href);
  assert.equal(typeof r.createReplayClock,'function');
  const https=(await import('node:https')).default;
+ const net=await import('node:net');
  const {syncBuiltinESMExports}=await import('node:module');
  let egress=0;
  t.mock.method(https,'request',()=>{egress++;throw Error('external clock request forbidden');});
+ t.mock.method(globalThis,'fetch',()=>{egress++;throw Error('external clock fetch forbidden');});
+ t.mock.method(net.Socket.prototype,'connect',()=>{egress++;throw Error('external clock socket forbidden');});
  syncBuiltinESMExports();
  t.after(()=>{t.mock.restoreAll();syncBuiltinESMExports();});
  const clock=r.createReplayClock(1793628000000);
@@ -215,6 +218,7 @@ test('restoreDrainsSourceAndPreservesItsClosedDatabase',async t=>{
  await assert.rejects(replay.recordSale(sale(1)),/Invalid cloud cost replay runtime/);
  await assert.rejects(replay.capture({recoveryKey:'synthetic-key',at:new Date(),signal:new AbortController().signal}),
   /Invalid cloud cost replay runtime/);
+ assert.deepEqual(replay.counts(),{attempted:1,successful:1,failed:0},'refused calls never enter the source writer');
  assert.deepEqual(await restoring,{ok:true,issues:0,sales:1});
  const source=join(stateRoot,'venue/venue.db');
  const bytes=readFileSync(source);
@@ -233,7 +237,107 @@ test('explicitCloseDrainsRecoveryAndRefusesAnotherAttempt',async t=>{
  await assert.rejects(refused,/Invalid cloud cost replay runtime/);
  await closing;await replay.close();
  await assert.rejects(replay.restore({artifact:capture.bytes,recoveryKey:'synthetic-key'}),/Invalid cloud cost replay runtime/);
+ await assert.rejects(replay.verify(),/Invalid cloud cost replay runtime/);
  assert.equal((await import('node:fs')).existsSync(join(stateRoot,'restored')),false);
+});
+
+test('inspectionCloseRefusalStillCollectsTheOwnedDestination',async t=>{
+ const {existsSync}=await import('node:fs');
+ const f=await wrappedArchiveFixture(t,`
+import {writeFileSync} from 'node:fs';import {join} from 'node:path';
+export async function openVenueDatabase(directory){
+ const store=await base.openVenueDatabase(directory);
+ if(!directory.includes('/restored/staging/'))return store;
+ return {...store,async close(){await store.close();
+  writeFileSync(join(directory.split('/restored/')[0],'inspection-close'),'called');
+  throw Error('SYNTHETIC_PRIVATE_CLOSE_REFUSAL');}};
+}`);
+ const captured=await f.replay.capture({recoveryKey:'synthetic-key',at:new Date(),signal:new AbortController().signal});
+ await assert.rejects(f.replay.restore({artifact:captured.bytes,recoveryKey:'synthetic-key'}),
+  {message:'Invalid cloud cost replay runtime'});
+ assert.equal(existsSync(join(f.stateRoot,'inspection-close')),true,'the injected close refusal must actually run');
+ assert.equal(existsSync(join(f.stateRoot,'restored')),false,'one failed close must not skip independent owned cleanup');
+ assert.equal(readFileSync(join(f.stateRoot,'secrets.env'),'utf8'),'SYNTHETIC_PRIVATE_STATE');
+});
+
+test('restoreSnapshotsOwnedBytesBeforeSourceShutdownYields',async t=>{
+ const {writeFileSync,existsSync}=await import('node:fs');
+ const f=await wrappedArchiveFixture(t,`
+import {writeFileSync,existsSync} from 'node:fs';import {join} from 'node:path';
+import {setTimeout as delay} from 'node:timers/promises';
+export async function openVenueDatabase(directory){
+ const store=await base.openVenueDatabase(directory);
+ if(directory.includes('/restored/'))return store;
+ const root=directory.slice(0,-'/venue'.length);
+ return {...store,async close(){await store.close();
+  writeFileSync(join(root,'writer-closed'),'closed');
+  for(let n=0;n<200&&!existsSync(join(root,'release-close'));n++)await delay(10);
+  if(!existsSync(join(root,'release-close')))throw Error('test close release timed out');
+ }};
+}`);
+ const captured=await f.replay.capture({recoveryKey:'synthetic-key',at:new Date(),signal:new AbortController().signal});
+ const bytes=Uint8Array.from(captured.bytes);
+ const restoring=f.replay.restore({artifact:bytes,recoveryKey:'synthetic-key'});
+ try{
+  for(let n=0;n<200&&!existsSync(join(f.stateRoot,'writer-closed'));n++)await new Promise(resolve=>setTimeout(resolve,10));
+  assert.equal(existsSync(join(f.stateRoot,'writer-closed')),true);
+  bytes.fill(0);
+ }finally{writeFileSync(join(f.stateRoot,'release-close'),'release');}
+ assert.deepEqual(await restoring,{ok:true,issues:0,sales:0});
+});
+
+test('foreignRestoreRefusalPreservesTheAdmittedWriter',async t=>{
+ const {replay}=await archiveFixture(t);
+ await assert.rejects(replay.restore({artifact:new Uint8Array([1,2,3]),recoveryKey:'synthetic-key'}),
+  {message:'Invalid cloud cost replay runtime'});
+ await replay.recordSale(sale(0));
+ assert.deepEqual(replay.counts(),{attempted:1,successful:1,failed:0});
+ assert.deepEqual(await replay.verify(),{ok:true,issues:0});
+});
+
+test('verificationAfterRecoveryChecksAReadCopyWithoutReopeningTheSourceWriter',async t=>{
+ const {readdirSync}=await import('node:fs');
+ const f=await wrappedArchiveFixture(t,`
+import {writeFileSync} from 'node:fs';import {dirname,join} from 'node:path';
+let sourceDirectory,sourceOpens=0,checks=0;
+export async function openVenueDatabase(directory){
+ sourceDirectory??=directory;
+ if(directory===sourceDirectory){sourceOpens++;writeFileSync(join(dirname(directory),'source-opens'),String(sourceOpens));}
+ return base.openVenueDatabase(directory);
+}
+export class VerifactuBackend extends base.VerifactuBackend{
+ async checkIntegrity(...args){checks++;writeFileSync(join(dirname(sourceDirectory),'integrity-checks'),String(checks));
+  return super.checkIntegrity(...args);}
+}`);
+ await f.replay.recordSale(sale(0));
+ const capture=await f.replay.capture({recoveryKey:'synthetic-key',at:new Date(),signal:new AbortController().signal});
+ assert.deepEqual(await f.replay.restore({artifact:capture.bytes,recoveryKey:'synthetic-key'}),{ok:true,issues:0,sales:1});
+ const before=readFileSync(join(f.stateRoot,'venue/venue.db'));
+ const priorChecks=Number(readFileSync(join(f.stateRoot,'integrity-checks'),'utf8'));
+ assert.deepEqual(await f.replay.verify(),{ok:true,issues:0});
+ assert.equal(Number(readFileSync(join(f.stateRoot,'integrity-checks'),'utf8')),priorChecks+1,'run the actual integrity checker after recovery');
+ assert.equal(readFileSync(join(f.stateRoot,'source-opens'),'utf8'),'1');
+ assert.deepEqual(readFileSync(join(f.stateRoot,'venue/venue.db')),before);
+ assert.equal(readdirSync(f.stateRoot).some(name=>name.startsWith('integrity-copy-')),false,'collect the private integrity copy');
+});
+
+test('verificationCleanupPreservesAReplacedInspectionDirectory',async t=>{
+ const {readdirSync}=await import('node:fs');
+ const f=await wrappedArchiveFixture(t,`
+import {renameSync,mkdirSync,writeFileSync} from 'node:fs';import {join} from 'node:path';
+export async function openVenueDatabase(directory){
+ const store=await base.openVenueDatabase(directory);
+ if(!directory.includes('/integrity-copy-'))return store;
+ return {...store,async close(){await store.close();
+  renameSync(directory,directory+'-original');mkdirSync(directory,{mode:0o700});
+  writeFileSync(join(directory,'sentinel'),'foreign',{mode:0o600});}};
+}`);
+ const capture=await f.replay.capture({recoveryKey:'synthetic-key',at:new Date(),signal:new AbortController().signal});
+ assert.deepEqual(await f.replay.restore({artifact:capture.bytes,recoveryKey:'synthetic-key'}),{ok:true,issues:0,sales:0});
+ await assert.rejects(f.replay.verify(),{message:'Invalid cloud cost replay runtime'});
+ const directory=readdirSync(f.stateRoot).find(name=>name.startsWith('integrity-copy-')&&!name.endsWith('-original'));
+ assert.ok(directory);
+ assert.equal(readFileSync(join(f.stateRoot,directory,'sentinel'),'utf8'),'foreign');
 });
 
 test('wrongRecoveryKeyCannotPrepareAllocation',async t=>{

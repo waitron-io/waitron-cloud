@@ -1,6 +1,6 @@
 import {assertReplayBundle,assertReplayAssets} from './replay-release.mjs';
 
-import { readFileSync, realpathSync, lstatSync, writeFileSync, readdirSync, mkdirSync, rmSync } from 'node:fs';
+import { readFileSync, realpathSync, lstatSync, writeFileSync, readdirSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs';
 import { join, relative, isAbsolute, resolve, dirname } from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
 import { pathToFileURL } from 'node:url';
@@ -182,10 +182,31 @@ export async function openReplay({ codeRoot, stateRoot, config, initial }) {
         });
       },
       verify() {
+        if (disposed) return Promise.reject(new Error('Invalid cloud cost replay runtime'));
         return admit(async () => {
+          if (sourceClosed) {
+            // Integrity remains readable after recovery without reopening the source writer.
+            validateState();
+            const directory = mkdtempSync(join(stateRoot, 'integrity-copy-'));
+            const identity = lstatSync(directory);
+            let copy;
+            try {
+              writeFileSync(join(directory, 'venue.db'), readFileSync(join(stateRoot, 'venue/venue.db')),
+                { mode: 0o600, flag: 'wx' });
+              copy = await r.openVenueDatabase(directory);
+              const result = await r.withTransaction(copy.venue, tx => backend.checkIntegrity(tx, nodeId));
+              return { ok: result.ok, issues: result.issues.length };
+            } finally {
+              try { await copy?.close(); } finally {
+                validateState(); const current = lstatSync(directory);
+                requireThat(current.ino === identity.ino && current.dev === identity.dev);
+                rmSync(directory, { recursive: true });
+              }
+            }
+          }
           const result = await r.withTransaction(db, tx => backend.checkIntegrity(tx, nodeId));
           return { ok: result.ok, issues: result.issues.length };
-        });
+        }, true);
       },
       capture(options) {
         return admit(async () => {
@@ -202,12 +223,17 @@ export async function openReplay({ codeRoot, stateRoot, config, initial }) {
       },
       restore(options) {
         if (disposed) return Promise.reject(new Error('Invalid cloud cost replay runtime'));
+        let artifact, recoveryKey;
+        try {
+          exact(options, ['artifact', 'recoveryKey']);
+          recoveryKey = options.recoveryKey;
+          requireThat(typeof recoveryKey === 'string' && recoveryKey.length > 0);
+          requireThat(options.artifact instanceof Uint8Array);
+          artifact = Uint8Array.from(options.artifact);
+          requireThat(captures.has(digest(artifact)));
+        } catch { return Promise.reject(new Error('Invalid cloud cost replay runtime')); }
         closing = true;
         return admit(async () => {
-          exact(options, ['artifact', 'recoveryKey']);
-          const { artifact, recoveryKey } = options;
-          requireThat(typeof recoveryKey === 'string' && recoveryKey.length > 0);
-          requireThat(artifact instanceof Uint8Array && captures.has(digest(artifact)));
           validateState();
           await closeWriter();
           const restoredRoot = join(stateRoot, 'restored');
@@ -264,8 +290,9 @@ export async function openReplay({ codeRoot, stateRoot, config, initial }) {
               return { ok: integrity.ok, issues: integrity.issues.length, sales: Number(sales.rows[0].n) };
             } finally { await restored.close(); }
           } catch (error) {
-            try { await inspected?.close(); } finally { inspected = undefined; }
-            await inspection?.discard(); inspection = undefined;
+            // One inspection cleanup refusal must not skip the other owned cleanup steps.
+            try { await inspected?.close(); } catch {} finally { inspected = undefined; }
+            try { await inspection?.discard(); } catch {} finally { inspection = undefined; }
             validateState();
             const s = lstatSync(restoredRoot);
             requireThat(s.ino === restoredIdentity.ino && s.dev === restoredIdentity.dev);
