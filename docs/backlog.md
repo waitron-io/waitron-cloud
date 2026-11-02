@@ -3287,6 +3287,34 @@ See [the boundaries and remaining work](backlog/verifier-build.md#verifier-sourc
 when local Docker returns.
 See [the boundaries and remaining work](backlog/verifier-build.md#verifier-build-refusal-and-cleanup-controls-d443).
 
+## Bound verifier test failure cleanup (D530)
+
+[The D462 backup job](https://github.com/waitron-io/waitron-cloud/actions/runs/41311315472/job/124862280459)
+first refuses an invalid-archive verdict because child cleanup fails. Its leftover
+child then causes later empty-state checks and image removal to fail. The original
+Docker refusal remains unexplained; a controlled refusal reproduces this cascade.
+
+The fixture now records each successfully created child's exact ID, image and six
+request labels. After each case's assertions, it removes only a matching recorded
+child and confirms absence. Changed ownership or an uncertain Docker response
+refuses rescue. A failed rescue does not prevent attempts for other recorded
+children. Failed records remain for later rescue attempts, so a persistent Docker
+refusal or changed ownership can still make later cases fail. There is no
+discovery or adoption of unrecorded containers.
+
+Run `node --test packages/backups/test/bound-fixture-cleanup.test.ts` for the
+ownership, absence, malformed-output and failed-rescue controls. With Docker,
+`node --test packages/backups/test/bound-fixture-cascade.test.ts` injects a product
+cleanup refusal into a private copy of the original test file. The original case
+must still fail, its next case must pass, and both its recorded child and image tag
+must be absent. The parent has an independent rescue if that control fails, and
+retains both the original assertion and a later rescue failure. These controls
+also run in ordinary package CI; the cascade control builds its own fixture image.
+Every original verifier assertion, authority check and deadline remains unchanged.
+The controller's existing diagnostics must identify a recurrence before you can
+attribute or repair the historical Docker failure. A lost create response before
+an ID is returned and a child created by a separate host remain outside this rescue.
+
 ## Bound verifier fixture build timeout (D312)
 
 Find why the bound verifier fixture image exceeded its two-minute build limit in CI.
