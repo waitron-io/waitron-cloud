@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import {createHash,createHmac,generateKeyPairSync,randomUUID,randomBytes} from 'node:crypto';
 import {pathToFileURL} from 'node:url';
 import {join} from 'node:path';
+import {constants} from 'node:os';
 export const source=(root,path)=>import(pathToFileURL(join(root,path)).href);
 function canonical(value){
  if(Array.isArray(value))return value.map(canonical);
@@ -135,7 +136,7 @@ export function upgradeFailure(error,phase){
   const fields=Object.getOwnPropertyDescriptors(command),value=key=>fields[key]?.value;
   if(['old','new'].includes(value('release'))&&['clone','checkout','install'].includes(value('operation'))){
    const status=value('status'),signal=value('signal'),processCode=value('code');
-   record.command={release:value('release'),operation:value('operation'),status:Number.isInteger(status)&&status>=0&&status<=255?status:null,signal:['SIGTERM','SIGKILL','SIGINT'].includes(signal)?signal:null,code:['ENOENT','EACCES','ETIMEDOUT','ENOBUFS'].includes(processCode)?processCode:null};
+   record.command={release:value('release'),operation:value('operation'),status:Number.isInteger(status)&&status>=0&&status<=255?status:null,signal:typeof signal==='string'&&Object.hasOwn(constants.signals,signal)?signal:null,code:['ENOENT','EACCES','ETIMEDOUT','ENOBUFS'].includes(processCode)?processCode:null};
   }
  }
  return record;
