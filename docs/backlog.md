@@ -3722,6 +3722,11 @@ unavailable marker and shutdown continues. A generated writer with a real HTTP
 socket proves that this earlier snapshot survives cancellation and writer exit;
 it does not identify the native writer's historical request. The historical stop/exit cause still needs a
 labelled recurrence; see the linked investigation before changing the stop rule.
+Five controlled Linux triples with the official writer show that a valid database
+stop and one completed LIST do not stop later retention LISTs. Waiting through
+the observed last retention level avoids cancellation in that toy setup. This
+does not reproduce the historical premature-close code or qualify a production
+drain method; retain the existing acceptance guard.
 The delayed-PUT fixture also records up to sixteen uploads on a stop refusal,
 including which upload released readiness and their arrival, backend-response and
 reply-forwarding times relative to stop. Its readiness gate now requires a
