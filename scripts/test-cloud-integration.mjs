@@ -98,17 +98,18 @@ export async function runTestCloudClients({image, waitronImage, protectedContain
   const waitronSource = sourceProvenance ? await captureWaitronSource(waitronCheckout, revision) : undefined;
   const source = sourceProvenance ? await captureIntegrationSource(root) : undefined;
   const runId = randomUUID(), project = 'waitron-cloud-test-integration-' + runId.slice(0, 8);
+  const docker = (args, input = '', phase) => command(args, input, phase, {TEST_CLOUD_IMAGE: image});
+  const inventory = () => readIntegrationInventory({docker, protectedIds: protectedContainerIds});
+  // Initial inventory can refuse before owned cleanup begins, so allocate no host scratch yet.
+  const before = await inventory();
+  checkProtectedContainers(before, before, protectedContainerIds);
   const directory = await mkdtemp(join(tmpdir(), 'cloud-integration-run-'));
   const override = join(directory, 'proof.yaml'), clientTag = project + '-venue:local', recoveryTag = project + '-recovery:local';
   const owned = [], created = [], removed = [], venueCAs = new Map();
   let built = false, recoveryBuilt = false, started = false, result, cloudSource, cloudAssets, waitronAssets, waitronBaseSource, waitronClientSource;
   let verifierWorker, verifierStarted = false, verifierScope, verifierUncertain = false, capacityEvidence;
-  const docker = (args, input = '', phase) => command(args, input, phase, {TEST_CLOUD_IMAGE: image});
   const prefix = ['compose', '--project-name', project, '--env-file', 'deploy/test-cloud/test.env', '-f', 'compose.yaml', '-f', 'deploy/test-cloud/compose.yaml', '-f', override];
   const compose = args => docker([...prefix, ...args], '', 'compose-' + args[0]);
-  const inventory = () => readIntegrationInventory({docker, protectedIds: protectedContainerIds});
-  const before = await inventory();
-  checkProtectedContainers(before, before, protectedContainerIds);
   let hostCapacity, startupCapacity, capacityChronology;
   const record = (kind, id) => {if (!created.some(value => value.kind === kind && value.id === id)) created.push({kind, id, owner: runId});};
   const control = async (id, phase, choice) => parseIntegrationJson(await docker(['exec', '-i',

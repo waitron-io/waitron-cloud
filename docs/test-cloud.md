@@ -49,6 +49,16 @@ Run the source checks with:
 node --test scripts/test-cloud-source.test.mjs
 ```
 
+If the initial Docker inventory fails or protected container state is missing or
+malformed, the client runner refuses before creating its temporary run directory.
+Later failures remove that directory through the existing cleanup path, while
+leaving neighbouring sessions' files alone. You can check these refusal paths
+without Docker:
+
+```sh
+node --test scripts/test-cloud-initial-inventory-cleanup.test.mjs
+```
+
 ## Read the combined withdrawal component
 
 A stream key and a temporary snapshot credential stop working at different

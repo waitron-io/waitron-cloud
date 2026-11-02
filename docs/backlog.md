@@ -1002,10 +1002,10 @@ implementation or production evidence.
   A genuine passing resource record, actual matching
   deployment identity, published-release upgrade and shipping qualification
   remain open.
-  A separate cleanup follow-up remains: a refused initial Docker inventory can
-  leave an empty host run directory because allocation precedes both that read
-  and the cleanup scope. Four controlled calls reproduce this; their four
-  empty directories were identified and removed independently.
+  Initial Docker inventory and protected-container checks now precede host run
+  directory allocation. Four isolated subprocess controls cover command refusal,
+  missing or malformed protected state, and later image refusal. Each leaves no
+  owned scratch directory and preserves a neighbouring session's files.
   A [combined journey](test-cloud.md#run-the-journeys-in-one-project) now requires
   recovery, remote withdrawal, measured capacity and matching-set rollback in one
   disposable project. It passes on the isolated Linux box in 385 seconds without
