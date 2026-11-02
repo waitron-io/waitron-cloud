@@ -152,6 +152,7 @@ try{
  assert.deepEqual(await ledger(primary.pool),oldLedger);
  if(relayStop||monitoringQuiet||backupVerification||billing||venueServices||lifecycle)assert.deepEqual((await primary.pool.query('SELECT * FROM schema_migrations ORDER BY name')).rows,fullOldLedger);
  if(lifecycle){
+  assert.equal((await primary.pool.query("SELECT to_regclass('billing_businesses') AS table_name")).rows[0].table_name,null);
   for(const table of ['data_lifecycles','data_lifecycle_operations','data_lifecycle_effects'])assert.equal((await primary.pool.query("SELECT to_regclass($1) AS table_name",[table])).rows[0].table_name,null);
   assert.deepEqual(await storedRows(primary.pool,true),beforeRows);lifecycleChecks.interruptedRollback=true;
  }else if(venueServices){

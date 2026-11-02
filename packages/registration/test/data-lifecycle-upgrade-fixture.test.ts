@@ -24,5 +24,15 @@ for(const fault of ['operation','effect','deadline','request-time'])test('recove
  if(fault==='effect')await f.pool.query('DELETE FROM data_lifecycle_effects');
  if(fault==='request-time')await f.pool.query("UPDATE data_lifecycle_operations SET requested_at=requested_at+interval '1 second'");
  if(fault==='deadline')await f.pool.query("UPDATE data_lifecycles SET effective_end_at=effective_end_at+interval '1 second',deadline_at=deadline_at+interval '1 second'");
- await assert.rejects(fixture.restoredLifecycle(root,f.pool,proof,before));
+ await assert.rejects(fixture.restoredLifecycle(root,f.pool,proof,before),/pending operations and effects survive the logical backup exactly/);
+});
+
+test('recovery refuses an internally consistent snapshot with a shifted operation deadline',async()=>{
+ const fixture=await load();assert.equal(typeof fixture.seedLifecycle,'function');
+ const proof=await fixture.seedLifecycle(root,f.pool,{installations:[{venueId:f.venueId},{venueId:f.foreignVenueId}]});
+ await f.pool.query("UPDATE data_lifecycle_operations SET deadline_at=deadline_at+interval '1 second'");
+ const shifted=await fixture.lifecycleState(f.pool);
+ await assert.rejects(fixture.restoredLifecycle(root,f.pool,proof,shifted),{
+  code:'ERR_ASSERTION',actual:'2028-05-29T23:30:01.000Z',expected:'2028-05-29T23:30:00.000Z',
+ });
 });
