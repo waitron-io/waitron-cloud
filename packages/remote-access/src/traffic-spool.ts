@@ -1,17 +1,21 @@
 import {createHash,randomUUID} from 'node:crypto';
 import {constants} from 'node:fs';
-import {mkdir,open,realpath,rename,unlink} from 'node:fs/promises';
+import {lstat,mkdir,open,opendir,realpath,rename,unlink} from 'node:fs/promises';
 import {isAbsolute,join,normalize} from 'node:path';
 import {isDeepStrictEqual} from 'node:util';
 import {isUuid,type ManifestEnvelope} from './manifest.ts';
 import {trafficDelta,type TrafficCounter} from './traffic-counters.ts';
 import {trafficEnvelopeReport,validateTrafficReport,type TrafficReport} from './traffic-report.ts';
+import {validateTrafficMapping,type TrafficMapping} from './traffic-coverage.ts';
 
 interface State {
  version:1;processId:string;sequence:number;until:string;complete:boolean;lastDigest:string;
  counters:[string,TrafficCounter][];pending:ManifestEnvelope[];
 }
 interface Options {directory:string;maxBytes:number}
+interface Delivery {
+ version:1;mapping:TrafficMapping;device:string;inode:string;processId:string;receipts:{sequence:number;digest:string}[];
+}
 function unavailable():never{throw new Error('traffic_spool_unavailable');}
 const missing=(error:unknown)=>!!error&&typeof error==='object'&&'code'in error&&error.code==='ENOENT';
 function object(value:unknown,keys:string[]):value is Record<string,unknown>{
@@ -43,7 +47,8 @@ function digest(envelope:ManifestEnvelope,counters:[string,TrafficCounter][]):st
 }
 /**
  * Cursor and pending envelopes share one checkpoint, so neither can advance alone.
- * maxBytes bounds that checkpoint; atomic writes and one retained partial write need at most three copies.
+ * maxBytes bounds each checkpoint; atomic writes and a retained partial write need at most three copies.
+ * Transfer also keeps one envelope copy and a bounded publication marker with its pending replacement.
  */
 export class TrafficSpool {
  readonly #directory:string;readonly #maxBytes:number;
@@ -155,6 +160,95 @@ export class TrafficSpool {
    const state=await this.#load();if(!state||processId!==state.processId||!Number.isSafeInteger(sequence)||sequence<1||sequence>state.sequence)unavailable();
    const pending=state.pending.filter(e=>trafficEnvelopeReport(e).sequence!==sequence);if(pending.length===state.pending.length)return;
    await this.#publish({...state,pending});
+  });
+ }
+ /** Only a saved publication in the same collector directory can turn absence into an acknowledgement. */
+ async transfer(input:TrafficMapping):Promise<void>{
+  let mapping:TrafficMapping;
+  try{validateTrafficMapping(input);mapping={...input};if(mapping.writerUid!==process.geteuid!()||mapping.directory===this.#directory)unavailable();}
+  catch{return unavailable();}
+  return this.#locked(async()=>{
+   let state=await this.#load();if(!state)return;
+   const directory=await open(mapping.directory,constants.O_RDONLY|constants.O_DIRECTORY|constants.O_NOFOLLOW);
+   try{
+    const initial=await directory.stat({bigint:true});
+    const checkDirectory=async()=>{
+     const s=await lstat(mapping.directory,{bigint:true});
+     if(!s.isDirectory()||s.dev!==initial.dev||s.ino!==initial.ino||s.uid!==BigInt(mapping.writerUid)||s.gid!==BigInt(mapping.readerGid)
+      ||(s.mode&0o7777n)!==0o2750n||await realpath(mapping.directory)!==mapping.directory)unavailable();
+    };
+    await checkDirectory();
+    // An interrupted marker is never proof that its preceding publication reached durable storage.
+    if(await this.#read('delivery.tmp')!==undefined){await this.#gap();await unlink(join(this.#directory,'delivery.tmp'));await this.#syncDirectory();}
+    const raw=await this.#read('delivery.json'),delivered=new Map<number,string>();
+    if(raw!==undefined){
+     const value:unknown=JSON.parse(raw);
+     if(!object(value,['version','mapping','device','inode','processId','receipts'])||value.version!==1
+      ||!isDeepStrictEqual(value.mapping,mapping)||value.device!==String(initial.dev)||value.inode!==String(initial.ino)
+      ||value.processId!==state.processId||!Array.isArray(value.receipts))unavailable();
+     let previous=0;
+     for(const entry of value.receipts){
+      if(!object(entry,['sequence','digest'])||!Number.isSafeInteger(entry.sequence)||Number(entry.sequence)<=previous||Number(entry.sequence)>state.sequence
+       ||typeof entry.digest!=='string'||!/^[a-f0-9]{64}$/.test(entry.digest))unavailable();
+      previous=Number(entry.sequence);delivered.set(previous,entry.digest);
+     }
+    }
+    let markerExists=raw!==undefined;
+    const saveDelivery=async()=>{
+     if(!delivered.size){if(markerExists){await unlink(join(this.#directory,'delivery.json'));await this.#syncDirectory();markerExists=false;}return;}
+     const marker:Delivery={version:1,mapping,device:String(initial.dev),inode:String(initial.ino),processId:state!.processId,
+      receipts:[...delivered].sort(([a],[b])=>a-b).map(([sequence,digest])=>({sequence,digest}))};
+     const text=JSON.stringify(marker);if(Buffer.byteLength(text)>this.#maxBytes)unavailable();
+     await this.#create('delivery.tmp',text);await rename(join(this.#directory,'delivery.tmp'),join(this.#directory,'delivery.json'));await this.#syncDirectory();markerExists=true;
+    };
+    // A checkpoint acknowledgement may commit before its obsolete publication marker is removed.
+    const pendingSequences=new Set(state.pending.map(e=>trafficEnvelopeReport(e).sequence));let pruned=false;
+    for(const sequence of delivered.keys())if(!pendingSequences.has(sequence)){delivered.delete(sequence);pruned=true;}
+    if(pruned)await saveDelivery();
+    let exportedCount=0;
+    for await(const _entry of await opendir(mapping.directory)){if(++exportedCount>4096)unavailable();}
+    for(const envelope of state.pending){
+     const report=trafficEnvelopeReport(envelope),text=JSON.stringify(envelope),hash=createHash('sha256').update(text).digest('hex'),delivery=delivered.get(report.sequence);
+     if(report.cellId!==mapping.cellId||Buffer.byteLength(text)>262144)unavailable();
+     if(delivery&&delivery!==hash)unavailable();
+     const path=join(mapping.directory,`${report.processId}.${report.sequence}.json`);
+     await checkDirectory();let file;
+     try{file=await open(path,constants.O_RDONLY|constants.O_NOFOLLOW|constants.O_NONBLOCK);}catch(error){if(!missing(error))throw error;}
+     if(file){
+      try{
+       const before=await file.stat({bigint:true});
+       if(!before.isFile()||before.nlink!==1n||before.uid!==BigInt(mapping.writerUid)||before.gid!==BigInt(mapping.readerGid)
+        ||(before.mode&0o7777n)!==0o640n||before.size!==BigInt(Buffer.byteLength(text)))unavailable();
+       const bytes=Buffer.alloc(Buffer.byteLength(text)+1);let size=0;
+       while(size<bytes.length){const r=await file.read(bytes,size,bytes.length-size,null);if(!r.bytesRead)break;size+=r.bytesRead;}
+       if(size!==Buffer.byteLength(text)||!bytes.subarray(0,size).equals(Buffer.from(text)))unavailable();
+       await file.sync();await checkDirectory();
+       const after=await lstat(path,{bigint:true});
+       if(after.dev!==before.dev||after.ino!==before.ino||after.size!==before.size||after.mtimeNs!==before.mtimeNs||after.ctimeNs!==before.ctimeNs)unavailable();
+      }finally{await file.close();}
+     }else if(delivery){
+      await checkDirectory();await directory.sync();
+      state={...state,pending:state.pending.filter(e=>trafficEnvelopeReport(e).sequence!==report.sequence)};
+      await this.#publish(state);
+      delivered.delete(report.sequence);await saveDelivery();continue;
+     }else{
+      if(exportedCount>=4096)continue;
+      const staging=join(this.#directory,'outgoing.tmp');let leftover;
+      try{leftover=await open(staging,constants.O_RDONLY|constants.O_NOFOLLOW|constants.O_NONBLOCK);}catch(error){if(!missing(error))throw error;}
+      if(leftover){
+       try{const s=await leftover.stat();if(!s.isFile()||s.nlink!==1||s.uid!==process.geteuid!()||![0o600,0o640].includes(s.mode&0o7777)||s.size>262144)unavailable();}
+       finally{await leftover.close();}
+       // The checkpoint retains the source bytes; a partial outgoing copy can be rebuilt without advancing it.
+       await this.#gap();await unlink(staging);await this.#syncDirectory();
+      }
+      const output=await open(staging,constants.O_WRONLY|constants.O_CREAT|constants.O_EXCL|constants.O_NOFOLLOW,0o600);
+      try{await output.writeFile(text);await output.chown(mapping.writerUid,mapping.readerGid);await output.chmod(0o640);await output.sync();}finally{await output.close();}
+      await checkDirectory();await rename(staging,path);exportedCount++;
+     }
+     await checkDirectory();await directory.sync();
+     if(!delivery){delivered.set(report.sequence,hash);await saveDelivery();}
+    }
+   }finally{await directory.close();}
   });
  }
  async restore():Promise<{processId:string;sequence:number;counters:Map<string,TrafficCounter>;complete:boolean}>{
