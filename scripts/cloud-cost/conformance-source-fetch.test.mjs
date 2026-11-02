@@ -145,7 +145,7 @@ test('browser preparation fetches and verifies the dashboard stream and unload r
   assert.equal(result.calls.filter(args=>args.includes('fetch')).length,1);
 });
 
-test('browser preparation refuses the historical replay revision before installation',async t=>{
+test('browser preparation refuses the current replay revision before installation',async t=>{
   const result=await prepare(t,{selected:'remote-browser-conformance.test.mjs'});
   assert.match(result.output,/Unexpected public source/);
   assert.equal(result.output.includes('REACHED_SOURCE_INSTALL'),false);
@@ -175,13 +175,13 @@ test('fixture cleanup collects a paused fetch after its supervisor dies',async t
   assert.throws(()=>process.kill(pid,0),{code:'ESRCH'},'cleanup collects the paused helper independently of its supervisor');
 });
 
-test('replay preparation retains its historical source independently of the browser pin',async t=>{
+test('replay preparation retains its current source independently of the browser pin',async t=>{
   const result=await prepare(t);
   assert.equal(result.calls.find(args=>args.includes('fetch')).at(-1),'b1b0f10952a59eb59f7358bd681a3cdc94d9b61c');
   assert.match(result.output,/REACHED_SOURCE_INSTALL/);
 });
 
-test('combined preparation begins with the historical replay source',async t=>{
+test('combined preparation begins with the current replay source',async t=>{
   const result=await prepare(t,{selected:['cadence-conformance.test.mjs','remote-browser-conformance.test.mjs']});
   assert.equal(result.calls.find(args=>args.includes('fetch')).at(-1),'b1b0f10952a59eb59f7358bd681a3cdc94d9b61c');
   assert.match(result.output,/REACHED_SOURCE_INSTALL/);

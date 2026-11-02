@@ -1,3 +1,4 @@
+import {standardNextNumber} from './replay-series-fixture.mjs';
 import {createHash} from 'node:crypto';
 // This explicit local integration command uses prepared public code and synthetic sales only.
 import { test } from 'node:test';
@@ -12,7 +13,7 @@ const initial = {
   taxpayer: { country: 'ES', taxId: '12345678Z', legalName: 'Synthetic SL' },
   location: { name: 'Synthetic venue', invoiceLocales: ['es'], operationDescription: 'Servicio',
     timeZone: 'Europe/Madrid', dayCutover: '06:00:00' },
-  nodeName: 'Synthetic node', seriesCode: 'R', fullSeriesCode: 'F', idSistemaInformatico: 'WR',
+  nodeName: 'Synthetic node', seriesCode: 'R', fullSeriesCode: 'F', rectificativeSeriesCode: 'C', idSistemaInformatico: 'W1',
 };
 const config = {
   localEndpoints: { s3: 'http://s3:8333', postgres: 'postgresql://fixture:fixture@postgres:5432/fixture',
@@ -47,7 +48,7 @@ test('allBillsReplayedThroughRecordSale', async t => {
     assert.equal(db.prepare('SELECT count(*) AS n FROM tenders').get().n, 3);
     assert.equal(db.prepare('SELECT count(*) AS n FROM sale_settlements').get().n, 3);
     assert.equal(db.prepare("SELECT count(*) AS n FROM envios WHERE estado='pendiente'").get().n, 3);
-    assert.equal(db.prepare('SELECT next_number AS n FROM invoice_series WHERE code=\'R\'').get().n, 4);
+    assert.equal(standardNextNumber(db,stateRoot), 4);
     assert.equal(db.prepare('SELECT count(*) AS n FROM registros_facturacion').get().n, 3);
     const hashes = db.prepare('SELECT huella FROM registros_facturacion ORDER BY secuencia').all();
     assert.equal(new Set(hashes.map(r => r.huella)).size, 3);
@@ -91,7 +92,7 @@ test('lateSettlementFailureRollsBackSaleAndAllocation', async t => {
     assert.equal(db.prepare('SELECT count(*) AS n FROM sales').get().n, 0);
     assert.equal(db.prepare('SELECT count(*) AS n FROM tenders').get().n, 0);
     assert.equal(db.prepare('SELECT count(*) AS n FROM registros_facturacion').get().n, 0);
-    assert.equal(db.prepare("SELECT next_number AS n FROM invoice_series WHERE code='R'").get().n, 1);
+    assert.equal(standardNextNumber(db,stateRoot), 1);
   } finally { db.close(); }
   await replay.recordSale(sale(1));
   assert.deepEqual(replay.counts(), { attempted: 2, successful: 1, failed: 1 });
@@ -103,7 +104,7 @@ test('sourceIdentityCannotBeInjectedIntoFreshReplay', async t => {
   const db = new DatabaseSync(join(stateRoot, 'venue/venue.db'), { readOnly: true });
   try {
     assert.equal(db.prepare('SELECT count(*) AS n FROM sales').get().n, 0);
-    assert.equal(db.prepare("SELECT next_number AS n FROM invoice_series WHERE code='R'").get().n, 1);
+    assert.equal(standardNextNumber(db,stateRoot), 1);
   } finally { db.close(); }
   assert.deepEqual(replay.counts(), { attempted: 2, successful: 0, failed: 2 });
 });
@@ -238,6 +239,7 @@ test('failedRestorePreservesAReplacedDestination', async t => {
     rmSync(stateRoot, { recursive: true, force: true }); rmSync(codeRoot, { recursive: true, force: true });
   } });
   cpSync(join(fixture.codeRoot, 'packages'), join(codeRoot, 'packages'), { recursive: true });
+  cpSync(join(fixture.codeRoot, 'assets'), join(codeRoot, 'assets'), { recursive: true });
   const source = `export * from ${JSON.stringify(pathToFileURL(join(fixture.codeRoot, 'runtime.mjs')).href)};
 import {renameSync,mkdirSync,writeFileSync} from 'node:fs';
 export async function restoreFromArtifact(deps) {
@@ -246,7 +248,7 @@ export async function restoreFromArtifact(deps) {
 }`;
   writeFileSync(join(codeRoot, 'runtime.mjs'), source);
   writeFileSync(join(codeRoot, 'runtime-manifest.json'), JSON.stringify({ schemaVersion: 1,
-    revision: 'fbadd15785464e59747e697c11048bfbc6e4938f', sha256: createHash('sha256').update(source).digest('hex') }));
+    revision: 'b1b0f10952a59eb59f7358bd681a3cdc94d9b61c', sha256: createHash('sha256').update(source).digest('hex') }));
   replay = await adapter.openReplay({ codeRoot, stateRoot, config, initial });
   await assert.rejects(replay.restore({ artifact: new Uint8Array(), recoveryKey: 'synthetic-key' }),
     e => e.message === 'Invalid cloud cost replay runtime' && !e.stack.includes('SYNTHETIC_PRIVATE_FAILURE'));
@@ -274,4 +276,53 @@ test('replayBundleCarriesMatchingReleaseAndFont',()=>{
  assert.equal(manifest.sha256,createHash('sha256').update(readFileSync(join(fixture.codeRoot,'runtime.mjs'))).digest('hex'));
  assert.equal(createHash('sha256').update(readFileSync(join(fixture.codeRoot,'assets/invoice-noto-sans.ttf'))).digest('hex'),
   'bfb7bb691513f12e734dc346c03a03f784912432d7e3fa8e56efcf906fe86b3d');
+});
+
+test('setupUsesModuleOwnedAllocation',async t=>{
+ const {stateRoot}=await open(t);
+ const db=new DatabaseSync(join(stateRoot,'venue/venue.db'),{readOnly:true});
+ try {
+  const node=readFileSync(join(stateRoot,'trading.env'),'utf8').match(/^WAITRON_NODE_ID=([^\n]+)\n$/)?.[1];
+  assert.ok(node);
+  const allocations=db.prepare('SELECT * FROM fiscal_allocations').all();
+  assert.equal(allocations.length,1,'ordinary provisioning must retain its actual allocation');
+  const a=allocations[0],input=JSON.parse(a.allocation);
+  assert.equal(a.node_id,node);assert.equal(a.software_id,'W1');assert.equal(a.environment,'preproduction');
+  assert.equal(input.source,'hour');assert.equal(input.installationIdentity,a.installation_identity);
+  assert.match(a.installation_identity,/^[0-9A-HJKMNP-TV-Z]{5}$/);
+  const series=db.prepare('SELECT id,node_id,code,purpose,next_number,retired_at FROM invoice_series ORDER BY purpose').all();
+  assert.equal(series.length,3);
+  assert.deepEqual(series.map(row=>({node:row.node_id,purpose:row.purpose,code:row.code,next:row.next_number,retired:row.retired_at})),[
+   {node,purpose:'full',code:'F-'+a.installation_identity,next:1,retired:null},
+   {node,purpose:'rectificative',code:'C-'+a.installation_identity,next:1,retired:null},
+   {node,purpose:'standard',code:'R-'+a.installation_identity,next:1,retired:null},
+  ]);
+  assert.equal(new Set(series.map(row=>row.id)).size,3);
+  const sif=db.prepare('SELECT * FROM registro_sif').all();assert.equal(sif.length,1);
+  assert.equal(sif[0].id,a.sif_id);assert.equal(sif[0].node_id,node);
+  assert.equal(sif[0].id_sistema_informatico,'W1');assert.equal(sif[0].numero_instalacion,a.installation_identity);
+  assert.equal(db.prepare('SELECT name FROM nodes WHERE id=?').get(node).name,'Synthetic node');
+ } finally {db.close();}
+});
+
+// Execute the peer's actual provisioning prefix with private host paths. HTTPS routes are qualified separately.
+test('ownerPeerProvisioningRetainsRealAllocation',async t=>{
+ const {spawnSync}=await import('node:child_process');
+ const {pathToFileURL}=await import('node:url');
+ const owner=JSON.parse(readFileSync(process.env.COST_OWNER_FIXTURE,'utf8'));
+ const root=mkdtempSync(join(fixture.stateParent,'owner-provision-'));chmodSync(root,0o700);
+ t.after(()=>rmSync(root,{recursive:true,force:true}));
+ const backend=readFileSync(new URL('./remote-waitron-backend.mjs',import.meta.url),'utf8');
+ const prefix=backend.slice(0,backend.indexOf('const app = new r.Hono();'))
+  .replace("'/input/runtime.mjs'",JSON.stringify(pathToFileURL(owner.runtime).href))
+  .replace("'/input/migrations/manifest.json'",JSON.stringify(join(owner.migrations,'manifest.json')))
+  .replace("'/input/migrations/'",JSON.stringify(owner.migrations+'/'))
+  .replaceAll("'/tmp/venue'",JSON.stringify(join(root,'venue')))
+  .replace("stateDir: '/tmp'",'stateDir: '+JSON.stringify(root));
+ assert.equal(prefix.includes("'/tmp"),false,'every peer scratch path must be redirected before execution');
+ const summary="console.log(JSON.stringify({node:provisioned.nodeId,rows:(await store.venue.execute(r.sql`SELECT node_id,software_id,environment FROM fiscal_allocations`)).rows}));await store.close();";
+ const result=spawnSync(process.execPath,['--input-type=module','-e',prefix+summary],{encoding:'utf8',timeout:30000});
+ assert.equal(result.status,0,result.stderr);
+ const data=JSON.parse(result.stdout);assert.equal(data.rows.length,1);
+ assert.deepEqual(data.rows,[{node_id:data.node,software_id:'W1',environment:'preproduction'}]);
 });

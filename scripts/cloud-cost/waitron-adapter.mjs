@@ -53,7 +53,7 @@ function replayPaths(codeRoot, stateRoot, initial) {
   requireThat(!contained(codeRoot, stateRoot) && !contained(stateRoot, codeRoot));
   requireThat((lstatSync(stateRoot).mode & 0o777) === 0o700);
   requireThat(!directoryEntryExists(join(stateRoot, 'venue')));
-  exact(initial, ['taxpayer', 'location', 'nodeName', 'seriesCode', 'fullSeriesCode', 'idSistemaInformatico']);
+  exact(initial, ['taxpayer', 'location', 'nodeName', 'seriesCode', 'fullSeriesCode', 'rectificativeSeriesCode', 'idSistemaInformatico']);
   const hasDomicile = Object.hasOwn(initial.taxpayer, 'taxpayerDomicile');
   exact(initial.taxpayer, ['country', 'taxId', 'legalName', ...(hasDomicile ? ['taxpayerDomicile'] : [])]);
   if (hasDomicile) requireThat(typeof initial.taxpayer.taxpayerDomicile === 'string'
@@ -65,9 +65,9 @@ function replayPaths(codeRoot, stateRoot, initial) {
   requireThat(Array.isArray(initial.location.invoiceLocales) && initial.location.invoiceLocales.length >= 1
     && initial.location.invoiceLocales.length <= 2 && initial.location.invoiceLocales.every(v => typeof v === 'string' && /^[a-z]{2}$/.test(v)));
   requireThat(typeof initial.location.dayCutover === 'string' && /^(?:[01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]$/.test(initial.location.dayCutover));
-  requireThat([initial.seriesCode, initial.fullSeriesCode].every(v => typeof v === 'string' && /^[A-Z0-9]{1,8}$/.test(v))
-    && initial.seriesCode !== initial.fullSeriesCode);
-  requireThat(typeof initial.idSistemaInformatico === 'string' && /^[A-Z0-9]{1,2}$/.test(initial.idSistemaInformatico));
+  requireThat([initial.seriesCode, initial.fullSeriesCode, initial.rectificativeSeriesCode].every(v => typeof v === 'string' && /^[A-Z0-9]{1,8}$/.test(v))
+    && new Set([initial.seriesCode, initial.fullSeriesCode, initial.rectificativeSeriesCode]).size === 3);
+  requireThat(initial.idSistemaInformatico === 'W1');
   const runtime = join(codeRoot, 'runtime.mjs'); const manifestPath = join(codeRoot, 'runtime-manifest.json');
   for (const path of [runtime, manifestPath]) {
     const s = lstatSync(path); requireThat(realpathSync(path) === path && s.isFile() && !s.isSymbolicLink() && s.nlink === 1);
@@ -100,15 +100,38 @@ export async function openReplay({ codeRoot, stateRoot, config, initial }) {
     await r.applyMigrations(join(stateRoot, 'venue'), migrations);
     store = await r.openVenueDatabase(join(stateRoot, 'venue'));
     const db = store.venue;
-    const { nodeId, standard, full } = await r.withTransaction(db, async tx => {
-      await tx.insert(r.tenants).values({ id: 1, ...initial.taxpayer });
-      const [location] = await tx.insert(r.locations).values(initial.location).returning({ id: r.locations.id });
-      const [node] = await tx.insert(r.nodes).values({ locationId: location.id, name: initial.nodeName }).returning({ id: r.nodes.id });
-      const [standard] = await tx.insert(r.invoiceSeries).values({ nodeId: node.id, code: initial.seriesCode }).returning({ id: r.invoiceSeries.id });
-      const [full] = await tx.insert(r.invoiceSeries).values({ nodeId: node.id, code: initial.fullSeriesCode, purpose: 'full' }).returning({ id: r.invoiceSeries.id });
-      await r.registerSif(tx, { nodeId: node.id, nif: initial.taxpayer.taxId, idSistemaInformatico: initial.idSistemaInformatico });
-      return { nodeId: node.id, standard: standard.id, full: full.id };
-    });
+    r.registerModulePermissions(r.ALL_MODULE_PERMISSIONS);
+    const provisioned = await r.provisionVenue({ ownerDb: db,
+      moduleConfig: r.venueModuleConfig({ overrides: new Map() }, 'ES-common'),
+      database: 'generated-cost-replay', stateDir: stateRoot }, {
+      environment: 'preproduction', initialAllocation: { kind: 'throwaway', hostEnvironment: 'preproduction' },
+      venue: { ...initial.taxpayer,
+        location: { ...initial.location, fiscalTerritory: 'ES-common', addressLine1: 'Synthetic street 1',
+          addressLine2: null, postalCode: '28013', city: 'Madrid', province: 'Madrid' },
+        seriesCode: initial.seriesCode, fullSeriesCode: initial.fullSeriesCode,
+        rectificativeSeriesCode: initial.rectificativeSeriesCode,
+        admin: { displayName: 'Generated replay owner', pinHash: r.hashPin('1234'),
+          passwordHash: r.hashPassword('Generated local replay password'), email: 'owner@example.test', locale: 'en-GB' },
+      },
+    }, r.ALL_MODULES);
+    const nodeId = provisioned.nodeId;
+    const series = (await db.execute(r.sql`SELECT id, node_id, code, purpose FROM invoice_series
+      WHERE node_id=${nodeId} AND retired_at IS NULL`)).rows;
+    const identities = (await db.execute(r.sql`SELECT numero_instalacion, id_sistema_informatico FROM registro_sif
+      WHERE node_id=${nodeId} AND revocado_en IS NULL`)).rows;
+    requireThat(identities.length === 1 && identities[0].id_sistema_informatico === initial.idSistemaInformatico);
+    requireThat(series.length === 3 && new Set(series.map(row => row.id)).size === 3
+      && provisioned.seriesIds.length === 3 && new Set(provisioned.seriesIds).size === 3
+      && series.every(row => row.node_id === nodeId && provisioned.seriesIds.includes(row.id)));
+    const selected = new Map();
+    for (const [purpose, base] of [['standard', initial.seriesCode], ['full', initial.fullSeriesCode],
+      ['rectificative', initial.rectificativeSeriesCode]]) {
+      const matches = series.filter(row => row.purpose === purpose && row.code === `${base}-${identities[0].numero_instalacion}`);
+      requireThat(matches.length === 1); selected.set(purpose, matches[0].id);
+    }
+    const standard = selected.get('standard'), full = selected.get('full');
+    // Provisioning uses the venue label; replay retains its independently supplied node label.
+    await db.execute(r.sql`UPDATE nodes SET name=${initial.nodeName} WHERE id=${nodeId}`);
     writeFileSync(join(stateRoot, 'trading.env'),
       `WAITRON_NODE_ID=${nodeId}\n`, { mode: 0o600, flag: 'wx' });
     const backend = new r.VerifactuBackend({ db, clock: { now: runtimeFail }, environment: 'preproduction',

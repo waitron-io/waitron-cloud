@@ -18,7 +18,7 @@ const config = { localEndpoints: { s3: 'http://s3:8333', postgres: 'postgresql:/
 const initial = { taxpayer: { country: 'ES', taxId: '12345678Z', legalName: 'Synthetic SL' },
   location: { name: 'Synthetic venue', invoiceLocales: ['es'], operationDescription: 'Servicio',
     timeZone: 'Europe/Madrid', dayCutover: '06:00:00' },
-  nodeName: 'Synthetic node', seriesCode: 'R', fullSeriesCode: 'F', idSistemaInformatico: 'WR' };
+  nodeName: 'Synthetic node', seriesCode: 'R', fullSeriesCode: 'F', rectificativeSeriesCode: 'C', idSistemaInformatico: 'W1' };
 function sale(at, n) {
   return { origin: { source: 'operator_script', deviceId: null }, locale: 'es', invoiceLocales: ['es'], total: '12.10',
     vatBreakdown: [{ rate: '21.00', base: '10.00', tax: '2.10' }],

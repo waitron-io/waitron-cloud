@@ -67,7 +67,7 @@ function runtimeFixture(t) {
     taxpayer: { country: 'ES', taxId: '40000001K', legalName: 'Synthetic SL' },
     location: { name: 'Synthetic venue', invoiceLocales: ['es'], operationDescription: 'Servicio',
       timeZone: 'Europe/Madrid', dayCutover: '06:00:00' },
-    nodeName: 'Synthetic node', seriesCode: 'R', fullSeriesCode: 'F', idSistemaInformatico: 'WR',
+    nodeName: 'Synthetic node', seriesCode: 'R', fullSeriesCode: 'F', rectificativeSeriesCode: 'C', idSistemaInformatico: 'W1',
   } };
 }
 // Unsafe paths/configuration must refuse before executing a prepared module or creating a venue.
@@ -124,6 +124,8 @@ test('runtimeRefusesUnknownOrMalformedInitialSettingsBeforeImport', async t => {
     i => i.taxpayer.taxId = '', i => i.nodeName = null,
     i => i.location.invoiceLocales = [], i => i.location.dayCutover = '26:00:00',
     i => i.fullSeriesCode = i.seriesCode, i => i.idSistemaInformatico = 'WRONG',
+    i => delete i.rectificativeSeriesCode, i => i.rectificativeSeriesCode = i.seriesCode,
+    i => i.rectificativeSeriesCode = i.fullSeriesCode, i => i.rectificativeSeriesCode = '',
   ]) {
     const initial = structuredClone(args.initial); change(initial);
     await assert.rejects(adapter.openReplay({ ...args, initial }), /Invalid cloud cost replay runtime/);
@@ -155,20 +157,31 @@ test('malformedIssuerDomicileRefusesBeforeRuntimeImport', async t => {
 });
 
 // The adapter owns this identity file; the runtime fixture supplies only the database boundary.
-test('replayWritesOnlyTheCurrentNodeIdentityWithPrivatePermissions', async t => {
-  const args = runtimeFixture(t);
-  const runtime = `
-export const tenants={},locations={},nodes={},invoiceSeries={};
+function identityRuntime(){
+  return `
+export const ALL_MODULES=[],ALL_MODULE_PERMISSIONS=[];
+export function registerModulePermissions(){}
+export function venueModuleConfig(){return {}}
+export function hashPin(){return 'fixture-pin-hash'}
+export function hashPassword(){return 'fixture-password-hash'}
+export function sql(strings){return strings.join('?')}
 export async function applyMigrations(){}
-export async function openVenueDatabase(){return {venue:{},async close(){}}}
-export async function withTransaction(_db,action){
- return action({insert:table=>({values:()=>({async returning(){
-  return [{id:table===locations?'location-a':table===nodes?'node-a':table===invoiceSeries?'series-a':'tenant-a'}];
- }})})});
-}
-export async function registerSif(){}
+export async function provisionVenue(){return {nodeId:'node-a',seriesIds:['standard','full','rectificative']}}
+export async function openVenueDatabase(){return {venue:{async execute(query){
+ if(query.includes('FROM invoice_series'))return {rows:[
+  {id:'standard',node_id:'node-a',code:'R-00001',purpose:'standard'},
+  {id:'full',node_id:'node-a',code:'F-00001',purpose:'full'},
+  {id:'rectificative',node_id:'node-a',code:'C-00001',purpose:'rectificative'}]};
+ if(query.includes('FROM registro_sif'))return {rows:[{numero_instalacion:'00001',id_sistema_informatico:'W1'}]};
+ return {rows:[]};
+}},async close(){}}}
 export class VerifactuBackend{}
 `;
+}
+
+test('replayWritesOnlyTheCurrentNodeIdentityWithPrivatePermissions', async t => {
+  const args = runtimeFixture(t);
+  const runtime = identityRuntime();
   writeFileSync(join(args.codeRoot, 'runtime.mjs'), runtime);
   writeFileSync(join(args.codeRoot, 'runtime-manifest.json'), JSON.stringify({schemaVersion: 1,
     revision: 'b1b0f10952a59eb59f7358bd681a3cdc94d9b61c', sha256: createHash('sha256').update(runtime).digest('hex')}));
@@ -192,4 +205,27 @@ test('runtimeRefusesMissingChangedAndLinkedFontBeforeImport',async t=>{
  rmSync(path);writeFileSync(path,font);
  await assert.rejects(adapter.openReplay(args),/Invalid cloud cost replay runtime/);
  assert.equal(existsSync(args.marker),true);
+});
+
+test('conflictingSoftwareIdentityRefusesBeforeImport',async t=>{
+ const args=runtimeFixture(t);args.initial.idSistemaInformatico='WR';
+ await assert.rejects(adapter.openReplay(args),/Invalid cloud cost replay runtime/);
+ assert.equal(existsSync(args.marker),false,'the fixed software identity must be checked before import');
+});
+
+test('allocationResultsMustMatchTheSelectedNodeSoftwareAndExactSeries',async t=>{
+ for(const [label,before,after] of [
+  ['software',"id_sistema_informatico:'W1'","id_sistema_informatico:'XX'"],
+  ['node',"id:'standard',node_id:'node-a'","id:'standard',node_id:'foreign'"],
+  ['result',"seriesIds:['standard','full','rectificative']","seriesIds:['foreign','full','rectificative']"],
+  ['code',"code:'R-00001'","code:'R-00002'"],
+ ]){
+  const args=runtimeFixture(t),original=identityRuntime();
+  assert.ok(original.includes(before));const runtime=original.replace(before,after);
+  writeFileSync(join(args.codeRoot,'runtime.mjs'),runtime);
+  writeFileSync(join(args.codeRoot,'runtime-manifest.json'),JSON.stringify({schemaVersion:1,
+   revision:'b1b0f10952a59eb59f7358bd681a3cdc94d9b61c',sha256:createHash('sha256').update(runtime).digest('hex')}));
+  await assert.rejects(adapter.openReplay(args),/Invalid cloud cost replay runtime/,label);
+  assert.equal(existsSync(join(args.stateRoot,'trading.env')),false,label+' must refuse before publishing an identity');
+ }
 });

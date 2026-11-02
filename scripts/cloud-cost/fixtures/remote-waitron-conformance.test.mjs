@@ -40,7 +40,7 @@ for (const fault of ['none', 'missing-person', 'invalid-canvases', 'false-availa
 test('pinnedWaitronOwnerReadsReconnectAndLogoutThroughTheGateway_' + fault, { timeout: 120000 }, async t => {
   assert.equal(typeof journey.measureRemoteJourneys, 'function', 'measure genuine owner and public routes');
   const fixture = JSON.parse(readFileSync(process.env.COST_OWNER_FIXTURE, 'utf8'));
-  assert.equal(fixture.revision, 'fbadd15785464e59747e697c11048bfbc6e4938f');
+  assert.equal(fixture.revision, 'b1b0f10952a59eb59f7358bd681a3cdc94d9b61c');
   assert.equal(createHash('sha256').update(readFileSync(fixture.runtime)).digest('hex'), fixture.runtimeSha256);
   const root = realpathSync(mkdtempSync(join(tmpdir(), 'cloud-cost-owner-'))), owner = randomUUID();
   const label = 'io.waitron.cloud-cost.remote-owner=' + owner, network = 'cost-remote-' + owner;

@@ -4,15 +4,19 @@
 
 **Open.** PR #700 prepares the matching node-only Waitron release
 `b1b0f10952a59eb59f7358bd681a3cdc94d9b61c`, checks its bundle digest and copies the
-pinned invoice font. Native preparation and admission checks pass; deliberate
-omissions of release, digest, asset and command-admission guards are caught in an
-independent installed copy. The actual sale replay still refuses at setup.
+pinned invoice font. Native checks prove that the generated test venue uses
+Waitron's ordinary installation allocation and retains standard, full and
+rectificative invoice series. Sale totals, invoice counters, hashes, rollback,
+source identity and private-file checks remain required. The peer's provisioning
+caller uses the same preproduction allocation path.
 The [compatibility design](superpowers/specs/2026-11-01-replay-allocation-compatibility-design.md)
 and [implementation plan](superpowers/plans/2026-11-01-replay-allocation-compatibility.md)
-cover ordinary allocation and authenticated recovery. The owner approved the
-bounded three-purpose fixture amendment; those callers and complete runtime
-qualification remain unfinished. Historical cost measurements retain their original
-release. No fiscal implementation, golden result or immutable row changes here.
+cover the remaining authenticated recovery caller and synthetic clock observations.
+Archive recovery, Linux container qualification, current receipt producers and
+whole-branch review remain unfinished. The owner approved the bounded three-purpose
+fixture amendment; all other fiscal and restore outcomes stay unchanged.
+Historical cost measurements retain their original release. No fiscal
+implementation, golden result or immutable row changes here.
 
 ## Concurrent storage archive publication (D450)
 

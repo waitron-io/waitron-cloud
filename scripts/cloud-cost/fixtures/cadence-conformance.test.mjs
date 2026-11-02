@@ -1,3 +1,4 @@
+import {standardNextNumber} from './replay-series-fixture.mjs';
 // Run explicitly with a prepared public Waitron runtime and generated synthetic state only.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -17,7 +18,7 @@ const initial = {
   taxpayer: { country: 'ES', taxId: '12345678Z', legalName: 'Synthetic SL' },
   location: { name: 'Synthetic venue', invoiceLocales: ['es'], operationDescription: 'Servicio',
     timeZone: 'Europe/Madrid', dayCutover: '06:00:00' },
-  nodeName: 'Synthetic node', seriesCode: 'R', fullSeriesCode: 'F', idSistemaInformatico: 'WR',
+  nodeName: 'Synthetic node', seriesCode: 'R', fullSeriesCode: 'F', rectificativeSeriesCode: 'C', idSistemaInformatico: 'W1',
 };
 const sale = i => {
   const instant = new Date(Date.UTC(2026, 0, 1, 12, i));
@@ -57,7 +58,7 @@ for (const cadence of [{ mode: 'original', factor: 1 }, { mode: 'accelerated', f
       assert.equal(db.prepare("SELECT count(*) AS n FROM envios WHERE estado='pendiente'").get().n, 4);
       assert.equal(db.prepare('SELECT count(*) AS n FROM registros_facturacion').get().n, 4);
       assert.equal(new Set(db.prepare('SELECT huella FROM registros_facturacion').all().map(v => v.huella)).size, 4);
-      assert.equal(db.prepare("SELECT next_number AS n FROM invoice_series WHERE code='R'").get().n, 5);
+      assert.equal(standardNextNumber(db,stateRoot), 5);
     } finally { db.close(); }
     assert.deepEqual(replay.counts(), { attempted: 4, successful: 4, failed: 0 });
     assert.deepEqual(await replay.verify(), { ok: true, issues: 0 });
@@ -80,6 +81,6 @@ test('genuineWriterRefusalStopsCadenceAndPreservesRollback', async t => {
     assert.deepEqual(db.prepare('SELECT invoice_number, total FROM sales').all().map(v => ({ ...v })), [{ invoice_number: 1, total: 1210 }]);
     assert.deepEqual(db.prepare('SELECT name FROM sale_lines').all().map(v => v.name), ['Synthetic item 0']);
     assert.equal(db.prepare('SELECT count(*) AS n FROM registros_facturacion').get().n, 1);
-    assert.equal(db.prepare("SELECT next_number AS n FROM invoice_series WHERE code='R'").get().n, 2);
+    assert.equal(standardNextNumber(db,stateRoot), 2);
   } finally { db.close(); }
 });

@@ -9,8 +9,9 @@ matching release and its real allocation callers before you can qualify that rep
 
 The owner's answer in Lane D `questions.md`, 2026-11-01 around 11:10, authorizes
 option 1: adapt Cloud to Waitron's existing installation allocation exactly as
-Waitron's own callers do. It forbids arbitrary installation numbers, fallbacks,
-bypasses, and golden or restore assertion changes. This is compatibility work,
+Waitron's own callers do. The initial answer forbids arbitrary installation numbers, fallbacks,
+bypasses, and golden or restore assertion changes. The later 13:10 answer permits
+only the two series-count changes from 2 to 3 described below. This is compatibility work,
 not permission to change fiscal policy. [Documentation ownership](../../documentation-ownership.md)
 keeps allocation and restore implementation in Waitron; Cloud owns its caller.
 
@@ -52,7 +53,7 @@ not replay, restore, Docker or interoperability. The caller design is unexecuted
 | --- | --- |
 | Waitron `software.ts:1` fixes `WAITRON_ID_SISTEMA = "W1"`; `hour-throwaway-allocation.ts` generates the minute identity and `${base}-${identity}` series. | Cloud's `WR` fixture input cannot select software identity. Bare `R` and `F` are bases, not allocated codes. |
 | `packages/provisioning/src/venue-plan.ts` requires `rectificativeSeriesCode` and plans standard, full and rectificative series. `hour-recovery-state.ts:61–63` calls `assertHourSeriesConfiguration`; `hour-series-configuration.ts:4–13` requires exactly those three purposes. | The normal provision-and-restore caller needs three series. A two-series throwaway setup does not establish a supported recovery path. |
-| Cloud `fixtures/replay-conformance.test.mjs:136–138` requires two SIF rows, exactly two active series and exactly two retired series after restore. | Normal three-purpose setup would require three active and three retired series. Changing those two expected counts is an explicitly forbidden restore assertion change. |
+| Cloud `fixtures/replay-conformance.test.mjs:136–138` requires two SIF rows, exactly two active series and exactly two retired series after restore. | Normal three-purpose setup would require three active and three retired series. The owner’s 13:10 amendment permits exactly those two expected-count changes. |
 | The same file selects `code='R'` at lines 49, 93 and 105; private and cadence checks also select bare `R`. | Keeping their numeric assertions requires selecting the actual allocated standard series. Silently rewriting the selector is still a changed check and needs to be inventoried. |
 
 The native guard result confirms the two-purpose mismatch. The normal recovery

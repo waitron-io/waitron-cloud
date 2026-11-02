@@ -20,7 +20,7 @@ const initial = {
   taxpayer: { country: 'ES', taxId: '12345678Z', legalName: 'Synthetic SL' },
   location: { name: 'Synthetic venue', invoiceLocales: ['es'], operationDescription: 'Servicio',
     timeZone: 'Europe/Madrid', dayCutover: '06:00:00' },
-  nodeName: 'Synthetic node', seriesCode: 'R', fullSeriesCode: 'F', idSistemaInformatico: 'WR',
+  nodeName: 'Synthetic node', seriesCode: 'R', fullSeriesCode: 'F', rectificativeSeriesCode: 'C', idSistemaInformatico: 'W1',
 };
 async function savedClock(t, timeZone, changes) {
   const parent = mkdtempSync(join(fixture.stateParent, 'saved-clock-')); chmodSync(parent, 0o700);
