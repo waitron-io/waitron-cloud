@@ -24,8 +24,10 @@ mock_provider "aws" {
   mock_data "aws_region" { defaults = { region = "eu-west-1" } }
 }
 variables {
-  compute    = { kubernetes_version = "1.34", operator_role_arns = ["arn:aws:iam::222222222222:role/operators/global-admin"] }
-  deployment = { version = 1, scope = "global", country = null, primary_region = "eu-central-1", backup_region = "eu-west-1", network = { cidr = "10.10.0.0/16", az_ids = ["euc1-az1", "euc1-az2", "euc1-az3"] }, cells = { "global-01" = { subnet_cidr = "10.10.16.0/20" } } }
+  database          = { engine_version = "17.6", parameter_family = "postgres17", instance_class = "db.t3.small", allocated_storage = 20, max_allocated_storage = 100 }
+  recovery_role_arn = "arn:aws:iam::222222222222:role/waitron-global-recovery"
+  compute           = { kubernetes_version = "1.34", operator_role_arns = ["arn:aws:iam::222222222222:role/operators/global-admin"] }
+  deployment        = { version = 1, scope = "global", country = null, primary_region = "eu-central-1", backup_region = "eu-west-1", network = { cidr = "10.10.0.0/16", az_ids = ["euc1-az1", "euc1-az2", "euc1-az3"] }, cells = { "global-01" = { subnet_cidr = "10.10.16.0/20" } } }
   bindings = {
     "global"             = { expected_identity = "222222222222", role_arn = "arn:aws:iam::222222222222:role/waitron-global-deployment" }
     "global_backup"      = { expected_identity = "222222222222", role_arn = "arn:aws:iam::222222222222:role/waitron-global-deployment" }
@@ -35,6 +37,14 @@ variables {
 }
 run "distinct_global_country_and_backup_bindings" {
   command = plan
+  override_module {
+    target  = module.custody
+    outputs = { kms = { database = "arn:aws:kms:eu-central-1:222222222222:key/11111111-1111-1111-1111-111111111111" }, backup_kms = { database = "arn:aws:kms:eu-west-1:222222222222:key/22222222-2222-2222-2222-222222222222" }, secrets = {}, backup_secret_refs = {} }
+  }
+  override_module {
+    target  = module.database
+    outputs = { database = null }
+  }
   override_module {
     target = module.network
     outputs = { network = {
@@ -64,6 +74,14 @@ run "distinct_global_country_and_backup_bindings" {
 run "rejects_unknown_version" {
   command = plan
   override_module {
+    target  = module.custody
+    outputs = { kms = { database = "arn:aws:kms:eu-central-1:222222222222:key/11111111-1111-1111-1111-111111111111" }, backup_kms = { database = "arn:aws:kms:eu-west-1:222222222222:key/22222222-2222-2222-2222-222222222222" }, secrets = {}, backup_secret_refs = {} }
+  }
+  override_module {
+    target  = module.database
+    outputs = { database = null }
+  }
+  override_module {
     target = module.network
     outputs = { network = {
       vpc_id                  = "vpc-00000000000000001"
@@ -85,6 +103,14 @@ run "rejects_unknown_version" {
 }
 run "rejects_unknown_scope" {
   command = plan
+  override_module {
+    target  = module.custody
+    outputs = { kms = { database = "arn:aws:kms:eu-central-1:222222222222:key/11111111-1111-1111-1111-111111111111" }, backup_kms = { database = "arn:aws:kms:eu-west-1:222222222222:key/22222222-2222-2222-2222-222222222222" }, secrets = {}, backup_secret_refs = {} }
+  }
+  override_module {
+    target  = module.database
+    outputs = { database = null }
+  }
   override_module {
     target = module.network
     outputs = { network = {
@@ -108,6 +134,14 @@ run "rejects_unknown_scope" {
 run "rejects_unknown_country" {
   command = plan
   override_module {
+    target  = module.custody
+    outputs = { kms = { database = "arn:aws:kms:eu-central-1:222222222222:key/11111111-1111-1111-1111-111111111111" }, backup_kms = { database = "arn:aws:kms:eu-west-1:222222222222:key/22222222-2222-2222-2222-222222222222" }, secrets = {}, backup_secret_refs = {} }
+  }
+  override_module {
+    target  = module.database
+    outputs = { database = null }
+  }
+  override_module {
     target = module.network
     outputs = { network = {
       vpc_id                  = "vpc-00000000000000001"
@@ -129,6 +163,14 @@ run "rejects_unknown_country" {
 }
 run "rejects_unknown_regions" {
   command = plan
+  override_module {
+    target  = module.custody
+    outputs = { kms = { database = "arn:aws:kms:eu-central-1:222222222222:key/11111111-1111-1111-1111-111111111111" }, backup_kms = { database = "arn:aws:kms:eu-west-1:222222222222:key/22222222-2222-2222-2222-222222222222" }, secrets = {}, backup_secret_refs = {} }
+  }
+  override_module {
+    target  = module.database
+    outputs = { database = null }
+  }
   override_module {
     target = module.network
     outputs = { network = {
@@ -152,6 +194,14 @@ run "rejects_unknown_regions" {
 run "rejects_unknown_cell_scope" {
   command = plan
   override_module {
+    target  = module.custody
+    outputs = { kms = { database = "arn:aws:kms:eu-central-1:222222222222:key/11111111-1111-1111-1111-111111111111" }, backup_kms = { database = "arn:aws:kms:eu-west-1:222222222222:key/22222222-2222-2222-2222-222222222222" }, secrets = {}, backup_secret_refs = {} }
+  }
+  override_module {
+    target  = module.database
+    outputs = { database = null }
+  }
+  override_module {
     target = module.network
     outputs = { network = {
       vpc_id                  = "vpc-00000000000000001"
@@ -173,6 +223,14 @@ run "rejects_unknown_cell_scope" {
 }
 run "rejects_missing_global" {
   command = plan
+  override_module {
+    target  = module.custody
+    outputs = { kms = { database = "arn:aws:kms:eu-central-1:222222222222:key/11111111-1111-1111-1111-111111111111" }, backup_kms = { database = "arn:aws:kms:eu-west-1:222222222222:key/22222222-2222-2222-2222-222222222222" }, secrets = {}, backup_secret_refs = {} }
+  }
+  override_module {
+    target  = module.database
+    outputs = { database = null }
+  }
   override_module {
     target = module.network
     outputs = { network = {
@@ -196,6 +254,14 @@ run "rejects_missing_global" {
 run "rejects_missing_global_backup" {
   command = plan
   override_module {
+    target  = module.custody
+    outputs = { kms = { database = "arn:aws:kms:eu-central-1:222222222222:key/11111111-1111-1111-1111-111111111111" }, backup_kms = { database = "arn:aws:kms:eu-west-1:222222222222:key/22222222-2222-2222-2222-222222222222" }, secrets = {}, backup_secret_refs = {} }
+  }
+  override_module {
+    target  = module.database
+    outputs = { database = null }
+  }
+  override_module {
     target = module.network
     outputs = { network = {
       vpc_id                  = "vpc-00000000000000001"
@@ -217,6 +283,14 @@ run "rejects_missing_global_backup" {
 }
 run "rejects_missing_global_keys" {
   command = plan
+  override_module {
+    target  = module.custody
+    outputs = { kms = { database = "arn:aws:kms:eu-central-1:222222222222:key/11111111-1111-1111-1111-111111111111" }, backup_kms = { database = "arn:aws:kms:eu-west-1:222222222222:key/22222222-2222-2222-2222-222222222222" }, secrets = {}, backup_secret_refs = {} }
+  }
+  override_module {
+    target  = module.database
+    outputs = { database = null }
+  }
   override_module {
     target = module.network
     outputs = { network = {
@@ -240,6 +314,14 @@ run "rejects_missing_global_keys" {
 run "rejects_missing_global_backup_keys" {
   command = plan
   override_module {
+    target  = module.custody
+    outputs = { kms = { database = "arn:aws:kms:eu-central-1:222222222222:key/11111111-1111-1111-1111-111111111111" }, backup_kms = { database = "arn:aws:kms:eu-west-1:222222222222:key/22222222-2222-2222-2222-222222222222" }, secrets = {}, backup_secret_refs = {} }
+  }
+  override_module {
+    target  = module.database
+    outputs = { database = null }
+  }
+  override_module {
     target = module.network
     outputs = { network = {
       vpc_id                  = "vpc-00000000000000001"
@@ -261,6 +343,14 @@ run "rejects_missing_global_backup_keys" {
 }
 run "rejects_extra_scope_binding" {
   command = plan
+  override_module {
+    target  = module.custody
+    outputs = { kms = { database = "arn:aws:kms:eu-central-1:222222222222:key/11111111-1111-1111-1111-111111111111" }, backup_kms = { database = "arn:aws:kms:eu-west-1:222222222222:key/22222222-2222-2222-2222-222222222222" }, secrets = {}, backup_secret_refs = {} }
+  }
+  override_module {
+    target  = module.database
+    outputs = { database = null }
+  }
   override_module {
     target = module.network
     outputs = { network = {
@@ -284,6 +374,14 @@ run "rejects_extra_scope_binding" {
 run "rejects_malformed_identity" {
   command = plan
   override_module {
+    target  = module.custody
+    outputs = { kms = { database = "arn:aws:kms:eu-central-1:222222222222:key/11111111-1111-1111-1111-111111111111" }, backup_kms = { database = "arn:aws:kms:eu-west-1:222222222222:key/22222222-2222-2222-2222-222222222222" }, secrets = {}, backup_secret_refs = {} }
+  }
+  override_module {
+    target  = module.database
+    outputs = { database = null }
+  }
+  override_module {
     target = module.network
     outputs = { network = {
       vpc_id                  = "vpc-00000000000000001"
@@ -305,6 +403,14 @@ run "rejects_malformed_identity" {
 }
 run "rejects_crossed_role" {
   command = plan
+  override_module {
+    target  = module.custody
+    outputs = { kms = { database = "arn:aws:kms:eu-central-1:222222222222:key/11111111-1111-1111-1111-111111111111" }, backup_kms = { database = "arn:aws:kms:eu-west-1:222222222222:key/22222222-2222-2222-2222-222222222222" }, secrets = {}, backup_secret_refs = {} }
+  }
+  override_module {
+    target  = module.database
+    outputs = { database = null }
+  }
   override_module {
     target = module.network
     outputs = { network = {
@@ -328,6 +434,14 @@ run "rejects_crossed_role" {
 run "rejects_wildcard_role" {
   command = plan
   override_module {
+    target  = module.custody
+    outputs = { kms = { database = "arn:aws:kms:eu-central-1:222222222222:key/11111111-1111-1111-1111-111111111111" }, backup_kms = { database = "arn:aws:kms:eu-west-1:222222222222:key/22222222-2222-2222-2222-222222222222" }, secrets = {}, backup_secret_refs = {} }
+  }
+  override_module {
+    target  = module.database
+    outputs = { database = null }
+  }
+  override_module {
     target = module.network
     outputs = { network = {
       vpc_id                  = "vpc-00000000000000001"
@@ -349,6 +463,14 @@ run "rejects_wildcard_role" {
 }
 run "rejects_deployment_as_key_admin" {
   command = plan
+  override_module {
+    target  = module.custody
+    outputs = { kms = { database = "arn:aws:kms:eu-central-1:222222222222:key/11111111-1111-1111-1111-111111111111" }, backup_kms = { database = "arn:aws:kms:eu-west-1:222222222222:key/22222222-2222-2222-2222-222222222222" }, secrets = {}, backup_secret_refs = {} }
+  }
+  override_module {
+    target  = module.database
+    outputs = { database = null }
+  }
   override_module {
     target = module.network
     outputs = { network = {
@@ -372,6 +494,14 @@ run "rejects_deployment_as_key_admin" {
 run "rejects_different_backup_account" {
   command = plan
   override_module {
+    target  = module.custody
+    outputs = { kms = { database = "arn:aws:kms:eu-central-1:222222222222:key/11111111-1111-1111-1111-111111111111" }, backup_kms = { database = "arn:aws:kms:eu-west-1:222222222222:key/22222222-2222-2222-2222-222222222222" }, secrets = {}, backup_secret_refs = {} }
+  }
+  override_module {
+    target  = module.database
+    outputs = { database = null }
+  }
+  override_module {
     target = module.network
     outputs = { network = {
       vpc_id                  = "vpc-00000000000000001"
@@ -393,6 +523,14 @@ run "rejects_different_backup_account" {
 }
 run "rejects_actual_global_account" {
   command = plan
+  override_module {
+    target  = module.custody
+    outputs = { kms = { database = "arn:aws:kms:eu-central-1:222222222222:key/11111111-1111-1111-1111-111111111111" }, backup_kms = { database = "arn:aws:kms:eu-west-1:222222222222:key/22222222-2222-2222-2222-222222222222" }, secrets = {}, backup_secret_refs = {} }
+  }
+  override_module {
+    target  = module.database
+    outputs = { database = null }
+  }
   override_module {
     target = module.network
     outputs = { network = {
@@ -419,6 +557,14 @@ run "rejects_actual_global_account" {
 run "rejects_actual_global_region" {
   command = plan
   override_module {
+    target  = module.custody
+    outputs = { kms = { database = "arn:aws:kms:eu-central-1:222222222222:key/11111111-1111-1111-1111-111111111111" }, backup_kms = { database = "arn:aws:kms:eu-west-1:222222222222:key/22222222-2222-2222-2222-222222222222" }, secrets = {}, backup_secret_refs = {} }
+  }
+  override_module {
+    target  = module.database
+    outputs = { database = null }
+  }
+  override_module {
     target = module.network
     outputs = { network = {
       vpc_id                  = "vpc-00000000000000001"
@@ -443,6 +589,14 @@ run "rejects_actual_global_region" {
 }
 run "rejects_actual_global_backup_account" {
   command = plan
+  override_module {
+    target  = module.custody
+    outputs = { kms = { database = "arn:aws:kms:eu-central-1:222222222222:key/11111111-1111-1111-1111-111111111111" }, backup_kms = { database = "arn:aws:kms:eu-west-1:222222222222:key/22222222-2222-2222-2222-222222222222" }, secrets = {}, backup_secret_refs = {} }
+  }
+  override_module {
+    target  = module.database
+    outputs = { database = null }
+  }
   override_module {
     target = module.network
     outputs = { network = {
@@ -469,6 +623,14 @@ run "rejects_actual_global_backup_account" {
 run "rejects_actual_global_backup_region" {
   command = plan
   override_module {
+    target  = module.custody
+    outputs = { kms = { database = "arn:aws:kms:eu-central-1:222222222222:key/11111111-1111-1111-1111-111111111111" }, backup_kms = { database = "arn:aws:kms:eu-west-1:222222222222:key/22222222-2222-2222-2222-222222222222" }, secrets = {}, backup_secret_refs = {} }
+  }
+  override_module {
+    target  = module.database
+    outputs = { database = null }
+  }
+  override_module {
     target = module.network
     outputs = { network = {
       vpc_id                  = "vpc-00000000000000001"
@@ -493,6 +655,14 @@ run "rejects_actual_global_backup_region" {
 }
 run "rejects_actual_global_keys_account" {
   command = plan
+  override_module {
+    target  = module.custody
+    outputs = { kms = { database = "arn:aws:kms:eu-central-1:222222222222:key/11111111-1111-1111-1111-111111111111" }, backup_kms = { database = "arn:aws:kms:eu-west-1:222222222222:key/22222222-2222-2222-2222-222222222222" }, secrets = {}, backup_secret_refs = {} }
+  }
+  override_module {
+    target  = module.database
+    outputs = { database = null }
+  }
   override_module {
     target = module.network
     outputs = { network = {
@@ -519,6 +689,14 @@ run "rejects_actual_global_keys_account" {
 run "rejects_actual_global_keys_region" {
   command = plan
   override_module {
+    target  = module.custody
+    outputs = { kms = { database = "arn:aws:kms:eu-central-1:222222222222:key/11111111-1111-1111-1111-111111111111" }, backup_kms = { database = "arn:aws:kms:eu-west-1:222222222222:key/22222222-2222-2222-2222-222222222222" }, secrets = {}, backup_secret_refs = {} }
+  }
+  override_module {
+    target  = module.database
+    outputs = { database = null }
+  }
+  override_module {
     target = module.network
     outputs = { network = {
       vpc_id                  = "vpc-00000000000000001"
@@ -543,6 +721,14 @@ run "rejects_actual_global_keys_region" {
 }
 run "rejects_actual_global_backup_keys_account" {
   command = plan
+  override_module {
+    target  = module.custody
+    outputs = { kms = { database = "arn:aws:kms:eu-central-1:222222222222:key/11111111-1111-1111-1111-111111111111" }, backup_kms = { database = "arn:aws:kms:eu-west-1:222222222222:key/22222222-2222-2222-2222-222222222222" }, secrets = {}, backup_secret_refs = {} }
+  }
+  override_module {
+    target  = module.database
+    outputs = { database = null }
+  }
   override_module {
     target = module.network
     outputs = { network = {
@@ -569,6 +755,14 @@ run "rejects_actual_global_backup_keys_account" {
 run "rejects_actual_global_backup_keys_region" {
   command = plan
   override_module {
+    target  = module.custody
+    outputs = { kms = { database = "arn:aws:kms:eu-central-1:222222222222:key/11111111-1111-1111-1111-111111111111" }, backup_kms = { database = "arn:aws:kms:eu-west-1:222222222222:key/22222222-2222-2222-2222-222222222222" }, secrets = {}, backup_secret_refs = {} }
+  }
+  override_module {
+    target  = module.database
+    outputs = { database = null }
+  }
+  override_module {
     target = module.network
     outputs = { network = {
       vpc_id                  = "vpc-00000000000000001"
@@ -594,6 +788,14 @@ run "rejects_actual_global_backup_keys_region" {
 run "rejects_all_malformed_identities" {
   command = plan
   override_module {
+    target  = module.custody
+    outputs = { kms = { database = "arn:aws:kms:eu-central-1:222222222222:key/11111111-1111-1111-1111-111111111111" }, backup_kms = { database = "arn:aws:kms:eu-west-1:222222222222:key/22222222-2222-2222-2222-222222222222" }, secrets = {}, backup_secret_refs = {} }
+  }
+  override_module {
+    target  = module.database
+    outputs = { database = null }
+  }
+  override_module {
     target = module.network
     outputs = { network = {
       vpc_id                  = "vpc-00000000000000001"
@@ -616,6 +818,14 @@ run "rejects_all_malformed_identities" {
 run "rejects_primary_region" {
   command = plan
   override_module {
+    target  = module.custody
+    outputs = { kms = { database = "arn:aws:kms:eu-central-1:222222222222:key/11111111-1111-1111-1111-111111111111" }, backup_kms = { database = "arn:aws:kms:eu-west-1:222222222222:key/22222222-2222-2222-2222-222222222222" }, secrets = {}, backup_secret_refs = {} }
+  }
+  override_module {
+    target  = module.database
+    outputs = { database = null }
+  }
+  override_module {
     target = module.network
     outputs = { network = {
       vpc_id                  = "vpc-00000000000000001"
@@ -637,6 +847,14 @@ run "rejects_primary_region" {
 }
 run "rejects_malformed_cell" {
   command = plan
+  override_module {
+    target  = module.custody
+    outputs = { kms = { database = "arn:aws:kms:eu-central-1:222222222222:key/11111111-1111-1111-1111-111111111111" }, backup_kms = { database = "arn:aws:kms:eu-west-1:222222222222:key/22222222-2222-2222-2222-222222222222" }, secrets = {}, backup_secret_refs = {} }
+  }
+  override_module {
+    target  = module.database
+    outputs = { database = null }
+  }
   override_module {
     target = module.network
     outputs = { network = {
@@ -661,6 +879,14 @@ run "rejects_malformed_cell" {
 run "primary_cells_use_their_exact_network_entries" {
   command = plan
   override_module {
+    target  = module.custody
+    outputs = { kms = { database = "arn:aws:kms:eu-central-1:222222222222:key/11111111-1111-1111-1111-111111111111" }, backup_kms = { database = "arn:aws:kms:eu-west-1:222222222222:key/22222222-2222-2222-2222-222222222222" }, secrets = {}, backup_secret_refs = {} }
+  }
+  override_module {
+    target  = module.database
+    outputs = { database = null }
+  }
+  override_module {
     target = module.network
     outputs = { network = {
       vpc_id                  = "vpc-00000000000000001"
@@ -682,6 +908,14 @@ run "primary_cells_use_their_exact_network_entries" {
 
 run "rejects_foreign_operator_account_before_cell_reads" {
   command = plan
+  override_module {
+    target  = module.custody
+    outputs = { kms = { database = "arn:aws:kms:eu-central-1:222222222222:key/11111111-1111-1111-1111-111111111111" }, backup_kms = { database = "arn:aws:kms:eu-west-1:222222222222:key/22222222-2222-2222-2222-222222222222" }, secrets = {}, backup_secret_refs = {} }
+  }
+  override_module {
+    target  = module.database
+    outputs = { database = null }
+  }
   override_module {
     target = module.network
     outputs = { network = {

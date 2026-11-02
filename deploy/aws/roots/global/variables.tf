@@ -52,3 +52,12 @@ variable "compute" {
     error_message = "Operator roles must belong to the explicitly bound deployment account"
   }
 }
+
+variable "database" {
+  type     = object({ engine_version = string, parameter_family = string, instance_class = string, allocated_storage = number, max_allocated_storage = number })
+  nullable = false
+}
+variable "recovery_role_arn" {
+  type     = string
+  nullable = false
+}

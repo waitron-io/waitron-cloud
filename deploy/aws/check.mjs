@@ -126,6 +126,9 @@ export async function runSuite(name, { directory = fileURLToPath(new URL('.', im
   try {
     await copyTrackedSources(directory, join(scratch, 'source'));
     const plan = suites.get(name).map((directory) => ({ directory, filter: `tests/${name}.tftest.hcl` }));
+    if (name === 'integration') {
+      plan.push(...['roots/global', 'roots/country'].map((directory) => ({ directory, filter: 'tests/composition.tftest.hcl' })));
+    }
     for (const entry of plan) {
       try {
         if (!(await lstat(join(scratch, 'source', entry.directory, entry.filter))).isFile()) throw new Error('Not a file');

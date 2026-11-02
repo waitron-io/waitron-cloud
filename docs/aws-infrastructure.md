@@ -797,13 +797,15 @@ check runs before network dependencies defer the cell module's identity reads.
 The roots declare their primary network,
 its cells and a database-client security group. Each cell waits for all network
 routes and associations, then attaches that group to its node launch template
-alongside the cell's own peer group. The database module still needs to consume
-the client group before this grants database access.
+alongside the cell's own peer group. The composed database consumes that same
+client group and the network's separate private database subnets.
 
 `primary_topology` exposes these provisional network and cell references.
 `deployment_admission` contains version, scope, country and region metadata.
-Neither output is the complete P1 infrastructure handoff. Database, storage,
-permissions, evidence, ingress and DNS composition remain unfinished.
+Neither output is the complete P1 infrastructure handoff. The separate
+`data_topology` output exposes the composed database, primary and backup key
+references, and primary and backup secret references. Storage, permissions,
+evidence, ingress, DNS and the complete handoff remain unfinished.
 
 For the global root, supply exactly `global`, `global_backup`, `global_keys`
 and `global_backup_keys` in `bindings`. Spain instead takes `country`,
@@ -820,11 +822,11 @@ reported account and region. The tests use synthetic identities, not AWS
 credentials. They cannot prove who may assume a role or what its effective
 permissions allow.
 
-OpenTofu 1.11 reuses mocked computed IDs across resource instances and cannot
-override one instance. The root tests therefore supply distinct subnet references
-at the network module's output boundary; the admission cases also replace cell
-outputs. The two-cell case plans the actual cell resources against those distinct
-subnets. Run the unmodified network suite separately:
+The root tests supply distinct subnet references at the network module's output
+boundary; the admission cases also replace cell outputs and the newly composed
+data modules. Their original admission and two-cell assertions stay intact.
+The separate composition cases plan the real custody, database and cell modules
+against the network fixture. Run the unmodified network suite separately:
 
 ```sh
 node deploy/aws/check.mjs --suite network
@@ -837,6 +839,31 @@ the complete-network dependency and the client-group attachment. The cell suite
 checks the actual launch template, retaining its standalone peer-group checks.
 These checks cover the connections between modules; they do not prove the entire
 resource graph together in one mocked plan or qualify a live deployment.
+
+To connect the management database, you also supply a `database` object with
+`engine_version`, `parameter_family`, `instance_class`, `allocated_storage` and
+`max_allocated_storage`, plus an explicit `recovery_role_arn`. These inputs have
+no defaults. The recovery role must be `waitron-global-recovery` or
+`waitron-es-recovery` in that root's account. Existing custody checks enforce
+that binding independently of deployment and key administration.
+
+Each database uses its own scope's database key and a different key in the
+cold-copy region. The custody module uses the dedicated key-administration
+providers for key resources. Its log-key contexts include every declared cell,
+so later log wiring can use the same cell names. Secret shells retain their
+backup references, but those references do not prove that secret values have
+been populated or recovered.
+
+```sh
+node --test deploy/aws/composition.test.mjs deploy/aws/topology.test.mjs
+```
+
+The integration suite runs the 29 existing cases and two composed data cases
+for each root. The data cases use different computed values for database keys
+and other keys, then check the actual database output and every retained secret
+reference. Frankfurt/Ireland use a different synthetic account from Madrid/Paris.
+These are local mocked plans. They do not qualify role assumption, network
+reachability, database recovery or provider availability.
 
 Each cell has its own workload roles and identity provider. The current
 version 1 handoff has one role reference per service, so one object cannot

@@ -46,3 +46,13 @@ output "primary_topology" {
     database_client_security_group_id = aws_security_group.database_clients.id
   }
 }
+
+output "data_topology" {
+  value = {
+    database           = module.database.database
+    keys               = module.custody.kms
+    backup_keys        = module.custody.backup_kms
+    secret_refs        = module.custody.secrets
+    backup_secret_refs = module.custody.backup_secret_refs
+  }
+}

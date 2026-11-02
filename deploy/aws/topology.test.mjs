@@ -73,4 +73,60 @@ for (const [scope, label, region] of [['global', 'global', 'eu-central-1'], ['co
     assert.equal(compute?.nullable, false);
     assert.equal(compute.default, undefined);
   });
+
+  // Mocked plans do not authenticate a provider; check the actual alias edges too.
+  test(`${scope} keeps key administration separate while composing regional custody`, () => {
+    const custody = module(scope, 'custody');
+    assert.equal(custody?.source, '"../../modules/custody"');
+    assert.deepEqual(custody.providers, {
+      aws: `\${aws.${scope}}`,
+      '${aws.backup}': `\${aws.${scope}_backup}`,
+      '${aws.keys}': `\${aws.${scope}_keys}`,
+      '${aws.backup_keys}': `\${aws.${scope}_backup_keys}`,
+    });
+    assert.equal(custody.scope, JSON.stringify(label));
+    assert.deepEqual(custody.authorities, {
+      deployment: `"arn:aws:iam::\${data.aws_caller_identity.${scope}.account_id}:role/waitron-${label}-deployment"`,
+      key_administration: `"arn:aws:iam::\${data.aws_caller_identity.${scope}.account_id}:role/waitron-${label}-key-administration"`,
+      recovery: '${var.recovery_role_arn}',
+    });
+    assert.deepEqual(custody.region_pair, {
+      primary: JSON.stringify(region), backup: JSON.stringify(scope === 'global' ? 'eu-west-1' : 'eu-west-3'),
+    });
+    assert.equal(custody.observability_cells, '${toset([for name in keys(var.deployment.cells) : "waitron-${name}"])}');
+    assert.equal(custody.depends_on, undefined);
+  });
+  test(`${scope} connects the management database to its private tier and the actual node client group`, () => {
+    const database = module(scope, 'database');
+    assert.equal(database?.source, '"../../modules/database"');
+    assert.deepEqual(database.providers, { aws: `\${aws.${scope}}`, '${aws.backup}': `\${aws.${scope}_backup}` });
+    assert.equal(database.scope, JSON.stringify(label));
+    assert.deepEqual(database.network, {
+      vpc_id: '${module.network.network.vpc_id}',
+      database_subnet_ids: '${module.network.network.database_subnet_ids}',
+      service_security_group_id: '${aws_security_group.database_clients.id}',
+    });
+    assert.deepEqual(database.kms, {
+      primary: '${module.custody.kms.database}', backup: '${module.custody.backup_kms.database}',
+    });
+    assert.equal(database.settings, '${var.database}');
+    assert.equal(database.depends_on, undefined);
+  });
+  test(`${scope} requires explicit database sizing and recovery authority`, () => {
+    for (const name of ['database', 'recovery_role_arn']) {
+      const value = entries(scope, 'variable').find(body => body[JSON.stringify(name)])?.[JSON.stringify(name)];
+      assert.equal(value?.nullable, false);
+      assert.equal(value.default, undefined);
+    }
+  });
+  test(`${scope} exposes the same composed database and custody references for later consumers`, () => {
+    const output = entries(scope, 'output').find(body => body['"data_topology"'])?.['"data_topology"'];
+    assert.deepEqual(output?.value, {
+      database: '${module.database.database}',
+      keys: '${module.custody.kms}',
+      backup_keys: '${module.custody.backup_kms}',
+      secret_refs: '${module.custody.secrets}',
+      backup_secret_refs: '${module.custody.backup_secret_refs}',
+    });
+  });
 }
