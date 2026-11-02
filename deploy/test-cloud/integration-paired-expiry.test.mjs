@@ -51,6 +51,22 @@ test('wall-clock acceleration cannot replace the actual remaining lifetime', asy
   const observe = await load(), s = scenario();
   await assert.rejects(observe({withdrawal: s.input, ...s, wait: async () => s.advance(601000, 0)}));
 });
+test('a small clock jump cannot skip even the end of the remaining lifetime', async () => {
+  const observe = await load(), s = scenario();
+  await assert.rejects(observe({withdrawal: s.input, ...s, wait: async () => s.advance(601000, 599999)}));
+});
+test('clock disagreement refuses even when both readings separately fit the observation window', async () => {
+  const observe = await load(), s = scenario();
+  await assert.rejects(observe({withdrawal: s.input, ...s, wait: async () => s.advance(608000, 601000)}));
+});
+test('a wall reading beyond the observation window refuses despite a bounded elapsed reading', async () => {
+  const observe = await load(), s = scenario();
+  await assert.rejects(observe({withdrawal: s.input, ...s, wait: async () => s.advance(610001, 610000)}));
+});
+test('an elapsed reading beyond the observation window refuses despite a bounded wall reading', async () => {
+  const observe = await load(), s = scenario();
+  await assert.rejects(observe({withdrawal: s.input, ...s, wait: async () => s.advance(607000, 610001)}));
+});
 test('an early wake cannot reach the provider probe', async () => {
   const observe = await load(), s = scenario(); let reached = false;
   await assert.rejects(observe({withdrawal: s.input, ...s, wait: async () => s.advance(599999), observe: async () => {reached = true; return s.observe();}}));
