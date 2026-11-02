@@ -1,5 +1,27 @@
 # CI pnpm setup
 
+## Nested package installs (D530)
+
+The package-test steps now pass the same package token as the initial install.
+You need that token when a test installs dependencies in a temporary checkout
+and pnpm must fetch a private tarball. The unsharded, grouped and sharded test
+steps receive it explicitly; workflow permissions remain `packages: read`.
+
+In [run 41461747571, job 125332453331](https://github.com/waitron-io/waitron-cloud/actions/runs/41461747571/job/125332453331),
+`installation venue guards detect all six omissions` failed before its assertions:
+the nested install received a 401 for `@waitron-io/ui-core` 0.1.0. The initial
+install had the package token, but the test step retained setup-node's placeholder.
+The native `node --test scripts/ci-nested-install-auth.test.mjs` control uses a
+fresh store, a loopback registry and a synthetic token. Each test-step binding
+first refuses the placeholder with 401, then installs and loads the package with
+the configured credential. The registry receives only a synthetic credential. Existing
+tests, permission checks, retries and deadlines stay unchanged.
+
+Why that historical job needed another fetch after its initial download remains
+unknown. The separate lifecycle proof's opaque failure during checkout also
+remains unknown; this change does not establish that it was another 401. Preserve
+those distinctions when investigating a recurrence.
+
 ## Bootstrap transport failures and bounded recovery (D154)
 
 Bootstrap setup now gives npm
