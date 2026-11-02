@@ -15,6 +15,27 @@ const current=`SELECT c.venue_id,c.consented_at FROM translation_consents c
 export async function hasConsent(client:PoolClient,venueId:string):Promise<boolean>{
  return !!(await client.query(current,[[venueId],translationConsentVersion])).rowCount;
 }
+export async function readAllowanceConsentActor(client:PoolClient,venueId:string):Promise<{accountId:string;consentId:string}>{
+ if(!uuid.test(venueId))fail('invalid_request');
+ const candidate=(await client.query<{id:string;account_id:string;organisation_id:string;legal_business_id:string}>(`SELECT c.id,c.account_id,c.organisation_id,v.legal_business_id
+  FROM translation_consents c JOIN venues v ON v.id=c.venue_id AND v.organisation_id=c.organisation_id
+  WHERE c.venue_id=$1 AND c.withdrawn_at IS NULL AND c.consent_version=$2`,[venueId,translationConsentVersion])).rows[0];
+ if(!candidate)fail('consent_required');
+ const {account_id:accountId,organisation_id:organisationId,legal_business_id:businessId}=candidate;
+ if(!(await client.query('SELECT id FROM cloud_accounts WHERE id=$1 AND disabled_at IS NULL FOR SHARE',[accountId])).rowCount)fail('consent_required');
+ if(!(await client.query('SELECT account_id FROM cloud_credentials WHERE account_id=$1 AND email_verified_at IS NOT NULL FOR SHARE',[accountId])).rowCount)fail('consent_required');
+ if(!(await client.query('SELECT account_id FROM organisation_memberships WHERE account_id=$1 AND organisation_id=$2 AND is_owner FOR SHARE',[accountId,organisationId])).rowCount)fail('consent_required');
+ // Account authority precedes the same parent locks used by allowance reservation.
+ if(!(await client.query('SELECT id FROM organisations WHERE id=$1 FOR SHARE',[organisationId])).rowCount)fail('consent_required');
+ if(!(await client.query('SELECT id FROM legal_businesses WHERE id=$1 AND organisation_id=$2 FOR SHARE',[businessId,organisationId])).rowCount)fail('consent_required');
+ await client.query('SELECT legal_business_id FROM billing_businesses WHERE organisation_id=$1 AND legal_business_id=$2 FOR SHARE',[organisationId,businessId]);
+ if(!(await client.query('SELECT id FROM venues WHERE id=$1 AND organisation_id=$2 AND legal_business_id=$3 FOR NO KEY UPDATE',[venueId,organisationId,businessId])).rowCount)fail('consent_required');
+ await client.query("SELECT pg_advisory_xact_lock(hashtextextended('translation-consent:'||$1,0))",[venueId]);
+ // A wait may replace consent even with the same owner; only the captured row can admit this work.
+ if(!(await client.query(`SELECT id FROM translation_consents WHERE id=$1 AND account_id=$2 AND venue_id=$3 AND organisation_id=$4
+  AND withdrawn_at IS NULL AND consent_version=$5 FOR SHARE`,[candidate.id,accountId,venueId,organisationId,translationConsentVersion])).rowCount)fail('consent_required');
+ return {accountId,consentId:candidate.id};
+}
 async function view(client:PoolClient,venueId:string):Promise<ConsentView>{
  const row=(await client.query<{consented_at:Date}>(current,[[venueId],translationConsentVersion])).rows[0];
  return {venueId,consented:!!row,consentedAt:row?row.consented_at.toISOString():null};

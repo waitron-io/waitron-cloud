@@ -8,7 +8,8 @@ export type AllowanceVersion={revision:number;effectiveFrom:CivilDate;limits:Rec
 export type AllowanceErrorCode='invalid_allowance_input'|'allowance_unavailable'|'allowance_conflict'|'allowance_exhausted'|'allowance_scope_not_found';
 export class AllowanceError extends Error{
  readonly code:AllowanceErrorCode;
- constructor(code:AllowanceErrorCode){super(code);this.name='AllowanceError';this.code=code;}
+ readonly available:bigint|undefined;
+ constructor(code:AllowanceErrorCode,available?:bigint){super(code);this.name='AllowanceError';this.code=code;this.available=available;}
 }
 const levels=['registered','connected','hosted'] as const;
 const services=['transactional_email','sms','content_translation','rota_solver','address_lookup'] as const;
@@ -17,6 +18,12 @@ function invalid():never{throw new AllowanceError('invalid_allowance_input');}
 function record(value:unknown,keys:readonly string[]):Record<string,unknown>{
  if(!value||typeof value!=='object'||Array.isArray(value)||Object.keys(value).length!==keys.length||!keys.every(key=>Object.hasOwn(value,key)))invalid();
  return value as Record<string,unknown>;
+}
+export function validateAllowanceOptions(value:unknown,planMode:string):AllowanceOptions|undefined{
+ if(value===undefined)return undefined;
+ const options=record(value,['mode','calendar']);
+ if(planMode!=='test-venue-levels'||options.mode!=='test'||options.calendar!=='UTC')invalid();
+ return {mode:'test',calendar:'UTC'};
 }
 function date(value:unknown):CivilDate{
  if(typeof value!=='string'||value.length!==10||!/^\d{4}-\d{2}-\d{2}$/.test(value)||value<'0001-01-01'||value>'9999-12-31')invalid();

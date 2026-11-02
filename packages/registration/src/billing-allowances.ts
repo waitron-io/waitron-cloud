@@ -95,7 +95,7 @@ export async function reserveAllowance(client:PoolClient,input:Input):Promise<Al
  const limit=allowanceLimit(version,{base,trials,day:today,hasPaymentMethod:business.current_method_id!==null,service:input.service});
  const accountScope=effectiveVenueLevel(base,trials,today)==='registered'&&['transactional_email','sms','address_lookup'].includes(input.service);
  const used=BigInt((await client.query(`SELECT coalesce(sum(units),0)::text AS used FROM billing_allowance_reservations WHERE service=$1 AND month=$2::date AND state IN ('held','spent') AND ${accountScope?'account_id':'venue_id'}=$3`,[input.service,month,accountScope?input.accountId:input.venueId])).rows[0].used);
- if(used+input.units>limit)fail('allowance_exhausted');
+ if(used+input.units>limit)throw new AllowanceError('allowance_exhausted',limit>used?limit-used:0n);
  const row=(await client.query<AllowanceReservation>(`INSERT INTO billing_allowance_reservations(id,account_id,organisation_id,legal_business_id,venue_id,installation_id,service,operation_id,binding,units,month,revision,state)
   VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,'held') RETURNING id,month::text,revision,units,state`,[randomUUID(),input.accountId,...args,input.venueId,input.installationId,input.service,input.operationId,input.binding,input.units.toString(),month,version.revision])).rows[0]!;
  return receipt(row);

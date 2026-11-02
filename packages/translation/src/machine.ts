@@ -1,6 +1,6 @@
 import type {Pool} from 'pg';
-import {createLeaseTrust,InstallationError,InstallationStore,readMachineClaims,requireTestPlanVenue,requireVenueService,transaction,verifyLease,verifyMachine,type LeaseIssuer,type PlanMode} from '@waitron-cloud/registration';
-import {hasConsent} from './consent.ts';
+import {createLeaseTrust,InstallationError,InstallationStore,readMachineClaims,requireTestPlanVenue,requireVenueService,transaction,validateAllowanceOptions,verifyLease,verifyMachine,type AllowanceOptions,type LeaseIssuer,type PlanMode} from '@waitron-cloud/registration';
+import {hasConsent,readAllowanceConsentActor} from './consent.ts';
 import {TranslationError} from './errors.ts';
 import {parseJob,writtenItems} from './job-body.ts';
 import {collectJob,createJob,findSubmitted,lockVenue,readJob,releaseJob,statusView,submitView} from './job-store.ts';
@@ -38,8 +38,9 @@ function jobReference(body:string,collect:boolean):{jobId:string;cursor:unknown}
 }
 function checkAction(action:TranslationAction){if(!actions.includes(action))throw new InstallationError('invalid_proof');}
 export class TranslationMachine {
- readonly #pool:Pool;readonly #issuer:LeaseIssuer;readonly #origin:string;readonly #trusted:ReadonlyMap<string,string>;readonly #collectPageBytes:number;readonly #planMode:PlanMode;
- constructor(pool:Pool,issuer:LeaseIssuer,origin:string,trusted=createLeaseTrust(issuer),collectPageBytes:number=maxCollectBytes,planMode:PlanMode='existing'){
+ readonly #pool:Pool;readonly #issuer:LeaseIssuer;readonly #origin:string;readonly #trusted:ReadonlyMap<string,string>;readonly #collectPageBytes:number;readonly #planMode:PlanMode;readonly #allowances:AllowanceOptions|undefined;
+ constructor(pool:Pool,issuer:LeaseIssuer,origin:string,trusted=createLeaseTrust(issuer),collectPageBytes:number=maxCollectBytes,planMode:PlanMode='existing',allowances?:AllowanceOptions){
+  this.#allowances=validateAllowanceOptions(allowances,planMode);
   requireTestPlanVenue('test',planMode);this.#planMode=planMode;
   validateCollectLimit(collectPageBytes);this.#collectPageBytes=collectPageBytes;
   this.#pool=pool;this.#issuer=issuer;this.#origin=origin;this.#trusted=trusted;
@@ -70,11 +71,12 @@ export class TranslationMachine {
    if(action==='translation-submit'){
     if(typeof jobBody!=='string')throw new InstallationError('invalid_proof');
     const fingerprint=checkSubmitBody(claims.body,jobBody),parsed=parseJob(jobBody);
-    let allowed=true;
+    let allowed=true,allowanceActor:{accountId:string;consentId:string}|undefined;
     if(this.#planMode!=='existing'){
      // A retry owns its durable job independently of today's permission and consent.
      const replay=await client.query('SELECT 1 FROM translation_jobs WHERE installation_id=$1 AND operation_id=$2',[row.id,claims.operationId]);
      if(!replay.rowCount){
+      if(this.#allowances)allowanceActor=await readAllowanceConsentActor(client,row.venue_id);
       try{
        await requireVenueService(client,row.venue_id,'content_translation',this.#planMode);
       }catch(error){if(error instanceof Error&&error.message==='permission_denied')allowed=false;else throw error;}
@@ -85,8 +87,9 @@ export class TranslationMachine {
     const prior=await findSubmitted(client,row.id,claims.operationId,fingerprint);
     if(prior)return submitView(prior);
     if(!allowed||row.translation_state!=='ready')throw new InstallationError('permission_denied');
+    if(this.#allowances&&!allowanceActor)throw new TranslationError('consent_required');
     if(!await hasConsent(client,row.venue_id))throw new TranslationError('consent_required');
-    return submitView(await createJob(client,{installationId:row.id,venueId:row.venue_id,operationId:claims.operationId,fingerprint,body:jobBody,total:writtenItems(parsed).length}));
+    return submitView(await createJob(client,{installationId:row.id,venueId:row.venue_id,operationId:claims.operationId,fingerprint,body:jobBody,total:writtenItems(parsed).length,allowanceActor}));
    }
    if(this.#planMode!=='existing'){
     row=(await client.query(query+' FOR SHARE OF i',[routing.installationId])).rows[0];claims=authorize(row);
