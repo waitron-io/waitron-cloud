@@ -14,9 +14,9 @@ test('venue relay detects independent policy and mode propagation omissions',{ti
   await exec('pnpm',['install','--frozen-lockfile'],{cwd:candidate,timeout:30000});
   const cases=[
    {name:'basic venue policy',file:'packages/registration/src/relay-grants.ts',needle:"await requireVenueService(client,candidate.venue_id,'transactional_email',planMode);",replacement:'',operation:'approval'},
-   {name:'message mode propagation',file:'packages/registration/src/relay-messages.ts',needle:'new RelayGrantStore(pool,config.grants,planMode)',replacement:'new RelayGrantStore(pool,config.grants)',operation:'messages'},
-   {name:'worker mode propagation',file:'packages/registration/src/relay-worker.ts',needle:'new RelayGrantStore(pool,config.grants,planMode)',replacement:'new RelayGrantStore(pool,config.grants)',operation:'handoff'},
-   {name:'HTTP mode propagation',file:'packages/account-http/src/app.ts',needle:'new RelayMessages(pool,options.leaseIssuer,config.portalOrigin,options.relay,options.leaseTrust,options.planMode)',replacement:'new RelayMessages(pool,options.leaseIssuer,config.portalOrigin,options.relay,options.leaseTrust)',operation:'HTTP'},
+   {name:'message mode propagation',file:'packages/registration/src/relay-messages.ts',needle:'new RelayGrantStore(pool,config.grants,planMode,allowances)',replacement:'new RelayGrantStore(pool,config.grants,undefined,allowances)',operation:'messages'},
+   {name:'worker mode propagation',file:'packages/registration/src/relay-worker.ts',needle:'new RelayGrantStore(pool,config.grants,planMode,allowances)',replacement:'new RelayGrantStore(pool,config.grants,undefined,allowances)',operation:'handoff'},
+   {name:'HTTP mode propagation',file:'packages/account-http/src/app.ts',needle:'new RelayMessages(pool,options.leaseIssuer,config.portalOrigin,options.relay,options.leaseTrust,options.planMode,allowances)',replacement:'new RelayMessages(pool,options.leaseIssuer,config.portalOrigin,options.relay,options.leaseTrust,undefined,allowances)',operation:'HTTP'},
   ];
   const env={...process.env};delete env.NODE_TEST_CONTEXT;
   async function run(c:typeof cases[number]){

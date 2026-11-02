@@ -4,7 +4,7 @@ import {ProviderError,type ModelCall,type ModelClient,type ModelReply} from './o
 import {firstPassInput,firstPassInstructions,reviewInput,reviewInstructions} from './prompt.ts';
 import {checkFirstPass,mergeReview,ReplyError} from './reply.ts';
 export const retryWaitsMs=[2000,8000,30000] as const;
-export interface BatchHooks {stillPermitted?():Promise<boolean>;mayCall():Promise<boolean>;spent(usage:{inputTokens:number;outputTokens:number}):Promise<void>;attempted():Promise<void>;wait(ms:number,signal:AbortSignal):Promise<void>}
+export interface BatchHooks {stillPermitted?():Promise<boolean>;mayCall():Promise<boolean>;beforeProvider?():Promise<boolean>;spent(usage:{inputTokens:number;outputTokens:number}):Promise<void>;attempted(attemptStartedAt?:string):Promise<void>;wait(ms:number,signal:AbortSignal):Promise<void>}
 export type BatchOutcome={kind:'done';results:ItemResult[];reviewApplied:number;reviewDropped:number;reviewFailed:boolean}|{kind:'failed';reason:'provider_unavailable'|'cap_reached'}|{kind:'aborted'};
 type Attempt<T>={ok:true;value:T;permitted:boolean}|{ok:false;stop:'cap'|'gave_up'|'aborted'|'permission'};
 async function permitted(hooks:BatchHooks,signal:AbortSignal):Promise<'allowed'|'permission'|'aborted'>{
@@ -21,7 +21,16 @@ async function runPass<T>(client:ModelClient,call:ModelCall,check:(text:string)=
   if(!allowed)return {ok:false,stop:'cap'};
   const admission=await permitted(hooks,signal);
   if(admission!=='allowed')return {ok:false,stop:admission};
+  if(hooks.beforeProvider){
+   const admitted=await hooks.beforeProvider();
+   if(signal.aborted)return {ok:false,stop:'aborted'};
+   if(!admitted)return {ok:false,stop:'permission'};
+   const current=await permitted(hooks,signal);
+   if(current!=='allowed')return {ok:false,stop:current};
+  }
   let response:{reply:ModelReply}|{error:unknown};
+  // Trial use belongs to the invocation day, even if the provider replies after midnight.
+  const attemptStartedAt=new Date().toISOString();
   try{response={reply:await client.respond(call,signal)};}catch(error){response={error};}
   // Storage and lease failures must escape without replaying a paid provider call.
   const callbackErrors:unknown[]=[];
@@ -30,7 +39,7 @@ async function runPass<T>(client:ModelClient,call:ModelCall,check:(text:string)=
     :response.error instanceof ProviderError?response.error.usage:undefined;
    if(usage)await hooks.spent(usage);
   }catch(error){callbackErrors.push(error);}
-  try{await hooks.attempted();}catch(error){callbackErrors.push(error);}
+  try{await hooks.attempted(attemptStartedAt);}catch(error){callbackErrors.push(error);}
   if(callbackErrors.length>1)throw new AggregateError(callbackErrors,'translation_callbacks_failed');
   if(callbackErrors.length)throw callbackErrors[0];
   if(signal.aborted)return {ok:false,stop:'aborted'};

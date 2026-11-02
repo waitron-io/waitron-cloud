@@ -14,7 +14,7 @@ test('venue translation HTTP and wait authority detect independent guard omissio
   await exec('pnpm',['install','--frozen-lockfile'],{cwd:candidate,timeout:30000});
   const refresh="     row=(await client.query(query+' FOR SHARE OF i',[routing.installationId])).rows[0];claims=authorize(row);";
   const cases=[
-   {name:'HTTP mode propagation',file:'packages/account-http/src/app.ts',needle:'new TranslationMachine(pool,options.leaseIssuer,config.portalOrigin,options.leaseTrust,undefined,options.planMode)',replacement:'new TranslationMachine(pool,options.leaseIssuer,config.portalOrigin,options.leaseTrust)',package:'account-http',test:'venue-service-translation-http.test.ts',pattern:'venue HTTP translation refuses registered admission before creating a job'},
+   {name:'HTTP mode propagation',file:'packages/account-http/src/app.ts',needle:'new TranslationMachine(pool,options.leaseIssuer,config.portalOrigin,options.leaseTrust,undefined,options.planMode,allowances)',replacement:'new TranslationMachine(pool,options.leaseIssuer,config.portalOrigin,options.leaseTrust,undefined,undefined,allowances)',package:'account-http',test:'venue-service-translation-http.test.ts',pattern:'venue HTTP translation refuses registered admission before creating a job'},
    {name:'post-policy proof authentication',file:'packages/translation/src/machine.ts',needle:refresh,replacement:refresh.replace('claims=authorize(row);',''),package:'translation',test:'venue-service-authority.test.ts',pattern:'venue translation rechecks revocation after policy wait'},
   ];
   const env={...process.env};delete env.NODE_TEST_CONTEXT;

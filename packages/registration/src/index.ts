@@ -316,3 +316,8 @@ export {BillingDisplayMachine,BillingDisplayError} from './billing-display-machi
 
 export {readVenuePermissions,requireVenueService,type VenuePermission} from './venue-service-permissions.ts';
 export type {PermissionCommand} from './billing-types.ts';
+
+export {AllowanceConfigStore,reserveAllowance,spendAllowance,recordAllowanceAttempt,releaseUnstartedAllowance} from './billing-allowances.ts';
+export type {AllowanceReservation} from './billing-allowances.ts';
+export {AllowanceError,validateAllowanceOptions,allowanceOptionsFromEnv} from './billing-allowance-rules.ts';
+export type {AllowanceOptions} from './billing-allowance-rules.ts';

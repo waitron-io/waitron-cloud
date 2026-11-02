@@ -1,5 +1,6 @@
 import {randomUUID} from 'node:crypto';
 import type {PoolClient} from 'pg';
+import {AllowanceError,reserveAllowance} from '@waitron-cloud/registration';
 import {TranslationError} from './errors.ts';
 import {collectPage,maxCollectBytes,validateCollectLimit,type BatchResults} from './collect-page.ts';
 import type {SubmitFingerprint} from './submit-proof.ts';
@@ -10,7 +11,7 @@ export interface ItemResult {ref:string;names:Record<string,string>;placeholder:
 export interface JobRow {id:string;installation_id:string;venue_id:string;operation_id:string;job_sha256:string;job_bytes:number;state:JobState;reason:string|null;
  total:number;done:number;failed:number;input_tokens:string;output_tokens:string;cost_micro_usd:string;review_applied:number;review_dropped:number;
  provider:string;model:string;prompt_version:string;lease_id:string|null;lease_until:Date|null;lease_count:number;
- created_at:Date;started_at:Date|null;finished_at:Date|null;collected_at:Date|null}
+ created_at:Date;started_at:Date|null;finished_at:Date|null;collected_at:Date|null;allowance_open_calls:number}
 export async function lockVenue(client:PoolClient,venueId:string){await client.query("SELECT pg_advisory_xact_lock(hashtextextended('translation-venue:'||$1,0))",[venueId]);}
 export async function findSubmitted(client:PoolClient,installationId:string,operationId:string,f:SubmitFingerprint){
  const row=(await client.query<JobRow>('SELECT * FROM translation_jobs WHERE installation_id=$1 AND operation_id=$2',[installationId,operationId])).rows[0];
@@ -25,10 +26,19 @@ export async function monthSpend(client:PoolClient,venueId:string):Promise<bigin
  return BigInt((await client.query(`SELECT COALESCE(sum(cost_micro_usd),0)::text AS spent FROM translation_jobs
   WHERE venue_id=$1 AND created_at>=date_trunc('month',clock_timestamp(),'UTC')`,[venueId])).rows[0].spent);
 }
-export async function createJob(client:PoolClient,input:{installationId:string;venueId:string;operationId:string;fingerprint:SubmitFingerprint;body:string;total:number}){
+export async function createJob(client:PoolClient,input:{installationId:string;venueId:string;operationId:string;fingerprint:SubmitFingerprint;body:string;total:number;allowanceActor?:{accountId:string;consentId:string}}){
  if((await client.query("SELECT 1 FROM translation_jobs WHERE venue_id=$1 AND state IN ('queued','running')",[input.venueId])).rowCount)fail('job_running');
  const {cap,perItem}=await spendingPolicy(client),left=cap-await monthSpend(client,input.venueId),total=BigInt(input.total);
  if(total*perItem>left){const fits=left<=0n?0n:left/perItem;fail('limit_reached',Number(fits<total?fits:total));}
+ if(input.allowanceActor){
+  try{await reserveAllowance(client,{accountId:input.allowanceActor.accountId,venueId:input.venueId,installationId:input.installationId,
+   service:'content_translation',operationId:input.operationId,units:total,
+   binding:`translation:${input.fingerprint.jobSha256}:${input.fingerprint.jobBytes}:${input.allowanceActor.consentId}`});}
+  catch(error){
+   if(error instanceof AllowanceError&&error.code==='allowance_exhausted'&&error.available!==undefined)fail('limit_reached',Number(error.available<total?error.available:total));
+   throw error;
+  }
+ }
  const row=(await client.query<JobRow>(`INSERT INTO translation_jobs(id,installation_id,venue_id,operation_id,job_sha256,job_bytes,total,provider,model,prompt_version)
   VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *`,[randomUUID(),input.installationId,input.venueId,input.operationId,input.fingerprint.jobSha256,input.fingerprint.jobBytes,input.total,translationProvider,translationModel,translationPromptVersion])).rows[0]!;
  await client.query('INSERT INTO translation_job_bodies(job_id,body) VALUES($1,$2)',[row.id,input.body]);

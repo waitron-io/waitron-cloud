@@ -2632,7 +2632,7 @@ Append/ack use an owned exclusive file lease and atomic durable checkpoints.
 `test/{traffic-store,traffic-collector,traffic-gateway}.test.ts`,
 `packages/registration/src/billing-trial-usage.ts`,
 `packages/registration/test/billing-trial-usage.test.ts`,
-`deploy/test-cloud/allowance-traffic-proof.test.mjs` and
+`deploy/test-cloud/test-fixtures/allowance-traffic-proof.test.mjs` and
 `scripts/verify-allowance-traffic-receipt{,.test}.mjs`.
 Modify registration `src/{usage-metering,index}.ts` and remote
 `src/{config,gateway-cli,placement,reconciler}.ts` only after source clearance.

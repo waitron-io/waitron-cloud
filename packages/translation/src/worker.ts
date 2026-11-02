@@ -1,7 +1,7 @@
 import {randomUUID} from 'node:crypto';
 import {setTimeout as delay} from 'node:timers/promises';
 import type {Pool,PoolClient} from 'pg';
-import {readVenuePermissions,recordUsageEvent,requireTestPlanVenue,requireVenueService,transaction,type PlanMode} from '@waitron-cloud/registration';
+import {readVenuePermissions,recordAllowanceAttempt,recordUsageEvent,requireTestPlanVenue,requireVenueService,spendAllowance,transaction,validateAllowanceOptions,type AllowanceOptions,type PlanMode} from '@waitron-cloud/registration';
 import {translateBatch,type BatchHooks} from './batch-runner.ts';
 import {hasConsent} from './consent.ts';
 import {planBatches} from './batching.ts';
@@ -20,9 +20,10 @@ async function recordJobUsage(client:PoolClient,job:JobRow&{finished_at:Date},or
   await recordUsageEvent(client,{organisationId,venueId:job.venue_id,type,quantity,sourceKind:'translation_job',sourceReference:job.id,occurredAt});
 }
 export class TranslationWorker {
- readonly #pool:Pool;readonly #client:ModelClient;readonly #concurrency:number;readonly #leaseMs:number;readonly #maxLeases:number;readonly #wait:BatchHooks['wait'];readonly #planMode:PlanMode;
- constructor(pool:Pool,client:ModelClient,options:{batchConcurrency?:number;leaseMs?:number;maxLeases?:number;wait?:BatchHooks['wait'];planMode?:PlanMode}={}){
+ readonly #pool:Pool;readonly #client:ModelClient;readonly #concurrency:number;readonly #leaseMs:number;readonly #maxLeases:number;readonly #wait:BatchHooks['wait'];readonly #planMode:PlanMode;readonly #allowances:AllowanceOptions|undefined;
+ constructor(pool:Pool,client:ModelClient,options:{batchConcurrency?:number;leaseMs?:number;maxLeases?:number;wait?:BatchHooks['wait'];planMode?:PlanMode;allowances?:AllowanceOptions}={}){
   this.#planMode=options.planMode===undefined?'existing':options.planMode;requireTestPlanVenue('test',this.#planMode);
+  this.#allowances=validateAllowanceOptions(options.allowances,this.#planMode);
   this.#pool=pool;this.#client=client;this.#concurrency=options.batchConcurrency??4;this.#leaseMs=options.leaseMs??600000;
   this.#maxLeases=options.maxLeases??3;this.#wait=options.wait??defaultWait;
   if(this.#concurrency>4||![this.#concurrency,this.#leaseMs,this.#maxLeases].every(n=>Number.isSafeInteger(n)&&n>0))throw new Error('translation_worker_options_invalid');
@@ -53,7 +54,7 @@ export class TranslationWorker {
    const hooks=await this.#hooks(job,leaseId,local,lease.permissionRevision);
    const run=async()=>{
     for(let next=pending.shift();next&&!local.signal.aborted;next=pending.shift()){
-     const outcome=await translateBatch(parsed,next.batch,this.#client,hooks,local.signal);
+     const outcome=await translateBatch(parsed,next.batch,this.#client,hooks(),local.signal);
      if(local.signal.aborted||outcome.kind==='aborted')return;
      const entry:StoredBatch=outcome.kind==='done'?{results:outcome.results,failed:[]}
       :{results:[],failed:failedRefs(next.batch),...(outcome.reason==='cap_reached'?{stoppedByCap:true as const}:{})};
@@ -104,22 +105,54 @@ export class TranslationWorker {
    return hasConsent(client,job.venue_id);
   });
  }
- async #hooks(job:JobRow,leaseId:string,local:AbortController,revision?:number):Promise<BatchHooks>{
+ async #hooks(job:JobRow,leaseId:string,local:AbortController,revision?:number):Promise<()=>BatchHooks>{
   const price=(await this.#pool.query<{input:string;output:string}>('SELECT input_micro_usd_per_million::text AS input,output_micro_usd_per_million::text AS output FROM translation_prices WHERE model=$1',[job.model])).rows[0];
   if(!price)throw new Error('translation_price_missing');
   const input=BigInt(price.input),output=BigInt(price.output);
   const guarded=async(sql:string,values:unknown[])=>{if((await this.#pool.query(sql,values)).rowCount!==1)local.abort();};
+  let initialAdmission:Promise<boolean>|undefined;
+  const admit=()=>{
+   if(!initialAdmission)return initialAdmission=this.#admit(job,leaseId,false);
+   return initialAdmission.then(allowed=>allowed?this.#admit(job,leaseId,true):false);
+  };
+  return ()=>{
+  let costFailed=false;
   return {
    ...(this.#planMode==='test-venue-levels'?{stillPermitted:()=>this.#permitted(job,leaseId,revision!)}:{}),
+   ...(this.#allowances?{beforeProvider:async()=>{
+    // Concurrent batches share the first durable spend, but every later call checks its lease.
+    costFailed=false;return admit();
+   }}:{}),
    mayCall:()=>transaction(this.#pool,async client=>(await monthSpend(client,job.venue_id))<(await spendingPolicy(client)).cap),
    spent:async usage=>{
     const cost=(BigInt(usage.inputTokens)*input+BigInt(usage.outputTokens)*output+999999n)/1000000n;
-    await guarded(`UPDATE translation_jobs SET input_tokens=input_tokens+$3,output_tokens=output_tokens+$4,cost_micro_usd=cost_micro_usd+$5
-     WHERE id=$1 AND lease_id=$2 AND state='running'`,[job.id,leaseId,usage.inputTokens,usage.outputTokens,cost.toString()]);
+    try{await guarded(`UPDATE translation_jobs SET input_tokens=input_tokens+$3,output_tokens=output_tokens+$4,cost_micro_usd=cost_micro_usd+$5
+     WHERE id=$1 AND lease_id=$2 AND state='running'`,[job.id,leaseId,usage.inputTokens,usage.outputTokens,cost.toString()]);}
+    catch(error){costFailed=true;throw error;}
    },
-   attempted:()=>guarded(`UPDATE translation_jobs SET lease_until=clock_timestamp()+$3*interval '1 millisecond' WHERE id=$1 AND lease_id=$2 AND state='running'`,[job.id,leaseId,this.#leaseMs]),
+   attempted:attemptStartedAt=>this.#allowances?transaction(this.#pool,async client=>{
+    if(!(await client.query("SELECT id FROM translation_jobs WHERE id=$1 AND lease_id=$2 AND state='running' FOR UPDATE",[job.id,leaseId])).rowCount){local.abort();return;}
+    const saved=(await client.query("SELECT id FROM billing_allowance_reservations WHERE service='content_translation' AND installation_id=$1 AND operation_id=$2 AND venue_id=$3",[job.installation_id,job.operation_id,job.venue_id])).rows[0];
+    if(!saved||!attemptStartedAt)throw new Error('translation_allowance_attempt_missing');
+    await recordAllowanceAttempt(client,saved.id,attemptStartedAt);
+    await client.query("UPDATE translation_jobs SET lease_until=clock_timestamp()+$2*interval '1 millisecond',allowance_open_calls=allowance_open_calls-$3 WHERE id=$1",[job.id,this.#leaseMs,costFailed?0:1]);
+   }):guarded(`UPDATE translation_jobs SET lease_until=clock_timestamp()+$3*interval '1 millisecond' WHERE id=$1 AND lease_id=$2 AND state='running'`,[job.id,leaseId,this.#leaseMs]),
    wait:this.#wait,
   };
+  };
+ }
+ async #admit(job:JobRow,leaseId:string,ownsSpend:boolean):Promise<boolean>{
+  return transaction(this.#pool,async client=>{
+   const current=(await client.query("SELECT id,allowance_open_calls FROM translation_jobs WHERE id=$1 AND lease_id=$2 AND state='running' AND lease_until>clock_timestamp() FOR UPDATE",[job.id,leaseId])).rows[0];
+   if(!current||(!ownsSpend&&current.allowance_open_calls!==0))return false;
+   const saved=(await client.query("SELECT id,units,state,attempted_at,binding FROM billing_allowance_reservations WHERE service='content_translation' AND installation_id=$1 AND operation_id=$2 AND venue_id=$3 FOR UPDATE",[job.installation_id,job.operation_id,job.venue_id])).rows[0];
+   if(!saved||BigInt(saved.units)!==BigInt(job.total)||!saved.binding.startsWith(`translation:${job.job_sha256}:${job.job_bytes}:`)||saved.state==='released')return false;
+   // A previous lease may have crashed between spending and calling; never replay that uncertainty.
+   if(saved.state==='spent'&&saved.attempted_at===null&&!ownsSpend)return false;
+   if(!(await client.query('SELECT 1 FROM translation_jobs WHERE id=$1 AND lease_until>clock_timestamp()',[job.id])).rowCount)return false;
+   await spendAllowance(client,saved.id);
+   await client.query('UPDATE translation_jobs SET allowance_open_calls=allowance_open_calls+1 WHERE id=$1',[job.id]);return true;
+  });
  }
  async #save(jobId:string,leaseId:string,index:number,entry:StoredBatch,review?:{reviewApplied:number;reviewDropped:number}):Promise<boolean>{
   return transaction(this.#pool,async client=>{

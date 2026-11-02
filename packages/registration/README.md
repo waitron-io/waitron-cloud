@@ -307,3 +307,59 @@ cannot bypass an operator stop. For private fixtures, worker commands select thi
 mode with `CLOUD_VENUE_SERVICE_LEVELS=test` and `CLOUD_TEST_SERVICE_PLANS=0`.
 Conflicting or invalid flags refuse startup before database work. The checked-in
 deployment keeps the mode dormant; production release qualification remains open.
+
+## Monthly allowances in test fixtures
+
+Add `{mode:'test',calendar:'UTC'}` as the fourth argument to `RelayGrantStore` or
+`RelayWorker`, or the seventh argument to `RelayMessages`, to exercise monthly
+allowances with `test-venue-levels`. The account app and listener accept the same
+value as `allowances`. Publish your synthetic limits through `AllowanceConfigStore`
+before admitting work; there are no production size defaults.
+
+For account and translation worker commands, set `CLOUD_TEST_ALLOWANCES=1` and
+`CLOUD_ALLOWANCE_CALENDAR=UTC` alongside the venue-level flags above. Invalid or
+incomplete combinations refuse before database connections. Leave both allowance
+variables absent to preserve the existing behavior. The dedicated test runtime
+forwards these options only to its existing service consumers and keeps translation
+and external provider credentials disabled.
+
+Relay admission commits one spent monthly unit with its original reservation and
+queue row. Delivery, cancellation, failure and expiry retain that unit. Replays and
+worker restarts check the original debit rather than spending from another month.
+The existing relay policy, owner, consent, origin, grant, lease and operator-stop
+checks still apply. Translation holds the requested items when queuing a job and
+spends them under its current worker lease before a provider call; its separate
+money safety cap remains in force. These adapters do not enable production billing.
+
+To check that the allowance guards prevent their intended failures, run:
+
+```sh
+node scripts/test-postgres.mjs exec pnpm --dir packages/registration exec node --test --test-timeout=240000 test/billing-allowance-guards.test.ts
+```
+
+The wrapper checks two trial rules and fourteen service, traffic and ownership
+guards. In an installed disposable candidate, each check runs the named behavior,
+changes one guard, requires the expected assertion failure, restores the original
+bytes and runs the behavior again. The operational-traffic check uses an isolated
+rendered HAProxy and PostgreSQL fixture with real TLS probes over three controlled
+UTC dates. It requires Docker. Missing cases, skipped tests, setup failures and
+undetected changes refuse qualification. Upgrade and two-backup recovery remain
+separate checks; passing the guard wrapper does not qualify either recovery path.
+
+To check the current migration and both backup paths, run:
+
+```sh
+node scripts/test-postgres.mjs exec pnpm --dir packages/registration exec node --test --test-timeout=360000 test/billing-allowance-upgrade-recovery.test.ts
+```
+
+Schema receipt version 9 binds the exact 47-to-48 predecessor and clean candidate.
+The proof interrupts the migration, checks complete rollback, then retries with
+concurrent consumers stopped. It restores the old backup to an empty, unenabled
+allowance schema, and separately restores a populated new backup. Matching external
+keys and signed spool bytes retain configuration revisions, held/spent/released
+units, unfinished-call markers, reporter identity, gaps and exact traffic totals.
+Replaying pending or older spool checkpoints cannot add bytes or reset identity.
+Wrong keys and foreign owners refuse access. Historical proofs 1–8 keep their
+original schema pairs; their wrappers execute the original installed release.
+These are local PostgreSQL and synthetic-account checks, not a live recovery or
+production billing qualification.

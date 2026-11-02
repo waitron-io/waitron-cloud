@@ -102,3 +102,41 @@ History cleanup preserves a backup tombstone, restored recovery, installation op
 The account portal calls `POST /api/account/usage/read` with the selected organisation ID. The route requires the portal Origin, the session cookie, the session CSRF token and current owner membership. It returns decimal strings so a large byte total does not lose precision in JavaScript.
 
 These totals are measurements only. They do not define billable units, free allowances, prices, invoices, excess-use behavior or a metering-outage policy. Decide those rules from operating-cost and abuse evidence before connecting any measurement to service enforcement.
+
+## Exercise monthly limits separately
+
+The billing fixture mode uses a separate monthly reservation store for relay mail
+and translation. It does not add fields or reconciliation sources to the owner
+usage summary above. Supply explicit test limits and the test/UTC options described
+in the [registration guide](../packages/registration/README.md#monthly-allowances-in-test-fixtures).
+Missing options preserve the existing service behavior, and production enforcement
+stays off.
+
+The relay adapter spends one unit in the message-admission transaction. Delivery,
+cancellation and uncertain handoff retain the original debit. Translation holds
+requested items when accepting a job and spends them immediately before a provider
+call under the current job lease. Work that was never leased can release its held
+items; a started or uncertain call cannot reclaim them. Neither adapter uses the
+owner usage totals as customer authority or replaces its existing safety limits.
+
+The [allowance guard qualification](../packages/registration/README.md#monthly-allowances-in-test-fixtures)
+checks traffic authority, exact replay, operational-probe exclusion and incomplete
+trial evidence alongside service limits. It removes one guard at a time in a
+separate installed copy and requires a failing behavioral assertion before
+restoring the source. The separate upgrade wrapper restores both a pre-upgrade
+backup and a populated allowance backup. It retains unfinished provider calls,
+original reservation states and signed pending traffic reports. A missing interval
+stays incomplete after recovery, and replay cannot add traffic bytes. Run the
+[upgrade and recovery command](../packages/registration/README.md#monthly-allowances-in-test-fixtures)
+separately; neither proof enables production enforcement.
+
+A restarted Linux gateway can recover a crashed writer even when its process
+number is reused. Its private lease also records the boot, PID namespace and
+process start time. Recovery retains the original signed report and an incomplete
+coverage marker. A live writer or an identity that cannot be verified still
+refuses access; concurrent direct calls are not queued by the spool itself.
+
+An unconfirmed spent call deliberately leaves trial evidence incomplete, including
+a stop between spending and provider invocation. It is not replayed to create a
+confirmation. Production clock drift and calendar qualification remain separate
+from these controlled UTC fixtures.
