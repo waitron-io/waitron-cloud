@@ -1,3 +1,4 @@
+import {REPLAY_REVISION} from './replay-release.mjs';
 import { isDeepStrictEqual } from 'node:util';
 
 const fail = () => { throw Error('Invalid cloud cost archive evidence'); };
@@ -32,9 +33,9 @@ function plain(value, seen = new Set(), budget = { remaining: 1000 }) {
   }
   seen.delete(value);
 }
-function check(value) {
+function check(value,revisions) {
   need(/^[a-f0-9]{40}$/.test(value.cloudRevision)
-    && value.waitronRevision === 'fbadd15785464e59747e697c11048bfbc6e4938f'
+    && revisions.includes(value.waitronRevision)
     && /^[a-f0-9]{64}$/.test(value.runtimeSha256) && /^sha256:[a-f0-9]{64}$/.test(value.image));
   for (const key of ['startedAt', 'endedAt']) need(typeof value[key] === 'string'
     && /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$/.test(value[key])
@@ -80,7 +81,7 @@ function check(value) {
 
 export function buildArchiveEvidence(input) {
   try {
-    plain(input); exact(input, keys); check(input);
+    plain(input); exact(input, keys); check(input,[REPLAY_REVISION]);
     return structuredClone({ schemaVersion: 1, kind: 'local-archive-aggregate', dataBoundary: boundary, ...input });
   } catch { fail(); }
 }
@@ -89,6 +90,6 @@ export function validateArchiveEvidence(input) {
   try {
     plain(input); exact(input, ['schemaVersion', 'kind', 'dataBoundary', ...keys]);
     need(input.schemaVersion === 1 && input.kind === 'local-archive-aggregate'); equal(input.dataBoundary, boundary);
-    check(input); return true;
+    check(input,['fbadd15785464e59747e697c11048bfbc6e4938f',REPLAY_REVISION]); return true;
   } catch { fail(); }
 }

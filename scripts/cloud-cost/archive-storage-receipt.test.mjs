@@ -24,7 +24,7 @@ function fixture() {
     observer: { attempts: 11, bytesIn: 4811, bytesOut: 4696 }, discrepancy: { attempts: 0, bytesIn: 0, bytesOut: 0 } };
   return {
     metadata: { runId: '12345678-1234-4234-8234-123456789012', cloudRevision: 'a'.repeat(40),
-      waitronRevision: 'fbadd15785464e59747e697c11048bfbc6e4938f',
+      waitronRevision: 'b1b0f10952a59eb59f7358bd681a3cdc94d9b61c',
       window: { startedAt: '2026-10-21T00:00:00.000Z', endedAt: '2026-10-21T00:00:02.000Z', elapsedSeconds: 2 } },
     result: { capturedBytes: 4500, headBytes: 4500, downloadedBytes: 4500, rangeBytes: 11, parts: 1,
       restored: { ok: true, issues: 0, sales: 1 }, integrity: { ok: true, issues: 0 },
@@ -130,4 +130,9 @@ test('archiveStorageDoesNotInvokeRawProducerGetters', () => {
   const input = fixture(); let invoked = false;
   Object.defineProperty(input.result, 'accounting', { get() { invoked = true; throw Error('PRIVATE_CANARY'); } });
   try { assert.throws(() => build(input), bad); } finally { assert.equal(invoked, false); }
+});
+
+test('currentProducerRejectsHistoricalRevision',()=>{
+ const input=fixture();input.metadata.waitronRevision='fbadd15785464e59747e697c11048bfbc6e4938f';
+ assert.throws(()=>build(input),bad);
 });

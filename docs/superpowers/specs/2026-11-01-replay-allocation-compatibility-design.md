@@ -45,7 +45,7 @@ while standard, full and rectificative pass. Its source bytes match this literal
 release (SHA256 `5c830bc8a93a283ba1108e0d0b760ae0c75e979e57fc3b6799891e14fe50cfb2`).
 The command used esbuild on `src/hour-series-configuration.ts`, then Node assertions
 against the resulting module. This narrow native experiment proves that guard,
-not replay, restore, Docker or interoperability. The caller design is unexecuted.
+not replay, restore, Docker or interoperability. The implementation plan records the subsequently qualified caller steps; this narrow guard receipt remains separate.
 
 ## The protected-check conflict
 
@@ -135,7 +135,9 @@ or setting `skipSecrets` cannot replace it. Recovery retains local node identity
 but activates a new fiscal installation and retires the old series.
 
 Clock observations for this generated replay are synthetic. Keep the real
-provisioning, clock-decision, prepared allocation and restore code. Use the host's
+provisioning, clock-decision, prepared allocation and restore code. Embed the
+literal release's timestamp with its own `scripts/generate-hour-release.mjs`;
+without it the ordinary recovery clock guard correctly refuses admission. Use the host's
 explicit `testClock` seam for wall/monotonic readings and a test-only bundle adapter
 around `observeInternetHourClock` that supplies its existing `deps.request` seam
 with controlled responses. Preserve the real observer's date, freshness, timeout

@@ -54,7 +54,7 @@ function fixture() {
     isolation: { blockedConnections: 3, blockedDns: 2, localControl: true },
     cleanup: { workerContainers: 0, networks: 0, privateCopies: 0 } },
     metadata: { runId: '12345678-1234-4234-8234-123456789012', cloudRevision: 'a'.repeat(40),
-      waitronRevision: 'fbadd15785464e59747e697c11048bfbc6e4938f',
+      waitronRevision: 'b1b0f10952a59eb59f7358bd681a3cdc94d9b61c',
       window: { startedAt: '2026-10-21T00:00:00.000Z', endedAt: '2026-10-21T00:01:00.000Z', elapsedSeconds: 60 } } };
 }
 function build(f) {
@@ -170,3 +170,8 @@ for (const field of ['expected', 'originalInventory', 'cadence', 'stream'])
     const f = fixture(); f.options[field].raw = 1;
     assert.throws(() => build(f), bad, 'valid numeric values do not permit unrecognised fields');
   });
+
+test('currentProducerRejectsHistoricalRevision',()=>{
+ const input=fixture();input.metadata.waitronRevision='fbadd15785464e59747e697c11048bfbc6e4938f';
+ assert.throws(()=>build(input),bad);
+});

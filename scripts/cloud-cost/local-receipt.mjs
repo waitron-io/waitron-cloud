@@ -1,3 +1,4 @@
+import {REPLAY_REVISION} from './replay-release.mjs';
 import { isDeepStrictEqual } from 'node:util';
 import { exportAggregate } from './schema.mjs';
 import { validateReplayAdmission } from './isolated-replay.mjs';
@@ -27,7 +28,7 @@ export function buildLocalReceipt(input) {
     exact(input, ['result', 'options', 'metadata']);
     const { result, options, metadata } = input;
     exact(metadata, ['runId', 'cloudRevision', 'waitronRevision', 'window']);
-    need(metadata.waitronRevision === 'fbadd15785464e59747e697c11048bfbc6e4938f');
+    need(metadata.waitronRevision === REPLAY_REVISION);
     exact(options, ['expected', 'originalInventory', 'cadence', 'replayWindowSeconds', 'stream']);
     exact(options.expected, ['sales', 'paid', 'tradingDays', 'busiest']);
     need(Object.values(options.expected).every(count) && options.expected.sales <= 100000

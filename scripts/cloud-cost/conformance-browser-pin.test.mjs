@@ -23,6 +23,7 @@ for(const refusal of [null,'browser','replay'])test('combined browser and replay
     "writeFileSync(join(tokens,'src/tokens/colors.css'),'generated-colors');writeFileSync(join(tokens,'src/tokens/structure.css'),'generated-structure');",
     "mkdirSync(join(migrations,'generated'),{recursive:true});writeFileSync(join(migrations,'generated/001.sql'),'select 1;');",
     "writeFileSync(join(migrations,'migrations.manifest.json'),JSON.stringify([{name:'generated',from:'generated'}]));",
+    "mkdirSync(join(source,'scripts'),{recursive:true});writeFileSync(join(source,'scripts/generate-hour-release.mjs'),'console.log('+JSON.stringify(JSON.stringify({sourceCommit:data.sources[source],committedAt:'2026-10-29T10:13:59.000Z',instantMs:1793268839000,generator:'scripts/generate-hour-release.mjs:v1',generatorSha256:'a'.repeat(64)}))+');');",
     "const module=join(source,'node_modules/.pnpm/esbuild@0.28.2/node_modules/esbuild/lib');mkdirSync(module,{recursive:true});",
     "writeFileSync(join(module,'package.json'),JSON.stringify({type:'module'}));",
     'writeFileSync(join(module,"main.js"),'+JSON.stringify("import {writeFileSync} from 'node:fs';export async function build({outfile}) {writeFileSync(outfile,'export const generated=true;');}")+');}',

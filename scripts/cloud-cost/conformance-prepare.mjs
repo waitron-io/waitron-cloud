@@ -38,6 +38,34 @@ const browserExports=[
  ['mountThemesApi','apps/server/src/themes-api.ts'],['mountDiskStopApi','apps/server/src/disk-stop-api.ts'],
 ];
 
+function replayClockBuild(source) {
+  const actual=join(source,'packages/fiscal-verifactu/src/hour-clock-internet.ts');
+  const clock=fileURLToPath(new URL('./replay-clock-fixture.mjs',import.meta.url));
+  return {name:'generated-replay-clock',setup(build){
+    build.onResolve({filter:/hour-clock-internet\.js$/},()=>({path:actual,namespace:'generated-replay-clock'}));
+    build.onLoad({filter:/.*/,namespace:'generated-replay-clock'},()=>({loader:'js',resolveDir:source,contents:`
+export * from ${JSON.stringify(actual)};
+import {observeInternetHourClock as actual} from ${JSON.stringify(actual)};
+import {replayClock} from ${JSON.stringify(clock)};
+export function observeInternetHourClock(environment){return replayClock.observe(actual,environment);}
+`}));
+  }};
+}
+
+function replayEntry(source) {
+  const clock=fileURLToPath(new URL('./replay-clock-fixture.mjs',import.meta.url));
+  return `\nexport {createReplayClock,replayClock} from ${JSON.stringify(clock)};
+export {observeInternetHourClock as rawObserveInternetHourClock} from './packages/fiscal-verifactu/src/hour-clock-internet.ts';
+export {observeInternetHourClock} from './packages/fiscal-verifactu/src/hour-clock-internet.js';
+export {compareHourClocks,canSelectHour} from './packages/fiscal-verifactu/src/hour-clock.ts';
+export {readHourRelease} from './packages/fiscal-verifactu/src/hour-release.ts';
+export {mintBreakGlassKey} from './apps/server/src/break-glass.ts';
+export {validateArtifact,readArtifactNode} from './apps/server/src/restore.ts';
+export {readRecoveryCopyPreview} from './apps/server/src/recovery-backup-preview.ts';
+export {createSelectedRecoveryPreparation} from './apps/server/src/recovery-preparation.ts';
+export {createFirstSetupCoordinator} from './packages/provisioning/src/first-setup-state.ts';`;
+}
+
 export async function prepareConformance(selected) {
   const browserFile='remote-browser-conformance.test.mjs';
   if(selected.includes(browserFile)&&selected.length>1) {
@@ -143,10 +171,20 @@ export async function prepareConformance(selected) {
       phase='source-install';
       await run('pnpm',['install','--frozen-lockfile','--reporter=ndjson'],{cwd:source,observeInstall:true,stdio:['ignore','pipe','inherit']});
       const {build}=await import(join(source,'node_modules/.pnpm/esbuild@0.28.2/node_modules/esbuild/lib/main.js'));
+      let replayBuild={};
+      if(revision===replayRevision){
+        phase='source-hour-release';
+        const stamp=JSON.parse(await run(process.execPath,[join(source,'scripts/generate-hour-release.mjs'),'--source',revision],
+          {cwd:source,encoding:'utf8',stdio:['ignore','pipe','inherit']}));
+        if(stamp.sourceCommit!==revision)throw Error('Unexpected replay release stamp');
+        replayBuild={plugins:[replayClockBuild(source)],define:{__WAITRON_HOUR_RELEASE__:JSON.stringify(stamp)}};
+      }
       code=join(root,'runtime');mkdirSync(code,{mode:0o700});runtime=join(code,'runtime.mjs');
       const entry=join(source,'cloud-cost-entry.mjs');
-      writeFileSync(entry,(selected.includes('remote-browser-conformance.test.mjs')?[...exports,...browserExports]:exports).map(([names,path])=>`export {${names}} from ${JSON.stringify('./'+path)};`).join('\n'));
+      writeFileSync(entry,(selected.includes('remote-browser-conformance.test.mjs')?[...exports,...browserExports]:exports).map(([names,path])=>`export {${names}} from ${JSON.stringify('./'+path)};`).join('\n')
+        +(revision===replayRevision?replayEntry(source):''));
       await build({entryPoints:[entry],outfile:runtime,bundle:true,platform:'node',format:'esm',target:'node26',
+        ...replayBuild,
         banner:{js:'import {createRequire as cloudCostRequire} from "node:module"; const require=cloudCostRequire(import.meta.url);'},logLevel:'warning'});
       if(revision===replayRevision)copyReplayAssets(source,code);
       if(selected.includes('remote-browser-conformance.test.mjs')) {
@@ -173,9 +211,10 @@ export async function prepareConformance(selected) {
         stackCode=join(root,'stack-runtime');cpSync(code,stackCode,{recursive:true});
         const stackEntry=join(source,'cloud-cost-stack-entry.mjs');
         writeFileSync(stackEntry,exports.filter(([names])=>names!=='businessDayAt,businessDayBounds')
-          .map(([names,path])=>`export {${names}} from ${JSON.stringify('./'+path)};`).join('\n'));
+          .map(([names,path])=>`export {${names}} from ${JSON.stringify('./'+path)};`).join('\n')+replayEntry(source));
         const stackRuntime=join(stackCode,'runtime.mjs');
         await build({entryPoints:[stackEntry],outfile:stackRuntime,bundle:true,platform:'node',format:'esm',target:'node26',
+          ...replayBuild,
           banner:{js:'import {createRequire as cloudCostRequire} from "node:module"; const require=cloudCostRequire(import.meta.url);'},logLevel:'warning'});
         writeFileSync(join(stackCode,'runtime-manifest.json'),JSON.stringify({schemaVersion:1,revision,sha256:sha(readFileSync(stackRuntime))}));
       }

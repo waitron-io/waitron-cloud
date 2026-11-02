@@ -1,3 +1,4 @@
+import {REPLAY_REVISION} from './replay-release.mjs';
 import { isDeepStrictEqual } from 'node:util';
 import { validateReceipt } from './schema.mjs';
 
@@ -45,7 +46,7 @@ export function buildArchiveStorageReceipt(input) {
   try {
     plain(input); exact(input, ['metadata', 'result', 'cleanup']);
     exact(input.metadata, ['runId', 'cloudRevision', 'waitronRevision', 'window']);
-    need(input.metadata.waitronRevision === 'fbadd15785464e59747e697c11048bfbc6e4938f');
+    need(input.metadata.waitronRevision === REPLAY_REVISION);
     const r = input.result;
     exact(r, ['accounting', 'capturedBytes', 'headBytes', 'downloadedBytes', 'rangeBytes', 'parts', 'restored', 'integrity', 'sales', 'leaked']);
     need(Number.isSafeInteger(r.capturedBytes) && r.capturedBytes > 0 && r.headBytes === r.capturedBytes

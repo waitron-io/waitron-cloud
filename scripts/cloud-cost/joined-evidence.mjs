@@ -160,7 +160,10 @@ export function buildLocalEvidence(input) {
     for (const service of input.services) validateServiceReceipt(service);
     need(new Set(input.services.map(service => service.metadata.runId)).size === input.services.length);
     api(input.api); browser(input.browser);
-    if (hasArchive) validateArchiveEvidence(input.archive);
+    if (hasArchive) {
+      validateArchiveEvidence(input.archive);
+      need(input.archive.waitronRevision === pin);
+    }
     return structuredClone({ schemaVersion: 1, kind: 'local-driver-evidence', costMeasured: false, dataBoundary: boundary,
       experiments: { stream: input.stream, services: input.services, api: input.api, browser: input.browser,
         ...(hasArchive ? { archive: input.archive } : {}) },

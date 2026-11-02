@@ -28,6 +28,51 @@ const sale = i => {
     clock: { now: () => ({ instant, offsetMinutes: 60, confident: true, confidence: 'anchored', anchorAgeSeconds: 0 }) },
     settlement: { kind: 'immediate', tenders: [{ method: 'cash', amount: '12.10', tipAmount: '0', settledAt: instant }] } };
 };
+
+// The real observer and clock decision must still reject bad evidence behind the generated boundary.
+test('syntheticClockObserverPreservesAdmissionAndNeverOpensEgress', async t=>{
+ const r=await import((await import('node:url')).pathToFileURL(join(fixture.codeRoot,'runtime.mjs')).href);
+ assert.equal(typeof r.createReplayClock,'function');
+ const https=(await import('node:https')).default;
+ const {syncBuiltinESMExports}=await import('node:module');
+ let egress=0;
+ t.mock.method(https,'request',()=>{egress++;throw Error('external clock request forbidden');});
+ syncBuiltinESMExports();
+ t.after(()=>{t.mock.restoreAll();syncBuiltinESMExports();});
+ const clock=r.createReplayClock(1793628000000);
+ const observation=await clock.observe(r.rawObserveInternetHourClock,'preproduction');
+ assert.equal(observation.result,'usable');
+ assert.equal(observation.instantMs,1793628000500);
+ const box=()=>({source:'box',result:'usable',instantMs:clock.wall(),uncertaintyMs:0,
+  wallStartedMs:clock.wall(),wallFinishedMs:clock.wall(),monotonicStartedMs:clock.monotonic(),monotonicFinishedMs:clock.monotonic()});
+ assert.equal(r.canSelectHour(r.compareHourClocks([observation,box()],1790000000000)),true);
+ for(const headers of [{},{date:'invalid'},{date:new Date(clock.wall()).toUTCString(),age:'1'},
+  {date:new Date(clock.wall()).toUTCString(),'x-cache':'HIT'}]){
+  const refused=await clock.observe(r.rawObserveInternetHourClock,'preproduction',()=>new Response(null,{headers}));
+  assert.equal(refused.result,'unavailable');
+  assert.equal(r.canSelectHour(r.compareHourClocks([refused,box()],1790000000000)),false);
+ }
+ const skewed=await clock.observe(r.rawObserveInternetHourClock,'preproduction',()=>new Response(null,
+  {headers:{date:new Date(clock.wall()+60000).toUTCString()}}));
+ assert.equal(r.canSelectHour(r.compareHourClocks([skewed,box()],1790000000000)),false);
+ clock.advance(30001);
+ assert.equal(r.canSelectHour(r.compareHourClocks([observation,box()],1790000000000)),false);
+ const corrected=await clock.observe(r.rawObserveInternetHourClock,'preproduction',()=>{
+  clock.advance(5001);return new Response(null,{headers:{date:new Date(clock.wall()).toUTCString()}});
+ });
+ assert.equal(corrected.result,'unavailable');
+ await assert.rejects(clock.observe(r.rawObserveInternetHourClock,'production'),/synthetic replay clock/);
+ assert.equal((await r.observeInternetHourClock('preproduction')).result,'usable');
+ assert.equal(egress,0);
+});
+
+test('replayCarriesTheActualPinnedReleaseTimeForRecoveryAdmission',async()=>{
+ const r=await import((await import('node:url')).pathToFileURL(join(fixture.codeRoot,'runtime.mjs')).href);
+ assert.equal(r.readHourRelease?.()?.sourceCommit,'b1b0f10952a59eb59f7358bd681a3cdc94d9b61c');
+ assert.equal(r.readHourRelease().instantMs,1793268839000);
+ assert.equal(r.readHourRelease().generator,'scripts/generate-hour-release.mjs:v1');
+ assert.equal(r.readHourRelease().generatorSha256,'92717148ceead9e4532ca249804c39c4dd7aaf776dad4e148ed1c1426f9e69ea');
+});
 async function open(t) {
   assert.equal(typeof adapter.openReplay, 'function', 'the adapter must invoke the prepared real Waitron runtime');
   const stateRoot = mkdtempSync(join(fixture.stateParent, 'conformance-')); chmodSync(stateRoot, 0o700);
@@ -118,6 +163,144 @@ async function archiveFixture(t) {
   return f;
 }
 
+async function wrappedArchiveFixture(t,overrides){
+ const {cpSync,writeFileSync,mkdirSync}=await import('node:fs');
+ const {pathToFileURL}=await import('node:url');
+ const codeRoot=mkdtempSync(join(fixture.stateParent,'recovery-runtime-'));
+ const stateRoot=mkdtempSync(join(fixture.stateParent,'recovery-state-'));
+ chmodSync(codeRoot,0o700);chmodSync(stateRoot,0o700);
+ cpSync(join(fixture.codeRoot,'packages'),join(codeRoot,'packages'),{recursive:true});
+ cpSync(join(fixture.codeRoot,'assets'),join(codeRoot,'assets'),{recursive:true});
+ const href=JSON.stringify(pathToFileURL(join(fixture.codeRoot,'runtime.mjs')).href);
+ const source=`import * as base from ${href};export * from ${href};\n${overrides}`;
+ writeFileSync(join(codeRoot,'runtime.mjs'),source);
+ writeFileSync(join(codeRoot,'runtime-manifest.json'),JSON.stringify({schemaVersion:1,
+  revision:'b1b0f10952a59eb59f7358bd681a3cdc94d9b61c',sha256:createHash('sha256').update(source).digest('hex')}));
+ let replay;
+ t.after(async()=>{try{await replay?.close();}finally{
+  rmSync(stateRoot,{recursive:true,force:true});rmSync(codeRoot,{recursive:true,force:true});
+ }});
+ replay=await adapter.openReplay({codeRoot,stateRoot,config,initial});
+ mkdirSync(join(stateRoot,'tls'),{mode:0o700});
+ for(const name of ['secrets.env','tls/ca.crt','tls/ca.key','tls/server.crt','tls/server.key'])
+  writeFileSync(join(stateRoot,name),'SYNTHETIC_PRIVATE_STATE',{mode:0o600});
+ return {replay,stateRoot};
+}
+
+test('restoreRequiresOwnedCaptureBeforeOpeningAnInspectionCopy',async t=>{
+ const {existsSync}=await import('node:fs');
+ const owned=await wrappedArchiveFixture(t,`
+import {writeFileSync} from 'node:fs';import {join} from 'node:path';
+export async function validateArtifact(deps){
+ writeFileSync(join(deps.stateDir,'..','validation-called'),'called');return base.validateArtifact(deps);
+}`);
+ const foreign=await archiveFixture(t);
+ const options={recoveryKey:'synthetic-key',at:new Date(),signal:new AbortController().signal};
+ const ownCapture=await owned.replay.capture(options),foreignCapture=await foreign.replay.capture(options);
+ const changed=Uint8Array.from(ownCapture.bytes);changed[changed.length-1]^=1;
+ for(const artifact of [foreignCapture.bytes,changed,new Uint8Array()]){
+  await assert.rejects(owned.replay.restore({artifact,recoveryKey:'synthetic-key'}),/Invalid cloud cost replay runtime/);
+  assert.equal(existsSync(join(owned.stateRoot,'validation-called')),false,'unowned bytes must refuse before inspection');
+  assert.equal(existsSync(join(owned.stateRoot,'restored')),false);
+ }
+ assert.deepEqual(await owned.replay.restore({artifact:ownCapture.bytes,recoveryKey:'synthetic-key'}),{ok:true,issues:0,sales:0});
+ assert.equal(existsSync(join(owned.stateRoot,'validation-called')),true,'the owned control must execute real validation');
+});
+
+test('restoreDrainsSourceAndPreservesItsClosedDatabase',async t=>{
+ const {replay,stateRoot}=await archiveFixture(t);
+ await replay.recordSale(sale(0));
+ const capture=await replay.capture({recoveryKey:'synthetic-key',at:new Date(),signal:new AbortController().signal});
+ const restoring=replay.restore({artifact:capture.bytes,recoveryKey:'synthetic-key'});
+ await assert.rejects(replay.recordSale(sale(1)),/Invalid cloud cost replay runtime/);
+ await assert.rejects(replay.capture({recoveryKey:'synthetic-key',at:new Date(),signal:new AbortController().signal}),
+  /Invalid cloud cost replay runtime/);
+ assert.deepEqual(await restoring,{ok:true,issues:0,sales:1});
+ const source=join(stateRoot,'venue/venue.db');
+ const bytes=readFileSync(source);
+ await replay.close();await replay.close();
+ assert.deepEqual(readFileSync(source),bytes);
+ const db=new DatabaseSync(source,{readOnly:true});
+ try {assert.equal(db.prepare('SELECT count(*) AS n FROM sales').get().n,1);}
+ finally {db.close();}
+});
+
+test('wrongRecoveryKeyCannotPrepareAllocation',async t=>{
+ const {existsSync}=await import('node:fs');
+ const f=await wrappedArchiveFixture(t,`
+import {writeFileSync} from 'node:fs';import {join} from 'node:path';
+export function createSelectedRecoveryPreparation(options){
+ const service=base.createSelectedRecoveryPreparation({...options,secret:'not-the-node-recovery-key'});
+ return {...service,async prepare(...args){try{return await service.prepare(...args);}catch(error){
+  writeFileSync(join(options.stateDir,'..','preparation-refusal'),error.code);throw error;
+ }}};
+}`);
+ const captured=await f.replay.capture({recoveryKey:'synthetic-key',at:new Date(),signal:new AbortController().signal});
+ await assert.rejects(f.replay.restore({artifact:captured.bytes,recoveryKey:'synthetic-key'}),
+  {message:'Invalid cloud cost replay runtime'});
+ assert.equal(existsSync(join(f.stateRoot,'restored')),false);
+ assert.equal(readFileSync(join(f.stateRoot,'preparation-refusal'),'utf8'),'promotion.break_glass_invalid');
+ assert.equal(readFileSync(join(f.stateRoot,'secrets.env'),'utf8'),'SYNTHETIC_PRIVATE_STATE');
+});
+
+test('recoveryCallerUsesTheClockChallengePreviewAndPreparedRunner',async t=>{
+ const f=await wrappedArchiveFixture(t,`
+import {writeFileSync} from 'node:fs';import {join} from 'node:path';
+export function createSelectedRecoveryPreparation(options){
+ const service=base.createSelectedRecoveryPreparation(options),calls=[];
+ const record=()=>writeFileSync(join(options.stateDir,'..','recovery-calls'),JSON.stringify(calls));
+ return {...service,async prepare(proposal,client){
+  calls.push([proposal.action,client.onBox]);record();return service.prepare(proposal,client);
+ },runner(input,entry){calls.push(['runner',entry.refresh]);record();return service.runner(input,entry);}};
+}`);
+ const captured=await f.replay.capture({recoveryKey:'synthetic-key',at:new Date(),signal:new AbortController().signal});
+ assert.deepEqual(await f.replay.restore({artifact:captured.bytes,recoveryKey:'synthetic-key'}),{ok:true,issues:0,sales:0});
+ const calls=JSON.parse(readFileSync(join(f.stateRoot,'recovery-calls'),'utf8'));
+ assert.deepEqual(calls.at(-1),['runner',true]);
+ const preparation=calls.slice(0,-1);
+ assert.ok(preparation.length>=4&&preparation.length%4===0);
+ for(let index=0;index<preparation.length;index+=4)
+  assert.deepEqual(preparation.slice(index,index+4),[['clock-challenge',false],['compare-clocks',false],['preview',false],['select',false]]);
+});
+
+test('changedRecoveryBindingOrExpiredPreparationRefusesPlacement',async t=>{
+ const {existsSync}=await import('node:fs');
+ for(const field of ['eventId','sourceId','targetNodeId','expired']){
+  const f=await wrappedArchiveFixture(t,`
+import {writeFileSync} from 'node:fs';import {join} from 'node:path';
+export function createSelectedRecoveryPreparation(options){
+ const service=base.createSelectedRecoveryPreparation(options);
+ return {...service,runner(input,entry){
+  ${field==='expired'?`
+  const original=service.runner(input,entry);
+  const runner=async(context,run)=>{
+   let expired;
+   await original(context,async(_tx,operations)=>{expired=operations;return {seriesId:'',reports:[]};});
+   return original(context,(tx)=>run(tx,expired));
+  };
+  runner.checkBeforePlacement=original.checkBeforePlacement;
+  return runner;`:`return service.runner({...input,approval:{...input.approval,${field}:'mismatched'}},entry);`}
+ }};
+}
+export async function restoreFromArtifact(deps){try{return await base.restoreFromArtifact(deps);}catch(error){
+ writeFileSync(join(deps.stateDir,'..','binding-refusal'),JSON.stringify({code:error.code,cause:error.params?.code}));throw error;
+}}
+`);
+  await f.replay.recordSale(sale(0));
+  const captured=await f.replay.capture({recoveryKey:'synthetic-key',at:new Date(),signal:new AbortController().signal});
+  await assert.rejects(f.replay.restore({artifact:captured.bytes,recoveryKey:'synthetic-key'}),
+   {message:'Invalid cloud cost replay runtime'},field);
+  assert.equal(existsSync(join(f.stateRoot,'restored')),false,field);
+  const failure=JSON.parse(readFileSync(join(f.stateRoot,'binding-refusal'),'utf8'));
+  assert.deepEqual(failure,field==='expired'?{code:'restore.hook_failed',cause:'module.operation_invalid'}:
+   {code:'sif.allocation_invalid'},field);
+  assert.equal(readFileSync(join(f.stateRoot,'secrets.env'),'utf8'),'SYNTHETIC_PRIVATE_STATE');
+  const db=new DatabaseSync(join(f.stateRoot,'venue/venue.db'),{readOnly:true});
+  try {assert.equal(db.prepare('SELECT count(*) AS n FROM sales').get().n,1);}
+  finally {db.close();}
+ }
+});
+
 // Skipping genuine capture, identity restoration, or fiscal hooks changes these durable effects.
 test('captureAndRestoreUseRealArchiveAndRestoreHooks', async t => {
   const { replay, stateRoot } = await archiveFixture(t);
@@ -136,8 +319,8 @@ test('captureAndRestoreUseRealArchiveAndRestoreHooks', async t => {
     assert.equal(db.prepare('SELECT count(*) AS n FROM sales').get().n, 2);
     assert.equal(db.prepare('SELECT count(*) AS n FROM registros_facturacion').get().n, 2);
     assert.equal(db.prepare('SELECT count(*) AS n FROM registro_sif').get().n, 2, 'the genuine fiscal restore hook creates a new installation');
-    assert.equal(db.prepare('SELECT count(*) AS n FROM invoice_series WHERE retired_at IS NULL').get().n, 2);
-    assert.equal(db.prepare('SELECT count(*) AS n FROM invoice_series WHERE retired_at IS NOT NULL').get().n, 2);
+    assert.equal(db.prepare('SELECT count(*) AS n FROM invoice_series WHERE retired_at IS NULL').get().n, 3);
+    assert.equal(db.prepare('SELECT count(*) AS n FROM invoice_series WHERE retired_at IS NOT NULL').get().n, 3);
   } finally { db.close(); }
   assert.equal(readFileSync(join(stateRoot, 'restored/secrets.env'), 'utf8'), 'SYNTHETIC_PRIVATE_STATE');
   assert.equal(readFileSync(join(stateRoot, 'restored/trading.env'), 'utf8'), readFileSync(join(stateRoot, 'trading.env'), 'utf8'));
@@ -250,7 +433,12 @@ export async function restoreFromArtifact(deps) {
   writeFileSync(join(codeRoot, 'runtime-manifest.json'), JSON.stringify({ schemaVersion: 1,
     revision: 'b1b0f10952a59eb59f7358bd681a3cdc94d9b61c', sha256: createHash('sha256').update(source).digest('hex') }));
   replay = await adapter.openReplay({ codeRoot, stateRoot, config, initial });
-  await assert.rejects(replay.restore({ artifact: new Uint8Array(), recoveryKey: 'synthetic-key' }),
+  const {mkdirSync}=await import('node:fs');
+  mkdirSync(join(stateRoot,'tls'),{mode:0o700});
+  for(const name of ['secrets.env','tls/ca.crt','tls/ca.key','tls/server.crt','tls/server.key'])
+    writeFileSync(join(stateRoot,name),'SYNTHETIC_PRIVATE_STATE',{mode:0o600});
+  const capture=await replay.capture({recoveryKey:'synthetic-key',at:new Date(),signal:new AbortController().signal});
+  await assert.rejects(replay.restore({ artifact: capture.bytes, recoveryKey: 'synthetic-key' }),
     e => e.message === 'Invalid cloud cost replay runtime' && !e.stack.includes('SYNTHETIC_PRIVATE_FAILURE'));
   assert.equal(existsSync(join(stateRoot, 'restored-original')), true);
   assert.equal(existsSync(join(stateRoot, 'restored/sentinel')), true, 'cleanup must preserve the replacement');

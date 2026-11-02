@@ -7,7 +7,7 @@ const module = await import('./archive-evidence.mjs').catch(error => {
   throw error;
 });
 const fixture = () => ({
-  cloudRevision: 'a'.repeat(40), waitronRevision: 'fbadd15785464e59747e697c11048bfbc6e4938f',
+  cloudRevision: 'a'.repeat(40), waitronRevision: 'b1b0f10952a59eb59f7358bd681a3cdc94d9b61c',
   runtimeSha256: 'b'.repeat(64), image: 'sha256:' + 'c'.repeat(64),
   startedAt: '2026-10-21T03:32:53.354Z', endedAt: '2026-10-21T03:33:01.154Z', experimentSeconds: 7.797,
   costMeasured: false,
@@ -138,7 +138,7 @@ for (const [name, change] of [
 const joinedFixture = () => {
   const read = name => JSON.parse(readFileSync(new URL('../../docs/cost-model/' + name + '.json', import.meta.url)));
   return { stream: read('measurements'), services: [read('service-mail-retry-fiscal-lifecycle'), read('service-signup-recovery-fiscal-refusal')],
-    api: read('remote-owner-public-api'), browser: read('remote-owner-browser'), archive: build(fixture()) };
+    api: read('remote-owner-public-api'), browser: read('remote-owner-browser'), archive: historicalFixture() };
 };
 test('joinedArchiveRetainsItsOwnWindowWithoutInventingStorageTrafficOrDayCosts', () => {
   const input = joinedFixture(); const result = buildLocalEvidence(input);
@@ -160,4 +160,27 @@ for (const [name, change] of [
 ]) test('joinedArchiveRefuses_' + name, () => {
   const input = joinedFixture(); change(input);
   assert.throws(() => buildLocalEvidence(input), { message: 'Invalid cloud cost joined evidence' });
+});
+
+const historicalFixture=()=>({schemaVersion:1,kind:'local-archive-aggregate',
+ dataBoundary:{classification:'anonymous-aggregate',rawIncluded:false,exportSchema:1},
+ ...fixture(),waitronRevision:'fbadd15785464e59747e697c11048bfbc6e4938f'});
+
+test('currentProducerRejectsHistoricalRevision',()=>{
+ const input=fixture();input.waitronRevision='fbadd15785464e59747e697c11048bfbc6e4938f';
+ assert.throws(()=>build(input),bad);
+});
+test('historicalArchiveStillValidatesWithoutBeingRelabelled',()=>{
+ const input=historicalFixture();const before=structuredClone(input);
+ assert.equal(module.validateArchiveEvidence(input),true);assert.deepEqual(input,before);
+});
+test('unknownArchiveRevisionRefuses',()=>{
+ for(const revision of ['a'.repeat(40),'99c265981ba98f1afd0e5fc822624a9a91822ad2']){
+  const input=historicalFixture();input.waitronRevision=revision;
+  assert.throws(()=>module.validateArchiveEvidence(input),bad);
+ }
+});
+test('historicalJoinRejectsCurrentReplaySample',()=>{
+ const input=joinedFixture();input.archive.waitronRevision='b1b0f10952a59eb59f7358bd681a3cdc94d9b61c';
+ assert.throws(()=>buildLocalEvidence(input),{message:'Invalid cloud cost joined evidence'});
 });

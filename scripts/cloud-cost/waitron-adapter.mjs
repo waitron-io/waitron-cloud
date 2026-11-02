@@ -1,7 +1,8 @@
 import {assertReplayBundle,assertReplayAssets} from './replay-release.mjs';
 
 import { readFileSync, realpathSync, lstatSync, writeFileSync, readdirSync, mkdirSync, rmSync } from 'node:fs';
-import { join, relative, isAbsolute, resolve } from 'node:path';
+import { join, relative, isAbsolute, resolve, dirname } from 'node:path';
+import { createHash, randomUUID } from 'node:crypto';
 import { pathToFileURL } from 'node:url';
 
 const fail = () => { throw new Error('Invalid cloud cost replay configuration'); };
@@ -151,9 +152,13 @@ export async function openReplay({ codeRoot, stateRoot, config, initial }) {
       scan(stateRoot);
     };
     let attempted = 0, successful = 0, failed = 0, closing = false, closePromise;
-    let pending = Promise.resolve();
-    const admit = action => {
-      if (closing) return Promise.reject(new Error('Invalid cloud cost replay runtime'));
+    let pending = Promise.resolve(), writerClose;
+    let sourceClosed = false, nodeRecoverySecret;
+    const captures = new Set();
+    const digest = bytes => createHash('sha256').update(bytes).digest('hex');
+    const closeWriter = () => writerClose ??= store.close().then(() => { sourceClosed = true; });
+    const admit = (action, recovery = false) => {
+      if (closing && !recovery) return Promise.reject(new Error('Invalid cloud cost replay runtime'));
       const result = pending.then(action).catch(() => runtimeFail());
       pending = result.catch(() => {});
       return result;
@@ -183,29 +188,72 @@ export async function openReplay({ codeRoot, stateRoot, config, initial }) {
         });
       },
       capture(options) {
-        return admit(() => {
+        return admit(async () => {
           exact(options, ['recoveryKey', 'at', 'signal']);
           const { recoveryKey, at, signal } = options;
           requireThat(typeof recoveryKey === 'string' && recoveryKey.length > 0);
           validateState();
-          return r.createCloudSnapshotArchive({ db, modules: archiveModules(),
+          nodeRecoverySecret ??= (await r.mintBreakGlassKey(db, nodeId)).secret;
+          const captured = await r.createCloudSnapshotArchive({ db, modules: archiveModules(),
             environment: 'preproduction', stateDir: stateRoot }, recoveryKey, at, signal);
+          captures.add(digest(captured.bytes));
+          return captured;
         });
       },
       restore(options) {
+        closing = true;
         return admit(async () => {
           exact(options, ['artifact', 'recoveryKey']);
           const { artifact, recoveryKey } = options;
           requireThat(typeof recoveryKey === 'string' && recoveryKey.length > 0);
+          requireThat(artifact instanceof Uint8Array && captures.has(digest(artifact)));
           validateState();
+          await closeWriter();
           const restoredRoot = join(stateRoot, 'restored');
           requireThat(!directoryEntryExists(restoredRoot));
           mkdirSync(restoredRoot, { mode: 0o700 });
           const restoredIdentity = lstatSync(restoredRoot);
+          let inspection, inspected;
           try {
+            const modules = archiveModules();
+            const deps = { artifact, recoveryKey, stateDir: restoredRoot,
+              stagingDir: join(restoredRoot, 'staging'), modules, migrationsRoot: null, environment: 'preproduction' };
+            inspection = await r.validateArtifact(deps);
+            const selected = await r.readRecoveryCopyPreview(inspection, inspection.sourceId, deps);
+            const node = await r.readArtifactNode(inspection);
+            requireThat(node.nodeId === nodeId && selected.nodeId === nodeId);
+            inspected = await r.openVenueDatabase(dirname(inspection.databasePath));
+            const binding = { module: 'fiscal-verifactu', action: 'restore', eventId: randomUUID(),
+              sourceId: inspection.sourceId, targetNodeId: nodeId };
+            const clock = r.replayClock;
+            clock.advance(Math.max(120000, Date.now() + 120000 - clock.wall()));
+            const service = r.createSelectedRecoveryPreparation({ stateDir: restoredRoot,
+              venueDir: join(restoredRoot, 'venue'), coordinator: r.createFirstSetupCoordinator(),
+              modules, binding, node, selected, secret: nodeRecoverySecret,
+              database: () => inspected.venue, testClock: clock,
+              readIsolation: async () => {
+                requireThat(sourceClosed && writerClose !== undefined && closing);
+                return { oldMachineOffline: true, oldMachineAbsent: false, noParallelRecovery: true };
+              },
+            });
+            let prepared;
+            for (let round = 0; round < 4; round++) {
+              const client = { onBox: false };
+              const challenge = await service.prepare({ action: 'clock-challenge' }, client);
+              const compared = await service.prepare({ action: 'compare-clocks',
+                browser: { challengeId: challenge.id, instantMs: clock.wall() } }, client);
+              await service.prepare({ action: 'preview' }, client);
+              prepared = await service.prepare({ action: 'select', comparisonId: compared.id }, client);
+              if (prepared.status !== 'waiting') break;
+              requireThat(Number.isSafeInteger(prepared.targetMs));
+              clock.advance(Math.max(0, prepared.targetMs + 1 - clock.wall()));
+            }
+            requireThat(prepared.status === 'selected');
+            const withModuleOperations = service.runner(prepared.input, { refresh: true });
+            await inspected.close(); inspected = undefined;
             await r.restoreFromArtifact({ artifact, recoveryKey, stateDir: restoredRoot,
               stagingDir: join(restoredRoot, 'staging'), venueDir: join(restoredRoot, 'venue'),
-              modules: archiveModules(), migrationsRoot: null, environment: 'preproduction', log: () => {} });
+              modules: service.modules, withModuleOperations, migrationsRoot: null, environment: 'preproduction', log: () => {} });
             const restored = await r.openVenueDatabase(join(restoredRoot, 'venue'));
             try {
               const restoredBackend = new r.VerifactuBackend({ db: restored.venue, clock: { now: runtimeFail },
@@ -215,18 +263,22 @@ export async function openReplay({ codeRoot, stateRoot, config, initial }) {
               return { ok: integrity.ok, issues: integrity.issues.length, sales: Number(sales.rows[0].n) };
             } finally { await restored.close(); }
           } catch (error) {
+            try { await inspected?.close(); } finally { inspected = undefined; }
+            await inspection?.discard(); inspection = undefined;
             validateState();
             const s = lstatSync(restoredRoot);
             requireThat(s.ino === restoredIdentity.ino && s.dev === restoredIdentity.dev);
             rmSync(restoredRoot, { recursive: true });
             throw error;
+          } finally {
+            try { await inspected?.close(); } finally { await inspection?.discard(); }
           }
-        });
+        }, true);
       },
       counts: () => ({ attempted, successful, failed }),
       close() {
         closing = true;
-        closePromise ??= pending.then(() => store.close()).catch(() => runtimeFail());
+        closePromise ??= pending.then(closeWriter).catch(() => runtimeFail());
         return closePromise;
       },
     };

@@ -9,14 +9,22 @@ Waitron's ordinary installation allocation and retains standard, full and
 rectificative invoice series. Sale totals, invoice counters, hashes, rollback,
 source identity and private-file checks remain required. The peer's provisioning
 caller uses the same preproduction allocation path.
+The generated recovery caller now accepts only its own captured archive, drains and
+closes the source writer, authenticates with the node recovery key, and uses
+Waitron's prepared recovery runner. Native checks retain the real restore hooks,
+private state, sales and new installation. Wrong keys, altered recovery bindings,
+expired callback permissions and replaced destinations refuse. Clock observations
+are explicitly synthetic; the real observer and admission checks still run, with
+the pinned release's actual generated timestamp and no external clock request.
+Current receipt builders require the new release. Historical archives retain their
+original revision and validation; historical reports reject mixed releases.
 The [compatibility design](superpowers/specs/2026-11-01-replay-allocation-compatibility-design.md)
 and [implementation plan](superpowers/plans/2026-11-01-replay-allocation-compatibility.md)
-cover the remaining authenticated recovery caller and synthetic clock observations.
-Archive recovery, Linux container qualification, current receipt producers and
-whole-branch review remain unfinished. The owner approved the bounded three-purpose
-fixture amendment; all other fiscal and restore outcomes stay unchanged.
-Historical cost measurements retain their original release. No fiscal
-implementation, golden result or immutable row changes here.
+retain the qualification gates. Linux container interoperability, complete backup
+readbacks, whole-branch review and current-head CI remain unfinished. The owner
+approved the bounded three-purpose fixture amendment; all other fiscal and restore
+outcomes stay unchanged. No fiscal implementation, golden result or immutable row
+changes here.
 
 ## Concurrent storage archive publication (D450)
 
