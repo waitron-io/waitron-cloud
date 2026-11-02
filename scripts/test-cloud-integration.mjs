@@ -13,6 +13,7 @@ import {inspectIntegrationContinuousRecovery} from '../deploy/test-cloud/test-fi
 import {rollbackRefusalDiagnostic} from '../deploy/test-cloud/test-fixtures/integration-renewal.mjs';
 import {captureIntegrationSource, checkIntegrationSource, measureIntegrationFiles} from '../deploy/test-cloud/test-fixtures/integration-source.mjs';
 import {parseCapacityVolumeReadings} from '../deploy/test-cloud/test-fixtures/integration-capacity.mjs';
+import {readIntegrationInventory} from '../deploy/test-cloud/test-fixtures/integration-inventory.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const origin = 'https://waitron.local:3000', revision = 'ec91a9e34d2daba146f4ee61850ea4136ad5cfb7';
@@ -88,12 +89,7 @@ export async function runTestCloudClients({image, waitronImage, protectedContain
   const docker = (args, input = '', phase) => command(args, input, phase, {TEST_CLOUD_IMAGE: image});
   const prefix = ['compose', '--project-name', project, '--env-file', 'deploy/test-cloud/test.env', '-f', 'compose.yaml', '-f', 'deploy/test-cloud/compose.yaml', '-f', override];
   const compose = args => docker([...prefix, ...args], '', 'compose-' + args[0]);
-  const inventory = async () => {
-    const ids = lines(await docker(['ps', '-aq', '--no-trunc']));
-    if (!ids.length) return [];
-    // Inspect only IDs, running states and start times, never environments or mount contents.
-    return (await docker(['inspect', '--format', '{{.Id}} {{.State.Running}} {{.State.StartedAt}}', ...ids])).split('\n').sort();
-  };
+  const inventory = () => readIntegrationInventory({docker, protectedIds: protectedContainerIds});
   const before = await inventory();
   checkProtectedContainers(before, before, protectedContainerIds);
   let hostCapacity, startupCapacity;
