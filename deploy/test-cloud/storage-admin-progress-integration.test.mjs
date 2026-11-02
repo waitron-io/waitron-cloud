@@ -2,14 +2,28 @@ import assert from 'node:assert/strict';
 import {spawn} from 'node:child_process';
 import {once} from 'node:events';
 import {existsSync} from 'node:fs';
-import {rm} from 'node:fs/promises';
+import {rm,readdir,readlink,unlink} from 'node:fs/promises';
+import {join} from 'node:path';
 import test from 'node:test';
+
+async function ownedClaims(roots) {
+  const directory = '/tmp/waitron-cloud-storage-ports-' + process.getuid();
+  const paths = [];
+  const entries = await readdir(directory).catch(error => {if (error.code === 'ENOENT') return []; throw error;});
+  for (const name of entries) {
+    const path = join(directory,name);
+    try {if (roots.has(await readlink(path))) paths.push(path);}
+    catch (error) {if (!['ENOENT','EINVAL'].includes(error.code)) throw error;}
+  }
+  return paths;
+}
 
 function launchControl(t, {cancel = false, beforeSpawn = false} = {}) {
   const probe = `
     import childProcess from 'node:child_process';
     import {syncBuiltinESMExports, createRequire} from 'node:module';
     import fs, {existsSync} from 'node:fs';
+    import {releaseStorageControlClaims} from ${JSON.stringify(new URL('./storage-admin-control-cleanup.mjs', import.meta.url).href)};
     const require = createRequire(${JSON.stringify(new URL('../../packages/backups/package.json', import.meta.url).href)});
     const {S3Client} = require('@aws-sdk/client-s3');
     const originalSend = S3Client.prototype.send;
@@ -46,6 +60,7 @@ function launchControl(t, {cancel = false, beforeSpawn = false} = {}) {
           finally {clearTimeout(timer);}
           if (child.exitCode === null && child.signalCode === null) {child.kill('SIGKILL'); await exited;}
         }
+        await releaseStorageControlClaims(roots);
         await Promise.all([...roots].map(root => fs.promises.rm(root, {recursive:true,force:true})));
       } finally {process.exit(1);}
     };
@@ -93,6 +108,7 @@ function launchControl(t, {cancel = false, beforeSpawn = false} = {}) {
       if (owner.exited) continue;
       try {process.kill(owner.pid, 'SIGKILL');} catch (error) {if (error.code !== 'ESRCH') throw error;}
     }
+    for (const path of await ownedClaims(roots)) await unlink(path).catch(error => {if (error.code !== 'ENOENT') throw error;});
     await Promise.all([...roots].map(root => rm(root, {recursive:true,force:true})));
   });
   return {child, ready, finished, owners, roots, output:() => output};
@@ -128,4 +144,5 @@ for (const beforeSpawn of [false, true]) test('cancelling the admin control coll
     assert.throws(() => process.kill(owner.pid, 0), {code:'ESRCH'}, 'cancelled control must collect its native child: ' + control.output());
   }
   for (const root of control.roots) assert.equal(existsSync(root), false, 'cancelled control must remove its owned scratch');
+  assert.deepEqual(await ownedClaims(control.roots), [], 'cancelled control must release its cooperative port claims');
 });
