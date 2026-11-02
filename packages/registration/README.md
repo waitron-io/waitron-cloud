@@ -330,3 +330,18 @@ The existing relay policy, owner, consent, origin, grant, lease and operator-sto
 checks still apply. Translation holds the requested items when queuing a job and
 spends them under its current worker lease before a provider call; its separate
 money safety cap remains in force. These adapters do not enable production billing.
+
+To check that the allowance guards prevent their intended failures, run:
+
+```sh
+node scripts/test-postgres.mjs exec pnpm --dir packages/registration exec node --test --test-timeout=240000 test/billing-allowance-guards.test.ts
+```
+
+The wrapper checks two trial rules and fourteen service, traffic and ownership
+guards. In an installed disposable candidate, each check runs the named behavior,
+changes one guard, requires the expected assertion failure, restores the original
+bytes and runs the behavior again. The operational-traffic check uses an isolated
+rendered HAProxy and PostgreSQL fixture with real TLS probes over three controlled
+UTC dates. It requires Docker. Missing cases, skipped tests, setup failures and
+undetected changes refuse qualification. Upgrade and two-backup recovery remain
+separate checks; passing the guard wrapper does not qualify either recovery path.

@@ -90,3 +90,12 @@ for(const args of [[],['--unknown'],['--pure','extra'],['--database']])test('all
   assert.equal(error.code,1);assert.equal(error.stdout,'');assert.match(error.stderr,/^allowance_traffic_guard\.(invalid_mode|database_required)\n$/);return true;
  });
 });
+
+test('allowance harness runs all three cases through the selected executable',async t=>{
+ const qualify=await harness(),f=await fixture(t);
+ await writeFile(join(f.candidate,'runtime.mjs'),`import {spawnSync} from 'node:child_process';import {appendFileSync} from 'node:fs';appendFileSync('runtime-runs','run\\n');const child=spawnSync(process.execPath,process.argv.slice(2),{stdio:'inherit'});process.exitCode=child.status??1;`);
+ assert.deepEqual(await qualify(f.candidate,f.guard,process.env,{command:process.execPath,prefix:['runtime.mjs']}),{guard:'synthetic allowance admission',baseline:1,detected:1,restored:1});
+ const runs=await readFile(join(f.candidate,'runtime-runs'),'utf8').catch(()=> '');
+ assert.equal(runs,'run\nrun\nrun\n','baseline, omission and restored tests must all execute inside the selected runtime');
+ assert.equal(await readFile(join(f.candidate,'gate.mjs'),'utf8'),f.original);
+});

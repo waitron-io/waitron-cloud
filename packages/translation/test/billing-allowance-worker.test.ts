@@ -298,3 +298,26 @@ for(const stage of ['first','review'] as const)test('a '+stage+' cost callback f
   assert.deepEqual([(await f.reservation()).units,(await f.reservation()).state,(await f.job()).cost_micro_usd],['2','spent',stage==='first'?'0':'7']);
  }finally{await fake.close();await f.db.close();}
 });
+
+// The final lease read must fence a takeover after the allowance has already been spent.
+test('a takeover after allowance spending prevents the actual provider call',async()=>{
+ const f=await fixture(),replacement=randomUUID(),patched:{client:PoolClient;query:PoolClient['query']}[]=[];let reads=0;
+ const permissionQuery="SELECT id FROM translation_jobs WHERE id=$1 ";
+ const intercept=(client:PoolClient)=>{
+  const query=client.query.bind(client);patched.push({client,query});
+  client.query=((...args:any[])=>{
+   if(typeof args[0]==='string'&&args[0].startsWith(permissionQuery)&&args[0].endsWith('FOR SHARE')&&++reads===3){
+    return f.db.pool.query("UPDATE translation_jobs SET lease_id=$2,lease_until=clock_timestamp()+interval '1 hour' WHERE id=$1",[f.jobId,replacement]).then(()=>(query as any)(...args));
+   }
+   return (query as any)(...args);
+  }) as PoolClient['query'];
+ };
+ f.db.secondPool.on('connect',intercept);
+ const fake=await startFakeOpenAi(r=>echoFirstPass(r));
+ try{
+  await f.run(fake.baseUrl).runOnce(new AbortController().signal);assert.equal(reads,3);
+  assert.equal(fake.requests.length,0,'the replaced lease must make zero real provider calls');
+  const job=await f.job();assert.deepEqual([job.lease_id,(await f.reservation()).state,job.allowance_open_calls],[replacement,'spent',1]);
+  assert.equal((await f.reservation()).attempted_at,null);
+ }finally{f.db.secondPool.removeListener('connect',intercept);for(const {client,query} of patched)client.query=query;await fake.close();await f.db.close();}
+});

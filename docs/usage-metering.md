@@ -118,3 +118,9 @@ requested items when accepting a job and spends them immediately before a provid
 call under the current job lease. Work that was never leased can release its held
 items; a started or uncertain call cannot reclaim them. Neither adapter uses the
 owner usage totals as customer authority or replaces its existing safety limits.
+
+The [allowance guard qualification](../packages/registration/README.md#monthly-allowances-in-test-fixtures)
+checks traffic authority, exact replay, operational-probe exclusion and incomplete
+trial evidence alongside service limits. It removes one guard at a time in a
+separate installed copy and requires a failing behavioral assertion before
+restoring the source. Upgrade and backup recovery need their own qualification.

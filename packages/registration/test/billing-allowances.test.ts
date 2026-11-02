@@ -278,3 +278,15 @@ test('SQL preserves reservation identity ownership whole units and monotone stat
   await assert.rejects(f.pool.query("UPDATE billing_allowance_reservations SET state='invalid'"),{code:'23514'});
  }finally{await f.close();}
 });
+
+// Removing the monotone-state guard would refund two units already spent.
+test('persisted spent translation units cannot be refunded by a state update',async()=>{
+ const f=await fixture();try{
+  await f.config.publish(TEST_ALLOWANCES);await set(f,'connected');
+  const held=await f.reserve({service:'content_translation',units:2n});await f.spend(held.id);
+  const refusal=await f.pool.query("UPDATE billing_allowance_reservations SET state='released' WHERE id=$1",[held.id]).then(()=>undefined,error=>error);
+  assert.equal(await f.total(),2n,'spent units must remain charged after an attempted refund');
+  assert.equal(refusal?.code,'55000');
+  assert.equal((await f.pool.query('SELECT state FROM billing_allowance_reservations WHERE id=$1',[held.id])).rows[0].state,'spent');
+ }finally{await f.close();}
+});
