@@ -15,6 +15,7 @@ test('a failed bound cleanup remains red while its next case and image cleanup s
   throw Error('injected cleanup refusal');
  }}}),out=await verify(source(4)`;
  const docker=(...args:string[])=>execFileSync('docker',args,{encoding:'utf8',stdio:['ignore','pipe','pipe'],timeout:10000}).trim();
+ let primary:unknown;
  try{
   assert(original.includes(target));writeFileSync(control,original.replace(target,replacement));
   const env={...process.env};delete env.NODE_TEST_CONTEXT;
@@ -24,7 +25,8 @@ test('a failed bound cleanup remains red while its next case and image cleanup s
   assert.match(child.stdout,/backup\.verifier_cleanup/);assert.match(child.stdout,/ok 2 - wrong key, scope/);
   const saved=JSON.parse(readFileSync(record,'utf8'));
   assert.throws(()=>docker('inspect',saved.id));assert.throws(()=>docker('image','inspect',saved.tag));
- }finally{
+ }catch(error){primary=error;throw error;}
+ finally{
   // A broken rescue must fail the test without leaving the control's own child behind.
   try{
    let saved;try{saved=JSON.parse(readFileSync(record,'utf8'));}catch(error){if((error as NodeJS.ErrnoException).code!=='ENOENT')throw error;}
@@ -35,6 +37,7 @@ test('a failed bound cleanup remains red while its next case and image cleanup s
     const tags=docker('image','ls','--format','{{.Repository}}:{{.Tag}}',saved.tag);
     if(tags){assert.equal(tags,saved.tag);docker('image','rm',saved.tag);}
    }
-  }finally{rmSync(control,{force:true});rmSync(scratch,{recursive:true,force:true});}
+  }catch(error){if(primary)throw new AggregateError([primary,error],'bound_fixture.control_cleanup');throw error;}
+  finally{rmSync(control,{force:true});rmSync(scratch,{recursive:true,force:true});}
  }
 });

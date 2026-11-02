@@ -6,22 +6,23 @@ const id='1'.repeat(64),peer='2'.repeat(64),image='sha256:'+'3'.repeat(64);
 const labels:Record<string,string>={'cloud.backup-verifier.owner':'owned-fixture','cloud.backup-verifier.scope':'scope','cloud.backup-verifier.token':'token','cloud.backup-verifier.claim':'claim','cloud.backup-verifier.request':'digest','cloud.backup-verifier.deadline':'123'};
 function fixture(){
  assert.equal(typeof module.boundFixtureCleanup,'function','owned fixture cleanup is missing');
- const children=new Map([[id,{Id:id,Image:image,Config:{Labels:{...labels}}}],[peer,{Id:peer,Image:image,Config:{Labels:{...labels}}}]]),removed:string[]=[];
+ const children=new Map([[id,{Id:id,Image:image,Config:{Labels:{...labels}}}],[peer,{Id:peer,Image:image,Config:{Labels:{...labels}}}]]),removed:string[]=[],inspected:string[]=[];
  const docker=(...args:string[])=>{
   if(args[0]==='inspect'){
+   inspected.push(args[1]!);
    const child=children.get(args[1]!);if(child)return JSON.stringify([child]);
    throw Object.assign(Error('missing'),{status:1,signal:null,stderr:'Error: No such object: '+args[1]});
   }
   assert.deepEqual(args,['rm','-f',id]);removed.push(args[2]!);children.delete(args[2]!);return id;
  };
  const cleanup=module.boundFixtureCleanup(docker);cleanup.record({id,image,labels});
- return {cleanup,children,removed,docker};
+ return {cleanup,children,removed,docker,inspected};
 }
 test('failed bound fixture cleanup removes only its recorded child and preserves the original error',()=>{
- const {cleanup,children,removed}=fixture(),original=Error('backup.verifier_cleanup');
+ const {cleanup,children,removed,inspected}=fixture(),original=Error('backup.verifier_cleanup');
  assert.throws(()=>{try{throw original;}finally{cleanup.release();}},error=>error===original);
  assert.deepEqual(removed,[id]);assert.equal(children.has(id),false);assert.equal(children.has(peer),true);
- cleanup.release();assert.deepEqual(removed,[id]);
+ const calls=inspected.length;cleanup.release();assert.deepEqual(removed,[id]);assert.equal(inspected.length,calls);
 });
 for(const field of ['Id','Image',...Object.keys(labels)])test(`fixture rescue refuses a changed ${field}`,()=>{
  const {cleanup,children,removed}=fixture(),child=children.get(id)!;
@@ -30,7 +31,7 @@ for(const field of ['Id','Image',...Object.keys(labels)])test(`fixture rescue re
 });
 test('fixture rescue accepts exact absence but preserves command failures',()=>{
  const {cleanup,children,removed}=fixture();children.delete(id);cleanup.release();assert.deepEqual(removed,[]);
- for(const error of [Object.assign(Error('refused'),{status:1,stderr:'permission denied'}),Object.assign(Error('interrupted'),{status:1,signal:'SIGTERM',stderr:'Error: No such object: '+id})]){
+ for(const error of [Object.assign(Error('refused'),{status:1,stderr:'permission denied'}),Object.assign(Error('interrupted'),{status:1,signal:'SIGTERM',stderr:'Error: No such object: '+id}),Object.assign(Error('unknown status'),{status:125,stderr:'Error: No such object: '+id})]){
   const refused=module.boundFixtureCleanup(()=>{throw error;});refused.record({id,image,labels});assert.throws(()=>refused.release(),/bound_fixture.cleanup/);
  }
 });
