@@ -27,7 +27,7 @@ test('actual manifests resolve portal alone and identity dependents without a ha
   assert.deepEqual(scopeForPaths(['packages/identity/src/index.ts'], real).packages,
     ['@waitron-cloud/account-http','@waitron-cloud/backups','@waitron-cloud/identity','@waitron-cloud/operations','@waitron-cloud/portal','@waitron-cloud/registration','@waitron-cloud/remote-access','@waitron-cloud/translation','@waitron-cloud/ui-smoke']);
 });
-test('actual work plans preserve all twenty-three nonempty package shards and six receipts', () => {
+test('actual work plans preserve all twenty-four nonempty package jobs and six receipts', () => {
   const real = loadWorkspace();
   assert.equal(real.length, 9);
   const full = workPlan(scopeForPaths(['pnpm-lock.yaml'], real), real);

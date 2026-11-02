@@ -42,6 +42,10 @@ test('backup partitions execute every current and future file once while dividin
       assert.ok(selected.length <= Math.ceil(files.length / 3), `Oversized backup partition ${row.shard}`);
       assert.ok(selected.filter(name => expensive.has(name)).length <= 2,
         'The three expensive guard files must not share one job');
+      if (selected.includes('venue-service-capture-guards.test.ts')) {
+        assert.deepEqual(selected.filter(name => expensive.has(name)), ['venue-service-capture-guards.test.ts'],
+          'Capture guards must stay separate from catalogue and stream guards');
+      }
       t.diagnostic(JSON.stringify({shard: row.shard, files: selected.length,
         expensive: selected.filter(name => expensive.has(name))}));
       for (const kind of ['fail', 'cancelled', 'skipped']) assert.match(output, new RegExp(`^# ${kind} 0$`, 'm'));
