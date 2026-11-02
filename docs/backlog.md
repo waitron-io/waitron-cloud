@@ -61,7 +61,9 @@ upstream stall's cause. The separate
 retains the original assertions and controls its shortened clock independently
 of connection scheduling. The [exhausted-attempt fixture](backlog/cost-conformance-fixtures.md#exhausted-archive-attempts-and-connection-scheduling-d530)
 also controls its shortened clock after each stalled request reaches the server,
-retaining three requests and every original check. A recurring npm abort-diagnostic refusal remains separate
+retaining three requests and every original check. The [body-stall and shared-deadline fixtures](backlog/cost-conformance-fixtures.md#body-stall-and-total-deadline-scheduling-d530)
+now coordinate their shortened clocks with consumed body bytes and admitted
+requests, preserving the original checks and limits. A recurring npm abort-diagnostic refusal remains separate
 in [the setup investigation](backlog/ci-pnpm-setup.md).
 
 ## Storage archive publication refusals (D449)
