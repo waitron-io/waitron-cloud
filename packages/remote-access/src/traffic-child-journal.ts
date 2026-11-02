@@ -95,6 +95,15 @@ export class TrafficChildJournal {
   });
  }
  restore():Promise<Saved|undefined>{return this.#run(()=>this.#load());}
+ /** A durable, non-reusable claim prevents two supervisors from spawning the same signed identity. */
+ claimSpawn():Promise<void>{
+  return this.#run(async()=>{
+   const saved=await this.#load();if(!saved||saved.end)unavailable();
+   const file=await open(join(this.#options.directory,'spawn.claim'),constants.O_WRONLY|constants.O_CREAT|constants.O_EXCL|constants.O_NOFOLLOW,0o600);
+   try{await file.writeFile(digest(saved.start));await file.sync();}finally{await file.close();}
+   await this.#sync();
+  });
+ }
  finish(spool:TrafficSpool,until:string):Promise<ManifestEnvelope>{
   return this.#run(async()=>{
    const saved=await this.#load();if(!saved)unavailable();
