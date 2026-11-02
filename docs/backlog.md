@@ -859,6 +859,26 @@ implementation or production evidence.
   generic inspection/startup failures remain unattributed. The strict complete
   producer, published releases and shipping deployment qualification remain due;
   the measured 13.46 GiB baseline does not meet the unchanged 20 GiB startup floor.
+  The combined producer now adds a strict redacted withdrawal component after
+  owned cleanup and the final source check. It binds the run, Cloud source and
+  paired installation to stream, gateway and snapshot evidence. An accepted
+  snapshot write remains residual access with its advertised remaining validity;
+  it supplies no completed withdrawal duration or shipping verdict. All 88
+  focused producer/reader controls pass, and 41 installed guard omissions fail.
+  The historical complete reader and every old assertion remain. The full
+  producer, published releases and shipping resource qualification stay open.
+  The committed candidate at `a2180187` passes both combined tests without skips
+  in 426.8 seconds under 600 seconds. Its new strict component records stream
+  withdrawal in 6.075 seconds, gateway withdrawal in 5.781 seconds and a still-live
+  snapshot write with 615,586 milliseconds of advertised validity left. All 1,691
+  measured inputs match. The same pairings survive rollback; 176 integration
+  readings span 393.8 seconds with gaps at most 4.532 seconds. Independent cleanup
+  verifies two projects and 250 recorded owned container IDs absent, with protected
+  Waitron unchanged. Baseline disk is 13.91 GiB, below the shipping 20 GiB floor.
+  The first attempt refuses the unchanged startup sample-gap check at 33.94
+  seconds. A later instrumented pass does not identify its cause. Keep that failure
+  and the command timing capture; on recurrence, capture adjacent sample times
+  and the command category before attributing the gap. No guard or limit changed.
   The separate capacity journey also
   collects host memory and available disk on Docker's data filesystem before
   project startup, throughout startup and settled/verification sampling,

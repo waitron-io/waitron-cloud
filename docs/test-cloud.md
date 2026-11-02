@@ -47,6 +47,56 @@ Run the source checks with:
 node --test scripts/test-cloud-source.test.mjs
 ```
 
+## Read the combined withdrawal component
+
+A stream key and a temporary snapshot credential stop working at different
+boundaries. Read the combined result's `withdrawal` component before interpreting
+a downgrade. It binds the same run, committed Cloud inputs and paired
+installation to the storage and gateway observations. The component is produced
+after owned cleanup and the final source check.
+
+`stream.after.durationMs` and `gateway.durationMs` record actual observed
+withdrawal, each below thirty seconds. The stream proof also requires the
+original reader, retained bytes and installation identity to survive the storage
+restart. For snapshots, `status: "residual-access"` means the old upload still
+succeeds. `remainingMs` is its advertised validity remaining at that observation;
+it is never a completed withdrawal duration. `status: "expired"` requires an
+observed storage refusal after the announced expiry. Fresh snapshot grants must
+be refused in either case.
+
+Run the producer and strict-reader controls without containers:
+
+```sh
+node --test deploy/test-cloud/integration-withdrawal-receipt.test.mjs
+```
+
+The reader rejects mismatched installations or source images, malformed or
+contradictory times, missing refusals and extra fields that could carry private
+data. Its 88 controls and 41 deliberate guard omissions pass their checks in an
+independently installed copy. This component supplies no complete-integration or
+shipping verdict. The original complete-receipt reader, separate provider-lifetime
+proof, published-release upgrade and shipping resource floors still apply.
+
+The shipping-Dockerfile candidate at `a2180187` passes both combined tests
+without skips in 426.8 seconds under the unchanged 600-second limit. All 1,691
+measured runtime inputs match the committed checkout. Its strict component
+records stream withdrawal in 6.075 seconds and gateway withdrawal in 5.781
+seconds. The old snapshot write still succeeds with 615,586 milliseconds of
+advertised validity remaining, so observed expiry stays false. Both original
+pairings survive matching-volume rollback.
+
+The same run records 176 integration samples over 393.8 seconds, with gaps at
+most 4.532 seconds, alongside startup, 61.8 settled seconds and the admitted
+verifier. Its 13.91 GiB baseline does not meet the unchanged 20 GiB shipping
+startup floor. An independent audit verifies both attempted projects and all
+250 recorded owned container IDs absent, with protected Waitron state unchanged.
+
+The first attempt refuses a startup sampling gap at 33.94 seconds. The diagnostic
+run captures Docker command durations outside the candidate, preserving output
+and exit status without recording arguments. Its later pass does not explain
+the first gap. Retain that refusal and capture sample times and command categories
+if it recurs; no sampling bound or deadline has changed.
+
 ## What is reachable
 
 Only the HTTPS proxy publishes to `192.168.10.10:3000`. It forwards to the unpublished account listener and accepts the exact canonical Host and, when present, Origin. It replaces forwarding headers and the account server trusts only its private address, `10.79.0.2`. Ordinary loopback deployment keeps `http://localhost:3000`.
