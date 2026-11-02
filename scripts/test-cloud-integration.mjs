@@ -88,6 +88,14 @@ export async function runTestCloudPairedExpiry({image, waitronImage, protectedCo
   return receipt;
 }
 
+export async function runTestCloudFixedPairedExpiry({image, waitronImage, protectedContainerIds = [], waitronCheckout} = {}) {
+  const receipt = await runTestCloudClients({image, waitronImage, protectedContainerIds, waitronCheckout,
+    fixedProject: true, paidContinuousRecovery: true, freeRemote: true, paidRemote: true,
+    measureCapacity: true, measureIntegration: true, schemaRollback: true, sourceProvenance: true, pairedExpiry: true});
+  receipt.withdrawal = createTestCloudWithdrawalReceipt(receipt);
+  return receipt;
+}
+
 export function checkProtectedContainers(before, after, ids) {
   for (const id of ids) {
     const row = before.find(value => value.startsWith(id + ' '));
