@@ -7,6 +7,7 @@ import {access, readFile, rm} from 'node:fs/promises';
 import {writeFileSync} from 'node:fs';
 import {join} from 'node:path';
 import {randomInt} from 'node:crypto';
+import {storageAdminOperations} from './storage-admin-diagnostics.mjs';
 import {startBackupStorage} from '../../scripts/backup-storage-fixture.mjs';
 
 async function close(servers) {
@@ -55,11 +56,12 @@ async function readOwner(port) {
 }
 
 test('native storage remains usable with exhausted admin gRPC ports and preserves every port owner on cleanup', {timeout:90000}, async t => {
-  const owners = await occupyAdminRange();
+  const run = storageAdminOperations(message => console.error(message));
+  const owners = await run('reserve-admin', () => occupyAdminRange());
   const firstPort = owners[0].address().port;
   const children = [], roots = [];
   let storage;
-  t.after(async () => {
+  t.after(async () => run('cleanup', async () => {
     try { await storage?.stop(); }
     finally {
       for (const child of children) {
@@ -71,7 +73,7 @@ test('native storage remains usable with exhausted admin gRPC ports and preserve
       await Promise.all(roots.map(root => rm(root, {recursive:true, force:true})));
       await close(owners);
     }
-  });
+  }));
   const spawn = childProcess.spawn;
   t.mock.method(childProcess, 'spawn', (binary, args, options) => {
     if (args[0] !== 'mini') return spawn(binary, args, options);
@@ -85,31 +87,33 @@ test('native storage remains usable with exhausted admin gRPC ports and preserve
   syncBuiltinESMExports();
   t.after(() => { t.mock.restoreAll(); syncBuiltinESMExports(); });
 
-  storage = await startBackupStorage({retryPortCollision:false});
+  storage = await run('start-exhausted', () => startBackupStorage({retryPortCollision:false}));
   assert.equal(children.length, 1, 'admin exhaustion must not restart the storage fixture');
   assert.equal(children[0].exitCode, null, 'the storage child must remain alive');
   const log = await readFile(join(storage.root, 'store.log'), 'utf8');
   assert.ok(log.includes(`Could not find available gRPC port for Admin starting from ${firstPort + 1}`), 'the native child must exhaust every fallback port');
-  const location = await storage.bucket('admin-exhaustion-ready');
+  const location = await run('bucket-exhausted', () => storage.bucket('admin-exhaustion-ready'));
   assert.equal(location.endpoint, storage.endpoint);
   assert.equal(location.bucket, 'admin-exhaustion-ready');
-  await storage.stop();
+  await run('stop-exhausted', () => storage.stop());
   storage = undefined;
   assert.ok(children[0].exitCode !== null || children[0].signalCode !== null, 'cleanup must stop its owned child');
   for (const root of roots) await assert.rejects(access(root), {code:'ENOENT'});
+  await run('verify-owners', async () => {
   for (let index = 0; index < owners.length; index++) {
     assert.equal(await readOwner(firstPort + index), `admin-owner-${index}`, 'cleanup must preserve every competing listener');
   }
+  });
 
   t.mock.restoreAll();
   syncBuiltinESMExports();
-  await close(owners);
-  storage = await startBackupStorage({retryPortCollision:false});
-  const recovered = await storage.bucket('admin-exhaustion-recovered');
+  await run('release-admin', () => close(owners));
+  storage = await run('start-recovered', () => startBackupStorage({retryPortCollision:false}));
+  const recovered = await run('bucket-recovered', () => storage.bucket('admin-exhaustion-recovered'));
   assert.equal(recovered.endpoint, storage.endpoint);
   assert.equal(recovered.bucket, 'admin-exhaustion-recovered');
   const recoveredRoot = storage.root;
-  await storage.stop();
+  await run('stop-recovered', () => storage.stop());
   storage = undefined;
   await assert.rejects(access(recoveredRoot), {code:'ENOENT'});
 });

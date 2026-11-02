@@ -593,6 +593,23 @@ repairs the demonstrated reservation intrusion; it does not identify historical
 Node or weed owners, prevent unrelated programs racing the later handoff, or
 qualify the separate native admin fallback.
 
+The same case later reaches its unchanged 90-second deadline in
+[PR870's first merge run](https://github.com/waitron-io/waitron-cloud/actions/runs/41387374274/job/125091183776).
+The unchanged isolated Linux control passes; it does not identify the stalled
+operation or reproduce CI concurrency. The case now prints fixed operation names
+and monotonic elapsed times at entry, every five seconds while waiting and on
+settlement. Each operation permits sixteen waiting reports, marks the last one
+`waiting-limit` and releases its diagnostic timer. Reporter failures preserve the
+original result or refusal. Controlled held-bucket checks exercise the installed
+case and verify owned-child and scratch cleanup. Private cancellation controls
+also collect the captured native child and scratch, including cancellation before
+the native child is spawned. All original assertions and the
+90-second limit remain. Use the last `storage_admin_progress` record to separate
+reservation, exhausted or recovered startup, bucket creation, owner verification
+and cleanup. Startup still combines download, configuration, port selection and
+readiness; the trace cannot distinguish those internal steps. A blocked event
+loop can delay reports. The historical timeout and port owner remain unexplained.
+
 See [the cooperative port claims and cleanup limits](backlog/storage-cache-fixture.md#cooperative-native-storage-port-ownership).
 
 ## Repository licence
