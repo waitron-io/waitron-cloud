@@ -1571,9 +1571,16 @@ implementation or production evidence.
   3.061-second interval and unchanged floors. Independent audit verifies all
   246 recorded owned container IDs absent and protected Waitron unchanged.
   Fourteen installed guard omissions are caught; all original tests and SQL stay
-  unchanged. This proves temporary project identity only. Published-release
-  upgrade, current-source paired expiry, complete assembly and later LAN deployment
-  remain open; enforcement stays off.
+  unchanged. The fixed-project expiry entry point now observes the original paired
+  snapshot grant being refused after expiry, then checks both original clients
+  through matching rollback. At source `31c3f834`, both cases pass without skips
+  in 1,083.6 seconds. All 533 resource observations pass the unchanged reader,
+  with a maximum 4.546-second interval and at least 3,292 MiB available memory.
+  Independent audit verifies all 539 recorded owned container IDs absent and
+  protected Waitron unchanged. All 903 prior test files and 45 SQL files retain
+  their bytes; this step adds assertions without changing existing checks.
+  Published-release upgrade, complete assembly and later LAN deployment remain
+  open; complete integration and shipping qualification stay false, enforcement off.
   See [the fixed-project proof](test-cloud.md#prove-the-fixed-project-without-adopting-an-existing-deployment).
 
 

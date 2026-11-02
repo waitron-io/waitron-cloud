@@ -1669,7 +1669,44 @@ Eight cleanup readings end with zero owned memory and fixture data. An independe
 audit finds all 246 recorded owned container IDs absent, no owned project resources
 or tags, and the protected Waitron IDs, start times and health unchanged.
 
-This proves the fixed project identity in the temporary journey. Published-release
-upgrade, current-source paired snapshot expiry, complete receipt assembly and the
-later LAN deployment remain open. Keep complete integration and shipping
-qualification false, and deployed plan enforcement off.
+This proves the fixed project identity in the temporary journey. Use the next
+command to observe the paired snapshot grant expiring in that same fixed project.
+Published-release upgrade, complete receipt assembly and the later LAN deployment
+remain open. Keep complete integration and shipping qualification false, and
+deployed plan enforcement off.
+
+### Observe expiry in the fixed project
+
+A separate expiry run cannot prove withdrawal for the fixed project's paired
+client. Run the combined fixed-project expiry case with the same immutable images
+and clean pinned Waitron checkout:
+
+```sh
+TEST_CLOUD_PAIRED_EXPIRY=1 \
+TEST_CLOUD_INTEGRATION_IMAGE=sha256:<cloud-image> \
+TEST_CLOUD_INTEGRATION_WAITRON_IMAGE=sha256:<waitron-image> \
+TEST_CLOUD_INTEGRATION_WAITRON_CHECKOUT=<clean-pinned-checkout> \
+TEST_CLOUD_PROTECTED_CONTAINER_IDS='<three-protected-ids-as-json>' \
+node --test scripts/test-cloud-fixed-paired-expiry.test.mjs
+```
+
+You need an empty `waitron-cloud-test` project. The proof retains the exclusive
+project lock, original fifteen-minute snapshot grant, resource limits and
+20-minute expiry-test deadline. It observes the same grant being refused after
+expiry, then restores the matching backup of configuration, database, storage and
+gateway. Both original clients must complete fresh renewal and configuration
+exchanges. The ordinary fixed-project
+and disposable expiry entry points keep their existing behaviour.
+
+At source `31c3f834`, both cases pass without skips in 1,083.6 seconds. Storage
+refuses the original paired grant after expiry, and both original clients complete
+fresh exchanges after matching rollback. The strict resource reader accepts all
+533 observations, with no interval above 4.546 seconds. Available memory stays
+above 3,292 MiB; disk measures 46.128 GiB before and 46.054 GiB after. Independent
+audit finds all 539 recorded owned container IDs absent, no owned project resources
+or tags, and the protected Waitron IDs, start times and health unchanged.
+
+This closes the same-run expiry check for that temporary fixed-project journey.
+Published-release upgrade, strict complete receipt assembly and later LAN deployment
+remain open. Keep complete integration and shipping qualification false, and
+deployed plan enforcement off.
