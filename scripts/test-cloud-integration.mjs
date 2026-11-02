@@ -12,7 +12,7 @@ import {inspectIntegrationAuthorisedRecovery} from '../deploy/test-cloud/test-fi
 import {inspectIntegrationContinuousRecovery} from '../deploy/test-cloud/test-fixtures/integration-continuous-recovery-evidence.mjs';
 import {rollbackRefusalDiagnostic} from '../deploy/test-cloud/test-fixtures/integration-renewal.mjs';
 import {captureIntegrationSource, checkIntegrationSource, measureIntegrationFiles} from '../deploy/test-cloud/test-fixtures/integration-source.mjs';
-import {parseCapacityVolumeReadings} from '../deploy/test-cloud/test-fixtures/integration-capacity.mjs';
+import {parseCapacityVolumeReadings, createCapacityChronology} from '../deploy/test-cloud/test-fixtures/integration-capacity.mjs';
 import {createTestCloudWithdrawalReceipt} from '../deploy/test-cloud/test-fixtures/integration-withdrawal-receipt.mjs';
 import {readIntegrationInventory} from '../deploy/test-cloud/test-fixtures/integration-inventory.mjs';
 
@@ -103,7 +103,7 @@ export async function runTestCloudClients({image, waitronImage, protectedContain
   const inventory = () => readIntegrationInventory({docker, protectedIds: protectedContainerIds});
   const before = await inventory();
   checkProtectedContainers(before, before, protectedContainerIds);
-  let hostCapacity, startupCapacity;
+  let hostCapacity, startupCapacity, capacityChronology;
   const record = (kind, id) => {if (!created.some(value => value.kind === kind && value.id === id)) created.push({kind, id, owner: runId});};
   const control = async (id, phase, choice) => parseIntegrationJson(await docker(['exec', '-i',
     ...(venueCAs.has(id) ? ['--env', 'NODE_EXTRA_CA_CERTS=' + venueCAs.get(id)] : []),
@@ -174,9 +174,10 @@ export async function runTestCloudClients({image, waitronImage, protectedContain
     const start = () => compose(['up', '--no-build', '--pull', 'never', '--detach', '--wait', '--wait-timeout', '90']);
     if (measureCapacity) {
       const {measureStartupCapacity, observeCapacity} = await import('../deploy/test-cloud/test-fixtures/integration-capacity.mjs');
+      capacityChronology = createCapacityChronology();
       startupCapacity = await measureStartupCapacity({start,
-        observe: () => observeCapacity({docker, project, runId, waitronImage, startup: true, diskPath: hostCapacity.diskPath, measureVolumes,
-          protectedUnchanged: async () => checkProtectedContainers(before, await inventory(), protectedContainerIds)}),
+        observe: () => capacityChronology.observe('startup', () => observeCapacity({docker, project, runId, waitronImage, startup: true, diskPath: hostCapacity.diskPath, measureVolumes,
+          protectedUnchanged: async () => checkProtectedContainers(before, await inventory(), protectedContainerIds)})),
         stop: () => compose(['stop', '--timeout', '10'])});
     } else await start();
     let journeyStage = 'clients';
@@ -336,7 +337,7 @@ export async function runTestCloudClients({image, waitronImage, protectedContain
           if (measureCapacity) {
             const {measureCapacityWindow, observeCapacity} = await import('../deploy/test-cloud/test-fixtures/integration-capacity.mjs');
             const measured = await measureCapacityWindow({
-              observe: async () => {
+              observe: async phase => {
                 if (verifierWorker && !verifierScope) {
                   const text = await docker(['logs', verifierWorker], '', 'capacity-controller-scope');
                   for (const line of text.split('\n')) {
@@ -344,8 +345,8 @@ export async function runTestCloudClients({image, waitronImage, protectedContain
                     if (value.controllerScope) {assert.match(value.controllerScope, /^[a-f0-9-]{36}$/); verifierScope = value.controllerScope;}
                   }
                 }
-                return observeCapacity({docker, project, runId, verifierScope, waitronImage, workerId: verifierWorker, diskPath: hostCapacity.diskPath, measureVolumes,
-                  protectedUnchanged: async () => checkProtectedContainers(before, await inventory(), protectedContainerIds)});
+                return capacityChronology.observe(phase, () => observeCapacity({docker, project, runId, verifierScope, waitronImage, workerId: verifierWorker, diskPath: hostCapacity.diskPath, measureVolumes,
+                  protectedUnchanged: async () => checkProtectedContainers(before, await inventory(), protectedContainerIds)}));
               },
               verify,
               stop: async () => {if (verifierStarted) await docker(['stop', '--time', '15', verifierWorker], '', 'capacity-refusal-stop');},
@@ -592,12 +593,13 @@ export async function runTestCloudClients({image, waitronImage, protectedContain
       const {measureIntegrationCapacity, observeCapacity} = await import('../deploy/test-cloud/test-fixtures/integration-capacity.mjs');
       const measured = await measureIntegrationCapacity({run: journey,
         observe: async () => ({stage: journeyStage,
-          ...await observeCapacity({docker, project, runId, verifierScope, waitronImage,
+          ...await capacityChronology.observe('integration', () => observeCapacity({docker, project, runId, verifierScope, waitronImage,
             workerId: verifierWorker, diskPath: hostCapacity.diskPath, measureVolumes,
-            protectedUnchanged: async () => checkProtectedContainers(before, await inventory(), protectedContainerIds)})}),
+            protectedUnchanged: async () => checkProtectedContainers(before, await inventory(), protectedContainerIds)}))}),
         stop: () => compose(['stop', '--timeout', '10'])});
       capacityEvidence.integration = {samples: measured.samples};
     } else await journey();
+    if (capacityEvidence) capacityEvidence.chronology = capacityChronology.snapshot();
   } finally {
     try {
       await completeCleanup([

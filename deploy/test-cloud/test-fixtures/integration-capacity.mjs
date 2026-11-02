@@ -25,6 +25,42 @@ function checkCapacitySample(value) {
     assert.equal(value.oom, false); assert.equal(value.protectedUnchanged, true);
 }
 
+export function createCapacityChronology({now = () => performance.now()} = {}) {
+  const began = now(), samples = [];
+  assert.ok(Number.isFinite(began), 'integration.chronology_clock');
+  let tail = Promise.resolve(), pending = 0, failure;
+  return {
+    observe(phase, read) {
+      pending++;
+      const operation = tail.then(async () => {
+        if (failure) throw failure;
+        assert.ok(['startup', 'settled', 'verification', 'integration'].includes(phase), 'integration.chronology_phase');
+        const startedMs = now() - began;
+        assert.ok(Number.isFinite(startedMs) && startedMs >= (samples.at(-1)?.finishedMs ?? 0), 'integration.chronology_clock');
+        const value = await read();
+        const finishedMs = now() - began;
+        assert.ok(Number.isFinite(finishedMs) && finishedMs >= startedMs, 'integration.chronology_clock');
+        assert.deepEqual(Object.keys(value).sort(), ['availableMiB', 'freeGiB', 'cloudMiB', 'verifierMiB',
+          'verifierCount', 'scratchMiB', 'fixtureBytes', 'oom', 'protectedUnchanged', 'verifierIds'].sort());
+        checkCapacitySample(value);
+        assert.ok(Number.isFinite(value.freeGiB) && value.freeGiB >= 0, 'integration.chronology_disk');
+        assert.ok(Array.isArray(value.verifierIds) && value.verifierIds.length === value.verifierCount);
+        for (const id of value.verifierIds) assert.match(id, /^[a-f0-9]{64}$/);
+        samples.push({startedMs, finishedMs, phase, reading: structuredClone(value)});
+        return value;
+      }).finally(() => {pending--;});
+      // One observation owns Docker/cgroup reads at a time; a refusal stays terminal.
+      tail = operation.catch(error => {failure = error;});
+      return operation;
+    },
+    snapshot() {
+      assert.equal(pending, 0, 'integration.chronology_pending');
+      if (failure) throw failure;
+      return {clock: 'shared-monotonic', samples: structuredClone(samples)};
+    },
+  };
+}
+
 export function checkCapacitySamples(samples) {
   assert.ok(Array.isArray(samples) && samples.length > 1);
   let previous = -1, settledStart, settledEnd, settledClosed = false, active = false;

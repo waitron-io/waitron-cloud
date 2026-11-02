@@ -1384,3 +1384,20 @@ The operator still emits an incomplete client report. Its 13.376 GiB baseline
 fails the unchanged 20 GiB shipping start floor. Complete resource chronology,
 release/generated-asset provenance, matching deployment identity, published-release
 upgrade and shipping resource qualification remain required.
+
+### Read resource windows on one clock
+
+The startup, settled, verification and whole-journey samplers each retain their
+own elapsed times. You cannot join those times directly because each starts at
+zero. The client report now also records `capacity.chronology` using one
+monotonic clock, which measures elapsed time independently of wall-clock changes.
+Each entry gives the phase, actual read start and finish times, and captured
+resource values. Concurrent samplers take turns collecting a reading, so their
+Docker and volume observations cannot overlap.
+
+Inspect the shared intervals for gaps; the collector preserves them without
+interpolation or invented readings. A failed read makes the chronology unusable.
+The original sampler assertions and deadlines remain. Focused controls exercise
+the shared clock and sampler composition; the changed combined journey still
+needs a genuine image run. This intermediate record supplies neither the final
+protected-container evidence nor a complete integration or shipping verdict.

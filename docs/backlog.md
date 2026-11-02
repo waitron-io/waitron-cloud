@@ -946,6 +946,12 @@ implementation or production evidence.
   faults are caught. The original tests, SQL and dependencies remain unchanged.
   The 13.376 GiB disk baseline remains below the unchanged shipping floor.
   Complete resources, release/generated assets and shipping qualification stay open.
+  Resource collection now also records each actual read interval on a shared
+  monotonic clock across startup, settled time, verification and integration.
+  Concurrent samplers serialize their reads; the original local times and checks
+  remain. Focused controls cover chronology, failures and sampler composition.
+  The changed combined journey still needs a genuine image run. This intermediate
+  record does not supply final protected-container evidence or a complete receipt.
   A [combined journey](test-cloud.md#run-the-journeys-in-one-project) now requires
   recovery, remote withdrawal, measured capacity and matching-set rollback in one
   disposable project. It passes on the isolated Linux box in 385 seconds without

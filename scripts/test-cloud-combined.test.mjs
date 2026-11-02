@@ -93,6 +93,17 @@ test('one project recovers both copies, withdraws remote access, measures capaci
     nativeStaffCsr: true, placements: 0, hostnames: 0, requests: 0, jobs: 0, configurationUnchanged: true, plan: 'free'});
   assert.deepEqual(receipt.freeSnapshot, {status: 'proved', httpStatus: 403, error: 'permission_denied', grantIssued: false});
   assert.equal(checkCapacitySamples(receipt.capacity?.samples), true);
+  const chronology = receipt.capacity.chronology;
+  assert.equal(chronology?.clock, 'shared-monotonic');
+  assert.deepEqual([...new Set(chronology.samples.map(value => value.phase))].sort(), ['integration', 'settled', 'startup', 'verification']);
+  assert.equal(chronology.samples.length, receipt.capacity.startup.samples.length + receipt.capacity.samples.length + receipt.capacity.integration.samples.length);
+  let observedEnd = 0;
+  for (const value of chronology.samples) {
+    assert.ok(value.startedMs >= observedEnd && value.finishedMs >= value.startedMs);
+    assert.ok(Number.isFinite(value.startedMs) && Number.isFinite(value.finishedMs));
+    observedEnd = value.finishedMs;
+  }
+  assert.ok(chronology.samples.some(value => value.phase === 'verification' && value.reading.verifierIds.includes(snapshot.workerVerification.childId)));
   assert.equal(receipt.capacity.measurement, 'linux-cgroup-v2-including-tmpfs');
   assert.equal(receipt.capacity.shippingQualification, false);
   assert.ok(receipt.capacity.samples.some(value => value.phase === 'verification' &&
