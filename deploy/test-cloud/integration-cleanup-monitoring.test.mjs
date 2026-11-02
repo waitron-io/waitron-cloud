@@ -28,7 +28,7 @@ else if(args[0]==='image'&&args[1]==='inspect') {
 else if(args[0]==='build') {}
 else if(args[0]==='compose') process.exitCode=31;
 else if(args[0]==='rm') {}
-else if(args[0]==='image'&&args[1]==='rm') {}
+else if(args[0]==='image'&&args[1]==='rm') setTimeout(()=>{},1100);
 else if((args[0]==='network'||args[0]==='volume')&&args[1]==='ls') {}
 else {process.exitCode=32;}
 `, {mode: 0o700});
@@ -44,9 +44,9 @@ mock.module(${JSON.stringify(capacity)}, {namedExports:{...actual,
  measureStartupCapacity:options=>actual.measureStartupCapacity({...options,now:()=>clock,wait:async ms=>{clock+=ms;await new Promise(resolve=>setImmediate(resolve));}}),
  measureCleanupCapacity:async options=>{
   cleanup=true;
-  try {return await actual.measureCleanupCapacity({...options,now:()=>clock,
+  try {return await actual.measureCleanupCapacity({...options,
    wait:async ms=>{clock+=ms;},observe:async()=>{reads++;return options.observe();}});}
-  finally {assert.ok(reads>=${fault === 'refused' ? 1 : 2},'Cleanup must read resources');}
+  finally {assert.ok(reads>=${fault === 'refused' ? 1 : 3},'Cleanup must read resources');}
  }}});
 const {runTestCloudClients}=await import(${JSON.stringify(runner)});
 await assert.rejects(runTestCloudClients({image:'sha256:'+'b'.repeat(64),waitronImage:'sha256:'+'c'.repeat(64),measureCapacity:true}),
