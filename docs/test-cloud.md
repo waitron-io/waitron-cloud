@@ -1565,3 +1565,24 @@ raw chronology preserves an 18.332-second preparation gap and a 7.192-second
 cleanup gap, both beyond the five-second limit. Keep these incomplete measurements
 at their actual source; they do not qualify deployment, a published release or
 the complete integration receipt.
+
+### Observe preparation before starting Cloud
+
+Image source checks and client-image preparation can take longer than the five-second
+sampling interval. Startup monitoring now begins before that work and continues
+through Compose readiness, using the same clock as the baseline. If a reading
+refuses during preparation, the runner waits for its in-flight work to finish and
+does not start the Cloud project. Its normal cleanup removes owned scratch and
+leaves neighbouring files in place.
+
+You can exercise the timing and refusal paths without starting Docker:
+
+```bash
+node --test deploy/test-cloud/integration-preparation-capacity.test.mjs deploy/test-cloud/integration-preparation-monitoring.test.mjs
+```
+
+These six controls use controlled readings and an isolated command boundary.
+They do not replace a genuine image-backed journey or change any resource floor.
+The saved `5ef3a0ce` preparation and cleanup gaps remain visible at that source.
+Complete cleanup sampling, matching deployment identity, published-release
+upgrade and shipping qualification remain open.

@@ -124,8 +124,15 @@ export async function measureCapacityWindow({observe, verify, stop, now = () => 
   return {samples, value};
 }
 
-export async function measureStartupCapacity({observe, start, stop, now = () => performance.now(), wait = ms => new Promise(resolve => setTimeout(resolve, ms))}) {
-  return measureOperationCapacity({observe, run: start, stop, now, wait, phase: 'startup'});
+export async function measureStartupCapacity({observe, prepare, start, stop, now = () => performance.now(), wait = ms => new Promise(resolve => setTimeout(resolve, ms))}) {
+  if (!prepare) return measureOperationCapacity({observe, run: start, stop, now, wait, phase: 'startup'});
+  let stopped = false;
+  return measureOperationCapacity({observe, run: async () => {
+    await prepare();
+    // Draining preparation after a refused reading must not allocate a new project.
+    assert.equal(stopped, false, 'integration.startup_cancelled');
+    return start();
+  }, stop: async () => {stopped = true; await stop();}, now, wait, phase: 'startup'});
 }
 
 export async function measureIntegrationCapacity(options) {

@@ -160,43 +160,48 @@ export async function runTestCloudClients({image, waitronImage, protectedContain
         readProtected: () => readProtectedContainerStates({docker, ids: protectedContainerIds})});
       await capacityChronology.start();
     }
-    if (source) {
-      const id = await docker(['create', '-i', '--pull=never', '--label', 'cloud.integration.owner=' + runId,
-        '--network', 'none', '--read-only', '--cap-drop', 'ALL', '--security-opt', 'no-new-privileges',
-        '--memory', '128m', '--memory-swap', '128m', '--pids-limit', '32', '--workdir', '/app',
-        '--entrypoint', 'node', image, 'scripts/test-cloud-image-source.mjs'], '', 'source-create');
-      owned.push(id); record('container', id);
-      const measured = parseIntegrationJson(await docker(['start', '-ai', id], JSON.stringify({files: source.files}), 'source-measure'));
-      assert.deepEqual(measured, await measureIntegrationFiles(root, source.files), 'integration.image_source_mismatch');
-      cloudSource = {head: source.head, tree: source.tree, image, dirty: false, ...measured};
-      cloudAssets = integrationAssetSummary(await probeIntegrationAssets({docker, image, kind: 'cloud', runId,
-        own: id => {owned.push(id); record('container', id);}}));
-    }
-    const [base] = JSON.parse(await docker(['image', 'inspect', waitronImage]));
-    assert.equal(base.Config.Labels?.['cloud.waitron-revision'], revision, 'integration.waitron_revision');
-    if (waitronSource) waitronBaseSource = await probeWaitronSource({docker, image: waitronImage, source: waitronSource, expectedHead: revision, runId,
-      own: id => {owned.push(id); record('container', id);}});
-    const baseTag = base.RepoTags?.[0]; assert.ok(baseTag, 'integration.waitron_tag');
-    assert.equal(JSON.parse(await docker(['image', 'inspect', baseTag]))[0].Id, waitronImage);
-    await docker(['build', '--pull=false', '--build-arg', 'WAITRON_IMAGE=' + baseTag, '--build-arg', 'WITH_STREAM=' + (paidStream ? '1' : '0'), '--label', 'cloud.integration.owner=' + runId,
-      '-f', 'deploy/test-cloud/test-fixtures/integration-venue.Dockerfile', '-t', clientTag, 'deploy/test-cloud/test-fixtures'], '', 'client-build');
-    built = true;
-    const clientImage = JSON.parse(await docker(['image', 'inspect', clientTag]))[0].Id;
-    record('image', clientImage);
-    if (waitronSource) waitronClientSource = await probeWaitronSource({docker, image: clientImage, source: waitronSource, expectedHead: revision, runId,
-      own: id => {owned.push(id); record('container', id);}});
-    if (source) waitronAssets = {...integrationAssetSummary(await probeIntegrationAssets({docker, image: clientImage, kind: 'waitron', runId,
-      own: id => {owned.push(id); record('container', id);}})), baseImage: waitronImage};
-    await writeFile(override, `name: ${project}\nservices:\n  gateway-manifest:\n    environment:\n      CLOUD_TEST_SERVICE_PLANS: "${paidRemote ? 1 : 0}"\n  account:\n    environment:\n      CLOUD_TEST_SERVICE_PLANS: "1"\n  storage:\n    environment:\n      CLOUD_TEST_SERVICE_PLANS: "1"\n    ports: !override ["127.0.0.1::8333"]\n  postgres:\n    ports: !override ["127.0.0.1::5432"]\n  mailpit:\n    ports: !override ["127.0.0.1::1025", "127.0.0.1::8025"]\n  proxy:\n    ports: !override ["127.0.0.1::3000"]\n  gateway:\n    ports: !override ["127.0.0.1::443", "127.0.0.1::51820/udp"]\n`, {mode: 0o600});
-    started = true;
-    const start = () => compose(['up', '--no-build', '--pull', 'never', '--detach', '--wait', '--wait-timeout', '90']);
+    let baseTag, clientImage;
+    const prepare = async () => {
+      if (source) {
+        const id = await docker(['create', '-i', '--pull=never', '--label', 'cloud.integration.owner=' + runId,
+          '--network', 'none', '--read-only', '--cap-drop', 'ALL', '--security-opt', 'no-new-privileges',
+          '--memory', '128m', '--memory-swap', '128m', '--pids-limit', '32', '--workdir', '/app',
+          '--entrypoint', 'node', image, 'scripts/test-cloud-image-source.mjs'], '', 'source-create');
+        owned.push(id); record('container', id);
+        const measured = parseIntegrationJson(await docker(['start', '-ai', id], JSON.stringify({files: source.files}), 'source-measure'));
+        assert.deepEqual(measured, await measureIntegrationFiles(root, source.files), 'integration.image_source_mismatch');
+        cloudSource = {head: source.head, tree: source.tree, image, dirty: false, ...measured};
+        cloudAssets = integrationAssetSummary(await probeIntegrationAssets({docker, image, kind: 'cloud', runId,
+          own: id => {owned.push(id); record('container', id);}}));
+      }
+      const [base] = JSON.parse(await docker(['image', 'inspect', waitronImage]));
+      assert.equal(base.Config.Labels?.['cloud.waitron-revision'], revision, 'integration.waitron_revision');
+      if (waitronSource) waitronBaseSource = await probeWaitronSource({docker, image: waitronImage, source: waitronSource, expectedHead: revision, runId,
+        own: id => {owned.push(id); record('container', id);}});
+      baseTag = base.RepoTags?.[0]; assert.ok(baseTag, 'integration.waitron_tag');
+      assert.equal(JSON.parse(await docker(['image', 'inspect', baseTag]))[0].Id, waitronImage);
+      await docker(['build', '--pull=false', '--build-arg', 'WAITRON_IMAGE=' + baseTag, '--build-arg', 'WITH_STREAM=' + (paidStream ? '1' : '0'), '--label', 'cloud.integration.owner=' + runId,
+        '-f', 'deploy/test-cloud/test-fixtures/integration-venue.Dockerfile', '-t', clientTag, 'deploy/test-cloud/test-fixtures'], '', 'client-build');
+      built = true;
+      clientImage = JSON.parse(await docker(['image', 'inspect', clientTag]))[0].Id;
+      record('image', clientImage);
+      if (waitronSource) waitronClientSource = await probeWaitronSource({docker, image: clientImage, source: waitronSource, expectedHead: revision, runId,
+        own: id => {owned.push(id); record('container', id);}});
+      if (source) waitronAssets = {...integrationAssetSummary(await probeIntegrationAssets({docker, image: clientImage, kind: 'waitron', runId,
+        own: id => {owned.push(id); record('container', id);}})), baseImage: waitronImage};
+      await writeFile(override, `name: ${project}\nservices:\n  gateway-manifest:\n    environment:\n      CLOUD_TEST_SERVICE_PLANS: "${paidRemote ? 1 : 0}"\n  account:\n    environment:\n      CLOUD_TEST_SERVICE_PLANS: "1"\n  storage:\n    environment:\n      CLOUD_TEST_SERVICE_PLANS: "1"\n    ports: !override ["127.0.0.1::8333"]\n  postgres:\n    ports: !override ["127.0.0.1::5432"]\n  mailpit:\n    ports: !override ["127.0.0.1::1025", "127.0.0.1::8025"]\n  proxy:\n    ports: !override ["127.0.0.1::3000"]\n  gateway:\n    ports: !override ["127.0.0.1::443", "127.0.0.1::51820/udp"]\n`, {mode: 0o600});
+    };
+    const start = () => {
+      started = true;
+      return compose(['up', '--no-build', '--pull', 'never', '--detach', '--wait', '--wait-timeout', '90']);
+    };
     if (measureCapacity) {
       const {measureStartupCapacity, observeCapacity} = await import('../deploy/test-cloud/test-fixtures/integration-capacity.mjs');
-      startupCapacity = await measureStartupCapacity({start,
+      startupCapacity = await measureStartupCapacity({prepare, start,
         observe: () => capacityChronology.observe('startup', () => observeCapacity({docker, project, runId, waitronImage, startup: true, diskPath: hostCapacity.diskPath, measureVolumes,
           protectedUnchanged: async () => checkProtectedContainers(before, await inventory(), protectedContainerIds)})),
-        stop: () => compose(['stop', '--timeout', '10'])});
-    } else await start();
+        stop: async () => {if (started) await compose(['stop', '--timeout', '10']);}});
+    } else {await prepare(); await start();}
     let journeyStage = 'clients';
     const journey = async () => {
     const account = await compose(['ps', '-q', 'account']), proxy = await compose(['ps', '-q', 'proxy']);

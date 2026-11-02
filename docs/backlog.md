@@ -1006,6 +1006,14 @@ implementation or production evidence.
   directory allocation. Four isolated subprocess controls cover command refusal,
   missing or malformed protected state, and later image refusal. Each leaves no
   owned scratch directory and preserves a neighbouring session's files.
+  Startup sampling now begins before image-source checks and client-image
+  preparation and continues through Compose readiness on the baseline clock. A refused reading drains
+  in-flight preparation and prevents later project startup; early refusals still
+  remove owned host scratch and preserve neighbouring files. Six focused controls
+  cover preparation timing, failures and the runner's actual cleanup path.
+  This change has not yet requalified the complete Linux journey. The saved
+  preparation gap stays attached to its original source; cleanup collection,
+  deployment identity and release/resource qualification remain open.
   A [combined journey](test-cloud.md#run-the-journeys-in-one-project) now requires
   recovery, remote withdrawal, measured capacity and matching-set rollback in one
   disposable project. It passes on the isolated Linux box in 385 seconds without
