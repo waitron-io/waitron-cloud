@@ -102,3 +102,19 @@ History cleanup preserves a backup tombstone, restored recovery, installation op
 The account portal calls `POST /api/account/usage/read` with the selected organisation ID. The route requires the portal Origin, the session cookie, the session CSRF token and current owner membership. It returns decimal strings so a large byte total does not lose precision in JavaScript.
 
 These totals are measurements only. They do not define billable units, free allowances, prices, invoices, excess-use behavior or a metering-outage policy. Decide those rules from operating-cost and abuse evidence before connecting any measurement to service enforcement.
+
+## Exercise monthly limits separately
+
+The billing fixture mode uses a separate monthly reservation store for relay mail
+and translation. It does not add fields or reconciliation sources to the owner
+usage summary above. Supply explicit test limits and the test/UTC options described
+in the [registration guide](../packages/registration/README.md#monthly-allowances-in-test-fixtures).
+Missing options preserve the existing service behavior, and production enforcement
+stays off.
+
+The relay adapter spends one unit in the message-admission transaction. Delivery,
+cancellation and uncertain handoff retain the original debit. Translation holds
+requested items when accepting a job and spends them immediately before a provider
+call under the current job lease. Work that was never leased can release its held
+items; a started or uncertain call cannot reclaim them. Neither adapter uses the
+owner usage totals as customer authority or replaces its existing safety limits.

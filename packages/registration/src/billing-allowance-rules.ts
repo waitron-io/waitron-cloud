@@ -25,6 +25,12 @@ export function validateAllowanceOptions(value:unknown,planMode:string):Allowanc
  if(planMode!=='test-venue-levels'||options.mode!=='test'||options.calendar!=='UTC')invalid();
  return {mode:'test',calendar:'UTC'};
 }
+export function allowanceOptionsFromEnv(environment:Readonly<Record<string,string|undefined>>,planMode:string):AllowanceOptions|undefined{
+ const flag=environment.CLOUD_TEST_ALLOWANCES??'0',calendar=environment.CLOUD_ALLOWANCE_CALENDAR;
+ if(flag==='0'&&calendar===undefined)return undefined;
+ if(flag!=='1')invalid();
+ return validateAllowanceOptions({mode:'test',calendar},planMode);
+}
 function date(value:unknown):CivilDate{
  if(typeof value!=='string'||value.length!==10||!/^\d{4}-\d{2}-\d{2}$/.test(value)||value<'0001-01-01'||value>'9999-12-31')invalid();
  const parsed=new Date(`${value}T00:00:00Z`);

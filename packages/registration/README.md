@@ -307,3 +307,26 @@ cannot bypass an operator stop. For private fixtures, worker commands select thi
 mode with `CLOUD_VENUE_SERVICE_LEVELS=test` and `CLOUD_TEST_SERVICE_PLANS=0`.
 Conflicting or invalid flags refuse startup before database work. The checked-in
 deployment keeps the mode dormant; production release qualification remains open.
+
+## Monthly allowances in test fixtures
+
+Add `{mode:'test',calendar:'UTC'}` as the fourth argument to `RelayGrantStore` or
+`RelayWorker`, or the seventh argument to `RelayMessages`, to exercise monthly
+allowances with `test-venue-levels`. The account app and listener accept the same
+value as `allowances`. Publish your synthetic limits through `AllowanceConfigStore`
+before admitting work; there are no production size defaults.
+
+For account and translation worker commands, set `CLOUD_TEST_ALLOWANCES=1` and
+`CLOUD_ALLOWANCE_CALENDAR=UTC` alongside the venue-level flags above. Invalid or
+incomplete combinations refuse before database connections. Leave both allowance
+variables absent to preserve the existing behavior. The dedicated test runtime
+forwards these options only to its existing service consumers and keeps translation
+and external provider credentials disabled.
+
+Relay admission commits one spent monthly unit with its original reservation and
+queue row. Delivery, cancellation, failure and expiry retain that unit. Replays and
+worker restarts check the original debit rather than spending from another month.
+The existing relay policy, owner, consent, origin, grant, lease and operator-stop
+checks still apply. Translation holds the requested items when queuing a job and
+spends them under its current worker lease before a provider call; its separate
+money safety cap remains in force. These adapters do not enable production billing.

@@ -319,5 +319,5 @@ export type {PermissionCommand} from './billing-types.ts';
 
 export {AllowanceConfigStore,reserveAllowance,spendAllowance,recordAllowanceAttempt,releaseUnstartedAllowance} from './billing-allowances.ts';
 export type {AllowanceReservation} from './billing-allowances.ts';
-export {AllowanceError,validateAllowanceOptions} from './billing-allowance-rules.ts';
+export {AllowanceError,validateAllowanceOptions,allowanceOptionsFromEnv} from './billing-allowance-rules.ts';
 export type {AllowanceOptions} from './billing-allowance-rules.ts';

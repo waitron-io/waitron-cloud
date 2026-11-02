@@ -7,6 +7,7 @@ import {RelayError,RelayGrantStore,type RelayConfig} from './relay-grants.ts';
 import {RelayKeys,relayBody,messageError,type RelayBody,type RelayKeyConfig,type RelayPayloadBinding} from './relay-payload.ts';
 import {transaction} from './transaction.ts';
 import {RelayControl} from './relay-control.ts';
+import {validateAllowanceOptions,type AllowanceOptions} from './billing-allowance-rules.ts';
 export type RelayAction='email-submit'|'email-status'|'email-cancel';
 export interface RelayAdmissionConfig {mode:'local-proof';grants:RelayConfig;payloadKeys:RelayKeyConfig;replayKeys:RelayKeyConfig;bounds:RelayBoundsConfig}
 interface MessageRow extends RelayPayloadBinding {binding:string;replay_key_id:string;payload:Buffer|null;state:string;status_revision:number;reason:string|null;expires_at:Date}
@@ -15,11 +16,12 @@ function view(row:MessageRow){return {version:1,messageId:row.message_id,state:r
 export class RelayMessages {
  readonly #pool:Pool;readonly #origin:string;readonly #trusted:ReadonlyMap<string,string>;readonly #installations:InstallationStore;
  readonly #bounds:RelayBounds;readonly #grants:RelayGrantStore;readonly #payload:RelayKeys;readonly #replay:RelayKeys;
- constructor(pool:Pool,issuer:LeaseIssuer,origin:string,config:RelayAdmissionConfig,trusted=createLeaseTrust(issuer),planMode:PlanMode='existing'){
+ constructor(pool:Pool,issuer:LeaseIssuer,origin:string,config:RelayAdmissionConfig,trusted=createLeaseTrust(issuer),planMode:PlanMode='existing',allowances?:AllowanceOptions){
+  allowances=validateAllowanceOptions(allowances,planMode);
   requireTestPlanVenue('test',planMode);
   if(config?.mode!=='local-proof')messageError('relay_unavailable');
   this.#pool=pool;this.#origin=origin;this.#trusted=trusted;this.#installations=new InstallationStore(pool,issuer,origin,trusted,planMode);
-  this.#bounds=new RelayBounds(pool,config.bounds);this.#grants=new RelayGrantStore(pool,config.grants,planMode);this.#payload=new RelayKeys(config.payloadKeys);this.#replay=new RelayKeys(config.replayKeys);
+  this.#bounds=new RelayBounds(pool,config.bounds);this.#grants=new RelayGrantStore(pool,config.grants,planMode,allowances);this.#payload=new RelayKeys(config.payloadKeys);this.#replay=new RelayKeys(config.replayKeys);
  }
  authenticate(action:RelayAction,envelope:unknown){return this.#installations.authenticate(action,envelope);}
  async execute(action:RelayAction,envelope:unknown){

@@ -4,6 +4,8 @@ import {randomUUID} from 'node:crypto';
 import type {Pool,PoolClient} from 'pg';
 import {IdentityError,resolveSession} from '@waitron-cloud/identity';
 import {transaction} from './transaction.ts';
+import {AllowanceError,validateAllowanceOptions,type AllowanceOptions} from './billing-allowance-rules.ts';
+import {reserveAllowance,spendAllowance} from './billing-allowances.ts';
 
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const version=/^[a-zA-Z0-9_.:-]{1,100}$/;
@@ -39,15 +41,22 @@ async function account(client:PoolClient,accountId:string){
  if(!(await client.query('SELECT id FROM cloud_accounts WHERE id=$1 AND disabled_at IS NULL FOR SHARE',[accountId])).rowCount)fail('grant_unavailable');
  if(!(await client.query('SELECT account_id FROM cloud_credentials WHERE account_id=$1 AND email_verified_at IS NOT NULL FOR SHARE',[accountId])).rowCount)fail('grant_unavailable');
 }
-async function authority(client:PoolClient,accountId:string,installationId:string,planMode:PlanMode):Promise<InstallationRow>{
- const candidate=(await client.query('SELECT v.organisation_id,i.venue_id FROM installations i JOIN venues v ON v.id=i.venue_id WHERE i.id=$1',[installationId])).rows[0];
+async function authority(client:PoolClient,accountId:string,installationId:string,planMode:PlanMode,allowances?:AllowanceOptions):Promise<InstallationRow>{
+ const candidate=(await client.query('SELECT v.organisation_id,v.legal_business_id,i.venue_id FROM installations i JOIN venues v ON v.id=i.venue_id WHERE i.id=$1',[installationId])).rows[0];
  if(!candidate)fail('grant_unavailable');
  if(!(await client.query('SELECT account_id FROM organisation_memberships WHERE account_id=$1 AND organisation_id=$2 AND is_owner FOR SHARE',[accountId,candidate.organisation_id])).rowCount)fail('grant_unavailable');
+ if(allowances){
+  // Billing writers take business parents before venue and installation locks.
+  await client.query('SELECT id FROM organisations WHERE id=$1 FOR SHARE',[candidate.organisation_id]);
+  await client.query('SELECT id FROM legal_businesses WHERE id=$1 AND organisation_id=$2 FOR SHARE',[candidate.legal_business_id,candidate.organisation_id]);
+  await client.query('SELECT legal_business_id FROM billing_businesses WHERE legal_business_id=$1 AND organisation_id=$2 FOR SHARE',[candidate.legal_business_id,candidate.organisation_id]);
+ }
  // Policy can synchronise expired setup, so it precedes every installation lock.
  try{await requireVenueService(client,candidate.venue_id,'transactional_email',planMode);}
  catch(error){if(error instanceof Error&&error.message==='permission_denied')fail('grant_unavailable');throw error;}
- const venue=(await client.query('SELECT organisation_id,environment FROM venues WHERE id=$1 FOR SHARE',[candidate.venue_id])).rows[0];
+ const venue=(await client.query('SELECT organisation_id,legal_business_id,environment FROM venues WHERE id=$1 FOR SHARE',[candidate.venue_id])).rows[0];
  if(!venue||venue.organisation_id!==candidate.organisation_id||venue.environment!=='test')fail('grant_unavailable');
+ if(allowances&&venue.legal_business_id!==candidate.legal_business_id)fail('grant_unavailable');
  const row=(await client.query('SELECT * FROM installations WHERE id=$1 FOR SHARE',[installationId])).rows[0];
  if(!row||row.venue_id!==candidate.venue_id||row.revoked_at||row.superseded_by)fail('grant_unavailable');
  return {...row,...venue};
@@ -56,8 +65,9 @@ function liveInstallation(row:InstallationRow,time:number){if(!row.lease_expires
 
 /** Internal local-proof core. No HTTP caller or production verifier is installed. */
 export class RelayGrantStore {
- readonly #pool:Pool;readonly #config:RelayConfig|undefined;readonly #planMode:PlanMode;
- constructor(pool:Pool,config?:RelayConfig,planMode:PlanMode='existing'){
+ readonly #pool:Pool;readonly #config:RelayConfig|undefined;readonly #planMode:PlanMode;readonly #allowances:AllowanceOptions|undefined;
+ constructor(pool:Pool,config?:RelayConfig,planMode:PlanMode='existing',allowances?:AllowanceOptions){
+  this.#allowances=validateAllowanceOptions(allowances,planMode);
   requireTestPlanVenue('test',planMode);
   this.#pool=pool;this.#planMode=planMode;
   if(config!==undefined){
@@ -126,7 +136,7 @@ export class RelayGrantStore {
   const candidate=(await client.query<GrantRow>('SELECT * FROM relay_grants WHERE id=$1 AND installation_id=$2',[input.grantId,authenticated.installationId])).rows[0];
   if(!candidate)fail('grant_unavailable');
   await account(client,candidate.account_id);
-  const installation=await authority(client,candidate.account_id,authenticated.installationId,this.#planMode);
+  const installation=await authority(client,candidate.account_id,authenticated.installationId,this.#planMode,this.#allowances);
   const grant=(await client.query<GrantRow>('SELECT * FROM relay_grants WHERE id=$1 FOR SHARE',[candidate.id])).rows[0];
   if(!grant||grant.account_id!==candidate.account_id||grant.installation_id!==installation.id||grant.venue_id!==installation.venue_id
    ||grant.organisation_id!==installation.organisation_id||grant.environment!==installation.environment||grant.public_key!==installation.public_key
@@ -141,12 +151,30 @@ export class RelayGrantStore {
   await client.query('INSERT INTO relay_account_policies(account_id,policy_version) VALUES($1,$2) ON CONFLICT DO NOTHING',[grant.account_id,policy.version]);
   if(!(await client.query('SELECT account_id FROM relay_account_policies WHERE account_id=$1 AND policy_version=$2 FOR SHARE',[grant.account_id,policy.version])).rowCount)fail('policy_conflict');
   // Policy rows can wait on another account; deadlines and periods use time after every lock.
-  const time=await now(client);liveInstallation(installation,time);
+  let time=await now(client);liveInstallation(installation,time);
   if(grant.expires_at.getTime()<=time||grant.origin_verified_until.getTime()<=time)fail('grant_unavailable');
   const prior=(await client.query<ReservationRow>('SELECT * FROM relay_reservations WHERE installation_id=$1 AND message_id=$2',[installation.id,input.messageId])).rows[0];
   if(prior){
    if(prior.binding!==input.binding||prior.grant_id!==grant.id||prior.grant_revision!==grant.revision||prior.account_id!==grant.account_id)fail('message_conflict');
+   if(this.#allowances){
+    const saved=(await client.query(`SELECT account_id,venue_id,binding,units::text,state FROM billing_allowance_reservations
+     WHERE service='transactional_email' AND installation_id=$1 AND operation_id=$2 FOR SHARE`,[installation.id,input.messageId])).rows[0];
+    if(!saved)throw new AllowanceError('allowance_unavailable');
+    if(saved.account_id!==grant.account_id||saved.venue_id!==installation.venue_id||saved.binding!==input.binding||saved.units!=='1'||saved.state!=='spent')throw new AllowanceError('allowance_conflict');
+    const replayedAt=await now(client);liveInstallation(installation,replayedAt);
+    if(grant.expires_at.getTime()<=replayedAt||grant.origin_verified_until.getTime()<=replayedAt)fail('grant_unavailable');
+   }
    return reservationView(prior,true);
+  }
+  if(this.#allowances){
+   try{
+    // An orphaned debit cannot license replacement service work after its row disappears.
+    if((await client.query("SELECT id FROM billing_allowance_reservations WHERE service='transactional_email' AND installation_id=$1 AND operation_id=$2",[installation.id,input.messageId])).rowCount)throw new AllowanceError('allowance_conflict');
+    const monthly=await reserveAllowance(client,{accountId:grant.account_id,venueId:installation.venue_id,installationId:installation.id,service:'transactional_email',operationId:input.messageId,binding:input.binding,units:1n});
+    await spendAllowance(client,monthly.id);
+    const admittedAt=await now(client);liveInstallation(installation,admittedAt);time=admittedAt;
+    if(grant.expires_at.getTime()<=admittedAt||grant.origin_verified_until.getTime()<=admittedAt)fail('grant_unavailable');
+   }catch(error){if(error instanceof AllowanceError&&error.code==='allowance_exhausted')fail('allowance_exhausted');throw error;}
   }
   const epoch=Date.parse(policy.epoch),duration=policy.periodSeconds*1000;
   if(time<epoch)fail('policy_conflict');
