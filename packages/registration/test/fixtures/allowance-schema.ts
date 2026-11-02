@@ -11,8 +11,8 @@ export async function requireAllowanceSchema(){
  try{
   await admin.query(`CREATE SCHEMA ${schema}`);await migrate(pool);
   const ledger=(await pool.query('SELECT name FROM schema_migrations ORDER BY name')).rows;
-  assert.equal(ledger.length,47,'allowance proof requires the actual candidate migration 47');
-  assert.equal(ledger[46].name,'047_billing_allowances_traffic.sql');
+  assert.equal(ledger.length,48,'allowance proof requires the actual candidate migration 48');
+  assert.equal(ledger[47].name,'048_billing_allowances_traffic.sql');
   for(const name of ['billing_allowance_versions','billing_allowance_reservations','remote_traffic_processes','remote_traffic_samples','remote_traffic_coverage','remote_traffic_reports']){
    assert.equal((await pool.query(`SELECT count(*) FROM ${name}`)).rows[0].count,'0',name+' must start empty');
   }
