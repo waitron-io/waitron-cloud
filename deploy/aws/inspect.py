@@ -110,7 +110,8 @@ def parse(path):
     for block in tree.find_data("block"):
         kind = str(block.children[0].children[0])
         require(kind != "provisioner", f"{path.name}: provisioner is forbidden")
-    return hcl2.loads(text, serialization_options=hcl2.SerializationOptions(with_comments=False))
+    # Serialize the inspected syntax tree without parsing the same input again.
+    return hcl2.serialize(hcl2.transform(tree), serialization_options=hcl2.SerializationOptions(with_comments=False))
 
 
 def inspect(directory):
