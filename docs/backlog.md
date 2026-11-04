@@ -258,12 +258,6 @@ The historical [PR #669 storage failure](https://github.com/waitron-io/waitron-c
 was a prematurely closed LIST response during Litestream shutdown. D530 owns its
 cause investigation; successful delivery of these client tests does not repair it.
 
-## Session HTTP response validation (D412)
-
-**Open.** Qualify server authority, browser integration and live ingress; physical
-passkeys and the separate retry-clock repair retain their own gates.
-See [the boundaries and remaining work](backlog/account-http-boundaries.md#session-http-response-validation-d412).
-
 ## Session revocation replies after sign-out or view reset (D440)
 
 **Open.** Qualify server authority and live ingress after the controlled client checks.
