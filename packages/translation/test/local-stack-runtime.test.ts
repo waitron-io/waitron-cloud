@@ -49,7 +49,7 @@ test('the packaged translation launcher checks migration digests before dispatch
   let diagnostic='';
   if(value.status!==0){
    // Read only this fixture's service states; never print container configuration or private logs.
-   const state=spawnSync('docker',[...prefix,'ps','--all','--format','json'],{encoding:'utf8',env,timeout:2000,maxBuffer:16384});
+   const state=spawnSync('docker',[...prefix,'ps','--all','--format','json'],{encoding:'utf8',env,timeout:2000,killSignal:'SIGKILL',maxBuffer:16384});
    let services:object[]=[],stateParseError=false;
    if(state.status===0)try{
     const text=state.stdout.trim(),rows=text.startsWith('[')?JSON.parse(text):text.split('\n').filter(Boolean).map(line=>JSON.parse(line));
@@ -63,6 +63,8 @@ test('the packaged translation launcher checks migration digests before dispatch
    diagnostic='compose-result '+JSON.stringify({command:args,status:value.status,signal:value.signal,errorCode:(value.error as NodeJS.ErrnoException|undefined)?.code??null,elapsedMs:value.elapsedMs,
     stateStatus:state.status,stateSignal:state.signal,stateErrorCode:(state.error as NodeJS.ErrnoException|undefined)?.code??null,stateParseError,services})+'\n';
   }
+  // Cleanup errors and the test runner's deadline can replace the assertion after a blocking command.
+  if(diagnostic)console.error(diagnostic+value.stdout+value.stderr);
   assert.equal(value.status,0,diagnostic+value.stdout+value.stderr);return value.stdout;
  };
  try{
