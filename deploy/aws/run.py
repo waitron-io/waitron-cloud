@@ -49,7 +49,13 @@ def run():
             "AWS_SHARED_CREDENTIALS_FILE": "/dev/null",
             "AWS_CONFIG_FILE": "/dev/null",
         }
-        for entry in json.loads(Path("/candidate/suite.json").read_text()):
+        batch = json.loads(Path("/candidate/batch.json").read_text())
+        entries = json.loads(Path("/candidate/suite.json").read_text())
+        if batch is not None:
+            entries = [entry for entry in entries if entry["directory"] == batch]
+        if not entries:
+            raise ValueError("No infrastructure entries for batch root")
+        for entry in entries:
             root = work / entry["directory"]
             for command in [
                 ["tofu", "init", "-backend=false", "-input=false", "-no-color"],

@@ -345,7 +345,9 @@ order. Remote access matters most because Waitron's customer-facing features wai
    roots, three-zone primary cells, encrypted cold copies, separate key authority,
    scoped workload permissions, ingress, DNS and infrastructure signals. Its offline
    pinned checks produce complete version 1 references for each exact cell and validate
-   the unchanged handoff schema. These are mocked plans, not a deployment. Account/state
+   the unchanged handoff schema. Integration checks run each independent root in its
+   own container under the original command and container deadlines. These are mocked
+   plans, not a deployment. Account/state
    custody, populated secrets, actual service and collector permissions, recovery and
    provider availability still need their separately authorised qualification.
    State qualification must cover first initialization at an absent key under the exact

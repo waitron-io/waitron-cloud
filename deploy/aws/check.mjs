@@ -121,8 +121,6 @@ export async function runSuite(name, { directory = fileURLToPath(new URL('.', im
     throw new Error('Local infrastructure tools unavailable; run node deploy/aws/check.mjs --prepare-tools', { cause: error });
   }
   const scratch = await mkdtemp(join(tmpdir(), 'cloud-aws-suite-'));
-  const container = `cloud-aws-suite-${randomUUID()}`;
-  let submitted = false;
   try {
     await copyTrackedSources(directory, join(scratch, 'source'));
     const plan = suites.get(name).map((directory) => ({ directory, filter: `tests/${name}.tftest.hcl` }));
@@ -140,27 +138,34 @@ export async function runSuite(name, { directory = fileURLToPath(new URL('.', im
       }
     }
     await inspectSnapshot(scratch, execute, image);
-    await writeFile(join(scratch, 'suite.json'), JSON.stringify(plan), { mode: 0o644 });
-    await writeFile(join(scratch, 'run.py'), await readFile(new URL('./run.py', import.meta.url)), { mode: 0o644 });
-    submitted = true;
-    const result = await execute('docker', [
-      'run', '--rm', '--name', container, '--label', `io.waitron.aws-inspection=${container}`,
-      '--pull', 'never', '--network', 'none', '--cap-drop', 'ALL', '--user', '65532:65532',
-      '--security-opt', 'no-new-privileges', '--read-only',
-      '--tmpfs', '/tmp:rw,noexec,nosuid,size=512m,mode=1777', '--pids-limit', '128', '--memory', '1g', '--cpus', '2',
-      '--mount', `type=bind,source=${scratch},target=/candidate,readonly`,
-      image, 'python', '-I', '/candidate/run.py',
-    ], { ...options, timeout: 300_000 });
-    return result.stdout;
+    const driver = await readFile(new URL('./run.py', import.meta.url));
+    const output = [];
+    // Each independent root keeps the existing driver budget; all filters still run.
+    for (const batch of name === 'integration' ? ['roots/global', 'roots/country'] : [null]) {
+      const container = `cloud-aws-suite-${randomUUID()}`;
+      await writeFile(join(scratch, 'suite.json'), JSON.stringify(plan), { mode: 0o644 });
+      await writeFile(join(scratch, 'batch.json'), JSON.stringify(batch), { mode: 0o644 });
+      await writeFile(join(scratch, 'run.py'), driver, { mode: 0o644 });
+      try {
+        const result = await execute('docker', [
+          'run', '--rm', '--name', container, '--label', `io.waitron.aws-inspection=${container}`,
+          '--pull', 'never', '--network', 'none', '--cap-drop', 'ALL', '--user', '65532:65532',
+          '--security-opt', 'no-new-privileges', '--read-only',
+          '--tmpfs', '/tmp:rw,noexec,nosuid,size=512m,mode=1777', '--pids-limit', '128', '--memory', '1g', '--cpus', '2',
+          '--mount', `type=bind,source=${scratch},target=/candidate,readonly`,
+          image, 'python', '-I', '/candidate/run.py',
+        ], { ...options, timeout: 300_000 });
+        output.push(result.stdout);
+      } finally {
+        await cleanupContainer(container, execute, options);
+      }
+    }
+    return output.join('');
   } catch (error) {
     if (error.stderr?.trim()) throw new Error(error.stderr.trim());
     throw error;
   } finally {
-    try {
-      if (submitted) await cleanupContainer(container, execute, options);
-    } finally {
-      await rm(scratch, { recursive: true, force: true });
-    }
+    await rm(scratch, { recursive: true, force: true });
   }
 }
 

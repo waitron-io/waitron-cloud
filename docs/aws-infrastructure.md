@@ -102,6 +102,11 @@ stops the suite. Each command has a 90-second deadline; each suite container has
 five-minute deadline and limits of 1 GiB memory, two CPUs, 128 processes and 512 MiB of
 temporary storage. The source inspector has its separate smaller limits.
 
+The integration suite runs the global root and country root in separate containers.
+Both consume the same inspected source copy and the complete fixed filter list.
+Each root keeps the five-minute container deadline, and a failure prevents any later
+root from starting. You receive the combined output only after both roots pass.
+
 The runner also restricts each child to at most two CPU cores, because a CPU
 quota alone leaves the host's larger core count visible to runtime worker pools.
 Suites with more than six independent plan cases run in groups of at most six,
