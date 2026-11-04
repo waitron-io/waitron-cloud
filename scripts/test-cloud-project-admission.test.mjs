@@ -14,7 +14,7 @@ for (const contender of ['proof', 'deployment']) test('fixed project lock exclud
   const root = await mkdtemp(join(tmpdir(), 'cloud-project-admission-'));
   try {
     for (const name of ['home', 'one', 'two', 'bin']) await mkdir(join(root, name));
-    await writeFile(join(root, 'bin/docker'), `#!${process.execPath}\nrequire('node:fs').appendFileSync(process.env.ADMISSION_CALLS,'docker\\n');process.exitCode=29;\n`, {mode: 0o700});
+    await writeFile(join(root, 'bin/docker'), `#!${process.execPath}\nrequire('node:fs').appendFileSync(${JSON.stringify(join(root, 'calls'))},'docker\\n');process.exitCode=29;\n`, {mode: 0o700});
     const child = spawnSync(process.execPath, ['--input-type=module', '-e', `
 import assert from 'node:assert/strict';
 import {spawnSync} from 'node:child_process';
@@ -31,6 +31,12 @@ await withFixedIntegrationProject({docker:async()=>'',run:async()=>{}});
       PATH: join(root, 'bin') + ':' + process.env.PATH, ADMISSION_CALLS: join(root, 'calls')}});
     assert.equal(child.status, 0, child.stderr);
     await assert.rejects(readFile(join(root, 'calls')), {code: 'ENOENT'}, 'A locked deployment must not inspect Docker');
+    if (contender === 'deployment') {
+      const unlocked = spawnSync(process.execPath, [deploy, 'preflight', 'sha256:' + 'b'.repeat(64)],
+        {encoding: 'utf8', env: {...process.env, HOME: join(root, 'home'), PATH: join(root, 'bin') + ':' + process.env.PATH}});
+      assert.equal(unlocked.status, 1, 'The fake engine refuses the unlocked preflight');
+      assert.match(await readFile(join(root, 'calls'), 'utf8'), /docker/, 'The control must reach the actual Docker boundary');
+    }
   } finally {await rm(root, {recursive: true, force: true});}
 });
 
