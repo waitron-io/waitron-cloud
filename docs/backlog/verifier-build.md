@@ -1,5 +1,39 @@
 # Verifier build qualification
 
+## Bound verifier fixture build timeout (D312)
+
+The original CI failure remains unexplained. Its first bound-verifier case failed
+after 125 seconds, but the cancelled job retained no build progress or error.
+Other catalogue cases in that job also took eight to twelve times as long as
+successful comparisons. Registry, image-pull, cache and runner contention causes
+remain unproved. The diagnostics and cleanup delivered in
+[PR539](https://github.com/waitron-io/waitron-cloud/pull/539) do not establish the cause.
+
+On 4 November 2026, the current fixture on the shared Linux test box built in
+945 ms with cached layers and 1,865 ms with `--no-cache`. Both runs retained plain
+build progress and completed within the unchanged 120-second command limit.
+The latter rebuilds fixture layers; it still uses the box's available Node base
+image and does not test downloading that image onto an empty host. Both unique
+image tags were removed and their absence checked. These runs do not reproduce
+the historical runner or identify its cause.
+
+Run `node --test --test-name-pattern='bound container returns exact child provenance only after confirmed cleanup' packages/backups/test/bound-container-verifier.test.ts`
+on the test box to exercise image setup and the first real container case.
+That command passed one case in 21.9 seconds. For separate build progress, use
+`docker build --progress=plain --iidfile <private-file> -t <unique-tag> -f packages/backups/test/container-fixture/Bound.Dockerfile .`
+under the same 120-second limit; remove only your tag and private files afterward.
+
+Run `node --test packages/backups/test/bound-fixture-failure.test.ts` for the five
+native diagnostic controls. They exercise the real suite hooks with Docker
+replaced, including a timed-out child and hung cleanup. Build failures print
+their command, elapsed time, failure reason and the last 8 KiB of output before
+the test summary. Failed-build cleanup attempts only its unique tag, with a
+one-second limit, and always removes temporary files.
+
+Inspect the next recurrence's immediate build report before changing the fixture.
+Keep the original verifier assertions, 120-second build limit, 150-second setup
+limit and CI job limit. A passing reproduction or CI run does not close this item.
+
 ## Verifier source isolation from local edits (D445)
 
 Your verifier build must use the pinned committed source even when its checkout
