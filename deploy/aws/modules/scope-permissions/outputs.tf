@@ -20,3 +20,9 @@ output "permission_admission" {
 output "attachment_refs" {
   value = merge({ for role, value in aws_iam_role_policy.replication : "replication-${role}" => value.id }, { recovery = aws_iam_role_policy.recovery.id })
 }
+
+# Only replication waits for this policy; independent bucket reads remain known during a plan.
+output "replication_role_arn" {
+  value      = var.custody_refs.replication_role_arn
+  depends_on = [aws_iam_role_policy.replication]
+}

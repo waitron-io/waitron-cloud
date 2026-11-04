@@ -56,3 +56,11 @@ output "data_topology" {
     backup_secret_refs = module.custody.backup_secret_refs
   }
 }
+
+output "storage_topology" {
+  value = {
+    storage     = null
+    attachments = module.scope_permissions.attachment_refs
+    admitted    = module.scope_permissions.permission_admission
+  }
+}

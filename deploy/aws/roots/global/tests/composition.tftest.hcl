@@ -105,3 +105,64 @@ run "data_topology_retains_every_secret_copy" {
     error_message = "COMPOSED_RETAINED_SECRETS: every scope secret shell must retain a reference in its own cold region"
   }
 }
+
+run "storage_and_scope_permissions_bind_cold_copies" {
+  command = plan
+  override_module {
+    target = module.network
+    outputs = { network = {
+      vpc_id                  = "vpc-00000000000000001"
+      public_subnet_ids       = { euc1-az1 = "subnet-00000000000000011", euc1-az2 = "subnet-00000000000000012", euc1-az3 = "subnet-00000000000000013" }
+      database_subnet_ids     = { euc1-az1 = "subnet-00000000000000021", euc1-az2 = "subnet-00000000000000022", euc1-az3 = "subnet-00000000000000023" }
+      private_route_table_ids = { euc1-az1 = "rtb-00000000000000001", euc1-az2 = "rtb-00000000000000002", euc1-az3 = "rtb-00000000000000003" }
+      cells = {
+        "global-01" = { private_subnet_ids = { euc1-az1 = "subnet-00000000000000001", euc1-az2 = "subnet-00000000000000002", euc1-az3 = "subnet-00000000000000003" } }
+        "global-02" = { private_subnet_ids = { euc1-az1 = "subnet-00000000000000004", euc1-az2 = "subnet-00000000000000005", euc1-az3 = "subnet-00000000000000006" } }
+      }
+    } }
+  }
+  override_resource {
+    target = module.custody.aws_kms_key.primary["database"]
+    values = { arn = "arn:aws:kms:eu-central-1:222222222222:key/11111111-1111-1111-1111-111111111111" }
+  }
+  override_resource {
+    target = module.custody.aws_kms_key.backup["database"]
+    values = { arn = "arn:aws:kms:eu-west-1:222222222222:key/22222222-2222-2222-2222-222222222222" }
+  }
+  assert {
+    condition     = output.storage_topology.admitted && (output.storage_topology.storage == null && toset(keys(output.storage_topology.attachments)) == toset(["recovery"]))
+    error_message = "COMPOSED_SCOPE_STORAGE: actual stores and shared policy ownership must stay bound to the same scope regardless of cell count"
+  }
+}
+
+run "two_cells_share_scope_permissions" {
+  command = plan
+  variables {
+    deployment = { version = 1, scope = "global", country = null, primary_region = "eu-central-1", backup_region = "eu-west-1", network = { cidr = "10.10.0.0/16", az_ids = ["euc1-az1", "euc1-az2", "euc1-az3"] }, cells = { "global-01" = { subnet_cidr = "10.10.16.0/20" }, "global-02" = { subnet_cidr = "10.10.32.0/20" } } }
+  }
+  override_module {
+    target = module.network
+    outputs = { network = {
+      vpc_id                  = "vpc-00000000000000001"
+      public_subnet_ids       = { euc1-az1 = "subnet-00000000000000011", euc1-az2 = "subnet-00000000000000012", euc1-az3 = "subnet-00000000000000013" }
+      database_subnet_ids     = { euc1-az1 = "subnet-00000000000000021", euc1-az2 = "subnet-00000000000000022", euc1-az3 = "subnet-00000000000000023" }
+      private_route_table_ids = { euc1-az1 = "rtb-00000000000000001", euc1-az2 = "rtb-00000000000000002", euc1-az3 = "rtb-00000000000000003" }
+      cells = {
+        "global-01" = { private_subnet_ids = { euc1-az1 = "subnet-00000000000000001", euc1-az2 = "subnet-00000000000000002", euc1-az3 = "subnet-00000000000000003" } }
+        "global-02" = { private_subnet_ids = { euc1-az1 = "subnet-00000000000000004", euc1-az2 = "subnet-00000000000000005", euc1-az3 = "subnet-00000000000000006" } }
+      }
+    } }
+  }
+  override_resource {
+    target = module.custody.aws_kms_key.primary["database"]
+    values = { arn = "arn:aws:kms:eu-central-1:222222222222:key/11111111-1111-1111-1111-111111111111" }
+  }
+  override_resource {
+    target = module.custody.aws_kms_key.backup["database"]
+    values = { arn = "arn:aws:kms:eu-west-1:222222222222:key/22222222-2222-2222-2222-222222222222" }
+  }
+  assert {
+    condition     = output.storage_topology.admitted && (output.storage_topology.storage == null && toset(keys(output.storage_topology.attachments)) == toset(["recovery"]))
+    error_message = "COMPOSED_SCOPE_STORAGE: actual stores and shared policy ownership must stay bound to the same scope regardless of cell count"
+  }
+}

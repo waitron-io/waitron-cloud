@@ -555,9 +555,9 @@ with AWS's policy-lockout safety check retained. The custody module binds key
 creation and policy changes to `aws.keys` and `aws.backup_keys`; deployment
 continues to own secret metadata and the replication role. It checks each key
 administrator's actual account and region against the deployment scope. Pass all
-four aliases explicitly when you compose it. The final global/country root
-mappings remain unfinished. The KMS key policy delegates only enumerated use
-operations to IAM policies in the same account. Its `Resource = "*"` means
+four aliases explicitly when you compose it. Both independent roots pass these
+separate deployment and key-administration bindings to custody. The KMS key
+policy delegates only enumerated use operations to IAM policies in the same account. Its `Resource = "*"` means
 [the key to which that policy is attached](https://docs.aws.amazon.com/kms/latest/developerguide/key-policy-default.html),
 not every key. No wildcard Allow action or principal is generated. S3 object
 resources end in `streams/*` or `snapshots/*` because permissions apply to the
@@ -594,10 +594,16 @@ runtime policies and eight roles in each country cell, plus two shared policies.
 The same exact action, resource and encryption-context checks cover both policy
 sets. Global keeps only its shared recovery policy.
 
-The composed plan checks these references without a dependency cycle. It does
-not qualify AWS policy enforcement or replication installation order. Before any
-later authorised deployment, qualify source/destination permissions and service
-readiness, then restore both retained objects and the matching application keys.
+The country root derives planned bucket names from its authenticated account and
+passes them to the shared policies. The replication-role reference waits for
+its attached source policy before storage can configure replication; independent
+bucket reads keep their normal planning behavior. The storage output must match
+those planned names and keys, so naming drift cannot silently leave replication bound to another
+store. The global root has only the shared recovery policy and no venue store.
+This describes installation order; mocked plans cannot qualify AWS policy
+enforcement or service readiness. Before any later authorised deployment,
+qualify source/destination permissions, then restore both retained objects and
+the matching application keys.
 P1 must mount the existing runtime contracts through authenticated integration:
 a KMS reference cannot replace the 64 hexadecimal characters expected in
 `CLOUD_BACKUP_MASTER_KEY`, and an email-key-ring reference cannot replace
@@ -804,7 +810,10 @@ client group and the network's separate private database subnets.
 `deployment_admission` contains version, scope, country and region metadata.
 Neither output is the complete P1 infrastructure handoff. The separate
 `data_topology` output exposes the composed database, primary and backup key
-references, and primary and backup secret references. Storage, permissions,
+references, and primary and backup secret references. The provisional
+`storage_topology` output contains actual country stores or null for global,
+shared policy attachment references and their admission result. Shared recovery
+and replication permissions are composed; per-cell workload permissions,
 evidence, ingress, DNS and the complete handoff remain unfinished.
 
 For the global root, supply exactly `global`, `global_backup`, `global_keys`
@@ -825,8 +834,13 @@ permissions allow.
 The root tests supply distinct subnet references at the network module's output
 boundary; the admission cases also replace cell outputs and the newly composed
 data modules. Their original admission and two-cell assertions stay intact.
-The separate composition cases plan the real custody, database and cell modules
-against the network fixture. Run the unmodified network suite separately:
+The separate composition cases plan the real custody, database, cell and shared
+permission modules against the network fixture. Country composition also plans
+actual storage. The policy dependency reaches only the replication role,
+leaving bucket identity and region reads independent. Both one-
+and two-cell cases require the same stores and shared policies. An independent
+negative case refuses store references that differ from the policy targets.
+Run the unmodified network suite separately:
 
 ```sh
 node deploy/aws/check.mjs --suite network

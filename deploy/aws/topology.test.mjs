@@ -11,6 +11,7 @@ for (const scope of ['global', 'country']) {
     sources[`${scope}/${name}`] = readFileSync(new URL(`roots/${scope}/${name}`, import.meta.url), 'utf8');
   }
 }
+sources['scope-permissions/outputs.tf'] = readFileSync(new URL('modules/scope-permissions/outputs.tf', import.meta.url), 'utf8');
 const name = `cloud-aws-topology-${randomUUID()}`;
 const options = { timeout: 30_000, maxBuffer: 1024 * 1024, encoding: 'utf8', env: { PATH: process.env.PATH, HOME: process.env.HOME } };
 let parsed;
@@ -119,6 +120,25 @@ for (const [scope, label, region] of [['global', 'global', 'eu-central-1'], ['co
       assert.equal(value.default, undefined);
     }
   });
+  // Sharing these policies across cells must not duplicate their AWS owner.
+  test(`${scope} attaches recovery permissions once outside the cell iterator`, () => {
+    const permissions = module(scope, 'scope_permissions');
+    assert.equal(permissions?.source, '"../../modules/scope-permissions"');
+    assert.deepEqual(permissions.providers, { aws: `\${aws.${scope}}` });
+    assert.equal(permissions.scope, JSON.stringify(label));
+    assert.equal(permissions.for_each, undefined);
+    assert.equal(permissions.count, undefined);
+    assert.equal(permissions.recovery_role_arn, '${var.recovery_role_arn}');
+    assert.deepEqual(permissions.prefixes, { stream: '"streams/"', snapshot: '"snapshots/"' });
+    assert.deepEqual(permissions.custody_refs, {
+      kms: '${module.custody.kms}', backup_kms: '${module.custody.backup_kms}',
+      secrets: '${module.custody.secrets}', backup_secret_refs: '${module.custody.backup_secret_refs}',
+      replication_role_arn: '${module.custody.replication_role_arn}',
+    });
+    assert.equal(permissions.database_refs, '${module.database.database}');
+    assert.equal(permissions.storage_refs, scope === 'global' ? null : '${local.storage_refs}');
+    assert.equal(permissions.depends_on, undefined);
+  });
   test(`${scope} exposes the same composed database and custody references for later consumers`, () => {
     const output = entries(scope, 'output').find(body => body['"data_topology"'])?.['"data_topology"'];
     assert.deepEqual(output?.value, {
@@ -130,3 +150,41 @@ for (const [scope, label, region] of [['global', 'global', 'eu-central-1'], ['co
     });
   });
 }
+
+// Reversing this edge would either install replication too early or form a cycle.
+test('country waits for replication policy through its role reference and keeps bucket reads independent', () => {
+  const storage = module('country', 'storage');
+  assert.equal(storage?.source, '"../../modules/storage"');
+  assert.deepEqual(storage.providers, { aws: '${aws.country}', '${aws.backup}': '${aws.country_backup}' });
+  assert.equal(storage.scope, '"es"');
+  assert.deepEqual(storage.region_pair, { primary: '"eu-south-2"', backup: '"eu-west-3"' });
+  assert.deepEqual(storage.kms, { primary: '${module.custody.kms.storage}', backup: '${module.custody.backup_kms.storage}' });
+  assert.equal(storage.replication_role_arn, '${module.scope_permissions.replication_role_arn}');
+  assert.deepEqual(storage.prefixes, { stream: '"streams/"', snapshot: '"snapshots/"' });
+  assert.equal(storage.for_each, undefined);
+  assert.equal(storage.count, undefined);
+  assert.equal(storage.depends_on, undefined);
+  const refs = entries('country', 'locals').find(body => body.storage_refs)?.storage_refs;
+  assert.deepEqual(refs, {
+    stream_bucket: '"waitron-es-stream-${data.aws_caller_identity.country.account_id}-eu-south-2"',
+    snapshot_bucket: '"waitron-es-snapshot-${data.aws_caller_identity.country.account_id}-eu-south-2"',
+    backup_buckets: {
+      stream: '"waitron-es-stream-${data.aws_caller_identity.country.account_id}-eu-west-3"',
+      snapshot: '"waitron-es-snapshot-${data.aws_caller_identity.country.account_id}-eu-west-3"',
+    },
+    kms_key_refs: { primary: '${module.custody.kms.storage}', backup: '${module.custody.backup_kms.storage}' },
+  });
+});
+test('global never allocates venue stores or replication', () => {
+  assert.equal(module('global', 'storage'), undefined);
+  const permissions = module('global', 'scope_permissions');
+  assert.equal(permissions?.storage_refs, null);
+  assert.equal(permissions?.scope, '"global"');
+});
+
+// Carry policy readiness only through the role reference used by replication.
+test('the replication role reference waits for its attached source policy', () => {
+  const output = parsed['scope-permissions/outputs.tf'].output.find(body => body['"replication_role_arn"'])?.['"replication_role_arn"'];
+  assert.equal(output?.value, '${var.custody_refs.replication_role_arn}');
+  assert.deepEqual(output.depends_on, ['${aws_iam_role_policy.replication}']);
+});

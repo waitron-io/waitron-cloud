@@ -38,12 +38,20 @@ variables {
 run "distinct_global_country_and_backup_bindings" {
   command = plan
   override_module {
+    target  = module.scope_permissions
+    outputs = { attachment_refs = {}, permission_admission = true, replication_role_arn = "arn:aws:iam::333333333333:role/waitron-es-storage-replication" }
+  }
+  override_module {
+    target  = module.storage
+    outputs = { storage = { stream_bucket = "waitron-es-stream-333333333333-eu-south-2", snapshot_bucket = "waitron-es-snapshot-333333333333-eu-south-2", backup_buckets = { stream = "waitron-es-stream-333333333333-eu-west-3", snapshot = "waitron-es-snapshot-333333333333-eu-west-3" }, kms_key_refs = { primary = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111", backup = "arn:aws:kms:eu-west-3:333333333333:key/22222222-2222-2222-2222-222222222222" } } }
+  }
+  override_module {
     target  = module.custody
-    outputs = { kms = { database = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111" }, backup_kms = { database = "arn:aws:kms:eu-west-3:333333333333:key/22222222-2222-2222-2222-222222222222" }, secrets = {}, backup_secret_refs = {} }
+    outputs = { kms = { database = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111", storage = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111", secrets = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111", logs = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111" }, backup_kms = { database = "arn:aws:kms:eu-west-3:333333333333:key/22222222-2222-2222-2222-222222222222", storage = "arn:aws:kms:eu-west-3:333333333333:key/22222222-2222-2222-2222-222222222222", secrets = "arn:aws:kms:eu-west-3:333333333333:key/22222222-2222-2222-2222-222222222222", logs = "arn:aws:kms:eu-west-3:333333333333:key/22222222-2222-2222-2222-222222222222" }, secrets = { "backup-master-key" = "arn:aws:secretsmanager:eu-south-2:333333333333:secret:waitron-es/backup-master-key-ABCDEF", "email-key-ring" = "arn:aws:secretsmanager:eu-south-2:333333333333:secret:waitron-es/email-key-ring-ABCDEF", "gateway-signing" = "arn:aws:secretsmanager:eu-south-2:333333333333:secret:waitron-es/gateway-signing-ABCDEF", "wireguard" = "arn:aws:secretsmanager:eu-south-2:333333333333:secret:waitron-es/wireguard-ABCDEF", "installation-signing" = "arn:aws:secretsmanager:eu-south-2:333333333333:secret:waitron-es/installation-signing-ABCDEF" }, backup_secret_refs = { "backup-master-key" = "arn:aws:secretsmanager:eu-west-3:333333333333:secret:waitron-es/backup-master-key-ABCDEF", "email-key-ring" = "arn:aws:secretsmanager:eu-west-3:333333333333:secret:waitron-es/email-key-ring-ABCDEF", "gateway-signing" = "arn:aws:secretsmanager:eu-west-3:333333333333:secret:waitron-es/gateway-signing-ABCDEF", "wireguard" = "arn:aws:secretsmanager:eu-west-3:333333333333:secret:waitron-es/wireguard-ABCDEF", "installation-signing" = "arn:aws:secretsmanager:eu-west-3:333333333333:secret:waitron-es/installation-signing-ABCDEF" }, replication_role_arn = "arn:aws:iam::333333333333:role/waitron-es-storage-replication" }
   }
   override_module {
     target  = module.database
-    outputs = { database = null }
+    outputs = { database = { endpoint = "synthetic.invalid", port = 5432, name = "cloud_es", admin_secret_ref = "arn:aws:secretsmanager:eu-south-2:333333333333:secret:admin-ABCDEF", kms_key_ref = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111", backup_ref = "arn:aws:rds:eu-west-3:333333333333:auto-backup:synthetic" } }
   }
   override_module {
     target = module.network
@@ -74,12 +82,20 @@ run "distinct_global_country_and_backup_bindings" {
 run "rejects_unknown_version" {
   command = plan
   override_module {
+    target  = module.scope_permissions
+    outputs = { attachment_refs = {}, permission_admission = true, replication_role_arn = "arn:aws:iam::333333333333:role/waitron-es-storage-replication" }
+  }
+  override_module {
+    target  = module.storage
+    outputs = { storage = { stream_bucket = "waitron-es-stream-333333333333-eu-south-2", snapshot_bucket = "waitron-es-snapshot-333333333333-eu-south-2", backup_buckets = { stream = "waitron-es-stream-333333333333-eu-west-3", snapshot = "waitron-es-snapshot-333333333333-eu-west-3" }, kms_key_refs = { primary = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111", backup = "arn:aws:kms:eu-west-3:333333333333:key/22222222-2222-2222-2222-222222222222" } } }
+  }
+  override_module {
     target  = module.custody
-    outputs = { kms = { database = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111" }, backup_kms = { database = "arn:aws:kms:eu-west-3:333333333333:key/22222222-2222-2222-2222-222222222222" }, secrets = {}, backup_secret_refs = {} }
+    outputs = { kms = { database = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111", storage = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111", secrets = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111", logs = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111" }, backup_kms = { database = "arn:aws:kms:eu-west-3:333333333333:key/22222222-2222-2222-2222-222222222222", storage = "arn:aws:kms:eu-west-3:333333333333:key/22222222-2222-2222-2222-222222222222", secrets = "arn:aws:kms:eu-west-3:333333333333:key/22222222-2222-2222-2222-222222222222", logs = "arn:aws:kms:eu-west-3:333333333333:key/22222222-2222-2222-2222-222222222222" }, secrets = { "backup-master-key" = "arn:aws:secretsmanager:eu-south-2:333333333333:secret:waitron-es/backup-master-key-ABCDEF", "email-key-ring" = "arn:aws:secretsmanager:eu-south-2:333333333333:secret:waitron-es/email-key-ring-ABCDEF", "gateway-signing" = "arn:aws:secretsmanager:eu-south-2:333333333333:secret:waitron-es/gateway-signing-ABCDEF", "wireguard" = "arn:aws:secretsmanager:eu-south-2:333333333333:secret:waitron-es/wireguard-ABCDEF", "installation-signing" = "arn:aws:secretsmanager:eu-south-2:333333333333:secret:waitron-es/installation-signing-ABCDEF" }, backup_secret_refs = { "backup-master-key" = "arn:aws:secretsmanager:eu-west-3:333333333333:secret:waitron-es/backup-master-key-ABCDEF", "email-key-ring" = "arn:aws:secretsmanager:eu-west-3:333333333333:secret:waitron-es/email-key-ring-ABCDEF", "gateway-signing" = "arn:aws:secretsmanager:eu-west-3:333333333333:secret:waitron-es/gateway-signing-ABCDEF", "wireguard" = "arn:aws:secretsmanager:eu-west-3:333333333333:secret:waitron-es/wireguard-ABCDEF", "installation-signing" = "arn:aws:secretsmanager:eu-west-3:333333333333:secret:waitron-es/installation-signing-ABCDEF" }, replication_role_arn = "arn:aws:iam::333333333333:role/waitron-es-storage-replication" }
   }
   override_module {
     target  = module.database
-    outputs = { database = null }
+    outputs = { database = { endpoint = "synthetic.invalid", port = 5432, name = "cloud_es", admin_secret_ref = "arn:aws:secretsmanager:eu-south-2:333333333333:secret:admin-ABCDEF", kms_key_ref = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111", backup_ref = "arn:aws:rds:eu-west-3:333333333333:auto-backup:synthetic" } }
   }
   override_module {
     target = module.network
@@ -104,12 +120,20 @@ run "rejects_unknown_version" {
 run "rejects_unknown_scope" {
   command = plan
   override_module {
+    target  = module.scope_permissions
+    outputs = { attachment_refs = {}, permission_admission = true, replication_role_arn = "arn:aws:iam::333333333333:role/waitron-es-storage-replication" }
+  }
+  override_module {
+    target  = module.storage
+    outputs = { storage = { stream_bucket = "waitron-es-stream-333333333333-eu-south-2", snapshot_bucket = "waitron-es-snapshot-333333333333-eu-south-2", backup_buckets = { stream = "waitron-es-stream-333333333333-eu-west-3", snapshot = "waitron-es-snapshot-333333333333-eu-west-3" }, kms_key_refs = { primary = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111", backup = "arn:aws:kms:eu-west-3:333333333333:key/22222222-2222-2222-2222-222222222222" } } }
+  }
+  override_module {
     target  = module.custody
-    outputs = { kms = { database = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111" }, backup_kms = { database = "arn:aws:kms:eu-west-3:333333333333:key/22222222-2222-2222-2222-222222222222" }, secrets = {}, backup_secret_refs = {} }
+    outputs = { kms = { database = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111", storage = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111", secrets = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111", logs = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111" }, backup_kms = { database = "arn:aws:kms:eu-west-3:333333333333:key/22222222-2222-2222-2222-222222222222", storage = "arn:aws:kms:eu-west-3:333333333333:key/22222222-2222-2222-2222-222222222222", secrets = "arn:aws:kms:eu-west-3:333333333333:key/22222222-2222-2222-2222-222222222222", logs = "arn:aws:kms:eu-west-3:333333333333:key/22222222-2222-2222-2222-222222222222" }, secrets = { "backup-master-key" = "arn:aws:secretsmanager:eu-south-2:333333333333:secret:waitron-es/backup-master-key-ABCDEF", "email-key-ring" = "arn:aws:secretsmanager:eu-south-2:333333333333:secret:waitron-es/email-key-ring-ABCDEF", "gateway-signing" = "arn:aws:secretsmanager:eu-south-2:333333333333:secret:waitron-es/gateway-signing-ABCDEF", "wireguard" = "arn:aws:secretsmanager:eu-south-2:333333333333:secret:waitron-es/wireguard-ABCDEF", "installation-signing" = "arn:aws:secretsmanager:eu-south-2:333333333333:secret:waitron-es/installation-signing-ABCDEF" }, backup_secret_refs = { "backup-master-key" = "arn:aws:secretsmanager:eu-west-3:333333333333:secret:waitron-es/backup-master-key-ABCDEF", "email-key-ring" = "arn:aws:secretsmanager:eu-west-3:333333333333:secret:waitron-es/email-key-ring-ABCDEF", "gateway-signing" = "arn:aws:secretsmanager:eu-west-3:333333333333:secret:waitron-es/gateway-signing-ABCDEF", "wireguard" = "arn:aws:secretsmanager:eu-west-3:333333333333:secret:waitron-es/wireguard-ABCDEF", "installation-signing" = "arn:aws:secretsmanager:eu-west-3:333333333333:secret:waitron-es/installation-signing-ABCDEF" }, replication_role_arn = "arn:aws:iam::333333333333:role/waitron-es-storage-replication" }
   }
   override_module {
     target  = module.database
-    outputs = { database = null }
+    outputs = { database = { endpoint = "synthetic.invalid", port = 5432, name = "cloud_es", admin_secret_ref = "arn:aws:secretsmanager:eu-south-2:333333333333:secret:admin-ABCDEF", kms_key_ref = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111", backup_ref = "arn:aws:rds:eu-west-3:333333333333:auto-backup:synthetic" } }
   }
   override_module {
     target = module.network
@@ -134,12 +158,20 @@ run "rejects_unknown_scope" {
 run "rejects_unknown_country" {
   command = plan
   override_module {
+    target  = module.scope_permissions
+    outputs = { attachment_refs = {}, permission_admission = true, replication_role_arn = "arn:aws:iam::333333333333:role/waitron-es-storage-replication" }
+  }
+  override_module {
+    target  = module.storage
+    outputs = { storage = { stream_bucket = "waitron-es-stream-333333333333-eu-south-2", snapshot_bucket = "waitron-es-snapshot-333333333333-eu-south-2", backup_buckets = { stream = "waitron-es-stream-333333333333-eu-west-3", snapshot = "waitron-es-snapshot-333333333333-eu-west-3" }, kms_key_refs = { primary = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111", backup = "arn:aws:kms:eu-west-3:333333333333:key/22222222-2222-2222-2222-222222222222" } } }
+  }
+  override_module {
     target  = module.custody
-    outputs = { kms = { database = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111" }, backup_kms = { database = "arn:aws:kms:eu-west-3:333333333333:key/22222222-2222-2222-2222-222222222222" }, secrets = {}, backup_secret_refs = {} }
+    outputs = { kms = { database = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111", storage = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111", secrets = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111", logs = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111" }, backup_kms = { database = "arn:aws:kms:eu-west-3:333333333333:key/22222222-2222-2222-2222-222222222222", storage = "arn:aws:kms:eu-west-3:333333333333:key/22222222-2222-2222-2222-222222222222", secrets = "arn:aws:kms:eu-west-3:333333333333:key/22222222-2222-2222-2222-222222222222", logs = "arn:aws:kms:eu-west-3:333333333333:key/22222222-2222-2222-2222-222222222222" }, secrets = { "backup-master-key" = "arn:aws:secretsmanager:eu-south-2:333333333333:secret:waitron-es/backup-master-key-ABCDEF", "email-key-ring" = "arn:aws:secretsmanager:eu-south-2:333333333333:secret:waitron-es/email-key-ring-ABCDEF", "gateway-signing" = "arn:aws:secretsmanager:eu-south-2:333333333333:secret:waitron-es/gateway-signing-ABCDEF", "wireguard" = "arn:aws:secretsmanager:eu-south-2:333333333333:secret:waitron-es/wireguard-ABCDEF", "installation-signing" = "arn:aws:secretsmanager:eu-south-2:333333333333:secret:waitron-es/installation-signing-ABCDEF" }, backup_secret_refs = { "backup-master-key" = "arn:aws:secretsmanager:eu-west-3:333333333333:secret:waitron-es/backup-master-key-ABCDEF", "email-key-ring" = "arn:aws:secretsmanager:eu-west-3:333333333333:secret:waitron-es/email-key-ring-ABCDEF", "gateway-signing" = "arn:aws:secretsmanager:eu-west-3:333333333333:secret:waitron-es/gateway-signing-ABCDEF", "wireguard" = "arn:aws:secretsmanager:eu-west-3:333333333333:secret:waitron-es/wireguard-ABCDEF", "installation-signing" = "arn:aws:secretsmanager:eu-west-3:333333333333:secret:waitron-es/installation-signing-ABCDEF" }, replication_role_arn = "arn:aws:iam::333333333333:role/waitron-es-storage-replication" }
   }
   override_module {
     target  = module.database
-    outputs = { database = null }
+    outputs = { database = { endpoint = "synthetic.invalid", port = 5432, name = "cloud_es", admin_secret_ref = "arn:aws:secretsmanager:eu-south-2:333333333333:secret:admin-ABCDEF", kms_key_ref = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111", backup_ref = "arn:aws:rds:eu-west-3:333333333333:auto-backup:synthetic" } }
   }
   override_module {
     target = module.network
@@ -164,12 +196,20 @@ run "rejects_unknown_country" {
 run "rejects_unknown_regions" {
   command = plan
   override_module {
+    target  = module.scope_permissions
+    outputs = { attachment_refs = {}, permission_admission = true, replication_role_arn = "arn:aws:iam::333333333333:role/waitron-es-storage-replication" }
+  }
+  override_module {
+    target  = module.storage
+    outputs = { storage = { stream_bucket = "waitron-es-stream-333333333333-eu-south-2", snapshot_bucket = "waitron-es-snapshot-333333333333-eu-south-2", backup_buckets = { stream = "waitron-es-stream-333333333333-eu-west-3", snapshot = "waitron-es-snapshot-333333333333-eu-west-3" }, kms_key_refs = { primary = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111", backup = "arn:aws:kms:eu-west-3:333333333333:key/22222222-2222-2222-2222-222222222222" } } }
+  }
+  override_module {
     target  = module.custody
-    outputs = { kms = { database = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111" }, backup_kms = { database = "arn:aws:kms:eu-west-3:333333333333:key/22222222-2222-2222-2222-222222222222" }, secrets = {}, backup_secret_refs = {} }
+    outputs = { kms = { database = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111", storage = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111", secrets = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111", logs = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111" }, backup_kms = { database = "arn:aws:kms:eu-west-3:333333333333:key/22222222-2222-2222-2222-222222222222", storage = "arn:aws:kms:eu-west-3:333333333333:key/22222222-2222-2222-2222-222222222222", secrets = "arn:aws:kms:eu-west-3:333333333333:key/22222222-2222-2222-2222-222222222222", logs = "arn:aws:kms:eu-west-3:333333333333:key/22222222-2222-2222-2222-222222222222" }, secrets = { "backup-master-key" = "arn:aws:secretsmanager:eu-south-2:333333333333:secret:waitron-es/backup-master-key-ABCDEF", "email-key-ring" = "arn:aws:secretsmanager:eu-south-2:333333333333:secret:waitron-es/email-key-ring-ABCDEF", "gateway-signing" = "arn:aws:secretsmanager:eu-south-2:333333333333:secret:waitron-es/gateway-signing-ABCDEF", "wireguard" = "arn:aws:secretsmanager:eu-south-2:333333333333:secret:waitron-es/wireguard-ABCDEF", "installation-signing" = "arn:aws:secretsmanager:eu-south-2:333333333333:secret:waitron-es/installation-signing-ABCDEF" }, backup_secret_refs = { "backup-master-key" = "arn:aws:secretsmanager:eu-west-3:333333333333:secret:waitron-es/backup-master-key-ABCDEF", "email-key-ring" = "arn:aws:secretsmanager:eu-west-3:333333333333:secret:waitron-es/email-key-ring-ABCDEF", "gateway-signing" = "arn:aws:secretsmanager:eu-west-3:333333333333:secret:waitron-es/gateway-signing-ABCDEF", "wireguard" = "arn:aws:secretsmanager:eu-west-3:333333333333:secret:waitron-es/wireguard-ABCDEF", "installation-signing" = "arn:aws:secretsmanager:eu-west-3:333333333333:secret:waitron-es/installation-signing-ABCDEF" }, replication_role_arn = "arn:aws:iam::333333333333:role/waitron-es-storage-replication" }
   }
   override_module {
     target  = module.database
-    outputs = { database = null }
+    outputs = { database = { endpoint = "synthetic.invalid", port = 5432, name = "cloud_es", admin_secret_ref = "arn:aws:secretsmanager:eu-south-2:333333333333:secret:admin-ABCDEF", kms_key_ref = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111", backup_ref = "arn:aws:rds:eu-west-3:333333333333:auto-backup:synthetic" } }
   }
   override_module {
     target = module.network
@@ -194,12 +234,20 @@ run "rejects_unknown_regions" {
 run "rejects_unknown_cell_scope" {
   command = plan
   override_module {
+    target  = module.scope_permissions
+    outputs = { attachment_refs = {}, permission_admission = true, replication_role_arn = "arn:aws:iam::333333333333:role/waitron-es-storage-replication" }
+  }
+  override_module {
+    target  = module.storage
+    outputs = { storage = { stream_bucket = "waitron-es-stream-333333333333-eu-south-2", snapshot_bucket = "waitron-es-snapshot-333333333333-eu-south-2", backup_buckets = { stream = "waitron-es-stream-333333333333-eu-west-3", snapshot = "waitron-es-snapshot-333333333333-eu-west-3" }, kms_key_refs = { primary = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111", backup = "arn:aws:kms:eu-west-3:333333333333:key/22222222-2222-2222-2222-222222222222" } } }
+  }
+  override_module {
     target  = module.custody
-    outputs = { kms = { database = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111" }, backup_kms = { database = "arn:aws:kms:eu-west-3:333333333333:key/22222222-2222-2222-2222-222222222222" }, secrets = {}, backup_secret_refs = {} }
+    outputs = { kms = { database = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111", storage = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111", secrets = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111", logs = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111" }, backup_kms = { database = "arn:aws:kms:eu-west-3:333333333333:key/22222222-2222-2222-2222-222222222222", storage = "arn:aws:kms:eu-west-3:333333333333:key/22222222-2222-2222-2222-222222222222", secrets = "arn:aws:kms:eu-west-3:333333333333:key/22222222-2222-2222-2222-222222222222", logs = "arn:aws:kms:eu-west-3:333333333333:key/22222222-2222-2222-2222-222222222222" }, secrets = { "backup-master-key" = "arn:aws:secretsmanager:eu-south-2:333333333333:secret:waitron-es/backup-master-key-ABCDEF", "email-key-ring" = "arn:aws:secretsmanager:eu-south-2:333333333333:secret:waitron-es/email-key-ring-ABCDEF", "gateway-signing" = "arn:aws:secretsmanager:eu-south-2:333333333333:secret:waitron-es/gateway-signing-ABCDEF", "wireguard" = "arn:aws:secretsmanager:eu-south-2:333333333333:secret:waitron-es/wireguard-ABCDEF", "installation-signing" = "arn:aws:secretsmanager:eu-south-2:333333333333:secret:waitron-es/installation-signing-ABCDEF" }, backup_secret_refs = { "backup-master-key" = "arn:aws:secretsmanager:eu-west-3:333333333333:secret:waitron-es/backup-master-key-ABCDEF", "email-key-ring" = "arn:aws:secretsmanager:eu-west-3:333333333333:secret:waitron-es/email-key-ring-ABCDEF", "gateway-signing" = "arn:aws:secretsmanager:eu-west-3:333333333333:secret:waitron-es/gateway-signing-ABCDEF", "wireguard" = "arn:aws:secretsmanager:eu-west-3:333333333333:secret:waitron-es/wireguard-ABCDEF", "installation-signing" = "arn:aws:secretsmanager:eu-west-3:333333333333:secret:waitron-es/installation-signing-ABCDEF" }, replication_role_arn = "arn:aws:iam::333333333333:role/waitron-es-storage-replication" }
   }
   override_module {
     target  = module.database
-    outputs = { database = null }
+    outputs = { database = { endpoint = "synthetic.invalid", port = 5432, name = "cloud_es", admin_secret_ref = "arn:aws:secretsmanager:eu-south-2:333333333333:secret:admin-ABCDEF", kms_key_ref = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111", backup_ref = "arn:aws:rds:eu-west-3:333333333333:auto-backup:synthetic" } }
   }
   override_module {
     target = module.network
@@ -224,12 +272,20 @@ run "rejects_unknown_cell_scope" {
 run "rejects_missing_country" {
   command = plan
   override_module {
+    target  = module.scope_permissions
+    outputs = { attachment_refs = {}, permission_admission = true, replication_role_arn = "arn:aws:iam::333333333333:role/waitron-es-storage-replication" }
+  }
+  override_module {
+    target  = module.storage
+    outputs = { storage = { stream_bucket = "waitron-es-stream-333333333333-eu-south-2", snapshot_bucket = "waitron-es-snapshot-333333333333-eu-south-2", backup_buckets = { stream = "waitron-es-stream-333333333333-eu-west-3", snapshot = "waitron-es-snapshot-333333333333-eu-west-3" }, kms_key_refs = { primary = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111", backup = "arn:aws:kms:eu-west-3:333333333333:key/22222222-2222-2222-2222-222222222222" } } }
+  }
+  override_module {
     target  = module.custody
-    outputs = { kms = { database = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111" }, backup_kms = { database = "arn:aws:kms:eu-west-3:333333333333:key/22222222-2222-2222-2222-222222222222" }, secrets = {}, backup_secret_refs = {} }
+    outputs = { kms = { database = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111", storage = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111", secrets = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111", logs = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111" }, backup_kms = { database = "arn:aws:kms:eu-west-3:333333333333:key/22222222-2222-2222-2222-222222222222", storage = "arn:aws:kms:eu-west-3:333333333333:key/22222222-2222-2222-2222-222222222222", secrets = "arn:aws:kms:eu-west-3:333333333333:key/22222222-2222-2222-2222-222222222222", logs = "arn:aws:kms:eu-west-3:333333333333:key/22222222-2222-2222-2222-222222222222" }, secrets = { "backup-master-key" = "arn:aws:secretsmanager:eu-south-2:333333333333:secret:waitron-es/backup-master-key-ABCDEF", "email-key-ring" = "arn:aws:secretsmanager:eu-south-2:333333333333:secret:waitron-es/email-key-ring-ABCDEF", "gateway-signing" = "arn:aws:secretsmanager:eu-south-2:333333333333:secret:waitron-es/gateway-signing-ABCDEF", "wireguard" = "arn:aws:secretsmanager:eu-south-2:333333333333:secret:waitron-es/wireguard-ABCDEF", "installation-signing" = "arn:aws:secretsmanager:eu-south-2:333333333333:secret:waitron-es/installation-signing-ABCDEF" }, backup_secret_refs = { "backup-master-key" = "arn:aws:secretsmanager:eu-west-3:333333333333:secret:waitron-es/backup-master-key-ABCDEF", "email-key-ring" = "arn:aws:secretsmanager:eu-west-3:333333333333:secret:waitron-es/email-key-ring-ABCDEF", "gateway-signing" = "arn:aws:secretsmanager:eu-west-3:333333333333:secret:waitron-es/gateway-signing-ABCDEF", "wireguard" = "arn:aws:secretsmanager:eu-west-3:333333333333:secret:waitron-es/wireguard-ABCDEF", "installation-signing" = "arn:aws:secretsmanager:eu-west-3:333333333333:secret:waitron-es/installation-signing-ABCDEF" }, replication_role_arn = "arn:aws:iam::333333333333:role/waitron-es-storage-replication" }
   }
   override_module {
     target  = module.database
-    outputs = { database = null }
+    outputs = { database = { endpoint = "synthetic.invalid", port = 5432, name = "cloud_es", admin_secret_ref = "arn:aws:secretsmanager:eu-south-2:333333333333:secret:admin-ABCDEF", kms_key_ref = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111", backup_ref = "arn:aws:rds:eu-west-3:333333333333:auto-backup:synthetic" } }
   }
   override_module {
     target = module.network
@@ -254,12 +310,20 @@ run "rejects_missing_country" {
 run "rejects_missing_country_backup" {
   command = plan
   override_module {
+    target  = module.scope_permissions
+    outputs = { attachment_refs = {}, permission_admission = true, replication_role_arn = "arn:aws:iam::333333333333:role/waitron-es-storage-replication" }
+  }
+  override_module {
+    target  = module.storage
+    outputs = { storage = { stream_bucket = "waitron-es-stream-333333333333-eu-south-2", snapshot_bucket = "waitron-es-snapshot-333333333333-eu-south-2", backup_buckets = { stream = "waitron-es-stream-333333333333-eu-west-3", snapshot = "waitron-es-snapshot-333333333333-eu-west-3" }, kms_key_refs = { primary = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111", backup = "arn:aws:kms:eu-west-3:333333333333:key/22222222-2222-2222-2222-222222222222" } } }
+  }
+  override_module {
     target  = module.custody
-    outputs = { kms = { database = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111" }, backup_kms = { database = "arn:aws:kms:eu-west-3:333333333333:key/22222222-2222-2222-2222-222222222222" }, secrets = {}, backup_secret_refs = {} }
+    outputs = { kms = { database = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111", storage = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111", secrets = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111", logs = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111" }, backup_kms = { database = "arn:aws:kms:eu-west-3:333333333333:key/22222222-2222-2222-2222-222222222222", storage = "arn:aws:kms:eu-west-3:333333333333:key/22222222-2222-2222-2222-222222222222", secrets = "arn:aws:kms:eu-west-3:333333333333:key/22222222-2222-2222-2222-222222222222", logs = "arn:aws:kms:eu-west-3:333333333333:key/22222222-2222-2222-2222-222222222222" }, secrets = { "backup-master-key" = "arn:aws:secretsmanager:eu-south-2:333333333333:secret:waitron-es/backup-master-key-ABCDEF", "email-key-ring" = "arn:aws:secretsmanager:eu-south-2:333333333333:secret:waitron-es/email-key-ring-ABCDEF", "gateway-signing" = "arn:aws:secretsmanager:eu-south-2:333333333333:secret:waitron-es/gateway-signing-ABCDEF", "wireguard" = "arn:aws:secretsmanager:eu-south-2:333333333333:secret:waitron-es/wireguard-ABCDEF", "installation-signing" = "arn:aws:secretsmanager:eu-south-2:333333333333:secret:waitron-es/installation-signing-ABCDEF" }, backup_secret_refs = { "backup-master-key" = "arn:aws:secretsmanager:eu-west-3:333333333333:secret:waitron-es/backup-master-key-ABCDEF", "email-key-ring" = "arn:aws:secretsmanager:eu-west-3:333333333333:secret:waitron-es/email-key-ring-ABCDEF", "gateway-signing" = "arn:aws:secretsmanager:eu-west-3:333333333333:secret:waitron-es/gateway-signing-ABCDEF", "wireguard" = "arn:aws:secretsmanager:eu-west-3:333333333333:secret:waitron-es/wireguard-ABCDEF", "installation-signing" = "arn:aws:secretsmanager:eu-west-3:333333333333:secret:waitron-es/installation-signing-ABCDEF" }, replication_role_arn = "arn:aws:iam::333333333333:role/waitron-es-storage-replication" }
   }
   override_module {
     target  = module.database
-    outputs = { database = null }
+    outputs = { database = { endpoint = "synthetic.invalid", port = 5432, name = "cloud_es", admin_secret_ref = "arn:aws:secretsmanager:eu-south-2:333333333333:secret:admin-ABCDEF", kms_key_ref = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111", backup_ref = "arn:aws:rds:eu-west-3:333333333333:auto-backup:synthetic" } }
   }
   override_module {
     target = module.network
@@ -284,12 +348,20 @@ run "rejects_missing_country_backup" {
 run "rejects_missing_country_keys" {
   command = plan
   override_module {
+    target  = module.scope_permissions
+    outputs = { attachment_refs = {}, permission_admission = true, replication_role_arn = "arn:aws:iam::333333333333:role/waitron-es-storage-replication" }
+  }
+  override_module {
+    target  = module.storage
+    outputs = { storage = { stream_bucket = "waitron-es-stream-333333333333-eu-south-2", snapshot_bucket = "waitron-es-snapshot-333333333333-eu-south-2", backup_buckets = { stream = "waitron-es-stream-333333333333-eu-west-3", snapshot = "waitron-es-snapshot-333333333333-eu-west-3" }, kms_key_refs = { primary = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111", backup = "arn:aws:kms:eu-west-3:333333333333:key/22222222-2222-2222-2222-222222222222" } } }
+  }
+  override_module {
     target  = module.custody
-    outputs = { kms = { database = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111" }, backup_kms = { database = "arn:aws:kms:eu-west-3:333333333333:key/22222222-2222-2222-2222-222222222222" }, secrets = {}, backup_secret_refs = {} }
+    outputs = { kms = { database = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111", storage = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111", secrets = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111", logs = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111" }, backup_kms = { database = "arn:aws:kms:eu-west-3:333333333333:key/22222222-2222-2222-2222-222222222222", storage = "arn:aws:kms:eu-west-3:333333333333:key/22222222-2222-2222-2222-222222222222", secrets = "arn:aws:kms:eu-west-3:333333333333:key/22222222-2222-2222-2222-222222222222", logs = "arn:aws:kms:eu-west-3:333333333333:key/22222222-2222-2222-2222-222222222222" }, secrets = { "backup-master-key" = "arn:aws:secretsmanager:eu-south-2:333333333333:secret:waitron-es/backup-master-key-ABCDEF", "email-key-ring" = "arn:aws:secretsmanager:eu-south-2:333333333333:secret:waitron-es/email-key-ring-ABCDEF", "gateway-signing" = "arn:aws:secretsmanager:eu-south-2:333333333333:secret:waitron-es/gateway-signing-ABCDEF", "wireguard" = "arn:aws:secretsmanager:eu-south-2:333333333333:secret:waitron-es/wireguard-ABCDEF", "installation-signing" = "arn:aws:secretsmanager:eu-south-2:333333333333:secret:waitron-es/installation-signing-ABCDEF" }, backup_secret_refs = { "backup-master-key" = "arn:aws:secretsmanager:eu-west-3:333333333333:secret:waitron-es/backup-master-key-ABCDEF", "email-key-ring" = "arn:aws:secretsmanager:eu-west-3:333333333333:secret:waitron-es/email-key-ring-ABCDEF", "gateway-signing" = "arn:aws:secretsmanager:eu-west-3:333333333333:secret:waitron-es/gateway-signing-ABCDEF", "wireguard" = "arn:aws:secretsmanager:eu-west-3:333333333333:secret:waitron-es/wireguard-ABCDEF", "installation-signing" = "arn:aws:secretsmanager:eu-west-3:333333333333:secret:waitron-es/installation-signing-ABCDEF" }, replication_role_arn = "arn:aws:iam::333333333333:role/waitron-es-storage-replication" }
   }
   override_module {
     target  = module.database
-    outputs = { database = null }
+    outputs = { database = { endpoint = "synthetic.invalid", port = 5432, name = "cloud_es", admin_secret_ref = "arn:aws:secretsmanager:eu-south-2:333333333333:secret:admin-ABCDEF", kms_key_ref = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111", backup_ref = "arn:aws:rds:eu-west-3:333333333333:auto-backup:synthetic" } }
   }
   override_module {
     target = module.network
@@ -314,12 +386,20 @@ run "rejects_missing_country_keys" {
 run "rejects_missing_country_backup_keys" {
   command = plan
   override_module {
+    target  = module.scope_permissions
+    outputs = { attachment_refs = {}, permission_admission = true, replication_role_arn = "arn:aws:iam::333333333333:role/waitron-es-storage-replication" }
+  }
+  override_module {
+    target  = module.storage
+    outputs = { storage = { stream_bucket = "waitron-es-stream-333333333333-eu-south-2", snapshot_bucket = "waitron-es-snapshot-333333333333-eu-south-2", backup_buckets = { stream = "waitron-es-stream-333333333333-eu-west-3", snapshot = "waitron-es-snapshot-333333333333-eu-west-3" }, kms_key_refs = { primary = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111", backup = "arn:aws:kms:eu-west-3:333333333333:key/22222222-2222-2222-2222-222222222222" } } }
+  }
+  override_module {
     target  = module.custody
-    outputs = { kms = { database = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111" }, backup_kms = { database = "arn:aws:kms:eu-west-3:333333333333:key/22222222-2222-2222-2222-222222222222" }, secrets = {}, backup_secret_refs = {} }
+    outputs = { kms = { database = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111", storage = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111", secrets = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111", logs = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111" }, backup_kms = { database = "arn:aws:kms:eu-west-3:333333333333:key/22222222-2222-2222-2222-222222222222", storage = "arn:aws:kms:eu-west-3:333333333333:key/22222222-2222-2222-2222-222222222222", secrets = "arn:aws:kms:eu-west-3:333333333333:key/22222222-2222-2222-2222-222222222222", logs = "arn:aws:kms:eu-west-3:333333333333:key/22222222-2222-2222-2222-222222222222" }, secrets = { "backup-master-key" = "arn:aws:secretsmanager:eu-south-2:333333333333:secret:waitron-es/backup-master-key-ABCDEF", "email-key-ring" = "arn:aws:secretsmanager:eu-south-2:333333333333:secret:waitron-es/email-key-ring-ABCDEF", "gateway-signing" = "arn:aws:secretsmanager:eu-south-2:333333333333:secret:waitron-es/gateway-signing-ABCDEF", "wireguard" = "arn:aws:secretsmanager:eu-south-2:333333333333:secret:waitron-es/wireguard-ABCDEF", "installation-signing" = "arn:aws:secretsmanager:eu-south-2:333333333333:secret:waitron-es/installation-signing-ABCDEF" }, backup_secret_refs = { "backup-master-key" = "arn:aws:secretsmanager:eu-west-3:333333333333:secret:waitron-es/backup-master-key-ABCDEF", "email-key-ring" = "arn:aws:secretsmanager:eu-west-3:333333333333:secret:waitron-es/email-key-ring-ABCDEF", "gateway-signing" = "arn:aws:secretsmanager:eu-west-3:333333333333:secret:waitron-es/gateway-signing-ABCDEF", "wireguard" = "arn:aws:secretsmanager:eu-west-3:333333333333:secret:waitron-es/wireguard-ABCDEF", "installation-signing" = "arn:aws:secretsmanager:eu-west-3:333333333333:secret:waitron-es/installation-signing-ABCDEF" }, replication_role_arn = "arn:aws:iam::333333333333:role/waitron-es-storage-replication" }
   }
   override_module {
     target  = module.database
-    outputs = { database = null }
+    outputs = { database = { endpoint = "synthetic.invalid", port = 5432, name = "cloud_es", admin_secret_ref = "arn:aws:secretsmanager:eu-south-2:333333333333:secret:admin-ABCDEF", kms_key_ref = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111", backup_ref = "arn:aws:rds:eu-west-3:333333333333:auto-backup:synthetic" } }
   }
   override_module {
     target = module.network
@@ -344,12 +424,20 @@ run "rejects_missing_country_backup_keys" {
 run "rejects_extra_scope_binding" {
   command = plan
   override_module {
+    target  = module.scope_permissions
+    outputs = { attachment_refs = {}, permission_admission = true, replication_role_arn = "arn:aws:iam::333333333333:role/waitron-es-storage-replication" }
+  }
+  override_module {
+    target  = module.storage
+    outputs = { storage = { stream_bucket = "waitron-es-stream-333333333333-eu-south-2", snapshot_bucket = "waitron-es-snapshot-333333333333-eu-south-2", backup_buckets = { stream = "waitron-es-stream-333333333333-eu-west-3", snapshot = "waitron-es-snapshot-333333333333-eu-west-3" }, kms_key_refs = { primary = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111", backup = "arn:aws:kms:eu-west-3:333333333333:key/22222222-2222-2222-2222-222222222222" } } }
+  }
+  override_module {
     target  = module.custody
-    outputs = { kms = { database = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111" }, backup_kms = { database = "arn:aws:kms:eu-west-3:333333333333:key/22222222-2222-2222-2222-222222222222" }, secrets = {}, backup_secret_refs = {} }
+    outputs = { kms = { database = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111", storage = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111", secrets = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111", logs = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111" }, backup_kms = { database = "arn:aws:kms:eu-west-3:333333333333:key/22222222-2222-2222-2222-222222222222", storage = "arn:aws:kms:eu-west-3:333333333333:key/22222222-2222-2222-2222-222222222222", secrets = "arn:aws:kms:eu-west-3:333333333333:key/22222222-2222-2222-2222-222222222222", logs = "arn:aws:kms:eu-west-3:333333333333:key/22222222-2222-2222-2222-222222222222" }, secrets = { "backup-master-key" = "arn:aws:secretsmanager:eu-south-2:333333333333:secret:waitron-es/backup-master-key-ABCDEF", "email-key-ring" = "arn:aws:secretsmanager:eu-south-2:333333333333:secret:waitron-es/email-key-ring-ABCDEF", "gateway-signing" = "arn:aws:secretsmanager:eu-south-2:333333333333:secret:waitron-es/gateway-signing-ABCDEF", "wireguard" = "arn:aws:secretsmanager:eu-south-2:333333333333:secret:waitron-es/wireguard-ABCDEF", "installation-signing" = "arn:aws:secretsmanager:eu-south-2:333333333333:secret:waitron-es/installation-signing-ABCDEF" }, backup_secret_refs = { "backup-master-key" = "arn:aws:secretsmanager:eu-west-3:333333333333:secret:waitron-es/backup-master-key-ABCDEF", "email-key-ring" = "arn:aws:secretsmanager:eu-west-3:333333333333:secret:waitron-es/email-key-ring-ABCDEF", "gateway-signing" = "arn:aws:secretsmanager:eu-west-3:333333333333:secret:waitron-es/gateway-signing-ABCDEF", "wireguard" = "arn:aws:secretsmanager:eu-west-3:333333333333:secret:waitron-es/wireguard-ABCDEF", "installation-signing" = "arn:aws:secretsmanager:eu-west-3:333333333333:secret:waitron-es/installation-signing-ABCDEF" }, replication_role_arn = "arn:aws:iam::333333333333:role/waitron-es-storage-replication" }
   }
   override_module {
     target  = module.database
-    outputs = { database = null }
+    outputs = { database = { endpoint = "synthetic.invalid", port = 5432, name = "cloud_es", admin_secret_ref = "arn:aws:secretsmanager:eu-south-2:333333333333:secret:admin-ABCDEF", kms_key_ref = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111", backup_ref = "arn:aws:rds:eu-west-3:333333333333:auto-backup:synthetic" } }
   }
   override_module {
     target = module.network
@@ -374,12 +462,20 @@ run "rejects_extra_scope_binding" {
 run "rejects_malformed_identity" {
   command = plan
   override_module {
+    target  = module.scope_permissions
+    outputs = { attachment_refs = {}, permission_admission = true, replication_role_arn = "arn:aws:iam::333333333333:role/waitron-es-storage-replication" }
+  }
+  override_module {
+    target  = module.storage
+    outputs = { storage = { stream_bucket = "waitron-es-stream-333333333333-eu-south-2", snapshot_bucket = "waitron-es-snapshot-333333333333-eu-south-2", backup_buckets = { stream = "waitron-es-stream-333333333333-eu-west-3", snapshot = "waitron-es-snapshot-333333333333-eu-west-3" }, kms_key_refs = { primary = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111", backup = "arn:aws:kms:eu-west-3:333333333333:key/22222222-2222-2222-2222-222222222222" } } }
+  }
+  override_module {
     target  = module.custody
-    outputs = { kms = { database = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111" }, backup_kms = { database = "arn:aws:kms:eu-west-3:333333333333:key/22222222-2222-2222-2222-222222222222" }, secrets = {}, backup_secret_refs = {} }
+    outputs = { kms = { database = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111", storage = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111", secrets = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111", logs = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111" }, backup_kms = { database = "arn:aws:kms:eu-west-3:333333333333:key/22222222-2222-2222-2222-222222222222", storage = "arn:aws:kms:eu-west-3:333333333333:key/22222222-2222-2222-2222-222222222222", secrets = "arn:aws:kms:eu-west-3:333333333333:key/22222222-2222-2222-2222-222222222222", logs = "arn:aws:kms:eu-west-3:333333333333:key/22222222-2222-2222-2222-222222222222" }, secrets = { "backup-master-key" = "arn:aws:secretsmanager:eu-south-2:333333333333:secret:waitron-es/backup-master-key-ABCDEF", "email-key-ring" = "arn:aws:secretsmanager:eu-south-2:333333333333:secret:waitron-es/email-key-ring-ABCDEF", "gateway-signing" = "arn:aws:secretsmanager:eu-south-2:333333333333:secret:waitron-es/gateway-signing-ABCDEF", "wireguard" = "arn:aws:secretsmanager:eu-south-2:333333333333:secret:waitron-es/wireguard-ABCDEF", "installation-signing" = "arn:aws:secretsmanager:eu-south-2:333333333333:secret:waitron-es/installation-signing-ABCDEF" }, backup_secret_refs = { "backup-master-key" = "arn:aws:secretsmanager:eu-west-3:333333333333:secret:waitron-es/backup-master-key-ABCDEF", "email-key-ring" = "arn:aws:secretsmanager:eu-west-3:333333333333:secret:waitron-es/email-key-ring-ABCDEF", "gateway-signing" = "arn:aws:secretsmanager:eu-west-3:333333333333:secret:waitron-es/gateway-signing-ABCDEF", "wireguard" = "arn:aws:secretsmanager:eu-west-3:333333333333:secret:waitron-es/wireguard-ABCDEF", "installation-signing" = "arn:aws:secretsmanager:eu-west-3:333333333333:secret:waitron-es/installation-signing-ABCDEF" }, replication_role_arn = "arn:aws:iam::333333333333:role/waitron-es-storage-replication" }
   }
   override_module {
     target  = module.database
-    outputs = { database = null }
+    outputs = { database = { endpoint = "synthetic.invalid", port = 5432, name = "cloud_es", admin_secret_ref = "arn:aws:secretsmanager:eu-south-2:333333333333:secret:admin-ABCDEF", kms_key_ref = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111", backup_ref = "arn:aws:rds:eu-west-3:333333333333:auto-backup:synthetic" } }
   }
   override_module {
     target = module.network
@@ -404,12 +500,20 @@ run "rejects_malformed_identity" {
 run "rejects_crossed_role" {
   command = plan
   override_module {
+    target  = module.scope_permissions
+    outputs = { attachment_refs = {}, permission_admission = true, replication_role_arn = "arn:aws:iam::333333333333:role/waitron-es-storage-replication" }
+  }
+  override_module {
+    target  = module.storage
+    outputs = { storage = { stream_bucket = "waitron-es-stream-333333333333-eu-south-2", snapshot_bucket = "waitron-es-snapshot-333333333333-eu-south-2", backup_buckets = { stream = "waitron-es-stream-333333333333-eu-west-3", snapshot = "waitron-es-snapshot-333333333333-eu-west-3" }, kms_key_refs = { primary = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111", backup = "arn:aws:kms:eu-west-3:333333333333:key/22222222-2222-2222-2222-222222222222" } } }
+  }
+  override_module {
     target  = module.custody
-    outputs = { kms = { database = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111" }, backup_kms = { database = "arn:aws:kms:eu-west-3:333333333333:key/22222222-2222-2222-2222-222222222222" }, secrets = {}, backup_secret_refs = {} }
+    outputs = { kms = { database = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111", storage = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111", secrets = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111", logs = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111" }, backup_kms = { database = "arn:aws:kms:eu-west-3:333333333333:key/22222222-2222-2222-2222-222222222222", storage = "arn:aws:kms:eu-west-3:333333333333:key/22222222-2222-2222-2222-222222222222", secrets = "arn:aws:kms:eu-west-3:333333333333:key/22222222-2222-2222-2222-222222222222", logs = "arn:aws:kms:eu-west-3:333333333333:key/22222222-2222-2222-2222-222222222222" }, secrets = { "backup-master-key" = "arn:aws:secretsmanager:eu-south-2:333333333333:secret:waitron-es/backup-master-key-ABCDEF", "email-key-ring" = "arn:aws:secretsmanager:eu-south-2:333333333333:secret:waitron-es/email-key-ring-ABCDEF", "gateway-signing" = "arn:aws:secretsmanager:eu-south-2:333333333333:secret:waitron-es/gateway-signing-ABCDEF", "wireguard" = "arn:aws:secretsmanager:eu-south-2:333333333333:secret:waitron-es/wireguard-ABCDEF", "installation-signing" = "arn:aws:secretsmanager:eu-south-2:333333333333:secret:waitron-es/installation-signing-ABCDEF" }, backup_secret_refs = { "backup-master-key" = "arn:aws:secretsmanager:eu-west-3:333333333333:secret:waitron-es/backup-master-key-ABCDEF", "email-key-ring" = "arn:aws:secretsmanager:eu-west-3:333333333333:secret:waitron-es/email-key-ring-ABCDEF", "gateway-signing" = "arn:aws:secretsmanager:eu-west-3:333333333333:secret:waitron-es/gateway-signing-ABCDEF", "wireguard" = "arn:aws:secretsmanager:eu-west-3:333333333333:secret:waitron-es/wireguard-ABCDEF", "installation-signing" = "arn:aws:secretsmanager:eu-west-3:333333333333:secret:waitron-es/installation-signing-ABCDEF" }, replication_role_arn = "arn:aws:iam::333333333333:role/waitron-es-storage-replication" }
   }
   override_module {
     target  = module.database
-    outputs = { database = null }
+    outputs = { database = { endpoint = "synthetic.invalid", port = 5432, name = "cloud_es", admin_secret_ref = "arn:aws:secretsmanager:eu-south-2:333333333333:secret:admin-ABCDEF", kms_key_ref = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111", backup_ref = "arn:aws:rds:eu-west-3:333333333333:auto-backup:synthetic" } }
   }
   override_module {
     target = module.network
@@ -434,12 +538,20 @@ run "rejects_crossed_role" {
 run "rejects_wildcard_role" {
   command = plan
   override_module {
+    target  = module.scope_permissions
+    outputs = { attachment_refs = {}, permission_admission = true, replication_role_arn = "arn:aws:iam::333333333333:role/waitron-es-storage-replication" }
+  }
+  override_module {
+    target  = module.storage
+    outputs = { storage = { stream_bucket = "waitron-es-stream-333333333333-eu-south-2", snapshot_bucket = "waitron-es-snapshot-333333333333-eu-south-2", backup_buckets = { stream = "waitron-es-stream-333333333333-eu-west-3", snapshot = "waitron-es-snapshot-333333333333-eu-west-3" }, kms_key_refs = { primary = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111", backup = "arn:aws:kms:eu-west-3:333333333333:key/22222222-2222-2222-2222-222222222222" } } }
+  }
+  override_module {
     target  = module.custody
-    outputs = { kms = { database = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111" }, backup_kms = { database = "arn:aws:kms:eu-west-3:333333333333:key/22222222-2222-2222-2222-222222222222" }, secrets = {}, backup_secret_refs = {} }
+    outputs = { kms = { database = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111", storage = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111", secrets = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111", logs = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111" }, backup_kms = { database = "arn:aws:kms:eu-west-3:333333333333:key/22222222-2222-2222-2222-222222222222", storage = "arn:aws:kms:eu-west-3:333333333333:key/22222222-2222-2222-2222-222222222222", secrets = "arn:aws:kms:eu-west-3:333333333333:key/22222222-2222-2222-2222-222222222222", logs = "arn:aws:kms:eu-west-3:333333333333:key/22222222-2222-2222-2222-222222222222" }, secrets = { "backup-master-key" = "arn:aws:secretsmanager:eu-south-2:333333333333:secret:waitron-es/backup-master-key-ABCDEF", "email-key-ring" = "arn:aws:secretsmanager:eu-south-2:333333333333:secret:waitron-es/email-key-ring-ABCDEF", "gateway-signing" = "arn:aws:secretsmanager:eu-south-2:333333333333:secret:waitron-es/gateway-signing-ABCDEF", "wireguard" = "arn:aws:secretsmanager:eu-south-2:333333333333:secret:waitron-es/wireguard-ABCDEF", "installation-signing" = "arn:aws:secretsmanager:eu-south-2:333333333333:secret:waitron-es/installation-signing-ABCDEF" }, backup_secret_refs = { "backup-master-key" = "arn:aws:secretsmanager:eu-west-3:333333333333:secret:waitron-es/backup-master-key-ABCDEF", "email-key-ring" = "arn:aws:secretsmanager:eu-west-3:333333333333:secret:waitron-es/email-key-ring-ABCDEF", "gateway-signing" = "arn:aws:secretsmanager:eu-west-3:333333333333:secret:waitron-es/gateway-signing-ABCDEF", "wireguard" = "arn:aws:secretsmanager:eu-west-3:333333333333:secret:waitron-es/wireguard-ABCDEF", "installation-signing" = "arn:aws:secretsmanager:eu-west-3:333333333333:secret:waitron-es/installation-signing-ABCDEF" }, replication_role_arn = "arn:aws:iam::333333333333:role/waitron-es-storage-replication" }
   }
   override_module {
     target  = module.database
-    outputs = { database = null }
+    outputs = { database = { endpoint = "synthetic.invalid", port = 5432, name = "cloud_es", admin_secret_ref = "arn:aws:secretsmanager:eu-south-2:333333333333:secret:admin-ABCDEF", kms_key_ref = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111", backup_ref = "arn:aws:rds:eu-west-3:333333333333:auto-backup:synthetic" } }
   }
   override_module {
     target = module.network
@@ -464,12 +576,20 @@ run "rejects_wildcard_role" {
 run "rejects_deployment_as_key_admin" {
   command = plan
   override_module {
+    target  = module.scope_permissions
+    outputs = { attachment_refs = {}, permission_admission = true, replication_role_arn = "arn:aws:iam::333333333333:role/waitron-es-storage-replication" }
+  }
+  override_module {
+    target  = module.storage
+    outputs = { storage = { stream_bucket = "waitron-es-stream-333333333333-eu-south-2", snapshot_bucket = "waitron-es-snapshot-333333333333-eu-south-2", backup_buckets = { stream = "waitron-es-stream-333333333333-eu-west-3", snapshot = "waitron-es-snapshot-333333333333-eu-west-3" }, kms_key_refs = { primary = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111", backup = "arn:aws:kms:eu-west-3:333333333333:key/22222222-2222-2222-2222-222222222222" } } }
+  }
+  override_module {
     target  = module.custody
-    outputs = { kms = { database = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111" }, backup_kms = { database = "arn:aws:kms:eu-west-3:333333333333:key/22222222-2222-2222-2222-222222222222" }, secrets = {}, backup_secret_refs = {} }
+    outputs = { kms = { database = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111", storage = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111", secrets = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111", logs = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111" }, backup_kms = { database = "arn:aws:kms:eu-west-3:333333333333:key/22222222-2222-2222-2222-222222222222", storage = "arn:aws:kms:eu-west-3:333333333333:key/22222222-2222-2222-2222-222222222222", secrets = "arn:aws:kms:eu-west-3:333333333333:key/22222222-2222-2222-2222-222222222222", logs = "arn:aws:kms:eu-west-3:333333333333:key/22222222-2222-2222-2222-222222222222" }, secrets = { "backup-master-key" = "arn:aws:secretsmanager:eu-south-2:333333333333:secret:waitron-es/backup-master-key-ABCDEF", "email-key-ring" = "arn:aws:secretsmanager:eu-south-2:333333333333:secret:waitron-es/email-key-ring-ABCDEF", "gateway-signing" = "arn:aws:secretsmanager:eu-south-2:333333333333:secret:waitron-es/gateway-signing-ABCDEF", "wireguard" = "arn:aws:secretsmanager:eu-south-2:333333333333:secret:waitron-es/wireguard-ABCDEF", "installation-signing" = "arn:aws:secretsmanager:eu-south-2:333333333333:secret:waitron-es/installation-signing-ABCDEF" }, backup_secret_refs = { "backup-master-key" = "arn:aws:secretsmanager:eu-west-3:333333333333:secret:waitron-es/backup-master-key-ABCDEF", "email-key-ring" = "arn:aws:secretsmanager:eu-west-3:333333333333:secret:waitron-es/email-key-ring-ABCDEF", "gateway-signing" = "arn:aws:secretsmanager:eu-west-3:333333333333:secret:waitron-es/gateway-signing-ABCDEF", "wireguard" = "arn:aws:secretsmanager:eu-west-3:333333333333:secret:waitron-es/wireguard-ABCDEF", "installation-signing" = "arn:aws:secretsmanager:eu-west-3:333333333333:secret:waitron-es/installation-signing-ABCDEF" }, replication_role_arn = "arn:aws:iam::333333333333:role/waitron-es-storage-replication" }
   }
   override_module {
     target  = module.database
-    outputs = { database = null }
+    outputs = { database = { endpoint = "synthetic.invalid", port = 5432, name = "cloud_es", admin_secret_ref = "arn:aws:secretsmanager:eu-south-2:333333333333:secret:admin-ABCDEF", kms_key_ref = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111", backup_ref = "arn:aws:rds:eu-west-3:333333333333:auto-backup:synthetic" } }
   }
   override_module {
     target = module.network
@@ -494,12 +614,20 @@ run "rejects_deployment_as_key_admin" {
 run "rejects_different_backup_account" {
   command = plan
   override_module {
+    target  = module.scope_permissions
+    outputs = { attachment_refs = {}, permission_admission = true, replication_role_arn = "arn:aws:iam::333333333333:role/waitron-es-storage-replication" }
+  }
+  override_module {
+    target  = module.storage
+    outputs = { storage = { stream_bucket = "waitron-es-stream-333333333333-eu-south-2", snapshot_bucket = "waitron-es-snapshot-333333333333-eu-south-2", backup_buckets = { stream = "waitron-es-stream-333333333333-eu-west-3", snapshot = "waitron-es-snapshot-333333333333-eu-west-3" }, kms_key_refs = { primary = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111", backup = "arn:aws:kms:eu-west-3:333333333333:key/22222222-2222-2222-2222-222222222222" } } }
+  }
+  override_module {
     target  = module.custody
-    outputs = { kms = { database = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111" }, backup_kms = { database = "arn:aws:kms:eu-west-3:333333333333:key/22222222-2222-2222-2222-222222222222" }, secrets = {}, backup_secret_refs = {} }
+    outputs = { kms = { database = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111", storage = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111", secrets = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111", logs = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111" }, backup_kms = { database = "arn:aws:kms:eu-west-3:333333333333:key/22222222-2222-2222-2222-222222222222", storage = "arn:aws:kms:eu-west-3:333333333333:key/22222222-2222-2222-2222-222222222222", secrets = "arn:aws:kms:eu-west-3:333333333333:key/22222222-2222-2222-2222-222222222222", logs = "arn:aws:kms:eu-west-3:333333333333:key/22222222-2222-2222-2222-222222222222" }, secrets = { "backup-master-key" = "arn:aws:secretsmanager:eu-south-2:333333333333:secret:waitron-es/backup-master-key-ABCDEF", "email-key-ring" = "arn:aws:secretsmanager:eu-south-2:333333333333:secret:waitron-es/email-key-ring-ABCDEF", "gateway-signing" = "arn:aws:secretsmanager:eu-south-2:333333333333:secret:waitron-es/gateway-signing-ABCDEF", "wireguard" = "arn:aws:secretsmanager:eu-south-2:333333333333:secret:waitron-es/wireguard-ABCDEF", "installation-signing" = "arn:aws:secretsmanager:eu-south-2:333333333333:secret:waitron-es/installation-signing-ABCDEF" }, backup_secret_refs = { "backup-master-key" = "arn:aws:secretsmanager:eu-west-3:333333333333:secret:waitron-es/backup-master-key-ABCDEF", "email-key-ring" = "arn:aws:secretsmanager:eu-west-3:333333333333:secret:waitron-es/email-key-ring-ABCDEF", "gateway-signing" = "arn:aws:secretsmanager:eu-west-3:333333333333:secret:waitron-es/gateway-signing-ABCDEF", "wireguard" = "arn:aws:secretsmanager:eu-west-3:333333333333:secret:waitron-es/wireguard-ABCDEF", "installation-signing" = "arn:aws:secretsmanager:eu-west-3:333333333333:secret:waitron-es/installation-signing-ABCDEF" }, replication_role_arn = "arn:aws:iam::333333333333:role/waitron-es-storage-replication" }
   }
   override_module {
     target  = module.database
-    outputs = { database = null }
+    outputs = { database = { endpoint = "synthetic.invalid", port = 5432, name = "cloud_es", admin_secret_ref = "arn:aws:secretsmanager:eu-south-2:333333333333:secret:admin-ABCDEF", kms_key_ref = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111", backup_ref = "arn:aws:rds:eu-west-3:333333333333:auto-backup:synthetic" } }
   }
   override_module {
     target = module.network
@@ -524,12 +652,21 @@ run "rejects_different_backup_account" {
 run "rejects_actual_country_account" {
   command = plan
   override_module {
+    target  = module.scope_permissions
+    outputs = { attachment_refs = {}, permission_admission = true, replication_role_arn = "arn:aws:iam::333333333333:role/waitron-es-storage-replication" }
+  }
+  # Match downstream stores to the reported account so only root admission refuses.
+  override_module {
+    target  = module.storage
+    outputs = { storage = { stream_bucket = "waitron-es-stream-999999999999-eu-south-2", snapshot_bucket = "waitron-es-snapshot-999999999999-eu-south-2", backup_buckets = { stream = "waitron-es-stream-999999999999-eu-west-3", snapshot = "waitron-es-snapshot-999999999999-eu-west-3" }, kms_key_refs = { primary = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111", backup = "arn:aws:kms:eu-west-3:333333333333:key/22222222-2222-2222-2222-222222222222" } } }
+  }
+  override_module {
     target  = module.custody
-    outputs = { kms = { database = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111" }, backup_kms = { database = "arn:aws:kms:eu-west-3:333333333333:key/22222222-2222-2222-2222-222222222222" }, secrets = {}, backup_secret_refs = {} }
+    outputs = { kms = { database = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111", storage = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111", secrets = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111", logs = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111" }, backup_kms = { database = "arn:aws:kms:eu-west-3:333333333333:key/22222222-2222-2222-2222-222222222222", storage = "arn:aws:kms:eu-west-3:333333333333:key/22222222-2222-2222-2222-222222222222", secrets = "arn:aws:kms:eu-west-3:333333333333:key/22222222-2222-2222-2222-222222222222", logs = "arn:aws:kms:eu-west-3:333333333333:key/22222222-2222-2222-2222-222222222222" }, secrets = { "backup-master-key" = "arn:aws:secretsmanager:eu-south-2:333333333333:secret:waitron-es/backup-master-key-ABCDEF", "email-key-ring" = "arn:aws:secretsmanager:eu-south-2:333333333333:secret:waitron-es/email-key-ring-ABCDEF", "gateway-signing" = "arn:aws:secretsmanager:eu-south-2:333333333333:secret:waitron-es/gateway-signing-ABCDEF", "wireguard" = "arn:aws:secretsmanager:eu-south-2:333333333333:secret:waitron-es/wireguard-ABCDEF", "installation-signing" = "arn:aws:secretsmanager:eu-south-2:333333333333:secret:waitron-es/installation-signing-ABCDEF" }, backup_secret_refs = { "backup-master-key" = "arn:aws:secretsmanager:eu-west-3:333333333333:secret:waitron-es/backup-master-key-ABCDEF", "email-key-ring" = "arn:aws:secretsmanager:eu-west-3:333333333333:secret:waitron-es/email-key-ring-ABCDEF", "gateway-signing" = "arn:aws:secretsmanager:eu-west-3:333333333333:secret:waitron-es/gateway-signing-ABCDEF", "wireguard" = "arn:aws:secretsmanager:eu-west-3:333333333333:secret:waitron-es/wireguard-ABCDEF", "installation-signing" = "arn:aws:secretsmanager:eu-west-3:333333333333:secret:waitron-es/installation-signing-ABCDEF" }, replication_role_arn = "arn:aws:iam::333333333333:role/waitron-es-storage-replication" }
   }
   override_module {
     target  = module.database
-    outputs = { database = null }
+    outputs = { database = { endpoint = "synthetic.invalid", port = 5432, name = "cloud_es", admin_secret_ref = "arn:aws:secretsmanager:eu-south-2:333333333333:secret:admin-ABCDEF", kms_key_ref = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111", backup_ref = "arn:aws:rds:eu-west-3:333333333333:auto-backup:synthetic" } }
   }
   override_module {
     target = module.network
@@ -557,12 +694,20 @@ run "rejects_actual_country_account" {
 run "rejects_actual_country_region" {
   command = plan
   override_module {
+    target  = module.scope_permissions
+    outputs = { attachment_refs = {}, permission_admission = true, replication_role_arn = "arn:aws:iam::333333333333:role/waitron-es-storage-replication" }
+  }
+  override_module {
+    target  = module.storage
+    outputs = { storage = { stream_bucket = "waitron-es-stream-333333333333-eu-south-2", snapshot_bucket = "waitron-es-snapshot-333333333333-eu-south-2", backup_buckets = { stream = "waitron-es-stream-333333333333-eu-west-3", snapshot = "waitron-es-snapshot-333333333333-eu-west-3" }, kms_key_refs = { primary = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111", backup = "arn:aws:kms:eu-west-3:333333333333:key/22222222-2222-2222-2222-222222222222" } } }
+  }
+  override_module {
     target  = module.custody
-    outputs = { kms = { database = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111" }, backup_kms = { database = "arn:aws:kms:eu-west-3:333333333333:key/22222222-2222-2222-2222-222222222222" }, secrets = {}, backup_secret_refs = {} }
+    outputs = { kms = { database = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111", storage = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111", secrets = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111", logs = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111" }, backup_kms = { database = "arn:aws:kms:eu-west-3:333333333333:key/22222222-2222-2222-2222-222222222222", storage = "arn:aws:kms:eu-west-3:333333333333:key/22222222-2222-2222-2222-222222222222", secrets = "arn:aws:kms:eu-west-3:333333333333:key/22222222-2222-2222-2222-222222222222", logs = "arn:aws:kms:eu-west-3:333333333333:key/22222222-2222-2222-2222-222222222222" }, secrets = { "backup-master-key" = "arn:aws:secretsmanager:eu-south-2:333333333333:secret:waitron-es/backup-master-key-ABCDEF", "email-key-ring" = "arn:aws:secretsmanager:eu-south-2:333333333333:secret:waitron-es/email-key-ring-ABCDEF", "gateway-signing" = "arn:aws:secretsmanager:eu-south-2:333333333333:secret:waitron-es/gateway-signing-ABCDEF", "wireguard" = "arn:aws:secretsmanager:eu-south-2:333333333333:secret:waitron-es/wireguard-ABCDEF", "installation-signing" = "arn:aws:secretsmanager:eu-south-2:333333333333:secret:waitron-es/installation-signing-ABCDEF" }, backup_secret_refs = { "backup-master-key" = "arn:aws:secretsmanager:eu-west-3:333333333333:secret:waitron-es/backup-master-key-ABCDEF", "email-key-ring" = "arn:aws:secretsmanager:eu-west-3:333333333333:secret:waitron-es/email-key-ring-ABCDEF", "gateway-signing" = "arn:aws:secretsmanager:eu-west-3:333333333333:secret:waitron-es/gateway-signing-ABCDEF", "wireguard" = "arn:aws:secretsmanager:eu-west-3:333333333333:secret:waitron-es/wireguard-ABCDEF", "installation-signing" = "arn:aws:secretsmanager:eu-west-3:333333333333:secret:waitron-es/installation-signing-ABCDEF" }, replication_role_arn = "arn:aws:iam::333333333333:role/waitron-es-storage-replication" }
   }
   override_module {
     target  = module.database
-    outputs = { database = null }
+    outputs = { database = { endpoint = "synthetic.invalid", port = 5432, name = "cloud_es", admin_secret_ref = "arn:aws:secretsmanager:eu-south-2:333333333333:secret:admin-ABCDEF", kms_key_ref = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111", backup_ref = "arn:aws:rds:eu-west-3:333333333333:auto-backup:synthetic" } }
   }
   override_module {
     target = module.network
@@ -590,12 +735,20 @@ run "rejects_actual_country_region" {
 run "rejects_actual_country_backup_account" {
   command = plan
   override_module {
+    target  = module.scope_permissions
+    outputs = { attachment_refs = {}, permission_admission = true, replication_role_arn = "arn:aws:iam::333333333333:role/waitron-es-storage-replication" }
+  }
+  override_module {
+    target  = module.storage
+    outputs = { storage = { stream_bucket = "waitron-es-stream-333333333333-eu-south-2", snapshot_bucket = "waitron-es-snapshot-333333333333-eu-south-2", backup_buckets = { stream = "waitron-es-stream-333333333333-eu-west-3", snapshot = "waitron-es-snapshot-333333333333-eu-west-3" }, kms_key_refs = { primary = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111", backup = "arn:aws:kms:eu-west-3:333333333333:key/22222222-2222-2222-2222-222222222222" } } }
+  }
+  override_module {
     target  = module.custody
-    outputs = { kms = { database = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111" }, backup_kms = { database = "arn:aws:kms:eu-west-3:333333333333:key/22222222-2222-2222-2222-222222222222" }, secrets = {}, backup_secret_refs = {} }
+    outputs = { kms = { database = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111", storage = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111", secrets = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111", logs = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111" }, backup_kms = { database = "arn:aws:kms:eu-west-3:333333333333:key/22222222-2222-2222-2222-222222222222", storage = "arn:aws:kms:eu-west-3:333333333333:key/22222222-2222-2222-2222-222222222222", secrets = "arn:aws:kms:eu-west-3:333333333333:key/22222222-2222-2222-2222-222222222222", logs = "arn:aws:kms:eu-west-3:333333333333:key/22222222-2222-2222-2222-222222222222" }, secrets = { "backup-master-key" = "arn:aws:secretsmanager:eu-south-2:333333333333:secret:waitron-es/backup-master-key-ABCDEF", "email-key-ring" = "arn:aws:secretsmanager:eu-south-2:333333333333:secret:waitron-es/email-key-ring-ABCDEF", "gateway-signing" = "arn:aws:secretsmanager:eu-south-2:333333333333:secret:waitron-es/gateway-signing-ABCDEF", "wireguard" = "arn:aws:secretsmanager:eu-south-2:333333333333:secret:waitron-es/wireguard-ABCDEF", "installation-signing" = "arn:aws:secretsmanager:eu-south-2:333333333333:secret:waitron-es/installation-signing-ABCDEF" }, backup_secret_refs = { "backup-master-key" = "arn:aws:secretsmanager:eu-west-3:333333333333:secret:waitron-es/backup-master-key-ABCDEF", "email-key-ring" = "arn:aws:secretsmanager:eu-west-3:333333333333:secret:waitron-es/email-key-ring-ABCDEF", "gateway-signing" = "arn:aws:secretsmanager:eu-west-3:333333333333:secret:waitron-es/gateway-signing-ABCDEF", "wireguard" = "arn:aws:secretsmanager:eu-west-3:333333333333:secret:waitron-es/wireguard-ABCDEF", "installation-signing" = "arn:aws:secretsmanager:eu-west-3:333333333333:secret:waitron-es/installation-signing-ABCDEF" }, replication_role_arn = "arn:aws:iam::333333333333:role/waitron-es-storage-replication" }
   }
   override_module {
     target  = module.database
-    outputs = { database = null }
+    outputs = { database = { endpoint = "synthetic.invalid", port = 5432, name = "cloud_es", admin_secret_ref = "arn:aws:secretsmanager:eu-south-2:333333333333:secret:admin-ABCDEF", kms_key_ref = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111", backup_ref = "arn:aws:rds:eu-west-3:333333333333:auto-backup:synthetic" } }
   }
   override_module {
     target = module.network
@@ -623,12 +776,20 @@ run "rejects_actual_country_backup_account" {
 run "rejects_actual_country_backup_region" {
   command = plan
   override_module {
+    target  = module.scope_permissions
+    outputs = { attachment_refs = {}, permission_admission = true, replication_role_arn = "arn:aws:iam::333333333333:role/waitron-es-storage-replication" }
+  }
+  override_module {
+    target  = module.storage
+    outputs = { storage = { stream_bucket = "waitron-es-stream-333333333333-eu-south-2", snapshot_bucket = "waitron-es-snapshot-333333333333-eu-south-2", backup_buckets = { stream = "waitron-es-stream-333333333333-eu-west-3", snapshot = "waitron-es-snapshot-333333333333-eu-west-3" }, kms_key_refs = { primary = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111", backup = "arn:aws:kms:eu-west-3:333333333333:key/22222222-2222-2222-2222-222222222222" } } }
+  }
+  override_module {
     target  = module.custody
-    outputs = { kms = { database = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111" }, backup_kms = { database = "arn:aws:kms:eu-west-3:333333333333:key/22222222-2222-2222-2222-222222222222" }, secrets = {}, backup_secret_refs = {} }
+    outputs = { kms = { database = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111", storage = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111", secrets = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111", logs = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111" }, backup_kms = { database = "arn:aws:kms:eu-west-3:333333333333:key/22222222-2222-2222-2222-222222222222", storage = "arn:aws:kms:eu-west-3:333333333333:key/22222222-2222-2222-2222-222222222222", secrets = "arn:aws:kms:eu-west-3:333333333333:key/22222222-2222-2222-2222-222222222222", logs = "arn:aws:kms:eu-west-3:333333333333:key/22222222-2222-2222-2222-222222222222" }, secrets = { "backup-master-key" = "arn:aws:secretsmanager:eu-south-2:333333333333:secret:waitron-es/backup-master-key-ABCDEF", "email-key-ring" = "arn:aws:secretsmanager:eu-south-2:333333333333:secret:waitron-es/email-key-ring-ABCDEF", "gateway-signing" = "arn:aws:secretsmanager:eu-south-2:333333333333:secret:waitron-es/gateway-signing-ABCDEF", "wireguard" = "arn:aws:secretsmanager:eu-south-2:333333333333:secret:waitron-es/wireguard-ABCDEF", "installation-signing" = "arn:aws:secretsmanager:eu-south-2:333333333333:secret:waitron-es/installation-signing-ABCDEF" }, backup_secret_refs = { "backup-master-key" = "arn:aws:secretsmanager:eu-west-3:333333333333:secret:waitron-es/backup-master-key-ABCDEF", "email-key-ring" = "arn:aws:secretsmanager:eu-west-3:333333333333:secret:waitron-es/email-key-ring-ABCDEF", "gateway-signing" = "arn:aws:secretsmanager:eu-west-3:333333333333:secret:waitron-es/gateway-signing-ABCDEF", "wireguard" = "arn:aws:secretsmanager:eu-west-3:333333333333:secret:waitron-es/wireguard-ABCDEF", "installation-signing" = "arn:aws:secretsmanager:eu-west-3:333333333333:secret:waitron-es/installation-signing-ABCDEF" }, replication_role_arn = "arn:aws:iam::333333333333:role/waitron-es-storage-replication" }
   }
   override_module {
     target  = module.database
-    outputs = { database = null }
+    outputs = { database = { endpoint = "synthetic.invalid", port = 5432, name = "cloud_es", admin_secret_ref = "arn:aws:secretsmanager:eu-south-2:333333333333:secret:admin-ABCDEF", kms_key_ref = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111", backup_ref = "arn:aws:rds:eu-west-3:333333333333:auto-backup:synthetic" } }
   }
   override_module {
     target = module.network
@@ -656,12 +817,20 @@ run "rejects_actual_country_backup_region" {
 run "rejects_actual_country_keys_account" {
   command = plan
   override_module {
+    target  = module.scope_permissions
+    outputs = { attachment_refs = {}, permission_admission = true, replication_role_arn = "arn:aws:iam::333333333333:role/waitron-es-storage-replication" }
+  }
+  override_module {
+    target  = module.storage
+    outputs = { storage = { stream_bucket = "waitron-es-stream-333333333333-eu-south-2", snapshot_bucket = "waitron-es-snapshot-333333333333-eu-south-2", backup_buckets = { stream = "waitron-es-stream-333333333333-eu-west-3", snapshot = "waitron-es-snapshot-333333333333-eu-west-3" }, kms_key_refs = { primary = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111", backup = "arn:aws:kms:eu-west-3:333333333333:key/22222222-2222-2222-2222-222222222222" } } }
+  }
+  override_module {
     target  = module.custody
-    outputs = { kms = { database = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111" }, backup_kms = { database = "arn:aws:kms:eu-west-3:333333333333:key/22222222-2222-2222-2222-222222222222" }, secrets = {}, backup_secret_refs = {} }
+    outputs = { kms = { database = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111", storage = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111", secrets = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111", logs = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111" }, backup_kms = { database = "arn:aws:kms:eu-west-3:333333333333:key/22222222-2222-2222-2222-222222222222", storage = "arn:aws:kms:eu-west-3:333333333333:key/22222222-2222-2222-2222-222222222222", secrets = "arn:aws:kms:eu-west-3:333333333333:key/22222222-2222-2222-2222-222222222222", logs = "arn:aws:kms:eu-west-3:333333333333:key/22222222-2222-2222-2222-222222222222" }, secrets = { "backup-master-key" = "arn:aws:secretsmanager:eu-south-2:333333333333:secret:waitron-es/backup-master-key-ABCDEF", "email-key-ring" = "arn:aws:secretsmanager:eu-south-2:333333333333:secret:waitron-es/email-key-ring-ABCDEF", "gateway-signing" = "arn:aws:secretsmanager:eu-south-2:333333333333:secret:waitron-es/gateway-signing-ABCDEF", "wireguard" = "arn:aws:secretsmanager:eu-south-2:333333333333:secret:waitron-es/wireguard-ABCDEF", "installation-signing" = "arn:aws:secretsmanager:eu-south-2:333333333333:secret:waitron-es/installation-signing-ABCDEF" }, backup_secret_refs = { "backup-master-key" = "arn:aws:secretsmanager:eu-west-3:333333333333:secret:waitron-es/backup-master-key-ABCDEF", "email-key-ring" = "arn:aws:secretsmanager:eu-west-3:333333333333:secret:waitron-es/email-key-ring-ABCDEF", "gateway-signing" = "arn:aws:secretsmanager:eu-west-3:333333333333:secret:waitron-es/gateway-signing-ABCDEF", "wireguard" = "arn:aws:secretsmanager:eu-west-3:333333333333:secret:waitron-es/wireguard-ABCDEF", "installation-signing" = "arn:aws:secretsmanager:eu-west-3:333333333333:secret:waitron-es/installation-signing-ABCDEF" }, replication_role_arn = "arn:aws:iam::333333333333:role/waitron-es-storage-replication" }
   }
   override_module {
     target  = module.database
-    outputs = { database = null }
+    outputs = { database = { endpoint = "synthetic.invalid", port = 5432, name = "cloud_es", admin_secret_ref = "arn:aws:secretsmanager:eu-south-2:333333333333:secret:admin-ABCDEF", kms_key_ref = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111", backup_ref = "arn:aws:rds:eu-west-3:333333333333:auto-backup:synthetic" } }
   }
   override_module {
     target = module.network
@@ -689,12 +858,20 @@ run "rejects_actual_country_keys_account" {
 run "rejects_actual_country_keys_region" {
   command = plan
   override_module {
+    target  = module.scope_permissions
+    outputs = { attachment_refs = {}, permission_admission = true, replication_role_arn = "arn:aws:iam::333333333333:role/waitron-es-storage-replication" }
+  }
+  override_module {
+    target  = module.storage
+    outputs = { storage = { stream_bucket = "waitron-es-stream-333333333333-eu-south-2", snapshot_bucket = "waitron-es-snapshot-333333333333-eu-south-2", backup_buckets = { stream = "waitron-es-stream-333333333333-eu-west-3", snapshot = "waitron-es-snapshot-333333333333-eu-west-3" }, kms_key_refs = { primary = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111", backup = "arn:aws:kms:eu-west-3:333333333333:key/22222222-2222-2222-2222-222222222222" } } }
+  }
+  override_module {
     target  = module.custody
-    outputs = { kms = { database = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111" }, backup_kms = { database = "arn:aws:kms:eu-west-3:333333333333:key/22222222-2222-2222-2222-222222222222" }, secrets = {}, backup_secret_refs = {} }
+    outputs = { kms = { database = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111", storage = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111", secrets = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111", logs = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111" }, backup_kms = { database = "arn:aws:kms:eu-west-3:333333333333:key/22222222-2222-2222-2222-222222222222", storage = "arn:aws:kms:eu-west-3:333333333333:key/22222222-2222-2222-2222-222222222222", secrets = "arn:aws:kms:eu-west-3:333333333333:key/22222222-2222-2222-2222-222222222222", logs = "arn:aws:kms:eu-west-3:333333333333:key/22222222-2222-2222-2222-222222222222" }, secrets = { "backup-master-key" = "arn:aws:secretsmanager:eu-south-2:333333333333:secret:waitron-es/backup-master-key-ABCDEF", "email-key-ring" = "arn:aws:secretsmanager:eu-south-2:333333333333:secret:waitron-es/email-key-ring-ABCDEF", "gateway-signing" = "arn:aws:secretsmanager:eu-south-2:333333333333:secret:waitron-es/gateway-signing-ABCDEF", "wireguard" = "arn:aws:secretsmanager:eu-south-2:333333333333:secret:waitron-es/wireguard-ABCDEF", "installation-signing" = "arn:aws:secretsmanager:eu-south-2:333333333333:secret:waitron-es/installation-signing-ABCDEF" }, backup_secret_refs = { "backup-master-key" = "arn:aws:secretsmanager:eu-west-3:333333333333:secret:waitron-es/backup-master-key-ABCDEF", "email-key-ring" = "arn:aws:secretsmanager:eu-west-3:333333333333:secret:waitron-es/email-key-ring-ABCDEF", "gateway-signing" = "arn:aws:secretsmanager:eu-west-3:333333333333:secret:waitron-es/gateway-signing-ABCDEF", "wireguard" = "arn:aws:secretsmanager:eu-west-3:333333333333:secret:waitron-es/wireguard-ABCDEF", "installation-signing" = "arn:aws:secretsmanager:eu-west-3:333333333333:secret:waitron-es/installation-signing-ABCDEF" }, replication_role_arn = "arn:aws:iam::333333333333:role/waitron-es-storage-replication" }
   }
   override_module {
     target  = module.database
-    outputs = { database = null }
+    outputs = { database = { endpoint = "synthetic.invalid", port = 5432, name = "cloud_es", admin_secret_ref = "arn:aws:secretsmanager:eu-south-2:333333333333:secret:admin-ABCDEF", kms_key_ref = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111", backup_ref = "arn:aws:rds:eu-west-3:333333333333:auto-backup:synthetic" } }
   }
   override_module {
     target = module.network
@@ -722,12 +899,20 @@ run "rejects_actual_country_keys_region" {
 run "rejects_actual_country_backup_keys_account" {
   command = plan
   override_module {
+    target  = module.scope_permissions
+    outputs = { attachment_refs = {}, permission_admission = true, replication_role_arn = "arn:aws:iam::333333333333:role/waitron-es-storage-replication" }
+  }
+  override_module {
+    target  = module.storage
+    outputs = { storage = { stream_bucket = "waitron-es-stream-333333333333-eu-south-2", snapshot_bucket = "waitron-es-snapshot-333333333333-eu-south-2", backup_buckets = { stream = "waitron-es-stream-333333333333-eu-west-3", snapshot = "waitron-es-snapshot-333333333333-eu-west-3" }, kms_key_refs = { primary = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111", backup = "arn:aws:kms:eu-west-3:333333333333:key/22222222-2222-2222-2222-222222222222" } } }
+  }
+  override_module {
     target  = module.custody
-    outputs = { kms = { database = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111" }, backup_kms = { database = "arn:aws:kms:eu-west-3:333333333333:key/22222222-2222-2222-2222-222222222222" }, secrets = {}, backup_secret_refs = {} }
+    outputs = { kms = { database = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111", storage = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111", secrets = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111", logs = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111" }, backup_kms = { database = "arn:aws:kms:eu-west-3:333333333333:key/22222222-2222-2222-2222-222222222222", storage = "arn:aws:kms:eu-west-3:333333333333:key/22222222-2222-2222-2222-222222222222", secrets = "arn:aws:kms:eu-west-3:333333333333:key/22222222-2222-2222-2222-222222222222", logs = "arn:aws:kms:eu-west-3:333333333333:key/22222222-2222-2222-2222-222222222222" }, secrets = { "backup-master-key" = "arn:aws:secretsmanager:eu-south-2:333333333333:secret:waitron-es/backup-master-key-ABCDEF", "email-key-ring" = "arn:aws:secretsmanager:eu-south-2:333333333333:secret:waitron-es/email-key-ring-ABCDEF", "gateway-signing" = "arn:aws:secretsmanager:eu-south-2:333333333333:secret:waitron-es/gateway-signing-ABCDEF", "wireguard" = "arn:aws:secretsmanager:eu-south-2:333333333333:secret:waitron-es/wireguard-ABCDEF", "installation-signing" = "arn:aws:secretsmanager:eu-south-2:333333333333:secret:waitron-es/installation-signing-ABCDEF" }, backup_secret_refs = { "backup-master-key" = "arn:aws:secretsmanager:eu-west-3:333333333333:secret:waitron-es/backup-master-key-ABCDEF", "email-key-ring" = "arn:aws:secretsmanager:eu-west-3:333333333333:secret:waitron-es/email-key-ring-ABCDEF", "gateway-signing" = "arn:aws:secretsmanager:eu-west-3:333333333333:secret:waitron-es/gateway-signing-ABCDEF", "wireguard" = "arn:aws:secretsmanager:eu-west-3:333333333333:secret:waitron-es/wireguard-ABCDEF", "installation-signing" = "arn:aws:secretsmanager:eu-west-3:333333333333:secret:waitron-es/installation-signing-ABCDEF" }, replication_role_arn = "arn:aws:iam::333333333333:role/waitron-es-storage-replication" }
   }
   override_module {
     target  = module.database
-    outputs = { database = null }
+    outputs = { database = { endpoint = "synthetic.invalid", port = 5432, name = "cloud_es", admin_secret_ref = "arn:aws:secretsmanager:eu-south-2:333333333333:secret:admin-ABCDEF", kms_key_ref = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111", backup_ref = "arn:aws:rds:eu-west-3:333333333333:auto-backup:synthetic" } }
   }
   override_module {
     target = module.network
@@ -755,12 +940,20 @@ run "rejects_actual_country_backup_keys_account" {
 run "rejects_actual_country_backup_keys_region" {
   command = plan
   override_module {
+    target  = module.scope_permissions
+    outputs = { attachment_refs = {}, permission_admission = true, replication_role_arn = "arn:aws:iam::333333333333:role/waitron-es-storage-replication" }
+  }
+  override_module {
+    target  = module.storage
+    outputs = { storage = { stream_bucket = "waitron-es-stream-333333333333-eu-south-2", snapshot_bucket = "waitron-es-snapshot-333333333333-eu-south-2", backup_buckets = { stream = "waitron-es-stream-333333333333-eu-west-3", snapshot = "waitron-es-snapshot-333333333333-eu-west-3" }, kms_key_refs = { primary = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111", backup = "arn:aws:kms:eu-west-3:333333333333:key/22222222-2222-2222-2222-222222222222" } } }
+  }
+  override_module {
     target  = module.custody
-    outputs = { kms = { database = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111" }, backup_kms = { database = "arn:aws:kms:eu-west-3:333333333333:key/22222222-2222-2222-2222-222222222222" }, secrets = {}, backup_secret_refs = {} }
+    outputs = { kms = { database = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111", storage = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111", secrets = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111", logs = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111" }, backup_kms = { database = "arn:aws:kms:eu-west-3:333333333333:key/22222222-2222-2222-2222-222222222222", storage = "arn:aws:kms:eu-west-3:333333333333:key/22222222-2222-2222-2222-222222222222", secrets = "arn:aws:kms:eu-west-3:333333333333:key/22222222-2222-2222-2222-222222222222", logs = "arn:aws:kms:eu-west-3:333333333333:key/22222222-2222-2222-2222-222222222222" }, secrets = { "backup-master-key" = "arn:aws:secretsmanager:eu-south-2:333333333333:secret:waitron-es/backup-master-key-ABCDEF", "email-key-ring" = "arn:aws:secretsmanager:eu-south-2:333333333333:secret:waitron-es/email-key-ring-ABCDEF", "gateway-signing" = "arn:aws:secretsmanager:eu-south-2:333333333333:secret:waitron-es/gateway-signing-ABCDEF", "wireguard" = "arn:aws:secretsmanager:eu-south-2:333333333333:secret:waitron-es/wireguard-ABCDEF", "installation-signing" = "arn:aws:secretsmanager:eu-south-2:333333333333:secret:waitron-es/installation-signing-ABCDEF" }, backup_secret_refs = { "backup-master-key" = "arn:aws:secretsmanager:eu-west-3:333333333333:secret:waitron-es/backup-master-key-ABCDEF", "email-key-ring" = "arn:aws:secretsmanager:eu-west-3:333333333333:secret:waitron-es/email-key-ring-ABCDEF", "gateway-signing" = "arn:aws:secretsmanager:eu-west-3:333333333333:secret:waitron-es/gateway-signing-ABCDEF", "wireguard" = "arn:aws:secretsmanager:eu-west-3:333333333333:secret:waitron-es/wireguard-ABCDEF", "installation-signing" = "arn:aws:secretsmanager:eu-west-3:333333333333:secret:waitron-es/installation-signing-ABCDEF" }, replication_role_arn = "arn:aws:iam::333333333333:role/waitron-es-storage-replication" }
   }
   override_module {
     target  = module.database
-    outputs = { database = null }
+    outputs = { database = { endpoint = "synthetic.invalid", port = 5432, name = "cloud_es", admin_secret_ref = "arn:aws:secretsmanager:eu-south-2:333333333333:secret:admin-ABCDEF", kms_key_ref = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111", backup_ref = "arn:aws:rds:eu-west-3:333333333333:auto-backup:synthetic" } }
   }
   override_module {
     target = module.network
@@ -788,12 +981,20 @@ run "rejects_actual_country_backup_keys_region" {
 run "rejects_all_malformed_identities" {
   command = plan
   override_module {
+    target  = module.scope_permissions
+    outputs = { attachment_refs = {}, permission_admission = true, replication_role_arn = "arn:aws:iam::333333333333:role/waitron-es-storage-replication" }
+  }
+  override_module {
+    target  = module.storage
+    outputs = { storage = { stream_bucket = "waitron-es-stream-333333333333-eu-south-2", snapshot_bucket = "waitron-es-snapshot-333333333333-eu-south-2", backup_buckets = { stream = "waitron-es-stream-333333333333-eu-west-3", snapshot = "waitron-es-snapshot-333333333333-eu-west-3" }, kms_key_refs = { primary = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111", backup = "arn:aws:kms:eu-west-3:333333333333:key/22222222-2222-2222-2222-222222222222" } } }
+  }
+  override_module {
     target  = module.custody
-    outputs = { kms = { database = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111" }, backup_kms = { database = "arn:aws:kms:eu-west-3:333333333333:key/22222222-2222-2222-2222-222222222222" }, secrets = {}, backup_secret_refs = {} }
+    outputs = { kms = { database = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111", storage = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111", secrets = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111", logs = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111" }, backup_kms = { database = "arn:aws:kms:eu-west-3:333333333333:key/22222222-2222-2222-2222-222222222222", storage = "arn:aws:kms:eu-west-3:333333333333:key/22222222-2222-2222-2222-222222222222", secrets = "arn:aws:kms:eu-west-3:333333333333:key/22222222-2222-2222-2222-222222222222", logs = "arn:aws:kms:eu-west-3:333333333333:key/22222222-2222-2222-2222-222222222222" }, secrets = { "backup-master-key" = "arn:aws:secretsmanager:eu-south-2:333333333333:secret:waitron-es/backup-master-key-ABCDEF", "email-key-ring" = "arn:aws:secretsmanager:eu-south-2:333333333333:secret:waitron-es/email-key-ring-ABCDEF", "gateway-signing" = "arn:aws:secretsmanager:eu-south-2:333333333333:secret:waitron-es/gateway-signing-ABCDEF", "wireguard" = "arn:aws:secretsmanager:eu-south-2:333333333333:secret:waitron-es/wireguard-ABCDEF", "installation-signing" = "arn:aws:secretsmanager:eu-south-2:333333333333:secret:waitron-es/installation-signing-ABCDEF" }, backup_secret_refs = { "backup-master-key" = "arn:aws:secretsmanager:eu-west-3:333333333333:secret:waitron-es/backup-master-key-ABCDEF", "email-key-ring" = "arn:aws:secretsmanager:eu-west-3:333333333333:secret:waitron-es/email-key-ring-ABCDEF", "gateway-signing" = "arn:aws:secretsmanager:eu-west-3:333333333333:secret:waitron-es/gateway-signing-ABCDEF", "wireguard" = "arn:aws:secretsmanager:eu-west-3:333333333333:secret:waitron-es/wireguard-ABCDEF", "installation-signing" = "arn:aws:secretsmanager:eu-west-3:333333333333:secret:waitron-es/installation-signing-ABCDEF" }, replication_role_arn = "arn:aws:iam::333333333333:role/waitron-es-storage-replication" }
   }
   override_module {
     target  = module.database
-    outputs = { database = null }
+    outputs = { database = { endpoint = "synthetic.invalid", port = 5432, name = "cloud_es", admin_secret_ref = "arn:aws:secretsmanager:eu-south-2:333333333333:secret:admin-ABCDEF", kms_key_ref = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111", backup_ref = "arn:aws:rds:eu-west-3:333333333333:auto-backup:synthetic" } }
   }
   override_module {
     target = module.network
@@ -818,12 +1019,20 @@ run "rejects_all_malformed_identities" {
 run "rejects_primary_region" {
   command = plan
   override_module {
+    target  = module.scope_permissions
+    outputs = { attachment_refs = {}, permission_admission = true, replication_role_arn = "arn:aws:iam::333333333333:role/waitron-es-storage-replication" }
+  }
+  override_module {
+    target  = module.storage
+    outputs = { storage = { stream_bucket = "waitron-es-stream-333333333333-eu-south-2", snapshot_bucket = "waitron-es-snapshot-333333333333-eu-south-2", backup_buckets = { stream = "waitron-es-stream-333333333333-eu-west-3", snapshot = "waitron-es-snapshot-333333333333-eu-west-3" }, kms_key_refs = { primary = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111", backup = "arn:aws:kms:eu-west-3:333333333333:key/22222222-2222-2222-2222-222222222222" } } }
+  }
+  override_module {
     target  = module.custody
-    outputs = { kms = { database = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111" }, backup_kms = { database = "arn:aws:kms:eu-west-3:333333333333:key/22222222-2222-2222-2222-222222222222" }, secrets = {}, backup_secret_refs = {} }
+    outputs = { kms = { database = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111", storage = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111", secrets = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111", logs = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111" }, backup_kms = { database = "arn:aws:kms:eu-west-3:333333333333:key/22222222-2222-2222-2222-222222222222", storage = "arn:aws:kms:eu-west-3:333333333333:key/22222222-2222-2222-2222-222222222222", secrets = "arn:aws:kms:eu-west-3:333333333333:key/22222222-2222-2222-2222-222222222222", logs = "arn:aws:kms:eu-west-3:333333333333:key/22222222-2222-2222-2222-222222222222" }, secrets = { "backup-master-key" = "arn:aws:secretsmanager:eu-south-2:333333333333:secret:waitron-es/backup-master-key-ABCDEF", "email-key-ring" = "arn:aws:secretsmanager:eu-south-2:333333333333:secret:waitron-es/email-key-ring-ABCDEF", "gateway-signing" = "arn:aws:secretsmanager:eu-south-2:333333333333:secret:waitron-es/gateway-signing-ABCDEF", "wireguard" = "arn:aws:secretsmanager:eu-south-2:333333333333:secret:waitron-es/wireguard-ABCDEF", "installation-signing" = "arn:aws:secretsmanager:eu-south-2:333333333333:secret:waitron-es/installation-signing-ABCDEF" }, backup_secret_refs = { "backup-master-key" = "arn:aws:secretsmanager:eu-west-3:333333333333:secret:waitron-es/backup-master-key-ABCDEF", "email-key-ring" = "arn:aws:secretsmanager:eu-west-3:333333333333:secret:waitron-es/email-key-ring-ABCDEF", "gateway-signing" = "arn:aws:secretsmanager:eu-west-3:333333333333:secret:waitron-es/gateway-signing-ABCDEF", "wireguard" = "arn:aws:secretsmanager:eu-west-3:333333333333:secret:waitron-es/wireguard-ABCDEF", "installation-signing" = "arn:aws:secretsmanager:eu-west-3:333333333333:secret:waitron-es/installation-signing-ABCDEF" }, replication_role_arn = "arn:aws:iam::333333333333:role/waitron-es-storage-replication" }
   }
   override_module {
     target  = module.database
-    outputs = { database = null }
+    outputs = { database = { endpoint = "synthetic.invalid", port = 5432, name = "cloud_es", admin_secret_ref = "arn:aws:secretsmanager:eu-south-2:333333333333:secret:admin-ABCDEF", kms_key_ref = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111", backup_ref = "arn:aws:rds:eu-west-3:333333333333:auto-backup:synthetic" } }
   }
   override_module {
     target = module.network
@@ -848,12 +1057,20 @@ run "rejects_primary_region" {
 run "rejects_malformed_cell" {
   command = plan
   override_module {
+    target  = module.scope_permissions
+    outputs = { attachment_refs = {}, permission_admission = true, replication_role_arn = "arn:aws:iam::333333333333:role/waitron-es-storage-replication" }
+  }
+  override_module {
+    target  = module.storage
+    outputs = { storage = { stream_bucket = "waitron-es-stream-333333333333-eu-south-2", snapshot_bucket = "waitron-es-snapshot-333333333333-eu-south-2", backup_buckets = { stream = "waitron-es-stream-333333333333-eu-west-3", snapshot = "waitron-es-snapshot-333333333333-eu-west-3" }, kms_key_refs = { primary = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111", backup = "arn:aws:kms:eu-west-3:333333333333:key/22222222-2222-2222-2222-222222222222" } } }
+  }
+  override_module {
     target  = module.custody
-    outputs = { kms = { database = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111" }, backup_kms = { database = "arn:aws:kms:eu-west-3:333333333333:key/22222222-2222-2222-2222-222222222222" }, secrets = {}, backup_secret_refs = {} }
+    outputs = { kms = { database = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111", storage = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111", secrets = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111", logs = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111" }, backup_kms = { database = "arn:aws:kms:eu-west-3:333333333333:key/22222222-2222-2222-2222-222222222222", storage = "arn:aws:kms:eu-west-3:333333333333:key/22222222-2222-2222-2222-222222222222", secrets = "arn:aws:kms:eu-west-3:333333333333:key/22222222-2222-2222-2222-222222222222", logs = "arn:aws:kms:eu-west-3:333333333333:key/22222222-2222-2222-2222-222222222222" }, secrets = { "backup-master-key" = "arn:aws:secretsmanager:eu-south-2:333333333333:secret:waitron-es/backup-master-key-ABCDEF", "email-key-ring" = "arn:aws:secretsmanager:eu-south-2:333333333333:secret:waitron-es/email-key-ring-ABCDEF", "gateway-signing" = "arn:aws:secretsmanager:eu-south-2:333333333333:secret:waitron-es/gateway-signing-ABCDEF", "wireguard" = "arn:aws:secretsmanager:eu-south-2:333333333333:secret:waitron-es/wireguard-ABCDEF", "installation-signing" = "arn:aws:secretsmanager:eu-south-2:333333333333:secret:waitron-es/installation-signing-ABCDEF" }, backup_secret_refs = { "backup-master-key" = "arn:aws:secretsmanager:eu-west-3:333333333333:secret:waitron-es/backup-master-key-ABCDEF", "email-key-ring" = "arn:aws:secretsmanager:eu-west-3:333333333333:secret:waitron-es/email-key-ring-ABCDEF", "gateway-signing" = "arn:aws:secretsmanager:eu-west-3:333333333333:secret:waitron-es/gateway-signing-ABCDEF", "wireguard" = "arn:aws:secretsmanager:eu-west-3:333333333333:secret:waitron-es/wireguard-ABCDEF", "installation-signing" = "arn:aws:secretsmanager:eu-west-3:333333333333:secret:waitron-es/installation-signing-ABCDEF" }, replication_role_arn = "arn:aws:iam::333333333333:role/waitron-es-storage-replication" }
   }
   override_module {
     target  = module.database
-    outputs = { database = null }
+    outputs = { database = { endpoint = "synthetic.invalid", port = 5432, name = "cloud_es", admin_secret_ref = "arn:aws:secretsmanager:eu-south-2:333333333333:secret:admin-ABCDEF", kms_key_ref = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111", backup_ref = "arn:aws:rds:eu-west-3:333333333333:auto-backup:synthetic" } }
   }
   override_module {
     target = module.network
@@ -879,12 +1096,20 @@ run "rejects_malformed_cell" {
 run "primary_cells_use_their_exact_network_entries" {
   command = plan
   override_module {
+    target  = module.scope_permissions
+    outputs = { attachment_refs = {}, permission_admission = true, replication_role_arn = "arn:aws:iam::333333333333:role/waitron-es-storage-replication" }
+  }
+  override_module {
+    target  = module.storage
+    outputs = { storage = { stream_bucket = "waitron-es-stream-333333333333-eu-south-2", snapshot_bucket = "waitron-es-snapshot-333333333333-eu-south-2", backup_buckets = { stream = "waitron-es-stream-333333333333-eu-west-3", snapshot = "waitron-es-snapshot-333333333333-eu-west-3" }, kms_key_refs = { primary = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111", backup = "arn:aws:kms:eu-west-3:333333333333:key/22222222-2222-2222-2222-222222222222" } } }
+  }
+  override_module {
     target  = module.custody
-    outputs = { kms = { database = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111" }, backup_kms = { database = "arn:aws:kms:eu-west-3:333333333333:key/22222222-2222-2222-2222-222222222222" }, secrets = {}, backup_secret_refs = {} }
+    outputs = { kms = { database = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111", storage = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111", secrets = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111", logs = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111" }, backup_kms = { database = "arn:aws:kms:eu-west-3:333333333333:key/22222222-2222-2222-2222-222222222222", storage = "arn:aws:kms:eu-west-3:333333333333:key/22222222-2222-2222-2222-222222222222", secrets = "arn:aws:kms:eu-west-3:333333333333:key/22222222-2222-2222-2222-222222222222", logs = "arn:aws:kms:eu-west-3:333333333333:key/22222222-2222-2222-2222-222222222222" }, secrets = { "backup-master-key" = "arn:aws:secretsmanager:eu-south-2:333333333333:secret:waitron-es/backup-master-key-ABCDEF", "email-key-ring" = "arn:aws:secretsmanager:eu-south-2:333333333333:secret:waitron-es/email-key-ring-ABCDEF", "gateway-signing" = "arn:aws:secretsmanager:eu-south-2:333333333333:secret:waitron-es/gateway-signing-ABCDEF", "wireguard" = "arn:aws:secretsmanager:eu-south-2:333333333333:secret:waitron-es/wireguard-ABCDEF", "installation-signing" = "arn:aws:secretsmanager:eu-south-2:333333333333:secret:waitron-es/installation-signing-ABCDEF" }, backup_secret_refs = { "backup-master-key" = "arn:aws:secretsmanager:eu-west-3:333333333333:secret:waitron-es/backup-master-key-ABCDEF", "email-key-ring" = "arn:aws:secretsmanager:eu-west-3:333333333333:secret:waitron-es/email-key-ring-ABCDEF", "gateway-signing" = "arn:aws:secretsmanager:eu-west-3:333333333333:secret:waitron-es/gateway-signing-ABCDEF", "wireguard" = "arn:aws:secretsmanager:eu-west-3:333333333333:secret:waitron-es/wireguard-ABCDEF", "installation-signing" = "arn:aws:secretsmanager:eu-west-3:333333333333:secret:waitron-es/installation-signing-ABCDEF" }, replication_role_arn = "arn:aws:iam::333333333333:role/waitron-es-storage-replication" }
   }
   override_module {
     target  = module.database
-    outputs = { database = null }
+    outputs = { database = { endpoint = "synthetic.invalid", port = 5432, name = "cloud_es", admin_secret_ref = "arn:aws:secretsmanager:eu-south-2:333333333333:secret:admin-ABCDEF", kms_key_ref = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111", backup_ref = "arn:aws:rds:eu-west-3:333333333333:auto-backup:synthetic" } }
   }
   override_module {
     target = module.network
@@ -909,12 +1134,20 @@ run "primary_cells_use_their_exact_network_entries" {
 run "rejects_foreign_operator_account_before_cell_reads" {
   command = plan
   override_module {
+    target  = module.scope_permissions
+    outputs = { attachment_refs = {}, permission_admission = true, replication_role_arn = "arn:aws:iam::333333333333:role/waitron-es-storage-replication" }
+  }
+  override_module {
+    target  = module.storage
+    outputs = { storage = { stream_bucket = "waitron-es-stream-333333333333-eu-south-2", snapshot_bucket = "waitron-es-snapshot-333333333333-eu-south-2", backup_buckets = { stream = "waitron-es-stream-333333333333-eu-west-3", snapshot = "waitron-es-snapshot-333333333333-eu-west-3" }, kms_key_refs = { primary = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111", backup = "arn:aws:kms:eu-west-3:333333333333:key/22222222-2222-2222-2222-222222222222" } } }
+  }
+  override_module {
     target  = module.custody
-    outputs = { kms = { database = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111" }, backup_kms = { database = "arn:aws:kms:eu-west-3:333333333333:key/22222222-2222-2222-2222-222222222222" }, secrets = {}, backup_secret_refs = {} }
+    outputs = { kms = { database = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111", storage = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111", secrets = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111", logs = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111" }, backup_kms = { database = "arn:aws:kms:eu-west-3:333333333333:key/22222222-2222-2222-2222-222222222222", storage = "arn:aws:kms:eu-west-3:333333333333:key/22222222-2222-2222-2222-222222222222", secrets = "arn:aws:kms:eu-west-3:333333333333:key/22222222-2222-2222-2222-222222222222", logs = "arn:aws:kms:eu-west-3:333333333333:key/22222222-2222-2222-2222-222222222222" }, secrets = { "backup-master-key" = "arn:aws:secretsmanager:eu-south-2:333333333333:secret:waitron-es/backup-master-key-ABCDEF", "email-key-ring" = "arn:aws:secretsmanager:eu-south-2:333333333333:secret:waitron-es/email-key-ring-ABCDEF", "gateway-signing" = "arn:aws:secretsmanager:eu-south-2:333333333333:secret:waitron-es/gateway-signing-ABCDEF", "wireguard" = "arn:aws:secretsmanager:eu-south-2:333333333333:secret:waitron-es/wireguard-ABCDEF", "installation-signing" = "arn:aws:secretsmanager:eu-south-2:333333333333:secret:waitron-es/installation-signing-ABCDEF" }, backup_secret_refs = { "backup-master-key" = "arn:aws:secretsmanager:eu-west-3:333333333333:secret:waitron-es/backup-master-key-ABCDEF", "email-key-ring" = "arn:aws:secretsmanager:eu-west-3:333333333333:secret:waitron-es/email-key-ring-ABCDEF", "gateway-signing" = "arn:aws:secretsmanager:eu-west-3:333333333333:secret:waitron-es/gateway-signing-ABCDEF", "wireguard" = "arn:aws:secretsmanager:eu-west-3:333333333333:secret:waitron-es/wireguard-ABCDEF", "installation-signing" = "arn:aws:secretsmanager:eu-west-3:333333333333:secret:waitron-es/installation-signing-ABCDEF" }, replication_role_arn = "arn:aws:iam::333333333333:role/waitron-es-storage-replication" }
   }
   override_module {
     target  = module.database
-    outputs = { database = null }
+    outputs = { database = { endpoint = "synthetic.invalid", port = 5432, name = "cloud_es", admin_secret_ref = "arn:aws:secretsmanager:eu-south-2:333333333333:secret:admin-ABCDEF", kms_key_ref = "arn:aws:kms:eu-south-2:333333333333:key/11111111-1111-1111-1111-111111111111", backup_ref = "arn:aws:rds:eu-west-3:333333333333:auto-backup:synthetic" } }
   }
   override_module {
     target = module.network

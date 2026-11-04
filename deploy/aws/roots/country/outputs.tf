@@ -56,3 +56,15 @@ output "data_topology" {
     backup_secret_refs = module.custody.backup_secret_refs
   }
 }
+
+output "storage_topology" {
+  value = {
+    storage     = module.storage.storage
+    attachments = module.scope_permissions.attachment_refs
+    admitted    = module.scope_permissions.permission_admission
+  }
+  precondition {
+    condition     = module.storage.storage == local.storage_refs
+    error_message = "Actual country stores and keys must match the targets granted to replication and recovery"
+  }
+}
