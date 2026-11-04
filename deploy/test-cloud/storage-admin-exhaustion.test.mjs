@@ -20,7 +20,9 @@ async function occupyAdminRange() {
   // Keep every reservation open so another process cannot enter that range.
   for (let attempt = 0; attempt < 20; attempt++) {
     const servers = [];
-    const firstPort = randomInt(10000, 65436);
+    // Service fixtures claim ports from 32768 upward. Keep this whole range
+    // below them so admin owners cannot enter a socket-to-child handoff.
+    const firstPort = randomInt(10000, 32668);
     try {
       for (let index = 0; index < 101; index++) {
         const server = createServer(socket => {

@@ -395,3 +395,128 @@ process's executable, certificates and shared cache, in both completion orders.
 The probes pause before listeners and store startup. An unexpected refusal retry
 is caught by the existing 30-second test deadline; prompt refusal is unproved.
 See [the storage qualification boundaries](storage-cache-fixture.md#concurrent-storage-extraction-and-failed-startup-cleanup-d454).
+
+
+## Native storage admin fallback exhaustion (D506)
+
+The admin test listeners could take another fixture's service port during the
+handoff from reservation socket to native child. Run
+`node --test scripts/ci-storage-admin-handoff.test.mjs` to pause a native child
+with its S3 port still claimed, then execute each admin case with its original
+assertions in a separate process. Selecting that port for the old admin listener
+or its 101-port range reproduces an S3 startup refusal. The 101 admin-gRPC owners
+stay below 32768. The fallback cases select
+owners below 22668, leaving room for HTTP's derived gRPC port 10000 higher and
+the next 100 fallback choices. This keeps these controlled listeners outside
+the service allocator's 32768–60999 range. An occupied admin candidate retries
+within 20 selections. The original admin assertions, all 101
+competing listeners, single-child checks and deadlines remain.
+
+These controls identify their deliberately selected competing listener.
+They do not identify historical CI listeners or explain every native startup
+failure. In particular,
+[merge 9b7c540a's local-stack job](https://github.com/waitron-io/waitron-cloud/actions/runs/41850829904/job/126652888279)
+refuses S3 port 52135 in `storage-admin-ports.test.mjs`; its snapshot names
+Node PID 5625 without identifying its fixture. The same job cancels the
+held-bucket case in `storage-admin-progress-integration.test.mjs` at its unchanged
+120-second limit. Neither a shared cause nor the stalled operation is established.
+The separate historical admin failures and qualification limits follow.
+
+
+Run `node --test deploy/test-cloud/storage-admin-exhaustion.test.mjs` to check
+usable S3 storage when all 101 admin gRPC choices are occupied, preservation of
+every competing listener, cleanup and later clean startup. The native fallback
+warning does not imply S3 startup refusal. Admin-worker functionality, an actual
+admin bind refusal and bind races involving other programs remain open.
+
+[PR790 qualification](https://github.com/waitron-io/waitron-cloud/actions/runs/41172266544/job/124452925371)
+failed before these checks when SeaweedFS refused its allocated master port.
+The listener snapshot names a `weed` process; its fixture owner remains
+unknown. This case deliberately disables the fixture's handoff retry to prove
+that admin exhaustion does not restart storage. The unchanged Linux control
+passes, which does not explain or fix that historical collision.
+
+[PR793's unrelated documentation qualification](https://github.com/waitron-io/waitron-cloud/actions/runs/41182496471/job/124482642911)
+also reaches a later handoff refusal in the existing forced-collision readiness
+test. Its restarted native store cannot bind the allocated S3 gRPC port; the
+listener snapshot names another `weed` PID without identifying its fixture.
+The expected original SDK error is therefore replaced by the genuine startup
+refusal. The unchanged forced-collision
+case passes all three modes on the authorised Linux test box, including the
+throwing reporter; that control does not explain or repair the CI collision.
+
+[PR795's email shutdown qualification](https://github.com/waitron-io/waitron-cloud/actions/runs/41187136562/job/124496295046)
+repeats this failure in the same forced-collision `reporter-throws` subcase.
+The restarted store cannot bind S3 gRPC port 46747; its listener snapshot names
+`weed` PID 7112, with fixture ownership still unknown. The original SDK-error
+assertion fails. Both storage source and test match the branch's base exactly.
+Lane H's D530 investigation owns this recurrence; keep the single restart and
+every assertion. A later clean qualification does not repair this collision.
+
+A controlled current-main reproduction exposes a peer binding an already claimed
+filer port before its claim attempt returns `EEXIST`. The native owner then
+refuses that port. Candidates are now claimed before binding; existing claims
+cause no bind, occupied unclaimed candidates retry within 256 selections, and
+other bind errors retain their original object. New native handoff and occupied
+socket controls cover that order and cleanup. All eight reservations, the single
+native restart, readiness and authority checks, and deadlines remain. This
+repairs the demonstrated reservation intrusion; it does not identify historical
+Node or weed owners, prevent unrelated programs racing the later handoff, or
+qualify the separate native admin fallback.
+
+The same case later reaches its unchanged 90-second deadline in
+[PR870's first merge run](https://github.com/waitron-io/waitron-cloud/actions/runs/41387374274/job/125091183776).
+The unchanged isolated Linux control passes; it does not identify the stalled
+operation or reproduce CI concurrency. The case now prints fixed operation names
+and monotonic elapsed times at entry, every five seconds while waiting and on
+settlement. Each operation permits sixteen waiting reports, marks the last one
+`waiting-limit` and releases its diagnostic timer. Reporter failures preserve the
+original result or refusal. Controlled held-bucket checks exercise the installed
+case and verify owned-child and scratch cleanup. Private cancellation controls
+also collect the captured native child and scratch, including cancellation before
+the native child is spawned. Cancellation also releases cooperative port claims
+whose targets exactly match roots created by that control. Private-directory
+controls preserve other targets and ordinary files. After-spawn cancellation
+qualifies release of eight claims; before-spawn cancellation verifies that no
+claims were allocated. Concurrent private-directory releases preserve other
+claims while tolerating claims the other release already removed. Claims without that ownership evidence
+remain untouched. All original assertions and the
+90-second limit remain. Use the last `storage_admin_progress` record to separate
+reservation, exhausted or recovered startup, bucket creation, owner verification
+and cleanup. Startup still combines download, configuration, port selection and
+readiness; the trace cannot distinguish those internal steps. A blocked event
+loop can delay reports. The historical timeout and port owner remain unexplained.
+
+Three Linux waves of four concurrent unchanged exhaustion cases pass on
+2 November at Cloud `601cf19f`. Each case retains all 101 competing listeners,
+both storage lifetimes, every original assertion and the 90-second limit. An
+independent controller records all 24 native children and verifies their exit,
+scratch removal and release of claims naming those exact scratch roots. All
+reported operations finish. This tests concurrent native stores, but does not
+recreate the original GitHub runner or explain its timeout or earlier port
+collision. Do not repeat this passing probe without a new hypothesis or a fresh
+operation trace; use that trace to select the next reproduction.
+
+See [the cooperative port claims and cleanup limits](#cooperative-native-storage-port-ownership).
+
+
+The HTTP regression pauses a service child, selects an occupied HTTP owner
+whose derived gRPC port would equal that service port, and waits for the derived
+listener before resuming the service. The original higher owner range first
+produces a native S3 bind refusal. The corrected range leaves room for the
+10000-port offset as well as all 100 fallback choices. The controls observe
+actual admin bind attempts, probe an unsafe interval at its upper edge, and
+require the occupied candidate to reach a bind; reverting to an old spelling or
+widening a range cannot pass through a lucky draw. The new wrapper allows
+120 seconds around the original 90-second case; the original 90- and 120-second
+limits remain unchanged.
+
+Default native admin listeners remain a separate open collision path. Two
+concurrent ordinary stores, without these test overrides, can have extra admin
+listeners outside their eight service-port claims even with `-admin.ui=false`.
+The local observation and the review identify such listeners, including an odd
+port in the service range, but do not demonstrate a default-admin takeover or
+identify a historical owner. The existing port-handoff investigation must also
+cover those defaults and other ephemeral test listeners before claiming all
+fixtures cooperate. These controlled admin tests do not qualify that broader
+protocol or native admin-worker functionality.

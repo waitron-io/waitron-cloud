@@ -165,3 +165,27 @@ wiring and controlled failures. The historical network cause remains unknown;
 retain any new labelled recurrence for D154 attribution. Forced termination
 of the supervisor itself cannot run its cleanup handlers; cleanup after that
 depends on the job runner and is not qualified by the native signal controls.
+
+
+## Native attempt-count observation (D530)
+
+The 4 November native root run at `c8341a79521981ce8f98509467facbcf1a7d6950`
+failed `hang is stopped within each attempt's bound` in
+`scripts/ci-setup-pnpm.test.mjs`: the fixture counted two installer executions
+instead of three. The run recorded 2986 passes, one failure and 15 platform
+skips. The case keeps its 750ms attempt budget and every original assertion.
+Its supervisor, observer, lock and test source are unchanged from main
+`4a356beee587960632ceca7cf67db8798b5d8d0c`.
+
+A private control using those exact main inputs and one added diagnostic line
+passes the original assertion with three installer executions. It does not
+reproduce or repair the full-run failure. An unchanged isolated feature run
+also counts two attempts; a later main-checkout run passes with three. These
+results do not establish a cause. No earlier exact occurrence was found
+in the campaign queues or questions; D530 already records a different
+descendant-timeout case that counted two rather than three attempts. A shared
+cause, scheduling explanation and flaky-test classification remain unproved.
+Run `node --test --test-name-pattern='^hang is stopped within each attempt' scripts/ci-setup-pnpm.test.mjs`
+to select this case. On recurrence, retain both supervisor attempt labels and
+installer-entry records before choosing a repair; the original failing
+assertion did not print those records.
