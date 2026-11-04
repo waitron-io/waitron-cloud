@@ -19,7 +19,7 @@ const installations=Array.from({length:8},(_,i)=>{
 });
 for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as const)for(const width of [390,1280])for(const handler of ['normal','delayed','missing'] as const){
  if(handler==='missing'&&(locale!=='en'||theme!=='light'||width!==390))continue;
- test(`${locale} ${theme} ${width}${handler==='normal'?'':` with ${handler} handler`}: a failed sign-out is brought into view and focused`,async t=>{
+ test(`${locale} ${theme} ${width}${handler==='normal'?'':` with ${handler} handler`}: ${handler==='missing'?'logout-handler observation times out before failure UI checks':'a failed sign-out is brought into view and focused'}`,async t=>{
   const browser=await chromium.launch({headless:true});let release!:()=>void;
   const held=new Promise<void>(resolve=>{release=resolve;});let handlerEntered=false;const entered=()=>{handlerEntered=true;};
   try{
@@ -60,7 +60,7 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
    assert.equal(await signOut.isEnabled(),true);assert.equal(attempts,1);
    assert.equal(await page.getByText(c.signedOut,{exact:true}).count(),0);
    assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
-   if(process.env.SIGNOUT_FOCUS_RECEIPT_DIR){await mkdir(process.env.SIGNOUT_FOCUS_RECEIPT_DIR,{recursive:true});await page.screenshot({path:`${process.env.SIGNOUT_FOCUS_RECEIPT_DIR}/${locale}-${theme}-${width}.png`});}
+   if(process.env.SIGNOUT_FOCUS_RECEIPT_DIR){await mkdir(process.env.SIGNOUT_FOCUS_RECEIPT_DIR,{recursive:true});await page.screenshot({path:`${process.env.SIGNOUT_FOCUS_RECEIPT_DIR}/${locale}-${theme}-${width}${handler==='normal'?'':`-${handler}`}.png`});}
    await signOut.click();await page.getByText(c.signedOut,{exact:true}).waitFor();assert.equal(attempts,2);
    assert.equal(await summary.getByText(c.logoutFailed,{exact:true}).count(),0);
   }finally{release();await browser.close();}
