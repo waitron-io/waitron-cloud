@@ -9,6 +9,7 @@ const factorBody = {challengeToken: challenge.challengeToken, proof: {kind: 'tot
 type Reply = {body?: unknown; status?: number; raw?: string; retry?: string} | 'network';
 
 function fixture(t: TestContext) {
+  t.mock.method(performance, 'now', () => 0);
   const replies: Reply[] = [];
   const requests: Array<{url: string; init: RequestInit}> = [];
   t.mock.method(globalThis, 'fetch', async (url: unknown, init?: RequestInit) => {
