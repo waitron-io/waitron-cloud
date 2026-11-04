@@ -153,6 +153,8 @@ customer route, provider call, service stop or destructive operation is enabled.
 
 ## Slice 5: Bind placement, credentials and outbound effects to policy
 
+**Execution plan:** [Country flow enforcement](2026-11-04-cloud-country-flow-enforcement.md) records the current consumer inventory, proposed interfaces, local TDD checks and unresolved enablement decisions. This link records planning only; it claims no implementation, qualification, review or acceptance.
+
 **Prerequisites:** Slices 2–4; migration slot resolved. Qualification is required for real flows, never fabricated to make a local test pass.
 
 **Files:** Extend `packages/remote-access/src/placement.ts`, `test/placement.test.ts`; `packages/backups/src/catalogue.ts`, `captures.ts`, `managed-streams.ts`, `storage.ts` and their matching existing tests. Extend `packages/registration/src/country-policy.ts`, create `src/flow-authority.ts`, `test/flow-authority.test.ts`. Integrate policy checks at `src/relay-worker.ts`, `src/email-outbox.ts` and existing relay/email tests in registration. Add policy bindings through a newly allocated migration and normal exports. Hosted placement, log sinks and KMS adapter integration remain behind their later accepted contracts.

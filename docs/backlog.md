@@ -281,7 +281,13 @@ original billing and venue-authority proofs remain pinned to their delivered
 trees with their original strict checks. Recording a request
 grants no service or deletion authority; no customer route or effects worker is
 enabled. Resubscription still needs a future retained-data check and activation
-adapter. Durable placement/credential bindings in slice 5 remain unbuilt. The
+adapter. Slice 5 has a source-based
+[implementation plan](superpowers/plans/2026-11-04-cloud-country-flow-enforcement.md)
+for durable country bindings, late-grant reconciliation and separate account/venue
+mail purposes. Placement/credential enforcement remains unbuilt; production
+assignment, provider retirement, destructive-retention coordination and mail retry
+semantics remain explicit gates. The retention and mail worker integrations stop
+until their existing behavioral guarantees have a compatible design. The
 later exit adapter must preserve priority for an earlier verified delete, perform
 independent status lookup and qualify finer deadline comparisons if another
 producer writes timestamps beyond millisecond precision. The
