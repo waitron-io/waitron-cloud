@@ -149,8 +149,14 @@ node --test --test-concurrency=1 --test-timeout=30000 \
 The three diagnostic test files, local command reporter and both signal test
 bodies match the 1 November baseline. The replay controller, local setup and
 fixture inputs have changed since then, so those older Linux passes do not
-qualify the complete current journey. The fresh Linux attempt stopped before copying or running tests because
-another lane held the box. When the box is available, run the signal selection
-above against the current checkout and retain any `local-command-refusal`
-record. The historical cause remains open; passing diagnostic controls do not
-explain the missed worker admission.
+qualify the complete current journey.
+
+The signal selection above now passes on the shared Linux test box at Cloud
+commit `846ab45d`: SIGINT in 7.62 seconds and SIGTERM in 6.47 seconds, with two
+passes and no failures, cancellations or skips. Both checks retain their original
+admission, private-output, cleanup and timing assertions. The nine controller,
+command and diagnostic inputs checked against main `4a356bee` are identical.
+This run qualifies only those two signal cases at that revision; it does not
+repeat the complete conformance group or explain the historical missed worker
+admission. Keep that cause open and retain any `local-command-refusal` record
+from a new failure before changing signal handling.
