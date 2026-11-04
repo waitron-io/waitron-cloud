@@ -2696,7 +2696,7 @@ implementation or production evidence.
   portal source changes also omit local-stack when its audit holds, otherwise they
   retain it. Isolated ui-smoke needs no receipt. Registration
   uses five file shards, account HTTP uses three, portal uses six and backups uses
-  two. Selected identity, operations and remote-access suites share one job when at
+  seven. Selected identity, operations and remote-access suites share one job when at
   least two are needed. Each keeps its full package command and deadline, runs
   once in sequence, and reports its own result. One PostgreSQL/Mailpit setup
   serves the group; a failure fails the job while later suites still run. The
