@@ -3,11 +3,11 @@ import {pathToFileURL} from 'node:url';
 export function verifySchemaUpgradeReceipt(value){
  const demand=(ok,field)=>{if(!ok)throw new Error(`schema_upgrade_receipt: ${field}`);};
  const exact=(object,keys)=>{demand(object&&typeof object==='object'&&!Array.isArray(object),'object');demand(JSON.stringify(Object.keys(object).sort())===JSON.stringify([...keys].sort()),'fields');};
- exact(value,['schemaVersion','driver','releases','checks','timings','cleanup','limitations','measuredAt',...(value?.schemaVersion===5?['backupVerification']:value?.schemaVersion===6?['billingStore']:value?.schemaVersion===7?['venueServices']:value?.schemaVersion===8?['lifecycle']:value?.schemaVersion===9?['allowances']:[])]);
+ exact(value,['schemaVersion','driver','releases','checks','timings','cleanup','limitations','measuredAt',...(value?.schemaVersion===5?['backupVerification']:value?.schemaVersion===6?['billingStore']:value?.schemaVersion===7?['venueServices']:value?.schemaVersion===8?['lifecycle']:value?.schemaVersion===9?['allowances']:value?.schemaVersion===10?['allowances','sesFeedback']:[])]);
  exact(value.driver,['head','dirty']);exact(value.releases,['old','new']);
  exact(value.timings,['upgradeMs','recoveryMs']);exact(value.cleanup,['containers','volumes','checkouts']);
  demand(typeof value.measuredAt==='string'&&Number.isFinite(Date.parse(value.measuredAt))&&new Date(value.measuredAt).toISOString()===value.measuredAt,'measuredAt');
- demand([1,2,3,4,5,6,7,8,9].includes(value?.schemaVersion),'version');
+ demand([1,2,3,4,5,6,7,8,9,10].includes(value?.schemaVersion),'version');
  const sha=/^[0-9a-f]{40}$/,digest=/^[0-9a-f]{64}$/;
  demand(sha.test(value.driver?.head)&&value.driver.dirty===false,'driver');
  for(const role of ['old','new']){const release=value.releases?.[role];exact(release,['head','migrations','digest']);demand(sha.test(release?.head)&&digest.test(release?.digest)&&Number.isInteger(release?.migrations)&&release.migrations>0,role);}
@@ -54,12 +54,16 @@ export function verifySchemaUpgradeReceipt(value){
   const lifecycleChecks=['oldSqlUnchanged','oldRowsPreserved','emptyAfterUpgrade','interruptedRollback','restartIdempotent','pendingOperationsRestored','effectsRestored','fixedDeadlinesRestored','retryStable','changedInputRefused','staleWorkerRefused','uncertainRetryRefused','reconciliationPreserved','foreignEffectRefused','newBackupRestored','oldBackupUpgradeEmpty'];
   exact(value.lifecycle,lifecycleChecks);for(const key of lifecycleChecks)demand(value.lifecycle[key]===true,key);
  }
- if(value.schemaVersion===9){
-  demand(value.releases.old.head==='1aae8f14c05113cc2a2c71337940ff7721ad5f5b'&&value.releases.old.migrations===47&&value.releases.new.migrations===48,'allowance schemas');
+ if(value.schemaVersion===9||value.schemaVersion===10){
+  demand(value.releases.old.head==='1aae8f14c05113cc2a2c71337940ff7721ad5f5b'&&value.releases.old.migrations===47&&value.releases.new.migrations===(value.schemaVersion===10?49:48),'allowance schemas');
   demand(value.driver.head===value.releases.new.head,'allowance candidate');
   checks.splice(checks.indexOf('pairingUpgraded'),1);checks.push('accountStatePreserved','relayStatePreserved','monitoringStatePreserved');
   const allowanceChecks=['oldSqlUnchanged','oldRowsPreserved','interruptedRollback','restartIdempotent','defaultOff','configRestored','reservationsRestored','spentNotReleased','trafficSourcesRestored','trafficLedgerRestored','trafficRetryStable','gapsRemainIncomplete','foreignScopeRefused','oldBackupUpgradeEmpty'];
   exact(value.allowances,allowanceChecks);for(const key of allowanceChecks)demand(value.allowances[key]===true,key);
+ }
+ if(value.schemaVersion===10){
+  const names=['emptyAfterUpgrade','oldBackupUpgradeEmpty','newBackupSchemaRestored'];
+  exact(value.sesFeedback,names);for(const name of names)demand(value.sesFeedback[name]===true,name);
  }
  exact(value.checks,checks);for(const key of checks)demand(value.checks[key]===true,key);
  for(const key of ['upgradeMs','recoveryMs'])demand(Number.isFinite(value.timings?.[key])&&value.timings[key]>=0,key);

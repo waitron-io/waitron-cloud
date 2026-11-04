@@ -107,7 +107,7 @@ test('database refuses changing durable attribution references and first provide
  const f=await fixture();try{
   const a=await transaction(f.pool,async c=>admitMailAttempt(c,await f.account()));
   await transaction(f.pool,c=>bindProviderId(c,a.attemptTag,'kept'));
-  for(const query of ["UPDATE mail_attempts SET country='FR'","UPDATE mail_attempts SET provider_message_id='replacement'",
+  for(const query of ["UPDATE mail_attempts SET policy_revision=policy_revision+1","UPDATE mail_attempts SET country='FR'","UPDATE mail_attempts SET provider_message_id='replacement'",
    'DELETE FROM mail_attempts',"UPDATE mail_attempt_recipients SET digest=repeat('a',64)",
    "UPDATE mail_queue_scopes SET region='eu-west-3'","UPDATE mail_recipient_key_versions SET commitment=repeat('a',64)"])
    await assert.rejects(f.pool.query(query),/mail_binding_immutable/);

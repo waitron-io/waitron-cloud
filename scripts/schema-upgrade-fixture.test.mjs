@@ -65,3 +65,12 @@ test('allowance upgrades select only their own complete distinct pinned pair',()
  assert.deepEqual(fixture.upgradeRevisions([...pair,'--allowances']),want);
  for(const args of [['--allowances'],['--allowances','--old','a'.repeat(40)],['--allowances','--old','main','--new','b'.repeat(40)],['--allowances','--old','a'.repeat(40),'--new','a'.repeat(40)],['--allowances',...pair,'--allowances'],['--allowances',...pair,'--force'],...['--lifecycle','--venue-services','--billing','--backup-verification','--monitoring-quiet','--relay-stop'].flatMap(mode=>[[mode,'--allowances',...pair],['--allowances',mode,...pair]])])assert.throws(()=>fixture.upgradeRevisions(args),/revisions/);
 });
+
+test('SES upgrade extends the allowance proof through migration49 without changing historical pairs',()=>{
+ const pair=['--old','a'.repeat(40),'--new','b'.repeat(40)];
+ const want={oldHead:'a'.repeat(40),newHead:'b'.repeat(40),factor:false,allowances:true,sesFeedback:true};
+ assert.deepEqual(fixture.upgradeRevisions(['--ses-feedback',...pair]),want);
+ assert.deepEqual(fixture.upgradeRevisions([...pair,'--ses-feedback']),want);
+ for(const flag of ['--allowances','--lifecycle','--venue-services','--billing','--backup-verification','--monitoring-quiet','--relay-stop','--ses-feedback'])
+  for(const args of [['--ses-feedback',flag,...pair],[flag,'--ses-feedback',...pair]])assert.throws(()=>fixture.upgradeRevisions(args),/revisions/);
+});
