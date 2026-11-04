@@ -1,17 +1,5 @@
 # Account HTTP boundaries
 
-## Session management transport refusals and retry waits (D432)
-
-When a session list cannot be read, it cannot supply targets for revocation.
-An uncertain removal uses a fresh read to check whether the selected session
-still exists; a later retry reads the list without repeating the write. Native
-HTTP/client/controller checks cover refused and unreadable replies, lost writes
-and the supported sign-out reasons when the current session ends. Server retry
-waits apply across account changes through the exact end of seconds and date
-values, and a shorter read wait cannot shorten an earlier write wait. Runtime
-and original assertions stay unchanged; server authority and live ingress remain
-separate qualification gates. Database suites run in CI during the Docker outage.
-
 ## Passkey transport refusals and pending actions (D435)
 
 When a passkey request fails, you can retry explicitly without replaying an

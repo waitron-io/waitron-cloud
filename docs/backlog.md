@@ -263,12 +263,6 @@ cause investigation; successful delivery of these client tests does not repair i
 **Open.** Qualify server authority and live ingress after the controlled client checks.
 See [the boundaries and remaining work](backlog/account-http-boundaries.md#session-revocation-replies-after-sign-out-or-view-reset-d440).
 
-## Session management transport refusals and retry waits (D432)
-
-**Open.** Qualify server authority, browser integration and live ingress; physical
-passkeys and the separate retry-clock repair retain their own gates.
-See [the boundaries and remaining work](backlog/account-http-boundaries.md#session-management-transport-refusals-and-retry-waits-d432).
-
 ## Passkey transport refusals and pending actions (D435)
 
 **Open.** Qualify server authority, browser integration and live ingress; physical
