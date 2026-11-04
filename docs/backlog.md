@@ -3464,29 +3464,6 @@ before changing queries, transaction rules, concurrency or timeouts. D383 remain
 parked with its completed review; this diagnostic delivery does not qualify that
 branch or establish a runtime repair.
 
-## Litestream request-validation diagnostics (D378)
-
-The transport records the first refused request-validation boundary using fixed
-stage names, including request identity, operation, retry sequence, after-stop
-admission, content length, mutation body and lifetime bookkeeping. Stop checkpoints
-and sanitized close records carry the stage without request paths, headers or
-SDK invocation identifiers. Later requests cannot replace the first refusal.
-Native HTTP checks still require refused requests to return 400 without forwarding
-or publishing accounting, and include a successful forwarding control.
-
-The [PR620 cost refusal](https://github.com/waitron-io/waitron-cloud/actions/runs/40600605206/job/122527571695)
-reported request-validation at stop's idle step without identifying its check.
-Its cause remains unknown. Reproduce the next labelled recurrence before changing
-transport, stop, accounting or cleanup rules. Genuine local Docker qualification
-remains unavailable until Docker returns; current-head Linux CI checks the delivery.
-
-The first D378 qualification also found an absent fiscal worker identity in
-[CI40604297872, job122540422831](https://github.com/waitron-io/waitron-cloud/actions/runs/40604297872/job/122540422831).
-Its cause remains unknown. [PR711](https://github.com/waitron-io/waitron-cloud/pull/711)
-removed the obsolete allocator, two-worker test and D380 diagnostic helper. This
-historical failure no longer has a running Cloud fixture to reproduce. Migration
-038 and dormant fiscal records remain governed by the registry retirement boundary.
-
 ## Litestream after-stop admission diagnostics (D381)
 
 You can now identify the exact refused admission guard in the stop checkpoint,
