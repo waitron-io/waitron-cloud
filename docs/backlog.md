@@ -494,19 +494,12 @@ See the [reproduction commands and diagnostic boundary](backlog/isolated-replay-
 
 ## Isolated replay result-boundary refusal (D297)
 
-An altered-stream control refused before reading its changed worker result in
-[cost CI](https://github.com/waitron-io/waitron-cloud/actions/runs/40281251676/job/121434888588).
-The counts variant failed again in [D543 merge CI](https://github.com/waitron-io/waitron-cloud/actions/runs/41202820800/job/124541925301)
-before the host read the result, after a clean native replication exit. That trace
-names checkpoint admission, but does not identify its refusing guard. A transport
-refusal now adds its first fixed reason, request-validation boundary and pending/completed
-request counts before cleanup. Controlled HTTP refusals after an idle callback and
-a request admitted after that callback retain distinct evidence through worker and
-host admission. The earlier preparation/worker/host stages and result-read status
-remain available without private output. Existing assertions, deadlines and refusal
-rules are unchanged. The unchanged counts case passed on the Linux test box; this
-is not a repair of its historical failure. Collect an instrumented recurrence to
-identify the cause before changing request or shutdown behavior.
+The altered-worker result controls have refused before reaching the result they
+were meant to check. The historical cause remains open. Current diagnostics retain
+the first transport refusal through the actual worker and host, and the current
+Linux host group passes all thirteen cases. Use the
+[reproduction commands and next-failure evidence](backlog/isolated-replay-result-boundary.md)
+to identify a recurrence before changing request or shutdown behavior.
 
 ## Isolated-replay CI work groups (D301)
 
