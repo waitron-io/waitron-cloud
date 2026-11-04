@@ -166,13 +166,6 @@ All existing test files, assertions and deadlines remain. Current-head CI must
 still measure the jobs against the roughly four-minute target; no job limit is
 raised. D463's collector and remaining billing work stay on their separate branch.
 
-## Concurrent gateway fixture inventory (D530)
-
-**Open.** The rendered-gateway cleanup check can fail while the concurrent traffic
-trial creates or removes its own containers. Reproduced with the unchanged pair on
-the Linux test box. Isolate their inventory checks while preserving proof that
-each fixture removes its own resources and leaves unrelated containers untouched.
-
 ## How to keep this file honest
 
 - Delete finished entries after checking main, the named pull requests and the code.
