@@ -1941,7 +1941,9 @@ The owner approved A1188's defaults on 29 October. Agreement to this proposed
 wire and permission to build Cloud billing section 7 or P6 are separate gates.
 This revision incorporates Lane B's eight part 1 amendments. Its review agreed
 with the separate-read approach subject to those amendments; final agreement
-on this exact revision and Lane A's A1018 response remain open.
+on this exact emergency-read revision remains open. Lane A agrees with the four
+A1018 answers subject to the amendments recorded below; that agreement does not
+qualify a hosted format or implementation.
 
 ### Read the facts without starting a copy
 
@@ -2158,6 +2160,11 @@ These answer the 2 November notice at Waitron plan Slice 0, Task 0.3. The
 already supplies the invariants; it does not supply the requested wire formats.
 The local-only version 1 remains unchanged. Hosted use waits for a jointly
 pinned amendment and adversarial tests, even after this proposal is published.
+Lane A's 4 November reply agrees with these four answers, with amendments to
+1, 3 and 4. Its source inspection names unpublished Waitron
+`f84c0b38f474d7f8950037edb2d9e4870e1a27d3`; the Slice 5 code can still change
+in review. The following requirements incorporate that reply. They are not a
+Cloud runtime receipt or agreement to the whole emergency-read proposal.
 
 1. **Account-to-person authentication bridge.** No qualified bridge exists in
    this agreement. A1188's staff path avoids an account mapping by authenticating
@@ -2168,7 +2175,12 @@ pinned amendment and adversarial tests, even after this proposal is published.
    operation UUID/fingerprint, M1/M2, scenario, membership term/digest, issuer,
    audience, authentication method/time, issue/expiry times, unique nonce and
    revocation generation. The receiving Waitron node must verify the venue
-   permission independently. Cloud ownership, matching email and support access
+   permission independently. The offer's `authorisedBy` must identify an active
+   person in the received copy whose role holds `node.promote`, following its
+   successor only when A1002 provides it. The inspected Slice 5 comparison
+   refuses otherwise with `handover.authoriser_not_permitted`. The hosted
+   bridge must preserve this local check and bind that same person; a Cloud
+   account alone cannot satisfy it. Cloud ownership, matching email and support access
    supply none of it. Issuer trust, canonical bytes, maximum age, clock tolerance,
    revocation delivery and one-use/replay storage are still unagreed; accept no
    token until these are pinned and tested. Expiry/revocation stops new authority;
@@ -2188,7 +2200,11 @@ pinned amendment and adversarial tests, even after this proposal is published.
    TLS certificate or account binding is not a Waitron membership trust anchor.
    Do not add a blanket Cloud signing key or accept the unknown M2's own chart.
    Where possible, enrol M2's public key through the venue's existing trusted
-   signed membership before the move. If M1 is already lost and never trusted
+   signed membership before the move. For a controlled move, the inspected
+   Slice 5 source also requires M1's own `nodes` row for M2 to contain the key
+   vouched for by that chart before it starts. A later hosted enrolment design
+   must name the authorised writer of that row and qualify both requirements;
+   a chart entry alone is insufficient. If M1 is already lost and never trusted
    that key, keep the return restricted. A joint explicit recovery/enrolment
    ceremony must bind the venue, M2 node/public-key fingerprint, operation and
    current chart through independently verified venue authority. Its delivery,
@@ -2198,7 +2214,11 @@ pinned amendment and adversarial tests, even after this proposal is published.
    membership signer trusted or authorise trading.
 4. **The same operation and fingerprint.** Yes as a correlation key: propose
    retaining Waitron's UUID v4 and SHA-256 of its sorted-key JSON binding, without
-   adding Cloud fields to that local binding. They are insufficient authority
+   adding Cloud fields to that local binding. A Cloud-supplied operation ID must
+   pass Waitron's `isOperationId` and its operation-directory constraints,
+   including the 64-character ceiling named in Lane A's reply. At the inspected
+   revision, `isOperationId` accepts only the canonical lowercase UUID v4
+   spelling; a shorter arbitrary folder name still fails. They are insufficient authority
    and insufficient as the complete Cloud command fingerprint. Store a separate
    versioned Cloud context containing the original binding/fingerprint, trusted
    account/venue/installation mappings, actor authorisation, exact hosted
@@ -2210,7 +2230,17 @@ pinned amendment and adversarial tests, even after this proposal is published.
    of the earlier step. Retain the original actor-authority decision separately
    from fresh transport proofs: reauthenticating a status or replay read must
    not rewrite the admitted command or bypass current access checks.
-   Membership key trust and the bridge remain prerequisites.
+   The inspected Slice 5 offer also carries `backup.env` and `modules.json`
+   digests, key-ring versions and an image-migration digest outside that binding.
+   Its spare refuses a mismatch. Include these exact admitted offer values in
+   the separately versioned hosted context, with conflict and replay vectors,
+   without silently extending the local binding. Where those settings come
+   from the environment, both file digests are null; that is no evidence that
+   the effective settings match. The hosted amendment must specify how to
+   establish that compatibility before it can be used; this proposal chooses
+   no replacement settings check and permits no bypass of the local guards.
+   Membership key trust, the named node-row writer, settings compatibility and
+   the bridge remain prerequisites.
    Canonical vectors for both digests and lost-reply/conflicting-input tests
    must precede hosted implementation. A new hosted wire version is required
    if the signed declaration needs extra fields; do not silently extend v1.
@@ -2231,6 +2261,12 @@ from both archive and stream restores. Pin adversarial URL vectors for trailing
 dots, trusted-host aliases, IP/local names and noncanonical raw spellings; test
 that code responses cannot mix an older address with a newer code. Delete the critical guards
 in disposable copies and require their named behavioural checks to fail.
+
+Before hosted A1018 use, also qualify the copied-person permission check,
+the chart and local node-row key checks, rejected operation IDs, conflicting
+offer digests/versions and environment-backed settings with null file digests.
+Reconcile the inspected unpublished Slice 5 revision with its final reviewed
+revision before pinning those joint vectors.
 
 The display/card and code-read work cannot restore or activate a copy. Parts
 0 and 3–6 keep A1188 section 11's independent dependencies. The A1018 bridge,
