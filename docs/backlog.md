@@ -626,15 +626,6 @@ before launch. Live providers, deployment and secret custody, database recovery,
 final-write handover and automatic appliance setup remain open; see the
 [milestone requirements and remaining qualification](backlog/first-milestone.md).
 
-## Stale fiscal-draft browser handler wait (D371)
-
-The stale-draft browser fixture bounds its installation-handler wait at the existing
-30-second page budget. An absent signal fails within that budget; delayed handlers
-repeat both languages, themes and phone/desktop widths. Every original pending-list,
-venue permission, uncertain-write, signed receipt, reconciliation and layout check
-remains. These native Chromium checks use stubbed HTTP and leave fiscal allocation
-and production authority unchanged.
-
 ## Fiscal venue-refresh browser handler observation (D376)
 
 The failed venue-list fixture observes its refresh handler's read count before
