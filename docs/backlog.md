@@ -4418,6 +4418,14 @@ failure-message, focus and retry checks. That control does not prove the exact
 four-second boundary. These native Chromium checks use stubbed HTTP and do not
 qualify backend or production sign-out.
 
+The missing-signal control isolates the handler observation. Ordinary journeys
+also start a response wait before clicking, so a missing signal can report that
+response timeout instead. Review faults detect broken focus and scrolling on both
+the historical parent and changed fixture. The parent case fails after 4.3 seconds
+but its file run needs stopping at 135 seconds; the changed run exits after five.
+These are individual samples. Reproduce and contain the competing response
+rejection before claiming precise failure diagnostics or a general cleanup bound.
+
 ## Session-check retry browser handler wait (D359)
 
 The session-check retry fixture refuses within its existing three-second page
