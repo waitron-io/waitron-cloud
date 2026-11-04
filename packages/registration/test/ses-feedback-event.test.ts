@@ -107,3 +107,56 @@ test('rejects duplicate JSON members, excessive nesting and unvalidated configur
   assert.throws(()=>parseSesFeedback(body,{...config()}));
   assert.throws(()=>parse({...feedbackEvent(),extra:JSON.parse('['.repeat(40)+'0'+']'.repeat(40))}));
 });
+
+test('malformed and undetermined classifications cannot become blocking outcomes',()=>{
+  const {bounce,...base}=feedbackEvent();
+  const complaint={timestamp:bounce.timestamp,feedbackId:'complaint-2'};
+  for(const complaintFeedbackType of [123,['not-spam'],{}]) {
+    assert.throws(()=>parse({...base,eventType:'Complaint',complaint:{...complaint,complaintFeedbackType}}),{message:'Invalid SES feedback event'});
+  }
+  for(const complaintFeedbackType of ['NOT-SPAM','not-spam ','future-type'])
+    assert.equal(parse({...base,eventType:'Complaint',complaint:{...complaint,complaintFeedbackType}}).kind,'unclassified');
+  for(const complaintFeedbackType of [undefined,'abuse','auth-failure','fraud','other','virus'])
+    assert.equal(parse({...base,eventType:'Complaint',complaint:{...complaint,complaintFeedbackType}}).kind,'complaint');
+  for(const bounceSubType of ['Undetermined','FutureSubtype'])
+    assert.equal(parse({...base,eventType:'Bounce',bounce:{...bounce,bounceSubType}}).kind,'unclassified');
+  assert.equal(parse({...base,eventType:'Bounce',bounce:{...bounce,bounceSubType:'NoEmail'}}).kind,'hard_bounce');
+});
+
+test('contradictory outcome sections refuse even when their recipients agree',()=>{
+  const e=feedbackEvent();
+  assert.throws(()=>parse({...e,delivery:{timestamp:e.bounce.timestamp,recipients:['owner@example.test']}}),{message:'Invalid SES feedback event'});
+  assert.throws(()=>parse({...e,eventType:'Complaint',bounce:{...e.bounce,bounceType:'Transient'},
+    complaint:{timestamp:e.bounce.timestamp,feedbackId:'complaint-2',complaintFeedbackType:'abuse'}}),{message:'Invalid SES feedback event'});
+});
+
+test('complaint identities and every outcome timestamp remain distinct from mail acceptance',()=>{
+  const {bounce,...base}=feedbackEvent();const time='2026-11-04T10:03:00.500Z';
+  const cases=[
+    {eventType:'Complaint',complaint:{timestamp:time,feedbackId:'complaint-2',complaintSubType:'OnTenantSuppressionList'}},
+    {eventType:'Delivery',delivery:{timestamp:time,recipients:['owner@example.test']}},
+    {eventType:'DeliveryDelay',deliveryDelay:{timestamp:time,delayedRecipients:[{emailAddress:'owner@example.test'}]}},
+  ];
+  for(const [index,outcome] of cases.entries()) {
+    const result=parse({...base,...outcome});
+    assert.equal(result.eventTime,time);assert.equal(result.eventId,index===0?'complaint-2':null);
+    assert.equal(result.kind,['provider_suppressed','delivery','temporary'][index]);
+    const key=['complaint','delivery','deliveryDelay'][index]!;
+    assert.throws(()=>parse({...base,...outcome,[key]:{...(outcome as any)[key],timestamp:'invalid'}}));
+  }
+  assert.throws(()=>parse({...base,eventType:'Complaint',complaint:{timestamp:time}}));
+  assert.throws(()=>parse({...base,eventType:'Bounce',bounce:{...bounce,bounceSubType:undefined}}));
+});
+
+test('UTF-8 size limits reject oversized valid JSON rather than relying on malformed padding',()=>{
+  assert.throws(()=>parse({...feedbackEvent(),extra:'é'.repeat(70*1024)}));
+  assert.throws(()=>parseSesFeedback(JSON.stringify({...feedbackEnvelope(),extra:'é'.repeat(130*1024)}),config()));
+});
+
+test('nesting permits depth32 and refuses depth33 in both envelope and message',()=>{
+  const nested=(depth:number)=>JSON.parse('['.repeat(depth)+'0'+']'.repeat(depth));
+  assert.equal(parse({...feedbackEvent(),extra:nested(31)}).kind,'hard_bounce');
+  assert.throws(()=>parse({...feedbackEvent(),extra:nested(32)}));
+  assert.equal(parseSesFeedback(JSON.stringify({...feedbackEnvelope(),extra:nested(31)}),config()).kind,'hard_bounce');
+  assert.throws(()=>parseSesFeedback(JSON.stringify({...feedbackEnvelope(),extra:nested(32)}),config()));
+});

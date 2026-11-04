@@ -54,6 +54,10 @@ export function parseSesFeedback(body:string,config:SesFeedbackConfig):ParsedFee
   if(!/^[A-Za-z0-9_-]{43}$/.test(attemptTag)||Buffer.from(attemptTag,'base64url').toString('base64url')!==attemptTag)return refuse();
   const providerMessageId=identifier(mail.messageId),mailTime=timestamp(mail.timestamp);
   const eventType=identifier(event.eventType);
+  const payloads:Record<string,string>={Bounce:'bounce',Complaint:'complaint',Delivery:'delivery',DeliveryDelay:'deliveryDelay',
+    Send:'send',Reject:'reject',Open:'open',Click:'click','Rendering Failure':'failure',Subscription:'subscription'};
+  // SES outcomes are separate events; another outcome section is contradictory evidence.
+  if(Object.values(payloads).some(key=>key!==payloads[eventType]&&event[key]!==undefined))return refuse();
   let kind:FeedbackKind='unclassified',eventId:string|null=null,eventTime=mailTime;
   const recipients:string[]=[];
   function recipientList(value:unknown,objects:boolean,redacted=false,required=false):void {
@@ -73,11 +77,15 @@ export function parseSesFeedback(body:string,config:SesFeedbackConfig):ParsedFee
   if(eventType==='Bounce') {
     const bounce=object(event.bounce),type=identifier(bounce.bounceType),subtype=identifier(bounce.bounceSubType);
     eventId=identifier(bounce.feedbackId);eventTime=timestamp(bounce.timestamp);
-    kind=type==='Permanent'?(suppressed.has(subtype)?'provider_suppressed':'hard_bounce'):type==='Transient'?'temporary':'unclassified';
+    kind=type==='Permanent'?(suppressed.has(subtype)?'provider_suppressed'
+      :subtype==='General'||subtype==='NoEmail'?'hard_bounce':'unclassified'):type==='Transient'?'temporary':'unclassified';
   } else if(complaint) {
     const report=object(event.complaint);eventId=identifier(report.feedbackId);eventTime=timestamp(report.timestamp);
-    kind=report.complaintSubType==='OnAccountSuppressionList'||report.complaintSubType==='OnTenantSuppressionList'?'provider_suppressed'
-      :report.complaintFeedbackType==='not-spam'?'unclassified':'complaint';
+    const type=report.complaintFeedbackType,subtype=report.complaintSubType;
+    if((type!==undefined&&typeof type!=='string')||(subtype!==undefined&&subtype!==null&&typeof subtype!=='string'))return refuse();
+    kind=subtype==='OnAccountSuppressionList'||subtype==='OnTenantSuppressionList'?'provider_suppressed'
+      :subtype!==undefined&&subtype!==null?'unclassified'
+      :type===undefined||['abuse','auth-failure','fraud','other','virus'].includes(type)?'complaint':'unclassified';
   } else if(eventType==='Delivery') {eventTime=timestamp(object(event.delivery).timestamp);kind='delivery';}
   else if(eventType==='DeliveryDelay') {eventTime=timestamp(object(event.deliveryDelay).timestamp);kind='temporary';}
   if(new Set(recipients).size>1||(!complaint&&recipients.length===0))return refuse();

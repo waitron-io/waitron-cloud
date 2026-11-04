@@ -20,7 +20,10 @@ const validated=new WeakSet<object>();
 export function isValidatedSesFeedbackConfig(value:SesFeedbackConfig):boolean{return validated.has(value);}
 const refuse=():never=>{throw new Error('Invalid SES feedback configuration');};
 function object(value:unknown):Record<string,unknown>{
-  return value!==null&&typeof value==='object'&&!Array.isArray(value)?value as Record<string,unknown>:refuse();
+  if(value===null||typeof value!=='object'||Array.isArray(value))return refuse();
+  // Configuration is data: repeated validation reads must not invoke changing accessors.
+  if(Object.values(Object.getOwnPropertyDescriptors(value)).some(d=>d.get||d.set))return refuse();
+  return value as Record<string,unknown>;
 }
 function name(value:unknown):string {
   return typeof value==='string'&&/^[A-Za-z0-9_-]{1,128}$/.test(value)?value:refuse();

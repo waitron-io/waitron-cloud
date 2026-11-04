@@ -94,3 +94,35 @@ test('matching trusted records cannot make malformed resources, revisions or SMT
     assert.throws(()=>validateSesFeedbackConfig({...policy,smtpBindings},input),{message:'Invalid SES feedback configuration'},String(change));
   }
 });
+
+test('qualified queue endpoints cannot replace the trusted queue or dead-letter resource pin',()=>{
+  for(const [field,index] of [['queueArn',3],['dlqArn',4]] as const) {
+    const {policy,input}=feedbackFixture();input[field]+='-other';
+    const url=input.flows[index]!.endpoint+'-other';input.flows[index]!.endpoint=url;
+    if(field==='queueArn')input.queueUrl=url;
+    const flows=policy.flows.map((f,i)=>i===index?{...f,endpoint:url}:f);
+    assert.throws(()=>validateSesFeedbackConfig({...policy,flows},input),{message:'Invalid SES feedback configuration'});
+  }
+});
+
+test('shared evidence cannot let an account-only SMTP binding qualify venue mail',()=>{
+  const {policy,input}=feedbackFixture('eu-north-1',['cloud-account-email','venue-email']);
+  const flows=policy.flows.map(f=>({...f,evidenceId:'shared-evidence'}));
+  const smtpBindings=policy.smtpBindings.map(b=>({...b,evidenceId:'shared-evidence'}));
+  assert.equal(validateSesFeedbackConfig({...policy,flows,smtpBindings},input).purposes.length,2);
+  assert.throws(()=>validateSesFeedbackConfig({...policy,flows,smtpBindings:smtpBindings.slice(0,1)},input));
+  assert.throws(()=>validateSesFeedbackConfig({...policy,flows,smtpBindings:smtpBindings.map(b=>({...b,host:'other.example.test'}))},input));
+});
+
+test('a primary queue cannot also serve as its dead-letter queue even with matching trusted evidence',()=>{
+  const {policy,input}=feedbackFixture();input.dlqArn=input.queueArn;
+  input.flows[4]={...input.flows[4]!,dataClass:'unused-extra'};
+  const smtpBindings=policy.smtpBindings.map(b=>({...b,dlqArn:input.queueArn}));
+  assert.throws(()=>validateSesFeedbackConfig({...policy,smtpBindings},input));
+});
+
+test('accessor input cannot mint a validated configuration with an unchecked ARN',()=>{
+  const {policy,input}=feedbackFixture();const original=input.configurationSetArn;let reads=0;
+  Object.defineProperty(input,'configurationSetArn',{get:()=>++reads<3?original:'arn:forged',enumerable:true});
+  assert.throws(()=>validateSesFeedbackConfig(policy,input),{message:'Invalid SES feedback configuration'});
+});
