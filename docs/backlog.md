@@ -3442,29 +3442,6 @@ box. All six native ordering and diagnostic controls also pass.
 Use a labelled
 recurrence to establish the historical cause before changing any shutdown rule.
 
-## Registration SQL setup failure diagnostics (D385)
-
-A registration setup failure now reports its fixed boundary and, for migration
-work, its ordinal in the shipped migration list. You can distinguish the advisory
-lock, ledger creation and compatibility check, migration loading, lookup,
-application and ledger recording, and transaction start or finish. Relay fixtures
-identify schema creation, migration setup, issuer creation, the bounds clock, relay
-configuration, venue preparation, each initial insert, session creation, grant
-approval and lease construction. These failure-only records omit SQL,
-parameters, schema and account names, credentials and caught error values.
-Original errors, query text and arguments, rollback, cleanup and the five-second
-statement limit stay in force. Successful setup remains silent.
-
-[PR627 qualification](https://github.com/waitron-io/waitron-cloud/actions/runs/40617804734/job/122584381707)
-refused two migration applications and one relay account insert with PostgreSQL
-statement timeouts. The historical cause remains unknown. Native controls cover
-labelled refusals and reporter failures; genuine local PostgreSQL reproduction
-waits for Docker to return. Use a labelled recurrence to reproduce the cause
-before changing queries, transaction rules, concurrency or timeouts. D383's
-[operation diagnostics](backlog/cost-conformance-fixtures.md#litestream-refused-operation-and-attempt-diagnostics-d383)
-have landed; neither diagnostic delivery establishes a historical runtime repair.
-
-
 ## Recovery deployment qualification
 
 **Open.** Qualify server permissions and genuine restore or recovery; these client

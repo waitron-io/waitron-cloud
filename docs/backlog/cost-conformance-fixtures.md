@@ -406,4 +406,31 @@ Run `node --test scripts/cloud-cost/litestream-admission-operation.test.mjs scri
 for the native controls. Diagnostics already landed in PR627, commit
 `4864bbfecea8f3e59cfa76566aab0a30a7db8220`.
 
+### Registration SQL setup failure diagnostics (D385)
+
+A registration setup failure reports its fixed boundary and, for migration
+work, its ordinal in the shipped migration list. You can distinguish the advisory
+lock, ledger creation and compatibility check, migration loading, lookup,
+application and ledger recording, and transaction start or finish. Relay fixtures
+identify schema creation, migration setup, issuer creation, the bounds clock, relay
+configuration, venue preparation, each initial insert, session creation, grant
+approval and lease construction. These failure-only records omit SQL,
+parameters, schema and account names, credentials and caught error values.
+Original errors, query text and arguments, rollback, cleanup and the five-second
+statement limit stay in force. Successful setup remains silent.
+
+[PR627 qualification](https://github.com/waitron-io/waitron-cloud/actions/runs/40617804734/job/122584381707)
+refused two migration applications and one relay account insert with PostgreSQL
+statement timeouts. The historical cause remains unknown. Native controls cover
+labelled refusals and reporter failures; they do not reproduce these timeouts
+against PostgreSQL. Use the authorised Linux test box for genuine PostgreSQL
+reproduction, or inspect the next labelled CI recurrence. Reproduce the cause
+before changing queries, transaction rules, concurrency or timeouts.
+The [D383 diagnostics above](#litestream-refused-operation-and-attempt-diagnostics-d383)
+already landed; neither diagnostic delivery establishes a runtime repair.
+
+Run `node --test packages/registration/test/sql-setup-diagnostics.test.ts`
+for the native controls. Diagnostics already landed in PR629, commit
+`7ac885100ba5771fc6aeff7245b9e10d5295d8a2`.
+
 Return to the [backlog index](../backlog.md).
