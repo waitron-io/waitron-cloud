@@ -813,8 +813,15 @@ Neither output is the complete P1 infrastructure handoff. The separate
 references, and primary and backup secret references. The provisional
 `storage_topology` output contains actual country stores or null for global,
 shared policy attachment references and their admission result. Shared recovery
-and replication permissions are composed; per-cell workload permissions,
-evidence, ingress, DNS and the complete handoff remain unfinished.
+and replication permissions are composed. The provisional `workload_topology`
+output maps each exact cell name to its workload roles and runtime policy
+attachments. Global cells each have the four agreed global roles; Spain cells
+each have all eight country roles. Each cell consumes its own cluster identity,
+namespace and service accounts, so adding a cell does not share cluster trust.
+Country runtime policies use the same planned store names as shared recovery
+and replication. The root's storage check binds those names and keys to the
+actual stores before the outputs can form a complete handoff.
+Evidence, ingress, DNS and the complete handoff remain unfinished.
 
 For the global root, supply exactly `global`, `global_backup`, `global_keys`
 and `global_backup_keys` in `bindings`. Spain instead takes `country`,
@@ -835,7 +842,7 @@ The root tests supply distinct subnet references at the network module's output
 boundary; the admission cases also replace cell outputs and the newly composed
 data modules. Their original admission and two-cell assertions stay intact.
 The separate composition cases plan the real custody, database, cell and shared
-permission modules against the network fixture. Country composition also plans
+permission modules and per-cell workload permissions against the network fixture. Country composition also plans
 actual storage. The policy dependency reaches only the replication role,
 leaving bucket identity and region reads independent. Both one-
 and two-cell cases require the same stores and shared policies. An independent
@@ -872,8 +879,12 @@ been populated or recovered.
 node --test deploy/aws/composition.test.mjs deploy/aws/topology.test.mjs
 ```
 
-The integration suite runs the 29 existing cases and two composed data cases
-for each root. The data cases use different computed values for database keys
+The integration suite runs 29 admission cases and six composition cases for
+global, plus 29 admission cases and six composition cases for Spain. The added
+one-cell and two-cell cases require each cell's complete role references and
+runtime attachment set. Admission cases replace workload outputs and supply a
+complete cell reference to keep their existing admission assertions independent.
+The data cases use different computed values for database keys
 and other keys, then check the actual database output and every retained secret
 reference. Frankfurt/Ireland use a different synthetic account from Madrid/Paris.
 These are local mocked plans. They do not qualify role assumption, network

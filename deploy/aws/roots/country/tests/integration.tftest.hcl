@@ -38,6 +38,10 @@ variables {
 run "distinct_global_country_and_backup_bindings" {
   command = plan
   override_module {
+    target  = module.workload_permissions
+    outputs = { workload_roles = {}, attachment_refs = {} }
+  }
+  override_module {
     target  = module.scope_permissions
     outputs = { attachment_refs = {}, permission_admission = true, replication_role_arn = "arn:aws:iam::333333333333:role/waitron-es-storage-replication" }
   }
@@ -68,7 +72,7 @@ run "distinct_global_country_and_backup_bindings" {
   }
   override_module {
     target  = module.cell
-    outputs = { cell = null }
+    outputs = { cell = { cluster_name = "waitron-es-fixture", region = "eu-south-2", az_ids = ["eus2-az1", "eus2-az2", "eus2-az3"], private_subnet_ids = { eus2-az1 = "subnet-00000000000000001", eus2-az2 = "subnet-00000000000000002", eus2-az3 = "subnet-00000000000000003" }, node_security_group_id = "sg-00000000000000009", oidc_issuer = "https://oidc.eks.eu-south-2.amazonaws.com/id/ADMISSION" } }
   }
   assert {
     condition     = output.deployment_admission.version == 1 && output.deployment_admission.scope == "country" && output.deployment_admission.country == "es"
@@ -82,6 +86,10 @@ run "distinct_global_country_and_backup_bindings" {
 run "rejects_unknown_version" {
   command = plan
   override_module {
+    target  = module.workload_permissions
+    outputs = { workload_roles = {}, attachment_refs = {} }
+  }
+  override_module {
     target  = module.scope_permissions
     outputs = { attachment_refs = {}, permission_admission = true, replication_role_arn = "arn:aws:iam::333333333333:role/waitron-es-storage-replication" }
   }
@@ -112,7 +120,7 @@ run "rejects_unknown_version" {
   }
   override_module {
     target  = module.cell
-    outputs = { cell = null }
+    outputs = { cell = { cluster_name = "waitron-es-fixture", region = "eu-south-2", az_ids = ["eus2-az1", "eus2-az2", "eus2-az3"], private_subnet_ids = { eus2-az1 = "subnet-00000000000000001", eus2-az2 = "subnet-00000000000000002", eus2-az3 = "subnet-00000000000000003" }, node_security_group_id = "sg-00000000000000009", oidc_issuer = "https://oidc.eks.eu-south-2.amazonaws.com/id/ADMISSION" } }
   }
   variables { deployment = { version = 2, scope = "country", country = "es", primary_region = "eu-south-2", backup_region = "eu-west-3", network = { cidr = "10.20.0.0/16", az_ids = ["eus2-az1", "eus2-az2", "eus2-az3"] }, cells = { "es-01" = { subnet_cidr = "10.20.16.0/20" } } } }
   expect_failures = [var.deployment]
@@ -120,6 +128,10 @@ run "rejects_unknown_version" {
 run "rejects_unknown_scope" {
   command = plan
   override_module {
+    target  = module.workload_permissions
+    outputs = { workload_roles = {}, attachment_refs = {} }
+  }
+  override_module {
     target  = module.scope_permissions
     outputs = { attachment_refs = {}, permission_admission = true, replication_role_arn = "arn:aws:iam::333333333333:role/waitron-es-storage-replication" }
   }
@@ -150,7 +162,7 @@ run "rejects_unknown_scope" {
   }
   override_module {
     target  = module.cell
-    outputs = { cell = null }
+    outputs = { cell = { cluster_name = "waitron-es-fixture", region = "eu-south-2", az_ids = ["eus2-az1", "eus2-az2", "eus2-az3"], private_subnet_ids = { eus2-az1 = "subnet-00000000000000001", eus2-az2 = "subnet-00000000000000002", eus2-az3 = "subnet-00000000000000003" }, node_security_group_id = "sg-00000000000000009", oidc_issuer = "https://oidc.eks.eu-south-2.amazonaws.com/id/ADMISSION" } }
   }
   variables { deployment = { version = 1, scope = "global", country = "es", primary_region = "eu-south-2", backup_region = "eu-west-3", network = { cidr = "10.20.0.0/16", az_ids = ["eus2-az1", "eus2-az2", "eus2-az3"] }, cells = { "es-01" = { subnet_cidr = "10.20.16.0/20" } } } }
   expect_failures = [var.deployment]
@@ -158,6 +170,10 @@ run "rejects_unknown_scope" {
 run "rejects_unknown_country" {
   command = plan
   override_module {
+    target  = module.workload_permissions
+    outputs = { workload_roles = {}, attachment_refs = {} }
+  }
+  override_module {
     target  = module.scope_permissions
     outputs = { attachment_refs = {}, permission_admission = true, replication_role_arn = "arn:aws:iam::333333333333:role/waitron-es-storage-replication" }
   }
@@ -188,7 +204,7 @@ run "rejects_unknown_country" {
   }
   override_module {
     target  = module.cell
-    outputs = { cell = null }
+    outputs = { cell = { cluster_name = "waitron-es-fixture", region = "eu-south-2", az_ids = ["eus2-az1", "eus2-az2", "eus2-az3"], private_subnet_ids = { eus2-az1 = "subnet-00000000000000001", eus2-az2 = "subnet-00000000000000002", eus2-az3 = "subnet-00000000000000003" }, node_security_group_id = "sg-00000000000000009", oidc_issuer = "https://oidc.eks.eu-south-2.amazonaws.com/id/ADMISSION" } }
   }
   variables { deployment = { version = 1, scope = "country", country = null, primary_region = "eu-south-2", backup_region = "eu-west-3", network = { cidr = "10.20.0.0/16", az_ids = ["eus2-az1", "eus2-az2", "eus2-az3"] }, cells = { "es-01" = { subnet_cidr = "10.20.16.0/20" } } } }
   expect_failures = [var.deployment]
@@ -196,6 +212,10 @@ run "rejects_unknown_country" {
 run "rejects_unknown_regions" {
   command = plan
   override_module {
+    target  = module.workload_permissions
+    outputs = { workload_roles = {}, attachment_refs = {} }
+  }
+  override_module {
     target  = module.scope_permissions
     outputs = { attachment_refs = {}, permission_admission = true, replication_role_arn = "arn:aws:iam::333333333333:role/waitron-es-storage-replication" }
   }
@@ -226,7 +246,7 @@ run "rejects_unknown_regions" {
   }
   override_module {
     target  = module.cell
-    outputs = { cell = null }
+    outputs = { cell = { cluster_name = "waitron-es-fixture", region = "eu-south-2", az_ids = ["eus2-az1", "eus2-az2", "eus2-az3"], private_subnet_ids = { eus2-az1 = "subnet-00000000000000001", eus2-az2 = "subnet-00000000000000002", eus2-az3 = "subnet-00000000000000003" }, node_security_group_id = "sg-00000000000000009", oidc_issuer = "https://oidc.eks.eu-south-2.amazonaws.com/id/ADMISSION" } }
   }
   variables { deployment = { version = 1, scope = "country", country = "es", primary_region = "eu-south-2", backup_region = "eu-south-2", network = { cidr = "10.20.0.0/16", az_ids = ["eus2-az1", "eus2-az2", "eus2-az3"] }, cells = { "es-01" = { subnet_cidr = "10.20.16.0/20" } } } }
   expect_failures = [var.deployment]
@@ -234,6 +254,10 @@ run "rejects_unknown_regions" {
 run "rejects_unknown_cell_scope" {
   command = plan
   override_module {
+    target  = module.workload_permissions
+    outputs = { workload_roles = {}, attachment_refs = {} }
+  }
+  override_module {
     target  = module.scope_permissions
     outputs = { attachment_refs = {}, permission_admission = true, replication_role_arn = "arn:aws:iam::333333333333:role/waitron-es-storage-replication" }
   }
@@ -264,7 +288,7 @@ run "rejects_unknown_cell_scope" {
   }
   override_module {
     target  = module.cell
-    outputs = { cell = null }
+    outputs = { cell = { cluster_name = "waitron-es-fixture", region = "eu-south-2", az_ids = ["eus2-az1", "eus2-az2", "eus2-az3"], private_subnet_ids = { eus2-az1 = "subnet-00000000000000001", eus2-az2 = "subnet-00000000000000002", eus2-az3 = "subnet-00000000000000003" }, node_security_group_id = "sg-00000000000000009", oidc_issuer = "https://oidc.eks.eu-south-2.amazonaws.com/id/ADMISSION" } }
   }
   variables { deployment = { version = 1, scope = "country", country = "es", primary_region = "eu-south-2", backup_region = "eu-west-3", network = { cidr = "10.20.0.0/16", az_ids = ["eus2-az1", "eus2-az2", "eus2-az3"] }, cells = { "global-01" = { subnet_cidr = "10.20.16.0/20" } } } }
   expect_failures = [var.deployment]
@@ -272,6 +296,10 @@ run "rejects_unknown_cell_scope" {
 run "rejects_missing_country" {
   command = plan
   override_module {
+    target  = module.workload_permissions
+    outputs = { workload_roles = {}, attachment_refs = {} }
+  }
+  override_module {
     target  = module.scope_permissions
     outputs = { attachment_refs = {}, permission_admission = true, replication_role_arn = "arn:aws:iam::333333333333:role/waitron-es-storage-replication" }
   }
@@ -302,7 +330,7 @@ run "rejects_missing_country" {
   }
   override_module {
     target  = module.cell
-    outputs = { cell = null }
+    outputs = { cell = { cluster_name = "waitron-es-fixture", region = "eu-south-2", az_ids = ["eus2-az1", "eus2-az2", "eus2-az3"], private_subnet_ids = { eus2-az1 = "subnet-00000000000000001", eus2-az2 = "subnet-00000000000000002", eus2-az3 = "subnet-00000000000000003" }, node_security_group_id = "sg-00000000000000009", oidc_issuer = "https://oidc.eks.eu-south-2.amazonaws.com/id/ADMISSION" } }
   }
   variables { bindings = { "country_backup" = { expected_identity = "333333333333", role_arn = "arn:aws:iam::333333333333:role/waitron-es-deployment" }, "country_keys" = { expected_identity = "333333333333", role_arn = "arn:aws:iam::333333333333:role/waitron-es-key-administration" }, "country_backup_keys" = { expected_identity = "333333333333", role_arn = "arn:aws:iam::333333333333:role/waitron-es-key-administration" }, } }
   expect_failures = [var.bindings]
@@ -310,6 +338,10 @@ run "rejects_missing_country" {
 run "rejects_missing_country_backup" {
   command = plan
   override_module {
+    target  = module.workload_permissions
+    outputs = { workload_roles = {}, attachment_refs = {} }
+  }
+  override_module {
     target  = module.scope_permissions
     outputs = { attachment_refs = {}, permission_admission = true, replication_role_arn = "arn:aws:iam::333333333333:role/waitron-es-storage-replication" }
   }
@@ -340,7 +372,7 @@ run "rejects_missing_country_backup" {
   }
   override_module {
     target  = module.cell
-    outputs = { cell = null }
+    outputs = { cell = { cluster_name = "waitron-es-fixture", region = "eu-south-2", az_ids = ["eus2-az1", "eus2-az2", "eus2-az3"], private_subnet_ids = { eus2-az1 = "subnet-00000000000000001", eus2-az2 = "subnet-00000000000000002", eus2-az3 = "subnet-00000000000000003" }, node_security_group_id = "sg-00000000000000009", oidc_issuer = "https://oidc.eks.eu-south-2.amazonaws.com/id/ADMISSION" } }
   }
   variables { bindings = { "country" = { expected_identity = "333333333333", role_arn = "arn:aws:iam::333333333333:role/waitron-es-deployment" }, "country_keys" = { expected_identity = "333333333333", role_arn = "arn:aws:iam::333333333333:role/waitron-es-key-administration" }, "country_backup_keys" = { expected_identity = "333333333333", role_arn = "arn:aws:iam::333333333333:role/waitron-es-key-administration" }, } }
   expect_failures = [var.bindings]
@@ -348,6 +380,10 @@ run "rejects_missing_country_backup" {
 run "rejects_missing_country_keys" {
   command = plan
   override_module {
+    target  = module.workload_permissions
+    outputs = { workload_roles = {}, attachment_refs = {} }
+  }
+  override_module {
     target  = module.scope_permissions
     outputs = { attachment_refs = {}, permission_admission = true, replication_role_arn = "arn:aws:iam::333333333333:role/waitron-es-storage-replication" }
   }
@@ -378,7 +414,7 @@ run "rejects_missing_country_keys" {
   }
   override_module {
     target  = module.cell
-    outputs = { cell = null }
+    outputs = { cell = { cluster_name = "waitron-es-fixture", region = "eu-south-2", az_ids = ["eus2-az1", "eus2-az2", "eus2-az3"], private_subnet_ids = { eus2-az1 = "subnet-00000000000000001", eus2-az2 = "subnet-00000000000000002", eus2-az3 = "subnet-00000000000000003" }, node_security_group_id = "sg-00000000000000009", oidc_issuer = "https://oidc.eks.eu-south-2.amazonaws.com/id/ADMISSION" } }
   }
   variables { bindings = { "country" = { expected_identity = "333333333333", role_arn = "arn:aws:iam::333333333333:role/waitron-es-deployment" }, "country_backup" = { expected_identity = "333333333333", role_arn = "arn:aws:iam::333333333333:role/waitron-es-deployment" }, "country_backup_keys" = { expected_identity = "333333333333", role_arn = "arn:aws:iam::333333333333:role/waitron-es-key-administration" }, } }
   expect_failures = [var.bindings]
@@ -386,6 +422,10 @@ run "rejects_missing_country_keys" {
 run "rejects_missing_country_backup_keys" {
   command = plan
   override_module {
+    target  = module.workload_permissions
+    outputs = { workload_roles = {}, attachment_refs = {} }
+  }
+  override_module {
     target  = module.scope_permissions
     outputs = { attachment_refs = {}, permission_admission = true, replication_role_arn = "arn:aws:iam::333333333333:role/waitron-es-storage-replication" }
   }
@@ -416,7 +456,7 @@ run "rejects_missing_country_backup_keys" {
   }
   override_module {
     target  = module.cell
-    outputs = { cell = null }
+    outputs = { cell = { cluster_name = "waitron-es-fixture", region = "eu-south-2", az_ids = ["eus2-az1", "eus2-az2", "eus2-az3"], private_subnet_ids = { eus2-az1 = "subnet-00000000000000001", eus2-az2 = "subnet-00000000000000002", eus2-az3 = "subnet-00000000000000003" }, node_security_group_id = "sg-00000000000000009", oidc_issuer = "https://oidc.eks.eu-south-2.amazonaws.com/id/ADMISSION" } }
   }
   variables { bindings = { "country" = { expected_identity = "333333333333", role_arn = "arn:aws:iam::333333333333:role/waitron-es-deployment" }, "country_backup" = { expected_identity = "333333333333", role_arn = "arn:aws:iam::333333333333:role/waitron-es-deployment" }, "country_keys" = { expected_identity = "333333333333", role_arn = "arn:aws:iam::333333333333:role/waitron-es-key-administration" }, } }
   expect_failures = [var.bindings]
@@ -424,6 +464,10 @@ run "rejects_missing_country_backup_keys" {
 run "rejects_extra_scope_binding" {
   command = plan
   override_module {
+    target  = module.workload_permissions
+    outputs = { workload_roles = {}, attachment_refs = {} }
+  }
+  override_module {
     target  = module.scope_permissions
     outputs = { attachment_refs = {}, permission_admission = true, replication_role_arn = "arn:aws:iam::333333333333:role/waitron-es-storage-replication" }
   }
@@ -454,7 +498,7 @@ run "rejects_extra_scope_binding" {
   }
   override_module {
     target  = module.cell
-    outputs = { cell = null }
+    outputs = { cell = { cluster_name = "waitron-es-fixture", region = "eu-south-2", az_ids = ["eus2-az1", "eus2-az2", "eus2-az3"], private_subnet_ids = { eus2-az1 = "subnet-00000000000000001", eus2-az2 = "subnet-00000000000000002", eus2-az3 = "subnet-00000000000000003" }, node_security_group_id = "sg-00000000000000009", oidc_issuer = "https://oidc.eks.eu-south-2.amazonaws.com/id/ADMISSION" } }
   }
   variables { bindings = { "country" = { expected_identity = "333333333333", role_arn = "arn:aws:iam::333333333333:role/waitron-es-deployment" }, "country_backup" = { expected_identity = "333333333333", role_arn = "arn:aws:iam::333333333333:role/waitron-es-deployment" }, "country_keys" = { expected_identity = "333333333333", role_arn = "arn:aws:iam::333333333333:role/waitron-es-key-administration" }, "country_backup_keys" = { expected_identity = "333333333333", role_arn = "arn:aws:iam::333333333333:role/waitron-es-key-administration" }, "organization" = { expected_identity = "111111111111", role_arn = "arn:aws:iam::111111111111:role/admin" } } }
   expect_failures = [var.bindings]
@@ -462,6 +506,10 @@ run "rejects_extra_scope_binding" {
 run "rejects_malformed_identity" {
   command = plan
   override_module {
+    target  = module.workload_permissions
+    outputs = { workload_roles = {}, attachment_refs = {} }
+  }
+  override_module {
     target  = module.scope_permissions
     outputs = { attachment_refs = {}, permission_admission = true, replication_role_arn = "arn:aws:iam::333333333333:role/waitron-es-storage-replication" }
   }
@@ -492,7 +540,7 @@ run "rejects_malformed_identity" {
   }
   override_module {
     target  = module.cell
-    outputs = { cell = null }
+    outputs = { cell = { cluster_name = "waitron-es-fixture", region = "eu-south-2", az_ids = ["eus2-az1", "eus2-az2", "eus2-az3"], private_subnet_ids = { eus2-az1 = "subnet-00000000000000001", eus2-az2 = "subnet-00000000000000002", eus2-az3 = "subnet-00000000000000003" }, node_security_group_id = "sg-00000000000000009", oidc_issuer = "https://oidc.eks.eu-south-2.amazonaws.com/id/ADMISSION" } }
   }
   variables { bindings = { "country" = { expected_identity = "not-an-account", role_arn = "arn:aws:iam::333333333333:role/waitron-es-deployment" }, "country_backup" = { expected_identity = "333333333333", role_arn = "arn:aws:iam::333333333333:role/waitron-es-deployment" }, "country_keys" = { expected_identity = "333333333333", role_arn = "arn:aws:iam::333333333333:role/waitron-es-key-administration" }, "country_backup_keys" = { expected_identity = "333333333333", role_arn = "arn:aws:iam::333333333333:role/waitron-es-key-administration" }, } }
   expect_failures = [var.bindings]
@@ -500,6 +548,10 @@ run "rejects_malformed_identity" {
 run "rejects_crossed_role" {
   command = plan
   override_module {
+    target  = module.workload_permissions
+    outputs = { workload_roles = {}, attachment_refs = {} }
+  }
+  override_module {
     target  = module.scope_permissions
     outputs = { attachment_refs = {}, permission_admission = true, replication_role_arn = "arn:aws:iam::333333333333:role/waitron-es-storage-replication" }
   }
@@ -530,7 +582,7 @@ run "rejects_crossed_role" {
   }
   override_module {
     target  = module.cell
-    outputs = { cell = null }
+    outputs = { cell = { cluster_name = "waitron-es-fixture", region = "eu-south-2", az_ids = ["eus2-az1", "eus2-az2", "eus2-az3"], private_subnet_ids = { eus2-az1 = "subnet-00000000000000001", eus2-az2 = "subnet-00000000000000002", eus2-az3 = "subnet-00000000000000003" }, node_security_group_id = "sg-00000000000000009", oidc_issuer = "https://oidc.eks.eu-south-2.amazonaws.com/id/ADMISSION" } }
   }
   variables { bindings = { "country" = { expected_identity = "333333333333", role_arn = "arn:aws:iam::999999999999:role/waitron-es-deployment" }, "country_backup" = { expected_identity = "333333333333", role_arn = "arn:aws:iam::333333333333:role/waitron-es-deployment" }, "country_keys" = { expected_identity = "333333333333", role_arn = "arn:aws:iam::333333333333:role/waitron-es-key-administration" }, "country_backup_keys" = { expected_identity = "333333333333", role_arn = "arn:aws:iam::333333333333:role/waitron-es-key-administration" }, } }
   expect_failures = [var.bindings]
@@ -538,6 +590,10 @@ run "rejects_crossed_role" {
 run "rejects_wildcard_role" {
   command = plan
   override_module {
+    target  = module.workload_permissions
+    outputs = { workload_roles = {}, attachment_refs = {} }
+  }
+  override_module {
     target  = module.scope_permissions
     outputs = { attachment_refs = {}, permission_admission = true, replication_role_arn = "arn:aws:iam::333333333333:role/waitron-es-storage-replication" }
   }
@@ -568,7 +624,7 @@ run "rejects_wildcard_role" {
   }
   override_module {
     target  = module.cell
-    outputs = { cell = null }
+    outputs = { cell = { cluster_name = "waitron-es-fixture", region = "eu-south-2", az_ids = ["eus2-az1", "eus2-az2", "eus2-az3"], private_subnet_ids = { eus2-az1 = "subnet-00000000000000001", eus2-az2 = "subnet-00000000000000002", eus2-az3 = "subnet-00000000000000003" }, node_security_group_id = "sg-00000000000000009", oidc_issuer = "https://oidc.eks.eu-south-2.amazonaws.com/id/ADMISSION" } }
   }
   variables { bindings = { "country" = { expected_identity = "333333333333", role_arn = "arn:aws:iam::333333333333:role/*" }, "country_backup" = { expected_identity = "333333333333", role_arn = "arn:aws:iam::333333333333:role/waitron-es-deployment" }, "country_keys" = { expected_identity = "333333333333", role_arn = "arn:aws:iam::333333333333:role/waitron-es-key-administration" }, "country_backup_keys" = { expected_identity = "333333333333", role_arn = "arn:aws:iam::333333333333:role/waitron-es-key-administration" }, } }
   expect_failures = [var.bindings]
@@ -576,6 +632,10 @@ run "rejects_wildcard_role" {
 run "rejects_deployment_as_key_admin" {
   command = plan
   override_module {
+    target  = module.workload_permissions
+    outputs = { workload_roles = {}, attachment_refs = {} }
+  }
+  override_module {
     target  = module.scope_permissions
     outputs = { attachment_refs = {}, permission_admission = true, replication_role_arn = "arn:aws:iam::333333333333:role/waitron-es-storage-replication" }
   }
@@ -606,7 +666,7 @@ run "rejects_deployment_as_key_admin" {
   }
   override_module {
     target  = module.cell
-    outputs = { cell = null }
+    outputs = { cell = { cluster_name = "waitron-es-fixture", region = "eu-south-2", az_ids = ["eus2-az1", "eus2-az2", "eus2-az3"], private_subnet_ids = { eus2-az1 = "subnet-00000000000000001", eus2-az2 = "subnet-00000000000000002", eus2-az3 = "subnet-00000000000000003" }, node_security_group_id = "sg-00000000000000009", oidc_issuer = "https://oidc.eks.eu-south-2.amazonaws.com/id/ADMISSION" } }
   }
   variables { bindings = { "country" = { expected_identity = "333333333333", role_arn = "arn:aws:iam::333333333333:role/waitron-es-deployment" }, "country_backup" = { expected_identity = "333333333333", role_arn = "arn:aws:iam::333333333333:role/waitron-es-deployment" }, "country_keys" = { expected_identity = "333333333333", role_arn = "arn:aws:iam::333333333333:role/waitron-es-deployment" }, "country_backup_keys" = { expected_identity = "333333333333", role_arn = "arn:aws:iam::333333333333:role/waitron-es-key-administration" }, } }
   expect_failures = [var.bindings]
@@ -614,6 +674,10 @@ run "rejects_deployment_as_key_admin" {
 run "rejects_different_backup_account" {
   command = plan
   override_module {
+    target  = module.workload_permissions
+    outputs = { workload_roles = {}, attachment_refs = {} }
+  }
+  override_module {
     target  = module.scope_permissions
     outputs = { attachment_refs = {}, permission_admission = true, replication_role_arn = "arn:aws:iam::333333333333:role/waitron-es-storage-replication" }
   }
@@ -644,13 +708,17 @@ run "rejects_different_backup_account" {
   }
   override_module {
     target  = module.cell
-    outputs = { cell = null }
+    outputs = { cell = { cluster_name = "waitron-es-fixture", region = "eu-south-2", az_ids = ["eus2-az1", "eus2-az2", "eus2-az3"], private_subnet_ids = { eus2-az1 = "subnet-00000000000000001", eus2-az2 = "subnet-00000000000000002", eus2-az3 = "subnet-00000000000000003" }, node_security_group_id = "sg-00000000000000009", oidc_issuer = "https://oidc.eks.eu-south-2.amazonaws.com/id/ADMISSION" } }
   }
   variables { bindings = { "country" = { expected_identity = "333333333333", role_arn = "arn:aws:iam::333333333333:role/waitron-es-deployment" }, "country_backup" = { expected_identity = "999999999999", role_arn = "arn:aws:iam::999999999999:role/waitron-es-deployment" }, "country_keys" = { expected_identity = "333333333333", role_arn = "arn:aws:iam::333333333333:role/waitron-es-key-administration" }, "country_backup_keys" = { expected_identity = "333333333333", role_arn = "arn:aws:iam::333333333333:role/waitron-es-key-administration" }, } }
   expect_failures = [var.bindings]
 }
 run "rejects_actual_country_account" {
   command = plan
+  override_module {
+    target  = module.workload_permissions
+    outputs = { workload_roles = {}, attachment_refs = {} }
+  }
   override_module {
     target  = module.scope_permissions
     outputs = { attachment_refs = {}, permission_admission = true, replication_role_arn = "arn:aws:iam::333333333333:role/waitron-es-storage-replication" }
@@ -683,7 +751,7 @@ run "rejects_actual_country_account" {
   }
   override_module {
     target  = module.cell
-    outputs = { cell = null }
+    outputs = { cell = { cluster_name = "waitron-es-fixture", region = "eu-south-2", az_ids = ["eus2-az1", "eus2-az2", "eus2-az3"], private_subnet_ids = { eus2-az1 = "subnet-00000000000000001", eus2-az2 = "subnet-00000000000000002", eus2-az3 = "subnet-00000000000000003" }, node_security_group_id = "sg-00000000000000009", oidc_issuer = "https://oidc.eks.eu-south-2.amazonaws.com/id/ADMISSION" } }
   }
   override_data {
     target = data.aws_caller_identity.country
@@ -694,6 +762,10 @@ run "rejects_actual_country_account" {
 run "rejects_actual_country_region" {
   command = plan
   override_module {
+    target  = module.workload_permissions
+    outputs = { workload_roles = {}, attachment_refs = {} }
+  }
+  override_module {
     target  = module.scope_permissions
     outputs = { attachment_refs = {}, permission_admission = true, replication_role_arn = "arn:aws:iam::333333333333:role/waitron-es-storage-replication" }
   }
@@ -724,7 +796,7 @@ run "rejects_actual_country_region" {
   }
   override_module {
     target  = module.cell
-    outputs = { cell = null }
+    outputs = { cell = { cluster_name = "waitron-es-fixture", region = "eu-south-2", az_ids = ["eus2-az1", "eus2-az2", "eus2-az3"], private_subnet_ids = { eus2-az1 = "subnet-00000000000000001", eus2-az2 = "subnet-00000000000000002", eus2-az3 = "subnet-00000000000000003" }, node_security_group_id = "sg-00000000000000009", oidc_issuer = "https://oidc.eks.eu-south-2.amazonaws.com/id/ADMISSION" } }
   }
   override_data {
     target = data.aws_region.country
@@ -735,6 +807,10 @@ run "rejects_actual_country_region" {
 run "rejects_actual_country_backup_account" {
   command = plan
   override_module {
+    target  = module.workload_permissions
+    outputs = { workload_roles = {}, attachment_refs = {} }
+  }
+  override_module {
     target  = module.scope_permissions
     outputs = { attachment_refs = {}, permission_admission = true, replication_role_arn = "arn:aws:iam::333333333333:role/waitron-es-storage-replication" }
   }
@@ -765,7 +841,7 @@ run "rejects_actual_country_backup_account" {
   }
   override_module {
     target  = module.cell
-    outputs = { cell = null }
+    outputs = { cell = { cluster_name = "waitron-es-fixture", region = "eu-south-2", az_ids = ["eus2-az1", "eus2-az2", "eus2-az3"], private_subnet_ids = { eus2-az1 = "subnet-00000000000000001", eus2-az2 = "subnet-00000000000000002", eus2-az3 = "subnet-00000000000000003" }, node_security_group_id = "sg-00000000000000009", oidc_issuer = "https://oidc.eks.eu-south-2.amazonaws.com/id/ADMISSION" } }
   }
   override_data {
     target = data.aws_caller_identity.country_backup
@@ -776,6 +852,10 @@ run "rejects_actual_country_backup_account" {
 run "rejects_actual_country_backup_region" {
   command = plan
   override_module {
+    target  = module.workload_permissions
+    outputs = { workload_roles = {}, attachment_refs = {} }
+  }
+  override_module {
     target  = module.scope_permissions
     outputs = { attachment_refs = {}, permission_admission = true, replication_role_arn = "arn:aws:iam::333333333333:role/waitron-es-storage-replication" }
   }
@@ -806,7 +886,7 @@ run "rejects_actual_country_backup_region" {
   }
   override_module {
     target  = module.cell
-    outputs = { cell = null }
+    outputs = { cell = { cluster_name = "waitron-es-fixture", region = "eu-south-2", az_ids = ["eus2-az1", "eus2-az2", "eus2-az3"], private_subnet_ids = { eus2-az1 = "subnet-00000000000000001", eus2-az2 = "subnet-00000000000000002", eus2-az3 = "subnet-00000000000000003" }, node_security_group_id = "sg-00000000000000009", oidc_issuer = "https://oidc.eks.eu-south-2.amazonaws.com/id/ADMISSION" } }
   }
   override_data {
     target = data.aws_region.country_backup
@@ -817,6 +897,10 @@ run "rejects_actual_country_backup_region" {
 run "rejects_actual_country_keys_account" {
   command = plan
   override_module {
+    target  = module.workload_permissions
+    outputs = { workload_roles = {}, attachment_refs = {} }
+  }
+  override_module {
     target  = module.scope_permissions
     outputs = { attachment_refs = {}, permission_admission = true, replication_role_arn = "arn:aws:iam::333333333333:role/waitron-es-storage-replication" }
   }
@@ -847,7 +931,7 @@ run "rejects_actual_country_keys_account" {
   }
   override_module {
     target  = module.cell
-    outputs = { cell = null }
+    outputs = { cell = { cluster_name = "waitron-es-fixture", region = "eu-south-2", az_ids = ["eus2-az1", "eus2-az2", "eus2-az3"], private_subnet_ids = { eus2-az1 = "subnet-00000000000000001", eus2-az2 = "subnet-00000000000000002", eus2-az3 = "subnet-00000000000000003" }, node_security_group_id = "sg-00000000000000009", oidc_issuer = "https://oidc.eks.eu-south-2.amazonaws.com/id/ADMISSION" } }
   }
   override_data {
     target = data.aws_caller_identity.country_keys
@@ -858,6 +942,10 @@ run "rejects_actual_country_keys_account" {
 run "rejects_actual_country_keys_region" {
   command = plan
   override_module {
+    target  = module.workload_permissions
+    outputs = { workload_roles = {}, attachment_refs = {} }
+  }
+  override_module {
     target  = module.scope_permissions
     outputs = { attachment_refs = {}, permission_admission = true, replication_role_arn = "arn:aws:iam::333333333333:role/waitron-es-storage-replication" }
   }
@@ -888,7 +976,7 @@ run "rejects_actual_country_keys_region" {
   }
   override_module {
     target  = module.cell
-    outputs = { cell = null }
+    outputs = { cell = { cluster_name = "waitron-es-fixture", region = "eu-south-2", az_ids = ["eus2-az1", "eus2-az2", "eus2-az3"], private_subnet_ids = { eus2-az1 = "subnet-00000000000000001", eus2-az2 = "subnet-00000000000000002", eus2-az3 = "subnet-00000000000000003" }, node_security_group_id = "sg-00000000000000009", oidc_issuer = "https://oidc.eks.eu-south-2.amazonaws.com/id/ADMISSION" } }
   }
   override_data {
     target = data.aws_region.country_keys
@@ -899,6 +987,10 @@ run "rejects_actual_country_keys_region" {
 run "rejects_actual_country_backup_keys_account" {
   command = plan
   override_module {
+    target  = module.workload_permissions
+    outputs = { workload_roles = {}, attachment_refs = {} }
+  }
+  override_module {
     target  = module.scope_permissions
     outputs = { attachment_refs = {}, permission_admission = true, replication_role_arn = "arn:aws:iam::333333333333:role/waitron-es-storage-replication" }
   }
@@ -929,7 +1021,7 @@ run "rejects_actual_country_backup_keys_account" {
   }
   override_module {
     target  = module.cell
-    outputs = { cell = null }
+    outputs = { cell = { cluster_name = "waitron-es-fixture", region = "eu-south-2", az_ids = ["eus2-az1", "eus2-az2", "eus2-az3"], private_subnet_ids = { eus2-az1 = "subnet-00000000000000001", eus2-az2 = "subnet-00000000000000002", eus2-az3 = "subnet-00000000000000003" }, node_security_group_id = "sg-00000000000000009", oidc_issuer = "https://oidc.eks.eu-south-2.amazonaws.com/id/ADMISSION" } }
   }
   override_data {
     target = data.aws_caller_identity.country_backup_keys
@@ -940,6 +1032,10 @@ run "rejects_actual_country_backup_keys_account" {
 run "rejects_actual_country_backup_keys_region" {
   command = plan
   override_module {
+    target  = module.workload_permissions
+    outputs = { workload_roles = {}, attachment_refs = {} }
+  }
+  override_module {
     target  = module.scope_permissions
     outputs = { attachment_refs = {}, permission_admission = true, replication_role_arn = "arn:aws:iam::333333333333:role/waitron-es-storage-replication" }
   }
@@ -970,7 +1066,7 @@ run "rejects_actual_country_backup_keys_region" {
   }
   override_module {
     target  = module.cell
-    outputs = { cell = null }
+    outputs = { cell = { cluster_name = "waitron-es-fixture", region = "eu-south-2", az_ids = ["eus2-az1", "eus2-az2", "eus2-az3"], private_subnet_ids = { eus2-az1 = "subnet-00000000000000001", eus2-az2 = "subnet-00000000000000002", eus2-az3 = "subnet-00000000000000003" }, node_security_group_id = "sg-00000000000000009", oidc_issuer = "https://oidc.eks.eu-south-2.amazonaws.com/id/ADMISSION" } }
   }
   override_data {
     target = data.aws_region.country_backup_keys
@@ -981,6 +1077,10 @@ run "rejects_actual_country_backup_keys_region" {
 run "rejects_all_malformed_identities" {
   command = plan
   override_module {
+    target  = module.workload_permissions
+    outputs = { workload_roles = {}, attachment_refs = {} }
+  }
+  override_module {
     target  = module.scope_permissions
     outputs = { attachment_refs = {}, permission_admission = true, replication_role_arn = "arn:aws:iam::333333333333:role/waitron-es-storage-replication" }
   }
@@ -1011,7 +1111,7 @@ run "rejects_all_malformed_identities" {
   }
   override_module {
     target  = module.cell
-    outputs = { cell = null }
+    outputs = { cell = { cluster_name = "waitron-es-fixture", region = "eu-south-2", az_ids = ["eus2-az1", "eus2-az2", "eus2-az3"], private_subnet_ids = { eus2-az1 = "subnet-00000000000000001", eus2-az2 = "subnet-00000000000000002", eus2-az3 = "subnet-00000000000000003" }, node_security_group_id = "sg-00000000000000009", oidc_issuer = "https://oidc.eks.eu-south-2.amazonaws.com/id/ADMISSION" } }
   }
   variables { bindings = { "country" = { expected_identity = "not-an-account", role_arn = "arn:aws:iam::not-an-account:role/waitron-es-deployment" }, "country_backup" = { expected_identity = "not-an-account", role_arn = "arn:aws:iam::not-an-account:role/waitron-es-deployment" }, "country_keys" = { expected_identity = "not-an-account", role_arn = "arn:aws:iam::not-an-account:role/waitron-es-key-administration" }, "country_backup_keys" = { expected_identity = "not-an-account", role_arn = "arn:aws:iam::not-an-account:role/waitron-es-key-administration" }, } }
   expect_failures = [var.bindings]
@@ -1019,6 +1119,10 @@ run "rejects_all_malformed_identities" {
 run "rejects_primary_region" {
   command = plan
   override_module {
+    target  = module.workload_permissions
+    outputs = { workload_roles = {}, attachment_refs = {} }
+  }
+  override_module {
     target  = module.scope_permissions
     outputs = { attachment_refs = {}, permission_admission = true, replication_role_arn = "arn:aws:iam::333333333333:role/waitron-es-storage-replication" }
   }
@@ -1049,7 +1153,7 @@ run "rejects_primary_region" {
   }
   override_module {
     target  = module.cell
-    outputs = { cell = null }
+    outputs = { cell = { cluster_name = "waitron-es-fixture", region = "eu-south-2", az_ids = ["eus2-az1", "eus2-az2", "eus2-az3"], private_subnet_ids = { eus2-az1 = "subnet-00000000000000001", eus2-az2 = "subnet-00000000000000002", eus2-az3 = "subnet-00000000000000003" }, node_security_group_id = "sg-00000000000000009", oidc_issuer = "https://oidc.eks.eu-south-2.amazonaws.com/id/ADMISSION" } }
   }
   variables { deployment = { version = 1, scope = "country", country = "es", primary_region = "eu-north-1", backup_region = "eu-west-3", network = { cidr = "10.20.0.0/16", az_ids = ["eus2-az1", "eus2-az2", "eus2-az3"] }, cells = { "es-01" = { subnet_cidr = "10.20.16.0/20" } } } }
   expect_failures = [var.deployment]
@@ -1057,6 +1161,10 @@ run "rejects_primary_region" {
 run "rejects_malformed_cell" {
   command = plan
   override_module {
+    target  = module.workload_permissions
+    outputs = { workload_roles = {}, attachment_refs = {} }
+  }
+  override_module {
     target  = module.scope_permissions
     outputs = { attachment_refs = {}, permission_admission = true, replication_role_arn = "arn:aws:iam::333333333333:role/waitron-es-storage-replication" }
   }
@@ -1087,7 +1195,7 @@ run "rejects_malformed_cell" {
   }
   override_module {
     target  = module.cell
-    outputs = { cell = null }
+    outputs = { cell = { cluster_name = "waitron-es-fixture", region = "eu-south-2", az_ids = ["eus2-az1", "eus2-az2", "eus2-az3"], private_subnet_ids = { eus2-az1 = "subnet-00000000000000001", eus2-az2 = "subnet-00000000000000002", eus2-az3 = "subnet-00000000000000003" }, node_security_group_id = "sg-00000000000000009", oidc_issuer = "https://oidc.eks.eu-south-2.amazonaws.com/id/ADMISSION" } }
   }
   variables { deployment = { version = 1, scope = "country", country = "es", primary_region = "eu-south-2", backup_region = "eu-west-3", network = { cidr = "10.20.0.0/16", az_ids = ["eus2-az1", "eus2-az2", "eus2-az3"] }, cells = { "es-any" = { subnet_cidr = "10.20.16.0/20" } } } }
   expect_failures = [var.deployment]
@@ -1095,6 +1203,10 @@ run "rejects_malformed_cell" {
 
 run "primary_cells_use_their_exact_network_entries" {
   command = plan
+  override_module {
+    target  = module.workload_permissions
+    outputs = { workload_roles = {}, attachment_refs = {} }
+  }
   override_module {
     target  = module.scope_permissions
     outputs = { attachment_refs = {}, permission_admission = true, replication_role_arn = "arn:aws:iam::333333333333:role/waitron-es-storage-replication" }
@@ -1134,6 +1246,10 @@ run "primary_cells_use_their_exact_network_entries" {
 run "rejects_foreign_operator_account_before_cell_reads" {
   command = plan
   override_module {
+    target  = module.workload_permissions
+    outputs = { workload_roles = {}, attachment_refs = {} }
+  }
+  override_module {
     target  = module.scope_permissions
     outputs = { attachment_refs = {}, permission_admission = true, replication_role_arn = "arn:aws:iam::333333333333:role/waitron-es-storage-replication" }
   }
@@ -1164,7 +1280,7 @@ run "rejects_foreign_operator_account_before_cell_reads" {
   }
   override_module {
     target  = module.cell
-    outputs = { cell = null }
+    outputs = { cell = { cluster_name = "waitron-es-fixture", region = "eu-south-2", az_ids = ["eus2-az1", "eus2-az2", "eus2-az3"], private_subnet_ids = { eus2-az1 = "subnet-00000000000000001", eus2-az2 = "subnet-00000000000000002", eus2-az3 = "subnet-00000000000000003" }, node_security_group_id = "sg-00000000000000009", oidc_issuer = "https://oidc.eks.eu-south-2.amazonaws.com/id/ADMISSION" } }
   }
   variables { compute = { kubernetes_version = "1.34", operator_role_arns = ["arn:aws:iam::999999999999:role/operators/admin"] } }
   expect_failures = [var.compute]

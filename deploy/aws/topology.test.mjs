@@ -188,3 +188,36 @@ test('the replication role reference waits for its attached source policy', () =
   assert.equal(output?.value, '${var.custody_refs.replication_role_arn}');
   assert.deepEqual(output.depends_on, ['${aws_iam_role_policy.replication}']);
 });
+
+for (const [scope, label] of [['global', 'global'], ['country', 'es']]) {
+  // A fixed issuer or shared iterator would trust the wrong Kubernetes cluster.
+  test(`${scope} binds every workload identity to the matching cell and primary provider`, () => {
+    const permissions = module(scope, 'workload_permissions');
+    assert.equal(permissions?.source, '"../../modules/workload-permissions"');
+    assert.deepEqual(permissions.providers, { aws: `\${aws.${scope}}` });
+    assert.equal(permissions.for_each, '${var.deployment.cells}');
+    assert.equal(permissions.scope, JSON.stringify(label));
+    assert.equal(permissions.cell_name, '${each.key}');
+    assert.equal(permissions.oidc_issuer, '${module.cell[each.key].cell.oidc_issuer}');
+    assert.equal(permissions.namespace, JSON.stringify(`waitron-cloud-${label}`));
+    const contract = JSON.parse(readFileSync(new URL('contracts/p1-roles-v1.json', import.meta.url), 'utf8'));
+    const roles = scope === 'global' ? ['api', 'portal', 'registration-worker', 'monitor-worker'] : contract.roles;
+    assert.deepEqual(Object.fromEntries(Object.entries(permissions.role_names).map(([role, account]) => [role.startsWith('"') ? JSON.parse(role) : role, account])), Object.fromEntries(roles.map(role => [role, JSON.stringify(contract.service_accounts[role])])));
+    assert.equal(permissions.count, undefined);
+    assert.equal(permissions.depends_on, undefined);
+  });
+  test(`${scope} gives cell workloads only their own completed scope references`, () => {
+    const permissions = module(scope, 'workload_permissions');
+    assert.deepEqual(permissions?.custody_refs, {
+      kms: '${module.custody.kms}', backup_kms: '${module.custody.backup_kms}',
+      secrets: '${module.custody.secrets}', backup_secret_refs: '${module.custody.backup_secret_refs}',
+      replication_role_arn: '${module.custody.replication_role_arn}',
+    });
+    assert.equal(permissions.storage_refs, scope === 'global' ? null : '${local.storage_refs}');
+    assert.equal(permissions.database_refs, '${module.database.database}');
+    assert.equal(permissions.recovery_role_arn, '${var.recovery_role_arn}');
+    assert.deepEqual(permissions.prefixes, { stream: '"streams/"', snapshot: '"snapshots/"' });
+    const output = entries(scope, 'output').find(body => body['"workload_topology"'])?.['"workload_topology"'];
+    assert.equal(output?.value, '${{for name, permissions in module.workload_permissions : name => {workload_roles = permissions.workload_roles, attachments = permissions.attachment_refs}}}');
+  });
+}

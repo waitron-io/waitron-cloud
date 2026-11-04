@@ -9,4 +9,8 @@ test('both independent roots plan the real management database, regional keys an
     assert.equal(result.split(`run "${name}"... pass`).length - 1, 2, `${name} must run in both roots`);
   }
   assert.equal(result.split('run "rejects_store_references_that_differ_from_permission_targets"... pass').length - 1, 1);
+  assert.equal(result.split('run "one_cell_has_its_own_workload_roles"... pass').length - 1, 1);
+  for (const name of ['two_cells_keep_distinct_workload_roles']) {
+    assert.equal(result.split(`run "${name}"... pass`).length - 1, 2, `${name} must run in both roots`);
+  }
 });

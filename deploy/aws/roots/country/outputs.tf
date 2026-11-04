@@ -68,3 +68,9 @@ output "storage_topology" {
     error_message = "Actual country stores and keys must match the targets granted to replication and recovery"
   }
 }
+
+output "workload_topology" {
+  value = { for name, permissions in module.workload_permissions : name => {
+    workload_roles = permissions.workload_roles, attachments = permissions.attachment_refs
+  } }
+}

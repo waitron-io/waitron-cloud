@@ -64,3 +64,9 @@ output "storage_topology" {
     admitted    = module.scope_permissions.permission_admission
   }
 }
+
+output "workload_topology" {
+  value = { for name, permissions in module.workload_permissions : name => {
+    workload_roles = permissions.workload_roles, attachments = permissions.attachment_refs
+  } }
+}

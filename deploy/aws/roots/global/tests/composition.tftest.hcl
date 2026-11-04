@@ -166,3 +166,124 @@ run "two_cells_share_scope_permissions" {
     error_message = "COMPOSED_SCOPE_STORAGE: actual stores and shared policy ownership must stay bound to the same scope regardless of cell count"
   }
 }
+
+run "one_cell_has_its_own_workload_roles" {
+  command = plan
+  override_module {
+    target = module.network
+    outputs = { network = {
+      vpc_id                  = "vpc-00000000000000001"
+      public_subnet_ids       = { euc1-az1 = "subnet-00000000000000011", euc1-az2 = "subnet-00000000000000012", euc1-az3 = "subnet-00000000000000013" }
+      database_subnet_ids     = { euc1-az1 = "subnet-00000000000000021", euc1-az2 = "subnet-00000000000000022", euc1-az3 = "subnet-00000000000000023" }
+      private_route_table_ids = { euc1-az1 = "rtb-00000000000000001", euc1-az2 = "rtb-00000000000000002", euc1-az3 = "rtb-00000000000000003" }
+      cells = {
+        "global-01" = { private_subnet_ids = { euc1-az1 = "subnet-00000000000000001", euc1-az2 = "subnet-00000000000000002", euc1-az3 = "subnet-00000000000000003" } }
+        "global-02" = { private_subnet_ids = { euc1-az1 = "subnet-00000000000000004", euc1-az2 = "subnet-00000000000000005", euc1-az3 = "subnet-00000000000000006" } }
+      }
+    } }
+  }
+  override_resource {
+    target = module.custody.aws_kms_key.primary["database"]
+    values = { arn = "arn:aws:kms:eu-central-1:222222222222:key/11111111-1111-1111-1111-111111111111" }
+  }
+  override_resource {
+    target = module.custody.aws_kms_key.backup["database"]
+    values = { arn = "arn:aws:kms:eu-west-1:222222222222:key/22222222-2222-2222-2222-222222222222" }
+  }
+  override_resource {
+    target = module.cell["global-01"].aws_eks_cluster.cell
+    values = { identity = [{ oidc = [{ issuer = "https://oidc.eks.eu-central-1.amazonaws.com/id/CELL01" }] }] }
+  }
+  override_resource {
+    target = module.workload_permissions["global-01"].aws_iam_role.workload["api"]
+    values = { arn = "arn:aws:iam::222222222222:role/waitron-global-global-01-api" }
+  }
+  override_resource {
+    target = module.workload_permissions["global-01"].aws_iam_role.workload["portal"]
+    values = { arn = "arn:aws:iam::222222222222:role/waitron-global-global-01-portal" }
+  }
+  override_resource {
+    target = module.workload_permissions["global-01"].aws_iam_role.workload["registration-worker"]
+    values = { arn = "arn:aws:iam::222222222222:role/waitron-global-global-01-registration-worker" }
+  }
+  override_resource {
+    target = module.workload_permissions["global-01"].aws_iam_role.workload["monitor-worker"]
+    values = { arn = "arn:aws:iam::222222222222:role/waitron-global-global-01-monitor-worker" }
+  }
+  assert {
+    condition     = { for cell, value in output.workload_topology : cell => value.workload_roles } == { "global-01" = { "api" = "arn:aws:iam::222222222222:role/waitron-global-global-01-api", "portal" = "arn:aws:iam::222222222222:role/waitron-global-global-01-portal", "registration-worker" = "arn:aws:iam::222222222222:role/waitron-global-global-01-registration-worker", "monitor-worker" = "arn:aws:iam::222222222222:role/waitron-global-global-01-monitor-worker" } } && alltrue([for value in values(output.workload_topology) : toset(keys(value.attachments)) == toset(["api", "registration-worker", "monitor-worker"])])
+    error_message = "COMPOSED_CELL_WORKLOADS: every selected cell needs its own complete role set and only its runtime policy attachments"
+  }
+}
+
+run "two_cells_keep_distinct_workload_roles" {
+  command = plan
+  override_module {
+    target = module.network
+    outputs = { network = {
+      vpc_id                  = "vpc-00000000000000001"
+      public_subnet_ids       = { euc1-az1 = "subnet-00000000000000011", euc1-az2 = "subnet-00000000000000012", euc1-az3 = "subnet-00000000000000013" }
+      database_subnet_ids     = { euc1-az1 = "subnet-00000000000000021", euc1-az2 = "subnet-00000000000000022", euc1-az3 = "subnet-00000000000000023" }
+      private_route_table_ids = { euc1-az1 = "rtb-00000000000000001", euc1-az2 = "rtb-00000000000000002", euc1-az3 = "rtb-00000000000000003" }
+      cells = {
+        "global-01" = { private_subnet_ids = { euc1-az1 = "subnet-00000000000000001", euc1-az2 = "subnet-00000000000000002", euc1-az3 = "subnet-00000000000000003" } }
+        "global-02" = { private_subnet_ids = { euc1-az1 = "subnet-00000000000000004", euc1-az2 = "subnet-00000000000000005", euc1-az3 = "subnet-00000000000000006" } }
+      }
+    } }
+  }
+  override_resource {
+    target = module.custody.aws_kms_key.primary["database"]
+    values = { arn = "arn:aws:kms:eu-central-1:222222222222:key/11111111-1111-1111-1111-111111111111" }
+  }
+  override_resource {
+    target = module.custody.aws_kms_key.backup["database"]
+    values = { arn = "arn:aws:kms:eu-west-1:222222222222:key/22222222-2222-2222-2222-222222222222" }
+  }
+  variables {
+    deployment = { version = 1, scope = "global", country = null, primary_region = "eu-central-1", backup_region = "eu-west-1", network = { cidr = "10.10.0.0/16", az_ids = ["euc1-az1", "euc1-az2", "euc1-az3"] }, cells = { "global-01" = { subnet_cidr = "10.10.16.0/20" }, "global-02" = { subnet_cidr = "10.10.32.0/20" } } }
+  }
+  override_resource {
+    target = module.cell["global-01"].aws_eks_cluster.cell
+    values = { identity = [{ oidc = [{ issuer = "https://oidc.eks.eu-central-1.amazonaws.com/id/CELL01" }] }] }
+  }
+  override_resource {
+    target = module.workload_permissions["global-01"].aws_iam_role.workload["api"]
+    values = { arn = "arn:aws:iam::222222222222:role/waitron-global-global-01-api" }
+  }
+  override_resource {
+    target = module.workload_permissions["global-01"].aws_iam_role.workload["portal"]
+    values = { arn = "arn:aws:iam::222222222222:role/waitron-global-global-01-portal" }
+  }
+  override_resource {
+    target = module.workload_permissions["global-01"].aws_iam_role.workload["registration-worker"]
+    values = { arn = "arn:aws:iam::222222222222:role/waitron-global-global-01-registration-worker" }
+  }
+  override_resource {
+    target = module.workload_permissions["global-01"].aws_iam_role.workload["monitor-worker"]
+    values = { arn = "arn:aws:iam::222222222222:role/waitron-global-global-01-monitor-worker" }
+  }
+  override_resource {
+    target = module.cell["global-02"].aws_eks_cluster.cell
+    values = { identity = [{ oidc = [{ issuer = "https://oidc.eks.eu-central-1.amazonaws.com/id/CELL02" }] }] }
+  }
+  override_resource {
+    target = module.workload_permissions["global-02"].aws_iam_role.workload["api"]
+    values = { arn = "arn:aws:iam::222222222222:role/waitron-global-global-02-api" }
+  }
+  override_resource {
+    target = module.workload_permissions["global-02"].aws_iam_role.workload["portal"]
+    values = { arn = "arn:aws:iam::222222222222:role/waitron-global-global-02-portal" }
+  }
+  override_resource {
+    target = module.workload_permissions["global-02"].aws_iam_role.workload["registration-worker"]
+    values = { arn = "arn:aws:iam::222222222222:role/waitron-global-global-02-registration-worker" }
+  }
+  override_resource {
+    target = module.workload_permissions["global-02"].aws_iam_role.workload["monitor-worker"]
+    values = { arn = "arn:aws:iam::222222222222:role/waitron-global-global-02-monitor-worker" }
+  }
+  assert {
+    condition     = { for cell, value in output.workload_topology : cell => value.workload_roles } == { "global-01" = { "api" = "arn:aws:iam::222222222222:role/waitron-global-global-01-api", "portal" = "arn:aws:iam::222222222222:role/waitron-global-global-01-portal", "registration-worker" = "arn:aws:iam::222222222222:role/waitron-global-global-01-registration-worker", "monitor-worker" = "arn:aws:iam::222222222222:role/waitron-global-global-01-monitor-worker" }, "global-02" = { "api" = "arn:aws:iam::222222222222:role/waitron-global-global-02-api", "portal" = "arn:aws:iam::222222222222:role/waitron-global-global-02-portal", "registration-worker" = "arn:aws:iam::222222222222:role/waitron-global-global-02-registration-worker", "monitor-worker" = "arn:aws:iam::222222222222:role/waitron-global-global-02-monitor-worker" } } && alltrue([for value in values(output.workload_topology) : toset(keys(value.attachments)) == toset(["api", "registration-worker", "monitor-worker"])])
+    error_message = "COMPOSED_CELL_WORKLOADS: every selected cell needs its own complete role set and only its runtime policy attachments"
+  }
+}
