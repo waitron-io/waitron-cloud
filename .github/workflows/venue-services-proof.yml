@@ -41,9 +41,24 @@ jobs:
       - uses: actions/setup-node@v5
         with:
           node-version: '26'
-          cache: pnpm
+          package-manager-cache: false
           registry-url: https://npm.pkg.github.com
           scope: '@waitron-io'
+      - name: Locate pnpm dependency store
+        id: pnpm-store
+        # The cache version must not depend on the bootstrap's random binary path.
+        run: |
+          export npm_config_store_dir="$RUNNER_TEMP/cloud-pnpm-store"
+          echo "npm_config_store_dir=$npm_config_store_dir" >> "$GITHUB_ENV"
+          pnpm_store_path=$(pnpm store path --silent) || exit "$?"
+          test -n "$pnpm_store_path" || exit 1
+          echo "path=$pnpm_store_path" >> "$GITHUB_OUTPUT"
+      - name: Restore pnpm dependency cache
+        id: pnpm-cache
+        uses: actions/cache/restore@v5
+        with:
+          path: ${{ steps.pnpm-store.outputs.path }}
+          key: pnpm-${{ runner.os }}-${{ runner.arch }}-node26-${{ hashFiles('pnpm-lock.yaml') }}
       - run: pnpm install --frozen-lockfile
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -55,3 +70,12 @@ jobs:
       - run: node --test --test-reporter=tap '${{ matrix.file }}'
         env:
           CLOUD_SERVICE_PROOF_TIMINGS: '1'
+      # Keep optional saving last so final runner cleanup collects its child processes.
+      - name: Save pnpm dependency cache
+        if: success() && steps.pnpm-cache.outputs.cache-hit != 'true'
+        timeout-minutes: 1
+        continue-on-error: true
+        uses: actions/cache/save@v5
+        with:
+          path: ${{ steps.pnpm-store.outputs.path }}
+          key: ${{ steps.pnpm-cache.outputs.cache-primary-key }}

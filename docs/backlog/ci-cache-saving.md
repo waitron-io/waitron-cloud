@@ -13,9 +13,45 @@ and artifacts; actual publishing still requires its separate manual invocation.
 The reconnect diagnostic preserves both CPU groups, first-refusal sampling,
 deliberate-fault controls and diagnostic artifacts.
 
-**Open.** Attribute the historical upload stall; the controlled archive-creation stall
-proves the save deadline, not that transport cause. The other five setup-node cache
-consumers retain their existing behaviour and need separate qualification before changing.
+The root checks, type checking, receipt suites, package matrix, relay-counter
+diagnostic and venue-service proofs use the same separate restore and final save.
+These are six job definitions, including the venue proof added after the earlier
+five-consumer inventory. Their mandatory steps, permissions, matrices, artifacts,
+assertions and eight-minute job limits remain unchanged. The relay diagnostic
+still checks its baseline, four deliberate faults and restored PostgreSQL case.
+The venue proof still runs both legacy and venue groups and records runner capacity.
+
+Each job selects the stable store before installation. A cache hit skips saving;
+a miss can save only after successful mandatory work. A failed optional save stays
+visible without changing a successful test result. The save runs last because
+final runner cleanup collects action children; its one-minute step limit does not
+promise immediate child termination. The eight-minute job limit still includes
+setup, tests and cleanup, so a successful test suite alone cannot qualify a job
+that exhausts that limit.
+
+**Open.** Attribute the historical upload stall; the controlled archive-creation
+stall proves the save deadline, not that transport cause. Qualify the changed
+jobs on their exact pull-request head and independently after merging. Record
+each job's cache hit or miss and whether saving ran; a hit does not qualify the
+miss path. Retain a real cache miss alongside the existing deliberate-stall and
+mandatory-failure controls before closing cache qualification. Compare setup,
+test and cleanup timings, and keep mandatory failures red. A later passing run
+does not repair the historical transport failure.
+
+All ten store-location steps preserve a failed pnpm lookup's exit status and
+refuse an empty path before publishing cache inputs. Native shell controls run
+the actual configured steps with failed, empty and successful lookups, including
+paths containing spaces. Run `node --test scripts/ci-cache-location.test.mjs`.
+The controls cover the six new cache consumers and the four earlier bounded-cache
+workflows, with every existing mandatory step and publication gate preserved.
+
+Keep two native harness observations separate from the cache transport cause.
+During review, `ci-setup-pnpm.test.mjs` reports two descendant-test attempts
+instead of three on both the candidate and its base. The unavailable-mirror
+case in `ci-download.test.mjs` reports two commands instead of one in the wider
+run. Later isolated checks pass without changing either source. Their causes
+remain unknown; retain the original assertions and investigate these scheduling
+observations under D530 before changing their limits.
 
 ## Portal shard job budget (D546 qualification)
 

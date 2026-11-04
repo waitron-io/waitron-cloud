@@ -3470,10 +3470,11 @@ requirements](backlog/diagnostic-permission-lock.md).
 
 ## Dependency-cache save stalls (D507)
 
-**Open.** Attribute the historical upload stall and qualify the five remaining
-setup-node cache consumers before changing them. Portal work now uses six
-file partitions to leave room for setup and cleanup within its eight-minute
-job limit; every case keeps its original assertions and deadline.
+The remaining CI, relay-counter and venue-proof jobs now restore dependencies
+separately and bound optional saving to one minute after mandatory work. Every
+existing check, matrix and job limit remains. **Open.** Attribute the historical
+upload stall and compare actual setup, test and cleanup timings before claiming
+that every job finishes within its limit.
 See [the boundaries and remaining work](backlog/ci-cache-saving.md#dependency-cache-save-stalls-d507).
 
 ## Audit fixture dependency preparation (D530)
