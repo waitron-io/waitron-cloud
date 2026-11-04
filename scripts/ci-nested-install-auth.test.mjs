@@ -5,6 +5,7 @@ import {mkdir, mkdtemp, readFile, rm, writeFile} from 'node:fs/promises';
 import {createServer} from 'node:http';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
+import {fileURLToPath} from 'node:url';
 import test from 'node:test';
 import {promisify} from 'node:util';
 
@@ -43,7 +44,12 @@ for (const step of [...steps, ...receiptSteps]) {
       // A separate checkout/store forces the fetch that a warm runner can conceal.
       const checkout = join(root, 'checkout');
       await mkdir(checkout);
-      await writeFile(join(checkout, 'package.json'), JSON.stringify({name: 'nested-install-fixture', private: true, dependencies: {'synthetic-private-package': url}}));
+      const throughReceipt = command === 'node scripts/ci-run-receipts.mjs';
+      const installArgs = ['install', '--frozen-lockfile', '--ignore-scripts', '--store-dir', join(root, 'store'), '--fetch-retries=0'];
+      await writeFile(join(checkout, 'package.json'), JSON.stringify({name: 'nested-install-fixture', private: true, dependencies: {'synthetic-private-package': url},
+        ...(throughReceipt ? {scripts: {'test:local-stack': 'node install.cjs'}} : {})}));
+      if (throughReceipt) await writeFile(join(checkout, 'install.cjs'),
+        `const {spawnSync}=require('node:child_process');const result=spawnSync('pnpm',${JSON.stringify(installArgs)},{stdio:'inherit'});process.exit(result.status??1);\n`);
       await writeFile(join(checkout, 'pnpm-lock.yaml'), `lockfileVersion: '9.0'\nsettings:\n  autoInstallPeers: true\n  excludeLinksFromLockfile: false\nimporters:\n  .:\n    dependencies:\n      synthetic-private-package:\n        specifier: ${url}\n        version: ${url}\npackages:\n  synthetic-private-package@${url}:\n    resolution: {integrity: ${integrity}, tarball: ${url}}\nsnapshots:\n  synthetic-private-package@${url}: {}\n`);
       const baseEnv = {...process.env, NODE_AUTH_TOKEN: 'XXXXX-XXXXX-XXXXX-XXXXX', NPM_CONFIG_USERCONFIG: join(root, 'npmrc')};
       delete baseEnv.NODE_TEST_CONTEXT;
@@ -51,7 +57,10 @@ for (const step of [...steps, ...receiptSteps]) {
       // Interpret the checked-in step's credential binding with a synthetic Actions secret.
       const bindings = [...step.matchAll(/^          (NODE_AUTH_TOKEN): (.+)$/gm)];
       const stepEnv = Object.fromEntries(bindings.map(([, key, value]) => [key, value === '${{ secrets.GITHUB_TOKEN }}' ? token : value]));
-      const install = env => exec('pnpm', ['install', '--frozen-lockfile', '--ignore-scripts', '--store-dir', join(root, 'store'), '--fetch-retries=0'], {cwd: checkout, env, timeout: 20_000, maxBuffer: 1024 * 1024});
+      const install = env => throughReceipt
+        ? exec(process.execPath, [fileURLToPath(new URL('./ci-run-receipts.mjs', import.meta.url))],
+          {cwd: checkout, env: {...env, CI_PLAN: JSON.stringify({receipts: ['test:local-stack']}), CI_RECEIPT_CONCURRENCY: '2'}, timeout: 20_000, maxBuffer: 1024 * 1024})
+        : exec('pnpm', installArgs, {cwd: checkout, env, timeout: 20_000, maxBuffer: 1024 * 1024});
       await assert.rejects(install(baseEnv), error => /ERR_PNPM_FETCH_401/.test(error.stdout));
       const installed = await install({...baseEnv, ...stepEnv}).catch(error => {
         assert.fail(`Nested install failed:\n${error.stdout ?? ''}${error.stderr ?? ''}`);

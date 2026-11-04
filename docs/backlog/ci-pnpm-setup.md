@@ -51,6 +51,9 @@ The package-test and grouped receipt steps now pass the same package token as th
 You need that token when a test installs dependencies in a temporary checkout
 and pnpm must fetch a private tarball. The unsharded, grouped and sharded test
 steps receive it explicitly; workflow permissions remain `packages: read`.
+The same GitHub token also has the workflow's existing read access to repository
+contents, Actions and pull requests. The receipt suites now inherit that token;
+this change adds no permission or write access.
 
 The grouped receipt step had the same missing binding in
 [run 41814030751](https://github.com/waitron-io/waitron-cloud/actions/runs/41814030751/job/126520320891)
@@ -58,7 +61,8 @@ and [run 41817007161](https://github.com/waitron-io/waitron-cloud/actions/runs/4
 Both retained setup-node's placeholder token, and the venue basic mail guard's
 nested install refused the private tarball before its assertions ran. The same
 cold-store loopback control now covers that step too: the checked-in binding
-must install and load the package after the placeholder gets a 401. This fixes
+passes through the real receipt runner, pnpm script and descendant installer,
+then loads the package after the placeholder gets a 401. This fixes
 the missing credential at that boundary; why those jobs needed a fresh download
 after the initial install remains unknown. Keep the original signup/reset
 omission checks and all install, test and job deadlines.

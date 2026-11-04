@@ -109,9 +109,11 @@ proof consumers introduce no additional unread Cloud prose exemption.
 
 The receipt-authentication renewal adds only an existing package-token binding
 to the grouped receipt step and extends its loopback-registry test to that
-entry point. The runner passes its environment to pnpm, and the venue basic
-guard's nested install inherits it. The test reads the CI workflow and creates
-its own package, lockfile, registry and private store; it adds no prose reader.
+entry point. That control executes the actual runner, pnpm script and descendant
+installer against a synthetic registry. The test reads the CI workflow and creates
+its own package, script, lockfile, registry and private store; it adds no prose reader.
+The token retains the workflow's existing read access to contents, packages,
+Actions and pull requests. No permission or write access is added.
 Identity and gateway programs, lock inputs, permissions and installation hooks
 remain unchanged. All four inventories are renewed from this reviewed candidate.
 
