@@ -4475,13 +4475,6 @@ Enter-key, pending-state, activation, cooldown, clock and deadline assertion.
 These checks use stubbed HTTP; real account authority and the historical Linux
 failure cause remain unqualified.
 
-## Recovery-session browser handler wait (D360)
-
-The recovery-session browser fixture refuses an absent handler signal within its
-existing three-second page budget. Delayed handlers still run the full bilingual,
-theme, viewport and server/network failure matrix. Original session-status,
-recovery-input, request-count, retry navigation, layout and deadline checks remain.
-
 ## Installation-refresh browser handler wait (D357)
 
 The installation-refresh browser fixture refuses an absent route-handler signal
