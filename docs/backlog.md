@@ -3514,19 +3514,11 @@ See [the boundaries and remaining work](backlog/ci-cache-saving.md#dependency-ca
 
 ## Audit fixture dependency preparation (D530)
 
-The translation-vector audit used a fresh offline install, which could refuse
-before checking the vector when the download cache lacked a package. The
-[main failure](https://github.com/waitron-io/waitron-cloud/actions/runs/41797930675/job/126466887370)
-named `undici-types` 7.18.2; an empty disposable cache reproduces that refusal.
-
-The fixture now copies the parent's installed dependency directories into its
-own checkout. Relative links keep workspace imports inside that checkout, and
-copied dependency files can change without changing the parent. You can run
-`node --test scripts/ci-audit-fixture-dependencies.test.mjs` to exercise the real
-audit with an empty download cache and an unavailable registry. Its original
-vector, planner, mismatch and restoration checks remain. This removes the
-fixture's dependency on cached downloads; the separate cache-upload stall and
-other D530 failures remain open.
+The translation-vector audit copies installed dependencies into its own checkout
+and passes with an empty download cache and an unavailable registry. Its original
+vector, planner, mismatch and restoration checks remain. See the
+[nested-install investigation](backlog/ci-pnpm-setup.md#nested-package-installs-d530)
+for the reproduced refusal, source isolation checks and remaining cache questions.
 
 ## CI PostgreSQL image pull
 

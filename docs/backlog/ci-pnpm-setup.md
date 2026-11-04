@@ -6,11 +6,23 @@ An offline nested install also failed in [run 41792705294, root partition 4](htt
 The translation-vector audit test could not find `undici-types@7.18.2`, although
 the initial install reported downloading all 162 packages. The same job passed
 on main in run 41499801321 and on the concurrent documentation branch in run
-41792656841; the unchanged focused test also passes locally. Lane G previously
-recorded that missing tarball in a cache-only test-box control on 31 October.
-D530 retains the cause: trace why the nested install cannot reuse the initial
-store, preserving the offline check and its assertions. A later clean run
-qualifies unrelated work; it does not repair or explain this failure.
+41792656841. Lane G previously recorded that missing tarball in a cache-only
+test-box control on 31 October. The same refusal reached
+[main again](https://github.com/waitron-io/waitron-cloud/actions/runs/41797930675/job/126466887370).
+An empty disposable store reproduces the exact missing `undici-types` version
+before the audit can check its vector.
+
+The audit fixture now copies the parent's installed dependency directories into
+its own checkout, so it needs neither cached downloads nor registry access.
+Relative links keep workspace imports inside that checkout, and copied dependency
+files can change without changing the parent. Run
+`node --test scripts/ci-audit-fixture-dependencies.test.mjs` to exercise the real
+audit with an empty store and an unavailable registry, plus candidate source and
+dependency isolation. Its original setup-status, vector, planner, mismatch and
+restoration assertions and deadlines remain. The three original audit cases and
+two added controls pass on Linux. Why the historical initial install left the
+download store incomplete remains unknown; this change removes that store from
+the audit's prerequisites. The independent cache-upload stall remains open.
 
 The package-test steps now pass the same package token as the initial install.
 You need that token when a test installs dependencies in a temporary checkout
