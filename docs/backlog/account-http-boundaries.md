@@ -52,17 +52,6 @@ Runtime, existing tests and authentication policy are unchanged. These local cli
 checks do not qualify the production ingress, server-side session storage or
 browser activity; keep their separate qualification gates.
 
-## Authenticator management transport and session rechecks (D431)
-
-A credentials refusal during an authenticator change triggers one session read.
-If that read cannot confirm your account, the portal asks you to check the outcome
-without repeating the change. Native HTTP/client/controller tests cover current,
-other, expired and unreadable session replies. Cancellation clears its setup
-secret and proof inputs even when its reply is lost, so continuing requires an
-explicit fresh setup. Seconds and date retry waits survive account changes and
-block status and setup requests until their exact boundary. Runtime and existing tests stay
-unchanged; server authority, browser and production qualification remain separate.
-
 ## Authenticator replies after account changes (D399)
 
 Delayed authenticator reads, setup, activation, removal, regeneration, cancellation
