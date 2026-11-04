@@ -44,6 +44,7 @@ test('AWS checks use the exact candidate with read-only repository permission', 
   assert.equal(job.steps.find(step => step.uses?.startsWith('actions/setup-node@')).with['node-version'], '26');
   const setup = job.steps.find(step => step.run === 'node scripts/ci-setup-pnpm.mjs');
   assert.ok(setup, 'The repository package-manager supervisor must run');
+  assert.deepEqual(Object.keys(setup).sort(), ['env', 'run', 'shell']);
   assert.ok(job.steps.indexOf(job.steps.find(step => step.uses?.startsWith('actions/setup-node@'))) < job.steps.indexOf(setup));
   assert.deepEqual(setup.env, {
     NODE_OPTIONS: '--require=${{ github.workspace }}/scripts/ci-pnpm-diagnostics.cjs',
