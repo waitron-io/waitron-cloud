@@ -3435,12 +3435,6 @@ failure retains its cause and removes its private directory without retrying.
 These checks exercise the existing format rule. Real token issuance and expiry,
 store startup and concurrent valid-cache publication keep their separate gates.
 
-## Existing storage-cache refusal qualification (D442)
-
-**Open.** Capture an instrumented recurrence before attributing the historical startup
-or download failure; real storage qualification remains separate.
-See [the boundaries and remaining work](backlog/storage-cache-fixture.md#existing-storage-cache-refusal-qualification-d442).
-
 ## Storage identity-server bind refusals (D456)
 
 The identity server binds directly to an OS-assigned port and keeps that socket
