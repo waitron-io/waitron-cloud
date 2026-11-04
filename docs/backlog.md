@@ -4009,13 +4009,6 @@ checks intact; cover each refusal with a server test and matching portal feedbac
 
 ## Clear stale connection and recovery code feedback (D249)
 
-When you edit the code on Connect a venue or Recover, the old malformed-code
-message and field marker clear. Submit checks the edited code again before any
-request. Server refusals and uncertain outcomes stay visible while you type;
-choosing a business still leaves code errors alone. Browser checks cover English
-and Spanish, both themes and phone/desktop widths, including pasted code trimming
-and values retained across a language change.
-
 Lane D's Litestream investigation has another observation from
 [cost run 40181699752, job 121133970845](https://github.com/waitron-io/waitron-cloud/actions/runs/40181699752/job/121133970845).
 The committed-PUT-reply shutdown check refuses at `idle` with one pending exchange
