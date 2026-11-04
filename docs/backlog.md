@@ -535,11 +535,11 @@ the jobs meet the five-minute target.
 behaviour.
 See [the boundaries and remaining work](backlog/diagnostic-download-http.md#diagnostic-download-response-validation-d410).
 
-## Diagnostic download transport failures (D425)
+## Diagnostic download qualification
 
 **Open.** Qualify server redaction, genuine browser downloads and production-network
-behaviour.
-See [the boundaries and remaining work](backlog/diagnostic-download-http.md#diagnostic-download-transport-failures-d425).
+behaviour. Native refusal and retry checks already pass.
+See [the remaining checks](backlog/diagnostic-download-http.md#diagnostic-download-qualification).
 
 ## Usage-read transport refusals and retry waits (D434, D436)
 

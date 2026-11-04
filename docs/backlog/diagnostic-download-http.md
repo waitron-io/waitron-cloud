@@ -11,17 +11,14 @@ exercise the existing response validator and preserve every permission and
 cooldown rule. Server redaction and genuine browser downloads remain separate
 CI and launch checks.
 
-## Diagnostic download transport failures (D425)
+## Diagnostic download qualification
 
-A refused or unreadable diagnostic reply must never save a file. Native tests
-exercise the real HTTP client and download controller for session and permission
-refusals, service errors, broken JSON, empty replies and network failures. A
-well-formed document inside an HTTP refusal is still refused. Each failed download
-leaves a usable explicit retry; a server wait prevents another request until its
-exact expiry, including both Retry-After formats. Run
-`node --test apps/portal/test/diagnostic-transport-boundary.test.ts`.
-These checks preserve the existing permissions and waits. Server redaction,
-browser file downloads and production-network qualification remain separate gates.
+Run `node --test apps/portal/test/diagnostic-transport-boundary.test.ts` to check
+that refused or unreadable replies save nothing, explicit retries remain usable
+and server waits hold until their exact expiry. These native checks preserve
+the existing permissions and waits. Server redaction, genuine browser file
+downloads and production-network behaviour remain unqualified; the native
+HTTP client and controller tests cannot establish them.
 
 ## Diagnostic download replies after account changes (D400)
 
