@@ -12,17 +12,6 @@ values, and a shorter read wait cannot shorten an earlier write wait. Runtime
 and original assertions stay unchanged; server authority and live ingress remain
 separate qualification gates. Database suites run in CI during the Docker outage.
 
-## Passkey HTTP replies before prompts and confirmation (D421)
-
-Malformed passkey lists cannot supply removal targets. Native HTTP/client/controller
-checks reject invalid sign-in and registration options before opening a browser
-prompt. An unreadable verification reply leaves sign-in uncertain; adding or
-removing a key uses a valid fresh list to reconcile a lost reply. A rejected list
-retains the last usable choices and offers a read-only retry. Tests cover request
-bodies, account-management CSRF and rate-limit waits without changing runtime or
-permissions. Physical-passkey, database and live ingress qualification remain
-separate gates; database suites run in CI while local Docker is unavailable.
-
 ## Passkey transport refusals and pending actions (D435)
 
 When a passkey request fails, you can retry explicitly without replaying an
