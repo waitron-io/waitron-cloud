@@ -363,3 +363,32 @@ Wrong keys and foreign owners refuse access. Historical proofs 1–8 keep their
 original schema pairs; their wrappers execute the original installed release.
 These are local PostgreSQL and synthetic-account checks, not a live recovery or
 production billing qualification.
+
+
+## Keep mail attempts bound before a future provider handoff
+
+A provider event can arrive after you have erased a mail payload. Migration 049
+adds a separate attempt ledger with opaque tags and keyed recipient references,
+so you can retain the binding without retaining the address, body or token.
+`admitMailAttempt` checks the current queue claim and commits no mail itself.
+Its caller must commit the transaction before SMTP starts. Production workers
+are not wired to this helper yet.
+
+Use one transaction for `lockMailScope`, `admitMailAttempt`,
+`recipientIsSuppressed` and `bindProviderId`. They share a database lock for the
+schema, country, provider account and region, covering both mail purposes and all
+key versions. Keep every persisted key available with the same material after
+rotation. Missing, changed or revoked material refuses admission. Provider IDs
+bind on their first observation and cannot be replaced or shared by attempts
+within a provider account and region. They remain separate from RFC Message-ID.
+
+Run the populated upgrade and focused persistence checks against a disposable
+PostgreSQL database:
+
+```sh
+node scripts/test-postgres.mjs exec pnpm --dir packages/registration exec node --test --test-timeout=120000 test/ses-feedback-migration.test.ts test/mail-attempts.test.ts test/recipient-suppression.test.ts test/migration-history.test.ts test/schema-compatibility.test.ts
+```
+
+These checks qualify local storage and locking. Feedback application, SMTP
+admission wiring, queue polling, audited removal and provider qualification remain
+separate implementation tasks. No live sender or AWS resource is enabled.
