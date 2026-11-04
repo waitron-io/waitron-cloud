@@ -501,15 +501,6 @@ Linux host group passes all thirteen cases. Use the
 [reproduction commands and next-failure evidence](backlog/isolated-replay-result-boundary.md)
 to identify a recurrence before changing request or shutdown behavior.
 
-## Isolated-replay CI work groups (D301)
-
-Isolated replay now runs in three separate CI jobs: controller cases, host and
-result-reporter cases, and the remaining command and diagnostic cases. New case
-names fall into one of these groups so coverage cannot disappear. Each job keeps
-the eight-minute cap, original case assertions, runtime pins and cleanup rules.
-Check the complete case inventory and both head and merge runs before claiming
-the jobs meet the five-minute target.
-
 ## Diagnostic download response validation (D410)
 
 **Open.** Qualify server redaction, genuine browser downloads and production-network
