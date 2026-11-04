@@ -223,8 +223,12 @@ identify their Cloud resources.
 Use the [incident runbook](incident-response.md) for the initial sole-owner response,
 private investigation, bilingual public updates and verified closure. It recommends
 Cloudflare Pages Direct Upload outside Waitron's AWS, with an independent public
-fallback address. Phone routing, account/page setup and outage drills remain open;
-the runbook supplies no deployed incident service.
+fallback address. Start with the [owner setup checklist](incident-setup.md), which
+includes sourced phone prices and the manual publishing fallback. The approved
+[monitoring design](superpowers/specs/2026-10-24-cloud-monitoring-alerting-status-design.md)
+adds automatic status updates, a text then call, and press-1 acknowledgement.
+Phone routing, account/page setup and outage drills remain open; these documents
+supply no deployed incident service.
 
 The [D103 monitoring proposal](superpowers/specs/2026-10-22-cloud-monitoring-thresholds-design.md)
 recommends initial thresholds, phone-alert conditions and worked timelines for owner

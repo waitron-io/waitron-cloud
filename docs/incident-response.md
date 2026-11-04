@@ -5,12 +5,13 @@ account portal and email stop together. You are the only initial person on call,
 and urgent alerts must reach your phone. Keep this runbook, the contact sheet and
 the public-status publishing instructions available outside Waitron's AWS account.
 
-This is D104's operating runbook and status-host recommendation, checked against
-Cloud `5d59bf3` on 22 October 2026. No phone service, outside observer or public page
-is configured by this document. The [D103 monitoring design](superpowers/specs/2026-10-22-cloud-monitoring-thresholds-design.md)
-is approved for planning only; its thresholds and acknowledgment clocks are not
-implemented by that approval.
-Production setup and the drills below are launch gates, not completed evidence.
+Start with the [account and phone setup checklist](incident-setup.md). This runbook
+follows the [approved monitoring design](superpowers/specs/2026-10-24-cloud-monitoring-alerting-status-design.md),
+which supersedes the earlier D103/D104 paging and publishing rules where its
+section 3 says so. Approval allows local building and rehearsal; accounts and
+spending still need a separate go-ahead. No phone service, outside observer or
+public page is configured by these documents. Production setup and the drills
+below remain launch gates.
 
 ## Prepare your independent route
 
@@ -22,14 +23,20 @@ access from your phone over mobile data while signed out of Cloud.
 
 The phone route must keep working when Cloud's account, database, region and SES
 email are unavailable. Select and qualify the paging provider and a separate
-delivery-failure route before launch. A push notification, SMS or call is only
-delivery evidence; acknowledgment must come from you and identify the incident.
+delivery-failure route before launch. A delivered text or answered call is only
+delivery evidence; pressing 1 on the call acknowledges that incident's page.
+Approving a repair separately requires your passkey.
 Do not treat another message through the failed provider as an independent route.
-No provider or paid subscription is selected here, and no second responder exists.
+The approved design recommends Twilio for a text followed by a call, with Vonage
+or Sinch as backup; the setup checklist compares Twilio and Vonage. No account or
+paid subscription is configured, and no second responder exists.
 
-The planning-approved D103 policy calls for one repeat after ten minutes without acknowledgment, an unattended
-marker after twenty minutes, and a pause on expanding the monitored group. Keep
-its episode, deadlines and acknowledgment state outside the affected deployment.
+The approved policy pages when investigation finishes or fifteen minutes after
+the fault is confirmed, whichever comes first. It does not wait beyond that
+deadline for an investigator. The first page attempt starts the clock, whether
+or not delivery succeeds: repeat once at ten minutes without acknowledgment,
+mark unattended at twenty minutes, and pause expanding the monitored group. Keep
+the incident, deadlines and acknowledgment state outside the affected deployment.
 If you cannot provide coverage, record the gap and pause expansion; do not claim
 continuous human response or silently name someone else as the fallback. Accept
 the coverage and failure procedure at the launch rehearsal. It is not an
@@ -52,12 +59,13 @@ availability or response-time promise to venues.
    restoration, fiscal edits, secret access or a release-policy change. The
    separate [C41 release design](superpowers/specs/2026-10-22-cloud-release-upgrade-design.md)
    proposes release pauses and still needs approval.
-5. Publish a short status update once you confirm customer impact. If observation
+5. Check that the automatic status update appears as soon as a Cloud fault is
+   confirmed; use the manual publishing fallback if it does not. If observation
    itself is down, say that you cannot confirm current service health. State what
    is affected, what you know, what you are doing and when you will update again.
    Do not wait to discover the root cause before communicating.
 
-For an acknowledged open P1, D103 proposes a private review every thirty minutes.
+For an acknowledged open P1, retain D103's private review every thirty minutes.
 At each review, publish material changes or a short unchanged-status update and
 set the next UTC update time. Make the first public update promptly after triage;
 record any delay. These are proposed working practices, not published service
@@ -97,7 +105,7 @@ another approved contact attempt with its result recorded.
 
 ## Publish only service information
 
-Show the affected service, investigating/identified/monitoring/resolved state,
+Show the affected service, investigating/fix being applied/monitoring/resolved state,
 UTC update time, known impact and next update. Write concise English and Spanish
 versions with the same meaning. For example, the following is a rehearsal message,
 not an actual outage or deployment receipt:
@@ -117,8 +125,10 @@ D101's access and retention rules; this runbook sets no new deletion period.
 
 ## Host the page on Cloudflare Pages
 
-Recommend a small, manually updated static page on **Cloudflare Pages Free**,
-using **Direct Upload**, outside Waitron's AWS account. Cloudflare documents local
+Use a small static page on **Cloudflare Pages Free**, using **Direct Upload**,
+outside Waitron's AWS account. The approved design adds automatic fixed-sentence
+English/Spanish updates from the outside machine; manual uploads remain the
+fallback. Cloudflare documents local
 uploads to its own global network and a generated `pages.dev` address in its
 [Direct Upload guide](https://developers.cloudflare.com/pages/get-started/direct-upload/).
 Its [limits page](https://developers.cloudflare.com/pages/platform/limits/)
@@ -147,7 +157,7 @@ to it. Give venues both addresses before launch, including in help that remains
 available when Cloud is down. Record the actual URLs after owner-authorised setup;
 no address is reserved or live today.
 
-To update during an incident, edit the saved bundle, review both languages for
+For a manual update during an incident, edit the saved bundle, review both languages for
 private data, sign into Cloudflare directly and upload to the production project.
 Read the public page over mobile data and check the incident reference and UTC
 time. Keep the previous bundle for correction, but never roll back to an old
@@ -159,7 +169,7 @@ This architecture removes intended Waitron-AWS serving and publishing dependenci
 that is a design inference from the cited product documentation. Actual account
 recovery, DNS, caching, mobile editing and provider availability remain unproved.
 It also depends on Cloudflare and your own connectivity. A managed incident service
-is a later option if manual updates or paging prove inadequate; a paid option
+is a later option if the approved publisher or paging proves inadequate; a paid option
 requires your approval first.
 
 ## Restore, verify and close
@@ -195,12 +205,14 @@ labelled and removing them from the live current-state view afterward:
 | --- | --- |
 | Cloud/AWS unavailable | Read the page and publish a new timestamped EN/ES update over mobile data while Cloud login, database, SES and AWS publishing credentials are unavailable. Read both public URLs; the fallback must still work if the friendly DNS name fails. |
 | Cloud CI unavailable | Edit and upload the saved bundle without GitHub Actions or an AWS build; verify public content and caching after each update. |
-| Phone delivery and acknowledgment | Stop the observer and separately fail the normal paging provider. Verify independent detection/delivery-failure handling, the authenticated episode acknowledgment, original deadlines through restart and the approved repeat/unattended behavior. Record duplicate or lost delivery honestly. |
+| Phone delivery and acknowledgment | Stop the observer and separately fail the normal paging provider. Verify independent detection and backup delivery, press-1 incident acknowledgment, deadlines through restart and repeat/unattended behavior. Repeat with the investigator unavailable and Do Not Disturb on. Pressing 1 must not approve a repair. Record duplicate or lost delivery honestly. |
+| Automatic public updates | Confirm a synthetic Cloud fault while AWS is unreachable. Verify fixed English/Spanish updates from the outside publisher, then exercise the manual fallback. An isolated on-prem box going quiet must not page or appear publicly. |
 | Sole owner unavailable | Exercise the agreed coverage-gap procedure, unattended marker and monitoring-expansion pause without inventing another responder or claiming the incident recovered. |
 | Safe communication and closure | Exercise unknown scope, a missed update, failed private notice, attempted private-data inclusion and false/stale recovery. Verify bilingual public correction, authorised private contact and actual recovery evidence. |
 
 Keep deployment blocked until paging supplier/metadata review, independent delivery
-and recovery access, D103 approval, D101 access/privacy gates and these drills are
-complete. D102 is also required for production venue email. Hands-on account and
-page setup waits for the owner's return on 3 November; no deployment or provider
-operation is authorised by this publication.
+and recovery access, D101 access/privacy gates and these drills are complete.
+D103's exact daily schedule and first monitored group still need approval before
+enablement. D102 is also required for production venue email. Follow the setup
+checklist when you are ready to create accounts; no deployment, provider operation
+or spending is authorised by this publication.
