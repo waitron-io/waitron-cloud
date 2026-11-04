@@ -4386,19 +4386,6 @@ rather than waiting for the outer runner deadline. Native browser checks cover
 an absent handler and a delayed handler while retaining every original assertion.
 No remote setup or permission behaviour changes.
 
-## Authenticator keyboard browser handler observation (D372)
-
-The authenticator setup keyboard fixture waits for its route handler to record
-its request before checking the payload. The browser request event can arrive
-first; a delayed handler reproduces that empty-record refusal. Setup handlers
-pause only while no request has been recorded. Ordinary and delayed English/light/390
-controls submit a real extra request during pending setup and reject it at the
-later existing count assertion. Arbitrarily late duplicates and other fault
-combinations remain unqualified. All 39 native Chromium checks retain every original password,
-Enter-key, pending-state, activation, cooldown, clock and deadline assertion.
-These checks use stubbed HTTP; real account authority and the historical Linux
-failure cause remain unqualified.
-
 ## Installation-refresh browser handler wait (D357)
 
 The installation-refresh browser fixture refuses an absent route-handler signal
