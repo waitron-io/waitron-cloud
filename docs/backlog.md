@@ -58,6 +58,25 @@ The recovery-width fixture also keeps each reachable handler capture separately.
 The pending-session sign-out fixture retains ordinary and delayed captures separately.
 The recovery-choice fixture also keeps its ordinary and delayed captures separately.
 The sign-out failure fixture keeps normal and delayed captures separately too.
+The recovery-session fixture also retains each ordinary and delayed capture.
+Collect it with `RECOVERY_SESSION_RECEIPT_DIR` set to a fresh directory when you run
+`pnpm --dir apps/portal exec node --test test/recovery-session-browser.test.ts`.
+Check all 32 filenames independently: the browser assertions passed all 33 cases
+before the repair while only sixteen files survived. Delayed captures add
+`-delayed`; the sixteen historical names remain unchanged. Separate names retain
+both runs without promising different pixels or stable image bytes. Every original
+behavioral assertion, expected value, observation and deadline remains unchanged.
+The delayed fixture publishes its route only after the artificial pause, so
+recorded omission checks fail all sixteen delayed cases. Before that correction,
+both cases passed with the observation removed. Restoring the observation passes
+both cases; the ordinary and delayed recovery assertions remain unchanged.
+The missing-signal title describes its observation timeout and early return,
+before failure-message and retry checks.
+Its four-second outer race does not independently prove the exact configured
+three-second observation boundary. Real recovery authority, other engines, behavior
+under load and general cleanup bounds remain unqualified. One historical ordinary missing-signal
+sample exits after 3.6 seconds; its parent needs stopping at 150 seconds after the
+120-second test timeout. These samples do not establish a general cleanup limit.
 See [the diagnostic qualification and open work](backlog/retrospective-reviews.md).
 
 ## Separate-process storage extraction and failed-startup cleanup (D457)
