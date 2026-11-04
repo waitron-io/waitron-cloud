@@ -196,12 +196,11 @@ raised. D463's collector and remaining billing work stay on their separate branc
 selected deployment.
 See [the native installation boundaries](backlog/venue-connection-http.md#installation-deployment-qualification).
 
-## Pairing transport refusals and retry waits (D428)
+## Pairing deployment qualification
 
 **Open.** Qualify server permissions, local confirmation and live delivery against the
-selected deployment. Pairing retry waits use elapsed time through clock corrections;
-HTTP-date waits use the response Date or local receipt clock.
-See [the boundaries and remaining work](backlog/venue-connection-http.md#pairing-transport-refusals-and-retry-waits-d428).
+selected deployment.
+See [the native pairing boundaries](backlog/venue-connection-http.md#pairing-deployment-qualification).
 
 ## Alert-preference transport refusals and retry waits (D429)
 
