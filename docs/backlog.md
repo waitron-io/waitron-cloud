@@ -2658,6 +2658,16 @@ implementation or production evidence.
   remains unattributed; no existing assertion or deadline changed.
   Keep signature verification, version pins and deadlines; see the
   [setup boundaries and remaining work](backlog/ci-pnpm-setup.md).
+  **Remote fixture container preservation (D530).** Running the rendered TLS
+  and trial-receipt wrappers together reproduces the whole-host inventory race:
+  the trial's database and counters appear during the rendered fixture. Each
+  wrapper now keeps a uniquely labelled foreign witness alive and requires its
+  identity and start time to survive cleanup. Sibling container churn is outside
+  that private inventory. Owned labels and names must both be empty afterward;
+  the original traffic, image, anonymous-volume and receipt checks remain.
+  Controlled removal, restart and extra protected containers must still fail.
+  This repairs the inventory assertion; it does not explain unrelated historical
+  browser, transport, install or backup-cleanup failures.
   **Nested package authentication (D530).** All three package-test entry points
   now pass the existing read-only package token to descendant installs. A cold
   loopback-registry control reproduces the placeholder-token 401 and loads the
