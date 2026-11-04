@@ -270,12 +270,6 @@ See [the boundaries and remaining work](backlog/account-http-boundaries.md#sessi
 passkeys and the separate retry-clock repair retain their own gates.
 See [the boundaries and remaining work](backlog/account-http-boundaries.md#passkey-transport-refusals-and-pending-actions-d435).
 
-## Password and second-factor sign-in HTTP replies (D424)
-
-**Open.** Qualify server authority, browser integration and live ingress; physical
-passkeys and the separate retry-clock repair retain their own gates.
-See [the boundaries and remaining work](backlog/account-http-boundaries.md#password-and-second-factor-sign-in-http-replies-d424).
-
 ## Current state
 
 Updated 2026-10-22. The repository has a pnpm workspace and internal PostgreSQL
