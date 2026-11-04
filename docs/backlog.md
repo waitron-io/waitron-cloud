@@ -3784,20 +3784,6 @@ D385 now labels those setup boundaries, so a changed qualification can retain mo
 evidence if they recur. Preserve the failing assertions and five-second database
 limit, then reproduce a labelled failure before changing runtime rules.
 
-## Recovery refusal messages and pasted codes (D192)
-
-Recovery now keeps the server's definite refusal message for approval, close and
-replacement, including rate limits, expired requests and lost permission. It
-reconciles only uncertain replies, so a refused action does not erase its error
-or lock approval as an unknown outcome. Outer code whitespace is trimmed before
-validation and sending; leading zeroes remain. Existing request binding,
-confirmations and permission guards stay in place.
-
-Native controller and stubbed-browser checks cover definite refusals, cooldowns,
-uncertain writes and padded codes. Real PostgreSQL recovery suites remain CI's
-gate while Docker is down locally. This does not qualify production recovery,
-prove an old server has stopped, or change the existing recovery source limits.
-
 ## Public browser-check status handler wait (D366)
 
 The live-status browser fixture configures a four-second challenge-handler wait.
