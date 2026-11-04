@@ -350,4 +350,28 @@ Run `node --test scripts/cloud-cost/litestream-request-validation-diagnostics.te
 for the native HTTP controls. Diagnostics already landed in PR622, commit
 `975395ec0dc590c8f5f7a7df7b821d9883e2d097`.
 
+### Litestream after-stop admission diagnostics (D381)
+
+You can now identify the exact refused admission guard in the stop checkpoint,
+independent request audit and sanitized close record. Fixed categories distinguish
+poisoned state, input shape, hop and phase, row metadata and identity, row capacity
+and operation, duplicate admission, retry sequence, observer pairing, post-stop
+operation and ordinal, clock order and the three-attempt bound. Later refused
+calls retain the first admission cause. Producer and observer share the tracker,
+so a later poisoned hop reports the earlier hop's cause. No request paths, headers, invocation
+identifiers or accessor values are published; every existing refusal and accounting
+rule remains in force.
+
+The [PR622 merge refusal](https://github.com/waitron-io/waitron-cloud/actions/runs/40611462709/job/122563803926)
+named after-stop admission without its inner guard. Its underlying cause remains
+unknown. Reproduce a labelled recurrence before changing admission, stop, retry,
+accounting or cleanup. Native controls exercise each category and real HTTP
+refusal. Use the authorised Linux test box for genuine-backend reproduction;
+the native controls do not qualify that backend. Current-head Linux CI must still
+qualify the genuine backend before landing.
+
+Run `node --test scripts/cloud-cost/litestream-admission-diagnostics.test.mjs scripts/cloud-cost/litestream-close-diagnostics.test.mjs`
+for the native controls. Diagnostics already landed in PR625, commit
+`d0a970e75d9c297ea56630c8963d9505c5cb3bf7`.
+
 Return to the [backlog index](../backlog.md).

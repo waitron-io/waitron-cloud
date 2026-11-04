@@ -3464,25 +3464,6 @@ before changing queries, transaction rules, concurrency or timeouts. D383 remain
 parked with its completed review; this diagnostic delivery does not qualify that
 branch or establish a runtime repair.
 
-## Litestream after-stop admission diagnostics (D381)
-
-You can now identify the exact refused admission guard in the stop checkpoint,
-independent request audit and sanitized close record. Fixed categories distinguish
-poisoned state, input shape, hop and phase, row metadata and identity, row capacity
-and operation, duplicate admission, retry sequence, observer pairing, post-stop
-operation and ordinal, clock order and the three-attempt bound. Later refused
-calls retain the first admission cause. Producer and observer share the tracker,
-so a later poisoned hop reports the earlier hop's cause. No request paths, headers, invocation
-identifiers or accessor values are published; every existing refusal and accounting
-rule remains in force.
-
-The [PR622 merge refusal](https://github.com/waitron-io/waitron-cloud/actions/runs/40611462709/job/122563803926)
-named after-stop admission without its inner guard. Its underlying cause remains
-unknown. Reproduce a labelled recurrence before changing admission, stop, retry,
-accounting or cleanup. Native controls exercise each category and real HTTP
-refusal; genuine local Docker reproduction waits for Docker to return. Current-head
-Linux CI supplies the genuine backend qualification.
-
 ## Litestream refused operation and attempt diagnostics (D383)
 
 The [PR625 merge refusal](https://github.com/waitron-io/waitron-cloud/actions/runs/40615344423/job/122576493560)
