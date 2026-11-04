@@ -2919,11 +2919,6 @@ unique image tag, with a one-second limit, and always removes temporary files.
 Reproduce the image build when local Docker is available; passing CI does not explain
 the earlier timeout. Keep every verifier assertion and the existing build and job limits.
 
-## Storage partial port-reservation refusals (D464)
-
-**Open.** Real store startup and historical failure causes remain open.
-See [the boundaries and remaining work](backlog/storage-cache-fixture.md#storage-partial-port-reservation-refusals-d464).
-
 
 ## Storage archive download failure reporting (D441)
 
