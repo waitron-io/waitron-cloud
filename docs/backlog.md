@@ -1635,7 +1635,11 @@ implementation or production evidence.
   therefore still needs 28 job groups. All six receipt suites remain selected
   whenever these declarations qualify narrower package work. Their independent
   inputs still need proof before omission. These are selection measurements, not
-  GitHub duration savings. The [reader boundaries and renewal procedure](ci-package-readers.md)
+  GitHub duration savings. A refused package graph retains all packages and
+  the independent receipt audits, even after visiting an approved reader. The
+  historical local-stack fixture supplies an explicit unknown reader and keeps
+  its original omission, package, diagnostic and type-check assertions. The
+  [reader boundaries and renewal procedure](ci-package-readers.md)
   explain the declarations and remaining limits.
   Part 2b supplies the
   direct package selection below; part 5 still owns verified merge reuse.

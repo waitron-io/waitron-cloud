@@ -72,6 +72,11 @@ their existing rules. Whenever these declarations qualify narrower package
 work, all six existing receipt suites remain selected. Package precision does
 not prove that an independent receipt can be omitted. Receipt reductions need
 separate evidence, including Cloud-cost consumers of portal or UI build tools.
+If any package reader refuses validation, the planner keeps all package work
+and uses the independent receipt audits. Visiting an approved reader before
+that refusal cannot override those audits. The historical local-stack fixture
+supplies an explicit unknown reader so this fallback remains exercised as more
+real readers gain declarations.
 
 ## Review and renew a declaration
 
