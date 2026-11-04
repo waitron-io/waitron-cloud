@@ -8,9 +8,12 @@ receipt suites still run. Every push to `main` runs the full suite independently
 
 The required documentation freshness check also applies to lockfile and manifest
 changes. An unrenewed inventoried edit fails its own PR. After you review readers
-and renew the shared policy, the policy file makes the PR mixed root work, so it
-currently runs the full suite. The lock reader's narrower selection remains
-independently checked; it does not override the required freshness gate. See the
+and renew the shared policy, a lockfile change still runs the full suite. A
+workspace manifest change accompanied by audited prose can instead select its
+package and saved consumers when both documentation audits and all four head
+inventories verify. Without prose, its policy renewal keeps full work. The lock
+reader's narrower selection remains independently checked; it does not override
+the required freshness gate. See the
 [renewal consequences](ci-documentation-audit.md) before pushing.
 
 The reader compares complete resolved dependency graphs in both saved revisions.

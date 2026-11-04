@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import {execFileSync} from 'node:child_process';
-import {mkdtempSync, mkdirSync, readFileSync, rmSync, symlinkSync, unlinkSync, writeFileSync} from 'node:fs';
+import {chmodSync, mkdtempSync, mkdirSync, readFileSync, rmSync, symlinkSync, unlinkSync, writeFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join, resolve} from 'node:path';
 import test from 'node:test';
@@ -87,6 +87,32 @@ test('a docs-only base does not prevent the next reviewed mixed package selectio
   const selected = plan(commit(), base);
   assert.deepEqual(selected.packages.map(row => row.package), ['@waitron-cloud/catalogue', '@waitron-cloud/consumer']);
 }));
+
+for (const kind of ['head-executable', 'base-executable', 'base-link']) {
+  test(`mixed package selection retains ${kind} Markdown`, () => fixture(({root, git, put, renew, commit, base, plan}) => {
+    const path = join(root, 'README.md');
+    if (kind.startsWith('base-')) {
+      if (kind === 'base-link') {
+        unlinkSync(path);
+        symlinkSync('docs/backlog.md', path);
+      } else chmodSync(path, 0o755);
+      renew();
+      base = commit();
+      assert.match(git('ls-tree', base, '--', 'README.md'), new RegExp(`^${kind === 'base-link' ? '120000' : '100755'} blob`));
+      if (kind === 'base-link') {
+        unlinkSync(path);
+        put('README.md', '# Regular again\n');
+      } else chmodSync(path, 0o644);
+    } else chmodSync(path, 0o755);
+    put('packages/catalogue/src/index.mjs', 'export const value = 2;\n');
+    put('docs/backlog.md', '# Updated\n');
+    renew();
+    const head = commit();
+    if (kind === 'head-executable') assert.match(git('ls-tree', head, '--', 'README.md'), /^100755 blob/);
+    assert.deepEqual(plan(head, base).packages.map(row => row.package),
+      ['@waitron-cloud/catalogue', '@waitron-cloud/consumer', '@waitron-cloud/unrelated']);
+  }));
+}
 
 test('pinned Markdown keeps the package that actually reads its contents', () => fixture(({root, put, renew, commit, plan}) => {
   const path = 'docs/waitron-integration-contract.md';

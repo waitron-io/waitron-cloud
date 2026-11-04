@@ -23,8 +23,9 @@ or stale evidence retain full work. A fresh head cannot qualify an unaudited
 base.
 
 When you change package code alongside audited prose, the prose no longer widens
-the package selection. The planner removes only documents admitted by both saved
-revisions before selecting package owners and their saved consumers. A document
+the package selection. The planner removes regular prose after both saved
+documentation audits verify, including added and deleted documents. It then
+selects package owners and their saved consumers. A document
 that becomes a link or an executable file keeps conservative work. The published
 translation contract, generated cost model, package Markdown and receipt data
 remain inputs to their existing checks.
@@ -34,8 +35,9 @@ Your code change also needs an audit renewal. The planner treats the accompanyin
 the saved head. The base still needs a current documentation audit. A prose-only
 base normally has stale peer inventories because those modes pin prose too;
 requiring them would send the next code PR back to full work. A malformed policy
-or even one stale head peer digest keeps full work. Every other root path retains its existing selection. Prose and an audit
-edit alone cannot produce an empty successful package plan. Main pushes and the
+or even one stale head peer digest keeps full work. Every other root path retains
+its existing selection. Prose and an audit edit alone cannot produce an empty
+successful package plan. Main pushes and the
 separate proof workflows keep their existing policies.
 
 This removes the prose barrier; it does not establish that every package reader

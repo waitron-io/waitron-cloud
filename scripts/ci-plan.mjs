@@ -18,7 +18,7 @@ function mixedCodePaths(paths, base, head, git) {
     documentationPlan(prose, base, head, git);
     for (const revision of [base, head]) {
       const {entries, policy} = readInputAudit(revision, git);
-      // A deletion is prose only if any surviving entry is still regular prose.
+      // A prose path must be regular in every tree where it exists.
       for (const path of prose) {
         const entry = entries.find(entry => entry.path === path);
         if (entry && (entry.mode !== '100644' || entry.type !== 'blob')) throw Error('Non-regular Markdown');
