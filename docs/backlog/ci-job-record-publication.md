@@ -59,6 +59,13 @@ with two-second pauses. The revised loop makes ten-, twenty- and twenty-six-seco
 attempts with two pauses, still totaling sixty seconds. Successful unfinished
 records retain the ordinary two-second polling interval.
 
+The larger retry budget favors a healthy slow response over more fresh requests.
+If three requests hang and a fourth would answer in one second, the old loop
+accepts at 37 seconds but the growing-budget loop expires before that fourth
+attempt. Four hung requests followed by a one-second answer likewise changes
+from success at 49 seconds to refusal at 60 seconds. You still get a bounded
+failure whenever the available attempts cannot collect the required evidence.
+
 Each timed-out lookup now reports its attempt, elapsed time, requested budget and
 remaining total time. Earlier CI logs record only the final timeout and last
 lookup error, so individual historical request durations and retry spacing cannot

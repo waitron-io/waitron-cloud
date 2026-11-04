@@ -287,6 +287,29 @@ test('a recovered slow lookup resets the read budget and still refuses a failed 
   }
 });
 
+test('a lookup timeout past its budget reports zero remaining time and still refuses', async t => {
+  let elapsed = 0;
+  const reports = [];
+  t.mock.method(childProcess, 'execFileSync', (command, args, options) => {
+    elapsed += options.timeout + 7;
+    throw Object.assign(new Error('spawnSync gh ETIMEDOUT'), {code: 'ETIMEDOUT'});
+  });
+  syncBuiltinESMExports();
+  try {
+    await assert.rejects(() => summary.waitForSummary(plan, results, {
+      timeoutMs: 50, now: () => elapsed,
+      sleep: async ms => { elapsed += ms; }, report: message => reports.push(message),
+    }), /Timed out waiting for job records:.*ETIMEDOUT/);
+    assert.equal(elapsed, 57);
+    assert.deepEqual(reports, [
+      'Job records lookup 1 timed out after 57 ms (budget 50 ms; 0 ms remaining)',
+    ]);
+  } finally {
+    t.mock.restoreAll();
+    syncBuiltinESMExports();
+  }
+});
+
 test('publication wait refuses records without a usable job name', async () => {
   for (const record of [null, {}, {name: ''}, {name: 42}]) {
     assert.throws(() => assertSummary(plan, results, [...jobs, record]), /Invalid job record/);

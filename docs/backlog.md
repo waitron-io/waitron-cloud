@@ -1214,7 +1214,8 @@ implementation or production evidence.
   unexplained. D573 lets a slow job lookup finish with a larger retry budget inside
   the original one-minute allowance. A controlled eleven-second response now
   succeeds; persistent lookup timeouts and failed or missing jobs still fail.
-  Timeout diagnostics report attempt duration and remaining time. Deadline diagnostics identify unmet identity and completed-step checks
+  Timeout diagnostics report attempt duration and remaining time. Deadline
+  diagnostics identify unmet identity and completed-step checks
   from the last observed record. Preserve run identity, final dependency results and time
   limits; landing still requires every actual job record final. See the
   [investigation and qualification limits](backlog/ci-job-record-publication.md).
