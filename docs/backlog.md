@@ -1241,8 +1241,24 @@ implementation or production evidence.
   receipts) or at the repository root when both immutable trees match the audited
   non-document input inventory in `scripts/ci-input-audit.json`. The check reads the
   selected git blobs and requires valid UTF-8, no NUL and a final newline; deleted
-  regular documents are accepted. Package Markdown, receipt data, mixed changes
-  and missing or stale audit evidence retain the existing selection or full fallback.
+  regular documents are accepted. Audited regular prose no longer widens mixed
+  package changes: both saved documentation inventories must verify, and an
+  accompanying policy renewal is ignored for package selection only when all four
+  head inventories are current. Base peer inventories may be stale after ordinary
+  prose changes; its documentation inventory must still verify. Saved consumers
+  remain selected. Pinned and
+  package Markdown, receipt data, links, unknown paths and missing or stale
+  evidence retain conservative work. D571 part 1 reuses these existing audits;
+  the parked `feat/precise-ci-selection` branch remains untouched. D69 ended in
+  #262 with full work for unresolved directory readers; its unmerged replacement
+  is reference material, not the current implementation. Dependency precision,
+  root-input owners, narrower cost/venue work, verified merge reuse and nightly
+  full runs remain D571 parts 2 through 6. The real portal-plus-prose candidate
+  still selects 28 package jobs: its saved graph refuses an unresolved directory
+  read in `scripts/ci-audit-fixture-dependencies.mjs`. Keep that conservative
+  fallback for part 2 to bound; part 1 claims no measured package-job saving.
+  Repeated audit reads remain: the review measured about 0.6 seconds of one
+  2.9-second local plan. No duration guarantee rests on that sample.
   Adding, changing or removing an executable, configuration or other tracked input
   invalidates the exemption until you audit the readers again and renew the
   certificate. The planner now emits a prominent GitHub warning on every run when

@@ -18,9 +18,35 @@ translation package checks its published vectors. The generated
 `docs/cloud-cost-model.md` remains pinned for artifact verification. Any edit to
 either file, including prose, keeps full CI and invalidates the documentation
 inventory immediately. Its own required CI fails until you review and renew it.
-Both immutable trees must match the selected inventory. Mixed changes, unknown
-paths or missing or stale evidence retain full work. A fresh head cannot qualify
-an unaudited base.
+Both immutable trees must match the selected inventory. Unknown paths or missing
+or stale evidence retain full work. A fresh head cannot qualify an unaudited
+base.
+
+When you change package code alongside audited prose, the prose no longer widens
+the package selection. The planner removes regular prose after both saved
+documentation audits verify, including added and deleted documents. It then
+selects package owners and their saved consumers. A document
+that becomes a link or an executable file keeps conservative work. The published
+translation contract, generated cost model, package Markdown and receipt data
+remain inputs to their existing checks.
+
+Your code change also needs an audit renewal. The planner treats the accompanying
+`scripts/ci-input-audit.json` as evidence only when all four inventories verify in
+the saved head. The base still needs a current documentation audit. A prose-only
+base normally has stale peer inventories because those modes pin prose too;
+requiring them would send the next code PR back to full work. A malformed policy
+or even one stale head peer digest keeps full work. Every other root path retains
+its existing selection. Prose and an audit edit alone cannot produce an empty
+successful package plan. Main pushes and the
+separate proof workflows keep their existing policies.
+
+This removes the prose barrier; it does not establish that every package reader
+can be resolved. On the D571 part 1 candidate, a real immutable portal edit plus
+prose and renewed audits still selects 28 package jobs. The saved-source scanner
+reports `Unresolved directory input at scripts/ci-audit-fixture-dependencies.mjs`.
+Keep that fallback until the reader can be bounded and its real consumers proved.
+A controlled identity `SOURCE.md` edit likewise keeps all nine packages. D571
+part 2 owns dependency precision; part 1 claims no measured job saving.
 
 Every change to a documentation-inventory input, including pinned prose, must
 keep that inventory current in its own pull request. The required root check verifies it on shard 1; a selected root-script

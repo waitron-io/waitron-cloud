@@ -8,6 +8,34 @@ import {scriptPlan} from './ci-scripts.mjs';
 import {scopeForRevisions, readGitBlobs} from './ci-package-revisions.mjs';
 import {describeLockChanges} from './ci-lock.mjs';
 import {lockPackageScope} from './ci-lock-selection.mjs';
+import {auditInputMode, readInputAudit, unreadMarkdown} from './ci-input-audit.mjs';
+
+function mixedCodePaths(paths, base, head, git) {
+  const prose = paths.filter(unreadMarkdown);
+  if (!prose.length || prose.length === paths.length) return paths;
+  const policyPath = 'scripts/ci-input-audit.json';
+  try {
+    documentationPlan(prose, base, head, git);
+    for (const revision of [base, head]) {
+      const {entries, policy} = readInputAudit(revision, git);
+      // A prose path must be regular in every tree where it exists.
+      for (const path of prose) {
+        const entry = entries.find(entry => entry.path === path);
+        if (entry && (entry.mode !== '100644' || entry.type !== 'blob')) throw Error('Non-regular Markdown');
+      }
+      // Prose-only base commits keep the document audit current while changing
+      // peer inventories. The renewed head must prove every policy mode.
+      if (paths.includes(policyPath) && revision === head) {
+        for (const mode of ['docs', 'identity', 'gateway', 'lock']) {
+          auditInputMode(mode, revision, git, Object.keys(policy.manifests));
+        }
+      }
+    }
+    return paths.filter(path => !prose.includes(path) && path !== policyPath);
+  } catch {
+    return paths;
+  }
+}
 
 export function createPlan(event, context, workspace, git, api) {
   let scope = scopeForPaths([],workspace);
@@ -29,14 +57,15 @@ export function createPlan(event, context, workspace, git, api) {
         const scripts = scriptPlan(paths, mergeBase, head.sha, git);
         if (scripts) return {packages: [], receipts: [], typecheck: false, reuse: null, scripts, reason: `Audited root script: ${paths.join(', ')}`};
       } catch { /* Missing or stale reader evidence keeps the existing full fallback. */ }
-      scope = scopeForPaths(paths,workspace);
+      const codePaths = mixedCodePaths(paths, mergeBase, head.sha, git);
+      scope = scopeForPaths(codePaths,workspace);
       if (paths.includes('pnpm-lock.yaml') && paths.every(path => path === 'pnpm-lock.yaml' || workspace.some(pkg => path === `${pkg.directory}/package.json`))) {
         try { lockSelection = lockPackageScope(mergeBase, head.sha, workspace, git, paths); scope = lockSelection.scope; }
         catch { /* Unproved root or package readers retain full lockfile work. */ }
       }
       if (!lockSelection && !scope.full && scope.packages.length < workspace.length) {
         try {
-          const revisions = scopeForRevisions(paths, workspace, mergeBase, head.sha, git);
+          const revisions = scopeForRevisions(codePaths, workspace, mergeBase, head.sha, git);
           scope.packages = [...new Set([...scope.packages, ...revisions.packages])].sort();
         }
         catch (error) {
