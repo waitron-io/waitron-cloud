@@ -1,0 +1,85 @@
+# Set up your incident page and phone alerts
+
+You need to publish updates and receive urgent calls even when Waitron's AWS
+account is unavailable. Start with Cloudflare Pages Free for the public page,
+then choose two independent text-and-call providers. You do the sign-ups; this
+checklist creates no account, subscription or live service.
+
+The [approved monitoring design](superpowers/specs/2026-10-24-cloud-monitoring-alerting-status-design.md)
+sets the intended automation. Account setup alone does not connect it. Use the
+[incident runbook](incident-response.md) for handling an actual incident.
+
+## Prepare the status page
+
+1. Create or use your own [Cloudflare account](https://dash.cloudflare.com/sign-up).
+   Use an email and recovery route you can reach without Cloud or SES. Enable
+   [two-factor authentication](https://developers.cloudflare.com/fundamentals/user-profiles/2fa/)
+   and save recovery codes in your approved password store outside AWS.
+2. Stay on **Pages Free**. Static asset requests are [free and unlimited](https://developers.cloudflare.com/pages/functions/pricing/#static-asset-requests).
+   You need no domain purchase, Functions or paid Workers plan for this page.
+3. Get the reviewed static page bundle from the builder, with `index.html` at its
+   root and matching English/Spanish text. This checklist does not supply the
+   bundle or its generator. Until supplied, stop before uploading. Initial text
+   must say setup is in progress unless current service health is actually verified.
+   The page must
+   work without Cloud APIs, AWS assets, login, analytics or external fonts. Review
+   it for venue names, personal data and secrets before publication.
+4. In **Workers & Pages**, follow **Create application → Get started → Drag and
+   drop your files**. Choose a project name, upload the folder or ZIP and select
+   **Deploy site**. Save the actual `https://<project>.pages.dev` address. These
+   steps follow Cloudflare's [Direct Upload guide](https://developers.cloudflare.com/pages/get-started/direct-upload/).
+5. Open that address on your phone over mobile data, signed out of Cloud. Keep it
+   public and directly usable. An optional friendly status domain must not replace
+   it or redirect it through AWS. Share both addresses with venues before launch.
+6. Keep an editable copy outside Cloud. For a manual correction, select **Create a
+   new deployment**, choose production and upload the reviewed replacement. Check
+   both languages and the UTC update time from your phone.
+
+Direct Upload supports both dashboard uploads and Wrangler, Cloudflare's command
+line upload tool, in the same project. It cannot switch to Git integration later.
+The builder can therefore add the approved automatic publisher while preserving
+your manual fallback. That publisher and its restricted credentials still need
+implementation and verification.
+
+## Choose your phone routes
+
+Use **Twilio first, with Vonage as the independent backup**, subject to your
+supplier review and spending approval. Both offer text and voice APIs, the
+interfaces the builder connects to Cloud. Their voice interfaces support keypad
+input: [Twilio Gather](https://www.twilio.com/docs/voice/twiml/gather) and
+[Vonage input](https://developer.vonage.com/en/voice/voice-api/ncco-reference#input).
+An account is not a ready-made Waitron alert service.
+
+Prices below were read from the providers' pricing pages on **4 November 2026**.
+They are different published examples, **not a like-for-like destination quote**.
+Your phone's destination country, caller country, number rental, message segments,
+carrier fees and taxes determine the actual cost. Confirm those before payment.
+
+| Provider | Published text price | Published call price | What to check before buying |
+| --- | --- | --- | --- |
+| Twilio | Italy: **US$0.0927 per outbound SMS segment**. [SMS prices](https://www.twilio.com/en-us/sms/pricing/it) | Italy mobile from the EEA: **US$0.0445/minute**; the separate general Italy-mobile row is **US$0.3473/minute**. [Voice prices](https://www.twilio.com/en-us/voice/pricing/it) | Confirm the actual destination and caller route. The SMS page lists Italian mobile-number rental at **US$45/month**; do not assume that number also provides the required voice caller identity. |
+| Vonage | Advertised US virtual-number starting rate: **€0.00735 / US$0.00860 per message**. [API prices](https://www.vonage.com/communications-apis/pricing/) | Advertised telephone-network starting rate: **€0.01314 / US$0.01538 per minute**. Same [pricing page](https://www.vonage.com/communications-apis/pricing/). | These starting rates do not quote an Italian or Spanish mobile. Select your actual country on the [SMS](https://www.vonage.com/communications-apis/sms/pricing/) and [voice](https://www.vonage.com/communications-apis/voice/pricing/) pages and confirm rental and account rates before funding. |
+
+1. Record your phone's country and the permitted monthly spend privately. Choose
+   the two providers and complete the supplier/metadata review before live use.
+2. When you approve opening and funding them, create separate accounts with
+   independent recovery access. Confirm sender registration, voice caller identity
+   and delivery to your actual phone. Keep keys in the approved secret store.
+3. Give the builder the account references through that store. The integration
+   must send a text then call, switch provider when delivery fails, and record
+   **press 1** against the incident. Acknowledging a call stops repeats; approving
+   a repair still requires your passkey.
+4. Save the paging numbers as contacts. Allow them through your phone's Do Not
+   Disturb settings and verify this with real test calls and texts before relying
+   on it. A delivered message or answered call without press 1 is not acknowledgement.
+
+## Check the complete route before launch
+
+With the builder, rehearse an AWS outage, the first phone provider failing, the
+investigator unavailable and your phone in Do Not Disturb. Verify automatic
+bilingual status updates plus manual publishing over mobile data. Paging must
+start when investigation finishes or 15 minutes after confirmation, whichever
+comes first; the repeat is 10 minutes after the first page attempt and the
+unattended marker is at 20 minutes. Keep times and results in the private launch
+record. Account recovery, the page bundle, publisher, phone adapters and these
+drills remain open until actually completed.

@@ -209,8 +209,10 @@ commit and configuration. It must show:
    explicit activation and post-replacement capture against the selected provider.
 9. External monitoring, incident handling, quiet periods, escalation, capacity and
    spend alerts, plus measured results against the adopted service objectives.
-   D104's [incident runbook](incident-response.md) now records the sole-owner phone
-   response and recommends Cloudflare Pages outside Waitron's AWS. Qualify the
+   D104's [setup checklist](incident-setup.md) covers your Cloudflare Pages account,
+   independent public address and two phone-provider options with sourced prices.
+   Its [incident runbook](incident-response.md) follows the approved automatic
+   status updates and sole-owner text/call response. Qualify the
    independent page read/update, phone delivery/failure/acknowledgment and owner
    coverage-gap drills there; no provider setup or production proof is complete.
 10. Cancellation, expiry, export and deletion behavior against lawyer-reviewed terms
