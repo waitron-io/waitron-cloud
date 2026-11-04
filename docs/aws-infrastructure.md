@@ -288,7 +288,7 @@ can change policies outside OpenTofu, and mocked plans do not prove live enforce
 A backend cannot create the bucket that already needs to hold its state. This build
 performs no bootstrap, migration, import or state upload. The state root has an empty
 partial S3 backend; every local check initializes with `-backend=false` and uses only
-mocked providers. Its committed provider lock follows the account root's two-platform
+mocked providers. Its committed provider lock follows the account root's three-platform
 checksums.
 
 After separate live authorization, use this sequence as an operator checklist:
@@ -305,13 +305,23 @@ After separate live authorization, use this sequence as an operator checklist:
 4. Prepare each root's external backend settings with its own bucket, region, exact
    key and KMS ARN, `encrypt = true`, `use_lockfile = true`, and an account allowlist.
    Select only the default workspace. Extra workspace paths are outside these grants.
-   Use the [OpenTofu 1.11 S3 backend reference](https://opentofu.org/docs/v1.11/language/settings/backends/s3/)
+   Use the [OpenTofu S3 backend reference](https://opentofu.org/docs/language/settings/backends/s3/)
    when qualifying that configuration. Credentials belong in the approved short-lived
    identity mechanism, never in backend files or command arguments.
 5. Review and explicitly migrate the local state to that root's S3 key. Migration is
    an authorized operator operation, never an automatic upload during initialization.
    Verify version retention, exact-key encryption, concurrent lock refusal, lock release
    and recovery through the separately retained procedure before retiring local copies.
+
+Before migrating a root, qualify its first initialization at a new, absent state
+key with the actual deployment role and exact conditional list policy. S3 can
+return a different missing-object response depending on list permission
+([HeadObject permissions](https://docs.aws.amazon.com/AmazonS3/latest/API/API_HeadObject.html)).
+An offline pinned-backend probe stops on a synthetic 403 and succeeds on 404;
+the real conditional-policy response remains unverified. Also qualify key creation
+under the separate bootstrap identity and later state-root refresh under the
+intended deployment identity. These checks require the separately authorised
+real-bucket qualification; no list or key grant is broadened by the local proof.
 
 If custody already exists, review imports and state moves against the existing resource
 IDs and addresses. Confirm there is exactly one authoritative state before moving it.
@@ -356,7 +366,7 @@ ranges must be aligned IPv4 `/20` blocks inside the VPC, outside the reserved ti
 and disjoint from other cells. The `/16` carving has fifteen cell address slots; it
 does not set a venue capacity or release-wave limit.
 
-OpenTofu 1.11's mock provider gives these resource instances the same computed IDs.
+Shared mock-provider values can hide substitutions between resource instances.
 The extra graph check evaluates the module's actual routing expressions with distinct
 symbolic resource IDs, so a route accidentally using another zone cannot hide behind
 identical mock values. It removes each zone from consideration and checks every
@@ -911,7 +921,10 @@ node deploy/aws/handoff.mjs infrastructure-output.json es es-02 > es-02.json
 The command prints the complete version 1 object for `es-02` without changing it.
 Use `global` with an exact `global-01` style cell name for the global root.
 An unknown cell, a different scope, an invalid schema or more than one embedded
-cell produces an error and no JSON output. The command only reads your file;
+cell produces an error and no JSON output. Selection checks those labels and the
+schema; the producer tests establish the cluster, issuer and role relationships.
+Use the unmodified output from the trusted root. Edited contents need independent
+validation. The command only reads your file;
 it does not initialise a backend, contact AWS or apply infrastructure.
 
 The export converts subnet, target-group and cold-bucket maps to the arrays the

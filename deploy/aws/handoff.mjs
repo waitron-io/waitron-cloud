@@ -12,8 +12,8 @@ export function selectInfrastructure(values, scope, cell) {
     throw new Error('Invalid infrastructure selection');
   }
   const value = values[cell];
-  // Schema validity alone allows several cells; a selected object must bind one
-  // exact cell to its roles rather than choosing a first or similar entry.
+  // The schema permits several cell keys. Selection requires the exact requested
+  // key; producer tests establish the underlying resource and role mapping.
   if (!validate(value) || value.scope !== expected.scope || value.country !== expected.country
       || Object.keys(value.cells).length !== 1 || !Object.hasOwn(value.cells, cell)) {
     throw new Error('Invalid infrastructure selection');

@@ -172,3 +172,34 @@ run "rejects_actual_backup_keys_region" {
   }
   expect_failures = [output.kms]
 }
+
+run "key_administration_keeps_only_explicit_management_actions" {
+  command = plan
+  assert {
+    condition = try(alltrue([for key in concat(values(aws_kms_key.primary), values(aws_kms_key.backup)) : toset(one([for statement in jsondecode(key.policy).Statement : statement if statement.Sid == "KeyAdministration"]).Action) == toset([
+      "kms:DescribeKey", "kms:GetKeyPolicy", "kms:PutKeyPolicy", "kms:EnableKeyRotation", "kms:GetKeyRotationStatus", "kms:RotateKeyOnDemand", "kms:UpdateKeyDescription", "kms:TagResource", "kms:UntagResource", "kms:ListResourceTags", "kms:CancelKeyDeletion"
+    ])]), false)
+    error_message = "KEY_ADMIN_ACTIONS: every primary and cold key must retain the exact management actions without direct deletion or cryptographic use"
+  }
+}
+
+run "alarm_key_use_keeps_exact_account_and_sources" {
+  command = plan
+  variables { observability_cells = ["waitron-es-01"] }
+  assert {
+    condition = try(jsonencode(one([for statement in jsondecode(aws_kms_key.primary["logs"].policy).Statement : statement if statement.Sid == "AlarmSignals"])) == jsonencode({
+      Sid = "AlarmSignals", Effect = "Allow", Principal = { Service = "cloudwatch.amazonaws.com" }, Action = ["kms:GenerateDataKey*", "kms:Decrypt"], Resource = "*"
+      Condition = {
+        StringEquals = { "aws:SourceAccount" = "333333333333" }
+        ArnEquals = { "aws:SourceArn" = [
+          "arn:aws:cloudwatch:eu-south-2:333333333333:alarm:waitron-es-database-connections",
+          "arn:aws:cloudwatch:eu-south-2:333333333333:alarm:waitron-es-database-storage",
+          "arn:aws:cloudwatch:eu-south-2:333333333333:alarm:waitron-es-nodes-waitron-es-01",
+          "arn:aws:cloudwatch:eu-south-2:333333333333:alarm:waitron-es-replication-snapshot",
+          "arn:aws:cloudwatch:eu-south-2:333333333333:alarm:waitron-es-replication-stream"
+        ] }
+      }
+    }), false)
+    error_message = "ALARM_KEY_SOURCES: alarm key use must retain the exact service, actions, account and every named infrastructure alarm"
+  }
+}

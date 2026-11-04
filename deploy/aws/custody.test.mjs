@@ -74,7 +74,10 @@ test('no_secret_values_in_state: custody creates metadata without reading or gen
 test('custody and scoped permissions compose without a cycle and retain every named refusal', async () => {
   const result = await runSuite('custody');
   const summaries = [...result.matchAll(/^(?:Isolated suite aggregate: )?Success! ([0-9]+) passed, 0 failed\.$/gm)].map(match => Number(match[1]));
-  assert.match(result, /Isolated suite aggregate: Success! 16 passed, 0 failed/);
+  assert.equal([...result.matchAll(/Isolated suite aggregate: Success! 18 passed, 0 failed/g)].length, 2, 'custody and scope modules must each execute all 18 cases');
+  for (const name of ['key_administration_keeps_only_explicit_management_actions', 'alarm_key_use_keeps_exact_account_and_sources']) {
+    assert.equal(result.split(`run "${name}"... pass`).length - 1, 1, `${name} must execute once`);
+  }
   assert.match(result, /Isolated suite aggregate: Success! 22 passed, 0 failed/);
   assert.match(result, /Isolated suite aggregate: Success! 18 passed, 0 failed/);
   assert.equal(summaries.at(-1), 3);

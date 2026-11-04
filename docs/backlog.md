@@ -348,6 +348,9 @@ order. Remote access matters most because Waitron's customer-facing features wai
    the unchanged handoff schema. These are mocked plans, not a deployment. Account/state
    custody, populated secrets, actual service and collector permissions, recovery and
    provider availability still need their separately authorised qualification.
+   State qualification must cover first initialization at an absent key under the exact
+   conditional list policy, separate bootstrap-key creation and later deployment-role
+   refresh. Database recovery grants still belong to P7's qualification.
    The owner approved gVisor for P6 and running Spain from Paris for P7 on
    2026-10-23. P6 still waits for P1/P4 and the accepted Waitron handover contract
    (A1018); P7 still waits for P3. Neither answer grants live/provider authority.
