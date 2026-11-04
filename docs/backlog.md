@@ -3251,7 +3251,8 @@ See [the investigation and retained ordering controls](backlog/portal-lost-reply
 **Open; the historical failure remains unattributed.** Preserve the real derivation
 result barrier, password-reset refusal and existing bounds when investigating a
 recurrence. Read the [observation requirements and remaining qualification](backlog/password-derivation-observation.md);
-use Linux PostgreSQL CI while local Docker is unavailable.
+current Linux PostgreSQL CI qualifies the unchanged observation cases and catches
+both deliberate faults. Use the shared test box for local database checks.
 
 ## Usage HTTP response boundaries (D409)
 
