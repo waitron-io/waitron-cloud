@@ -10,7 +10,7 @@ import {assertScriptWork} from './ci-scripts.mjs';
 export const packageShards = Object.freeze({
   '@waitron-cloud/registration': 5,
   '@waitron-cloud/account-http': 3,
-  '@waitron-cloud/backups': 2,
+  '@waitron-cloud/backups': 7,
   '@waitron-cloud/portal': 6,
   '@waitron-cloud/identity': 1,
   '@waitron-cloud/operations': 1,

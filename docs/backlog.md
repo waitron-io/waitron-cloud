@@ -735,7 +735,7 @@ Migration 038, its dormant tables and stored rows remain unchanged. Registration
 owns the seven retained schema tests and the digest/ledger-position check. Removal
 regressions compare every dormant table and the migration ledger before and after
 old calls and free/paid/free plan changes. Shared account, session, recovery and
-mail assertions remain. Live CI keeps nine packages, 24 logical shards in 23
+mail assertions remain. Live CI keeps nine packages, 29 logical shards in 28
 jobs and all six receipt suites, including all six portal shards. Saved historical
 manifests and cost receipts remain historical evidence; their parsers and positive
 receipt-selection checks remain. The [registry reference](fiscal-allocation-registry.md)
@@ -1696,7 +1696,10 @@ implementation or production evidence.
   and receipt jobs to check a candidate. The summary also checks the plan's
   package allocation against the planner's registered package names and shard
   counts. Registration uses five partitions, account HTTP uses three, portal uses six
-  and backups uses two. The summary requires every registration partition
+  and backups uses seven. The [backup job budget investigation](backlog/backup-ci-budget.md)
+  records a job cancelled during cleanup after all 569 cases passed. Seven
+  partitions separate its five expensive guard files while preserving every assertion
+  and the eight-minute limit. The summary requires every registration partition
   and rejects the former six- and seven-partition allocations. A Node subprocess
   check partitions copies of every current registration filename plus a new
   filename and requires each to execute exactly once. Its file workers run one
@@ -2699,7 +2702,7 @@ implementation or production evidence.
   portal source changes also omit local-stack when its audit holds, otherwise they
   retain it. Isolated ui-smoke needs no receipt. Registration
   uses five file shards, account HTTP uses three, portal uses six and backups uses
-  two. Selected identity, operations and remote-access suites share one job when at
+  seven. Selected identity, operations and remote-access suites share one job when at
   least two are needed. Each keeps its full package command and deadline, runs
   once in sequence, and reports its own result. One PostgreSQL/Mailpit setup
   serves the group; a failure fails the job while later suites still run. The
