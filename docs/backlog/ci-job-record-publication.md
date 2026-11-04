@@ -38,6 +38,15 @@ These explanations preserve the acceptance checks and overall time limits.
 
 ## Slow job lookups (D573)
 
+The 21 October–4 November snapshot contains 1,998 CI runs. Examining every
+failed or rerun run (191 runs, including earlier attempts) finds 190 failed
+summary attempts, of which eleven reached a job-record lookup deadline. Eight
+ended with `ETIMEDOUT`: seven on 4 November with the ten-second read cap and
+one on 22 October with the earlier thirty-second cap. The other three expired
+waiting for stale records. The strict-check step took 60–63 seconds in those
+eleven cases. The two reported 4 November examples are runs
+`41872410672` and `41873935980`; the 22 October timeout is `39828383029`.
+
 The former fixed ten-second read limit rejects a controlled eleven-second response
 on every attempt, even when that response contains all required successful jobs.
 The regression checks reproduce that refusal, then accept the same evidence in
@@ -45,6 +54,10 @@ The regression checks reproduce that refusal, then accept the same evidence in
 seconds, kills the first timed-out process and accepts the second response.
 Persistent timeouts still exhaust the original minute; a recovered read containing
 a failed shard still fails. Every original summary assertion remains.
+With persistent full-budget timeouts, the old loop makes five ten-second attempts
+with two-second pauses. The revised loop makes ten-, twenty- and twenty-six-second
+attempts with two pauses, still totaling sixty seconds. Successful unfinished
+records retain the ordinary two-second polling interval.
 
 Each timed-out lookup now reports its attempt, elapsed time, requested budget and
 remaining total time. Earlier CI logs record only the final timeout and last
