@@ -35,11 +35,6 @@ own this remaining qualification. The [compatibility plan](superpowers/plans/202
 records the bounded fixture and route amendments. No fiscal implementation,
 immutable row, historical result or deployment authority changes here.
 
-## Concurrent storage archive publication (D450)
-
-**Open.** Real extraction, store startup and historical failure causes remain open.
-See [the boundaries and remaining work](backlog/storage-cache-fixture.md#concurrent-storage-archive-publication-d450).
-
 ## Retrospective review qualification (D535)
 
 Child exit reports retain known operating-system signals and publish the value
