@@ -4127,15 +4127,6 @@ deletion refusal without changing ownership, accounting, cleanup or deadlines.
 Genuine local reproduction waits for Docker to return; a later passing run does
 not establish a repair.
 
-## Password-change notification recovery link (D261)
-
-Your password-changed email now links to the password-reset request page in
-English or Spanish. Older queued messages without a language link to the English
-page. The notification contains no reset token; you request a fresh reset there.
-`node --test packages/registration/test/account-mail.test.ts` covers a public and a local
-origin, both languages, legacy messages and unchanged subjects. Live provider
-delivery remains part of the first working milestone's production qualification.
-
 ## Passkey keyboard browser handler observation (D373)
 
 The keyboard fixture waits for its options handler before checking the exact
