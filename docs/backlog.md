@@ -3812,16 +3812,6 @@ Qualify the public browser check against the supported browsers and production
 networks before public exposure. Local HTTP, script and Chromium checks do not
 discharge that deployment gate.
 
-## Script-fallback browser handler wait (D370)
-
-The script-fallback fixture refuses an absent challenge-handler signal within
-its existing four-second page budget after script recovery. Delayed handlers
-repeat all three script-recovery journeys in both languages, themes and
-phone/desktop widths. Original guidance, security policy, cookie, forwarding
-and rollout checks remain, including the exact earlier shipped-page hash.
-These are native Chromium and local HTTP checks; production network and browser
-qualification remains open.
-
 ## Public gateway source limits (D191)
 
 The public gate now counts an IPv6 /64 network as one source, while IPv4-mapped
