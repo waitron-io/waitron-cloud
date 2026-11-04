@@ -3297,19 +3297,6 @@ a Linux recurrence before choosing a delivery or capture fix, preserving the
 original assertions, single lookup and deadline. Read the [investigation and
 bounded diagnostics](backlog/mail-capture.md#account-http-reset-mail-capture).
 
-## Passkey Enter browser handler observation (D374)
-
-The passkey Enter fixture now waits for its options handler to record the request
-before checking the exact password and pending enrollment. A browser request event
-can arrive before that record. The observation uses the existing four-second page
-budget; delayed-handler journeys and an absent-record control retain all original
-keyboard, enrollment, unsupported-browser, cooldown, clock and deadline checks.
-Only the first options request is delayed. An injected second request reaches
-the existing count assertions in the English, light, 390-pixel ordinary and
-delayed controls. All 39 cases pass after restoring the controller. Historical
-browser failures remain
-unattributed; these stubbed HTTP checks do not qualify real server authority.
-
 ## Portal session test startup
 
 **Open; historical cause unknown.** Capture a diagnostic recurrence before
@@ -3479,6 +3466,11 @@ without raw output or URLs. A controlled native header-body stall and a successf
 fresh build qualify this distinction; the historical Linux cause remains unknown.
 Keep the source pin, integrity checks, deadlines and original assertions.
 
+On 4 November, all 44 existing native setup and installer controls pass without
+skips. The test box is busy, so no fresh Linux or Docker setup runs. These controls
+qualify the diagnostics and cleanup; the historical timeouts and Linux transfer
+and native-build causes remain open. See the detail file for the bounded attempt.
+
 ### Interrupted source-fetch fixture state (D530)
 
 **Interrupted writes reproduced and handled; historical timing remains unknown.**
@@ -3508,6 +3500,13 @@ headers. Keep the bounded retries, shared download budget, cancellation and
 checksum requirements; see the
 [download handling and qualification limits](backlog/cost-conformance-fixtures.md#fixture-archive-download-retries-d311).
 
+A bounded 4 November check passes all 56 local HTTP controls and downloads both
+pinned Linux x64 archives on the Mac, each on its first attempt with a verified
+checksum. The test box was occupied, so this does not qualify Linux execution or
+Docker preparation. Neither successful download explains the historical refusals
+or stall; those causes remain open.
+
+
 ### Storage startup retry notice can replace the original refusal (D530)
 
 **Fixed by D526; the throwing notice preserves the permitted retry.**
@@ -3526,7 +3525,10 @@ open under the [readiness investigation](backlog/storage-authority-timeout.md).
 **Open; the registry timeout and metadata HTTP 502 remain unexplained.** Fixture
 builds now handle Docker Hub metadata HTTP 5xx within the original build budget,
 with native controls for bounded retries, permanent refusals and cleanup. D135
-still needs fresh qualification on the acquisition repair; see the
+still needs fresh Docker-backed qualification on the acquisition repair. A bounded
+2026-11-04 attempt passed all 39 native acquisition and build controls; the test
+box was occupied, so real preparation did not run. The historical causes remain
+open; see the
 [image acquisition investigation](backlog/cost-conformance-fixtures.md#conformance-image-acquisition-during-d135-qualification).
 
 ### Litestream conformance transport-close refusal (D141)
@@ -3797,67 +3799,6 @@ D385 now labels those setup boundaries, so a changed qualification can retain mo
 evidence if they recur. Preserve the failing assertions and five-second database
 limit, then reproduce a labelled failure before changing runtime rules.
 
-## Recovery refusal messages and pasted codes (D192)
-
-Recovery now keeps the server's definite refusal message for approval, close and
-replacement, including rate limits, expired requests and lost permission. It
-reconciles only uncertain replies, so a refused action does not erase its error
-or lock approval as an unknown outcome. Outer code whitespace is trimmed before
-validation and sending; leading zeroes remain. Existing request binding,
-confirmations and permission guards stay in place.
-
-Native controller and stubbed-browser checks cover definite refusals, cooldowns,
-uncertain writes and padded codes. Real PostgreSQL recovery suites remain CI's
-gate while Docker is down locally. This does not qualify production recovery,
-prove an old server has stopped, or change the existing recovery source limits.
-
-## Public browser-check status handler wait (D366)
-
-The live-status browser fixture configures a four-second challenge-handler wait.
-Its missing-signal control checks a five-second outer race, so it does not prove
-the exact configured value or that every ordinary observation is necessary.
-Delayed handlers repeat every language, theme, width and failure journey. All
-33 browser checks pass, and ordinary and delayed challenge-failure captures now
-retain 16 separate files with all eight historical names. Every original
-live-region, accessibility-tree, reload, focus, cookie, forwarding assertion and
-deadline remains. Native Chromium and local HTTP checks leave other browser
-engines, worker-failure images and production-network qualification open.
-
-## Recovery-choice browser handler wait (D362)
-
-Set `RECOVERY_PORTAL_RECEIPT_DIR` to a fresh directory when checking the recovery
-choice fixture. It retains sixteen recovery captures: eight ordinary and eight
-delayed, keeping all eight original names. Separate names prevent a later handler
-variant from overwriting earlier evidence. The missing-signal control runs only
-the first four subtests, then returns before the disabled-choice assertions,
-source clearing, recovery submission, pairing and screenshots. Its title names
-the submission boundary.
-Every original organisation and venue selection, recovery permission, source
-clearing, approval payload, pairing, layout, observation and deadline check remains.
-
-The missing-signal control wraps a configured four-second observation in a
-five-second race. It does not independently establish the exact four-second
-boundary. Native Chromium with stubbed HTTP leaves real recovery authority,
-other browser engines, production networks and the historical Linux cause
-unqualified. Delayed handlers still repeat all eight language, theme and width
-journeys.
-
-## Recovery organisation-width browser handler wait (D364)
-
-Set `RECOVERY_WIDTH_RECEIPT_DIR` to a fresh directory when checking the recovery
-organisation-width fixture. It retains seventeen captures: eight ordinary,
-eight delayed and one English/light/390 absent-signal capture. The eight
-original names stay unchanged. All captures precede the gated refresh, so they
-show the initial choice and width, not its later pending state. Every original
-choice, width, pending-state, selected-value and deadline assertion remains.
-
-The missing-signal control wraps a configured four-second observation in a
-five-second race. It does not independently establish the exact four-second
-value. Delayed handlers repeat all eight language, theme and width journeys.
-See [the review boundaries](backlog/retrospective-reviews.md#recovery-organisation-width-captures).
-Real recovery authority and the historical Linux cause remain unqualified.
-
-
 ## Recovery HTTP replies before confirming an outcome (D419)
 
 **Open.** Qualify server permissions and genuine restore or recovery; these client
@@ -3869,12 +3810,6 @@ See [the boundaries and remaining work](backlog/backup-recovery-http.md#recovery
 **Open.** Qualify server permissions and genuine restore or recovery; these client
 checks grant no activation or stop-proof authority.
 See [the boundaries and remaining work](backlog/backup-recovery-http.md#recovery-transport-waits-and-pending-actions-d437).
-
-## Recovery screen scope and supplied choices (D158)
-
-Read the [recovery-screen scope detail](backlog/recovery-screen-scope.md) for the
-supplied-choice checks and retained server refusals. Production backup provisioning
-remains unqualified; PostgreSQL checks run in CI while local Docker is down.
 
 ## Cost-stack isolation command refusal (D152)
 
@@ -3891,80 +3826,6 @@ remain limited as described there; the separate replication interruption remains
 Qualify the public browser check against the supported browsers and production
 networks before public exposure. Local HTTP, script and Chromium checks do not
 discharge that deployment gate.
-
-## JavaScript-disabled browser-check fixture handler wait (D369)
-
-The JavaScript-disabled browser fixture bounds its enabled-script challenge-handler
-wait at the existing four-second page budget. An absent signal fails promptly;
-delayed handlers repeat enabled-script journeys in both languages, themes and
-phone/desktop widths. Original script-disabled guidance, content-security policy,
-bilingual visibility, cookie, forwarding and failure assertions remain. These
-native Chromium and local HTTP checks leave production-network qualification open.
-Ordinary captures keep their original names; delayed captures add a suffix so all
-24 screenshots survive. The missing-signal control checks the five-second outer
-bound rather than independently proving an exact four-second wait.
-
-## Public browser-check landmark handler wait (D365)
-
-The landmark browser fixture uses a four-second observation for an absent
-challenge-handler signal. Its missing-signal control checks a five-second outer
-bound; it does not independently pin the exact four-second value or prove that
-ordinary handler observation is necessary. Delayed handlers repeat running-check
-journeys in both languages, themes and phone/desktop widths. All original main
-region, bilingual guidance, reload link, cookie, forwarding and layout checks
-remain, including disabled JavaScript and unavailable-script journeys.
-Ordinary captures keep all 24 historical names; eight delayed running captures
-add a suffix, retaining 32 screenshots. Set `PUBLIC_CHALLENGE_RECEIPT_DIR` to a
-fresh directory for this file, separate from other browser fixtures. These checks
-use native Chromium and local HTTP; other browser engines and production networks
-remain unqualified. Production behaviour is unchanged.
-
-## Public browser-check reload handler wait (D367)
-
-The reload browser fixture refuses an absent challenge-handler signal within
-its existing four-second page budget. Delayed handlers repeat both script-failure
-journeys in both languages, themes and phone/desktop widths. All original reload,
-keyboard, request-count, cookie, forwarding and disabled-JavaScript checks remain.
-The fixture keeps its 24 historical screenshot names and retains 16 delayed
-captures plus the reachable missing-signal capture separately, for 41 images.
-The missing-signal control wraps its configured four-second observation in a
-five-second race; it does not independently prove the exact four-second value.
-These checks use native Chromium and local HTTP; production behaviour is unchanged.
-
-## Running browser-check failure reload handler waits (D368)
-
-The running-check failure reload fixture refuses either missing first or restarted
-challenge-handler signal within its existing four-second page budget. Delayed
-handlers repeat all four failure journeys across both languages, themes and
-phone/desktop widths. Original messages, reload, keyboard, request-count, cookie,
-forwarding and deadline checks remain. Native Chromium and local HTTP qualify
-this fixture; supported-browser and production-network checks remain open.
-Its eight historical screenshot names stay unchanged; delayed captures and the
-reachable missing-next control have separate paths, retaining 17 images. Missing
-signals are checked against a five-second outer race around the configured
-four-second observation; the exact four-second value is not independently proved.
-
-## Script-fallback browser handler wait (D370)
-
-The script-fallback fixture refuses an absent challenge-handler signal within
-its existing four-second page budget after script recovery. Delayed handlers
-repeat all three script-recovery journeys in both languages, themes and
-phone/desktop widths. Original guidance, security policy, cookie, forwarding
-and rollout checks remain, including the exact earlier shipped-page hash.
-These are native Chromium and local HTTP checks; production network and browser
-qualification remains open.
-
-## Session activity replies across reads and sign-out (D439)
-
-**Open.** Qualify server authority, browser integration and live ingress; physical
-passkeys and the separate retry-clock repair retain their own gates.
-See [the boundaries and remaining work](backlog/account-http-boundaries.md#session-activity-replies-across-reads-and-sign-out-d439).
-
-## Session HTTP replies and sign-out acknowledgements (D422)
-
-**Open.** Qualify server authority, browser integration and live ingress; physical
-passkeys and the separate retry-clock repair retain their own gates.
-See [the boundaries and remaining work](backlog/account-http-boundaries.md#session-http-replies-and-sign-out-acknowledgements-d422).
 
 ## Public gateway source limits (D191)
 
@@ -4007,28 +3868,8 @@ original CI job's concurrency. Use the next labelled recurrence to find the caus
 preserving the existing assertions and deadlines. See the
 [investigation and qualification limits](backlog/storage-authority-timeout.md).
 
-## Authenticator replies after account changes (D399)
-
-**Open.** Qualify server authority, browser integration and live ingress; physical
-passkeys and the separate retry-clock repair retain their own gates.
-See [the boundaries and remaining work](backlog/account-http-boundaries.md#authenticator-replies-after-account-changes-d399).
 
 ## Authenticator code format feedback (D237)
-
-Malformed authenticator codes now stay in their field with an explanation, before
-any request. App codes require six digits; recovery proofs accept 32 hexadecimal
-characters or four groups of eight. The portal still removes whitespace and keeps
-recovery hyphens. New-app confirmation accepts only its six-digit app code.
-Editing a malformed sign-in, management or new-app code clears its previous local
-format message and field marker. Submit checks the edited value again; editing
-neither sends a request nor changes the code rules. Other-field edits leave that
-code error alone. Required-code feedback still waits for non-whitespace input,
-and server refusals, uncertain changes and retry waits remain visible.
-Blank-code, incorrect-code and outage feedback remain distinct. Server refusals
-keep their general feedback without marking a code field: an invalid-input reply
-can also mean the setup or account state changed. The server remains the authority
-for accepting a proof. Controller and English/Spanish browser checks cover sign-in,
-management and new-app confirmation without changing server rules.
 
 ### Distinguish server refusals during authenticator changes
 
@@ -4040,13 +3881,6 @@ account HTTP and portal packages. Keep proof acceptance and account authority
 checks intact; cover each refusal with a server test and matching portal feedback.
 
 ## Clear stale connection and recovery code feedback (D249)
-
-When you edit the code on Connect a venue or Recover, the old malformed-code
-message and field marker clear. Submit checks the edited code again before any
-request. Server refusals and uncertain outcomes stay visible while you type;
-choosing a business still leaves code errors alone. Browser checks cover English
-and Spanish, both themes and phone/desktop widths, including pasted code trimming
-and values retained across a language change.
 
 Lane D's Litestream investigation has another observation from
 [cost run 40181699752, job 121133970845](https://github.com/waitron-io/waitron-cloud/actions/runs/40181699752/job/121133970845).
@@ -4079,70 +3913,6 @@ choose replacement, regeneration, removal, activation or cancellation. Stubbed
 API browser checks cover English/Spanish, both themes and phone/desktop widths;
 these do not qualify the backend or production.
 
-## Home redirect browser readiness (D314)
-
-The home-page browser checks wait for the existing `/account` or `/login`
-destination before checking the confirmed session's heading, title and notice.
-The Account heading also appears during session checking, so it cannot confirm
-that the redirect has finished. A delayed session reply reproduces the earlier
-URL refusal and catches omission of the destination wait. All original
-assertions and four-second page/120-second runner deadlines stay unchanged;
-this corrects test readiness without changing product authentication or routing.
-
-## Pending-session sign-out browser handler wait (D363)
-
-The pending-session sign-out browser fixture configures a four-second old-read
-handler observation. Its missing-signal control requires a timeout within a
-five-second outer race and returns before revocation and screenshot checks;
-that control does not establish the exact observation deadline. Delayed handlers
-repeat the original revocation and stale-session journeys across both languages,
-themes and widths. The eight ordinary screenshot names remain; delayed current-session
-captures use separate names, retaining sixteen files so neither handler's capture
-overwrites the other's.
-Every original assertion, observation and deadline remains. Native Chromium with
-stubbed HTTP does not qualify real session authority, other engines or networks,
-or explain the historical Linux failure.
-Sampled omission of the handler observation still passes twelve head cases and
-six parent cases. A single reply-filter omission passes four cases on each;
-a separate omission of both check-reply filters also leaves the focused current
-case passing on head and parent. Guard necessity remains unqualified. Preserve
-the checks and reproduce an actual ordering failure before changing them.
-One native full-file sample takes 325 seconds for 53 cases versus the parent's
-157 seconds for 26. Collect captures into a fresh `PENDING_SIGNOUT_RECEIPT_DIR`
-and check all sixteen names; browser assertions alone do not check filenames.
-
-## Sign-out failure browser handler wait (D361)
-
-The sign-out failure fixture keeps sixteen normal and delayed screenshots, including
-all eight historical names. Collect them into a fresh `SIGNOUT_FOCUS_RECEIPT_DIR`
-and check every name; passing browser assertions alone do not detect overwritten
-captures. Both handler variants repeat the original journeys across English and
-Spanish, light and dark themes, and phone and desktop widths. Pending-state, focus,
-scroll, failure-message, retry, request-count, layout and deadline assertions remain.
-
-The handler observation is configured for four seconds. Its missing-signal control
-expects a timeout before a separate five-second race ends, then returns before
-failure-message, focus and retry checks. That control does not prove the exact
-four-second boundary. These native Chromium checks use stubbed HTTP and do not
-qualify backend or production sign-out.
-
-The missing-signal control isolates the handler observation. Ordinary journeys
-also start a response wait before clicking, so a missing signal can report that
-response timeout instead. Review faults detect broken focus and scrolling on both
-the historical parent and changed fixture. The parent case fails after 4.3 seconds
-but its file run needs stopping at 135 seconds; the changed run exits after five.
-These are individual samples. Reproduce and contain the competing response
-rejection before claiming precise failure diagnostics or a general cleanup bound.
-
-## Session-check retry browser handler wait (D359)
-
-The session-check retry fixture refuses within its existing three-second page
-budget when the first session route handler never signals entry. Missing-signal
-controls cover both connect and recovery; delayed handlers repeat every original
-language, theme, width and failure journey. All protected-action, retry, cooldown,
-request-count, clock and runner deadline assertions remain. These native Chromium
-checks use stubbed HTTP and do not qualify backend or production authentication.
-
 ## Translation-refresh browser handler wait (D358)
 
 The translation-refresh fixture now refuses within its existing four-second page
@@ -4152,79 +3922,6 @@ original journey across both languages, themes and phone/desktop widths. All
 translation retry, consent, pending-state, layout and runner deadline assertions
 remain. These native Chromium checks use stubbed HTTP and do not qualify the
 backend or production.
-
-## Session-list retry browser handler observation (D375)
-
-The session-list activity fixture waits for its retry handler to count the read
-before checking that a second load cannot duplicate it. The browser request event
-can arrive before that count. The wait uses the existing four-second page budget;
-a missing count fails within that budget. Delayed handlers repeat both languages,
-themes, widths and clock setups while retaining every original session, retry,
-uncertain-revoke, account, write and deadline assertion. These native Chromium
-checks use stubbed HTTP; database and permission qualification remain in CI.
-
-Earlier qualification encountered a [Litestream storage refusal](https://github.com/waitron-io/waitron-cloud/actions/runs/40600605206/job/122527571695).
-The historical cause remains unknown. The shared transport now reports which
-request-validation check refused; keep its accounting checks and deadlines.
-Local Docker reproduction waits until 3 November.
-
-## Browser-test clock setup (D313)
-
-The monitoring-status fixture also reproduces the refusal when setup pauses
-longer than its one-second clock window. It now freezes from the earlier start;
-original and delayed journeys retain every latest-status, freshness, missing-data,
-certificate, read-only, layout and deadline check.
-
-The passkey Add keyboard fixture reproduces the refusal with a 100 ms setup
-delay and now freezes from an earlier start. Original and delayed journeys retain
-every caret, focus, exact-password, Tab/Enter, pending-request and enrollment check
-across both languages, themes and viewport widths, with unchanged deadlines.
-
-The alert-preferences activity fixture now installs its running clock a day before
-its intended pause, then freezes at the original instant before loading the app.
-A 100 ms setup delay reproduced CI's “Cannot fast-forward to the past” refusal;
-the corrected delayed case and all 15 original journeys pass without changing
-assertions, deadlines or application time. The session-list activity fixture also
-reproduces the refusal with a 100 ms setup delay and now freezes from the earlier
-start before loading the app. Its original journeys and delayed variants retain
-all session, retry, uncertain-revoke and account assertions and deadlines.
-The authenticator-status activity fixture reproduces the same refusal under a
-100 ms setup delay and now uses the earlier start too. Its original journeys and
-delayed variants preserve every status, retry, account, write and deadline check.
-The translation-consent activity fixture also reproduces the refusal under a
-100 ms setup delay. Its four clock setups now start earlier and freeze at the
-original instant before loading the app. Original journeys and delayed variants
-retain every consent, retry, navigation, account, write and deadline check.
-The account-security cooldown fixture also reproduces the refusal with a 100 ms
-setup delay and now freezes from the earlier start. Original and delayed journeys
-retain all six passkey/session actions, request counts, disabled-control, countdown,
-retry and deadline checks across both languages, themes and viewport widths.
-The authenticator keyboard fixture reproduces the refusal with the same setup
-delay and now freezes from the earlier start. Original and delayed journeys retain
-every Enter-key, activation, unavailable-status, cooldown, request and deadline
-check. Both clock setup sites are qualified.
-The passkey Enter fixture reproduces the refusal with the same setup delay at
-all three clock setup sites and now freezes from the earlier start. Original and
-delayed journeys retain every password, enrollment, unsupported-browser, cooldown,
-request-count, duplicate-submit and deadline check.
-The monitoring-action guidance fixture reproduces the refusal with a 1100 ms
-setup pause and now freezes from an earlier start at the original instant. Its
-original and delayed journeys retain all failed/stale/certificate explanations,
-read-only actions, hostnames, dates, requests, healthy states and deadlines.
-The session-check retry fixture reproduces the refusal after a 1100 ms setup
-pause, beyond its old one-second window. It now starts earlier and freezes at
-the original instant before loading the app. Both connect and recovery journeys
-retain every protected-action, request, retry, cooldown and deadline assertion;
-the original language, theme and viewport matrix and four delayed variants run.
-The change-email cooldown fixture reproduces the refusal after a 1100 ms setup
-pause and now freezes from an earlier start at the original instant. Its original
-journeys and delayed signup/recovery variants retain every corrected-address,
-per-address wait, server retry, navigation, operation separation and deadline check.
-The cooldown wording fixture reproduces the refusal after a 1100 ms setup pause
-and now starts earlier before freezing at the original instant. Its account and
-fiscal views retain all singular, plural, expiry, layout and deadline checks;
-the original language, theme and viewport matrix and delayed variants run.
-No historical CI failure in these fixtures is attributed here.
 
 ## Paced replay deletion recurrence (D351 qualification)
 
@@ -4247,15 +3944,6 @@ does not identify its cause. Resume D121 with this trace and reproduce the
 deletion refusal without changing ownership, accounting, cleanup or deadlines.
 Genuine local reproduction waits for Docker to return; a later passing run does
 not establish a repair.
-
-## Password-change notification recovery link (D261)
-
-Your password-changed email now links to the password-reset request page in
-English or Spanish. Older queued messages without a language link to the English
-page. The notification contains no reset token; you request a fresh reset there.
-`node --test packages/registration/test/account-mail.test.ts` covers a public and a local
-origin, both languages, legacy messages and unchanged subjects. Live provider
-delivery remains part of the first working milestone's production qualification.
 
 ## Passkey keyboard browser handler observation (D373)
 
@@ -4444,20 +4132,15 @@ Cloud follow-ups, each a separate small change with tests before implementation:
 Authentication, recovery, tenant permissions and fiscal changes keep their full
 review and owner gates. This audit does not enable services or change policy.
 
-## D413 — Locate a failed joint fiscal fixture setup
-
-**Open.** Initial directory refusals and completed blocking setup overruns now
-produce bounded reports. Capture the operation behind the historical setup
-timeout; keep the pinned source, fiscal assertions and deadlines unchanged.
-See [the boundaries and remaining work](backlog/joint-fiscal-fixture-setup.md#d413--locate-a-failed-joint-fiscal-fixture-setup).
-
 ## Cost-mail reconciliation refusal observed during D262
 
 The historical mail measurement-close refusal remains unexplained. Both unchanged
 PostgreSQL/Mailpit cases pass on the Linux test box, alongside all 20 mail controls
 on Linux and macOS. These results do not identify or repair the old failure.
-Use the next labelled close-error diagnostic to reproduce its cause while preserving
-measurement guards, accounting and deadlines. See [the investigation and qualification limits](backlog/cost-mail-reconciliation.md).
+The bounded 4 November check passes all 20 native controls; the busy test box
+prevents a fresh PostgreSQL/Mailpit reproduction. Use the next labelled close-error
+diagnostic to reproduce its cause while preserving measurement guards, accounting
+and deadlines. See [the investigation and qualification limits](backlog/cost-mail-reconciliation.md).
 
 ## Remote hostname browser-test request observation (D315)
 
@@ -4470,26 +4153,6 @@ A missing handler now refuses within the existing three-second page budget,
 rather than waiting for the outer runner deadline. Native browser checks cover
 an absent handler and a delayed handler while retaining every original assertion.
 No remote setup or permission behaviour changes.
-
-## Authenticator keyboard browser handler observation (D372)
-
-The authenticator setup keyboard fixture waits for its route handler to record
-its request before checking the payload. The browser request event can arrive
-first; a delayed handler reproduces that empty-record refusal. Setup handlers
-pause only while no request has been recorded. Ordinary and delayed English/light/390
-controls submit a real extra request during pending setup and reject it at the
-later existing count assertion. Arbitrarily late duplicates and other fault
-combinations remain unqualified. All 39 native Chromium checks retain every original password,
-Enter-key, pending-state, activation, cooldown, clock and deadline assertion.
-These checks use stubbed HTTP; real account authority and the historical Linux
-failure cause remain unqualified.
-
-## Recovery-session browser handler wait (D360)
-
-The recovery-session browser fixture refuses an absent handler signal within its
-existing three-second page budget. Delayed handlers still run the full bilingual,
-theme, viewport and server/network failure matrix. Original session-status,
-recovery-input, request-count, retry navigation, layout and deadline checks remain.
 
 ## Installation-refresh browser handler wait (D357)
 

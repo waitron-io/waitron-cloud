@@ -55,4 +55,21 @@ Preserve measurement guards, accounting and deadlines. Do not repeat these
 passing baselines without new evidence. This investigation remains separate
 from reset-mail capture and Mailpit fixture startup.
 
+### Bounded follow-up, 4 November 2026
+
+At candidate revision `d21f5bca8fd12cb1742c4e71309159c2b247558a`,
+`node --test scripts/cloud-cost/mail.test.mjs` passes all 20 native controls
+without failures or skips, including first-reason retention and independent
+count diagnostics. The observer, controls, two-case fixture, email outbox,
+local mailer and dependency lock match main revision
+`2208befc414b6236bdbc8798082b433f7d0f01d4` byte for byte.
+
+The test-box helper returns exit 75 because lane G holds the box, before the
+PostgreSQL/Mailpit command above runs. No fresh Linux or Docker-backed case
+is qualified. Rereading the original failed job confirms only the generic
+close error at fixture line 65; it has no labelled reason or independent
+counts. This attempt does not identify or repair that historical refusal.
+Keep the investigation open and use the next labelled recurrence as described
+above. Measurement guards, accounting, assertions and deadlines are unchanged.
+
 Return to the [backlog index](../backlog.md).

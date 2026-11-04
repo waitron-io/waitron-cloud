@@ -57,6 +57,22 @@ service URL over a local response; it does not contact GitHub. Inspect the next
 labelled CI refusal before claiming an upstream repair. Pins, checksum checks,
 three attempts, pauses, body cancellation and the shared budget remain unchanged.
 
+On 4 November, one bounded check runs the four `conformance-archive*.test.mjs`
+files on the Mac: all 56 cases pass without failures, cancellations or skips.
+Calling `downloadConformanceArchive` directly with the current Linux x64 pins
+then downloads Litestream 0.5.17 (13,540,484 bytes) and SeaweedFS 4.47
+(45,801,355 bytes). Both return HTTP 200 on their first attempt and pass the
+pinned SHA-256 check. The diagnostics label each response as GitHub release
+assets served by Azure Blob. This identifies these successful responses only.
+Both temporary archives are removed after the check.
+
+The test-box helper returns 75 because another lane holds the box. No Linux or
+Docker preparation runs in this attempt. The downloader, pins, three-attempt
+limit, pauses, inactivity timer, total budget, cancellation and checksum checks
+are unchanged. These successful downloads do not establish why the historical
+500/504 responses or stalled body occurred; inspect a labelled refusal before
+claiming an upstream repair.
+
 
 ### Header-progress fixture scheduling (D530)
 
@@ -184,8 +200,17 @@ Run `node --test scripts/cloud-cost/conformance-image-build.test.mjs` for native
 controls of the recorded refusal, recovery, permanent errors, exhausted attempts,
 shared deadline and cancellation. These replace network archives and Docker
 commands at their external boundaries; they do not run a real image build.
-Docker-backed qualification belongs to CI while local Docker is unavailable.
 The registry's underlying HTTP 502 cause remains unknown.
+
+A bounded qualification attempt on 2026-11-04 ran
+`node --test scripts/cloud-cost/conformance-image-acquisition.test.mjs
+scripts/cloud-cost/conformance-image-build.test.mjs`: all 39 native controls
+passed without failures or skips. These controls replace external Docker commands
+and cannot establish current registry availability. The test-box helper refused
+real preparation with exit 75 because lane G held the box; no image was built or
+pulled by that attempt. Fresh Docker-backed qualification and attribution of both
+historical registry failures remain open. Keep the existing attempt counts,
+shared budgets, cancellation, integrity checks and owned cleanup unchanged.
 
 
 ### Litestream conformance transport-close refusal (D141)

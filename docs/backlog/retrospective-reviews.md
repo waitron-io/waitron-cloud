@@ -17,18 +17,24 @@ worker-admission failure or qualify the Docker-backed integration.
 
 ## Joint fixture setup reporting
 
-A blocking source command can consume the setup budget while deferring its
-reporting timer. Before entering another stage, the fixture now reports the
-operation that crossed the budget. Initial temporary-directory refusal also
-passes through the bounded reporter and preserves its original error. Reports
-keep the same fixed labels and numeric fields. No setup operation is cancelled
-by this observation.
+**Historical reference.** Cloud removed this fixture and both diagnostic test
+files in [PR #711](https://github.com/waitron-io/waitron-cloud/pull/711).
+The reporting checks below describe the earlier release; their commands no
+longer run on the current tree.
 
-Run `node --test packages/account-http/test/fiscal-waitron-setup-diagnostics.test.ts packages/account-http/test/fiscal-waitron-setup-boundaries.test.ts` for the native checks.
-They retain the original privacy, cleanup, pinned-source and command-budget
-assertions and add real hook and filesystem refusals plus controlled error and
-clock boundaries. See [the setup investigation](joint-fiscal-fixture-setup.md)
-for the historical cause and remaining timing limits.
+A blocking source command could consume the setup budget while deferring its
+reporting timer. Before entering another stage, the fixture reported the
+operation that crossed the budget. Initial temporary-directory refusal also
+passed through the bounded reporter and preserved its original error. Reports
+kept fixed labels and numeric fields. Observation cancelled no setup operation.
+
+The native checks in `fiscal-waitron-setup-diagnostics.test.ts` and
+`fiscal-waitron-setup-boundaries.test.ts` retained the privacy, cleanup,
+pinned-source and command-budget assertions and added real hook and filesystem
+refusals plus controlled error and clock boundaries. See [the historical setup
+investigation](joint-fiscal-fixture-setup.md) for the unexplained cause and timing
+limits. Retirement closes the active investigation, without attributing its
+historical timeout.
 
 ## Interrupted LIST evidence
 
@@ -250,6 +256,10 @@ Every original behavioral assertion, expected value, observation and deadline
 remains unchanged. Other engines, production networks, real recovery authority
 and the historical Linux cause remain unqualified.
 
+The missing-signal control wraps a configured four-second observation in a
+five-second race. It does not independently establish the exact four-second
+value. Delayed handlers repeat all eight language, theme and width journeys.
+
 Removing the ordinary observation still passes sixteen historical ordinary and
 delayed cases, as well as all eight parent cases. Those runs leave its necessity
 unqualified; the repair retains every observation. Removing only the select's
@@ -258,3 +268,154 @@ passing without overflow. A separate, forced 1000-pixel minimum width fails all
 three English/light/390 historical variants and the matching parent case at the
 original page-width assertion. This samples a real overflow; it does not qualify
 every layout fault or prove any individual style rule necessary.
+
+## Pending-session sign-out observation and captures
+
+The pending-session sign-out browser fixture configures a four-second old-read
+handler observation. Its missing-signal control requires a timeout within a
+five-second outer race and returns before revocation and screenshot checks;
+that control does not establish the exact observation deadline. Delayed handlers
+repeat the original revocation and stale-session journeys across both languages,
+themes and widths. The eight ordinary screenshot names remain; delayed current-session
+captures use separate names, retaining sixteen files so neither handler's capture
+overwrites the other's.
+Every original assertion, observation and deadline remains. Native Chromium with
+stubbed HTTP does not qualify real session authority, other engines or networks,
+or explain the historical Linux failure.
+Sampled omission of the handler observation still passes twelve head cases and
+six parent cases. A single reply-filter omission passes four cases on each;
+a separate omission of both check-reply filters also leaves the focused current
+case passing on head and parent. Guard necessity remains unqualified. Preserve
+the checks and reproduce an actual ordering failure before changing them.
+One native full-file sample takes 325 seconds for 53 cases versus the parent's
+157 seconds for 26. Collect captures into a fresh `PENDING_SIGNOUT_RECEIPT_DIR`
+and check all sixteen names; browser assertions alone do not check filenames.
+
+## Session-list retry handler observation (D375)
+
+The session-list activity fixture waits for its retry handler to count the read
+before checking that a second load cannot duplicate it. The browser request event
+can arrive before that count. The wait uses the existing four-second page budget;
+a missing count fails within that budget. Delayed handlers repeat both languages,
+themes, widths and clock setups while retaining every original session, retry,
+uncertain-revoke, account, write and deadline assertion. These native Chromium
+checks use stubbed HTTP; database and permission qualification remain in CI.
+
+Earlier qualification encountered a [Litestream storage refusal](https://github.com/waitron-io/waitron-cloud/actions/runs/40600605206/job/122527571695).
+The historical cause remains unknown. The shared transport now reports which
+request-validation check refused; keep its accounting checks and deadlines.
+
+## Sign-out failure observation and captures (D361)
+
+The sign-out failure fixture keeps sixteen normal and delayed screenshots, including
+all eight historical names. Collect them into a fresh `SIGNOUT_FOCUS_RECEIPT_DIR`
+and check every name; passing browser assertions alone do not detect overwritten
+captures. Both handler variants repeat the original journeys across English and
+Spanish, light and dark themes, and phone and desktop widths. Pending-state, focus,
+scroll, failure-message, retry, request-count, layout and deadline assertions remain.
+
+The handler observation is configured for four seconds. Its missing-signal control
+expects a timeout before a separate five-second race ends, then returns before
+failure-message, focus and retry checks. That control does not prove the exact
+four-second boundary. These native Chromium checks use stubbed HTTP and do not
+qualify backend or production sign-out.
+
+The missing-signal control isolates the handler observation. Ordinary journeys
+also start a response wait before clicking, so a missing signal can report that
+response timeout instead. Review faults detect broken focus and scrolling on both
+the historical parent and changed fixture. The parent case fails after 4.3 seconds
+but its file run needs stopping at 135 seconds; the changed run exits after five.
+These are individual samples. Reproduce and contain the competing response
+rejection before claiming precise failure diagnostics or a general cleanup bound.
+
+## Recovery-choice observation and captures (D362)
+
+Set `RECOVERY_PORTAL_RECEIPT_DIR` to a fresh directory when checking the recovery
+choice fixture. It retains sixteen recovery captures: eight ordinary and eight
+delayed, keeping all eight original names. Separate names prevent a later handler
+variant from overwriting earlier evidence. The missing-signal control runs only
+the first four subtests, then returns before the disabled-choice assertions,
+source clearing, recovery submission, pairing and screenshots. Its title names
+the submission boundary.
+Every original organisation and venue selection, recovery permission, source
+clearing, approval payload, pairing, layout, observation and deadline check remains.
+
+The missing-signal control wraps a configured four-second observation in a
+five-second race. It does not independently establish the exact four-second
+boundary. Native Chromium with stubbed HTTP leaves real recovery authority,
+other browser engines, production networks and the historical Linux cause
+unqualified. Delayed handlers still repeat all eight language, theme and width
+journeys.
+
+## Public browser-check landmark observation and captures (D365)
+
+The landmark browser fixture uses a four-second observation for an absent
+challenge-handler signal. Its missing-signal control checks a five-second outer
+bound; it does not independently pin the exact four-second value or prove that
+ordinary handler observation is necessary. Delayed handlers repeat running-check
+journeys in both languages, themes and phone/desktop widths. All original main
+region, bilingual guidance, reload link, cookie, forwarding and layout checks
+remain, including disabled JavaScript and unavailable-script journeys.
+Ordinary captures keep all 24 historical names; eight delayed running captures
+add a suffix, retaining 32 screenshots. Set `PUBLIC_CHALLENGE_RECEIPT_DIR` to a
+fresh directory for this file, separate from other browser fixtures. These checks
+use native Chromium and local HTTP; other browser engines and production networks
+remain unqualified. Production behaviour is unchanged.
+
+## Browser-test clock setup (D313)
+
+The monitoring-status fixture also reproduces the refusal when setup pauses
+longer than its one-second clock window. It now freezes from the earlier start;
+original and delayed journeys retain every latest-status, freshness, missing-data,
+certificate, read-only, layout and deadline check.
+
+The passkey Add keyboard fixture reproduces the refusal with a 100 ms setup
+delay and now freezes from an earlier start. Original and delayed journeys retain
+every caret, focus, exact-password, Tab/Enter, pending-request and enrollment check
+across both languages, themes and viewport widths, with unchanged deadlines.
+
+The alert-preferences activity fixture now installs its running clock a day before
+its intended pause, then freezes at the original instant before loading the app.
+A 100 ms setup delay reproduced CI's “Cannot fast-forward to the past” refusal;
+the corrected delayed case and all 15 original journeys pass without changing
+assertions, deadlines or application time. The session-list activity fixture also
+reproduces the refusal with a 100 ms setup delay and now freezes from the earlier
+start before loading the app. Its original journeys and delayed variants retain
+all session, retry, uncertain-revoke and account assertions and deadlines.
+The authenticator-status activity fixture reproduces the same refusal under a
+100 ms setup delay and now uses the earlier start too. Its original journeys and
+delayed variants preserve every status, retry, account, write and deadline check.
+The translation-consent activity fixture also reproduces the refusal under a
+100 ms setup delay. Its four clock setups now start earlier and freeze at the
+original instant before loading the app. Original journeys and delayed variants
+retain every consent, retry, navigation, account, write and deadline check.
+The account-security cooldown fixture also reproduces the refusal with a 100 ms
+setup delay and now freezes from the earlier start. Original and delayed journeys
+retain all six passkey/session actions, request counts, disabled-control, countdown,
+retry and deadline checks across both languages, themes and viewport widths.
+The authenticator keyboard fixture reproduces the refusal with the same setup
+delay and now freezes from the earlier start. Original and delayed journeys retain
+every Enter-key, activation, unavailable-status, cooldown, request and deadline
+check. Both clock setup sites are qualified.
+The passkey Enter fixture reproduces the refusal with the same setup delay at
+all three clock setup sites and now freezes from the earlier start. Original and
+delayed journeys retain every password, enrollment, unsupported-browser, cooldown,
+request-count, duplicate-submit and deadline check.
+The monitoring-action guidance fixture reproduces the refusal with a 1100 ms
+setup pause and now freezes from an earlier start at the original instant. Its
+original and delayed journeys retain all failed/stale/certificate explanations,
+read-only actions, hostnames, dates, requests, healthy states and deadlines.
+The session-check retry fixture reproduces the refusal after a 1100 ms setup
+pause, beyond its old one-second window. It now starts earlier and freezes at
+the original instant before loading the app. Both connect and recovery journeys
+retain every protected-action, request, retry, cooldown and deadline assertion;
+the original language, theme and viewport matrix and four delayed variants run.
+The change-email cooldown fixture reproduces the refusal after a 1100 ms setup
+pause and now freezes from an earlier start at the original instant. Its original
+journeys and delayed signup/recovery variants retain every corrected-address,
+per-address wait, server retry, navigation, operation separation and deadline check.
+The cooldown wording fixture reproduces the refusal after a 1100 ms setup pause
+and now starts earlier before freezing at the original instant. Its account and
+fiscal views retain all singular, plural, expiry, layout and deadline checks;
+the original language, theme and viewport matrix and delayed variants run.
+No historical CI failure in these fixtures is attributed here.

@@ -26,40 +26,6 @@ repair; physical passkeys, server authority and live ingress still need their ow
 qualification, with database suites running in CI while Docker is unavailable.
 Run `node --test apps/portal/test/passkey-transport-boundary.test.ts`.
 
-## Session activity replies across reads and sign-out (D439)
-
-A delayed activity reply cannot replace a newer accepted session read, change
-its retry wait or notify the app. An accepted expiry also discards a newer
-pending read, so it cannot restore the expired sign-in. Sign-out discards activity
-started during its preflight, even when the sign-out reply is lost or refused;
-a disposed session ignores late activity results and refuses further activity
-and session checks.
-Run `node --test apps/portal/test/session-activity-ordering.test.ts` for these
-native HTTP/client checks. Runtime and original tests stay unchanged. Trusted
-browser activity, server-side session storage and production ingress retain their
-separate qualification gates.
-
-## Session HTTP replies and sign-out acknowledgements (D422)
-
-Native tests exercise the real HTTP client and session manager with 44 controlled
-responses. Malformed passive and activity replies leave the account unavailable;
-a later valid read restores it. Server retry waits block explicit and visibility
-reads until their boundary. Only the recognised expiry response adds the expiry
-explanation, and uncertain sign-out replies never confirm that you signed out.
-The tests also check sign-out preflight and secure/local CSRF cookie selection.
-Run `node --test apps/portal/test/session-http-boundary.test.ts`.
-Runtime, existing tests and authentication policy are unchanged. These local client
-checks do not qualify the production ingress, server-side session storage or
-browser activity; keep their separate qualification gates.
-
-## Authenticator replies after account changes (D399)
-
-Delayed authenticator reads, setup, activation, removal, regeneration, cancellation
-and follow-up session reads are covered across account changes and sign-out.
-Old replies must preserve the current account's pending work and setup draft,
-without returning old recovery codes or applying old cooldowns. These native
-controller checks leave browser/session integration and production qualification
-open; they do not change server authority or retry policy.
 
 ## Signup and password-reset HTTP acknowledgements (D423)
 
