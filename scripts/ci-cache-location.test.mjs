@@ -8,6 +8,8 @@ import test from 'node:test';
 const consumers = [
   ['ci.yml', 'root'], ['ci.yml', 'typecheck'], ['ci.yml', 'receipts'], ['ci.yml', 'packages'],
   ['relay-counter-diagnostic.yml', 'linux-counter-rollover'], ['venue-services-proof.yml', 'service-receipts'],
+  ['cloud-cost.yml', 'conformance'], ['password-derivation-diagnostic.yml', 'linux-observation'],
+  ['ui-release.yml', 'build'], ['browser-reconnect-diagnostic.yml', 'socket-observation'],
 ];
 
 function locateScript(file, name) {

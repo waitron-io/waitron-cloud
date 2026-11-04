@@ -38,12 +38,12 @@ mandatory-failure controls before closing cache qualification. Compare setup,
 test and cleanup timings, and keep mandatory failures red. A later passing run
 does not repair the historical transport failure.
 
-The six store-location steps preserve a failed pnpm lookup's exit status and
+All ten store-location steps preserve a failed pnpm lookup's exit status and
 refuse an empty path before publishing cache inputs. Native shell controls run
 the actual configured steps with failed, empty and successful lookups, including
 paths containing spaces. Run `node --test scripts/ci-cache-location.test.mjs`.
-The four earlier workflows still use the older inline lookup; qualify the same
-failure case there before changing those sibling steps.
+The controls cover the six new cache consumers and the four earlier bounded-cache
+workflows, with every existing mandatory step and publication gate preserved.
 
 Keep two native harness observations separate from the cache transport cause.
 During review, `ci-setup-pnpm.test.mjs` reports two descendant-test attempts
