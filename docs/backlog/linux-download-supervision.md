@@ -23,8 +23,18 @@ original Node checks and production download limits remain unchanged.
 
 The bounded Linux diagnostic retains each case's outcome and fails if any case
 fails, including when output passes through `tee`. The progress and shell-failure
-checks were observed failing before their implementations. Current-head CI and
-the required code review still gate landing. Docker remains unavailable locally.
+checks were observed failing before their implementations. The fixture adjustment
+and diagnostics landed in [PR315](https://github.com/waitron-io/waitron-cloud/pull/315).
+
+On 4 November 2026, all 29 unchanged focused checks passed on the authorised Linux
+test box: nine Linux ownership cases, four diagnostic checks and sixteen workflow
+and supervisor checks. You can run them with
+`node --test --test-timeout=30000 scripts/ci-download.test.mjs scripts/ci-download-linux.test.mjs scripts/ci-download-diagnostics.test.mjs`.
+The retained [Linux contention run40427348212](https://github.com/waitron-io/waitron-cloud/actions/runs/40427348212)
+also passes all 32 cases with eight workers sharing one CPU. Its fixture,
+supervisor, event helper and diagnostic workflow match current main and the tested
+candidate. These results qualify the existing checks; they do not identify the
+historical failure's stalled phase.
 
 One broader macOS workflow check also exhausted its separate one-second attempts;
 subsequent exact-main and feature single-case checks passed. Its cause remains

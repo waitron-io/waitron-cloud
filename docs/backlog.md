@@ -3333,8 +3333,11 @@ declare those core prerequisites implemented.
 ## Linux download-supervision fixture timing (D126)
 
 The historical Linux failure phase and a separate macOS timing failure remain
-unattributed. Capture process and step timing if either recurs, preserving the
-existing outer limits and assertions. See the [fixture timing detail](backlog/linux-download-supervision.md).
+unattributed. PR315's fixture adjustment is on main; all 29 unchanged focused
+checks pass on the authorised Linux test box. A retained Linux diagnostic also
+passes all 32 contention cases with matching fixture and supervisor sources.
+Capture process and step timing if either failure recurs, preserving the existing
+outer limits and assertions. See the [fixture timing detail](backlog/linux-download-supervision.md).
 
 ## Cost conformance image acquisition (D137)
 
