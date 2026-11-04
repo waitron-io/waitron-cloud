@@ -3181,11 +3181,6 @@ recurrence. Read the [observation requirements and remaining qualification](back
 current Linux PostgreSQL CI qualifies the unchanged observation cases and catches
 both deliberate faults. Use the shared test box for local database checks.
 
-## Usage HTTP response boundaries (D409)
-
-**Open.** Production deployment, monitoring and billing policy remain unqualified.
-See [the boundaries and remaining work](backlog/usage-metering.md#usage-http-response-boundaries-d409).
-
 ## Initial services and future candidates
 
 **Open; local implementations do not approve production enablement.** Remote access
