@@ -23,7 +23,9 @@ function mixedCodePaths(paths, base, head, git) {
         const entry = entries.find(entry => entry.path === path);
         if (entry && (entry.mode !== '100644' || entry.type !== 'blob')) throw Error('Non-regular Markdown');
       }
-      if (paths.includes(policyPath)) {
+      // Prose-only base commits keep the document audit current while changing
+      // peer inventories. The renewed head must prove every policy mode.
+      if (paths.includes(policyPath) && revision === head) {
         for (const mode of ['docs', 'identity', 'gateway', 'lock']) {
           auditInputMode(mode, revision, git, Object.keys(policy.manifests));
         }

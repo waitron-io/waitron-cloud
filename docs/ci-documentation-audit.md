@@ -31,8 +31,10 @@ remain inputs to their existing checks.
 
 Your code change also needs an audit renewal. The planner treats the accompanying
 `scripts/ci-input-audit.json` as evidence only when all four inventories verify in
-both saved revisions. A malformed policy or even one stale peer digest keeps full
-work. Every other root path retains its existing selection. Prose and an audit
+the saved head. The base still needs a current documentation audit. A prose-only
+base normally has stale peer inventories because those modes pin prose too;
+requiring them would send the next code PR back to full work. A malformed policy
+or even one stale head peer digest keeps full work. Every other root path retains its existing selection. Prose and an audit
 edit alone cannot produce an empty successful package plan. Main pushes and the
 separate proof workflows keep their existing policies.
 

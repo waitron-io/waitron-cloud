@@ -1244,7 +1244,9 @@ implementation or production evidence.
   regular documents are accepted. Audited regular prose no longer widens mixed
   package changes: both saved documentation inventories must verify, and an
   accompanying policy renewal is ignored for package selection only when all four
-  saved inventories are current. Saved consumers remain selected. Pinned and
+  head inventories are current. Base peer inventories may be stale after ordinary
+  prose changes; its documentation inventory must still verify. Saved consumers
+  remain selected. Pinned and
   package Markdown, receipt data, links, unknown paths and missing or stale
   evidence retain conservative work. D571 part 1 reuses these existing audits;
   the parked `feat/precise-ci-selection` branch remains untouched. D69 ended in

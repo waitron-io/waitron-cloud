@@ -75,6 +75,19 @@ test('dirty local source cannot hide a committed consumer in a mixed prose chang
   assert.deepEqual(selected.packages.map(row => row.package), ['@waitron-cloud/catalogue', '@waitron-cloud/consumer']);
 }));
 
+test('a docs-only base does not prevent the next reviewed mixed package selection', () => fixture(({root, put, renew, commit, plan}) => {
+  put('README.md', '# Previous prose-only change\n');
+  const base = commit();
+  assert.throws(() => execFileSync(process.execPath, [generator, '--check', base], {cwd: root, stdio: 'pipe'}),
+    error => error.status === 1 && error.stdout.toString().includes('docs: current') &&
+      error.stderr.toString().includes('root-script consumer audit'));
+  put('packages/catalogue/src/index.mjs', 'export const value = 2;\n');
+  put('docs/backlog.md', '# Updated\n');
+  renew();
+  const selected = plan(commit(), base);
+  assert.deepEqual(selected.packages.map(row => row.package), ['@waitron-cloud/catalogue', '@waitron-cloud/consumer']);
+}));
+
 test('pinned Markdown keeps the package that actually reads its contents', () => fixture(({root, put, renew, commit, plan}) => {
   const path = 'docs/waitron-integration-contract.md';
   put(path, 'published-value\n');
