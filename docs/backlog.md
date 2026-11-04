@@ -3466,6 +3466,11 @@ without raw output or URLs. A controlled native header-body stall and a successf
 fresh build qualify this distinction; the historical Linux cause remains unknown.
 Keep the source pin, integrity checks, deadlines and original assertions.
 
+On 4 November, all 44 existing native setup and installer controls pass without
+skips. The test box is busy, so no fresh Linux or Docker setup runs. These controls
+qualify the diagnostics and cleanup; the historical timeouts and Linux transfer
+and native-build causes remain open. See the detail file for the bounded attempt.
+
 ### Interrupted source-fetch fixture state (D530)
 
 **Interrupted writes reproduced and handled; historical timing remains unknown.**

@@ -22,7 +22,7 @@ checks cover success, refusal, damaged bytes, timeout, cancellation and interrup
 bodies. These diagnostics exclude the process environment. Lane D must
 investigate a diagnostic recurrence at the named command before claiming a cause
 or changing a deadline. This passing run does not explain or repair the historical
-timeout. Local Docker-backed qualification remains unavailable while Docker is down.
+timeout. Fresh Docker-backed qualification remains open.
 
 
 ## Source installation stops at 669 of 670 packages
@@ -48,8 +48,8 @@ Native macOS warm-cache and isolated fresh-cache installs of pinned Waitron
 completes without a container. Controlled child processes exercise download waits,
 nonzero and zero exits, cancellation, periodic reports and cleanup. These checks
 qualify the observer, not the historical Linux failure. Lane D must inspect the next
-labelled Linux recurrence before proposing a repair. Genuine local container
-qualification stays blocked while Docker is down.
+labelled Linux recurrence before proposing a repair. Fresh container qualification
+remains open.
 
 The pinned source has a root `prepare` script and no install scripts in workspace
 sub-packages. Extend the observer before relying on such scripts in a later source
@@ -90,7 +90,7 @@ Lane D must obtain evidence from the affected Linux transfer before proposing a
 repair. A fast native download, a passing changed CI run and this controlled stall
 do not establish that cause. Keep the source revision, lockfile, integrity checks,
 request settings, outer limit and process-group cleanup unchanged. Genuine local
-container qualification remains blocked while Docker is down.
+container qualification remains open.
 
 ## Bounded pinned-source acquisition (D482)
 
@@ -110,8 +110,8 @@ connection and low-speed refusals, permanent failures, a healthy fetch, wrong
 revision and interruption. External Git responses are substituted and only the
 disposable supervisor's timers are accelerated. These controls qualify the retry
 boundary, not the historical GitHub transport cause. The pinned revision,
-installation and conformance assertions stay unchanged. Genuine local Docker
-qualification remains unavailable during the outage; GitHub CI runs that work.
+installation and conformance assertions stay unchanged. Fresh Docker qualification
+remains open; GitHub CI runs that work.
 
 
 ## Public source fetch reaches the setup limit (D480)
@@ -169,3 +169,23 @@ clock is accelerated. The test supplies an isolated package store and header
 cache, so it needs neither Docker nor an external header download. Linux CI must
 qualify these controls; a passing run does not explain or repair the historical
 failure. Preserve the existing pin, lockfile, deadlines, checks and cleanup.
+
+## Bounded qualification on 4 November 2026
+
+All 44 existing native controls pass on macOS without failures, cancellations or
+skips. Run `node --test --test-concurrency=1` with these five files under
+`scripts/cloud-cost/`: `conformance-setup-diagnostics.test.mjs`,
+`conformance-install-diagnostics.test.mjs`, `conformance-install-observer.test.mjs`,
+`conformance-install-script-progress.test.mjs` and
+`conformance-install-transport.test.mjs`. They exercise command and installation
+diagnostics, bounded progress reports, controlled header and body stalls, damaged
+archives, refusal, interruption and child and scratch cleanup. The existing
+assertions and production limits remain unchanged.
+
+The test-box helper returns exit 75 because another lane holds the box. The
+requested `node scripts/cloud-cost/conformance.mjs --only
+remote-browser-conformance.test.mjs` never runs, so no fresh Linux source
+installation, image acquisition or browser case is qualified here. This bounded
+attempt does not explain the original unlabelled timeout, the Linux canvas
+transfer slowdown or the native-build wait. Keep those causes open and investigate
+a labelled Linux recurrence before proposing a repair.
