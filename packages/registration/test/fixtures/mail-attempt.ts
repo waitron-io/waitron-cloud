@@ -6,8 +6,9 @@ import {feedbackFixture} from './ses-feedback.ts';
 
 export const keys={activeKeyId:'v1',keys:{v1:'11'.repeat(32)}};
 export const rotated={activeKeyId:'v2',keys:{v1:'11'.repeat(32),v2:'22'.repeat(32)}};
-export function config(region='eu-north-1',country='ES') {
+export function config(region='eu-north-1',country='ES',providerAccountId='123456789012') {
  const f=feedbackFixture(region,['cloud-account-email','venue-email']);
+ if(providerAccountId!=='123456789012')Object.assign(f,JSON.parse(JSON.stringify(f).replaceAll('123456789012',providerAccountId)));
  if(country!=='ES'){
   f.policy.country=country;f.input.scope.country=country;
   for(const flow of f.input.flows)flow.country=country;

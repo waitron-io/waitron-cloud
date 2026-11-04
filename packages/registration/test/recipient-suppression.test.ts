@@ -41,3 +41,24 @@ test('old-version suppression covers new admissions and both purposes only withi
   const fresh=await f.account();await assert.rejects(transaction(f.pool,c=>admitMailAttempt(c,{...fresh,recipientKeys:rotated})),/mail_recipient_suppressed/);
  }finally{await f.close();}
 });
+
+test('suppression refuses an empty recipient-reference list inside a transaction',async()=>{
+ const f=await fixture();try{
+  await assert.rejects(transaction(f.pool,c=>recipientIsSuppressed(c,config().scope,[])),/mail_keys_unavailable/);
+ }finally{await f.close();}
+});
+
+test('admission takes the shared scope lock before locking a queue row',async()=>{
+ const f=await fixture(),held=await f.pool.connect(),worker=await f.pool.connect(),probe=await f.pool.connect();let pending:Promise<unknown>|undefined;
+ try{
+  const input=await f.account();await held.query('BEGIN');await lockMailScope(held,input.config.scope);
+  const blocker=(await held.query('SELECT pg_backend_pid() AS pid')).rows[0].pid;
+  await worker.query('BEGIN');const pid=(await worker.query('SELECT pg_backend_pid() AS pid')).rows[0].pid;
+  pending=admitMailAttempt(worker,input);void pending.catch(()=>{});
+  let blocked=false;const until=performance.now()+3000;
+  do{blocked=(await f.admin.query('SELECT $2=ANY(pg_blocking_pids($1)) AS blocked',[pid,blocker])).rows[0].blocked;if(!blocked)await setImmediate();}while(!blocked&&performance.now()<until);
+  assert.equal(blocked,true,'admission waits on our scope lock');
+  await probe.query('BEGIN');assert.equal((await probe.query('SELECT id FROM email_outbox WHERE id=$1 FOR UPDATE NOWAIT',[input.claim.outboxId])).rowCount,1);
+  await probe.query('ROLLBACK');await held.query('ROLLBACK');await pending;
+ }finally{await probe.query('ROLLBACK');await held.query('ROLLBACK');await pending?.catch(()=>{});await worker.query('ROLLBACK');probe.release();held.release();worker.release();await f.close();}
+});

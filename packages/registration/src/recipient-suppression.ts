@@ -16,7 +16,7 @@ export async function lockMailScope(client:PoolClient,scope:MailScope):Promise<v
 
 export async function recipientIsSuppressed(client:PoolClient,scope:MailScope,refs:readonly RecipientRef[]):Promise<boolean> {
  await lockMailScope(client,scope);
- if(!Array.isArray(refs)||refs.some(ref=>!ref||!/^[A-Za-z0-9_-]{1,64}$/.test(ref.keyId)||!/^[a-f0-9]{64}$/.test(ref.digest)))throw Error('mail_keys_unavailable');
+ if(!Array.isArray(refs)||refs.length===0||refs.some(ref=>!ref||!/^[A-Za-z0-9_-]{1,64}$/.test(ref.keyId)||!/^[a-f0-9]{64}$/.test(ref.digest)))throw Error('mail_keys_unavailable');
  const found=await client.query(`SELECT 1 FROM mail_suppressions s JOIN unnest($4::text[],$5::text[]) AS r(key_id,digest)
   ON s.key_id=r.key_id AND s.digest=r.digest WHERE s.country=$1 AND s.provider_account_id=$2 AND s.region=$3 LIMIT 1`,
   [scope.country,scope.providerAccountId,scope.region,refs.map(r=>r.keyId),refs.map(r=>r.digest)]);

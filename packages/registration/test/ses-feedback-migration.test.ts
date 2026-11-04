@@ -83,3 +83,13 @@ test('feedback ledger enforces transport deduplication and preserves first evide
   for(const id of ['','a'.repeat(257),'unsafe\nvalue'])await assert.rejects(f.pool.query(insert,['ES',values[1],id,values[3]]),{code:'23514'});
  }finally{await f.close();}
 });
+
+test('receipt scope and fixed processing results refuse contradictory records',async()=>{
+ const f=await fixture();try{
+  await migrate(f.pool);
+  const sql=`INSERT INTO mail_feedback_receipts(country,topic_arn,sns_id,content_digest,result,diagnostic) VALUES($1,$2,'scope-test',repeat('a',64),$3,$4)`;
+  for(const row of [['not-a-country','arn:aws:sns:eu-north-1:123456789012:mail-feedback','ignored','unresolved'],
+   ['ES','arbitrary-topic','ignored','unresolved'],['ES','arn:aws:sns:eu-north-1:123456789012:mail-feedback','applied','unresolved']])
+   await assert.rejects(f.pool.query(sql,row),{code:'23514'});
+ }finally{await f.close();}
+});

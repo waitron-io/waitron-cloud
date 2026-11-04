@@ -15,7 +15,8 @@ const fail=(reason:string):never=>{throw Error(reason);};
 async function recipientRefs(client:PoolClient,input:AttemptInput):Promise<RecipientRef[]> {
  const {country,providerAccountId,region}=input.config.scope;
  const config=input.recipientKeys,recipient=normaliseEmail(input.recipient);
- if(!recipient||!config||!config.keys||typeof config.keys!=='object'||Array.isArray(config.keys)
+ if(!recipient)return fail('mail_recipient_unavailable');
+ if(!config||!config.keys||typeof config.keys!=='object'||Array.isArray(config.keys)
   ||!Object.hasOwn(config.keys,config.activeKeyId))return fail('mail_keys_unavailable');
  const entries=Object.entries(config.keys).sort(([a],[b])=>a.localeCompare(b));
  if(entries.length===0)return fail('mail_keys_unavailable');
@@ -25,7 +26,7 @@ async function recipientRefs(client:PoolClient,input:AttemptInput):Promise<Recip
   material.set(id,Buffer.from(key,'hex'));
  }
  const commitment=(key:Buffer)=>createHmac('sha256',key).update('waitron-mail-recipient-key-v1').digest('hex');
- const persisted=(await client.query('SELECT key_id,commitment,revoked FROM mail_recipient_key_versions WHERE country=$1 AND provider_account_id=$2 AND region=$3',[country,providerAccountId,region])).rows;
+ const persisted=(await client.query('SELECT key_id,commitment,revoked FROM mail_recipient_key_versions WHERE country=$1 AND provider_account_id=$2 AND region=$3 ORDER BY key_id FOR SHARE',[country,providerAccountId,region])).rows;
  for(const row of persisted){
   const key=material.get(row.key_id);
   if(!key||row.revoked||commitment(key)!==row.commitment)return fail('mail_keys_unavailable');
@@ -39,9 +40,9 @@ async function recipientRefs(client:PoolClient,input:AttemptInput):Promise<Recip
  return refs;
 }
 
-/** The caller commits admission before starting SMTP; authority checks precede this scope lock. */
+/** Commit admission before SMTP; caller-owned authority locks must precede this scope lock. */
 export async function admitMailAttempt(client:PoolClient,input:AttemptInput):Promise<HandoffAdmission> {
- if(!input?.config||!isValidatedSesFeedbackConfig(input.config))return fail('mail_configuration_unavailable');
+ if(!input?.config||!isValidatedSesFeedbackConfig(input.config)||input.config.policyRevision>2147483647)return fail('mail_configuration_unavailable');
  const {config,claim}=input;
  if(!claim||!config.purposes.includes(claim.purpose))return fail('mail_configuration_unavailable');
  if(!uuid(claim.claimId)||!Number.isInteger(claim.attempt)||claim.attempt<1||claim.attempt>8)return fail('mail_claim_unavailable');
@@ -75,6 +76,7 @@ export async function admitMailAttempt(client:PoolClient,input:AttemptInput):Pro
  if(inserted.rowCount!==1)return fail('mail_attempt_conflict');
  for(const ref of refs)await client.query(`INSERT INTO mail_attempt_recipients(attempt_tag,country,provider_account_id,region,key_id,digest)
   VALUES($1,$2,$3,$4,$5,$6)`,[attemptTag,country,providerAccountId,region,ref.keyId,ref.digest]);
+ await client.query('UPDATE mail_attempts SET recipient_refs_sealed=true WHERE attempt_tag=$1',[attemptTag]);
  return {attemptTag,configurationSet:config.configurationSet};
 }
 
@@ -87,6 +89,13 @@ export async function bindProviderId(client:PoolClient,attemptTag:string,provide
  await lockMailScope(client,{country:found.country,providerAccountId:found.provider_account_id,region:found.region});
  const row=(await client.query('SELECT provider_message_id FROM mail_attempts WHERE attempt_tag=$1 FOR UPDATE',[attemptTag])).rows[0];
  if(row.provider_message_id!==null&&row.provider_message_id!==providerMessageId)return fail('mail_provider_conflict');
+ await client.query('SAVEPOINT mail_provider_binding');
  try{await client.query('UPDATE mail_attempts SET provider_message_id=$2 WHERE attempt_tag=$1',[attemptTag,providerMessageId]);}
- catch(error){if((error as {code?:string}).code==='23505')return fail('mail_provider_conflict');throw error;}
+ catch(error){
+  if((error as {code?:string}).code!=='23505')throw error;
+  await client.query('ROLLBACK TO SAVEPOINT mail_provider_binding');
+  await client.query('RELEASE SAVEPOINT mail_provider_binding');
+  return fail('mail_provider_conflict');
+ }
+ await client.query('RELEASE SAVEPOINT mail_provider_binding');
 }

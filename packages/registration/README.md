@@ -377,11 +377,16 @@ so you can retain the binding without retaining the address, body or token.
 Its caller must commit the transaction before SMTP starts. Production workers
 are not wired to this helper yet.
 
-Use one transaction for `lockMailScope`, `admitMailAttempt`,
-`recipientIsSuppressed` and `bindProviderId`. They share a database lock for the
+Each call to `lockMailScope`, `admitMailAttempt`, `recipientIsSuppressed` and
+`bindProviderId` requires an open transaction. Commit admission before SMTP.
+Bind the provider receipt in a later transaction after SMTP returns; authenticated
+feedback uses its own transaction. These transactions share a database lock for the
 schema, country, provider account and region, covering both mail purposes and all
 key versions. Keep every persisted key available with the same material after
-rotation. Missing, changed or revoked material refuses admission. Provider IDs
+rotation. Missing, changed or revoked material refuses admission. Admission holds
+the retained key rows through commit, so a later revocation waits for that decision.
+Recipient references close before admission returns; later additions and rewrites
+refuse. An incomplete reference set cannot commit. Operator audit rows are append-only. Provider IDs
 bind on their first observation and cannot be replaced or shared by attempts
 within a provider account and region. They remain separate from RFC Message-ID.
 
@@ -391,6 +396,9 @@ PostgreSQL database:
 ```sh
 node scripts/test-postgres.mjs exec pnpm --dir packages/registration exec node --test --test-timeout=120000 test/ses-feedback-migration.test.ts test/mail-attempts.test.ts test/recipient-suppression.test.ts test/migration-history.test.ts test/schema-compatibility.test.ts
 ```
+
+The store accepts policy revisions through 2147483647, matching its SQL column;
+larger qualified revisions refuse with a fixed configuration diagnostic.
 
 These checks qualify local storage and locking. Feedback application, SMTP
 admission wiring, queue polling, audited removal and provider qualification remain
