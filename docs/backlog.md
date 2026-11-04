@@ -4259,12 +4259,6 @@ See [the boundaries and remaining work](backlog/account-http-boundaries.md#sessi
 passkeys and the separate retry-clock repair retain their own gates.
 See [the boundaries and remaining work](backlog/account-http-boundaries.md#session-http-replies-and-sign-out-acknowledgements-d422).
 
-## Initial session lists after account changes (D407)
-
-**Open.** Qualify server authority, browser integration and live ingress; physical
-passkeys and the separate retry-clock repair retain their own gates.
-See [the boundaries and remaining work](backlog/account-http-boundaries.md#initial-session-lists-after-account-changes-d407).
-
 ## Public gateway source limits (D191)
 
 The public gate now counts an IPv6 /64 network as one source, while IPv4-mapped
