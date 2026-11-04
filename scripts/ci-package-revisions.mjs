@@ -93,7 +93,7 @@ function hasDirectoryReference(source, context, quoted = false, delimiters = [])
   return false;
 }
 
-function sourceDirectoryReads(source) {
+function sourceDirectoryReads(source, excludedValues = []) {
   // Backticks and closing parentheses/brackets can precede directory readers
   // through member chains. This scan preserves tagged calls and nested keys
   // without evaluation; opening backticks and inert text can also match.
@@ -296,10 +296,14 @@ function sourceDirectoryReads(source) {
   for (const match of source.source.matchAll(directoryPattern(/\b(?:readdirSync|readdir|opendirSync|opendir)\s*\(/g))) {
     assert.ok(admittedCalls.has(match.index), `Unresolved directory input at ${source.path}`);
   }
+  for (const value of excludedValues) {
+    assert.ok(!rootReads.has(value) && !optionReads.has(value),
+      `Directory exclusion hides a scanned input at ${source.path}: ${value}`);
+  }
   return rootReads;
 }
 
-function workspaceAt(sha, workspace, git) {
+function workspaceAt(sha, workspace, git, onReviewedReader) {
   assert.match(sha, /^[a-f0-9]{40}$/);
   const entries = git('ls-tree', '-rz', '--full-tree', sha).split('\0');
   assert.equal(entries.pop(), '', 'Incomplete package tree inventory');
@@ -364,11 +368,12 @@ function workspaceAt(sha, workspace, git) {
         const label = source.path === 'scripts/ci-audit-fixture-dependencies.mjs' ? 'installed dependency reader' : 'package reader';
         assert.deepEqual(files.get(source.path), {mode, type, id}, `Unreviewed ${label} at ${source.path}`);
         source.references = declaration.sourceReferences ?? [];
+        onReviewedReader();
       }
       // Glob patterns, options and the default working directory can reach inputs
       // outside the quoted paths; unresolved scans must keep every package.
       assert.doesNotMatch(source.source, /\b(?:globSync|glob)\b/, `Unresolved glob scan at ${source.path}`);
-      const rootReads = declaration?.nonSourceDirectoryReads ? new Set() : sourceDirectoryReads(source);
+      const rootReads = declaration?.nonSourceDirectoryReads ? new Set() : sourceDirectoryReads(source, declaration?.directoryReferences);
       for (const value of [...quotedReferences(source.source), ...(source.references ?? [])]) {
         const target = value.startsWith('.') ? posix.normalize(posix.join(posix.dirname(source.path), value)) : posix.normalize(value);
         if (packages.some(other => target.startsWith(`${other.directory}/`))) continue;
@@ -389,10 +394,11 @@ function workspaceAt(sha, workspace, git) {
 }
 
 export function scopeForRevisions(paths, workspace, base, head, git, options) {
+  const onReviewedReader = options?.onReviewedReader ?? (() => {});
   // Each saved revision has independent evidence. Keep both batch reads even
   // when one refuses narrowing, then preserve the first refusal for the caller.
   const snapshots = [base, head].map(sha => {
-    try { return {packages: workspaceAt(sha, workspace, git)}; }
+    try { return {packages: workspaceAt(sha, workspace, git, onReviewedReader)}; }
     catch (error) { return {error}; }
   });
   for (const snapshot of snapshots) if (Object.hasOwn(snapshot, 'error')) throw snapshot.error;

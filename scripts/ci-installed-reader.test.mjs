@@ -95,7 +95,8 @@ test('a real mixed portal revision narrows while a new unknown reader restores e
     const selected = plan(head);
     assert.deepEqual(selected.packages.map(row => row.package), Array(6).fill('@waitron-cloud/portal'));
     assert.equal(selected.typecheck, true);
-    assert.deepEqual(selected.receipts, ['test:local-stack']);
+    assert.deepEqual(selected.receipts, ['test:two-venue-milestone-receipt', 'test:backup-capacity',
+      'test:public-gateway-limits', 'test:local-stack', 'test:database-recovery-receipt', 'test:cloud-cost']);
     writeFileSync(join(root, 'apps/portal/src/unreviewed-reader.mjs'),
       "import {readdirSync} from 'node:fs';\nexport const discover = directory => readdirSync(directory);\n");
     const unknown = plan(save());
@@ -104,4 +105,17 @@ test('a real mixed portal revision narrows while a new unknown reader restores e
         '@waitron-cloud/portal', '@waitron-cloud/registration', '@waitron-cloud/remote-access', '@waitron-cloud/translation', '@waitron-cloud/ui-smoke']);
     assert.match(unknown.reason, /Unresolved directory input at apps\/portal\/src\/unreviewed-reader.mjs/);
   } finally {rmSync(root, {recursive: true, force: true});}
+});
+
+
+test('qualifying the real UI-smoke graph retains every existing receipt suite', {timeout: 60_000}, () => {
+  const git = (...args) => execFileSync('git', args, {encoding: 'utf8', maxBuffer: 64 * 1024 * 1024});
+  git.readBlobs = readGitBlobs;
+  const sha = git('rev-parse', 'HEAD').trim(), workspace = loadWorkspace();
+  const changed = (...args) => args[0] === 'diff' ? 'packages/ui-smoke/test.mjs\0' : git(...args);
+  changed.readBlobs = git.readBlobs;
+  const selected = createPlan({pull_request: {base: {sha}, head: {sha}}}, {sha}, workspace, changed);
+  assert.deepEqual(selected.packages, [{package: '@waitron-cloud/ui-smoke', shard: 1}]);
+  assert.deepEqual(selected.receipts, ['test:two-venue-milestone-receipt', 'test:backup-capacity',
+    'test:public-gateway-limits', 'test:local-stack', 'test:database-recovery-receipt', 'test:cloud-cost']);
 });

@@ -8,15 +8,18 @@ unknown source loader makes even a portal change run every package.
 The saved package graph uses the exact reader versions in
 [`scripts/ci-package-readers.mjs`](../scripts/ci-package-readers.mjs). Each
 entry records its Git mode, object type and blob identifier, which identifies
-its complete bytes. Both saved revisions must match independently. Changing a
-declared reader without another review keeps full package work.
+its complete bytes. When the graph visits a declaration, both saved revisions must match independently.
+In the current graph, an edit to any of the 40 declared readers also fails the required real-graph
+root check until you review the changed reader and renew its identifier. The
+planner keeps full package work while that check is red.
 
 The declarations distinguish directory operations from source inputs. `nonSourceDirectoryReads` identifies
 reviewed directory operations on installed dependencies, runtime data or owned
 fixtures. `directoryReferences` lists exact quoted values that do not enumerate
 source helpers. For example, a path-validation check for `.` and `..` must not
 load every deployment script. A declaration that only excludes quoted values
-does not excuse a directory scan. `sourceReferences` records known computed
+cannot exclude a value that its admitted URL reader actually scans, including
+readers with options. That conflict refuses narrowing. `sourceReferences` records known computed
 helper paths and package inputs explicitly, so the graph does not rely on an
 unrelated import continuing to provide the same edge.
 
@@ -41,7 +44,7 @@ for specific programs, not a complete JavaScript parser.
 | Capacity and storage fixtures | Temporary object-store, extraction and download state. |
 | Guard probes and deployment wrappers | Inert path-validation values, known mutation targets and fixture roots; literal helper/source files remain graph inputs. |
 
-The declaration file lists all 41 exact versions. These declarations leave every runtime reader and package
+The declaration file lists all 40 exact versions. These declarations leave every runtime reader and package
 test unchanged. The new controls execute a real helper consumer,
 retain a base-only consumer through a helper cycle and dirty live files, and
 reject changed reader bytes, executable/link modes and unknown readers. The live
@@ -64,13 +67,19 @@ selection measurement, not a GitHub runtime measurement.
 The backend cycle is real. Production imports and shared integration fixtures
 connect account HTTP, registration, backups, remote access, operations and
 translation. Removing those edges would skip consumers. Identity feeds that
-cycle too. Type checking, root checks and receipt selection keep their existing
-rules; these counts describe package jobs only.
+cycle too. These counts describe package jobs only. Type checking and root checks keep
+their existing rules. Whenever these declarations qualify narrower package
+work, all six existing receipt suites remain selected. Package precision does
+not prove that an independent receipt can be omitted. Receipt reductions need
+separate evidence, including Cloud-cost consumers of portal or UI build tools.
 
 ## Review and renew a declaration
 
 Read the whole changed reader, its generated programs and the directories it
-actually visits. Account for any source loader and every helper it runs. Keep an
+actually visits. Account for any source loader and every helper it runs.
+Quoted generated programs can hide inner paths from the broad quote scanner;
+record every embedded or computed Cloud helper and package input explicitly in
+`sourceReferences`. Do not infer completeness from a matching identifier. Keep an
 uncertain operation unresolved. Then record the reviewed bytes with
 `git hash-object <reader-path>` and update its exact declaration. Never renew
 these identifiers automatically.

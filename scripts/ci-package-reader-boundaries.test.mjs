@@ -113,3 +113,28 @@ for (const reference of ['scripts/link.mjs', 'packages/catalogue/src/index.mjs']
     {full: false, packages: ['catalogue', 'consumer']});
   assert.equal(execFileSync(process.execPath, ['packages/consumer/src/index.mjs'], {cwd: root, encoding: 'utf8'}), '2\n');
 }));
+
+for (const options of ['', ', {withFileTypes: true}']) test(`a directory-only exclusion cannot hide its actual URL scan${options}`, () => fixture(async ({root, git, put, commit, load}) => {
+  const source = `import {readdirSync} from 'node:fs';\nexport let value = 0;\nfor (const entry of readdirSync(new URL('.', import.meta.url)${options})) {\n const name = typeof entry === 'string' ? entry : entry.name;\n if (name === 'link.mjs') value = (await import(new URL(name, import.meta.url))).value;\n}\n`;
+  put('scripts/declared.mjs', source);
+  const sha = commit(), id = git('hash-object', 'scripts/declared.mjs').trim();
+  const scope = await load({'scripts/declared.mjs': {mode: '100644', type: 'blob', id, nonSourceDirectoryReads: false, directoryReferences: ['.']}});
+  assert.equal(execFileSync(process.execPath, ['packages/consumer/src/index.mjs'], {cwd: root, encoding: 'utf8'}), '1\n');
+  assert.throws(() => scope(['packages/catalogue/src/index.mjs'], loadWorkspace(root), sha, sha, git), /Directory exclusion hides a scanned input/);
+}));
+
+test('a declared data reader retains its own quoted sibling input', () => fixture(async ({root, git, put, commit, load}) => {
+  put('scripts/declared.mjs', "import {readdirSync} from 'node:fs';\nexport const runtime = () => readdirSync('/owned-runtime-json');\nexport {value} from '../packages/catalogue/src/index.mjs';\n");
+  const base = commit(), id = git('hash-object', 'scripts/declared.mjs').trim();
+  const scope = await load({'scripts/declared.mjs': {mode: '100644', type: 'blob', id, nonSourceDirectoryReads: true, directoryReferences: []}});
+  put('packages/catalogue/src/index.mjs', 'export const value = 2;\n');
+  assert.deepEqual(scope(['packages/catalogue/src/index.mjs'], loadWorkspace(root), base, commit(), git), {full: false, packages: ['catalogue', 'consumer']});
+  assert.equal(execFileSync(process.execPath, ['packages/consumer/src/index.mjs'], {cwd: root, encoding: 'utf8'}), '2\n');
+}));
+
+test('a declaration cannot excuse an unresolved glob reader', () => fixture(async ({root, git, put, commit, load}) => {
+  put('scripts/declared.mjs', "import {globSync} from 'node:fs';\nexport const runtime = () => globSync('packages/**/src/*.mjs');\n");
+  const sha = commit(), id = git('hash-object', 'scripts/declared.mjs').trim();
+  const scope = await load({'scripts/declared.mjs': {mode: '100644', type: 'blob', id, nonSourceDirectoryReads: true, directoryReferences: []}});
+  assert.throws(() => scope(['packages/catalogue/src/index.mjs'], loadWorkspace(root), sha, sha, git), /Unresolved glob scan/);
+}));
