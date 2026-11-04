@@ -6,7 +6,7 @@
     "project": "waitron-cloud-test",
     "completeIntegration": false,
     "origin": "https://waitron.local:3000",
-    "waitronHead": "dae67da4e16569a875626fbcd81c26b389173bf6",
+    "waitronHead": "ec91a9e34d2daba146f4ee61850ea4136ad5cfb7",
     "image": "sha256:8a83d94d44b74afe4f81305048bf6e5b3f5f5ba22a2947652fdcf5b83290fc8c",
     "waitronImage": "sha256:aa2f4fa70b74a4b8851e3247959596141665da2a6bb16b4d52db4fc81653a707",
     "cloudSource": {
@@ -20,7 +20,7 @@
     "waitronSource": {
       "base": {
         "image": "sha256:aa2f4fa70b74a4b8851e3247959596141665da2a6bb16b4d52db4fc81653a707",
-        "head": "dae67da4e16569a875626fbcd81c26b389173bf6",
+        "head": "ec91a9e34d2daba146f4ee61850ea4136ad5cfb7",
         "tree": "eb777e9ae8296357ccf25666fe1f35a79f49682b",
         "dirty": false,
         "files": 9357,
@@ -28,7 +28,7 @@
       },
       "client": {
         "image": "sha256:8b862b94412c99183f38cf5203e7597c58723112c83ebd788d934f0533ea3f58",
-        "head": "dae67da4e16569a875626fbcd81c26b389173bf6",
+        "head": "ec91a9e34d2daba146f4ee61850ea4136ad5cfb7",
         "tree": "eb777e9ae8296357ccf25666fe1f35a79f49682b",
         "dirty": false,
         "files": 9357,
@@ -100,7 +100,9 @@
       "grantIssued": false
     },
     "capacity": {
-      "shippingQualification": false
+      "shippingQualification": false,
+      "measurement": "linux-cgroup-v2-including-tmpfs",
+      "diskMeasurement": "docker-data-filesystem"
     },
     "paidSnapshot": {
       "status": "published",
@@ -631,7 +633,19 @@
       ],
       "remaining": []
     },
-    "protectedContainersUnchanged": true
+    "protectedContainersUnchanged": true,
+    "restarts": [
+      {
+        "installationId": "00000000-0000-4000-8000-000000000004",
+        "before": "2026-11-02T17:00:00.000000000Z",
+        "after": "2026-11-02T17:00:01.000000000Z"
+      },
+      {
+        "installationId": "00000000-0000-4000-8000-000000000008",
+        "before": "2026-11-02T17:00:00.000000000Z",
+        "after": "2026-11-02T17:00:01.000000000Z"
+      }
+    ]
   },
   "freeServices": {
     "version": 1,

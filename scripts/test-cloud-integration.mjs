@@ -1,12 +1,13 @@
 import assert from 'node:assert/strict';
 import {spawn} from 'node:child_process';
+import {AsyncLocalStorage} from 'node:async_hooks';
 import {mkdtemp, writeFile, readFile, rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {fileURLToPath, pathToFileURL} from 'node:url';
 import {randomUUID} from 'node:crypto';
 import {request} from 'node:https';
-import {setTimeout as delay} from 'node:timers/promises';
+import {setTimeout as timerDelay} from 'node:timers/promises';
 import {verifierIdentityScope, checkVerifierChild} from '../deploy/test-cloud/test-fixtures/integration-verifier-ownership.mjs';
 import {inspectIntegrationAuthorisedRecovery} from '../deploy/test-cloud/test-fixtures/integration-recovery-evidence.mjs';
 import {inspectIntegrationContinuousRecovery} from '../deploy/test-cloud/test-fixtures/integration-continuous-recovery-evidence.mjs';
@@ -26,6 +27,9 @@ export {completeCleanup};
 const root = fileURLToPath(new URL('../', import.meta.url));
 const origin = 'https://waitron.local:3000', revision = 'ec91a9e34d2daba146f4ee61850ea4136ad5cfb7';
 const digest = /^sha256:[a-f0-9]{64}$/;
+const cancellation = new AsyncLocalStorage();
+const runSignal = () => cancellation.getStore()?.cleanup ? undefined : cancellation.getStore()?.signal;
+const delay = ms => timerDelay(ms, undefined, {signal: runSignal()});
 
 export function parseIntegrationJson(text) {
   try {return JSON.parse(text);} catch {throw Error('integration.invalid_json');}
@@ -39,20 +43,22 @@ export function streamCommandDiagnostic(text) {
   return names.includes(found) ? ':integration.stream_'+found : '';
 }
 
-// Child output may contain account links or local credentials; only fixed phases and invariants escape failures.
+// Docker failures expose fixed phases; successful structured replies still require private parsing.
 function command(args, input = '', phase = args[0], env = {}) {
+  const signal = runSignal();
+  signal?.throwIfAborted();
   return new Promise((resolve, reject) => {
     const child = spawn('docker', args, {cwd: root, env: {...process.env, ...env}, stdio: ['pipe', 'pipe', 'pipe']});
     let output = '', diagnostic = '', size = 0, invalid = false;
     const timer = setTimeout(() => {invalid = true; child.kill('SIGKILL');}, 120000);
     const stop = () => {invalid = true; child.kill('SIGTERM');};
-    process.once('SIGINT', stop); process.once('SIGTERM', stop);
+    signal?.addEventListener('abort', stop, {once: true});
     child.stdout.on('data', part => {size += part.length; if (size > 2 * 1024 * 1024) stop(); else output += part;});
     child.stderr.on('data', part => {size += part.length; if (size > 2 * 1024 * 1024) stop(); else if (phase === 'client-diagnostics') output += part; else if (phase === 'snapshot-inspect-stream' || phase === 'client-rollback-refresh') diagnostic=(diagnostic+part).slice(-4096);});
     child.stdin.on('error', () => {});
     child.once('error', () => {invalid = true;});
     child.once('close', code => {
-      clearTimeout(timer); process.removeListener('SIGINT', stop); process.removeListener('SIGTERM', stop);
+      clearTimeout(timer); signal?.removeEventListener('abort', stop);
       if (invalid || code !== 0) reject(new Error('integration.command_failed:' + phase + streamCommandDiagnostic(diagnostic) + (phase === 'client-rollback-refresh' ? rollbackRefusalDiagnostic(diagnostic) : '')));
       else resolve(output.trim());
     });
@@ -104,19 +110,34 @@ export function checkProtectedContainers(before, after, ids) {
 
 export async function runTestCloudClients(options = {}) {
   if (!digest.test(options.image) || !digest.test(options.waitronImage)) throw Error('integration.image_invalid');
-  if (options.fixedProject) return withFixedIntegrationProject({docker: command,
-    run: project => runClients(options, project)});
-  return runClients(options);
+  const stop = new AbortController(), shutdown = () => stop.abort(Error('integration.cancelled'));
+  process.on('SIGINT', shutdown); process.on('SIGTERM', shutdown);
+  try {
+    return await cancellation.run({signal: stop.signal}, async () => {
+      try {
+        const checkout = options.waitronCheckout ?? process.env.TEST_CLOUD_INTEGRATION_WAITRON_CHECKOUT;
+        if (options.sourceProvenance) assert.ok(typeof checkout === 'string' && checkout.length > 0, 'integration.waitron_checkout_required');
+        const waitronSource = options.sourceProvenance ? await captureWaitronSource(checkout, revision) : undefined;
+        stop.signal.throwIfAborted();
+        const result = options.fixedProject ? await withFixedIntegrationProject({docker: command,
+          run: project => runClients(options, project, waitronSource)}) : await runClients(options, undefined, waitronSource);
+        stop.signal.throwIfAborted();
+        return result;
+      } catch (error) {
+        if (stop.signal.aborted && error.name === 'AbortError') throw stop.signal.reason;
+        throw error;
+      }
+    });
+  } finally {process.removeListener('SIGINT', shutdown); process.removeListener('SIGTERM', shutdown);}
 }
 
-async function runClients({image, waitronImage, protectedContainerIds = [], waitronCheckout = process.env.TEST_CLOUD_INTEGRATION_WAITRON_CHECKOUT, paidSnapshot = false, paidVerification = false, paidRecovery = false, paidAuthorisedRecovery = false, paidStream = false, paidContinuousRecovery = false, freeRemote = false, paidRemote = false, cloudRollback = false, measureCapacity = false, measureIntegration = false, schemaRollback = false, sourceProvenance = false, pairedExpiry = false}, fixedProject) {
+async function runClients({image, waitronImage, protectedContainerIds = [], waitronCheckout = process.env.TEST_CLOUD_INTEGRATION_WAITRON_CHECKOUT, paidSnapshot = false, paidVerification = false, paidRecovery = false, paidAuthorisedRecovery = false, paidStream = false, paidContinuousRecovery = false, freeRemote = false, paidRemote = false, cloudRollback = false, measureCapacity = false, measureIntegration = false, schemaRollback = false, sourceProvenance = false, pairedExpiry = false}, fixedProject, waitronSource) {
   measureCapacity ||= measureIntegration;
   paidStream ||= paidContinuousRecovery;
   paidAuthorisedRecovery ||= paidStream;
   paidRecovery ||= paidAuthorisedRecovery;
   if (!digest.test(image) || !digest.test(waitronImage)) throw Error('integration.image_invalid');
   if (sourceProvenance) assert.ok(typeof waitronCheckout === 'string' && waitronCheckout.length > 0, 'integration.waitron_checkout_required');
-  const waitronSource = sourceProvenance ? await captureWaitronSource(waitronCheckout, revision) : undefined;
   const source = sourceProvenance ? await captureIntegrationSource(root) : undefined;
   const runId = randomUUID(), project = fixedProject ?? 'waitron-cloud-test-integration-' + runId.slice(0, 8);
   let cleanupCheckpoint;
@@ -196,10 +217,18 @@ async function runClients({image, waitronImage, protectedContainerIds = [], wait
     let baseTag, clientImage;
     const prepare = async () => {
       if (source) {
+        const reader = await readFile(new URL('../deploy/test-cloud/test-fixtures/integration-source.mjs', import.meta.url), 'utf8');
+        const measure = reader + `
+          try {
+            let text = '';
+            for await (const part of process.stdin) {text += part; assert.ok(Buffer.byteLength(text) <= 2 * 1024 * 1024);}
+            const input = JSON.parse(text); assert.deepEqual(Object.keys(input), ['files']);
+            console.log(JSON.stringify(await measureIntegrationFiles(process.cwd(), input.files)));
+          } catch {process.stderr.write('Integration image source refused\\n'); process.exitCode = 1;}`;
         const id = await docker(['create', '-i', '--pull=never', '--label', 'cloud.integration.owner=' + runId,
           '--network', 'none', '--read-only', '--cap-drop', 'ALL', '--security-opt', 'no-new-privileges',
           '--memory', '128m', '--memory-swap', '128m', '--pids-limit', '32', '--workdir', '/app',
-          '--entrypoint', 'node', image, 'scripts/test-cloud-image-source.mjs'], '', 'source-create');
+          '--entrypoint', 'node', image, '--input-type=module', '-e', measure], '', 'source-create');
         owned.push(id); record('container', id);
         const measured = parseIntegrationJson(await docker(['start', '-ai', id], JSON.stringify({files: source.files}), 'source-measure'));
         assert.deepEqual(measured, await measureIntegrationFiles(root, source.files), 'integration.image_source_mismatch');
@@ -207,16 +236,16 @@ async function runClients({image, waitronImage, protectedContainerIds = [], wait
         cloudAssets = integrationAssetSummary(await probeIntegrationAssets({docker, image, kind: 'cloud', runId,
           own: id => {owned.push(id); record('container', id);}}));
       }
-      const [base] = JSON.parse(await docker(['image', 'inspect', waitronImage]));
+      const [base] = parseIntegrationJson(await docker(['image', 'inspect', waitronImage]));
       assert.equal(base.Config.Labels?.['cloud.waitron-revision'], revision, 'integration.waitron_revision');
       if (waitronSource) waitronBaseSource = await probeWaitronSource({docker, image: waitronImage, source: waitronSource, expectedHead: revision, runId,
         own: id => {owned.push(id); record('container', id);}});
       baseTag = base.RepoTags?.[0]; assert.ok(baseTag, 'integration.waitron_tag');
-      assert.equal(JSON.parse(await docker(['image', 'inspect', baseTag]))[0].Id, waitronImage);
+      assert.equal(parseIntegrationJson(await docker(['image', 'inspect', baseTag]))[0].Id, waitronImage);
       await docker(['build', '--pull=false', '--build-arg', 'WAITRON_IMAGE=' + baseTag, '--build-arg', 'WITH_STREAM=' + (paidStream ? '1' : '0'), '--label', 'cloud.integration.owner=' + runId,
         '-f', 'deploy/test-cloud/test-fixtures/integration-venue.Dockerfile', '-t', clientTag, 'deploy/test-cloud/test-fixtures'], '', 'client-build');
       built = true;
-      clientImage = JSON.parse(await docker(['image', 'inspect', clientTag]))[0].Id;
+      clientImage = parseIntegrationJson(await docker(['image', 'inspect', clientTag]))[0].Id;
       record('image', clientImage);
       if (waitronSource) waitronClientSource = await probeWaitronSource({docker, image: clientImage, source: waitronSource, expectedHead: revision, runId,
         own: id => {owned.push(id); record('container', id);}});
@@ -248,7 +277,7 @@ async function runClients({image, waitronImage, protectedContainerIds = [], wait
     let port = Number((await compose(['port', 'proxy', '3000'])).split(':').at(-1));
     const mailPort = Number((await compose(['port', 'mailpit', '8025'])).split(':').at(-1));
     const api = (path, body, credentials = {}, trust = ca, servername = 'waitron.local') => new Promise((resolve, reject) => {
-      const req = request({hostname: '127.0.0.1', port, servername, ca: trust, path, method: body === undefined ? 'GET' : 'POST',
+      const req = request({hostname: '127.0.0.1', port, servername, ca: trust, path, signal: runSignal(), method: body === undefined ? 'GET' : 'POST',
         headers: {host: 'waitron.local:3000', ...(body === undefined ? {} : {origin, 'content-type': 'application/json'}), ...credentials}}, res => {
         let text = '';
         res.on('data', part => {text += part; if (text.length > 65536) req.destroy(Error('integration.response_large'));});
@@ -268,9 +297,9 @@ async function runClients({image, waitronImage, protectedContainerIds = [], wait
       assert.equal((await api('/api/account/signup/request', {email})).status, 202);
       let message;
       for (let attempt = 0; attempt < 100; attempt++) {
-        const inbox = parseIntegrationJson(await (await fetch(`http://127.0.0.1:${mailPort}/api/v1/messages`, {signal: AbortSignal.timeout(5000)})).text());
+        const inbox = parseIntegrationJson(await (await fetch(`http://127.0.0.1:${mailPort}/api/v1/messages`, {signal: AbortSignal.any([AbortSignal.timeout(5000), ...[runSignal()].filter(Boolean)])})).text());
         const found = inbox.messages?.find(value => value.To.some(to => to.Address === email));
-        if (found) {message = parseIntegrationJson(await (await fetch(`http://127.0.0.1:${mailPort}/api/v1/message/${found.ID}`, {signal: AbortSignal.timeout(5000)})).text()); break;}
+        if (found) {message = parseIntegrationJson(await (await fetch(`http://127.0.0.1:${mailPort}/api/v1/message/${found.ID}`, {signal: AbortSignal.any([AbortSignal.timeout(5000), ...[runSignal()].filter(Boolean)])})).text()); break;}
         await delay(100);
       }
       const token = /https:\/\/waitron\.local:3000\/signup#token=([A-Za-z0-9_-]{43})/.exec(message?.Text ?? '')?.[1];
@@ -278,7 +307,7 @@ async function runClients({image, waitronImage, protectedContainerIds = [], wait
       const signup = await api('/api/account/signup/complete', {token, password, organisationName: plan + ' café', legalBusinessName: plan + ' café SL', countryCode: 'ES'});
       assert.equal(signup.status, 201, 'integration.signup');
       const {organisationId, legalBusinessId} = signup.body;
-      const planResult = JSON.parse(await docker(['exec', '-i', account, 'node', 'deploy/test-cloud/test-fixtures/integration-account.mjs'], JSON.stringify({organisationId, plan}), 'plan'));
+      const planResult = parseIntegrationJson(await docker(['exec', '-i', account, 'node', 'deploy/test-cloud/test-fixtures/integration-account.mjs'], JSON.stringify({organisationId, plan}), 'plan'));
       const login = await api('/api/account/login', {email, password}); assert.equal(login.status, 200, 'integration.login');
       const cookie = login.headers['set-cookie'].map(value => value.split(';')[0]).join('; ');
       const csrf = /__Host-cloud_csrf=([^;]+)/.exec(cookie)?.[1]; assert.ok(csrf);
@@ -335,7 +364,7 @@ async function runClients({image, waitronImage, protectedContainerIds = [], wait
         const independent = parseIntegrationJson(await remotePhase('free-remote-inspect', {csr}));
         freeRemoteEvidence = {organisationId, ...refused, provision: prepared.provision, ...independent};
       }
-      const persisted = JSON.parse(await docker(['exec', '-i', account, 'node', 'deploy/test-cloud/test-fixtures/integration-account.mjs'],
+      const persisted = parseIntegrationJson(await docker(['exec', '-i', account, 'node', 'deploy/test-cloud/test-fixtures/integration-account.mjs'],
         JSON.stringify({organisationId, installationId: evidence.registration.installationId}), 'persisted-binding'));
       assert.equal(persisted.venueId, evidence.registration.venueId); assert.equal(persisted.localVenueId, evidence.localVenueId);
       if (captureSnapshot) {
@@ -467,6 +496,7 @@ async function runClients({image, waitronImage, protectedContainerIds = [], wait
             assert.equal(await docker(['inspect', '--format', '{{.State.Running}}', id]), 'false');
             const delivery = await streamPhase('read', {selected: observedStream, authority: recoveryAuthority});
             assert.equal(delivery.ownerApprovedKit, true);
+            // Failed recovery checks may include bounded child diagnostics with known credentials redacted.
             const checked = parseIntegrationJson(await docker(['exec', '--workdir', '/waitron/apps/server', target,
               'node', '--input-type=module', '-e', `
                 import {spawnSync} from 'node:child_process';import {readFileSync} from 'node:fs';
@@ -522,7 +552,7 @@ async function runClients({image, waitronImage, protectedContainerIds = [], wait
           if (paidAuthorisedRecovery) {
             assert.equal(recoveryAuthority.sourceNodeId, captured.sourceNodeId);
             assert.equal(recoveryAuthority.localVenueId, evidence.localVenueId);
-            // Archive bytes and both keys stay inside the disposable target; the host receives measurements only.
+            // Archive bytes and the archive key stay in the target; the host forwards the separate recovery authority privately.
             const delivery = parseIntegrationJson(await docker(['exec', '-i', target, 'node', '--input-type=module', '-e', `
               import assert from 'node:assert/strict';import {spawnSync} from 'node:child_process';import {writeFileSync} from 'node:fs';
               let s='';for await(const b of process.stdin){s+=b;assert(s.length<16384);}const input=JSON.parse(s);
@@ -540,6 +570,7 @@ async function runClients({image, waitronImage, protectedContainerIds = [], wait
           assert.equal(refusal.routeMoved, false); assert.equal(refusal.reportedRestored, false);
           assert.equal(await docker(['inspect', '--format', '{{.State.Running}}', id]), 'false');
           if (paidAuthorisedRecovery) {
+            // Failed recovery checks may include bounded child diagnostics with known credentials redacted.
             const checked = parseIntegrationJson(await docker(['exec', '--workdir', '/waitron/apps/server', target,
               'node', '--input-type=module', '-e', `
                 import {spawnSync} from 'node:child_process';import {readFileSync} from 'node:fs';
@@ -661,6 +692,7 @@ async function runClients({image, waitronImage, protectedContainerIds = [], wait
       capacityEvidence.integration = {samples: measured.samples};
     } else await journey();
   } finally {
+    await cancellation.run({...cancellation.getStore(), cleanup: true}, async () => {
     try {
       const cleanup = () => cleanupTestCloudResources({docker, project, runId, created, removed, owned, started,
         verifier: {worker: verifierWorker, started: verifierStarted, readScope: readVerifierScope, children: verifierChildren},
@@ -685,6 +717,7 @@ async function runClients({image, waitronImage, protectedContainerIds = [], wait
         result.cleanup = {created, removed, remaining: []}; result.protectedContainersUnchanged = true;
       }
     } finally {await rm(directory, {recursive: true, force: true});}
+    });
   }
   if (capacityEvidence) {
     const {readHostCapacity} = await import('../deploy/test-cloud/test-fixtures/integration-capacity.mjs');

@@ -53,6 +53,28 @@ test('assembly keeps measured local proof separate from release and complete-int
 });
 
 const changes = [
+  ['journey extension', v => v.journey.privateKey = 'PRIVATE_CANARY'],
+  ['ordinary recovery claims restoration', v => v.journey.paidSnapshot.ownerRecovery.ordinaryRestore = 'RESTORED'],
+  ['unqualified recovery client', v => v.journey.paidSnapshot.ownerRecovery.client = 'fake'],
+  ['unexecuted snapshot recovery', v => v.journey.paidSnapshot.recovery = 'not-run'],
+  ['missing restart observations', v => delete v.journey.restarts],
+  ['unexecuted restart', v => v.journey.restarts[0].after = v.journey.restarts[0].before],
+  ['foreign restart', v => v.journey.restarts[0].installationId = v.journey.runId],
+  ['absent remote peer', v => v.journey.paidRemote.peerPresent = false],
+  ['false capacity qualification', v => v.journey.capacity.shippingQualification = true],
+  ['unqualified capacity method', v => v.journey.capacity.measurement = 'guessed'],
+  ['foreign rollback images', v => {
+    for (const state of [v.journey.schemaRollback.before, v.journey.schemaRollback.after])
+      for (const row of state.bindings) row.image = 'sha256:' + 'f'.repeat(64);
+  }],
+  ['unbuilt client image', v => {
+    v.journey.waitronSource.client.image = v.journey.waitronImage;
+    v.journey.assets.waitron.image = v.journey.waitronImage;
+  }],
+  ['consistent unpinned Waitron source', v => {
+    v.journey.waitronHead = 'f'.repeat(40);
+    for (const source of Object.values(v.journey.waitronSource)) source.head = 'f'.repeat(40);
+  }],
   ['input extension', v => v.token = 'PRIVATE_CANARY'],
   ['asset array with named fields', v => v.journey.assets.cloud = Object.assign([], v.journey.assets.cloud)],
   ['free-service revision', v => v.freeServices.cloudHead = 'f'.repeat(40)],

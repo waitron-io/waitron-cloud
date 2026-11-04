@@ -52,6 +52,7 @@ function rollback(value, journey, organisations) {
     assert.match(volume.archiveSha256, hash); assert.match(volume.contentSha256, hash); positive(volume.bytes);
   }
   assert.ok(Array.isArray(before.bindings) && before.bindings.length > 0);
+  assert.ok(before.bindings.some(row => row.image === journey.image), 'assembly.rollback_cloud_image');
   assert.equal(new Set(before.bindings.map(v => v.id)).size, before.bindings.length);
   for (const row of before.bindings) {
     exact(row, 'id,image,mounts'); assert.match(row.id, hash); assert.match(row.image, image);
@@ -79,6 +80,12 @@ function rollback(value, journey, organisations) {
 export function assembleTestCloudEvidence(input) {
   exact(input, 'journey,freeServices');
   const {journey: raw, freeServices} = input;
+  exact(raw, 'version,kind,runId,project,completeIntegration,origin,waitronHead,image,waitronImage,cloudSource,waitronSource,assets,accountMail,clients,tls,organisations,freeSnapshot,restarts,capacity,paidSnapshot,paidStream,paidContinuousRecovery,freeRemote,paidRemote,paidStorageWithdrawal,paidSnapshotExposure,schemaRollback,cleanup,protectedContainersUnchanged' +
+    (Object.hasOwn(raw, 'withdrawal') ? ',withdrawal' : ''));
+  assert.equal(raw.waitronHead, 'ec91a9e34d2daba146f4ee61850ea4136ad5cfb7', 'assembly.waitron_pin');
+  assert.equal(raw.capacity.shippingQualification, false);
+  assert.equal(raw.capacity.measurement, 'linux-cgroup-v2-including-tmpfs');
+  assert.equal(raw.capacity.diskMeasurement, 'docker-data-filesystem');
   validateFreeServiceReceipt(freeServices);
   const withdrawal = createTestCloudWithdrawalReceipt(raw);
   assert.equal(freeServices.cloudHead, raw.cloudSource.head); assert.equal(freeServices.cloudTree, raw.cloudSource.tree);
@@ -89,6 +96,7 @@ export function assembleTestCloudEvidence(input) {
   for (const source of Object.values(raw.waitronSource)) waitronSource(source);
   const {base, client} = raw.waitronSource;
   assert.equal(base.image, raw.waitronImage); assert.equal(base.head, raw.waitronHead);
+  assert.notEqual(client.image, base.image);
   for (const name of ['head', 'tree', 'dirty', 'files', 'sourceSha256']) assert.equal(client[name], base[name]);
   exact(raw.assets, 'cloud,waitron');
   asset(raw.assets.cloud, 'cloud', raw.image); asset(raw.assets.waitron, 'waitron', client.image);
@@ -100,11 +108,17 @@ export function assembleTestCloudEvidence(input) {
   const paid = raw.organisations.find(v => v.plan === 'paid'), free = raw.organisations.find(v => v.plan === 'free');
   assert.notEqual(paid.localVenueId, free.localVenueId);
   assert.deepEqual(raw.clients, {status: 'proved', actions: ['pair', 'renew', 'configuration'], demoVenues: 2, restartIdentity: 'proved'});
+  assert.deepEqual(raw.restarts.map(row => row.installationId).sort(), organisations.map(row => row.installationId).sort());
+  for (const row of raw.restarts) {
+    exact(row, 'installationId,before,after');
+    assert.ok(Number.isFinite(Date.parse(row.before)) && Number.isFinite(Date.parse(row.after)) && Date.parse(row.after) > Date.parse(row.before));
+  }
   assert.deepEqual(raw.tls, {untrustedRefused: true, wrongHostnameRefused: true});
   const snapshot = raw.paidSnapshot, verification = snapshot.workerVerification, recovery = snapshot.ownerRecovery;
   bind(snapshot, paid); assert.equal(snapshot.localVenueId, paid.localVenueId);
   assert.match(snapshot.pointId, uuid); assert.match(snapshot.sourceNodeId, uuid); assert.match(snapshot.sha256, hash); positive(snapshot.bytes);
   assert.equal(snapshot.status, 'published'); assert.equal(snapshot.verification, 'verified');
+  assert.equal(snapshot.recovery, 'fiscal-authority-required');
   yes(snapshot, 'networkDeniedDuringCapture,signedPublication,independentStoredDigest');
   bind(verification, snapshot, 'pointId,sha256,bytes'); assert.match(verification.attemptId, uuid);
   assert.match(verification.childId, hash); assert.match(verification.targetDigest, hash);
@@ -112,6 +126,7 @@ export function assembleTestCloudEvidence(input) {
   assert.equal(verification.modules, 15); yes(verification, 'cleanupConfirmed,noSupersession,childAbsent,workerStoppedNaturally');
   bind(recovery, verification, 'pointId,attemptId,targetDigest,sha256,bytes');
   assert.equal(recovery.protocolVersion, 2); assert.equal(recovery.cloudStatus, 'pending');
+  assert.equal(recovery.client, 'pinned-compiled-waitron'); assert.equal(recovery.ordinaryRestore, 'FISCAL_RESTORE');
   assert.equal(recovery.activation, 'not_attempted'); assert.equal(recovery.reportedRestored, false); assert.equal(recovery.routeMoved, false);
   yes(recovery, 'noSupersession,independentDigest,prePlacement,sourceStoppedDuringRead,requestClosed,sourceIdentityPreserved');
   assert.deepEqual(recovery.refusals, {alternateTargetRefused: true, damagedArchiveRefused: true, placementCalls: 0, restoredReports: 0, stateUnchanged: true});
@@ -132,6 +147,7 @@ export function assembleTestCloudEvidence(input) {
     publicAfterChallenge: 200, publicPrivatePath: 404, freeNeighbourRefused: true, untrustedRefused: true,
     wrongHostnameRefused: true, sameNativeAvailability: true, staffCertificateMatches: true});
   assert.deepEqual(raw.paidRemote.client, {nativeStaffCsr: true, nativeCertificateInstalled: true, pairedSignedExchange: true, keysStayedInVenue: true});
+  assert.equal(raw.paidRemote.peerPresent, true);
   const resources = createTestCloudResourceEvidence(raw.capacity.observations);
   assert.ok(raw.capacity.observations.samples.some(v => v.phase === 'verification' && v.reading.verifierIds.includes(verification.childId)));
   assert.ok(raw.cleanup.created.some(v => v.kind === 'container' && v.id === verification.childId));

@@ -7,11 +7,15 @@ import {createHash} from 'node:crypto';
 const roots = ['apps', 'packages', 'deploy', 'scripts'];
 const files = ['package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml', 'tsconfig.json', '.npmrc', 'compose.yaml', '.dockerignore'];
 const sha = value => createHash('sha256').update(value).digest('hex');
-function runtimePath(path) {
-  return typeof path === 'string' && /^[A-Za-z0-9_.@/-]+$/.test(path) &&
-    !path.split('/').some(part => !part || part === '.' || part === '..' || part === 'node_modules' || part === 'dist') &&
+function selectedRuntimePath(path) {
+  return typeof path === 'string' && path.length > 0 &&
+    !path.split('/').some(part => part === 'node_modules' || part === 'dist') &&
     !path.endsWith('.md') && !path.split('/').some(part => part === '.env' || part.startsWith('.env.')) &&
     (files.includes(path) || roots.some(root => path.startsWith(root + '/')));
+}
+function runtimePath(path) {
+  return selectedRuntimePath(path) && /^[A-Za-z0-9_.@/+\-]+$/.test(path) &&
+    !path.split('/').some(part => !part || part === '.' || part === '..');
 }
 
 export async function measureIntegrationFiles(root, values) {
@@ -35,9 +39,10 @@ export async function captureIntegrationSource(root) {
   const git = (...args) => execFileSync('git', args, {cwd: root, encoding: 'utf8', timeout: 30000, maxBuffer: 2 * 1024 * 1024}).trim();
   assert.equal(git('status', '--porcelain', '--untracked-files=all'), '', 'integration.source_dirty');
   const head = git('rev-parse', 'HEAD'), tree = git('rev-parse', 'HEAD^{tree}');
-  const paths = git('ls-files', '-z', '--', ...roots, ...files).split('\0').filter(runtimePath).sort();
+  const paths = git('ls-files', '-z', '--', ...roots, ...files).split('\0').filter(selectedRuntimePath).sort();
   const values = [];
   for (const path of paths) {
+    assert.ok(runtimePath(path), 'integration.source_path');
     assert.equal((await lstat(join(root, path))).isFile(), true);
     values.push({path, sha256: sha(await readFile(join(root, path)))});
   }

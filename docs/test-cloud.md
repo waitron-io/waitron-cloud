@@ -56,12 +56,15 @@ There is no completed PR7 receipt to validate yet. Keep plan enforcement off
 before the test-box deployment.
 
 The combined journey requires clean committed Cloud and pinned Waitron checkouts. Before starting Cloud,
-it reads the selected immutable image in a disposable, networkless container and
-compares every tracked runtime input under `apps`, `packages`, `deploy` and
+it sends the host checkout's measuring code to a disposable, networkless container
+and reads the selected immutable image. It compares every tracked runtime input under `apps`, `packages`, `deploy` and
 `scripts`, plus the root dependency and Compose configuration, with that checkout.
 The receipt records the commit, tree, image ID, file count and SHA-256 of this
 manifest. A changed or missing image file, a symbolic link, or a checkout changed
-before the run finishes refuses the result. It also captures every tracked Waitron
+before the run finishes refuses the result. Plus signs in tracked runtime filenames
+are measured; unsupported filenames refuse capture rather than disappearing from
+the manifest. Documentation, generated `dist` output, dependencies and environment
+files are excluded from this source manifest. It also captures every tracked Waitron
 file and checks the selected base image and derived client image against that
 manifest. Both measured source trees enter the raw report. A source match alone
 does not certify generated assets or a published release.
@@ -1677,10 +1680,25 @@ node --test scripts/test-cloud-fixed-project.test.mjs
 ```
 
 The proof uses the actual Compose name `waitron-cloud-test` throughout creation,
-measurement, matching backup restore and cleanup. It holds a host lock until the
-proof finishes and refuses existing project containers, networks, volumes or
-fixture image tags before allocating anything. An inspection failure also
-refuses admission. Never remove an existing lock or deployment to make it pass.
+measurement, matching backup restore and cleanup. The proof and deployment CLI
+share `~/.local/state/waitron-cloud/test-project.lock`, independent of checkout or
+temporary directory. The lock lasts through cleanup. Admission refuses existing
+project containers, networks, volumes, fixture image tags and resources carrying
+verifier or integration ownership labels. A failed inspection refuses admission.
+The pinned Waitron checkout is checked before admission inspects Docker.
+
+SIGINT and SIGTERM cancel Docker commands, HTTPS requests, mail fetches and polling
+waits. The runner then drains owned cleanup, removes its scratch and releases its
+lock; another signal does not interrupt that cleanup. Failed verifier stop or scope
+reads retain the durable ownership state for inspection.
+
+After an uncatchable kill or host crash, the lock can remain. Do not remove it to
+force admission. Check for both active drivers on this host, inspect the fixed
+project and ownership-labelled resources read-only, and reconcile their recorded
+IDs. If you cannot establish that every driver has stopped and ownership is known,
+retain the lock and state for the owner. After that inspection, an operator may
+remove only the empty stale lock with `rmdir ~/.local/state/waitron-cloud/test-project.lock`.
+This does not authorise deleting a deployment or any unknown resource.
 
 This remains a temporary integration proof with random loopback ports. It does
 not publish the LAN service or enable plan enforcement in a deployed release.

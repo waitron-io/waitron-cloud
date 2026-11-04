@@ -836,10 +836,14 @@ implementation or production evidence.
   ownership labels and recorded resource IDs, preserves foreign resources sharing
   a project name, and retains verifier state after a failed stop or scope read.
   Controlled Linux checks cover owned cleanup, foreign resources, stop refusal
-  and actual Compose ownership rendering. Cancellation between commands, shared
-  host-wide admission and remaining source/evidence validation findings still
-  block finishing this dormant branch; no release gate is discharged by these
-  cleanup checks.
+  and actual Compose ownership rendering. Whole-run cancellation now drains cleanup
+  during command gaps. The proof and deployment CLI share a stable admission lock
+  and refuse orphan owner-labelled resources. Cloud source measurements execute
+  host-supplied code, include tracked plus-named inputs and refuse unsupported
+  paths. The assembler requires the pinned client, ordinary fiscal refusal,
+  restart observations, remote peer and resource-measurement method. Private JSON
+  failures use a fixed error. Current-head CI still gates this dormant branch;
+  none of these controlled checks qualifies a release or enables deployment.
 
   **Open:** the owner-authorised **Cloud/Waitron release driver**, after this
   dormant proof branch finishes, owns published-image upgrade and rollback
