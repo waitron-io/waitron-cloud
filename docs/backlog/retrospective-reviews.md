@@ -294,3 +294,26 @@ checks use stubbed HTTP; database and permission qualification remain in CI.
 Earlier qualification encountered a [Litestream storage refusal](https://github.com/waitron-io/waitron-cloud/actions/runs/40600605206/job/122527571695).
 The historical cause remains unknown. The shared transport now reports which
 request-validation check refused; keep its accounting checks and deadlines.
+
+## Sign-out failure observation and captures (D361)
+
+The sign-out failure fixture keeps sixteen normal and delayed screenshots, including
+all eight historical names. Collect them into a fresh `SIGNOUT_FOCUS_RECEIPT_DIR`
+and check every name; passing browser assertions alone do not detect overwritten
+captures. Both handler variants repeat the original journeys across English and
+Spanish, light and dark themes, and phone and desktop widths. Pending-state, focus,
+scroll, failure-message, retry, request-count, layout and deadline assertions remain.
+
+The handler observation is configured for four seconds. Its missing-signal control
+expects a timeout before a separate five-second race ends, then returns before
+failure-message, focus and retry checks. That control does not prove the exact
+four-second boundary. These native Chromium checks use stubbed HTTP and do not
+qualify backend or production sign-out.
+
+The missing-signal control isolates the handler observation. Ordinary journeys
+also start a response wait before clicking, so a missing signal can report that
+response timeout instead. Review faults detect broken focus and scrolling on both
+the historical parent and changed fixture. The parent case fails after 4.3 seconds
+but its file run needs stopping at 135 seconds; the changed run exits after five.
+These are individual samples. Reproduce and contain the competing response
+rejection before claiming precise failure diagnostics or a general cleanup bound.
