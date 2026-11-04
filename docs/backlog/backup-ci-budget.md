@@ -14,11 +14,11 @@ time. All three also pass on the preceding main revision. The cancelled
 branch changes no backup files; its additional migration and runner contention
 remain possible contributors, without a measured attribution.
 
-Backup tests now use three partitions, with capture separated from catalogue
-and stream. The planner and independent summary require all three jobs. Node's
-own file discovery runs every current filename and an added future filename
-exactly once in a controlled check. That check also catches concentrating all
-three expensive files in one job. Existing behavioral assertions, file selectors,
+Backup tests now use seven partitions, with capture, catalogue, replacement,
+storage and stream guards each in a separate job. The planner and independent
+summary require all seven jobs. Node's own file discovery runs every current filename and an added future filename
+exactly once in a controlled check. That check also catches putting
+any two expensive files in one job. Existing behavioral assertions, file selectors,
 test limits and the eight-minute job cap remain unchanged.
 
 Run `node --test scripts/ci-backup-partition.test.mjs` to check allocation and

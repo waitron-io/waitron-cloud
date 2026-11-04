@@ -729,7 +729,7 @@ Migration 038, its dormant tables and stored rows remain unchanged. Registration
 owns the seven retained schema tests and the digest/ledger-position check. Removal
 regressions compare every dormant table and the migration ledger before and after
 old calls and free/paid/free plan changes. Shared account, session, recovery and
-mail assertions remain. Live CI keeps nine packages, 25 logical shards in 24
+mail assertions remain. Live CI keeps nine packages, 29 logical shards in 28
 jobs and all six receipt suites, including all six portal shards. Saved historical
 manifests and cost receipts remain historical evidence; their parsers and positive
 receipt-selection checks remain. The [registry reference](fiscal-allocation-registry.md)
@@ -1690,9 +1690,9 @@ implementation or production evidence.
   and receipt jobs to check a candidate. The summary also checks the plan's
   package allocation against the planner's registered package names and shard
   counts. Registration uses five partitions, account HTTP uses three, portal uses six
-  and backups uses three. The [backup job budget investigation](backlog/backup-ci-budget.md)
-  records a job cancelled during cleanup after all 569 cases passed. Three
-  partitions divide its expensive guard files while preserving every assertion
+  and backups uses seven. The [backup job budget investigation](backlog/backup-ci-budget.md)
+  records a job cancelled during cleanup after all 569 cases passed. Seven
+  partitions separate its five expensive guard files while preserving every assertion
   and the eight-minute limit. The summary requires every registration partition
   and rejects the former six- and seven-partition allocations. A Node subprocess
   check partitions copies of every current registration filename plus a new

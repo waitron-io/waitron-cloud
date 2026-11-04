@@ -7,16 +7,18 @@ import test from 'node:test';
 import {loadWorkspace, workPlan} from './ci-scope.mjs';
 import {assertSummary} from './ci-summary.mjs';
 
-test('summary requires all three backup jobs and refuses the previous two-job allocation', () => {
+test('summary requires all seven backup jobs and refuses previous allocations', () => {
   const results = {changes: 'success', typecheck: 'success', root: 'success', packages: 'success', receipts: 'skipped'};
-  const rows = [1, 2, 3].map(shard => ({package: '@waitron-cloud/backups', shard, shards: 3}));
+  const rows = [1, 2, 3, 4, 5, 6, 7].map(shard => ({package: '@waitron-cloud/backups', shard, shards: 7}));
   const summarize = packages => assertSummary({packages, receipts: [], typecheck: true}, results,
     ['changes', 'typecheck', 'root (1/4)', 'root (2/4)', 'root (3/4)', 'root (4/4)',
       ...packages.map(row => `package (${row.package}, shard ${row.shard}/${row.shards})`)]
       .map(name => ({name, status: 'completed', conclusion: 'success'})));
   assert.doesNotThrow(() => summarize(rows));
   for (const omitted of rows) assert.throws(() => summarize(rows.filter(row => row !== omitted)), /Incomplete package allocation/);
-  assert.throws(() => summarize(rows.slice(0, 2).map(row => ({...row, shards: 2}))), /Invalid package allocation/);
+  for (const shards of [2, 3]) {
+    assert.throws(() => summarize(rows.slice(0, shards).map(row => ({...row, shards}))), /Invalid package allocation/);
+  }
 });
 
 test('backup partitions execute every current and future file once while dividing the expensive guard files', t => {
@@ -25,7 +27,8 @@ test('backup partitions execute every current and future file once while dividin
   const files = readdirSync(new URL('../packages/backups/test/', import.meta.url))
     .filter(name => name.endsWith('.test.ts')).concat('zz-future-backup.test.ts').sort();
   const expensive = new Set(['venue-service-capture-guards.test.ts',
-    'venue-service-catalogue-guards.test.ts', 'venue-service-stream-guards.test.ts']);
+    'venue-service-catalogue-guards.test.ts', 'venue-service-stream-guards.test.ts',
+    'venue-service-storage-guards.test.ts', 'venue-service-replacement-guards.test.ts']);
   const root = mkdtempSync(join(tmpdir(), 'cloud-backup-shards-'));
   try {
     for (const name of files) writeFileSync(join(root, name),
@@ -39,9 +42,9 @@ test('backup partitions execute every current and future file once while dividin
       {cwd: root, env, encoding: 'utf8', timeout: 30_000});
       const selected = [...output.matchAll(/^ok \d+ - (.+)$/gm)].map(match => match[1]);
       assert.ok(selected.length > 0, `Empty backup partition ${row.shard}`);
-      assert.ok(selected.length <= Math.ceil(files.length / 3), `Oversized backup partition ${row.shard}`);
-      assert.ok(selected.filter(name => expensive.has(name)).length <= 2,
-        'The three expensive guard files must not share one job');
+      assert.ok(selected.length <= Math.ceil(files.length / 7), `Oversized backup partition ${row.shard}`);
+      assert.ok(selected.filter(name => expensive.has(name)).length <= 1,
+        'Each expensive guard file must have its own job');
       if (selected.includes('venue-service-capture-guards.test.ts')) {
         assert.deepEqual(selected.filter(name => expensive.has(name)), ['venue-service-capture-guards.test.ts'],
           'Capture guards must stay separate from catalogue and stream guards');
@@ -51,7 +54,7 @@ test('backup partitions execute every current and future file once while dividin
       for (const kind of ['fail', 'cancelled', 'skipped']) assert.match(output, new RegExp(`^# ${kind} 0$`, 'm'));
       seen.push(...selected);
     }
-    assert.equal(rows.length, 3);
+    assert.equal(rows.length, 7);
     assert.deepEqual(seen.sort(), files);
   } finally {rmSync(root, {recursive: true, force: true});}
 });
