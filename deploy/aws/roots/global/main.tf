@@ -24,5 +24,5 @@ module "cell" {
     private_subnet_ids = module.network.network.cells[each.key].private_subnet_ids
   }
   # Subnet creation alone does not wait for NAT routes and associations.
-  depends_on = [module.network]
+  depends_on = [module.network, module.observability]
 }

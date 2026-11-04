@@ -26,6 +26,7 @@ mock_provider "aws" {
   mock_data "aws_region" { defaults = { region = "eu-west-3" } }
 }
 variables {
+  budget_limit_usd  = 123.45
   dns               = { create_zone = false, existing_zone_id = "ZSPAIN" }
   database          = { engine_version = "17.6", parameter_family = "postgres17", instance_class = "db.t3.small", allocated_storage = 20, max_allocated_storage = 100 }
   recovery_role_arn = "arn:aws:iam::333333333333:role/waitron-es-recovery"
@@ -40,6 +41,10 @@ variables {
 }
 run "one_cell_keep_exact_ingress_and_scope_dns" {
   command = plan
+  override_module {
+    target  = module.observability
+    outputs = { observability = { logs = {}, signals = {}, budget_ref = "synthetic-budget" } }
+  }
   override_module {
     target  = module.workload_permissions
     outputs = { workload_roles = {}, attachment_refs = {} }
@@ -93,6 +98,10 @@ run "one_cell_keep_exact_ingress_and_scope_dns" {
 }
 run "two_cells_keep_exact_ingress_and_scope_dns" {
   command = plan
+  override_module {
+    target  = module.observability
+    outputs = { observability = { logs = {}, signals = {}, budget_ref = "synthetic-budget" } }
+  }
   variables { deployment = { version = 1, scope = "country", country = "es", primary_region = "eu-south-2", backup_region = "eu-west-3", network = { cidr = "10.20.0.0/16", az_ids = ["eus2-az1", "eus2-az2", "eus2-az3"] }, cells = { "es-01" = { subnet_cidr = "10.20.16.0/20" }, "es-02" = { subnet_cidr = "10.20.32.0/20" } } } }
   override_module {
     target  = module.workload_permissions

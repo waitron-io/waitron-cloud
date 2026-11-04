@@ -25,6 +25,7 @@ module "database" {
     database_subnet_ids       = module.network.network.database_subnet_ids
     service_security_group_id = aws_security_group.database_clients.id
   }
-  kms      = { primary = module.custody.kms.database, backup = module.custody.backup_kms.database }
-  settings = var.database
+  kms        = { primary = module.custody.kms.database, backup = module.custody.backup_kms.database }
+  depends_on = [module.observability]
+  settings   = var.database
 }

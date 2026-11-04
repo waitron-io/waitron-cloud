@@ -36,6 +36,7 @@ mock_provider "aws" {
   mock_data "aws_region" { defaults = { region = "eu-west-3" } }
 }
 variables {
+  budget_limit_usd  = 123.45
   dns               = { create_zone = false, existing_zone_id = "ZSPAIN" }
   database          = { engine_version = "17.6", parameter_family = "postgres17", instance_class = "db.t3.small", allocated_storage = 20, max_allocated_storage = 100 }
   recovery_role_arn = "arn:aws:iam::333333333333:role/waitron-es-recovery"
@@ -50,6 +51,10 @@ variables {
 }
 run "data_topology_binds_database_and_cold_keys" {
   command = plan
+  override_module {
+    target  = module.observability
+    outputs = { observability = { logs = {}, signals = {}, budget_ref = "synthetic-budget" } }
+  }
   override_resource {
     target = module.custody.aws_iam_role.replication["storage"]
     values = { arn = "arn:aws:iam::333333333333:role/waitron-es-storage-replication" }
@@ -87,6 +92,10 @@ run "data_topology_binds_database_and_cold_keys" {
 
 run "data_topology_retains_every_secret_copy" {
   command = plan
+  override_module {
+    target  = module.observability
+    outputs = { observability = { logs = {}, signals = {}, budget_ref = "synthetic-budget" } }
+  }
   override_resource {
     target = module.custody.aws_iam_role.replication["storage"]
     values = { arn = "arn:aws:iam::333333333333:role/waitron-es-storage-replication" }
@@ -120,6 +129,10 @@ run "data_topology_retains_every_secret_copy" {
 
 run "storage_and_scope_permissions_bind_cold_copies" {
   command = plan
+  override_module {
+    target  = module.observability
+    outputs = { observability = { logs = {}, signals = {}, budget_ref = "synthetic-budget" } }
+  }
   override_resource {
     target = module.custody.aws_iam_role.replication["storage"]
     values = { arn = "arn:aws:iam::333333333333:role/waitron-es-storage-replication" }
@@ -194,6 +207,10 @@ run "storage_and_scope_permissions_bind_cold_copies" {
 
 run "two_cells_share_scope_permissions" {
   command = plan
+  override_module {
+    target  = module.observability
+    outputs = { observability = { logs = {}, signals = {}, budget_ref = "synthetic-budget" } }
+  }
   override_resource {
     target = module.custody.aws_iam_role.replication["storage"]
     values = { arn = "arn:aws:iam::333333333333:role/waitron-es-storage-replication" }
@@ -230,6 +247,10 @@ run "two_cells_share_scope_permissions" {
 
 run "rejects_store_references_that_differ_from_permission_targets" {
   command = plan
+  override_module {
+    target  = module.observability
+    outputs = { observability = { logs = {}, signals = {}, budget_ref = "synthetic-budget" } }
+  }
   override_resource {
     target = module.custody.aws_iam_role.replication["storage"]
     values = { arn = "arn:aws:iam::333333333333:role/waitron-es-storage-replication" }
@@ -273,6 +294,10 @@ run "rejects_store_references_that_differ_from_permission_targets" {
 
 run "two_cells_keep_distinct_workload_roles" {
   command = plan
+  override_module {
+    target  = module.observability
+    outputs = { observability = { logs = {}, signals = {}, budget_ref = "synthetic-budget" } }
+  }
   override_resource {
     target = module.custody.aws_iam_role.replication["storage"]
     values = { arn = "arn:aws:iam::333333333333:role/waitron-es-storage-replication" }

@@ -659,11 +659,12 @@ separate charges during a later authorised deployment. Node signals use
 [Container Insights' failed-node count](https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/Container-Insights-metrics-EKS.html);
 the collector must be installed before it emits that metric.
 
-Root composition remains Task 12's work: connect the admitted network and stores,
-create log groups before EKS/RDS delivery, enable PostgreSQL exports, pass matching
-cell names to custody and qualify collector permissions with P1. The module's
-mocked plans establish declarations and refusal checks. They do not prove live
-service delivery, mail, paging, legal retention or monitoring availability. Before
+Both roots now connect their primary network and planned resource names to the
+evidence module. Log destinations precede EKS and RDS creation; PostgreSQL exports
+are enabled. Custody and evidence use the same cell names. You still need to
+qualify collector permissions with P1. The module's mocked plans establish declarations
+and refusal checks. They do not prove live service delivery, mail, paging, legal
+retention or monitoring availability. Before
 any separately authorised AWS rehearsal, exercise the
 [CloudTrail key permissions](https://docs.aws.amazon.com/awscloudtrail/latest/userguide/create-kms-key-policy-for-cloudtrail.html)
 and [encrypted budget topic permissions](https://docs.aws.amazon.com/cost-management/latest/userguide/budgets-sns-policy.html)
@@ -821,7 +822,8 @@ namespace and service accounts, so adding a cell does not share cluster trust.
 Country runtime policies use the same planned store names as shared recovery
 and replication. The root's storage check binds those names and keys to the
 actual stores before the outputs can form a complete handoff.
-Evidence and the complete handoff remain unfinished.
+The provisional `evidence_topology` output contains the connected regional logs,
+infrastructure signals and budget reference. The complete handoff remains unfinished.
 
 For the global root, supply exactly `global`, `global_backup`, `global_keys`
 and `global_backup_keys` in `bindings`. Spain instead takes `country`,
@@ -871,7 +873,7 @@ that binding independently of deployment and key administration.
 Each database uses its own scope's database key and a different key in the
 cold-copy region. The custody module uses the dedicated key-administration
 providers for key resources. Its log-key contexts include every declared cell,
-so later log wiring can use the same cell names. Secret shells retain their
+and evidence uses those same cell names. Secret shells retain their
 backup references, but those references do not prove that secret values have
 been populated or recovered.
 
@@ -930,3 +932,32 @@ The fixed integration suite also runs one-cell and two-cell ingress/DNS cases
 for both scopes. These plans use real ingress and DNS modules with distinct
 synthetic load balancer references. They do not prove public reachability,
 DNS propagation, certificate custody or target registration.
+
+### Composed evidence and log delivery
+
+Clusters and databases need their encrypted log destinations before they start.
+Both roots enforce that order, using known producer names to avoid a dependency
+cycle.
+
+Supply `budget_limit_usd` explicitly in each root. It must be positive; local
+examples use a test threshold, not a proposed production budget. No subscription
+or email recipient is created.
+
+The root connects the primary VPC, exact database identifier, every declared cell
+and the country's two cold-copy rules to its evidence module. Global has no venue
+replication signals. Both roots use their primary log key. Deterministic producer
+names let encrypted log destinations and delivery policies exist before EKS and
+RDS start. PostgreSQL log export is enabled; Container Insights still needs P1's
+collector and separately qualified permissions.
+
+Run the integration suite to check one-cell and two-cell evidence plans in each
+scope:
+
+```sh
+node deploy/aws/check.mjs --suite integration
+```
+
+The complete output checks keep distinct per-cell log references, the shared
+database and VPC destinations, the exact infrastructure signal set and the
+external budget reference. These are mocked plans; live log delivery and
+production retention remain unqualified.

@@ -10,7 +10,7 @@ test('both independent roots plan the real management database, regional keys an
   }
   assert.equal(result.split('run "rejects_store_references_that_differ_from_permission_targets"... pass').length - 1, 1);
   assert.equal(result.split('run "one_cell_has_its_own_workload_roles"... pass').length - 1, 1);
-  for (const name of ['two_cells_keep_distinct_workload_roles', 'one_cell_keep_exact_ingress_and_scope_dns', 'two_cells_keep_exact_ingress_and_scope_dns']) {
+  for (const name of ['two_cells_keep_distinct_workload_roles', 'one_cell_keep_exact_ingress_and_scope_dns', 'two_cells_keep_exact_ingress_and_scope_dns', 'one_cell_keep_exact_regional_evidence', 'two_cells_keep_exact_regional_evidence']) {
     assert.equal(result.split(`run "${name}"... pass`).length - 1, 2, `${name} must run in both roots`);
   }
 });

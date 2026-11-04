@@ -55,7 +55,7 @@ for (const [scope, label, region] of [['global', 'global', 'eu-central-1'], ['co
   });
   // Subnet IDs alone do not order outbound routes and their associations.
   test(`${scope} waits for the complete network before starting each cell`, () => {
-    assert.deepEqual(module(scope, 'cell')?.depends_on, ['${module.network}']);
+    assert.deepEqual(module(scope, 'cell')?.depends_on, ['${module.network}', '${module.observability}']);
     assert.deepEqual(module(scope, 'cell').network, {
       vpc_id: '${module.network.network.vpc_id}',
       private_subnet_ids: '${module.network.network.cells[each.key].private_subnet_ids}',
@@ -111,7 +111,7 @@ for (const [scope, label, region] of [['global', 'global', 'eu-central-1'], ['co
       primary: '${module.custody.kms.database}', backup: '${module.custody.backup_kms.database}',
     });
     assert.equal(database.settings, '${var.database}');
-    assert.equal(database.depends_on, undefined);
+    assert.deepEqual(database.depends_on, ['${module.observability}']);
   });
   test(`${scope} requires explicit database sizing and recovery authority`, () => {
     for (const name of ['database', 'recovery_role_arn']) {
@@ -246,5 +246,33 @@ for (const [scope, label] of [['global', 'global'], ['country', 'es']]) {
     assert.equal(dns.existing_zone_id, '${var.dns.existing_zone_id}');
     assert.equal(dns.for_each, undefined);
     assert.equal(dns.count, undefined);
+  });
+}
+
+for (const [scope, label] of [['global', 'global'], ['country', 'es']]) {
+  // Derived producer names let destinations exist before EKS/RDS enable delivery.
+  test(`${scope} installs primary evidence destinations before their producers without a cycle`, () => {
+    const evidence = module(scope, 'observability');
+    assert.equal(evidence?.source, '"../../modules/observability"');
+    assert.deepEqual(evidence.providers, { aws: `\${aws.${scope}}` });
+    assert.equal(evidence.scope, JSON.stringify(label));
+    assert.equal(evidence.kms_key_arn, '${module.custody.kms.logs}');
+    assert.equal(evidence.budget_limit_usd, '${var.budget_limit_usd}');
+    assert.deepEqual(evidence.resources, {
+      vpc_id: '${module.network.network.vpc_id}',
+      database_identifier: JSON.stringify(`waitron-${label}`),
+      cell_names: '${toset([for name in keys(var.deployment.cells) : "waitron-${name}"])}',
+      replication: scope === 'global' ? {} : '${{for kind in ["stream", "snapshot"] : kind => {source_bucket = kind == "stream" ? local.storage_refs.stream_bucket : local.storage_refs.snapshot_bucket, destination_bucket = local.storage_refs.backup_buckets[kind], rule_id = "cold"}}}',
+    });
+    assert.equal(evidence.for_each, undefined);
+    assert.equal(evidence.count, undefined);
+    assert.equal(evidence.depends_on, undefined);
+    const budget = entries(scope, 'variable').find(body => body['"budget_limit_usd"'])?.['"budget_limit_usd"'];
+    assert.equal(budget?.nullable, false);
+    assert.equal(budget.default, undefined);
+    assert.deepEqual(module(scope, 'cell').depends_on, ['${module.network}', '${module.observability}']);
+    assert.deepEqual(module(scope, 'database').depends_on, ['${module.observability}']);
+    const output = entries(scope, 'output').find(body => body['"evidence_topology"'])?.['"evidence_topology"'];
+    assert.equal(output?.value, '${module.observability.observability}');
   });
 }

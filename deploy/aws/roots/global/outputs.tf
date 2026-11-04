@@ -77,3 +77,7 @@ output "edge_topology" {
     dns     = module.dns.dns
   }
 }
+
+output "evidence_topology" {
+  value = module.observability.observability
+}

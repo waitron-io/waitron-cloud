@@ -223,3 +223,11 @@ run "rejects_empty_class" {
   variables { settings = { engine_version = "17.6", parameter_family = "postgres17", instance_class = "", allocated_storage = 20, max_allocated_storage = 100 } }
   expect_failures = [var.settings]
 }
+
+run "exports_postgresql_logs_to_regional_destination" {
+  command = plan
+  assert {
+    condition     = try(toset(aws_db_instance.management.enabled_cloudwatch_logs_exports) == toset(["postgresql"]), false)
+    error_message = "DATABASE_LOG_DELIVERY: PostgreSQL logs must reach the pre-created regional log group"
+  }
+}

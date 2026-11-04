@@ -66,3 +66,8 @@ variable "dns" {
   type     = object({ create_zone = bool, existing_zone_id = string })
   nullable = false
 }
+
+variable "budget_limit_usd" {
+  type     = number
+  nullable = false
+}

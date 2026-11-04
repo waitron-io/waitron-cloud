@@ -36,6 +36,7 @@ mock_provider "aws" {
   mock_data "aws_region" { defaults = { region = "eu-west-1" } }
 }
 variables {
+  budget_limit_usd  = 123.45
   dns               = { create_zone = false, existing_zone_id = "ZGLOBAL" }
   database          = { engine_version = "17.6", parameter_family = "postgres17", instance_class = "db.t3.small", allocated_storage = 20, max_allocated_storage = 100 }
   recovery_role_arn = "arn:aws:iam::222222222222:role/waitron-global-recovery"
@@ -50,6 +51,10 @@ variables {
 }
 run "data_topology_binds_database_and_cold_keys" {
   command = plan
+  override_module {
+    target  = module.observability
+    outputs = { observability = { logs = {}, signals = {}, budget_ref = "synthetic-budget" } }
+  }
   override_module {
     target = module.network
     outputs = { network = {
@@ -84,6 +89,10 @@ run "data_topology_binds_database_and_cold_keys" {
 run "data_topology_retains_every_secret_copy" {
   command = plan
   override_module {
+    target  = module.observability
+    outputs = { observability = { logs = {}, signals = {}, budget_ref = "synthetic-budget" } }
+  }
+  override_module {
     target = module.network
     outputs = { network = {
       vpc_id                  = "vpc-00000000000000001"
@@ -113,6 +122,10 @@ run "data_topology_retains_every_secret_copy" {
 run "storage_and_scope_permissions_bind_cold_copies" {
   command = plan
   override_module {
+    target  = module.observability
+    outputs = { observability = { logs = {}, signals = {}, budget_ref = "synthetic-budget" } }
+  }
+  override_module {
     target = module.network
     outputs = { network = {
       vpc_id                  = "vpc-00000000000000001"
@@ -141,6 +154,10 @@ run "storage_and_scope_permissions_bind_cold_copies" {
 
 run "two_cells_share_scope_permissions" {
   command = plan
+  override_module {
+    target  = module.observability
+    outputs = { observability = { logs = {}, signals = {}, budget_ref = "synthetic-budget" } }
+  }
   variables {
     deployment = { version = 1, scope = "global", country = null, primary_region = "eu-central-1", backup_region = "eu-west-1", network = { cidr = "10.10.0.0/16", az_ids = ["euc1-az1", "euc1-az2", "euc1-az3"] }, cells = { "global-01" = { subnet_cidr = "10.10.16.0/20" }, "global-02" = { subnet_cidr = "10.10.32.0/20" } } }
   }
@@ -173,6 +190,10 @@ run "two_cells_share_scope_permissions" {
 
 run "one_cell_has_its_own_workload_roles" {
   command = plan
+  override_module {
+    target  = module.observability
+    outputs = { observability = { logs = {}, signals = {}, budget_ref = "synthetic-budget" } }
+  }
   override_module {
     target = module.network
     outputs = { network = {
@@ -222,6 +243,10 @@ run "one_cell_has_its_own_workload_roles" {
 
 run "two_cells_keep_distinct_workload_roles" {
   command = plan
+  override_module {
+    target  = module.observability
+    outputs = { observability = { logs = {}, signals = {}, budget_ref = "synthetic-budget" } }
+  }
   override_module {
     target = module.network
     outputs = { network = {

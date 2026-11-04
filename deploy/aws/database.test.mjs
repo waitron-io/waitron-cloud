@@ -81,5 +81,5 @@ test('regional provider bindings match their primary and cold-copy identity chec
   }
 });
 test('database plans preserve private Multi-AZ PostgreSQL, encrypted cold copies and input refusals', async () => {
-  assert.match(await runSuite('database'), /Success! 27 passed, 0 failed/);
+  assert.match(await runSuite('database'), /Success! 28 passed, 0 failed/);
 });
