@@ -78,6 +78,14 @@ inventory reads the separately pinned Waitron checkout. A real Git control adds
 and commits Cloud prose: its commit and tree change, while the Cloud runtime
 file inventory stays byte-for-byte equal.
 
+The renewal also includes the later recovery-session browser and container
+resource-diagnostic test changes on `main` through #921. The browser test reads
+application source and styles and writes captures to its configured receipt
+directory. The container controls read their own temporary state and the existing
+entry and verifier programs. Neither adds a Cloud prose reader. Review these
+combined inputs before renewal even when their source files do not overlap your
+branch: the old audit rejects the merged tree because it inventories both files.
+
 You can check the documentation inventory alone without installing packages:
 
 ```sh
