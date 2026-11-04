@@ -3025,12 +3025,12 @@ replies and preserve the existing recovery permissions and cooldown policy.
 Server authority and genuine restore qualification remain separate CI and launch gates.
 
 
-## Backup catalogue transport refusals and retry waits (D426)
+## Backup catalogue qualification
 
-**Open.** Qualify server permissions and genuine restore or recovery. Catalogue retry
-waits now use elapsed time through clock corrections, including HTTP-date and
-body-reading time; these client checks grant no activation or stop-proof authority.
-See [the boundaries and remaining work](backlog/backup-recovery-http.md#backup-catalogue-transport-refusals-and-retry-waits-d426).
+**Open.** Qualify server permissions, deployed browser integration, computer sleep
+and genuine restore or recovery. Native transport and elapsed retry checks pass;
+they grant no activation or stop-proof authority.
+See [the remaining checks](backlog/backup-recovery-http.md#backup-catalogue-qualification).
 
 ## Container verifier memory-refusal observation (D335)
 

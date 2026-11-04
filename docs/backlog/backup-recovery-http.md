@@ -1,22 +1,15 @@
 # Backup and recovery HTTP boundaries
 
-## Backup catalogue transport refusals and retry waits (D426)
+## Backup catalogue qualification
 
-When an older catalogue request loses its connection or receives a service refusal,
-your accepted snapshots and recovery choice remain available for an explicit retry.
-A current session or permission refusal clears those choices because the catalogue
-can no longer confirm your access. Native HTTP/client/controller checks cover initial
-loads, pagination, unreadable bodies and retries with the existing page cursor.
-Your catalogue retry wait measures elapsed time, so correcting your system clock
-cannot bypass it, extend it or revive an expired wait. An HTTP-date wait uses the
-response Date header, or your clock when the headers arrive, and includes time
-spent reading the response body. The wait survives closing, reopening and account
-changes; expiry permits an explicit read and sends no request by itself.
-Run `node --test apps/portal/test/backup-retry-clock*.test.ts` for native HTTP checks
-and the catalogue retry screen in both languages, themes and viewport widths.
-Server authority, deployed browser integration, computer sleep and genuine restore
-qualification remain separate gates; database suites run in CI while local Docker
-is unavailable.
+Run `node --test apps/portal/test/backup-transport-boundary.test.ts apps/portal/test/backup-retry-clock.test.ts`
+to check that lost replies preserve accepted choices, permission refusals clear
+them and explicit retries keep the page cursor. Retry waits use elapsed time,
+include body-reading time, survive reopening and account changes, and send no
+request at expiry. These native client and controller checks preserve recovery
+permissions; they grant no activation or stop-proof authority. Server permissions,
+deployed browser integration, computer sleep and genuine restore or recovery
+remain unqualified; database suites run in CI.
 
 ## Recovery transport waits and pending actions (D437)
 
