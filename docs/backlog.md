@@ -3744,20 +3744,17 @@ Qualify the public browser check against the supported browsers and production
 networks before public exposure. Local HTTP, script and Chromium checks do not
 discharge that deployment gate.
 
-## Public gateway source limits (D191)
+## Public gateway deployment qualification (D191)
 
-The public gate now counts an IPv6 /64 network as one source, while IPv4-mapped
-IPv6 addresses share their corresponding IPv4 allowance. Rotating 4,096 addresses
-inside one /64 no longer fills the table or refuses a different network. Native
-HTTP/HTTPS regressions cover the 120-request allowance, equivalent spellings,
-separate networks, full-address challenge/access binding, the 4,096-source cap
-and expiry. The [limits guide](local-remote-access.md#measure-shared-public-traffic-limits)
-keeps the 2026-09-30 receipt as a historical measurement.
+
+The [limits guide](local-remote-access.md#measure-shared-public-traffic-limits)
+documents the implemented source policy and its native checks. Its 2026-09-30
+receipt remains a historical measurement, not deployment qualification.
 
 Before public deployment, qualify fairness for customers sharing IPv4 addresses
 or IPv6 networks, including IPv4-to-IPv6 translation. Many distinct networks can
-still exhaust all 4,096 source buckets and refuse new callers until expiry; the next gateway hardening task must
-choose and test admission under that pressure. Per-venue fairness, coordinated
+still exhaust all 4,096 source buckets and refuse new callers until expiry. Choose
+and test admission under that pressure. Per-venue fairness, coordinated
 limits across gateways and HAProxy connection-table pressure remain open. Verify
 IPv6 connection accounting with HAProxy's configured `stick-table type ip`; native
 gate checks do not qualify that separate layer.
