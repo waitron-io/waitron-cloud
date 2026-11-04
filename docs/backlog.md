@@ -4806,12 +4806,6 @@ See [the boundaries and remaining work](backlog/remote-access-http.md#remote-sta
 permission and retry rules.
 See [the boundaries and remaining work](backlog/remote-access-http.md#remote-access-http-response-boundaries-d420).
 
-## Remote hostname replies after account and venue changes (D402)
-
-**Open.** Qualify live DNS/ACME, browser integration and deployment; retain the existing
-permission and retry rules.
-See [the boundaries and remaining work](backlog/remote-access-http.md#remote-hostname-replies-after-account-and-venue-changes-d402).
-
 ## Unchanged remote hostname review (D259)
 
 On Account, Review DNS settings is available only when the entered name differs
