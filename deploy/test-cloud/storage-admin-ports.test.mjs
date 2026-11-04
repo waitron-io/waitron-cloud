@@ -6,6 +6,7 @@ import {createServer, connect} from 'node:net';
 import {access, readFile, rm} from 'node:fs/promises';
 import {writeFileSync} from 'node:fs';
 import {join} from 'node:path';
+import {randomInt} from 'node:crypto';
 import {startBackupStorage} from '../../scripts/backup-storage-fixture.mjs';
 
 async function readOwner(port) {
@@ -49,10 +50,19 @@ for (const {kinds, explicit} of [
       const marker = `owned-admin-${kind}`;
       const server = createServer(socket => socket.end(marker));
       owners.push({kind, marker, server});
-      await new Promise((resolve, reject) => {
-        server.once('error', reject);
-        server.listen(0, '127.0.0.1', resolve);
-      });
+      // Service fixtures claim ports from 32768 upward. Leave room for the
+      // native admin allocator's next 100 choices without entering that range.
+      for (let attempt = 0; ; attempt++) {
+        try {
+          await new Promise((resolve, reject) => {
+            server.once('error', reject);
+            server.listen(randomInt(10000, 32668), '127.0.0.1', resolve);
+          });
+          break;
+        } catch (error) {
+          if (error.code !== 'EADDRINUSE' || attempt === 19) throw error;
+        }
+      }
       owners.at(-1).port = server.address().port;
     }
     const spawn = childProcess.spawn;
