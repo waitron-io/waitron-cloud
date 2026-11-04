@@ -21,7 +21,7 @@ test('rejectsWrongSourceAndMultiRecipient',()=>{
     e=>{e.mail.sendingAccountId='999999999999';},e=>{e.mail.sourceArn+='-wrong';},e=>{e.mail.tags['ses:configuration-set']=['wrong'];},
     e=>{e.mail.tags['ses:configuration-set'].push('transactional');},e=>{delete e.mail.tags['waitron-attempt'];},
     e=>{e.mail.tags['waitron-attempt'].push(attemptTag);},e=>{e.mail.tags['waitron-attempt']=['A'.repeat(42)+'B'];},
-    e=>{e.mail.tags['waitron-attempt']=['short'];},e=>{e.mail.destination.push('owner@example.test');},
+    e=>{e.mail.tags['waitron-attempt']=['short'];},e=>{e.mail.tags['waitron-attempt']=['AAAA'];},e=>{e.mail.destination.push('owner@example.test');},
     e=>{e.bounce.bouncedRecipients.push({emailAddress:'other@example.test'});},
     e=>{e.bounce.bouncedRecipients=[{emailAddress:'other@example.test'}];},
     e=>{e.bounce.bouncedRecipients=[];},e=>{e.mail.destination=[];},e=>{e.mail.destination='owner@example.test';},

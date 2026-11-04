@@ -38,7 +38,7 @@ test('rejectsIncompleteOrMixedQualifiedBindings',()=>{
     i=>{i.queueUrl+='?secret=1';},i=>{i.queueUrl=i.queueUrl.replace('https:','http:');},
     i=>{i.queueUrl=i.queueUrl.replace('/mail-feedback','/wrong');},
     i=>{i.dlqArn=i.queueArn;},i=>{i.dlqArn+='.fifo';},
-    i=>{i.flows.pop();},i=>{i.flows[0]!.accountId='other';},i=>{i.flows[0]!.dataClass='email-metadata';},
+    i=>{i.flows.pop();},i=>{i.flows.push({...i.flows[0]!,dataClass:'unknown'});},i=>{i.flows[0]!.accountId='other';},i=>{i.flows[0]!.dataClass='email-metadata';},
     i=>{i.flows[0]!.endpoint+='?redirect=1';},i=>{i.flows[0]!.supplierId='other';},
   ];
   for(const mutate of mutations) {
@@ -51,6 +51,10 @@ test('rejectsIncompleteOrMixedQualifiedBindings',()=>{
     assert.throws(()=>validateSesFeedbackConfig(policy,input),{message:'Invalid SES feedback configuration'},field);
   }
   for(const value of [null,[],false,'config',{}, {scope:null}])assert.throws(()=>validateSesFeedbackConfig(spainCountryPolicy,value));
+  const otherRegion=feedbackFixture('eu-south-2');
+  assert.throws(()=>validateSesFeedbackConfig(otherRegion.policy,otherRegion.input));
+  const otherPurpose=feedbackFixture('eu-north-1',['marketing']);
+  assert.throws(()=>validateSesFeedbackConfig(otherPurpose.policy,otherPurpose.input));
 });
 
 test('caller qualification cannot replace trusted policy, complete evidence or SMTP qualification',()=>{
@@ -73,5 +77,20 @@ test('trusted evidence pins the configuration revision and same-account identity
     (i:any)=>{i.topicArn=i.topicArn.replace(':mail-feedback',':other');}]) {
     const {policy,input}=feedbackFixture();change(input);
     assert.throws(()=>validateSesFeedbackConfig(policy,input),{message:'Invalid SES feedback configuration'},String(change));
+  }
+});
+
+test('matching trusted records cannot make malformed resources, revisions or SMTP settings valid',()=>{
+  for(const change of [(i:any)=>{i.identityArn=i.identityArn.replace('identity/','configuration-set/');},
+    (i:any)=>{i.identityArn=i.identityArn.replace(':ses:',':sns:');},
+    (i:any)=>{i.configurationSetArn+='-wrong';},
+    (i:any)=>{i.topicArn+='.fifo';},(i:any)=>{i.dlqArn+='.fifo';},(i:any)=>{i.dlqArn=i.queueArn;},
+    (i:any)=>{i.configurationSet='bad/name';i.configurationSetArn=i.configurationSetArn.replace('transactional','bad/name');},
+    (i:any)=>{i.revision='bad revision';},(i:any)=>{i.smtpPort=587;},(i:any)=>{i.smtpHost='other.example.test';}]) {
+    const {policy,input}=feedbackFixture();change(input);
+    const smtpBindings=policy.smtpBindings.map(b=>({...b,revision:input.revision,identityArn:input.identityArn,
+      configurationSetArn:input.configurationSetArn,topicArn:input.topicArn,queueArn:input.queueArn,dlqArn:input.dlqArn,
+      host:input.smtpHost,port:input.smtpPort}));
+    assert.throws(()=>validateSesFeedbackConfig({...policy,smtpBindings},input),{message:'Invalid SES feedback configuration'},String(change));
   }
 });
