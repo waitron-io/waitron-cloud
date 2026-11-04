@@ -4134,11 +4134,11 @@ removed, retained and failed-refresh journeys. Original recovery, permission,
 selection, request, layout and deadline assertions remain unchanged across both
 languages, themes and viewport widths. No product authority changes.
 
-## Remote hostname save transport and read-back (D427)
+## Remote hostname save qualification
 
-**Open.** Qualify live DNS/ACME, browser integration and deployment; retain the existing
-permission and retry rules.
-See [the boundaries and remaining work](backlog/remote-access-http.md#remote-hostname-save-transport-and-read-back-d427).
+**Open.** Qualify live DNS and certificate issuance, browser integration and deployment.
+Native save and read-back checks pass; permission and retry rules remain in force.
+See [the remaining checks](backlog/remote-access-http.md#remote-hostname-save-qualification).
 
 ## Remote status and DNS-preview transport failures (D438)
 

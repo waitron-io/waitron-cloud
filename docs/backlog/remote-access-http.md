@@ -1,14 +1,14 @@
 # Remote access HTTP boundaries
 
-## Remote hostname save transport and read-back (D427)
+## Remote hostname save qualification
 
-If a hostname save loses its reply, the portal reads the current status once
-to find out whether it succeeded. Native HTTP/client/controller checks cover
-refused, unreadable and lost replies, plus failed read-back and explicit status
-retries. Only a matching current hostname confirms the save; another apply
-requires a fresh review. A server wait permits this immediate read-back but
-blocks later requests until its deadline. Runtime and existing tests stay
-unchanged. Live DNS/ACME, browser and deployment qualification remain open.
+Run `node --test apps/portal/test/remote-transport-boundary.test.ts` to check refused,
+unreadable and lost save replies, failed read-back and explicit status retries.
+One status read checks whether the requested hostname was saved without replaying
+the write; another save requires a fresh review. Permission refusals still clear
+the setup. A server wait permits the immediate read-back but blocks later requests
+until its deadline. These native HTTP/client/controller checks leave live DNS,
+certificate issuance, browser integration and deployment unqualified.
 
 ## Remote status and DNS-preview transport failures (D438)
 
