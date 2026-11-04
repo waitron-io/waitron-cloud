@@ -4134,15 +4134,6 @@ but its file run needs stopping at 135 seconds; the changed run exits after five
 These are individual samples. Reproduce and contain the competing response
 rejection before claiming precise failure diagnostics or a general cleanup bound.
 
-## Session-check retry browser handler wait (D359)
-
-The session-check retry fixture refuses within its existing three-second page
-budget when the first session route handler never signals entry. Missing-signal
-controls cover both connect and recovery; delayed handlers repeat every original
-language, theme, width and failure journey. All protected-action, retry, cooldown,
-request-count, clock and runner deadline assertions remain. These native Chromium
-checks use stubbed HTTP and do not qualify backend or production authentication.
-
 ## Translation-refresh browser handler wait (D358)
 
 The translation-refresh fixture now refuses within its existing four-second page
