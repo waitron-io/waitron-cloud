@@ -1939,6 +1939,9 @@ A1187's recovery-pack dependency. The source is Waitron
 and Cloud's [billing design, section 7](superpowers/specs/2026-10-29-cloud-billing-design.md#7-emergency-hosting-when-the-owner-cannot-be-reached).
 The owner approved A1188's defaults on 29 October. Agreement to this proposed
 wire and permission to build Cloud billing section 7 or P6 are separate gates.
+This revision incorporates Lane B's eight part 1 amendments. Its review agreed
+with the separate-read approach subject to those amendments; final agreement
+on this exact revision and Lane A's A1018 response remain open.
 
 ### Read the facts without starting a copy
 
@@ -1957,8 +1960,10 @@ country origin and current control lease. Apply the billing display's stored-key
 authentication, post-lock revalidation, scope resolution, proof/lease bounds,
 browser-Origin refusal and shared rate budgets. Accept no selectors or query
 parameters. Never derive venue, account or permission from caller-supplied IDs.
-Keep the read available at every paid level, including when the setting is off;
-otherwise the box cannot learn that its earlier information is obsolete.
+Keep the read available at every level, Registered included, whether the
+setting is on or off. A venue that is not at an active Connected level under
+billing section 7 answers `open:false`. Otherwise a box whose venue dropped a
+level keeps an obsolete `open:true`.
 
 The proposed closed response has exactly these fields. UUIDs, `UtcInstant` and
 price validation follow the billing display section. Examples below are
@@ -1968,7 +1973,9 @@ synthetic wire examples, not runnable endpoints or production prices.
 type EmergencyDisplayV1 = {
   version:1; installationId:string; venueId:string; countryCode:'ES';
   asOf:UtcInstant;
-  emergency:{status:'ready'; open:boolean; address:string|null;
+  emergency:{status:'ready'; open:boolean;
+    closedReason:null|'setting_off'|'level_inactive'|'no_payment_method'|'not_provisioned';
+    address:string|null;
     codeIssuedAt:UtcInstant|null}
     | {status:'unavailable'; reason:'state_not_ready'};
   prices:Prices;
@@ -1987,32 +1994,41 @@ must show the price as unavailable and supplies no permission to start hosting.
 venue's Connected level is active under billing section 7, a payment method is
 on file, and its emergency address and current code exist. Unknown or inconsistent
 facts give `state_not_ready`, never a guessed false or true. Resolve all of these
-facts in the same scoped snapshot. No payment method or provider identifier is
-returned. `codeIssuedAt` is the issuance instant of the current code, including
+facts in the same scoped snapshot. `closedReason` is null exactly when `open`
+is true; otherwise it names the first of these that applies, in this order:
+setting off, Connected level not active, no payment method on file, address or
+code not provisioned. It names no payment method or provider. The code read's
+403 body is `{"error":"emergency_hosting_closed","reason":<the same value>}`.
+An unprovisioned code or address is that 403 with `not_provisioned`; 503
+`temporarily_unavailable` is kept for unknown or inconsistent state.
+`codeIssuedAt` is the issuance instant of the current code, including
 after replacement, not the time of this read or print. It lets you compare a
 printed recovery pack with the current card. Neither this instant nor an address
 is a code or authority. With no current code return null; do not create one.
 
 `address` is the complete saved HTTPS emergency URL with no userinfo, query or
 fragment. Its origin is separate from the staff address and the code-entry page.
-Waitron validates its exact registered emergency destination against trusted
-Cloud configuration, including the permitted path; a matching suffix alone is
-insufficient. Its provisioning and distribution must be jointly pinned before
-either adapter accepts the URL. A venue must never point this name at its local
+In version 1 the box accepts the address only from this installation-authenticated
+reply from its configured Cloud origin, with redirects refused. The address must
+be HTTPS on the default port, with path `/` and no userinfo, query or fragment.
+Its host must differ from the staff address's host (`WAITRON_MANAGEMENT_ORIGIN`)
+and from the Cloud origin's host. A pinned list or parent domain of emergency
+names is a later version: the box has no such configuration today.
+A venue must never point this name at its local
 box. If no address is provisioned, return null and `open:false`; an unavailable
 snapshot supplies neither field. The address reveals no code or staff credential.
 
 For an open venue with unpublished prices, the proposed response is:
 
 ```json
-{"version":1,"installationId":"11111111-1111-4111-8111-111111111111","venueId":"22222222-2222-4222-8222-222222222222","countryCode":"ES","asOf":"2026-11-10T12:00:00.000Z","emergency":{"status":"ready","open":true,"address":"https://harbour-emergency.cloud.example.test/","codeIssuedAt":"2026-11-01T09:00:00.000Z"},"prices":{"status":"unavailable","reason":"not_published"}}
+{"version":1,"installationId":"11111111-1111-4111-8111-111111111111","venueId":"22222222-2222-4222-8222-222222222222","countryCode":"ES","asOf":"2026-11-10T12:00:00.000Z","emergency":{"status":"ready","open":true,"closedReason":null,"address":"https://harbour-emergency.cloud.example.test/","codeIssuedAt":"2026-11-01T09:00:00.000Z"},"prices":{"status":"unavailable","reason":"not_published"}}
 ```
 
 An unavailable emergency snapshot is exactly
 `{"status":"unavailable","reason":"state_not_ready"}`. Prices remain
 independently published or unavailable. Reject extra fields, mismatched saved
 registration, malformed dates/URLs/prices and `open:true` with a null address
-or issuance date. An off setting can retain its provisioned address and current
+or issuance date, and any `open`/`closedReason` mismatch. An off setting can retain its provisioned address and current
 issuance date; it never permits start or code disclosure by itself.
 
 Use the billing display's error mappings, 16,384-byte request/response limits,
@@ -2026,7 +2042,12 @@ as unavailable. Billing and emergency reads do not order one another.
 A1188 needs one deliberate difference from billing display: the box keeps the
 last successfully validated emergency address and open flag for the tills and
 their existing saved view when the box disappears. Include its issuance and
-observation dates so the card can describe its age. Bind saved facts to the
+observation dates so the card can describe its age. The box keeps the saved facts
+beside its installation key, outside the venue database and its backups, so a
+restored copy never carries them and no table is added. The till start read uses
+only these saved facts and never waits on Cloud. Only `open` and `address` reach
+the tills; the issue and observation dates stay on the dashboard card.
+Bind saved facts to the
 registration; clear them on disconnect, replacement registration or known
 revocation. A failed read marks the display stale/unavailable without presenting
 the saved flag as current permission. A known `open:false` replaces an older
@@ -2038,8 +2059,12 @@ at the code page and before confirmation. No emergency code is saved here.
 Proposed POST `/api/installations/emergency-hosting-code` uses the same machine
 envelope and authority checks, with the distinct action
 `emergency-hosting-code` and body exactly `{"version":1}`. Bind it to the
-venue's current original box installation; the restored copy's new installation
-and an unrelated installation cannot fetch it. A Cloud account cookie is no
+installation Cloud currently records as the venue's box: the paired installation,
+or a replacement the owner approved through reconnection. An A1188 locked copy's
+installation, any restored copy the owner has not approved, and an unrelated
+installation cannot fetch it. Once Cloud confirms a declaration, the previous
+box's installation is refused the code read, as one of the services item 8
+withdraws. A Cloud account cookie is no
 substitute. The box's authenticated local route checks the person's current
 `node.promote` permission before requesting, returning or printing the code.
 Follow its successor `node.manage` only when A1002 actually provides it.
@@ -2051,11 +2076,17 @@ asOf,code,codeIssuedAt,address}`. The IDs and address obey the display rules;
 the code and its issuance instant are one current generation read together.
 The code encoding, length and fixed validation vectors must be jointly pinned
 before implementation; do not guess a production secret format from this prose.
-When the emergency path is closed, return 403 `emergency_hosting_closed`;
-when the code/address is unprovisioned or state is unknown, return 503
+When the emergency path is closed, return 403 `emergency_hosting_closed` with
+the display's `closedReason` as `reason`, including `not_provisioned` for an
+unprovisioned code or address. Unknown or inconsistent state returns 503
 `temporarily_unavailable`. Do not issue or rotate a code as a read side effect.
 Other bounds and refusals follow the display read, with
 `unsupported_emergency_hosting_version` for an unsupported body version.
+
+The code read has its own rate budget, which Cloud states, separate from the
+display read's one read per minute. The box never shares, caches or replays a
+code answer across requests: each Show code or pack makes one read for that
+request alone, and a 429 is shown with its `Retry-After` wait.
 
 Fetch only on Show code or Print recovery pack. Keep the answer in request/UI
 memory for that interaction; put no code in the venue database, browser storage,
@@ -2075,11 +2106,11 @@ design boundaries for later joint formats and tests, not implemented effects.
 | --- | --- |
 | 1: facts; 2: code and issue date | Separate reads above. Billing display v1 remains closed. |
 | 3: addresses | Follow owner-approved A1188 section 13 items 5–6: separate emergency name, separate code-entry origin, never locally pointed at the box. No staff password enters the code-entry page; the copy itself still runs on Cloud's machines. |
-| 4: locked restore | Follow item 13: M2 has its own new node identity, no source private node key and no fiscal authority before declaration. This requires an explicit restore amendment and A947/A1018 qualification; today's source-identity restore is unchanged. |
+| 4: locked restore | Follow item 13: M2 has its own new node identity, no source private node key and no fiscal authority before declaration. This requires an explicit restore amendment and A947/A1018 qualification; today's source-identity restore is unchanged. Cloud starts the locked copy from the venue's live stream with the backup key it already holds, and asks nobody for the node recovery key. Until Cloud confirms the declaration, the copy can only read the venue's bucket; write access for its own new generation is granted only after confirmation (item 8). |
 | 5: copy identity/certificate | A fresh Cloud installation is required. Production certificates and issuance for the emergency name need a separately agreed certificate/lease profile; do not widen staff certificate v1 implicitly. |
 | 6: still open; 7: box last heard | Require a new authenticated copy-operation read of current eligibility and the original box's observed heartbeat time, including explicit unknown. These display facts cannot supply it or replace the two-minute refusal in A1188 section 13 item 9. |
 | 8: declaration confirmation | Bind one durable operation to the actor, selected copy and exact declaration. Same inputs replay the stored result; changed inputs conflict. Later implementation must coordinate charging, owner mail, source-service withdrawal and the new backup generation without inventing a second operation after an uncertain reply. |
-| 9: stop and repeated starts | Follow approved section 13 item 10: the 30-minute stop ends only at Cloud confirmation of the declaration. Sign-in does not cancel it. Valid-code start budgets and their durable counters remain to be specified before building the code page. |
+| 9: stop and repeated starts | Follow A1188 section 5, "The time limit", and section 9 item 9, approved with the design on 29 October: the 30-minute stop ends only when Cloud confirms the declaration. Sign-in does not cancel it. The limit on how often valid codes start copies, and its durable counters, are agreed before Waitron builds A1188 part 3, because the copy's own count of wrong sign-ins restarts with every copy. |
 | 10: returning box | A separate narrow authenticated read must remain possible after service withdrawal. A positive move result keeps the box restricted; it grants no activation, trusted membership key or general service access. Its format/revocation policy remains a joint prerequisite. |
 
 ### A1018: answers to Lane A's four questions
@@ -2150,7 +2181,8 @@ pinned amendment and adversarial tests, even after this proposal is published.
 
 Waitron must reply to this exact proposal revision before the read becomes an
 agreed contract. Pin both repository revisions and shared request/signature,
-closed-response, URL and code-format vectors. Then qualify both adapters with
+closed-response, URL and code-format vectors, including the independent code-read
+rate budget. Then qualify both adapters with
 same-venue/sibling isolation, post-wait revocation/key changes, stale out-of-order
 replies, code rotation during print, no persisted code, unavailable prices and
 facts, and old cached links after owner withdrawal. Delete the critical guards
