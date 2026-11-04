@@ -31,9 +31,19 @@ that exhausts that limit.
 
 **Open.** Attribute the historical upload stall; the controlled archive-creation
 stall proves the save deadline, not that transport cause. Qualify the changed
-jobs on their exact pull-request head and independently after merging. Compare
-setup, test and cleanup timings, and keep mandatory failures red. A later passing
-run does not repair the historical transport failure.
+jobs on their exact pull-request head and independently after merging. Record
+each job's cache hit or miss and whether saving ran; a hit does not qualify the
+miss path. Retain a real cache miss alongside the existing deliberate-stall and
+mandatory-failure controls before closing cache qualification. Compare setup,
+test and cleanup timings, and keep mandatory failures red. A later passing run
+does not repair the historical transport failure.
+
+The six store-location steps preserve a failed pnpm lookup's exit status and
+refuse an empty path before publishing cache inputs. Native shell controls run
+the actual configured steps with failed, empty and successful lookups, including
+paths containing spaces. Run `node --test scripts/ci-cache-location.test.mjs`.
+The four earlier workflows still use the older inline lookup; qualify the same
+failure case there before changing those sibling steps.
 
 ## Portal shard job budget (D546 qualification)
 
