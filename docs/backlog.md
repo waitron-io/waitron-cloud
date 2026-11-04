@@ -346,12 +346,18 @@ The published plan records the reviewed roadmap; local build authority for slice
 spending, deployment, provider resources or contracts. D103's first C39 monitoring
 design is approved for planning only; C41 release/upgrade and C60 compute decisions remain separate.
 D102's [feedback and suppression design](superpowers/specs/2026-11-01-ses-feedback-design.md)
-is approved for Paris and authenticated private-queue intake (owner, 2026-11-01).
+was approved for authenticated private-queue intake on 2026-11-01. The owner
+subsequently authorised the local code and tests (D565), accepting Stockholm
+`eu-north-1` and Paris `eu-west-3`, with Stockholm as the configured default.
 The [implementation plan](superpowers/plans/2026-11-02-ses-feedback-implementation.md)
-sets out test-first stages for attempt binding, shared suppression, private feedback
-intake and separate provider qualification. Planning alone is authorised; intake and
-shared suppression remain unimplemented. Build, AWS resources, spending, sender/domain
-setup and live mail need separate owner authority on or after 3 November. D101's
+sets out attempt binding, shared suppression, private feedback intake and separate
+provider qualification. Task 1 now validates immutable, independently qualified
+purpose/resource/SMTP bindings and bounded one-recipient event envelopes. Native
+synthetic checks cover refusals and classification; they prove no effective AWS
+publisher authentication or live delivery. Durable bindings, shared suppression,
+queue consumption and production wiring remain unimplemented. AWS resources,
+spending, credentials, production access and live mail remain unauthorised for this
+build; the owner's existing DNS setup grants none of those permissions. D101's
 legal, retention and supplier gates, D103's alert thresholds and D104's independent
 alert route remain open; a second country needs its own approved provider-account
 policy. D68 is landed, including
