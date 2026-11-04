@@ -3495,6 +3495,13 @@ headers. Keep the bounded retries, shared download budget, cancellation and
 checksum requirements; see the
 [download handling and qualification limits](backlog/cost-conformance-fixtures.md#fixture-archive-download-retries-d311).
 
+A bounded 4 November check passes all 56 local HTTP controls and downloads both
+pinned Linux x64 archives on the Mac, each on its first attempt with a verified
+checksum. The test box was occupied, so this does not qualify Linux execution or
+Docker preparation. Neither successful download explains the historical refusals
+or stall; those causes remain open.
+
+
 ### Storage startup retry notice can replace the original refusal (D530)
 
 **Fixed by D526; the throwing notice preserves the permitted retry.**
