@@ -495,12 +495,6 @@ Linux host group passes all thirteen cases. Use the
 [reproduction commands and next-failure evidence](backlog/isolated-replay-result-boundary.md)
 to identify a recurrence before changing request or shutdown behavior.
 
-## Diagnostic download response validation (D410)
-
-**Open.** Qualify server redaction, genuine browser downloads and production-network
-behaviour.
-See [the boundaries and remaining work](backlog/diagnostic-download-http.md#diagnostic-download-response-validation-d410).
-
 ## Diagnostic download qualification
 
 **Open.** Qualify server redaction, genuine browser downloads and production-network

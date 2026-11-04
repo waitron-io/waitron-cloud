@@ -1,16 +1,5 @@
 # Diagnostic download HTTP boundaries
 
-## Diagnostic download response validation (D410)
-
-When you download a diagnostic, native HTTP/controller checks now prove that
-nested extra fields, malformed service and incident metadata, duplicate entries,
-and invalid timestamps cannot reach the file-saving callback. A well-formed
-reply for another installation is also refused; a later valid retry still saves
-the selected installation's document with its expected filename. These checks
-exercise the existing response validator and preserve every permission and
-cooldown rule. Server redaction and genuine browser downloads remain separate
-CI and launch checks.
-
 ## Diagnostic download qualification
 
 Run `node --test apps/portal/test/diagnostic-transport-boundary.test.ts` to check
