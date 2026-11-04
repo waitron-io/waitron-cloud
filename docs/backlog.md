@@ -807,346 +807,64 @@ implementation or production evidence.
   do not explain the historical Docker delay. Local Docker qualification stays
   parked until 3 November; current-head CI runs the genuine gateway journeys.
 
-- **LAN test Cloud with free and paid organisations.** The
-  [test deployment design](superpowers/specs/2026-10-17-test-cloud-free-paid-design.md)
-  and [implementation plan](superpowers/plans/2026-10-17-test-cloud-free-paid.md)
-  describe a separate Cloud Compose project on the owner's test box, with an
-  operator-set pretend plan and service checks enabled only for this test deployment.
-  The [free-service fixture proof](test-cloud.md#check-free-services-locally) now
-  checks account mail under both plans, separately consented relay capture with
-  test-CA origin evidence and revocation, and fake-provider translation across
-  plan changes. Its bounded runner requires every selected file to execute and
-  refuses missing, failed, cancelled or skipped results. The redacted receipt
-  binds the Cloud commit and tree; it qualifies neither Waitron client journey.
-  Waitron's inspected `e2ca1ca487412a2bb7ef1277e48c6adad6068c85` includes paging,
-  but the joint translation and owner gates remain. Its email transport has no
-  Cloud relay caller. Final disposable Waitron integration, image qualification
-  and test-box deployment remain open; plan enforcement stays off.
-  The organisation plan store and operator command now persist free/paid metadata,
-  advance revisions only on changes and refuse incompatible migration ledgers.
-  Real PostgreSQL checks cover concurrent updates, rollback and separate organisations;
-  paid status leaves the disabled fiscal API unavailable. See the
-  [operator commands](local-deployment.md#inspect-the-test-organisation-plan).
-  The opt-in backup boundary now checks paid permission before provisioning,
-  capture/publication, rotation, stream authority, recovery reads and replacement
-  completion. Plan changes advance installation revisions atomically; downgrades
-  clear paid setup and cached machine replies use current configuration. Explicit
-  reprovisioning restores an existing location/stream binding without discarding
-  objects or key versions. Test-mode expiry pauses while free, and admitted expiry
-  holds policy through deletion. The backup worker CLI validates and forwards the
-  test plan flag; ordinary completed replacement replies retain their original
-  authority rules. Metadata/status/close and admitted verification
-  remain available. Ordinary deployment permissions and retention stay unchanged.
-  The [backup guide](local-backups.md#exercise-test-free-and-paid-plans) describes
-  these checks and their lock order. Real PostgreSQL barriers cover provider waits,
-  pairing, multiple installations, replacement and rollback. Keep organisation
-  writes in the setter; two shared policy readers that both update their organisation
-  can still deadlock while upgrading locks. No current service caller does that.
-  CI also exposed an enabled Sign out button whose handler refused clicks while
-  authenticator startup was pending. The three Sign out views now share the
-  handler's existing pending-work gate. A held-response browser check covers both
-  languages, themes and screen sizes without changing the original assertions or
-  three-second waits. No fiscal policy changed.
-  Opted-in remote permission now covers placements, moves, names, certificate
-  submit/status, authorization and publication. Active/staged gateway routes and
-  reconciler jobs share the current paid/test/provisioned eligibility set. Delayed
-  signing/DNS results recheck policy; publication holds policy through the file
-  replacement. Upgrading alone restores no route; explicit existing-placement
-  provision restores cleared setup once. Public setup metadata remains readable.
-  The account server CLI now validates and forwards the same mode; real listener
-  tests cover free lifecycle masking and staff refusal, ordinary defaults and
-  malformed-flag startup refusal. Fresh-health and direct-store forged-proof
-  checks cover the account/status and authentication boundaries too.
-  A single-cell gateway export now locks organisation policies only for that cell's
-  active placements and incoming staged/ready moves, in UUID order. Real PostgreSQL
-  tests prove that an unrelated cell's policy update no longer blocks the export,
-  incoming policies stay locked through publication, and a newly staged organisation
-  waits for the next export if its policy was absent from the locked set. The existing
-  paid/test/setup/revocation checks remain. Reconciler target selection now reads
-  active routes once and incoming routes once across all cells, grouping them by
-  their destination cell. A real PostgreSQL check with eight cells observes two
-  route reads instead of sixteen; empty-cell jobs and route/certificate contents
-  remain covered, including moves, revision changes and plan restrictions.
-  Reconciler eligibility now indexes the permitted installation IDs once per target
-  rebuild, rather than scanning the list for each route and certificate. Real
-  PostgreSQL checks with four and sixteen eligible installations observe four
-  and sixteen ID reads, replacing twenty and 272. Empty test-mode eligibility
-  still withdraws routes and certificate jobs; ordinary mode keeps its existing
-  behavior. Single-cell gateway exports now build the same kind of index once
-  for active and incoming routes. Real PostgreSQL checks through both returned
-  and published manifests observe four and sixteen ID reads for four and sixteen
-  routes, replacing ten and 136. Empty eligibility still excludes both kinds of
-  route; ordinary mode retains them. Those exports now fetch active routes and
-  incoming routes in two cell-scoped batches. Real PostgreSQL checks with four
-  and sixteen mixed routes observe five database calls in ordinary mode
-  (transaction, cell sequence and two route batches), plus two policy calls in
-  test-plan mode, through both returned and published manifests. A missing hostname
-  on an eligible route refuses the export before publication and rolls back its
-  sequence. Route names, target addresses, ports and keys,
-  move lifecycle, revocation and cell isolation remain covered. A controlled
-  PostgreSQL move completion between the two route reads omits that route for one
-  export on both the original and batched versions; the next export includes it.
-  Qualify a consistent route view across those reads before promising uninterrupted
-  cell movement. Eligibility still
-  scans placed organisations and rebuilds target lists for current-work checks.
-  Global policy locks and total target processing need production-scale measurement
-  before larger capacity claims.
-  A real two-peer Docker gateway proof withdrew the downgraded route/peer in
-  4,053 ms while its paid neighbour still served its own body; wall-clock short-lease
-  expiry and an expired-cache restart restored no access. This is local synthetic
-  gateway evidence, not test-box deployment or the later client acceptance proof.
-  A barrier test also excludes a new placement whose organisation was absent from
-  that export's locked policy set; the next export includes it.
-  The signed manifest schema and ten-minute authority maximum are unchanged.
-  See the [remote test guide](local-remote-access.md#exercise-test-free-and-paid-plans).
-  The isolated LAN HTTPS override, persistent private CA/leaf bootstrap, fixed
-  capture mailer and dedicated test runtime are implemented. The runtime validates
-  and forwards plan mode explicitly while translation stays off. Rendered Compose
-  checks keep the backend unpublished, replace bindings and cap all container
-  limits at 1,824 MiB. Real native-Mac Docker proofs cover trusted HTTPS signup,
-  captured canonical links, independent proxy Host/Origin/header checks, restart
-  identity, account replacement without restarting its proxy and owned stop with preserved volumes. They do not prove amd64 box
-  deployment. The image-only driver checks platform, capacity, ports, network
-  overlap, rendered bindings and recorded IDs; startup monitoring checks resource
-  floors and existing Waitron health once per five seconds. Interrupted state with unrecorded IDs is refused; scoped Docker discovery and stop attempts survive a failed host inventory or state write. Cleanup that cannot reach Docker is reported as incomplete. See the [test Cloud guide](test-cloud.md).
-  The owner-approved
-  [backup-verification contract](superpowers/specs/2026-10-18-backup-verification-without-fiscal-authority.md)
-  separates data recovery checks from permission to activate a fiscal server.
-  Its five worked cases and acceptance checks are a design, not runtime evidence.
-  Waitron's separately owned A850 interface landed in
-  [#1939](https://github.com/clintongormley/waitron/pull/1939) at
-  `5516dd57e9ae4c52e1a68f35f1e1860ff00e2faa`. The
-  [Cloud implementation plan](superpowers/plans/2026-10-21-cloud-backup-verification.md)
-  covers strict result admission, stored evidence, current target qualification,
-  historical retention and version-bound recovery across all existing readers.
-  Cloud now has dormant strict request/result readers and a complete target manifest
-  exported from the compiled pinned Waitron bundle. The literal protocol vector
-  matches Waitron's request digest; the manifest includes all 15 owners and binds
-  package, dependency, migration and policy data to that release. These encoding
-  checks do not verify an archive. The next additive migration stores immutable
-  attempt bindings, keeps historical verdicts separate, and supplies a current
-  qualification view. Old successful checks retain their retention protection but
-  gain no current qualification. The policy starts empty with its release gate
-  closed; old recovery requests gain no target identity. A dormant native runner
-  now sends the request and matching key in separate bounded private frames and
-  calls only the compiled verification bundle. Its result is checked after process
-  exit and private scratch cleanup. A pinned-bundle probe matches all 15 owners,
-  refuses synthetic invalid archive bytes and a missing migration journal, then
-  repeats after restoring that journal. This is invocation evidence, not genuine
-  archive success or Docker isolation. The controller's dormant bound interface
-  now journals the same request token, claim and deadline, checks exact ownership
-  on removal, and refuses ambiguous or unknown create outcomes. Private journals
-  reject symbolic links, broad permissions, duplicate fields and oversized data.
-  The dormant Docker adapter now streams those frames directly into the compiled
-  verifier, checks the exact child, image, request and resource settings, and
-  confirms removal before returning a result and ownership receipt. Real Docker
-  checks cover private input, output forgery, resource limits, isolation, cleanup
-  refusal and a watchdog that survives its host. The immutable local image builds
-  from the pinned source and generated runtime stamp; all 15 owners match the
-  complete target. It refuses synthetic bad bytes and a missing actual migration
-  journal. These are boundary and invocation checks; genuine archive success is
-  still unproved. A dormant database admission core now binds each attempt to its
-  live claim, complete policy, publication metadata and terminated, removed child.
-  It atomically records the outcome, point pointers and job transition. A final
-  time check rolls back all changes if a blocked write outlasts the lease or
-  request deadline. PostgreSQL tests cover all five outcome categories, duplicate
-  results, policy changes and explicit lock waits; synthetic results prove this
-  boundary, not archive recovery. The dormant catalogue claim pipeline now connects
-  storage, key unsealing, independent byte measurements and encrypted-stage disposal
-  to that core. It passes only the matching archive key to the verifier, records
-  thrown or inconsistent results as unavailable, lets cleanup uncertainty override
-  passed and invalid results, and rejects expired results without changing job
-  state. PostgreSQL checks cover cancellation during cleanup, fresh retry tokens,
-  storage/key errors and policy, deletion and claim changes during external work.
-  These checks use synthetic child results. The worker now uses the strict claim
-  pipeline and the callback-success catalogue method is removed. Both runtime
-  entry points pass the persistent controller scope and pin the implementing
-  Waitron revision. Jobs wait for a configured target; policy locks precede
-  claims and retention venue locks. Late verification, error and cancellation
-  results leave expired claims untouched. Existing tests now seed explicit
-  synthetic bound evidence, while the genuine local proof requires the bound
-  image as well as its original independent checks. Machine recovery now negotiates
-  Waitron's exact v2 signed target binding, persists it with the fresh request key,
-  and returns the selected immutable attempt's descriptor on snapshot info/read.
-  Replays cannot change the target or downgrade versions. The machine-only reader
-  rejects duplicate fields and malformed UTF-8, accepts bounded complete targets,
-  and caps responses at 65,536 bytes without widening owner forms. Synthetic
-  database and HTTP checks cover all three target actions, signature expiry after
-  a confirmed lock wait, and unchanged v1 continuous recovery. Every snapshot
-  approval now requires a persisted v2 request and current qualification. Metadata,
-  keys, restored reports and replacement prepare, completion and completed-result
-  lookup all recheck the exact approved evidence; a newer success cannot silently
-  replace it. Snapshot defaults use current qualification. Policy locks precede
-  venue locks, and provider grants are rechecked before credentials leave Cloud.
-  PostgreSQL barriers prove refusal after policy, evidence or metadata changes and
-  expiry during waits, with complete rollback of registration, key rotation and
-  routes. Synthetic fixtures explicitly opt into disposable release readiness;
-  their existing owner, plan, confirmation and continuous-recovery assertions stay.
-  Catalogue pages, diagnostics, venue summaries, monitoring and operations status
-  now use that same current evidence. A queued backup notice rechecks the actual
-  point before delivery; inconclusive work cannot create a failed-copy notice.
-  Historical successes still protect the fallback, bytes and key dependencies.
-  History cleanup keeps attempt evidence and its job until both explicit cutoffs,
-  recovery references and usage records permit removing the complete graph; a
-  locked child leaves all its history intact. Focused PostgreSQL checks cover
-  these decisions and acknowledged retention/admission/policy lock waits.
-  These are synthetic boundary checks. A local parallel backup run reached the
-  container-worker deadline and returned a wall timeout instead of the CPU-limit
-  result in `verify-process.test.ts`. Both unchanged files pass isolated runs;
-  `node --test --test-concurrency=1 --test-timeout=30000 'test/*.test.ts'`
-  in the backups package passes all 757 tests. The original resource failures
-  remain unexplained. Capture Docker stages, host deadline and CPU-limit timing
-  if they recur; keep the limits and assertions intact.
-  The genuine joint proof is described below. Snapshots
-  stay unavailable and deployment enforcement stays off. The unavailable backup
-  profile now has a private writable controller-state volume separate from its
-  read-only configuration. It still receives no Docker socket.
-  An unsuccessful Docker create with no discoverable exact child retains its
-  private intent after expiry and blocks restart. A delayed exact child is reclaimed
-  before fresh work; an outcome that never resolves can stop verification indefinitely.
-  Define and qualify recovery from a definitive daemon rejection before relying on
-  automatic availability. Do not clear uncertain journals merely to resume work.
-  Task 9 adds portal wording that separates checked data from activation and treats
-  inconclusive checks as pending. The version 5 schema proof targets migrations
-  42-to-43 with synthetic legacy history, recovery holds, external backup keys,
-  current evidence and v2 request bindings. The actual old-to-new/disaster proof
-  passes on `ee927ed9ac4486f4d9166e0c95ac661eab674bf5`, including interrupted
-  rollback, old-binary refusal and cleanup. It exposed helper lookup failure during
-  `pg_restore`; unlanded migration 043 now retains its schema search path. All 42
-  shipped migrations remain unchanged. The genuine joint proof is described below;
-  release remains unqualified. Earlier receipt versions and fiscal authority rules remain unchanged.
-  The PR5 adapters are reconciled with current main, preserving their earlier
-  storage, account, remote and controller behavior and historical test evidence.
-  Task 10's new version 2 receipt validator refuses missing genuine phases,
-  incomplete module coverage, substituted image/request/attempt evidence,
-  continuous-source presence, uncertain cleanup and publication claims for a local
-  candidate. It keeps ordinary fiscal refusal distinct from a complete proof.
-  The receipt producer and genuine joint orchestration record version 2 evidence
-  for one complete local run, retaining the primary fiscal refusal alongside
-  separately authorised ordinary recovery.
-  Waitron A1004 is now pinned at `ec91a9e34d2daba146f4ee61850ea4136ad5cfb7`.
-  The build compares the complete compiled target, including all 15 owners and
-  the newer core/venue-service schemas. The older target is refused. Genuine
-  local capture now verifies with worker threads still denied. The fixture creates
-  its synthetic certificate with Waitron's existing generator and normal vault
-  writer before capture; missing credentials correctly remain unavailable.
-  Wrong-key and changed-byte controls refuse, and the untouched archive passes
-  afterward. Signed publication through the real machine API, storage staging,
-  scoped worker verification, committed current evidence and child removal pass
-  together. Continuous stream objects and database pointers are checked absent
-  before capture, after publication and after admission. Only the disposable proof
-  database enables release readiness. The same scenario now compiles the pinned
-  Waitron v2 client with its unchanged restore boundary. The owner API chooses the
-  qualified default and approves the exact committed attempt. The real client
-  checks target info, scoped storage delivery, digest and size before staging.
-  Ordinary restore reaches the unchanged fiscal-authority refusal, reports no
-  restored state and replaces no installation. Continuous objects and pointers
-  are checked absent at all nine boundaries. The version 2 producer emits actual
-  bound evidence only after confirmed cleanup. Both producer and strict validator
-  certify the complete local scenario only with its separately authorised recovery
-  and all same-run controls. The final release gate remains due. Historical two-venue resource and
-  security assertions remain available without qualifying the newer contract.
-  The same genuine run now refuses an alternate runtime target before any remote
-  read and a damaged downloaded copy before staging, preserving recovery state.
-  The same run now captures the authorised A1017 source through the normal
-  backup writer, publishes it, verifies all 15 modules, admits it and delivers it
-  through the pinned compiled v2 client. The private capture container receives
-  those exact delivered bytes and their archive key before preparing ordinary
-  recovery. Its recovered counters remain 123; fresh series begin at 1 and two
-  allocations exist. Wrong node keys and missing module preparation preserve the
-  destination. Changed delivery bytes, keys and digests refuse before recovery.
-  The optional `authorisedRecovery` evidence binds this separate fiscal activation
-  to the same run, archive, point and verification attempt. It preserves the
-  unchanged no-authority refusal and records no Cloud activation or route movement.
-  The same run now executes wrong-key, damaged-archive, malformed-output, timeout,
-  full-scratch, cancellation, forced-crash and uncertain-cleanup controls in fresh
-  exact-image children, then verifies the untouched archive again. Each outcome
-  binds the admitted source request, captured bytes, unique child, claim and token;
-  a refused child publishes no accepted verdict. All owned children are removed.
-  Bounded compressed transport preserves the enlarged receipt through the test
-  runner's output chunks. The same run now also makes the kernel kill an exact
-  verifier child at its unchanged 1 GiB memory/swap limit. Its receipt requires
-  Docker's OOM flag, exit 137 and confirmed removal. A format-2 request over the
-  same captured bytes returns the pinned runtime's genuine unsupported-format
-  outcome; the untouched archive still verifies afterward. These controls do not
-  exercise a module's needs-authority outcome. Placement and recovery certification
-  use the same delivered bytes' separately authorised restore, while the primary
-  client remains refused with no activation or route movement. Remaining
-  receipt/release checks remain due. A local image
-  export also failed because Docker could not find a parent snapshot; a build
-  without cached-layer reuse exported successfully. The cache failure's cause
-  remains unverified.
-  A source release does not establish
-  a published verifier image or qualify any snapshot. Snapshots
-  remain unavailable on this test deployment, and enforcement stays off until the
-  implementation, evidence and release gates pass.
-  The thirty-day leaf and one-year CA currently fail closed on expiry; same-CA
-  in-volume renewal remains a maintenance follow-up. Continuous box supervision,
-  coordinated image/schema upgrades and volume-to-volume rollback still need the
-  final deployment slice; the driver refuses an image change meanwhile.
-  The private storage adapter persists separate stream writers and recovery readers,
-  saves withdrawal intent before provider reload, checks actual signed storage
-  refusals and creates a fresh writer after explicit upgrade provisioning. Its
-  plan wrapper rejects free/production venues, catches a free/paid change between
-  polls and withdraws writers on a policy database failure. Reopening retries an
-  interrupted withdrawal. Native SeaweedFS tests exposed static reload merging:
-  deletion alone left the old writer active, so withdrawal uses an explicit
-  disabled identity. Missing private state cannot silently reset an existing
-  managed identity file. A private persistent issuer supplies scoped OIDC tokens
-  and fifteen-minute STS configuration. The dedicated storage process and account
-  runtime now share private volume state and a reload socket without Docker access.
-  Storage starts without venue keys, reconciles current plans before healthy status,
-  and advertises trusted `https://waitron.local:8333` through internal resolution.
-  A real disposable-container proof sends signed account HTTPS requests: free
-  snapshot/stream requests return 403 permission_denied, paid credentials are
-  distinct and scoped, and normal/restart downgrade rejects old writers while
-  preserving the neighbour, retained data, recovery key and reader. Explicit
-  upgrade returns a fresh writer. Reprovisioning now compares location fields
-  independently of object property order; PostgreSQL tests preserve all three
-  location and installation-ownership fences. In explicit test mode, the test manifest
-  worker now runs the real remote reconciler with private local certificate inputs.
-  Signed staff requests receive LAN-CA chains; public keys remain volume-backed.
-  The gateway accepts populated readiness and rejects stale status. Its opt-in
-  certificate watch reloads the proxy after renewal; a real failing renewal proof
-  preceded the fix. The delivered Docker proof covers two distinct WireGuard peers,
-  staff bodies, trusted public TLS/challenge, replacement certificates, downgrade
-  and pending-at-restart withdrawal while preserving the paid neighbour. Latest
-  measured withdrawal was 1,162 ms, including the operator command; it is not a
-  production deadline. The assigned local names use r.waitron.local; there is no
-  public DNS or outside-home availability. The backup worker selects the canonical
-  endpoint and LAN CA in test mode. Its dedicated controller now records a private
-  child ID and token before admitting further work, checks image and ownership
-  before deletion, and refuses missing or uncertain state. One database session
-  admits one trusted worker; its verifier retains the 1,024 MiB memory and 256 MiB
-  scratch limits, no network, no socket and no host mounts. Local Docker checks
-  cover decoys, interrupted creation and resource boundaries. The verifier also
-  accepts Waitron's file-backed validated database while retaining integrity,
-  node, module, capture-time and restore-hook checks and the older fixture path.
-  Genuine paid snapshot verification is **blocked**, not proved: the pinned
-  Waitron revision `e52c997c02d2fcd66d0e7239cbfd79ced4ddd0ee` captures and publishes
-  an archive, but its fiscal restore hook refuses verification with
-  `restore.hook_failed` / `sif.allocation_invalid`. A separately agreed verification
-  contract must resolve the required allocation authority without silently
-  granting fiscal writes or skipping that hook. Keep the backup profile unavailable
-  and deployment enforcement off. Final LAN/client integration also remains open.
-  The first real fifteen-minute STS
-  run observed InvalidAccessKeyId after its recorded expiry, but its new assertion
-  wrongly expected the expired-identity error from the STS endpoint. That run is
-  failed evidence, not a green test. A corrected full-duration run now passes:
-  an accepted write before its 02:43:00Z expiry is refused with S3 403
-  InvalidAccessKeyId at 02:43:01.013Z on 18 October 2026. The short diagnostic
-  remains separate. The isolated local-stack receipt now
-  supplies PostgreSQL to these policy tests. Concurrent native fixtures reuse a
-  verified cached archive without rewriting it, and publish downloads by atomic
-  rename; the first combined run exposed a truncated shared-archive read, and a
-  read-only-cache regression test covers the corrected path.
-  Deployment enforcement is still off. Three remaining implementation slices,
-  real remote/verifier adapters, LAN deployment,
-  two-organisation acceptance and measured headroom remain open. The existing
-  Waitron venue is quarantined; use a separate disposable Waitron test venue and
-  leave its running containers and data untouched. Keep address providers disabled
-  and the existing translation release gates in place. A free plan permits a
-  service only after that service's independent prerequisites pass.
+- **LAN test Cloud with free and paid organisations.** The dormant PR7 proof
+  runner and [source-bound evidence assembler](test-cloud.md#assemble-the-local-evidence-before-release-qualification)
+  combine genuine free/paid pairing, captured account mail, paid archive
+  verification and non-activating recovery, continuous recovery, snapshot fallback,
+  remote isolation/withdrawal, same-run snapshot credential expiry and matching
+  four-volume rollback. Free-service fixtures stay separate from unavailable
+  Waitron relay/translation journeys. The fixed project is `waitron-cloud-test`;
+  protected Waitron containers are never adopted.
+
+  The recorded Linux journey at `31c3f8343795d9d2ed340cd20fa7eeb2534cbcbf` passes
+  both combined cases without skips in 1,083.6 seconds. Both original pairings
+  exchange freshly after rollback; all 533 resource readings pass the original
+  limits. Independent cleanup finds all 539 recorded owned container IDs absent
+  and protected Waitron unchanged. A separate exact-source free-service run passes
+  seven groups and 255 tests without skips. The assembler checks their source,
+  image, generated-asset, recovery, withdrawal, resource and cleanup bindings.
+  These measurements retain their original source identity after rebasing; they
+  do not qualify the current release image. Historical failure diagnostics remain
+  in the [test Cloud guide](test-cloud.md), with unresolved causes still unknown.
+
+  Whole-branch review found additional proof-runner gaps. Cleanup now uses run
+  ownership labels and recorded resource IDs, preserves foreign resources sharing
+  a project name, and retains verifier state after a failed stop or scope read.
+  Controlled Linux checks cover owned cleanup, foreign resources, stop refusal
+  and actual Compose ownership rendering. Whole-run cancellation now drains cleanup
+  during command gaps. The proof and deployment CLI share a stable admission lock
+  and refuse orphan owner-labelled resources. Cloud source measurements execute
+  host-supplied code, include tracked plus-named inputs and refuse unsupported
+  paths. The assembler requires the pinned client, ordinary fiscal refusal,
+  restart observations, remote peer and resource-measurement method. Private JSON
+  failures use a fixed error. Current-head CI still gates this dormant branch;
+  none of these controlled checks qualifies a release or enables deployment.
+
+  **Open:** the owner-authorised **Cloud/Waitron release driver**, after this
+  dormant proof branch finishes, owns published-image upgrade and rollback
+  qualification. It must bind immutable published Cloud and Waitron digests to
+  their exact source, compiled verifier target/module manifest and generated
+  assets, name a supported old/new release pair, prove its real schema upgrade
+  and old-consumer refusal, then restore the matching database, configuration,
+  storage and gateway state and prove both original pairings still exchange.
+  See the [release-driver handoff](test-cloud.md#release-driver-handoff).
+  Publication remains `unqualified`; complete-integration and shipping flags stay
+  false. Final complete receipt, current-release resources and later reviewed LAN
+  deployment remain required. Snapshots stay unavailable, plan enforcement and
+  deployed translation stay off, address providers stay disabled, and no image
+  publication, account, provider resource or spending is authorised here.
+
+  Other open maintenance remains separate: keep organisation writes in the plan
+  setter, since shared policy readers that update their organisation can deadlock
+  while upgrading locks. Qualify a consistent route view across the two export
+  reads and production-scale processing before promising uninterrupted movement
+  or larger capacity. Qualify recovery from definitive daemon rejection without
+  clearing uncertain verifier journals. Same-CA in-volume renewal, continuous box
+  supervision and the coordinated image/schema and volume-to-volume rollback
+  deployment path remain open. The existing Waitron venue is quarantined: use
+  disposable venues and leave its running containers and data untouched.
+
+
 - **Translation worker lock-probe timing is now independently exercised.** The
   existing review-totals case put a PostgreSQL lock probe inside its fake HTTP
   response while the real client allowed 100 ms. A controlled 150 ms probe on

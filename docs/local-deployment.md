@@ -347,3 +347,10 @@ recovery objectives still need deployment-specific evidence.
 ## Use the isolated LAN test deployment
 
 Use the [test Cloud guide](test-cloud.md) for the separate HTTPS project, private CA, capture mailer and image-only deployment commands. The files and local proof are implemented; the test box is not deployed yet. Keep plan enforcement and translation off until their remaining integration gates pass. Your ordinary loopback stack keeps its existing origin and lifecycle commands.
+
+The dormant PR7 runner and pre-release assembler do not qualify a published image.
+The [release-driver handoff](test-cloud.md#release-driver-handoff) assigns the
+supported-release upgrade, matching four-volume rollback, both original client
+exchanges and final release receipt to the later owner-authorised Cloud/Waitron
+release driver. Keep snapshots unavailable and enforcement off until those gates
+and the separate reviewed deployment are complete.

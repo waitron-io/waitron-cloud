@@ -1,10 +1,11 @@
 import {execFile,spawn} from 'node:child_process';
 import {promisify} from 'node:util';
-import {readFile,writeFile,mkdir,rename,open,rm} from 'node:fs/promises';
+import {readFile,writeFile,mkdir,rename} from 'node:fs/promises';
 import {dirname,resolve} from 'node:path';
 import {fileURLToPath,pathToFileURL} from 'node:url';
 import {freemem} from 'node:os';
 import {isIP} from 'node:net';
+import {withTestCloudProjectLock} from './test-cloud-project-lock.mjs';
 const exec=promisify(execFile),root=fileURLToPath(new URL('../',import.meta.url));
 const project='waitron-cloud-test',idPattern=/^[0-9a-f]{64}$/,imagePattern=/^sha256:[0-9a-f]{64}$/;
 const ports=new Set([3000,55432,1125,8125,8333,8443,51820]);
@@ -146,9 +147,10 @@ if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){
   const path=resolve(root,'.local-stack/test-cloud-state.json');
   const readState=async()=>{try{return JSON.parse(await readFile(path,'utf8'));}catch(e){if(e.code==='ENOENT')return null;throw e;}};
   const saveState=async value=>{await mkdir(dirname(path),{recursive:true,mode:0o700});await writeFile(path+'.tmp',JSON.stringify(value)+'\n',{mode:0o600});await rename(path+'.tmp',path);};
-  await mkdir(dirname(path),{recursive:true,mode:0o700});const lock=path+'.lock';const handle=await open(lock,'wx',0o600);
+  await withTestCloudProjectLock(async()=>{
   const stop=new AbortController(),shutdown=()=>stop.abort();process.once('SIGINT',shutdown);process.once('SIGTERM',shutdown);
   try{console.log(JSON.stringify(await deploy(mode,{image,input:mode==='load'?process.stdin:undefined,readState,saveState,signal:stop.signal})));}
-  finally{process.removeListener('SIGINT',shutdown);process.removeListener('SIGTERM',shutdown);await handle.close();await rm(lock);}
+  finally{process.removeListener('SIGINT',shutdown);process.removeListener('SIGTERM',shutdown);}
+  });
  }catch(error){console.error(error?.message==='test_cloud.cleanup_incomplete'?'Test Cloud cleanup is incomplete; retain its state and inspect the recorded IDs':'Test Cloud operation refused or failed; check image, capacity, ports and recorded ownership');process.exitCode=1;}
 }
