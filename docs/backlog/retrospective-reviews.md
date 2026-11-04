@@ -280,3 +280,17 @@ the checks and reproduce an actual ordering failure before changing them.
 One native full-file sample takes 325 seconds for 53 cases versus the parent's
 157 seconds for 26. Collect captures into a fresh `PENDING_SIGNOUT_RECEIPT_DIR`
 and check all sixteen names; browser assertions alone do not check filenames.
+
+## Session-list retry handler observation (D375)
+
+The session-list activity fixture waits for its retry handler to count the read
+before checking that a second load cannot duplicate it. The browser request event
+can arrive before that count. The wait uses the existing four-second page budget;
+a missing count fails within that budget. Delayed handlers repeat both languages,
+themes, widths and clock setups while retaining every original session, retry,
+uncertain-revoke, account, write and deadline assertion. These native Chromium
+checks use stubbed HTTP; database and permission qualification remain in CI.
+
+Earlier qualification encountered a [Litestream storage refusal](https://github.com/waitron-io/waitron-cloud/actions/runs/40600605206/job/122527571695).
+The historical cause remains unknown. The shared transport now reports which
+request-validation check refused; keep its accounting checks and deadlines.
