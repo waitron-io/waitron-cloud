@@ -63,6 +63,18 @@ The recovery-width fixture also keeps each reachable handler capture separately.
 The pending-session sign-out fixture retains ordinary and delayed captures separately.
 The recovery-choice fixture also keeps its ordinary and delayed captures separately.
 The sign-out failure fixture keeps normal and delayed captures separately too.
+The recovery-session fixture also retains each ordinary and delayed capture.
+Collect it with `RECOVERY_SESSION_RECEIPT_DIR` set to a fresh directory when you run
+`pnpm --dir apps/portal exec node --test test/recovery-session-browser.test.ts`.
+Check all 32 filenames independently: the browser assertions passed all 33 cases
+before the repair while only sixteen files survived. Delayed captures add
+`-delayed`; the sixteen historical names remain unchanged. Separate names retain
+both runs without promising different pixels or stable image bytes. Every original
+behavioral assertion, expected value, observation and deadline remains unchanged.
+The missing-signal control returns before failure-message and retry checks.
+Its four-second outer race does not independently prove the exact configured
+three-second observation boundary. Real recovery authority, other engines and
+general cleanup bounds remain unqualified.
 See [the diagnostic qualification and open work](backlog/retrospective-reviews.md).
 
 ## Concurrent storage extraction and failed-startup cleanup (D454)

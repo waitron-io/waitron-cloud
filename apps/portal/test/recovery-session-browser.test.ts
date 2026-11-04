@@ -52,7 +52,7 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
   assert.equal(await status.textContent(),unavailable);assert.equal(requests,1);
   assert.equal(await page.locator('input[name=recoveryCode]').count(),0);
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
-  if(process.env.RECOVERY_SESSION_RECEIPT_DIR){await mkdir(process.env.RECOVERY_SESSION_RECEIPT_DIR,{recursive:true});await page.screenshot({path:`${process.env.RECOVERY_SESSION_RECEIPT_DIR}/${locale}-${theme}-${width}-${failure}.png`,fullPage:true});}
+  if(process.env.RECOVERY_SESSION_RECEIPT_DIR){await mkdir(process.env.RECOVERY_SESSION_RECEIPT_DIR,{recursive:true});await page.screenshot({path:`${process.env.RECOVERY_SESSION_RECEIPT_DIR}/${locale}-${theme}-${width}-${failure}${handler==='ordinary'?'':`-${handler}`}.png`,fullPage:true});}
   await page.getByRole('button',{name:locale==='en'?'Try again':'Volver a intentar',exact:true}).click();
   await page.waitForURL('https://portal.test/login');assert.equal(requests,2);
  }finally{await browser.close();}
