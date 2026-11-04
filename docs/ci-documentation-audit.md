@@ -63,7 +63,12 @@ Waitron sources, JavaScript, JSON and font assets. Installed-dependency copying
 scans only workspace dependency directories. The new non-UTF-8 patch control
 writes its own Markdown bytes before reading its disposable candidate. It does
 not depend on the original document's content. CI fixtures continue to create
-their own documents. No additional Cloud prose exemption is added.
+their own documents. No additional Cloud prose exemption is added. The later #914 test-cloud changes
+are included too: its Cloud source inventory excludes Markdown explicitly,
+volume scans read private runtime roots, and the complete Waitron source
+inventory reads the separately pinned Waitron checkout. A real Git control adds
+and commits Cloud prose: its commit and tree change, while the Cloud runtime
+file inventory stays byte-for-byte equal.
 
 You can check the documentation inventory alone without installing packages:
 
