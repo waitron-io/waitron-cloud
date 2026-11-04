@@ -3024,7 +3024,8 @@ See [the boundaries and remaining work](backlog/backup-recovery-http.md#backup-c
 
 ## Container verifier memory-refusal observation (D335)
 
-**Open.** Qualify the native Docker-positive, non-73 refusal control; Docker event-reporting differences remain unexplained.
+**Open.** Docker event-reporting differences remain unexplained. Native controls now
+qualify Docker-reported memory kills with exits 137 and 1 and no entry report.
 See [the boundaries and remaining work](backlog/verifier-build.md#container-verifier-memory-refusal-observation-d335).
 
 ## Passive security-audit session timestamp check (D530)

@@ -43,5 +43,21 @@ wrong requirement; the Docker event-reporting difference remains unexplained.
 The [kernel's cgroup documentation](https://www.kernel.org/doc/html/latest/admin-guide/cgroup-v2.html)
 defines `oom_kill` as killed processes in the cgroup. Resource reports still omit
 raw child text and cannot turn a successful exit into a refusal. Production code
-is unchanged. Real container qualification runs in CI while local Docker remains
-unavailable until 3 November. A native refusal control for a Docker-positive OOM report with a non-73 exit remains open in `packages/backups/test/container-resource-diagnostics.test.ts`; the review's omitted-flag experiment survives the current native suite.
+is unchanged.
+
+Run `node --test packages/backups/test/container-resource-diagnostics.test.ts`
+to check that Docker's positive out-of-memory report with exit 137 or 1 and no
+entry report still produces `backup.verifier_resource`, retains the exit and Docker
+flag, omits private child text and removes the container created for that check.
+Removing the Docker flag from the resource-refusal condition makes these controls
+fail; the original eight cases still pass without that guard. The second flagged
+exit also rejects an incorrect exit-137 restriction. Recording both created and
+removed names makes cleanup of another container fail. These checks preserve the
+original cases' expected values. They do not explain the historical Docker
+reporting difference. Use the authorised Linux test box for real container
+reproduction; current-head CI owns package qualification.
+
+The sibling `bound-container-verifier.ts` still needs isolated native qualification
+of its Docker memory flag. The review's omission experiment was inconclusive
+because the broader command also had Docker-dependent failures. Do not treat that
+observation as a real-container or current-head CI result.
