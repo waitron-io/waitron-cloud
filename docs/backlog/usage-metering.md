@@ -74,13 +74,3 @@ Usage and alert retry waits both use elapsed time and contribute their remaining
 delay to the shared countdown. Backup catalogue waits also use elapsed time. The
 installation, diagnostic, remote, recovery and translation-consent waits now measure elapsed time too. Their request gates and shared countdown keep a live wait through clock corrections and never revive an expired wait. HTTP date waits use the server Date header when available, and reading the response body consumes the original wait. Run `node --test apps/portal/test/panel-retry-clock.test.ts apps/portal/test/panel-retry-clock-browser.test.ts` for native and bilingual browser controls. Passkey, authenticator, account-security, session/logout and email waits retain their existing clock policy and remain open. Server authority and production metering remain separate
 qualification gates; database suites run in CI while local Docker is unavailable.
-
-## Usage HTTP response boundaries (D409)
-
-Your usage view keeps its earlier measurements when a response is malformed or
-names another organisation. Native checks exercise the HTTP parser and controller
-together: unexpected fields, numeric or malformed counts and invalid freshness
-are refused, while an explicit valid retry still completes. Signed storage bytes
-and decimal counts keep their exact precision. Production deployment, monitoring
-and billing policy remain open in [usage metering](usage-metering.md).
-Run `node --test apps/portal/test/usage-response-boundary.test.ts`.

@@ -3346,11 +3346,6 @@ result barrier, password-reset refusal and existing bounds when investigating a
 recurrence. Read the [observation requirements and remaining qualification](backlog/password-derivation-observation.md);
 use Linux PostgreSQL CI while local Docker is unavailable.
 
-## Usage HTTP response boundaries (D409)
-
-**Open.** Production deployment, monitoring and billing policy remain unqualified.
-See [the boundaries and remaining work](backlog/usage-metering.md#usage-http-response-boundaries-d409).
-
 ## Initial services and future candidates
 
 **Open; local implementations do not approve production enablement.** Remote access
