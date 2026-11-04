@@ -70,9 +70,12 @@ test('interrupted SES ledger insert rolls back every new relation before a repea
 test('feedback ledger enforces transport deduplication and preserves first evidence',async()=>{
  const f=await fixture();try{
   await migrate(f.pool);
+  const {emptySesFeedback}=await import(new URL('../../../scripts/schema-upgrade-fixture.mjs',import.meta.url).href);
+  assert.equal(await emptySesFeedback(f.pool),true);
   const values=['ES','arn:aws:sns:eu-north-1:123456789012:mail-feedback','sns-one','a'.repeat(64)];
   const insert=`INSERT INTO mail_feedback_receipts(country,topic_arn,sns_id,content_digest,result,diagnostic) VALUES($1,$2,$3,$4,'ignored','unresolved')`;
   await f.pool.query(insert,values);
+  await assert.rejects(emptySesFeedback(f.pool),{name:'AssertionError'});
   await assert.rejects(f.pool.query(insert,[...values.slice(0,3),'b'.repeat(64)]),{code:'23505'});
   await assert.rejects(f.pool.query("UPDATE mail_feedback_receipts SET content_digest=repeat('b',64)"),/mail_binding_immutable/);
   await assert.rejects(f.pool.query('DELETE FROM mail_feedback_receipts'),/mail_binding_immutable/);
