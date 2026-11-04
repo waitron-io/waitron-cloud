@@ -1,15 +1,5 @@
 # Account HTTP boundaries
 
-## Session HTTP response validation (D412)
-
-Malformed session lists cannot become revocation targets or confirm that a session
-ended. Native HTTP/client/controller checks cover initial reads and reconciliation
-after accepted or lost revocation replies. A failed reconciliation offers a
-read-only retry without repeating the write; a valid list confirms removal only
-when the selected session is absent. Lists retain exactly one current session,
-including beyond 100 other sessions. Server authority and live ingress remain
-separate qualification gates; database suites run in CI while Docker is unavailable.
-
 ## Session management transport refusals and retry waits (D432)
 
 When a session list cannot be read, it cannot supply targets for revocation.
