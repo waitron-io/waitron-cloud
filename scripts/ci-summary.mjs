@@ -108,7 +108,7 @@ export function assertSummary(plan, results, jobs) {
 }
 
 function readCurrentJobs(timeoutMs) {
-  const pages = JSON.parse(execFileSync('gh', ['api','--paginate','--slurp',`repos/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}/jobs?filter=latest&per_page=100`], {encoding:'utf8',timeout:Math.min(10_000, timeoutMs),killSignal:'SIGKILL'}));
+  const pages = JSON.parse(execFileSync('gh', ['api','--paginate','--slurp',`repos/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}/jobs?filter=latest&per_page=100`], {encoding:'utf8',timeout:timeoutMs,killSignal:'SIGKILL'}));
   return pages.flatMap(page => page.jobs);
 }
 
@@ -169,26 +169,36 @@ export async function waitForSummary(plan, results, {
   const deadline = now() + timeoutMs;
   let waiting = [];
   let lookupError;
+  let readBudget = 10_000;
+  let attempts = 0;
   let evidence = [];
   const evidenceMessage = () => evidence.length ? `; last observed unmet step evidence: ${evidence.join('; ')}` : '';
   const reported = new Set();
   for (;;) {
-    const remaining = deadline - now();
+    const started = now();
+    const remaining = deadline - started;
     const names = waiting.join(', ') || expected.join(', ');
     assert.ok(remaining > 0, `Timed out waiting for job records: ${names}${lookupError ? `; last lookup: ${lookupError.message}` : ''}${evidenceMessage()}`);
     let jobs;
+    const budget = Math.ceil(Math.min(readBudget, remaining));
+    attempts++;
     try {
-      jobs = await readJobs(Math.ceil(remaining));
+      jobs = await readJobs(budget);
     } catch (error) {
       if (error.code !== 'ETIMEDOUT') {
         throw new Error(`Could not read job records for ${names}: ${error.message}`, {cause: error});
       }
       lookupError = error;
-      await sleep(Math.max(0, Math.min(pollMs, deadline - now())));
+      const finished = now();
+      report(`Job records lookup ${attempts} timed out after ${Math.round(finished - started)} ms (budget ${budget} ms; ${Math.max(0, Math.floor(deadline - finished))} ms remaining)`);
+      // A slow healthy lookup needs more time on retry, inside the same deadline.
+      readBudget *= 2;
+      await sleep(Math.max(0, Math.min(pollMs, deadline - finished)));
       continue;
     }
     assert.ok(now() < deadline, `Timed out reading job records: ${names}${evidenceMessage()}`);
     lookupError = undefined;
+    readBudget = 10_000;
     // A called workflow shares its run with cost and venue. The parent requires
     // those families separately; this summary still checks every standard job.
     if (jobPrefix) {

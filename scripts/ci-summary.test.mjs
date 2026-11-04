@@ -214,6 +214,79 @@ test('default publication allowance caps API calls, each read and the total wait
   }
 });
 
+test('slow job evidence can finish after an initial timeout within the original minute', async t => {
+  let elapsed = 0;
+  const budgets = [];
+  t.mock.method(childProcess, 'execFileSync', (command, args, options) => {
+    budgets.push(options.timeout);
+    elapsed += Math.min(options.timeout, 11_000);
+    if (options.timeout < 11_000) throw Object.assign(new Error('spawnSync gh ETIMEDOUT'), {code: 'ETIMEDOUT'});
+    return JSON.stringify([{jobs}]);
+  });
+  syncBuiltinESMExports();
+  try {
+    await summary.waitForSummary(plan, results, {
+      now: () => elapsed, sleep: async ms => { elapsed += ms; },
+    });
+    assert.equal(elapsed, 23_000);
+    assert.deepEqual(budgets, [10_000, 20_000]);
+  } finally {
+    t.mock.restoreAll();
+    syncBuiltinESMExports();
+  }
+});
+
+test('persistent slow lookups retain the minute deadline and explain each timed-out attempt', async t => {
+  let elapsed = 0;
+  const budgets = [], sleeps = [], reports = [];
+  t.mock.method(childProcess, 'execFileSync', (command, args, options) => {
+    budgets.push(options.timeout);
+    elapsed += options.timeout;
+    throw Object.assign(new Error('spawnSync gh ETIMEDOUT'), {code: 'ETIMEDOUT'});
+  });
+  syncBuiltinESMExports();
+  try {
+    await assert.rejects(() => summary.waitForSummary(plan, results, {
+      now: () => elapsed, sleep: async ms => { sleeps.push(ms); elapsed += ms; },
+      report: message => reports.push(message),
+    }), /Timed out waiting for job records:.*ETIMEDOUT/);
+    assert.equal(elapsed, 60_000);
+    assert.deepEqual(budgets, [10_000, 20_000, 26_000]);
+    assert.deepEqual(sleeps, [2_000, 2_000, 0]);
+    assert.deepEqual(reports, [
+      'Job records lookup 1 timed out after 10000 ms (budget 10000 ms; 50000 ms remaining)',
+      'Job records lookup 2 timed out after 20000 ms (budget 20000 ms; 28000 ms remaining)',
+      'Job records lookup 3 timed out after 26000 ms (budget 26000 ms; 0 ms remaining)',
+    ]);
+  } finally {
+    t.mock.restoreAll();
+    syncBuiltinESMExports();
+  }
+});
+
+test('a recovered slow lookup resets the read budget and still refuses a failed shard', async t => {
+  let elapsed = 0;
+  const budgets = [];
+  t.mock.method(childProcess, 'execFileSync', (command, args, options) => {
+    budgets.push(options.timeout);
+    elapsed += Math.min(options.timeout, 11_000);
+    if (options.timeout < 11_000) throw Object.assign(new Error('spawnSync gh ETIMEDOUT'), {code: 'ETIMEDOUT'});
+    return JSON.stringify([{jobs: budgets.length === 2 ? unfinishedJobs()
+      : [...jobs.slice(0, -1), {...jobs.at(-1), conclusion: 'failure'}]}]);
+  });
+  syncBuiltinESMExports();
+  try {
+    await assert.rejects(() => summary.waitForSummary(plan, results, {
+      now: () => elapsed, sleep: async ms => { elapsed += ms; },
+    }), /shard 6\/6\) did not pass/);
+    assert.equal(elapsed, 48_000);
+    assert.deepEqual(budgets, [10_000, 20_000, 10_000, 20_000]);
+  } finally {
+    t.mock.restoreAll();
+    syncBuiltinESMExports();
+  }
+});
+
 test('publication wait refuses records without a usable job name', async () => {
   for (const record of [null, {}, {name: ''}, {name: 42}]) {
     assert.throws(() => assertSummary(plan, results, [...jobs, record]), /Invalid job record/);

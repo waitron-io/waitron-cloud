@@ -15,8 +15,10 @@ Steps alone cannot prove success: the runner publishes its final step before
 Final successful dependency results cover failures after the steps finish.
 Missing or duplicate partitions and unexpected executed jobs still fail.
 Without sufficient evidence, the summary waits within its original 60 seconds,
-polling every two seconds. Each API read has a ten-second limit, capped by
-remaining time; timed-out reads retry inside that same allowance. Other lookup
+polling every two seconds. An API read starts with a ten-second budget. A timed-out
+read doubles the next budget, capped by the remaining total allowance; a successful
+read resets it to ten seconds. This lets a slow healthy response finish instead of
+repeatedly stopping it at ten seconds. Other lookup
 errors fail immediately. A timed-out API process is forcibly stopped so ignoring
 a termination request cannot extend its allowance. Each partition's step
 evidence is reported once. Exhaustion names the pending jobs and last timeout;
@@ -32,7 +34,24 @@ or number order. For example, `[run attempt]` means that the last record could
 not supply step evidence for the current attempt. The diagnostic uses the last
 successful read, including when a later read times out; it cannot explain changes
 GitHub has not published. It excludes arbitrary step names and API field values.
-These explanations preserve the acceptance checks and every existing time limit.
+These explanations preserve the acceptance checks and overall time limits.
+
+## Slow job lookups (D573)
+
+The former fixed ten-second read limit rejects a controlled eleven-second response
+on every attempt, even when that response contains all required successful jobs.
+The regression checks reproduce that refusal, then accept the same evidence in
+23 seconds with the growing read budget. A real child-process probe takes 23.1
+seconds, kills the first timed-out process and accepts the second response.
+Persistent timeouts still exhaust the original minute; a recovered read containing
+a failed shard still fails. Every original summary assertion remains.
+
+Each timed-out lookup now reports its attempt, elapsed time, requested budget and
+remaining total time. Earlier CI logs record only the final timeout and last
+lookup error, so individual historical request durations and retry spacing cannot
+be recovered from them. The controlled timing tests establish the local budget
+defect; they do not establish GitHub's service-side cause or guarantee recovery
+during an outage. Keep historical failed runs and landing's final-job requirement.
 
 Eight runs on 2026-10-22 include five failed summaries naming 32.8–41.6 KB
 package logs; successful root jobs had roughly 371 KB logs. This does not
