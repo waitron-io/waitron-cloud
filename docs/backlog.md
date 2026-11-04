@@ -3514,9 +3514,10 @@ See [the boundaries and remaining work](backlog/ci-cache-saving.md#dependency-ca
 
 ## Audit fixture dependency preparation (D530)
 
-The translation-vector audit copies installed dependencies into its own checkout
-and passes with an empty download cache and an unavailable registry. Its original
-vector, planner, mismatch and restoration checks remain. See the
+The translation-vector audit and both remote-access guard fixtures copy installed
+dependencies into their own checkouts and pass with an empty download cache and
+an unavailable registry. Setup refusals retain a readable reason. Their original
+vector, planner, mismatch, restoration and denial checks remain. See the
 [nested-install investigation](backlog/ci-pnpm-setup.md#nested-package-installs-d530)
 for the reproduced refusal, source isolation checks and remaining cache questions.
 

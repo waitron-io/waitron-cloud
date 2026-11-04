@@ -9,11 +9,12 @@ import {before,after,test} from 'node:test';
 const root=fileURLToPath(new URL('../../../',import.meta.url));let temporary:string,candidate:string;
 before(async()=>{
  temporary=await mkdtemp(join(tmpdir(),'forward-display-omissions-'));candidate=join(temporary,'candidate');
- execFileSync('git',['clone','--quiet','--no-hardlinks',root,candidate],{timeout:30000,stdio:'pipe'});
+ execFileSync('git',['clone','--quiet','--no-hardlinks',root,candidate],{timeout:30000,stdio:'pipe',encoding:'utf8'});
  // Include the complete candidate, including uncommitted test additions in a driver run.
- const patch=execFileSync('git',['diff','--binary','HEAD'],{cwd:root,maxBuffer:8*1024*1024});
- if(patch.length)execFileSync('git',['apply','--binary','-'],{cwd:candidate,input:patch});
- execFileSync('pnpm',['install','--frozen-lockfile','--offline'],{cwd:candidate,timeout:120000,stdio:'pipe'});
+ const patch=execFileSync('git',['diff','--binary','HEAD'],{cwd:root,maxBuffer:8*1024*1024,encoding:'utf8'});
+ if(patch.length)execFileSync('git',['apply','--binary','-'],{cwd:candidate,input:patch,encoding:'utf8'});
+ const installed=spawnSync(process.execPath,['scripts/ci-audit-fixture-dependencies.mjs',root,candidate],{cwd:candidate,timeout:120000,stdio:'pipe',encoding:'utf8'});
+ assert.equal(installed.status,0,`Dependency fixture setup failed (${installed.signal??'no signal'}):\n${installed.stdout??''}${installed.stderr??''}${installed.error?.message??''}`);
 },{timeout:150000});
 after(async()=>{if(temporary)await rm(temporary,{recursive:true,force:true});});
 interface Fault {name:string;source:string;file:string;pattern:string;changes:[string,string][];postgres?:boolean}

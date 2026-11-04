@@ -9,6 +9,20 @@ const helper = new URL('./ci-audit-fixture-dependencies.mjs', import.meta.url).p
 const env = {...process.env};
 delete env.NODE_TEST_CONTEXT;
 
+for (const kind of ['missing source', 'empty source', 'file instead of dependencies']) {
+  test(`dependency preparation refuses ${kind}`, () => {
+    const scratch = mkdtempSync(join(tmpdir(), 'cloud-audit-no-installed-deps-'));
+    const source = join(scratch, 'source');
+    try {
+      if (kind !== 'missing source') mkdirSync(source);
+      if (kind === 'file instead of dependencies') writeFileSync(join(source, 'node_modules'), 'not installed');
+      const result = spawnSync(process.execPath, [helper, source, join(scratch, 'candidate')], {env, encoding: 'utf8'});
+      assert.equal(result.status, 1, result.stdout + result.stderr);
+      assert.match(result.stderr, /node_modules/);
+    } finally {rmSync(scratch, {recursive: true, force: true});}
+  });
+}
+
 // Omitting dependency preparation must fail even when the runner's download store is empty.
 test('the real translation audit reaches its mismatch and restoration checks with an empty download store', {timeout: 60_000}, () => {
   const store = mkdtempSync(join(tmpdir(), 'cloud-audit-empty-store-'));

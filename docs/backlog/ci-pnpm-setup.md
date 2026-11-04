@@ -9,8 +9,9 @@ on main in run 41499801321 and on the concurrent documentation branch in run
 41792656841. Lane G previously recorded that missing tarball in a cache-only
 test-box control on 31 October. The same refusal reached
 [main again](https://github.com/waitron-io/waitron-cloud/actions/runs/41797930675/job/126466887370).
-An empty disposable store reproduces the exact missing `undici-types` version
-before the audit can check its vector.
+An empty disposable store reproduces `ERR_PNPM_NO_OFFLINE_TARBALL` before the
+audit can check its vector. One control names the same `undici-types` version;
+others name different missing packages, depending on which pnpm reaches first.
 
 The audit fixture now copies the parent's installed dependency directories into
 its own checkout, so it needs neither cached downloads nor registry access.
@@ -20,9 +21,24 @@ files can change without changing the parent. Run
 audit with an empty store and an unavailable registry, plus candidate source and
 dependency isolation. Its original setup-status, vector, planner, mismatch and
 restoration assertions and deadlines remain. The three original audit cases and
-two added controls pass on Linux. Why the historical initial install left the
-download store incomplete remains unknown; this change removes that store from
-the audit's prerequisites. The independent cache-upload stall remains open.
+two initial controls pass on Linux. Why the nested install could not find that
+package in the store remains unknown; this change removes that store from the
+audit's prerequisites. The helper also refuses a missing dependency directory.
+
+Both remote-access guard fixtures use the same installed copies. Their twelve
+report omissions and twenty-nine collection guards retain every denial check and
+deadline. A setup refusal includes decoded child output in the assertion message,
+so TAP and the ordinary reporter can show its reason. Cold-store controls exercise
+an original denial in each fixture; separate failed-child controls require the
+readable reason. The historical package in
+[the remote-access failure](https://github.com/waitron-io/waitron-cloud/actions/runs/41804574176)
+is still unknown because its Buffer output was truncated. A controlled cold-store
+run names `undici-types` 7.18.2; that does not recover the lost historical output.
+
+The two manual diagnostic workflows, `password-derivation-diagnostic.yml` and
+`relay-counter-diagnostic.yml`, still install nested checkouts from the offline
+store. Their cold-store behaviour is unqualified; they remain outside this fixture
+repair. The independent cache-upload stall also remains open.
 
 The package-test steps now pass the same package token as the initial install.
 You need that token when a test installs dependencies in a temporary checkout
