@@ -169,7 +169,7 @@ test('a changed published translation vector retains its real package check afte
   const vectors = JSON.parse(original.slice(start, end));
   const env = {...process.env};
   delete env.NODE_TEST_CONTEXT;
-  const installed = spawnSync('pnpm', ['install', '--frozen-lockfile', '--offline'], {cwd: root, env, encoding: 'utf8', timeout: 60_000});
+  const installed = spawnSync(process.execPath, ['scripts/ci-audit-fixture-dependencies.mjs', process.cwd(), root], {cwd: root, env, encoding: 'utf8', timeout: 60_000});
   assert.equal(installed.status, 0, installed.stdout + installed.stderr);
   const checkVector = () => spawnSync(process.execPath, ['--test', '--test-reporter=tap',
     '--test-name-pattern=the contract publishes exactly the committed vectors', 'packages/translation/test/submit-proof.test.ts'],

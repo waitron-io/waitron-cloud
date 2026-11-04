@@ -3469,6 +3469,15 @@ file partitions to leave room for setup and cleanup within its eight-minute
 job limit; every case keeps its original assertions and deadline.
 See [the boundaries and remaining work](backlog/ci-cache-saving.md#dependency-cache-save-stalls-d507).
 
+## Audit fixture dependency preparation (D530)
+
+The translation-vector audit, remote-access and portal guard fixtures copy installed
+dependencies into their own checkouts and pass with an empty download cache and
+an unavailable registry. Setup refusals retain a readable reason. Their original
+vector, planner, mismatch, restoration and denial checks remain. See the
+[nested-install investigation](backlog/ci-pnpm-setup.md#nested-package-installs-d530)
+for the reproduced refusal, source isolation checks and remaining cache questions.
+
 ## CI PostgreSQL image pull
 
 D104's documentation-only [run 39733028534](https://github.com/waitron-io/waitron-cloud/actions/runs/39733028534/job/119672295764)

@@ -6,11 +6,46 @@ An offline nested install also failed in [run 41792705294, root partition 4](htt
 The translation-vector audit test could not find `undici-types@7.18.2`, although
 the initial install reported downloading all 162 packages. The same job passed
 on main in run 41499801321 and on the concurrent documentation branch in run
-41792656841; the unchanged focused test also passes locally. Lane G previously
-recorded that missing tarball in a cache-only test-box control on 31 October.
-D530 retains the cause: trace why the nested install cannot reuse the initial
-store, preserving the offline check and its assertions. A later clean run
-qualifies unrelated work; it does not repair or explain this failure.
+41792656841. Lane G previously recorded that missing tarball in a cache-only
+test-box control on 31 October. The same refusal reached
+[main again](https://github.com/waitron-io/waitron-cloud/actions/runs/41797930675/job/126466887370).
+An empty disposable store reproduces `ERR_PNPM_NO_OFFLINE_TARBALL` before the
+audit can check its vector. One control names the same `undici-types` version;
+others name different missing packages, depending on which pnpm reaches first.
+
+The audit fixture now copies the parent's installed dependency directories into
+its own checkout, so it needs neither cached downloads nor registry access.
+Relative links keep workspace imports inside that checkout, and copied dependency
+files can change without changing the parent. Run
+`node --test scripts/ci-audit-fixture-dependencies.test.mjs` to exercise the real
+audit with an empty store and an unavailable registry, plus candidate source and
+dependency isolation. Its original setup-status, vector, planner, mismatch and
+restoration assertions and deadlines remain. The three original audit cases and
+two initial controls pass on Linux. Why the nested install could not find that
+package in the store remains unknown; this change removes that store from the
+audit's prerequisites. The helper also refuses missing, empty or linked root
+dependency directories and linked workspace dependency directories.
+The helper enumerates the two workspace roots explicitly. This preserves the
+package selector's existing refusal to narrow work for unresolved directory
+reads, including its live-repository checks. Missing-target dependency links
+are refused too.
+
+The remote-access and portal guard fixtures use the same installed copies. Their
+twelve report omissions, twenty-nine collection guards and nine portal omissions
+retain every denial check and deadline. A setup refusal includes decoded child
+output, signal and process errors in the assertion message, so TAP and the
+ordinary reporter can show its reason. Cold-store controls exercise an original
+denial in each fixture; separate failed-child controls require readable stdout,
+stderr, killed-child and missing-executable reasons. Candidate patches remain
+binary-safe, including uncommitted non-UTF-8 bytes. The historical package in
+[the remote-access failure](https://github.com/waitron-io/waitron-cloud/actions/runs/41804574176)
+is still unknown because its Buffer output was truncated. A controlled cold-store
+run names `undici-types` 7.18.2; that does not recover the lost historical output.
+
+The two manual diagnostic workflows, `password-derivation-diagnostic.yml` and
+`relay-counter-diagnostic.yml`, still install nested checkouts from the offline
+store. Their cold-store behaviour is unqualified; they remain outside this fixture
+repair. The independent cache-upload stall also remains open.
 
 The package-test steps now pass the same package token as the initial install.
 You need that token when a test installs dependencies in a temporary checkout
