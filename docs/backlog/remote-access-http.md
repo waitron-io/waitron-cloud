@@ -32,14 +32,3 @@ a matching current hostname confirms the result. Mismatched save replies require
 you to reload. Permission refusals clear the setup, and server retry waits block
 new requests until their deadline. Runtime rules and existing tests are unchanged.
 Live DNS/ACME, browser integration and deployment qualification remain open.
-
-## Remote hostname replies after account and venue changes (D402)
-
-Native controller checks hold DNS previews, saves and uncertain-save status reads
-across account changes, returning accounts, venue changes, closing and sign-out.
-A late success, malformed or mismatched reply, lost reply or server refusal cannot
-replace your newer pending read or reviewed public hostname, publish feedback,
-change the wait or start another request. Current replies still finish when you
-select the same account. Six deliberate faults fail; restored controls pass.
-These checks cover local reply handling. Live DNS/ACME and deployment qualification
-remain open; PostgreSQL and container suites run in CI during the Docker outage.
