@@ -202,12 +202,11 @@ See [the native installation boundaries](backlog/venue-connection-http.md#instal
 selected deployment.
 See [the native pairing boundaries](backlog/venue-connection-http.md#pairing-deployment-qualification).
 
-## Alert-preference transport refusals and retry waits (D429)
+## Alert-preference deployment qualification
 
 **Open.** Qualify server authority, deployed browser integration and production mail
-delivery. Alert retry waits now use elapsed time through clock corrections;
-HTTP-date waits use the response Date or local receipt clock.
-See [the boundaries and remaining work](backlog/alert-preference-http.md#alert-preference-transport-refusals-and-retry-waits-d429).
+delivery.
+See [the native alert boundaries](backlog/alert-preference-http.md#alert-preference-deployment-qualification).
 
 ## Translation-consent HTTP response validation (D417)
 
