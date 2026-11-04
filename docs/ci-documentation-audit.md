@@ -36,6 +36,14 @@ work. Every other root path retains its existing selection. Prose and an audit
 edit alone cannot produce an empty successful package plan. Main pushes and the
 separate proof workflows keep their existing policies.
 
+This removes the prose barrier; it does not establish that every package reader
+can be resolved. On the D571 part 1 candidate, a real immutable portal edit plus
+prose and renewed audits still selects 28 package jobs. The saved-source scanner
+reports `Unresolved directory input at scripts/ci-audit-fixture-dependencies.mjs`.
+Keep that fallback until the reader can be bounded and its real consumers proved.
+A controlled identity `SOURCE.md` edit likewise keeps all nine packages. D571
+part 2 owns dependency precision; part 1 claims no measured job saving.
+
 Every change to a documentation-inventory input, including pinned prose, must
 keep that inventory current in its own pull request. The required root check verifies it on shard 1; a selected root-script
 check verifies it too. The documentation check already verifies both revisions.

@@ -1251,7 +1251,10 @@ implementation or production evidence.
   #262 with full work for unresolved directory readers; its unmerged replacement
   is reference material, not the current implementation. Dependency precision,
   root-input owners, narrower cost/venue work, verified merge reuse and nightly
-  full runs remain D571 parts 2 through 6.
+  full runs remain D571 parts 2 through 6. The real portal-plus-prose candidate
+  still selects 28 package jobs: its saved graph refuses an unresolved directory
+  read in `scripts/ci-audit-fixture-dependencies.mjs`. Keep that conservative
+  fallback for part 2 to bound; part 1 claims no measured package-job saving.
   Adding, changing or removing an executable, configuration or other tracked input
   invalidates the exemption until you audit the readers again and renew the
   certificate. The planner now emits a prominent GitHub warning on every run when
