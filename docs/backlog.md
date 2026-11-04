@@ -4035,14 +4035,6 @@ diagnostic to reproduce its cause while preserving measurement guards, accountin
 and deadlines. See [the investigation and qualification limits](backlog/cost-mail-reconciliation.md).
 
 
-## Installation-refresh browser handler wait (D357)
-
-The installation-refresh browser fixture refuses an absent route-handler signal
-within its existing four-second page budget. A delayed handler still runs all
-removed, retained and failed-refresh journeys. Original recovery, permission,
-selection, request, layout and deadline assertions remain unchanged across both
-languages, themes and viewport widths. No product authority changes.
-
 ## Remote hostname save qualification
 
 **Open.** Qualify live DNS and certificate issuance, browser integration and deployment.
