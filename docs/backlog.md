@@ -3857,12 +3857,6 @@ See [the boundaries and remaining work](backlog/backup-recovery-http.md#recovery
 checks grant no activation or stop-proof authority.
 See [the boundaries and remaining work](backlog/backup-recovery-http.md#recovery-transport-waits-and-pending-actions-d437).
 
-## Recovery screen scope and supplied choices (D158)
-
-Read the [recovery-screen scope detail](backlog/recovery-screen-scope.md) for the
-supplied-choice checks and retained server refusals. Production backup provisioning
-remains unqualified; PostgreSQL checks run in CI while local Docker is down.
-
 ## Cost-stack isolation command refusal (D152)
 
 **Open.** Both unchanged signal checks pass on the shared Linux test box, without
