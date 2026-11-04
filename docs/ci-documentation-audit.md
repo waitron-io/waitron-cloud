@@ -22,8 +22,8 @@ Both immutable trees must match the selected inventory. Mixed changes, unknown
 paths or missing or stale evidence retain full work. A fresh head cannot qualify
 an unaudited base.
 
-Every inventoried input change, including pinned prose, must keep the
-documentation inventory current in its own pull request. The required root check verifies it on shard 1; a selected root-script
+Every change to a documentation-inventory input, including pinned prose, must
+keep that inventory current in its own pull request. The required root check verifies it on shard 1; a selected root-script
 check verifies it too. The documentation check already verifies both revisions.
 A stale inventory therefore fails the required CI summary while the planner
 keeps its conservative full-work fallback. Before you push code, review the
@@ -196,8 +196,8 @@ are already pinned or refer to another checkout:
 The four inventories are renewed from the reviewed staged candidate using the
 procedure below. This is a review boundary for those inputs, not proof that an
 arbitrary future program cannot read Markdown. Any later inventoried change
-invalidates the relevant certificate, retains conservative work and fails its
-own required CI until review and renewal.
+invalidates the relevant certificate and retains conservative work. A stale
+documentation inventory also fails its own required CI until review and renewal.
 The separate receipt certificates and historical fixture evidence stay unchanged.
 
 ## Review before renewal
