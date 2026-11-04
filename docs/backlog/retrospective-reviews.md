@@ -258,3 +258,25 @@ passing without overflow. A separate, forced 1000-pixel minimum width fails all
 three English/light/390 historical variants and the matching parent case at the
 original page-width assertion. This samples a real overflow; it does not qualify
 every layout fault or prove any individual style rule necessary.
+
+## Pending-session sign-out observation and captures
+
+The pending-session sign-out browser fixture configures a four-second old-read
+handler observation. Its missing-signal control requires a timeout within a
+five-second outer race and returns before revocation and screenshot checks;
+that control does not establish the exact observation deadline. Delayed handlers
+repeat the original revocation and stale-session journeys across both languages,
+themes and widths. The eight ordinary screenshot names remain; delayed current-session
+captures use separate names, retaining sixteen files so neither handler's capture
+overwrites the other's.
+Every original assertion, observation and deadline remains. Native Chromium with
+stubbed HTTP does not qualify real session authority, other engines or networks,
+or explain the historical Linux failure.
+Sampled omission of the handler observation still passes twelve head cases and
+six parent cases. A single reply-filter omission passes four cases on each;
+a separate omission of both check-reply filters also leaves the focused current
+case passing on head and parent. Guard necessity remains unqualified. Preserve
+the checks and reproduce an actual ordering failure before changing them.
+One native full-file sample takes 325 seconds for 53 cases versus the parent's
+157 seconds for 26. Collect captures into a fresh `PENDING_SIGNOUT_RECEIPT_DIR`
+and check all sixteen names; browser assertions alone do not check filenames.
