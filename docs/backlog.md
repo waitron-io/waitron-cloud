@@ -626,20 +626,6 @@ before launch. Live providers, deployment and secret custody, database recovery,
 final-write handover and automatic appliance setup remain open; see the
 [milestone requirements and remaining qualification](backlog/first-milestone.md).
 
-## Fiscal venue-refresh browser handler observation (D376)
-
-The failed venue-list fixture observes its refresh handler's read count before
-checking duplicate suppression. A delayed handler reproduces browser pending
-state before the Node handler counts the read. Normal and delayed refresh
-journeys cover both languages, themes and widths. The separate Retry-After and
-pending/uncertain-write cases remain unchanged in both languages at width 390.
-
-The missing-count control checks a configured two-second wait through a
-three-second outer race. It detects waits that exceed that outer bound; it does
-not independently enforce the exact two-second deadline. Every original assertion
-and deadline remains. These stubbed Chromium checks leave fiscal allocation
-behavior and expected results unchanged.
-
 ## Fiscal test-worker failure evidence (D380)
 
 PR622's two-worker allocation check observed C000001 and a missing second receipt;
