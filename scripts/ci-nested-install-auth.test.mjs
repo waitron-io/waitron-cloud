@@ -12,10 +12,13 @@ const exec = promisify(execFile);
 const workflow = await readFile(new URL('../.github/workflows/ci.yml', import.meta.url), 'utf8');
 const packages = workflow.match(/^  packages:\n([\s\S]*?)(?=^  [\w-]+:)/m)[1];
 const steps = packages.split(/^      - /m).filter(step => /run: node scripts\/test-postgres.mjs/.test(step));
+const receipts = workflow.match(/^  receipts:\n([\s\S]*?)(?=^  [\w-]+:)/m)[1];
+const receiptSteps = receipts.split(/^      - /m).filter(step => /run: node scripts\/ci-run-receipts.mjs/.test(step));
 
 // Removing authentication from any test entry point must break a cold descendant install.
 test('all package test entry points are exercised', () => assert.equal(steps.length, 3));
-for (const step of steps) {
+test('the receipt test entry point is exercised', () => assert.equal(receiptSteps.length, 1));
+for (const step of [...steps, ...receiptSteps]) {
   const command = step.match(/run: (.+)/)[1];
   test(`cold descendant install receives package authentication: ${command}`, {timeout: 30_000}, async () => {
     const root = await mkdtemp(join(tmpdir(), 'cloud-nested-auth-'));

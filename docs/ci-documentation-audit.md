@@ -107,6 +107,14 @@ proof consumers introduce no additional unread Cloud prose exemption.
 
 ## Review of the other three inventories
 
+The receipt-authentication renewal adds only an existing package-token binding
+to the grouped receipt step and extends its loopback-registry test to that
+entry point. The runner passes its environment to pnpm, and the venue basic
+guard's nested install inherits it. The test reads the CI workflow and creates
+its own package, lockfile, registry and private store; it adds no prose reader.
+Identity and gateway programs, lock inputs, permissions and installation hooks
+remain unchanged. All four inventories are renewed from this reviewed candidate.
+
 The staged generator renews identity, gateway and lock inventories together with
 documentation. Their excluded programs and their consumers need review too.
 Since #869, the identity and gateway target programs, owning tests, script-mode

@@ -2204,7 +2204,7 @@ implementation or production evidence.
   This repairs the inventory assertion; it does not explain unrelated historical
   browser, transport, install or backup-cleanup failures.
   **Nested package authentication (D530).** All three package-test entry points
-  now pass the existing read-only package token to descendant installs. A cold
+  and the grouped receipt step now pass the existing read-only package token to descendant installs. A cold
   loopback-registry control reproduces the placeholder-token 401 and loads the
   installed package with each workflow binding. See the
   [failure receipt and remaining unknowns](backlog/ci-pnpm-setup.md#nested-package-installs-d530).
