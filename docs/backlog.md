@@ -3814,30 +3814,6 @@ and 20 completed exchanges; transport cleanup then reports `active-close`.
 Reproduce this refusal before attributing its cause. Keep the existing limits
 and assertions; the code-feedback fix does not resolve this investigation.
 
-## Remote hostname keyboard review (D250)
-
-Press Enter in the remote-access Hostname field to review the DNS settings.
-Enter keeps you at the review step; applying the change requires clicking Confirm.
-Malformed names still show their field message before any DNS request, and pending
-operations and server retry waits keep review disabled. English/Spanish browser
-checks cover both themes and phone/desktop widths.
-
-Press Enter in the passkey password field to choose Add a passkey, using the
-same password and disabled states as its button. Browser confirmation still
-completes enrollment; Enter never chooses a passkey to remove. Stubbed API and
-virtual-authenticator browser checks cover English/Spanish, both themes and
-phone/desktop widths, blank passwords, modified or composing Enter, pending
-requests, rate limits and unsupported browsers. These are portal checks, not
-provider or production qualification. Each supported-browser fixture supplies
-its own virtual passkey device instead of relying on the host.
-
-When your authenticator is off, Enter in its password field starts first setup
-through the existing Enable action. Empty passwords show the existing field
-message; pending requests and retry waits keep setup blocked. Enter does not
-choose replacement, regeneration, removal, activation or cancellation. Stubbed
-API browser checks cover English/Spanish, both themes and phone/desktop widths;
-these do not qualify the backend or production.
-
 
 ## Paced replay deletion recurrence (D351 qualification)
 
