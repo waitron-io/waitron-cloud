@@ -64,11 +64,6 @@ The pending-session sign-out fixture retains ordinary and delayed captures separ
 The recovery-choice fixture also keeps its ordinary and delayed captures separately.
 See [the diagnostic qualification and open work](backlog/retrospective-reviews.md).
 
-## Concurrent storage extraction and failed-startup cleanup (D454)
-
-**Open.** Real store startup and historical failure causes remain open.
-See [the boundaries and remaining work](backlog/storage-cache-fixture.md#concurrent-storage-extraction-and-failed-startup-cleanup-d454).
-
 ## Separate-process storage extraction and failed-startup cleanup (D457)
 
 **Open.** Real store startup and historical failure causes remain open.
