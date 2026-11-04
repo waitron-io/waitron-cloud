@@ -4306,12 +4306,6 @@ preserving the existing assertions and deadlines. See the
 passkeys and the separate retry-clock repair retain their own gates.
 See [the boundaries and remaining work](backlog/account-http-boundaries.md#authenticator-management-transport-and-session-rechecks-d431).
 
-## Authenticator HTTP response boundaries (D418)
-
-**Open.** Qualify server authority, browser integration and live ingress; physical
-passkeys and the separate retry-clock repair retain their own gates.
-See [the boundaries and remaining work](backlog/account-http-boundaries.md#authenticator-http-response-boundaries-d418).
-
 ## Authenticator replies after account changes (D399)
 
 **Open.** Qualify server authority, browser integration and live ingress; physical
