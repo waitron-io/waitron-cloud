@@ -99,42 +99,11 @@ in [the setup investigation](backlog/ci-pnpm-setup.md).
 
 ## Worker shutdown during polling and error reporting (D459)
 
-**Open.** Production shutdown, real database failures and cancellation remain open.
-See [the boundaries and remaining work](backlog/worker-scheduling.md#worker-shutdown-during-polling-and-error-reporting-d459).
-
-Cancelled monitoring startup scheduling and translation startup retention now require
-natural command exit, as do blocked translation retention, idle monitoring shutdown,
-blocked monitoring startup after lock release, and idle or blocked-claim email shutdown.
-The four email cases reject a forced successful exit through a wrapper's `beforeExit`
-observation. See [the email command limits](backlog/worker-scheduling.md#email-command-shutdown-with-real-database-claims-d536).
-Active translation checks also require natural exit during the first provider call,
-review and two concurrent jobs; explicit pool cleanup remains open. See [the additional qualification detail](backlog/worker-scheduling.md#additional-shutdown-and-timer-qualification).
-Active monitoring checks retain an observation through a database lock after either
-stop signal, commit it after release and leave a later due venue unchecked. See
-[the observation shutdown limits](backlog/worker-scheduling.md#monitoring-command-shutdown-during-an-active-observation-d552).
-Active-observation cancellation now checks unset observation state, the failed venue's retry delay,
-no later claim after a stop signal and natural exit. A running control continues to
-a later venue. See [the cancellation limits](backlog/worker-scheduling.md#monitoring-shutdown-after-active-observation-cancellation-d553).
-
-Active-observation statement timeouts now qualify both stop signals and a running
-control, with retained retry state, no later claim after shutdown and natural exit.
-See [the statement-timeout limits](backlog/worker-scheduling.md#monitoring-shutdown-after-an-observation-reaches-its-statement-timeout-d554).
-
-Active-observation connection-loss checks now terminate the owned blocked backend
-after either stop signal, retain retry state and require natural exit without a
-later claim. A running control reaches another venue through a different live
-connection. See [the single-connection failure limits](backlog/worker-scheduling.md#monitoring-shutdown-after-losing-an-active-observation-connection-d555).
-
-Email shutdown now checks connection loss after a complete local SMTP message
-but before acknowledgement, including retained retry state, no later mail claim
-and natural exit under both stop signals. A two-second drain check distinguishes
-the fixture disconnect from the local transport’s five-second inactivity timeout.
-Remote acceptance remains uncertain.
-See [the SMTP connection-loss limits](backlog/worker-scheduling.md#email-command-shutdown-after-losing-an-smtp-acknowledgement-d556).
-
-Email shutdown also checks connection loss while the server holds recipient acceptance,
-before receiving a message body, under both stop signals. The command retains retry state,
-leaves later mail untouched and drains naturally. See [the recipient-stage limits](backlog/worker-scheduling.md#email-command-shutdown-before-smtp-recipient-acceptance-d557).
+**Open.** Qualify production shutdown, database failures, cancellation and provider
+behavior beyond the local fixtures, plus explicit database pool cleanup. Native
+polling, pending schedules and late error reports have shutdown controls;
+real-command checks cover the cases named in
+[the worker shutdown detail and remaining limits](backlog/worker-scheduling.md#worker-shutdown-during-polling-and-error-reporting-d459).
 
 ## Translation consent during account changes (D392)
 
