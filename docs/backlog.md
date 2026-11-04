@@ -3037,22 +3037,12 @@ See [the boundaries and remaining work](backlog/storage-cache-fixture.md#storage
 
 ## Storage archive download failure reporting (D441)
 
-**Open; historical cause unknown.** The Linux test box passes five download
-controls and all four unchanged service-runtime checks from a private empty
-archive cache. A controlled local HTTP/2 truncation confirms archive-body
-reporting but has a different protocol error number from the historical refusal.
-Capture an instrumented recurrence before attributing that old failure or changing
-the single download attempt; full CI qualification remains separate.
-See [the boundaries and remaining work](backlog/storage-cache-fixture.md#storage-archive-download-failure-reporting-d441).
-
-[PR794's root shard](https://github.com/waitron-io/waitron-cloud/actions/runs/41182674171/job/124483174725)
-fails the three storage TLS cases in their shared setup: fetching the pinned
-SeaweedFS 4.47 archive raises `fetch failed` before their assertions. The transport
-cause is absent from the test output. The unchanged TLS tests pass three cases
-locally, and a later archive GET on the authorised Linux test box returns HTTP
-200; neither control explains or repairs the CI failure. D530's investigation
-must capture the cold-download cause while preserving the original TLS checks,
-checksums and cleanup assertions.
+**Open; historical cause unknown.** Download failure reporting is implemented,
+and all five native controls pass. The retained Linux cold-cache run and PR849
+CI qualify an earlier baseline; the runtime has since changed. Capture the named
+request and phase at a new failure before changing transport or the single
+archive-download attempt.
+See [the evidence and remaining work](backlog/storage-cache-fixture.md#storage-archive-download-failure-reporting-d441).
 
 ## Parallel storage-cache fixture failure on main
 
