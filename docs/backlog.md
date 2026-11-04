@@ -3513,7 +3513,10 @@ open under the [readiness investigation](backlog/storage-authority-timeout.md).
 **Open; the registry timeout and metadata HTTP 502 remain unexplained.** Fixture
 builds now handle Docker Hub metadata HTTP 5xx within the original build budget,
 with native controls for bounded retries, permanent refusals and cleanup. D135
-still needs fresh qualification on the acquisition repair; see the
+still needs fresh Docker-backed qualification on the acquisition repair. A bounded
+2026-11-04 attempt passed all 39 native acquisition and build controls; the test
+box was occupied, so real preparation did not run. The historical causes remain
+open; see the
 [image acquisition investigation](backlog/cost-conformance-fixtures.md#conformance-image-acquisition-during-d135-qualification).
 
 ### Litestream conformance transport-close refusal (D141)

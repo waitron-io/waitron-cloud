@@ -184,8 +184,17 @@ Run `node --test scripts/cloud-cost/conformance-image-build.test.mjs` for native
 controls of the recorded refusal, recovery, permanent errors, exhausted attempts,
 shared deadline and cancellation. These replace network archives and Docker
 commands at their external boundaries; they do not run a real image build.
-Docker-backed qualification belongs to CI while local Docker is unavailable.
 The registry's underlying HTTP 502 cause remains unknown.
+
+A bounded qualification attempt on 2026-11-04 ran
+`node --test scripts/cloud-cost/conformance-image-acquisition.test.mjs
+scripts/cloud-cost/conformance-image-build.test.mjs`: all 39 native controls
+passed without failures or skips. These controls replace external Docker commands
+and cannot establish current registry availability. The test-box helper refused
+real preparation with exit 75 because lane G held the box; no image was built or
+pulled by that attempt. Fresh Docker-backed qualification and attribution of both
+historical registry failures remain open. Keep the existing attempt counts,
+shared budgets, cancellation, integrity checks and owned cleanup unchanged.
 
 
 ### Litestream conformance transport-close refusal (D141)
