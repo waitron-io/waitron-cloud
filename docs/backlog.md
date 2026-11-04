@@ -3812,18 +3812,6 @@ Qualify the public browser check against the supported browsers and production
 networks before public exposure. Local HTTP, script and Chromium checks do not
 discharge that deployment gate.
 
-## Public browser-check reload handler wait (D367)
-
-The reload browser fixture refuses an absent challenge-handler signal within
-its existing four-second page budget. Delayed handlers repeat both script-failure
-journeys in both languages, themes and phone/desktop widths. All original reload,
-keyboard, request-count, cookie, forwarding and disabled-JavaScript checks remain.
-The fixture keeps its 24 historical screenshot names and retains 16 delayed
-captures plus the reachable missing-signal capture separately, for 41 images.
-The missing-signal control wraps its configured four-second observation in a
-five-second race; it does not independently prove the exact four-second value.
-These checks use native Chromium and local HTTP; production behaviour is unchanged.
-
 ## Running browser-check failure reload handler waits (D368)
 
 The running-check failure reload fixture refuses either missing first or restarted
