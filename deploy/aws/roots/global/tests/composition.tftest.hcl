@@ -1,5 +1,8 @@
 mock_provider "aws" {
   alias = "global"
+  mock_resource "aws_lb" { defaults = { arn = "arn:aws:elasticloadbalancing:eu-central-1:222222222222:loadbalancer/net/synthetic/1111111111111111" } }
+  mock_resource "aws_lb_target_group" { defaults = { arn = "arn:aws:elasticloadbalancing:eu-central-1:222222222222:targetgroup/synthetic/1111111111111111" } }
+  mock_data "aws_route53_zone" { defaults = { zone_id = "ZGLOBAL", name_servers = ["ns-1.synthetic.invalid", "ns-2.synthetic.invalid", "ns-3.synthetic.invalid", "ns-4.synthetic.invalid"] } }
   mock_resource "aws_db_instance" { defaults = {
     arn                = "arn:aws:rds:eu-central-1:222222222222:db:waitron-global"
     address            = "waitron-global.synthetic.invalid"
@@ -33,6 +36,7 @@ mock_provider "aws" {
   mock_data "aws_region" { defaults = { region = "eu-west-1" } }
 }
 variables {
+  dns               = { create_zone = false, existing_zone_id = "ZGLOBAL" }
   database          = { engine_version = "17.6", parameter_family = "postgres17", instance_class = "db.t3.small", allocated_storage = 20, max_allocated_storage = 100 }
   recovery_role_arn = "arn:aws:iam::222222222222:role/waitron-global-recovery"
   compute           = { kubernetes_version = "1.34", operator_role_arns = ["arn:aws:iam::222222222222:role/operators/global-admin"] }

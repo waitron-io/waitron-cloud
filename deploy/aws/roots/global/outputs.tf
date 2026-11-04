@@ -70,3 +70,10 @@ output "workload_topology" {
     workload_roles = permissions.workload_roles, attachments = permissions.attachment_refs
   } }
 }
+
+output "edge_topology" {
+  value = {
+    ingress = { for name, ingress in module.ingress : name => ingress.ingress }
+    dns     = module.dns.dns
+  }
+}

@@ -61,3 +61,8 @@ variable "recovery_role_arn" {
   type     = string
   nullable = false
 }
+
+variable "dns" {
+  type     = object({ create_zone = bool, existing_zone_id = string })
+  nullable = false
+}

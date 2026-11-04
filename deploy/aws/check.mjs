@@ -128,6 +128,7 @@ export async function runSuite(name, { directory = fileURLToPath(new URL('.', im
     const plan = suites.get(name).map((directory) => ({ directory, filter: `tests/${name}.tftest.hcl` }));
     if (name === 'integration') {
       plan.push(...['roots/global', 'roots/country'].map((directory) => ({ directory, filter: 'tests/composition.tftest.hcl' })));
+      plan.push(...['roots/global', 'roots/country'].map((directory) => ({ directory, filter: 'tests/edge.tftest.hcl' })));
     }
     for (const entry of plan) {
       try {

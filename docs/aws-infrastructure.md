@@ -821,7 +821,7 @@ namespace and service accounts, so adding a cell does not share cluster trust.
 Country runtime policies use the same planned store names as shared recovery
 and replication. The root's storage check binds those names and keys to the
 actual stores before the outputs can form a complete handoff.
-Evidence, ingress, DNS and the complete handoff remain unfinished.
+Evidence and the complete handoff remain unfinished.
 
 For the global root, supply exactly `global`, `global_backup`, `global_keys`
 and `global_backup_keys` in `bindings`. Spain instead takes `country`,
@@ -900,3 +900,33 @@ cell entry.
 Schema fixtures accept this representation for two cells in either scope.
 The real export, selection checks and remaining resource composition are
 unfinished; no new schema or runtime consumer is qualified by that fixture check.
+
+### Composed ingress and DNS
+
+Each cell now receives its own ingress module through the scope's primary
+provider. It uses the shared three-zone public network and that exact cell's
+node security group. The agreed public ports stay TCP 443 for both scopes and
+UDP 51820 for Spain only. The `edge_topology` output groups these ingress
+references by exact cell and includes the scope's DNS zone and nameservers.
+This output is provisional while the complete version 1 export is assembled.
+
+Supply an explicit DNS selection to either independent root:
+
+```hcl
+dns = {
+  create_zone      = false
+  existing_zone_id = "ZEXTERNALZONEID"
+}
+```
+
+Use the externally verified zone ID for your own scope. The global root names
+`waitron.io`; Spain names `es.waitron.io`. Creation requires `create_zone = true`
+and a null existing ID. This input only describes the selected path; it neither
+imports nor changes a live zone during the local checks. Parent delegation stays
+in the separate delegation root, and P1 still owns venue records and target
+registration.
+
+The fixed integration suite also runs one-cell and two-cell ingress/DNS cases
+for both scopes. These plans use real ingress and DNS modules with distinct
+synthetic load balancer references. They do not prove public reachability,
+DNS propagation, certificate custody or target registration.

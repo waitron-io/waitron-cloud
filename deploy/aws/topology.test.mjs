@@ -221,3 +221,30 @@ for (const [scope, label] of [['global', 'global'], ['country', 'es']]) {
     assert.equal(output?.value, '${{for name, permissions in module.workload_permissions : name => {workload_roles = permissions.workload_roles, attachments = permissions.attachment_refs}}}');
   });
 }
+
+for (const [scope, label] of [['global', 'global'], ['country', 'es']]) {
+  // A shared node group or backup alias can expose the wrong cell's service.
+  test(`${scope} connects each ingress to its own node group and the primary public network`, () => {
+    const ingress = module(scope, 'ingress');
+    assert.equal(ingress?.source, '"../../modules/ingress"');
+    assert.deepEqual(ingress.providers, { aws: `\${aws.${scope}}` });
+    assert.equal(ingress.for_each, '${var.deployment.cells}');
+    assert.equal(ingress.scope, JSON.stringify(label));
+    assert.equal(ingress.cell_id, '${each.key}');
+    assert.deepEqual(ingress.network, {
+      vpc_id: '${module.network.network.vpc_id}',
+      public_subnet_ids: '${module.network.network.public_subnet_ids}',
+      node_security_group_id: '${module.cell[each.key].cell.node_security_group_id}',
+    });
+    assert.deepEqual(ingress.ports, { tcp: [443], udp: scope === 'global' ? [] : [51820] });
+    const dns = module(scope, 'dns');
+    assert.equal(dns?.source, '"../../modules/dns"');
+    assert.deepEqual(dns.providers, { aws: `\${aws.${scope}}` });
+    assert.equal(dns.scope, JSON.stringify(label));
+    assert.equal(dns.zone_name, JSON.stringify(scope === 'global' ? 'waitron.io' : 'es.waitron.io'));
+    assert.equal(dns.create_zone, '${var.dns.create_zone}');
+    assert.equal(dns.existing_zone_id, '${var.dns.existing_zone_id}');
+    assert.equal(dns.for_each, undefined);
+    assert.equal(dns.count, undefined);
+  });
+}

@@ -1,5 +1,8 @@
 mock_provider "aws" {
   alias = "global"
+  mock_resource "aws_lb" { defaults = { arn = "arn:aws:elasticloadbalancing:eu-central-1:222222222222:loadbalancer/net/synthetic/1111111111111111" } }
+  mock_resource "aws_lb_target_group" { defaults = { arn = "arn:aws:elasticloadbalancing:eu-central-1:222222222222:targetgroup/synthetic/1111111111111111" } }
+  mock_data "aws_route53_zone" { defaults = { zone_id = "ZGLOBAL", name_servers = ["ns-1.synthetic.invalid", "ns-2.synthetic.invalid", "ns-3.synthetic.invalid", "ns-4.synthetic.invalid"] } }
   mock_resource "aws_eks_cluster" { defaults = { identity = [{ oidc = [{ issuer = "https://oidc.eks.eu-central-1.amazonaws.com/id/SYNTHETIC" }] }] } }
   mock_resource "aws_security_group" { defaults = { id = "sg-00000000000000009" } }
   mock_data "aws_availability_zones" { defaults = { zone_ids = ["euc1-az1", "euc1-az2", "euc1-az3"] } }
@@ -24,6 +27,7 @@ mock_provider "aws" {
   mock_data "aws_region" { defaults = { region = "eu-west-1" } }
 }
 variables {
+  dns               = { create_zone = false, existing_zone_id = "ZGLOBAL" }
   database          = { engine_version = "17.6", parameter_family = "postgres17", instance_class = "db.t3.small", allocated_storage = 20, max_allocated_storage = 100 }
   recovery_role_arn = "arn:aws:iam::222222222222:role/waitron-global-recovery"
   compute           = { kubernetes_version = "1.34", operator_role_arns = ["arn:aws:iam::222222222222:role/operators/global-admin"] }
@@ -37,6 +41,10 @@ variables {
 }
 run "distinct_global_country_and_backup_bindings" {
   command = plan
+  override_module {
+    target  = module.ingress
+    outputs = { ingress = null }
+  }
   override_module {
     target  = module.workload_permissions
     outputs = { workload_roles = {}, attachment_refs = {} }
@@ -82,6 +90,10 @@ run "distinct_global_country_and_backup_bindings" {
 run "rejects_unknown_version" {
   command = plan
   override_module {
+    target  = module.ingress
+    outputs = { ingress = null }
+  }
+  override_module {
     target  = module.workload_permissions
     outputs = { workload_roles = {}, attachment_refs = {} }
   }
@@ -119,6 +131,10 @@ run "rejects_unknown_version" {
 }
 run "rejects_unknown_scope" {
   command = plan
+  override_module {
+    target  = module.ingress
+    outputs = { ingress = null }
+  }
   override_module {
     target  = module.workload_permissions
     outputs = { workload_roles = {}, attachment_refs = {} }
@@ -158,6 +174,10 @@ run "rejects_unknown_scope" {
 run "rejects_unknown_country" {
   command = plan
   override_module {
+    target  = module.ingress
+    outputs = { ingress = null }
+  }
+  override_module {
     target  = module.workload_permissions
     outputs = { workload_roles = {}, attachment_refs = {} }
   }
@@ -195,6 +215,10 @@ run "rejects_unknown_country" {
 }
 run "rejects_unknown_regions" {
   command = plan
+  override_module {
+    target  = module.ingress
+    outputs = { ingress = null }
+  }
   override_module {
     target  = module.workload_permissions
     outputs = { workload_roles = {}, attachment_refs = {} }
@@ -234,6 +258,10 @@ run "rejects_unknown_regions" {
 run "rejects_unknown_cell_scope" {
   command = plan
   override_module {
+    target  = module.ingress
+    outputs = { ingress = null }
+  }
+  override_module {
     target  = module.workload_permissions
     outputs = { workload_roles = {}, attachment_refs = {} }
   }
@@ -271,6 +299,10 @@ run "rejects_unknown_cell_scope" {
 }
 run "rejects_missing_global" {
   command = plan
+  override_module {
+    target  = module.ingress
+    outputs = { ingress = null }
+  }
   override_module {
     target  = module.workload_permissions
     outputs = { workload_roles = {}, attachment_refs = {} }
@@ -310,6 +342,10 @@ run "rejects_missing_global" {
 run "rejects_missing_global_backup" {
   command = plan
   override_module {
+    target  = module.ingress
+    outputs = { ingress = null }
+  }
+  override_module {
     target  = module.workload_permissions
     outputs = { workload_roles = {}, attachment_refs = {} }
   }
@@ -347,6 +383,10 @@ run "rejects_missing_global_backup" {
 }
 run "rejects_missing_global_keys" {
   command = plan
+  override_module {
+    target  = module.ingress
+    outputs = { ingress = null }
+  }
   override_module {
     target  = module.workload_permissions
     outputs = { workload_roles = {}, attachment_refs = {} }
@@ -386,6 +426,10 @@ run "rejects_missing_global_keys" {
 run "rejects_missing_global_backup_keys" {
   command = plan
   override_module {
+    target  = module.ingress
+    outputs = { ingress = null }
+  }
+  override_module {
     target  = module.workload_permissions
     outputs = { workload_roles = {}, attachment_refs = {} }
   }
@@ -423,6 +467,10 @@ run "rejects_missing_global_backup_keys" {
 }
 run "rejects_extra_scope_binding" {
   command = plan
+  override_module {
+    target  = module.ingress
+    outputs = { ingress = null }
+  }
   override_module {
     target  = module.workload_permissions
     outputs = { workload_roles = {}, attachment_refs = {} }
@@ -462,6 +510,10 @@ run "rejects_extra_scope_binding" {
 run "rejects_malformed_identity" {
   command = plan
   override_module {
+    target  = module.ingress
+    outputs = { ingress = null }
+  }
+  override_module {
     target  = module.workload_permissions
     outputs = { workload_roles = {}, attachment_refs = {} }
   }
@@ -499,6 +551,10 @@ run "rejects_malformed_identity" {
 }
 run "rejects_crossed_role" {
   command = plan
+  override_module {
+    target  = module.ingress
+    outputs = { ingress = null }
+  }
   override_module {
     target  = module.workload_permissions
     outputs = { workload_roles = {}, attachment_refs = {} }
@@ -538,6 +594,10 @@ run "rejects_crossed_role" {
 run "rejects_wildcard_role" {
   command = plan
   override_module {
+    target  = module.ingress
+    outputs = { ingress = null }
+  }
+  override_module {
     target  = module.workload_permissions
     outputs = { workload_roles = {}, attachment_refs = {} }
   }
@@ -575,6 +635,10 @@ run "rejects_wildcard_role" {
 }
 run "rejects_deployment_as_key_admin" {
   command = plan
+  override_module {
+    target  = module.ingress
+    outputs = { ingress = null }
+  }
   override_module {
     target  = module.workload_permissions
     outputs = { workload_roles = {}, attachment_refs = {} }
@@ -614,6 +678,10 @@ run "rejects_deployment_as_key_admin" {
 run "rejects_different_backup_account" {
   command = plan
   override_module {
+    target  = module.ingress
+    outputs = { ingress = null }
+  }
+  override_module {
     target  = module.workload_permissions
     outputs = { workload_roles = {}, attachment_refs = {} }
   }
@@ -651,6 +719,10 @@ run "rejects_different_backup_account" {
 }
 run "rejects_actual_global_account" {
   command = plan
+  override_module {
+    target  = module.ingress
+    outputs = { ingress = null }
+  }
   override_module {
     target  = module.workload_permissions
     outputs = { workload_roles = {}, attachment_refs = {} }
@@ -693,6 +765,10 @@ run "rejects_actual_global_account" {
 run "rejects_actual_global_region" {
   command = plan
   override_module {
+    target  = module.ingress
+    outputs = { ingress = null }
+  }
+  override_module {
     target  = module.workload_permissions
     outputs = { workload_roles = {}, attachment_refs = {} }
   }
@@ -733,6 +809,10 @@ run "rejects_actual_global_region" {
 }
 run "rejects_actual_global_backup_account" {
   command = plan
+  override_module {
+    target  = module.ingress
+    outputs = { ingress = null }
+  }
   override_module {
     target  = module.workload_permissions
     outputs = { workload_roles = {}, attachment_refs = {} }
@@ -775,6 +855,10 @@ run "rejects_actual_global_backup_account" {
 run "rejects_actual_global_backup_region" {
   command = plan
   override_module {
+    target  = module.ingress
+    outputs = { ingress = null }
+  }
+  override_module {
     target  = module.workload_permissions
     outputs = { workload_roles = {}, attachment_refs = {} }
   }
@@ -815,6 +899,10 @@ run "rejects_actual_global_backup_region" {
 }
 run "rejects_actual_global_keys_account" {
   command = plan
+  override_module {
+    target  = module.ingress
+    outputs = { ingress = null }
+  }
   override_module {
     target  = module.workload_permissions
     outputs = { workload_roles = {}, attachment_refs = {} }
@@ -857,6 +945,10 @@ run "rejects_actual_global_keys_account" {
 run "rejects_actual_global_keys_region" {
   command = plan
   override_module {
+    target  = module.ingress
+    outputs = { ingress = null }
+  }
+  override_module {
     target  = module.workload_permissions
     outputs = { workload_roles = {}, attachment_refs = {} }
   }
@@ -897,6 +989,10 @@ run "rejects_actual_global_keys_region" {
 }
 run "rejects_actual_global_backup_keys_account" {
   command = plan
+  override_module {
+    target  = module.ingress
+    outputs = { ingress = null }
+  }
   override_module {
     target  = module.workload_permissions
     outputs = { workload_roles = {}, attachment_refs = {} }
@@ -939,6 +1035,10 @@ run "rejects_actual_global_backup_keys_account" {
 run "rejects_actual_global_backup_keys_region" {
   command = plan
   override_module {
+    target  = module.ingress
+    outputs = { ingress = null }
+  }
+  override_module {
     target  = module.workload_permissions
     outputs = { workload_roles = {}, attachment_refs = {} }
   }
@@ -980,6 +1080,10 @@ run "rejects_actual_global_backup_keys_region" {
 run "rejects_all_malformed_identities" {
   command = plan
   override_module {
+    target  = module.ingress
+    outputs = { ingress = null }
+  }
+  override_module {
     target  = module.workload_permissions
     outputs = { workload_roles = {}, attachment_refs = {} }
   }
@@ -1018,6 +1122,10 @@ run "rejects_all_malformed_identities" {
 run "rejects_primary_region" {
   command = plan
   override_module {
+    target  = module.ingress
+    outputs = { ingress = null }
+  }
+  override_module {
     target  = module.workload_permissions
     outputs = { workload_roles = {}, attachment_refs = {} }
   }
@@ -1055,6 +1163,10 @@ run "rejects_primary_region" {
 }
 run "rejects_malformed_cell" {
   command = plan
+  override_module {
+    target  = module.ingress
+    outputs = { ingress = null }
+  }
   override_module {
     target  = module.workload_permissions
     outputs = { workload_roles = {}, attachment_refs = {} }
@@ -1095,6 +1207,10 @@ run "rejects_malformed_cell" {
 run "primary_cells_use_their_exact_network_entries" {
   command = plan
   override_module {
+    target  = module.ingress
+    outputs = { ingress = null }
+  }
+  override_module {
     target  = module.workload_permissions
     outputs = { workload_roles = {}, attachment_refs = {} }
   }
@@ -1132,6 +1248,10 @@ run "primary_cells_use_their_exact_network_entries" {
 
 run "rejects_foreign_operator_account_before_cell_reads" {
   command = plan
+  override_module {
+    target  = module.ingress
+    outputs = { ingress = null }
+  }
   override_module {
     target  = module.workload_permissions
     outputs = { workload_roles = {}, attachment_refs = {} }
