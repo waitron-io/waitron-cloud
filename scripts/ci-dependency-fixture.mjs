@@ -46,6 +46,15 @@ export function seedReceiptDependencyInputs(root) {
   for (const entry of readdirSync(root,{withFileTypes:true})) {
     if (entry.name!=='.git' && !entry.name.endsWith('.md') && !deploymentInputs.rootFiles.includes(entry.name) && (entry.isFile() || entry.isSymbolicLink())) rmSync(join(root,entry.name));
   }
+  // Historical omissions require the audited manifest inventory, including outside workspace packages.
+  const removeNewManifests = (directory = '') => {
+    for (const entry of readdirSync(join(root, directory), {withFileTypes: true})) {
+      const path = join(directory, entry.name);
+      if (entry.name === 'package.json' && !Object.hasOwn(inputs, path)) rmSync(join(root, path));
+      else if (entry.isDirectory() && !['.git', 'node_modules'].includes(entry.name)) removeNewManifests(path);
+    }
+  };
+  removeNewManifests();
   for (const [path, text] of Object.entries(inputs)) {
     mkdirSync(dirname(join(root, path)), {recursive: true});
     writeFileSync(join(root, path), text);

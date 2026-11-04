@@ -1,10 +1,33 @@
 import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
 import {execFileSync, spawnSync} from 'node:child_process';
-import {appendFileSync, cpSync, existsSync, mkdtempSync, readFileSync, readdirSync, rmSync} from 'node:fs';
+import {appendFileSync, cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import test from 'node:test';
+import {seedReceiptDependencyInputs} from './ci-dependency-fixture.mjs';
+import {assertInstallationInputs} from './ci-install-inputs.mjs';
+
+test('historical receipt fixtures remove new nested manifests while the live audit still refuses them', () => {
+  const root = mkdtempSync(join(tmpdir(), 'cloud-nested-manifest-fixture-'));
+  const git = (...args) => execFileSync('git', ['-c', 'maintenance.auto=false', ...args], {cwd: root, encoding: 'utf8', stdio: 'pipe'});
+  const inventory = () => git('ls-tree', '-rz', '--full-tree', 'HEAD').split('\0').slice(0, -1);
+  try {
+    execFileSync('git', ['clone', '--shared', '--quiet', process.cwd(), root], {stdio: 'pipe'});
+    git('config', 'user.name', 'CI test'); git('config', 'user.email', 'ci@example.test');
+    for (const directory of ['deploy/fixture-tools', 'scripts/fixture-tools', 'packages/registration/fixture-tools']) {
+      mkdirSync(join(root, directory), {recursive: true});
+      writeFileSync(join(root, directory, 'package.json'), '{"private":true}\n');
+    }
+    seedReceiptDependencyInputs(root);
+    git('add', '-A'); git('commit', '-s', '-qm', 'Reconstruct audited historical installation');
+    assertInstallationInputs(inventory());
+
+    writeFileSync(join(root, 'deploy/fixture-tools/package.json'), '{"private":true}\n');
+    git('add', '-A'); git('commit', '-s', '-qm', 'Add unaudited live installation input');
+    assert.throws(() => assertInstallationInputs(inventory()), /Unaudited dependency installation inputs/);
+  } finally {rmSync(root, {recursive: true, force: true});}
+});
 
 test('receipt selector fixtures retain their assertions after dependency inputs change', () => {
   const inputs = JSON.parse(readFileSync(new URL('./fixtures/ci-dependency-inputs.json', import.meta.url), 'utf8'));
