@@ -45,6 +45,14 @@ paths containing spaces. Run `node --test scripts/ci-cache-location.test.mjs`.
 The four earlier workflows still use the older inline lookup; qualify the same
 failure case there before changing those sibling steps.
 
+Keep two native harness observations separate from the cache transport cause.
+During review, `ci-setup-pnpm.test.mjs` reports two descendant-test attempts
+instead of three on both the candidate and its base. The unavailable-mirror
+case in `ci-download.test.mjs` reports two commands instead of one in the wider
+run. Later isolated checks pass without changing either source. Their causes
+remain unknown; retain the original assertions and investigate these scheduling
+observations under D530 before changing their limits.
+
 ## Portal shard job budget (D546 qualification)
 
 Portal work uses six file partitions so each job has less mandatory work
