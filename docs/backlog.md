@@ -3781,8 +3781,11 @@ identity publication in 5.01 seconds. The test and operation-label helper match
 the later failing revision; its runtime and dependencies differ. An isolated
 checkout of that exact historical revision with its frozen dependencies also
 passes all four cases. Neither run reproduces the failures or recreates the
-original CI job's concurrency. Use the next labelled recurrence to find the cause,
-preserving the existing assertions and deadlines. See the
+original CI job's concurrency. The authority, fixture, diagnostic tests and
+dependency lock still match the earlier Linux check and current main. This
+preserves that result's scope without explaining either historical failure.
+Use the next labelled recurrence to find the cause, preserving the existing
+assertions and deadlines. See the
 [investigation and qualification limits](backlog/storage-authority-timeout.md).
 
 

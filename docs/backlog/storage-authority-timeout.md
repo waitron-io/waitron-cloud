@@ -85,12 +85,20 @@ helper and lockfile match that revision's hashes. This rules out neither
 scheduling pressure nor a startup race: the original CI job's concurrent files
 and resource conditions have not been recreated. Neither passing run is a fix.
 
+The authority test, implementation, operation-label helper, startup fixture and
+dependency lock still match that first Linux check at current main
+`2208befc414b6236bdbc8798082b433f7d0f01d4`. The operation-label and readiness
+diagnostic tests also match. This source comparison preserves the earlier result's
+scope; it does not recreate either failed CI job's concurrent work or machine
+conditions.
+
 The earlier 14.72-second abort has no operation label; keep it separate from the
 later 33.53-second startup internal error.
 
 Keep the label and original error at the next genuine Linux recurrence, then
 reproduce and repair that operation's cause. A passing controlled abort or native
-run does not close the historical timeout. Docker and PostgreSQL reproduction can
-run on the owner's test box while the Mac's Docker is off; full qualification
-uses GitHub CI. D152's separate native-writer drain decision remains open.
+run does not close the historical timeout. Use the shared test-box helper for
+Linux reproduction, and preserve its log and source hashes. A busy-box refusal
+starts no tests and gives no new Linux result. Full qualification uses GitHub CI.
+D152's separate native-writer drain investigation remains open.
 
