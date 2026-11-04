@@ -125,6 +125,12 @@ test('venue attempts use their installation scope and share recipient digests wi
   const row=(await f.pool.query('SELECT purpose,installation_id,queue_id FROM mail_attempts WHERE attempt_tag=$1',[admission.attemptTag])).rows[0];
   assert.deepEqual(row,{purpose:'venue-email',installation_id:venue.installation,queue_id:message.messageId});
   assert.equal((await f.pool.query('SELECT count(*) FROM mail_attempt_recipients')).rows[0].count,'2');
+  const stale=await venue.submit({recipient:'original@example.test'}),staleClaim=randomUUID();
+  await f.pool.query("UPDATE relay_messages SET state='sending',claim_id=$2,lease_until=clock_timestamp()-interval '1 second',attempts=1 WHERE message_id=$1",[stale.messageId,staleClaim]);
+  const staleInput={...input,claim:{...input.claim,messageId:stale.messageId,claimId:staleClaim}};
+  await assert.rejects(transaction(f.pool,c=>admitMailAttempt(c,staleInput)),/mail_claim_unavailable/);
+  await f.pool.query("UPDATE relay_messages SET lease_until=clock_timestamp()+interval '1 minute',expires_at=clock_timestamp()-interval '1 second' WHERE message_id=$1",[stale.messageId]);
+  await assert.rejects(transaction(f.pool,c=>admitMailAttempt(c,staleInput)),/mail_claim_unavailable/);
   const event=randomUUID();
   await f.pool.query(`INSERT INTO mail_feedback_events(id,attempt_tag,country,provider_account_id,region,recipient_identity,event_identity,kind,event_time)
    VALUES($1,$2,'ES','123456789012','eu-north-1',repeat('a',64),'complaint','complaint',clock_timestamp())`,[event,admission.attemptTag]);
@@ -166,4 +172,24 @@ test('all durable helpers refuse an implicit transaction and provider IDs are un
   const race=await Promise.allSettled([a,b].map(entry=>transaction(f.pool,c=>bindProviderId(c,entry.attemptTag,'shared-provider-id'))));
   assert.equal(race.filter(r=>r.status==='fulfilled').length,1);assert.equal(race.filter(r=>r.status==='rejected').length,1);
  }finally{client.release();await f.close();}
+});
+
+for(const deadline of ['lease_until','expires_at'])test(`admission rechecks ${deadline} after a queue-row lock wait`,async()=>{
+ const {setImmediate}=await import('node:timers/promises');
+ const f=await fixture(),held=await f.pool.connect(),worker=await f.pool.connect();let pending:Promise<unknown>|undefined;
+ try{
+  const input=await f.account();await f.pool.query(`UPDATE email_outbox SET ${deadline}=clock_timestamp()+interval '2 seconds' WHERE id=$1`,[input.claim.outboxId]);
+  await held.query('BEGIN');await held.query('SELECT id FROM email_outbox WHERE id=$1 FOR UPDATE',[input.claim.outboxId]);
+  const blocker=(await held.query('SELECT pg_backend_pid() AS pid')).rows[0].pid;
+  await worker.query('BEGIN');const pid=(await worker.query('SELECT pg_backend_pid() AS pid')).rows[0].pid;
+  pending=admitMailAttempt(worker,input);void pending.catch(()=>{});
+  let blocked=false;const until=performance.now()+1500;
+  do{blocked=(await f.admin.query('SELECT $2=ANY(pg_blocking_pids($1)) AS blocked',[pid,blocker])).rows[0].blocked;if(!blocked)await setImmediate();}while(!blocked&&performance.now()<until);
+  assert.equal(blocked,true,'admission waits on this queue row before its deadline');
+  await held.query(`SELECT pg_sleep(GREATEST(0,EXTRACT(EPOCH FROM (${deadline}-clock_timestamp())))+0.02) FROM email_outbox WHERE id=$1`,[input.claim.outboxId]);
+  assert.equal((await held.query(`SELECT ${deadline}<=clock_timestamp() AS expired FROM email_outbox WHERE id=$1`,[input.claim.outboxId])).rows[0].expired,true);
+  await held.query('ROLLBACK');
+  await assert.rejects(pending,/mail_claim_unavailable/);
+  await worker.query('ROLLBACK');assert.equal((await f.pool.query('SELECT count(*) FROM mail_attempts')).rows[0].count,'0');
+ }finally{await held.query('ROLLBACK');await pending?.catch(()=>{});await worker.query('ROLLBACK');held.release();worker.release();await f.close();}
 });

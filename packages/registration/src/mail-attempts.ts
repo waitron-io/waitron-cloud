@@ -52,9 +52,9 @@ export async function admitMailAttempt(client:PoolClient,input:AttemptInput):Pro
  await lockMailScope(client,scope);
  const current=claim.purpose==='cloud-account-email'
   ?await client.query(`SELECT id FROM email_outbox WHERE id=$1 AND claim_id=$2 AND attempts=$3 AND status='processing'
-    AND lease_until>clock_timestamp() AND expires_at>clock_timestamp() FOR UPDATE`,[queueId,claim.claimId,claim.attempt])
+    FOR UPDATE`,[queueId,claim.claimId,claim.attempt])
   :await client.query(`SELECT message_id FROM relay_messages WHERE installation_id=$1 AND message_id=$2 AND claim_id=$3 AND attempts=$4 AND state='sending'
-    AND lease_until>clock_timestamp() AND expires_at>clock_timestamp() FOR UPDATE`,[installation,queueId,claim.claimId,claim.attempt]);
+    FOR UPDATE`,[installation,queueId,claim.claimId,claim.attempt]);
  if(!current.rowCount)return fail('mail_claim_unavailable');
  await client.query(`INSERT INTO mail_queue_scopes(purpose,installation_id,queue_id,country,provider_account_id,region)
   VALUES($1,$2,$3,$4,$5,$6) ON CONFLICT DO NOTHING`,[claim.purpose,installation,queueId,country,providerAccountId,region]);
@@ -62,6 +62,11 @@ export async function admitMailAttempt(client:PoolClient,input:AttemptInput):Pro
  if(pinned.country!==country||pinned.provider_account_id!==providerAccountId||pinned.region!==region)return fail('mail_scope_conflict');
  const refs=await recipientRefs(client,input);
  if(await recipientIsSuppressed(client,scope,refs))return fail('mail_recipient_suppressed');
+ // A SELECT predicate can run before its row-lock wait; sample deadlines after that wait.
+ const deadline=claim.purpose==='cloud-account-email'
+  ?await client.query('SELECT lease_until>clock_timestamp() AND expires_at>clock_timestamp() AS live FROM email_outbox WHERE id=$1',[queueId])
+  :await client.query('SELECT lease_until>clock_timestamp() AND expires_at>clock_timestamp() AS live FROM relay_messages WHERE installation_id=$1 AND message_id=$2',[installation,queueId]);
+ if(deadline.rows[0]?.live!==true)return fail('mail_claim_unavailable');
  const attemptTag=randomBytes(32).toString('base64url');
  const inserted=await client.query(`INSERT INTO mail_attempts(attempt_tag,purpose,installation_id,queue_id,country,provider_account_id,region,
   policy_revision,configuration_revision,configuration_set,claim_id,attempt)
