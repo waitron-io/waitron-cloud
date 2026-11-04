@@ -107,6 +107,14 @@ Both consume the same inspected source copy and the complete fixed filter list.
 Each root keeps the five-minute container deadline, and a failure prevents any later
 root from starting. You receive the combined output only after both roots pass.
 
+CI splits the guard test files into three groups, called shards. A fourth job runs
+the complete plan set and formatting. Each job keeps the same 30-minute limit, prepares its
+offline tools and saves its own diagnostic artifact, including after a failure.
+The shards cover every test file exactly once. The full plan job keeps `--all`;
+the project targets about four minutes per job for quick feedback, but this job
+cannot meet that target while the complete integration check alone
+takes about eight minutes on the test box.
+
 The runner also restricts each child to at most two CPU cores, because a CPU
 quota alone leaves the host's larger core count visible to runtime worker pools.
 Suites with more than six independent plan cases run in groups of at most six,
@@ -121,10 +129,10 @@ between processes.
 
 You can select only `canary`, `accounts`, `state`, `network`, `cell`, `database`, `storage`,
 `custody`, `observability`, `ingress`, `dns` or `integration`. Each name selects fixed module
-and root paths; the CLI accepts no custom command or directory. `--all` runs those suites
-in order and refuses a missing test file. Build and qualify each remaining suite
-before using `--all` as a check of the whole infrastructure layer.
-It does not report the unfinished infrastructure as verified. Missing local tools produce
+and root paths; the CLI accepts no custom command or directory. `--all` runs every suite
+in order and stops on a missing file or failed plan. A passing run checks the mocked
+configuration; live provider qualification remains separate.
+Missing local tools produce
 the `--prepare-tools` setup instruction without downloading anything.
 
 The separate dependency install supplies Ajv for contract validation and YAML for
@@ -137,14 +145,15 @@ A passing local plan covers one checkout. The
 [AWS infrastructure workflow](../.github/workflows/aws-infrastructure.yml) checks the
 exact pull-request head and every push to `main`, including documentation changes.
 An updated pull request cancels its older check; each main push keeps its own result.
-The job has repository read permission and retains no checkout credential. It receives
+Every job has repository read permission and retains no checkout credential. It receives
 no AWS secret or identity-token permission.
 
-The job prepares the pinned software image, installs the separate locked dependencies,
-runs the Node guards and all isolated mocked plans, then checks formatting in an offline,
-read-only container. A 30-minute job limit bounds the whole sequence alongside the
-runner's existing per-command limits. It retains command output, assertion counts and
-failure diagnostics for 14 days in an artifact named for the checked commit and attempt.
+Each job prepares the pinned software image and installs the separate locked dependencies.
+Three jobs run the Node guard shards. The fourth runs all isolated mocked plans and
+checks formatting in an offline, read-only container. Each job keeps a 30-minute limit
+alongside the runner's existing per-command limits. It retains command output, assertion
+counts and failure diagnostics for 14 days in an artifact named for the checked commit,
+attempt and matrix cell, the job's unique label.
 Logging preserves a failed command's exit status, so later commands cannot mask it.
 
 When Docker is unavailable, you can still check the workflow wiring:

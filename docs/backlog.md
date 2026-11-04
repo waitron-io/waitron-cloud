@@ -346,7 +346,9 @@ order. Remote access matters most because Waitron's customer-facing features wai
    scoped workload permissions, ingress, DNS and infrastructure signals. Its offline
    pinned checks produce complete version 1 references for each exact cell and validate
    the unchanged handoff schema. Integration checks run each independent root in its
-   own container under the original command and container deadlines. These are mocked
+   own container under the original command and container deadlines. CI separates
+   three guard-test shards from the full plan and formatting checks, keeping every
+   test file and the original job limits. These are mocked
    plans, not a deployment. Account/state
    custody, populated secrets, actual service and collector permissions, recovery and
    provider availability still need their separately authorised qualification.
