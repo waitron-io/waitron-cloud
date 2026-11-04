@@ -50,13 +50,13 @@ for (const {kinds, explicit} of [
       const marker = `owned-admin-${kind}`;
       const server = createServer(socket => socket.end(marker));
       owners.push({kind, marker, server});
-      // Service fixtures claim ports from 32768 upward. Leave room for the
-      // native admin allocator's next 100 choices without entering that range.
+      // Implicit admin gRPC adds 10000 to HTTP. Leave room for another 100
+      // fallback choices below the service fixtures' 32768-and-up range.
       for (let attempt = 0; ; attempt++) {
         try {
           await new Promise((resolve, reject) => {
             server.once('error', reject);
-            server.listen(randomInt(10000, 32668), '127.0.0.1', resolve);
+            server.listen(randomInt(10000, 22668), '127.0.0.1', resolve);
           });
           break;
         } catch (error) {

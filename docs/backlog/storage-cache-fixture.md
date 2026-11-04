@@ -372,15 +372,17 @@ See [the storage qualification boundaries](storage-cache-fixture.md#concurrent-s
 The admin test listeners could take another fixture's service port during the
 handoff from reservation socket to native child. Run
 `node --test scripts/ci-storage-admin-handoff.test.mjs` to pause a native child
-with its S3 port still claimed, then execute each unchanged admin case in a
-separate process. Selecting that port for the old admin listener or its 101-port
-range reproduces an S3 startup refusal. The admin listeners now select ports
-below 32768, leaving room for the native allocator's next 100 choices. This keeps
-them outside the service allocator's 32768–60999 range. An occupied admin
-candidate retries within 20 selections. The original admin assertions, all 101
+with its S3 port still claimed, then execute each admin case with its original
+assertions in a separate process. Selecting that port for the old admin listener
+or its 101-port range reproduces an S3 startup refusal. The 101 admin-gRPC owners
+stay below 32768. The fallback cases select
+owners below 22668, leaving room for HTTP's derived gRPC port 10000 higher and
+the next 100 fallback choices. This keeps these controlled listeners outside
+the service allocator's 32768–60999 range. An occupied admin candidate retries
+within 20 selections. The original admin assertions, all 101
 competing listeners, single-child checks and deadlines remain.
 
-These controls identify the deliberately selected competing Node listener.
+These controls identify their deliberately selected competing listener.
 They do not identify historical CI listeners or explain every native startup
 failure. In particular,
 [merge 9b7c540a's local-stack job](https://github.com/waitron-io/waitron-cloud/actions/runs/41850829904/job/126652888279)
@@ -465,4 +467,26 @@ recreate the original GitHub runner or explain its timeout or earlier port
 collision. Do not repeat this passing probe without a new hypothesis or a fresh
 operation trace; use that trace to select the next reproduction.
 
-See [the cooperative port claims and cleanup limits](backlog/storage-cache-fixture.md#cooperative-native-storage-port-ownership).
+See [the cooperative port claims and cleanup limits](#cooperative-native-storage-port-ownership).
+
+
+The HTTP regression pauses a service child, selects an occupied HTTP owner
+whose derived gRPC port would equal that service port, and waits for the derived
+listener before resuming the service. The original higher owner range first
+produces a native S3 bind refusal. The corrected range leaves room for the
+10000-port offset as well as all 100 fallback choices. The controls observe
+actual admin bind attempts, probe an unsafe interval at its upper edge, and
+require the occupied candidate to reach a bind; reverting to an old spelling or
+widening a range cannot pass through a lucky draw. The new wrapper allows
+120 seconds around the original 90-second case; the original 90- and 120-second
+limits remain unchanged.
+
+Default native admin listeners remain a separate open collision path. Two
+concurrent ordinary stores, without these test overrides, can have extra admin
+listeners outside their eight service-port claims even with `-admin.ui=false`.
+The local observation and the review identify such listeners, including an odd
+port in the service range, but do not demonstrate a default-admin takeover or
+identify a historical owner. The existing port-handoff investigation must also
+cover those defaults and other ephemeral test listeners before claiming all
+fixtures cooperate. These controlled admin tests do not qualify that broader
+protocol or native admin-worker functionality.

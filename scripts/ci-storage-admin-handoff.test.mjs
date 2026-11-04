@@ -7,19 +7,23 @@ import {readlink, access, rm} from 'node:fs/promises';
 import {join} from 'node:path';
 import {createServer, connect} from 'node:net';
 import {randomInt} from 'node:crypto';
+import crypto from 'node:crypto';
 import {startBackupStorage} from './backup-storage-fixture.mjs';
 import {releaseStorageControlClaims} from '../deploy/test-cloud/storage-admin-control-cleanup.mjs';
 
 // Admin test listeners must not occupy a service port while its owner is between
 // releasing its reservation socket and starting the native listener.
-for (const {exhausted, occupied} of [
+for (const {exhausted, occupied, http = false} of [
   {exhausted:false, occupied:false}, {exhausted:false, occupied:true}, {exhausted:true, occupied:false},
-]) test(`admin ${exhausted ? 'exhaustion' : 'fallback'} listeners preserve a paused native service handoff${occupied ? ' after an occupied candidate' : ''}`, {timeout:60000}, async t => {
-  const spawn = childProcess.spawn;
+  {exhausted:false, occupied:false, http:true},
+]) test(`admin ${exhausted ? 'exhaustion' : http ? 'HTTP fallback' : 'fallback'} listeners preserve a paused native service handoff${occupied ? ' after an occupied candidate' : ''}`, {timeout:120000}, async t => {
+  const spawn = childProcess.spawn, choose = crypto.randomInt;
   let native, announceSpawn, store, control, output = '';
   let port, root;
   const controlChildren = [], controlRoots = new Set();
   const spawned = new Promise(resolve => { announceSpawn = resolve; });
+  if (http) t.mock.method(crypto, 'randomInt', (min, max, ...rest) =>
+    min === 32768 && max === 61000 ? choose(32768, 42668) : choose(min, max, ...rest));
   t.mock.method(childProcess, 'spawn', (binary, args, options) => {
     if (args[0] !== 'mini') return spawn(binary, args, options);
     native = spawn('sh', ['-c', 'kill -STOP $$; exec "$@"', 'sh', binary, ...args], options);
@@ -34,7 +38,7 @@ for (const {exhausted, occupied} of [
   t.after(async () => {
     if (native?.exitCode === null && native.signalCode === null) native.kill('SIGCONT');
     if (control?.exitCode === null && control.signalCode === null) {
-      const exited = once(control, 'exit');
+      const exited = once(control, 'close');
       control.kill('SIGTERM');
       await exited;
     }
@@ -67,7 +71,7 @@ for (const {exhausted, occupied} of [
       try {
         await new Promise((resolve, reject) => {
           competitor.once('error', reject);
-          competitor.listen(randomInt(10000, 32668), '127.0.0.1', resolve);
+          competitor.listen(randomInt(10000, 22668), '127.0.0.1', resolve);
         });
         break;
       } catch (error) { if (error.code !== 'EADDRINUSE' || attempt === 19) throw error; }
@@ -88,23 +92,34 @@ for (const {exhausted, occupied} of [
       if (String(args[0]).endsWith('cloud-backup-storage-')) report({kind:'root', root});
       return root;
     };
-    let selected = false;
+    let selected = false, servers = 0;
     let selectedOccupied = false;
     crypto.randomInt = (min, max, ...rest) => {
-      if (${occupied} && !selectedOccupied && min === 10000 && max === 32668) {
+      if (${occupied} && !selectedOccupied && min <= ${competingPort ?? 0} && max > ${competingPort ?? 0}) {
         selectedOccupied = true;
+        report({kind:'occupied-selected'});
         return ${competingPort ?? 0};
       }
-      if (${exhausted} && !selected && min === 10000 && max > ${port}) {
+      if (${http} && !selected && min <= ${port - 10001} && max > ${port - 10001}) {
+        selected = true;
+        report({kind:'derived-collision'});
+        return ${port - 10001};
+      }
+      if (${exhausted} && !selected && min <= ${port - 50} && max > ${port - 50}) {
         selected = true;
         return ${port} - 50;
       }
+      // Probe an unsafe interval at its upper edge so a widened range cannot
+      // escape the ownership check merely because its random draw was lucky.
+      if (min < 32768 && max - 1 + ${exhausted ? 100 : 10100} >= 32768) return max - 1;
       return choose(min, max, ...rest);
     };
     net.createServer = (...args) => {
       const server = create(...args), listen = server.listen;
+      const admin = servers++ < ${exhausted ? 101 : 1};
       server.listen = function(candidate, ...rest) {
         if (!${exhausted} && !selected && candidate === 0) {selected = true; candidate = ${port};}
+        if (admin) report({kind:'candidate', port:candidate});
         return listen.call(this, candidate, ...rest);
       };
       return server;
@@ -123,12 +138,13 @@ for (const {exhausted, occupied} of [
   const environment = {...process.env};
   delete environment.NODE_TEST_CONTEXT;
   const file = exhausted ? 'storage-admin-exhaustion.test.mjs' : 'storage-admin-ports.test.mjs';
-  const pattern = exhausted ? 'native storage remains usable' : '^native storage recovers from occupied admin gRPC ports$';
+  const pattern = exhausted ? 'native storage remains usable' : '^native storage recovers from occupied admin ' + (http ? 'HTTP' : 'gRPC') + ' ports$';
   control = spawn(process.execPath, ['--import', 'data:text/javascript,' + encodeURIComponent(probe),
     '--test-isolation=none', '--test', '--test-name-pattern=' + pattern,
     new URL('../deploy/test-cloud/' + file, import.meta.url).pathname],
   {env:environment, stdio:['ignore','pipe','pipe']});
-  let announceReady, diagnostic = '';
+  let announceReady, diagnostic = '', derivedCollision = false, occupiedSelected = false;
+  const adminCandidates = [];
   const ready = new Promise(resolve => { announceReady = resolve; });
   control.stdout.setEncoding('utf8').on('data', text => { output += text; });
   control.stderr.setEncoding('utf8').on('data', text => {
@@ -139,6 +155,9 @@ for (const {exhausted, occupied} of [
     for (const line of lines) {
       if (!line.startsWith('admin_handoff=')) continue;
       const message = JSON.parse(line.slice('admin_handoff='.length));
+      if (message.kind === 'derived-collision') derivedCollision = true;
+      if (message.kind === 'occupied-selected') occupiedSelected = true;
+      if (message.kind === 'candidate') adminCandidates.push(message.port);
       if (message.kind === 'admin-ready') announceReady();
       if (message.kind === 'root') controlRoots.add(message.root);
       if (message.kind === 'owned') controlChildren.push({pid:message.pid});
@@ -150,6 +169,21 @@ for (const {exhausted, occupied} of [
   });
   const finished = once(control, 'close');
   await Promise.race([ready, finished.then(() => { throw Error(output); })]);
+  if (derivedCollision) {
+    const deadline = Date.now() + 5000;
+    while (true) {
+      const listening = await new Promise(resolve => {
+        const socket = connect({host:'127.0.0.1', port});
+        socket.setTimeout(100, () => socket.destroy());
+        socket.once('connect', () => { socket.destroy(); resolve(true); });
+        socket.once('error', () => resolve(false));
+        socket.once('close', () => resolve(false));
+      });
+      if (listening) break;
+      assert.ok(Date.now() < deadline, 'the controlled derived gRPC listener must bind before resuming its peer');
+      await new Promise(resolve => setTimeout(resolve, 10));
+    }
+  }
   native.kill('SIGCONT');
   store = await starting;
   assert.equal((await store.bucket('admin-peer-handoff')).endpoint, store.endpoint);
@@ -159,9 +193,14 @@ for (const {exhausted, occupied} of [
   assert.equal(code, 0, output);
   assert.match(output, /(?:#|ℹ) pass 1\b/, output);
   assert.match(output, /(?:#|ℹ) fail 0\b/, output);
+  assert.ok(adminCandidates.length >= (exhausted ? 101 : 1), 'observe the real admin listener attempts');
+  for (const candidate of adminCandidates) assert.ok(candidate + (exhausted ? 100 : 10100) < 32768,
+    'admin listeners and their derived fallback ports must remain below the service range');
   assert.ok(controlChildren.every(child => child.exited), 'the original admin case collects its native child');
   for (const path of controlRoots) await assert.rejects(access(path), {code:'ENOENT'});
   if (occupied) {
+    assert.equal(occupiedSelected, true, 'the occupied candidate must actually be selected');
+    assert.ok(adminCandidates.includes(competingPort), 'the occupied candidate must reach the real bind');
     const marker = await new Promise((resolve, reject) => {
       const socket = connect({host:'127.0.0.1', port:competingPort});
       let body = '';

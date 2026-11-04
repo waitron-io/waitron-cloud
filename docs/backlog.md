@@ -565,10 +565,10 @@ See [the boundaries and remaining work](backlog/usage-metering.md#usage-read-tra
 
 ## Native storage admin fallback exhaustion (D506)
 
-**Open.** Admin test listeners now stay outside the native service-port range;
-paused-child controls reproduce the old S3 refusal and check both admin cases.
-Historical port owners, the progress-control timeout, admin-worker functionality
-and other programs' bind races remain unqualified.
+**Open.** Admin test listeners and HTTP-derived gRPC choices now stay below the native
+service-port range; paused-child controls reproduce the old S3 refusals.
+Historical port owners, the progress-control timeout, default native admin
+listeners, admin-worker functionality and other programs' bind races remain unqualified.
 See [the controls and unresolved failures](backlog/storage-cache-fixture.md#native-storage-admin-fallback-exhaustion-d506).
 
 ## Repository licence
