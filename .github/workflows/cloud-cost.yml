@@ -4,7 +4,6 @@ on:
     branches: [main]
     paths: ['**', '!docs/**', '!**/*.md']
   pull_request:
-    paths: ['**', '!docs/**', '!**/*.md']
 permissions:
   contents: read
   packages: read
@@ -17,18 +16,24 @@ jobs:
     timeout-minutes: 2
     outputs:
       files: ${{ steps.files.outputs.files }}
+      required: ${{ steps.plan.outputs.required }}
     steps:
       - uses: actions/checkout@v5
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
       - uses: actions/setup-node@v5
         with:
           node-version: '26'
           package-manager-cache: false
+      - id: plan
+        run: node scripts/ci-docs.mjs --plan
       - id: files
+        if: steps.plan.outputs.required == 'true'
         run: echo "files=$(node scripts/cloud-cost/conformance.mjs --matrix)" >> "$GITHUB_OUTPUT"
   conformance:
     needs: discover
+    if: needs.discover.outputs.required == 'true'
     name: cost (${{ matrix.file }}, ${{ matrix.group }})
     runs-on: ubuntu-latest
     timeout-minutes: 8

@@ -212,3 +212,68 @@ test('planner command prominently warns about an unreviewed documentation audit 
     assert.equal(selected.documentation, undefined);
   });
 });
+
+
+test('audit command rejects a reader change in its own revision and accepts only reviewed immutable inputs', () => fixture(({root, put, commit, base}) => {
+  const run = sha => spawnSync(process.execPath, [checker, '--audit', sha], {cwd: root, encoding: 'utf8'});
+  assert.equal(run(base).status, 0, 'a current reviewed tree passes the freshness gate');
+  put('scripts/reader.mjs', 'readFileSync("docs/backlog.md");\n');
+  assert.equal(run(base).status, 0, 'unstaged readers cannot replace immutable evidence');
+  const stale = run(commit());
+  assert.equal(stale.status, 1);
+  assert.match(stale.stderr, /Executable inputs changed/);
+  assert.match(stale.stderr, /--write-staged/);
+  assert.match(stale.stderr, /docs\/ci-documentation-audit.md/);
+  assert.equal(run('main').status, 1, 'mutable refs are refused');
+}));
+
+test('proof planner skips only audited prose and keeps code, pinned documents, main and unavailable evidence', () => fixture(({root, git, put, commit, base}) => {
+  const run = (event, expected) => {
+    const scratch = mkdtempSync(join(tmpdir(), 'cloud-proof-plan-'));
+    try {
+      const eventPath = join(scratch, 'event.json'), output = join(scratch, 'output');
+      writeFileSync(eventPath, JSON.stringify(event)); writeFileSync(output, '');
+      const result = spawnSync(process.execPath, [checker, '--plan'], {cwd: root, encoding: 'utf8',
+        env: {...process.env, GITHUB_EVENT_PATH: eventPath, GITHUB_OUTPUT: output}});
+      assert.equal(result.status, 0, result.stderr);
+      assert.equal(readFileSync(output, 'utf8'), `required=${expected}\n`);
+    } finally {rmSync(scratch, {recursive: true, force: true});}
+  };
+  const pr = (head, old = base) => ({pull_request: {base: {sha: old}, head: {sha: head}}});
+  put('docs/backlog.md', '# Changed\n');
+  const docs = commit();
+  run(pr(docs), false);
+  run({}, true);
+  run(pr(docs, 'a'.repeat(40)), true);
+  run(pr('main'), true);
+  run(pr(docs, 'HEAD~1'), true);
+  git('checkout', '--detach', base);
+  put('scripts/reader.mjs', 'console.log("main advanced");\n');
+  const advanced = commit();
+  run(pr(docs, advanced), false);
+  git('checkout', '--detach', docs);
+  git('mv', 'README.md', 'docs/renamed.md');
+  run(pr(commit()), false);
+  git('reset', '--hard', base);
+  const pinned = 'docs/waitron-integration-contract.md';
+  put(pinned, '# Published contract input\n');
+  const tree = commit();
+  const inputs = git('ls-tree', '-rz', '--full-tree', tree).split('\0')
+    .filter(row => ['scripts/reader.mjs', pinned].includes(row.split('\t')[1]));
+  put(policy, JSON.stringify(completeAudit({docsInputSha256: createHash('sha256')
+    .update(inputs.map(row => row + '\0').join('')).digest('hex')})) + '\n');
+  const pinnedBase = commit();
+  assert.equal(spawnSync(process.execPath, [checker, '--audit', pinnedBase], {cwd: root}).status, 0);
+  git('mv', pinned, 'docs/moved-contract.md');
+  run(pr(commit(), pinnedBase), true);
+
+  for (const path of ['scripts/reader.mjs', 'docs/waitron-integration-contract.md', 'docs/cloud-cost-model.md', 'docs/receipts/proof.md', 'packages/one/README.md']) {
+    git('reset', '--hard', base);
+    put(path, 'changed\n');
+    run(pr(commit()), true);
+  }
+  git('reset', '--hard', base);
+  put('scripts/reader.mjs', 'changed\n'); const stale = commit();
+  put('docs/backlog.md', '# Later prose\n');
+  run(pr(commit(), stale), true);
+}));

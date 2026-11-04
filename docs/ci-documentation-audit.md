@@ -17,14 +17,128 @@ The entire `docs/waitron-integration-contract.md` is now pinned because the
 translation package checks its published vectors. The generated
 `docs/cloud-cost-model.md` remains pinned for artifact verification. Any edit to
 either file, including prose, keeps full CI and invalidates the documentation
-inventory for later pull requests until you review and renew it.
+inventory immediately. Its own required CI fails until you review and renew it.
 Both immutable trees must match the selected inventory. Mixed changes, unknown
 paths or missing or stale evidence retain full work. A fresh head cannot qualify
 an unaudited base.
 
-The planner checks its committed checkout on every run and emits a GitHub warning
-when the documentation inventory is stale, including for code changes. A matching
-hash records your review boundary; it does not prove that the review was correct.
+Every change to a documentation-inventory input, including pinned prose, must
+keep that inventory current in its own pull request. The required root check verifies it on shard 1; a selected root-script
+check verifies it too. The documentation check already verifies both revisions.
+A stale inventory therefore fails the required CI summary while the planner
+keeps its conservative full-work fallback. Before you push code, review the
+changed readers and renew the staged inventories with the procedure below.
+A matching hash records your review boundary; it does not prove that the review
+was correct.
+
+This makes review and renewal part of every inventoried edit. Parallel code PRs
+can conflict on the policy even when their source changes are independent. Rebase,
+review the combined reader changes and regenerate from the merged staged tree;
+keep completed branch review approval when its implementation is unchanged.
+The required failure catches lost evidence in the PR that invalidates it instead
+of silently sending later prose PRs through the full suite. Renewal remains a
+human review step; a matching hash alone cannot establish that review happened.
+
+Venue service proof and Cloud cost conformance use the same `documentationPlan`
+check through `node scripts/ci-docs.mjs --plan`. They skip their test jobs only
+when both revisions qualify as regular unread prose. Missing revisions, mixed
+changes, pinned documents and stale evidence retain those tests. The cost
+workflow keeps its existing main-push path filter; the standard main workflow
+still runs every package and receipt, and the venue workflow still runs both
+proofs, even after a documentation-only pull request.
+
+## Renewal after #869
+
+You can locate the first stale revision after the last renewal with:
+
+```sh
+node scripts/ci-input-audit.mjs --check 95fbb4c5372699e44192048ea661c70e8bc3627a
+node scripts/ci-input-audit.mjs --check 3937c66bb73ae2da0cf31bc2937f393472846664
+```
+
+The first command passes all four inventories. The second refuses documentation:
+#870 changed `scripts/cloud-cost/conformance-archive-idle.test.mjs` without
+renewing the policy. Its actual documentation digest starts `079b8c59`, while the
+recorded digest still starts `17b6b293`. Later code changes kept it stale; a
+warning did not make the failure part of the required CI result.
+
+The renewed review covers programs and tests changed since #869, including
+removed paths, package Markdown, manifests and all execution wiring. Existing
+readers of the translation contract and generated cost model remain pinned.
+New traffic journals, storage-control scans and verifier cleanup read owned
+runtime or scratch directories. Cost release preparation reads separately pinned
+Waitron sources, JavaScript, JSON and font assets. Installed-dependency copying
+scans only workspace dependency directories. The new non-UTF-8 patch control
+writes its own Markdown bytes before reading its disposable candidate. It does
+not depend on the original document's content. CI fixtures continue to create
+their own documents. No additional Cloud prose exemption is added. The later #914 test-cloud changes
+are included too: its Cloud source inventory excludes Markdown explicitly,
+volume scans read private runtime roots, and the complete Waitron source
+inventory reads the separately pinned Waitron checkout. A real Git control adds
+and commits Cloud prose: its commit and tree change, while the Cloud runtime
+file inventory stays byte-for-byte equal.
+
+The renewal also includes the later recovery-session browser and container
+resource-diagnostic test changes on `main` through #921. The browser test reads
+application source and styles and writes captures to its configured receipt
+directory. The container controls read their own temporary state and the existing
+entry and verifier programs. Neither adds a Cloud prose reader. Review these
+combined inputs before renewal even when their source files do not overlap your
+branch: the old audit rejects the merged tree because it inventories both files.
+
+You can check the documentation inventory alone without installing packages:
+
+```sh
+node scripts/ci-docs.mjs --audit "$(git rev-parse HEAD)"
+```
+
+A stale result exits with status 1 and points you to the reader review and staged
+renewal procedure. It checks immutable Git blobs, so unstaged files cannot stand
+in for the reviewed tree.
+
+The separate proof review follows `scripts/fixtures/service-proof.ts` into the
+seven legacy and nine venue suites listed in `scripts/test-cloud-free-services.mjs`.
+Its receipt checker reads Git candidate identity and generated JSON output. The
+selected tests and helpers read source programs, local certificates, JSON state,
+owned scratch and database fixtures. The cost launcher selects JavaScript fixture
+files and prepares pinned source releases and synthetic runtime data. Its
+publication reader still uses the pinned generated cost model. These existing
+proof consumers introduce no additional unread Cloud prose exemption.
+
+## Review of the other three inventories
+
+The staged generator renews identity, gateway and lock inventories together with
+documentation. Their excluded programs and their consumers need review too.
+Since #869, the identity and gateway target programs, owning tests, script-mode
+checker, lock parser and saved-package reader are unchanged. The changed CI wiring
+still invokes those exact owning tests. The identity checker reads the pinned
+package source map and the separately selected Waitron checkout. The gateway
+checker reads its explicit JSON receipt; its existing generator remains the
+syntax-checked caller. New test-cloud and cost preparation do not execute these root scripts. The new
+Cloud source inventory does read their bytes, as well as the lockfile. Its
+expected hashes come from the same candidate; controls accept the current
+measured files and reject older or altered file hashes. Volume readers use
+private runtime inputs, and the complete Waitron reader uses a separate checkout.
+
+The lock review includes the root manifest, all nine workspace manifests,
+installation configuration, frozen installs, cache wiring and source consumers.
+The new Cloud image build installs the complete frozen graph. Its Cloud source
+inventory includes the lockfile and manifests and binds the measured files to
+the same candidate; it does not compare them with a fixed older lock hash. The
+complete Waitron inventory reads a different checkout. New test installs use
+owned disposable source trees. Compiler checks and all six receipt suites remain
+required for dependency changes. Existing manifest, graph and unknown-reader
+behavioural assertions are retained.
+
+Real Git controls edit each root-script family and the lock integrity metadata.
+Both root-script changes still qualify for their existing narrow script plan,
+but the new documentation freshness check rejects each with status 1. The lock
+control keeps 28 package jobs and six receipt suites and is rejected too. After
+reviewed staged renewal, all four modes are current and each control selects
+28 package jobs, six receipt suites and compiler work because the policy is a
+mixed root input. Re-enabling a peer certificate therefore does not by itself
+qualify a stale-documentation PR to land. This review leaves the separate receipt
+certificates and their historical fixtures untouched.
 
 ## Contract reader and renewal
 
@@ -90,7 +204,8 @@ are already pinned or refer to another checkout:
 The four inventories are renewed from the reviewed staged candidate using the
 procedure below. This is a review boundary for those inputs, not proof that an
 arbitrary future program cannot read Markdown. Any later inventoried change
-invalidates the relevant certificate and retains conservative work until review.
+invalidates the relevant certificate and retains conservative work. A stale
+documentation inventory also fails its own required CI until review and renewal.
 The separate receipt certificates and historical fixture evidence stay unchanged.
 
 ## Review before renewal
