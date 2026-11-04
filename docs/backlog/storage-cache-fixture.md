@@ -164,6 +164,8 @@ open. Discovery, the provider's issuer and key URL, and issued tokens all use
 that bound port. This removes the demonstrated handoff race; it does not prove
 which bind failed in the historical Linux run.
 
+Identity-server errors after startup still need separate qualification.
+
 Run `node --test deploy/test-cloud/storage-s3-grpc.test.mjs` to check the claimed
 probe-port regression, both-child exhaustion, disabled retries and successful
 recovery. The original S3 assertions and one-retry limit remain unchanged. An
@@ -192,8 +194,9 @@ budget failure in that run remains under [D530 investigation](ci-cache-saving.md
 
 The separate D458 port-probe error-handler change becomes unnecessary because
 this repair removes that probe. Its separate runtime change is unnecessary;
-the parked branch remains preserved. Local native checks need no containers; PostgreSQL and full Linux
-qualification remain CI gates while Docker is unavailable.
+the parked branch remains preserved. Local native refusal checks need no containers.
+Use the shared Linux test box for PostgreSQL or Linux checks; current-head and
+merge CI remain separate qualification gates.
 
 The three malformed-certificate, malformed-key and mismatched-key cases require
 zero TCP probes: TLS construction refuses the material before any child-port
