@@ -10,7 +10,26 @@ concurrency:
   group: venue-services-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 jobs:
+  changes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    outputs:
+      required: ${{ steps.plan.outputs.required }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '26'
+          package-manager-cache: false
+      - id: plan
+        run: node scripts/ci-docs.mjs --plan
   service-receipts:
+    needs: changes
+    if: needs.changes.outputs.required == 'true'
     name: service-receipts (${{ matrix.receipt }})
     strategy:
       fail-fast: false

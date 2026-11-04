@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import {execFileSync} from 'node:child_process';
+import {appendFileSync, readFileSync} from 'node:fs';
 import {auditInputMode, unreadMarkdown} from './ci-input-audit.mjs';
 export {unreadMarkdown} from './ci-input-audit.mjs';
 import {pathToFileURL} from 'node:url';
@@ -52,8 +53,32 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
       const binary = typeof args.at(-1) === 'object' && args.pop().binary;
       return execFileSync('git', args, {encoding: binary ? undefined : 'utf8', timeout: 30_000, maxBuffer: 16 * 1024 * 1024});
     };
-    const count = checkDocumentation(JSON.parse(process.env.CI_PLAN), git);
-    console.log(`Checked ${count} changed Markdown paths against audited immutable inputs`);
+    const args = process.argv.slice(2);
+    if (args.length === 2 && args[0] === '--audit') {
+      try { auditDocumentation(args[1], git); }
+      catch (error) {
+        throw new Error(`${error.message}\nReview changed readers, then renew with node scripts/ci-input-audit.mjs --write-staged as described in docs/ci-documentation-audit.md.`);
+      }
+      console.log('Documentation reader audit is current');
+    } else if (args.length === 1 && args[0] === '--plan') {
+      let documentation = null;
+      try {
+        const {pull_request: pr} = JSON.parse(readFileSync(process.env.GITHUB_EVENT_PATH, 'utf8'));
+        if (pr) {
+          assert.ok([pr.base.sha, pr.head.sha].every(sha => shaPattern.test(sha)), 'Invalid proof revisions');
+          const base = git('merge-base', pr.base.sha, pr.head.sha).trim();
+          const paths = git('diff', '--name-only', '--no-renames', '-z', base, pr.head.sha).split('\0');
+          assert.equal(paths.pop(), '', 'Incomplete proof diff');
+          documentation = documentationPlan(paths, base, pr.head.sha, git);
+        }
+      } catch { /* Missing or stale evidence retains all proof work. */ }
+      appendFileSync(process.env.GITHUB_OUTPUT, `required=${!documentation}\n`);
+      console.log(documentation ? 'Audited unread Markdown: no proof tests required' : 'Full proof work required');
+    } else {
+      assert.equal(args.length, 0, 'Usage: ci-docs.mjs [--audit <commit> | --plan]');
+      const count = checkDocumentation(JSON.parse(process.env.CI_PLAN), git);
+      console.log(`Checked ${count} changed Markdown paths against audited immutable inputs`);
+    }
   } catch (error) {
     console.error(error.message);
     process.exitCode = 1;

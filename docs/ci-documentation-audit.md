@@ -22,9 +22,58 @@ Both immutable trees must match the selected inventory. Mixed changes, unknown
 paths or missing or stale evidence retain full work. A fresh head cannot qualify
 an unaudited base.
 
-The planner checks its committed checkout on every run and emits a GitHub warning
-when the documentation inventory is stale, including for code changes. A matching
-hash records your review boundary; it does not prove that the review was correct.
+A code change must keep the documentation inventory current in its own pull
+request. The required root check verifies it on shard 1; a selected root-script
+check verifies it too. The documentation check already verifies both revisions.
+A stale inventory therefore fails the required CI summary while the planner
+keeps its conservative full-work fallback. Before you push code, review the
+changed readers and renew the staged inventories with the procedure below.
+A matching hash records your review boundary; it does not prove that the review
+was correct.
+
+Venue service proof and Cloud cost conformance use the same `documentationPlan`
+check through `node scripts/ci-docs.mjs --plan`. They skip their test jobs only
+when both revisions qualify as regular unread prose. Missing revisions, mixed
+changes, pinned documents and stale evidence retain those tests. The cost
+workflow keeps its existing main-push path filter; the standard main workflow
+still runs every package and receipt, and the venue workflow still runs both
+proofs, even after a documentation-only pull request.
+
+## Renewal after #869
+
+You can locate the first stale revision after the last renewal with:
+
+```sh
+node scripts/ci-input-audit.mjs --check 95fbb4c5372699e44192048ea661c70e8bc3627a
+node scripts/ci-input-audit.mjs --check 3937c66bb73ae2da0cf31bc2937f393472846664
+```
+
+The first command passes all four inventories. The second refuses documentation:
+#870 changed `scripts/cloud-cost/conformance-archive-idle.test.mjs` without
+renewing the policy. Its actual documentation digest starts `079b8c59`, while the
+recorded digest still starts `17b6b293`. Later code changes kept it stale; a
+warning did not make the failure part of the required CI result.
+
+The renewed review covers programs and tests changed since #869, including
+removed paths, package Markdown, manifests and all execution wiring. Existing
+readers of the translation contract and generated cost model remain pinned.
+New traffic journals, storage-control scans and verifier cleanup read owned
+runtime or scratch directories. Cost release preparation reads separately pinned
+Waitron sources, JavaScript, JSON and font assets. Installed-dependency copying
+scans only workspace dependency directories. The new non-UTF-8 patch control
+writes its own Markdown bytes before reading its disposable candidate. It does
+not depend on the original document's content. CI fixtures continue to create
+their own documents. No additional Cloud prose exemption is added.
+
+You can check the documentation inventory alone without installing packages:
+
+```sh
+node scripts/ci-docs.mjs --audit "$(git rev-parse HEAD)"
+```
+
+A stale result exits with status 1 and points you to the reader review and staged
+renewal procedure. It checks immutable Git blobs, so unstaged files cannot stand
+in for the reviewed tree.
 
 ## Contract reader and renewal
 

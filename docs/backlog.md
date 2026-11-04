@@ -1378,6 +1378,16 @@ implementation or production evidence.
   limits; landing still requires every actual job record final. See the
   [investigation and qualification limits](backlog/ci-job-record-publication.md).
 
+- **Documentation-only CI audit freshness (D567).** The documentation inventory
+  was first stale after #870 changed the cost archive test without renewal after
+  #869. Required root and selected script checks now reject a stale documentation
+  inventory in the changing PR; the full-work fallback remains. Venue and cost
+  workflows share the existing audited prose selector, so qualified documentation
+  PRs omit their tests too. Review changed readers before staged renewal; the
+  [audit guide](ci-documentation-audit.md) records the boundary. Every main push
+  still runs the full standard suite. Exact-head Actions qualification and the
+  separate documentation/code PR controls own the runtime evidence.
+
 - **CI execution budget.** You can read one summary job and the individual package
   and receipt jobs to check a candidate. The summary also checks the plan's
   package allocation against the planner's registered package names and shard
