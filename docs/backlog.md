@@ -3440,11 +3440,6 @@ assertion and deadline. Runtime port selection is unchanged; see
 Identity-server errors after startup and historical failure causes remain open;
 see [the storage investigation](backlog/storage-cache-fixture.md#identity-port-allocation-race-d499).
 
-## Storage TLS material refusals (D455)
-
-**Open.** Real store startup and historical failure causes remain open.
-See [the boundaries and remaining work](backlog/storage-cache-fixture.md#storage-tls-material-refusals-d455).
-
 ## Storage archive download failure reporting (D441)
 
 **Open; historical cause unknown.** The Linux test box passes five download
