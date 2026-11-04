@@ -3998,21 +3998,6 @@ preserving the existing assertions and deadlines. See the
 
 ## Authenticator code format feedback (D237)
 
-Malformed authenticator codes now stay in their field with an explanation, before
-any request. App codes require six digits; recovery proofs accept 32 hexadecimal
-characters or four groups of eight. The portal still removes whitespace and keeps
-recovery hyphens. New-app confirmation accepts only its six-digit app code.
-Editing a malformed sign-in, management or new-app code clears its previous local
-format message and field marker. Submit checks the edited value again; editing
-neither sends a request nor changes the code rules. Other-field edits leave that
-code error alone. Required-code feedback still waits for non-whitespace input,
-and server refusals, uncertain changes and retry waits remain visible.
-Blank-code, incorrect-code and outage feedback remain distinct. Server refusals
-keep their general feedback without marking a code field: an invalid-input reply
-can also mean the setup or account state changed. The server remains the authority
-for accepting a proof. Controller and English/Spanish browser checks cover sign-in,
-management and new-app confirmation without changing server rules.
-
 ### Distinguish server refusals during authenticator changes
 
 An expired, consumed or superseded setup, a removed factor, and an over-long
