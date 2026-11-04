@@ -25,6 +25,10 @@ two initial controls pass on Linux. Why the nested install could not find that
 package in the store remains unknown; this change removes that store from the
 audit's prerequisites. The helper also refuses missing, empty or linked root
 dependency directories and linked workspace dependency directories.
+The helper enumerates the two workspace roots explicitly. This preserves the
+package selector's existing refusal to narrow work for unresolved directory
+reads, including its live-repository checks. Missing-target dependency links
+are refused too.
 
 The remote-access and portal guard fixtures use the same installed copies. Their
 twelve report omissions, twenty-nine collection guards and nine portal omissions

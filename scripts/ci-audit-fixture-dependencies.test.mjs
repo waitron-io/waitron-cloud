@@ -9,7 +9,7 @@ const helper = new URL('./ci-audit-fixture-dependencies.mjs', import.meta.url).p
 const env = {...process.env};
 delete env.NODE_TEST_CONTEXT;
 
-for (const kind of ['missing source', 'empty source', 'file instead of dependencies', 'empty dependency directory', 'linked dependency directory', 'linked workspace dependencies']) {
+for (const kind of ['missing source', 'empty source', 'file instead of dependencies', 'empty dependency directory', 'linked dependency directory', 'linked workspace dependencies', 'linked missing workspace dependencies']) {
   test(`dependency preparation refuses ${kind}`, () => {
     const scratch = mkdtempSync(join(tmpdir(), 'cloud-audit-no-installed-deps-'));
     const source = join(scratch, 'source');
@@ -24,7 +24,7 @@ for (const kind of ['missing source', 'empty source', 'file instead of dependenc
         else {
           mkdirSync(join(source, 'node_modules'));writeFileSync(join(source, 'node_modules/installed.cjs'), 'module.exports = 1;\n');
           mkdirSync(join(source, 'packages/caller'), {recursive: true});
-          symlinkSync(shared, join(source, 'packages/caller/node_modules'), 'dir');
+          symlinkSync(kind === 'linked missing workspace dependencies' ? join(scratch, 'missing') : shared, join(source, 'packages/caller/node_modules'), 'dir');
         }
       }
       const result = spawnSync(process.execPath, [helper, source, join(scratch, 'candidate')], {env, encoding: 'utf8'});
