@@ -2,6 +2,16 @@
 
 ## Nested package installs (D530)
 
+An offline nested install also failed in [run 41792705294, root partition 4](https://github.com/waitron-io/waitron-cloud/actions/runs/41792705294/job/126450587544).
+The translation-vector audit test could not find `undici-types@7.18.2`, although
+the initial install reported downloading all 162 packages. The same job passed
+on main in run 41499801321 and on the concurrent documentation branch in run
+41792656841; the unchanged focused test also passes locally. Lane G previously
+recorded that missing tarball in a cache-only test-box control on 31 October.
+D530 retains the cause: trace why the nested install cannot reuse the initial
+store, preserving the offline check and its assertions. A later clean run
+qualifies unrelated work; it does not repair or explain this failure.
+
 The package-test steps now pass the same package token as the initial install.
 You need that token when a test installs dependencies in a temporary checkout
 and pnpm must fetch a private tarball. The unsharded, grouped and sharded test
