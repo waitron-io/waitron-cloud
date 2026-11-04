@@ -340,3 +340,18 @@ boundary. Native Chromium with stubbed HTTP leaves real recovery authority,
 other browser engines, production networks and the historical Linux cause
 unqualified. Delayed handlers still repeat all eight language, theme and width
 journeys.
+
+## Public browser-check landmark observation and captures (D365)
+
+The landmark browser fixture uses a four-second observation for an absent
+challenge-handler signal. Its missing-signal control checks a five-second outer
+bound; it does not independently pin the exact four-second value or prove that
+ordinary handler observation is necessary. Delayed handlers repeat running-check
+journeys in both languages, themes and phone/desktop widths. All original main
+region, bilingual guidance, reload link, cookie, forwarding and layout checks
+remain, including disabled JavaScript and unavailable-script journeys.
+Ordinary captures keep all 24 historical names; eight delayed running captures
+add a suffix, retaining 32 screenshots. Set `PUBLIC_CHALLENGE_RECEIPT_DIR` to a
+fresh directory for this file, separate from other browser fixtures. These checks
+use native Chromium and local HTTP; other browser engines and production networks
+remain unqualified. Production behaviour is unchanged.
