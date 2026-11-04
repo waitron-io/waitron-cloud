@@ -141,13 +141,6 @@ Email shutdown also checks connection loss while the server holds recipient acce
 before receiving a message body, under both stop signals. The command retains retry state,
 leaves later mail untouched and drains naturally. See [the recipient-stage limits](backlog/worker-scheduling.md#email-command-shutdown-before-smtp-recipient-acceptance-d557).
 
-## Worker scheduling failures and error reporting (D467)
-
-**Open.** Production scheduling, real database failures and capacity remain separate gates.
-See [the native worker boundaries](backlog/worker-scheduling.md#worker-failure-and-reporting-boundaries-d467).
-
-See [the additional qualification detail](backlog/worker-scheduling.md#cancellation-and-empty-failure-values).
-
 ## Worker scheduling deadlines and polling failures (D468)
 
 **Open.** Production scheduling, real database failures and recovery remain open.
