@@ -3784,18 +3784,6 @@ D385 now labels those setup boundaries, so a changed qualification can retain mo
 evidence if they recur. Preserve the failing assertions and five-second database
 limit, then reproduce a labelled failure before changing runtime rules.
 
-## Public browser-check status handler wait (D366)
-
-The live-status browser fixture configures a four-second challenge-handler wait.
-Its missing-signal control checks a five-second outer race, so it does not prove
-the exact configured value or that every ordinary observation is necessary.
-Delayed handlers repeat every language, theme, width and failure journey. All
-33 browser checks pass, and ordinary and delayed challenge-failure captures now
-retain 16 separate files with all eight historical names. Every original
-live-region, accessibility-tree, reload, focus, cookie, forwarding assertion and
-deadline remains. Native Chromium and local HTTP checks leave other browser
-engines, worker-failure images and production-network qualification open.
-
 ## Recovery-choice browser handler wait (D362)
 
 Set `RECOVERY_PORTAL_RECEIPT_DIR` to a fresh directory when checking the recovery
