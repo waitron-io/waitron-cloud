@@ -336,3 +336,9 @@ input. Identity and gateway target programs, their readers, manifests, lockfile,
 installation hooks and CI wiring remain unchanged. All four inventories are
 renewed from the reviewed staged candidate; no selection rule or manifest
 expectation changes.
+
+
+The combined renewal also includes the SES configuration and bounded-event
+readers from main `59cabe75`. They parse supplied configuration, notification JSON
+and inline test fixtures; they add no Cloud Markdown reader. The identity and
+gateway targets, dependency manifests and installation hooks remain unchanged.
