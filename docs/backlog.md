@@ -3202,18 +3202,6 @@ also stops Docker's own registry transfer. Qualify that with a real daemon and a
 controlled registry when local Docker is available; do not infer it from client
 termination.
 
-## Backup recovery wait observation (D164)
-
-A controlled Linux PostgreSQL reproduction in [PR #355](https://github.com/waitron-io/waitron-cloud/pull/355)
-pauses the activity snapshot before its live blocker check. It reproduces the
-expiry-query/qualification-lock mismatch from #352's independent merge. The test
-observer now acknowledges a blocked backend first, then reads its query in a new
-statement while the caller still holds the blocker. The original operation and
-proof-expiry cases record backend IDs, query times, wait events and stages. All
-original expiry guards, refusal assertions and deadlines remain unchanged;
-production recovery code is unchanged. This establishes an observer defect that
-can explain the historical failure, without proving that run's exact timing.
-
 ## Portal reset-mail boundary reporting
 
 **Open; the missing reset email remains unexplained.** Capture a diagnostic
