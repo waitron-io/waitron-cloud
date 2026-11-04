@@ -322,4 +322,115 @@ request from invalidated state, a clock refusal or a later accounting check.
 Reproduce that category before changing behavior. A passing current run does not
 repair the historical failure; do not repeat this baseline without a new trigger.
 
+### Litestream request-validation diagnostics (D378)
+
+The transport records the first refused request-validation boundary using fixed
+stage names, including request identity, operation, retry sequence, after-stop
+admission, content length, mutation body and lifetime bookkeeping. Stop checkpoints
+and sanitized close records carry the stage without request paths, headers or
+SDK invocation identifiers. Later requests cannot replace the first refusal.
+Native HTTP checks still require refused requests to return 400 without forwarding
+or publishing accounting, and include a successful forwarding control.
+
+The [PR620 cost refusal](https://github.com/waitron-io/waitron-cloud/actions/runs/40600605206/job/122527571695)
+reported request-validation at stop's idle step without identifying its check.
+Its cause remains unknown. Reproduce the next labelled recurrence before changing
+transport, stop, accounting or cleanup rules. Use the authorised Linux test box
+for reproduction; these native checks do not qualify the genuine storage backend.
+
+The first D378 qualification also found an absent fiscal worker identity in
+[CI40604297872, job122540422831](https://github.com/waitron-io/waitron-cloud/actions/runs/40604297872/job/122540422831).
+Its cause remains unknown. [PR711](https://github.com/waitron-io/waitron-cloud/pull/711)
+removed the obsolete allocator, two-worker test and D380 diagnostic helper. This
+historical failure no longer has a running Cloud fixture to reproduce. Migration
+038 and dormant fiscal records remain governed by the registry retirement boundary.
+This diagnostic qualification does not establish either historical cause.
+
+Run `node --test scripts/cloud-cost/litestream-request-validation-diagnostics.test.mjs scripts/cloud-cost/litestream-close-diagnostics.test.mjs`
+for the native HTTP controls. Diagnostics already landed in PR622, commit
+`975395ec0dc590c8f5f7a7df7b821d9883e2d097`.
+
+### Litestream after-stop admission diagnostics (D381)
+
+You can now identify the exact refused admission guard in the stop checkpoint,
+independent request audit and sanitized close record. Fixed categories distinguish
+poisoned state, input shape, hop and phase, row metadata and identity, row capacity
+and operation, duplicate admission, retry sequence, observer pairing, post-stop
+operation and ordinal, clock order and the three-attempt bound. Later refused
+calls retain the first admission cause. Producer and observer share the tracker,
+so a later poisoned hop reports the earlier hop's cause. No request paths, headers, invocation
+identifiers or accessor values are published; every existing refusal and accounting
+rule remains in force.
+
+The [PR622 merge refusal](https://github.com/waitron-io/waitron-cloud/actions/runs/40611462709/job/122563803926)
+named after-stop admission without its inner guard. Its underlying cause remains
+unknown. Reproduce a labelled recurrence before changing admission, stop, retry,
+accounting or cleanup. Native controls exercise each category and real HTTP
+refusal. Use the authorised Linux test box for genuine-backend reproduction;
+the native controls do not qualify that backend. Current-head Linux CI must still
+qualify the genuine backend before landing.
+
+Run `node --test scripts/cloud-cost/litestream-admission-diagnostics.test.mjs scripts/cloud-cost/litestream-close-diagnostics.test.mjs`
+for the native controls. Diagnostics already landed in PR625, commit
+`d0a970e75d9c297ea56630c8963d9505c5cb3bf7`.
+
+### Litestream refused operation and attempt diagnostics (D383)
+
+The [PR625 merge refusal](https://github.com/waitron-io/waitron-cloud/actions/runs/40615344423/job/122576493560)
+identified a non-list operation after stop, but omitted the operation and whether
+it was an initial attempt or a retry. You can now read both fixed categories from
+the validated internal row in admission errors, independent audit checkpoints,
+transport checkpoints and sanitized close reports. Later poisoned calls retain the
+first shared producer or observer cause, without adding their own request details.
+Earlier refusals keep their existing context-free shape, including after stop.
+Later clock and affected-attempt refusals retain the validated list and initial
+attempt categories. Request identifiers,
+paths, headers, arbitrary caller values and accessor output stay private.
+
+Native controls exercise initial attempts and retries, shared first-cause retention,
+real HTTP refusal and the privacy filters. Every original admission, stop, retry,
+accounting and cleanup rule, assertion and deadline remains unchanged. The cause
+of the historical refusal is still unknown. Reproduce the labelled operation
+before changing runtime rules. Use the authorised Linux test box for genuine-backend
+reproduction; native controls do not qualify that backend. Current-head Linux CI
+must still qualify the genuine backend before landing.
+
+[PR627's first qualification](https://github.com/waitron-io/waitron-cloud/actions/runs/40617804734/job/122584381707)
+reported three PostgreSQL statement timeouts in registration shard 5: two during
+migration setup and one while creating an account fixture. Their cause is unknown.
+D385 now labels those setup boundaries, so a changed qualification can retain more
+evidence if they recur. Preserve the failing assertions and five-second database
+limit, then reproduce a labelled failure before changing runtime rules.
+
+Run `node --test scripts/cloud-cost/litestream-admission-operation.test.mjs scripts/cloud-cost/litestream-close-diagnostics.test.mjs`
+for the native controls. Diagnostics already landed in PR627, commit
+`4864bbfecea8f3e59cfa76566aab0a30a7db8220`.
+
+### Registration SQL setup failure diagnostics (D385)
+
+A registration setup failure reports its fixed boundary and, for migration
+work, its ordinal in the shipped migration list. You can distinguish the advisory
+lock, ledger creation and compatibility check, migration loading, lookup,
+application and ledger recording, and transaction start or finish. Relay fixtures
+identify schema creation, migration setup, issuer creation, the bounds clock, relay
+configuration, venue preparation, each initial insert, session creation, grant
+approval and lease construction. These failure-only records omit SQL,
+parameters, schema and account names, credentials and caught error values.
+Original errors, query text and arguments, rollback, cleanup and the five-second
+statement limit stay in force. Successful setup remains silent.
+
+[PR627 qualification](https://github.com/waitron-io/waitron-cloud/actions/runs/40617804734/job/122584381707)
+refused two migration applications and one relay account insert with PostgreSQL
+statement timeouts. The historical cause remains unknown. Native controls cover
+labelled refusals and reporter failures; they do not reproduce these timeouts
+against PostgreSQL. Use the authorised Linux test box for genuine PostgreSQL
+reproduction, or inspect the next labelled CI recurrence. Reproduce the cause
+before changing queries, transaction rules, concurrency or timeouts.
+The [D383 diagnostics above](#litestream-refused-operation-and-attempt-diagnostics-d383)
+already landed; neither diagnostic delivery establishes a runtime repair.
+
+Run `node --test packages/registration/test/sql-setup-diagnostics.test.ts`
+for the native controls. Diagnostics already landed in PR629, commit
+`7ac885100ba5771fc6aeff7245b9e10d5295d8a2`.
+
 Return to the [backlog index](../backlog.md).

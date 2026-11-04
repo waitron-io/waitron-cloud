@@ -99,49 +99,11 @@ in [the setup investigation](backlog/ci-pnpm-setup.md).
 
 ## Worker shutdown during polling and error reporting (D459)
 
-**Open.** Production shutdown, real database failures and cancellation remain open.
-See [the boundaries and remaining work](backlog/worker-scheduling.md#worker-shutdown-during-polling-and-error-reporting-d459).
-
-Cancelled monitoring startup scheduling and translation startup retention now require
-natural command exit, as do blocked translation retention, idle monitoring shutdown,
-blocked monitoring startup after lock release, and idle or blocked-claim email shutdown.
-The four email cases reject a forced successful exit through a wrapper's `beforeExit`
-observation. See [the email command limits](backlog/worker-scheduling.md#email-command-shutdown-with-real-database-claims-d536).
-Active translation checks also require natural exit during the first provider call,
-review and two concurrent jobs; explicit pool cleanup remains open. See [the additional qualification detail](backlog/worker-scheduling.md#additional-shutdown-and-timer-qualification).
-Active monitoring checks retain an observation through a database lock after either
-stop signal, commit it after release and leave a later due venue unchecked. See
-[the observation shutdown limits](backlog/worker-scheduling.md#monitoring-command-shutdown-during-an-active-observation-d552).
-Active-observation cancellation now checks unset observation state, the failed venue's retry delay,
-no later claim after a stop signal and natural exit. A running control continues to
-a later venue. See [the cancellation limits](backlog/worker-scheduling.md#monitoring-shutdown-after-active-observation-cancellation-d553).
-
-Active-observation statement timeouts now qualify both stop signals and a running
-control, with retained retry state, no later claim after shutdown and natural exit.
-See [the statement-timeout limits](backlog/worker-scheduling.md#monitoring-shutdown-after-an-observation-reaches-its-statement-timeout-d554).
-
-Active-observation connection-loss checks now terminate the owned blocked backend
-after either stop signal, retain retry state and require natural exit without a
-later claim. A running control reaches another venue through a different live
-connection. See [the single-connection failure limits](backlog/worker-scheduling.md#monitoring-shutdown-after-losing-an-active-observation-connection-d555).
-
-Email shutdown now checks connection loss after a complete local SMTP message
-but before acknowledgement, including retained retry state, no later mail claim
-and natural exit under both stop signals. A two-second drain check distinguishes
-the fixture disconnect from the local transport’s five-second inactivity timeout.
-Remote acceptance remains uncertain.
-See [the SMTP connection-loss limits](backlog/worker-scheduling.md#email-command-shutdown-after-losing-an-smtp-acknowledgement-d556).
-
-Email shutdown also checks connection loss while the server holds recipient acceptance,
-before receiving a message body, under both stop signals. The command retains retry state,
-leaves later mail untouched and drains naturally. See [the recipient-stage limits](backlog/worker-scheduling.md#email-command-shutdown-before-smtp-recipient-acceptance-d557).
-
-## Worker scheduling deadlines and polling failures (D468)
-
-**Open.** Production scheduling, real database failures and recovery remain open.
-See [the boundaries and remaining work](backlog/worker-scheduling.md#worker-scheduling-deadlines-and-polling-failures-d468).
-
-See [the additional qualification detail](backlog/worker-scheduling.md#recurring-intervals-across-clock-corrections).
+**Open.** Qualify production shutdown, database failures, cancellation and provider
+behavior beyond the local fixtures, plus explicit database pool cleanup. Native
+polling, pending schedules and late error reports have shutdown controls;
+real-command checks cover the cases named in
+[the worker shutdown detail and remaining limits](backlog/worker-scheduling.md#worker-shutdown-during-polling-and-error-reporting-d459).
 
 ## Translation consent during account changes (D392)
 
@@ -2911,13 +2873,9 @@ an ID is returned and a child created by a separate host remain outside this res
 
 ## Bound verifier fixture build timeout (D312)
 
-Find why the bound verifier fixture image exceeded its two-minute build limit in CI.
-The cancelled run retained no build progress, so registry, image-pull and cache causes
-remain unproved. Build failures now print their command, elapsed time, failure reason
-and output tail before the test summary. Failed-build cleanup still attempts its
-unique image tag, with a one-second limit, and always removes temporary files.
-Reproduce the image build when local Docker is available; passing CI does not explain
-the earlier timeout. Keep every verifier assertion and the existing build and job limits.
+**Open.** The current image builds on the Linux test box, but the historical CI
+timeout remains unexplained. See [the reproduction and remaining investigation](backlog/verifier-build.md#bound-verifier-fixture-build-timeout-d312).
+Keep every verifier assertion and the existing build and job limits.
 
 
 ## Storage archive download failure reporting (D441)
@@ -3438,98 +3396,6 @@ box. All six native ordering and diagnostic controls also pass.
 
 Use a labelled
 recurrence to establish the historical cause before changing any shutdown rule.
-
-## Registration SQL setup failure diagnostics (D385)
-
-A registration setup failure now reports its fixed boundary and, for migration
-work, its ordinal in the shipped migration list. You can distinguish the advisory
-lock, ledger creation and compatibility check, migration loading, lookup,
-application and ledger recording, and transaction start or finish. Relay fixtures
-identify schema creation, migration setup, issuer creation, the bounds clock, relay
-configuration, venue preparation, each initial insert, session creation, grant
-approval and lease construction. These failure-only records omit SQL,
-parameters, schema and account names, credentials and caught error values.
-Original errors, query text and arguments, rollback, cleanup and the five-second
-statement limit stay in force. Successful setup remains silent.
-
-[PR627 qualification](https://github.com/waitron-io/waitron-cloud/actions/runs/40617804734/job/122584381707)
-refused two migration applications and one relay account insert with PostgreSQL
-statement timeouts. The historical cause remains unknown. Native controls cover
-labelled refusals and reporter failures; genuine local PostgreSQL reproduction
-waits for Docker to return. Use a labelled recurrence to reproduce the cause
-before changing queries, transaction rules, concurrency or timeouts. D383 remains
-parked with its completed review; this diagnostic delivery does not qualify that
-branch or establish a runtime repair.
-
-## Litestream request-validation diagnostics (D378)
-
-The transport records the first refused request-validation boundary using fixed
-stage names, including request identity, operation, retry sequence, after-stop
-admission, content length, mutation body and lifetime bookkeeping. Stop checkpoints
-and sanitized close records carry the stage without request paths, headers or
-SDK invocation identifiers. Later requests cannot replace the first refusal.
-Native HTTP checks still require refused requests to return 400 without forwarding
-or publishing accounting, and include a successful forwarding control.
-
-The [PR620 cost refusal](https://github.com/waitron-io/waitron-cloud/actions/runs/40600605206/job/122527571695)
-reported request-validation at stop's idle step without identifying its check.
-Its cause remains unknown. Reproduce the next labelled recurrence before changing
-transport, stop, accounting or cleanup rules. Genuine local Docker qualification
-remains unavailable until Docker returns; current-head Linux CI checks the delivery.
-
-The first D378 qualification also found an absent fiscal worker identity in
-[CI40604297872, job122540422831](https://github.com/waitron-io/waitron-cloud/actions/runs/40604297872/job/122540422831).
-Its cause remains unknown. [PR711](https://github.com/waitron-io/waitron-cloud/pull/711)
-removed the obsolete allocator, two-worker test and D380 diagnostic helper. This
-historical failure no longer has a running Cloud fixture to reproduce. Migration
-038 and dormant fiscal records remain governed by the registry retirement boundary.
-
-## Litestream after-stop admission diagnostics (D381)
-
-You can now identify the exact refused admission guard in the stop checkpoint,
-independent request audit and sanitized close record. Fixed categories distinguish
-poisoned state, input shape, hop and phase, row metadata and identity, row capacity
-and operation, duplicate admission, retry sequence, observer pairing, post-stop
-operation and ordinal, clock order and the three-attempt bound. Later refused
-calls retain the first admission cause. Producer and observer share the tracker,
-so a later poisoned hop reports the earlier hop's cause. No request paths, headers, invocation
-identifiers or accessor values are published; every existing refusal and accounting
-rule remains in force.
-
-The [PR622 merge refusal](https://github.com/waitron-io/waitron-cloud/actions/runs/40611462709/job/122563803926)
-named after-stop admission without its inner guard. Its underlying cause remains
-unknown. Reproduce a labelled recurrence before changing admission, stop, retry,
-accounting or cleanup. Native controls exercise each category and real HTTP
-refusal; genuine local Docker reproduction waits for Docker to return. Current-head
-Linux CI supplies the genuine backend qualification.
-
-## Litestream refused operation and attempt diagnostics (D383)
-
-The [PR625 merge refusal](https://github.com/waitron-io/waitron-cloud/actions/runs/40615344423/job/122576493560)
-identified a non-list operation after stop, but omitted the operation and whether
-it was an initial attempt or a retry. You can now read both fixed categories from
-the validated internal row in admission errors, independent audit checkpoints,
-transport checkpoints and sanitized close reports. Later poisoned calls retain the
-first shared producer or observer cause, without adding their own request details.
-Earlier refusals keep their existing context-free shape, including after stop.
-Later clock and affected-attempt refusals retain the validated list and initial
-attempt categories. Request identifiers,
-paths, headers, arbitrary caller values and accessor output stay private.
-
-Native controls exercise initial attempts and retries, shared first-cause retention,
-real HTTP refusal and the privacy filters. Every original admission, stop, retry,
-accounting and cleanup rule, assertion and deadline remains unchanged. The cause
-of the historical refusal is still unknown. Reproduce the labelled operation
-before changing runtime rules; genuine local reproduction waits for Docker to
-return, while current-head Linux CI qualifies the real backend.
-
-[PR627's first qualification](https://github.com/waitron-io/waitron-cloud/actions/runs/40617804734/job/122584381707)
-reported three PostgreSQL statement timeouts in registration shard 5: two during
-migration setup and one while creating an account fixture. Their cause is unknown.
-D385 now labels those setup boundaries, so a changed qualification can retain more
-evidence if they recur. Preserve the failing assertions and five-second database
-limit, then reproduce a labelled failure before changing runtime rules.
-
 
 ## Recovery deployment qualification
 
