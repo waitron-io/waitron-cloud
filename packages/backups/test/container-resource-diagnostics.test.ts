@@ -44,18 +44,19 @@ for(const [name,stderr,exitCode,expected,oomKilled] of [
  ['unavailable child diagnostics','backup.verifier_resource\nprivate-container-secret',73,null,false],
  ['malformed child diagnostics','backup.verifier_resource_detail {invalid private-container-secret}\n',73,null,false],
  ['Docker-reported memory kill without an entry report','private-container-secret',137,null,true],
+ ['Docker-reported memory kill with another exit','private-container-secret',1,null,true],
  ['advisory text on a successful exit','backup.verifier_resource_detail '+JSON.stringify(detail)+'\n',0,null,false],
 ] as const)test(`container reporting handles ${name} and still removes owned work`,async()=>{
- const directory=await mkdtemp(join(tmpdir(),'verifier-docker-report-')),state=join(directory,'state'),removed=join(directory,'removed'),oldPath=process.env.PATH;
+ const directory=await mkdtemp(join(tmpdir(),'verifier-docker-report-')),state=join(directory,'state'),removed=join(directory,'removed'),createdName=join(directory,'created-name'),removedName=join(directory,'removed-name'),oldPath=process.env.PATH;
  const wrapper=join(directory,'docker');
  await writeFile(wrapper,`#!${process.execPath}
 const fs=require('node:fs'),args=process.argv.slice(2),state=${JSON.stringify(state)};
 if(args[0]==='image')console.log(JSON.stringify([{Id:'sha256:fixture',Config:{}}]));
 else if(args[0]==='ps')console.log('');
-else if(args[0]==='create'){fs.writeFileSync(state,'created');console.log(args[args.indexOf('--name')+1]);}
+else if(args[0]==='create'){fs.writeFileSync(state,'created');fs.writeFileSync(${JSON.stringify(createdName)},args[args.indexOf('--name')+1]);console.log(args[args.indexOf('--name')+1]);}
 else if(args[0]==='inspect')console.log(JSON.stringify([{State:{Status:fs.readFileSync(state,'utf8'),ExitCode:${exitCode},OOMKilled:${oomKilled},Error:''},HostConfig:{Memory:201326592,MemorySwap:201326592,Tmpfs:{'/scratch':'size=16m'},NetworkMode:'none',ReadonlyRootfs:true},Mounts:[]}]));
 else if(args[0]==='start'){fs.writeFileSync(state,'running');process.stdin.resume();process.stdin.on('end',()=>{process.stdout.write('{"integrityOk":true}');process.stderr.write(${JSON.stringify(stderr)});fs.writeFileSync(state,'exited');process.exitCode=${exitCode};});}
-else if(args[0]==='rm'){fs.writeFileSync(${JSON.stringify(removed)},'removed');console.log('removed');}
+else if(args[0]==='rm'){fs.writeFileSync(${JSON.stringify(removed)},'removed');fs.writeFileSync(${JSON.stringify(removedName)},args.at(-1));console.log('removed');}
 else process.exitCode=125;`);await chmod(wrapper,0o700);process.env.PATH=directory+':'+oldPath;
  try{
   const verify=await createContainerWaitronVerifier({image:'fixture',owner:'test',memoryMiB:192,scratchMiB:16});
@@ -67,6 +68,7 @@ else process.exitCode=125;`);await chmod(wrapper,0o700);process.env.PATH=directo
    assert.deepEqual(error.cause.resourceDetail,expected);assert(!JSON.stringify(error.cause).includes('private-container-secret'));return true;
   });
   assert.equal(await readFile(removed,'utf8'),'removed');
+  assert.equal(await readFile(removedName,'utf8'),await readFile(createdName,'utf8'));
  }finally{process.env.PATH=oldPath;await rm(directory,{recursive:true,force:true});}
 });
 

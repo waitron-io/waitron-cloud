@@ -3331,7 +3331,7 @@ See [the boundaries and remaining work](backlog/storage-cache-fixture.md#storage
 ## Container verifier memory-refusal observation (D335)
 
 **Open.** Docker event-reporting differences remain unexplained. Native controls now
-qualify a Docker-reported memory kill with exit 137 and no entry report.
+qualify Docker-reported memory kills with exits 137 and 1 and no entry report.
 See [the boundaries and remaining work](backlog/verifier-build.md#container-verifier-memory-refusal-observation-d335).
 
 ## Verifier build refusal and cleanup controls (D443)
