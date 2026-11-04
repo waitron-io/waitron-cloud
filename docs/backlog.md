@@ -2902,6 +2902,14 @@ timeout remains unexplained. See [the reproduction and remaining investigation](
 Keep every verifier assertion and the existing build and job limits.
 
 
+## Storage test socket attribution and live progress (D575)
+
+Unexpected reservation-control binds now report the failed phase, port and
+listening process before cleanup. The admin wrapper forwards its child's output
+while retaining the transcript, so its last operation survives an outer timeout.
+Historical owners and a shared cause with default admin listeners remain unknown.
+See [the checks and investigation limits](backlog/storage-cache-fixture.md#storage-test-socket-attribution-and-live-progress-d575).
+
 ## Storage archive download failure reporting (D441)
 
 **Open; historical cause unknown.** Download failure reporting is implemented,

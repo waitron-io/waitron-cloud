@@ -323,3 +323,16 @@ tests use their independently pinned nine-manifest certificate; current lock
 validation requires every current manifest and its metadata. See the
 [dependency-update audit](ci-lockfile-audit.md) and the
 [coordinated design](superpowers/specs/2026-10-16-coordinated-ci-audits.md).
+
+
+## Storage control diagnostic reader review (D575)
+
+The control helper reads child stdout and stderr and asks `lsof` for listeners
+on the one refused numeric port. Its test programs use explicit JavaScript file
+paths and private runtime state. The parent retains the same transcript for
+existing assertions and now also forwards it while the child runs. These
+readers consume no exempt Markdown. The added backlog prose is not a runtime
+input. Identity and gateway target programs, their readers, manifests, lockfile,
+installation hooks and CI wiring remain unchanged. All four inventories are
+renewed from the reviewed staged candidate; no selection rule or manifest
+expectation changes.

@@ -520,3 +520,41 @@ identify a historical owner. The existing port-handoff investigation must also
 cover those defaults and other ephemeral test listeners before claiming all
 fixtures cooperate. These controlled admin tests do not qualify that broader
 protocol or native admin-worker functionality.
+
+
+## Storage test socket attribution and live progress (D575)
+
+An unexpected bind failure in the reservation control previously named only a
+socket, so you could not distinguish its initial competing listener from a
+cleanup-verification rebind. Run
+`node --test scripts/ci-backup-storage-reservation-refusals.test.mjs scripts/ci-storage-control-diagnostics.test.mjs`
+to check both control phases and a deliberate takeover after cleanup. A refused
+bind retains its original error and adds `storageControl` with the phase, actual
+port and a bounded `lsof` listener snapshot. The snapshot names process IDs,
+commands and endpoints; an unavailable inspector records its reason. Collection
+has a two-second limit and never stops the competing listener. A process ID alone
+does not identify which test created that listener.
+
+The admin wrapper now forwards stdout and stderr as they arrive and keeps both
+in its failure transcript. Run
+`node --test deploy/test-cloud/storage-admin-progress-integration.test.mjs`
+to hold a child before native startup and require its operation record while it
+is still running. This closes the wrapper's buffering gap. The existing held-bucket
+and cancellation checks still verify owned-resource cleanup. The underlying
+90-second case and 120-second wrapper limits and all original checks remain.
+A blocked event loop or a failure before the child emits a record can still leave
+no operation evidence.
+
+The recorded first-reservation refusal at
+[PR932's root job](https://github.com/waitron-io/waitron-cloud/actions/runs/41897316384/job/126812884123)
+has only Node's internal bind stack for port 43549. It does not establish which
+control phase failed or who held the port. The held-bucket wrapper also reaches
+its 120-second limit on
+[main 9b7c540a](https://github.com/waitron-io/waitron-cloud/actions/runs/41850829904/job/126652888279)
+and [PR926](https://github.com/waitron-io/waitron-cloud/actions/runs/41882127691/job/126757174361).
+Those old buffered logs do not identify a stalled operation. Two observed ordinary
+stores have extra default admin listeners, including port 33647 inside the service
+allocator range. That observation establishes a possible collision path, not a
+cause for these historical failures. Keep the existing allocation and retry rules;
+use a new attributed recurrence to select a cause repair rather than repeat a
+passing baseline or introduce a broader claiming protocol.

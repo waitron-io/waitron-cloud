@@ -5,6 +5,7 @@ import {existsSync} from 'node:fs';
 import {rm,readdir,readlink,unlink} from 'node:fs/promises';
 import {join} from 'node:path';
 import test from 'node:test';
+import {storageControlOutput} from '../../scripts/storage-control-diagnostics.mjs';
 
 async function ownedClaims(roots) {
   const directory = '/tmp/waitron-cloud-storage-ports-' + process.getuid();
@@ -18,7 +19,7 @@ async function ownedClaims(roots) {
   return paths;
 }
 
-function launchControl(t, {cancel = false, beforeSpawn = false} = {}) {
+function launchControl(t, {cancel = false, beforeSpawn = false, report = text => process.stderr.write(text)} = {}) {
   const probe = `
     import childProcess from 'node:child_process';
     import {syncBuiltinESMExports, createRequire} from 'node:module';
@@ -87,7 +88,8 @@ function launchControl(t, {cancel = false, beforeSpawn = false} = {}) {
   const child = spawn(process.execPath, ['--import', 'data:text/javascript,' + encodeURIComponent(probe),
     '--test-isolation=none', '--test', new URL('./storage-admin-exhaustion.test.mjs', import.meta.url).pathname],
     {env:environment, stdio:['ignore','pipe','pipe','ipc']});
-  let output = '', held;
+  let held;
+  const output = storageControlOutput(child, report);
   const ready = new Promise(resolve => {held = resolve;}), owners = [], roots = new Set();
   child.on('message', message => {
     if (message.kind === 'owned') {owners.push(message); roots.add(message.root);}
@@ -95,8 +97,6 @@ function launchControl(t, {cancel = false, beforeSpawn = false} = {}) {
     if (message.kind === 'collected') {const owner = owners.find(owner => owner.pid === message.pid); if (owner) owner.exited = true;}
     if (message.kind === 'held') held();
   });
-  child.stdout.setEncoding('utf8').on('data', text => {output += text;});
-  child.stderr.setEncoding('utf8').on('data', text => {output += text;});
   const finished = once(child, 'exit');
   t.after(async () => {
     if (child.exitCode === null && child.signalCode === null) {
@@ -111,7 +111,7 @@ function launchControl(t, {cancel = false, beforeSpawn = false} = {}) {
     for (const path of await ownedClaims(roots)) await unlink(path).catch(error => {if (error.code !== 'ENOENT') throw error;});
     await Promise.all([...roots].map(root => rm(root, {recursive:true,force:true})));
   });
-  return {child, ready, finished, owners, roots, output:() => output};
+  return {child, ready, finished, owners, roots, output};
 }
 
 // Removing the installed operation wrapper must lose the waiting/refusal evidence.
@@ -145,4 +145,22 @@ for (const beforeSpawn of [false, true]) test('cancelling the admin control coll
   }
   for (const root of control.roots) assert.equal(existsSync(root), false, 'cancelled control must remove its owned scratch');
   assert.deepEqual(await ownedClaims(control.roots), [], 'cancelled control must release its cooperative port claims');
+});
+
+// Buffering the nested transcript until exit loses the last operation at the outer deadline.
+test('the admin wrapper forwards progress while its child is still held', {timeout:120000}, async t => {
+  let observe;
+  const live = new Promise(resolve => {observe = resolve;});
+  const control = launchControl(t, {cancel:true,beforeSpawn:true,report:text => {if (text.includes('storage_admin_progress=')) observe(text);}});
+  await Promise.race([control.ready, control.finished.then(() => {throw Error(control.output());})]);
+  let timer;
+  try {
+    const text = await Promise.race([live, new Promise((resolve,reject) => {
+      timer = setTimeout(() => reject(Error('nested admin progress was buffered while its child was held')), 2000);
+    })]);
+    assert.match(text, /storage_admin_progress=/);
+    assert.equal(control.child.exitCode, null);
+  } finally {clearTimeout(timer);}
+  control.child.send({kind:'cancel'});
+  await control.finished;
 });

@@ -50,6 +50,7 @@ import https from "node:https";
 import { syncBuiltinESMExports } from "node:module";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { listenStorageControl } from "./scripts/storage-control-diagnostics.mjs";
 const [position, seed, archiveName, brokenSink] = process.argv.slice(1);
 const diagnostics = [];
 const diagnosticFailure = Error("diagnostic sink refused");
@@ -81,7 +82,7 @@ fs.symlink = async (...args) => {
 const competitor = tcpServer(socket => socket.end("competing listener"));
 // The allocator selects odd ports; keep the controlled occupied candidate in that range.
 do {
-  await new Promise(resolve => competitor.listen(0, "127.0.0.1", resolve));
+  await listenStorageControl(competitor, 0, "competitor-bind");
   if (competitor.address().port % 2 === 1) break;
   await new Promise(resolve => competitor.close(resolve));
 } while (true);
@@ -93,6 +94,8 @@ let candidates = 0;
 crypto.randomInt = (...args) => ++candidates === 3 && occupiedCandidate
   ? competingPort : choosePort(...args);
 const servers = [], heldPorts = [];
+const collideRebind = process.argv[7] === "true";
+let rebindOwner;
 let root, issuer, original, allocations = 0, calls = 0, issuerPort;
 fs.mkdtemp = async (...args) => { allocations++; root = await allocate(...args); return root; };
 // The selected real bind refusal carries a controlled nonretryable code.
@@ -164,10 +167,23 @@ try {
   for (const port of [issuerPort, ...heldPorts]) {
     const replacement = tcpServer();
     replacement.unref();
-    await new Promise((resolve, reject) => {
-      replacement.once("error", reject);
-      replacement.listen(port, "127.0.0.1", resolve);
-    });
+    const bindReplacement = () => listenStorageControl(replacement, port, "cleanup-rebind");
+    if (collideRebind && port === issuerPort) {
+      rebindOwner = tcpServer(socket => socket.end("controlled rebind owner"));
+      await new Promise((resolve, reject) => {
+        rebindOwner.once("error", reject);
+        rebindOwner.listen(port, "127.0.0.1", resolve);
+      });
+      await assert.rejects(bindReplacement(), error => {
+        assert.equal(error.code, "EADDRINUSE");
+        assert.equal(error.storageControl?.stage, "cleanup-rebind");
+        assert.equal(error.storageControl.port, port);
+        assert.equal(error.storageControl.socketOwners.source, "lsof");
+        assert.ok(error.storageControl.socketOwners.output.includes("p" + process.pid));
+        return true;
+      });
+      await new Promise(resolve => rebindOwner.close(resolve));
+    } else await bindReplacement();
     await new Promise(resolve => replacement.close(resolve));
   }
   const received = await new Promise((resolve, reject) => {
@@ -181,7 +197,7 @@ try {
   assert.equal(received, "competing listener", "cleanup must preserve a competing listener");
   console.log(JSON.stringify({refusedPosition, releasedReservations: heldPorts.length, allocations}));
 } finally {
-  await Promise.all([issuer, ...servers, competitor].filter(server => server?.listening)
+  await Promise.all([issuer, ...servers, competitor, rebindOwner].filter(server => server?.listening)
     .map(server => new Promise(resolve => server.close(resolve))));
 }
 
@@ -236,3 +252,17 @@ for (const brokenSink of [false, true]) {
     assert.deepEqual(JSON.parse(stdout), {refusedPosition: 8, releasedReservations: 7, allocations: 1});
   });
 }
+
+// A real takeover between cleanup and its proof must identify the failed rebind.
+test("storage refusal control attributes a takeover during cleanup verification", {timeout:30000}, async t => {
+  const directory = await mkdtemp(join(tmpdir(), "cloud-storage-reservation-test-"));
+  t.after(() => rm(directory, {recursive:true,force:true}));
+  const {stdout, stderr} = await execute(process.execPath,
+    ["--input-type=module","-e",probe,"1",seed,archiveName,"false","false","false","true"], {
+      cwd:new URL("..",import.meta.url),
+      env:{...process.env,TMPDIR:directory,TMP:directory,TEMP:directory},
+      timeout:25000,maxBuffer:1024*1024,
+    });
+  assert.equal(stderr, "");
+  assert.deepEqual(JSON.parse(stdout), {refusedPosition:1,releasedReservations:0,allocations:1});
+});
