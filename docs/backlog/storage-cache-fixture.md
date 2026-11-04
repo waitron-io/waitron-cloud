@@ -552,6 +552,17 @@ control phase failed or who held the port. The held-bucket wrapper also reaches
 its 120-second limit on
 [main 9b7c540a](https://github.com/waitron-io/waitron-cloud/actions/runs/41850829904/job/126652888279)
 and [PR926](https://github.com/waitron-io/waitron-cloud/actions/runs/41882127691/job/126757174361).
+A two-week history audit ending 4 November 2026 at 20:43:49 UTC lists 1,957
+runs created in that window and reviews 85 failed root/receipt job logs,
+including earlier attempts of successful reruns. It finds one named reservation
+`EADDRINUSE` and these two held-bucket cancellations. The wider daily inventory
+also includes 21 October's earlier runs; all three matches occur on 4 November,
+so the exact fourteen-day boundary changes none of the counts. Fourteen runs
+remain unfinished, and cancelled-job transcripts are not exhaustively inspected.
+These are observed named failures, not a measured collision rate. The separate
+31 October wrong bind-number assertion and 2 November six-versus-seven held-port
+assertion are not counted as this unlabelled bind refusal.
+
 Those old buffered logs do not identify a stalled operation. Two observed ordinary
 stores have extra default admin listeners, including port 33647 inside the service
 allocator range. That observation establishes a possible collision path, not a
