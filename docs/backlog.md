@@ -3633,8 +3633,23 @@ historical Linux event. It records the producer's interrupted response while the
 storage observer is still pending, so it does not qualify the historical pair of
 producer interruption and observer success or identify that event's cause. The official
 0.5.17 binary, allowance, both counters, assertions and deadlines remain unchanged.
-Genuine local Docker reproduction waits until Docker returns. Use a labelled
-recurrence to establish the cause before changing any shutdown rule.
+
+The unchanged genuine held-metadata case now passes on the authorised Linux test
+box with the official 0.5.17 writer. All four SDK requests match storage requests,
+but one permitted late LIST is interrupted: the first counter records a transport
+error while storage records success. Body counts differ by 213 bytes, and cost
+accuracy remains incomplete under the existing after-stop allowance.
+
+This passes
+the case's request-count checks; it does not reproduce the historical initial LIST
+failure or establish its cause. The historical log does not record acknowledgement
+timing. Run
+`node scripts/cloud-cost/conformance.mjs --only stack-conformance.test.mjs --pattern
+'^genuinePinnedLitestreamCountsHeldMetadataAfterValidatedRuntimeStop$'` on the test
+box. All six native ordering and diagnostic controls also pass.
+
+Use a labelled
+recurrence to establish the historical cause before changing any shutdown rule.
 
 ## Registration SQL setup failure diagnostics (D385)
 
