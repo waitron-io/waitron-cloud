@@ -832,6 +832,15 @@ implementation or production evidence.
   do not qualify the current release image. Historical failure diagnostics remain
   in the [test Cloud guide](test-cloud.md), with unresolved causes still unknown.
 
+  Whole-branch review found additional proof-runner gaps. Cleanup now uses run
+  ownership labels and recorded resource IDs, preserves foreign resources sharing
+  a project name, and retains verifier state after a failed stop or scope read.
+  Controlled Linux checks cover owned cleanup, foreign resources, stop refusal
+  and actual Compose ownership rendering. Cancellation between commands, shared
+  host-wide admission and remaining source/evidence validation findings still
+  block finishing this dormant branch; no release gate is discharged by these
+  cleanup checks.
+
   **Open:** the owner-authorised **Cloud/Waitron release driver**, after this
   dormant proof branch finishes, owns published-image upgrade and rollback
   qualification. It must bind immutable published Cloud and Waitron digests to
@@ -845,6 +854,16 @@ implementation or production evidence.
   deployment remain required. Snapshots stay unavailable, plan enforcement and
   deployed translation stay off, address providers stay disabled, and no image
   publication, account, provider resource or spending is authorised here.
+
+  Other open maintenance remains separate: keep organisation writes in the plan
+  setter, since shared policy readers that update their organisation can deadlock
+  while upgrading locks. Qualify a consistent route view across the two export
+  reads and production-scale processing before promising uninterrupted movement
+  or larger capacity. Qualify recovery from definitive daemon rejection without
+  clearing uncertain verifier journals. Same-CA in-volume renewal, continuous box
+  supervision and the coordinated image/schema and volume-to-volume rollback
+  deployment path remain open. The existing Waitron venue is quarantined: use
+  disposable venues and leave its running containers and data untouched.
 
 
 - **Translation worker lock-probe timing is now independently exercised.** The

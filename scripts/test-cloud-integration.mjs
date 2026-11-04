@@ -20,6 +20,8 @@ import {probeIntegrationAssets, integrationAssetSummary} from '../deploy/test-cl
 import {captureWaitronSource} from '../deploy/test-cloud/test-fixtures/integration-waitron-source.mjs';
 import {probeWaitronSource} from '../deploy/test-cloud/test-fixtures/integration-waitron-source-probe.mjs';
 import {withFixedIntegrationProject} from '../deploy/test-cloud/test-fixtures/integration-fixed-project.mjs';
+import {completeCleanup, cleanupTestCloudResources, integrationOwnershipOverride} from './test-cloud-cleanup.mjs';
+export {completeCleanup};
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const origin = 'https://waitron.local:3000', revision = 'ec91a9e34d2daba146f4ee61850ea4136ad5cfb7';
@@ -29,11 +31,6 @@ export function parseIntegrationJson(text) {
   try {return JSON.parse(text);} catch {throw Error('integration.invalid_json');}
 }
 
-export async function completeCleanup(steps) {
-  const failed = [];
-  for (const step of steps) {try {await step.run();} catch {failed.push(step.phase);}}
-  if (failed.length) throw Error('integration.cleanup_failed:' + failed.join(','));
-}
 
 export function streamCommandDiagnostic(text) {
   const names=['shape','venueId','installationId','sourceNodeId','localVenueId','generation','recoverableAt','observation','identity',
@@ -124,7 +121,17 @@ async function runClients({image, waitronImage, protectedContainerIds = [], wait
   const runId = randomUUID(), project = fixedProject ?? 'waitron-cloud-test-integration-' + runId.slice(0, 8);
   let cleanupCheckpoint;
   const docker = async (args, input = '', phase) => {
-    try {return await command(args, input, phase, {TEST_CLOUD_IMAGE: image});}
+    try {
+      const creating = ['volume', 'network'].includes(args[0]) && args[1] === 'create';
+      if (creating) args = [...args.slice(0, 2), '--label', 'cloud.integration.owner=' + runId, ...args.slice(2)];
+      const result = await command(args, input, phase, {TEST_CLOUD_IMAGE: image});
+      if (creating) {
+        const [row] = parseIntegrationJson(await command([args[0], 'inspect', result], '', 'created-resource-owner'));
+        assert.equal(row.Labels['cloud.integration.owner'], runId, 'integration.resource_not_created');
+        record(args[0], result);
+      }
+      return result;
+    }
     finally {if (cleanupCheckpoint) await cleanupCheckpoint();}
   };
   const inventory = () => readIntegrationInventory({docker, protectedIds: protectedContainerIds});
@@ -135,7 +142,7 @@ async function runClients({image, waitronImage, protectedContainerIds = [], wait
   const override = join(directory, 'proof.yaml'), clientTag = project + '-venue:local', recoveryTag = project + '-recovery:local';
   const owned = [], created = [], removed = [], venueCAs = new Map();
   let built = false, recoveryBuilt = false, started = false, result, cloudSource, cloudAssets, waitronAssets, waitronBaseSource, waitronClientSource;
-  let verifierWorker, verifierStarted = false, verifierScope, verifierUncertain = false, capacityEvidence;
+  let verifierWorker, verifierStarted = false, verifierScope, capacityEvidence;
   const prefix = ['compose', '--project-name', project, '--env-file', 'deploy/test-cloud/test.env', '-f', 'compose.yaml', '-f', 'deploy/test-cloud/compose.yaml', '-f', override];
   const compose = args => docker([...prefix, ...args], '', 'compose-' + args[0]);
   let hostCapacity, startupCapacity, capacityChronology;
@@ -146,11 +153,9 @@ async function runClients({image, waitronImage, protectedContainerIds = [], wait
   const readVerifierScope = async () => {
     if (!verifierWorker || !verifierStarted) return;
     const path = join(directory, 'verifier-identity.json');
-    try {
-      await docker(['cp', verifierWorker + ':/run/backup-verifier/verifier-controller/identity.json', path], '', 'verifier-identity');
-      const identity = parseIntegrationJson(await readFile(path, 'utf8'));
-      verifierScope = verifierIdentityScope(identity, waitronImage);
-    } catch (error) {verifierUncertain = true; throw error;}
+    await docker(['cp', verifierWorker + ':/run/backup-verifier/verifier-controller/identity.json', path], '', 'verifier-identity');
+    const identity = parseIntegrationJson(await readFile(path, 'utf8'));
+    verifierScope = verifierIdentityScope(identity, waitronImage);
   };
   const verifierChildren = async () => {
     if (!verifierScope) return [];
@@ -218,6 +223,10 @@ async function runClients({image, waitronImage, protectedContainerIds = [], wait
       if (source) waitronAssets = {...integrationAssetSummary(await probeIntegrationAssets({docker, image: clientImage, kind: 'waitron', runId,
         own: id => {owned.push(id); record('container', id);}})), baseImage: waitronImage};
       await writeFile(override, `name: ${project}\nservices:\n  gateway-manifest:\n    environment:\n      CLOUD_TEST_SERVICE_PLANS: "${paidRemote ? 1 : 0}"\n  account:\n    environment:\n      CLOUD_TEST_SERVICE_PLANS: "1"\n  storage:\n    environment:\n      CLOUD_TEST_SERVICE_PLANS: "1"\n    ports: !override ["127.0.0.1::8333"]\n  postgres:\n    ports: !override ["127.0.0.1::5432"]\n  mailpit:\n    ports: !override ["127.0.0.1::1025", "127.0.0.1::8025"]\n  proxy:\n    ports: !override ["127.0.0.1::3000"]\n  gateway:\n    ports: !override ["127.0.0.1::443", "127.0.0.1::51820/udp"]\n`, {mode: 0o600});
+      const ownership = join(directory, 'ownership.json');
+      const rendered = parseIntegrationJson(await compose(['--profile', '*', 'config', '--format', 'json']));
+      await writeFile(ownership, JSON.stringify(integrationOwnershipOverride(rendered, runId)), {mode: 0o600});
+      prefix.push('-f', ownership);
     };
     const start = () => {
       started = true;
@@ -653,48 +662,10 @@ async function runClients({image, waitronImage, protectedContainerIds = [], wait
     } else await journey();
   } finally {
     try {
-      const cleanup = () => completeCleanup([
-        {phase: 'verifier', run: async () => {
-          if (!verifierWorker) return;
-          if (verifierStarted) await docker(['stop', '--time', '15', verifierWorker], '', 'verifier-cleanup-stop');
-          await readVerifierScope();
-          for (const id of await verifierChildren()) {owned.push(id); record('container', id);}
-        }},
-        {phase: 'discover-containers', run: async () => {
-          if (started) for (const id of lines(await docker(['ps', '-aq', '--no-trunc', '--filter', 'label=com.docker.compose.project=' + project]))) {owned.push(id); record('container', id);}
-        }},
-        {phase: 'containers', run: () => completeCleanup([...new Set(owned)].map(id => ({phase: 'container', run: async () => {
-          await docker(['rm', '-f', '-v', id], '', 'owned-container-cleanup'); removed.push(created.find(value => value.kind === 'container' && value.id === id));
-        }})))},
-        ...['network', 'volume'].map(kind => ({phase: kind, run: async () => {
-          if (!started) return;
-          // Keep durable ownership evidence if the trusted controller's scope could not be read.
-          if (kind === 'volume' && verifierUncertain) throw Error('integration.verifier_state_retained');
-          const ids = lines(await docker([kind, 'ls', '-q', '--filter', 'label=com.docker.compose.project=' + project]));
-          await completeCleanup(ids.map(id => ({phase: kind, run: async () => {
-            record(kind, id); await docker([kind, 'rm', id], '', 'owned-' + kind + '-cleanup'); removed.push(created.find(value => value.kind === kind && value.id === id));
-          }})));
-          assert.equal(await docker([kind, 'ls', '-q', '--filter', 'label=com.docker.compose.project=' + project]), '', 'integration.cleanup_' + kind);
-        }})),
-        {phase: 'image', run: async () => {
-          if (!built) return;
-          const [info] = JSON.parse(await docker(['image', 'inspect', clientTag])); assert.equal(info.Config.Labels['cloud.integration.owner'], runId);
-          await docker(['image', 'rm', clientTag], '', 'owned-image-cleanup'); removed.push(created.find(value => value.kind === 'image' && value.id === info.Id));
-        }},
-        {phase: 'recovery-image', run: async () => {
-          if (!recoveryBuilt) return;
-          const [info] = parseIntegrationJson(await docker(['image', 'inspect', recoveryTag]));
-          assert.equal(info.Config.Labels['cloud.integration.owner'], runId);
-          await docker(['image', 'rm', recoveryTag], '', 'owned-recovery-image-cleanup');
-          removed.push(created.find(value => value.kind === 'image' && value.id === info.Id));
-        }},
-        {phase: 'inventory', run: async () => {
-          const after = await inventory();
-          // Other lanes own their temporary lifetimes; only the caller's protected IDs are invariant.
-          checkProtectedContainers(before, after, protectedContainerIds);
-          for (const id of owned) assert.ok(!after.some(row => row.startsWith(id + ' ')), 'integration.owned_container_remains');
-        }},
-      ]);
+      const cleanup = () => cleanupTestCloudResources({docker, project, runId, created, removed, owned, started,
+        verifier: {worker: verifierWorker, started: verifierStarted, readScope: readVerifierScope, children: verifierChildren},
+        built, recoveryBuilt, clientTag, recoveryTag, inventory,
+        protectedUnchanged: after => checkProtectedContainers(before, after, protectedContainerIds)});
       if (capacityChronology) {
         const {measureCleanupCapacity, observeCapacity} = await import('../deploy/test-cloud/test-fixtures/integration-capacity.mjs');
         const measured = await measureCleanupCapacity({

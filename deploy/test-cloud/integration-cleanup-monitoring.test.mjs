@@ -26,6 +26,7 @@ else if(args[0]==='image'&&args[1]==='inspect') {
  process.stdout.write(JSON.stringify([{Config:{Labels:{'cloud.waitron-revision':'ec91a9e34d2daba146f4ee61850ea4136ad5cfb7','cloud.integration.owner':owner}},RepoTags:['pin:local'],Id:'sha256:'+'c'.repeat(64)}]));
 }
 else if(args[0]==='build') {}
+else if(args[0]==='compose'&&args.includes('config')) process.stdout.write(JSON.stringify({services:{account:{}},networks:{},volumes:{}}));
 else if(args[0]==='compose') process.exitCode=31;
 else if(args[0]==='rm') {}
 else if(args[0]==='image'&&args[1]==='rm') setTimeout(()=>{},1100);
