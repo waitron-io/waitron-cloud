@@ -9,15 +9,19 @@ export class AuthenticatorController {
   enrolment:FactorEnrolment|undefined;
   status:FactorStatus|undefined;
   password='';proofKind:FactorProof['kind']='totp';proofCode='';confirmation='';
-  pending=false;loaded=false;loadAttempted=false;retryAt=0;error:keyof Copy|undefined;
+  pending=false;loaded=false;loadAttempted=false;error:keyof Copy|undefined;
   requiredField:'password'|'proof'|'confirmation'|undefined;
+  // Server delays measure elapsed time, including across account and wall-clock changes.
+  #retryUntil=0;
+  get retryAt(){const remaining=this.#retryUntil-performance.now();return remaining>0?Date.now()+remaining:0;}
+  get waiting(){return Math.max(0,Math.ceil((this.#retryUntil-performance.now())/1000));}
   #account:string|undefined;#generation=0;#request:Request;#changed:()=>void;
   constructor(changed:()=>void,request:Request=accountRequest){this.#changed=changed;this.#request=request;}
   #clearInput(){this.password='';this.proofCode='';this.confirmation='';}
   fence(){this.#generation++;this.pending=false;this.loaded=false;this.loadAttempted=false;this.error=undefined;this.requiredField=undefined;this.challenge=undefined;this.enrolment=undefined;this.status=undefined;this.#clearInput();}
   account(id:string|undefined){if(id===this.#account)return;this.#account=id;this.fence();}
   #failure(result:Extract<ApiResult<unknown>,{ok:false}>,change=false){
-    this.retryAt=Date.now()+result.retryAfterMs;
+    this.#retryUntil=performance.now()+result.retryAfterMs;
     this.error=result.status===429?'limited':result.code==='credentials_invalid'?'credentials':result.status===403?'forbidden'
       :change&&(result.status===0||result.status>=500)?'factorChangeUncertain':'factorUnavailable';
   }
@@ -25,8 +29,8 @@ export class AuthenticatorController {
     this.#failure(result,change);
     if(result.status===400&&result.code==='invalid_input')this.error='factorCheckSettings';
   }
-  #start(){if(this.pending||Date.now()<this.retryAt)return undefined;this.pending=true;this.error=undefined;this.requiredField=undefined;this.#changed();return this.#generation;}
-  #required(error:'requiredPassword'|'factorCodeRequired'|'factorCodeInvalid'|'factorConfirmationInvalid',field:NonNullable<AuthenticatorController['requiredField']>){if(!this.pending&&Date.now()>=this.retryAt){this.error=error;this.requiredField=field;this.#changed();}return false as const;}
+  #start(){if(this.pending||this.waiting)return undefined;this.pending=true;this.error=undefined;this.requiredField=undefined;this.#changed();return this.#generation;}
+  #required(error:'requiredPassword'|'factorCodeRequired'|'factorCodeInvalid'|'factorConfirmationInvalid',field:NonNullable<AuthenticatorController['requiredField']>){if(!this.pending&&!this.waiting){this.error=error;this.requiredField=field;this.#changed();}return false as const;}
   async startLogin(email:string,password:string):Promise<'authenticated'|'factor'|'reconcile'|false>{
     const generation=this.#start();if(generation===undefined)return false;
     this.challenge=undefined;this.#clearInput();
@@ -53,7 +57,7 @@ export class AuthenticatorController {
     const result=await this.#request<FactorStatus>('/authenticator');if(generation!==this.#generation)return;
     this.pending=false;this.loaded=result.ok;if(result.ok)this.status=result.value;else this.#failure(result);this.#changed();}
   async refresh(){
-    if(!this.#account||this.pending||Date.now()<this.retryAt)return;
+    if(!this.#account||this.pending||this.waiting)return;
     this.enrolment=undefined;this.status=undefined;this.loaded=false;this.#clearInput();
     await this.load();
   }

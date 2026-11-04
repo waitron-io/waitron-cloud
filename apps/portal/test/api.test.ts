@@ -9,6 +9,7 @@ test('account requests never retry writes and distinguish transport failures', a
   assert.equal(calls, 1);
 });
 test('account requests validate success bodies and honor both Retry-After forms', async t => {
+  t.mock.method(performance, 'now', () => 0);
   const replies = [new Response('{}'), new Response('{"error":"rate_limited"}', {status:429,headers:{'retry-after':'90'}}),
     new Response('{"error":"temporarily_unavailable"}', {status:503,headers:{'retry-after':new Date(Date.now()+60_000).toUTCString()}})];
   t.mock.method(globalThis, 'fetch', async () => replies.shift()!);

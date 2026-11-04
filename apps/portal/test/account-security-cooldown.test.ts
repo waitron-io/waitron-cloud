@@ -27,6 +27,7 @@ function success(path: string): unknown {
 for (const endpoint of ['/passkeys', '/passkeys/authentication/options', '/passkeys/authentication/verify', '/passkeys/registration/options', '/passkeys/registration/verify', '/passkeys/remove']) {
   test(`passkeys honour Retry-After from ${endpoint} across every action and navigation`, async t => {
     t.mock.timers.enable({apis: ['Date'], now: Date.parse(at)});
+    t.mock.method(performance, 'now', () => Date.now() - Date.parse(at));
     const calls: string[] = [];
     const request = async <T>(path: string): Promise<ApiResult<T>> => {
       calls.push(path);
@@ -57,6 +58,7 @@ for (const endpoint of ['/passkeys', '/passkeys/authentication/options', '/passk
 for (const endpoint of ['/sessions', '/sessions/revoke', 'reconciliation']) {
   test(`sessions honour Retry-After from ${endpoint} across reads and revocation`, async t => {
     t.mock.timers.enable({apis: ['Date'], now: Date.parse(at)});
+    t.mock.method(performance, 'now', () => Date.now() - Date.parse(at));
     const calls: string[] = [];
     const request = async <T>(path: string): Promise<ApiResult<T>> => {
       calls.push(path);
@@ -87,6 +89,7 @@ for (const endpoint of ['/sessions', '/sessions/revoke', 'reconciliation']) {
 
 for (const kind of ['passkeys', 'sessions'] as const) test(`${kind} reconciliation cannot shorten a write's Retry-After`, async t => {
   t.mock.timers.enable({apis: ['Date'], now: Date.parse(at)});
+    t.mock.method(performance, 'now', () => Date.now() - Date.parse(at));
   const request = async <T>(path: string): Promise<ApiResult<T>> => ({ok: false, status: 503, code: 'temporarily_unavailable', retryAfterMs: path.endsWith('/remove') || path.endsWith('/revoke') ? 60_000 : 1_000});
   const controller = kind === 'passkeys' ? new PasskeyController(() => {}, request, browser) : new AccountSecurityController(() => {}, () => {}, request);
   controller.account('owner');
@@ -97,6 +100,7 @@ for (const kind of ['passkeys', 'sessions'] as const) test(`${kind} reconciliati
 
 for (const action of ['enroll', 'remove', 'revoke'] as const) test(`${action} keeps Retry-After even when reconciliation confirms the change`, async t => {
   t.mock.timers.enable({apis: ['Date'], now: Date.parse(at)});
+    t.mock.method(performance, 'now', () => Date.now() - Date.parse(at));
   const request = async <T>(path: string): Promise<ApiResult<T>> => {
     if (path.endsWith('/options')) return {ok: true, value: success(path) as T};
     if (path === '/passkeys') return {ok: true, value: {passkeys: action === 'enroll' ? [passkey] : []} as T};

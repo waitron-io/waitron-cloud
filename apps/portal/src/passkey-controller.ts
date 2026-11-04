@@ -29,7 +29,9 @@ export class PasskeyController {
   passkeys: PasskeySummary[] = [];
   password = '';
   pending = false;
-  retryAt = 0;
+  // Server delays measure elapsed time, including across account and wall-clock changes.
+  #retryUntil = 0;
+  get retryAt() { const remaining = this.#retryUntil - performance.now(); return remaining > 0 ? Date.now() + remaining : 0; }
   loaded = false;
   listLoaded = false;
   error: keyof Copy | undefined;
@@ -46,7 +48,7 @@ export class PasskeyController {
     this.#browser = browser;
   }
 
-  get waiting() { return Math.max(0, Math.ceil((this.retryAt - Date.now()) / 1000)); }
+  get waiting() { return Math.max(0, Math.ceil((this.#retryUntil - performance.now()) / 1000)); }
 
   fence() { this.#generation++; this.pending = false; this.error = undefined; this.notice = undefined; }
 
@@ -72,7 +74,7 @@ export class PasskeyController {
   }
 
   #failure(result: Extract<ApiResult<unknown>, {ok: false}>, password = false, refusal?: 'passkeyRegistrationRefused' | 'passkeyRemovalRefused') {
-    this.retryAt = Math.max(this.retryAt, Date.now() + result.retryAfterMs);
+    this.#retryUntil = Math.max(this.#retryUntil, performance.now() + result.retryAfterMs);
     this.error = password && result.code === 'credentials_invalid' ? 'passkeyPasswordInvalid'
       : result.status === 429 ? 'limited'
       : result.status === 401 ? 'pairSession'
@@ -154,7 +156,7 @@ export class PasskeyController {
     if (generation !== this.#generation) return;
     const result = await this.#request<PasskeySummary>('/passkeys/registration/verify', {ceremonyId: options.value.ceremonyId, response});
     if (generation !== this.#generation) return;
-    if (!result.ok) this.retryAt = Math.max(this.retryAt, Date.now() + result.retryAfterMs);
+    if (!result.ok) this.#retryUntil = Math.max(this.#retryUntil, performance.now() + result.retryAfterMs);
     const listed = await this.#list(generation);
     if (generation !== this.#generation) return;
     this.pending = false; this.password = '';
@@ -170,7 +172,7 @@ export class PasskeyController {
     this.pending = true; this.error = undefined; this.notice = undefined; this.#changed();
     const result = await this.#request<void>('/passkeys/remove', {id, password});
     if (generation !== this.#generation) return;
-    if (!result.ok) this.retryAt = Math.max(this.retryAt, Date.now() + result.retryAfterMs);
+    if (!result.ok) this.#retryUntil = Math.max(this.#retryUntil, performance.now() + result.retryAfterMs);
     const listed = await this.#list(generation);
     if (generation !== this.#generation) return;
     this.pending = false; this.password = '';

@@ -127,6 +127,7 @@ for (const operation of ['load', 'begin', 'cancel'] as const) for (const format 
   test(`authenticator HTTP ${operation} ${format} wait lasts to its boundary${switchAccount ? ' through account changes' : ''}`, async t => {
     let now = 1_800_000_000_000;
     t.mock.method(Date, 'now', () => now);
+    t.mock.method(performance, 'now', () => now - 1_800_000_000_000);
     const f = fixture(t); const c = f.controller;
     f.replies.push({body: active}); await c.load();
     authority(c); f.replies.push({body: enrolment}); await c.begin();

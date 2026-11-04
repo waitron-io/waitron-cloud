@@ -31,7 +31,7 @@ export class PortalApp {
   differentOrg = false;
   reveal = false;
   pending = false;
-  cooldownUntil = 0;
+  #cooldownUntil = 0;
   cooldownOperation = '';
   #emailCooldowns = new Map<string, number>();
   session: PortalSession;
@@ -139,11 +139,13 @@ export class PortalApp {
     return this.path;
   }
   get waiting() {
-    if (this.path === '/recover') return Math.max(this.recovery.waiting,this.backups.waiting,this.installations.waiting,Math.max(0,Math.ceil((this.session.retryAt-Date.now())/1000)));
-    if (this.path === '/connect') return Math.max(this.pairing.waiting, Math.max(0, Math.ceil((this.session.retryAt - Date.now()) / 1000)));
-    const deadline = ['/', '/account'].includes(this.path) ? Math.max(this.session.retryAt,this.authenticator.retryAt,this.passkeys.retryAt,this.security.retryAt) : Math.max(this.#emailCooldowns.get(`${this.operation}:${this.fields.email.trim().toLowerCase()}`) ?? 0, this.cooldownOperation === this.operation ? this.cooldownUntil : 0, this.path === '/login' ? Math.max(this.authenticator.retryAt,this.passkeys.retryAt) : 0);
-    const panelWait = ['/', '/account'].includes(this.path) ? Math.max(this.installations.waiting,this.backups.waiting,this.alerts.waiting,this.translationConsent.waiting,this.remote.waiting,this.usage.waiting,this.diagnostics.waiting) : 0;
-    return Math.max(panelWait, 0, Math.ceil((deadline - Date.now()) / 1000));
+    if (this.path === '/recover') return Math.max(this.recovery.waiting, this.backups.waiting, this.installations.waiting, this.session.waiting);
+    if (this.path === '/connect') return Math.max(this.pairing.waiting, this.session.waiting);
+    if (['/', '/account'].includes(this.path)) return Math.max(this.session.waiting, this.authenticator.waiting, this.passkeys.waiting, this.security.waiting,
+      this.installations.waiting, this.backups.waiting, this.alerts.waiting, this.translationConsent.waiting, this.remote.waiting, this.usage.waiting, this.diagnostics.waiting);
+    const deadline = Math.max(this.#emailCooldowns.get(`${this.operation}:${this.fields.email.trim().toLowerCase()}`) ?? 0,
+      this.cooldownOperation === this.operation ? this.#cooldownUntil : 0);
+    return Math.max(0, Math.ceil((deadline - performance.now()) / 1000), this.path === '/login' ? Math.max(this.authenticator.waiting, this.passkeys.waiting) : 0);
   }
   draw() {
     this.remote.expireForward();
@@ -263,10 +265,10 @@ export class PortalApp {
     if (route !== this.#route) return;
     this.pending = false;
     if (result.ok) {
-      if (path.endsWith('/request')) { this.requested = true; this.#emailCooldowns.set(`${this.operation}:${body.email!.trim().toLowerCase()}`, Date.now() + 60_000); }
+      if (path.endsWith('/request')) { this.requested = true; this.#emailCooldowns.set(`${this.operation}:${body.email!.trim().toLowerCase()}`, performance.now() + 60_000); }
       else { this.notice = path === '/signup/complete' ? 'signupReady' : 'resetReady'; this.link = {invalid: false}; this.fields.password = ''; }
     } else {
-      this.cooldownOperation = this.operation; this.cooldownUntil = Math.max(this.cooldownUntil, Date.now() + result.retryAfterMs);
+      this.cooldownOperation = this.operation; this.#cooldownUntil = Math.max(this.#cooldownUntil, performance.now() + result.retryAfterMs);
       if (result.code === 'password_compromised') this.errors.password = 'passwordCompromised';
       else this.error = result.code === 'link_unavailable' ? 'linkUnavailable'
         : result.code === 'credentials_invalid' ? 'credentials'
@@ -324,7 +326,7 @@ export class PortalApp {
     await this.passkeys.remove(id, this.passkeys.password);
   }
   async revokeSession(id: string) { await this.security.revoke(id); }
-  get logoutWaiting() { return Math.max(0, Math.ceil((this.session.retryAt - Date.now()) / 1000)); }
+  get logoutWaiting() { return this.session.waiting; }
   // Share admission with the buttons so startup reads cannot leave an enabled, ignored sign-out.
   get logoutDisabled() { return this.pending || !!this.logoutWaiting || this.pairing.pending || this.installations.pending || this.remote.pending || this.recovery.pending || this.security.pending || this.usage.pending || this.authenticator.pending; }
   async logout() {

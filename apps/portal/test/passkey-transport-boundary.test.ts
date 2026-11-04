@@ -160,6 +160,7 @@ for (const mode of ['load', 'enroll', 'remove'] as const) for (const format of [
     environment(t);
     let now = Date.parse('2026-10-28T09:00:00.000Z'), limited = true;
     t.mock.method(Date, 'now', () => now);
+    t.mock.method(performance, 'now', () => now - Date.parse('2026-10-28T09:00:00.000Z'));
     const paths: unknown[] = [], events: string[] = [];
     const refusedPath = mode === 'load' ? '/passkeys' : mode === 'enroll' ? '/passkeys/registration/options' : '/passkeys/remove';
     t.mock.method(globalThis, 'fetch', async (url: unknown) => {

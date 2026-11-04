@@ -33,6 +33,7 @@ for (const transition of ['different account', 'returning account', 'refresh', '
     for (const [name, reply] of Object.entries(outcomes)) {
       test(`old initial session list ${name} cannot affect ${transition} with ${newer} view`, {timeout: 5_000}, async t => {
         t.mock.timers.enable({apis: ['Date'], now});
+  const clockStart = Date.now(); t.mock.method(performance, 'now', () => Date.now() - clockStart);
         const oldReply = deferred<List>();
         const newReply = deferred<List>();
         const calls: Array<{path: string; body: unknown}> = [];
@@ -124,6 +125,7 @@ test('selecting the same account keeps its pending list and coalesces another lo
 for (const [name, reply] of Object.entries(outcomes)) {
   test(`a current initial session list still handles ${name}`, async t => {
     t.mock.timers.enable({apis: ['Date'], now});
+  const clockStart = Date.now(); t.mock.method(performance, 'now', () => Date.now() - clockStart);
     let calls = 0;
     const ended: Array<'signedOut' | undefined> = [];
     const controller = new AccountSecurityController(() => {}, reason => {ended.push(reason);},
