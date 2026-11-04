@@ -1579,8 +1579,17 @@ implementation or production evidence.
   Independent audit verifies all 539 recorded owned container IDs absent and
   protected Waitron unchanged. All 903 prior test files and 45 SQL files retain
   their bytes; this step adds assertions without changing existing checks.
-  Published-release upgrade, complete assembly and later LAN deployment remain
-  open; complete integration and shipping qualification stay false, enforcement off.
+  The pre-release assembler now joins that same fixed-project journey with the
+  free-service proof only at its exact Cloud commit and tree. It checks image and
+  asset measurements, recovery and withdrawal bindings, the actual verifier's
+  resource readings, matching-volume rollback, both original clients and owned
+  cleanup. The recorded `31c3f834` journey assembles with a separate Linux
+  free-service run at the same revision: all seven groups and 255 tests pass
+  without skips; all 533 resource readings pass unchanged, and the protected
+  Waitron IDs, start times and health remain unchanged. The output explicitly
+  retains unqualified publication and false completion/shipping flags.
+  Published-release upgrade, final complete receipt and later LAN deployment
+  remain open; enforcement stays off.
   See [the fixed-project proof](test-cloud.md#prove-the-fixed-project-without-adopting-an-existing-deployment).
 
 

@@ -1,0 +1,713 @@
+{
+  "journey": {
+    "version": 1,
+    "kind": "test-cloud-clients",
+    "runId": "00000000-0000-4000-8000-000000000001",
+    "project": "waitron-cloud-test",
+    "completeIntegration": false,
+    "origin": "https://waitron.local:3000",
+    "waitronHead": "dae67da4e16569a875626fbcd81c26b389173bf6",
+    "image": "sha256:8a83d94d44b74afe4f81305048bf6e5b3f5f5ba22a2947652fdcf5b83290fc8c",
+    "waitronImage": "sha256:aa2f4fa70b74a4b8851e3247959596141665da2a6bb16b4d52db4fc81653a707",
+    "cloudSource": {
+      "head": "4cfd63eccc4aae3388b8705807a407d510eca5e2",
+      "tree": "9bc9a4f2ff5e3b2d7f968f44e1ef7e093056a22f",
+      "image": "sha256:8a83d94d44b74afe4f81305048bf6e5b3f5f5ba22a2947652fdcf5b83290fc8c",
+      "dirty": false,
+      "files": 1722,
+      "runtimeSha256": "505990fb6d35e8ad9a104c6e7492d732f5e033bc86fe0f8c6eb96ba3964c30b8"
+    },
+    "waitronSource": {
+      "base": {
+        "image": "sha256:aa2f4fa70b74a4b8851e3247959596141665da2a6bb16b4d52db4fc81653a707",
+        "head": "dae67da4e16569a875626fbcd81c26b389173bf6",
+        "tree": "eb777e9ae8296357ccf25666fe1f35a79f49682b",
+        "dirty": false,
+        "files": 9357,
+        "sourceSha256": "be57b4c0e6748b127db1e909e888b0e8acfff4c4fd7bd933ccd024cfe5a32fe8"
+      },
+      "client": {
+        "image": "sha256:8b862b94412c99183f38cf5203e7597c58723112c83ebd788d934f0533ea3f58",
+        "head": "dae67da4e16569a875626fbcd81c26b389173bf6",
+        "tree": "eb777e9ae8296357ccf25666fe1f35a79f49682b",
+        "dirty": false,
+        "files": 9357,
+        "sourceSha256": "be57b4c0e6748b127db1e909e888b0e8acfff4c4fd7bd933ccd024cfe5a32fe8"
+      }
+    },
+    "assets": {
+      "cloud": {
+        "image": "sha256:8a83d94d44b74afe4f81305048bf6e5b3f5f5ba22a2947652fdcf5b83290fc8c",
+        "kind": "cloud",
+        "files": 3,
+        "bytes": 278240,
+        "manifestSha256": "922d65b35c33616fbab3f1061ff9734bde7ff786433a0a86b62be07d7088d816"
+      },
+      "waitron": {
+        "image": "sha256:8b862b94412c99183f38cf5203e7597c58723112c83ebd788d934f0533ea3f58",
+        "kind": "waitron",
+        "files": 772,
+        "bytes": 198965873,
+        "manifestSha256": "8f2111b1143b1162a00e824fe7bb57930747b5a8f25dc8e7d51ffaf8e4d55382",
+        "baseImage": "sha256:aa2f4fa70b74a4b8851e3247959596141665da2a6bb16b4d52db4fc81653a707"
+      }
+    },
+    "accountMail": {
+      "free": "proved",
+      "paid": "proved",
+      "transport": "mailpit"
+    },
+    "clients": {
+      "status": "proved",
+      "actions": [
+        "pair",
+        "renew",
+        "configuration"
+      ],
+      "demoVenues": 2,
+      "restartIdentity": "proved"
+    },
+    "tls": {
+      "untrustedRefused": true,
+      "wrongHostnameRefused": true
+    },
+    "organisations": [
+      {
+        "plan": "free",
+        "organisationId": "00000000-0000-4000-8000-000000000002",
+        "venueId": "00000000-0000-4000-8000-000000000003",
+        "installationId": "00000000-0000-4000-8000-000000000004",
+        "localVenueId": "00000000-0000-4000-8000-000000000005",
+        "stateSha256": "3787a03f495763cf62d08d24d9c6522870063445e94defaa327ffe7347825455",
+        "installationState": "active",
+        "planRevision": 0
+      },
+      {
+        "plan": "paid",
+        "organisationId": "00000000-0000-4000-8000-000000000006",
+        "venueId": "00000000-0000-4000-8000-000000000007",
+        "installationId": "00000000-0000-4000-8000-000000000008",
+        "localVenueId": "00000000-0000-4000-8000-000000000009",
+        "stateSha256": "eab82a99a70c0f61cbc2ef2ec80665145f7f85946aa9432c380bfdfa57f63441",
+        "installationState": "active",
+        "planRevision": 1
+      }
+    ],
+    "freeSnapshot": {
+      "status": "proved",
+      "httpStatus": 403,
+      "error": "permission_denied",
+      "grantIssued": false
+    },
+    "capacity": {
+      "shippingQualification": false
+    },
+    "paidSnapshot": {
+      "status": "published",
+      "pointId": "00000000-0000-4000-8000-000000000010",
+      "sourceNodeId": "00000000-0000-4000-8000-000000000011",
+      "sha256": "47860669af441a1736781d130368503e133945d59e16874f0cec0d461429f6db",
+      "bytes": 4115029,
+      "verification": "verified",
+      "networkDeniedDuringCapture": true,
+      "signedPublication": true,
+      "independentStoredDigest": true,
+      "organisationId": "00000000-0000-4000-8000-000000000006",
+      "venueId": "00000000-0000-4000-8000-000000000007",
+      "installationId": "00000000-0000-4000-8000-000000000008",
+      "localVenueId": "00000000-0000-4000-8000-000000000009",
+      "recovery": "fiscal-authority-required",
+      "workerVerification": {
+        "pointId": "00000000-0000-4000-8000-000000000010",
+        "sha256": "47860669af441a1736781d130368503e133945d59e16874f0cec0d461429f6db",
+        "bytes": 4115029,
+        "attemptId": "00000000-0000-4000-8000-000000000012",
+        "childId": "6cc0ee8b19fecb553906f8e29bd2241e573cfa2667ef55f7ad877d1efeb602f1",
+        "controllerScope": "00000000-0000-4000-8000-000000000013",
+        "targetDigest": "a4b051b4b36c775202520039064c6c50aca0156b7705b4dcc816da9b1aec36ae",
+        "status": "passed",
+        "activation": "not_attempted",
+        "modules": 15,
+        "cleanupConfirmed": true,
+        "noSupersession": true,
+        "childAbsent": true,
+        "workerStoppedNaturally": true
+      },
+      "snapshotFallback": {
+        "streamObjects": 0,
+        "pointerRows": 0,
+        "retainedSnapshotUnchanged": true,
+        "observations": [
+          "before-snapshot-request",
+          "after-snapshot-read",
+          "after-snapshot-restore-and-close"
+        ]
+      },
+      "authorisedRecovery": {
+        "sha256": "47860669af441a1736781d130368503e133945d59e16874f0cec0d461429f6db",
+        "bytes": 4115029,
+        "sourceNodeId": "00000000-0000-4000-8000-000000000011",
+        "localVenueId": "00000000-0000-4000-8000-000000000009",
+        "exit": 0,
+        "preparationBoundToDeliveredArchive": true,
+        "sourceAuthorityVerified": true,
+        "wrongAuthorityRefused": true,
+        "missingPreparationRefused": true,
+        "integrity": "ok",
+        "sourceRecordsPreserved": true,
+        "noServerStarted": true,
+        "noCloudCredentials": true,
+        "cloudReportedRestored": false
+      },
+      "ownerRecovery": {
+        "requestId": "00000000-0000-4000-8000-000000000014",
+        "protocolVersion": 2,
+        "pointId": "00000000-0000-4000-8000-000000000010",
+        "attemptId": "00000000-0000-4000-8000-000000000012",
+        "targetDigest": "a4b051b4b36c775202520039064c6c50aca0156b7705b4dcc816da9b1aec36ae",
+        "sha256": "47860669af441a1736781d130368503e133945d59e16874f0cec0d461429f6db",
+        "bytes": 4115029,
+        "cloudStatus": "pending",
+        "noSupersession": true,
+        "client": "pinned-compiled-waitron",
+        "independentDigest": true,
+        "prePlacement": true,
+        "refusals": {
+          "alternateTargetRefused": true,
+          "damagedArchiveRefused": true,
+          "placementCalls": 0,
+          "restoredReports": 0,
+          "stateUnchanged": true
+        },
+        "ordinaryRestore": "FISCAL_RESTORE",
+        "activation": "not_attempted",
+        "routeMoved": false,
+        "reportedRestored": false,
+        "sourceStoppedDuringRead": true,
+        "requestClosed": true,
+        "sourceIdentityPreserved": true
+      }
+    },
+    "paidStream": {
+      "status": "observed",
+      "venueId": "00000000-0000-4000-8000-000000000007",
+      "installationId": "00000000-0000-4000-8000-000000000008",
+      "sourceNodeId": "00000000-0000-4000-8000-000000000011",
+      "localVenueId": "00000000-0000-4000-8000-000000000009",
+      "generation": "gen-0-00000000-0000-4000-8000-000000000011-20261102T175922Z",
+      "recoverableAt": "2026-11-02T17:59:24.205Z",
+      "checkedAt": "2026-11-02T17:59:24.710Z",
+      "nativeStreaming": true,
+      "signedPointerVerified": true,
+      "retainedSnapshotUnchanged": true,
+      "noSupersession": true,
+      "noActivation": true,
+      "independentObservation": true
+    },
+    "paidContinuousRecovery": {
+      "sourceNodeId": "00000000-0000-4000-8000-000000000011",
+      "localVenueId": "00000000-0000-4000-8000-000000000009",
+      "generation": "gen-0-00000000-0000-4000-8000-000000000011-20261102T175922Z",
+      "exit": 0,
+      "nativeRestore": true,
+      "ownerApprovedKit": true,
+      "sourceStoppedDuringRead": true,
+      "sourceAuthorityVerified": true,
+      "preparationBoundToStream": true,
+      "sourceRecordsPreserved": true,
+      "wrongAuthorityRefused": true,
+      "missingPreparationRefused": true,
+      "noServerStarted": true,
+      "noSupersession": true,
+      "requestClosed": true,
+      "integrity": "ok",
+      "cloudReportedRestored": false
+    },
+    "freeRemote": {
+      "organisationId": "00000000-0000-4000-8000-000000000002",
+      "installationId": "00000000-0000-4000-8000-000000000004",
+      "submit": {
+        "status": 403,
+        "error": "permission_denied"
+      },
+      "status": {
+        "status": 403,
+        "error": "permission_denied"
+      },
+      "invalidProof": {
+        "status": 401,
+        "error": "invalid_proof"
+      },
+      "nativeStaffCsr": true,
+      "provision": "permission_denied",
+      "placements": 0,
+      "hostnames": 0,
+      "requests": 0,
+      "jobs": 0,
+      "configurationUnchanged": true,
+      "plan": "free"
+    },
+    "paidRemote": {
+      "organisationId": "00000000-0000-4000-8000-000000000006",
+      "installationId": "00000000-0000-4000-8000-000000000008",
+      "venueId": "00000000-0000-4000-8000-000000000007",
+      "client": {
+        "nativeStaffCsr": true,
+        "nativeCertificateInstalled": true,
+        "pairedSignedExchange": true,
+        "keysStayedInVenue": true
+      },
+      "peerPresent": true,
+      "directStorage": {
+        "organisationId": "00000000-0000-4000-8000-000000000006",
+        "venueId": "00000000-0000-4000-8000-000000000007",
+        "installationId": "00000000-0000-4000-8000-000000000008",
+        "before": {
+          "writeStatus": 200,
+          "readStatus": 200,
+          "outsidePrefixRefused": true,
+          "neighbourRefused": true
+        },
+        "after": {
+          "writeStatus": 403,
+          "readStatus": 403,
+          "durationMs": 3481
+        },
+        "restartObserved": true,
+        "retainedData": true,
+        "readerPreserved": true,
+        "installationPreserved": true,
+        "plan": "free"
+      },
+      "snapshotExposure": {
+        "organisationId": "00000000-0000-4000-8000-000000000006",
+        "venueId": "00000000-0000-4000-8000-000000000007",
+        "installationId": "00000000-0000-4000-8000-000000000008",
+        "pointId": "00000000-0000-4000-8000-000000000010",
+        "requestedAt": 1793642272594,
+        "acceptedAt": 1793642282942,
+        "expiresAt": "2026-11-02T18:12:52.000Z",
+        "downgradedAt": 1793642543484,
+        "observedAt": 1793643173404,
+        "remainingMs": 0,
+        "writeStatus": 403,
+        "expiryObserved": true,
+        "newGrantRefused": true
+      },
+      "withdrawal": {
+        "staffRefused": true,
+        "publicRefused": true,
+        "peerRemoved": true,
+        "cachedConfigurationMasked": true,
+        "installationPreserved": true,
+        "restartObserved": true,
+        "plan": "free",
+        "durationMs": 3160
+      },
+      "routes": {
+        "staffAvailability": 200,
+        "staffPrivateWithoutLogin": 401,
+        "publicBeforeChallenge": 403,
+        "publicAfterChallenge": 200,
+        "publicPrivatePath": 404,
+        "freeNeighbourRefused": true,
+        "untrustedRefused": true,
+        "wrongHostnameRefused": true,
+        "sameNativeAvailability": true,
+        "staffCertificateMatches": true
+      }
+    },
+    "paidStorageWithdrawal": {
+      "organisationId": "00000000-0000-4000-8000-000000000006",
+      "venueId": "00000000-0000-4000-8000-000000000007",
+      "installationId": "00000000-0000-4000-8000-000000000008",
+      "before": {
+        "writeStatus": 200,
+        "readStatus": 200,
+        "outsidePrefixRefused": true,
+        "neighbourRefused": true
+      },
+      "after": {
+        "writeStatus": 403,
+        "readStatus": 403,
+        "durationMs": 3481
+      },
+      "restartObserved": true,
+      "retainedData": true,
+      "readerPreserved": true,
+      "installationPreserved": true,
+      "plan": "free"
+    },
+    "paidSnapshotExposure": {
+      "organisationId": "00000000-0000-4000-8000-000000000006",
+      "venueId": "00000000-0000-4000-8000-000000000007",
+      "installationId": "00000000-0000-4000-8000-000000000008",
+      "pointId": "00000000-0000-4000-8000-000000000010",
+      "requestedAt": 1793642272594,
+      "acceptedAt": 1793642282942,
+      "expiresAt": "2026-11-02T18:12:52.000Z",
+      "downgradedAt": 1793642543484,
+      "observedAt": 1793643173404,
+      "remainingMs": 0,
+      "writeStatus": 403,
+      "expiryObserved": true,
+      "newGrantRefused": true
+    },
+    "schemaRollback": {
+      "kind": "controlled-schema-change",
+      "shippingQualification": false,
+      "before": {
+        "project": "waitron-cloud-test",
+        "image": "sha256:8a83d94d44b74afe4f81305048bf6e5b3f5f5ba22a2947652fdcf5b83290fc8c",
+        "identity": {
+          "runtimeSha256": "83a237ff30532fa90360aad354b7b1db4bed26fb0ed7cf0ff0a85db4f5545637",
+          "caSha256": "bd94e7844ddb343eac7250252777eb82c002b9076a60bb3066c6b74c33e7acfe",
+          "schemaSha256": "a2b0c5e8a7374133820a04220c8497d28a47f4cf574dd382b80e806e211f27d3"
+        },
+        "schema": {
+          "ledgerSha256": "a2b0c5e8a7374133820a04220c8497d28a47f4cf574dd382b80e806e211f27d3",
+          "migrations": 45,
+          "probe": false
+        },
+        "bindings": [
+          {
+            "id": "5555555555555555555555555555555555555555555555555555555555555555",
+            "image": "sha256:8a83d94d44b74afe4f81305048bf6e5b3f5f5ba22a2947652fdcf5b83290fc8c",
+            "mounts": [
+              {
+                "name": "waitron-cloud-test_local-stack-config",
+                "destination": "/volumes/config"
+              }
+            ]
+          },
+          {
+            "id": "6666666666666666666666666666666666666666666666666666666666666666",
+            "image": "sha256:8a83d94d44b74afe4f81305048bf6e5b3f5f5ba22a2947652fdcf5b83290fc8c",
+            "mounts": [
+              {
+                "name": "waitron-cloud-test_local-stack-postgres",
+                "destination": "/volumes/postgres"
+              }
+            ]
+          },
+          {
+            "id": "7777777777777777777777777777777777777777777777777777777777777777",
+            "image": "sha256:8a83d94d44b74afe4f81305048bf6e5b3f5f5ba22a2947652fdcf5b83290fc8c",
+            "mounts": [
+              {
+                "name": "waitron-cloud-test_local-stack-storage",
+                "destination": "/volumes/storage"
+              }
+            ]
+          },
+          {
+            "id": "8888888888888888888888888888888888888888888888888888888888888888",
+            "image": "sha256:8a83d94d44b74afe4f81305048bf6e5b3f5f5ba22a2947652fdcf5b83290fc8c",
+            "mounts": [
+              {
+                "name": "waitron-cloud-test_local-stack-gateway",
+                "destination": "/volumes/gateway"
+              }
+            ]
+          }
+        ]
+      },
+      "after": {
+        "project": "waitron-cloud-test",
+        "image": "sha256:8a83d94d44b74afe4f81305048bf6e5b3f5f5ba22a2947652fdcf5b83290fc8c",
+        "identity": {
+          "runtimeSha256": "83a237ff30532fa90360aad354b7b1db4bed26fb0ed7cf0ff0a85db4f5545637",
+          "caSha256": "bd94e7844ddb343eac7250252777eb82c002b9076a60bb3066c6b74c33e7acfe",
+          "schemaSha256": "a2b0c5e8a7374133820a04220c8497d28a47f4cf574dd382b80e806e211f27d3"
+        },
+        "schema": {
+          "ledgerSha256": "a2b0c5e8a7374133820a04220c8497d28a47f4cf574dd382b80e806e211f27d3",
+          "migrations": 45,
+          "probe": false
+        },
+        "bindings": [
+          {
+            "id": "5555555555555555555555555555555555555555555555555555555555555555",
+            "image": "sha256:8a83d94d44b74afe4f81305048bf6e5b3f5f5ba22a2947652fdcf5b83290fc8c",
+            "mounts": [
+              {
+                "name": "waitron-cloud-test_local-stack-config",
+                "destination": "/volumes/config"
+              }
+            ]
+          },
+          {
+            "id": "6666666666666666666666666666666666666666666666666666666666666666",
+            "image": "sha256:8a83d94d44b74afe4f81305048bf6e5b3f5f5ba22a2947652fdcf5b83290fc8c",
+            "mounts": [
+              {
+                "name": "waitron-cloud-test_local-stack-postgres",
+                "destination": "/volumes/postgres"
+              }
+            ]
+          },
+          {
+            "id": "7777777777777777777777777777777777777777777777777777777777777777",
+            "image": "sha256:8a83d94d44b74afe4f81305048bf6e5b3f5f5ba22a2947652fdcf5b83290fc8c",
+            "mounts": [
+              {
+                "name": "waitron-cloud-test_local-stack-storage",
+                "destination": "/volumes/storage"
+              }
+            ]
+          },
+          {
+            "id": "8888888888888888888888888888888888888888888888888888888888888888",
+            "image": "sha256:8a83d94d44b74afe4f81305048bf6e5b3f5f5ba22a2947652fdcf5b83290fc8c",
+            "mounts": [
+              {
+                "name": "waitron-cloud-test_local-stack-gateway",
+                "destination": "/volumes/gateway"
+              }
+            ]
+          }
+        ]
+      },
+      "backup": {
+        "version": 1,
+        "volumes": [
+          {
+            "role": "config",
+            "archiveSha256": "5d52c29d419f20d2d48963508a215e655c3f747a6af714de2fd22ffcdd5bb65b",
+            "contentSha256": "a064939c72a8d2225ad2bc39ec515d0d458fa9f60c66ae482807194e2454f699",
+            "bytes": 71680
+          },
+          {
+            "role": "postgres",
+            "archiveSha256": "4db8bd251dc52e07551745c53b2942765df905d60a50e332ebee928ebfdbb340",
+            "contentSha256": "b429ae8cb6f8e8c662ed50a9da9c9669537877fdabbc8008fdb49324043ca66a",
+            "bytes": 73349120
+          },
+          {
+            "role": "storage",
+            "archiveSha256": "1af70ec3c6dbd34611a8e96649444ac00110aa1d0a2c2452abf76fa3e3217f63",
+            "contentSha256": "3f971e0c341fe041f85937b1bdd4e030b464a3630070fb5b3d72ba0057a6221c",
+            "bytes": 13629440
+          },
+          {
+            "role": "gateway",
+            "archiveSha256": "4799494f2bab245641a5b66fbccd1e0f4c329c15546723ba7b590b0d24f32b37",
+            "contentSha256": "51032d7b563b26da085bf16c937ecab4060cb9cd5ed29f593862b0b7689a8880",
+            "bytes": 10240
+          }
+        ]
+      },
+      "changedSchema": {
+        "ledgerSha256": "658ae283c31f4c77f6f5533bb8e0bb097a456d21a58560cdaf117847f1165c4d",
+        "migrations": 46,
+        "probe": true
+      },
+      "consumerRefusedChangedSchema": true,
+      "privateFilesChanged": true,
+      "oldBinaryOnNewSchema": false,
+      "ready": true,
+      "clients": [
+        {
+          "installationId": "00000000-0000-4000-8000-000000000004",
+          "before": {
+            "renewals": 1,
+            "configurations": 19
+          },
+          "after": {
+            "renewals": 2,
+            "configurations": 21
+          },
+          "identityPreserved": true
+        },
+        {
+          "installationId": "00000000-0000-4000-8000-000000000008",
+          "before": {
+            "renewals": 1,
+            "configurations": 23
+          },
+          "after": {
+            "renewals": 2,
+            "configurations": 26
+          },
+          "identityPreserved": true
+        }
+      ],
+      "pairedClientsPreserved": 2
+    },
+    "cleanup": {
+      "created": [
+        {
+          "kind": "container",
+          "id": "5555555555555555555555555555555555555555555555555555555555555555",
+          "owner": "00000000-0000-4000-8000-000000000001"
+        },
+        {
+          "kind": "container",
+          "id": "6666666666666666666666666666666666666666666666666666666666666666",
+          "owner": "00000000-0000-4000-8000-000000000001"
+        },
+        {
+          "kind": "container",
+          "id": "7777777777777777777777777777777777777777777777777777777777777777",
+          "owner": "00000000-0000-4000-8000-000000000001"
+        },
+        {
+          "kind": "container",
+          "id": "8888888888888888888888888888888888888888888888888888888888888888",
+          "owner": "00000000-0000-4000-8000-000000000001"
+        },
+        {
+          "kind": "container",
+          "id": "6cc0ee8b19fecb553906f8e29bd2241e573cfa2667ef55f7ad877d1efeb602f1",
+          "owner": "00000000-0000-4000-8000-000000000001"
+        },
+        {
+          "kind": "volume",
+          "id": "waitron-cloud-test_local-stack-config",
+          "owner": "00000000-0000-4000-8000-000000000001"
+        },
+        {
+          "kind": "volume",
+          "id": "waitron-cloud-test_local-stack-postgres",
+          "owner": "00000000-0000-4000-8000-000000000001"
+        },
+        {
+          "kind": "volume",
+          "id": "waitron-cloud-test_local-stack-storage",
+          "owner": "00000000-0000-4000-8000-000000000001"
+        },
+        {
+          "kind": "volume",
+          "id": "waitron-cloud-test_local-stack-gateway",
+          "owner": "00000000-0000-4000-8000-000000000001"
+        }
+      ],
+      "removed": [
+        {
+          "kind": "container",
+          "id": "5555555555555555555555555555555555555555555555555555555555555555",
+          "owner": "00000000-0000-4000-8000-000000000001"
+        },
+        {
+          "kind": "container",
+          "id": "6666666666666666666666666666666666666666666666666666666666666666",
+          "owner": "00000000-0000-4000-8000-000000000001"
+        },
+        {
+          "kind": "container",
+          "id": "7777777777777777777777777777777777777777777777777777777777777777",
+          "owner": "00000000-0000-4000-8000-000000000001"
+        },
+        {
+          "kind": "container",
+          "id": "8888888888888888888888888888888888888888888888888888888888888888",
+          "owner": "00000000-0000-4000-8000-000000000001"
+        },
+        {
+          "kind": "container",
+          "id": "6cc0ee8b19fecb553906f8e29bd2241e573cfa2667ef55f7ad877d1efeb602f1",
+          "owner": "00000000-0000-4000-8000-000000000001"
+        },
+        {
+          "kind": "volume",
+          "id": "waitron-cloud-test_local-stack-config",
+          "owner": "00000000-0000-4000-8000-000000000001"
+        },
+        {
+          "kind": "volume",
+          "id": "waitron-cloud-test_local-stack-postgres",
+          "owner": "00000000-0000-4000-8000-000000000001"
+        },
+        {
+          "kind": "volume",
+          "id": "waitron-cloud-test_local-stack-storage",
+          "owner": "00000000-0000-4000-8000-000000000001"
+        },
+        {
+          "kind": "volume",
+          "id": "waitron-cloud-test_local-stack-gateway",
+          "owner": "00000000-0000-4000-8000-000000000001"
+        }
+      ],
+      "remaining": []
+    },
+    "protectedContainersUnchanged": true
+  },
+  "freeServices": {
+    "version": 1,
+    "kind": "test-cloud-free-services",
+    "cloudHead": "4cfd63eccc4aae3388b8705807a407d510eca5e2",
+    "cloudTree": "9bc9a4f2ff5e3b2d7f968f44e1ef7e093056a22f",
+    "scope": "local-fixtures",
+    "relay": "local-proof",
+    "translation": "fake-loopback",
+    "deployedTranslation": "off",
+    "waitronRelay": "not-qualified",
+    "waitronTranslation": "not-qualified",
+    "suites": [
+      {
+        "id": "account-mail",
+        "tests": 3,
+        "passed": 3,
+        "failed": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 0
+      },
+      {
+        "id": "relay-plans",
+        "tests": 3,
+        "passed": 3,
+        "failed": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 0
+      },
+      {
+        "id": "translation-plans",
+        "tests": 3,
+        "passed": 3,
+        "failed": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 0
+      },
+      {
+        "id": "relay-guards",
+        "tests": 3,
+        "passed": 3,
+        "failed": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 0
+      },
+      {
+        "id": "translation-guards",
+        "tests": 3,
+        "passed": 3,
+        "failed": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 0
+      },
+      {
+        "id": "http-guards",
+        "tests": 3,
+        "passed": 3,
+        "failed": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 0
+      },
+      {
+        "id": "deployment-gates",
+        "tests": 3,
+        "passed": 3,
+        "failed": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 0
+      }
+    ]
+  }
+}

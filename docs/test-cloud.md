@@ -1710,3 +1710,44 @@ This closes the same-run expiry check for that temporary fixed-project journey.
 Published-release upgrade, strict complete receipt assembly and later LAN deployment
 remain open. Keep complete integration and shipping qualification false, and
 deployed plan enforcement off.
+
+### Assemble the local evidence before release qualification
+
+You need one fixed-project journey containing recovery, remote withdrawal, actual
+snapshot expiry and matching rollback. Run the free-service fixture proof from
+that journey's exact clean Cloud commit and tree, then join the two reports:
+
+```sh
+evidence_dir=$(mktemp -d)
+node scripts/test-postgres.mjs exec node scripts/test-cloud-free-services.mjs > "$evidence_dir/free-services.json"
+node --input-type=module - /path/to/journey.json "$evidence_dir/free-services.json" > "$evidence_dir/assembly-input.json" <<'JS'
+import {readFile} from 'node:fs/promises';
+const [journey, freeServices] = await Promise.all(process.argv.slice(2).map(async path =>
+  JSON.parse(await readFile(path, 'utf8'))));
+console.log(JSON.stringify({journey, freeServices}));
+JS
+node scripts/assemble-test-cloud-evidence.mjs "$evidence_dir/assembly-input.json" > "$evidence_dir/evidence.json"
+```
+
+Keep the reports outside your checkout so the free-service proof can require a
+clean source tree.
+
+The assembler checks both revisions, the measured Cloud and Waitron images,
+generated assets, the paid archive and recovery bindings, free-service refusals,
+the actual verifier's resource readings, the four saved volumes and fresh
+exchanges from both original clients after rollback. Every resource reading keeps
+its original clock and limits. Keep both raw reports alongside the assembled
+evidence so you can trace each observation to its executing command.
+
+The output is `test-cloud-pre-release-evidence`. It retains
+`completeIntegration: false`, `shippingQualification: false` and
+`publication: "unqualified"`. The original complete-receipt reader and deployment
+gates remain in place. Published-image qualification, a supported release upgrade,
+final complete receipt and later LAN deployment still need their own evidence.
+
+The saved fixed-project journey at `31c3f834` passes this assembly with a separate
+Linux free-service proof at the same commit and tree: all seven groups pass,
+255 tests execute without failures or skips, and the three protected Waitron
+containers retain their IDs, start times and health. Its 533 resource readings
+pass unchanged. This qualifies those recorded inputs; keep deployed plan
+enforcement off.
