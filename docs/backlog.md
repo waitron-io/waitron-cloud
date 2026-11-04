@@ -275,12 +275,6 @@ See [the boundaries and remaining work](backlog/account-http-boundaries.md#sessi
 passkeys and the separate retry-clock repair retain their own gates.
 See [the boundaries and remaining work](backlog/account-http-boundaries.md#session-management-transport-refusals-and-retry-waits-d432).
 
-## Session recheck ordering and disposal (D405)
-
-**Open.** Qualify server authority, browser integration and live ingress; physical
-passkeys and the separate retry-clock repair retain their own gates.
-See [the boundaries and remaining work](backlog/account-http-boundaries.md#session-recheck-ordering-and-disposal-d405).
-
 ## Passkey HTTP replies before prompts and confirmation (D421)
 
 **Open.** Qualify server authority, browser integration and live ingress; physical
