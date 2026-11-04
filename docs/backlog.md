@@ -486,9 +486,10 @@ Production email (D102: bounces and complaints) is already tracked and is not re
 
 ## Isolated replay ownership fixture refusal (D294)
 
-**Open; historical cause unknown.** The Linux ownership case passes alone and
-after the preceding worker-deadline test, without reproducing the historical
-refusal. Collect an instrumented recurrence before changing the ownership check.
+**Open; historical cause unknown.** Recorded Linux CI passes all twelve controller
+cases, including ownership loss after the worker-deadline case. Current native
+diagnostic checks also pass. Neither result explains the historical refusal;
+collect an instrumented recurrence before changing the ownership check.
 See the [reproduction commands and diagnostic boundary](backlog/isolated-replay-ownership.md).
 
 ## Isolated replay result-boundary refusal (D297)
