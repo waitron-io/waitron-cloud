@@ -1024,3 +1024,15 @@ The complete output checks keep distinct per-cell log references, the shared
 database and VPC destinations, the exact infrastructure signal set and the
 external budget reference. These are mocked plans; live log delivery and
 production retention remain unqualified.
+
+## Documentation-reader audit
+
+Before pushing an infrastructure change, review its file readers and renew the
+[staged input inventories](ci-documentation-audit.md#review-before-renewal).
+The source checker copies HCL and provider locks; its runner reads that copy and
+generated suite JSON. The tools build copies six named inputs, and the handoff
+reader consumes its JSON schema and selected output. The infrastructure tests
+read source, schemas, workflow wiring and their own scratch data. This review
+adds no exemption for Cloud prose. Identity and gateway scripts, workspace
+installation inputs and historical receipt certificates keep their existing
+review boundaries. The separately frozen AWS installation remains inventoried.
