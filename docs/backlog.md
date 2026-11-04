@@ -4175,12 +4175,6 @@ Read the [recovery-screen scope detail](backlog/recovery-screen-scope.md) for th
 supplied-choice checks and retained server refusals. Production backup provisioning
 remains unqualified; PostgreSQL checks run in CI while local Docker is down.
 
-## Delayed recovery replies across account and request changes (D401)
-
-**Open.** Qualify recovery authority and genuine browser and restore behavior
-separately from controlled replies.
-See [the boundaries and remaining work](backlog/backup-recovery-http.md#delayed-recovery-replies-across-account-and-request-changes-d401).
-
 ## Cost-stack isolation command refusal (D152)
 
 **Open.** Both unchanged signal checks pass on the shared Linux test box, without
