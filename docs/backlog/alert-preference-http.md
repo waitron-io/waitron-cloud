@@ -1,15 +1,5 @@
 # Alert preference HTTP boundaries
 
-## Initial alert reads after account changes (D408)
-
-When you change account or sign out, late alert-preference reads cannot replace
-current choices, end a newer pending read, clear a saved confirmation or impose
-an old retry wait. Native controller tests cover successful reads and refusals,
-including returning to the same account. Selecting the current account keeps its
-pending read, and a current rate limit still applies after an account change.
-Server authority, browser integration and production delivery remain separate
-qualification gates.
-
 ## Alert-preference transport refusals and retry waits (D429)
 
 Your alert retry wait measures elapsed time, so a system clock correction cannot
