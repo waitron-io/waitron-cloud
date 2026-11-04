@@ -26,18 +26,6 @@ repair; physical passkeys, server authority and live ingress still need their ow
 qualification, with database suites running in CI while Docker is unavailable.
 Run `node --test apps/portal/test/passkey-transport-boundary.test.ts`.
 
-## Session HTTP replies and sign-out acknowledgements (D422)
-
-Native tests exercise the real HTTP client and session manager with 44 controlled
-responses. Malformed passive and activity replies leave the account unavailable;
-a later valid read restores it. Server retry waits block explicit and visibility
-reads until their boundary. Only the recognised expiry response adds the expiry
-explanation, and uncertain sign-out replies never confirm that you signed out.
-The tests also check sign-out preflight and secure/local CSRF cookie selection.
-Run `node --test apps/portal/test/session-http-boundary.test.ts`.
-Runtime, existing tests and authentication policy are unchanged. These local client
-checks do not qualify the production ingress, server-side session storage or
-browser activity; keep their separate qualification gates.
 
 ## Authenticator replies after account changes (D399)
 
