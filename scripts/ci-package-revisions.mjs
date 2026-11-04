@@ -3,6 +3,7 @@ import {execFileSync} from 'node:child_process';
 import {createHash} from 'node:crypto';
 import {posix} from 'node:path';
 import {sourceDependencies, scopeForPaths, quotedReferences} from './ci-scope.mjs';
+import {reviewedDirectoryReaders} from './ci-package-readers.mjs';
 
 function directoryPattern(expression) {
   // Comments separate tokens like whitespace and stop at their first terminator;
@@ -92,6 +93,212 @@ function hasDirectoryReference(source, context, quoted = false, delimiters = [])
   return false;
 }
 
+function sourceDirectoryReads(source) {
+  // Backticks and closing parentheses/brackets can precede directory readers
+  // through member chains. This scan preserves tagged calls and nested keys
+  // without evaluation; opening backticks and inert text can also match.
+  assert.doesNotMatch(source.source, directoryPattern(/[)`\]]\s*(?:!\s*)*(?:(?:(?:\?\.|\.)\s*#?(?:[$_\p{ID_Start}]|\\u(?:[\da-fA-F]{4}|\{0*[\da-fA-F]{1,6}\}))(?:[$\u200c\u200d\p{ID_Continue}]|\\u(?:[\da-fA-F]{4}|\{0*[\da-fA-F]{1,6}\}))*|(?:\?\.\s*)?\[[^\[\]]*\])\s*(?:!\s*)*)*(?:\?\.|\.)\s*(?:readdirSync|readdir|opendirSync|opendir)\b/u),
+    `Unresolved parenthesized directory member at ${source.path}`);
+  // A Unicode escape can hide a directory API in a dot-member name.
+  // Without resolving member identities, keep every possible consumer.
+  assert.doesNotMatch(source.source, directoryPattern(/\.\s*[$_\p{ID_Continue}]*\\u/u),
+    `Unresolved escaped member at ${source.path}`);
+  // Optional calls and function members can enumerate a directory without
+  // matching a direct call; unresolved arguments retain every consumer.
+  // TypeScript non-null assertions leave the runtime function unchanged,
+  // including when the assertion is followed by a direct invocation.
+  // Closing parentheses can wrap the reader before invocation or member
+  // access. Type arguments and satisfies checks are erased before execution;
+  // unresolved references must retain their possible consumers.
+  // Array elements can preserve the reader until a later indexed call;
+  // simple comma-separated and closing-bracket references stay unresolved.
+  // A semicolon can end an assignment that stores the reader for a later call.
+  // Escapes can spell a directory API without a literal name. Keep every
+  // consumer rather than interpreting unresolved string or template keys.
+  // Require a receiver so escaped array values after `of` or `return`
+  // do not force unrelated package suites.
+  assert.doesNotMatch(source.source, directoryPattern(/(?:\b(?!(?:of|in|return|throw|yield|await|void|typeof|delete|new|instanceof)\b)[A-Za-z_$][\w$]*|[)\]])\s*(?:!\s*)*(?:\?\.\s*)?\[\s*(?:\(\s*)*(?:'[^'\\]*\\|"[^"\\]*\\|`[^`\\]*\\)/),
+    `Unresolved escaped directory key at ${source.path}`);
+  // Literal keys can preserve directory readers through erased assertions
+  // and parentheses. Without resolving the remaining expression, keep consumers.
+  assert.doesNotMatch(source.source, directoryPattern(/\[\s*(?:\(\s*)*(['"`])(?:readdirSync|readdir|opendirSync|opendir)\1/),
+    `Unresolved indirect directory call at ${source.path}`);
+  // The first array element can preserve a reader through a namespace chain;
+  // comments, optional access and non-null assertions leave that value intact.
+  assert.doesNotMatch(source.source, directoryPattern(/\[\s*(?:#?(?:[$_\p{ID_Start}]|\\u(?:[\da-fA-F]{4}|\{0*[\da-fA-F]{1,6}\}))(?:[$\u200c\u200d\p{ID_Continue}]|\\u(?:[\da-fA-F]{4}|\{0*[\da-fA-F]{1,6}\}))*\s*(?:!\s*)*(?:\?\.|\.)\s*)*(?:readdirSync|readdir|opendirSync|opendir)\b/u),
+    `Unresolved indirect directory call at ${source.path}`);
+  assert.doesNotMatch(source.source, directoryPattern(/\b(?:readdirSync|readdir|opendirSync|opendir)\s*(?:(?:!\s*)*(?:\?\.|\.|\[|(?:,\s*)?\]|\)|;|<|satisfies\b)|(?:!\s*)+\()/),
+    `Unresolved indirect directory call at ${source.path}`);
+  // Brace groups can hold or transfer a reader, including unresolved
+  // destructuring and exports. Static imports alone establish no consumer;
+  // quoted code retains the conservative check.
+  const objectReference = directoryPattern(/(?:\{|,)\s*(?:readdirSync|readdir|opendirSync|opendir)\s*(?:,|\})/);
+  if (objectReference.test(source.source)) {
+    assert.equal(hasDirectoryReference(source.source, '{'), false,
+      `Unresolved object directory reference at ${source.path}`);
+  }
+  // Assignments, arrow results, block returns, yields and default exports can
+  // preserve a reader for a later call. A brace can end a field or block; requiring a value
+  // expression keeps ordinary named imports narrow without resolving bindings.
+  assert.doesNotMatch(source.source, directoryPattern(/(?:=>|=|\b(?:return|yield)\b|\bexport\s+default)\s*(?:await\s+)*(?:#?(?:[$_\p{ID_Start}]|\\u(?:[\da-fA-F]{4}|\{0*[\da-fA-F]{1,6}\}))(?:[$\u200c\u200d\p{ID_Continue}]|\\u(?:[\da-fA-F]{4}|\{0*[\da-fA-F]{1,6}\}))*\s*(?:!\s*)*(?:\?\.|\.)\s*)*(?:readdirSync|readdir|opendirSync|opendir)\b\s*(?:!\s*)*(?:,|\}|[\r\n\u2028\u2029]|\/\/|$)/u),
+    `Unresolved indirect directory call at ${source.path}`);
+  // A comma can store the reader between other elements. Require an array
+  // opener so ordinary named imports do not force full package work. A simple
+  // namespace chain, including Unicode and private names, preserves the stored
+  // function through non-null assertions too.
+  const arraySource = arrayDirectorySource(source.source);
+  assert.doesNotMatch(arraySource, directoryPattern(/\[[^\[\]{};]*,\s*(?:#?(?:[$_\p{ID_Start}]|\\u(?:[\da-fA-F]{4}|\{0*[\da-fA-F]{1,6}\}))(?:[$\u200c\u200d\p{ID_Continue}]|\\u(?:[\da-fA-F]{4}|\{0*[\da-fA-F]{1,6}\}))*\s*(?:!\s*)*(?:\?\.|\.)\s*)*(?:readdirSync|readdir|opendirSync|opendir)\s*(?:!\s*)*,/u),
+    `Unresolved indirect directory call at ${source.path}`);
+  // A nested value can precede ordinary elements and a stored reader.
+  // Resume at its closing delimiter without interpreting the earlier value;
+  // brackets, braces and semicolons outside matched tokens bound this scan.
+  assert.doesNotMatch(arraySource, directoryPattern(/[\]}][^\[\]{};]*,\s*(?:#?(?:[$_\p{ID_Start}]|\\u(?:[\da-fA-F]{4}|\{0*[\da-fA-F]{1,6}\}))(?:[$\u200c\u200d\p{ID_Continue}]|\\u(?:[\da-fA-F]{4}|\{0*[\da-fA-F]{1,6}\}))*\s*(?:!\s*)*(?:\?\.|\.)\s*)*(?:readdirSync|readdir|opendirSync|opendir)\s*(?:!\s*)*,/u),
+    `Unresolved indirect directory call at ${source.path}`);
+  // A callee can keep a reader passed between commas, including a namespace
+  // member. Without resolving that transfer, retain every possible consumer.
+  if (directoryPattern(/\b(?:readdirSync|readdir|opendirSync|opendir)\s*(?:!\s*)*,/).test(source.source)) {
+    assert.equal(hasDirectoryReference(source.source, '('), false,
+      `Unresolved call argument directory reference at ${source.path}`);
+  }
+  // Logical assignments and awaited logical or conditional operands can keep
+  // the reader for a later call. Namespace chains, optional access and erased
+  // non-null assertions also preserve that function without resolving it.
+  assert.doesNotMatch(source.source, directoryPattern(/\b(?:readdirSync|readdir|opendirSync|opendir)\s*(?:!\s*)*(?:&&|\|\||\?\?|\?(?!\.)|:)|(?:(?:&&|\|\||\?\?)=?|\?|:)\s*(?:await\s+)*(?:#?(?:[$_\p{ID_Start}]|\\u(?:[\da-fA-F]{4}|\{0*[\da-fA-F]{1,6}\}))(?:[$\u200c\u200d\p{ID_Continue}]|\\u(?:[\da-fA-F]{4}|\{0*[\da-fA-F]{1,6}\}))*\s*(?:!\s*)*(?:\?\.|\.)\s*)*(?:readdirSync|readdir|opendirSync|opendir)\b/u),
+    `Unresolved indirect directory call at ${source.path}`);
+  // An imported alias can enumerate helpers without naming a directory API
+  // at its call site. Quoted names and escaped alias tokens stay unresolved;
+  // those bindings must retain every possible consumer without decoding code.
+  assert.doesNotMatch(source.source, directoryPattern(/\b(?:readdirSync|readdir|opendirSync|opendir)['"]?\s+as\b/),
+    `Unresolved directory import alias at ${source.path}`);
+  // Consume each escaped token before testing its suffix, so a long ordinary
+  // string cannot restart the same suffix scan at every backslash.
+  const aliasSuffix = directoryPattern(/\s+as\b/y);
+  for (const token of source.source.matchAll(/(?<![\w$\\{}'"])[\w${}'"]*(?:\\[\s\S][\w${}'"]*)+/g)) {
+    aliasSuffix.lastIndex = token.index + token[0].length;
+    assert.ok(!aliasSuffix.test(source.source), `Unresolved directory import alias at ${source.path}`);
+  }
+  // Bare names can hide directory readers behind Unicode escapes. Decode
+  // the whole name so unrelated escaped identifiers keep their own scope.
+  for (const token of source.source.matchAll(/(?<![$\p{ID_Continue}\\.'"`])[$_\p{ID_Continue}]*\\u(?:[\da-fA-F]{4}|\{0*[\da-fA-F]{1,6}\})(?:[$\p{ID_Continue}]|\\u(?:[\da-fA-F]{4}|\{0*[\da-fA-F]{1,6}\}))*/gu)) {
+    const name = token[0].replace(/\\u(?:([\da-fA-F]{4})|\{(0*[\da-fA-F]{1,6})\})/g,
+      (_, fixed, braced) => String.fromCodePoint(parseInt(fixed ?? braced, 16)));
+    assert.doesNotMatch(name, /^(?:readdirSync|readdir|opendirSync|opendir)$/,
+      `Unresolved escaped identifier at ${source.path}`);
+  }
+  const rootReads = new Set([...source.source.matchAll(directoryURLPattern(/\b(?:readdirSync|readdir|opendirSync|opendir)\s*\(\s*new\s+URL\s*\(\s*(['"`])([^'"`\n$\\]*)\1\s*,\s*import\s*\.\s*meta\s*\.\s*url\s*,?\s*\)\s*,?\s*\)/g))].map(match => match[2]));
+  // Options may enable recursion or supply a computed policy; an unresolved
+  // root scan cannot justify omitting any package consumer.
+  const optionReads = new Set([...source.source.matchAll(directoryURLPattern(/\b(?:readdirSync|readdir|opendirSync|opendir)\s*\(\s*new\s+URL\s*\(\s*(['"`])([^'"`\n$\\]*)\1\s*,\s*import\s*\.\s*meta\s*\.\s*url\s*,?\s*\)\s*,(?!\s*\))/g))].map(match => match[2]));
+  const optionVariables = new Set([...source.source.matchAll(directoryPattern(/\b(?:readdirSync|readdir|opendirSync|opendir)\s*\(\s*((?:[$_\p{ID_Start}]|\\u(?:[\da-fA-F]{4}|\{0*[\da-fA-F]{1,6}\}))(?:[$\u200c\u200d\p{ID_Continue}]|\\u(?:[\da-fA-F]{4}|\{0*[\da-fA-F]{1,6}\}))*)\s*,(?!\s*\))/gu))].map(match => directoryIdentifier(match[1])));
+  // A root URL variable retains helpers when its identifier is scanned.
+  const scannedVariables = new Set([...source.source.matchAll(directoryPattern(/\b(?:readdirSync|readdir|opendirSync|opendir)\s*\(\s*((?:[$_\p{ID_Start}]|\\u(?:[\da-fA-F]{4}|\{0*[\da-fA-F]{1,6}\}))(?:[$\u200c\u200d\p{ID_Continue}]|\\u(?:[\da-fA-F]{4}|\{0*[\da-fA-F]{1,6}\}))*)\s*,?\s*\)/gu))].map(match => directoryIdentifier(match[1])));
+  // Parentheses around a URL or alias value preserve that input. Alias edges combine
+  // names across scopes; the admission checks below refuse unproved binding contexts.
+  const identifier = String.raw`(?:[$_\p{ID_Start}]|\\u(?:[\da-fA-F]{4}|\{0*[\da-fA-F]{1,6}\}))(?:[$\u200c\u200d\p{ID_Continue}]|\\u(?:[\da-fA-F]{4}|\{0*[\da-fA-F]{1,6}\}))*`;
+  const aliases = new Map();
+  const knownAssignments = new Set();
+  const knownReferences = new Set();
+  const resolvedVariables = new Set();
+  // A comment can contain the line break that ends an alias declaration;
+  // alias edges retain consumers, but continued values cannot qualify narrowing.
+  const declarationAlias = directoryURLPattern(new RegExp(String.raw`(?:\b(?:const|let|var)\s+|,\s*)(${identifier})\s*(?::\s*URL\s*)?=\s*(${identifier})(?=\s*(?:[,;}\r\n\u2028\u2029]|//|/\*|$))`, 'dgu'));
+  // Keep the right-hand name unconsumed so chained assignments expose every
+  // transfer. A property or expression suffix does not establish a bare alias.
+  const assignmentAlias = directoryPattern(new RegExp(String.raw`(?<![$\p{ID_Continue}\\])(${identifier})\s*=\s*(?=(${identifier})(?=\s*(?:=(?!=|>)|[,;)}\]\r\n\u2028\u2029]|//|/\*|$)))`, 'dgu'));
+  // Consume a closing parenthesis before the value boundary. Otherwise a
+  // property suffix such as (original).pathname could become a URL transfer.
+  // A parameter list can end before a function body or an arrow.
+  const parenthesizedAlias = directoryURLPattern(new RegExp(String.raw`(?<![$\p{ID_Continue}\\])(${identifier})\s*(?::\s*URL\s*)?=\s*\(\s*(?:\(\s*)*(?=(${identifier})\s*(?:=(?!=|>)|\)\s*(?:\)\s*)*(?:=>|\{|[,;}\]\r\n\u2028\u2029]|//|/\*|$)))`, 'dgu'));
+  for (const pattern of [declarationAlias, assignmentAlias, parenthesizedAlias]) for (const match of source.source.matchAll(pattern)) {
+    if (!directoryValueContinues(source.source, match.indices[2][1])) knownAssignments.add(match.indices[1][0]);
+    knownReferences.add(match.indices[1][0]);
+    knownReferences.add(match.indices[2][0]);
+    const name = directoryIdentifier(match[2]);
+    if (!aliases.has(name)) aliases.set(name, new Set());
+    aliases.get(name).add(directoryIdentifier(match[1]));
+  }
+  for (const match of source.source.matchAll(directoryURLPattern(/(?<![$\p{ID_Continue}\\])((?:[$_\p{ID_Start}]|\\u(?:[\da-fA-F]{4}|\{0*[\da-fA-F]{1,6}\}))(?:[$\u200c\u200d\p{ID_Continue}]|\\u(?:[\da-fA-F]{4}|\{0*[\da-fA-F]{1,6}\}))*)\s*(?::\s*URL\s*)?=\s*(?:\(\s*)*new\s+URL\s*\(\s*(['"`])([^'"`\n$\\]*)\2\s*,\s*import\s*\.\s*meta\s*\.\s*url\s*,?\s*\)\s*(?:\)\s*)*(?==>|\{|[,;}\]\r\n\u2028\u2029]|\/\/|\/\*|$)/dgu))) {
+    knownReferences.add(match.indices[1][0]);
+    const target = posix.normalize(posix.join(posix.dirname(source.path), match[3]));
+    const resolved = !/[?#%]/.test(match[3]) && target !== '..' && !target.startsWith('../') &&
+      !directoryValueContinues(source.source, match.index + match[0].length);
+    if (resolved) knownAssignments.add(match.indices[1][0]);
+    const names = new Set([directoryIdentifier(match[1])]);
+    // The visited set bounds cycles and follows transfers in either order.
+    for (const name of names) {
+      if (resolved) resolvedVariables.add(name);
+      if (scannedVariables.has(name)) rootReads.add(match[3]);
+      if (optionVariables.has(name)) optionReads.add(match[3]);
+      for (const alias of aliases.get(name) ?? []) names.add(alias);
+    }
+  }
+  for (const value of optionReads) {
+    assert.doesNotMatch(value, /[?#%]/, `Unverified repository-root directory scan options at ${source.path}`);
+    const target = posix.normalize(posix.join(posix.dirname(source.path), value)).replace(/\/$/, '');
+    assert.notEqual(target, '.', `Unverified repository-root directory scan options at ${source.path}`);
+    assert.ok(target !== '..' && !target.startsWith('../'), `Unverified repository-root directory scan options at ${source.path}`);
+  }
+  // Narrowing needs a resolved input for every direct reader call. A known
+  // URL elsewhere in the source cannot qualify a computed or overwritten input.
+  const uncertainVariables = new Set();
+  const assignmentNames = new Map();
+  const writes = directoryURLPattern(new RegExp(String.raw`(?<![$\p{ID_Continue}\\])(${identifier})\s*(?::\s*URL\s*)?(?:[+*/%&|?^-]|&&|\|\||\?\?)?=(?!=|>)`, 'dgu'));
+  for (const match of source.source.matchAll(writes)) {
+    assignmentNames.set(match.indices[1][0], directoryIdentifier(match[1]));
+    if (!knownAssignments.has(match.indices[1][0])) uncertainVariables.add(directoryIdentifier(match[1]));
+  }
+  const admittedCalls = new Set();
+  const directInput = directoryURLPattern(/\b(?:readdirSync|readdir|opendirSync|opendir)\s*\(\s*new\s+URL\s*\(\s*(['"`])([^'"`\n$\\]*)\1\s*,\s*import\s*\.\s*meta\s*\.\s*url\s*,?\s*\)\s*(?=[,)])/g);
+  for (const match of source.source.matchAll(directInput)) {
+    const target = posix.normalize(posix.join(posix.dirname(source.path), match[2]));
+    if (!/[?#%]/.test(match[2]) && target !== '..' && !target.startsWith('../')) admittedCalls.add(match.index);
+  }
+  const variableInput = directoryPattern(new RegExp(String.raw`\b(?:readdirSync|readdir|opendirSync|opendir)\s*\(\s*(${identifier})\s*(?=[,)])`, 'dgu'));
+  const variableCalls = [...source.source.matchAll(variableInput)];
+  for (const match of variableCalls) knownReferences.add(match.indices[1][0]);
+  // A URL used as another URL's base is read without changing its value.
+  const urlBase = directoryURLPattern(new RegExp(String.raw`\bnew\s+URL\s*\(\s*[^(),]*,\s*(${identifier})\s*,?\s*\)`, 'dgu'));
+  for (const match of source.source.matchAll(urlBase)) knownReferences.add(match.indices[1][0]);
+  // A bare declaration does not replace the later proven URL assignment.
+  const bareDeclaration = directoryPattern(new RegExp(String.raw`\b(?:let|var)\s+(?:${identifier}\s*,\s*)*${identifier}\s*;`, 'gu'));
+  for (const declaration of source.source.matchAll(bareDeclaration)) {
+    for (const token of declaration[0].matchAll(new RegExp(identifier, 'gu'))) knownReferences.add(declaration.index + token.index);
+  }
+  // Other uses may mutate a URL or bind the same name in another scope.
+  // Without proving those uses, a matching declaration cannot qualify a read.
+  let escapedURL = false;
+  // A name assigned inside parentheses may be a parameter whose caller can
+  // replace its default. Opaque literal programs and slash expressions also
+  // cannot establish binding identity; retaining extra work is intentional.
+  const contexts = new RegExp(String.raw`'(?:\\[\s\S]|[^'\\])*'|"(?:\\[\s\S]|[^"\\])*"|\x60(?:\\[\s\S]|[^\x60\\])*\x60|/\*(?:[^*]|\*(?!/))*\*/|//[^\r\n\u2028\u2029]*(?:[\r\n\u2028\u2029]|$)|${identifier}|[^\s]`, 'gu');
+  const assignments = [...assignmentNames];
+  let assignmentIndex = 0, parentheses = 0;
+  for (const token of source.source.matchAll(contexts)) {
+    if (token[0] === '(') parentheses++;
+    if (token[0] === ')') parentheses = Math.max(0, parentheses - 1);
+    if (token[0] === '/') escapedURL = true;
+    while (assignments[assignmentIndex]?.[0] < token.index + token[0].length) {
+      const [position, name] = assignments[assignmentIndex++];
+      if (parentheses || (position > token.index && /^['"`/]/.test(token[0]))) uncertainVariables.add(name);
+    }
+  }
+  for (const name of aliases.keys()) if (!resolvedVariables.has(name)) uncertainVariables.add(name);
+  for (const match of source.source.matchAll(new RegExp(String.raw`(?<![$\p{ID_Continue}\\])(${identifier})`, 'gu'))) {
+    const name = directoryIdentifier(match[1]);
+    if (resolvedVariables.has(name) && !knownReferences.has(match.index)) escapedURL = true;
+  }
+  if (escapedURL) for (const match of variableCalls) uncertainVariables.add(directoryIdentifier(match[1]));
+  for (const name of uncertainVariables) for (const alias of aliases.get(name) ?? []) uncertainVariables.add(alias);
+  for (const match of variableCalls) {
+    const name = directoryIdentifier(match[1]);
+    if (resolvedVariables.has(name) && !uncertainVariables.has(name)) admittedCalls.add(match.index);
+  }
+  for (const match of source.source.matchAll(directoryPattern(/\b(?:readdirSync|readdir|opendirSync|opendir)\s*\(/g))) {
+    assert.ok(admittedCalls.has(match.index), `Unresolved directory input at ${source.path}`);
+  }
+  return rootReads;
+}
+
 function workspaceAt(sha, workspace, git) {
   assert.match(sha, /^[a-f0-9]{40}$/);
   const entries = git('ls-tree', '-rz', '--full-tree', sha).split('\0');
@@ -151,216 +358,21 @@ function workspaceAt(sha, workspace, git) {
     // Visit saved helper sources too; a cycle must not expand the queue forever.
     for (let index = 0; index < sources.length; index++) {
       const source = sources[index];
+      const declaration = reviewedDirectoryReaders[source.path];
+      if (declaration) {
+        const {mode, type, id} = declaration;
+        const label = source.path === 'scripts/ci-audit-fixture-dependencies.mjs' ? 'installed dependency reader' : 'package reader';
+        assert.deepEqual(files.get(source.path), {mode, type, id}, `Unreviewed ${label} at ${source.path}`);
+      }
       // Glob patterns, options and the default working directory can reach inputs
       // outside the quoted paths; unresolved scans must keep every package.
       assert.doesNotMatch(source.source, /\b(?:globSync|glob)\b/, `Unresolved glob scan at ${source.path}`);
-      // Backticks and closing parentheses/brackets can precede directory readers
-      // through member chains. This scan preserves tagged calls and nested keys
-      // without evaluation; opening backticks and inert text can also match.
-      assert.doesNotMatch(source.source, directoryPattern(/[)`\]]\s*(?:!\s*)*(?:(?:(?:\?\.|\.)\s*#?(?:[$_\p{ID_Start}]|\\u(?:[\da-fA-F]{4}|\{0*[\da-fA-F]{1,6}\}))(?:[$\u200c\u200d\p{ID_Continue}]|\\u(?:[\da-fA-F]{4}|\{0*[\da-fA-F]{1,6}\}))*|(?:\?\.\s*)?\[[^\[\]]*\])\s*(?:!\s*)*)*(?:\?\.|\.)\s*(?:readdirSync|readdir|opendirSync|opendir)\b/u),
-        `Unresolved parenthesized directory member at ${source.path}`);
-      // A Unicode escape can hide a directory API in a dot-member name.
-      // Without resolving member identities, keep every possible consumer.
-      assert.doesNotMatch(source.source, directoryPattern(/\.\s*[$_\p{ID_Continue}]*\\u/u),
-        `Unresolved escaped member at ${source.path}`);
-      // Optional calls and function members can enumerate a directory without
-      // matching a direct call; unresolved arguments retain every consumer.
-      // TypeScript non-null assertions leave the runtime function unchanged,
-      // including when the assertion is followed by a direct invocation.
-      // Closing parentheses can wrap the reader before invocation or member
-      // access. Type arguments and satisfies checks are erased before execution;
-      // unresolved references must retain their possible consumers.
-      // Array elements can preserve the reader until a later indexed call;
-      // simple comma-separated and closing-bracket references stay unresolved.
-      // A semicolon can end an assignment that stores the reader for a later call.
-      // Escapes can spell a directory API without a literal name. Keep every
-      // consumer rather than interpreting unresolved string or template keys.
-      // Require a receiver so escaped array values after `of` or `return`
-      // do not force unrelated package suites.
-      assert.doesNotMatch(source.source, directoryPattern(/(?:\b(?!(?:of|in|return|throw|yield|await|void|typeof|delete|new|instanceof)\b)[A-Za-z_$][\w$]*|[)\]])\s*(?:!\s*)*(?:\?\.\s*)?\[\s*(?:\(\s*)*(?:'[^'\\]*\\|"[^"\\]*\\|`[^`\\]*\\)/),
-        `Unresolved escaped directory key at ${source.path}`);
-      // Literal keys can preserve directory readers through erased assertions
-      // and parentheses. Without resolving the remaining expression, keep consumers.
-      assert.doesNotMatch(source.source, directoryPattern(/\[\s*(?:\(\s*)*(['"`])(?:readdirSync|readdir|opendirSync|opendir)\1/),
-        `Unresolved indirect directory call at ${source.path}`);
-      // The first array element can preserve a reader through a namespace chain;
-      // comments, optional access and non-null assertions leave that value intact.
-      assert.doesNotMatch(source.source, directoryPattern(/\[\s*(?:#?(?:[$_\p{ID_Start}]|\\u(?:[\da-fA-F]{4}|\{0*[\da-fA-F]{1,6}\}))(?:[$\u200c\u200d\p{ID_Continue}]|\\u(?:[\da-fA-F]{4}|\{0*[\da-fA-F]{1,6}\}))*\s*(?:!\s*)*(?:\?\.|\.)\s*)*(?:readdirSync|readdir|opendirSync|opendir)\b/u),
-        `Unresolved indirect directory call at ${source.path}`);
-      assert.doesNotMatch(source.source, directoryPattern(/\b(?:readdirSync|readdir|opendirSync|opendir)\s*(?:(?:!\s*)*(?:\?\.|\.|\[|(?:,\s*)?\]|\)|;|<|satisfies\b)|(?:!\s*)+\()/),
-        `Unresolved indirect directory call at ${source.path}`);
-      // Brace groups can hold or transfer a reader, including unresolved
-      // destructuring and exports. Static imports alone establish no consumer;
-      // quoted code retains the conservative check.
-      const objectReference = directoryPattern(/(?:\{|,)\s*(?:readdirSync|readdir|opendirSync|opendir)\s*(?:,|\})/);
-      if (objectReference.test(source.source)) {
-        assert.equal(hasDirectoryReference(source.source, '{'), false,
-          `Unresolved object directory reference at ${source.path}`);
-      }
-      // Assignments, arrow results, block returns, yields and default exports can
-      // preserve a reader for a later call. A brace can end a field or block; requiring a value
-      // expression keeps ordinary named imports narrow without resolving bindings.
-      assert.doesNotMatch(source.source, directoryPattern(/(?:=>|=|\b(?:return|yield)\b|\bexport\s+default)\s*(?:await\s+)*(?:#?(?:[$_\p{ID_Start}]|\\u(?:[\da-fA-F]{4}|\{0*[\da-fA-F]{1,6}\}))(?:[$\u200c\u200d\p{ID_Continue}]|\\u(?:[\da-fA-F]{4}|\{0*[\da-fA-F]{1,6}\}))*\s*(?:!\s*)*(?:\?\.|\.)\s*)*(?:readdirSync|readdir|opendirSync|opendir)\b\s*(?:!\s*)*(?:,|\}|[\r\n\u2028\u2029]|\/\/|$)/u),
-        `Unresolved indirect directory call at ${source.path}`);
-      // A comma can store the reader between other elements. Require an array
-      // opener so ordinary named imports do not force full package work. A simple
-      // namespace chain, including Unicode and private names, preserves the stored
-      // function through non-null assertions too.
-      const arraySource = arrayDirectorySource(source.source);
-      assert.doesNotMatch(arraySource, directoryPattern(/\[[^\[\]{};]*,\s*(?:#?(?:[$_\p{ID_Start}]|\\u(?:[\da-fA-F]{4}|\{0*[\da-fA-F]{1,6}\}))(?:[$\u200c\u200d\p{ID_Continue}]|\\u(?:[\da-fA-F]{4}|\{0*[\da-fA-F]{1,6}\}))*\s*(?:!\s*)*(?:\?\.|\.)\s*)*(?:readdirSync|readdir|opendirSync|opendir)\s*(?:!\s*)*,/u),
-        `Unresolved indirect directory call at ${source.path}`);
-      // A nested value can precede ordinary elements and a stored reader.
-      // Resume at its closing delimiter without interpreting the earlier value;
-      // brackets, braces and semicolons outside matched tokens bound this scan.
-      assert.doesNotMatch(arraySource, directoryPattern(/[\]}][^\[\]{};]*,\s*(?:#?(?:[$_\p{ID_Start}]|\\u(?:[\da-fA-F]{4}|\{0*[\da-fA-F]{1,6}\}))(?:[$\u200c\u200d\p{ID_Continue}]|\\u(?:[\da-fA-F]{4}|\{0*[\da-fA-F]{1,6}\}))*\s*(?:!\s*)*(?:\?\.|\.)\s*)*(?:readdirSync|readdir|opendirSync|opendir)\s*(?:!\s*)*,/u),
-        `Unresolved indirect directory call at ${source.path}`);
-      // A callee can keep a reader passed between commas, including a namespace
-      // member. Without resolving that transfer, retain every possible consumer.
-      if (directoryPattern(/\b(?:readdirSync|readdir|opendirSync|opendir)\s*(?:!\s*)*,/).test(source.source)) {
-        assert.equal(hasDirectoryReference(source.source, '('), false,
-          `Unresolved call argument directory reference at ${source.path}`);
-      }
-      // Logical assignments and awaited logical or conditional operands can keep
-      // the reader for a later call. Namespace chains, optional access and erased
-      // non-null assertions also preserve that function without resolving it.
-      assert.doesNotMatch(source.source, directoryPattern(/\b(?:readdirSync|readdir|opendirSync|opendir)\s*(?:!\s*)*(?:&&|\|\||\?\?|\?(?!\.)|:)|(?:(?:&&|\|\||\?\?)=?|\?|:)\s*(?:await\s+)*(?:#?(?:[$_\p{ID_Start}]|\\u(?:[\da-fA-F]{4}|\{0*[\da-fA-F]{1,6}\}))(?:[$\u200c\u200d\p{ID_Continue}]|\\u(?:[\da-fA-F]{4}|\{0*[\da-fA-F]{1,6}\}))*\s*(?:!\s*)*(?:\?\.|\.)\s*)*(?:readdirSync|readdir|opendirSync|opendir)\b/u),
-        `Unresolved indirect directory call at ${source.path}`);
-      // An imported alias can enumerate helpers without naming a directory API
-      // at its call site. Quoted names and escaped alias tokens stay unresolved;
-      // those bindings must retain every possible consumer without decoding code.
-      assert.doesNotMatch(source.source, directoryPattern(/\b(?:readdirSync|readdir|opendirSync|opendir)['"]?\s+as\b/),
-        `Unresolved directory import alias at ${source.path}`);
-      // Consume each escaped token before testing its suffix, so a long ordinary
-      // string cannot restart the same suffix scan at every backslash.
-      const aliasSuffix = directoryPattern(/\s+as\b/y);
-      for (const token of source.source.matchAll(/(?<![\w$\\{}'"])[\w${}'"]*(?:\\[\s\S][\w${}'"]*)+/g)) {
-        aliasSuffix.lastIndex = token.index + token[0].length;
-        assert.ok(!aliasSuffix.test(source.source), `Unresolved directory import alias at ${source.path}`);
-      }
-      // Bare names can hide directory readers behind Unicode escapes. Decode
-      // the whole name so unrelated escaped identifiers keep their own scope.
-      for (const token of source.source.matchAll(/(?<![$\p{ID_Continue}\\.'"`])[$_\p{ID_Continue}]*\\u(?:[\da-fA-F]{4}|\{0*[\da-fA-F]{1,6}\})(?:[$\p{ID_Continue}]|\\u(?:[\da-fA-F]{4}|\{0*[\da-fA-F]{1,6}\}))*/gu)) {
-        const name = token[0].replace(/\\u(?:([\da-fA-F]{4})|\{(0*[\da-fA-F]{1,6})\})/g,
-          (_, fixed, braced) => String.fromCodePoint(parseInt(fixed ?? braced, 16)));
-        assert.doesNotMatch(name, /^(?:readdirSync|readdir|opendirSync|opendir)$/,
-          `Unresolved escaped identifier at ${source.path}`);
-      }
-      const rootReads = new Set([...source.source.matchAll(directoryURLPattern(/\b(?:readdirSync|readdir|opendirSync|opendir)\s*\(\s*new\s+URL\s*\(\s*(['"`])([^'"`\n$\\]*)\1\s*,\s*import\s*\.\s*meta\s*\.\s*url\s*,?\s*\)\s*,?\s*\)/g))].map(match => match[2]));
-      // Options may enable recursion or supply a computed policy; an unresolved
-      // root scan cannot justify omitting any package consumer.
-      const optionReads = new Set([...source.source.matchAll(directoryURLPattern(/\b(?:readdirSync|readdir|opendirSync|opendir)\s*\(\s*new\s+URL\s*\(\s*(['"`])([^'"`\n$\\]*)\1\s*,\s*import\s*\.\s*meta\s*\.\s*url\s*,?\s*\)\s*,(?!\s*\))/g))].map(match => match[2]));
-      const optionVariables = new Set([...source.source.matchAll(directoryPattern(/\b(?:readdirSync|readdir|opendirSync|opendir)\s*\(\s*((?:[$_\p{ID_Start}]|\\u(?:[\da-fA-F]{4}|\{0*[\da-fA-F]{1,6}\}))(?:[$\u200c\u200d\p{ID_Continue}]|\\u(?:[\da-fA-F]{4}|\{0*[\da-fA-F]{1,6}\}))*)\s*,(?!\s*\))/gu))].map(match => directoryIdentifier(match[1])));
-      // A root URL variable retains helpers when its identifier is scanned.
-      const scannedVariables = new Set([...source.source.matchAll(directoryPattern(/\b(?:readdirSync|readdir|opendirSync|opendir)\s*\(\s*((?:[$_\p{ID_Start}]|\\u(?:[\da-fA-F]{4}|\{0*[\da-fA-F]{1,6}\}))(?:[$\u200c\u200d\p{ID_Continue}]|\\u(?:[\da-fA-F]{4}|\{0*[\da-fA-F]{1,6}\}))*)\s*,?\s*\)/gu))].map(match => directoryIdentifier(match[1])));
-      // Parentheses around a URL or alias value preserve that input. Alias edges combine
-      // names across scopes; the admission checks below refuse unproved binding contexts.
-      const identifier = String.raw`(?:[$_\p{ID_Start}]|\\u(?:[\da-fA-F]{4}|\{0*[\da-fA-F]{1,6}\}))(?:[$\u200c\u200d\p{ID_Continue}]|\\u(?:[\da-fA-F]{4}|\{0*[\da-fA-F]{1,6}\}))*`;
-      const aliases = new Map();
-      const knownAssignments = new Set();
-      const knownReferences = new Set();
-      const resolvedVariables = new Set();
-      // A comment can contain the line break that ends an alias declaration;
-      // alias edges retain consumers, but continued values cannot qualify narrowing.
-      const declarationAlias = directoryURLPattern(new RegExp(String.raw`(?:\b(?:const|let|var)\s+|,\s*)(${identifier})\s*(?::\s*URL\s*)?=\s*(${identifier})(?=\s*(?:[,;}\r\n\u2028\u2029]|//|/\*|$))`, 'dgu'));
-      // Keep the right-hand name unconsumed so chained assignments expose every
-      // transfer. A property or expression suffix does not establish a bare alias.
-      const assignmentAlias = directoryPattern(new RegExp(String.raw`(?<![$\p{ID_Continue}\\])(${identifier})\s*=\s*(?=(${identifier})(?=\s*(?:=(?!=|>)|[,;)}\]\r\n\u2028\u2029]|//|/\*|$)))`, 'dgu'));
-      // Consume a closing parenthesis before the value boundary. Otherwise a
-      // property suffix such as (original).pathname could become a URL transfer.
-      // A parameter list can end before a function body or an arrow.
-      const parenthesizedAlias = directoryURLPattern(new RegExp(String.raw`(?<![$\p{ID_Continue}\\])(${identifier})\s*(?::\s*URL\s*)?=\s*\(\s*(?:\(\s*)*(?=(${identifier})\s*(?:=(?!=|>)|\)\s*(?:\)\s*)*(?:=>|\{|[,;}\]\r\n\u2028\u2029]|//|/\*|$)))`, 'dgu'));
-      for (const pattern of [declarationAlias, assignmentAlias, parenthesizedAlias]) for (const match of source.source.matchAll(pattern)) {
-        if (!directoryValueContinues(source.source, match.indices[2][1])) knownAssignments.add(match.indices[1][0]);
-        knownReferences.add(match.indices[1][0]);
-        knownReferences.add(match.indices[2][0]);
-        const name = directoryIdentifier(match[2]);
-        if (!aliases.has(name)) aliases.set(name, new Set());
-        aliases.get(name).add(directoryIdentifier(match[1]));
-      }
-      for (const match of source.source.matchAll(directoryURLPattern(/(?<![$\p{ID_Continue}\\])((?:[$_\p{ID_Start}]|\\u(?:[\da-fA-F]{4}|\{0*[\da-fA-F]{1,6}\}))(?:[$\u200c\u200d\p{ID_Continue}]|\\u(?:[\da-fA-F]{4}|\{0*[\da-fA-F]{1,6}\}))*)\s*(?::\s*URL\s*)?=\s*(?:\(\s*)*new\s+URL\s*\(\s*(['"`])([^'"`\n$\\]*)\2\s*,\s*import\s*\.\s*meta\s*\.\s*url\s*,?\s*\)\s*(?:\)\s*)*(?==>|\{|[,;}\]\r\n\u2028\u2029]|\/\/|\/\*|$)/dgu))) {
-        knownReferences.add(match.indices[1][0]);
-        const target = posix.normalize(posix.join(posix.dirname(source.path), match[3]));
-        const resolved = !/[?#%]/.test(match[3]) && target !== '..' && !target.startsWith('../') &&
-          !directoryValueContinues(source.source, match.index + match[0].length);
-        if (resolved) knownAssignments.add(match.indices[1][0]);
-        const names = new Set([directoryIdentifier(match[1])]);
-        // The visited set bounds cycles and follows transfers in either order.
-        for (const name of names) {
-          if (resolved) resolvedVariables.add(name);
-          if (scannedVariables.has(name)) rootReads.add(match[3]);
-          if (optionVariables.has(name)) optionReads.add(match[3]);
-          for (const alias of aliases.get(name) ?? []) names.add(alias);
-        }
-      }
-      for (const value of optionReads) {
-        assert.doesNotMatch(value, /[?#%]/, `Unverified repository-root directory scan options at ${source.path}`);
-        const target = posix.normalize(posix.join(posix.dirname(source.path), value)).replace(/\/$/, '');
-        assert.notEqual(target, '.', `Unverified repository-root directory scan options at ${source.path}`);
-        assert.ok(target !== '..' && !target.startsWith('../'), `Unverified repository-root directory scan options at ${source.path}`);
-      }
-      // Narrowing needs a resolved input for every direct reader call. A known
-      // URL elsewhere in the source cannot qualify a computed or overwritten input.
-      const uncertainVariables = new Set();
-      const assignmentNames = new Map();
-      const writes = directoryURLPattern(new RegExp(String.raw`(?<![$\p{ID_Continue}\\])(${identifier})\s*(?::\s*URL\s*)?(?:[+*/%&|?^-]|&&|\|\||\?\?)?=(?!=|>)`, 'dgu'));
-      for (const match of source.source.matchAll(writes)) {
-        assignmentNames.set(match.indices[1][0], directoryIdentifier(match[1]));
-        if (!knownAssignments.has(match.indices[1][0])) uncertainVariables.add(directoryIdentifier(match[1]));
-      }
-      const admittedCalls = new Set();
-      const directInput = directoryURLPattern(/\b(?:readdirSync|readdir|opendirSync|opendir)\s*\(\s*new\s+URL\s*\(\s*(['"`])([^'"`\n$\\]*)\1\s*,\s*import\s*\.\s*meta\s*\.\s*url\s*,?\s*\)\s*(?=[,)])/g);
-      for (const match of source.source.matchAll(directInput)) {
-        const target = posix.normalize(posix.join(posix.dirname(source.path), match[2]));
-        if (!/[?#%]/.test(match[2]) && target !== '..' && !target.startsWith('../')) admittedCalls.add(match.index);
-      }
-      const variableInput = directoryPattern(new RegExp(String.raw`\b(?:readdirSync|readdir|opendirSync|opendir)\s*\(\s*(${identifier})\s*(?=[,)])`, 'dgu'));
-      const variableCalls = [...source.source.matchAll(variableInput)];
-      for (const match of variableCalls) knownReferences.add(match.indices[1][0]);
-      // A URL used as another URL's base is read without changing its value.
-      const urlBase = directoryURLPattern(new RegExp(String.raw`\bnew\s+URL\s*\(\s*[^(),]*,\s*(${identifier})\s*,?\s*\)`, 'dgu'));
-      for (const match of source.source.matchAll(urlBase)) knownReferences.add(match.indices[1][0]);
-      // A bare declaration does not replace the later proven URL assignment.
-      const bareDeclaration = directoryPattern(new RegExp(String.raw`\b(?:let|var)\s+(?:${identifier}\s*,\s*)*${identifier}\s*;`, 'gu'));
-      for (const declaration of source.source.matchAll(bareDeclaration)) {
-        for (const token of declaration[0].matchAll(new RegExp(identifier, 'gu'))) knownReferences.add(declaration.index + token.index);
-      }
-      // Other uses may mutate a URL or bind the same name in another scope.
-      // Without proving those uses, a matching declaration cannot qualify a read.
-      let escapedURL = false;
-      // A name assigned inside parentheses may be a parameter whose caller can
-      // replace its default. Opaque literal programs and slash expressions also
-      // cannot establish binding identity; retaining extra work is intentional.
-      const contexts = new RegExp(String.raw`'(?:\\[\s\S]|[^'\\])*'|"(?:\\[\s\S]|[^"\\])*"|\x60(?:\\[\s\S]|[^\x60\\])*\x60|/\*(?:[^*]|\*(?!/))*\*/|//[^\r\n\u2028\u2029]*(?:[\r\n\u2028\u2029]|$)|${identifier}|[^\s]`, 'gu');
-      const assignments = [...assignmentNames];
-      let assignmentIndex = 0, parentheses = 0;
-      for (const token of source.source.matchAll(contexts)) {
-        if (token[0] === '(') parentheses++;
-        if (token[0] === ')') parentheses = Math.max(0, parentheses - 1);
-        if (token[0] === '/') escapedURL = true;
-        while (assignments[assignmentIndex]?.[0] < token.index + token[0].length) {
-          const [position, name] = assignments[assignmentIndex++];
-          if (parentheses || (position > token.index && /^['"`/]/.test(token[0]))) uncertainVariables.add(name);
-        }
-      }
-      for (const name of aliases.keys()) if (!resolvedVariables.has(name)) uncertainVariables.add(name);
-      for (const match of source.source.matchAll(new RegExp(String.raw`(?<![$\p{ID_Continue}\\])(${identifier})`, 'gu'))) {
-        const name = directoryIdentifier(match[1]);
-        if (resolvedVariables.has(name) && !knownReferences.has(match.index)) escapedURL = true;
-      }
-      if (escapedURL) for (const match of variableCalls) uncertainVariables.add(directoryIdentifier(match[1]));
-      for (const name of uncertainVariables) for (const alias of aliases.get(name) ?? []) uncertainVariables.add(alias);
-      for (const match of variableCalls) {
-        const name = directoryIdentifier(match[1]);
-        if (resolvedVariables.has(name) && !uncertainVariables.has(name)) admittedCalls.add(match.index);
-      }
-      for (const match of source.source.matchAll(directoryPattern(/\b(?:readdirSync|readdir|opendirSync|opendir)\s*\(/g))) {
-        assert.ok(admittedCalls.has(match.index), `Unresolved directory input at ${source.path}`);
-      }
+      const rootReads = declaration?.nonSourceDirectoryReads ? new Set() : sourceDirectoryReads(source);
       for (const value of quotedReferences(source.source)) {
         const target = value.startsWith('.') ? posix.normalize(posix.join(posix.dirname(source.path), value)) : posix.normalize(value);
         if (packages.some(other => target.startsWith(`${other.directory}/`))) continue;
         // Keep descendant helpers without matching a similarly named sibling.
-        for (const path of [...(target.replace(/\/$/, '') === '.' && rootReads.has(value) ? rootModules : []), ...(directories.get(posix.normalize(target).replace(/\/$/, '')) ?? []), target, target.replace(/\.js$/, '.ts'), target.replace(/\.mjs$/, '.mts'), target.replace(/\.cjs$/, '.cts'), target.replace(/\.jsx?$/, '.tsx'),
+        for (const path of [...(target.replace(/\/$/, '') === '.' && rootReads.has(value) ? rootModules : []), ...(!declaration?.directoryReferences.includes(value) ? (directories.get(posix.normalize(target).replace(/\/$/, '')) ?? []) : []), target, target.replace(/\.js$/, '.ts'), target.replace(/\.mjs$/, '.mts'), target.replace(/\.cjs$/, '.cts'), target.replace(/\.jsx?$/, '.tsx'),
           ...['.mjs', '.cjs', '.js', '.ts', '.mts', '.cts', '.tsx', '.jsx'].flatMap(ext => [target + ext, posix.join(target, 'index' + ext)])]) {
           if (!modules.has(path) || visited.has(path)) continue;
           visited.add(path);

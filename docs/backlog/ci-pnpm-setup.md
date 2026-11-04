@@ -25,10 +25,12 @@ two initial controls pass on Linux. Why the nested install could not find that
 package in the store remains unknown; this change removes that store from the
 audit's prerequisites. The helper also refuses missing, empty or linked root
 dependency directories and linked workspace dependency directories.
-The helper enumerates the two workspace roots explicitly. This preserves the
-package selector's existing refusal to narrow work for unresolved directory
-reads, including its live-repository checks. Missing-target dependency links
-are refused too.
+The helper enumerates the two workspace roots explicitly. Its exact reviewed
+version now has a [package reader declaration](../ci-package-readers.md), because
+it copies installed dependencies rather than discovering tracked source. Both
+saved trees must match that version; changed and unknown readers keep full
+package work. The live refusal control supplies an explicit unknown reader and
+retains its original assertions. Missing-target dependency links are refused too.
 
 The remote-access and portal guard fixtures use the same installed copies. Their
 twelve report omissions, twenty-nine collection guards and nine portal omissions

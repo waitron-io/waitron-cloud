@@ -1623,7 +1623,19 @@ implementation or production evidence.
   evidence retain conservative work. D571 part 1 reuses these existing audits;
   the parked `feat/precise-ci-selection` branch remains untouched. D69 ended in
   #262 with full work for unresolved directory readers; its unmerged replacement
-  is reference material, not the current implementation. Part 2b supplies the
+  is reference material, not the current implementation. D571 part 2 declares
+  41 exact reader versions for installed dependencies, runtime data, scratch and
+  inert directory values. Both immutable trees check their mode, type and blob;
+  changed or unknown readers retain conservative work. Quoted file references,
+  sibling imports and helper chains remain in the graph. The live fallback test
+  now supplies an explicit unknown reader and keeps every original assertion.
+  The local saved-graph measurement selects six portal package jobs and one
+  UI-smoke job. Identity still selects all nine packages; the other six backend
+  changes select eight packages. Their real import and shared-fixture cycle
+  therefore still needs 28 job groups. These are selection measurements, not
+  GitHub duration savings. The [reader boundaries and renewal procedure](ci-package-readers.md)
+  explain the declarations and remaining limits.
+  Part 2b supplies the
   direct package selection below; part 5 still owns verified merge reuse.
   Part 3 implements the [reviewed root-input design](superpowers/specs/2026-11-05-ci-root-input-ownership-design.md)
   with [separate records and an explicit renewal procedure](ci-root-input-ownership.md).
@@ -2664,7 +2676,10 @@ implementation or production evidence.
   certificates are unchanged. Repository-root working directories, computed
   inputs, non-source directory contents and broader root-path selection remain
   conservative. The owner closed D69 with the run-all fallback; more precise dynamic-input selection is optional future work. Identity still selects all nine packages in the current graph;
-  portal-only changes now retain full package work when any saved reader is unresolved. Unaudited root, unknown and empty changes run everything.
+  portal-only changes retain full package work when any saved reader is unresolved
+  or a declared version has changed. The 41 exact D571 declarations bound known
+  runtime/data operations without weakening unknown-reader checks. Unaudited root,
+  unknown and empty changes run everything.
   Type checking stays whole-workspace. The root command compiles the shared
   backend configuration once, then runs the portal and UI-smoke configurations.
   The seven backend package commands use the same root configuration, so repeating
