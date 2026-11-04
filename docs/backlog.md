@@ -248,12 +248,6 @@ separate qualification gates. The historical genuine-browser reconnect refusal
 (run 40746396664, job 123021488076) remains under D201/D530 investigation; a
 passing qualification does not establish its cause or repair it.
 
-## Account request proof and transport boundaries (D406)
-
-**Open.** Qualify server authority, browser integration and live ingress; physical
-passkeys and the separate retry-clock repair retain their own gates.
-See [the boundaries and remaining work](backlog/account-http-boundaries.md#account-request-proof-and-transport-boundaries-d406).
-
 ## Signup and password-reset HTTP acknowledgements (D423)
 
 **Open.** Qualify production mail, browser and server authority, exact success

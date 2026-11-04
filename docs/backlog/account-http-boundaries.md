@@ -1,16 +1,5 @@
 # Account HTTP boundaries
 
-## Account request proof and transport boundaries (D406)
-
-The account request client selects one CSRF cookie for the connection protocol.
-Missing or duplicate cookies send an empty proof, and public sign-in and passive
-account reads do not inspect management cookies. Native tests cover request
-payloads, credentials, refusals and private error redaction across account controls.
-Real loopback HTTP checks cover the existing deadline while waiting for headers
-or a response body; failed writes remain single attempts. Server authority and
-live ingress qualification remain open; database/browser suites run in CI while
-local Docker is unavailable.
-
 ## Session HTTP response validation (D412)
 
 Malformed session lists cannot become revocation targets or confirm that a session
