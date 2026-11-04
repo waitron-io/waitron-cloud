@@ -786,11 +786,6 @@ owner-only quality trials after 2026-11-02, and commercial and production decisi
 are complete; preserve the approved cap, admission, consent and paging rules in the
 [translation requirements and open work](backlog/translation.md).
 
-## Installation replies after account changes (D398)
-
-**Open.** The earlier incomplete signature-metadata response remains unexplained; server permission and revocation checks remain in CI.
-See [the boundaries and remaining work](backlog/venue-connection-http.md#installation-replies-after-account-changes-d398).
-
 ## Initial focus
 
 **Open; local building only.** Launch first in Spain on AWS and keep routine customer
