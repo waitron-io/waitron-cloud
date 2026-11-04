@@ -11,16 +11,15 @@ permissions; they grant no activation or stop-proof authority. Server permission
 deployed browser integration, computer sleep and genuine restore or recovery
 remain unqualified; database suites run in CI.
 
-## Recovery transport waits and pending actions (D437)
+## Recovery deployment qualification
 
-When a recovery request is pending, you cannot send a second inspection,
-approval, close or replacement from that controller. Native client and controller
-checks with stubbed fetch cover these gates and exact seconds/date retry expiry
-for all four actions.
+Run `node --test apps/portal/test/recovery-transport-boundary.test.ts` to check
+that a pending inspection, approval, close or replacement blocks duplicate actions.
 A server failure with a retry wait leaves the write uncertain; expiry sends no
 request, and your next inspection reconciles the result without repeating the
 write. Account and request changes clear private choices while keeping the wait.
-Run `node --test apps/portal/test/recovery-transport-boundary.test.ts` for these
-checks. They preserve runtime behaviour and recovery authority; production
-recovery, server-side permissions and clock-correction handling remain separate
-qualification work.
+Native checks cover exact seconds and date expiry for all four actions.
+Run `node --test apps/portal/test/panel-retry-clock.test.ts` to check elapsed retry
+waits through clock corrections and time spent reading response bodies. These
+client checks leave server permissions and genuine restore or recovery unqualified;
+they grant no activation authority or proof that the old server has stopped.

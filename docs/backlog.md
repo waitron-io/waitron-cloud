@@ -3777,11 +3777,11 @@ evidence if they recur. Preserve the failing assertions and five-second database
 limit, then reproduce a labelled failure before changing runtime rules.
 
 
-## Recovery transport waits and pending actions (D437)
+## Recovery deployment qualification
 
 **Open.** Qualify server permissions and genuine restore or recovery; these client
-checks grant no activation or stop-proof authority.
-See [the boundaries and remaining work](backlog/backup-recovery-http.md#recovery-transport-waits-and-pending-actions-d437).
+checks grant no activation authority or proof that the old server has stopped.
+See [the native recovery boundaries](backlog/backup-recovery-http.md#recovery-deployment-qualification).
 
 ## Cost-stack isolation command refusal (D152)
 
