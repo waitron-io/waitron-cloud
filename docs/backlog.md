@@ -3908,64 +3908,6 @@ translation retry, consent, pending-state, layout and runner deadline assertions
 remain. These native Chromium checks use stubbed HTTP and do not qualify the
 backend or production.
 
-## Browser-test clock setup (D313)
-
-The monitoring-status fixture also reproduces the refusal when setup pauses
-longer than its one-second clock window. It now freezes from the earlier start;
-original and delayed journeys retain every latest-status, freshness, missing-data,
-certificate, read-only, layout and deadline check.
-
-The passkey Add keyboard fixture reproduces the refusal with a 100 ms setup
-delay and now freezes from an earlier start. Original and delayed journeys retain
-every caret, focus, exact-password, Tab/Enter, pending-request and enrollment check
-across both languages, themes and viewport widths, with unchanged deadlines.
-
-The alert-preferences activity fixture now installs its running clock a day before
-its intended pause, then freezes at the original instant before loading the app.
-A 100 ms setup delay reproduced CI's “Cannot fast-forward to the past” refusal;
-the corrected delayed case and all 15 original journeys pass without changing
-assertions, deadlines or application time. The session-list activity fixture also
-reproduces the refusal with a 100 ms setup delay and now freezes from the earlier
-start before loading the app. Its original journeys and delayed variants retain
-all session, retry, uncertain-revoke and account assertions and deadlines.
-The authenticator-status activity fixture reproduces the same refusal under a
-100 ms setup delay and now uses the earlier start too. Its original journeys and
-delayed variants preserve every status, retry, account, write and deadline check.
-The translation-consent activity fixture also reproduces the refusal under a
-100 ms setup delay. Its four clock setups now start earlier and freeze at the
-original instant before loading the app. Original journeys and delayed variants
-retain every consent, retry, navigation, account, write and deadline check.
-The account-security cooldown fixture also reproduces the refusal with a 100 ms
-setup delay and now freezes from the earlier start. Original and delayed journeys
-retain all six passkey/session actions, request counts, disabled-control, countdown,
-retry and deadline checks across both languages, themes and viewport widths.
-The authenticator keyboard fixture reproduces the refusal with the same setup
-delay and now freezes from the earlier start. Original and delayed journeys retain
-every Enter-key, activation, unavailable-status, cooldown, request and deadline
-check. Both clock setup sites are qualified.
-The passkey Enter fixture reproduces the refusal with the same setup delay at
-all three clock setup sites and now freezes from the earlier start. Original and
-delayed journeys retain every password, enrollment, unsupported-browser, cooldown,
-request-count, duplicate-submit and deadline check.
-The monitoring-action guidance fixture reproduces the refusal with a 1100 ms
-setup pause and now freezes from an earlier start at the original instant. Its
-original and delayed journeys retain all failed/stale/certificate explanations,
-read-only actions, hostnames, dates, requests, healthy states and deadlines.
-The session-check retry fixture reproduces the refusal after a 1100 ms setup
-pause, beyond its old one-second window. It now starts earlier and freezes at
-the original instant before loading the app. Both connect and recovery journeys
-retain every protected-action, request, retry, cooldown and deadline assertion;
-the original language, theme and viewport matrix and four delayed variants run.
-The change-email cooldown fixture reproduces the refusal after a 1100 ms setup
-pause and now freezes from an earlier start at the original instant. Its original
-journeys and delayed signup/recovery variants retain every corrected-address,
-per-address wait, server retry, navigation, operation separation and deadline check.
-The cooldown wording fixture reproduces the refusal after a 1100 ms setup pause
-and now starts earlier before freezing at the original instant. Its account and
-fiscal views retain all singular, plural, expiry, layout and deadline checks;
-the original language, theme and viewport matrix and delayed variants run.
-No historical CI failure in these fixtures is attributed here.
-
 ## Paced replay deletion recurrence (D351 qualification)
 
 [Cost run 40541558126, job 122321994540](https://github.com/waitron-io/waitron-cloud/actions/runs/40541558126/job/122321994540)
