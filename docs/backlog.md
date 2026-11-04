@@ -3329,6 +3329,17 @@ See [the boundaries and remaining work](backlog/storage-cache-fixture.md#storage
 **Open.** Qualify the native Docker-positive, non-73 refusal control; Docker event-reporting differences remain unexplained.
 See [the boundaries and remaining work](backlog/verifier-build.md#container-verifier-memory-refusal-observation-d335).
 
+## Passive security-audit session timestamp check (D530)
+
+[PR889's account HTTP job](https://github.com/waitron-io/waitron-cloud/actions/runs/41799209730/job/126471471556)
+fails `security-audit.test.ts:41` because the session's last-used timestamp is one
+millisecond later than its creation timestamp. The unchanged case passes in
+[PR890's job](https://github.com/waitron-io/waitron-cloud/actions/runs/41800780918/job/126476006089).
+A Linux probe calling `createSession` reproduces the same one-millisecond gap
+before any HTTP request. Migration `002_identity.sql` gives the two columns
+independent `clock_timestamp()` defaults. Repair the fixture's assumption while
+preserving proof that passive reads do not update the session. No assertion,
+session behaviour or landed migration has been changed for this investigation.
 
 ## Bound verifier test failure cleanup (D530)
 
