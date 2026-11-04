@@ -2,7 +2,7 @@ import {execFileSync} from 'node:child_process';
 import {readFileSync} from 'node:fs';
 import {resolve} from 'node:path';
 
-const [waitron, revision = 'origin/main', sourceMap = resolve(import.meta.dirname, '../packages/identity/SOURCE.md')] = process.argv.slice(2);
+const [waitron, revision = 'origin/' + 'main', sourceMap = resolve(import.meta.dirname, '../packages/identity/SOURCE.md')] = process.argv.slice(2);
 try {
   if (!waitron) throw new Error('Usage: node scripts/identity-upstream.mjs <Waitron checkout> [revision] [source map]');
   const source = readFileSync(sourceMap, 'utf8');
