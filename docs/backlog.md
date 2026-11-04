@@ -4132,13 +4132,6 @@ Cloud follow-ups, each a separate small change with tests before implementation:
 Authentication, recovery, tenant permissions and fiscal changes keep their full
 review and owner gates. This audit does not enable services or change policy.
 
-## D413 — Locate a failed joint fiscal fixture setup
-
-**Open.** Initial directory refusals and completed blocking setup overruns now
-produce bounded reports. Capture the operation behind the historical setup
-timeout; keep the pinned source, fiscal assertions and deadlines unchanged.
-See [the boundaries and remaining work](backlog/joint-fiscal-fixture-setup.md#d413--locate-a-failed-joint-fiscal-fixture-setup).
-
 ## Cost-mail reconciliation refusal observed during D262
 
 The historical mail measurement-close refusal remains unexplained. Both unchanged

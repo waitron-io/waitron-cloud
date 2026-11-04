@@ -2,6 +2,11 @@
 
 ## D413 — Locate a failed joint fiscal fixture setup
 
+**Historical reference.** Cloud retired this joint fixture and its diagnostic
+tests in [PR #711](https://github.com/waitron-io/waitron-cloud/pull/711).
+The notes below describe that removed setup path. The historical timeout
+remains unexplained; removing its caller does not identify or repair its cause.
+
 If the pinned PostgreSQL/Waitron integration fails during setup, you get the
 active operation and elapsed timings before cleanup, including a refusal to
 create the temporary directory. A reporting timer observes the existing
@@ -25,5 +30,6 @@ referenced handle is still unqualified.
 Git, install, bridge and hook deadlines, the pinned commit, fiscal assertions and
 allocation behaviour retain their existing checks. The operation behind D412's
 historical setup timeout remains unknown; use a failing instrumented run to
-identify it before proposing a repair. Real PostgreSQL qualification runs in CI
-while Mac Docker is unavailable.
+identify it before proposing a repair. The PostgreSQL qualification described
+here belongs to the retired fixture. Current retained-schema and missing-route
+checks use separate fixtures.

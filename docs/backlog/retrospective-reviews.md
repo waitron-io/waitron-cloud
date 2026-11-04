@@ -17,18 +17,24 @@ worker-admission failure or qualify the Docker-backed integration.
 
 ## Joint fixture setup reporting
 
-A blocking source command can consume the setup budget while deferring its
-reporting timer. Before entering another stage, the fixture now reports the
-operation that crossed the budget. Initial temporary-directory refusal also
-passes through the bounded reporter and preserves its original error. Reports
-keep the same fixed labels and numeric fields. No setup operation is cancelled
-by this observation.
+**Historical reference.** Cloud removed this fixture and both diagnostic test
+files in [PR #711](https://github.com/waitron-io/waitron-cloud/pull/711).
+The reporting checks below describe the earlier release; their commands no
+longer run on the current tree.
 
-Run `node --test packages/account-http/test/fiscal-waitron-setup-diagnostics.test.ts packages/account-http/test/fiscal-waitron-setup-boundaries.test.ts` for the native checks.
-They retain the original privacy, cleanup, pinned-source and command-budget
-assertions and add real hook and filesystem refusals plus controlled error and
-clock boundaries. See [the setup investigation](joint-fiscal-fixture-setup.md)
-for the historical cause and remaining timing limits.
+A blocking source command could consume the setup budget while deferring its
+reporting timer. Before entering another stage, the fixture reported the
+operation that crossed the budget. Initial temporary-directory refusal also
+passed through the bounded reporter and preserved its original error. Reports
+kept fixed labels and numeric fields. Observation cancelled no setup operation.
+
+The native checks in `fiscal-waitron-setup-diagnostics.test.ts` and
+`fiscal-waitron-setup-boundaries.test.ts` retained the privacy, cleanup,
+pinned-source and command-budget assertions and added real hook and filesystem
+refusals plus controlled error and clock boundaries. See [the historical setup
+investigation](joint-fiscal-fixture-setup.md) for the unexplained cause and timing
+limits. Retirement closes the active investigation, without attributing its
+historical timeout.
 
 ## Interrupted LIST evidence
 
