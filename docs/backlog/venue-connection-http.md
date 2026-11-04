@@ -36,12 +36,3 @@ Spanish browser matrix cover retained choices and explicit retry through expiry.
 A retry keeps the existing request proof and binding. Server permission checks,
 local confirmation and live deployment remain separate qualification gates;
 database suites run in CI.
-
-## Pairing HTTP replies and binding checks (D414)
-
-Malformed business lists cannot supply a pairing choice, and malformed inspection
-or approval replies cannot replace your accepted view. Native client/controller
-tests cover valid replies naming another request, venue, organisation or business,
-plus approval replies that still await approval. A refused reply retains your
-code and choice for an explicit retry; writes carry the existing request proof.
-Server permission checks and local confirmation remain separate qualification gates.

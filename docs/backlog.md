@@ -209,12 +209,6 @@ selected deployment. Pairing retry waits use elapsed time through clock correcti
 HTTP-date waits use the response Date or local receipt clock.
 See [the boundaries and remaining work](backlog/venue-connection-http.md#pairing-transport-refusals-and-retry-waits-d428).
 
-## Pairing HTTP replies and binding checks (D414)
-
-**Open.** Qualify server permissions, local confirmation and live delivery against the
-selected deployment.
-See [the boundaries and remaining work](backlog/venue-connection-http.md#pairing-http-replies-and-binding-checks-d414).
-
 ## Alert-preference transport refusals and retry waits (D429)
 
 **Open.** Qualify server authority, deployed browser integration and production mail
