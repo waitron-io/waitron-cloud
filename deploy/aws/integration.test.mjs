@@ -42,10 +42,18 @@ test('AWS checks use the exact candidate with read-only repository permission', 
   assert.equal(checkout.with.ref, '${{ github.event.pull_request.head.sha || github.sha }}');
   assert.equal(checkout.with['persist-credentials'], false);
   assert.equal(job.steps.find(step => step.uses?.startsWith('actions/setup-node@')).with['node-version'], '26');
-  assert.ok(job.steps.some(step => step.uses?.startsWith('pnpm/action-setup@')));
+  const setup = job.steps.find(step => step.run === 'node scripts/ci-setup-pnpm.mjs');
+  assert.ok(setup, 'The repository package-manager supervisor must run');
+  assert.ok(job.steps.indexOf(job.steps.find(step => step.uses?.startsWith('actions/setup-node@'))) < job.steps.indexOf(setup));
+  assert.deepEqual(setup.env, {
+    NODE_OPTIONS: '--require=${{ github.workspace }}/scripts/ci-pnpm-diagnostics.cjs',
+    npm_config_fetch_timeout: '15000',
+    npm_config_fetch_retries: '1',
+    npm_config_fetch_retry_mintimeout: '1000',
+  });
   assert.equal(value.env, undefined);
   for (const step of job.steps) {
-    assert.equal(step.env, undefined);
+    if (step !== setup) assert.equal(step.env, undefined);
     assert.equal(step['working-directory'], undefined);
     assert.equal(step.if, step.uses?.startsWith('actions/upload-artifact@') ? '${{ always() }}' : undefined);
   }
@@ -65,7 +73,7 @@ import { basename } from 'node:path';
 const args = process.argv.slice(2);
 const command = basename(process.argv[1]);
 appendFileSync(process.env.TRACE, JSON.stringify([command, ...args]) + '\\n');
-const stage = command === 'pnpm' ? 'install' : command === 'docker' ? 'format'
+const stage = args[0] === 'scripts/ci-setup-pnpm.mjs' ? 'setup' : command === 'pnpm' ? 'install' : command === 'docker' ? 'format'
   : args.includes('--prepare-tools') ? 'prepare' : args.includes('--all') ? 'suites' : 'guards';
 console.log(stage === 'guards' ? '# tests 3\\n# pass 3\\n# fail 0' : stage === 'suites' ? 'Success! 2 passed, 0 failed.' : stage);
 process.exit(process.env.FAIL_STAGE === stage ? 7 : 0);
@@ -86,11 +94,22 @@ process.exit(process.env.FAIL_STAGE === stage ? 7 : 0);
       });
     } catch (error) { status = error.code; break; }
   }
-  let calls = [];
-  try { calls = (await readFile(join(root, 'trace'), 'utf8')).trim().split('\n').map(line => JSON.parse(line)); }
+  let allCalls = [];
+  try { allCalls = (await readFile(join(root, 'trace'), 'utf8')).trim().split('\n').map(line => JSON.parse(line)); }
   catch (error) { if (error.code !== 'ENOENT') throw error; }
-  return { root, status, calls };
+  const isSetup = call => call[0] === 'node' && call[1] === 'scripts/ci-setup-pnpm.mjs';
+  return { root, status, calls: allCalls.filter(call => !isSetup(call)), allCalls };
 }
+
+test('AWS shell verifies the package manager before infrastructure work and stops on setup failure', async t => {
+  const baseline = await runCommands(t);
+  assert.equal(baseline.status, 0);
+  assert.deepEqual(baseline.allCalls, [['node', 'scripts/ci-setup-pnpm.mjs'], ...baseline.calls]);
+  const refused = await runCommands(t, 'setup');
+  assert.equal(refused.status, 7);
+  assert.deepEqual(refused.allCalls, [['node', 'scripts/ci-setup-pnpm.mjs']]);
+  assert.deepEqual(refused.calls, []);
+});
 
 // Execute the workflow's actual shell; replace only the external tool boundary.
 test('AWS shell prepares tools, installs locked dependencies, checks guards and all plans, then formats offline', async t => {
