@@ -93,11 +93,6 @@ in [the setup investigation](backlog/ci-pnpm-setup.md).
 **Open.** Real extraction, store startup and concurrent successful publication remain open.
 See [the boundaries and remaining work](backlog/storage-cache-fixture.md#storage-archive-publication-refusals-d449).
 
-## Storage fixture filesystem refusals (D448)
-
-**Open.** Real store startup, concurrent publication and historical failure causes remain open.
-See [the boundaries and remaining work](backlog/storage-cache-fixture.md#storage-fixture-filesystem-refusals-d448).
-
 ## Worker shutdown during polling and error reporting (D459)
 
 **Open.** Production shutdown, real database failures and cancellation remain open.
