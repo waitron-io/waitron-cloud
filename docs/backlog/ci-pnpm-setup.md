@@ -23,14 +23,17 @@ dependency isolation. Its original setup-status, vector, planner, mismatch and
 restoration assertions and deadlines remain. The three original audit cases and
 two initial controls pass on Linux. Why the nested install could not find that
 package in the store remains unknown; this change removes that store from the
-audit's prerequisites. The helper also refuses a missing dependency directory.
+audit's prerequisites. The helper also refuses missing, empty or linked root
+dependency directories and linked workspace dependency directories.
 
-Both remote-access guard fixtures use the same installed copies. Their twelve
-report omissions and twenty-nine collection guards retain every denial check and
-deadline. A setup refusal includes decoded child output in the assertion message,
-so TAP and the ordinary reporter can show its reason. Cold-store controls exercise
-an original denial in each fixture; separate failed-child controls require the
-readable reason. The historical package in
+The remote-access and portal guard fixtures use the same installed copies. Their
+twelve report omissions, twenty-nine collection guards and nine portal omissions
+retain every denial check and deadline. A setup refusal includes decoded child
+output, signal and process errors in the assertion message, so TAP and the
+ordinary reporter can show its reason. Cold-store controls exercise an original
+denial in each fixture; separate failed-child controls require readable stdout,
+stderr, killed-child and missing-executable reasons. Candidate patches remain
+binary-safe, including uncommitted non-UTF-8 bytes. The historical package in
 [the remote-access failure](https://github.com/waitron-io/waitron-cloud/actions/runs/41804574176)
 is still unknown because its Buffer output was truncated. A controlled cold-store
 run names `undici-types` 7.18.2; that does not recover the lost historical output.

@@ -3514,7 +3514,7 @@ See [the boundaries and remaining work](backlog/ci-cache-saving.md#dependency-ca
 
 ## Audit fixture dependency preparation (D530)
 
-The translation-vector audit and both remote-access guard fixtures copy installed
+The translation-vector audit, remote-access and portal guard fixtures copy installed
 dependencies into their own checkouts and pass with an empty download cache and
 an unavailable registry. Setup refusals retain a readable reason. Their original
 vector, planner, mismatch, restoration and denial checks remain. See the
