@@ -15,6 +15,7 @@ const bundle = await build({stdin: {contents: `
 `, resolveDir: new URL('..', import.meta.url).pathname}, bundle: true, write: false, format: 'iife', target: 'es2023'});
 const styles = await readFile(new URL('../src/styles.css', import.meta.url), 'utf8');
 const checkedAt = '2026-10-24T12:00:00Z', openedAt = '2026-10-24T11:00:00Z', expiresAt = '2026-10-29T12:00:00Z';
+const receiptPaths = new Set<string>();
 
 for (const setupDelay of [0, 1100])
 for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'] as const) for (const width of [390, 1280]) {
@@ -97,9 +98,12 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
         }
         assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
         if (process.env.MONITORING_REGIONS_RECEIPT_DIR) {
+          const path = `${process.env.MONITORING_REGIONS_RECEIPT_DIR}/${locale}-${theme}-${width}${setupDelay ? '-delayed' : ''}.png`;
+          assert.equal(receiptPaths.has(path), false, 'each clock setup keeps its own screenshot');
+          receiptPaths.add(path);
           await mkdir(process.env.MONITORING_REGIONS_RECEIPT_DIR, {recursive: true});
           await venues.first().scrollIntoViewIfNeeded();
-          await page.screenshot({path: `${process.env.MONITORING_REGIONS_RECEIPT_DIR}/${locale}-${theme}-${width}.png`, fullPage: true});
+          await page.screenshot({path, fullPage: true});
         }
         enabled = false;
         await page.getByRole('button', {name: c.refreshStatus, exact: true}).click();

@@ -3232,16 +3232,16 @@ is only an inference. Retain this failure in the shared CI-failure investigation
 Fresh qualification preserves the original outside-request, accounting, cleanup
 and deadline checks; a passing run does not establish the historical cause.
 
-Fresh D349 qualification also fails the source-fetch fixture's “browser
-preparation refuses the historical replay revision before installation” case in
-[CI run 41169033630, job
+At commit `bfc5e38d`, D349 qualification failed the source-fetch fixture's
+“browser preparation refuses the historical replay revision before installation”
+case in [CI run 41169033630, job
 124443297790](https://github.com/waitron-io/waitron-cloud/actions/runs/41169033630/job/124443297790).
-Reading the generated state at `conformance-source-fetch.test.mjs:60` throws
-`Unexpected end of JSON input`; 2,506 other cases in that suite pass. The
-unchanged case passes alone on macOS and the Linux test box. The historical timing remains
-unknown. Main now has D530's interrupted-write and helper-cleanup controls;
-fresh current-head CI still qualifies this separate monitoring change.
-Preserve every source-revision refusal and cleanup check.
+Reading the generated state at the then-current `conformance-source-fetch.test.mjs:60`
+threw `Unexpected end of JSON input`; 2,506 other cases in that suite passed.
+Main now has D530's interrupted-write and helper-cleanup controls. The current
+case is “browser preparation refuses the current replay revision before installation”.
+Its historical timing remains unknown; fresh current-head CI still qualifies
+this separate monitoring change. Preserve every source-revision refusal and cleanup check.
 
 ### Interrupted source-fetch fixture state (D530)
 
