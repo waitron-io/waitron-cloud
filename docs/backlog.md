@@ -210,11 +210,6 @@ See [the boundaries and remaining work](backlog/venue-connection-http.md#pairing
 selected deployment.
 See [the boundaries and remaining work](backlog/venue-connection-http.md#pairing-http-replies-and-binding-checks-d414).
 
-## Initial alert reads after account changes (D408)
-
-**Open.** Qualify server authority, browser integration and production mail delivery.
-See [the boundaries and remaining work](backlog/alert-preference-http.md#initial-alert-reads-after-account-changes-d408).
-
 ## Alert-preference transport refusals and retry waits (D429)
 
 **Open.** Qualify server authority, deployed browser integration and production mail
