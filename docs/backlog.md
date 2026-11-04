@@ -4146,12 +4146,6 @@ See [the boundaries and remaining work](backlog/remote-access-http.md#remote-hos
 permission and retry rules.
 See [the boundaries and remaining work](backlog/remote-access-http.md#remote-status-and-dns-preview-transport-failures-d438).
 
-## Remote-access HTTP response boundaries (D420)
-
-**Open.** Qualify live DNS/ACME, browser integration and deployment; retain the existing
-permission and retry rules.
-See [the boundaries and remaining work](backlog/remote-access-http.md#remote-access-http-response-boundaries-d420).
-
 ## Unchanged remote hostname review (D259)
 
 On Account, Review DNS settings is available only when the entered name differs
