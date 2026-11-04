@@ -65,15 +65,6 @@ Runtime, existing tests and authentication policy are unchanged. These local cli
 checks do not qualify the production ingress, server-side session storage or
 browser activity; keep their separate qualification gates.
 
-## Initial session lists after account changes (D407)
-
-When you switch accounts, sign out or refresh the session view, an older session
-list must leave the current view and its retry wait untouched. Native controlled
-requests cover delayed successes and refusals while the current read is pending
-or loaded, including switching away and back. Current reads still enforce retry
-waits and normal sign-in rechecks. Browser and database qualification runs in CI;
-physical-passkey and live-provider qualification remain open.
-
 ## Authenticator management transport and session rechecks (D431)
 
 A credentials refusal during an authenticator change triggers one session read.
