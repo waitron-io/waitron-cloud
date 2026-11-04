@@ -190,53 +190,23 @@ raised. D463's collector and remaining billing work stay on their separate branc
   A server Retry-After still blocks every address for that operation.
 
 
-## Installation HTTP replies and stop confirmation (D416)
+## Installation deployment qualification
 
 **Open.** Qualify server permissions, local confirmation and live delivery against the
 selected deployment.
-See [the boundaries and remaining work](backlog/venue-connection-http.md#installation-http-replies-and-stop-confirmation-d416).
+See [the native installation boundaries](backlog/venue-connection-http.md#installation-deployment-qualification).
 
-## Installation transport refusals and retry waits (D433)
-
-**Open.** Qualify server permissions, local confirmation and live delivery against the
-selected deployment.
-See [the boundaries and remaining work](backlog/venue-connection-http.md#installation-transport-refusals-and-retry-waits-d433).
-
-## Pairing transport refusals and retry waits (D428)
-
-**Open.** Qualify server permissions, local confirmation and live delivery against the
-selected deployment. Pairing retry waits use elapsed time through clock corrections;
-HTTP-date waits use the response Date or local receipt clock.
-See [the boundaries and remaining work](backlog/venue-connection-http.md#pairing-transport-refusals-and-retry-waits-d428).
-
-## Pairing HTTP replies and binding checks (D414)
+## Pairing deployment qualification
 
 **Open.** Qualify server permissions, local confirmation and live delivery against the
 selected deployment.
-See [the boundaries and remaining work](backlog/venue-connection-http.md#pairing-http-replies-and-binding-checks-d414).
+See [the native pairing boundaries](backlog/venue-connection-http.md#pairing-deployment-qualification).
 
-## Alert-preference transport refusals and retry waits (D429)
+## Alert-preference deployment qualification
 
 **Open.** Qualify server authority, deployed browser integration and production mail
-delivery. Alert retry waits now use elapsed time through clock corrections;
-HTTP-date waits use the response Date or local receipt clock.
-See [the boundaries and remaining work](backlog/alert-preference-http.md#alert-preference-transport-refusals-and-retry-waits-d429).
-
-## Alert-preference HTTP response validation (D415)
-
-**Open.** Qualify server authority, browser integration and production mail delivery.
-See [the boundaries and remaining work](backlog/alert-preference-http.md#alert-preference-http-response-validation-d415).
-
-## Translation-consent HTTP response validation (D417)
-
-Malformed consent replies cannot replace your last confirmed choices. Native
-HTTP/client/controller tests cover initial reads, refreshes, agreement and
-withdrawal, including duplicate venues, invalid dates, unexpected statuses and
-lost replies. An uncertain write keeps the last choice and offers an explicit
-retry; permission loss clears it, and rate limits keep their server wait.
-Server authority, browser integration and the translation release gates remain
-separate qualification work; local database checks wait for Docker.
-
+delivery.
+See [the native alert boundaries](backlog/alert-preference-http.md#alert-preference-deployment-qualification).
 
 ## Translation-consent HTTP retry deadlines (D430)
 
@@ -510,35 +480,20 @@ Production email (D102: bounces and complaints) is already tracked and is not re
 
 ## Isolated replay ownership fixture refusal (D294)
 
-**Open; historical cause unknown.** The Linux ownership case passes alone and
-after the preceding worker-deadline test, without reproducing the historical
-refusal. Collect an instrumented recurrence before changing the ownership check.
+**Open; historical cause unknown.** Recorded Linux CI passes all twelve controller
+cases, including ownership loss after the worker-deadline case. Current native
+diagnostic checks also pass. Neither result explains the historical refusal;
+collect an instrumented recurrence before changing the ownership check.
 See the [reproduction commands and diagnostic boundary](backlog/isolated-replay-ownership.md).
 
 ## Isolated replay result-boundary refusal (D297)
 
-An altered-stream control refused before reading its changed worker result in
-[cost CI](https://github.com/waitron-io/waitron-cloud/actions/runs/40281251676/job/121434888588).
-The counts variant failed again in [D543 merge CI](https://github.com/waitron-io/waitron-cloud/actions/runs/41202820800/job/124541925301)
-before the host read the result, after a clean native replication exit. That trace
-names checkpoint admission, but does not identify its refusing guard. A transport
-refusal now adds its first fixed reason, request-validation boundary and pending/completed
-request counts before cleanup. Controlled HTTP refusals after an idle callback and
-a request admitted after that callback retain distinct evidence through worker and
-host admission. The earlier preparation/worker/host stages and result-read status
-remain available without private output. Existing assertions, deadlines and refusal
-rules are unchanged. The unchanged counts case passed on the Linux test box; this
-is not a repair of its historical failure. Collect an instrumented recurrence to
-identify the cause before changing request or shutdown behavior.
-
-## Isolated-replay CI work groups (D301)
-
-Isolated replay now runs in three separate CI jobs: controller cases, host and
-result-reporter cases, and the remaining command and diagnostic cases. New case
-names fall into one of these groups so coverage cannot disappear. Each job keeps
-the eight-minute cap, original case assertions, runtime pins and cleanup rules.
-Check the complete case inventory and both head and merge runs before claiming
-the jobs meet the five-minute target.
+The altered-worker result controls have refused before reaching the result they
+were meant to check. The historical cause remains open. Current diagnostics retain
+the first transport refusal through the actual worker and host, and the current
+Linux host group passes all thirteen cases. Use the
+[reproduction commands and next-failure evidence](backlog/isolated-replay-result-boundary.md)
+to identify a recurrence before changing request or shutdown behavior.
 
 ## Diagnostic download response validation (D410)
 
@@ -546,11 +501,11 @@ the jobs meet the five-minute target.
 behaviour.
 See [the boundaries and remaining work](backlog/diagnostic-download-http.md#diagnostic-download-response-validation-d410).
 
-## Diagnostic download transport failures (D425)
+## Diagnostic download qualification
 
 **Open.** Qualify server redaction, genuine browser downloads and production-network
-behaviour.
-See [the boundaries and remaining work](backlog/diagnostic-download-http.md#diagnostic-download-transport-failures-d425).
+behaviour. Native refusal and retry checks already pass.
+See [the remaining checks](backlog/diagnostic-download-http.md#diagnostic-download-qualification).
 
 ## Usage-read transport refusals and retry waits (D434, D436)
 
@@ -649,41 +604,6 @@ remote access, backup, replacement and gateway checks against the selected deplo
 before launch. Live providers, deployment and secret custody, database recovery,
 final-write handover and automatic appliance setup remain open; see the
 [milestone requirements and remaining qualification](backlog/first-milestone.md).
-
-## Stale fiscal-draft browser handler wait (D371)
-
-The stale-draft browser fixture bounds its installation-handler wait at the existing
-30-second page budget. An absent signal fails within that budget; delayed handlers
-repeat both languages, themes and phone/desktop widths. Every original pending-list,
-venue permission, uncertain-write, signed receipt, reconciliation and layout check
-remains. These native Chromium checks use stubbed HTTP and leave fiscal allocation
-and production authority unchanged.
-
-## Fiscal venue-refresh browser handler observation (D376)
-
-The failed venue-list fixture observes its refresh handler's read count before
-checking duplicate suppression. A delayed handler reproduces browser pending
-state before the Node handler counts the read. Normal and delayed refresh
-journeys cover both languages, themes and widths. The separate Retry-After and
-pending/uncertain-write cases remain unchanged in both languages at width 390.
-
-The missing-count control checks a configured two-second wait through a
-three-second outer race. It detects waits that exceed that outer bound; it does
-not independently enforce the exact two-second deadline. Every original assertion
-and deadline remains. These stubbed Chromium checks leave fiscal allocation
-behavior and expected results unchanged.
-
-## Fiscal test-worker failure evidence (D380)
-
-PR622's two-worker allocation check observed C000001 and a missing second receipt;
-the worker refusal was absent from CI40604297872. Its reservation and retry
-assertions now report up to two workers' fixed refusal codes and receipt presence
-only when a check fails, then rethrow the identical assertion. Native controls
-cover a real independent worker refusal, private fields, accessors, bounded output
-and a broken diagnostic sink. Every original identity, allocation, retry, process
-separation and deadline check remains. The historical cause is unknown; local
-PostgreSQL reproduction waits for Docker to return. Use a labelled recurrence
-to reproduce the cause before changing allocation behavior or expected values.
 
 ## Fiscal allocation registry
 
@@ -3025,29 +2945,12 @@ private-replay checks began (run 40646201742, job 122675571593). D530 retains
 the unresolved cause; a passing retest does not repair it. Production permission
 checks and provider qualification remain separate.
 
-## Backup catalogue replies after account and venue changes (D396)
+## Backup catalogue qualification
 
-Native controller checks hold refresh and older-page replies while you change
-account or venue, reopen the catalogue, switch accounts away and back, or sign out.
-Late successes and refusals leave the current rows, recovery choices, pending read,
-feedback and cooldown unchanged. Current reads still complete and paginate; selecting
-the same account preserves its pending read. These checks use controlled HTTP
-replies and preserve the existing recovery permissions and cooldown policy.
-Server authority and genuine restore qualification remain separate CI and launch gates.
-
-
-## Backup catalogue HTTP response validation (D411)
-
-**Open.** Qualify server permissions and genuine restore or recovery; these client
-checks grant no activation or stop-proof authority.
-See [the boundaries and remaining work](backlog/backup-recovery-http.md#backup-catalogue-http-response-validation-d411).
-
-## Backup catalogue transport refusals and retry waits (D426)
-
-**Open.** Qualify server permissions and genuine restore or recovery. Catalogue retry
-waits now use elapsed time through clock corrections, including HTTP-date and
-body-reading time; these client checks grant no activation or stop-proof authority.
-See [the boundaries and remaining work](backlog/backup-recovery-http.md#backup-catalogue-transport-refusals-and-retry-waits-d426).
+**Open.** Qualify server permissions, deployed browser integration, computer sleep
+and genuine restore or recovery. Native transport and elapsed retry checks pass;
+they grant no activation or stop-proof authority.
+See [the remaining checks](backlog/backup-recovery-http.md#backup-catalogue-qualification).
 
 ## Container verifier memory-refusal observation (D335)
 
@@ -3125,55 +3028,15 @@ See [the boundaries and remaining work](backlog/storage-cache-fixture.md#storage
 **Open.** Store startup, concurrent extraction and historical failure causes remain open.
 See [the boundaries and remaining work](backlog/storage-cache-fixture.md#storage-extraction-and-certificate-setup-refusals-d452).
 
-## Storage startup configuration refusals (D446)
-
-Malformed token-duration strings are now checked before the fixture allocates a
-private directory or requests an archive. Run
-`node --test scripts/ci-backup-storage-options.test.mjs` for native controls of
-missing units, partial matches, whitespace, negative and fractional durations,
-and an empty value that must not select the default. Accepted second, minute and
-hour formats and omitted options reach a deliberately refused download; that
-failure retains its cause and removes its private directory without retrying.
-These checks exercise the existing format rule. Real token issuance and expiry,
-store startup and concurrent valid-cache publication keep their separate gates.
-
-## Storage identity-server bind refusals (D456)
-
-The identity server binds directly to an OS-assigned port and keeps that socket
-until cleanup. Its discovery response, provider configuration and tokens use the
-bound port, removing the probe-and-rebind race reproduced under D499.
-Run `node --test scripts/ci-backup-storage-issuer-bind.test.mjs` to check real
-bind refusals, later setup failure and preservation of another listener. Failed
-identity and numbered reservation binds print only their name and bind attempt number while
-preserving their original error and cleanup, even when diagnostic output fails.
-Skipped port claims consume no bind attempt; four regression cases cover the
-D548 diagnostic mismatch without changing existing assertions or deadlines.
-The refusal fixture now uses OS-assigned ports for earlier successful listeners.
-Two occupied-candidate controls reproduce and prevent the six-versus-seven
-listener-count failure from run41422295053 while retaining every original
-assertion and deadline. Runtime port selection is unchanged; see
-[the fixture qualification](backlog/storage-cache-fixture.md#cooperative-native-storage-port-ownership).
-Identity-server errors after startup and historical failure causes remain open;
-see [the storage investigation](backlog/storage-cache-fixture.md#identity-port-allocation-race-d499).
 
 ## Storage archive download failure reporting (D441)
 
-**Open; historical cause unknown.** The Linux test box passes five download
-controls and all four unchanged service-runtime checks from a private empty
-archive cache. A controlled local HTTP/2 truncation confirms archive-body
-reporting but has a different protocol error number from the historical refusal.
-Capture an instrumented recurrence before attributing that old failure or changing
-the single download attempt; full CI qualification remains separate.
-See [the boundaries and remaining work](backlog/storage-cache-fixture.md#storage-archive-download-failure-reporting-d441).
-
-[PR794's root shard](https://github.com/waitron-io/waitron-cloud/actions/runs/41182674171/job/124483174725)
-fails the three storage TLS cases in their shared setup: fetching the pinned
-SeaweedFS 4.47 archive raises `fetch failed` before their assertions. The transport
-cause is absent from the test output. The unchanged TLS tests pass three cases
-locally, and a later archive GET on the authorised Linux test box returns HTTP
-200; neither control explains or repairs the CI failure. D530's investigation
-must capture the cold-download cause while preserving the original TLS checks,
-checksums and cleanup assertions.
+**Open; historical cause unknown.** Download failure reporting is implemented,
+and all five native controls pass. The retained Linux cold-cache run and PR849
+CI qualify an earlier baseline; the runtime has since changed. Capture the named
+request and phase at a new failure before changing transport or the single
+archive-download attempt.
+See [the evidence and remaining work](backlog/storage-cache-fixture.md#storage-archive-download-failure-reporting-d441).
 
 ## Parallel storage-cache fixture failure on main
 
@@ -3190,10 +3053,12 @@ historical bind and reconnect investigations. See [the D499 boundaries](backlog/
 
 ## Diagnostic permission test lock observation (D198)
 
-Capture a recurrence to explain the historical membership-update delay. Keep the
-100 ms database lock-wait limit, successful revocation before releasing the
-incident read, and final HTTP 403 refusal. See [the investigation and guard
-requirements](backlog/diagnostic-permission-lock.md).
+The shipped fixture repair passes the six current diagnostic cases on Linux,
+including delayed revocation and the final HTTP 403 refusal. The historical
+membership-update delay remains unexplained. Capture a recurrence with separate
+submission, database and commit timings; keep the 100 ms database lock-wait limit
+and successful revocation before releasing the incident read. See [the evidence
+and capture requirements](backlog/diagnostic-permission-lock.md).
 
 ## Dependency-cache save stalls (D507)
 
@@ -3264,18 +3129,6 @@ also stops Docker's own registry transfer. Qualify that with a real daemon and a
 controlled registry when local Docker is available; do not infer it from client
 termination.
 
-## Backup recovery wait observation (D164)
-
-A controlled Linux PostgreSQL reproduction in [PR #355](https://github.com/waitron-io/waitron-cloud/pull/355)
-pauses the activity snapshot before its live blocker check. It reproduces the
-expiry-query/qualification-lock mismatch from #352's independent merge. The test
-observer now acknowledges a blocked backend first, then reads its query in a new
-statement while the caller still holds the blocker. The original operation and
-proof-expiry cases record backend IDs, query times, wait events and stages. All
-original expiry guards, refusal assertions and deadlines remain unchanged;
-production recovery code is unchanged. This establishes an observer defect that
-can explain the historical failure, without proving that run's exact timing.
-
 ## Portal reset-mail boundary reporting
 
 **Open; the missing reset email remains unexplained.** Capture a diagnostic
@@ -3325,7 +3178,8 @@ See [the investigation and retained ordering controls](backlog/portal-lost-reply
 **Open; the historical failure remains unattributed.** Preserve the real derivation
 result barrier, password-reset refusal and existing bounds when investigating a
 recurrence. Read the [observation requirements and remaining qualification](backlog/password-derivation-observation.md);
-use Linux PostgreSQL CI while local Docker is unavailable.
+current Linux PostgreSQL CI qualifies the unchanged observation cases and catches
+both deliberate faults. Use the shared test box for local database checks.
 
 ## Usage HTTP response boundaries (D409)
 
@@ -3406,8 +3260,11 @@ declare those core prerequisites implemented.
 ## Linux download-supervision fixture timing (D126)
 
 The historical Linux failure phase and a separate macOS timing failure remain
-unattributed. Capture process and step timing if either recurs, preserving the
-existing outer limits and assertions. See the [fixture timing detail](backlog/linux-download-supervision.md).
+unattributed. PR315's fixture adjustment is on main; all 29 unchanged focused
+checks pass on the authorised Linux test box. A retained Linux diagnostic also
+passes all 32 contention cases with matching fixture and supervisor sources.
+Capture process and step timing if either failure recurs, preserving the existing
+outer limits and assertions. See the [fixture timing detail](backlog/linux-download-supervision.md).
 
 ## Cost conformance image acquisition (D137)
 
@@ -3421,6 +3278,9 @@ The separate isolation-test Node acquisition now retries temporary HTTP 5xx and
 transport failures before creating resources, within a shared 120-second
 preparation budget; it retains every isolation assertion and immediate permanent
 refusal. The historical provider outage remains unexplained.
+All 54 unchanged pull, build and isolation-image acquisition controls pass on
+macOS with replacement Docker commands. This qualifies the existing recovery
+controls; live Linux acquisition and the historical causes remain open.
 See the
 [image acquisition detail](backlog/cost-image-acquisition.md).
 
@@ -3572,28 +3432,6 @@ Use GitHub CI while local Docker is down; do not rerun the unchanged merge for a
 passing result. The exact job log and source-identity receipt are retained in lane
 G's `receipts/d142/`.
 
-## Relay migration setup across a counter rollover (D155)
-
-The release-35 populated-upgrade test assumed every setup admission would finish
-inside its counter window. A deterministic PostgreSQL check holds the first
-message insert past that window and reproduces the final counter-expiry refusal
-with the database clock, counter end, message expiry and row counts recorded.
-The relay still rolls back that admission. Its internal error now carries only
-the counter end and observed clock, with a fixed cause name; the public response
-remains `503 relay_unavailable` with `Retry-After: 1`.
-
-Migration setup retries only this proved counter rollback, at most ten times.
-Unexplained unavailability, rate limits and other failures still fail immediately.
-The new check verifies one retained message, reservation and pair of counters,
-no additional debit on replay, and the existing ciphertext-byte invariant. A
-separate Linux check deletes the expiry guard, its clock evidence and the pool
-notice observer, then injects an extra replay counter increment in disposable
-checkouts. It requires all four faults to fail before checking the restored code.
-Original migration assertions, counter policy, authority windows and deadlines
-stay unchanged. The old failure log did not record its exact clock values; this
-reproduction does not invent those missing historical values. Local database
-checks are unavailable while Docker is down; GitHub CI supplies that evidence.
-
 ## Cost-stack replication interruption (D152)
 
 **Open; historical interruption causes and production shutdown qualification
@@ -3697,8 +3535,23 @@ historical Linux event. It records the producer's interrupted response while the
 storage observer is still pending, so it does not qualify the historical pair of
 producer interruption and observer success or identify that event's cause. The official
 0.5.17 binary, allowance, both counters, assertions and deadlines remain unchanged.
-Genuine local Docker reproduction waits until Docker returns. Use a labelled
-recurrence to establish the cause before changing any shutdown rule.
+
+The unchanged genuine held-metadata case now passes on the authorised Linux test
+box with the official 0.5.17 writer. All four SDK requests match storage requests,
+but one permitted late LIST is interrupted: the first counter records a transport
+error while storage records success. Body counts differ by 213 bytes, and cost
+accuracy remains incomplete under the existing after-stop allowance.
+
+This passes
+the case's request-count checks; it does not reproduce the historical initial LIST
+failure or establish its cause. The historical log does not record acknowledgement
+timing. Run
+`node scripts/cloud-cost/conformance.mjs --only stack-conformance.test.mjs --pattern
+'^genuinePinnedLitestreamCountsHeldMetadataAfterValidatedRuntimeStop$'` on the test
+box. All six native ordering and diagnostic controls also pass.
+
+Use a labelled
+recurrence to establish the historical cause before changing any shutdown rule.
 
 ## Registration SQL setup failure diagnostics (D385)
 
@@ -3740,12 +3593,10 @@ remains unavailable until Docker returns; current-head Linux CI checks the deliv
 
 The first D378 qualification also found an absent fiscal worker identity in
 [CI40604297872, job122540422831](https://github.com/waitron-io/waitron-cloud/actions/runs/40604297872/job/122540422831).
-The test expected `C000001` and `C000002`; its output did not identify why one
-worker returned no allocation. D380 now adds bounded worker-refusal reporting
-without exposing the response. The historical cause remains unknown. Preserve
-both exact identities and every authority, retry and concurrency check. Use the
-new reporting on a recurrence, or reproduce with PostgreSQL when Docker returns,
-before changing the fixture or allocator.
+Its cause remains unknown. [PR711](https://github.com/waitron-io/waitron-cloud/pull/711)
+removed the obsolete allocator, two-worker test and D380 diagnostic helper. This
+historical failure no longer has a running Cloud fixture to reproduce. Migration
+038 and dormant fiscal records remain governed by the registry retirement boundary.
 
 ## Litestream after-stop admission diagnostics (D381)
 
@@ -3793,23 +3644,21 @@ D385 now labels those setup boundaries, so a changed qualification can retain mo
 evidence if they recur. Preserve the failing assertions and five-second database
 limit, then reproduce a labelled failure before changing runtime rules.
 
-## Recovery HTTP replies before confirming an outcome (D419)
+
+## Recovery deployment qualification
 
 **Open.** Qualify server permissions and genuine restore or recovery; these client
-checks grant no activation or stop-proof authority.
-See [the boundaries and remaining work](backlog/backup-recovery-http.md#recovery-http-replies-before-confirming-an-outcome-d419).
-
-## Recovery transport waits and pending actions (D437)
-
-**Open.** Qualify server permissions and genuine restore or recovery; these client
-checks grant no activation or stop-proof authority.
-See [the boundaries and remaining work](backlog/backup-recovery-http.md#recovery-transport-waits-and-pending-actions-d437).
+checks grant no activation authority or proof that the old server has stopped.
+See [the native recovery boundaries](backlog/backup-recovery-http.md#recovery-deployment-qualification).
 
 ## Cost-stack isolation command refusal (D152)
 
-**Open.** Both unchanged signal checks pass on the shared Linux test box, without
-reproducing the historical missed admission. Attribute a new failure from the
-retained child evidence before changing signal handling. See [the diagnostic boundary and reproduction results](backlog/cost-stack-isolation.md#local-signal-check-stopped-before-worker-admission-d502).
+**Open.** Both unchanged signal checks pass on the shared Linux test box at
+Cloud commit `846ab45d`: SIGINT in 7.62 seconds and SIGTERM in 6.47 seconds.
+This selection did not reproduce the historical missed admission or exercise
+the complete conformance group. The 53 native diagnostic checks also pass.
+Attribute a new failure from retained child evidence before changing signal
+handling. See [the diagnostic boundary and qualification limits](backlog/cost-stack-isolation.md#qualification-on-4-november-2026).
 
 Read the [isolation and deadline investigation](backlog/cost-stack-isolation.md)
 before changing the fixture guards. Historical attribution and Linux qualification
@@ -3821,20 +3670,16 @@ Qualify the public browser check against the supported browsers and production
 networks before public exposure. Local HTTP, script and Chromium checks do not
 discharge that deployment gate.
 
-## Public gateway source limits (D191)
+## Public gateway deployment qualification (D191)
 
-The public gate now counts an IPv6 /64 network as one source, while IPv4-mapped
-IPv6 addresses share their corresponding IPv4 allowance. Rotating 4,096 addresses
-inside one /64 no longer fills the table or refuses a different network. Native
-HTTP/HTTPS regressions cover the 120-request allowance, equivalent spellings,
-separate networks, full-address challenge/access binding, the 4,096-source cap
-and expiry. The [limits guide](local-remote-access.md#measure-shared-public-traffic-limits)
-keeps the 2026-09-30 receipt as a historical measurement.
+The [limits guide](local-remote-access.md#measure-shared-public-traffic-limits)
+documents the implemented source policy and its native checks. Its 2026-09-30
+receipt remains a historical measurement, not deployment qualification.
 
 Before public deployment, qualify fairness for customers sharing IPv4 addresses
 or IPv6 networks, including IPv4-to-IPv6 translation. Many distinct networks can
-still exhaust all 4,096 source buckets and refuse new callers until expiry; the next gateway hardening task must
-choose and test admission under that pressure. Per-venue fairness, coordinated
+still exhaust all 4,096 source buckets and refuse new callers until expiry. Choose
+and test admission under that pressure. Per-venue fairness, coordinated
 limits across gateways and HAProxy connection-table pressure remain open. Verify
 IPv6 connection accounting with HAProxy's configured `stick-table type ip`; native
 gate checks do not qualify that separate layer.
@@ -3858,8 +3703,11 @@ identity publication in 5.01 seconds. The test and operation-label helper match
 the later failing revision; its runtime and dependencies differ. An isolated
 checkout of that exact historical revision with its frozen dependencies also
 passes all four cases. Neither run reproduces the failures or recreates the
-original CI job's concurrency. Use the next labelled recurrence to find the cause,
-preserving the existing assertions and deadlines. See the
+original CI job's concurrency. The authority, fixture, diagnostic tests and
+dependency lock still match the earlier Linux check and current main. This
+preserves that result's scope without explaining either historical failure.
+Use the next labelled recurrence to find the cause, preserving the existing
+assertions and deadlines. See the
 [investigation and qualification limits](backlog/storage-authority-timeout.md).
 
 
@@ -3883,39 +3731,6 @@ and 20 completed exchanges; transport cleanup then reports `active-close`.
 Reproduce this refusal before attributing its cause. Keep the existing limits
 and assertions; the code-feedback fix does not resolve this investigation.
 
-## Remote hostname keyboard review (D250)
-
-Press Enter in the remote-access Hostname field to review the DNS settings.
-Enter keeps you at the review step; applying the change requires clicking Confirm.
-Malformed names still show their field message before any DNS request, and pending
-operations and server retry waits keep review disabled. English/Spanish browser
-checks cover both themes and phone/desktop widths.
-
-Press Enter in the passkey password field to choose Add a passkey, using the
-same password and disabled states as its button. Browser confirmation still
-completes enrollment; Enter never chooses a passkey to remove. Stubbed API and
-virtual-authenticator browser checks cover English/Spanish, both themes and
-phone/desktop widths, blank passwords, modified or composing Enter, pending
-requests, rate limits and unsupported browsers. These are portal checks, not
-provider or production qualification. Each supported-browser fixture supplies
-its own virtual passkey device instead of relying on the host.
-
-When your authenticator is off, Enter in its password field starts first setup
-through the existing Enable action. Empty passwords show the existing field
-message; pending requests and retry waits keep setup blocked. Enter does not
-choose replacement, regeneration, removal, activation or cancellation. Stubbed
-API browser checks cover English/Spanish, both themes and phone/desktop widths;
-these do not qualify the backend or production.
-
-## Translation-refresh browser handler wait (D358)
-
-The translation-refresh fixture now refuses within its existing four-second page
-budget when the installation route handler never signals entry. A missing-signal
-control reproduces the earlier unbounded wait; delayed handlers repeat every
-original journey across both languages, themes and phone/desktop widths. All
-translation retry, consent, pending-state, layout and runner deadline assertions
-remain. These native Chromium checks use stubbed HTTP and do not qualify the
-backend or production.
 
 ## Paced replay deletion recurrence (D351 qualification)
 
@@ -4136,59 +3951,18 @@ prevents a fresh PostgreSQL/Mailpit reproduction. Use the next labelled close-er
 diagnostic to reproduce its cause while preserving measurement guards, accounting
 and deadlines. See [the investigation and qualification limits](backlog/cost-mail-reconciliation.md).
 
-## Remote hostname browser-test request observation (D315)
 
-The Enter-key browser test waits for its DNS route handler to record the first
-request before checking its payload and pending-review behaviour. The browser's
-request event can arrive before that record is filled. A controlled handler delay
-reproduces the empty-array refusal; waiting for the handler preserves the existing
-request, confirmation, apply, invalid-input and rate-limit assertions and deadlines.
-A missing handler now refuses within the existing three-second page budget,
-rather than waiting for the outer runner deadline. Native browser checks cover
-an absent handler and a delayed handler while retaining every original assertion.
-No remote setup or permission behaviour changes.
+## Remote hostname save qualification
 
-## Installation-refresh browser handler wait (D357)
+**Open.** Qualify live DNS and certificate issuance, browser integration and deployment.
+Native save and read-back checks pass; permission and retry rules remain in force.
+See [the remaining checks](backlog/remote-access-http.md#remote-hostname-save-qualification).
 
-The installation-refresh browser fixture refuses an absent route-handler signal
-within its existing four-second page budget. A delayed handler still runs all
-removed, retained and failed-refresh journeys. Original recovery, permission,
-selection, request, layout and deadline assertions remain unchanged across both
-languages, themes and viewport widths. No product authority changes.
+## Remote status and DNS-preview deployment qualification
 
-## Remote hostname save transport and read-back (D427)
-
-**Open.** Qualify live DNS/ACME, browser integration and deployment; retain the existing
-permission and retry rules.
-See [the boundaries and remaining work](backlog/remote-access-http.md#remote-hostname-save-transport-and-read-back-d427).
-
-## Remote status and DNS-preview transport failures (D438)
-
-**Open.** Qualify live DNS/ACME, browser integration and deployment; retain the existing
-permission and retry rules.
-See [the boundaries and remaining work](backlog/remote-access-http.md#remote-status-and-dns-preview-transport-failures-d438).
-
-## Remote-access HTTP response boundaries (D420)
-
-**Open.** Qualify live DNS/ACME, browser integration and deployment; retain the existing
-permission and retry rules.
-See [the boundaries and remaining work](backlog/remote-access-http.md#remote-access-http-response-boundaries-d420).
-
-## Unchanged remote hostname review (D259)
-
-On Account, Review DNS settings is available only when the entered name differs
-from the selected saved name after trimming spaces, lowercasing and removing one
-trailing dot. The controller also refuses an unchanged review, so clicking or
-pressing Enter cannot create a confirmation or send a redundant save that puts
-remote access back into setup. Changed names still need review and confirmation;
-Use assigned name still lets you switch back from a custom name.
-
-Stubbed portal and controller checks cover assigned and custom names, staff and
-public access, equivalent input, saving a different name and switching back. The
-existing Enter, installation-refresh and uncertain-save checks retain their
-assertions and deadlines with the three owner-approved setup changes. Server
-behaviour and the outstanding live DNS/ACME and deployment qualification are
-unchanged.
+**Open.** Qualify live DNS, certificate issuance, browser integration and deployment;
+retain the existing permission and retry rules.
+See [the native read boundaries](backlog/remote-access-http.md#remote-status-and-dns-preview-deployment-qualification).
 
 ## Isolated replay ownership-loss fixture
 

@@ -85,6 +85,11 @@ Remaining: retain the diagnostics to attribute any recurrence of the original
 read-only-cache rejection. Do not treat this demonstrated readiness repair as
 proof of that historical failure's cause.
 
+Run `node --test scripts/ci-backup-storage-options.test.mjs` to check token-duration
+formats before temporary allocation or archive download. These configuration
+controls do not qualify real token issuance or expiry; keep those checks separate
+from store startup and concurrent valid-cache publication.
+
 ## Existing storage-cache refusal qualification (D442)
 
 An invalid existing archive must fail before extraction or download, so a fixture
@@ -105,8 +110,8 @@ headers, refusing an HTTP status or reading the body. Its error includes the
 public release URL and available status, and retains the original error as its
 cause. The diagnostic does not copy the signed redirect URL.
 
-Run `node --test scripts/ci-backup-storage-download.test.mjs` for isolated
-cold-cache controls, including a genuinely truncated local HTTP response. Failed
+Run `node --test --test-concurrency=1 --test-timeout=30000 scripts/ci-backup-storage-download.test.mjs`
+for isolated cold-cache controls, including a genuinely truncated local HTTP response. Failed
 startup removes its private directory and publishes no archive; a complete
 archive with the wrong digest remains refused. The fixture still makes exactly one download attempt; archive pins,
 cache publication and permission checks are unchanged. These controls qualify
@@ -125,7 +130,7 @@ TMPDIR=/path/to/private-empty-directory node scripts/test-postgres.mjs exec \
   node --test deploy/test-cloud/service-runtime.test.mjs
 ```
 
-The runtime and original test match historical head
+At that measured revision, the runtime and original test match historical head
 `d58cbe85efad8795e65dceb0048aaefc5bf3d0d2` byte-for-byte. The storage fixture has
 later diagnostics and port/readiness repairs, so this run does not recreate the
 complete historical environment. The successful download also does not establish
@@ -139,10 +144,32 @@ That controlled response reports HTTP/2 error 1; the historical response reports
 error 2. This proves that the existing diagnostic can identify this kind of archive
 failure, not that the old failure came from the archive server.
 
+[PR794's root shard](https://github.com/waitron-io/waitron-cloud/actions/runs/41182674171/job/124483174725)
+fails the three storage TLS cases in their shared setup: fetching the pinned
+SeaweedFS 4.47 archive raises `fetch failed` before their assertions. The transport
+cause is absent from the test output. The unchanged TLS tests pass three cases
+locally, and a later archive GET on the authorised Linux test box returns HTTP
+200; neither control explains or repairs the CI failure. D530's investigation
+must capture the cold-download cause while preserving the original TLS checks,
+checksums and cleanup assertions.
+
+On 4 November, all five native download controls pass again with no failure,
+cancellation or skip. The fixture and download test match both current main and
+[PR849's qualified revision](https://github.com/waitron-io/waitron-cloud/commit/9d1935aabc278116f62fc2852569cde3aee7eaf3)
+byte-for-byte. The runtime has since gained venue-level permissions, so the retained
+Linux run does not qualify today's runtime. The original runtime test is unchanged.
+
+[PR849's head run](https://github.com/waitron-io/waitron-cloud/actions/runs/41297220239)
+and its [merge run](https://github.com/waitron-io/waitron-cloud/actions/runs/41297937307)
+each completed all 30 jobs, with 17,344 passing tests, 19 optional skips and no
+failures or cancellations. That qualifies the earlier baseline, including the
+recorded Linux reproduction. It does not qualify this documentation branch or
+explain the historical failure.
+
 Keep the historical cause open. At a new instrumented recurrence, inspect the
 named request and phase before changing transport, startup behavior or the single
-download attempt. The Linux run replaces the earlier wait for Mac Docker;
-full current-head and merge CI remain separate qualification gates.
+download attempt. Use the shared Linux test box if you need a fresh Linux run;
+do not repeat the passing cold-cache baseline without a new failure to investigate.
 
 ## Identity-port allocation race (D499)
 
@@ -158,6 +185,8 @@ now binds on port zero, letting the OS choose a port while keeping its socket
 open. Discovery, the provider's issuer and key URL, and issued tokens all use
 that bound port. This removes the demonstrated handoff race; it does not prove
 which bind failed in the historical Linux run.
+
+Identity-server errors after startup still need separate qualification.
 
 Run `node --test deploy/test-cloud/storage-s3-grpc.test.mjs` to check the claimed
 probe-port regression, both-child exhaustion, disabled retries and successful
@@ -187,8 +216,9 @@ budget failure in that run remains under [D530 investigation](ci-cache-saving.md
 
 The separate D458 port-probe error-handler change becomes unnecessary because
 this repair removes that probe. Its separate runtime change is unnecessary;
-the parked branch remains preserved. Local native checks need no containers; PostgreSQL and full Linux
-qualification remain CI gates while Docker is unavailable.
+the parked branch remains preserved. Local native refusal checks need no containers.
+Use the shared Linux test box for PostgreSQL or Linux checks; current-head and
+merge CI remain separate qualification gates.
 
 The three malformed-certificate, malformed-key and mismatched-key cases require
 zero TCP probes: TLS construction refuses the material before any child-port
