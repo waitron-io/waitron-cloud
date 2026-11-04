@@ -13,9 +13,27 @@ and artifacts; actual publishing still requires its separate manual invocation.
 The reconnect diagnostic preserves both CPU groups, first-refusal sampling,
 deliberate-fault controls and diagnostic artifacts.
 
-**Open.** Attribute the historical upload stall; the controlled archive-creation stall
-proves the save deadline, not that transport cause. The other five setup-node cache
-consumers retain their existing behaviour and need separate qualification before changing.
+The root checks, type checking, receipt suites, package matrix, relay-counter
+diagnostic and venue-service proofs use the same separate restore and final save.
+These are six job definitions, including the venue proof added after the earlier
+five-consumer inventory. Their mandatory steps, permissions, matrices, artifacts,
+assertions and eight-minute job limits remain unchanged. The relay diagnostic
+still checks its baseline, four deliberate faults and restored PostgreSQL case.
+The venue proof still runs both legacy and venue groups and records runner capacity.
+
+Each job selects the stable store before installation. A cache hit skips saving;
+a miss can save only after successful mandatory work. A failed optional save stays
+visible without changing a successful test result. The save runs last because
+final runner cleanup collects action children; its one-minute step limit does not
+promise immediate child termination. The eight-minute job limit still includes
+setup, tests and cleanup, so a successful test suite alone cannot qualify a job
+that exhausts that limit.
+
+**Open.** Attribute the historical upload stall; the controlled archive-creation
+stall proves the save deadline, not that transport cause. Qualify the changed
+jobs on their exact pull-request head and independently after merging. Compare
+setup, test and cleanup timings, and keep mandatory failures red. A later passing
+run does not repair the historical transport failure.
 
 ## Portal shard job budget (D546 qualification)
 
