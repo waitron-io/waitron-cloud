@@ -2916,6 +2916,12 @@ implementation or production evidence.
   availability checks for sign-in, remote access and backups. The plan is a documentation
   milestone; implementation and those runtime checks remain unfinished. AWS accounts,
   spending, live infrastructure and production schema changes need separate authority.
+  D570's [weekly proof plan](superpowers/plans/2026-11-04-kubernetes-weekly-proof.md)
+  records the owner's narrow exception for a disposable staging-only ARM EC2 runner,
+  weekly and after deployment changes, within USD 5 per month. Access setup, total-cost
+  reservations, tested independent termination, Linux ARM compatibility and the complete
+  same-head P1 proof remain unbuilt and unqualified. The plan does not authorise spending
+  before the minimum-access answer, general AWS work or production access.
   Global account separation and the action controller have planning entries below;
   release waves, hosted venues and regional failover remain later plans.
   Country/provider/cell registry, repeatable resource
