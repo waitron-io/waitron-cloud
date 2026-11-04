@@ -2924,11 +2924,6 @@ the earlier timeout. Keep every verifier assertion and the existing build and jo
 **Open.** Real store startup and historical failure causes remain open.
 See [the boundaries and remaining work](backlog/storage-cache-fixture.md#storage-partial-port-reservation-refusals-d464).
 
-## Storage extraction and certificate setup refusals (D452)
-
-**Open.** Store startup, concurrent extraction and historical failure causes remain open.
-See [the boundaries and remaining work](backlog/storage-cache-fixture.md#storage-extraction-and-certificate-setup-refusals-d452).
-
 
 ## Storage archive download failure reporting (D441)
 
