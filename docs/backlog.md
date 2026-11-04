@@ -2661,11 +2661,14 @@ implementation or production evidence.
   **Remote fixture container preservation (D530).** Running the rendered TLS
   and trial-receipt wrappers together reproduces the whole-host inventory race:
   the trial's database and counters appear during the rendered fixture. Each
-  wrapper now keeps a uniquely labelled foreign witness alive and requires its
-  identity and start time to survive cleanup. Sibling container churn is outside
-  that private inventory. Owned labels and names must both be empty afterward;
-  the original traffic, image, anonymous-volume and receipt checks remain.
-  Controlled removal, restart and extra protected containers must still fail.
+  wrapper now excludes only positively labelled traffic siblings from the
+  foreign inventory and retains every unrelated running or stopped container.
+  A uniquely labelled witness must also retain its identity, start time and
+  running status across cleanup. A lost create response is recovered through
+  its unique label. Owned labels and names must both be empty afterward; the
+  original traffic, image, anonymous-volume and receipt checks remain. Controls
+  execute both wrappers with restarted or stopped witnesses, removed unrelated
+  foreign containers and a lost create response, requiring refusal and cleanup.
   This repairs the inventory assertion; it does not explain unrelated historical
   browser, transport, install or backup-cleanup failures.
   **Nested package authentication (D530).** All three package-test entry points
