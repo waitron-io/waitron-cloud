@@ -3329,11 +3329,6 @@ waits now use elapsed time through clock corrections, including HTTP-date and
 body-reading time; these client checks grant no activation or stop-proof authority.
 See [the boundaries and remaining work](backlog/backup-recovery-http.md#backup-catalogue-transport-refusals-and-retry-waits-d426).
 
-## Storage archive extraction command refusals (D453)
-
-**Open.** Real store startup and historical failure causes remain open.
-See [the boundaries and remaining work](backlog/storage-cache-fixture.md#storage-archive-extraction-command-refusals-d453).
-
 ## Container verifier memory-refusal observation (D335)
 
 **Open.** Qualify the native Docker-positive, non-73 refusal control; Docker event-reporting differences remain unexplained.
