@@ -3126,10 +3126,12 @@ historical bind and reconnect investigations. See [the D499 boundaries](backlog/
 
 ## Diagnostic permission test lock observation (D198)
 
-Capture a recurrence to explain the historical membership-update delay. Keep the
-100 ms database lock-wait limit, successful revocation before releasing the
-incident read, and final HTTP 403 refusal. See [the investigation and guard
-requirements](backlog/diagnostic-permission-lock.md).
+The shipped fixture repair passes the six current diagnostic cases on Linux,
+including delayed revocation and the final HTTP 403 refusal. The historical
+membership-update delay remains unexplained. Capture a recurrence with separate
+submission, database and commit timings; keep the 100 ms database lock-wait limit
+and successful revocation before releasing the incident read. See [the evidence
+and capture requirements](backlog/diagnostic-permission-lock.md).
 
 ## Dependency-cache save stalls (D507)
 
