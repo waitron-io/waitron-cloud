@@ -3329,11 +3329,6 @@ See [the boundaries and remaining work](backlog/storage-cache-fixture.md#storage
 **Open.** Qualify the native Docker-positive, non-73 refusal control; Docker event-reporting differences remain unexplained.
 See [the boundaries and remaining work](backlog/verifier-build.md#container-verifier-memory-refusal-observation-d335).
 
-## Verifier build refusal and cleanup controls (D443)
-
-**Open.** Run real image qualification in CI and reproduce the historical build timeout
-when local Docker returns.
-See [the boundaries and remaining work](backlog/verifier-build.md#verifier-build-refusal-and-cleanup-controls-d443).
 
 ## Bound verifier test failure cleanup (D530)
 
