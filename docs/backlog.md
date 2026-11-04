@@ -4137,8 +4137,10 @@ review and owner gates. This audit does not enable services or change policy.
 The historical mail measurement-close refusal remains unexplained. Both unchanged
 PostgreSQL/Mailpit cases pass on the Linux test box, alongside all 20 mail controls
 on Linux and macOS. These results do not identify or repair the old failure.
-Use the next labelled close-error diagnostic to reproduce its cause while preserving
-measurement guards, accounting and deadlines. See [the investigation and qualification limits](backlog/cost-mail-reconciliation.md).
+The bounded 4 November check passes all 20 native controls; the busy test box
+prevents a fresh PostgreSQL/Mailpit reproduction. Use the next labelled close-error
+diagnostic to reproduce its cause while preserving measurement guards, accounting
+and deadlines. See [the investigation and qualification limits](backlog/cost-mail-reconciliation.md).
 
 ## Remote hostname browser-test request observation (D315)
 
