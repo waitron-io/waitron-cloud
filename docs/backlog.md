@@ -62,6 +62,7 @@ Their notes describe the missing-signal controls' outer refusal checks.
 The recovery-width fixture also keeps each reachable handler capture separately.
 The pending-session sign-out fixture retains ordinary and delayed captures separately.
 The recovery-choice fixture also keeps its ordinary and delayed captures separately.
+The sign-out failure fixture keeps normal and delayed captures separately too.
 See [the diagnostic qualification and open work](backlog/retrospective-reviews.md).
 
 ## Concurrent storage extraction and failed-startup cleanup (D454)
@@ -4368,13 +4369,26 @@ and check all sixteen names; browser assertions alone do not check filenames.
 
 ## Sign-out failure browser handler wait (D361)
 
-The sign-out failure fixture refuses within its existing four-second page budget
-when the first logout route handler never signals entry. A missing-signal control
-reproduces the unbounded wait; delayed handlers repeat all eight original journeys
-across both languages, themes and phone/desktop widths. Pending-state, focus,
-scroll, failure-message, retry, request-count, layout and runner deadline checks
-remain. These native Chromium checks use stubbed HTTP and do not qualify backend
-or production sign-out.
+The sign-out failure fixture keeps sixteen normal and delayed screenshots, including
+all eight historical names. Collect them into a fresh `SIGNOUT_FOCUS_RECEIPT_DIR`
+and check every name; passing browser assertions alone do not detect overwritten
+captures. Both handler variants repeat the original journeys across English and
+Spanish, light and dark themes, and phone and desktop widths. Pending-state, focus,
+scroll, failure-message, retry, request-count, layout and deadline assertions remain.
+
+The handler observation is configured for four seconds. Its missing-signal control
+expects a timeout before a separate five-second race ends, then returns before
+failure-message, focus and retry checks. That control does not prove the exact
+four-second boundary. These native Chromium checks use stubbed HTTP and do not
+qualify backend or production sign-out.
+
+The missing-signal control isolates the handler observation. Ordinary journeys
+also start a response wait before clicking, so a missing signal can report that
+response timeout instead. Review faults detect broken focus and scrolling on both
+the historical parent and changed fixture. The parent case fails after 4.3 seconds
+but its file run needs stopping at 135 seconds; the changed run exits after five.
+These are individual samples. Reproduce and contain the competing response
+rejection before claiming precise failure diagnostics or a general cleanup bound.
 
 ## Session-check retry browser handler wait (D359)
 
