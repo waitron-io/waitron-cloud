@@ -1,7 +1,9 @@
 # Production account email
 
 The owner selected **Amazon SES in an EU region** on 2026-10-21. D102 owns the
-approved Paris (`eu-west-3`) plan, account setup and live qualification. The
+feedback plan, account setup and live qualification. On 2026-11-03 the owner
+accepted Stockholm (`eu-north-1`) or Paris (`eu-west-3`); the local validator
+defaults to Stockholm and requires explicit regional qualification. The
 [SES endpoint table](https://docs.aws.amazon.com/general/latest/gr/ses.html) lists
 those regions but no Spain endpoint. This is an approved email-processing exception,
 not a claim about recipient mail providers, transit or every subprocessor. The
@@ -85,9 +87,11 @@ on 2026-11-01, including Paris and private queue intake for authenticated bounce
 complaint events. It binds feedback before sending, keeps provider IDs separate from
 the original Message-ID and blocks future handoffs without replaying accepted mail.
 The [implementation plan](superpowers/plans/2026-11-02-ses-feedback-implementation.md)
-covers the local build and separate provider qualification. Only planning is
-authorised. Intake and the shared account/venue suppression boundary remain
-unimplemented; Paris account/provider qualification is still required.
+covers the local build and separate provider qualification. D565 authorises code
+and synthetic tests only. Task 1 validates configuration and event envelopes;
+queue intake and the shared account/venue suppression boundary remain
+unimplemented. Account/provider qualification is still required in the selected
+region.
 
 D102 must qualify and configure the selected SES account/region and verified sender
 domain. Confirm the processing/storage locations, retention, subcontractors and suppression rules for the
@@ -96,8 +100,8 @@ confirm with a real delivered message. Configure SPF, DKIM and DMARC as instruct
 the provider. Use an application credential, configure a monitored bounce address and
 prove delivery, permanent bounce and complaint handling.
 
-The plan separates future local intake tests from live setup. Local implementation
-also needs separate owner authority. Production authentication,
+The plan separates local intake tests from live setup. Build authority permits
+no AWS resources, credentials, production-access request or live mail. Production authentication,
 suppression reconciliation, alerts, secret provisioning and live delivery proof need
 the qualified account/provider. Hands-on account, sender/domain and live testing
 wait for the owner on 3 November.
@@ -110,3 +114,31 @@ SES selection reconciled 2026-10-22; transport source retained from the 2026-09-
 
 - [AWS SES endpoints](https://docs.aws.amazon.com/general/latest/gr/ses.html)
 - [Nodemailer SMTP options](https://nodemailer.com/smtp)
+
+## Check feedback configuration locally
+
+Before any future SES handoff, you need separately qualified evidence for each
+mail purpose. Run the synthetic validator and parser checks without a provider
+connection:
+
+```sh
+pnpm --dir packages/registration exec node --test test/ses-feedback-config.test.ts test/ses-feedback-event.test.ts test/country-policy.test.ts
+```
+
+The internal `SesFeedbackPolicy` extends the unchanged country policy with
+`smtpBindings`. Each binding names its purpose, SES content evidence ID, SMTP
+host and port, configuration revision, identity ARN, configuration-set ARN, topic
+ARN and primary/dead-letter queue ARNs. ARN means the exact AWS resource name.
+Content and email-metadata flows must independently match trusted evidence for
+the selected SES, SNS and queue endpoints. This prevents account-mail evidence
+from enabling venue mail or an unrelated resource on the same AWS account.
+Missing or stale evidence refuses configuration; input flags cannot qualify it.
+
+The parser accepts only the expected notification wrapper and one-recipient
+attempt tag. It bounds the envelope, nested message and identifiers, refuses
+ambiguous recipients and duplicate JSON members, and never retrieves embedded
+URLs. A redacted complaint leaves recipient resolution to the future durable
+attempt lookup. Provider suppression, hard bounces and temporary outcomes stay
+separate; parsing writes no suppression or sending state. These checks validate
+structure against trusted settings. Only a separately qualified SQS connection
+and effective publisher policies can authenticate the actual sender.
