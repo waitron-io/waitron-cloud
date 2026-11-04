@@ -82,6 +82,21 @@ for (const theme of ['light', 'dark'] as const) for (const width of [390, 1280])
         await page.evaluate(wall => {const w = window as any; w.accountClock.wall = wall; w.app.draw();}, Date.parse(stamp) + correction);
         assert.equal(await page.evaluate(() => (window as any).app.waiting), wait / 1000);
         assert.equal(await retry.isDisabled(), true);
+        if (scenario === 'signup') {
+          await page.evaluate(() => {
+            const a = (window as any).app;
+            a.navigate('/forgot-password'); a.fields.email = 'owner@example.test'; a.draw();
+          });
+          assert.equal(await page.evaluate(() => (window as any).app.waiting), 0, 'signup refusal cannot delay a password-reset request');
+          assert.equal(await page.locator('#submit button').isEnabled(), true);
+          await page.evaluate(() => {
+            const a = (window as any).app;
+            a.navigate('/signup'); a.fields.email = 'owner@example.test'; a.draw();
+          });
+          assert.equal(await page.evaluate(() => (window as any).app.waiting), 2, 'returning to signup retains its own live refusal');
+          assert.equal(await retry.isDisabled(), true);
+          assert.equal(attempts, 1);
+        }
         if (scenario === 'session') {
           for (const path of ['/connect', '/recover', '/account']) {
             await page.evaluate(path => (window as any).app.navigate(path), path);
