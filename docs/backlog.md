@@ -3784,22 +3784,6 @@ D385 now labels those setup boundaries, so a changed qualification can retain mo
 evidence if they recur. Preserve the failing assertions and five-second database
 limit, then reproduce a labelled failure before changing runtime rules.
 
-## Recovery organisation-width browser handler wait (D364)
-
-Set `RECOVERY_WIDTH_RECEIPT_DIR` to a fresh directory when checking the recovery
-organisation-width fixture. It retains seventeen captures: eight ordinary,
-eight delayed and one English/light/390 absent-signal capture. The eight
-original names stay unchanged. All captures precede the gated refresh, so they
-show the initial choice and width, not its later pending state. Every original
-choice, width, pending-state, selected-value and deadline assertion remains.
-
-The missing-signal control wraps a configured four-second observation in a
-five-second race. It does not independently establish the exact four-second
-value. Delayed handlers repeat all eight language, theme and width journeys.
-See [the review boundaries](backlog/retrospective-reviews.md#recovery-organisation-width-captures).
-Real recovery authority and the historical Linux cause remain unqualified.
-
-
 ## Recovery HTTP replies before confirming an outcome (D419)
 
 **Open.** Qualify server permissions and genuine restore or recovery; these client

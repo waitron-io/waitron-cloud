@@ -250,6 +250,10 @@ Every original behavioral assertion, expected value, observation and deadline
 remains unchanged. Other engines, production networks, real recovery authority
 and the historical Linux cause remain unqualified.
 
+The missing-signal control wraps a configured four-second observation in a
+five-second race. It does not independently establish the exact four-second
+value. Delayed handlers repeat all eight language, theme and width journeys.
+
 Removing the ordinary observation still passes sixteen historical ordinary and
 delayed cases, as well as all eight parent cases. Those runs leave its necessity
 unqualified; the repair retains every observation. Removing only the select's
