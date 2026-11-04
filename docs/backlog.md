@@ -611,18 +611,6 @@ before launch. Live providers, deployment and secret custody, database recovery,
 final-write handover and automatic appliance setup remain open; see the
 [milestone requirements and remaining qualification](backlog/first-milestone.md).
 
-## Fiscal test-worker failure evidence (D380)
-
-PR622's two-worker allocation check observed C000001 and a missing second receipt;
-the worker refusal was absent from CI40604297872. Its reservation and retry
-assertions now report up to two workers' fixed refusal codes and receipt presence
-only when a check fails, then rethrow the identical assertion. Native controls
-cover a real independent worker refusal, private fields, accessors, bounded output
-and a broken diagnostic sink. Every original identity, allocation, retry, process
-separation and deadline check remains. The historical cause is unknown; local
-PostgreSQL reproduction waits for Docker to return. Use a labelled recurrence
-to reproduce the cause before changing allocation behavior or expected values.
-
 ## Fiscal allocation registry
 
 Cloud no longer runs the obsolete fiscal allocation registry. Waitron generates
@@ -3651,12 +3639,10 @@ remains unavailable until Docker returns; current-head Linux CI checks the deliv
 
 The first D378 qualification also found an absent fiscal worker identity in
 [CI40604297872, job122540422831](https://github.com/waitron-io/waitron-cloud/actions/runs/40604297872/job/122540422831).
-The test expected `C000001` and `C000002`; its output did not identify why one
-worker returned no allocation. D380 now adds bounded worker-refusal reporting
-without exposing the response. The historical cause remains unknown. Preserve
-both exact identities and every authority, retry and concurrency check. Use the
-new reporting on a recurrence, or reproduce with PostgreSQL when Docker returns,
-before changing the fixture or allocator.
+Its cause remains unknown. [PR711](https://github.com/waitron-io/waitron-cloud/pull/711)
+removed the obsolete allocator, two-worker test and D380 diagnostic helper. This
+historical failure no longer has a running Cloud fixture to reproduce. Migration
+038 and dormant fiscal records remain governed by the registry retirement boundary.
 
 ## Litestream after-stop admission diagnostics (D381)
 
