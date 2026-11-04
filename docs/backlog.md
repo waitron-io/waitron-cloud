@@ -4066,22 +4066,6 @@ See [the remaining checks](backlog/remote-access-http.md#remote-hostname-save-qu
 retain the existing permission and retry rules.
 See [the native read boundaries](backlog/remote-access-http.md#remote-status-and-dns-preview-deployment-qualification).
 
-## Unchanged remote hostname review (D259)
-
-On Account, Review DNS settings is available only when the entered name differs
-from the selected saved name after trimming spaces, lowercasing and removing one
-trailing dot. The controller also refuses an unchanged review, so clicking or
-pressing Enter cannot create a confirmation or send a redundant save that puts
-remote access back into setup. Changed names still need review and confirmation;
-Use assigned name still lets you switch back from a custom name.
-
-Stubbed portal and controller checks cover assigned and custom names, staff and
-public access, equivalent input, saving a different name and switching back. The
-existing Enter, installation-refresh and uncertain-save checks retain their
-assertions and deadlines with the three owner-approved setup changes. Server
-behaviour and the outstanding live DNS/ACME and deployment qualification are
-unchanged.
-
 ## Isolated replay ownership-loss fixture
 
 An earlier remote-guidance qualification failed in
