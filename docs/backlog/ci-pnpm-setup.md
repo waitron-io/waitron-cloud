@@ -179,7 +179,9 @@ Its supervisor, observer, lock and test source are unchanged from main
 
 A private control using those exact main inputs and one added diagnostic line
 passes the original assertion with three installer executions. It does not
-reproduce or repair the full-run failure. No earlier exact occurrence was found
+reproduce or repair the full-run failure. An unchanged isolated feature run
+also counts two attempts; a later main-checkout run passes with three. These
+results do not establish a cause. No earlier exact occurrence was found
 in the campaign queues or questions; D530 already records a different
 descendant-timeout case that counted two rather than three attempts. A shared
 cause, scheduling explanation and flaky-test classification remain unproved.
