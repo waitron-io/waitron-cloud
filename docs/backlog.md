@@ -3042,12 +3042,6 @@ replies and preserve the existing recovery permissions and cooldown policy.
 Server authority and genuine restore qualification remain separate CI and launch gates.
 
 
-## Backup catalogue HTTP response validation (D411)
-
-**Open.** Qualify server permissions and genuine restore or recovery; these client
-checks grant no activation or stop-proof authority.
-See [the boundaries and remaining work](backlog/backup-recovery-http.md#backup-catalogue-http-response-validation-d411).
-
 ## Backup catalogue transport refusals and retry waits (D426)
 
 **Open.** Qualify server permissions and genuine restore or recovery. Catalogue retry

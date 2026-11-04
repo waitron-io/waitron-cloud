@@ -1,14 +1,5 @@
 # Backup and recovery HTTP boundaries
 
-## Backup catalogue HTTP response validation (D411)
-
-Malformed or secret-bearing catalogue replies cannot become recovery choices.
-Native tests pass HTTP responses through the account client and catalogue controller,
-covering snapshot and continuous-source metadata, duplicate points and page limits.
-A refused older page keeps your accepted rows and snapshot selection; valid retries
-still paginate. Another venue's reply cannot replace your catalogue. Recovery
-permissions, server authority and genuine restore qualification remain separate gates.
-
 ## Backup catalogue transport refusals and retry waits (D426)
 
 When an older catalogue request loses its connection or receives a service refusal,
