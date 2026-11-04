@@ -190,12 +190,6 @@ raised. D463's collector and remaining billing work stay on their separate branc
   A server Retry-After still blocks every address for that operation.
 
 
-## Installation HTTP replies and stop confirmation (D416)
-
-**Open.** Qualify server permissions, local confirmation and live delivery against the
-selected deployment.
-See [the boundaries and remaining work](backlog/venue-connection-http.md#installation-http-replies-and-stop-confirmation-d416).
-
 ## Installation transport refusals and retry waits (D433)
 
 **Open.** Qualify server permissions, local confirmation and live delivery against the

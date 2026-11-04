@@ -1,15 +1,5 @@
 # Venue connection HTTP boundaries
 
-## Installation HTTP replies and stop confirmation (D416)
-
-When an installation reply is malformed, your existing venue rows and stop
-confirmation remain available for an explicit retry. Native client/controller
-tests cover service, overview and redacted monitoring evidence. A stop reply must
-confirm revocation for the same installation, venue, organisation and business;
-a valid reply keeps the selected row's display context and offered action.
-Permission refusals and retry waits retain their existing handling. Server
-permission checks and live delivery remain separate qualification gates.
-
 ## Installation transport refusals and retry waits (D433)
 
 When an installation read or stop has no usable reply, your selected row and
