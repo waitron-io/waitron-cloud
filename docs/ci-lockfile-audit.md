@@ -2,9 +2,16 @@
 
 A resolved dependency update can affect one package without changing its manifest.
 When your pull request changes `pnpm-lock.yaml`, alone or alongside workspace
-manifest dependency fields, CI can run the affected packages and the packages that
-read them, including through shared test helpers. All compiler checks and all five
+manifest dependency fields, the lock reader identifies the affected packages and
+the packages that read them, including through shared test helpers. All compiler checks and all six
 receipt suites still run. Every push to `main` runs the full suite independently.
+
+The required documentation freshness check also applies to lockfile and manifest
+changes. An unrenewed inventoried edit fails its own PR. After you review readers
+and renew the shared policy, the policy file makes the PR mixed root work, so it
+currently runs the full suite. The lock reader's narrower selection remains
+independently checked; it does not override the required freshness gate. See the
+[renewal consequences](ci-documentation-audit.md) before pushing.
 
 The reader compares complete resolved dependency graphs in both saved revisions.
 It follows indirect, optional and workspace-linked dependencies and retains peer

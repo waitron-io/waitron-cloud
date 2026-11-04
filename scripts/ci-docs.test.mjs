@@ -247,6 +247,26 @@ test('proof planner skips only audited prose and keeps code, pinned documents, m
   run(pr(docs, 'a'.repeat(40)), true);
   run(pr('main'), true);
   run(pr(docs, 'HEAD~1'), true);
+  git('checkout', '--detach', base);
+  put('scripts/reader.mjs', 'console.log("main advanced");\n');
+  const advanced = commit();
+  run(pr(docs, advanced), false);
+  git('checkout', '--detach', docs);
+  git('mv', 'README.md', 'docs/renamed.md');
+  run(pr(commit()), false);
+  git('reset', '--hard', base);
+  const pinned = 'docs/waitron-integration-contract.md';
+  put(pinned, '# Published contract input\n');
+  const tree = commit();
+  const inputs = git('ls-tree', '-rz', '--full-tree', tree).split('\0')
+    .filter(row => ['scripts/reader.mjs', pinned].includes(row.split('\t')[1]));
+  put(policy, JSON.stringify(completeAudit({docsInputSha256: createHash('sha256')
+    .update(inputs.map(row => row + '\0').join('')).digest('hex')})) + '\n');
+  const pinnedBase = commit();
+  assert.equal(spawnSync(process.execPath, [checker, '--audit', pinnedBase], {cwd: root}).status, 0);
+  git('mv', pinned, 'docs/moved-contract.md');
+  run(pr(commit(), pinnedBase), true);
+
   for (const path of ['scripts/reader.mjs', 'docs/waitron-integration-contract.md', 'docs/cloud-cost-model.md', 'docs/receipts/proof.md', 'packages/one/README.md']) {
     git('reset', '--hard', base);
     put(path, 'changed\n');
