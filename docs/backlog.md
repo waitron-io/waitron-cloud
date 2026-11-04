@@ -3954,12 +3954,6 @@ and rollout checks remain, including the exact earlier shipped-page hash.
 These are native Chromium and local HTTP checks; production network and browser
 qualification remains open.
 
-## Session activity replies across reads and sign-out (D439)
-
-**Open.** Qualify server authority, browser integration and live ingress; physical
-passkeys and the separate retry-clock repair retain their own gates.
-See [the boundaries and remaining work](backlog/account-http-boundaries.md#session-activity-replies-across-reads-and-sign-out-d439).
-
 ## Session HTTP replies and sign-out acknowledgements (D422)
 
 **Open.** Qualify server authority, browser integration and live ingress; physical

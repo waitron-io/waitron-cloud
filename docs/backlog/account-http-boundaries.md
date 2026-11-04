@@ -26,19 +26,6 @@ repair; physical passkeys, server authority and live ingress still need their ow
 qualification, with database suites running in CI while Docker is unavailable.
 Run `node --test apps/portal/test/passkey-transport-boundary.test.ts`.
 
-## Session activity replies across reads and sign-out (D439)
-
-A delayed activity reply cannot replace a newer accepted session read, change
-its retry wait or notify the app. An accepted expiry also discards a newer
-pending read, so it cannot restore the expired sign-in. Sign-out discards activity
-started during its preflight, even when the sign-out reply is lost or refused;
-a disposed session ignores late activity results and refuses further activity
-and session checks.
-Run `node --test apps/portal/test/session-activity-ordering.test.ts` for these
-native HTTP/client checks. Runtime and original tests stay unchanged. Trusted
-browser activity, server-side session storage and production ingress retain their
-separate qualification gates.
-
 ## Session HTTP replies and sign-out acknowledgements (D422)
 
 Native tests exercise the real HTTP client and session manager with 44 controlled
