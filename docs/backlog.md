@@ -293,12 +293,6 @@ See [the boundaries and remaining work](backlog/account-http-boundaries.md#passk
 passkeys and the separate retry-clock repair retain their own gates.
 See [the boundaries and remaining work](backlog/account-http-boundaries.md#passkey-transport-refusals-and-pending-actions-d435).
 
-## Passkey management after account changes (D403)
-
-**Open.** Qualify server authority, browser integration and live ingress; physical
-passkeys and the separate retry-clock repair retain their own gates.
-See [the boundaries and remaining work](backlog/account-http-boundaries.md#passkey-management-after-account-changes-d403).
-
 ## Password and second-factor sign-in HTTP replies (D424)
 
 **Open.** Qualify server authority, browser integration and live ingress; physical

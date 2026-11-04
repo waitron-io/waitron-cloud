@@ -58,12 +58,6 @@ repair; physical passkeys, server authority and live ingress still need their ow
 qualification, with database suites running in CI while Docker is unavailable.
 Run `node --test apps/portal/test/passkey-transport-boundary.test.ts`.
 
-## Passkey management after account changes (D403)
-
-Obsolete enrollment and sign-in browser prompts stop before verification after
-account or route changes. Physical-passkey and live-provider qualification remain
-open.
-
 ## Password and second-factor sign-in HTTP replies (D424)
 
 Your password reply must distinguish a signed-in account from a second-factor
