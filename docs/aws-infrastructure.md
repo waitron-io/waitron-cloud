@@ -823,7 +823,8 @@ Country runtime policies use the same planned store names as shared recovery
 and replication. The root's storage check binds those names and keys to the
 actual stores before the outputs can form a complete handoff.
 The provisional `evidence_topology` output contains the connected regional logs,
-infrastructure signals and budget reference. The complete handoff remains unfinished.
+infrastructure signals and budget reference. `infrastructure_v1_by_cell` combines
+these references into one complete version 1 object for each exact cell.
 
 For the global root, supply exactly `global`, `global_backup`, `global_keys`
 and `global_backup_keys` in `bindings`. Spain instead takes `country`,
@@ -881,8 +882,8 @@ been populated or recovered.
 node --test deploy/aws/composition.test.mjs deploy/aws/topology.test.mjs
 ```
 
-The integration suite runs 29 admission cases and six composition cases for
-global, plus 29 admission cases and six composition cases for Spain. The added
+The integration suite runs 41 cases per root: 29 admission, six composition,
+two ingress/DNS, two regional evidence and two complete handoff cases. The added
 one-cell and two-cell cases require each cell's complete role references and
 runtime attachment set. Admission cases replace workload outputs and supply a
 complete cell reference to keep their existing admission assertions independent.
@@ -892,16 +893,47 @@ reference. Frankfurt/Ireland use a different synthetic account from Madrid/Paris
 These are local mocked plans. They do not qualify role assumption, network
 reachability, database recovery or provider availability.
 
-Each cell has its own workload roles and identity provider. The current
-version 1 handoff has one role reference per service, so one object cannot
-name several cells' different roles. The integration default is an export
-named `infrastructure_v1_by_cell`: each entry will be one complete, unchanged
-version 1 object containing exactly the named cell and its matching roles.
-P1's planned single-object input keeps the same shape: callers select an exact
-cell entry.
-Schema fixtures accept this representation for two cells in either scope.
-The real export, selection checks and remaining resource composition are
-unfinished; no new schema or runtime consumer is qualified by that fixture check.
+Each cell has its own workload roles and identity provider. Version 1 has one
+role reference per service, so you select one complete object for the cell you
+intend to configure. Both roots export `infrastructure_v1_by_cell`, keyed by
+exact cell name. Each value keeps the unchanged
+[version 1 schema](../deploy/aws/contracts/infrastructure-v1.schema.json), contains
+exactly that cell and names its matching roles. No service gains another cell's
+identity trust.
+
+Given an operator-supplied `tofu output -json` file from a separately authorised
+deployment, select Spain's second cell locally:
+
+```sh
+node deploy/aws/handoff.mjs infrastructure-output.json es es-02 > es-02.json
+```
+
+The command prints the complete version 1 object for `es-02` without changing it.
+Use `global` with an exact `global-01` style cell name for the global root.
+An unknown cell, a different scope, an invalid schema or more than one embedded
+cell produces an error and no JSON output. The command only reads your file;
+it does not initialise a backend, contact AWS or apply infrastructure.
+
+The export converts subnet, target-group and cold-bucket maps to the arrays the
+schema requires. Global has null venue buckets, no bucket copies and no storage
+key references. Spain includes both cold bucket names and their regional keys.
+Log keys `rds`, `vpc`, `eks` and `metrics` carry the shared database/network logs
+and the selected cell's exact cluster/performance logs. Infrastructure signals
+and the budget remain shared by the scope. Recovery contains only cold-region
+references and keeps `runtime_enabled` false.
+
+Run the actual planned-output and selection checks with:
+
+```sh
+node --test deploy/aws/handoff.test.mjs
+```
+
+The one-cell and two-cell plans in both roots use distinct cell issuers, roles,
+subnets and ingress targets. Their actual JSON outputs must match independently
+specified complete objects and pass the unchanged schema. The selector also
+refuses crossed scope/cell bindings and extra credential fields. These checks
+qualify local mocked composition. String references cannot prove secret custody,
+and P1 still needs its own runtime integration and provider qualification.
 
 ### Composed ingress and DNS
 

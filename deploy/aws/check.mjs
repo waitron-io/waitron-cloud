@@ -130,6 +130,7 @@ export async function runSuite(name, { directory = fileURLToPath(new URL('.', im
       plan.push(...['roots/global', 'roots/country'].map((directory) => ({ directory, filter: 'tests/composition.tftest.hcl' })));
       plan.push(...['roots/global', 'roots/country'].map((directory) => ({ directory, filter: 'tests/edge.tftest.hcl' })));
       plan.push(...['roots/global', 'roots/country'].map((directory) => ({ directory, filter: 'tests/evidence.tftest.hcl' })));
+      plan.push(...['roots/global', 'roots/country'].map((directory) => ({ directory, filter: 'tests/handoff.tftest.hcl' })));
     }
     for (const entry of plan) {
       try {

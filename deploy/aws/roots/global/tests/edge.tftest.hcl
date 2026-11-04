@@ -43,7 +43,7 @@ run "one_cell_keep_exact_ingress_and_scope_dns" {
   command = plan
   override_module {
     target  = module.observability
-    outputs = { observability = { logs = {}, signals = {}, budget_ref = "synthetic-budget" } }
+    outputs = { observability = { logs = { "rds" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-rds", "vpc" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-vpc", "eks/waitron-global-01" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-eks-global-01", "metrics/waitron-global-01" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-metrics-global-01", "eks/waitron-global-02" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-eks-global-02", "metrics/waitron-global-02" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-metrics-global-02", "eks/waitron-global-any" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-eks-global-any", "metrics/waitron-global-any" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-metrics-global-any", "eks/waitron-es-01" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-eks-es-01", "metrics/waitron-es-01" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-metrics-es-01" }, signals = {}, budget_ref = "synthetic-budget" } }
   }
   override_module {
     target  = module.workload_permissions
@@ -96,7 +96,7 @@ run "two_cells_keep_exact_ingress_and_scope_dns" {
   command = plan
   override_module {
     target  = module.observability
-    outputs = { observability = { logs = {}, signals = {}, budget_ref = "synthetic-budget" } }
+    outputs = { observability = { logs = { "rds" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-rds", "vpc" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-vpc", "eks/waitron-global-01" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-eks-global-01", "metrics/waitron-global-01" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-metrics-global-01", "eks/waitron-global-02" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-eks-global-02", "metrics/waitron-global-02" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-metrics-global-02", "eks/waitron-global-any" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-eks-global-any", "metrics/waitron-global-any" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-metrics-global-any", "eks/waitron-es-01" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-eks-es-01", "metrics/waitron-es-01" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-metrics-es-01" }, signals = {}, budget_ref = "synthetic-budget" } }
   }
   variables { deployment = { version = 1, scope = "global", country = null, primary_region = "eu-central-1", backup_region = "eu-west-1", network = { cidr = "10.10.0.0/16", az_ids = ["euc1-az1", "euc1-az2", "euc1-az3"] }, cells = { "global-01" = { subnet_cidr = "10.10.16.0/20" }, "global-02" = { subnet_cidr = "10.10.32.0/20" } } } }
   override_module {

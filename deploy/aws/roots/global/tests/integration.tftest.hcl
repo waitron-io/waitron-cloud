@@ -44,11 +44,11 @@ run "distinct_global_country_and_backup_bindings" {
   command = plan
   override_module {
     target  = module.observability
-    outputs = { observability = { logs = {}, signals = {}, budget_ref = "synthetic-budget" } }
+    outputs = { observability = { logs = { "rds" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-rds", "vpc" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-vpc", "eks/waitron-global-01" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-eks-global-01", "metrics/waitron-global-01" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-metrics-global-01", "eks/waitron-global-02" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-eks-global-02", "metrics/waitron-global-02" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-metrics-global-02", "eks/waitron-global-any" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-eks-global-any", "metrics/waitron-global-any" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-metrics-global-any", "eks/waitron-es-01" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-eks-es-01", "metrics/waitron-es-01" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-metrics-es-01" }, signals = {}, budget_ref = "synthetic-budget" } }
   }
   override_module {
     target  = module.ingress
-    outputs = { ingress = null }
+    outputs = { ingress = { dns_name = "synthetic.invalid", zone_id = "ZFIXTURE", tcp_ports = [443], udp_ports = [], target_group_arns = { https = "arn:aws:elasticloadbalancing:eu-central-1:222222222222:targetgroup/synthetic/1111111111111111" } } }
   }
   override_module {
     target  = module.workload_permissions
@@ -96,11 +96,11 @@ run "rejects_unknown_version" {
   command = plan
   override_module {
     target  = module.observability
-    outputs = { observability = { logs = {}, signals = {}, budget_ref = "synthetic-budget" } }
+    outputs = { observability = { logs = { "rds" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-rds", "vpc" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-vpc", "eks/waitron-global-01" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-eks-global-01", "metrics/waitron-global-01" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-metrics-global-01", "eks/waitron-global-02" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-eks-global-02", "metrics/waitron-global-02" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-metrics-global-02", "eks/waitron-global-any" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-eks-global-any", "metrics/waitron-global-any" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-metrics-global-any", "eks/waitron-es-01" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-eks-es-01", "metrics/waitron-es-01" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-metrics-es-01" }, signals = {}, budget_ref = "synthetic-budget" } }
   }
   override_module {
     target  = module.ingress
-    outputs = { ingress = null }
+    outputs = { ingress = { dns_name = "synthetic.invalid", zone_id = "ZFIXTURE", tcp_ports = [443], udp_ports = [], target_group_arns = { https = "arn:aws:elasticloadbalancing:eu-central-1:222222222222:targetgroup/synthetic/1111111111111111" } } }
   }
   override_module {
     target  = module.workload_permissions
@@ -142,11 +142,11 @@ run "rejects_unknown_scope" {
   command = plan
   override_module {
     target  = module.observability
-    outputs = { observability = { logs = {}, signals = {}, budget_ref = "synthetic-budget" } }
+    outputs = { observability = { logs = { "rds" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-rds", "vpc" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-vpc", "eks/waitron-global-01" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-eks-global-01", "metrics/waitron-global-01" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-metrics-global-01", "eks/waitron-global-02" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-eks-global-02", "metrics/waitron-global-02" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-metrics-global-02", "eks/waitron-global-any" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-eks-global-any", "metrics/waitron-global-any" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-metrics-global-any", "eks/waitron-es-01" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-eks-es-01", "metrics/waitron-es-01" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-metrics-es-01" }, signals = {}, budget_ref = "synthetic-budget" } }
   }
   override_module {
     target  = module.ingress
-    outputs = { ingress = null }
+    outputs = { ingress = { dns_name = "synthetic.invalid", zone_id = "ZFIXTURE", tcp_ports = [443], udp_ports = [], target_group_arns = { https = "arn:aws:elasticloadbalancing:eu-central-1:222222222222:targetgroup/synthetic/1111111111111111" } } }
   }
   override_module {
     target  = module.workload_permissions
@@ -188,11 +188,11 @@ run "rejects_unknown_country" {
   command = plan
   override_module {
     target  = module.observability
-    outputs = { observability = { logs = {}, signals = {}, budget_ref = "synthetic-budget" } }
+    outputs = { observability = { logs = { "rds" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-rds", "vpc" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-vpc", "eks/waitron-global-01" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-eks-global-01", "metrics/waitron-global-01" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-metrics-global-01", "eks/waitron-global-02" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-eks-global-02", "metrics/waitron-global-02" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-metrics-global-02", "eks/waitron-global-any" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-eks-global-any", "metrics/waitron-global-any" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-metrics-global-any", "eks/waitron-es-01" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-eks-es-01", "metrics/waitron-es-01" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-metrics-es-01" }, signals = {}, budget_ref = "synthetic-budget" } }
   }
   override_module {
     target  = module.ingress
-    outputs = { ingress = null }
+    outputs = { ingress = { dns_name = "synthetic.invalid", zone_id = "ZFIXTURE", tcp_ports = [443], udp_ports = [], target_group_arns = { https = "arn:aws:elasticloadbalancing:eu-central-1:222222222222:targetgroup/synthetic/1111111111111111" } } }
   }
   override_module {
     target  = module.workload_permissions
@@ -234,11 +234,11 @@ run "rejects_unknown_regions" {
   command = plan
   override_module {
     target  = module.observability
-    outputs = { observability = { logs = {}, signals = {}, budget_ref = "synthetic-budget" } }
+    outputs = { observability = { logs = { "rds" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-rds", "vpc" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-vpc", "eks/waitron-global-01" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-eks-global-01", "metrics/waitron-global-01" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-metrics-global-01", "eks/waitron-global-02" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-eks-global-02", "metrics/waitron-global-02" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-metrics-global-02", "eks/waitron-global-any" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-eks-global-any", "metrics/waitron-global-any" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-metrics-global-any", "eks/waitron-es-01" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-eks-es-01", "metrics/waitron-es-01" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-metrics-es-01" }, signals = {}, budget_ref = "synthetic-budget" } }
   }
   override_module {
     target  = module.ingress
-    outputs = { ingress = null }
+    outputs = { ingress = { dns_name = "synthetic.invalid", zone_id = "ZFIXTURE", tcp_ports = [443], udp_ports = [], target_group_arns = { https = "arn:aws:elasticloadbalancing:eu-central-1:222222222222:targetgroup/synthetic/1111111111111111" } } }
   }
   override_module {
     target  = module.workload_permissions
@@ -280,11 +280,11 @@ run "rejects_unknown_cell_scope" {
   command = plan
   override_module {
     target  = module.observability
-    outputs = { observability = { logs = {}, signals = {}, budget_ref = "synthetic-budget" } }
+    outputs = { observability = { logs = { "rds" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-rds", "vpc" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-vpc", "eks/waitron-global-01" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-eks-global-01", "metrics/waitron-global-01" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-metrics-global-01", "eks/waitron-global-02" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-eks-global-02", "metrics/waitron-global-02" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-metrics-global-02", "eks/waitron-global-any" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-eks-global-any", "metrics/waitron-global-any" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-metrics-global-any", "eks/waitron-es-01" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-eks-es-01", "metrics/waitron-es-01" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-metrics-es-01" }, signals = {}, budget_ref = "synthetic-budget" } }
   }
   override_module {
     target  = module.ingress
-    outputs = { ingress = null }
+    outputs = { ingress = { dns_name = "synthetic.invalid", zone_id = "ZFIXTURE", tcp_ports = [443], udp_ports = [], target_group_arns = { https = "arn:aws:elasticloadbalancing:eu-central-1:222222222222:targetgroup/synthetic/1111111111111111" } } }
   }
   override_module {
     target  = module.workload_permissions
@@ -326,11 +326,11 @@ run "rejects_missing_global" {
   command = plan
   override_module {
     target  = module.observability
-    outputs = { observability = { logs = {}, signals = {}, budget_ref = "synthetic-budget" } }
+    outputs = { observability = { logs = { "rds" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-rds", "vpc" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-vpc", "eks/waitron-global-01" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-eks-global-01", "metrics/waitron-global-01" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-metrics-global-01", "eks/waitron-global-02" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-eks-global-02", "metrics/waitron-global-02" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-metrics-global-02", "eks/waitron-global-any" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-eks-global-any", "metrics/waitron-global-any" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-metrics-global-any", "eks/waitron-es-01" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-eks-es-01", "metrics/waitron-es-01" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-metrics-es-01" }, signals = {}, budget_ref = "synthetic-budget" } }
   }
   override_module {
     target  = module.ingress
-    outputs = { ingress = null }
+    outputs = { ingress = { dns_name = "synthetic.invalid", zone_id = "ZFIXTURE", tcp_ports = [443], udp_ports = [], target_group_arns = { https = "arn:aws:elasticloadbalancing:eu-central-1:222222222222:targetgroup/synthetic/1111111111111111" } } }
   }
   override_module {
     target  = module.workload_permissions
@@ -372,11 +372,11 @@ run "rejects_missing_global_backup" {
   command = plan
   override_module {
     target  = module.observability
-    outputs = { observability = { logs = {}, signals = {}, budget_ref = "synthetic-budget" } }
+    outputs = { observability = { logs = { "rds" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-rds", "vpc" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-vpc", "eks/waitron-global-01" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-eks-global-01", "metrics/waitron-global-01" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-metrics-global-01", "eks/waitron-global-02" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-eks-global-02", "metrics/waitron-global-02" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-metrics-global-02", "eks/waitron-global-any" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-eks-global-any", "metrics/waitron-global-any" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-metrics-global-any", "eks/waitron-es-01" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-eks-es-01", "metrics/waitron-es-01" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-metrics-es-01" }, signals = {}, budget_ref = "synthetic-budget" } }
   }
   override_module {
     target  = module.ingress
-    outputs = { ingress = null }
+    outputs = { ingress = { dns_name = "synthetic.invalid", zone_id = "ZFIXTURE", tcp_ports = [443], udp_ports = [], target_group_arns = { https = "arn:aws:elasticloadbalancing:eu-central-1:222222222222:targetgroup/synthetic/1111111111111111" } } }
   }
   override_module {
     target  = module.workload_permissions
@@ -418,11 +418,11 @@ run "rejects_missing_global_keys" {
   command = plan
   override_module {
     target  = module.observability
-    outputs = { observability = { logs = {}, signals = {}, budget_ref = "synthetic-budget" } }
+    outputs = { observability = { logs = { "rds" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-rds", "vpc" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-vpc", "eks/waitron-global-01" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-eks-global-01", "metrics/waitron-global-01" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-metrics-global-01", "eks/waitron-global-02" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-eks-global-02", "metrics/waitron-global-02" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-metrics-global-02", "eks/waitron-global-any" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-eks-global-any", "metrics/waitron-global-any" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-metrics-global-any", "eks/waitron-es-01" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-eks-es-01", "metrics/waitron-es-01" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-metrics-es-01" }, signals = {}, budget_ref = "synthetic-budget" } }
   }
   override_module {
     target  = module.ingress
-    outputs = { ingress = null }
+    outputs = { ingress = { dns_name = "synthetic.invalid", zone_id = "ZFIXTURE", tcp_ports = [443], udp_ports = [], target_group_arns = { https = "arn:aws:elasticloadbalancing:eu-central-1:222222222222:targetgroup/synthetic/1111111111111111" } } }
   }
   override_module {
     target  = module.workload_permissions
@@ -464,11 +464,11 @@ run "rejects_missing_global_backup_keys" {
   command = plan
   override_module {
     target  = module.observability
-    outputs = { observability = { logs = {}, signals = {}, budget_ref = "synthetic-budget" } }
+    outputs = { observability = { logs = { "rds" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-rds", "vpc" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-vpc", "eks/waitron-global-01" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-eks-global-01", "metrics/waitron-global-01" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-metrics-global-01", "eks/waitron-global-02" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-eks-global-02", "metrics/waitron-global-02" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-metrics-global-02", "eks/waitron-global-any" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-eks-global-any", "metrics/waitron-global-any" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-metrics-global-any", "eks/waitron-es-01" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-eks-es-01", "metrics/waitron-es-01" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-metrics-es-01" }, signals = {}, budget_ref = "synthetic-budget" } }
   }
   override_module {
     target  = module.ingress
-    outputs = { ingress = null }
+    outputs = { ingress = { dns_name = "synthetic.invalid", zone_id = "ZFIXTURE", tcp_ports = [443], udp_ports = [], target_group_arns = { https = "arn:aws:elasticloadbalancing:eu-central-1:222222222222:targetgroup/synthetic/1111111111111111" } } }
   }
   override_module {
     target  = module.workload_permissions
@@ -510,11 +510,11 @@ run "rejects_extra_scope_binding" {
   command = plan
   override_module {
     target  = module.observability
-    outputs = { observability = { logs = {}, signals = {}, budget_ref = "synthetic-budget" } }
+    outputs = { observability = { logs = { "rds" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-rds", "vpc" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-vpc", "eks/waitron-global-01" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-eks-global-01", "metrics/waitron-global-01" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-metrics-global-01", "eks/waitron-global-02" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-eks-global-02", "metrics/waitron-global-02" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-metrics-global-02", "eks/waitron-global-any" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-eks-global-any", "metrics/waitron-global-any" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-metrics-global-any", "eks/waitron-es-01" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-eks-es-01", "metrics/waitron-es-01" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-metrics-es-01" }, signals = {}, budget_ref = "synthetic-budget" } }
   }
   override_module {
     target  = module.ingress
-    outputs = { ingress = null }
+    outputs = { ingress = { dns_name = "synthetic.invalid", zone_id = "ZFIXTURE", tcp_ports = [443], udp_ports = [], target_group_arns = { https = "arn:aws:elasticloadbalancing:eu-central-1:222222222222:targetgroup/synthetic/1111111111111111" } } }
   }
   override_module {
     target  = module.workload_permissions
@@ -556,11 +556,11 @@ run "rejects_malformed_identity" {
   command = plan
   override_module {
     target  = module.observability
-    outputs = { observability = { logs = {}, signals = {}, budget_ref = "synthetic-budget" } }
+    outputs = { observability = { logs = { "rds" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-rds", "vpc" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-vpc", "eks/waitron-global-01" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-eks-global-01", "metrics/waitron-global-01" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-metrics-global-01", "eks/waitron-global-02" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-eks-global-02", "metrics/waitron-global-02" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-metrics-global-02", "eks/waitron-global-any" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-eks-global-any", "metrics/waitron-global-any" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-metrics-global-any", "eks/waitron-es-01" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-eks-es-01", "metrics/waitron-es-01" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-metrics-es-01" }, signals = {}, budget_ref = "synthetic-budget" } }
   }
   override_module {
     target  = module.ingress
-    outputs = { ingress = null }
+    outputs = { ingress = { dns_name = "synthetic.invalid", zone_id = "ZFIXTURE", tcp_ports = [443], udp_ports = [], target_group_arns = { https = "arn:aws:elasticloadbalancing:eu-central-1:222222222222:targetgroup/synthetic/1111111111111111" } } }
   }
   override_module {
     target  = module.workload_permissions
@@ -602,11 +602,11 @@ run "rejects_crossed_role" {
   command = plan
   override_module {
     target  = module.observability
-    outputs = { observability = { logs = {}, signals = {}, budget_ref = "synthetic-budget" } }
+    outputs = { observability = { logs = { "rds" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-rds", "vpc" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-vpc", "eks/waitron-global-01" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-eks-global-01", "metrics/waitron-global-01" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-metrics-global-01", "eks/waitron-global-02" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-eks-global-02", "metrics/waitron-global-02" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-metrics-global-02", "eks/waitron-global-any" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-eks-global-any", "metrics/waitron-global-any" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-metrics-global-any", "eks/waitron-es-01" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-eks-es-01", "metrics/waitron-es-01" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-metrics-es-01" }, signals = {}, budget_ref = "synthetic-budget" } }
   }
   override_module {
     target  = module.ingress
-    outputs = { ingress = null }
+    outputs = { ingress = { dns_name = "synthetic.invalid", zone_id = "ZFIXTURE", tcp_ports = [443], udp_ports = [], target_group_arns = { https = "arn:aws:elasticloadbalancing:eu-central-1:222222222222:targetgroup/synthetic/1111111111111111" } } }
   }
   override_module {
     target  = module.workload_permissions
@@ -648,11 +648,11 @@ run "rejects_wildcard_role" {
   command = plan
   override_module {
     target  = module.observability
-    outputs = { observability = { logs = {}, signals = {}, budget_ref = "synthetic-budget" } }
+    outputs = { observability = { logs = { "rds" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-rds", "vpc" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-vpc", "eks/waitron-global-01" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-eks-global-01", "metrics/waitron-global-01" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-metrics-global-01", "eks/waitron-global-02" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-eks-global-02", "metrics/waitron-global-02" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-metrics-global-02", "eks/waitron-global-any" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-eks-global-any", "metrics/waitron-global-any" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-metrics-global-any", "eks/waitron-es-01" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-eks-es-01", "metrics/waitron-es-01" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-metrics-es-01" }, signals = {}, budget_ref = "synthetic-budget" } }
   }
   override_module {
     target  = module.ingress
-    outputs = { ingress = null }
+    outputs = { ingress = { dns_name = "synthetic.invalid", zone_id = "ZFIXTURE", tcp_ports = [443], udp_ports = [], target_group_arns = { https = "arn:aws:elasticloadbalancing:eu-central-1:222222222222:targetgroup/synthetic/1111111111111111" } } }
   }
   override_module {
     target  = module.workload_permissions
@@ -694,11 +694,11 @@ run "rejects_deployment_as_key_admin" {
   command = plan
   override_module {
     target  = module.observability
-    outputs = { observability = { logs = {}, signals = {}, budget_ref = "synthetic-budget" } }
+    outputs = { observability = { logs = { "rds" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-rds", "vpc" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-vpc", "eks/waitron-global-01" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-eks-global-01", "metrics/waitron-global-01" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-metrics-global-01", "eks/waitron-global-02" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-eks-global-02", "metrics/waitron-global-02" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-metrics-global-02", "eks/waitron-global-any" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-eks-global-any", "metrics/waitron-global-any" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-metrics-global-any", "eks/waitron-es-01" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-eks-es-01", "metrics/waitron-es-01" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-metrics-es-01" }, signals = {}, budget_ref = "synthetic-budget" } }
   }
   override_module {
     target  = module.ingress
-    outputs = { ingress = null }
+    outputs = { ingress = { dns_name = "synthetic.invalid", zone_id = "ZFIXTURE", tcp_ports = [443], udp_ports = [], target_group_arns = { https = "arn:aws:elasticloadbalancing:eu-central-1:222222222222:targetgroup/synthetic/1111111111111111" } } }
   }
   override_module {
     target  = module.workload_permissions
@@ -740,11 +740,11 @@ run "rejects_different_backup_account" {
   command = plan
   override_module {
     target  = module.observability
-    outputs = { observability = { logs = {}, signals = {}, budget_ref = "synthetic-budget" } }
+    outputs = { observability = { logs = { "rds" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-rds", "vpc" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-vpc", "eks/waitron-global-01" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-eks-global-01", "metrics/waitron-global-01" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-metrics-global-01", "eks/waitron-global-02" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-eks-global-02", "metrics/waitron-global-02" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-metrics-global-02", "eks/waitron-global-any" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-eks-global-any", "metrics/waitron-global-any" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-metrics-global-any", "eks/waitron-es-01" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-eks-es-01", "metrics/waitron-es-01" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-metrics-es-01" }, signals = {}, budget_ref = "synthetic-budget" } }
   }
   override_module {
     target  = module.ingress
-    outputs = { ingress = null }
+    outputs = { ingress = { dns_name = "synthetic.invalid", zone_id = "ZFIXTURE", tcp_ports = [443], udp_ports = [], target_group_arns = { https = "arn:aws:elasticloadbalancing:eu-central-1:222222222222:targetgroup/synthetic/1111111111111111" } } }
   }
   override_module {
     target  = module.workload_permissions
@@ -786,11 +786,11 @@ run "rejects_actual_global_account" {
   command = plan
   override_module {
     target  = module.observability
-    outputs = { observability = { logs = {}, signals = {}, budget_ref = "synthetic-budget" } }
+    outputs = { observability = { logs = { "rds" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-rds", "vpc" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-vpc", "eks/waitron-global-01" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-eks-global-01", "metrics/waitron-global-01" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-metrics-global-01", "eks/waitron-global-02" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-eks-global-02", "metrics/waitron-global-02" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-metrics-global-02", "eks/waitron-global-any" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-eks-global-any", "metrics/waitron-global-any" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-metrics-global-any", "eks/waitron-es-01" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-eks-es-01", "metrics/waitron-es-01" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-metrics-es-01" }, signals = {}, budget_ref = "synthetic-budget" } }
   }
   override_module {
     target  = module.ingress
-    outputs = { ingress = null }
+    outputs = { ingress = { dns_name = "synthetic.invalid", zone_id = "ZFIXTURE", tcp_ports = [443], udp_ports = [], target_group_arns = { https = "arn:aws:elasticloadbalancing:eu-central-1:222222222222:targetgroup/synthetic/1111111111111111" } } }
   }
   override_module {
     target  = module.workload_permissions
@@ -835,11 +835,11 @@ run "rejects_actual_global_region" {
   command = plan
   override_module {
     target  = module.observability
-    outputs = { observability = { logs = {}, signals = {}, budget_ref = "synthetic-budget" } }
+    outputs = { observability = { logs = { "rds" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-rds", "vpc" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-vpc", "eks/waitron-global-01" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-eks-global-01", "metrics/waitron-global-01" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-metrics-global-01", "eks/waitron-global-02" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-eks-global-02", "metrics/waitron-global-02" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-metrics-global-02", "eks/waitron-global-any" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-eks-global-any", "metrics/waitron-global-any" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-metrics-global-any", "eks/waitron-es-01" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-eks-es-01", "metrics/waitron-es-01" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-metrics-es-01" }, signals = {}, budget_ref = "synthetic-budget" } }
   }
   override_module {
     target  = module.ingress
-    outputs = { ingress = null }
+    outputs = { ingress = { dns_name = "synthetic.invalid", zone_id = "ZFIXTURE", tcp_ports = [443], udp_ports = [], target_group_arns = { https = "arn:aws:elasticloadbalancing:eu-central-1:222222222222:targetgroup/synthetic/1111111111111111" } } }
   }
   override_module {
     target  = module.workload_permissions
@@ -884,11 +884,11 @@ run "rejects_actual_global_backup_account" {
   command = plan
   override_module {
     target  = module.observability
-    outputs = { observability = { logs = {}, signals = {}, budget_ref = "synthetic-budget" } }
+    outputs = { observability = { logs = { "rds" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-rds", "vpc" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-vpc", "eks/waitron-global-01" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-eks-global-01", "metrics/waitron-global-01" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-metrics-global-01", "eks/waitron-global-02" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-eks-global-02", "metrics/waitron-global-02" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-metrics-global-02", "eks/waitron-global-any" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-eks-global-any", "metrics/waitron-global-any" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-metrics-global-any", "eks/waitron-es-01" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-eks-es-01", "metrics/waitron-es-01" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-metrics-es-01" }, signals = {}, budget_ref = "synthetic-budget" } }
   }
   override_module {
     target  = module.ingress
-    outputs = { ingress = null }
+    outputs = { ingress = { dns_name = "synthetic.invalid", zone_id = "ZFIXTURE", tcp_ports = [443], udp_ports = [], target_group_arns = { https = "arn:aws:elasticloadbalancing:eu-central-1:222222222222:targetgroup/synthetic/1111111111111111" } } }
   }
   override_module {
     target  = module.workload_permissions
@@ -933,11 +933,11 @@ run "rejects_actual_global_backup_region" {
   command = plan
   override_module {
     target  = module.observability
-    outputs = { observability = { logs = {}, signals = {}, budget_ref = "synthetic-budget" } }
+    outputs = { observability = { logs = { "rds" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-rds", "vpc" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-vpc", "eks/waitron-global-01" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-eks-global-01", "metrics/waitron-global-01" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-metrics-global-01", "eks/waitron-global-02" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-eks-global-02", "metrics/waitron-global-02" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-metrics-global-02", "eks/waitron-global-any" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-eks-global-any", "metrics/waitron-global-any" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-metrics-global-any", "eks/waitron-es-01" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-eks-es-01", "metrics/waitron-es-01" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-metrics-es-01" }, signals = {}, budget_ref = "synthetic-budget" } }
   }
   override_module {
     target  = module.ingress
-    outputs = { ingress = null }
+    outputs = { ingress = { dns_name = "synthetic.invalid", zone_id = "ZFIXTURE", tcp_ports = [443], udp_ports = [], target_group_arns = { https = "arn:aws:elasticloadbalancing:eu-central-1:222222222222:targetgroup/synthetic/1111111111111111" } } }
   }
   override_module {
     target  = module.workload_permissions
@@ -982,11 +982,11 @@ run "rejects_actual_global_keys_account" {
   command = plan
   override_module {
     target  = module.observability
-    outputs = { observability = { logs = {}, signals = {}, budget_ref = "synthetic-budget" } }
+    outputs = { observability = { logs = { "rds" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-rds", "vpc" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-vpc", "eks/waitron-global-01" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-eks-global-01", "metrics/waitron-global-01" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-metrics-global-01", "eks/waitron-global-02" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-eks-global-02", "metrics/waitron-global-02" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-metrics-global-02", "eks/waitron-global-any" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-eks-global-any", "metrics/waitron-global-any" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-metrics-global-any", "eks/waitron-es-01" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-eks-es-01", "metrics/waitron-es-01" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-metrics-es-01" }, signals = {}, budget_ref = "synthetic-budget" } }
   }
   override_module {
     target  = module.ingress
-    outputs = { ingress = null }
+    outputs = { ingress = { dns_name = "synthetic.invalid", zone_id = "ZFIXTURE", tcp_ports = [443], udp_ports = [], target_group_arns = { https = "arn:aws:elasticloadbalancing:eu-central-1:222222222222:targetgroup/synthetic/1111111111111111" } } }
   }
   override_module {
     target  = module.workload_permissions
@@ -1031,11 +1031,11 @@ run "rejects_actual_global_keys_region" {
   command = plan
   override_module {
     target  = module.observability
-    outputs = { observability = { logs = {}, signals = {}, budget_ref = "synthetic-budget" } }
+    outputs = { observability = { logs = { "rds" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-rds", "vpc" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-vpc", "eks/waitron-global-01" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-eks-global-01", "metrics/waitron-global-01" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-metrics-global-01", "eks/waitron-global-02" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-eks-global-02", "metrics/waitron-global-02" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-metrics-global-02", "eks/waitron-global-any" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-eks-global-any", "metrics/waitron-global-any" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-metrics-global-any", "eks/waitron-es-01" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-eks-es-01", "metrics/waitron-es-01" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-metrics-es-01" }, signals = {}, budget_ref = "synthetic-budget" } }
   }
   override_module {
     target  = module.ingress
-    outputs = { ingress = null }
+    outputs = { ingress = { dns_name = "synthetic.invalid", zone_id = "ZFIXTURE", tcp_ports = [443], udp_ports = [], target_group_arns = { https = "arn:aws:elasticloadbalancing:eu-central-1:222222222222:targetgroup/synthetic/1111111111111111" } } }
   }
   override_module {
     target  = module.workload_permissions
@@ -1080,11 +1080,11 @@ run "rejects_actual_global_backup_keys_account" {
   command = plan
   override_module {
     target  = module.observability
-    outputs = { observability = { logs = {}, signals = {}, budget_ref = "synthetic-budget" } }
+    outputs = { observability = { logs = { "rds" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-rds", "vpc" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-vpc", "eks/waitron-global-01" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-eks-global-01", "metrics/waitron-global-01" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-metrics-global-01", "eks/waitron-global-02" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-eks-global-02", "metrics/waitron-global-02" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-metrics-global-02", "eks/waitron-global-any" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-eks-global-any", "metrics/waitron-global-any" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-metrics-global-any", "eks/waitron-es-01" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-eks-es-01", "metrics/waitron-es-01" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-metrics-es-01" }, signals = {}, budget_ref = "synthetic-budget" } }
   }
   override_module {
     target  = module.ingress
-    outputs = { ingress = null }
+    outputs = { ingress = { dns_name = "synthetic.invalid", zone_id = "ZFIXTURE", tcp_ports = [443], udp_ports = [], target_group_arns = { https = "arn:aws:elasticloadbalancing:eu-central-1:222222222222:targetgroup/synthetic/1111111111111111" } } }
   }
   override_module {
     target  = module.workload_permissions
@@ -1129,11 +1129,11 @@ run "rejects_actual_global_backup_keys_region" {
   command = plan
   override_module {
     target  = module.observability
-    outputs = { observability = { logs = {}, signals = {}, budget_ref = "synthetic-budget" } }
+    outputs = { observability = { logs = { "rds" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-rds", "vpc" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-vpc", "eks/waitron-global-01" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-eks-global-01", "metrics/waitron-global-01" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-metrics-global-01", "eks/waitron-global-02" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-eks-global-02", "metrics/waitron-global-02" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-metrics-global-02", "eks/waitron-global-any" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-eks-global-any", "metrics/waitron-global-any" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-metrics-global-any", "eks/waitron-es-01" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-eks-es-01", "metrics/waitron-es-01" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-metrics-es-01" }, signals = {}, budget_ref = "synthetic-budget" } }
   }
   override_module {
     target  = module.ingress
-    outputs = { ingress = null }
+    outputs = { ingress = { dns_name = "synthetic.invalid", zone_id = "ZFIXTURE", tcp_ports = [443], udp_ports = [], target_group_arns = { https = "arn:aws:elasticloadbalancing:eu-central-1:222222222222:targetgroup/synthetic/1111111111111111" } } }
   }
   override_module {
     target  = module.workload_permissions
@@ -1178,11 +1178,11 @@ run "rejects_all_malformed_identities" {
   command = plan
   override_module {
     target  = module.observability
-    outputs = { observability = { logs = {}, signals = {}, budget_ref = "synthetic-budget" } }
+    outputs = { observability = { logs = { "rds" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-rds", "vpc" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-vpc", "eks/waitron-global-01" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-eks-global-01", "metrics/waitron-global-01" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-metrics-global-01", "eks/waitron-global-02" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-eks-global-02", "metrics/waitron-global-02" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-metrics-global-02", "eks/waitron-global-any" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-eks-global-any", "metrics/waitron-global-any" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-metrics-global-any", "eks/waitron-es-01" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-eks-es-01", "metrics/waitron-es-01" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-metrics-es-01" }, signals = {}, budget_ref = "synthetic-budget" } }
   }
   override_module {
     target  = module.ingress
-    outputs = { ingress = null }
+    outputs = { ingress = { dns_name = "synthetic.invalid", zone_id = "ZFIXTURE", tcp_ports = [443], udp_ports = [], target_group_arns = { https = "arn:aws:elasticloadbalancing:eu-central-1:222222222222:targetgroup/synthetic/1111111111111111" } } }
   }
   override_module {
     target  = module.workload_permissions
@@ -1224,11 +1224,11 @@ run "rejects_primary_region" {
   command = plan
   override_module {
     target  = module.observability
-    outputs = { observability = { logs = {}, signals = {}, budget_ref = "synthetic-budget" } }
+    outputs = { observability = { logs = { "rds" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-rds", "vpc" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-vpc", "eks/waitron-global-01" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-eks-global-01", "metrics/waitron-global-01" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-metrics-global-01", "eks/waitron-global-02" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-eks-global-02", "metrics/waitron-global-02" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-metrics-global-02", "eks/waitron-global-any" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-eks-global-any", "metrics/waitron-global-any" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-metrics-global-any", "eks/waitron-es-01" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-eks-es-01", "metrics/waitron-es-01" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-metrics-es-01" }, signals = {}, budget_ref = "synthetic-budget" } }
   }
   override_module {
     target  = module.ingress
-    outputs = { ingress = null }
+    outputs = { ingress = { dns_name = "synthetic.invalid", zone_id = "ZFIXTURE", tcp_ports = [443], udp_ports = [], target_group_arns = { https = "arn:aws:elasticloadbalancing:eu-central-1:222222222222:targetgroup/synthetic/1111111111111111" } } }
   }
   override_module {
     target  = module.workload_permissions
@@ -1270,11 +1270,11 @@ run "rejects_malformed_cell" {
   command = plan
   override_module {
     target  = module.observability
-    outputs = { observability = { logs = {}, signals = {}, budget_ref = "synthetic-budget" } }
+    outputs = { observability = { logs = { "rds" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-rds", "vpc" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-vpc", "eks/waitron-global-01" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-eks-global-01", "metrics/waitron-global-01" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-metrics-global-01", "eks/waitron-global-02" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-eks-global-02", "metrics/waitron-global-02" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-metrics-global-02", "eks/waitron-global-any" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-eks-global-any", "metrics/waitron-global-any" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-metrics-global-any", "eks/waitron-es-01" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-eks-es-01", "metrics/waitron-es-01" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-metrics-es-01" }, signals = {}, budget_ref = "synthetic-budget" } }
   }
   override_module {
     target  = module.ingress
-    outputs = { ingress = null }
+    outputs = { ingress = { dns_name = "synthetic.invalid", zone_id = "ZFIXTURE", tcp_ports = [443], udp_ports = [], target_group_arns = { https = "arn:aws:elasticloadbalancing:eu-central-1:222222222222:targetgroup/synthetic/1111111111111111" } } }
   }
   override_module {
     target  = module.workload_permissions
@@ -1317,11 +1317,11 @@ run "primary_cells_use_their_exact_network_entries" {
   command = plan
   override_module {
     target  = module.observability
-    outputs = { observability = { logs = {}, signals = {}, budget_ref = "synthetic-budget" } }
+    outputs = { observability = { logs = { "rds" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-rds", "vpc" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-vpc", "eks/waitron-global-01" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-eks-global-01", "metrics/waitron-global-01" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-metrics-global-01", "eks/waitron-global-02" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-eks-global-02", "metrics/waitron-global-02" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-metrics-global-02", "eks/waitron-global-any" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-eks-global-any", "metrics/waitron-global-any" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-metrics-global-any", "eks/waitron-es-01" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-eks-es-01", "metrics/waitron-es-01" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-metrics-es-01" }, signals = {}, budget_ref = "synthetic-budget" } }
   }
   override_module {
     target  = module.ingress
-    outputs = { ingress = null }
+    outputs = { ingress = { dns_name = "synthetic.invalid", zone_id = "ZFIXTURE", tcp_ports = [443], udp_ports = [], target_group_arns = { https = "arn:aws:elasticloadbalancing:eu-central-1:222222222222:targetgroup/synthetic/1111111111111111" } } }
   }
   override_module {
     target  = module.workload_permissions
@@ -1363,11 +1363,11 @@ run "rejects_foreign_operator_account_before_cell_reads" {
   command = plan
   override_module {
     target  = module.observability
-    outputs = { observability = { logs = {}, signals = {}, budget_ref = "synthetic-budget" } }
+    outputs = { observability = { logs = { "rds" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-rds", "vpc" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-vpc", "eks/waitron-global-01" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-eks-global-01", "metrics/waitron-global-01" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-metrics-global-01", "eks/waitron-global-02" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-eks-global-02", "metrics/waitron-global-02" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-metrics-global-02", "eks/waitron-global-any" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-eks-global-any", "metrics/waitron-global-any" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-metrics-global-any", "eks/waitron-es-01" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-eks-es-01", "metrics/waitron-es-01" = "arn:aws:logs:eu-central-1:222222222222:log-group:synthetic-metrics-es-01" }, signals = {}, budget_ref = "synthetic-budget" } }
   }
   override_module {
     target  = module.ingress
-    outputs = { ingress = null }
+    outputs = { ingress = { dns_name = "synthetic.invalid", zone_id = "ZFIXTURE", tcp_ports = [443], udp_ports = [], target_group_arns = { https = "arn:aws:elasticloadbalancing:eu-central-1:222222222222:targetgroup/synthetic/1111111111111111" } } }
   }
   override_module {
     target  = module.workload_permissions

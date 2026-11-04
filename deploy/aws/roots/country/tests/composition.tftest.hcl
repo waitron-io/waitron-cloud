@@ -53,7 +53,7 @@ run "data_topology_binds_database_and_cold_keys" {
   command = plan
   override_module {
     target  = module.observability
-    outputs = { observability = { logs = {}, signals = {}, budget_ref = "synthetic-budget" } }
+    outputs = { observability = { logs = { "rds" = "arn:aws:logs:eu-south-2:333333333333:log-group:synthetic-rds", "vpc" = "arn:aws:logs:eu-south-2:333333333333:log-group:synthetic-vpc", "eks/waitron-es-01" = "arn:aws:logs:eu-south-2:333333333333:log-group:synthetic-eks-es-01", "metrics/waitron-es-01" = "arn:aws:logs:eu-south-2:333333333333:log-group:synthetic-metrics-es-01", "eks/waitron-es-02" = "arn:aws:logs:eu-south-2:333333333333:log-group:synthetic-eks-es-02", "metrics/waitron-es-02" = "arn:aws:logs:eu-south-2:333333333333:log-group:synthetic-metrics-es-02", "eks/waitron-es-any" = "arn:aws:logs:eu-south-2:333333333333:log-group:synthetic-eks-es-any", "metrics/waitron-es-any" = "arn:aws:logs:eu-south-2:333333333333:log-group:synthetic-metrics-es-any", "eks/waitron-global-01" = "arn:aws:logs:eu-south-2:333333333333:log-group:synthetic-eks-global-01", "metrics/waitron-global-01" = "arn:aws:logs:eu-south-2:333333333333:log-group:synthetic-metrics-global-01" }, signals = {}, budget_ref = "synthetic-budget" } }
   }
   override_resource {
     target = module.custody.aws_iam_role.replication["storage"]
@@ -94,7 +94,7 @@ run "data_topology_retains_every_secret_copy" {
   command = plan
   override_module {
     target  = module.observability
-    outputs = { observability = { logs = {}, signals = {}, budget_ref = "synthetic-budget" } }
+    outputs = { observability = { logs = { "rds" = "arn:aws:logs:eu-south-2:333333333333:log-group:synthetic-rds", "vpc" = "arn:aws:logs:eu-south-2:333333333333:log-group:synthetic-vpc", "eks/waitron-es-01" = "arn:aws:logs:eu-south-2:333333333333:log-group:synthetic-eks-es-01", "metrics/waitron-es-01" = "arn:aws:logs:eu-south-2:333333333333:log-group:synthetic-metrics-es-01", "eks/waitron-es-02" = "arn:aws:logs:eu-south-2:333333333333:log-group:synthetic-eks-es-02", "metrics/waitron-es-02" = "arn:aws:logs:eu-south-2:333333333333:log-group:synthetic-metrics-es-02", "eks/waitron-es-any" = "arn:aws:logs:eu-south-2:333333333333:log-group:synthetic-eks-es-any", "metrics/waitron-es-any" = "arn:aws:logs:eu-south-2:333333333333:log-group:synthetic-metrics-es-any", "eks/waitron-global-01" = "arn:aws:logs:eu-south-2:333333333333:log-group:synthetic-eks-global-01", "metrics/waitron-global-01" = "arn:aws:logs:eu-south-2:333333333333:log-group:synthetic-metrics-global-01" }, signals = {}, budget_ref = "synthetic-budget" } }
   }
   override_resource {
     target = module.custody.aws_iam_role.replication["storage"]
@@ -131,7 +131,7 @@ run "storage_and_scope_permissions_bind_cold_copies" {
   command = plan
   override_module {
     target  = module.observability
-    outputs = { observability = { logs = {}, signals = {}, budget_ref = "synthetic-budget" } }
+    outputs = { observability = { logs = { "rds" = "arn:aws:logs:eu-south-2:333333333333:log-group:synthetic-rds", "vpc" = "arn:aws:logs:eu-south-2:333333333333:log-group:synthetic-vpc", "eks/waitron-es-01" = "arn:aws:logs:eu-south-2:333333333333:log-group:synthetic-eks-es-01", "metrics/waitron-es-01" = "arn:aws:logs:eu-south-2:333333333333:log-group:synthetic-metrics-es-01", "eks/waitron-es-02" = "arn:aws:logs:eu-south-2:333333333333:log-group:synthetic-eks-es-02", "metrics/waitron-es-02" = "arn:aws:logs:eu-south-2:333333333333:log-group:synthetic-metrics-es-02", "eks/waitron-es-any" = "arn:aws:logs:eu-south-2:333333333333:log-group:synthetic-eks-es-any", "metrics/waitron-es-any" = "arn:aws:logs:eu-south-2:333333333333:log-group:synthetic-metrics-es-any", "eks/waitron-global-01" = "arn:aws:logs:eu-south-2:333333333333:log-group:synthetic-eks-global-01", "metrics/waitron-global-01" = "arn:aws:logs:eu-south-2:333333333333:log-group:synthetic-metrics-global-01" }, signals = {}, budget_ref = "synthetic-budget" } }
   }
   override_resource {
     target = module.custody.aws_iam_role.replication["storage"]
@@ -209,7 +209,7 @@ run "two_cells_share_scope_permissions" {
   command = plan
   override_module {
     target  = module.observability
-    outputs = { observability = { logs = {}, signals = {}, budget_ref = "synthetic-budget" } }
+    outputs = { observability = { logs = { "rds" = "arn:aws:logs:eu-south-2:333333333333:log-group:synthetic-rds", "vpc" = "arn:aws:logs:eu-south-2:333333333333:log-group:synthetic-vpc", "eks/waitron-es-01" = "arn:aws:logs:eu-south-2:333333333333:log-group:synthetic-eks-es-01", "metrics/waitron-es-01" = "arn:aws:logs:eu-south-2:333333333333:log-group:synthetic-metrics-es-01", "eks/waitron-es-02" = "arn:aws:logs:eu-south-2:333333333333:log-group:synthetic-eks-es-02", "metrics/waitron-es-02" = "arn:aws:logs:eu-south-2:333333333333:log-group:synthetic-metrics-es-02", "eks/waitron-es-any" = "arn:aws:logs:eu-south-2:333333333333:log-group:synthetic-eks-es-any", "metrics/waitron-es-any" = "arn:aws:logs:eu-south-2:333333333333:log-group:synthetic-metrics-es-any", "eks/waitron-global-01" = "arn:aws:logs:eu-south-2:333333333333:log-group:synthetic-eks-global-01", "metrics/waitron-global-01" = "arn:aws:logs:eu-south-2:333333333333:log-group:synthetic-metrics-global-01" }, signals = {}, budget_ref = "synthetic-budget" } }
   }
   override_resource {
     target = module.custody.aws_iam_role.replication["storage"]
@@ -249,7 +249,7 @@ run "rejects_store_references_that_differ_from_permission_targets" {
   command = plan
   override_module {
     target  = module.observability
-    outputs = { observability = { logs = {}, signals = {}, budget_ref = "synthetic-budget" } }
+    outputs = { observability = { logs = { "rds" = "arn:aws:logs:eu-south-2:333333333333:log-group:synthetic-rds", "vpc" = "arn:aws:logs:eu-south-2:333333333333:log-group:synthetic-vpc", "eks/waitron-es-01" = "arn:aws:logs:eu-south-2:333333333333:log-group:synthetic-eks-es-01", "metrics/waitron-es-01" = "arn:aws:logs:eu-south-2:333333333333:log-group:synthetic-metrics-es-01", "eks/waitron-es-02" = "arn:aws:logs:eu-south-2:333333333333:log-group:synthetic-eks-es-02", "metrics/waitron-es-02" = "arn:aws:logs:eu-south-2:333333333333:log-group:synthetic-metrics-es-02", "eks/waitron-es-any" = "arn:aws:logs:eu-south-2:333333333333:log-group:synthetic-eks-es-any", "metrics/waitron-es-any" = "arn:aws:logs:eu-south-2:333333333333:log-group:synthetic-metrics-es-any", "eks/waitron-global-01" = "arn:aws:logs:eu-south-2:333333333333:log-group:synthetic-eks-global-01", "metrics/waitron-global-01" = "arn:aws:logs:eu-south-2:333333333333:log-group:synthetic-metrics-global-01" }, signals = {}, budget_ref = "synthetic-budget" } }
   }
   override_resource {
     target = module.custody.aws_iam_role.replication["storage"]
@@ -296,7 +296,7 @@ run "two_cells_keep_distinct_workload_roles" {
   command = plan
   override_module {
     target  = module.observability
-    outputs = { observability = { logs = {}, signals = {}, budget_ref = "synthetic-budget" } }
+    outputs = { observability = { logs = { "rds" = "arn:aws:logs:eu-south-2:333333333333:log-group:synthetic-rds", "vpc" = "arn:aws:logs:eu-south-2:333333333333:log-group:synthetic-vpc", "eks/waitron-es-01" = "arn:aws:logs:eu-south-2:333333333333:log-group:synthetic-eks-es-01", "metrics/waitron-es-01" = "arn:aws:logs:eu-south-2:333333333333:log-group:synthetic-metrics-es-01", "eks/waitron-es-02" = "arn:aws:logs:eu-south-2:333333333333:log-group:synthetic-eks-es-02", "metrics/waitron-es-02" = "arn:aws:logs:eu-south-2:333333333333:log-group:synthetic-metrics-es-02", "eks/waitron-es-any" = "arn:aws:logs:eu-south-2:333333333333:log-group:synthetic-eks-es-any", "metrics/waitron-es-any" = "arn:aws:logs:eu-south-2:333333333333:log-group:synthetic-metrics-es-any", "eks/waitron-global-01" = "arn:aws:logs:eu-south-2:333333333333:log-group:synthetic-eks-global-01", "metrics/waitron-global-01" = "arn:aws:logs:eu-south-2:333333333333:log-group:synthetic-metrics-global-01" }, signals = {}, budget_ref = "synthetic-budget" } }
   }
   override_resource {
     target = module.custody.aws_iam_role.replication["storage"]
