@@ -374,4 +374,36 @@ Run `node --test scripts/cloud-cost/litestream-admission-diagnostics.test.mjs sc
 for the native controls. Diagnostics already landed in PR625, commit
 `d0a970e75d9c297ea56630c8963d9505c5cb3bf7`.
 
+### Litestream refused operation and attempt diagnostics (D383)
+
+The [PR625 merge refusal](https://github.com/waitron-io/waitron-cloud/actions/runs/40615344423/job/122576493560)
+identified a non-list operation after stop, but omitted the operation and whether
+it was an initial attempt or a retry. You can now read both fixed categories from
+the validated internal row in admission errors, independent audit checkpoints,
+transport checkpoints and sanitized close reports. Later poisoned calls retain the
+first shared producer or observer cause, without adding their own request details.
+Earlier refusals keep their existing context-free shape, including after stop.
+Later clock and affected-attempt refusals retain the validated list and initial
+attempt categories. Request identifiers,
+paths, headers, arbitrary caller values and accessor output stay private.
+
+Native controls exercise initial attempts and retries, shared first-cause retention,
+real HTTP refusal and the privacy filters. Every original admission, stop, retry,
+accounting and cleanup rule, assertion and deadline remains unchanged. The cause
+of the historical refusal is still unknown. Reproduce the labelled operation
+before changing runtime rules. Use the authorised Linux test box for genuine-backend
+reproduction; native controls do not qualify that backend. Current-head Linux CI
+must still qualify the genuine backend before landing.
+
+[PR627's first qualification](https://github.com/waitron-io/waitron-cloud/actions/runs/40617804734/job/122584381707)
+reported three PostgreSQL statement timeouts in registration shard 5: two during
+migration setup and one while creating an account fixture. Their cause is unknown.
+D385 now labels those setup boundaries, so a changed qualification can retain more
+evidence if they recur. Preserve the failing assertions and five-second database
+limit, then reproduce a labelled failure before changing runtime rules.
+
+Run `node --test scripts/cloud-cost/litestream-admission-operation.test.mjs scripts/cloud-cost/litestream-close-diagnostics.test.mjs`
+for the native controls. Diagnostics already landed in PR627, commit
+`4864bbfecea8f3e59cfa76566aab0a30a7db8220`.
+
 Return to the [backlog index](../backlog.md).

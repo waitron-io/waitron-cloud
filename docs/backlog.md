@@ -3460,36 +3460,9 @@ refused two migration applications and one relay account insert with PostgreSQL
 statement timeouts. The historical cause remains unknown. Native controls cover
 labelled refusals and reporter failures; genuine local PostgreSQL reproduction
 waits for Docker to return. Use a labelled recurrence to reproduce the cause
-before changing queries, transaction rules, concurrency or timeouts. D383 remains
-parked with its completed review; this diagnostic delivery does not qualify that
-branch or establish a runtime repair.
-
-## Litestream refused operation and attempt diagnostics (D383)
-
-The [PR625 merge refusal](https://github.com/waitron-io/waitron-cloud/actions/runs/40615344423/job/122576493560)
-identified a non-list operation after stop, but omitted the operation and whether
-it was an initial attempt or a retry. You can now read both fixed categories from
-the validated internal row in admission errors, independent audit checkpoints,
-transport checkpoints and sanitized close reports. Later poisoned calls retain the
-first shared producer or observer cause, without adding their own request details.
-Earlier refusals keep their existing context-free shape, including after stop.
-Later clock and affected-attempt refusals retain the validated list and initial
-attempt categories. Request identifiers,
-paths, headers, arbitrary caller values and accessor output stay private.
-
-Native controls exercise initial attempts and retries, shared first-cause retention,
-real HTTP refusal and the privacy filters. Every original admission, stop, retry,
-accounting and cleanup rule, assertion and deadline remains unchanged. The cause
-of the historical refusal is still unknown. Reproduce the labelled operation
-before changing runtime rules; genuine local reproduction waits for Docker to
-return, while current-head Linux CI qualifies the real backend.
-
-[PR627's first qualification](https://github.com/waitron-io/waitron-cloud/actions/runs/40617804734/job/122584381707)
-reported three PostgreSQL statement timeouts in registration shard 5: two during
-migration setup and one while creating an account fixture. Their cause is unknown.
-D385 now labels those setup boundaries, so a changed qualification can retain more
-evidence if they recur. Preserve the failing assertions and five-second database
-limit, then reproduce a labelled failure before changing runtime rules.
+before changing queries, transaction rules, concurrency or timeouts. D383's
+[operation diagnostics](backlog/cost-conformance-fixtures.md#litestream-refused-operation-and-attempt-diagnostics-d383)
+have landed; neither diagnostic delivery establishes a historical runtime repair.
 
 
 ## Recovery deployment qualification
