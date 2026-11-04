@@ -3034,18 +3034,6 @@ See [the boundaries and remaining work](backlog/storage-cache-fixture.md#storage
 **Open.** Store startup, concurrent extraction and historical failure causes remain open.
 See [the boundaries and remaining work](backlog/storage-cache-fixture.md#storage-extraction-and-certificate-setup-refusals-d452).
 
-## Storage startup configuration refusals (D446)
-
-Malformed token-duration strings are now checked before the fixture allocates a
-private directory or requests an archive. Run
-`node --test scripts/ci-backup-storage-options.test.mjs` for native controls of
-missing units, partial matches, whitespace, negative and fractional durations,
-and an empty value that must not select the default. Accepted second, minute and
-hour formats and omitted options reach a deliberately refused download; that
-failure retains its cause and removes its private directory without retrying.
-These checks exercise the existing format rule. Real token issuance and expiry,
-store startup and concurrent valid-cache publication keep their separate gates.
-
 ## Storage identity-server bind refusals (D456)
 
 The identity server binds directly to an OS-assigned port and keeps that socket

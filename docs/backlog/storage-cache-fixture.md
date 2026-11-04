@@ -85,6 +85,11 @@ Remaining: retain the diagnostics to attribute any recurrence of the original
 read-only-cache rejection. Do not treat this demonstrated readiness repair as
 proof of that historical failure's cause.
 
+Run `node --test scripts/ci-backup-storage-options.test.mjs` to check token-duration
+formats before temporary allocation or archive download. These configuration
+controls do not qualify real token issuance or expiry; keep those checks separate
+from store startup and concurrent valid-cache publication.
+
 ## Existing storage-cache refusal qualification (D442)
 
 An invalid existing archive must fail before extraction or download, so a fixture
