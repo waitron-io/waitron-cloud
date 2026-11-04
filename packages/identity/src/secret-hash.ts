@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
 
 // Source and adaptation details are recorded in ../SOURCE.md.
-const SALT_BYTES = 16;
+const SALT_BYTES = 0x10;
 const KEY_BYTES = 32;
 const HASH_FORMAT = /^scrypt\$([0-9a-f]{32})\$([0-9a-f]{64})$/;
 export function isSecretHash(stored: string): boolean { return typeof stored === 'string' && HASH_FORMAT.test(stored); }
