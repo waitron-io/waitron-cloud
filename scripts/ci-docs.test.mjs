@@ -246,6 +246,7 @@ test('proof planner skips only audited prose and keeps code, pinned documents, m
   run({}, true);
   run(pr(docs, 'a'.repeat(40)), true);
   run(pr('main'), true);
+  run(pr(docs, 'HEAD~1'), true);
   for (const path of ['scripts/reader.mjs', 'docs/waitron-integration-contract.md', 'docs/cloud-cost-model.md', 'docs/receipts/proof.md', 'packages/one/README.md']) {
     git('reset', '--hard', base);
     put(path, 'changed\n');
