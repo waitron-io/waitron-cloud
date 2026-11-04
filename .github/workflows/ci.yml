@@ -241,6 +241,7 @@ jobs:
         env:
           CI_PLAN: ${{ needs.changes.outputs.plan }}
           CI_RECEIPT_CONCURRENCY: '2'
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       # Keep optional saving last so final runner cleanup collects its child processes.
       - name: Save pnpm dependency cache
         if: success() && steps.pnpm-cache.outputs.cache-hit != 'true'
