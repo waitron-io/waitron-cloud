@@ -3001,17 +3001,6 @@ private-replay checks began (run 40646201742, job 122675571593). D530 retains
 the unresolved cause; a passing retest does not repair it. Production permission
 checks and provider qualification remain separate.
 
-## Backup catalogue replies after account and venue changes (D396)
-
-Native controller checks hold refresh and older-page replies while you change
-account or venue, reopen the catalogue, switch accounts away and back, or sign out.
-Late successes and refusals leave the current rows, recovery choices, pending read,
-feedback and cooldown unchanged. Current reads still complete and paginate; selecting
-the same account preserves its pending read. These checks use controlled HTTP
-replies and preserve the existing recovery permissions and cooldown policy.
-Server authority and genuine restore qualification remain separate CI and launch gates.
-
-
 ## Backup catalogue qualification
 
 **Open.** Qualify server permissions, deployed browser integration, computer sleep
