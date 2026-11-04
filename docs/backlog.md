@@ -228,11 +228,6 @@ The historical [PR #669 storage failure](https://github.com/waitron-io/waitron-c
 was a prematurely closed LIST response during Litestream shutdown. D530 owns its
 cause investigation; successful delivery of these client tests does not repair it.
 
-## Session revocation replies after sign-out or view reset (D440)
-
-**Open.** Qualify server authority and live ingress after the controlled client checks.
-See [the boundaries and remaining work](backlog/account-http-boundaries.md#session-revocation-replies-after-sign-out-or-view-reset-d440).
-
 ## Current state
 
 Updated 2026-10-22. The repository has a pnpm workspace and internal PostgreSQL
