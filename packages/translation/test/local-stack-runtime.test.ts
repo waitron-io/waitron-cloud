@@ -39,8 +39,32 @@ test('the packaged translation launcher checks migration digests before dispatch
 `);
  const prefix=['compose','--project-name',project,'--env-file',join(root,'deploy/local-stack/local.env'),'-f',join(root,'compose.yaml'),'-f',override,'--profile','translation'];
  const env={...process.env,COMPOSE_PROFILES:'',CLOUD_TRANSLATION_LOCAL_PROOF:'1',CLOUD_OPENAI_API_KEY:'local-fake-key',CLOUD_OPENAI_BASE_URL:'http://127.0.0.1:9/v1'};
- const compose=(...args:string[])=>spawnSync('docker',[...prefix,...args],{encoding:'utf8',env,timeout:20000});
- const success=(...args:string[])=>{const value=compose(...args);assert.equal(value.status,0,value.stdout+value.stderr);return value.stdout;};
+ const compose=(...args:string[])=>{
+  const start=performance.now();
+  const value=spawnSync('docker',[...prefix,...args],{encoding:'utf8',env,timeout:20000});
+  return {...value,elapsedMs:Math.round(performance.now()-start)};
+ };
+ const success=(...args:string[])=>{
+  const value=compose(...args);
+  let diagnostic='';
+  if(value.status!==0){
+   // Read only this fixture's service states; never print container configuration or private logs.
+   const state=spawnSync('docker',[...prefix,'ps','--all','--format','json'],{encoding:'utf8',env,timeout:2000,maxBuffer:16384});
+   let services:object[]=[],stateParseError=false;
+   if(state.status===0)try{
+    const text=state.stdout.trim(),rows=text.startsWith('[')?JSON.parse(text):text.split('\n').filter(Boolean).map(line=>JSON.parse(line));
+    services=rows.filter((row:Record<string,unknown>)=>row&&['bootstrap','postgres','migrate','translation-worker'].includes(row.Service as string)).slice(0,4).map((row:Record<string,unknown>)=>({
+     service:row.Service,
+     state:['created','restarting','running','removing','paused','exited','dead'].includes(row.State as string)?row.State:null,
+     health:['','starting','healthy','unhealthy'].includes(row.Health as string)?row.Health:null,
+     exitCode:Number.isInteger(row.ExitCode)?row.ExitCode:null,
+    }));
+   }catch{stateParseError=true;}
+   diagnostic='compose-result '+JSON.stringify({command:args,status:value.status,signal:value.signal,errorCode:(value.error as NodeJS.ErrnoException|undefined)?.code??null,elapsedMs:value.elapsedMs,
+    stateStatus:state.status,stateSignal:state.signal,stateErrorCode:(state.error as NodeJS.ErrnoException|undefined)?.code??null,stateParseError,services})+'\n';
+  }
+  assert.equal(value.status,0,diagnostic+value.stdout+value.stderr);return value.stdout;
+ };
  try{
   success('up','-d','--no-build','translation-worker');
   const child=success('exec','-T','translation-worker','node','--input-type=module','-e',
