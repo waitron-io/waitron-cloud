@@ -97,11 +97,6 @@ now coordinate their shortened clocks with consumed body bytes and admitted
 requests, preserving the original checks and limits. A recurring npm abort-diagnostic refusal remains separate
 in [the setup investigation](backlog/ci-pnpm-setup.md).
 
-## Storage archive publication refusals (D449)
-
-**Open.** Real extraction, store startup and concurrent successful publication remain open.
-See [the boundaries and remaining work](backlog/storage-cache-fixture.md#storage-archive-publication-refusals-d449).
-
 ## Worker shutdown during polling and error reporting (D459)
 
 **Open.** Production shutdown, real database failures and cancellation remain open.
