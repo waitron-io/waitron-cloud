@@ -67,6 +67,10 @@ bindings, alternate configuration formats, override files, variable files and sy
 are refused. Comments, strings and heredocs are parsed as syntax, so a quoted example of
 an apply command does not masquerade as an executable command.
 
+Keep source nesting shallow enough to read. Extremely deep input can reach Python's
+own recursion limit; its exact boundary and exception name depend on the runtime and
+parser call structure. They are not a supported input contract.
+
 Local modules must resolve to directories inside the inspected copy. Each child needs an
 explicit provider map, including every alias it uses. The checker follows those maps
 through nested modules to the test's mocks. Missing bindings, undeclared aliases and

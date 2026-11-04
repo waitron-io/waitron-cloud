@@ -352,6 +352,8 @@ order. Remote access matters most because Waitron's customer-facing features wai
    plans, not a deployment. Account/state
    custody, populated secrets, actual service and collector permissions, recovery and
    provider availability still need their separately authorised qualification.
+   Very deeply nested source remains subject to Python's limits; no exact boundary
+   or exception name is qualified.
    State qualification must cover first initialization at an absent key under the exact
    conditional list policy, separate bootstrap-key creation and later deployment-role
    refresh. Database recovery grants still belong to P7's qualification.
