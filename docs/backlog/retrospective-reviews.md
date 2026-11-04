@@ -317,3 +317,22 @@ the historical parent and changed fixture. The parent case fails after 4.3 secon
 but its file run needs stopping at 135 seconds; the changed run exits after five.
 These are individual samples. Reproduce and contain the competing response
 rejection before claiming precise failure diagnostics or a general cleanup bound.
+
+## Recovery-choice observation and captures (D362)
+
+Set `RECOVERY_PORTAL_RECEIPT_DIR` to a fresh directory when checking the recovery
+choice fixture. It retains sixteen recovery captures: eight ordinary and eight
+delayed, keeping all eight original names. Separate names prevent a later handler
+variant from overwriting earlier evidence. The missing-signal control runs only
+the first four subtests, then returns before the disabled-choice assertions,
+source clearing, recovery submission, pairing and screenshots. Its title names
+the submission boundary.
+Every original organisation and venue selection, recovery permission, source
+clearing, approval payload, pairing, layout, observation and deadline check remains.
+
+The missing-signal control wraps a configured four-second observation in a
+five-second race. It does not independently establish the exact four-second
+boundary. Native Chromium with stubbed HTTP leaves real recovery authority,
+other browser engines, production networks and the historical Linux cause
+unqualified. Delayed handlers still repeat all eight language, theme and width
+journeys.

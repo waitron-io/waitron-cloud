@@ -3784,25 +3784,6 @@ D385 now labels those setup boundaries, so a changed qualification can retain mo
 evidence if they recur. Preserve the failing assertions and five-second database
 limit, then reproduce a labelled failure before changing runtime rules.
 
-## Recovery-choice browser handler wait (D362)
-
-Set `RECOVERY_PORTAL_RECEIPT_DIR` to a fresh directory when checking the recovery
-choice fixture. It retains sixteen recovery captures: eight ordinary and eight
-delayed, keeping all eight original names. Separate names prevent a later handler
-variant from overwriting earlier evidence. The missing-signal control runs only
-the first four subtests, then returns before the disabled-choice assertions,
-source clearing, recovery submission, pairing and screenshots. Its title names
-the submission boundary.
-Every original organisation and venue selection, recovery permission, source
-clearing, approval payload, pairing, layout, observation and deadline check remains.
-
-The missing-signal control wraps a configured four-second observation in a
-five-second race. It does not independently establish the exact four-second
-boundary. Native Chromium with stubbed HTTP leaves real recovery authority,
-other browser engines, production networks and the historical Linux cause
-unqualified. Delayed handlers still repeat all eight language, theme and width
-journeys.
-
 ## Recovery organisation-width browser handler wait (D364)
 
 Set `RECOVERY_WIDTH_RECEIPT_DIR` to a fresh directory when checking the recovery
