@@ -7,7 +7,7 @@ import {fileURLToPath} from 'node:url';
 import {test} from 'node:test';
 
 const preload=fileURLToPath(new URL('./fixtures/traffic-wrapper-docker-standin.mjs',import.meta.url));
-for(const wrapper of ['traffic-rendered-gateway','traffic-gateway'])for(const fault of ['sibling-churn','witness-restarted','witness-stopped','foreign-running-removed','foreign-stopped-removed','lost-create']){
+for(const wrapper of ['traffic-rendered-gateway','traffic-gateway'])for(const fault of ['sibling-churn','witness-restarted','witness-stopped','foreign-running-removed','foreign-stopped-removed','lost-create','owned-leak']){
  test(`${wrapper} protects foreign containers through ${fault}`,()=>{
   const directory=mkdtempSync(join(tmpdir(),'cloud-traffic-wrapper-control-')),state=join(directory,'state.json');
   try{
@@ -19,10 +19,12 @@ for(const wrapper of ['traffic-rendered-gateway','traffic-gateway'])for(const fa
    if(fault==='sibling-churn')assert.equal(result.status,0,output);
    else{
     assert.notEqual(result.status,0,output);
-    assert.match(output,fault==='lost-create'?/controlled lost create response/:/foreign container identities and start times must survive/);
+    assert.match(output,fault==='lost-create'?/controlled lost create response/:fault==='owned-leak'?/Expected values to be strictly equal/:/foreign container identities and start times must survive/);
    }
    const remaining=JSON.parse(readFileSync(state,'utf8')) as {containers:Array<{name:string}>;images:string[];volumes:string[]};
-   assert.deepEqual(remaining.containers.filter(row=>row.name.startsWith('cloud-traffic-')),[],'every wrapper-owned container is removed');
+   const owned=remaining.containers.filter(row=>row.name.startsWith('cloud-traffic-'));
+   if(fault==='owned-leak'){assert.equal(owned.length,1);assert.ok(owned[0]!.name.endsWith('-unexpected'),'the injected unrecorded leak remains detected');}
+   else assert.deepEqual(owned,[],'every wrapper-owned container is removed');
    assert.deepEqual(remaining.images,[]);assert.deepEqual(remaining.volumes,[]);
   }finally{rmSync(directory,{recursive:true,force:true});}
  });

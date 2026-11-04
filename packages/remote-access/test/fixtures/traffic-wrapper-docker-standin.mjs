@@ -49,6 +49,7 @@ function docker(args){
    const witness=[...rows].find(([,value])=>protectedRow(value));
    if(witness&&scenario==='witness-restarted')witness[1].started='second-start';
    if(witness&&scenario==='witness-stopped')witness[1].status='exited';
+   if(scenario==='owned-leak')rows.set('e'.repeat(64),{name:row.name+'-unexpected',label:row.label,started:'new',status:'running',image:'unrelated-owned-extra-image'});
    if(scenario==='foreign-running-removed')rows.delete('c'.repeat(64));
    if(scenario==='foreign-stopped-removed')rows.delete('d'.repeat(64));
    if(scenario==='sibling-churn'){rows.delete('b'.repeat(64));rows.set('e'.repeat(64),{name:'next-sibling',label:'io.waitron.traffic-owner=next',started:'new',status:'running',image:'sibling-image'});}
