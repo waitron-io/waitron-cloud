@@ -140,6 +140,30 @@ mixed root input. Re-enabling a peer certificate therefore does not by itself
 qualify a stale-documentation PR to land. This review leaves the separate receipt
 certificates and their historical fixtures untouched.
 
+## Admin fixture reader review (D506)
+
+The admin-port controls read their own generated `mini.options`, native
+`store.log`, temporary storage roots and numeric port-claim links. The new
+paused-child test launches the existing JavaScript cases with a literal file
+list and observes their controlled output. Its cleanup helper scans the shared
+claim directory but removes only links targeting roots that invocation captured.
+The storage fixture reads pinned archives, generated certificates, JSON setup
+and workspace manifests. These readers do not add a consumer of exempt Cloud
+prose; no Markdown exemption changes.
+
+The port-selection changes retain those same inputs and every original
+assertion. Their embedded programs contain fixed test paths and runtime roots;
+they do not discover Cloud document content. The added backlog observations are
+ordinary prose. Identity and gateway targets, dependency manifests, installation
+hooks and the lockfile remain unchanged by D506.
+
+This renewal includes the reviewed shared selectors and required freshness
+gates from #922. Their event JSON, immutable Git trees and policy checks keep
+the existing document boundaries. Review the merged staged tree before renewing
+all four inventories; an old branch's matching hash does not qualify these
+combined readers. The generated policy records that boundary without extending
+any allowlist or proving behaviour outside the exercised controls.
+
 ## Contract reader and renewal
 
 With commit
