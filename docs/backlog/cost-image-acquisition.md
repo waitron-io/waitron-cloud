@@ -26,8 +26,8 @@ Controlled Docker-command tests reproduce the exact recorded refusal and cover
 recovery, permanent refusals, exhausted attempts, shared deadlines, cached images,
 interruption and owned scratch cleanup. Run them with
 `node --test scripts/cloud-cost/conformance-image-acquisition.test.mjs`.
-The Mac's Docker remains unavailable until 3 November; use the authorised Linux
-test box for a controlled reproduction and current-head CI for landing evidence.
+Use the authorised Linux test box for a live reproduction and current-head CI
+for landing evidence. The controlled checks below do not contact the registry.
 
 ### Registry failure groups (D530)
 
@@ -80,4 +80,28 @@ controlled acquisition checks. On the authorised Linux test box, also run
 to exercise the actual isolation and source-copy boundaries. The historical
 Docker Hub outage cause remains unknown; this recovery does not repair the
 provider or the separate authentication refusal.
+
+### Current qualification
+
+[PR #328](https://github.com/waitron-io/waitron-cloud/pull/328) delivered the
+conformance pull recovery. Its acquisition fixture is unchanged on 4 November.
+All 54 existing pull, build and isolation-image acquisition controls pass on
+macOS with:
+
+```sh
+node --test --test-concurrency=1 --test-timeout=30000 \
+  scripts/cloud-cost/conformance-image-acquisition.test.mjs \
+  scripts/cloud-cost/conformance-image-build.test.mjs \
+  scripts/cloud-cost/isolation-image-acquisition.test.mjs
+```
+
+These checks run real supervised children with replacement Docker commands.
+They cover recovery from the recorded temporary refusals, immediate permanent
+refusal, cache reuse, shared deadlines, interruption and cleanup. They do not
+exercise a live Docker daemon or registry, or establish the historical causes.
+The original token-timeout log records a completed fixture build followed by a
+15-second token-request timeout. The later authentication log records one refused
+pull after a completed build, without the registry challenge or credential
+selection needed to attribute it. Keep both investigations open and capture
+those details during a controlled Linux recurrence, without recording secrets.
 

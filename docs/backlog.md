@@ -3351,6 +3351,9 @@ The separate isolation-test Node acquisition now retries temporary HTTP 5xx and
 transport failures before creating resources, within a shared 120-second
 preparation budget; it retains every isolation assertion and immediate permanent
 refusal. The historical provider outage remains unexplained.
+All 54 unchanged pull, build and isolation-image acquisition controls pass on
+macOS with replacement Docker commands. This qualifies the existing recovery
+controls; live Linux acquisition and the historical causes remain open.
 See the
 [image acquisition detail](backlog/cost-image-acquisition.md).
 
