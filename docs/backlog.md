@@ -3995,11 +3995,6 @@ original CI job's concurrency. Use the next labelled recurrence to find the caus
 preserving the existing assertions and deadlines. See the
 [investigation and qualification limits](backlog/storage-authority-timeout.md).
 
-## Authenticator replies after account changes (D399)
-
-**Open.** Qualify server authority, browser integration and live ingress; physical
-passkeys and the separate retry-clock repair retain their own gates.
-See [the boundaries and remaining work](backlog/account-http-boundaries.md#authenticator-replies-after-account-changes-d399).
 
 ## Authenticator code format feedback (D237)
 

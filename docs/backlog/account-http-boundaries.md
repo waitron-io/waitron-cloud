@@ -27,15 +27,6 @@ qualification, with database suites running in CI while Docker is unavailable.
 Run `node --test apps/portal/test/passkey-transport-boundary.test.ts`.
 
 
-## Authenticator replies after account changes (D399)
-
-Delayed authenticator reads, setup, activation, removal, regeneration, cancellation
-and follow-up session reads are covered across account changes and sign-out.
-Old replies must preserve the current account's pending work and setup draft,
-without returning old recovery codes or applying old cooldowns. These native
-controller checks leave browser/session integration and production qualification
-open; they do not change server authority or retry policy.
-
 ## Signup and password-reset HTTP acknowledgements (D423)
 
 Native account-client tests return an unsuccessful client result for malformed
