@@ -190,11 +190,11 @@ raised. D463's collector and remaining billing work stay on their separate branc
   A server Retry-After still blocks every address for that operation.
 
 
-## Installation transport refusals and retry waits (D433)
+## Installation deployment qualification
 
 **Open.** Qualify server permissions, local confirmation and live delivery against the
 selected deployment.
-See [the boundaries and remaining work](backlog/venue-connection-http.md#installation-transport-refusals-and-retry-waits-d433).
+See [the native installation boundaries](backlog/venue-connection-http.md#installation-deployment-qualification).
 
 ## Pairing transport refusals and retry waits (D428)
 

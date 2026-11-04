@@ -1,15 +1,14 @@
 # Venue connection HTTP boundaries
 
-## Installation transport refusals and retry waits (D433)
+## Installation deployment qualification
 
-When an installation read or stop has no usable reply, your selected row and
-stop confirmation remain available for an explicit retry. Native HTTP client
-and controller checks cover lost replies, unreadable bodies and refused statuses
-carrying success-shaped data. Pending requests block another read or stop and
-selection changes. Server retry waits survive account changes and backward clock
-adjustments through the exact end of seconds and date values. Runtime and existing
-assertions are unchanged; server permissions and live delivery remain separate
-qualification gates. Database suites run in CI during the local Docker outage.
+Run `node --test apps/portal/test/installation-transport-boundary.test.ts` to check
+that lost, unreadable or refused replies retain your selected row and stop
+confirmation for an explicit retry. Pending requests block another read or stop
+and selection changes. Server waits remain in force across account changes and
+backward clock adjustments until their exact seconds or date expiry. These native
+HTTP client and controller checks leave server permissions, local confirmation
+and live delivery against the selected deployment unqualified.
 
 ## Pairing transport refusals and retry waits (D428)
 
