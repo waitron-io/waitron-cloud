@@ -3512,6 +3512,22 @@ file partitions to leave room for setup and cleanup within its eight-minute
 job limit; every case keeps its original assertions and deadline.
 See [the boundaries and remaining work](backlog/ci-cache-saving.md#dependency-cache-save-stalls-d507).
 
+## Audit fixture dependency preparation (D530)
+
+The translation-vector audit used a fresh offline install, which could refuse
+before checking the vector when the download cache lacked a package. The
+[main failure](https://github.com/waitron-io/waitron-cloud/actions/runs/41797930675/job/126466887370)
+named `undici-types` 7.18.2; an empty disposable cache reproduces that refusal.
+
+The fixture now copies the parent's installed dependency directories into its
+own checkout. Relative links keep workspace imports inside that checkout, and
+copied dependency files can change without changing the parent. You can run
+`node --test scripts/ci-audit-fixture-dependencies.test.mjs` to exercise the real
+audit with an empty download cache and an unavailable registry. Its original
+vector, planner, mismatch and restoration checks remain. This removes the
+fixture's dependency on cached downloads; the separate cache-upload stall and
+other D530 failures remain open.
+
 ## CI PostgreSQL image pull
 
 D104's documentation-only [run 39733028534](https://github.com/waitron-io/waitron-cloud/actions/runs/39733028534/job/119672295764)
