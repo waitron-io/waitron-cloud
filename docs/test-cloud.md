@@ -4,6 +4,34 @@ You need a separate Cloud account service to exercise your test server without t
 
 The deployment files and local HTTPS, storage, remote, backup-verifier and free-service fixture proofs are implemented. **The test box is not deployed yet.** Plan enforcement remains off until the final disposable Waitron integration and release checks pass. Address providers stay disabled. Translation stays off pending the pinned joint paging proof and owner trials after 2 November 2026. Outside-home remote access needs a separately approved domain, certificates and deployment.
 
+## Release-driver handoff
+
+The local proof branch supplies the journey runner and the strict pre-release
+assembler below. It finishes with publication `unqualified`, complete integration
+and shipping qualification false, snapshots unavailable and plan enforcement off.
+The owner-authorised **Cloud/Waitron release driver** takes the following work
+only after the dormant branch finishes, as the
+[backup-verification plan](superpowers/plans/2026-10-21-cloud-backup-verification.md#task-10-complete-the-genuine-joint-proof-and-pr5-release-handoff)
+requires. No image is built or published merely to fill missing release evidence.
+
+1. Record the immutable published Cloud and Waitron image digests and publication
+   evidence. Match their exact source, compiled verification target and complete
+   module manifest, generated assets and runtime inputs. A local image ID or a
+   source commit alone is insufficient.
+2. Name the supported old/new release pair. Exercise its actual schema upgrade,
+   idempotent restart and old-consumer refusal against the newer ledger. The
+   controlled `999_test_cloud_rollback_probe.sql` journey below proves a different
+   failure path and cannot stand in for a supported-release upgrade.
+3. Restore the matching database, private configuration, storage and gateway
+   backup with its matching binary. Check project, CA, schema, volume and
+   installation identities and fresh signed exchanges from both original clients.
+4. Produce the final complete receipt and qualify the selected release's resource
+   limits before the separate reviewed LAN deployment and enablement decision.
+
+Saved native observations still name `31c3f8343795d9d2ed340cd20fa7eeb2534cbcbf`.
+The rebase and later local checks do not turn that image into a tested current
+release. Keep source identities and all incomplete gates explicit in the handoff.
+
 ## Final integration receipt work
 
 The first PR7 component is a strict receipt reader. It rejects missing genuine-client
