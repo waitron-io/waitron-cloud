@@ -72,8 +72,8 @@ control fires that same deadline while storage setup is held. Removing the
 deadline makes both native controls fail; restoration passes. Only the deadline
 clock is controlled in these native cases; the full Linux streamed-day journey
 keeps its real clock. All runtime timers, budgets and isolation checks remain.
-Local Docker-backed checks are unavailable while Docker is down; GitHub CI
-supplies that evidence.
+Run Docker-backed checks on the shared Linux test box through the campaign
+helper while the Mac's Docker is off. Current-head GitHub CI still decides landing.
 
 ### Local signal check stopped before worker admission (D502)
 
@@ -130,3 +130,27 @@ recurrence. Read `local-command-refusal` first: `childClosed`, `status`, `signal
 and `timerFired` distinguish the recorded child outcome from forced collection;
 `workerStarted` and `lastPreparation` locate its recorded progress. These are
 directions for investigation, not an explanation of the historical event.
+
+#### Qualification on 4 November 2026
+
+All 53 native diagnostic checks pass on macOS at Cloud commit
+[`2208befc`](https://github.com/waitron-io/waitron-cloud/commit/2208befc414b6236bdbc8798082b433f7d0f01d4).
+They cover bounded container and gateway evidence, private-output refusals,
+cleanup ordering and the local command reporter, including real child exit and
+hangup. Run the same selection without Docker:
+
+```sh
+node --test --test-concurrency=1 --test-timeout=30000 \
+  scripts/cloud-cost/local-command-diagnostics.test.mjs \
+  scripts/cloud-cost/isolation-command-diagnostics.test.mjs \
+  scripts/cloud-cost/gateway-parent-diagnostics.test.mjs
+```
+
+The three diagnostic test files, local command reporter and both signal test
+bodies match the 1 November baseline. The replay controller, local setup and
+fixture inputs have changed since then, so those older Linux passes do not
+qualify the complete current journey. The fresh Linux attempt stopped before copying or running tests because
+another lane held the box. When the box is available, run the signal selection
+above against the current checkout and retain any `local-command-refusal`
+record. The historical cause remains open; passing diagnostic controls do not
+explain the missed worker admission.

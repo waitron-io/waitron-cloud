@@ -3728,9 +3728,11 @@ See [the native recovery boundaries](backlog/backup-recovery-http.md#recovery-de
 
 ## Cost-stack isolation command refusal (D152)
 
-**Open.** Both unchanged signal checks pass on the shared Linux test box, without
-reproducing the historical missed admission. Attribute a new failure from the
-retained child evidence before changing signal handling. See [the diagnostic boundary and reproduction results](backlog/cost-stack-isolation.md#local-signal-check-stopped-before-worker-admission-d502).
+**Open.** The recorded Linux signal checks did not reproduce the historical
+missed admission. All 53 current native diagnostic checks pass, but replay setup
+has changed since that Linux observation. The fresh Linux attempt stopped
+because another lane held the box. Attribute a new failure from retained child
+evidence before changing signal handling. See [the diagnostic boundary and qualification limits](backlog/cost-stack-isolation.md#qualification-on-4-november-2026).
 
 Read the [isolation and deadline investigation](backlog/cost-stack-isolation.md)
 before changing the fixture guards. Historical attribution and Linux qualification
