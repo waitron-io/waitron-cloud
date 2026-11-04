@@ -216,11 +216,6 @@ delivery. Alert retry waits now use elapsed time through clock corrections;
 HTTP-date waits use the response Date or local receipt clock.
 See [the boundaries and remaining work](backlog/alert-preference-http.md#alert-preference-transport-refusals-and-retry-waits-d429).
 
-## Alert-preference HTTP response validation (D415)
-
-**Open.** Qualify server authority, browser integration and production mail delivery.
-See [the boundaries and remaining work](backlog/alert-preference-http.md#alert-preference-http-response-validation-d415).
-
 ## Translation-consent HTTP response validation (D417)
 
 Malformed consent replies cannot replace your last confirmed choices. Native
