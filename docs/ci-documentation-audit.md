@@ -342,3 +342,10 @@ The combined renewal also includes the SES configuration and bounded-event
 readers from main `59cabe75`. They parse supplied configuration, notification JSON
 and inline test fixtures; they add no Cloud Markdown reader. The identity and
 gateway targets, dependency manifests and installation hooks remain unchanged.
+
+The renewal on main `88ddbc83` also retains the mixed-prose planner from D571
+part 1. Its new reader loads saved Git trees and the existing audit policy,
+checks regular Markdown modes and each head inventory, and selects code paths.
+The accompanying tests use private Git fixtures. This storage branch adds no
+Markdown reader or selection-rule change; the combined inventories are renewed
+from the staged tree.
