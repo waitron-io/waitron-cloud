@@ -530,20 +530,33 @@ cleanup-verification rebind. Run
 `node --test scripts/ci-backup-storage-reservation-refusals.test.mjs scripts/ci-storage-control-diagnostics.test.mjs`
 to check both control phases and a deliberate takeover after cleanup. A refused
 bind retains its original error and adds `storageControl` with the phase, actual
-port and a bounded `lsof` listener snapshot. The snapshot names process IDs,
-commands and endpoints; an unavailable inspector records its reason. Collection
-has a two-second limit and never stops the competing listener. A process ID alone
-does not identify which test created that listener.
+port and a bounded `lsof` TCP snapshot, including outgoing connections. On Linux,
+if that query returns no socket rows, an additional `ss -B` query looks for bound
+but inactive sockets. Real controls require the holding process and port in both
+cases. Each command requests a five-second timeout and uses `SIGKILL` to collect
+its own unresponsive inspector. The five-second budget covers a controlled
+2.2-second inspector response; the earlier two-second budget lost that response.
+No competing process is stopped. A nonzero inspector exit retains partial output,
+stderr, status and signal; a missing executable records its reason. No returned
+rows does not prove the port was free: visibility and ownership can change before
+inspection. A process ID alone does not identify which test created that listener.
 
-The admin wrapper now forwards stdout and stderr as they arrive and keeps both
-in its failure transcript. Run
+The admin wrapper now forwards stdout and stderr into its enclosing test output
+as they arrive and keeps both in its failure transcript. Run
 `node --test deploy/test-cloud/storage-admin-progress-integration.test.mjs`
 to hold a child before native startup and require its operation record while it
 is still running. This closes the wrapper's buffering gap. The existing held-bucket
 and cancellation checks still verify owned-resource cleanup. The underlying
 90-second case and 120-second wrapper limits and all original checks remain.
-A blocked event loop or a failure before the child emits a record can still leave
-no operation evidence.
+The default stderr write is exercised by the installed wrapper check; deleting
+that write must fail it. Node's ordered file reporter can still hold the enclosing
+output behind an earlier file. Review controls observed a record after a test
+deadline and after `SIGTERM`, but lost it after `SIGKILL`. GitHub job-timeout and
+PostgreSQL-wrapper signal behaviour remain unqualified. A blocked event loop or
+a failure before the child emits a record can also leave no operation evidence.
+A review stand-in with a closed stderr failed before its cleanup; the real
+wrapper and its earlier baseline have not been compared for that condition.
+Capture that actual case before changing shared stream-error or shutdown handling.
 
 The recorded first-reservation refusal at
 [PR932's root job](https://github.com/waitron-io/waitron-cloud/actions/runs/41897316384/job/126812884123)

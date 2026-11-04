@@ -170,10 +170,7 @@ try {
     const bindReplacement = () => listenStorageControl(replacement, port, "cleanup-rebind");
     if (collideRebind && port === issuerPort) {
       rebindOwner = tcpServer(socket => socket.end("controlled rebind owner"));
-      await new Promise((resolve, reject) => {
-        rebindOwner.once("error", reject);
-        rebindOwner.listen(port, "127.0.0.1", resolve);
-      });
+      await listenStorageControl(rebindOwner, port, "controlled-owner-bind");
       await assert.rejects(bindReplacement(), error => {
         assert.equal(error.code, "EADDRINUSE");
         assert.equal(error.storageControl?.stage, "cleanup-rebind");

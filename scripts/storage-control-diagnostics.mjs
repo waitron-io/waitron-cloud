@@ -12,6 +12,21 @@ export function storageControlOutput(child, report) {
   return () => output;
 }
 
+function inspectSockets(source, args) {
+  try {
+    return {source,output:execFileSync(source,args,
+      {encoding:'utf8',timeout:5000,killSignal:'SIGKILL',maxBuffer:65536,stdio:['ignore','pipe','pipe']})};
+  } catch (failure) {
+    const reason = failure.code ?? (failure.signal ? 'signal_' + failure.signal : 'exit_' + failure.status);
+    // A nonzero inspector exit is not evidence that the tool was absent.
+    const ran = failure.status !== null || failure.signal !== null;
+    return ran
+      ? {source,output:failure.stdout ?? '',stderr:failure.stderr ?? '',
+        status:failure.status,signal:failure.signal,reason}
+      : {source:'unavailable',reason};
+  }
+}
+
 export async function listenStorageControl(server, port, stage) {
   try {
     await new Promise((resolve, reject) => {
@@ -22,16 +37,14 @@ export async function listenStorageControl(server, port, stage) {
       server.listen(port, '127.0.0.1');
     });
   } catch (error) {
-    let socketOwners;
-    try {
-      socketOwners = {source:'lsof', output:execFileSync('lsof',
-        ['-nP','-a','-iTCP:' + (error.port ?? port),'-sTCP:LISTEN','-Fpcn'],
-        {encoding:'utf8',timeout:2000,maxBuffer:65536,stdio:['ignore','pipe','pipe']})};
-    } catch (failure) {
-      socketOwners = {source:'unavailable',reason:failure.code ?? 'exit_' + failure.status};
+    const refusedPort = error.port ?? port;
+    const socketOwners = inspectSockets('lsof',['-nP','-iTCP:' + refusedPort,'-FpcnT']);
+    // Linux lsof can omit bound sockets that have not entered TCP's listen table.
+    if (process.platform === 'linux' && socketOwners.source === 'lsof' && socketOwners.output === '') {
+      socketOwners.boundInactive = inspectSockets('ss',['-B','-tnp','sport = :' + refusedPort]);
     }
     // Snapshot before caller cleanup, preserving the original bind refusal.
-    error.storageControl = {stage, port:error.port ?? port, socketOwners};
+    error.storageControl = {stage,port:refusedPort,socketOwners};
     throw error;
   }
 }

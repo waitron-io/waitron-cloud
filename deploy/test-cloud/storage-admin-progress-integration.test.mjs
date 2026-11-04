@@ -151,7 +151,12 @@ for (const beforeSpawn of [false, true]) test('cancelling the admin control coll
 test('the admin wrapper forwards progress while its child is still held', {timeout:120000}, async t => {
   let observe;
   const live = new Promise(resolve => {observe = resolve;});
-  const control = launchControl(t, {cancel:true,beforeSpawn:true,report:text => {if (text.includes('storage_admin_progress=')) observe(text);}});
+  const write = process.stderr.write;
+  t.mock.method(process.stderr, 'write', function(text, ...args) {
+    if (String(text).includes('storage_admin_progress=')) observe(String(text));
+    return write.call(this, text, ...args);
+  });
+  const control = launchControl(t, {cancel:true,beforeSpawn:true});
   await Promise.race([control.ready, control.finished.then(() => {throw Error(control.output());})]);
   let timer;
   try {

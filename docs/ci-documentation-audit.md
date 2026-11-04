@@ -327,8 +327,8 @@ validation requires every current manifest and its metadata. See the
 
 ## Storage control diagnostic reader review (D575)
 
-The control helper reads child stdout and stderr and asks `lsof` for listeners
-on the one refused numeric port. Its test programs use explicit JavaScript file
+The control helper reads child stdout and stderr and asks `lsof` for TCP sockets
+on the one refused numeric port, with an `ss -B` fallback for empty Linux results. Its test programs use explicit JavaScript file
 paths and private runtime state. The parent retains the same transcript for
 existing assertions and now also forwards it while the child runs. These
 readers consume no exempt Markdown. The added backlog prose is not a runtime
