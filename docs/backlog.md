@@ -3776,11 +3776,6 @@ D385 now labels those setup boundaries, so a changed qualification can retain mo
 evidence if they recur. Preserve the failing assertions and five-second database
 limit, then reproduce a labelled failure before changing runtime rules.
 
-## Recovery HTTP replies before confirming an outcome (D419)
-
-**Open.** Qualify server permissions and genuine restore or recovery; these client
-checks grant no activation or stop-proof authority.
-See [the boundaries and remaining work](backlog/backup-recovery-http.md#recovery-http-replies-before-confirming-an-outcome-d419).
 
 ## Recovery transport waits and pending actions (D437)
 

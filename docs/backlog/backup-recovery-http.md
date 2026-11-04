@@ -18,18 +18,6 @@ Server authority, deployed browser integration, computer sleep and genuine resto
 qualification remain separate gates; database suites run in CI while local Docker
 is unavailable.
 
-## Recovery HTTP replies before confirming an outcome (D419)
-
-Native real-client/controller checks reject malformed inspection, approval, close
-and replacement replies without replacing the displayed recovery. An uncertain
-write triggers inspection; failed inspection keeps approval and replacement
-blocked until a valid reply confirms current state. Replies must match the
-request, selected source and displayed replacement proposal. Permission loss
-clears choices and confirmation; retry waits still apply. Snapshot and continuous
-source controls retain the exact approval payload. These checks do not qualify
-production recovery, prove the old server stopped or change recovery authority.
-
-
 ## Recovery transport waits and pending actions (D437)
 
 When a recovery request is pending, you cannot send a second inspection,
