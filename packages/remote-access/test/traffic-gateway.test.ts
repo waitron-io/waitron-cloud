@@ -4,6 +4,7 @@ import {randomUUID} from 'node:crypto';
 import {fileURLToPath} from 'node:url';
 import {setTimeout as delay} from 'node:timers/promises';
 import {test} from 'node:test';
+import {protectContainer} from './fixtures/container-protection.ts';
 
 // The private database network isolates aliases and fixed fixture listeners from every foreign container.
 test('candidate gateway and PostgreSQL qualify a clean bound traffic receipt',{timeout:240000},async t=>{
@@ -12,12 +13,12 @@ test('candidate gateway and PostgreSQL qualify a clean bound traffic receipt',{t
  const docker=(args:string[],timeout=30000)=>run('docker',args,timeout);
  const candidate=()=>({cloudHead:run('git',['rev-parse','HEAD']),cloudTree:run('git',['rev-parse','HEAD^{tree}'])});
  assert.equal(run('git',['status','--porcelain']),'','the wrapper requires a clean candidate');const identity=candidate();
- const inventory=()=>docker(['ps','-aq','--no-trunc']).split('\n').filter(Boolean).sort().map(id=>docker(['inspect','--format','{{.Id}} {{.State.StartedAt}}',id]));
- const before=inventory();let image=false,database:string|undefined;
+ let image=false,database:string|undefined,protection:ReturnType<typeof protectContainer>|undefined;
  const volumes:string[]=[],containers:string[]=[],suites:Record<string,string|number>[]=[];
  try{
   docker(['build','-f','deploy/local-remote/Dockerfile','-t',tag,'.'],150000);image=true;
-  database=docker(['create','--name',tag+'-db','--network','none','--memory=256m','--cpus=1','--env',`POSTGRES_PASSWORD=${password}`,'--env','POSTGRES_DB=cloud_test','postgres:18-alpine']);
+  protection=protectContainer(docker,tag,tag);
+  database=docker(['create','--name',tag+'-db','--label','io.waitron.traffic-owner='+tag,'--network','none','--memory=256m','--cpus=1','--env',`POSTGRES_PASSWORD=${password}`,'--env','POSTGRES_DB=cloud_test','postgres:18-alpine']);
   assert.match(database,/^[a-f0-9]{64}$/);
   const mounts=JSON.parse(docker(['inspect','--format','{{json .Mounts}}',database])) as Array<{Type:string;Name?:string}>;
   volumes.push(...mounts.filter(m=>m.Type==='volume').map(m=>m.Name!));
@@ -30,7 +31,7 @@ test('candidate gateway and PostgreSQL qualify a clean bound traffic receipt',{t
    gateway:['deploy/test-cloud/test-fixtures/allowance-traffic-proof.test.mjs','packages/remote-access/test/fixtures/traffic-rendered-haproxy.ts'],
   };
   for(const [id,paths]of Object.entries(files)){
-   const container=docker(['create','--name',tag+'-'+id,'--network','container:'+database,'--cap-add','NET_ADMIN','--memory=512m','--cpus=1',
+   const container=docker(['create','--name',tag+'-'+id,'--label','io.waitron.traffic-owner='+tag,'--network','container:'+database,'--cap-add','NET_ADMIN','--memory=512m','--cpus=1',
     '--mount',`type=bind,source=${root},target=/proof,readonly`,'--env',`TEST_DATABASE_URL=postgres://postgres:${password}@127.0.0.1:5432/cloud_test`,
     tag,'node','--test','--test-reporter=tap','--test-concurrency=1','--test-timeout=150000',...paths.map(path=>'/proof/'+path)]);
    assert.match(container,/^[a-f0-9]{64}$/);containers.push(container);
@@ -50,14 +51,18 @@ test('candidate gateway and PostgreSQL qualify a clean bound traffic receipt',{t
    suites.push(counts);docker(['rm','--force','--volumes',container]);
   }
  }finally{
-  const present=new Set(docker(['ps','-aq','--no-trunc']).split('\n'));for(const container of containers)if(present.has(container))docker(['rm','--force','--volumes',container]);
-  if(database)docker(['rm','--force','--volumes',database]);
-  if(image)docker(['image','rm',tag]);
-  assert.equal(docker(['ps','-aq','--filter','name=^/'+tag+'(-db|-counters|-collector|-gateway)?$']),'');
-  assert.equal(docker(['image','ls','--quiet',tag]),'');
-  const remaining=new Set(docker(['volume','ls','--quiet']).split('\n'));for(const volume of volumes)assert.equal(remaining.has(volume),false,'owned anonymous PostgreSQL volume must be removed');
-  assert.deepEqual(inventory(),before,'foreign container identities and start times must survive the trial proof');
-  t.diagnostic('owned gateway/database/image/volumes removed; foreign container identities and start times unchanged');
+  try{
+   const present=new Set(docker(['ps','-aq','--no-trunc','--filter','label=io.waitron.traffic-owner='+tag]).split('\n'));for(const container of containers)if(present.has(container))docker(['rm','--force','--volumes',container]);
+   if(database)docker(['rm','--force','--volumes',database]);
+   assert.equal(docker(['ps','-aq','--filter','name=^/'+tag+'(-db|-counters|-collector|-gateway)?$']),'');
+   assert.equal(docker(['ps','-aq','--filter','label=io.waitron.traffic-owner='+tag]),'');
+   const remaining=new Set(docker(['volume','ls','--quiet']).split('\n'));for(const volume of volumes)assert.equal(remaining.has(volume),false,'owned anonymous PostgreSQL volume must be removed');
+   protection?.verify();
+  }finally{
+   try{protection?.close();}finally{if(image)docker(['image','rm',tag]);}
+   assert.equal(docker(['image','ls','--quiet',tag]),'');
+  }
+  t.diagnostic('owned gateway/database/image/volumes/witness removed; protected foreign container identity/start time unchanged');
  }
  assert.equal(run('git',['status','--porcelain']),'');assert.deepEqual(candidate(),identity);
  const receipt={version:1,kind:'cloud-allowance-traffic',...identity,scope:'local-fixtures',productionEnforcement:'off',
