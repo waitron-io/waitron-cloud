@@ -71,10 +71,17 @@ before the repair while only sixteen files survived. Delayed captures add
 `-delayed`; the sixteen historical names remain unchanged. Separate names retain
 both runs without promising different pixels or stable image bytes. Every original
 behavioral assertion, expected value, observation and deadline remains unchanged.
-The missing-signal control returns before failure-message and retry checks.
+The delayed fixture publishes its route only after the artificial pause, so
+recorded omission checks fail all sixteen delayed cases. Before that correction,
+both cases passed with the observation removed. Restoring the observation passes
+both cases; the ordinary and delayed recovery assertions remain unchanged.
+The missing-signal title describes its observation timeout and early return,
+before failure-message and retry checks.
 Its four-second outer race does not independently prove the exact configured
-three-second observation boundary. Real recovery authority, other engines and
-general cleanup bounds remain unqualified.
+three-second observation boundary. Real recovery authority, other engines, behavior
+under load and general cleanup bounds remain unqualified. One historical ordinary missing-signal
+sample exits after 3.6 seconds; its parent needs stopping at 150 seconds after the
+120-second test timeout. These samples do not establish a general cleanup limit.
 See [the diagnostic qualification and open work](backlog/retrospective-reviews.md).
 
 ## Concurrent storage extraction and failed-startup cleanup (D454)

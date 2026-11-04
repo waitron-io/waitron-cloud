@@ -13,7 +13,7 @@ const bundle=await build({stdin:{contents:`
 const styles=await readFile(new URL('../src/styles.css',import.meta.url),'utf8');
 for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as const)for(const width of [390,1280])for(const failure of ['503','network'] as const){
  const handlers=locale==='en'&&theme==='light'&&width===390&&failure==='503'?['ordinary','delayed','missing'] as const:['ordinary','delayed'] as const;
- for(const handler of handlers)test(`${locale} ${theme} ${width} ${failure}: recovery distinguishes a failed session check and retries${handler==='ordinary'?'':` (${handler} handler)`}`,async t=>{
+ for(const handler of handlers)test(`${locale} ${theme} ${width} ${failure}: ${handler==='missing'?'missing session handler signal times out before recovery checks':`recovery distinguishes a failed session check and retries${handler==='ordinary'?'':` (${handler} handler)`}`}`,async t=>{
  const browser=await chromium.launch({headless:true});
  try{
   const page=await browser.newPage({locale,colorScheme:theme,viewport:{width,height:900}});page.setDefaultTimeout(3000);
@@ -23,8 +23,8 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
    if(path==='/api/account/session'){
     requests++;
     if(requests===1){
-     firstRoute=route;
      if(handler==='delayed')await new Promise(resolve=>setTimeout(resolve,100));
+     firstRoute=route;
      if(handler!=='missing')received=true;
      return;
     }
