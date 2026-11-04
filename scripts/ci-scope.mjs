@@ -13,8 +13,8 @@ export function* quotedReferences(source) {
 
 export function sourceDependencies(pkg, packages, sources, root = process.cwd()) {
   const dependencies = new Set();
-  for (const {path, source} of sources) {
-    for (const value of quotedReferences(source)) {
+  for (const {path, source, references = []} of sources) {
+    for (const value of [...quotedReferences(source), ...references]) {
       const prefix=value.split('${')[0];
       const relativePath=prefix.startsWith('./') || prefix.startsWith('../');
       const target=relativePath ? relative(root,resolve(root,dirname(path),prefix)) : posix.normalize(prefix);

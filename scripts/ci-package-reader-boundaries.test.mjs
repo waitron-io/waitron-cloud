@@ -98,3 +98,18 @@ test('a declared helper cycle and a base-only consumer survive dirty live reader
   assert.deepEqual(scope(['packages/catalogue/src/index.mjs'], loadWorkspace(root), base, head, git),
     {full: false, packages: ['catalogue', 'consumer']});
 }));
+
+for (const reference of ['scripts/link.mjs', 'packages/catalogue/src/index.mjs']) test(`an excluded directory keeps its explicitly declared ${reference} input`, () => fixture(async ({root, git, put, commit, load}) => {
+  const helper = reference.startsWith('scripts/');
+  const computed = helper ? "'./' + 'link.mjs'" : "'../packages/' + 'catalog' + 'ue/src/index.mjs'";
+  const source = `import {readdirSync} from 'node:fs';\nexport const runtime = () => readdirSync('/owned-runtime-json');\nconst {value} = await import(${computed});\nexport {value};\n`;
+  put('scripts/declared.mjs', source);
+  const base = commit(), id = git('hash-object', 'scripts/declared.mjs').trim();
+  const scope = await load({'scripts/declared.mjs': {mode: '100644', type: 'blob', id,
+    nonSourceDirectoryReads: true, directoryReferences: [helper ? './' : '../packages/'], sourceReferences: [reference]}});
+  put('packages/catalogue/src/index.mjs', 'export const value = 2;\n');
+  const head = commit();
+  assert.deepEqual(scope(['packages/catalogue/src/index.mjs'], loadWorkspace(root), base, head, git),
+    {full: false, packages: ['catalogue', 'consumer']});
+  assert.equal(execFileSync(process.execPath, ['packages/consumer/src/index.mjs'], {cwd: root, encoding: 'utf8'}), '2\n');
+}));

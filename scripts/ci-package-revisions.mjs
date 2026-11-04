@@ -363,12 +363,13 @@ function workspaceAt(sha, workspace, git) {
         const {mode, type, id} = declaration;
         const label = source.path === 'scripts/ci-audit-fixture-dependencies.mjs' ? 'installed dependency reader' : 'package reader';
         assert.deepEqual(files.get(source.path), {mode, type, id}, `Unreviewed ${label} at ${source.path}`);
+        source.references = declaration.sourceReferences ?? [];
       }
       // Glob patterns, options and the default working directory can reach inputs
       // outside the quoted paths; unresolved scans must keep every package.
       assert.doesNotMatch(source.source, /\b(?:globSync|glob)\b/, `Unresolved glob scan at ${source.path}`);
       const rootReads = declaration?.nonSourceDirectoryReads ? new Set() : sourceDirectoryReads(source);
-      for (const value of quotedReferences(source.source)) {
+      for (const value of [...quotedReferences(source.source), ...(source.references ?? [])]) {
         const target = value.startsWith('.') ? posix.normalize(posix.join(posix.dirname(source.path), value)) : posix.normalize(value);
         if (packages.some(other => target.startsWith(`${other.directory}/`))) continue;
         // Keep descendant helpers without matching a similarly named sibling.

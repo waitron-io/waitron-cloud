@@ -11,12 +11,14 @@ entry records its Git mode, object type and blob identifier, which identifies
 its complete bytes. Both saved revisions must match independently. Changing a
 declared reader without another review keeps full package work.
 
-The declarations have two separate purposes. `nonSourceDirectoryReads` identifies
+The declarations distinguish directory operations from source inputs. `nonSourceDirectoryReads` identifies
 reviewed directory operations on installed dependencies, runtime data or owned
 fixtures. `directoryReferences` lists exact quoted values that do not enumerate
 source helpers. For example, a path-validation check for `.` and `..` must not
 load every deployment script. A declaration that only excludes quoted values
-does not excuse a directory scan.
+does not excuse a directory scan. `sourceReferences` records known computed
+helper paths and package inputs explicitly, so the graph does not rely on an
+unrelated import continuing to provide the same edge.
 
 File references, sibling package imports and helper chains remain visible.
 Directory exclusions leave direct files, extension resolution and index modules
@@ -87,6 +89,7 @@ changed-check rule. Do not remove an edge to recover an old job count.
 
 Review the combined readers again after a rebase and renew the normal
 [staged input audits](ci-documentation-audit.md). Declaration changes and all
-other executable changes still invalidate those separate inventories. Root
-owners, proof-workflow selection, merge reuse and nightly full work belong to
-later D571 parts.
+other executable changes still invalidate those separate inventories. D571 part
+2b will separately change dependency depth and test-file selection. Parts 3
+through 6 own root-input selection, proof workflows, merge reuse and nightly
+full work.
