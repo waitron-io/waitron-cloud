@@ -29,13 +29,16 @@ function docker(args){
  if(args[0]==='inspect'){const id=args.at(-1),row=rows.get(id);if(!row)throw Error('missing container');return inspect(row,id,args[args.indexOf('--format')+1]);}
  if(args[0]==='ps'){
   const all=args.some(value=>/^-[a-z]*a[a-z]*$/.test(value)),filters=args.flatMap((value,i)=>value==='--filter'?[args[i+1]]:[]);
-  return [...rows].filter(([id,row])=>(all||row.status==='running')&&filters.every(filter=>{
+  if(filters.some(filter=>filter.startsWith('label!=')))throw Error("invalid filter 'label!'");
+  const selected=[...rows].filter(([id,row])=>(all||row.status==='running')&&filters.every(filter=>{
    if(filter.startsWith('label!='))return row.label.split('=')[0]!==filter.slice(7);
    if(filter.startsWith('label='))return row.label===filter.slice(6);
    if(filter.startsWith('id='))return id===filter.slice(3);
    if(filter.startsWith('name='))return new RegExp(filter.slice(5)).test('/'+row.name);
    throw Error('unknown filter '+filter);
-  })).map(([id])=>id).sort().join('\n');
+  }));
+  if(args.includes('--format'))return selected.map(([id,row])=>id+'|'+(row.label.startsWith('io.waitron.traffic-owner=')?row.label.split('=')[1]:'')+'|'+(row.label.startsWith('io.waitron.traffic-protected=')?row.label.split('=')[1]:'')).sort().join('\n');
+  return selected.map(([id])=>id).sort().join('\n');
  }
  if(args[0]==='rm'){
   const id=args.at(-1),row=rows.get(id);if(!row)return '';

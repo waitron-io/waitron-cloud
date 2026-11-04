@@ -17,9 +17,12 @@ function fixture(){
   if(args[0]==='start'){if(failStart)throw Error('controlled start failure');rows.get(id)!.started='running';rows.get(id)!.status='running';return id;}
   if(args[0]==='ps'){
    const filters=args.flatMap((value,i)=>value==='--filter'?[args[i+1]!]:[]);
+   if(filters.some(filter=>filter.startsWith('label!=')))throw Error("invalid filter 'label!'");
    const all=args.some(value=>/^-[a-z]*a[a-z]*$/.test(value));
-   return [...rows].filter(([key,row])=>(all || (row.status??'running')==='running') && filters.every(filter=>
-    filter.startsWith('label!=') ? row.label.split('=')[0]!==filter.slice(7) : filter==='label='+row.label || filter==='id='+key)).map(([key])=>key).join('\n');
+   const selected=[...rows].filter(([key,row])=>(all || (row.status??'running')==='running') && filters.every(filter=>
+    filter.startsWith('label!=') ? row.label.split('=')[0]!==filter.slice(7) : filter==='label='+row.label || filter==='id='+key));
+   if(args.includes('--format'))return selected.map(([key,row])=>key+'|'+(row.label.startsWith('io.waitron.traffic-owner=')?row.label.split('=')[1]:'')+'|'+(row.label.startsWith('io.waitron.traffic-protected=')?row.label.split('=')[1]:'')).join('\n');
+   return selected.map(([key])=>key).join('\n');
   }
   if(args[0]==='inspect'){
    const key=args.at(-1)!,row=rows.get(key);assert.ok(row,'missing protected container');
@@ -36,7 +39,7 @@ test('labelled protection tolerates concurrent sibling creation and removal',()=
  f.rows.delete(f.other);f.rows.set('c'.repeat(64),{label:'io.waitron.traffic-owner=another-sibling',started:'new'});
  protection.verify();protection.close();
  assert.deepEqual([...f.rows.keys()],['c'.repeat(64)]);
- assert.ok(f.calls.filter(args=>args[0]==='ps').every(args=>args.includes('--filter')));
+ assert.ok(f.calls.filter(args=>args[0]==='ps').every(args=>args.includes('--filter')||args.includes('--format')));
 });
 for(const fault of ['removed','restarted','extra'] as const)test('protection refuses '+fault+' labelled container',()=>{
  const f=fixture(),protection=protectContainer(f.docker,'candidate','fixture');

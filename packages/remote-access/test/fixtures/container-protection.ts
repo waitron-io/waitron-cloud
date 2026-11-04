@@ -15,7 +15,8 @@ export function protectContainer(docker:(args:string[])=>string,image:string,tag
   docker(['start',id]);
   assert.equal(owned().length,1,'exactly one protected witness must exist');
   const inventory=()=>{
-   const unrelated=docker(['ps','-aq','--no-trunc','--filter','label!=io.waitron.traffic-owner','--filter','label!=io.waitron.traffic-protected']).trim().split('\n').filter(Boolean);
+   const unrelated=docker(['ps','-a','--no-trunc','--format','{{.ID}}|{{.Label "io.waitron.traffic-owner"}}|{{.Label "io.waitron.traffic-protected"}}']).trim().split('\n').filter(Boolean)
+    .map(line=>line.split('|')).filter(([,owner,protectedOwner])=>owner===''&&protectedOwner==='').map(([container])=>container!);
    return [...unrelated,...owned()].sort().map(container=>docker(['inspect','--format','{{.Id}} {{.State.StartedAt}} {{.State.Status}}',container]).trim());
   };
   const before=inventory();
