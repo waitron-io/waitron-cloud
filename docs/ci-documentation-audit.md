@@ -92,7 +92,7 @@ while the planner retains full work. Both revisions must qualify for a prose-onl
 shortcut. A fresh head cannot repair an unaudited base, whether it uses v1 or v2.
 
 Venue service proof and Cloud cost conformance select their own reviewed inputs
-through `CI_PROOF_KIND` and `node scripts/ci-docs.mjs --plan`. The
+through `CI_WORKFLOW_PATH` and `node scripts/ci-native-plan.mjs`. The
 [proof selection guide](ci-proof-selection.md) lists consumed paths, refusal
 controls and complete manual runs. Both omit unrelated pull-request changes and
 stop running on main pushes. The [nightly backstop](ci-nightly.md) still calls
@@ -136,8 +136,10 @@ inputs keep full work. Prose plus evidence alone cannot produce an empty success
 package plan. Existing unresolved package readers can also retain all packages.
 
 Cloud cost and venue proof workflows use the same two-revision check through
-`node scripts/ci-docs.mjs --plan`. Mixed changes, pinned prose and stale evidence
-retain their tests. Their existing main policies remain unchanged.
+`node scripts/ci-native-plan.mjs`. Mixed changes, pinned prose and stale evidence
+retain their tests. Neither workflow triggers on main pushes; manual and nightly
+calls retain complete work. Read the [merge evidence checklist](ci-merge-evidence.md)
+for the workflows that do run after a merge.
 
 ## Historical evidence and migration
 

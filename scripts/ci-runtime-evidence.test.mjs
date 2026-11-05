@@ -55,3 +55,31 @@ test('reusable and explicit-full publication cannot manufacture source or decisi
     }
   } finally {rmSync(root, {recursive: true, force: true});}
 });
+
+test('a full main run can complete missing decision evidence after planner metadata was unavailable', () => {
+  assert.equal(typeof runtime.completeMissingMainDecision, 'function');
+  const root = mkdtempSync(join(tmpdir(), 'cloud-full-decision-fallback-'));
+  try {
+    const output = join(root, 'output');
+    const git = (...args) => args[1] === 'HEAD^{tree}' ? 'c'.repeat(40) : 'a'.repeat(40);
+    const api = {remaining: () => 5000, readRun: () => run()};
+    runtime.completeMissingMainDecision({full: true, head: 'a'.repeat(40), required: true}, 'full', {context: context(), api, git, root, output});
+    const decision = JSON.parse(readFileSync(join(root, 'decision/plan.json'), 'utf8'));
+    assert.equal(decision.context.workflowId, 17); assert.equal(decision.mode, 'full');
+    assert.equal(readFileSync(output, 'utf8'), 'decision_artifact=ci-decision-v1-aws-infrastructure-90-2\n');
+    const untouched = join(root, 'untouched');
+    runtime.completeMissingMainDecision({}, 'selected', {context: context(), published: 'already-hosted', api, git, root, output: untouched});
+    assert.equal(existsSync(untouched), false);
+    assert.throws(() => runtime.completeMissingMainDecision({}, 'selected', {context: context(), api, git, root, output: untouched}), /complete full work/);
+  } finally {rmSync(root, {recursive: true, force: true});}
+});
+
+test('invalid original ranges can record full work but cannot authorize selected or unselected work', () => {
+  const git = (...args) => args[1] === 'HEAD^{tree}' ? 'c'.repeat(40) : 'a'.repeat(40);
+  const invalid = {...context(), workflowId: 17, event: {...context().event, after: 'invalid-after'}};
+  const full = createDecisionEvidence(invalid, {full: true, head: 'a'.repeat(40), required: true}, git, 'full');
+  assert.equal(full.context.event.after, 'invalid-after', 'Preserve the actual untrusted range rather than manufacturing one');
+  for (const mode of ['selected', 'unselected']) {
+    assert.throws(() => createDecisionEvidence(invalid, {base: 'b'.repeat(40), head: 'a'.repeat(40), paths: ['input'], required: mode === 'selected'}, git, mode), /Decision event head differs/);
+  }
+});

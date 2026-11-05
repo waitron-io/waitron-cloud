@@ -39,8 +39,14 @@ export function collectPages(readPage) {
   throw Error('Evidence page limit exceeded');
 }
 
-export function createReuseApi({repository, now = () => performance.now(), execute = execFileSync, executable = 'gh', budgetMs = 30_000} = {}) {
-  assert.equal(repository, 'waitron-io/waitron-cloud', 'Unsupported evidence repository');
+export function createReuseApi(options = {}) {
+  assert.equal(options.repository, 'waitron-io/waitron-cloud', 'Unsupported evidence repository');
+  return createGithubReader(options);
+}
+
+function createGithubReader({repository, now = () => performance.now(), execute = execFileSync, executable = 'gh', budgetMs = 30_000} = {}) {
+  assert.ok(typeof repository === 'string' && /^[A-Za-z0-9-]{1,39}\/[A-Za-z0-9_.-]{1,100}$/.test(repository) &&
+    !['.', '..'].includes(repository.split('/')[1]), 'Invalid current repository');
   assert.ok(Number.isFinite(budgetMs) && budgetMs > 0 && budgetMs <= 30_000, 'Invalid evidence deadline');
   const deadline = now() + budgetMs;
   let requests = 0;
@@ -124,6 +130,14 @@ export function createReuseApi({repository, now = () => performance.now(), execu
     },
     listArtifacts: (runId, number, remainingMs) => {identity(runId); return list(`${root}/actions/runs/${runId}/artifacts`, 'artifacts', number, remainingMs);},
     readPlanArtifact: (artifactId, remainingMs) => {identity(artifactId); return read(`${root}/actions/artifacts/${artifactId}/zip`, remainingMs, true);},
+  };
+}
+
+export function createCurrentJobReader({repository, runId, attempt, ...options} = {}) {
+  identity(runId); identity(attempt);
+  return remainingMs => {
+    const api = createGithubReader({...options, repository, budgetMs: Math.min(30_000, remainingMs)});
+    return collectPages(page => api.listAttemptJobs(runId, attempt, page, api.remaining()));
   };
 }
 

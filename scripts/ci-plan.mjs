@@ -2,7 +2,7 @@ import {execFileSync} from 'node:child_process';
 import assert from 'node:assert/strict';
 import {resolveRange} from './ci-range.mjs';
 import {findReuse, permitsRangeSelection} from './ci-reuse.mjs';
-import {bindRuntimeWorkflow, publishRuntimePlan, reuseContextFromEnvironment, runtimeReuseDependencies} from './ci-reuse-runtime.mjs';
+import {bindRuntimeWorkflow, evidenceInvocation, publishRuntimePlan, reuseContextFromEnvironment, runtimeReuseDependencies} from './ci-reuse-runtime.mjs';
 import {appendFileSync, readFileSync} from 'node:fs';
 import {pathToFileURL} from 'node:url';
 import {loadWorkspace, scopeForPaths, workPlan, receiptSuites} from './ci-scope.mjs';
@@ -43,7 +43,7 @@ function mixedCodePaths(paths, base, head, git) {
   }
 }
 
-function selectRevisionPlan(range, workspace, git, testFilesByPackage) {
+function buildRevisionPlan(range, workspace, git, testFilesByPackage) {
   let scope = scopeForPaths([],workspace);
   let revisions;
   let receiptScope;
@@ -104,6 +104,16 @@ function selectRevisionPlan(range, workspace, git, testFilesByPackage) {
   return {...work,reuse:null,reason};
 }
 
+function selectRevisionPlan(range, workspace, git, testFilesByPackage) {
+  const plan = buildRevisionPlan(range, workspace, git, testFilesByPackage);
+  if (plan.reason.length > 4096) plan.reason = plan.reason.slice(0, 4096) + '... (explanation truncated)';
+  if (Buffer.byteLength(JSON.stringify(plan)) > 240 * 1024) {
+    return {...workPlan(scopeForPaths([], workspace), workspace, undefined, undefined, testFilesByPackage), reuse: null,
+      reason: 'Plan evidence exceeds its bound: full suite'};
+  }
+  return plan;
+}
+
 export function selectPlan(range, snapshot, git) {
   assert.equal(snapshot.revision,range.head,'Workspace snapshot revision mismatch');
   assert.ok(Array.isArray(snapshot.packages) && snapshot.packages.length,'Missing workspace packages');
@@ -143,15 +153,20 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   catch {
     console.log('::warning title=Documentation-only CI unavailable::Review changed executable inputs, then renew documentation evidence (scripts/ci-input-audit.json in v1; docs records in v2) with --write-staged using docs/ci-documentation-audit.md. V2 peer records may remain stale and retain full work. Docs-only changes retain full CI, and the required root/script freshness check fails until reviewed and renewed.');
   }
-  const record = process.env.CI_RECORD_EVIDENCE === 'true' && !context.full && !context.called && ['push', 'pull_request'].includes(context.eventName);
+  let record = process.env.CI_RECORD_EVIDENCE === 'true' && evidenceInvocation(context);
   const dependencies = (record || context.eventName === 'push') && context.repository === 'waitron-io/waitron-cloud'
     ? runtimeReuseDependencies(context) : {};
-  if (record) context = bindRuntimeWorkflow(context, dependencies.api);
-  const plan = createPlan(event,context,loadWorkspace(),git,dependencies.api,dependencies.git);
+  if (record) {
+      try {context = bindRuntimeWorkflow(context, dependencies.api);}
+      catch {context.full = true; record = false; console.log('Workflow identity unavailable: full work without reusable source evidence');}
+    }
+  const workspace = loadWorkspace();
+  const plan = createPlan(event,context,workspace,git,dependencies.api,dependencies.git);
   // Diagnostics share GitHub's job output budget with the executable work plan.
   if (plan.reason.length > 4096) plan.reason = plan.reason.slice(0, 4096) + '... (explanation truncated)';
   const range = resolveRange(event, context, git);
-  const mode = plan.reuse ? 'reused' : range.kind === 'full' || /^(Unverified PR evidence:|Cannot verify push topology:)/.test(plan.reason) ? 'full' : 'selected';
+  const complete = workPlan(scopeForPaths([], workspace), workspace);
+  const mode = plan.reuse ? 'reused' : plan.typecheck && JSON.stringify(plan.packages) === JSON.stringify(complete.packages) && JSON.stringify(plan.receipts) === JSON.stringify(complete.receipts) ? 'full' : 'selected';
   if (record) publishRuntimePlan(context, plan, git, mode);
   const outputs = {
     mode,

@@ -14,7 +14,7 @@ actual trigger, rather than as missing or inherited checks.
 ## Read the decision before counting tests
 
 For every triggered workflow, save the exact merge SHA, tree, run ID and attempt,
-then read all final jobs and their logs. The planner retains one main artifact
+then read all final jobs and their logs. The run retains one main artifact
 named `ci-decision-v1-<workflow-key>-<run-id>-<attempt>`. It contains only
 `plan.json`. The step summary links any inherited PR and source attempt.
 The possible decisions are:
@@ -42,13 +42,20 @@ every final native job. For reuse, it rechecks the source independently. Save
 its output with the raw logs and test counts. A pending, failed, cancelled,
 missing or contradictory result keeps the merge check open.
 
+If the planner cannot read its own workflow identity, it runs full work without
+publishing reusable source evidence. A successful main summary can complete the
+full decision after API access returns. It still verifies every current job and
+binds the decision to the actual checkout. A full decision preserves an invalid
+original push range for inspection; that range cannot authorize selected or
+inherited work. If the API remains unavailable, the summary fails.
+
 Count inherited source passes separately from checks newly executed on main.
 A reuse-only merge executes zero new product checks. Its planner and summary
 are fresh work; its source test counts are inherited evidence.
 
 ## What qualifies a source
 
-Each ordinary PR planner retains its own
+Each eligible same-repository PR planner retains its own
 `ci-plan-v1-<workflow-key>-<run-id>-<attempt>` artifact with the original event,
 exact checkout and tree, workflow identity and selection digest. Evidence from
 another workflow cannot fill a gap. The verifier requires one merged PR in this

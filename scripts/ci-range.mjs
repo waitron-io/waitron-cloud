@@ -13,11 +13,13 @@ export function resolveRange(event, context, git) {
       assert.ok(commitSHA(base.sha) && commitSHA(head.sha), 'Invalid PR revisions');
       const mergeBase = git('merge-base',base.sha,head.sha).trim();
       assert.ok(commitSHA(mergeBase), 'Invalid merge base');
+      if (mergeBase === head.sha) return full('Empty revision range: full suite');
       return {kind:'pr',base:mergeBase,head:head.sha};
     }
     if (context.eventName !== 'push' || context.ref !== 'refs/heads/main') return full('Main push or unknown diff: full suite');
     assert.ok(!event.forced && !event.deleted && !event.created, 'Unsupported push shape');
     assert.ok(commitSHA(event.before) && commitSHA(event.after) && event.after === context.sha, 'Invalid push revisions');
+    if (event.before === event.after) return full('Empty revision range: full suite');
     for (const sha of [event.before,event.after]) {
       assert.equal(git('rev-parse','--verify',`${sha}^{commit}`).trim(),sha,'Push commit does not resolve exactly');
     }

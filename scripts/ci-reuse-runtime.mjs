@@ -6,7 +6,7 @@ import {createDecisionEvidence} from './ci-decision.mjs';
 import {createBoundedGit, createReuseApi} from './ci-reuse-api.mjs';
 
 export function reuseContextFromEnvironment(event, env = process.env) {
-  const inputs = JSON.parse(env.CI_WORKFLOW_INPUTS || '{}');
+  const inputs = JSON.parse(env.CI_WORKFLOW_INPUTS || '{}') ?? {};
   assert.ok(inputs && typeof inputs === 'object' && !Array.isArray(inputs), 'Invalid workflow inputs');
   return {event, sha: env.GITHUB_SHA, repository: env.GITHUB_REPOSITORY, branch: env.GITHUB_REF_NAME,
     repositoryId: Number(env.GITHUB_REPOSITORY_ID), runId: Number(env.GITHUB_RUN_ID), attempt: Number(env.GITHUB_RUN_ATTEMPT),
@@ -59,4 +59,20 @@ export function publishRuntimePlan(context, selection, git, mode, {root = '.ci-e
     const link = proof ? `; [source PR #${proof.pr}](https://github.com/${proof.repository}/pull/${proof.pr}), [run ${proof.runId}, attempt ${proof.attempt}](https://github.com/${proof.repository}/actions/runs/${proof.runId}/attempts/${proof.attempt})` : '';
     appendFileSync(summary, `## ${key}: ${source ? 'PR source plan' : mode}\n\nExact checkout ${source ? record.checkout.sha : context.sha}${link}.\n`);
   }
+}
+
+export function evidenceInvocation(context) {
+  if (context.repository !== 'waitron-io/waitron-cloud' || context.full || context.called) return false;
+  if (context.eventName === 'push') return context.ref === 'refs/heads/main';
+  if (context.eventName !== 'pull_request') return false;
+  return [context.event?.pull_request?.base?.repo, context.event?.pull_request?.head?.repo]
+    .every(repo => repo?.id === context.repositoryId && repo.full_name === context.repository);
+}
+
+export function completeMissingMainDecision(selection, mode, {context, published, api, git, ...location} = {}) {
+  if (published || context.eventName !== 'push' || !evidenceInvocation(context)) return;
+  assert.equal(mode, 'full', 'Missing main evidence requires complete full work');
+  const dependencies = api && git ? {api, git} : runtimeReuseDependencies(context);
+  const bound = bindRuntimeWorkflow(context, dependencies.api);
+  publishRuntimePlan(bound, selection, dependencies.git, mode, location);
 }

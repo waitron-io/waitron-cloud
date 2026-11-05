@@ -39,7 +39,7 @@ export function validateDecisionEvidence(record) {
   assert.equal(context.workflowRef, `${context.repository}/${record.workflowPath}@refs/heads/main`, 'Decision workflow reference differs');
   revision(context.sha); revision(record.tree);
   assert.equal(context.workflowSha, context.sha, 'Decision execution revision differs');
-  assert.equal(context.event?.after, context.sha, 'Decision event head differs');
+  if (record.mode !== 'full') assert.equal(context.event?.after, context.sha, 'Decision event head differs');
   assert.equal(typeof context.full, 'boolean', 'Missing full invocation marker');
   assert.equal(typeof context.called, 'boolean', 'Missing called invocation marker');
   assert.equal(Boolean(record.selection?.reuse), record.mode === 'reused', 'Decision reuse mode differs');

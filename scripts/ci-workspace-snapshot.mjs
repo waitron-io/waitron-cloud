@@ -16,7 +16,7 @@ export function loadWorkspaceAtRevision(revision, git) {
     assert.ok(!/(?:^|\/)\.gitattributes$/.test(path),'Checkout attributes require full work');
     files.set(path,{mode,type,id});
   }
-  const inputs=[...files].filter(([path])=>path==='pnpm-workspace.yaml' || /^(?:packages|apps)\/[^/]+\/(?:package\.json|.*\.[cm]?[jt]sx?)$/.test(path));
+  const inputs=[...files].filter(([path])=>path==='pnpm-workspace.yaml' || /^(?:packages|apps)\/[^/]+\/(?:package\.json|.*\.(?:[cm]?[jt]sx?|jsonc?|ya?ml))$/.test(path));
   const blobs=git.readBlobs?.([...new Set(inputs.map(([,file])=>file.id))]);
   const read=path=>{
     const file=files.get(path);
@@ -33,7 +33,7 @@ export function loadWorkspaceAtRevision(revision, git) {
   const testFilesByPackage={};
   for (const pkg of packages) {
     assert.match(pkg.name,/^@waitron-cloud\/[a-z-]+$/,'Invalid workspace package name');
-    const sources=[];
+    const sources=[], metadata=[];
     testFilesByPackage[pkg.name]=[];
     for (const [path,file] of files) {
       if (!path.startsWith(`${pkg.directory}/`)) continue;
@@ -42,9 +42,12 @@ export function loadWorkspaceAtRevision(revision, git) {
       assert.ok(!parts.includes('node_modules') && !parts.includes('.git'),'Tracked dependency override');
       if (parts.some(part=>['dist','coverage'].includes(part))) continue;
       if (/\.[cm]?[jt]sx?$/.test(path)) sources.push({path,source:read(path)});
+      else if (/\.(?:jsonc?|ya?ml)$/.test(path)) metadata.push({path,source:read(path)});
       if (posix.dirname(path)===`${pkg.directory}/test` && path.endsWith('.test.ts')) testFilesByPackage[pkg.name].push(path);
     }
     pkg.pathDependencies=sourceDependencies(pkg,packages,sources,'/');
+    pkg.sources=sources;
+    pkg.metadata=metadata;
   }
   return {revision,packages,testFilesByPackage};
 }

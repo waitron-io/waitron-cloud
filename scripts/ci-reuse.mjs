@@ -211,8 +211,8 @@ export function findReuse(context, {api, git, now = () => performance.now()} = {
     assert.ok(typeof pr.head.ref === 'string' && pr.head.ref.length > 0, 'Missing PR head branch');
     const head = commit(pr.head.sha);
     if (merged.tree.sha !== head.tree.sha) return refuse('Merge tree differs from PR head: use range selection');
-    // Equal complete trees bind the running selector, emitter and all their
-    // imports and directory inventories to the historical checked-out head.
+    // Matching committed trees establish the historical revision. The separate
+    // checks below bind running scripts, install inputs and fixture inventories.
     assert.equal(readGit('rev-parse', 'HEAD^{tree}').trim(), head.tree.sha, 'Reviewed checkout tree differs from source head');
     assertReviewedInputs(head.sha, readGit);
     const newest = () => {

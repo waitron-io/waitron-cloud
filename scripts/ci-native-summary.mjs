@@ -3,9 +3,9 @@ import {appendFileSync} from 'node:fs';
 import {pathToFileURL} from 'node:url';
 import {setTimeout} from 'node:timers/promises';
 import {expectedJobContract} from './ci-evidence.mjs';
-import {createReuseApi, collectPages} from './ci-reuse-api.mjs';
+import {createCurrentJobReader} from './ci-reuse-api.mjs';
 import {assertCurrentReuse} from './ci-reuse.mjs';
-import {bindRuntimeWorkflow, readRuntimeReuseContext, runtimeReuseDependencies} from './ci-reuse-runtime.mjs';
+import {bindRuntimeWorkflow, completeMissingMainDecision, readRuntimeReuseContext, runtimeReuseDependencies} from './ci-reuse-runtime.mjs';
 import {hasFinishedSteps} from './ci-summary.mjs';
 
 export async function waitForNativeSummary(path, plan, results, {readJobs, identity, prefix = '', timeoutMs = 60_000,
@@ -21,9 +21,18 @@ export async function waitForNativeSummary(path, plan, results, {readJobs, ident
   const contract = expectedJobContract(path, plan);
   const expected = contract.required.concat(contract.skipped);
   const deadline = now() + timeoutMs;
+  let lookupError;
   for (;;) {
-    assert.ok(now() < deadline, 'Timed out waiting for native job records');
-    let jobs = readJobs(Math.ceil(deadline - now()));
+    assert.ok(now() < deadline, `Timed out waiting for native job records${lookupError ? `; last lookup: ${lookupError.message}` : ''}`);
+    let jobs;
+    try {jobs = readJobs(Math.ceil(deadline - now()));}
+    catch (error) {
+      if (error.code !== 'ETIMEDOUT') throw error;
+      lookupError = error;
+      await sleep(Math.max(0, Math.min(2000, deadline - now())));
+      continue;
+    }
+    lookupError = undefined;
     assert.ok(now() < deadline, 'Timed out reading native job records');
     assert.ok(jobs.every(job => typeof job?.name === 'string' && job.name.length > 0), 'Invalid native job name');
     if (prefix) jobs = jobs.filter(job => job.name.startsWith(prefix)).map(job => ({...job, name: job.name.slice(prefix.length)}));
@@ -56,10 +65,8 @@ export async function waitForNativeSummary(path, plan, results, {readJobs, ident
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   try {
     const plan = JSON.parse(process.env.CI_PLAN), path = process.env.CI_WORKFLOW_PATH;
-    const readJobs = remainingMs => {
-      const api = createReuseApi({repository: process.env.GITHUB_REPOSITORY, budgetMs: Math.min(30_000, remainingMs)});
-      return collectPages(page => api.listAttemptJobs(Number(process.env.GITHUB_RUN_ID), Number(process.env.GITHUB_RUN_ATTEMPT), page, api.remaining()));
-    };
+    const readJobs = createCurrentJobReader({repository: process.env.GITHUB_REPOSITORY,
+      runId: Number(process.env.GITHUB_RUN_ID), attempt: Number(process.env.GITHUB_RUN_ATTEMPT)});
     await waitForNativeSummary(path, plan, JSON.parse(process.env.CI_RESULTS), {readJobs, prefix: process.env.CI_JOB_PREFIX || '',
       identity: {runId: Number(process.env.GITHUB_RUN_ID), runAttempt: Number(process.env.GITHUB_RUN_ATTEMPT), headSha: process.env.CI_HEAD_SHA},
       recheckReuse: () => {
@@ -68,6 +75,11 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
         context = bindRuntimeWorkflow(context, dependencies.api);
         assertCurrentReuse(plan.reuse, context, dependencies);
       }});
+    if (process.env.CI_RECORD_DECISION === 'true') {
+      const context = readRuntimeReuseContext();
+      context.workflowPath = process.env.CI_WORKFLOW_PATH ?? context.workflowPath;
+      completeMissingMainDecision(plan, process.env.CI_MODE, {context, published: process.env.CI_DECISION_ARTIFACT});
+    }
     const result = plan.reuse ? `Reused PR #${plan.reuse.pr}, run ${plan.reuse.runId}, attempt ${plan.reuse.attempt}; zero new product checks`
       : plan.required ? 'Passed every selected native job' : 'No native proof inputs selected; planner and summary passed';
     console.log(result);

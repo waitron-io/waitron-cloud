@@ -46,3 +46,9 @@ test('gate evaluator refuses unknown syntax rather than inventing skip permissio
     assert.throws(() => evaluateExpression(expression, {}));
   }
 });
+
+test('standard final source qualification has full history and the pinned Node runtime', () => {
+  const summary = job(workflow('ci'), 'summary');
+  assert.equal(field(summary, 'fetch-depth', 10), '0');
+  assert.equal(field(summary, 'node-version', 10), "'26'");
+});

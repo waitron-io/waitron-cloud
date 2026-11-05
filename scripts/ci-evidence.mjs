@@ -17,6 +17,10 @@ export {assertReuseProof};
 export const maxEvidenceBytes = 256 * 1024;
 const sha = /^(?!0{40}$)[a-f0-9]{40}$/;
 const positive = value => Number.isSafeInteger(value) && value > 0;
+const branchName = value => typeof value === 'string' && value.length > 0 &&
+  !['@', 'HEAD'].includes(value) && !value.startsWith('-') && !value.endsWith('.') &&
+  !value.includes('..') && !value.includes('@{') && !/[\x00-\x20\x7f~^:?*\[\\]/.test(value) &&
+  value.split('/').every(part => part && !part.startsWith('.') && !part.endsWith('.lock'));
 const ci = workflowPaths[0];
 const packagePlaceholder = "package (${{ matrix.package }}${{ ((matrix.shards && format(', shard {0}/{1}', matrix.shard, matrix.shards)) || '') }})";
 
@@ -120,7 +124,7 @@ export function createPlanEvidence(input) {
     assert.match(event[side]?.sha, sha, 'Invalid original revision');
     assert.equal(event[side].repositoryId, record.repositoryId, 'Wrong original repository ID');
     assert.equal(event[side].repository, record.repository, 'Wrong original repository');
-    assert.ok(typeof event[side].ref === 'string' && /^[A-Za-z0-9_./-]+$/.test(event[side].ref), 'Invalid original branch');
+    assert.ok(branchName(event[side].ref), 'Invalid original branch');
   }
   assert.equal(event.base.ref, 'main', 'Source base must be main');
   assert.match(event.mergeBase, sha, 'Invalid original merge base');

@@ -196,3 +196,14 @@ test('duplicate Link headers cannot silently select only the first pagination in
     `<${endpoint}>; rel="next"\r\nLink: <${endpoint}>; rel="last"`)});
   assert.throws(() => api.listRuns('.github/workflows/ci.yml', head, 1), /Duplicate pagination headers/);
 });
+
+test('current job reads bind to their own repository without relaxing reuse repository admission', () => {
+  assert.equal(typeof module.createCurrentJobReader, 'function');
+  const calls = [];
+  const read = module.createCurrentJobReader({repository: 'someone/waitron-cloud', runId: 42, attempt: 2,
+    execute: (_command, args, options) => {calls.push({args, options}); return response({total_count: 1, jobs: [{id: 1}]});}});
+  assert.deepEqual(read(123), [{id: 1}]);
+  assert.equal(calls[0].args.at(-1), 'repos/someone/waitron-cloud/actions/runs/42/attempts/2/jobs?per_page=100&page=1');
+  assert.ok(calls[0].options.timeout <= 123);
+  assert.throws(() => module.createReuseApi({repository: 'someone/waitron-cloud'}), /Unsupported evidence repository/);
+});

@@ -8,7 +8,7 @@ import {assertReceiptSuites} from './ci-run-receipts.mjs';
 import {assertScriptWork} from './ci-scripts.mjs';
 import {assertReuseProof} from './ci-reuse-proof.mjs';
 import {assertCurrentReuse} from './ci-reuse.mjs';
-import {bindRuntimeWorkflow, readRuntimeReuseContext, runtimeReuseDependencies} from './ci-reuse-runtime.mjs';
+import {bindRuntimeWorkflow, completeMissingMainDecision, readRuntimeReuseContext, runtimeReuseDependencies} from './ci-reuse-runtime.mjs';
 
 export const packageShards = Object.freeze({
   '@waitron-cloud/registration': 6,
@@ -247,6 +247,11 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
     const plan = JSON.parse(process.env.CI_PLAN);
     const results = Object.fromEntries(Object.entries(JSON.parse(process.env.CI_RESULTS)).map(([name,job])=>[name,job.result]));
     await waitForSummary(plan, results);
+    if (process.env.CI_RECORD_DECISION === 'true') {
+      const context = readRuntimeReuseContext();
+      context.workflowPath = process.env.CI_WORKFLOW_PATH ?? context.workflowPath;
+      completeMissingMainDecision(plan, process.env.CI_MODE, {context, published: process.env.CI_DECISION_ARTIFACT});
+    }
     console.log(plan.reuse ? `same tree as PR head ${plan.reuse.sha}, run ${plan.reuse.runId}` : plan.documentation ? `Passed 1 document check (${plan.documentation.paths.length} paths)` : plan.scripts ? 'Passed root script checks' : `Passed ${plan.packages.length} package jobs and ${plan.receipts.length} receipts`);
   } catch (error) {
     console.error(error.message);

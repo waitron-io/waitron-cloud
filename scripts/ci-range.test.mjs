@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import {execFileSync, spawnSync} from 'node:child_process';
-import {mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync} from 'node:fs';
+import {mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, symlinkSync} from 'node:fs';
 import {fileURLToPath} from 'node:url';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
@@ -40,13 +40,15 @@ test('executed main range selection covers an unequal squash, a direct push and 
   const workflow = {id: 17, path: '.github/workflows/ci.yml', state: 'active'};
   const directory = mkdtempSync(join(tmpdir(), 'cloud-range-cli-'));
   t.after(() => rmSync(directory, {recursive: true, force: true}));
-  writeFileSync(join(directory, 'gh'), `#!${process.execPath}
+  writeFileSync(join(directory, 'package.json'), '{"type":"module"}\n');
+  writeFileSync(join(directory, 'gh.cjs'), `#!${process.execPath}
 const fs = require('node:fs');
 const responses = JSON.parse(fs.readFileSync(process.env.CI_RESPONSES));
 const data = responses[process.argv.at(-1)];
 if (data === undefined) process.exit(2);
 process.stdout.write('HTTP/2 200 OK\\r\\n\\r\\n' + JSON.stringify(data));
 `, {mode: 0o700});
+  symlinkSync('gh.cjs', join(directory, 'gh'));
   const run = (base, head, prs, unavailable = false) => {
     const endpoint = `repos/${repository.full_name}`;
     const commits = {};
@@ -76,7 +78,7 @@ process.stdout.write('HTTP/2 200 OK\\r\\n\\r\\n' + JSON.stringify(data));
     base: {ref: 'main', sha: baseline, repo: repository}, head: {sha: sourceHead, ref: 'feature', repo: repository}};
   const portal = [1, 2, 3, 4, 5, 6].map(shard => ({package: '@waitron-cloud/portal', shard, shards: 6}));
   const unequal = run(advancedMain, squash, [pr]);
-  assert.deepEqual(unequal.packages, portal);
+  assert.deepEqual(unequal.packages, portal, unequal.reason);
   assert.deepEqual(unequal.receipts, ['test:local-stack']);
   assert.equal(unequal.reuse, null);
   write('packages/ui-smoke/test/direct.test.ts', 'export const direct = true;\n');

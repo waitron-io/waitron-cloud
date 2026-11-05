@@ -74,3 +74,22 @@ test('native summary rejects duplicate job identities even from a preloaded job 
   await summary(jobs);
   await assert.rejects(summary(jobs.map((job, i) => i === 1 ? {...job, id: 1} : job)), /Duplicate native job ID/);
 });
+
+test('native summary retries transient lookups within its unchanged publication deadline', async () => {
+  const {waitForNativeSummary} = await import('./ci-native-summary.mjs');
+  const identity = {runId: 42, runAttempt: 1, headSha: 'a'.repeat(40)};
+  const jobs = ['changes', 'linux-contention', 'summary'].map((name, id) => ({id: id + 1, name, run_id: 42, run_attempt: 1,
+    head_sha: identity.headSha, status: 'completed', conclusion: 'success'}));
+  const plan = {full: true, required: true, head: identity.headSha}, results = {changes: {result: 'success'}, 'linux-contention': {result: 'success'}};
+  let reads = 0, time = 0;
+  const run = readJobs => waitForNativeSummary('.github/workflows/download-supervision-diagnostic.yml', plan, results,
+    {identity, readJobs, now: () => time, timeoutMs: 5000, sleep: async ms => {assert.ok(ms >= 0); time += ms;}});
+  await run(() => {reads++; if (reads === 1) throw Object.assign(Error('Controlled transient read'), {code: 'ETIMEDOUT'}); return jobs;});
+  assert.equal(reads, 2);
+  reads = 0; time = 0;
+  await assert.rejects(run(() => {reads++; time += 50; throw Object.assign(Error('Still unavailable'), {code: 'ETIMEDOUT'});}), /Timed out/);
+  assert.ok(time >= 5000 && time <= 5050); assert.ok(reads < 5);
+  reads = 0; time = 0;
+  await assert.rejects(run(() => {reads++; throw Error('Invalid current evidence');}), /Invalid current evidence/);
+  assert.equal(reads, 1);
+});

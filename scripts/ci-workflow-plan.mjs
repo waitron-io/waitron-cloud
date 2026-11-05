@@ -26,6 +26,7 @@ export function selectWorkflowPlan(workflowPath, range, git) {
   if (['cloud-cost.yml', 'venue-services-proof.yml'].some(name => workflowPath.endsWith('/' + name))) {
     required = proofInputPlanRange(workflowPath.endsWith('/cloud-cost.yml') ? 'cost' : 'venue', range, git).required;
   }
-  return {base: range.base, head: range.head, paths, required,
+  const plan = {base: range.base, head: range.head, paths, required,
     ...(workflowPath.endsWith('/cloud-cost.yml') && required ? {matrix: conformanceMatrix()} : {})};
+  return Buffer.byteLength(JSON.stringify(plan)) > 240 * 1024 ? fullWorkflowPlan(workflowPath, range.head) : plan;
 }

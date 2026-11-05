@@ -857,3 +857,28 @@ test('main readback binds its first inherited job snapshot even when a later sou
   };
   assert.throws(() => readbackDecision(f.decision, {api: f.api, git, now: f.now}), /Inherited job evidence differs/);
 });
+
+test('full readback preserves an invalid range and still requires every native check on the actual head', () => {
+  const f = fixture(), path = '.github/workflows/aws-infrastructure.yml';
+  const context = {...f.context, event: {...f.context.event, after: 'invalid-after'}, workflowPath: path,
+    workflowRef: `${repository}/${path}@refs/heads/main`, workflowSha: merge, full: false, called: false};
+  const decision = createDecisionEvidence(context, {full: true, head: merge, required: true}, git, 'full');
+  const content = archive(decision);
+  const metadata = {id: 62, name: 'ci-decision-v1-aws-infrastructure-90-1', expired: false, size_in_bytes: content.length,
+    digest: 'sha256:' + createHash('sha256').update(content).digest('hex'),
+    workflow_run: {id: 90, head_sha: merge, repository_id: 123, head_repository_id: 123}};
+  const names = ['changes', 'verify (guards-1)', 'verify (guards-2)', 'verify (guards-3)', 'verify (suites)', 'summary'];
+  let currentJobs = names.map((name, i) => ({id: i + 100, name, run_id: 90, run_attempt: 1,
+    head_sha: merge, status: 'completed', conclusion: 'success'}));
+  const main = f.api.readRun(90);
+  f.api.remaining = () => 30_000;
+  f.api.readWorkflow = () => ({id: 17, path, state: 'active'});
+  f.api.readRun = id => {assert.equal(id, 90, 'Full work cannot borrow source success'); return {...main, path, status: 'completed', conclusion: 'success'};};
+  f.api.listArtifacts = () => page([metadata]); f.api.readPlanArtifact = () => content;
+  f.api.listAttemptJobs = () => page(currentJobs);
+  const observed = readbackDecision(decision, {api: f.api, git, now: f.now});
+  assert.equal(observed.mode, 'full'); assert.equal(observed.mergeSha, merge); assert.equal(observed.inherited, null);
+  assert.deepEqual(observed.succeeded, names);
+  currentJobs = currentJobs.filter(job => job.name !== 'verify (guards-3)');
+  assert.throws(() => readbackDecision(decision, {api: f.api, git, now: f.now}), /Incomplete main job inventory/);
+});

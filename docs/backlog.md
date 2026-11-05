@@ -1389,7 +1389,11 @@ implementation or production evidence.
   Local checks cover workflow conditions, artifact publication, complete native
   jobs and deliberate guard omissions. Hosted equal-tree and changed-tree
   readback, the first nightly with AWS and measured time savings remain unproved.
-  Runtime landing still requires the whole-branch review, current-head CI and
+  The whole-branch review found ordinary-run failures around missing API evidence,
+  empty ranges, oversized plans and summary checkouts. Focused controls cover their
+  full-work fallbacks, bounded historical reconstruction and final summary proof.
+  Missing immutable PR objects are fetched by exact hash without moving refs.
+  Runtime landing still requires final review triage, current-head CI and
   the watcher's post-merge runbook update.
   Part 6 adds the [nightly full backstop](ci-nightly.md):
   one 03:17 UTC schedule and a manual trigger call all four workflows
