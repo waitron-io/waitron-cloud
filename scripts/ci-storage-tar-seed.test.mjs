@@ -12,7 +12,7 @@ let fixture;
 before(async () => { fixture = await prepareStorageTarSeed(); }, { timeout: 45000 });
 after(async () => { if (fixture) await rm(fixture.seedRoot, { recursive: true, force: true }); });
 
-async function runSeedCase(t, setup, { direct = false } = {}) {
+async function runSeedCase(t, setup, { direct = false, file = "scripts/ci-backup-storage-tar-refusals.test.mjs", timeout = 40000 } = {}) {
   const root = await mkdtemp(join(tmpdir(), "cloud-tar-seed-control-"));
   t.after(() => rm(root, { recursive: true, force: true }));
   const preload = join(root, "preload.mjs");
@@ -42,9 +42,9 @@ try {
   }));
   process.exitCode = 1;
 }
-`] : ["--import", preload, "--test", "--test-reporter=tap", "scripts/ci-backup-storage-tar-refusals.test.mjs"];
+`] : ["--import", preload, "--test", "--test-reporter=tap", file];
     result = await execute(process.execPath, args, {
-      cwd: new URL("..", import.meta.url), env, timeout: 40000, maxBuffer: 1024 * 1024,
+      cwd: new URL("..", import.meta.url), env, timeout, maxBuffer: 1024 * 1024,
     });
     result.code = 0;
   } catch (error) { result = error; }
@@ -250,5 +250,28 @@ globalThis.fetch = async () => {calls++; return good();};`, {direct: true});
     const seedRoots = result.remaining.filter(name => name.startsWith("cloud-storage-tar-seed-"));
     assert.equal(seedRoots.length, cleanupRefuses ? 1 : 0, result.output);
     assert.deepEqual(result.remaining.filter(name => !name.startsWith("cloud-storage-tar-seed-")).sort(), ["neighbour", "preload.mjs"]);
+  });
+}
+
+// A raw seed fetch would stop the suite on the first temporary upstream refusal.
+for (const [name, passes] of [
+  ["concurrent-publication", 2], ["concurrent-extraction", 2], ["reservation-refusals", 13],
+  ["readiness-diagnostics", 8], ["tls-refusals", 3], ["extraction", 3], ["process-extraction", 2],
+  ["issuer-bind", 4], ["publication", 4],
+]) {
+  test(`${name} seed recovers before running its unchanged storage checks`, { timeout: name === "readiness-diagnostics" ? 150000 : 45000 }, async t => {
+    const result = await runSeedCase(t, `globalThis.fetch = async () => {
+      if (++calls === 1) return new Response("temporary upstream failure", {status: 503});
+      return good();
+    };`, {file: `scripts/ci-backup-storage-${name}.test.mjs`, timeout: name === "readiness-diagnostics" ? 140000 : 40000});
+    assert.equal(result.code, 0, result.output);
+    assert.match(result.output, new RegExp(`# pass ${passes}\\b`));
+    assert.match(result.output, /# skipped 0\b/);
+    assert.match(result.output, /# fail 0\b/);
+    assert.match(result.output, /# cancelled 0\b/);
+    assert.match(result.output, /seed_fetch_calls=2/);
+    assert.equal(result.events.filter(event => event.event === "retry").length, 1);
+    assert.equal(result.events.at(-1)?.event, "complete");
+    assert.deepEqual(result.remaining, ["preload.mjs"], "each suite must remove its private seed and probes");
   });
 }

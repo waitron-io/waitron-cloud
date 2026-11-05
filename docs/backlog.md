@@ -13,6 +13,12 @@ watcher without a token fallback. Preparation review, the actual release,
 automation, exact-head upgrade validation and fresh-registry/image checks remain
 open. This documentation change does not publish or dispatch anything.
 
+## Shared storage-test seed downloads (D585)
+
+The [storage archive acquisition record](backlog/storage-cache-fixture.md#every-seaweedfs-archive-fetch-and-a-controlled-copy-proposal-d530-4)
+tracks D585: ten test seed hooks share bounded acquisition; native startup,
+conformance preparation and the Dockerfile remain separate follow-up paths.
+
 ## Admin listener shutdown and paced replay (D581)
 
 The exhaustion fixture drains probe data before closing its owned listeners.
