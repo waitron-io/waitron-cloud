@@ -120,6 +120,7 @@ test('v2 lock selection retains types and every receipt with both immutable lock
 }));
 
 test('v2 fresh evidence never repairs a stale v1 base in either revision order', () => consumerFixture(({root, git, put, commit}) => {
+  git('checkout', '--orphan', 'historical-v1');
   rmSync(join(root, 'scripts/ci-input-audit.d'), {recursive: true}); unlinkSync(join(root, 'scripts/ci-input-audit-v2.json'));
   const staleV1 = commit(); put('README.md', '# Changed prose\n'); git('add', '-A');
   ok(node(root, './ci-input-audit.mjs', ['--init-v2-staged'])); const freshV2 = commit();

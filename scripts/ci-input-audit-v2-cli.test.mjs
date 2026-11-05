@@ -36,6 +36,7 @@ test('v2 default and explicit docs renewal leave stale peers untouched', () => f
 }));
 
 test('v2 generation is staged explicit and idempotent', () => fixture(({root, git, put}) => {
+  git('checkout', '--orphan', 'historical-v1');
   rmSync(join(root, records), {recursive: true}); unlinkSync(join(root, marker));
   git('add', '-A'); git('commit', '-sm', 'V1 migration fixture');
   const before = snapshot(root, git);
@@ -81,6 +82,7 @@ test('v2 CLI rejects invalid mode forms and checks without writing', () => fixtu
 }));
 
 test('v2 initialization refuses partial live output instead of silently completing it', () => fixture(({root, git}) => {
+  git('checkout', '--orphan', 'historical-v1');
   rmSync(join(root, records), {recursive: true}); unlinkSync(join(root, marker)); git('add', '-A');
   git('commit', '-sm', 'V1 fixture for partial initialization');
   ok(run(root, '--init-v2-staged'));

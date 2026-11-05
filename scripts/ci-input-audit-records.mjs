@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
-import {constants, lstatSync, readdirSync, mkdirSync, openSync, closeSync, fstatSync, ftruncateSync, writeFileSync, readFileSync} from 'node:fs';
+import {constants, lstatSync, readdirSync, mkdirSync, openSync, closeSync, fstatSync, ftruncateSync, writeFileSync, readFileSync, accessSync} from 'node:fs';
 import {dirname} from 'node:path';
 
 export const auditDescriptor = 'scripts/ci-input-audit-v2.json';
@@ -11,25 +11,59 @@ export const serializeRecord = record => JSON.stringify(record) + '\n';
 const sha256 = source => createHash('sha256').update(source).digest('hex');
 
 const immutableHistory = new WeakMap();
+const verifiedRetention = new WeakMap();
 
-export function assertRecordRetention(revision, git, entries) {
+function auditHistory(revision, git) {
   const cached = immutableHistory.get(git)?.get(revision);
   if (cached) return cached;
   assert.equal(git('rev-parse', '--is-shallow-repository').trim(), 'false', 'Audit retention requires complete history');
   const kind = git('cat-file', '-t', revision).trim();
   assert.ok(['commit', 'tree'].includes(kind), 'Invalid audit revision type');
-  const ancestor = kind === 'commit' ? revision : git('rev-parse', '--verify', 'HEAD').trim();
-  // Full merged ancestry retains every introduced name, including a deletion
-  // hidden behind unrelated children or a temporarily missing activation marker.
-  const history = git('log', '--full-history', '-m', '--root', '--format=', '--name-only', '-z', '--diff-filter=A', ancestor, '--', auditRecordRoot);
-  const names = history.split('\0');
-  assert.equal(names.pop(), '', 'Incomplete audit record history');
-  const current = new Set(entries.map(entry => entry.path));
-  for (const path of names) if (path) assert.ok(current.has(path), `Audit record must be retained: ${path}`);
-  const result = {ancestor, kind};
-  if (kind === 'commit') {
+  let ancestor = kind === 'commit' ? revision : null;
+  if (kind === 'tree') {
+    try { ancestor = git('rev-parse', '--verify', 'HEAD').trim(); }
+    catch { /* An unborn branch has no ancestral evidence to retain. */ }
+  }
+  const activations = ancestor ? git('log', '--full-history', '-m', '--root', '--reverse', '--format=%H',
+    '--diff-filter=A', '--no-renames', ancestor, '--', auditDescriptor).trim().split('\n').filter(Boolean) : [];
+  assert.ok(activations.every(sha => /^[a-f0-9]{40}$/.test(sha)), 'Invalid activation history');
+  const result = {ancestor, kind, activations};
+  if (kind === 'commit' && /^[a-f0-9]{40}$/.test(revision)) {
     if (!immutableHistory.has(git)) immutableHistory.set(git, new Map());
     immutableHistory.get(git).set(revision, result);
+  }
+  return result;
+}
+
+export function assertHistoricalV1(revision, git) {
+  assert.equal(auditHistory(revision, git).activations.length, 0, 'V2 metadata removed after activation; historical v1 authority cannot be renewed');
+}
+
+export function assertRecordRetention(revision, git, entries) {
+  const cached = verifiedRetention.get(git)?.get(revision);
+  if (cached) return cached;
+  const history = auditHistory(revision, git), {ancestor, kind} = history;
+  // Disable rename inference: both sides of a rename remain independently
+  // accountable, including names hidden behind later children or merges.
+  const source = ancestor ? git('log', '--full-history', '-m', '--root', '--format=', '--name-only', '-z',
+    '--diff-filter=A', '--no-renames', ancestor, '--', auditRecordRoot) : '';
+  const names = source.split('\0');
+  assert.equal(names.pop(), '', 'Incomplete audit record history');
+  const current = new Set(entries.map(entry => entry.path));
+  for (const path of names) {
+    const canonical = /^scripts\/ci-input-audit\.d\/(?:docs|identity|gateway|lock)\/[a-f0-9]{64}\.json$/.exec(path);
+    if (canonical?.[0] === path) assert.ok(current.has(path), `Audit record must be retained: ${path}`);
+  }
+  if (history.activations.length) {
+    const original = git('ls-tree', '-z', '--full-tree', history.activations[0], '--', 'scripts/ci-input-audit.json');
+    const match = /^100644 blob ([a-f0-9]{40})\tscripts\/ci-input-audit\.json\0$/.exec(original);
+    assert.ok(match, 'Missing regular frozen v1 policy');
+    assert.equal(entries.find(entry => entry.path === 'scripts/ci-input-audit.json')?.objectId, match[1], 'V1 policy must remain frozen after v2 activation');
+  }
+  const result = {ancestor, kind};
+  if (kind === 'commit' && /^[a-f0-9]{40}$/.test(revision)) {
+    if (!verifiedRetention.has(git)) verifiedRetention.set(git, new Map());
+    verifiedRetention.get(git).set(revision, result);
   }
   return result;
 }
@@ -44,6 +78,9 @@ export function readModeRecords(revision, git, entries) {
     assert.ok(entry.mode === '100644' && entry.type === 'blob', `Nonregular audit metadata: ${entry.path}`);
     const source = blobs.get(entry.objectId);
     assert.equal(typeof source, 'string', 'Missing audit metadata blob');
+    const bytes = Buffer.from(source, 'utf8');
+    assert.equal(createHash('sha1').update(`blob ${bytes.length}\0`).update(bytes).digest('hex'), entry.objectId,
+      'Invalid UTF-8 audit metadata blob bytes');
     if (entry.path === auditDescriptor) {
       assert.equal(source, '{"version":2}\n', 'Invalid v2 audit descriptor');
       continue;
@@ -140,12 +177,16 @@ export function writeAuditRecords(outputs, allowedRecords = []) {
       }
     }
   };
-  // Complete preflight precedes directory creation or the first write. Refusal
-  // must not partly renew the evidence or follow a linked output's target.
+  // Validate known path, link and permission refusals before the first write.
+  // Immutable checks still reject incomplete output after an unexpected I/O failure.
   for (const [path, content] of outputs) {
     validateDirectory(dirname(path));
-    validateFile(path);
+    const info = validateFile(path);
     assert.equal(typeof content, 'string', 'Invalid audit output bytes');
+    if (info && readFileSync(path, 'utf8') !== content) {
+      assert.ok(info.mode & 0o222, `Read-only audit output: ${path}`);
+      accessSync(path, constants.W_OK);
+    }
   }
   scan(auditRecordRoot.slice(0, -1));
   for (const directory of directories) mkdirSync(directory, {recursive: true});

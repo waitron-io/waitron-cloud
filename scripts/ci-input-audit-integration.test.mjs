@@ -38,9 +38,12 @@ function completeFixture(run) {
   try {
     execFileSync('git', ['clone', '--shared', '--quiet', process.cwd(), root], {stdio: 'pipe'});
     cpSync('scripts', join(root, 'scripts'), {recursive: true});
+    git('config', 'user.name', 'CI test'); git('config', 'user.email', 'ci@example.test');
+    git('checkout', '--orphan', 'historical-v1');
     // Historical assertions must exercise the v1 policy even after live v2 activation.
     rmSync(join(root, 'scripts/ci-input-audit-v2.json'), {force: true});
     rmSync(join(root, 'scripts/ci-input-audit.d'), {recursive: true, force: true});
+    git('add', '-A'); git('commit', '-s', '-qm', 'Isolate historical v1 fixture ancestry');
     git('config', 'user.name', 'CI test'); git('config', 'user.email', 'ci@example.test');
     run({root, git, read, write, node, commit, renew});
   } finally {rmSync(root, {recursive: true, force: true});}
