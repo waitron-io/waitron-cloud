@@ -17,7 +17,11 @@ changed remote head. Local tests exercise competing writers against a real
 throwaway Git remote. Source CI selection, complete registry enumeration,
 automation-branch bootstrap, workflow integration and actual upload/readback
 remain open. Preparation review, exact-head upgrade validation and fresh
-registry/image checks also remain open. No publisher is activated by this slice.
+registry/image checks also remain open. Integration must recheck registry
+inventory before recording an upload and give read-only monitors verified remote
+history rather than a local snapshot. Replay supports retained history without
+repeated full-history copies; the Git command's 16 MiB output limit and abandoned
+local-lock recovery remain open. No publisher is activated by this slice.
 
 ## Shared storage-test seed downloads (D585)
 

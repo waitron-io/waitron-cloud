@@ -32,10 +32,10 @@ function nextVersion(ledger) {
   return `0.2.${patch}`;
 }
 
-function append(ledger, event) {
+function append(ledger, event, clone = true) {
   time(event.at);
   const last = ledger.events.at(-1);
-  if (last) assert(event.at >= last.at, 'event time moved backwards');
+  if (last) assert(Date.parse(event.at) >= Date.parse(last.at), 'event time moved backwards');
   if (event.type === 'reserved') {
     keys(event, 'type source version inputsSha512 recipeSha512 sourceChecksSha512 at');
     sourceIdentity(event.source);
@@ -70,10 +70,12 @@ function append(ledger, event) {
       assert.deepEqual(source, reservation.source, 'registry readback source differs');
       assert.equal(visibility, 'private', 'registry readback visibility differs');
       time(publishedAt);
-      assert(publishedAt <= event.at, 'registry readback publication time is in the future');
+      assert(Date.parse(publishedAt) <= Date.parse(event.at), 'registry readback publication time is in the future');
     } else assert.fail('unknown release transition');
   }
-  return {schema: 1, events: [...copy(ledger.events), copy(event)]};
+  const events = clone ? copy(ledger.events) : ledger.events;
+  events.push(clone ? copy(event) : event);
+  return {schema: 1, events};
 }
 
 export function validateLedger(ledger) {
@@ -82,11 +84,12 @@ export function validateLedger(ledger) {
   assert(Array.isArray(ledger.events), 'ledger events must be an array');
   let validated = {schema: 1, events: []};
   for (const event of ledger.events) {
-    const next = append(validated, event);
-    assert.equal(next.events.length, validated.events.length + 1, 'duplicate ledger transition');
+    const length = validated.events.length;
+    const next = append(validated, event, false);
+    assert.equal(next.events.length, length + 1, 'duplicate ledger transition');
     validated = next;
   }
-  return validated;
+  return copy(validated);
 }
 
 export function reserveRelease(ledger, request) {
@@ -97,7 +100,7 @@ export function reserveRelease(ledger, request) {
   time(identity.at);
   assert(Array.isArray(registryVersions), 'registry versions must be a complete array');
   assert.equal(new Set(registryVersions).size, registryVersions.length, 'duplicate registry versions');
-  const owned = new Set(reservations(ledger).map(event => event.version));
+  const owned = new Set(ledger.events.filter(event => event.type === 'uploading').map(event => event.version));
   for (const number of registryVersions) {
     assert.match(number, version, 'invalid registry version');
     // This series begins at 0.2.0; only the existing 0.1.0 predates its ledger.

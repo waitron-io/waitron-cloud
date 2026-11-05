@@ -1,13 +1,15 @@
 import assert from 'node:assert/strict';
 import {execFileSync} from 'node:child_process';
-import {mkdtemp, readFile, writeFile, rm, mkdir, access} from 'node:fs/promises';
+import {mkdtemp, readFile, writeFile, rm, mkdir, access, chmod} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {test} from 'node:test';
 import {reserveRelease, appendReleaseEvent} from './ui-ledger.mjs';
 import {readLedger, persistLedger} from './ui-ledger-git.mjs';
 
-const git = (cwd, ...args) => execFileSync('git', args, {cwd, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe']}).trim();
+const git = (cwd, ...args) => execFileSync('git', args, {cwd, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'],
+  env: {...Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith('GIT_'))),
+    GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1'}}).trim();
 const request = {source: {repository: 'clintongormley/waitron', commit: 'a'.repeat(40), version: '0.1.0'},
   inputsSha512: 'b'.repeat(128), recipeSha512: 'c'.repeat(128), sourceChecksSha512: 'd'.repeat(128),
   registryVersions: ['0.1.0'], at: '2026-11-05T20:00:00.000Z'};
@@ -173,6 +175,149 @@ git --git-dir='${remote}' update-ref refs/heads/ui-release-ledger ${initial.head
   await assert.rejects(() => persistLedger(one, snapshot, next), /stale|rejected/);
   assert.equal(git(remote, 'rev-parse', 'refs/heads/ui-release-ledger'), initial.head);
   assert.notEqual(git(one, 'rev-parse', 'HEAD'), snapshot.head, 'retain the signed local attempt');
+  await assert.rejects(() => access(join(one, '.git/ui-release-ledger.lock')), /ENOENT/);
+});
+
+test('HOME Git configuration cannot redirect a ledger push or its remote readback', async t => {
+  const {root, one, remote} = await fixture(t);
+  const decoy = join(root, 'decoy.git');
+  git(root, 'clone', '--bare', remote, decoy);
+  const home = join(root, 'home');
+  await mkdir(home);
+  await writeFile(join(home, '.gitconfig'), `[url "${decoy}"]\n  insteadOf = ${remote}\n`);
+  const snapshot = await readLedger(one);
+  const priorHome = process.env.HOME;
+  try {
+    process.env.HOME = home;
+    await persistLedger(one, snapshot, reserveRelease(snapshot.ledger, request));
+  } finally { process.env.HOME = priorHome; }
+  assert.notEqual(git(remote, 'rev-parse', 'refs/heads/ui-release-ledger'), snapshot.head);
+  assert.equal(git(decoy, 'rev-parse', 'refs/heads/ui-release-ledger'), snapshot.head);
+});
+
+test('hidden index flags, ignored files, executable ledger mode and nested roots refuse reads', async t => {
+  const {one} = await fixture(t);
+  for (const flag of ['assume-unchanged', 'skip-worktree']) {
+    git(one, 'update-index', '--' + flag, 'releases.json');
+    await assert.rejects(() => readLedger(one), /hidden index flags/);
+    git(one, 'update-index', '--no-' + flag, 'releases.json');
+  }
+  await writeFile(join(one, '.git/info/exclude'), 'ignored-file\n');
+  await writeFile(join(one, 'ignored-file'), 'stray');
+  await assert.rejects(() => readLedger(one), /clean/);
+  await rm(join(one, 'ignored-file'));
+  const nested = join(one, 'nested');
+  await mkdir(nested);
+  await assert.rejects(() => readLedger(nested), /root/);
+  await rm(nested, {recursive: true});
+  await chmod(join(one, 'releases.json'), 0o755);
+  git(one, 'add', 'releases.json');
+  git(one, 'commit', '-s', '-m', 'Make ledger executable');
+  await assert.rejects(() => readLedger(one), /regular file/);
+});
+
+test('a hook changing valid ledger bytes cannot publish a different preparation', async t => {
+  const {one, remote} = await fixture(t);
+  const snapshot = await readLedger(one);
+  await writeFile(join(one, '.git/hooks/pre-commit'), `#!/bin/sh
+node -e 'const fs=require("node:fs");const p="releases.json";const d=JSON.parse(fs.readFileSync(p));d.events[0].inputsSha512="3".repeat(128);fs.writeFileSync(p,JSON.stringify(d)+"\\n");'
+git add releases.json
+`, {mode: 0o755});
+  await assert.rejects(() => persistLedger(one, snapshot, reserveRelease(snapshot.ledger, request)), /hooks changed/);
+  assert.equal(git(remote, 'rev-parse', 'refs/heads/ui-release-ledger'), snapshot.head);
+});
+
+test('a hook changing the commit parent cannot rewrite the durable ledger history', async t => {
+  const {one, remote} = await fixture(t);
+  const initial = await readLedger(one);
+  await persistLedger(one, initial, reserveRelease(initial.ledger, request));
+  const snapshot = await readLedger(one);
+  const next = appendReleaseEvent(snapshot.ledger, {type: 'prepared', sourceCommit: 'a'.repeat(40),
+    version: '0.2.0', at: '2026-11-05T20:01:00.000Z', artifact: {sha512: 'e'.repeat(128),
+      manifestSha512: 'f'.repeat(128), notices: {LICENSE: '1'.repeat(128), 'LICENSE-GRANTS.md': '2'.repeat(128)}}});
+  git(one, 'switch', '-c', 'alternate-parent', initial.head);
+  await writeFile(join(one, 'releases.json'), JSON.stringify(next, null, 2) + '\n');
+  git(one, 'add', 'releases.json');
+  git(one, 'commit', '-s', '-m', 'Prepare alternate parent test tree');
+  const alternate = git(one, 'rev-parse', 'HEAD');
+  git(one, 'switch', 'ui-release-ledger');
+  await writeFile(join(one, '.git/hooks/post-commit'), `#!/bin/sh\ngit update-ref refs/heads/ui-release-ledger ${alternate}\n`, {mode: 0o755});
+  await assert.rejects(() => persistLedger(one, snapshot, next), /parent changed/);
+  assert.equal(git(remote, 'rev-parse', 'refs/heads/ui-release-ledger'), snapshot.head);
+});
+
+test('a remote changed by its receive hook cannot be reported as a durable successful push', async t => {
+  const {one, remote} = await fixture(t);
+  const snapshot = await readLedger(one);
+  await writeFile(join(remote, 'hooks/post-receive'), `#!/bin/sh\ngit update-ref refs/heads/ui-release-ledger ${snapshot.head}\n`, {mode: 0o755});
+  await assert.rejects(() => persistLedger(one, snapshot, reserveRelease(snapshot.ledger, request)), /remote ledger readback differs/);
+});
+
+test('a hook stripping the sign-off refuses before pushing', async t => {
+  const {one, remote} = await fixture(t);
+  const snapshot = await readLedger(one);
+  await writeFile(join(one, '.git/hooks/commit-msg'), `#!/bin/sh
+node -e 'const fs=require("node:fs");const p=process.argv[1];fs.writeFileSync(p,fs.readFileSync(p,"utf8").split("\\n").filter(l=>!l.startsWith("Signed-off-by:")).join("\\n"));' "$1"
+`, {mode: 0o755});
+  await assert.rejects(() => persistLedger(one, snapshot, reserveRelease(snapshot.ledger, request)), /sign-off/);
+  assert.equal(git(remote, 'rev-parse', 'refs/heads/ui-release-ledger'), snapshot.head);
+});
+
+test('a timed-out hook loses its whole process group before releasing the local lock', async t => {
+  const {one, remote, root} = await fixture(t);
+  const snapshot = await readLedger(one);
+  const marker = join(root, 'late-hook-write');
+  await writeFile(join(one, '.git/hooks/pre-commit'), `#!/bin/sh
+trap '' TERM
+: > .git/hook-started
+sleep 2
+: > '${marker}'
+`, {mode: 0o755});
+  await assert.rejects(() => persistLedger(one, snapshot, reserveRelease(snapshot.ledger, request),
+    {commandTimeoutMs: 1000}), /timed out/);
+  await access(join(one, '.git/hook-started'));
+  await assert.rejects(() => access(join(one, '.git/ui-release-ledger.lock')), /ENOENT/);
+  await new Promise(resolve => setTimeout(resolve, 2200));
+  await assert.rejects(() => access(marker), /ENOENT/);
+  assert.equal(git(remote, 'rev-parse', 'refs/heads/ui-release-ledger'), snapshot.head);
+});
+
+test('a hook dirtying the lock preserves both the command error and cleanup error', async t => {
+  const {one} = await fixture(t);
+  const snapshot = await readLedger(one);
+  await writeFile(join(one, '.git/hooks/pre-commit'), '#!/bin/sh\n: > .git/ui-release-ledger.lock/debris\nexit 7\n', {mode: 0o755});
+  await assert.rejects(() => persistLedger(one, snapshot, reserveRelease(snapshot.ledger, request)), error => {
+    assert(error instanceof AggregateError);
+    assert.match(error.errors[0].message, /commit/);
+    assert.equal(error.errors[1].code, 'ENOTEMPTY');
+    return true;
+  });
+  await access(join(one, '.git/ui-release-ledger.lock/debris'));
+});
+
+test('a failed process signal keeps the local lock instead of admitting another writer', async t => {
+  const {one, remote} = await fixture(t);
+  const snapshot = await readLedger(one);
+  await writeFile(join(one, '.git/hooks/pre-commit'), '#!/bin/sh\nsleep 2\n', {mode: 0o755});
+  const originalKill = process.kill;
+  try {
+    process.kill = () => { throw Object.assign(new Error('controlled process signal refusal'), {code: 'EPERM'}); };
+    await assert.rejects(() => persistLedger(one, snapshot, reserveRelease(snapshot.ledger, request),
+      {commandTimeoutMs: 1000}), /process cleanup failed/);
+  } finally { process.kill = originalKill; }
+  await access(join(one, '.git/ui-release-ledger.lock'));
+  assert.equal(git(remote, 'rev-parse', 'refs/heads/ui-release-ledger'), snapshot.head);
+});
+
+test('excessive hook output stops its process group without publishing', async t => {
+  const {one, remote} = await fixture(t);
+  const snapshot = await readLedger(one);
+  await writeFile(join(one, '.git/hooks/pre-commit'), `#!/bin/sh
+node -e 'process.stdout.write("x".repeat(17*1024*1024))'
+sleep 2
+`, {mode: 0o755});
+  await assert.rejects(() => persistLedger(one, snapshot, reserveRelease(snapshot.ledger, request)), /16 MiB/);
+  assert.equal(git(remote, 'rev-parse', 'refs/heads/ui-release-ledger'), snapshot.head);
   await assert.rejects(() => access(join(one, '.git/ui-release-ledger.lock')), /ENOENT/);
 });
 

@@ -13,8 +13,9 @@ hashes of the input inventory, preparation recipe and source-check evidence,
 the complete registry version list and a UTC timestamp. The first reservation
 receives `0.2.0` even when the source manifest remains `0.1.0`. An identical
 source and evidence retry reuses that reservation. A changed identity refuses.
-Only the existing `0.1.0` may precede the ledger; any other registry version
-without its own reservation stops allocation.
+Only the existing `0.1.0` may precede the ledger. Any other registry version
+needs an already recorded upload attempt. A number that appears while its
+record is only reserved or prepared stops allocation and retries too.
 
 Append a `prepared` event with the archive, manifest and both notice hashes.
 Persist it before appending and persisting `uploading`. After registry
@@ -34,7 +35,8 @@ and successive patch numbers.
 
 ## Persist one transition at a time
 
-Use `readLedger(checkout)` and `persistLedger(checkout, snapshot, next)` from
+Use `readLedger(checkout)` to read a local committed snapshot, then
+`persistLedger(checkout, snapshot, next)` from
 `scripts/release/ui-ledger-git.mjs` in a dedicated clean checkout of the
 `ui-release-ledger` branch. Its only tracked file is regular `releases.json`.
 Initialising that branch and choosing its repository identity belong to the
@@ -51,8 +53,26 @@ Git authentication in the dedicated checkout instead.
 
 A failed hook or push stops the operation. Inspect the staged file or retained
 signed local commit and reconcile it with the remote. The helper does not reset
-the checkout, retry a push or discard another run's work. After a successful
+the checkout, retry a push or discard another run's work. A local snapshot can
+include a rejected commit, so it is not authoritative remote evidence for a
+release monitor. Read-only monitoring still needs its own verified remote read.
+After a successful
 push it reads back the exact remote head before returning the new snapshot.
+
+Git commands ignore global and system configuration as well as inherited
+`GIT_*` variables; configure identity and authentication locally in the dedicated
+checkout. Commits must retain their committer's sign-off after hooks finish.
+Ignored files also make the checkout dirty. The default Git command limit is
+30 seconds. You may shorten the commit and push limit with
+`{commandTimeoutMs: 5000}` as the fourth persistence argument. On timeout, the
+helper terminates only that command's own process group before releasing its
+lock. A signal failure retains the lock. A hook that dirties the lock preserves
+both the command error and the cleanup error rather than hiding the first.
+
+A forcibly killed caller can leave a lock and a still-finishing local Git
+command. Do not reclaim that checkout automatically. Leave its evidence intact
+and investigate the recorded attempt; any replacement checkout must start from
+verified remote history. This helper does not recover abandoned local locks.
 
 Run the state and real-Git checks without credentials or containers:
 
@@ -66,3 +86,10 @@ artifact bytes and registry responses. Keep source builds separate from the
 job holding package-write credentials. The existing release workflow and
 September source pin are unchanged; this library does not qualify or authorise
 a dispatch of that workflow for `0.2.0`.
+
+The source adapter must recheck registry versions immediately before recording
+an upload attempt. A complete empty inventory is different from a failed
+lookup; this library cannot establish which one the adapter supplied. Replay
+retains all published events without cloning the growing history at each step.
+Git command output still has a 16 MiB limit; a larger-history storage format
+remains future work.
