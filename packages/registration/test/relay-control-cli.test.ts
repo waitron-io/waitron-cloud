@@ -5,7 +5,9 @@ import {setTimeout as delay} from 'node:timers/promises';
 import {fileURLToPath} from 'node:url';
 import {after, before, beforeEach, test} from 'node:test';
 import {Pool} from 'pg';
+import {createTransport} from 'nodemailer';
 import {fixture} from './fixtures/relay-worker.ts';
+import {smtp} from './fixtures/relay-stop-barrier.ts';
 
 const diagnostic = 'Relay control failed; check configuration, database and migrations\n';
 const privateValue = 'private-cli-customer-password-sentinel';
@@ -78,21 +80,30 @@ async function locked(table = 'relay_control') {
 }
 
 // Missing commits, wrong modes or hidden forwarding output break this contract.
-test('control commands acknowledge committed state across fresh processes and silent forwarding', async () => {
+test('control commands acknowledge committed state across fresh processes and silent forwarding', async t => {
   const venue = await f.venue(); await venue.submit({recipient: 'private-cli-customer-password-sentinel@example.test'});
   const tables = ['cloud_accounts', 'cloud_credentials', 'relay_messages', 'relay_reservations', 'relay_bounds_windows', 'relay_queue_bytes'];
   async function snapshot() {return Promise.all(tables.map(async table => (await f.pool.query(`SELECT * FROM ${table}`)).rows));}
   const before = await snapshot();
-  const inbox = await (await fetch(process.env.MAILPIT_TEST_URL! + '/api/v1/messages')).json();
-  await success(command(), false);
-  await success(command(['--stop']), true); await flag(true);
-  await success(command(['--stop']), true); await success(command(), true);
-  await success(command(['--resume'], {}, 'root'), false); await flag(false);
-  await success(command(['--stop'], {}, 'package'), true); await flag(true);
-  await success(command(['--status'], {}, 'root'), true);
-  await success(command(['--resume']), false); await success(command(['--resume']), false);
+  const inbox = await smtp(t);
+  // Observe every command-owned delivery without sharing a sibling test's inbox.
+  const control = (args = ['--status'], via: 'node' | 'root' | 'package' = 'node') => command(args,
+    {CLOUD_MAIL_TRANSPORT: 'local', MAILPIT_SMTP_PORT: String(inbox.port), MAILPIT_TEST_SMTP_PORT: String(inbox.port)}, via);
+  const sibling = createTransport({host: '127.0.0.1', port: Number(process.env.MAILPIT_TEST_SMTP_PORT), secure: false, ignoreTLS: true});
+  try {
+    await Promise.all([
+      success(control(), false),
+      sibling.sendMail({from: 'monitor@example.test', to: 'quiet@example.test', subject: 'Concurrent service reminder', text: 'Sibling test delivery'}),
+    ]);
+  } finally {sibling.close();}
+  await success(control(['--stop']), true); await flag(true);
+  await success(control(['--stop']), true); await success(control(), true);
+  await success(control(['--resume'], 'root'), false); await flag(false);
+  await success(control(['--stop'], 'package'), true); await flag(true);
+  await success(control(['--status'], 'root'), true);
+  await success(control(['--resume']), false); await success(control(['--resume']), false);
   assert.deepEqual(await snapshot(), before);
-  assert.deepEqual(await (await fetch(process.env.MAILPIT_TEST_URL! + '/api/v1/messages')).json(), inbox);
+  assert.deepEqual(inbox.captured, [], 'control commands send no mail to any destination');
 });
 
 for (const [name, args] of [['missing', []], ['unknown', ['--unknown']], ['extra', ['--stop', '--status']]] as const) {
