@@ -86,7 +86,14 @@ test('ordinary reader refuses malformed page totals and invalid job identities',
 });
 
 test('ordinary reader accepts complete single and multiple pages before checking job results', async t => {
-  const records = [...jobs, ...Array.from({length: 49}, (_, index) => ({name: `unused ${index}`, status: 'completed', conclusion: 'skipped'}))]
+  const skippedNames = [
+    ...Array.from({length: 6}, (_, i) => `package (@waitron-cloud/registration, shard ${i + 1}/6)`),
+    ...Array.from({length: 3}, (_, i) => `package (@waitron-cloud/account-http, shard ${i + 1}/3)`),
+    ...Array.from({length: 7}, (_, i) => `package (@waitron-cloud/backups, shard ${i + 1}/7)`),
+    ...Array.from({length: 4}, (_, i) => `package (@waitron-cloud/remote-access, shard ${i + 1}/4)`),
+    'package (@waitron-cloud/translation)', 'package (@waitron-cloud/ui-smoke)',
+  ];
+  const records = [...jobs, ...skippedNames.map(name => ({name, status: 'completed', conclusion: 'skipped'}))]
     .map((job, index) => ({...job, id: index + 1}));
   let pages;
   t.mock.method(childProcess, 'execFileSync', () => JSON.stringify(pages));
