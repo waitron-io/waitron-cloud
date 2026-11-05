@@ -63,7 +63,7 @@ function readsTestPath(pkg, path, workspace) {
   const matches = (target, uncertain = false) => {
     target = posix.normalize(target).replace(/\/$/, '');
     return path === target || (uncertain && (target === '.' || path.startsWith(target))) ||
-      [target.replace(/\.js$/, '.ts'), target.replace(/\.mjs$/, '.mts'), target.replace(/\.cjs$/, '.cts'),
+      [target.replace(/\.js$/, '.ts'), target.replace(/\.mjs$/, '.mts'), target.replace(/\.cjs$/, '.cts'), target.replace(/\.jsx?$/, '.tsx'),
         ...['.mjs', '.cjs', '.js', '.ts', '.mts', '.cts', '.tsx', '.jsx'].flatMap(ext => [target + ext, posix.join(target, 'index' + ext)])].includes(path);
   };
   for (const {path: sourcePath, source, references = []} of pkg.sources) {

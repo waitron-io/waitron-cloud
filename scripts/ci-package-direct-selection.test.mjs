@@ -65,6 +65,12 @@ test('package subpath exports and extension substitution retain their test-file 
   assert.deepEqual(scopeForPaths(['packages/catalogue/test/prices.test.ts'], graph, direct).packages, ['catalogue', 'gateway']);
 });
 
+test('emitted JavaScript test imports retain their TypeScript JSX source reader', () => {
+  const graph = members.map(pkg => ({...pkg}));
+  graph[1].sources = [{path: 'packages/gateway/src/read.mjs', source: "import '../../catalogue/test/prices.test.js';"}];
+  assert.deepEqual(scopeForPaths(['packages/catalogue/test/prices.test.tsx'], graph, direct).packages, ['catalogue', 'gateway']);
+});
+
 test('an ordinary package directory value does not import every test below that directory', () => {
   const graph = members.map(pkg => ({...pkg}));
   graph[1].sources = [{path: 'packages/gateway/test/read.mjs', source: "const fixture = '../../catalogue';"}];
