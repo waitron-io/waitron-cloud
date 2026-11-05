@@ -51,7 +51,18 @@ export function proofInputPlan(kind, event, git) {
     assert.equal(git('rev-parse', 'HEAD').trim(), pr.head.sha, 'Proof checkout differs from the event head');
     const base = git('merge-base', pr.base.sha, pr.head.sha).trim();
     assert.match(base, revision, 'Missing proof merge base');
-    const paths = git('diff', '--name-only', '--no-renames', '-z', base, pr.head.sha).split('\0');
+    return proofInputPlanRange(kind, {base, head: pr.head.sha}, git);
+  } catch (error) {
+    return {required: true, reason: `Kept full ${kind} proof work: ${error.message}`};
+  }
+}
+
+export function proofInputPlanRange(kind, {base, head}, git) {
+  try {
+    assert.ok(['cost', 'venue'].includes(kind), 'Unknown proof kind');
+    assert.ok([base, head].every(value => revision.test(value)), 'Invalid proof revisions');
+    assert.notEqual(base, head, 'Empty proof range');
+    const paths = git('diff', '--name-only', '--no-renames', '-z', base, head).split('\0');
     assert.equal(paths.pop(), '', 'Incomplete proof diff');
     assert.ok(paths.length > 0, 'Empty proof diff');
     assert.ok(paths.every(path => path && !/[\\\n\r]/.test(path) &&
@@ -60,10 +71,10 @@ export function proofInputPlan(kind, event, git) {
     const auditPath = path => path === policyPath || path === 'scripts/ci-input-audit-v2.json' ||
       path.startsWith('scripts/ci-input-audit.d/');
     if (paths.some(auditPath)) {
-      const {policy} = readInputAudit(pr.head.sha, git);
-      if (policy.version === 2) auditInputMode('docs', pr.head.sha, git);
+      const {policy} = readInputAudit(head, git);
+      if (policy.version === 2) auditInputMode('docs', head, git);
       else for (const mode of ['docs', 'identity', 'gateway', 'lock']) {
-        auditInputMode(mode, pr.head.sha, git, Object.keys(policy.manifests));
+        auditInputMode(mode, head, git, Object.keys(policy.manifests));
       }
     }
     const inputs = paths.filter(path => !auditPath(path) && consumes(kind, path));

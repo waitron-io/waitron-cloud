@@ -4,11 +4,16 @@ on:
     inputs:
       full:
         type: boolean
-        default: false
+        default: true
+      job-prefix:
+        type: string
+        default: ''
   pull_request:
   workflow_dispatch:
 permissions:
   contents: read
+  actions: read
+  pull-requests: read
   packages: read
 concurrency:
   group: cost-conformance-${{ inputs.full && 'nightly-' || '' }}${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
@@ -18,25 +23,46 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 2
     outputs:
-      files: ${{ steps.files.outputs.files }}
+      plan: ${{ steps.plan.outputs.plan }}
+      mode: ${{ steps.plan.outputs.mode }}
       required: ${{ steps.plan.outputs.required }}
+      files: ${{ steps.plan.outputs.files }}
     steps:
       - uses: actions/checkout@v5
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 0
+          persist-credentials: false
       - uses: actions/setup-node@v5
         with:
           node-version: '26'
           package-manager-cache: false
       - id: plan
-        run: node scripts/ci-docs.mjs --plan
+        run: node scripts/ci-native-plan.mjs
         env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CI_FORCE_FULL: ${{ inputs.full }}
-          CI_PROOF_KIND: cost
-      - id: files
-        if: steps.plan.outputs.required == 'true'
-        run: echo "files=$(node scripts/cloud-cost/conformance.mjs --matrix)" >> "$GITHUB_OUTPUT"
+          CI_WORKFLOW_INPUTS: ${{ toJSON(inputs) }}
+          CI_RECORD_EVIDENCE: 'true'
+          CI_WORKFLOW_PATH: .github/workflows/cloud-cost.yml
+      - name: Retain source plan
+        if: steps.plan.outputs.source_artifact != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.plan.outputs.source_artifact }}
+          path: .ci-evidence/source/plan.json
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 14
+      - name: Retain main decision
+        if: steps.plan.outputs.decision_artifact != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.plan.outputs.decision_artifact }}
+          path: .ci-evidence/decision/plan.json
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 14
   conformance:
     needs: discover
     if: needs.discover.outputs.required == 'true'
@@ -97,3 +123,27 @@ jobs:
         with:
           path: ${{ steps.pnpm-store.outputs.path }}
           key: ${{ steps.pnpm-cache.outputs.cache-primary-key }}
+  summary:
+    if: ${{ always() }}
+    needs: [discover, conformance]
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '26'
+          package-manager-cache: false
+      - run: node scripts/ci-native-summary.mjs
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CI_PLAN: ${{ needs.discover.outputs.plan }}
+          CI_RESULTS: ${{ toJSON(needs) }}
+          CI_JOB_PREFIX: ${{ inputs.job-prefix }}
+          CI_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          CI_WORKFLOW_INPUTS: ${{ toJSON(inputs) }}
+          CI_WORKFLOW_PATH: .github/workflows/cloud-cost.yml

@@ -1375,20 +1375,26 @@ implementation or production evidence.
   peer shortcuts. No measured GitHub time saving is claimed. D571 part 5 has a
   [verified-merge design](superpowers/specs/2026-11-05-verified-merge-ci-design.md)
   and [implementation plan](superpowers/plans/2026-11-05-verified-merge-ci.md).
-  Runtime implementation is in progress. Its local planner can qualify an
-  identical-tree PR source, and its final summary rechecks that source before
-  accepting skipped work. Main decision readback verifies the hosted artifact,
-  every final job and the reconstructed push range or full inventory. Each of
-  AWS, cost, venue and download diagnostics now has independent local source
-  reconstruction and decision readback, including legitimate unselected proofs.
-  The verifier compares source and execution workflow inputs with the reviewed
-  definitions. These paths are not enabled in workflows. Workflow planners,
-  summaries, uploads, nightly AWS coverage and the whole-branch review remain. Runtime
-  landing waits for the nightly backstop and the watcher's post-merge runbook update.
+  The workflows now publish attempt-bound source plans and main decisions,
+  independently qualify identical-tree sources, and recheck them in the final
+  summary before accepting skipped work. Main readback verifies the hosted
+  artifact, every final job and the reconstructed push range or full inventory.
+  AWS and applicable download diagnostics have their own planners and summaries.
+  Cost and venue retain part 4's removed main triggers and their input selection;
+  they cannot borrow standard CI's evidence. Historical proof reconstruction
+  reads its explicit immutable range, independently of the operator checkout.
+  Reusable calls, including a false-valued full input, always run complete work.
+  The [merge evidence checklist](ci-merge-evidence.md) distinguishes inherited
+  counts, newly executed checks and workflows excluded by their actual triggers.
+  Local checks cover workflow conditions, artifact publication, complete native
+  jobs and deliberate guard omissions. Hosted equal-tree and changed-tree
+  readback, the first nightly with AWS and measured time savings remain unproved.
+  Runtime landing still requires the whole-branch review, current-head CI and
+  the watcher's post-merge runbook update.
   Part 6 adds the [nightly full backstop](ci-nightly.md):
-  one 03:17 UTC schedule and a manual trigger call the existing three workflows
-  at the same revision. All package partitions, six receipt suites, cost and
-  venue execute even on an unchanged tree. The parent refuses a missing, skipped,
+  one 03:17 UTC schedule and a manual trigger call all four workflows
+  at the same revision. All package partitions, six receipt suites, cost,
+  venue and four AWS cells execute even on an unchanged tree. The parent refuses a missing, skipped,
   cancelled or failed family; the standard summary retains its exact job checks
   within the nested family, refusing malformed job names before filtering.
   Configuration guards protect the full inputs, concurrency and final
@@ -2623,9 +2629,9 @@ implementation or production evidence.
   plan, refusing missing, duplicated, cancelled, unfinished or failed required
   jobs, and any unexpected executed job. Unused job families must finish skipped.
   Every PR job checks out its exact
-  head SHA. Every push to main runs the complete package, receipt and compiler
-  suites, even when the merge tree equals a green pull-request head. This follows
-  the owner's 2026-10-18 decision until D571 part 5 changes the merge policy.
+  head SHA. The former 2026-10-18 policy repeated complete package, receipt and
+  compiler suites on every main push. D571 part 5 replaces that policy
+  with independently verified identical-tree reuse and actual main-range selection.
   D571 part 6 supplies an additional nightly full run under the 4 November
   decision; it does not itself remove main-push testing. Local
   regressions exercise the real planner and summary commands and both equal-tree

@@ -2,7 +2,7 @@ import {execFileSync} from 'node:child_process';
 import assert from 'node:assert/strict';
 import {resolveRange} from './ci-range.mjs';
 import {findReuse, permitsRangeSelection} from './ci-reuse.mjs';
-import {reuseContextFromEnvironment, runtimeReuseDependencies} from './ci-reuse-runtime.mjs';
+import {bindRuntimeWorkflow, publishRuntimePlan, reuseContextFromEnvironment, runtimeReuseDependencies} from './ci-reuse-runtime.mjs';
 import {appendFileSync, readFileSync} from 'node:fs';
 import {pathToFileURL} from 'node:url';
 import {loadWorkspace, scopeForPaths, workPlan, receiptSuites} from './ci-scope.mjs';
@@ -130,7 +130,7 @@ export function createPlan(event, context, workspace, git, api, reuseGit = git) 
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const event = JSON.parse(readFileSync(process.env.GITHUB_EVENT_PATH,'utf8'));
-  const context = reuseContextFromEnvironment(event);
+  let context = reuseContextFromEnvironment(event);
   context.full ||= process.env.CI_FORCE_FULL === 'true';
   const git = (...args) => {
     const binary = typeof args.at(-1) === 'object' && args.pop().binary;
@@ -143,12 +143,18 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   catch {
     console.log('::warning title=Documentation-only CI unavailable::Review changed executable inputs, then renew documentation evidence (scripts/ci-input-audit.json in v1; docs records in v2) with --write-staged using docs/ci-documentation-audit.md. V2 peer records may remain stale and retain full work. Docs-only changes retain full CI, and the required root/script freshness check fails until reviewed and renewed.');
   }
-  const dependencies = context.eventName === 'push' && context.repository === 'waitron-io/waitron-cloud'
+  const record = process.env.CI_RECORD_EVIDENCE === 'true' && !context.full && !context.called && ['push', 'pull_request'].includes(context.eventName);
+  const dependencies = (record || context.eventName === 'push') && context.repository === 'waitron-io/waitron-cloud'
     ? runtimeReuseDependencies(context) : {};
+  if (record) context = bindRuntimeWorkflow(context, dependencies.api);
   const plan = createPlan(event,context,loadWorkspace(),git,dependencies.api,dependencies.git);
   // Diagnostics share GitHub's job output budget with the executable work plan.
   if (plan.reason.length > 4096) plan.reason = plan.reason.slice(0, 4096) + '... (explanation truncated)';
+  const range = resolveRange(event, context, git);
+  const mode = plan.reuse ? 'reused' : range.kind === 'full' || /^(Unverified PR evidence:|Cannot verify push topology:)/.test(plan.reason) ? 'full' : 'selected';
+  if (record) publishRuntimePlan(context, plan, git, mode);
   const outputs = {
+    mode,
     plan:JSON.stringify(plan), typecheck:String(plan.typecheck),
     documentation:String(Boolean(plan.documentation)),
     scripts:String(Boolean(plan.scripts)),

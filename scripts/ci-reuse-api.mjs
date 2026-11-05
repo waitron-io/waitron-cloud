@@ -39,9 +39,10 @@ export function collectPages(readPage) {
   throw Error('Evidence page limit exceeded');
 }
 
-export function createReuseApi({repository, now = () => performance.now(), execute = execFileSync, executable = 'gh'} = {}) {
+export function createReuseApi({repository, now = () => performance.now(), execute = execFileSync, executable = 'gh', budgetMs = 30_000} = {}) {
   assert.equal(repository, 'waitron-io/waitron-cloud', 'Unsupported evidence repository');
-  const deadline = now() + 30_000;
+  assert.ok(Number.isFinite(budgetMs) && budgetMs > 0 && budgetMs <= 30_000, 'Invalid evidence deadline');
+  const deadline = now() + budgetMs;
   let requests = 0;
   const remaining = () => {
     const value = Math.floor(deadline - now());

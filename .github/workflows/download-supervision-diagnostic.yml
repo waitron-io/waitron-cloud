@@ -15,8 +15,55 @@ on:
       - '.github/workflows/download-supervision-diagnostic.yml'
 permissions:
   contents: read
+  actions: read
+  pull-requests: read
 jobs:
+  changes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    outputs:
+      plan: ${{ steps.plan.outputs.plan }}
+      mode: ${{ steps.plan.outputs.mode }}
+      required: ${{ steps.plan.outputs.required }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '26'
+          package-manager-cache: false
+      - id: plan
+        run: node scripts/ci-native-plan.mjs
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CI_FORCE_FULL: ${{ inputs.full }}
+          CI_WORKFLOW_INPUTS: ${{ toJSON(inputs) }}
+          CI_RECORD_EVIDENCE: 'true'
+          CI_WORKFLOW_PATH: .github/workflows/download-supervision-diagnostic.yml
+      - name: Retain source plan
+        if: steps.plan.outputs.source_artifact != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.plan.outputs.source_artifact }}
+          path: .ci-evidence/source/plan.json
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 14
+      - name: Retain main decision
+        if: steps.plan.outputs.decision_artifact != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.plan.outputs.decision_artifact }}
+          path: .ci-evidence/decision/plan.json
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 14
   linux-contention:
+    needs: changes
+    if: needs.changes.outputs.required == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 4
     steps:
@@ -65,3 +112,27 @@ jobs:
           name: download-supervision-${{ github.event.pull_request.head.sha || github.sha }}-${{ github.run_attempt }}
           path: diagnostics/
           retention-days: 14
+  summary:
+    if: ${{ always() }}
+    needs: [changes, linux-contention]
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '26'
+          package-manager-cache: false
+      - run: node scripts/ci-native-summary.mjs
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CI_PLAN: ${{ needs.changes.outputs.plan }}
+          CI_RESULTS: ${{ toJSON(needs) }}
+          CI_JOB_PREFIX: ${{ inputs.job-prefix }}
+          CI_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          CI_WORKFLOW_INPUTS: ${{ toJSON(inputs) }}
+          CI_WORKFLOW_PATH: .github/workflows/download-supervision-diagnostic.yml

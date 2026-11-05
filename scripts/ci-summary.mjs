@@ -8,7 +8,7 @@ import {assertReceiptSuites} from './ci-run-receipts.mjs';
 import {assertScriptWork} from './ci-scripts.mjs';
 import {assertReuseProof} from './ci-reuse-proof.mjs';
 import {assertCurrentReuse} from './ci-reuse.mjs';
-import {readRuntimeReuseContext, runtimeReuseDependencies} from './ci-reuse-runtime.mjs';
+import {bindRuntimeWorkflow, readRuntimeReuseContext, runtimeReuseDependencies} from './ci-reuse-runtime.mjs';
 
 export const packageShards = Object.freeze({
   '@waitron-cloud/registration': 6,
@@ -119,7 +119,7 @@ function readCurrentJobs(timeoutMs) {
   return pages.flatMap(page => page.jobs);
 }
 
-function hasFinishedSteps(job, identity) {
+export function hasFinishedSteps(job, identity) {
   if (!identity || !Number.isSafeInteger(identity.runId) || identity.runId <= 0 ||
       !Number.isSafeInteger(identity.runAttempt) || identity.runAttempt <= 0 ||
       !/^[a-f0-9]{40}$/.test(identity.headSha)) return false;
@@ -231,8 +231,10 @@ export async function waitForSummary(plan, results, {
     }
     if (waiting.length === 0) {
       if (plan.reuse) {
-        const context = reuseContext ?? readRuntimeReuseContext();
-        assertCurrentReuse(plan.reuse, context, reuseDependencies ?? runtimeReuseDependencies(context));
+        let context = reuseContext ?? readRuntimeReuseContext();
+        const dependencies = reuseDependencies ?? runtimeReuseDependencies(context);
+        if (!reuseContext) context = bindRuntimeWorkflow(context, dependencies.api);
+        assertCurrentReuse(plan.reuse, context, dependencies);
       }
       return;
     }

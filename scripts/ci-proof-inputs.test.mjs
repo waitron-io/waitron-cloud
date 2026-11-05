@@ -4,6 +4,8 @@ import {mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync} from 'node:
 import {tmpdir} from 'node:os';
 import {join, resolve} from 'node:path';
 import test from 'node:test';
+import * as proofInputs from './ci-proof-inputs.mjs';
+import {selectWorkflowPlan} from './ci-workflow-plan.mjs';
 import {recordFilename} from './ci-input-audit-records.mjs';
 
 const checker = resolve('scripts/ci-docs.mjs');
@@ -15,17 +17,20 @@ function fixture(run) {
     mkdirSync(join(root, path, '..'), {recursive: true}); writeFileSync(join(root, path), text);
   };
   const commit = () => {git('add', '-A'); git('commit', '-sm', 'Proof input fixture'); return git('rev-parse', 'HEAD');};
-  const plan = (kind, event, sha = git('rev-parse', 'HEAD'), full = 'false') => {
+  const plan = (kind, event, sha = git('rev-parse', 'HEAD'), full = 'false', configured) => {
     const eventPath = join(root, '.git/event.json'), output = join(root, '.git/output');
     writeFileSync(eventPath, JSON.stringify(event)); writeFileSync(output, '');
-    const result = spawnSync(process.execPath, [checker, '--plan'], {cwd: root, encoding: 'utf8',
+    const args = configured ? [resolve(/run: node (scripts\/ci-[a-z-]+\.mjs)/.exec(configured)[1])] : [checker, '--plan'];
+    const workflowPath = configured ? /CI_WORKFLOW_PATH: ([^\s]+)/.exec(configured)[1] : '';
+    const result = spawnSync(process.execPath, args, {cwd: root, encoding: 'utf8',
       env: {...process.env, CI_PROOF_KIND: kind, CI_FORCE_FULL: full, GITHUB_SHA: sha,
-        GITHUB_EVENT_PATH: eventPath, GITHUB_OUTPUT: output}});
+        GITHUB_EVENT_PATH: eventPath, GITHUB_OUTPUT: output, ...(configured ? {CI_WORKFLOW_PATH: workflowPath, CI_RECORD_EVIDENCE: 'false', GITHUB_EVENT_NAME: 'pull_request', CI_WORKFLOW_INPUTS: '{}'} : {})}});
     assert.equal(result.status, 0, result.stderr);
     const lines = readFileSync(output, 'utf8').trim().split('\n');
-    assert.equal(lines.length, 1, result.stdout);
-    assert.match(lines[0], /^required=(true|false)$/);
-    return {required: lines[0] === 'required=true', reason: result.stdout};
+    if (!configured) assert.equal(lines.length, 1, result.stdout);
+    const required = lines.find(line => line.startsWith('required='));
+    assert.match(required, /^required=(true|false)$/);
+    return {required: required === 'required=true', reason: result.stdout};
   };
   try {
     git('init', '-b', 'main'); git('config', 'user.name', 'Proof test'); git('config', 'user.email', 'proof@example.test');
@@ -136,11 +141,10 @@ test('a cost consumer shared test helper keeps conformance', () => fixture(({put
 for (const [kind, name] of [['cost', 'cloud-cost.yml'], ['venue', 'venue-services-proof.yml']]) {
   test(`${kind} workflow's actual planner wiring omits portal work and keeps its own control`, () => fixture(({put, commit, plan, pr}) => {
     const workflow = readFileSync(resolve('.github/workflows', name), 'utf8');
-    const configuredKind = /CI_PROOF_KIND: (\w+)/.exec(workflow)?.[1] ?? '';
     put('apps/portal/src/account.ts'); const unrelated = commit();
-    assert.equal(plan(configuredKind, pr(unrelated)).required, false);
+    assert.equal(plan(kind, pr(unrelated), undefined, 'false', workflow).required, false);
     put(`.github/workflows/${name}`); const own = commit();
-    assert.equal(plan(configuredKind, pr(own, unrelated)).required, true);
+    assert.equal(plan(kind, pr(own, unrelated), undefined, 'false', workflow).required, true);
   }));
 }
 
@@ -298,3 +302,32 @@ for (const [kind, name] of [['cost', 'cloud-cost.yml'], ['venue', 'venue-service
     assert.equal(workflowSchedules(name, 'push', plan(kind, {}).required), false);
   }));
 }
+
+// Dropping the earlier commit or reusing the former Markdown-only policy would
+// wrongly skip a changed cost input, or repeat venue work for portal-only input.
+test('native range selection preserves proof inputs across the entire push', () => fixture(({put, commit, git, base}) => {
+  put('scripts/cloud-cost/changed.mjs'); commit();
+  put('apps/portal/src/account.ts'); const head = commit();
+  const plan = selectWorkflowPlan('.github/workflows/cloud-cost.yml', {base, head}, git);
+  assert.equal(plan.required, true);
+  assert.deepEqual(plan.paths, ['apps/portal/src/account.ts', 'scripts/cloud-cost/changed.mjs']);
+  const venue = selectWorkflowPlan('.github/workflows/venue-services-proof.yml', {base, head}, git);
+  assert.equal(venue.required, true, 'Unclassified root scripts retain venue work');
+}));
+
+test('literal portal-only range omits cost and venue without a synthetic PR', () => fixture(({put, commit, git, base}) => {
+  put('apps/portal/src/account.ts'); const head = commit();
+  for (const path of ['cloud-cost.yml', 'venue-services-proof.yml']) {
+    const selection = selectWorkflowPlan(`.github/workflows/${path}`, {base, head}, git);
+    assert.equal(selection.required, false);
+    assert.deepEqual(selection.paths, ['apps/portal/src/account.ts']);
+  }
+  assert.equal(typeof proofInputs.proofInputPlanRange, 'function');
+  assert.equal(proofInputs.proofInputPlanRange('cost', {base, head}, git).required, false);
+}));
+
+test('historical proof range reads immutable inputs independently of the working checkout', () => fixture(({put, commit, git, base}) => {
+  put('apps/portal/src/account.ts'); const head = commit();
+  git('checkout', '--detach', base);
+  for (const kind of ['cost', 'venue']) assert.equal(proofInputs.proofInputPlanRange(kind, {base, head}, git).required, false);
+}));

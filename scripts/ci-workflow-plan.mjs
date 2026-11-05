@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import {workflowPaths} from './ci-reuse-proof.mjs';
 import {loadWorkspaceAtRevision} from './ci-workspace-snapshot.mjs';
 import {selectPlan} from './ci-plan.mjs';
-import {documentationPlan} from './ci-docs.mjs';
+import {proofInputPlanRange} from './ci-proof-inputs.mjs';
 import {conformanceMatrix} from './cloud-cost/conformance.mjs';
 
 export function fullWorkflowPlan(workflowPath, head) {
@@ -24,8 +24,7 @@ export function selectWorkflowPlan(workflowPath, range, git) {
   assert.ok(paths.length > 0, 'Empty workflow path inventory');
   let required = true;
   if (['cloud-cost.yml', 'venue-services-proof.yml'].some(name => workflowPath.endsWith('/' + name))) {
-    try {required = !documentationPlan(paths, range.base, range.head, git);}
-    catch { /* Missing or stale documentation evidence retains the native proof. */ }
+    required = proofInputPlanRange(workflowPath.endsWith('/cloud-cost.yml') ? 'cost' : 'venue', range, git).required;
   }
   return {base: range.base, head: range.head, paths, required,
     ...(workflowPath.endsWith('/cloud-cost.yml') && required ? {matrix: conformanceMatrix()} : {})};

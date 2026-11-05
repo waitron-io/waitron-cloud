@@ -1,5 +1,8 @@
 import assert from 'node:assert/strict';
-import {readFileSync} from 'node:fs';
+import {appendFileSync, mkdirSync, readFileSync, writeFileSync} from 'node:fs';
+import {join} from 'node:path';
+import {canonicalJson, capturePlanEvidence} from './ci-evidence.mjs';
+import {createDecisionEvidence} from './ci-decision.mjs';
 import {createBoundedGit, createReuseApi} from './ci-reuse-api.mjs';
 
 export function reuseContextFromEnvironment(event, env = process.env) {
@@ -22,4 +25,38 @@ export function readRuntimeReuseContext(env = process.env) {
   const bytes = readFileSync(env.GITHUB_EVENT_PATH);
   assert.ok(bytes.length > 0 && bytes.length <= 1024 * 1024, 'Invalid original event size');
   return reuseContextFromEnvironment(JSON.parse(new TextDecoder('utf-8', {fatal: true}).decode(bytes)), env);
+}
+
+export function bindRuntimeWorkflow(context, api) {
+  const run = api.readRun(context.runId, api.remaining());
+  assert.equal(run.id, context.runId, 'Wrong runtime run');
+  assert.equal(run.run_attempt, context.attempt, 'Wrong runtime attempt');
+  assert.equal(run.path, context.workflowPath, 'Wrong runtime workflow');
+  assert.equal(run.event, context.eventName, 'Wrong runtime event');
+  assert.equal(run.head_sha, context.eventName === 'pull_request' ? context.event.pull_request.head.sha : context.sha, 'Wrong runtime head');
+  for (const repo of [run.repository, run.head_repository]) {
+    assert.equal(repo?.id, context.repositoryId, 'Wrong runtime repository');
+    assert.equal(repo.full_name, context.repository, 'Wrong runtime repository name');
+  }
+  assert.ok(Number.isSafeInteger(run.workflow_id) && run.workflow_id > 0, 'Missing runtime workflow ID');
+  return {...context, workflowId: run.workflow_id};
+}
+
+export function publishRuntimePlan(context, selection, git, mode, {root = '.ci-evidence', output = process.env.GITHUB_OUTPUT,
+  summary = process.env.GITHUB_STEP_SUMMARY} = {}) {
+  if (context.called || context.full || !['pull_request', 'push'].includes(context.eventName)) return;
+  if (context.eventName === 'push' && context.ref !== 'refs/heads/main') return;
+  const source = context.eventName === 'pull_request';
+  const record = source ? capturePlanEvidence(context.event, context, selection, git) : createDecisionEvidence(context, selection, git, mode);
+  const directory = join(root, source ? 'source' : 'decision');
+  mkdirSync(directory, {recursive: true});
+  writeFileSync(join(directory, 'plan.json'), canonicalJson(record) + '\n', {flag: 'wx'});
+  const key = context.workflowPath.slice('.github/workflows/'.length, -4);
+  const kind = source ? 'plan' : 'decision';
+  appendFileSync(output, `${source ? 'source' : 'decision'}_artifact=ci-${kind}-v1-${key}-${context.runId}-${context.attempt}\n`);
+  if (summary) {
+    const proof = selection.reuse;
+    const link = proof ? `; [source PR #${proof.pr}](https://github.com/${proof.repository}/pull/${proof.pr}), [run ${proof.runId}, attempt ${proof.attempt}](https://github.com/${proof.repository}/actions/runs/${proof.runId}/attempts/${proof.attempt})` : '';
+    appendFileSync(summary, `## ${key}: ${source ? 'PR source plan' : mode}\n\nExact checkout ${source ? record.checkout.sha : context.sha}${link}.\n`);
+  }
 }

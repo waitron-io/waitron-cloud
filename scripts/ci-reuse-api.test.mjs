@@ -175,3 +175,12 @@ test('real subprocess consumes a fake gh response and kills only its own timed-o
     assert.throws(() => api.readRun(42, 50), error => error.code === 'ETIMEDOUT');
   } finally {rmSync(root, {recursive: true, force: true});}
 });
+
+test('job-publication reads consume only the summary time remaining', () => {
+  let time = 0, observed;
+  const api = module.createReuseApi({repository, budgetMs: 37, now: () => time, execute: (_command, _args, options) => {
+    observed = options.timeout; time += 38; return response({id: 42});
+  }});
+  assert.throws(() => api.readRun(42), /deadline exhausted/);
+  assert.equal(observed, 37);
+});

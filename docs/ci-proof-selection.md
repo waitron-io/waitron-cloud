@@ -8,8 +8,9 @@ The ordinary CI workflow keeps its own package and receipt selection.
 You can run either complete proof manually with **Run workflow** in GitHub Actions.
 Automatic main-push runs are removed. The [nightly full run](ci-nightly.md)
 executes both complete matrices, even when called from an unrelated pull request.
-Manual full runs remain available. The standard main workflow still runs its full
-package, compiler and six-receipt plan, including the cost unit checks.
+Manual full runs remain available. The standard main workflow independently verifies reuse or selects its changed
+range. Follow the [merge evidence checklist](ci-merge-evidence.md); its inherited
+counts do not count as newly executed proof work.
 
 ## Cost conformance inputs
 
@@ -93,5 +94,6 @@ the PR merge environment and workflow-specific selection. These are local
 selection receipts. GitHub job counts and timings must be measured separately.
 
 Changing when a proof runs does not change its cases, assertions, time limits,
-permissions or commands. A skipped matrix means it was not selected. It does not
+proof commands. The lightweight planner and summary have read access to Actions
+and pull-request metadata so they can verify attempt-bound evidence. A skipped matrix means it was not selected. It does not
 prove those tests passed on that revision.
