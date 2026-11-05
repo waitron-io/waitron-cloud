@@ -6,7 +6,7 @@ import { createMeter } from './meter.mjs';
 import { createLitestreamTransport } from './litestream.mjs';
 import { checkpointTransportDiagnostic, workerFailureTrace } from './worker-diagnostic.mjs';
 
-// Removing socket-count forwarding loses the distinction between settled and interrupted native work.
+// Removing socket-count forwarding hides how many validated requests belonged to the failed socket.
 test('a real reset after request settlement retains zero forwarding requests through the worker', { timeout: 5000 }, async t => {
   const backend = createServer((req, res) => { req.resume(); req.on('end', () => res.end('ok')); });
   backend.listen(0, '127.0.0.1'); await once(backend, 'listening');
