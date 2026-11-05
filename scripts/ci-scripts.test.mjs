@@ -242,7 +242,7 @@ test('executed planner emits the script-only job and summary consumes its needs 
   assert.equal(output.scripts, 'true');
   for (const family of ['packages', 'receipts', 'typecheck', 'documentation']) assert.equal(output[family], 'false');
   assert.deepEqual(JSON.parse(output.plan).scripts, {base, head, paths: [helper]});
-  const gh = '#!/bin/sh\nprintf \'%s\\n\' \'[{"jobs":[{"name":"changes","status":"completed","conclusion":"success"},{"name":"scripts","status":"completed","conclusion":"success"}]}]\'\n';
+  const gh = '#!/bin/sh\nprintf \'%s\\n\' \'[{"total_count":2,"jobs":[{"id":1,"name":"changes","status":"completed","conclusion":"success"},{"id":2,"name":"scripts","status":"completed","conclusion":"success"}]}]\'\n';
   put('gh', gh); git('update-index', '--refresh');
   execFileSync('chmod', ['+x', join(root, 'gh')]);
   const summary = spawnSync(process.execPath, [resolve('scripts/ci-summary.mjs')], {cwd: root, env: {...process.env, PATH: `${root}:${process.env.PATH}`, GITHUB_EVENT_PATH: join(root, 'event.json'), GITHUB_SHA: head, CI_HEAD_SHA: head, CI_JOB_PREFIX: '', CI_PLAN: output.plan, CI_RESULTS: JSON.stringify({changes: {result: 'success'}, scripts: {result: 'success'}, packages: {result: 'skipped'}, receipts: {result: 'skipped'}, typecheck: {result: 'skipped'}, documentation: {result: 'skipped'}})}, encoding: 'utf8'});

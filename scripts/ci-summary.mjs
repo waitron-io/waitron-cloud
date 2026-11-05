@@ -137,7 +137,24 @@ export function assertSummary(plan, results, jobs, rootVerification) {
 
 function readCurrentJobs(timeoutMs) {
   const pages = JSON.parse(execFileSync('gh', ['api','--paginate','--slurp',`repos/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}/jobs?filter=latest&per_page=30`], {encoding:'utf8',timeout:timeoutMs,killSignal:'SIGKILL'}));
-  return pages.flatMap(page => page.jobs);
+  assert.ok(Array.isArray(pages) && pages.length > 0, 'Invalid job list pages');
+  const jobs = [];
+  let total;
+  const identities = new Set();
+  for (const page of pages) {
+    assert.ok(page && Array.isArray(page.jobs), 'Invalid job list page');
+    assert.ok(Number.isSafeInteger(page.total_count) && page.total_count >= 0, 'Invalid job list total');
+    if (total === undefined) total = page.total_count;
+    assert.equal(page.total_count, total, 'Job list total changed');
+    for (const job of page.jobs) {
+      assert.ok(Number.isSafeInteger(job?.id) && job.id > 0, 'Invalid job identity');
+      assert.ok(!identities.has(job.id), 'Duplicate job identity');
+      identities.add(job.id);
+      jobs.push(job);
+    }
+  }
+  assert.equal(jobs.length, total, 'Incomplete job list');
+  return jobs;
 }
 
 export function hasFinishedSteps(job, identity) {
