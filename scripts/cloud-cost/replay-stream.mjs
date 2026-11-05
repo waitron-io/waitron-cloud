@@ -90,7 +90,7 @@ export async function openReplayStream(input) {
       try {
         await Promise.race([session.whenIdle(() => {
           writer.stopping = true; writer.child.kill('SIGTERM');
-        }), new Promise((_, reject) => { drainTimer = setTimeout(() => reject(Error()), 2000); })]);
+        }, { retireConnections: true }), new Promise((_, reject) => { drainTimer = setTimeout(() => reject(Error()), 2000); })]);
       } catch { /* Collection below still stops the owned child and refuses invalid evidence. */ }
       finally { clearTimeout(drainTimer); }
     }
@@ -110,7 +110,7 @@ export async function openReplayStream(input) {
   const abort = () => { invalid = true; dispose().catch(() => {}); };
   const quiesce = async () => {
     healthy();
-    at('quiesce-idle'); await session.whenIdle(() => { writer.stopping = true; writer.child.kill('SIGTERM'); });
+    at('quiesce-idle'); await session.whenIdle(() => { writer.stopping = true; writer.child.kill('SIGTERM'); }, { retireConnections: true });
     at('quiesce-stop'); const result = await stop(writer);
     at('quiesce-stop-result'); successful(result); writer = undefined;
     at('quiesce-health'); healthy();

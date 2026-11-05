@@ -19,8 +19,18 @@ Five ordinary official-writer macOS probes pass; with a padded 512 KiB LIST repl
 two of five stop-at-idle probes instead record `client-error / ECONNRESET`, zero
 forwarding requests, equal successful counters and writer exit zero. This is a
 controlled native reproduction, not attribution of the historical paced replay.
-The native shutdown repair and the separate LIST investigation remain open;
-no acceptance rule, assertion, accounting or deadline changes.
+Replay shutdown now gracefully half-closes previously used storage sockets and
+waits for their peers to close before signalling the writer. It checks again for
+requests admitted during that drain. Fresh connections remain available for their
+first request; unfinished headers and interrupted replies still refuse. The same
+drain applies during collection, within its existing two-second budget.
+Run `node --test scripts/cloud-cost/litestream-idle-retirement.test.mjs
+scripts/cloud-cost/replay-stream.test.mjs` for socket, restore and collection
+controls. The padded official-writer Linux probe resets in all twenty unchanged
+trials and passes all twenty with graceful retirement. This repairs that measured
+shutdown ordering; the older CI traces cannot establish every historical cause.
+The separate native LIST investigation and requests starting after the final drain
+remain open. No acceptance rule, existing assertion, accounting or deadline changes.
 
 ## Cloud backup box identity (D451)
 

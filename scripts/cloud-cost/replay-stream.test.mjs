@@ -19,6 +19,25 @@ const module = await import('./replay-stream.mjs').catch(error => {
 });
 const bad = { message: 'Invalid cloud cost replay stream' };
 
+// Signalling a writer with a settled keep-alive socket can reset the audited listener.
+test('replay retires settled storage sockets before signalling the writer', { timeout: 10000 }, async t => {
+  const f = await fixture(t, 'reset-on-stop'), run = await open(t, f);
+  await upload(f);
+  const result = await run.finish({ expectedSales: 1 });
+  assert.deepEqual(result.restored, { sales: 1, integrity: true });
+  assert.equal(result.stream.status, 'measured');
+  assert.equal(result.stream.requests.reconciled, true);
+  assert.deepEqual(result.native, { version: '0.5.17', writerStarts: 1, phaseRestarts: 0 });
+  clean(f);
+});
+
+test('replay cancellation retires settled sockets before collecting its writer', { timeout: 10000 }, async t => {
+  const f = await fixture(t, 'reset-on-stop'), run = await open(t, f);
+  await upload(f); await run.close();
+  assert.deepEqual(await run.closeResources(), { measurementValid: true });
+  clean(f);
+});
+
 // The child performs real HTTP/SQLite I/O; the separate storage endpoint inventories its bytes.
 async function fixture(t, mode = 'normal', { holdAfterStop = false, interruptQueuedUpload = false } = {}) {
   const parent = realpathSync(mkdtempSync(join(tmpdir(), 'cost-replay-stream-')));
@@ -71,7 +90,7 @@ async function fixture(t, mode = 'normal', { holdAfterStop = false, interruptQue
   const binary = join(root, 'synthetic-writer');
   const text = `#!${process.execPath}
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
-import { request } from 'node:http';
+import { request, Agent } from 'node:http';
 import { randomUUID } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
 const mode = ${JSON.stringify(mode)}, interruptQueuedUpload = ${JSON.stringify(interruptQueuedUpload)};
@@ -80,13 +99,14 @@ console.log('PRIVATE_CHILD_STDOUT_CANARY'); console.error('PRIVATE_CHILD_STDERR_
 if (process.env.PRIVATE_STREAM_ENV) process.exit(73);
 const c = JSON.parse(readFileSync(process.argv[process.argv.indexOf('-config') + 1], 'utf8')).dbs[0];
 let serial = Promise.resolve(), stopping = false, terminationRequested = false;
+const agent = new Agent({keepAlive:true}), sockets = new Set();
 let uploadsStarted = 0;
 const send = async (method, bytes) => {
   // Hold later queued work until the real idle handoff signals this generated writer.
   if (interruptQueuedUpload && method === 'PUT' && ++uploadsStarted > 2)
     while (!terminationRequested) await new Promise(resolve => setTimeout(resolve, 10));
   return new Promise((resolve, reject) => {
-  const r = request(c.replica.endpoint + '/' + c.replica.bucket + '/stream.ltx', { method, agent: false, headers: {
+  const r = request(c.replica.endpoint + '/' + c.replica.bucket + '/stream.ltx', { method, agent: mode === 'reset-on-stop' ? agent : false, headers: {
     'content-length': bytes.length, 'amz-sdk-invocation-id': randomUUID(), 'amz-sdk-request': 'attempt=1; max=1',
     'x-fixture-after-stop': terminationRequested ? 'yes' : 'no',
   } }, res => {
@@ -95,6 +115,7 @@ const send = async (method, bytes) => {
     }
     const chunks=[]; res.on('data', b=>chunks.push(b)); res.on('end',()=>resolve(Buffer.concat(chunks)));
   });
+  r.on('socket', socket => { sockets.add(socket); socket.once('close',()=>sockets.delete(socket)); });
   r.on('error', reject); r.end(bytes);
   });
 };
@@ -116,13 +137,19 @@ if (mode === 'read-before-upload') {
 }
 // The successful-close control has exactly one startup and one held upload.
 let scheduledUploads = 0;
-const nextUpload = () => { if (mode !== 'held-fast-stop' || interruptQueuedUpload || scheduledUploads < 2) { scheduledUploads++; upload(); } };
+const nextUpload = () => { if (!['held-fast-stop','reset-on-stop'].includes(mode) || interruptQueuedUpload || scheduledUploads < 2) { scheduledUploads++; upload(); } };
 nextUpload(); const timer=setInterval(nextUpload,50);
 process.once('SIGTERM',()=>{
   terminationRequested = true;
   if(mode === 'writing-hang') return;
   if(mode === 'hang') { process.kill(process.pid, 'SIGSTOP'); return; }
   if(mode === 'held-fast-stop') { if (!interruptQueuedUpload) process.exit(0); return; }
+  if(mode === 'reset-on-stop') {
+    stopping=true; clearInterval(timer); serial.then(()=>{
+      for(const socket of sockets) socket.resetAndDestroy();
+      setTimeout(()=>process.exit(0),25);
+    }); return;
+  }
   stopping=true; clearInterval(timer); serial.then(()=>process.exit(mode === 'stop' ? 23 : 0));
 });
 `;
