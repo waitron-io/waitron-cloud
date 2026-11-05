@@ -264,6 +264,111 @@ Failed extraction preserves the command error and complete cached archive, remov
 its private root and stops before certificate setup or listeners. Real store startup
 and historical causes remain open; see [the investigation](storage-cache-fixture.md).
 
+## Extraction-refusal seed acquisition (D530-4)
+
+An extraction test can fail before tar runs if its seed archive is unavailable.
+The [recorded CI failure](https://github.com/waitron-io/waitron-cloud/actions/runs/42033259367/job/127266525049)
+aborted that direct download after 30 seconds, without recording whether headers
+or the body stalled. Its provider cause remains unknown. A later cold-cache pass
+does not explain that failure.
+
+Run `node --test scripts/ci-storage-tar-seed.test.mjs` for controlled seed
+failures, then `node --test scripts/ci-backup-storage-tar-refusals.test.mjs`
+for the three existing extraction checks. Acquisition records identify only the
+public pinned request, attempt, stage, status, received bytes and elapsed time;
+signed redirect URLs and response bodies stay out of those records.
+
+Only this test's seed download gains recovery. It makes at most three attempts
+for HTTP 5xx, reset connections or ten seconds without header/body progress.
+Every attempt and its one- or two-second pause share the existing 30-second
+download budget. Other HTTP refusals and digest failures stop immediately,
+including a permanent refusal whose body cancellation also resets. The
+45-second setup limit and each extraction test's 30-second limit remain.
+The shared cache stays read-only, the exact platform digests remain required,
+and failed setup removes only its private seed directory. Disk failures have a
+separate seed stage. If the filesystem also refuses cleanup, the error retains
+both failures with the original setup error as its cause; its private folder
+may remain. The two test files each need a real pinned archive before controlled
+checks run, so an empty cache can require two downloads. An unavailable upstream
+fails setup rather than skipping controls. The storage fixture's
+own single download attempt and historical startup investigations remain separate.
+
+## Every SeaweedFS archive fetch and a controlled-copy proposal (D530-4)
+
+The 5 November inventory finds thirteen live-source acquisition sites for
+SeaweedFS 4.47. They do not share one supervised acquisition. This repair covers
+the tar-refusal setup and its new controls through `storage-tar-seed.mjs`.
+It does not cover the nine other seed hooks, ordinary native fixture startup,
+conformance preparation or the local-stack image build.
+
+| Acquisition site | Current boundary |
+| --- | --- |
+| `scripts/fixtures/storage-tar-seed.mjs:49` | This repair: three temporary attempts within 30 seconds, ten-second inactivity, exact digest, read-only cache. Used by tar refusals and seed controls. |
+| `scripts/ci-backup-storage-concurrent-extraction.test.mjs:29` | One raw seed fetch, 30 seconds; digest required. |
+| `scripts/ci-backup-storage-concurrent-publication.test.mjs:30` | One raw seed fetch, 30 seconds; digest required. |
+| `scripts/ci-backup-storage-extraction.test.mjs:30` | One raw seed fetch, 30 seconds; digest required. |
+| `scripts/ci-backup-storage-issuer-bind.test.mjs:29` | One raw seed fetch, 30 seconds; digest required. |
+| `scripts/ci-backup-storage-process-extraction.test.mjs:27` | One raw seed fetch, 30 seconds; digest required. |
+| `scripts/ci-backup-storage-publication.test.mjs:30` | One raw seed fetch, 30 seconds; digest required. |
+| `scripts/ci-backup-storage-readiness-diagnostics.test.mjs:24` | One raw seed fetch, 30 seconds; digest required. |
+| `scripts/ci-backup-storage-reservation-refusals.test.mjs:29` | One raw seed fetch, 30 seconds; digest required. |
+| `scripts/ci-backup-storage-tls-refusals.test.mjs:29` | One raw seed fetch, 30 seconds; digest required. |
+| `scripts/backup-storage-fixture.mjs:58` | One cache-miss fetch, header/status/body diagnostics and digest; fetch has no own abort deadline. Caller limits remain separate. |
+| `scripts/cloud-cost/conformance-prepare.mjs:252` | Calls `downloadConformanceArchive`: up to three attempts, shared 120 seconds and 30-second inactivity; extracts into its private image context. |
+| `deploy/local-stack/Dockerfile:15` | Version 4.47 and supplied architecture digest; its `curl` has no own retry or deadline. Outer build limits are separate. |
+
+The frozen `scripts/fixtures/ci-deployment-inputs.json` also contains a copy of
+the Dockerfile, materialised by `scripts/ci-dependency-fixture.mjs`; it represents
+the same build edge in historical receipt fixtures. Mock fetches and URL
+assertions in the refusal tests are not additional upstream acquisition sites.
+Thirty-three source files import or reference the native storage fixture in
+this inventory; their cache misses still enter its single fetch. This repair
+leaves those contracts and the frozen fixture unchanged.
+
+The wider evidence is distinct from the tar-hook timeout. Nightly run
+`42042160125`, job `127302872285`, records three HTTP 504 replies at the
+conformance storage-archive stage. General run `42042160180`, job
+`127296533572`, records native fixture status refusals, a 60-second handoff
+cancellation and seed/readiness failures. A later same-head root job passes;
+that does not explain the first timeout or establish one cause for every case.
+Do not label those paths repaired by this helper.
+
+### Optional controlled copy, owner decision required
+
+Recommend evaluating a Cloud-owned R2 Standard bucket behind a custom domain
+for the exact approved archives, rather than fetching upstream release assets
+in each test job. Publish only checksum-verified, versioned bytes, preserve the
+upstream notices, and keep the existing digests as the final check. Switching
+all thirteen acquisition sites and the historical fixture needs its own scoped
+change. No bucket, domain, upload, publishing credential or endpoint change is
+part of this repair.
+
+The upstream release API lists 42,495,103 bytes for macOS ARM64, 45,801,355 for
+Linux x64 and 40,359,016 for Linux ARM64: 128,655,474 bytes in total, about
+0.129 GB. This is asset metadata, not a new qualification of all three binaries.
+Assume at most 100,000 reads and ten writes per month, one version retained and
+an existing owned domain. That read volume could transfer about 4.58 TB if every
+read downloads the Linux x64 archive; this is a sizing example, not measured CI
+traffic.
+
+At the [R2 prices checked on 5 November 2026](https://developers.cloudflare.com/r2/pricing/),
+this fits the unused monthly allowances of 10 GB storage, ten million reads and
+one million writes, giving a $0 storage/request estimate with no egress charge.
+If those shared allowances are already exhausted, rounding each added meter up
+gives a conservative incremental estimate of $0.38 in a steady month, or $4.88
+in a month with the assumed writes, before tax and other account usage. Those
+figures use $0.015 per GB-month, $0.36 per million reads and $4.50 per million
+writes; they exclude domain or optional edge-product charges.
+
+Use a [custom domain](https://developers.cloudflare.com/r2/buckets/public-buckets/)
+for cache controls; the managed development hostname is a different service
+boundary. A public GHCR artifact is an alternative with [currently free
+container storage and bandwidth](https://docs.github.com/en/billing/concepts/product-billing/github-packages),
+but it retains GitHub as the provider. The R2 proposal separates this archive
+boundary from GitHub release downloads; it does not make CI independent of
+GitHub or remove the need to qualify mirror access. Pricing, account allowance,
+publication authority and the exact consumer change remain owner decisions.
+
 ## Storage partial port-reservation refusals (D464)
 
 Run `node --test scripts/ci-backup-storage-reservation-refusals.test.mjs` to

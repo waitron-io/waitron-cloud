@@ -3090,6 +3090,22 @@ request and phase at a new failure before changing transport or the single
 archive-download attempt.
 See [the evidence and remaining work](backlog/storage-cache-fixture.md#storage-archive-download-failure-reporting-d441).
 
+## Storage extraction seed acquisition (D530-4)
+
+The extraction-refusal checks now report seed acquisition separately from the
+storage fixture. Cold downloads allow at most three attempts for temporary
+HTTP 5xx, reset connections and ten seconds without transfer progress, within
+one unchanged 30-second budget. Permanent HTTP refusals and invalid digests stop
+immediately. All three extraction checks, pins, cache preservation and outer
+limits remain. Disk and cleanup failures have separate stages, with both errors
+retained when removal also fails. The historical CI timeout has no recorded HTTP stage, so its
+provider cause stays unknown. Capture a new labelled failure before attributing
+it to the registry. The wider inventory names thirteen acquisition sites; this
+helper covers two seed-setup consumers, leaving the other hooks, native fixture,
+conformance and image build separate. A costed controlled-copy proposal remains
+an owner decision, with no mirror built. See [the seed controls and limits](backlog/storage-cache-fixture.md#extraction-refusal-seed-acquisition-d530-4)
+and [the complete inventory and proposal](backlog/storage-cache-fixture.md#every-seaweedfs-archive-fetch-and-a-controlled-copy-proposal-d530-4).
+
 ## Parallel storage-cache fixture failure on main
 
 Native admin-port fallback and explicit HTTP refusal now have controlled checks;
