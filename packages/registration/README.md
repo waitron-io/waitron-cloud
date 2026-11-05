@@ -430,6 +430,19 @@ still-present local block. Migration 050 leaves older local blocks unmapped beca
 you cannot infer their country or provider from a keyed digest. The mapping stays
 immutable for later reconciliation. Authenticated removal and provider
 reconciliation remain a separate task; this API adds no removal authority.
+The legacy relay gate is global: an ES-scoped trusted block also refuses FR relay
+mail, while shared account-mail lookup uses only its explicit country mapping.
+Before adding removal, you must identify each block's lifetime. Otherwise deleting
+a local row and later adding the same digest without a scope revives its old
+mappings. Task 7 must prevent that revival and refuse to clear a local row with
+mappings outside the reconciled scope.
+
+Missing retained relay keys leave queued ciphertext and its original expiry intact,
+with no SMTP handoff or attempt. The failed claim occupies worker capacity until
+its 60-second lease expires. Account configuration failures use the existing bounded
+retry policy. Qualify both operational outcomes before production wiring. A revoked
+retained key also rolls back a trusted manual block and its mappings together;
+the owner's separately approved key-retirement and recovery design remains required.
 
 Run the handoff and migration races against disposable PostgreSQL:
 

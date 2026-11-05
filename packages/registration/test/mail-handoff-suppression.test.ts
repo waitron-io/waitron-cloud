@@ -89,7 +89,7 @@ test('a scoped local relay commits an attempt before SMTP and shares a trusted m
  }finally{await f.close();}
 });
 
-test('an explicitly scoped manual block crosses purposes without inventing provider evidence or guessing another country',async()=>{
+test('an explicitly scoped manual block crosses purposes without inventing provider evidence or guessing another account-mail country',async()=>{
  const f=await relayFixture();try{
   const worker=new RelayWorker(f.pool,{...f.config,ses});await worker.suppress('owner@example.test');
   const blocked=await enqueue(f.pool),other=await enqueue(f.pool,'other@example.test');let sends=0;
@@ -245,6 +245,7 @@ for(const deadline of ['lease_until','expires_at'])test(`account admission refus
   await f.pool.query(`UPDATE email_outbox SET ${deadline}=clock_timestamp()-interval '1 second' WHERE id=$1`,[id]);
   await held.query('COMMIT');await pending;
   assert.equal(sends,0);assert.equal((await f.pool.query('SELECT count(*) FROM mail_attempts')).rows[0].count,'0');
+  assert.equal((await f.pool.query('SELECT status FROM email_outbox WHERE id=$1',[id])).rows[0].status,deadline==='lease_until'?'processing':'expired');
  }finally{await held.query('ROLLBACK');await pending?.catch(()=>{});held.release();await f.close();}
 });
 
@@ -269,7 +270,7 @@ for(const [table,column,state] of [
  }finally{await held.query('ROLLBACK');await run?.catch(()=>{});held.release();await f.close();}
 });
 
-test('a replaced claim cannot admit or settle the replacement after a scope lock wait',async()=>{
+test('a replaced claim cannot admit or mutate the replacement after a scope lock wait',async()=>{
  const f=await fixture(),held=await f.pool.connect();let pending:Promise<unknown>|undefined;
  try{
   const id=await enqueue(f.pool);let sends=0;
@@ -314,16 +315,22 @@ test('reset authority stays locked through a suppression wait and later changes 
  }finally{await scope.query('ROLLBACK');await change?.catch(()=>{});await writer.query('ROLLBACK');await pending?.catch(()=>{});scope.release();writer.release();await f.close();}
 });
 
-for(const target of ['account','membership','installation','incident','preference','service'])test(`service-alert ${target} authority winning a lock wait prevents admission`,async()=>{
+for(const target of ['account','membership','installation','incident','preference','service','venue','episode','recipient'])test(`service-alert ${target} authority winning a lock wait prevents admission`,async()=>{
  const f=await relayFixture(),held=await f.pool.connect();let pending:Promise<unknown>|undefined;
  try{
   const v=await f.venue(),venue=(await f.pool.query('SELECT venue_id FROM installations WHERE id=$1',[v.installation])).rows[0].venue_id;
   await f.pool.query("INSERT INTO installation_services(installation_id,service,state) VALUES($1,'remote_access','ready')",[v.installation]);
   await f.pool.query('INSERT INTO account_alert_preferences(account_id,enabled) VALUES($1,true)',[v.account]);
   const incident=(await f.pool.query("INSERT INTO venue_incidents(venue_id,kind,status,revision) VALUES($1,'disconnected','open',1) RETURNING id",[venue])).rows[0].id;
+  let episode:string|null=null;
+  if(target==='episode'||target==='recipient'){
+   episode=(await f.pool.query(`INSERT INTO venue_alert_episodes(incident_id,installation_id,opening_revision,opened_at,quiet_seconds,reminder_seconds,opening_due_at,status)
+    VALUES($1,$2,1,statement_timestamp(),0,0,statement_timestamp(),'open') RETURNING id`,[incident,v.installation])).rows[0].id;
+   await f.pool.query("INSERT INTO venue_alert_recipients(episode_id,account_id,reminder_status,recovery_status) VALUES($1,$2,'waiting','waiting')",[episode,v.account]);
+  }
   const id=await transaction(f.pool,async c=>{
    const id=await outbox.enqueue(c,'service_alert',{email:`${v.account}@example.test`,incidentId:incident,venueId:venue,revision:1,issue:'disconnected',state:'open'});
-   await c.query("INSERT INTO service_alert_deliveries(outbox_id,incident_id,revision,state,account_id) VALUES($1,$2,1,'open',$3)",[id,incident,v.account]);return id;
+   await c.query("INSERT INTO service_alert_deliveries(outbox_id,incident_id,revision,state,account_id,episode_id) VALUES($1,$2,1,'open',$3,$4)",[id,incident,v.account,episode]);return id;
   });
   const cases:Record<string,[string,string,unknown[]]>={
    account:['SELECT id FROM cloud_accounts WHERE id=$1 FOR UPDATE','UPDATE cloud_accounts SET disabled_at=clock_timestamp() WHERE id=$1',[v.account]],
@@ -331,6 +338,9 @@ for(const target of ['account','membership','installation','incident','preferenc
    installation:['SELECT id FROM installations WHERE id=$1 FOR UPDATE','UPDATE installations SET revoked_at=clock_timestamp() WHERE id=$1',[v.installation]],
    incident:['SELECT id FROM venue_incidents WHERE id=$1 FOR UPDATE',"UPDATE venue_incidents SET status='suppressed',revision=revision+1 WHERE id=$1",[incident]],
    preference:['SELECT account_id FROM account_alert_preferences WHERE account_id=$1 FOR UPDATE','UPDATE account_alert_preferences SET enabled=false WHERE account_id=$1',[v.account]],
+   venue:['SELECT id FROM venues WHERE id=$1 FOR UPDATE',"UPDATE venues SET environment='production' WHERE id=$1",[venue]],
+   episode:['SELECT id FROM venue_alert_episodes WHERE id=$1 FOR UPDATE',"UPDATE venue_alert_episodes SET status='suppressed' WHERE id=$1",[episode]],
+   recipient:['SELECT account_id FROM venue_alert_recipients WHERE episode_id=$1 FOR UPDATE','DELETE FROM venue_alert_recipients WHERE episode_id=$1',[episode]],
    service:['SELECT installation_id FROM installation_services WHERE installation_id=$1 FOR UPDATE',"UPDATE installation_services SET state='unconfigured' WHERE installation_id=$1",[v.installation]],
   };
   const [lock,change,args]=cases[target]!;await held.query('BEGIN');await held.query(lock,args);const pid=(await held.query('SELECT pg_backend_pid() AS pid')).rows[0].pid;let sends=0;
@@ -339,4 +349,129 @@ for(const target of ['account','membership','installation','incident','preferenc
   assert.equal(sends,0);assert.equal((await f.pool.query('SELECT status FROM email_outbox WHERE id=$1',[id])).rows[0].status,'cancelled');
   assert.equal((await f.pool.query('SELECT count(*) FROM mail_attempts')).rows[0].count,'0');
  }finally{await held.query('ROLLBACK');await pending?.catch(()=>{});held.release();await f.close();}
+});
+
+// A retained-key writer can delay admission after the worker's first authority check.
+for(const purpose of ['account','relay','relay installation'])test(`${purpose} authority expiring during a retained-key wait cancels admission`,async t=>{
+ const f=await relayFixture(),held=await f.pool.connect();let run:Promise<unknown>|undefined;
+ try{
+  await originalAttempt(f,'seed@example.test');const v=await f.venue(),s=await smtp(t);let sends=0;
+  const id=purpose==='account'?await enqueue(f.pool):(await v.submit()).messageId;
+  if(purpose==='account')await f.pool.query("UPDATE signup_requests SET expires_at=clock_timestamp()+interval '2 seconds'");
+  else if(purpose==='relay')await f.pool.query("UPDATE relay_grants SET expires_at=clock_timestamp()+interval '2 seconds'");
+  else await f.pool.query("UPDATE installations SET lease_expires_at=clock_timestamp()+interval '2 seconds'");
+  await held.query('BEGIN');await held.query('SELECT key_id FROM mail_recipient_key_versions FOR UPDATE');
+  const pid=(await held.query('SELECT pg_backend_pid() AS pid')).rows[0].pid;
+  run=purpose==='account'?accountWorker(f.pool,async()=>{sends++;}).runOnce():new RelayWorker(f.pool,{...f.config,smtpPort:s.port,ses}).runOnce();void run.catch(()=>{});
+  await waitBlocked(f.pool,pid);
+  const table=purpose==='account'?'signup_requests':purpose==='relay'?'relay_grants':'installations',column=purpose==='relay installation'?'lease_expires_at':'expires_at';
+  await held.query(`SELECT pg_sleep(GREATEST(0,EXTRACT(EPOCH FROM (${column}-clock_timestamp())))+0.02) FROM ${table}`);
+  await held.query('ROLLBACK');await run;
+  assert.equal(sends,0);assert.equal(s.captured.length,0);
+  assert.equal(purpose==='account'?(await f.pool.query('SELECT status FROM email_outbox WHERE id=$1',[id])).rows[0].status:(await f.row(id)).state,'cancelled');
+  assert.equal((await f.pool.query('SELECT count(*) FROM mail_attempts WHERE queue_id=$1',[id])).rows[0].count,'0');
+  if(purpose!=='account')assert.equal((await f.row(id)).attempts,0);
+ }finally{await held.query('ROLLBACK');await run?.catch(()=>{});held.release();await f.close();}
+});
+
+test('missing retained relay keys leave the queue retryable without fabricating a recipient block',async t=>{
+ const f=await relayFixture();try{
+  await originalAttempt(f,'seed@example.test');const v=await f.venue(),body=await v.submit(),s=await smtp(t);
+  const worker=new RelayWorker(f.pool,{...f.config,smtpPort:s.port,ses:{...ses,recipientKeys:{activeKeyId:'v2',keys:{v2:rotated.keys.v2}}}});
+  await assert.rejects(worker.runOnce(),{message:'mail_keys_unavailable'});
+  const row=await f.row(body.messageId);assert.equal(row.state,'queued');assert.equal(row.reason,null);assert.equal(row.attempts,0);assert.ok(row.payload);
+  assert.equal(s.captured.length,0);assert.equal((await f.pool.query('SELECT count(*) FROM mail_attempts WHERE queue_id=$1',[body.messageId])).rows[0].count,'0');
+  assert.equal((await f.pool.query('SELECT count(*) FROM mail_suppressions')).rows[0].count,'0');
+ }finally{await f.close();}
+});
+
+test('trusted manual suppression waits for the shared scope before committing either block',async()=>{
+ const f=await relayFixture(),held=await f.pool.connect();let run:Promise<unknown>|undefined;
+ try{
+  await held.query('BEGIN');await lockMailScope(held,ses.config.scope);const pid=(await held.query('SELECT pg_backend_pid() AS pid')).rows[0].pid;
+  run=new RelayWorker(f.pool,{...f.config,ses}).suppress('owner@example.test');void run.catch(()=>{});await waitBlocked(f.pool,pid);
+  assert.equal((await f.pool.query('SELECT count(*) FROM relay_suppressions')).rows[0].count,'0');
+  await held.query('COMMIT');await run;
+  assert.equal((await f.pool.query('SELECT count(*) FROM relay_suppressions')).rows[0].count,'1');
+  assert.equal((await f.pool.query('SELECT count(*) FROM mail_legacy_suppression_scopes')).rows[0].count,'1');
+ }finally{await held.query('ROLLBACK');await run?.catch(()=>{});held.release();await f.close();}
+});
+
+test('relay handoff keeps its constructed scope and key material across caller mutations',async t=>{
+ const f=await relayFixture(),held=await f.pool.connect();let run:Promise<unknown>|undefined;
+ try{
+  const binding={config:ses.config,recipientKeys:{activeKeyId:'v1',keys:{v1:keys.keys.v1}}};
+  await originalAttempt(f,'seed@example.test');const v=await f.venue(),body=await v.submit(),s=await smtp(t);
+  const worker=new RelayWorker(f.pool,{...f.config,smtpPort:s.port,ses:binding});
+  await held.query('BEGIN');await lockMailScope(held,ses.config.scope);const pid=(await held.query('SELECT pg_backend_pid() AS pid')).rows[0].pid;
+  run=worker.runOnce();void run.catch(()=>{});await waitBlocked(f.pool,pid);
+  binding.config=config('eu-north-1','FR');binding.recipientKeys.keys.v1='33'.repeat(32);
+  await held.query('COMMIT');await run;
+  assert.equal((await f.row(body.messageId)).state,'accepted');assert.equal(s.captured.length,1);
+  assert.deepEqual((await f.pool.query('SELECT country,region FROM mail_attempts WHERE queue_id=$1',[body.messageId])).rows,[{country:'ES',region:'eu-north-1'}]);
+ }finally{await held.query('ROLLBACK');await run?.catch(()=>{});held.release();await f.close();}
+});
+
+test('a retained mapping alone cannot block account mail when its legacy block is absent',async()=>{
+ const f=await relayFixture();try{
+  await new RelayWorker(f.pool,{...f.config,ses}).suppress('owner@example.test');
+  // Fixture-only deletion models an absent legacy block; production removal needs a block-lifetime design.
+  await f.pool.query('DELETE FROM relay_suppressions');assert.equal((await f.pool.query('SELECT count(*) FROM mail_legacy_suppression_scopes')).rows[0].count,'1');
+  const id=await enqueue(f.pool);let sends=0;await accountWorker(f.pool,async()=>{sends++;}).runOnce();
+  assert.equal(sends,1);assert.equal((await f.pool.query('SELECT status FROM email_outbox WHERE id=$1',[id])).rows[0].status,'sent');
+ }finally{await f.close();}
+});
+
+for(const deadline of ['lease_until','expires_at'])test(`unconfigured account worker refuses ${deadline} expiring during its request lock wait`,async()=>{
+ const f=await fixture(),held=await f.pool.connect();let run:Promise<unknown>|undefined;
+ try{
+  const id=await enqueue(f.pool);let sends=0;const send=async()=>{sends++;};
+  await held.query('BEGIN');await held.query('SELECT token_hash FROM signup_requests FOR UPDATE');const pid=(await held.query('SELECT pg_backend_pid() AS pid')).rows[0].pid;
+  run=new EmailWorker(f.pool,outbox,{sendVerification:send,sendPasswordReset:send,sendPasswordChanged:send,sendServiceAlert:send}).runOnce();void run.catch(()=>{});await waitBlocked(f.pool,pid);
+  await f.pool.query(`UPDATE email_outbox SET ${deadline}=clock_timestamp()-interval '1 second' WHERE id=$1`,[id]);
+  await held.query('COMMIT');await run;
+  assert.equal(sends,0);assert.equal((await f.pool.query('SELECT status FROM email_outbox WHERE id=$1',[id])).rows[0].status,deadline==='lease_until'?'processing':'expired');
+ }finally{await held.query('ROLLBACK');await run?.catch(()=>{});held.release();await f.close();}
+});
+
+test('reset request consumption winning its row lock prevents admission',async()=>{
+ const f=await relayFixture(),held=await f.pool.connect();let run:Promise<unknown>|undefined;
+ try{
+  const v=await f.venue();await f.pool.query("UPDATE cloud_credentials SET password_hash='original-hash' WHERE account_id=$1",[v.account]);
+  await new PasswordRecoveryStore(f.pool,outbox).request(`${v.account}@example.test`);
+  await held.query('BEGIN');await held.query('SELECT token_hash FROM password_reset_requests FOR UPDATE');const pid=(await held.query('SELECT pg_backend_pid() AS pid')).rows[0].pid;let sends=0;
+  run=accountWorker(f.pool,async()=>{sends++;}).runOnce();void run.catch(()=>{});await waitBlocked(f.pool,pid);
+  await held.query('UPDATE password_reset_requests SET consumed_at=clock_timestamp()');await held.query('COMMIT');await run;
+  assert.equal(sends,0);assert.equal((await f.pool.query("SELECT status FROM email_outbox WHERE kind='password_reset'")).rows[0].status,'cancelled');
+  assert.equal((await f.pool.query('SELECT count(*) FROM mail_attempts')).rows[0].count,'0');
+ }finally{await held.query('ROLLBACK');await run?.catch(()=>{});held.release();await f.close();}
+});
+
+test('a stale admitted account send cannot overwrite the replacement SMTP receipt',async()=>{
+ const f=await fixture();let release:()=>void=()=>{},run:Promise<unknown>|undefined;
+ try{
+  const id=await enqueue(f.pool);let started!:()=>void;const entered=new Promise<void>(r=>started=r),gate=new Promise<void>(r=>release=r);
+  const first=new EmailWorker(f.pool,outbox,{sendVerification:async()=>{started();await gate;return{transport:'smtp',messageId:'<first@example.test>'};},sendPasswordReset:async()=>{},sendPasswordChanged:async()=>{},sendServiceAlert:async()=>{}},{ses});
+  run=first.runOnce();void run.catch(()=>{});await entered;
+  await f.pool.query("UPDATE email_outbox SET lease_until=clock_timestamp()-interval '1 second' WHERE id=$1",[id]);
+  const second=new EmailWorker(f.pool,outbox,{sendVerification:async()=>({transport:'smtp',messageId:'<second@example.test>'}),sendPasswordReset:async()=>{},sendPasswordChanged:async()=>{},sendServiceAlert:async()=>{}},{ses});
+  await second.runOnce();release();await run;
+  assert.deepEqual((await f.pool.query('SELECT status,attempts,message_id FROM email_outbox WHERE id=$1',[id])).rows[0],{status:'sent',attempts:2,message_id:'<second@example.test>'});
+  assert.equal((await f.pool.query('SELECT count(DISTINCT attempt_tag) FROM mail_attempts WHERE queue_id=$1',[id])).rows[0].count,'2');
+ }finally{release();await run?.catch(()=>{});await f.close();}
+});
+
+test('a stale admitted relay send stays uncertain after a late SMTP acceptance',async t=>{
+ const f=await relayFixture();let release:()=>void=()=>{},run:Promise<unknown>|undefined;
+ try{
+  let entered!:()=>void;const started=new Promise<void>(r=>entered=r),gate=new Promise<void>(r=>release=r);let sends=0;
+  const s=await smtp(t,{onData(stream,_session,done){stream.resume();stream.on('end',()=>{sends++;entered();void gate.then(()=>done());});}});
+  const v=await f.venue(),body=await v.submit(),worker=new RelayWorker(f.pool,{...f.config,smtpPort:s.port,ses});
+  run=worker.runOnce();void run.catch(()=>{});await started;
+  await f.pool.query("UPDATE relay_messages SET lease_until=clock_timestamp()-interval '1 second' WHERE message_id=$1",[body.messageId]);
+  await worker.runOnce();release();await run;assert.equal((await f.row(body.messageId)).state,'uncertain');
+  assert.equal(await worker.runOnce(),false);assert.equal(sends,1);assert.equal((await f.row(body.messageId)).attempts,1);
+  assert.equal((await f.pool.query('SELECT count(*) FROM mail_attempts WHERE queue_id=$1',[body.messageId])).rows[0].count,'1');
+  assert.equal((await f.pool.query('SELECT count(*) FROM relay_reservations WHERE message_id=$1',[body.messageId])).rows[0].count,'1');
+ }finally{release();await run?.catch(()=>{});await f.close();}
 });

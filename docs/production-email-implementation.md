@@ -154,6 +154,11 @@ attempt before transport starts. Explicitly scoped trusted local blocks also
 receive an immutable legacy-to-scope mapping; older unmapped blocks keep their
 local gate without a guessed country. SMTP metadata and provider receipts remain
 Task 5, and production wiring still needs separate enablement.
+The legacy relay gate still applies across countries. Account mail uses explicit
+mapping scopes. Before adding removal, Task 7 must distinguish each block lifetime
+so an unscoped re-add cannot revive old country mappings. No removal path is
+provided here. Retained-key failures and the full stop on revoked keys still need
+operational and recovery qualification before production wiring.
 
 Task 3 adds `applySesFeedback`, which owns the database transaction for a parsed
 event. Only a future trusted queue consumer may call it. It binds the original

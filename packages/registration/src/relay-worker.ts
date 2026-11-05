@@ -158,6 +158,11 @@ export class RelayWorker {
      if(!(error instanceof Error)||error.message!=='mail_recipient_suppressed')throw error;
      await c.query('ROLLBACK TO SAVEPOINT relay_mail_admission');await this.#terminal(c,row,'failed','refused');return;
     }
+    // Retained-key reads can wait after the earlier deadline check; no attempt survives lost authority.
+    const stillLive=(await c.query(`SELECT 1 FROM relay_grants g JOIN installations i ON i.id=g.installation_id
+     WHERE g.id=$1 AND g.expires_at>clock_timestamp() AND g.origin_verified_until>clock_timestamp()
+     AND i.lease_expires_at>clock_timestamp()`,[row.grant_id])).rowCount;
+    if(!stillLive){await c.query('ROLLBACK TO SAVEPOINT relay_mail_admission');await this.#terminal(c,row,'cancelled','cancelled');return;}
    }
    return content;
   });

@@ -144,6 +144,7 @@ export class EmailWorker {
     catch(error){
       const reason=error instanceof Error?error.message:'';
       if(reason==='mail_claim_unavailable')return true;
+      if(reason==='mail_authority_unavailable'){await this.#finish(claim,'cancelled');return true;}
       if(reason.startsWith('mail_')){await this.#fail(claim,reason==='mail_recipient_suppressed'?'delivery_rejected':'delivery_configuration',reason!=='mail_recipient_suppressed');return true;}
       throw error;
     }
@@ -221,7 +222,11 @@ export class EmailWorker {
       if(current.lease_until<=now)return false;
       if(current.expires_at<=now){await this.#finish(row,'expired',undefined,client);return false;}
       if(row.kind!=='service_alert'&&!await this.#live(client,row,message)){await this.#finish(row,'cancelled',undefined,client);return false;}
-      if(this.#ses)await admitMailAttempt(client,{...this.#ses,recipient:message.email,claim:{purpose:'cloud-account-email',outboxId:row.id,claimId:row.claim_id,attempt:row.attempts}});
+      if(this.#ses){
+        await admitMailAttempt(client,{...this.#ses,recipient:message.email,claim:{purpose:'cloud-account-email',outboxId:row.id,claimId:row.claim_id,attempt:row.attempts}});
+        // Retained-key locks can wait after the earlier authority check. Roll admission back if time ran out.
+        if(!await this.#live(client,row,message))throw Error('mail_authority_unavailable');
+      }
       return true;
     });
   }

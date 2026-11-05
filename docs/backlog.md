@@ -384,6 +384,12 @@ rotation, replaced claims and current reset and alert authority. Migration 050
 retains the first 49 ledger entries and maps explicitly scoped local blocks to
 shared recipient references without inventing provider events or assigning old
 unmapped rows to a country. Unconfigured local capture retains its existing gate.
+Retained-key lock waits now receive a final authority-deadline check before commit.
+The legacy relay gate remains global across country settings. Before removal,
+Task 7 must distinguish block lifetimes so a later unscoped re-add cannot revive
+old country mappings, and refuse clearing a legacy row mapped to another scope.
+Before production wiring, qualify retained-key failures that leave relay work
+queued until its original expiry and occupy capacity until the claim lease ends.
 SMTP metadata, provider receipts, trusted queue consumption, audited removal and
 production wiring remain future tasks. Task 8 must qualify any additional event types;
 `Rendering Failure` currently refuses. It must also reconcile historical Paris-only
