@@ -52,3 +52,8 @@ At the measured `be28f5d6` workspace, a registration source change still selects
 jobs rather than 28. Its consumers really are broad. An unshared registration
 test selects its five existing partitions. Do not narrow registration source
 selection further without measuring which files its consumers read.
+
+After the sixth registration partition lands, the same registration source
+change selects 28 jobs from the full plan's 29. An unshared registration test
+selects all six registration partitions. The historical sample above keeps
+its original five-partition counts.

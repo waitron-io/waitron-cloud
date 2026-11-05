@@ -1327,7 +1327,9 @@ implementation or production evidence.
   audit and reader refusals still select full work. A separate projection that
   excludes prose and audit metadata changes 410 to 338 package jobs; this is
   potential selection reduction, not measured CI savings. Registration source
-  still selects 27 jobs, so further narrowing needs file-level consumer evidence.
+  selects 28 of the full plan's 29 jobs after the sixth registration partition;
+  the historical sample retains its original 27-job count. Further narrowing
+  needs file-level consumer evidence.
   The real portal-plus-prose candidate
   still selects 28 package jobs: its saved graph refuses an unresolved directory
   read in `scripts/ci-audit-fixture-dependencies.mjs`. Keep that conservative
