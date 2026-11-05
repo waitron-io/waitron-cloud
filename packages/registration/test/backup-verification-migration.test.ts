@@ -420,7 +420,7 @@ test('old_recovery_has_no_v2_identity', async () => {
 
 test('concurrent_upgrade_is_once_and_applied_sql_unchanged', async () => {
   assert.equal(migrationNames.at(45), '046_venue_service_authority.sql', 'the release includes venue service authority');
-  assert.equal(migrationNames.at(46),'047_data_lifecycle.sql');assert.equal(migrationNames.at(-1),'048_billing_allowances_traffic.sql');
+  assert.equal(migrationNames.at(46),'047_data_lifecycle.sql');assert.equal(migrationNames.at(47),'048_billing_allowances_traffic.sql');assert.equal(migrationNames.at(-1),'049_ses_feedback.sql');
   assert.equal(migrationNames[44],'045_billing_store.sql');assert.equal(migrationNames[43], '044_remote_forward_observations.sql');
   assert.equal(migrationNames[42], '043_backup_target_verification.sql', 'the historical additive migration is retained');
   const name = `concurrent_verification_${randomUUID().replaceAll('-', '')}`;

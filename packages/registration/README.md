@@ -346,20 +346,60 @@ UTC dates. It requires Docker. Missing cases, skipped tests, setup failures and
 undetected changes refuse qualification. Upgrade and two-backup recovery remain
 separate checks; passing the guard wrapper does not qualify either recovery path.
 
-To check the current migration and both backup paths, run:
+To check the current release and both backup paths, run:
 
 ```sh
 node scripts/test-postgres.mjs exec pnpm --dir packages/registration exec node --test --test-timeout=360000 test/billing-allowance-upgrade-recovery.test.ts
 ```
 
-Schema receipt version 9 binds the exact 47-to-48 predecessor and clean candidate.
+Schema receipt version 10 binds the exact 47-to-49 predecessor and clean candidate.
+It retains every allowance check and also requires empty feedback tables after
+upgrade and both backup paths. Populated mail-attempt recovery is not claimed here.
+Historical version 9 retains its strict 47-to-48 pair.
 The proof interrupts the migration, checks complete rollback, then retries with
 concurrent consumers stopped. It restores the old backup to an empty, unenabled
 allowance schema, and separately restores a populated new backup. Matching external
 keys and signed spool bytes retain configuration revisions, held/spent/released
 units, unfinished-call markers, reporter identity, gaps and exact traffic totals.
 Replaying pending or older spool checkpoints cannot add bytes or reset identity.
-Wrong keys and foreign owners refuse access. Historical proofs 1–8 keep their
+Wrong keys and foreign owners refuse access. Historical proofs 1–9 keep their
 original schema pairs; their wrappers execute the original installed release.
 These are local PostgreSQL and synthetic-account checks, not a live recovery or
 production billing qualification.
+
+
+## Keep mail attempts bound before a future provider handoff
+
+A provider event can arrive after you have erased a mail payload. Migration 049
+adds a separate attempt ledger with opaque tags and keyed recipient references,
+so you can retain the binding without retaining the address, body or token.
+`admitMailAttempt` checks the current queue claim and commits no mail itself.
+Its caller must commit the transaction before SMTP starts. Production workers
+are not wired to this helper yet.
+
+Each call to `lockMailScope`, `admitMailAttempt`, `recipientIsSuppressed` and
+`bindProviderId` requires an open transaction. Commit admission before SMTP.
+Bind the provider receipt in a later transaction after SMTP returns; authenticated
+feedback uses its own transaction. These transactions share a database lock for the
+schema, country, provider account and region, covering both mail purposes and all
+key versions. Keep every persisted key available with the same material after
+rotation. Missing, changed or revoked material refuses admission. Admission holds
+the retained key rows through commit, so a later revocation waits for that decision.
+Recipient references close before admission returns; later additions and rewrites
+refuse. An incomplete reference set cannot commit. Operator audit rows are append-only. Provider IDs
+bind on their first observation and cannot be replaced or shared by attempts
+within a provider account and region. They remain separate from RFC Message-ID.
+
+Run the populated upgrade and focused persistence checks against a disposable
+PostgreSQL database:
+
+```sh
+node scripts/test-postgres.mjs exec pnpm --dir packages/registration exec node --test --test-timeout=120000 test/ses-feedback-migration.test.ts test/mail-attempts.test.ts test/recipient-suppression.test.ts test/migration-history.test.ts test/schema-compatibility.test.ts
+```
+
+The store accepts policy revisions through 2147483647, matching its SQL column;
+larger qualified revisions refuse with a fixed configuration diagnostic.
+
+These checks qualify local storage and locking. Feedback application, SMTP
+admission wiring, queue polling, audited removal and provider qualification remain
+separate implementation tasks. No live sender or AWS resource is enabled.

@@ -318,8 +318,11 @@ sets out attempt binding, shared suppression, private feedback intake and separa
 provider qualification. Task 1 now validates immutable, independently qualified
 purpose/resource/SMTP bindings and bounded one-recipient event envelopes. Native
 synthetic checks cover refusals and classification; they prove no effective AWS
-publisher authentication or live delivery. Durable bindings, shared suppression,
-queue consumption and production wiring remain unimplemented. Task 8 must qualify any additional event types;
+publisher authentication or live delivery. Task 2 adds durable, one-recipient
+attempt bindings, retained key commitments and shared suppression lookup under a
+transaction lock for each country/provider account/region. Migration 049 retains
+all 48 previous ledger entries. Both send paths, authenticated feedback application,
+queue consumption and production wiring remain future tasks. Task 8 must qualify any additional event types;
 `Rendering Failure` currently refuses. It must also reconcile historical Paris-only
 supplier wording and retired enablement dates before any live qualification. AWS resources,
 spending, credentials, production access and live mail remain unauthorised for this

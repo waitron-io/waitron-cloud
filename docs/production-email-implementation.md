@@ -142,3 +142,10 @@ attempt lookup. Provider suppression, hard bounces and temporary outcomes stay
 separate; parsing writes no suppression or sending state. These checks validate
 structure against trusted settings. Only a separately qualified SQS connection
 and effective publisher policies can authenticate the actual sender.
+
+
+Task 2 adds the [durable attempt ledger](../packages/registration/README.md#keep-mail-attempts-bound-before-a-future-provider-handoff)
+and shared suppression lookup. It retains original keyed recipient references
+after payload erasure and refuses conflicting provider IDs. The account and relay
+workers still use their existing sending paths; Task 4 must join them to the new
+admission helpers before this protocol governs a real handoff.

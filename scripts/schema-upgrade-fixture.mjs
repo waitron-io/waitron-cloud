@@ -40,6 +40,10 @@ export async function completionRetry(root,pool,state){
 }
 
 export function upgradeRevisions(args){
+ if(args.includes('--ses-feedback')){
+  if(args.filter(arg=>arg==='--ses-feedback').length!==1)throw Error('schema upgrade revisions invalid');
+  return {...upgradeRevisions(args.map(arg=>arg==='--ses-feedback'?'--allowances':arg)),sesFeedback:true};
+ }
  if(args.length===0)return{oldHead:'9a56d0122bf6872a0200735a7b1e3a23ad4f825c',newHead:'eafd97ad5ac51563e91c821d4c957ef996e5d3fb',factor:false};
  const values={};let relayStop=false,monitoringQuiet=false,backupVerification=false,billing=false,venueServices=false,lifecycle=false,allowances=false;
  for(let i=0;i<args.length;){
@@ -144,4 +148,11 @@ export function upgradeFailure(error,phase){
   }
  }
  return record;
+}
+
+
+export async function emptySesFeedback(pool){
+ for(const table of ['mail_queue_scopes','mail_attempts','mail_attempt_recipients','mail_feedback_receipts','mail_feedback_events','mail_suppressions','mail_recipient_key_versions','mail_suppression_actions'])
+  assert.equal((await pool.query(`SELECT count(*) FROM ${table}`)).rows[0].count,'0',table+' starts empty');
+ return true;
 }
