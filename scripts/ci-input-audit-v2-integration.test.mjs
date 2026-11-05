@@ -81,3 +81,25 @@ test('both configured workflow freshness gates refuse the real stale v2 head', {
     assert.match(result.stderr, /Unreviewed audit input/, `${job} must run the actual immutable freshness check`);
   }
 }));
+
+test('the complete v2 migration publishes its full plan within the job output budget', {timeout: 120_000}, () => completeFixture(({root, git, node, ok, commit}) => {
+  git('checkout', '--orphan', 'migration-v1');
+  rmSync(join(root, marker)); rmSync(join(root, records), {recursive: true});
+  git('add', '-A'); ok(node('scripts/ci-input-audit.mjs', ['--write-staged']));
+  const base = commit();
+  ok(node('scripts/ci-input-audit.mjs', ['--init-v2-staged']));
+  const head = commit();
+  const event = join(root, '.git', 'migration-event.json'), output = join(root, '.git', 'migration-output');
+  writeFileSync(event, JSON.stringify({pull_request: {base: {sha: base}, head: {sha: head}}})); writeFileSync(output, '');
+  ok(node('scripts/ci-plan.mjs', [], {GITHUB_EVENT_PATH: event, GITHUB_OUTPUT: output, GITHUB_SHA: head}));
+  const text = readFileSync(output, 'utf8');
+  const values = Object.fromEntries(text.trim().split('\n').map(line => [line.slice(0, line.indexOf('=')), line.slice(line.indexOf('=') + 1)]));
+  const plan = JSON.parse(values.plan);
+  assert.equal(plan.packages.length, 28);
+  assert.deepEqual(plan.receipts, ['test:two-venue-milestone-receipt', 'test:backup-capacity', 'test:public-gateway-limits', 'test:local-stack', 'test:database-recovery-receipt', 'test:cloud-cost']);
+  assert.equal(plan.typecheck, true); assert.equal(plan.reuse, null);
+  assert.equal(values.packages, 'true'); assert.equal(values.receipts, 'true'); assert.equal(values.typecheck, 'true');
+  assert.deepEqual(JSON.parse(values.package_matrix), {include: plan.packages});
+  // GitHub estimates the per-job 1 MiB output limit using UTF-16 bytes.
+  assert.ok(Buffer.byteLength(text, 'utf16le') < 1024 * 1024, 'The migration explanation must not prevent publication of required work');
+}));

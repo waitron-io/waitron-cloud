@@ -108,6 +108,8 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
     console.log('::warning title=Documentation-only CI unavailable::Review changed executable inputs, then renew documentation evidence (scripts/ci-input-audit.json in v1; docs records in v2) with --write-staged using docs/ci-documentation-audit.md. V2 peer records may remain stale and retain full work. Docs-only changes retain full CI, and the required root/script freshness check fails until reviewed and renewed.');
   }
   const plan = createPlan(event,context,loadWorkspace(),git);
+  // Diagnostics share GitHub's job output budget with the executable work plan.
+  if (plan.reason.length > 4096) plan.reason = plan.reason.slice(0, 4096) + '... (explanation truncated)';
   const outputs = {
     plan:JSON.stringify(plan), typecheck:String(plan.typecheck),
     documentation:String(Boolean(plan.documentation)),
