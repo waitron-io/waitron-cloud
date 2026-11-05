@@ -3766,7 +3766,7 @@ See [the native read boundaries](backlog/remote-access-http.md#remote-status-and
 
 An earlier remote-guidance qualification failed in
 `isolatedControllerNeverClaimsCleanupAfterLosingItsOwnership`: the fixture did not
-observe the replay worker's started journal state (conformance run 40265731418,
+observe the replay worker's started journal state (conformance run 40265731418, <!-- D577 scratch B -->
 job 121387722438). The cause remains unknown and belongs to D530's investigation.
 Keep the ownership assertion, deadlines, resource collection and refusal to claim
 cleanup after ownership loss. Qualify any repair with the genuine runtime fixture;
