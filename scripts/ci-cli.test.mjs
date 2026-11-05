@@ -9,7 +9,7 @@ import {loadWorkspace} from './ci-scope.mjs';
 import {assertSummary} from './ci-summary.mjs';
 
 const repository='waitron-io/waitron-cloud';
-test('real squash merges run full on main for equal trees and advanced main without API access',()=>{
+test('unknown-input squash merges keep complete full work for equal and advanced main trees',()=>{
   const root=mkdtempSync(join(tmpdir(),'cloud-ci-merge-'));
   try {
     const git=(...args)=>execFileSync('git',['-c','maintenance.auto=false',...args],{cwd:root,encoding:'utf8'}).trim();
@@ -29,7 +29,7 @@ test('real squash merges run full on main for equal trees and advanced main with
       const api=path=>path.includes('/commits/') ? [{state:'closed',merged_at:'2026-10-14T09:00:00Z',merge_commit_sha:sha,base:{ref:'main',repo:{full_name:repository}},head:{sha:head,ref:'feature',repo:{full_name:repository}}}] : path.includes('/jobs?') ? {total_count:2,jobs:['changes','summary'].map(name=>({name,status:'completed',conclusion:'success'}))} : {workflow_runs:[{id:42,head_sha:head,head_branch:'feature',head_repository:{full_name:repository},event:'pull_request',path:'.github/workflows/ci.yml',status:'completed',conclusion:'success'}]};
       assert.equal(git('rev-parse', `${sha}^{tree}`) === git('rev-parse', `${head}^{tree}`), !behind);
       let greenCalls = 0;
-      const plan=createPlan({before:parent,commits:[{}]},{sha,repository,branch:'main'},workspace,git,path=>{greenCalls++;return api(path);});
+      const plan=createPlan({before:parent,after:sha,commits:[{}]},{eventName:'push',ref:'refs/heads/main',sha,repository,branch:'main'},workspace,git,path=>{greenCalls++;return api(path);});
       assert.equal(greenCalls, 0);
       const expectedPackages = [
         ...[['account-http',3],['backups',7],['portal',6],['registration',6],['remote-access',4]].flatMap(([name, shards]) =>
@@ -50,7 +50,7 @@ test('real squash merges run full on main for equal trees and advanced main with
       assert.deepEqual(plan.receipts,['test:two-venue-milestone-receipt','test:backup-capacity','test:public-gateway-limits','test:local-stack','test:database-recovery-receipt','test:cloud-cost']);
       assert.equal(plan.reuse,null);
       const apiCalls = [];
-      const unavailable = createPlan({before:parent,commits:[{}]}, {sha,repository,branch:'main'}, workspace, git,
+      const unavailable = createPlan({before:parent,after:sha,commits:[{}]}, {eventName:'push',ref:'refs/heads/main',sha,repository,branch:'main'}, workspace, git,
         path => {apiCalls.push(path); throw Error('API unavailable');});
       assert.deepEqual(unavailable, plan);
       assert.deepEqual(apiCalls, []);
@@ -58,11 +58,11 @@ test('real squash merges run full on main for equal trees and advanced main with
       const marker = join(root, 'api-called');
       writeFileSync(executable, '#!/bin/sh\ntouch "$CI_API_MARKER"\nexit 1\n', {mode: 0o700});
       const eventPath = join(root, 'event.json'), outputPath = join(root, 'output');
-      writeFileSync(eventPath, JSON.stringify({before:parent,commits:[{}]}));
+      writeFileSync(eventPath, JSON.stringify({before:parent,after:sha,commits:[{}]}));
       writeFileSync(outputPath, '');
       const env = {...process.env, PATH:`${root}:${process.env.PATH}`, CI_API_MARKER:marker,
         GITHUB_EVENT_PATH:eventPath, GITHUB_OUTPUT:outputPath, GITHUB_SHA:sha,
-        GITHUB_REPOSITORY:repository, GITHUB_REF_NAME:'main'};
+        GITHUB_REPOSITORY:repository, GITHUB_REF_NAME:'main',GITHUB_EVENT_NAME:'push',GITHUB_REF:'refs/heads/main',CI_FULL:'false',CI_CALLED:'false'};
       const executed = spawnSync(process.execPath, ['scripts/ci-plan.mjs'], {cwd:root, env, encoding:'utf8', timeout:30_000});
       assert.equal(executed.status, 0, executed.stdout + executed.stderr);
       const outputs = Object.fromEntries(readFileSync(outputPath, 'utf8').trim().split('\n').map(line => [line.slice(0,line.indexOf('=')),line.slice(line.indexOf('=')+1)]));

@@ -1,4 +1,6 @@
 import {execFileSync} from 'node:child_process';
+import assert from 'node:assert/strict';
+import {resolveRange} from './ci-range.mjs';
 import {appendFileSync, readFileSync} from 'node:fs';
 import {pathToFileURL} from 'node:url';
 import {loadWorkspace, scopeForPaths, workPlan, receiptSuites} from './ci-scope.mjs';
@@ -39,19 +41,19 @@ function mixedCodePaths(paths, base, head, git) {
   }
 }
 
-export function createPlan(event, context, workspace, git, api) {
+function selectRevisionPlan(range, workspace, git, testFilesByPackage) {
   let scope = scopeForPaths([],workspace);
   let revisions;
   let receiptScope;
   let lockSelection;
-  let reason = context.full === true ? 'Explicit full run: all packages and receipts' : 'Main push or unknown diff: full suite';
-  if (context.full !== true && event.pull_request) {
+  let reason = 'Main push or unknown diff: full suite';
+  {
     try {
-      const {head,base} = event.pull_request;
-      if (![head.sha,base.sha].every(sha=>/^[a-f0-9]{40}$/.test(sha))) throw Error('Invalid event SHA');
-      const mergeBase = git('merge-base',base.sha,head.sha).trim();
+      const head = {sha:range.head};
+      const mergeBase = range.base;
       const paths = git('diff','--name-only','--no-renames','-z',mergeBase,head.sha).split('\0');
-      if (paths.at(-1)==='') paths.pop();
+      if (paths.pop() !== '') throw Error('Incomplete NUL path inventory');
+      if (!paths.length) throw Error('Empty revision range');
       try {
         const documentation = documentationPlan(paths, mergeBase, head.sha, git);
         if (documentation) return {packages:[], receipts:[], typecheck:false, reuse:null, documentation, reason:`Audited unread Markdown: ${paths.join(', ')}`};
@@ -84,10 +86,13 @@ export function createPlan(event, context, workspace, git, api) {
       if (!reason.startsWith('Unverified package revisions:')) reason = scope.full ? `Shared, unaudited or unknown paths: full suite (${paths.join(', ')})` : `Selected ${scope.packages.join(', ')}`;
       if (paths.includes('pnpm-lock.yaml')) reason += `; ${lockSelection?.reason ?? describeLockChanges(mergeBase, head.sha, git)}`;
     } catch {
-      reason = 'Cannot determine PR diff: full suite';
+      scope = scopeForPaths([],workspace);
+      revisions = undefined;
+      lockSelection = undefined;
+      reason = 'Cannot determine revision diff: full suite';
     }
   }
-  const work = workPlan(scope,workspace,undefined,receiptScope ?? scope);
+  const work = workPlan(scope,workspace,undefined,receiptScope ?? scope,testFilesByPackage);
   if (lockSelection) work.receipts = [...receiptSuites];
   if (revisions && !lockSelection) {
     const selection = receiptPlan(work.receipts, receiptScope ?? scope, revisions.base, revisions.head, git);
@@ -97,9 +102,24 @@ export function createPlan(event, context, workspace, git, api) {
   return {...work,reuse:null,reason};
 }
 
+export function selectPlan(range, snapshot, git) {
+  assert.equal(snapshot.revision,range.head,'Workspace snapshot revision mismatch');
+  assert.ok(Array.isArray(snapshot.packages) && snapshot.packages.length,'Missing workspace packages');
+  assert.ok(snapshot.testFilesByPackage && typeof snapshot.testFilesByPackage==='object','Missing saved test inventory');
+  return selectRevisionPlan(range,snapshot.packages,git,snapshot.testFilesByPackage);
+}
+
+export function createPlan(event, context, workspace, git, api) {
+  const range = resolveRange(event,context,git);
+  if (range.kind === 'full') return {...workPlan(scopeForPaths([],workspace),workspace),reuse:null,reason:range.reason};
+  return selectRevisionPlan(range,workspace,git);
+}
+
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const event = JSON.parse(readFileSync(process.env.GITHUB_EVENT_PATH,'utf8'));
-  const context = {sha:process.env.GITHUB_SHA,repository:process.env.GITHUB_REPOSITORY,branch:process.env.GITHUB_REF_NAME,full:process.env.CI_FORCE_FULL === 'true'};
+  const context = {sha:process.env.GITHUB_SHA,repository:process.env.GITHUB_REPOSITORY,branch:process.env.GITHUB_REF_NAME,
+    eventName:process.env.GITHUB_EVENT_NAME,ref:process.env.GITHUB_REF,
+    full:process.env.CI_FORCE_FULL === 'true' || process.env.CI_FULL === 'true',called:process.env.CI_CALLED === 'true'};
   const git = (...args) => {
     const binary = typeof args.at(-1) === 'object' && args.pop().binary;
     return execFileSync('git', args, {encoding: binary ? undefined : 'utf8', timeout: 30_000, maxBuffer: 64 * 1024 * 1024, stdio: ['ignore', 'pipe', 'pipe']});
