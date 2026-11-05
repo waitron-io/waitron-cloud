@@ -88,3 +88,15 @@ test("conformance retains reset retries while discarding a permanent refusal bod
   error => error === reason);
   assert.equal(requests, 3);
 });
+
+for (const callerSignal of [false, true]) {
+  test(`retry deadline preserves the existing error contract with caller signal ${callerSignal}`, async t => {
+    let requests = 0;
+    t.mock.method(globalThis, "fetch", async () => { requests++; return new Response("temporary", { status: 503 }); });
+    await assert.rejects(() => downloadStorageArchive("https://example.invalid/archive", {
+      timeoutMs: 25, ...(callerSignal ? { signal: new AbortController().signal } : {}),
+    }), error => callerSignal ? error.name === "TimeoutError" :
+      error.name === "AbortError" && error.cause?.name === "TimeoutError");
+    assert.equal(requests, 1, "the deadline interrupts the first retry pause");
+  });
+}

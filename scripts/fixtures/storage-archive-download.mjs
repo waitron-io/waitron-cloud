@@ -59,7 +59,7 @@ export async function downloadStorageArchive(url, {
       emit("retry", { error });
       // Pauses spend the original budget; a new attempt never resets it.
       try { await delay(attempt * 1000, undefined, { signal: budget }); }
-      catch (error) { budget.throwIfAborted(); throw error; }
+      catch (error) { if (signal) budget.throwIfAborted(); throw error; }
     } finally {
       clearTimeout(idleTimer);
       emit("settled");
