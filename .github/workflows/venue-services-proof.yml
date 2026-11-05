@@ -5,9 +5,8 @@ on:
       full:
         type: boolean
         default: false
-  push:
-    branches: [main]
   pull_request:
+  workflow_dispatch:
 permissions:
   contents: read
   packages: read
@@ -34,6 +33,7 @@ jobs:
         run: node scripts/ci-docs.mjs --plan
         env:
           CI_FORCE_FULL: ${{ inputs.full }}
+          CI_PROOF_KIND: venue
   service-receipts:
     needs: changes
     if: needs.changes.outputs.required == 'true'

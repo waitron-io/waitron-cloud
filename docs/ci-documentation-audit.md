@@ -89,6 +89,19 @@ root-script job verifies it too. Stale documentation evidence fails its own PR
 while the planner retains full work. Both revisions must qualify for a prose-only
 shortcut. A fresh head cannot repair an unaudited base, whether it uses v1 or v2.
 
+Venue service proof and Cloud cost conformance select their own reviewed inputs
+through `CI_PROOF_KIND` and `node scripts/ci-docs.mjs --plan`. The
+[proof selection guide](ci-proof-selection.md) lists consumed paths, refusal
+controls and complete manual runs. Both omit unrelated pull-request changes and
+stop running on main pushes. The [nightly backstop](ci-nightly.md) still calls
+both complete matrices with the explicit full input.
+
+The proof programs and fixtures read source, manifests, generated JSON,
+certificates, pinned runtime releases and their own scratch directories. The
+cost publication reader keeps the generated cost model pinned. Their reviewed
+selection adds no reader of exempt Cloud prose. Renew documentation records for
+the combined input changes; keep the historical v1 policy fixed.
+
 ## Optional peer renewal
 
 Identity excludes only its checker and owning test. Gateway excludes only its
