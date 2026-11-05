@@ -29,7 +29,7 @@ test('all existing receipt suites and workflow guards remain available in CI',()
 test('slow packages run every file shard with their original test deadlines',()=>{
   const members=loadWorkspace();
   const full=workPlan(scopeForPaths([],members),members);
-  for (const [name,count] of [['registration',5],['account-http',3],['backups',7],['portal',6]]) {
+  for (const [name,count] of [['registration',6],['account-http',3],['backups',7],['portal',6]]) {
     const rows=full.packages.filter(row=>row.package===`@waitron-cloud/${name}`);
     assert.deepEqual(rows.map(row=>row.shard),Array.from({length:count},(_,i)=>i+1));
     assert.ok(rows.every(row=>row.shards===count));
@@ -37,7 +37,8 @@ test('slow packages run every file shard with their original test deadlines',()=
   const packages=job('packages');
   assert.match(packages,/if: \$\{\{ !matrix.shards && !matrix.members \}\}\n\s+run: node scripts\/test-postgres.mjs --filter/);
   assert.match(packages,/if: matrix.package == '@waitron-cloud\/portal'\n\s+run: pnpm --filter \$\{\{ matrix.package \}\} build/);
-  assert.match(packages,/if: matrix.shards\n\s+run: node scripts\/test-postgres.mjs exec pnpm --filter \$\{\{ matrix.package \}\} exec node --test --test-timeout=\$\{\{ matrix.package == '@waitron-cloud\/portal' && '120000' \|\| '30000' \}\} --test-shard=\$\{\{ matrix.shard \}\}\/\$\{\{ matrix.shards \}\} "test\/\*\.test\.ts"/);
+  assert.match(packages,/if: matrix.package == '@waitron-cloud\/registration'\n\s+run: node scripts\/test-postgres.mjs exec pnpm --filter \$\{\{ matrix.package \}\} exec node \.\.\/\.\.\/scripts\/ci-run-registration-shard.mjs \$\{\{ matrix.shard \}\}/);
+  assert.match(packages,/if: matrix.shards && matrix.package != '@waitron-cloud\/registration'\n\s+run: node scripts\/test-postgres.mjs exec pnpm --filter \$\{\{ matrix.package \}\} exec node --test --test-timeout=\$\{\{ matrix.package == '@waitron-cloud\/portal' && '120000' \|\| '30000' \}\} --test-shard=\$\{\{ matrix.shard \}\}\/\$\{\{ matrix.shards \}\} "test\/\*\.test\.ts"/);
 });
 test('work jobs stop within eight minutes and planner/summary within two',()=>{
   for (const name of ['root','typecheck','receipts','packages']) assert.match(job(name),/^    timeout-minutes: 8$/m);

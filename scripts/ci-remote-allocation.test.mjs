@@ -30,7 +30,7 @@ test('remote shards discover every current file and a future file exactly once t
  assert.equal(selected.length,4);
  const files=readdirSync(new URL('../packages/remote-access/test/',import.meta.url)).filter(f=>f.endsWith('.test.ts')).concat('zz-future-remote.test.ts').sort();
  const workflow=readFileSync(new URL('../.github/workflows/ci.yml',import.meta.url),'utf8');
- const command=workflow.match(/- if: matrix\.shards\n\s+run: ([^\n]+)/)?.[1];assert.ok(command,'workflow supplies the shard command');
+ const command=workflow.match(/- if: matrix\.shards && matrix\.package != '@waitron-cloud\/registration'\n\s+run: ([^\n]+)/)?.[1];assert.ok(command,'workflow supplies the shard command');
  const root=mkdtempSync(join(tmpdir(),'cloud-remote-shards-')),directory=join(root,'packages/remote-access/test');
  try{
   mkdirSync(directory,{recursive:true});mkdirSync(join(root,'scripts'));

@@ -95,7 +95,7 @@ test('the complete v2 migration publishes its full plan within the job output bu
   const text = readFileSync(output, 'utf8');
   const values = Object.fromEntries(text.trim().split('\n').map(line => [line.slice(0, line.indexOf('=')), line.slice(line.indexOf('=') + 1)]));
   const plan = JSON.parse(values.plan);
-  assert.equal(plan.packages.length, 28);
+  assert.equal(plan.packages.length, 29);
   assert.deepEqual(plan.receipts, ['test:two-venue-milestone-receipt', 'test:backup-capacity', 'test:public-gateway-limits', 'test:local-stack', 'test:database-recovery-receipt', 'test:cloud-cost']);
   assert.equal(plan.typecheck, true); assert.equal(plan.reuse, null);
   assert.equal(values.packages, 'true'); assert.equal(values.receipts, 'true'); assert.equal(values.typecheck, 'true');

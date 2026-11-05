@@ -504,7 +504,7 @@ Migration 038, its dormant tables and stored rows remain unchanged. Registration
 owns the seven retained schema tests and the digest/ledger-position check. Removal
 regressions compare every dormant table and the migration ledger before and after
 old calls and free/paid/free plan changes. Shared account, session, recovery and
-mail assertions remain. Live CI keeps nine packages, 29 logical shards in 28
+mail assertions remain. Live CI keeps nine packages, 30 logical shards in 29
 jobs and all six receipt suites, including all six portal shards. Saved historical
 manifests and cost receipts remain historical evidence; their parsers and positive
 receipt-selection checks remain. The [registry reference](fiscal-allocation-registry.md)
@@ -1206,12 +1206,14 @@ implementation or production evidence.
 - **CI execution budget.** You can read one summary job and the individual package
   and receipt jobs to check a candidate. The summary also checks the plan's
   package allocation against the planner's registered package names and shard
-  counts. Registration uses five partitions, account HTTP uses three, portal uses six
+  counts. Registration uses six partitions, account HTTP uses three, portal uses six
   and backups uses seven. The [backup job budget investigation](backlog/backup-ci-budget.md)
   records a job cancelled during cleanup after all 569 cases passed. Seven
   partitions separate its five expensive guard files while preserving every assertion
   and the eight-minute limit. The summary requires every registration partition
-  and rejects the former six- and seven-partition allocations. A Node subprocess
+  and rejects five- and seven-partition allocations. The
+  [registration runtime investigation (D576)](backlog/package-ci-runtime.md) records
+  the Linux measurements and the historical failures that remain unexplained. A Node subprocess
   check partitions copies of every current registration filename plus a new
   filename and requires each to execute exactly once. Its file workers run one
   at a time; overlapping fixture bodies fail on a shared scratch-directory lock.
@@ -1224,10 +1226,16 @@ implementation or production evidence.
   reached 259 seconds but used the same 23 rounded registration minutes as seven
   jobs, and its backup job failed the strict native-memory OOM check. The start
   ordering fix below addresses a reproduced mechanism for that failure.
-  Matched case durations guide the five-job allocation; they do not prove its
-  elapsed time or a saving. Require every registration job within 300 seconds
-  and fewer than 23 rounded registration minutes on the exact candidate head.
-  The wider target of 55 rounded minutes for a full run remains open.
+  Whole-file measurements guide the six-job allocation and three explicit
+  filename moves. The balanced Linux trial passes all 1,684 cases and runs every
+  one of the 139 files exactly once. Its slowest wrapper falls from 293.499 to
+  234.678 seconds, with every group within four minutes. These sequential Linux
+  runs do not establish concurrent hosted-job timing or explain the historical
+  cancellation.
+  Aim for about four minutes per registration job and require every exact-head
+  registration job within 300 seconds. Use observed wall times and complete case
+  counts rather than the retired rounded-minute budgets. Current-head CI and
+  post-merge verification remain required.
 
   The relay-capacity test keeps its four SMTP deliveries open until all four
   competing worker attempts return without work. Its unchanged sending, queued
@@ -1545,9 +1553,9 @@ implementation or production evidence.
   even when its resolved inputs did not change. Saved-revision checks cover
   single and multiple manifests, overlap with a changed resolved importer and
   lock-only changes without edited manifests. Package selection, audits,
-  fallback, compiler and receipt checks retain their existing behavior. The plan also requires measured
-  grouping to reduce the full run toward 55 rounded job-minutes while keeping
-  each work job near five minutes. The historical D66/D67 full-run samples used 72 and
+  fallback, compiler and receipt checks retain their existing behavior. Judge grouping
+  by observed job wall times and complete case counts, keeping each work job near
+  five minutes. Rounded-minute budgets no longer gate this work. The historical D66/D67 full-run samples used 72 and
   73 minutes; these are timestamp-based rounding estimates, not invoices.
   CI still selects changed workspace packages and every package that depends on them,
   including test dependencies and direct sibling source/fixture reads absent from
@@ -2229,7 +2237,7 @@ implementation or production evidence.
   foreign containers and a lost create response, requiring refusal and cleanup.
   This repairs the inventory assertion; it does not explain unrelated historical
   browser, transport, install or backup-cleanup failures.
-  **Nested package authentication (D530).** All three package-test entry points
+  **Nested package authentication (D530).** All four package-test entry points
   and the grouped receipt step now pass the existing read-only package token to descendant installs. A cold
   loopback-registry control reproduces the placeholder-token 401 and loads the
   installed package with each workflow binding. See the
@@ -2272,7 +2280,7 @@ implementation or production evidence.
   Unknown/full changes retain all five;
   portal source changes also omit local-stack when its audit holds, otherwise they
   retain it. Isolated ui-smoke needs no receipt. Registration
-  uses five file shards, account HTTP uses three, portal uses six and backups uses
+  uses six file shards, account HTTP uses three, portal uses six and backups uses
   seven. Selected identity, operations and remote-access suites share one job when at
   least two are needed. Each keeps its full package command and deadline, runs
   once in sequence, and reports its own result. One PostgreSQL/Mailpit setup
@@ -2285,8 +2293,8 @@ implementation or production evidence.
   complete successfully. The existing receipt-input audits also pin the grouped
   runner and its suite registry, because they now control execution. Changed or
   missing execution inputs retain the affected receipt. The five receipt commands
-  and all their assertions stay intact. Compare actual rounded minutes with the
-  preceding five-job sample before claiming a saving; the full-run budget and other grouping work remain
+  and all their assertions stay intact. Compare observed job wall times and complete
+  case counts with the preceding five-job sample before claiming a saving; whole-run runtime and other grouping work remain
   open. Each file runs once, with its original
   assertions and test deadline. The authenticator clock-rollover case has its own
   portal file so sharding can separate its two real clock waits from the main

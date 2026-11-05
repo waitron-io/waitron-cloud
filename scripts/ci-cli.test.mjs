@@ -32,7 +32,7 @@ test('real squash merges run full on main for equal trees and advanced main with
       const plan=createPlan({before:parent,commits:[{}]},{sha,repository,branch:'main'},workspace,git,path=>{greenCalls++;return api(path);});
       assert.equal(greenCalls, 0);
       const expectedPackages = [
-        ...[['account-http',3],['backups',7],['portal',6],['registration',5],['remote-access',4]].flatMap(([name, shards]) =>
+        ...[['account-http',3],['backups',7],['portal',6],['registration',6],['remote-access',4]].flatMap(([name, shards]) =>
           Array.from({length: shards}, (_,i) => ({package:`@waitron-cloud/${name}`, shard:i+1, shards}))),
         ...['translation','ui-smoke'].map(name=>({package:`@waitron-cloud/${name}`,shard:1})),
         {package:'@waitron-cloud/identity + @waitron-cloud/operations',
@@ -129,7 +129,7 @@ test('executed planner forces a full reusable run even with an audited prose pul
       assert.equal(result.status, 0, result.stdout + result.stderr);
       const line = readFileSync(output, 'utf8').split('\n').find(line => line.startsWith('plan='));
       const selected = JSON.parse(line.slice(5));
-      assert.equal(selected.packages.length, full === 'true' ? 28 : 0, result.stdout + result.stderr);
+      assert.equal(selected.packages.length, full === 'true' ? 29 : 0, result.stdout + result.stderr);
       assert.equal(selected.receipts.length, full === 'true' ? 6 : 0);
       assert.equal(selected.typecheck, full === 'true');
       assert.equal(Boolean(selected.documentation), full !== 'true');
