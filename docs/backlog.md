@@ -1289,7 +1289,10 @@ implementation or production evidence.
   at the same revision. All package partitions, six receipt suites, cost and
   venue execute even on an unchanged tree. The parent refuses a missing, skipped,
   cancelled or failed family; the standard summary retains its exact job checks
-  within the nested family. Real PR rehearsal and exact-main full execution
+  within the nested family, refusing malformed job names before filtering.
+  Configuration guards protect the full inputs, concurrency and final
+  dependencies; an executed CLI control checks the configured prefix. These
+  guards do not replace hosted execution. Real PR rehearsal and exact-main full execution
   still need their current-run receipts before a runtime coverage claim. The real portal-plus-prose candidate
   still selects 28 package jobs: its saved graph refuses an unresolved directory
   read in `scripts/ci-audit-fixture-dependencies.mjs`. Keep that conservative

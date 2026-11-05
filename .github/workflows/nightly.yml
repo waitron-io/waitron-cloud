@@ -4,7 +4,7 @@ on:
     # Off the hour, after the usual European working day. GitHub uses UTC.
     - cron: '17 3 * * *'
   workflow_dispatch:
-  # Exercise the real reusable calls when the nightly wiring itself changes.
+  # Rehearse this parent when its own file changes.
   pull_request:
     paths:
       - '.github/workflows/nightly.yml'

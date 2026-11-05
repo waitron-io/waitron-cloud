@@ -33,13 +33,17 @@ not a successful backstop. Record a red run and its failed step in the lane's
 questions and progress files. Follow the shared campaign CI failure rule: inspect
 the failure and its history, then fix its cause or record the existing owning
 item before considering a retry. A passing retry does not prove a repair.
-GitHub's normal workflow failure notifications and the Actions page remain the
-notification channels; this change adds no external messaging or paging service.
+Use the Actions page as the source of the result. Delivery of GitHub's normal
+failure notifications depends on your settings and has not been qualified by
+this change. No external messaging or paging service is added.
 
 When this workflow's own file changes in a pull request, GitHub runs the complete
 nightly workflow as a rehearsal. This proves the real reusable calls and nested
 job-name boundary before the wiring lands. Ordinary package and prose PRs do not
-start that extra rehearsal. Manual branch runs are also possible, but do not
+start that extra rehearsal. Configuration guards check the reusable input and
+summary connections; a CLI control exercises the configured prefix. Those checks
+do not prove GitHub expression evaluation or scheduling. Manual branch runs are
+also possible, but do not
 qualify `main`'s nightly backstop. PR rehearsals can supersede older rehearsals;
 scheduled and manual runs each have their own concurrency group. The called
 workflows use distinct groups, so they do not cancel the parent's standalone CI.

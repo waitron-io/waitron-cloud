@@ -284,6 +284,7 @@ test('explicit full execution overrides a real audited prose PR without changing
   const head = commit();
   assert.equal(plan(head).documentation.paths[0], 'docs/backlog.md');
   const full = createPlan({pull_request: {base: {sha: base}, head: {sha: head}}}, {sha: head, full: true}, workspace, git);
+  assert.match(full.reason, /Explicit full run/);
   assert.equal(full.typecheck, true);
   assert.equal(full.packages.length, 28);
   assert.equal(full.documentation, undefined);

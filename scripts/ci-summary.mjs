@@ -191,8 +191,11 @@ export async function waitForSummary(plan, results, {
     lookupError = undefined;
     // A called workflow shares its run with cost and venue. The parent requires
     // those families separately; this summary still checks every standard job.
-    if (jobPrefix) jobs = jobs.filter(job => job.name?.startsWith(jobPrefix))
-      .map(job => ({...job, name: job.name.slice(jobPrefix.length)}));
+    if (jobPrefix) {
+      for (const job of jobs) assert.ok(job && typeof job.name === 'string' && job.name.trim().length > 0, 'Invalid job record: missing job name');
+      jobs = jobs.filter(job => job.name.startsWith(jobPrefix))
+        .map(job => ({...job, name: job.name.slice(jobPrefix.length)}));
+    }
     waiting = [];
     // The runner finishes its final step before uploads and job-result publication.
     // Final needs success is also required; steps alone cannot prove job success.

@@ -43,7 +43,7 @@ export function createPlan(event, context, workspace, git, api) {
   let scope = scopeForPaths([],workspace);
   let revisions;
   let lockSelection;
-  let reason = 'Main push or unknown diff: full suite';
+  let reason = context.full === true ? 'Explicit full run: all packages and receipts' : 'Main push or unknown diff: full suite';
   if (context.full !== true && event.pull_request) {
     try {
       const {head,base} = event.pull_request;
