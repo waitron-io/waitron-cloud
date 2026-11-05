@@ -1181,7 +1181,8 @@ implementation or production evidence.
   workflows share the existing audited prose selector, so qualified documentation
   PRs omit their tests too. Review changed readers before staged renewal; the
   [audit guide](ci-documentation-audit.md) records the boundary. Every main push
-  still runs the full standard suite. Real prose control #923 completes all
+  still runs the full standard suite; the [nightly run](ci-nightly.md) is an
+  additional backstop until D571 part 5 changes merge checks. Real prose control #923 completes all
   three workflows with five planner/document/summary jobs and seven skipped test
   jobs. Stale code and script controls #924/#925 refuse at the required audit
   steps. Later test-only changes through #921 are included in the reviewed
@@ -1277,13 +1278,25 @@ implementation or production evidence.
   the parked `feat/precise-ci-selection` branch remains untouched. D69 ended in
   #262 with full work for unresolved directory readers; its unmerged replacement
   is reference material, not the current implementation. Dependency precision,
-  root-input owners, narrower cost/venue work and nightly full runs remain
-  D571 parts 2 through 6. D571 part 5 now has a
+  root-input owners, narrower cost/venue work and verified merge reuse remain
+  D571 parts 2 through 5. D571 part 5 has a
   [verified-merge design](superpowers/specs/2026-11-05-verified-merge-ci-design.md)
   and [implementation plan](superpowers/plans/2026-11-05-verified-merge-ci.md).
   Reuse and changed-tree main selection are not implemented. Runtime landing
   waits for the nightly backstop and the watcher's post-merge runbook update.
-  The real portal-plus-prose candidate
+  Part 6 adds the [nightly full backstop](ci-nightly.md):
+  one 03:17 UTC schedule and a manual trigger call the existing three workflows
+  at the same revision. All package partitions, six receipt suites, cost and
+  venue execute even on an unchanged tree. The parent refuses a missing, skipped,
+  cancelled or failed family; the standard summary retains its exact job checks
+  within the nested family, refusing malformed job names before filtering.
+  Configuration guards protect the full inputs, concurrency and final
+  dependencies; an executed CLI control checks the configured prefix. These
+  guards do not replace hosted execution. The copied-reader CLI fixture stages
+  regenerated per-path evidence before saving its baseline; a changed-reader
+  control preserves both ordinary prose-only and forced-full assertions.
+  Real PR rehearsal and exact-main full execution
+  still need their current-run receipts before a runtime coverage claim. The real portal-plus-prose candidate
   still selects 28 package jobs: its saved graph refuses an unresolved directory
   read in `scripts/ci-audit-fixture-dependencies.mjs`. Keep that conservative
   fallback for part 2 to bound; part 1 claims no measured package-job saving.
@@ -2497,7 +2510,9 @@ implementation or production evidence.
   Every PR job checks out its exact
   head SHA. Every push to main runs the complete package, receipt and compiler
   suites, even when the merge tree equals a green pull-request head. This follows
-  the owner's 2026-10-18 decision; daily-only main testing is withdrawn. Local
+  the owner's 2026-10-18 decision until D571 part 5 changes the merge policy.
+  D571 part 6 supplies an additional nightly full run under the 4 November
+  decision; it does not itself remove main-push testing. Local
   regressions exercise the real planner and summary commands and both equal-tree
   and advanced-main squash merges without depending on the pull-request API.
   The reuse helper and its evidence checks remain historical controls.

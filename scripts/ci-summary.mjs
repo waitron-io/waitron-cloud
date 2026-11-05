@@ -156,6 +156,7 @@ function unmetStepEvidence(job, identity) {
 
 export async function waitForSummary(plan, results, {
   readJobs = readCurrentJobs,
+  jobPrefix = process.env.CI_JOB_PREFIX ?? '',
   now = () => performance.now(),
   sleep = setTimeout,
   timeoutMs = 60_000,
@@ -163,6 +164,7 @@ export async function waitForSummary(plan, results, {
   identity = {runId: Number(process.env.GITHUB_RUN_ID), runAttempt: Number(process.env.GITHUB_RUN_ATTEMPT), headSha: process.env.CI_HEAD_SHA},
   report = message => console.log(message),
 } = {}) {
+  assert.ok(['', 'standard / '].includes(jobPrefix), 'Invalid CI job prefix');
   const expected = expectedSummaryJobs(plan, results);
   const deadline = now() + timeoutMs;
   let waiting = [];
@@ -187,6 +189,13 @@ export async function waitForSummary(plan, results, {
     }
     assert.ok(now() < deadline, `Timed out reading job records: ${names}${evidenceMessage()}`);
     lookupError = undefined;
+    // A called workflow shares its run with cost and venue. The parent requires
+    // those families separately; this summary still checks every standard job.
+    if (jobPrefix) {
+      for (const job of jobs) assert.ok(job && typeof job.name === 'string' && job.name.trim().length > 0, 'Invalid job record: missing job name');
+      jobs = jobs.filter(job => job.name.startsWith(jobPrefix))
+        .map(job => ({...job, name: job.name.slice(jobPrefix.length)}));
+    }
     waiting = [];
     // The runner finishes its final step before uploads and job-result publication.
     // Final needs success is also required; steps alone cannot prove job success.

@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import childProcess, {spawnSync} from 'node:child_process';
 import {syncBuiltinESMExports} from 'node:module';
-import {mkdtempSync, rmSync, writeFileSync} from 'node:fs';
+import {mkdtempSync, readFileSync, rmSync, writeFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {assertSummary} from './ci-summary.mjs';
@@ -534,4 +534,40 @@ test('live summary preserves every surviving package shard after registry retire
     '@waitron-cloud/portal': 6, '@waitron-cloud/identity': 1, '@waitron-cloud/operations': 1,
     '@waitron-cloud/remote-access': 4, '@waitron-cloud/translation': 1, '@waitron-cloud/ui-smoke': 1,
   });
+});
+
+test('reused standard workflow checks only its exact job family within the nightly run', async () => {
+  const nested = jobs.map(job => ({...job, name: `standard / ${job.name}`}));
+  const other = [{name: 'cost / discover', status: 'in_progress', conclusion: null}, {name: 'venue / changes', status: 'queued', conclusion: null}, {name: 'nightly-summary', status: 'queued', conclusion: null}];
+  const run = records => summary.waitForSummary(plan, results, {jobPrefix: 'standard / ', readJobs: async () => records, timeoutMs: 100, pollMs: 0});
+  await run([...nested, ...other]);
+  for (const broken of [nested.slice(1), [...nested, nested[0]], nested.map((job, i) => i ? job : {...job, conclusion: 'failure'}), nested.map(job => ({...job, name: job.name.replace('standard / ', 'impostor / ')}))]) {
+    await assert.rejects(run([...broken, ...other]));
+  }
+  await assert.rejects(summary.waitForSummary(plan, results, {jobPrefix: 'package', readJobs: async () => jobs}), /prefix/i);
+});
+
+test('nested summaries refuse malformed job names before selecting a workflow family', async () => {
+  const nested = jobs.map(job => ({...job, name: `standard / ${job.name}`}));
+  for (const name of [undefined, '', '   ', null, 5]) {
+    await assert.rejects(summary.waitForSummary(plan, results, {jobPrefix: 'standard / ', readJobs: async () => [...nested, {name, status: 'completed', conclusion: 'failure'}]}), /Invalid job record: missing job name/);
+  }
+});
+
+test('actual nested summary command receives the prefix configured by both workflow files', () => {
+  const root = mkdtempSync(join(tmpdir(), 'cloud-nested-summary-cli-'));
+  try {
+    const caller = readFileSync(new URL('../.github/workflows/nightly.yml', import.meta.url), 'utf8');
+    const callee = readFileSync(new URL('../.github/workflows/ci.yml', import.meta.url), 'utf8');
+    const value = /job-prefix: '([^']+)'/.exec(caller)?.[1];
+    const input = /CI_JOB_PREFIX: \$\{\{ inputs\.([\w-]+) \}\}/.exec(callee)?.[1];
+    const prefix = {'job-prefix': value}[input];
+    assert.equal(typeof prefix, 'string', 'Both workflows must deliver a prefix');
+    const records = [...jobs.map(job => ({...job, name: `standard / ${job.name}`})), {name: 'cost / discover', status: 'in_progress', conclusion: null}];
+    writeFileSync(join(root, 'jobs.json'), JSON.stringify([{jobs: records}]));
+    writeFileSync(join(root, 'gh'), `#!${process.execPath}\nconst fs=require('node:fs');const assert=require('node:assert/strict');assert.deepEqual(process.argv.slice(2),['api','--paginate','--slurp','repos/waitron-io/waitron-cloud/actions/runs/42/jobs?filter=latest&per_page=100']);process.stdout.write(fs.readFileSync(process.env.CI_JOB_FIXTURE,'utf8'));\n`, {mode: 0o700});
+    const result = spawnSync(process.execPath, ['scripts/ci-summary.mjs'], {encoding: 'utf8', timeout: 3_000, env: {...process.env, PATH: `${root}:${process.env.PATH}`, GITHUB_REPOSITORY: 'waitron-io/waitron-cloud', GITHUB_RUN_ID: '42', CI_JOB_FIXTURE: join(root, 'jobs.json'), CI_JOB_PREFIX: prefix, CI_PLAN: JSON.stringify(plan), CI_RESULTS: JSON.stringify(Object.fromEntries(Object.entries(results).map(([name, result]) => [name, {result}])))} });
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    assert.match(result.stdout, /Passed 6 package jobs and 0 receipts/);
+  } finally {rmSync(root, {recursive: true, force: true});}
 });

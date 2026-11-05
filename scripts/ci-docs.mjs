@@ -66,7 +66,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
       let documentation = null;
       try {
         const {pull_request: pr} = JSON.parse(readFileSync(process.env.GITHUB_EVENT_PATH, 'utf8'));
-        if (pr) {
+        if (process.env.CI_FORCE_FULL !== 'true' && pr) {
           assert.ok([pr.base.sha, pr.head.sha].every(sha => shaPattern.test(sha)), 'Invalid proof revisions');
           const base = git('merge-base', pr.base.sha, pr.head.sha).trim();
           const paths = git('diff', '--name-only', '--no-renames', '-z', base, pr.head.sha).split('\0');

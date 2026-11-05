@@ -1,5 +1,10 @@
 # Precise CI selection
 
+Current policy note, 5 November 2026: [D571's nightly full backstop](../../ci-nightly.md)
+adds a scheduled full run under the owner's 4 November decision. This historical
+slice's main-push policy remains until D571 part 5 changes it; earlier references
+to withdrawn daily testing describe the October decision, not the new backstop.
+
 Your documentation PR currently runs 1,477 package tests. Your full run also costs more after splitting jobs: each job repeats setup and rounds up separately. Select actual consumers for every changed path, then group the selected work to reduce those costs without losing checks.
 
 **Boundary:** This design changes pull request test selection and grouping. Operating-cost modelling, daily schedules and the main-run policy are separate work. Execute implementation inline after the reviewed design is landed.

@@ -1,5 +1,10 @@
 # Precise CI selection implementation plan
 
+Current policy note, 5 November 2026: [D571's nightly full backstop](../../ci-nightly.md)
+adds a scheduled full run under the owner's 4 November decision. This historical
+slice's main-push policy remains until D571 part 5 changes it; earlier references
+to separate daily scheduling describe the October scope, not the new backstop.
+
 **Goal:** Select all real consumers for every PR path and reduce full-run rounded job-minutes toward 55 or below while keeping each job about ≤300 seconds.
 **Architecture:** Compare immutable base/head input graphs; select logical checks; pack them into validated workflow jobs. Keep D67 reuse and landing guards.
 **Tools:** Node 26, pnpm 9.15, git objects, built-in Node tests; no added production YAML dependency.

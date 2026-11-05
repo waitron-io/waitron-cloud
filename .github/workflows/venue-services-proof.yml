@@ -1,5 +1,10 @@
 name: Venue service proof
 on:
+  workflow_call:
+    inputs:
+      full:
+        type: boolean
+        default: false
   push:
     branches: [main]
   pull_request:
@@ -7,8 +12,8 @@ permissions:
   contents: read
   packages: read
 concurrency:
-  group: venue-services-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  group: venue-services-${{ inputs.full && 'nightly-' || '' }}${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+  cancel-in-progress: ${{ !inputs.full && github.event_name == 'pull_request' }}
 jobs:
   changes:
     runs-on: ubuntu-latest
@@ -27,6 +32,8 @@ jobs:
           package-manager-cache: false
       - id: plan
         run: node scripts/ci-docs.mjs --plan
+        env:
+          CI_FORCE_FULL: ${{ inputs.full }}
   service-receipts:
     needs: changes
     if: needs.changes.outputs.required == 'true'

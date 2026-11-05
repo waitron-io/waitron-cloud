@@ -1,5 +1,10 @@
 # Scoped and reused CI design and execution plan
 
+Current policy note, 5 November 2026: [D571's nightly full backstop](../../ci-nightly.md)
+adds a scheduled full run under the owner's 4 November decision. This historical
+slice's main-push policy remains until D571 part 5 changes it; earlier references
+to withdrawn daily testing describe the October decision, not the new backstop.
+
 **Goal:** You run affected package suites and reuse verified PR-head CI after an identical-tree merge, keeping `summary` as the strict landing gate.
 **Scope:** One production PR after the seven-way registration partition (`e8ed2e58`). Disposable proof branches never change main.
 **Sources:** `.github/workflows/ci.yml`; workspace manifests; `scripts/ci-workflow.test.mjs`; root `tsconfig.json`.

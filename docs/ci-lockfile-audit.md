@@ -4,7 +4,9 @@ A resolved dependency update can affect one package without changing its manifes
 When your pull request changes `pnpm-lock.yaml`, alone or alongside workspace
 manifest dependency fields, the lock reader identifies the affected packages and
 the packages that read them, including through shared test helpers. All compiler checks and all six
-receipt suites still run. Every push to `main` runs the full suite independently.
+receipt suites still run. Main pushes still run the full standard suite in
+this slice, with an additional [nightly full backstop](ci-nightly.md). D571 part 5
+owns the later change to merge checks.
 
 The required documentation freshness check applies to lockfile and manifest
 changes too. Review readers and renew documentation records before pushing.

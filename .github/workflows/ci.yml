@@ -1,5 +1,13 @@
 name: CI
 on:
+  workflow_call:
+    inputs:
+      full:
+        type: boolean
+        default: false
+      job-prefix:
+        type: string
+        default: ''
   push:
     branches: [main]
   pull_request:
@@ -10,8 +18,8 @@ permissions:
   pull-requests: read
 concurrency:
   # Every main merge needs its own run, even when several merges arrive together.
-  group: ci-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  group: ci-${{ inputs.full && 'nightly-' || '' }}${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+  cancel-in-progress: ${{ !inputs.full && github.event_name == 'pull_request' }}
 jobs:
   changes:
     runs-on: ubuntu-latest
@@ -44,6 +52,7 @@ jobs:
         run: node scripts/ci-plan.mjs
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CI_FORCE_FULL: ${{ inputs.full }}
   documentation:
     needs: changes
     if: needs.changes.outputs.documentation == 'true'
@@ -350,5 +359,6 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CI_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
           CI_PLAN: ${{ needs.changes.outputs.plan }}
+          CI_JOB_PREFIX: ${{ inputs.job-prefix }}
           CI_RESULTS: ${{ toJSON(needs) }}
         run: node scripts/ci-summary.mjs

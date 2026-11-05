@@ -43,8 +43,8 @@ export function createPlan(event, context, workspace, git, api) {
   let scope = scopeForPaths([],workspace);
   let revisions;
   let lockSelection;
-  let reason = 'Main push or unknown diff: full suite';
-  if (event.pull_request) {
+  let reason = context.full === true ? 'Explicit full run: all packages and receipts' : 'Main push or unknown diff: full suite';
+  if (context.full !== true && event.pull_request) {
     try {
       const {head,base} = event.pull_request;
       if (![head.sha,base.sha].every(sha=>/^[a-f0-9]{40}$/.test(sha))) throw Error('Invalid event SHA');
@@ -95,7 +95,7 @@ export function createPlan(event, context, workspace, git, api) {
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const event = JSON.parse(readFileSync(process.env.GITHUB_EVENT_PATH,'utf8'));
-  const context = {sha:process.env.GITHUB_SHA,repository:process.env.GITHUB_REPOSITORY,branch:process.env.GITHUB_REF_NAME};
+  const context = {sha:process.env.GITHUB_SHA,repository:process.env.GITHUB_REPOSITORY,branch:process.env.GITHUB_REF_NAME,full:process.env.CI_FORCE_FULL === 'true'};
   const git = (...args) => {
     const binary = typeof args.at(-1) === 'object' && args.pop().binary;
     return execFileSync('git', args, {encoding: binary ? undefined : 'utf8', timeout: 30_000, maxBuffer: 64 * 1024 * 1024, stdio: ['ignore', 'pipe', 'pipe']});
