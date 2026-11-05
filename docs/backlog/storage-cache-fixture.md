@@ -487,6 +487,15 @@ and cleanup. Startup still combines download, configuration, port selection and
 readiness; the trace cannot distinguish those internal steps. A blocked event
 loop can delay reports. The historical timeout and port owner remain unexplained.
 
+[PR942's standard receipt](https://github.com/waitron-io/waitron-cloud/actions/runs/41986274075/job/127107818923)
+reaches the same 90-second limit on 5 November at `bed60ce7`. This trace completes
+startup, bucket creation, native-child stop and owner verification, then waits
+in `release-admin` for 80 seconds before the case deadline. Cleanup completes.
+The unchanged case and storage fixture match main. The trace narrows this
+recurrence to releasing the competing listeners; it does not explain why that
+release waits or establish the cause of the earlier timeout. Reproduce that
+operation before changing the fixture; preserve every owner check and deadline.
+
 Three Linux waves of four concurrent unchanged exhaustion cases pass on
 2 November at Cloud `601cf19f`. Each case retains all 101 competing listeners,
 both storage lifetimes, every original assertion and the 90-second limit. An

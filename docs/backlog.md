@@ -1292,7 +1292,10 @@ implementation or production evidence.
   within the nested family, refusing malformed job names before filtering.
   Configuration guards protect the full inputs, concurrency and final
   dependencies; an executed CLI control checks the configured prefix. These
-  guards do not replace hosted execution. Real PR rehearsal and exact-main full execution
+  guards do not replace hosted execution. The copied-reader CLI fixture stages
+  regenerated per-path evidence before saving its baseline; a changed-reader
+  control preserves both ordinary prose-only and forced-full assertions.
+  Real PR rehearsal and exact-main full execution
   still need their current-run receipts before a runtime coverage claim. The real portal-plus-prose candidate
   still selects 28 package jobs: its saved graph refuses an unresolved directory
   read in `scripts/ci-audit-fixture-dependencies.mjs`. Keep that conservative

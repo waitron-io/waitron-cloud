@@ -112,10 +112,11 @@ test('executed planner forces a full reusable run even with an audited prose pul
   try {
     execFileSync('git', ['clone', '--shared', '--quiet', process.cwd(), root], {stdio: 'pipe'});
     cpSync('scripts', join(root, 'scripts'), {recursive: true});
+    writeFileSync(join(root, 'scripts/ci-plan.mjs'), readFileSync(join(root, 'scripts/ci-plan.mjs'), 'utf8') + '\n// Fixture reader bytes require fresh evidence.\n');
     git('config', 'user.name', 'CI test'); git('config', 'user.email', 'ci@example.test');
     git('add', '-A');
     execFileSync(process.execPath, ['scripts/ci-input-audit.mjs', '--write-staged'], {cwd: root, stdio: 'pipe'});
-    git('add', 'scripts/ci-input-audit.json'); git('commit', '--allow-empty', '-sm', 'Reviewed nightly fixture');
+    git('add', 'scripts'); git('commit', '--allow-empty', '-sm', 'Reviewed nightly fixture');
     const base = git('rev-parse', 'HEAD');
     writeFileSync(join(root, 'docs/nightly-control.md'), '# Nightly control\n');
     git('add', 'docs/nightly-control.md'); git('commit', '-sm', 'Prose control');
@@ -128,7 +129,7 @@ test('executed planner forces a full reusable run even with an audited prose pul
       assert.equal(result.status, 0, result.stdout + result.stderr);
       const line = readFileSync(output, 'utf8').split('\n').find(line => line.startsWith('plan='));
       const selected = JSON.parse(line.slice(5));
-      assert.equal(selected.packages.length, full === 'true' ? 28 : 0);
+      assert.equal(selected.packages.length, full === 'true' ? 28 : 0, result.stdout + result.stderr);
       assert.equal(selected.receipts.length, full === 'true' ? 6 : 0);
       assert.equal(selected.typecheck, full === 'true');
       assert.equal(Boolean(selected.documentation), full !== 'true');
