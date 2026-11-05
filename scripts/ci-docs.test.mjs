@@ -148,7 +148,8 @@ test('real planner command emits document output and reports unaudited fallbacks
     const output = join(tmpdir(), `cloud-doc-output-${head}`);
     try {
       writeFileSync(output, '');
-      const result = spawnSync(process.execPath, [resolve('scripts/ci-plan.mjs')], {cwd: root, env: {...process.env, GITHUB_EVENT_PATH: join(root, 'event.json'), GITHUB_OUTPUT: output}, encoding: 'utf8'});
+      const result = spawnSync(process.execPath, [resolve('scripts/ci-plan.mjs')], {cwd: root, env: {...process.env, GITHUB_EVENT_NAME: 'pull_request', CI_FULL: 'false', CI_CALLED: 'false',
+      CI_FORCE_FULL: 'false', CI_WORKFLOW_INPUTS: '{}', CI_RECORD_EVIDENCE: 'false', GITHUB_EVENT_PATH: join(root, 'event.json'), GITHUB_OUTPUT: output, GITHUB_SHA: head}, encoding: 'utf8'});
       return {...result, output: readFileSync(output, 'utf8')};
     } finally { rmSync(output, {force: true}); rmSync(join(root, 'event.json'), {force: true}); }
   };
@@ -202,7 +203,8 @@ test('planner command prominently warns about an unreviewed documentation audit 
     const output = join(root, 'output.txt');
     writeFileSync(output, '');
     const result = spawnSync(process.execPath, [resolve('scripts/ci-plan.mjs')], {cwd: root,
-      env: {...process.env, GITHUB_EVENT_PATH: join(root, 'event.json'), GITHUB_OUTPUT: output}, encoding: 'utf8'});
+      env: {...process.env, GITHUB_EVENT_NAME: 'pull_request', CI_FULL: 'false', CI_CALLED: 'false',
+      CI_FORCE_FULL: 'false', CI_WORKFLOW_INPUTS: '{}', CI_RECORD_EVIDENCE: 'false', GITHUB_EVENT_PATH: join(root, 'event.json'), GITHUB_OUTPUT: output, GITHUB_SHA: head}, encoding: 'utf8'});
     assert.equal(result.status, 0, result.stderr);
     assert.match(result.stdout, /::warning title=Documentation-only CI unavailable::/);
     assert.match(result.stdout, /review.*scripts\/ci-input-audit\.json.*docs\/ci-documentation-audit\.md/i);

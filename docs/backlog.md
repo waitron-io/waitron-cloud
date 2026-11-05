@@ -1342,7 +1342,10 @@ implementation or production evidence.
   reviewed target ancestry and survive squash or rebase; malformed metadata,
   lost records, rename inference and later v1 downgrades are refused. Historical
   v1 assertions remain intact in isolated fixture history. The complete current
-  candidate and its required workflow freshness commands have executable controls. The
+  candidate and its required workflow freshness commands have executable controls.
+  D587 gives the synthetic audit pull-request fixtures their own event and call inputs,
+  so scheduled and manually dispatched full runs retain the same selection assertions.
+  The production full-run rules and time limits stay unchanged. The
   [history sample](backlog/ci-audit-conflicts.md) reproduces audit-only conflicts
   in 21 of 30 repeated-head transitions. The two owned drafts #946/#947 pass on unchanged first-attempt heads;
   both merge orders need zero audit conflicts, regeneration or reruns. The

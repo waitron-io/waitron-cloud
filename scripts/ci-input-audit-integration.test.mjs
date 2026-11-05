@@ -19,7 +19,8 @@ function completeFixture(run) {
   const read = path => readFileSync(join(root, path), 'utf8');
   const write = (path, value) => writeFileSync(join(root, path), typeof value === 'string' ? value : JSON.stringify(value, null, 2) + '\n');
   const node = (path, args = [], env = {}) => spawnSync(process.execPath, [path, ...args],
-    {cwd: root, env: {...process.env, ...env}, encoding: 'utf8', timeout: 60_000});
+    {cwd: root, env: {...process.env, GITHUB_EVENT_NAME: 'pull_request',
+      CI_FULL: 'false', CI_CALLED: 'false', CI_FORCE_FULL: 'false', CI_WORKFLOW_INPUTS: '{}', CI_RECORD_EVIDENCE: 'false', ...env}, encoding: 'utf8', timeout: 60_000});
   const commit = () => {git('add', '-A'); git('commit', '--allow-empty', '-s', '-qm', 'Save complete audit control'); return git('rev-parse', 'HEAD').trim();};
   const renew = () => {
     git('add', '-A');

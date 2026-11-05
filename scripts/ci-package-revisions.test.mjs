@@ -402,7 +402,8 @@ test('the real planner command batches both saved revisions and retains former r
   const trace = join(root, 'git-trace.log');
   writeFileSync(event, JSON.stringify({pull_request: {base: {sha: base}, head: {sha: head}}}));
   execFileSync(process.execPath, [new URL('./ci-plan.mjs', import.meta.url).pathname], {
-    cwd: root, env: {...process.env, GITHUB_EVENT_PATH: event, GITHUB_OUTPUT: output,
+    cwd: root, env: {...process.env, GITHUB_EVENT_NAME: 'pull_request', CI_FULL: 'false', CI_CALLED: 'false',
+      CI_FORCE_FULL: 'false', CI_WORKFLOW_INPUTS: '{}', CI_RECORD_EVIDENCE: 'false', GITHUB_EVENT_PATH: event, GITHUB_OUTPUT: output,
       GITHUB_SHA: head, GITHUB_REPOSITORY: 'waitron-io/waitron-cloud', GITHUB_REF_NAME: 'fixture', GIT_TRACE: trace},
     stdio: ['ignore', 'pipe', 'pipe'],
   });
@@ -526,7 +527,8 @@ test('the planner command follows immutable helper readers despite dirty source 
   const event = join(root, 'event.json'), output = join(root, 'outputs.txt'), trace = join(root, 'git-trace.log');
   writeFileSync(event, JSON.stringify({pull_request: {base: {sha: base}, head: {sha: head}}}));
   execFileSync(process.execPath, [new URL('./ci-plan.mjs', import.meta.url).pathname], {
-    cwd: root, env: {...process.env, GITHUB_EVENT_PATH: event, GITHUB_OUTPUT: output, GITHUB_SHA: head,
+    cwd: root, env: {...process.env, GITHUB_EVENT_NAME: 'pull_request', CI_FULL: 'false', CI_CALLED: 'false',
+      CI_FORCE_FULL: 'false', CI_WORKFLOW_INPUTS: '{}', CI_RECORD_EVIDENCE: 'false', GITHUB_EVENT_PATH: event, GITHUB_OUTPUT: output, GITHUB_SHA: head,
       GITHUB_REPOSITORY: 'waitron-io/waitron-cloud', GITHUB_REF_NAME: 'fixture', GIT_TRACE: trace},
     stdio: ['ignore', 'pipe', 'pipe'],
   });
