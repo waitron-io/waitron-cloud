@@ -57,6 +57,18 @@ completion flags for this premature-close boundary as well as at
 `response-aborted`. Other pipeline error categories keep their existing
 diagnostic shape. These fields record transport progress, not whether the native writer consumed the response.
 
+[Nightly rehearsal 41990933182, job 127137641411](https://github.com/waitron-io/waitron-cloud/actions/runs/41990933182/job/127137641411)
+repeats this boundary in
+`genuineNativeStreamHistoriesPairBinaryRetriesWithIndependentStorageBounds`.
+The writer exits zero, but its workload LIST records `response-pipeline` and
+`ERR_STREAM_PREMATURE_CLOSE` after 22 attempts. Both counters agree on 5,674
+input bytes and 1,224,605 output bytes; the interrupted reply reports all 743
+expected bytes and complete request/response flags. The producer records one
+transport error while the observer records success. The pre-signal snapshot
+contains one pending LIST. Cleanup completes. This is another occurrence of the
+existing D152 investigation; the underlying cancellation cause remains unknown.
+A later passing run cannot establish its repair.
+
 Run `node --test scripts/cloud-cost/litestream-pipeline-diagnostics.test.mjs`
 for real HTTP controls with and without a validated stop acknowledgement. A
 completed preliminary LIST checks that storage admission observes that
