@@ -264,6 +264,30 @@ Failed extraction preserves the command error and complete cached archive, remov
 its private root and stops before certificate setup or listeners. Real store startup
 and historical causes remain open; see [the investigation](storage-cache-fixture.md).
 
+## Extraction-refusal seed acquisition (D530-4)
+
+An extraction test can fail before tar runs if its seed archive is unavailable.
+The [recorded CI failure](https://github.com/waitron-io/waitron-cloud/actions/runs/42033259367/job/127266525049)
+aborted that direct download after 30 seconds, without recording whether headers
+or the body stalled. Its provider cause remains unknown. A later cold-cache pass
+does not explain that failure.
+
+Run `node --test scripts/ci-storage-tar-seed.test.mjs` for controlled seed
+failures, then `node --test scripts/ci-backup-storage-tar-refusals.test.mjs`
+for the three existing extraction checks. Acquisition records identify only the
+public pinned request, attempt, stage, status, received bytes and elapsed time;
+signed redirect URLs and response bodies stay out of those records.
+
+Only this test's seed download gains recovery. It makes at most three attempts
+for HTTP 5xx, reset connections or ten seconds without header/body progress.
+Every attempt and its one- or two-second pause share the existing 30-second
+download budget. Other HTTP refusals and digest failures stop immediately,
+including a permanent refusal whose body cancellation also resets. The
+45-second setup limit and each extraction test's 30-second limit remain.
+The shared cache stays read-only, the exact platform digests remain required,
+and failed setup removes only its private seed directory. The storage fixture's
+own single download attempt and historical startup investigations remain separate.
+
 ## Storage partial port-reservation refusals (D464)
 
 Run `node --test scripts/ci-backup-storage-reservation-refusals.test.mjs` to
