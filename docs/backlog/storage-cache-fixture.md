@@ -114,8 +114,16 @@ Run `node --test --test-concurrency=1 --test-timeout=30000 scripts/ci-backup-sto
 for isolated cold-cache controls, including a genuinely truncated local HTTP response. Failed
 startup removes its private directory and publishes no archive; a complete
 archive with the wrong digest remains refused. The fixture still makes exactly one download attempt; archive pins,
-cache publication and permission checks are unchanged. These controls qualify
-reporting, not the historical Linux failure.
+cache publication and permission checks are unchanged. D585 adds a shared
+30-second deadline over headers and body. Run `node --test scripts/ci-backup-storage-download-budget.test.mjs`
+to hold headers or a body on a real local HTTP server and verify abort, an empty
+cache and removal of the private startup directory. Its HTTP-refusal case
+requires connection closure before the deadline can fire. Run
+`node --test scripts/ci-backup-storage-download-contract.test.mjs` to check native
+body silence without a seed inactivity limit, late completion after abort,
+unavailable status, cancellation errors and a failed diagnostic sink. These
+controls qualify reporting and bounded acquisition, not the historical Linux
+failure.
 
 On 1 November, the authorised Linux test box passes all five download controls
 and all four unchanged `service-runtime.test.mjs` checks. The first plan journey
@@ -304,27 +312,37 @@ storage checks. The shared controls also exercise permanent HTTP refusals,
 body resets, inactivity, the total budget, checksum refusal and cleanup errors.
 The original probe bodies and their assertions remain unchanged.
 
+Native startup and the seeds use `downloadStorageArchive` for supervision. Native
+startup keeps one attempt and its original phase/error-cause contract, with one
+30-second deadline over headers and body. The seed policy keeps three temporary
+attempts, ten-second inactivity and its original total budget. Digest checking
+and cache publication stay with each caller so their existing refusal and
+cleanup rules remain distinct.
+
 | Acquisition site | Current boundary |
 | --- | --- |
 | `scripts/fixtures/storage-tar-seed.mjs` | Shared test acquisition: at most three temporary attempts within 30 seconds, ten-second inactivity, exact digest, read-only cache. |
 | `scripts/ci-backup-storage-{concurrent-extraction,concurrent-publication,extraction,issuer-bind,process-extraction,publication,readiness-diagnostics,reservation-refusals,tls-refusals,tar-refusals}.test.mjs` | Each setup uses that helper and removes its own returned seed directory. Existing setup and test deadlines remain. |
-| `scripts/backup-storage-fixture.mjs` | Still separate: one cache-miss fetch with header/status/body diagnostics and digest, without its own abort deadline. Existing refusal tests require one attempt and preservation of the original error. |
+| `scripts/fixtures/storage-archive-download.mjs` | Shared header/body supervision and caller-selected attempt policy. Native startup uses one attempt and a 30-second total deadline; seeds retain their existing retry/inactivity policy. |
+| `scripts/backup-storage-fixture.mjs` | Shared supervision on a cache miss. Original header/status/body diagnostics and causes, digest validation, atomic cache publication and extraction stay with the native fixture. |
 | `scripts/cloud-cost/conformance-prepare.mjs` | Still separate: calls `downloadConformanceArchive`, with up to three attempts, a shared 120 seconds and 30-second inactivity. It extracts into its private image context. |
 | `deploy/local-stack/Dockerfile` | Still separate: version 4.47 and supplied architecture digest; `curl` has no own retry or deadline. Outer build limits are separate. |
 
-D585 remains open for those three paths. They need distinct integration checks:
-the native fixture must preserve its single-attempt refusal contract, conformance
-must retain its 120-second budget, and the image build must work without a host
-Node helper. Consolidating test setup does not qualify any of those paths or
-repair the upstream HTTP 504 cause. No controlled copy or provider is built.
+D585 remains open for conformance and the image build. Conformance must retain
+its 120-second budget, and the image build must work without a host Node helper.
+Native header/body controls and unchanged refusal checks qualify its bounded
+single attempt. They do not qualify those remaining paths or repair the upstream
+HTTP 504 cause. No controlled copy or provider is built.
 
 The frozen `scripts/fixtures/ci-deployment-inputs.json` also contains a copy of
 the Dockerfile, materialised by `scripts/ci-dependency-fixture.mjs`; it represents
 the same build edge in historical receipt fixtures. Mock fetches and URL
 assertions in the refusal tests are not additional upstream acquisition sites.
-Thirty-three source files import or reference the native storage fixture in
-this inventory; their cache misses still enter its single fetch. The test-seed consolidation
-leaves those contracts and the frozen fixture unchanged.
+Native fixture consumers enter the shared single-attempt supervision on a cache
+miss.
+Native refusal checks retain their original assertions. Refused HTTP bodies
+are cancelled immediately, with the original HTTP error retained if cancellation
+also fails. The frozen fixture is unchanged.
 
 The wider evidence is distinct from the tar-hook timeout. Nightly run
 `42042160125`, job `127302872285`, records three HTTP 504 replies at the

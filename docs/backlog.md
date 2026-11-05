@@ -16,8 +16,11 @@ open. This documentation change does not publish or dispatch anything.
 ## Shared storage-test seed downloads (D585)
 
 The [storage archive acquisition record](backlog/storage-cache-fixture.md#every-seaweedfs-archive-fetch-and-a-controlled-copy-proposal-d530-4)
-tracks D585: ten test seed hooks share bounded acquisition; native startup,
-conformance preparation and the Dockerfile remain separate follow-up paths.
+tracks D585: native startup and ten test seed hooks share bounded acquisition.
+Native startup retains one attempt, with a 30-second deadline covering headers
+and body. HTTP refusals close their response body immediately without replacing
+the original refusal. Conformance preparation and the Dockerfile remain separate
+follow-up paths.
 
 ## Admin listener shutdown and paced replay (D581)
 
@@ -3231,8 +3234,8 @@ See [the checks and investigation limits](backlog/storage-cache-fixture.md#stora
 **Open; historical cause unknown.** Download failure reporting is implemented,
 and all five native controls pass. The retained Linux cold-cache run and PR849
 CI qualify an earlier baseline; the runtime has since changed. Capture the named
-request and phase at a new failure before changing transport or the single
-archive-download attempt.
+request and phase at a new failure before changing the single archive-download
+attempt. D585 adds a 30-second header/body deadline without adding a retry.
 See [the evidence and remaining work](backlog/storage-cache-fixture.md#storage-archive-download-failure-reporting-d441).
 
 ## Storage extraction seed acquisition (D530-4)
@@ -3246,8 +3249,9 @@ limits remain. Disk and cleanup failures have separate stages, with both errors
 retained when removal also fails. The historical CI timeout has no recorded HTTP stage, so its
 provider cause stays unknown. Capture a new labelled failure before attributing
 it to the registry. The historical inventory names thirteen acquisition sites. Ten storage suites
-and the seed-control suite now use the shared helper; native fixture startup,
-conformance and image build remain separate D585 slices. The owner has deferred
+and the seed-control suite now share supervision with native fixture startup,
+which retains one attempt and adds a 30-second deadline. Conformance and image
+build remain separate D585 slices. The owner has deferred
 the costed controlled-copy proposal; no mirror is built. See [the seed controls and limits](backlog/storage-cache-fixture.md#extraction-refusal-seed-acquisition-d530-4)
 and [the complete inventory and proposal](backlog/storage-cache-fixture.md#every-seaweedfs-archive-fetch-and-a-controlled-copy-proposal-d530-4).
 

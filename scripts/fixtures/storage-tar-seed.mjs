@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { setTimeout as delay } from "node:timers/promises";
+import { downloadStorageArchive } from "./storage-archive-download.mjs";
 
 const pins = {
   "darwin-arm64": ["darwin_arm64", "3ad466db33e83d0b103f90a06997feeb1cc42fd536e6cbdcdded975778f64fda"],
@@ -33,45 +33,10 @@ export async function prepareStorageTarSeed() {
       bytes = await readFile(join(tmpdir(), "waitron-cloud-test-binaries", archiveName));
     } catch (error) {
       if (error.code !== "ENOENT") throw error;
-      // Headers, bodies and retry pauses share one 30-second budget.
-      const budget = AbortSignal.timeout(30000);
-      for (attempt = 1; ; attempt++) {
-        budget.throwIfAborted();
-        phase = "headers"; status = null; bytesReceived = 0; report("attempt");
-        const inactivity = new AbortController();
-        let idleTimer, retryable = false;
-        const progress = () => {
-          clearTimeout(idleTimer);
-          idleTimer = setTimeout(() => inactivity.abort(new DOMException("Storage seed transfer stalled", "TimeoutError")), 10000);
-        };
-        try {
-          progress();
-          const response = await fetch(url, { signal: AbortSignal.any([budget, inactivity.signal]) });
-          progress();
-          phase = "status"; status = response.status; report("headers");
-          if (!response.ok) {
-            retryable = status >= 500 && status <= 599;
-            await response.body?.cancel();
-          }
-          assert.equal(response.ok, true, "the pinned release archive must be available");
-          phase = "body"; report("body");
-          const chunks = [];
-          for await (const chunk of response.body) {
-            chunks.push(chunk); bytesReceived += chunk.length; progress();
-          }
-          budget.throwIfAborted();
-          bytes = Buffer.concat(chunks);
-          break;
-        } catch (error) {
-          clearTimeout(idleTimer);
-          budget.throwIfAborted();
-          const reset = ["ECONNRESET", "UND_ERR_SOCKET"].includes(error?.cause?.code ?? error?.code);
-          if (attempt >= 3 || (phase === "status" && !retryable) ||
-              (!retryable && !reset && !inactivity.signal.aborted)) throw error;
-          report("retry");
-          await delay(attempt * 1000, undefined, { signal: budget });
-        } finally { clearTimeout(idleTimer); }
-      }
+      bytes = await downloadStorageArchive(url, { report(event) {
+        ({ phase, attempt, status, bytesReceived } = event);
+        report(event.event);
+      } });
     }
     phase = "digest";
     assert.equal(createHash("sha256").update(bytes).digest("hex"), checksum, "SeaweedFS archive digest mismatch");
