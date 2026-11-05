@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { readFileSync, realpathSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 const policy = JSON.parse(readFileSync(new URL('./policy.json', import.meta.url)));
@@ -42,7 +42,7 @@ const operations = { DescribeInstances: ec2sdk.DescribeInstancesCommand, Describ
 exports.handler = async () => sweepExpired({ account: process.env.ACCOUNT, region: process.env.AWS_REGION, stackId: process.env.STACK_ID, bucket: process.env.BUCKET, aws: { call: (service, operation, input) => (service === 'ec2' ? ec2 : s3).send(new operations[operation](input)) } });\n`;
 }
 
-if (process.argv[1] === fileURLToPath(import.meta.url)) {
+if (process.argv[1] && realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url))) {
   console.error('D570 owner-run lifecycle is not implemented. Do not apply this prerequisite template; budget, bootstrap, repository protection and live safety qualification remain open.');
   process.exitCode = 1;
 }

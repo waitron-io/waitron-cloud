@@ -360,6 +360,9 @@
                     },
                     "Bool": {
                       "ec2:IsLaunchTemplateResource": "true"
+                    },
+                    "DateLessThan": {
+                      "aws:CurrentTime": "2027-02-28T23:59:00Z"
                     }
                   }
                 },
@@ -388,6 +391,9 @@
                     "Null": {
                       "aws:RequestTag/Run": "false",
                       "aws:RequestTag/ExpiresAt": "false"
+                    },
+                    "DateLessThan": {
+                      "aws:CurrentTime": "2027-02-28T23:59:00Z"
                     }
                   }
                 },
@@ -407,6 +413,9 @@
                       "aws:RequestTag/Stack": {
                         "Ref": "AWS::StackId"
                       }
+                    },
+                    "DateLessThan": {
+                      "aws:CurrentTime": "2027-02-28T23:59:00Z"
                     }
                   }
                 },
@@ -428,6 +437,9 @@
                   "Condition": {
                     "StringEquals": {
                       "aws:RequestedRegion": "eu-south-2"
+                    },
+                    "DateLessThan": {
+                      "aws:CurrentTime": "2027-02-28T23:59:00Z"
                     }
                   }
                 },
@@ -443,6 +455,9 @@
                       "ec2:ResourceTag/Stack": {
                         "Ref": "AWS::StackId"
                       }
+                    },
+                    "DateLessThan": {
+                      "aws:CurrentTime": "2027-02-28T23:59:00Z"
                     }
                   }
                 },
@@ -464,6 +479,9 @@
                       "ec2:ResourceTag/Stack": {
                         "Ref": "AWS::StackId"
                       }
+                    },
+                    "DateLessThan": {
+                      "aws:CurrentTime": "2027-02-28T23:59:00Z"
                     }
                   }
                 },
@@ -484,7 +502,12 @@
                     {
                       "Fn::Sub": "${Bucket.Arn}/d570/receipt/*"
                     }
-                  ]
+                  ],
+                  "Condition": {
+                    "DateLessThan": {
+                      "aws:CurrentTime": "2027-02-28T23:59:00Z"
+                    }
+                  }
                 },
                 {
                   "Sid": "WriteObjects",
@@ -500,7 +523,12 @@
                     {
                       "Fn::Sub": "${Bucket.Arn}/d570/receipt/*"
                     }
-                  ]
+                  ],
+                  "Condition": {
+                    "DateLessThan": {
+                      "aws:CurrentTime": "2027-02-28T23:59:00Z"
+                    }
+                  }
                 },
                 {
                   "Sid": "ListPrefixes",
@@ -520,6 +548,9 @@
                         "d570/payload/*",
                         "d570/receipt/*"
                       ]
+                    },
+                    "DateLessThan": {
+                      "aws:CurrentTime": "2027-02-28T23:59:00Z"
                     }
                   }
                 },
@@ -532,6 +563,11 @@
                   ],
                   "Resource": {
                     "Fn::Sub": "${Bucket.Arn}/d570/payload/*"
+                  },
+                  "Condition": {
+                    "DateLessThan": {
+                      "aws:CurrentTime": "2027-02-28T23:59:00Z"
+                    }
                   }
                 },
                 {
@@ -542,6 +578,9 @@
                   "Condition": {
                     "StringEquals": {
                       "aws:RequestedRegion": "eu-south-2"
+                    },
+                    "DateLessThan": {
+                      "aws:CurrentTime": "2027-02-28T23:59:00Z"
                     }
                   }
                 }

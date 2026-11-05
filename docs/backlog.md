@@ -2942,7 +2942,8 @@ implementation or production evidence.
   2027-02-28T23:59:00Z with an initial USD 0 baseline. The private setup template,
   identity-checked renderer and bounded expiry engine now have synthetic checks
   and an unprivileged CI gate. Launches remain explicitly denied, the sweep rule
-  disabled and CLI up/down closed. The complete removable setup you run in one
+  disabled and CLI up/down closed. Pre-activation gates now explicitly include
+  whole-snapshot cleanup starvation and an independent cap on future expiry tags. The complete removable setup you run in one
   sitting, with automatic resource setup and removal, remains unfinished. No prior
   full Mac proof or recurring Mac probe
   is required; the supported Mac path and every capacity floor remain unchanged.

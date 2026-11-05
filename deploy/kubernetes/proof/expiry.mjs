@@ -57,7 +57,7 @@ export async function sweepExpired({ aws, account, region, stackId, bucket, now 
     || !/^arn:aws:cloudformation:eu-south-2:462991287391:stack\/[A-Za-z][A-Za-z0-9-]*\/[0-9a-f-]{36}$/.test(stackId)
     || typeof bucket !== 'string' || !/^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$/.test(bucket)) throw new Error('Invalid expiry scope');
   const started = now();
-  if (!Number.isSafeInteger(started) || started <= 0) throw new Error('Invalid expiry clock');
+  if (!Number.isSafeInteger(started) || started <= 0 || !Number.isFinite(new Date(started).getTime())) throw new Error('Invalid expiry clock');
   const instances = await inventory(aws, 'DescribeInstances', stackId);
   const volumes = await inventory(aws, 'DescribeVolumes', stackId);
   // Validate the entire snapshot before the first destructive request.

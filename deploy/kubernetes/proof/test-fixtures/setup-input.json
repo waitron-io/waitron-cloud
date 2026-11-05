@@ -1,0 +1,21 @@
+{
+  "account": "462991287391",
+  "region": "eu-south-2",
+  "now": "2026-11-05T20:00:00Z",
+  "repository": {
+    "fullName": "waitron-io/waitron-cloud",
+    "id": 1381507078,
+    "ownerId": 332029685
+  },
+  "oidcProviderArn": "arn:aws:iam::462991287391:oidc-provider/token.actions.githubusercontent.com",
+  "image": {
+    "ImageId": "ami-0123456789abcdef0",
+    "OwnerId": "137112412989",
+    "Architecture": "arm64",
+    "State": "available",
+    "Public": true,
+    "RootDeviceType": "ebs",
+    "VirtualizationType": "hvm"
+  },
+  "s3PrefixListId": "pl-0123456789abcdef0"
+}

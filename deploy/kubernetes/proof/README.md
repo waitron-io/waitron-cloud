@@ -29,7 +29,9 @@ security-group rules, S3-only HTTPS egress, private encrypted storage, separate
 launcher and expiry roles, a fixed launch template, a one-day log group and a
 disabled one-minute sweep. Its outputs carry the runtime resource identities.
 The launcher has no IAM, network, bucket or template administration permissions.
-Its intended launch permissions remain denied pending the missing safety gates;
+Every launcher grant also carries the approved absolute access-expiry condition,
+so an already issued session cannot extend that deadline. Its intended launch
+permissions remain denied pending the missing safety gates;
 unit checks and CloudFormation validation do not qualify IAM behavior on AWS.
 
 The sweep selects `Proof=D570` and the exact CloudFormation stack ARN. It checks
@@ -54,9 +56,31 @@ uvx --from cfn-lint==1.59.0 cfn-lint deploy/kubernetes/proof/setup.yaml
 ```
 
 The unprivileged `Kubernetes proof prerequisites` workflow runs those checks on
-pull requests and main. It requests no AWS session and has no recurring or manual
+pull requests and main, including validation of the fully rendered synthetic
+template with its actual inline Lambda source. It requests no AWS session and has no recurring or manual
 launch trigger. The Lambda test executes the rendered inline source with synthetic
-SDK responses; it makes no claim about a live AWS termination actor.
+SDK responses, including termination and volume deletion; it makes no claim about
+a live AWS termination actor. The fixture uses made-up AMI and prefix-list IDs;
+it is test input, not a discovered or qualified machine image.
+
+
+Two named expiry gates must be resolved before enabling the sweep:
+
+- **Whole-snapshot cleanup starvation:** one malformed run tag, even on a
+  terminated row or an unattached volume, currently stops all mutations. A failed
+  first termination also prevents later cleanup attempts. Define and prove a
+  per-resource failure strategy that still cannot delete a foreign volume, then
+  follow the plan's changed-check rule before changing ownership assertions.
+- **Unbounded future expiry:** a syntactically valid future tag currently has no
+  independent lifetime bound. Prove a cap against immutable EC2 launch time,
+  the reserved 120-minute proof plus 15-minute cleanup window and the approved
+  access expiry. Define missing, malformed and contradictory time evidence for
+  instances and volumes; none may produce a false healthy result.
+
+Also qualify the launch statement's required network-interface resources, condition
+keys for each EC2 resource type, the regional official image owner and the account's
+Lambda concurrency quota. These are live/provider gates, with no current passing
+claim. The launcher deny and disabled rule remain mandatory until they are resolved.
 
 Before the owner can run setup, implement the one-entry `up`/`down` lifecycle,
 conditional all-in setup/runtime reservations, official current prices and billing

@@ -107,7 +107,7 @@ test('wrong account, region, stack or clock cannot make any AWS call', async () 
   for (const override of [
     { account: '949687825720' }, { region: 'eu-west-1' }, { stackId: stackId.replace('462991287391', '949687825720') },
     { stackId: stackId.replace('eu-south-2', 'eu-west-1') }, { stackId: '' }, { now: () => NaN },
-    { bucket: '' },
+    { bucket: '' }, { now: () => 0 }, { now: () => -1 }, { now: () => 1.5 }, { now: () => 9e15 },
   ]) {
     const f = fixture({ instances: [instance()] });
     await assert.rejects(sweep({ ...f.options, ...override }), /scope|clock/);
@@ -176,6 +176,28 @@ test('a backwards, invalid or overlong sweep clock withholds healthy heartbeat',
     const f = fixture();
     let reads = 0;
     await assert.rejects(sweep({ ...f.options, now: () => reads++ === 0 ? Date.parse(now) : end }), /clock|deadline/);
+    assert.deepEqual(mutations(f), []);
+  }
+});
+
+test('each inventory sends both server ownership filters and rejects tokens before the page limit', async () => {
+  const f = fixture();
+  await sweep(f.options);
+  for (const operation of ['DescribeInstances', 'DescribeVolumes']) {
+    assert.deepEqual(f.calls.find(c => c.operation === operation).input.Filters, [{ Name: 'tag:Proof', Values: ['D570'] }, { Name: 'tag:Stack', Values: [stackId] }]);
+  }
+  const repeated = fixture({ pages: () => ({ Reservations: [], NextToken: 'same' }) });
+  await assert.rejects(sweep(repeated.options), /pagination/);
+  assert.equal(repeated.calls.length, 2);
+  const long = fixture({ pages: () => ({ Reservations: [], NextToken: 'x'.repeat(4097) }) });
+  await assert.rejects(sweep(long.options), /pagination/);
+  assert.equal(long.calls.length, 1);
+});
+
+test('unknown instance and volume states withhold every mutation', async () => {
+  for (const broken of [{ instances: [instance({ State: { Name: 'unknown' } })] }, { volumes: [volume({ State: 'unknown' })] }]) {
+    const f = fixture(broken);
+    await assert.rejects(sweep(f.options), /inventory/);
     assert.deepEqual(mutations(f), []);
   }
 });

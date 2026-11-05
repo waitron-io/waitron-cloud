@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, mkdtempSync, symlinkSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import test from 'node:test';
 import vm from 'node:vm';
@@ -8,13 +10,7 @@ const module = await import('./setup.mjs').catch(error => {
   if (error.code !== 'ERR_MODULE_NOT_FOUND') throw error;
   return {};
 });
-const inputs = () => ({
-  account: '462991287391', region: 'eu-south-2', now: '2026-11-05T20:00:00Z',
-  repository: { fullName: 'waitron-io/waitron-cloud', id: 1381507078, ownerId: 332029685 },
-  oidcProviderArn: 'arn:aws:iam::462991287391:oidc-provider/token.actions.githubusercontent.com',
-  image: { ImageId: 'ami-0123456789abcdef0', OwnerId: '137112412989', Architecture: 'arm64', State: 'available', Public: true, RootDeviceType: 'ebs', VirtualizationType: 'hvm' },
-  s3PrefixListId: 'pl-0123456789abcdef0',
-});
+const inputs = () => JSON.parse(readFileSync(new URL('./test-fixtures/setup-input.json', import.meta.url)));
 function render(input = inputs()) {
   assert.equal(typeof module.renderSetup, 'function', 'reviewable setup template compiler is missing');
   return module.renderSetup(input);
@@ -54,7 +50,7 @@ test('outputs supply runtime identities and numeric launch version without paste
   assert.equal(t.Outputs.AccessExpiry.Value, '2027-02-28T23:59:00Z');
 });
 
-test('shared OIDC provider is referenced conditionally and survives stack removal', () => {
+test('shared OIDC provider is referenced and only an absent provider gets a conditional owned resource', () => {
   const t = render();
   assert.deepEqual(t.Conditions.D570Scope, { 'Fn::And': [{ 'Fn::Equals': [{ Ref: 'AWS::AccountId' }, '462991287391'] }, { 'Fn::Equals': [{ Ref: 'AWS::Region' }, 'eu-south-2'] }] });
   assert.deepEqual(t.Conditions.CreateOidc, { 'Fn::And': [{ Condition: 'D570Scope' }, { 'Fn::Equals': [{ Ref: 'ExistingOidcProviderArn' }, ''] }] });
@@ -192,4 +188,123 @@ test('up and down refuse all execution while owner lifecycle and live qualificat
     assert.match(result.stderr, /owner-run lifecycle is not implemented/);
     assert.equal(result.stdout, '');
   }
+});
+
+test('symlinked CLI refuses up, down and unknown commands without running the next step', () => {
+  const scratch = mkdtempSync(join(tmpdir(), 'd570-cli-refusal-'));
+  try {
+    const alias = join(scratch, 'setup.mjs');
+    symlinkSync(new URL('./setup.mjs', import.meta.url).pathname, alias);
+    for (const action of ['up', 'down', '--force']) {
+      const result = spawnSync(process.execPath, [alias, action], { encoding: 'utf8', env: { PATH: '/nonexistent' } });
+      assert.equal(result.status, 1, action);
+      assert.match(result.stderr, /owner-run lifecycle is not implemented/);
+      assert.equal(result.stdout, '');
+    }
+  } finally { rmSync(scratch, { recursive: true }); }
+});
+
+test('expiry role, environment and invocation target retain separate ownership boundaries', () => {
+  const t = render();
+  assert.deepEqual(resource(t, 'ExpiryRole').AssumeRolePolicyDocument, { Version: '2012-10-17', Statement: [{ Effect: 'Allow', Principal: { Service: 'lambda.amazonaws.com' }, Action: 'sts:AssumeRole' }] });
+  const fn = resource(t, 'ExpiryFunction');
+  assert.deepEqual(fn.Role, { 'Fn::GetAtt': ['ExpiryRole', 'Arn'] });
+  assert.equal(fn.ReservedConcurrentExecutions, 1);
+  assert.deepEqual(fn.Environment.Variables, { ACCOUNT: '462991287391', STACK_ID: { Ref: 'AWS::StackId' }, BUCKET: { Ref: 'Bucket' } });
+  assert.deepEqual(resource(t, 'ExpiryRule').Targets, [{ Id: 'D570Expiry', Arn: { 'Fn::GetAtt': ['ExpiryFunction', 'Arn'] }, RetryPolicy: { MaximumEventAgeInSeconds: 60, MaximumRetryAttempts: 0 } }]);
+  assert.deepEqual(resource(t, 'ExpiryPermission').FunctionName, { Ref: 'ExpiryFunction' });
+  assert.equal(resource(t, 'ExpiryPermission').Principal, 'events.amazonaws.com');
+  assert.equal(resource(t, 'LaunchTemplate').LaunchTemplateData.DisableApiTermination, undefined);
+});
+
+test('tagging and cleanup permissions keep both exact resource and request boundaries', () => {
+  const t = render();
+  const arns = ['arn:aws:ec2:eu-south-2:462991287391:instance/*', 'arn:aws:ec2:eu-south-2:462991287391:volume/*'];
+  const owned = { StringEquals: { 'aws:RequestedRegion': 'eu-south-2', 'ec2:ResourceTag/Proof': 'D570', 'ec2:ResourceTag/Stack': { Ref: 'AWS::StackId' } } };
+  for (const [role, sid] of [['LauncherRole', 'OwnedCleanup'], ['ExpiryRole', 'TerminateOwned']]) {
+    const s = statements(t, role).find(s => s.Sid === sid);
+    assert.deepEqual(s?.Resource, arns);
+    assert.deepEqual(s?.Condition.StringEquals, owned.StringEquals);
+  }
+  const tags = statements(t, 'LauncherRole').find(s => s.Sid === 'LaunchTags');
+  assert.deepEqual(tags?.Resource, arns);
+  assert.deepEqual(tags?.Condition.StringEquals, { 'aws:RequestedRegion': 'eu-south-2', 'ec2:CreateAction': 'RunInstances', 'aws:RequestTag/Proof': 'D570', 'aws:RequestTag/Stack': { Ref: 'AWS::StackId' } });
+  const run = statements(t, 'LauncherRole').find(s => s.Sid === 'TaggedRun');
+  assert.deepEqual(run?.Resource, arns);
+  assert.deepEqual(run?.Condition.StringEquals, { 'aws:RequestedRegion': 'eu-south-2', 'aws:RequestTag/Proof': 'D570', 'aws:RequestTag/Stack': { Ref: 'AWS::StackId' }, 'ec2:InstanceType': 'm7g.2xlarge' });
+  assert.deepEqual(run?.Condition.Null, { 'aws:RequestTag/Run': 'false', 'aws:RequestTag/ExpiresAt': 'false' });
+  assert.deepEqual(run?.Condition.ArnEquals, { 'ec2:LaunchTemplate': { 'Fn::Sub': 'arn:aws:ec2:eu-south-2:462991287391:launch-template/${LaunchTemplate}' } });
+  const fixed = statements(t, 'LauncherRole').find(s => s.Sid === 'FixedTemplateResources');
+  assert.deepEqual(fixed?.Condition.Bool, { 'ec2:IsLaunchTemplateResource': 'true' });
+  assert.deepEqual(fixed?.Condition.ArnEquals, run?.Condition.ArnEquals);
+});
+
+test('bucket and endpoint policies keep transport and create-only object boundaries', () => {
+  const t = render(), p = resource(t, 'BucketPolicy').PolicyDocument.Statement;
+  const tls = p.find(s => s.Sid === 'TlsOnly');
+  assert.deepEqual(tls, { Sid: 'TlsOnly', Effect: 'Deny', Action: 's3:*', Resource: [{ 'Fn::GetAtt': ['Bucket', 'Arn'] }, { 'Fn::Sub': '${Bucket.Arn}/*' }], Condition: { Bool: { 'aws:SecureTransport': 'false' } }, Principal: '*' });
+  assert.deepEqual(p.find(s => s.Sid === 'CreateOnlyEvidence'), { Sid: 'CreateOnlyEvidence', Effect: 'Deny', Action: 's3:PutObject', Resource: [{ 'Fn::Sub': '${Bucket.Arn}/d570/payload/*' }, { 'Fn::Sub': '${Bucket.Arn}/d570/receipt/*' }], Condition: { Null: { 's3:if-none-match': 'true' }, Bool: { 's3:ObjectCreationOperation': 'true' } }, Principal: '*' });
+  assert.deepEqual(resource(t, 'S3Endpoint').PolicyDocument, { Version: '2012-10-17', Statement: [{ Sid: 'ProofObjects', Effect: 'Allow', Action: ['s3:GetObject', 's3:PutObject', 's3:AbortMultipartUpload', 's3:ListMultipartUploadParts'], Resource: { 'Fn::Sub': '${Bucket.Arn}/d570/*' }, Principal: '*' }] });
+});
+
+test('launcher reads, lists and multipart work stay inside their declared prefixes', () => {
+  const t = render(), launcher = statements(t, 'LauncherRole');
+  assert.deepEqual(launcher.find(s => s.Sid === 'ReadObjects')?.Resource, ['ledger', 'health', 'payload', 'receipt'].map(p => ({ 'Fn::Sub': '${Bucket.Arn}/d570/' + p + '/*' })));
+  const list = launcher.find(s => s.Sid === 'ListPrefixes');
+  assert.equal(list?.Action, 's3:ListBucket');
+  assert.deepEqual(list?.Resource, { 'Fn::GetAtt': ['Bucket', 'Arn'] });
+  assert.deepEqual(list?.Condition.StringLike, { 's3:prefix': ['d570/ledger/*', 'd570/health/*', 'd570/payload/*', 'd570/receipt/*'] });
+  const multipart = launcher.find(s => s.Sid === 'PayloadMultipart');
+  assert.deepEqual(multipart?.Action, ['s3:AbortMultipartUpload', 's3:ListMultipartUploadParts']);
+  assert.deepEqual(multipart?.Resource, { 'Fn::Sub': '${Bucket.Arn}/d570/payload/*' });
+});
+
+test('approval policy and rendered template retain the same owner limits', () => {
+  const policy = JSON.parse(readFileSync(new URL('./policy.json', import.meta.url)));
+  const t = render();
+  assert.equal(policy.monthlyCapUsd, Number(t.Outputs.MonthlyCapUsd.Value));
+  assert.equal(policy.instanceType, resource(t, 'LaunchTemplate').LaunchTemplateData.InstanceType);
+  assert.equal(policy.sessionSeconds, resource(t, 'LauncherRole').MaxSessionDuration);
+  assert.equal(policy.accessExpiry, t.Outputs.AccessExpiry.Value);
+  assert.equal(policy.approvedBaselineUsd, 0);
+  assert.equal(policy.admission, t.Outputs.Admission.Value);
+  assert.equal(policy.forbiddenAccount, '949687825720');
+});
+
+test('already assumed launcher sessions lose every granted action at the approved expiry', () => {
+  for (const statement of statements(render(), 'LauncherRole').filter(s => s.Effect === 'Allow')) {
+    assert.deepEqual(statement.Condition?.DateLessThan, { 'aws:CurrentTime': '2027-02-28T23:59:00Z' }, statement.Sid);
+  }
+});
+
+test('serialized Lambda requests actual termination and volume deletion before publishing health', async () => {
+  const calls = [], stackId = 'arn:aws:cloudformation:eu-south-2:462991287391:stack/d570/00000000-0000-4000-8000-000000000000';
+  const tags = Object.entries({ Proof: 'D570', Stack: stackId, Run: '11111111-1111-4111-8111-111111111111', ExpiresAt: '2026-11-05T19:00:00Z' }).map(([Key, Value]) => ({ Key, Value }));
+  class Client {
+    constructor(options) { assert.equal(options.region, 'eu-south-2'); assert.equal(options.maxAttempts, 3); }
+    async send(command) {
+      calls.push(command);
+      if (command.name === 'DescribeInstances') return { Reservations: [{ Instances: [{ InstanceId: 'i-0123456789abcdef0', State: { Name: 'running' }, Tags: tags }] }] };
+      if (command.name === 'DescribeVolumes') return { Volumes: [{ VolumeId: 'vol-0123456789abcdef0', State: 'available', Attachments: [], Tags: tags }] };
+      if (command.name === 'TerminateInstances') {
+        assert.deepEqual(JSON.parse(JSON.stringify(command.input)), { InstanceIds: ['i-0123456789abcdef0'] });
+        return { TerminatingInstances: [{ InstanceId: 'i-0123456789abcdef0', CurrentState: { Name: 'shutting-down' } }] };
+      }
+      if (command.name === 'DeleteVolume') { assert.equal(command.input.VolumeId, 'vol-0123456789abcdef0'); return {}; }
+      if (command.name === 'PutObject') return {};
+      throw new Error('Wrong SDK operation');
+    }
+  }
+  const command = name => class { constructor(input) { this.name = name; this.input = input; } };
+  class Clock extends Date { static now() { return Date.parse('2026-11-05T20:00:00Z'); } }
+  const exports = {};
+  vm.runInNewContext(resource(render(), 'ExpiryFunction').Code.ZipFile, { exports, Date: Clock, process: { env: { AWS_REGION: 'eu-south-2', ACCOUNT: '462991287391', STACK_ID: stackId, BUCKET: 'd570-synthetic' } }, require(name) {
+    if (name === '@aws-sdk/client-ec2') return { EC2Client: Client, ...Object.fromEntries(['DescribeInstances', 'DescribeVolumes', 'TerminateInstances', 'DeleteVolume'].map(n => [`${n}Command`, command(n)])) };
+    if (name === '@aws-sdk/client-s3') return { S3Client: Client, PutObjectCommand: command('PutObject') };
+    throw new Error('Unexpected import');
+  } });
+  const result = await exports.handler();
+  assert.deepEqual(calls.map(c => c.name), ['DescribeInstances', 'DescribeVolumes', 'TerminateInstances', 'DeleteVolume', 'PutObject']);
+  assert.deepEqual(JSON.parse(JSON.stringify(result.terminationRequested)), ['i-0123456789abcdef0']);
+  assert.deepEqual(JSON.parse(JSON.stringify(result.volumeDeletionRequested)), ['vol-0123456789abcdef0']);
 });
