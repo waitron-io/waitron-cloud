@@ -1455,12 +1455,47 @@ implementation or production evidence.
   peer shortcuts. No measured GitHub time saving is claimed. D571 part 5 has a
   [verified-merge design](superpowers/specs/2026-11-05-verified-merge-ci-design.md)
   and [implementation plan](superpowers/plans/2026-11-05-verified-merge-ci.md).
-  Reuse and changed-tree main selection are not implemented. Runtime landing
-  waits for the nightly backstop and the watcher's post-merge runbook update.
+  The workflows now publish attempt-bound source plans and main decisions,
+  independently qualify identical-tree sources, and recheck them in the final
+  summary before accepting skipped work. Main readback verifies the hosted
+  artifact, every final job and the reconstructed push range or full inventory.
+  AWS and applicable download diagnostics have their own planners and summaries.
+  Cost and venue retain part 4's removed main triggers and their input selection;
+  they cannot borrow standard CI's evidence. Historical proof reconstruction
+  reads its explicit immutable range, independently of the operator checkout.
+  Reusable calls, including a false-valued full input, always run complete work.
+  The [merge evidence checklist](ci-merge-evidence.md) distinguishes inherited
+  counts, newly executed checks and workflows excluded by their actual triggers.
+  Local checks cover workflow conditions, artifact publication, complete native
+  jobs and deliberate guard omissions. Hosted equal-tree and changed-tree
+  readback, the first nightly with AWS and measured time savings remain unproved.
+  The whole-branch review found ordinary-run failures around missing API evidence,
+  empty ranges, oversized plans and summary checkouts. Focused controls cover their
+  full-work fallbacks, bounded historical reconstruction and final summary proof.
+  Missing immutable PR objects are fetched by exact hash without moving refs.
+  CLI fixtures set their own run identity so hosted inputs cannot change the
+  refusal they exercise. The live-reader control uses distinct saved revisions
+  to reach package discovery without bypassing the empty-range guard.
+  The bounded native, source and readback readers now collect 30-record job
+  pages. A controlled slow large-page response reproduces native summary
+  exhaustion; smaller pages pass that control. Missing, duplicated, truncated
+  or changing evidence still fails in those bounded readers. The 500-record
+  ceiling and request/time limits remain; shared readback requests can exhaust
+  their budget earlier. Numeric aliases require an independently verified
+  repository name and ID. The ordinary strict summary requests 30 records
+  through its existing reader, preserving its expected-name/result checks and
+  retry bounds. Its existing total-count/unique-ID gap remains separate: a
+  fake-GitHub command reproduced acceptance of a declared 14-job list delivering
+  12 jobs, changing totals and a duplicate skipped-job ID, while a missing
+  required job still fails. The watcher needs to assign that existing reader's
+  completeness follow-up; this change does not claim those controls there.
+  The hosted timeout's natural cause is not proved. The watcher
+  has updated all six operator runbooks; runtime landing still requires fresh
+  current-head CI.
   Part 6 adds the [nightly full backstop](ci-nightly.md):
-  one 03:17 UTC schedule and a manual trigger call the existing three workflows
-  at the same revision. All package partitions, six receipt suites, cost and
-  venue execute even on an unchanged tree. The parent refuses a missing, skipped,
+  one 03:17 UTC schedule and a manual trigger call all four workflows
+  at the same revision. All package partitions, six receipt suites, cost,
+  venue and four AWS cells execute even on an unchanged tree. The parent refuses a missing, skipped,
   cancelled or failed family; the standard summary retains its exact job checks
   within the nested family, refusing malformed job names before filtering.
   Configuration guards protect the full inputs, concurrency and final
@@ -2695,9 +2730,9 @@ implementation or production evidence.
   plan, refusing missing, duplicated, cancelled, unfinished or failed required
   jobs, and any unexpected executed job. Unused job families must finish skipped.
   Every PR job checks out its exact
-  head SHA. Every push to main runs the complete package, receipt and compiler
-  suites, even when the merge tree equals a green pull-request head. This follows
-  the owner's 2026-10-18 decision until D571 part 5 changes the merge policy.
+  head SHA. The former 2026-10-18 policy repeated complete package, receipt and
+  compiler suites on every main push. D571 part 5 replaces that policy
+  with independently verified identical-tree reuse and actual main-range selection.
   D571 part 6 supplies an additional nightly full run under the 4 November
   decision; it does not itself remove main-push testing. Local
   regressions exercise the real planner and summary commands and both equal-tree

@@ -26,21 +26,22 @@ async function workflow() {
 // Omitting either event or filtering paths would leave some merge SHAs unchecked.
 test('AWS checks cover every main push and pull request', async () => {
   const value = await workflow();
-  assert.deepEqual(value.on, { push: { branches: ['main'] }, pull_request: null });
-  assert.equal(value.concurrency.group, "aws-infrastructure-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}");
-  assert.equal(value.concurrency['cancel-in-progress'], "${{ github.event_name == 'pull_request' }}");
+  assert.deepEqual(value.on, { workflow_call: {inputs: {full: {type: 'boolean', default: true}, 'job-prefix': {type: 'string', default: ''}}}, push: { branches: ['main'] }, pull_request: null });
+  assert.equal(value.concurrency.group, "aws-infrastructure-${{ inputs.full && 'nightly-' || '' }}${{ github.event_name == 'pull_request' && github.ref || github.run_id }}");
+  assert.equal(value.concurrency['cancel-in-progress'], "${{ !inputs.full && github.event_name == 'pull_request' }}");
 });
 
 // The checkout action receives the PR candidate, never GitHub's synthetic merge.
 test('AWS checks use the exact candidate with read-only repository permission', async () => {
   const value = await workflow();
-  assert.deepEqual(value.permissions, { contents: 'read' });
+  assert.deepEqual(value.permissions, { contents: 'read', actions: 'read', 'pull-requests': 'read' });
   assert.equal(value.defaults, undefined);
-  assert.deepEqual(Object.keys(value.jobs), ['verify']);
+  assert.deepEqual(Object.keys(value.jobs), ['changes', 'verify', 'summary']);
   const job = value.jobs.verify;
   assert.equal(job.permissions, undefined);
   assert.equal(job.env, undefined);
-  assert.equal(job.if, undefined);
+  assert.equal(job.if, "needs.changes.outputs.required == 'true'");
+  assert.equal(job.needs, 'changes');
   assert.equal(job.defaults, undefined);
   assert.equal(job['runs-on'], 'ubuntu-latest');
   assert.ok(job['timeout-minutes'] > 0 && job['timeout-minutes'] <= 30);

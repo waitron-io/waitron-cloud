@@ -1,4 +1,5 @@
 import {groupShortPackages} from './ci-package-groups.mjs';
+import assert from 'node:assert/strict';
 import {execFileSync} from 'node:child_process';
 import {readFileSync, readdirSync, realpathSync} from 'node:fs';
 import {dirname, join, posix, relative, resolve} from 'node:path';
@@ -150,14 +151,21 @@ export function scopeForPaths(paths, workspace, {direct = false} = {}) {
 
 export const receiptSuites = ['test:two-venue-milestone-receipt','test:backup-capacity','test:public-gateway-limits','test:local-stack','test:database-recovery-receipt','test:cloud-cost'];
 const shards = {'@waitron-cloud/registration':6, '@waitron-cloud/account-http':3, '@waitron-cloud/backups':7, '@waitron-cloud/portal':6, '@waitron-cloud/remote-access':4};
-export function workPlan(scope, workspace, root = process.cwd(), receiptScope = scope) {
+export function workPlan(scope, workspace, root = process.cwd(), receiptScope = scope, testFilesByPackage) {
   const packages = [];
   for (const name of scope.packages) {
     const pkg = workspace.find(pkg=>pkg.name === name);
     if (!pkg?.scripts?.test) throw new Error(`Selected package ${name} declares no tests`);
     const count = shards[name];
     if (count) {
-      const files = readdirSync(`${root}/${pkg.directory}/test`).filter(file=>file.endsWith('.test.ts'));
+      const files = testFilesByPackage === undefined
+        ? readdirSync(`${root}/${pkg.directory}/test`).filter(file=>file.endsWith('.test.ts'))
+        : testFilesByPackage[pkg.name];
+      assert.ok(Array.isArray(files), `Missing test inventory: ${name}`);
+      if (testFilesByPackage !== undefined) {
+        assert.ok(new Set(files).size===files.length && files.every(path=>typeof path==='string' &&
+          posix.dirname(path)===`${pkg.directory}/test` && path.endsWith('.test.ts')), `Invalid saved test inventory: ${name}`);
+      }
       if (files.length < count) throw new Error(`${name} has an empty test shard`);
       for (let shard = 1; shard <= count; shard++) packages.push({package:name,shard,shards:count});
     } else packages.push({package:name,shard:1});

@@ -2,10 +2,11 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import childProcess, {spawnSync} from 'node:child_process';
 import {syncBuiltinESMExports} from 'node:module';
-import {mkdtempSync, readFileSync, rmSync, writeFileSync} from 'node:fs';
+import {mkdtempSync, readFileSync, rmSync, writeFileSync, symlinkSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {assertSummary} from './ci-summary.mjs';
+import {reuseProof} from './fixtures/ci-evidence.mjs';
 import * as summary from './ci-summary.mjs';
 const plan = {packages:[1,2,3,4,5,6].map(shard=>({package:'@waitron-cloud/portal',shard,shards:6})),receipts:[],typecheck:true,reuse:null};
 const results = {changes:'success',typecheck:'success',root:'success',receipts:'skipped',packages:'success'};
@@ -28,7 +29,7 @@ test('summary accepts skipped work only with concrete reuse evidence and rejects
   const empty={packages:[],receipts:[],typecheck:false,reuse:null};
   const skipped={changes:'success',typecheck:'skipped',receipts:'skipped',packages:'skipped'};
   assert.throws(()=>assertSummary(empty,skipped,jobs));
-  assert.doesNotThrow(()=>assertSummary({...empty,reuse:{sha:'a'.repeat(40),runId:42}},skipped,[jobs[0]]));
+  assert.doesNotThrow(()=>assertSummary({...empty,reuse:reuseProof()},skipped,[jobs[0]]));
   for (const reuse of [{}, {sha:'bad',runId:42},{sha:'a'.repeat(40),runId:null}]) assert.throws(()=>assertSummary({...empty,reuse},skipped,jobs));
   assert.throws(()=>assertSummary({...plan,reuse:{sha:'a'.repeat(40),runId:42}},results,jobs));
 });
@@ -78,7 +79,7 @@ test('executed summary waits for a stale job record to publish its final result'
     writeFileSync(join(root, 'settled.json'), JSON.stringify([{jobs}]));
     writeFileSync(join(root, 'gh'), `#!/bin/sh
 case "$*" in
-  'api --paginate --slurp repos/waitron-io/waitron-cloud/actions/runs/42/jobs?filter=latest&per_page=100') ;;
+  'api --paginate --slurp repos/waitron-io/waitron-cloud/actions/runs/42/jobs?filter=latest&per_page=30') ;;
   *) exit 2 ;;
 esac
 if [ -f "$CI_PUBLICATION_FIXTURE/read" ]; then
@@ -661,9 +662,30 @@ test('actual nested summary command receives the prefix configured by both workf
     assert.equal(typeof prefix, 'string', 'Both workflows must deliver a prefix');
     const records = [...jobs.map(job => ({...job, name: `standard / ${job.name}`})), {name: 'cost / discover', status: 'in_progress', conclusion: null}];
     writeFileSync(join(root, 'jobs.json'), JSON.stringify([{jobs: records}]));
-    writeFileSync(join(root, 'gh'), `#!${process.execPath}\nconst fs=require('node:fs');const assert=require('node:assert/strict');assert.deepEqual(process.argv.slice(2),['api','--paginate','--slurp','repos/waitron-io/waitron-cloud/actions/runs/42/jobs?filter=latest&per_page=100']);process.stdout.write(fs.readFileSync(process.env.CI_JOB_FIXTURE,'utf8'));\n`, {mode: 0o700});
+  writeFileSync(join(root, 'package.json'), '{"type":"module"}\n');
+    writeFileSync(join(root, 'gh.cjs'), `#!${process.execPath}\nconst fs=require('node:fs');const assert=require('node:assert/strict');assert.deepEqual(process.argv.slice(2),['api','--paginate','--slurp','repos/waitron-io/waitron-cloud/actions/runs/42/jobs?filter=latest&per_page=30']);process.stdout.write(fs.readFileSync(process.env.CI_JOB_FIXTURE,'utf8'));\n`, {mode: 0o700});
+    symlinkSync('gh.cjs', join(root, 'gh'));
     const result = spawnSync(process.execPath, ['scripts/ci-summary.mjs'], {encoding: 'utf8', timeout: 3_000, env: {...process.env, PATH: `${root}:${process.env.PATH}`, GITHUB_REPOSITORY: 'waitron-io/waitron-cloud', GITHUB_RUN_ID: '42', CI_JOB_FIXTURE: join(root, 'jobs.json'), CI_JOB_PREFIX: prefix, CI_PLAN: JSON.stringify(plan), CI_RESULTS: JSON.stringify(Object.fromEntries(Object.entries(results).map(([name, result]) => [name, {result}])))} });
     assert.equal(result.status, 0, result.stdout + result.stderr);
     assert.match(result.stdout, /Passed 6 package jobs and 0 receipts/);
   } finally {rmSync(root, {recursive: true, force: true});}
+});
+test('summary refuses legacy reuse tokens and requires a complete workflow-bound proof', () => {
+  const skipped = {changes: 'success', typecheck: 'skipped', root: 'skipped', packages: 'skipped', receipts: 'skipped'};
+  const proof = {version: 1, repository: 'waitron-io/waitron-cloud', repositoryId: 123, pr: 51,
+    mergeSha: 'b'.repeat(40), sha: 'a'.repeat(40), tree: 'c'.repeat(40), workflowId: 17,
+    workflowPath: '.github/workflows/ci.yml', runId: 42, attempt: 2,
+    planDigest: 'd'.repeat(64), jobsDigest: 'e'.repeat(64)};
+  const reused = {packages: [], receipts: [], typecheck: false, reuse: proof};
+  assert.doesNotThrow(() => assertSummary(reused, skipped, [jobs[0]]));
+  assert.throws(() => assertSummary({...reused, reuse: {sha: proof.sha, runId: proof.runId}}, skipped, [jobs[0]]));
+  for (const field of Object.keys(proof)) {
+    const incomplete = {...proof}; delete incomplete[field];
+    assert.throws(() => assertSummary({...reused, reuse: incomplete}, skipped, [jobs[0]]), field);
+  }
+  for (const change of [{version: 2}, {attempt: 0}, {repositoryId: 0}, {pr: -1}, {workflowId: NaN},
+    {repository: 'outsider/fork'}, {workflowPath: '.github/workflows/cloud-cost.yml'},
+    {tree: '0'.repeat(40)}, {planDigest: 'f'.repeat(63)}, {jobsDigest: 'F'.repeat(64)}]) {
+    assert.throws(() => assertSummary({...reused, reuse: {...proof, ...change}}, skipped, [jobs[0]]), JSON.stringify(change));
+  }
 });

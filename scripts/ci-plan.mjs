@@ -1,4 +1,8 @@
 import {execFileSync} from 'node:child_process';
+import assert from 'node:assert/strict';
+import {resolveRange} from './ci-range.mjs';
+import {findReuse, permitsRangeSelection} from './ci-reuse.mjs';
+import {bindRuntimeWorkflow, evidenceInvocation, publishRuntimePlan, reuseContextFromEnvironment, runtimeReuseDependencies} from './ci-reuse-runtime.mjs';
 import {appendFileSync, readFileSync} from 'node:fs';
 import {pathToFileURL} from 'node:url';
 import {loadWorkspace, scopeForPaths, workPlan, receiptSuites} from './ci-scope.mjs';
@@ -39,19 +43,19 @@ function mixedCodePaths(paths, base, head, git) {
   }
 }
 
-export function createPlan(event, context, workspace, git, api) {
+function buildRevisionPlan(range, workspace, git, testFilesByPackage) {
   let scope = scopeForPaths([],workspace);
   let revisions;
   let receiptScope;
   let lockSelection;
-  let reason = context.full === true ? 'Explicit full run: all packages and receipts' : 'Main push or unknown diff: full suite';
-  if (context.full !== true && event.pull_request) {
+  let reason = 'Main push or unknown diff: full suite';
+  {
     try {
-      const {head,base} = event.pull_request;
-      if (![head.sha,base.sha].every(sha=>/^[a-f0-9]{40}$/.test(sha))) throw Error('Invalid event SHA');
-      const mergeBase = git('merge-base',base.sha,head.sha).trim();
+      const head = {sha:range.head};
+      const mergeBase = range.base;
       const paths = git('diff','--name-only','--no-renames','-z',mergeBase,head.sha).split('\0');
-      if (paths.at(-1)==='') paths.pop();
+      if (paths.pop() !== '') throw Error('Incomplete NUL path inventory');
+      if (!paths.length) throw Error('Empty revision range');
       try {
         const documentation = documentationPlan(paths, mergeBase, head.sha, git);
         if (documentation) return {packages:[], receipts:[], typecheck:false, reuse:null, documentation, reason:`Audited unread Markdown: ${paths.join(', ')}`};
@@ -84,10 +88,13 @@ export function createPlan(event, context, workspace, git, api) {
       if (!reason.startsWith('Unverified package revisions:')) reason = scope.full ? `Shared, unaudited or unknown paths: full suite (${paths.join(', ')})` : `Selected ${scope.packages.join(', ')}`;
       if (paths.includes('pnpm-lock.yaml')) reason += `; ${lockSelection?.reason ?? describeLockChanges(mergeBase, head.sha, git)}`;
     } catch {
-      reason = 'Cannot determine PR diff: full suite';
+      scope = scopeForPaths([],workspace);
+      revisions = undefined;
+      lockSelection = undefined;
+      reason = 'Cannot determine revision diff: full suite';
     }
   }
-  const work = workPlan(scope,workspace,undefined,receiptScope ?? scope);
+  const work = workPlan(scope,workspace,undefined,receiptScope ?? scope,testFilesByPackage);
   if (lockSelection) work.receipts = [...receiptSuites];
   if (revisions && !lockSelection) {
     const selection = receiptPlan(work.receipts, receiptScope ?? scope, revisions.base, revisions.head, git);
@@ -97,9 +104,44 @@ export function createPlan(event, context, workspace, git, api) {
   return {...work,reuse:null,reason};
 }
 
+function selectRevisionPlan(range, workspace, git, testFilesByPackage) {
+  const plan = buildRevisionPlan(range, workspace, git, testFilesByPackage);
+  if (plan.reason.length > 4096) plan.reason = plan.reason.slice(0, 4096) + '... (explanation truncated)';
+  if (Buffer.byteLength(JSON.stringify(plan)) > 240 * 1024) {
+    return {...workPlan(scopeForPaths([], workspace), workspace, undefined, undefined, testFilesByPackage), reuse: null,
+      reason: 'Plan evidence exceeds its bound: full suite'};
+  }
+  return plan;
+}
+
+export function selectPlan(range, snapshot, git) {
+  assert.equal(snapshot.revision,range.head,'Workspace snapshot revision mismatch');
+  assert.ok(Array.isArray(snapshot.packages) && snapshot.packages.length,'Missing workspace packages');
+  assert.ok(snapshot.testFilesByPackage && typeof snapshot.testFilesByPackage==='object','Missing saved test inventory');
+  return selectRevisionPlan(range,snapshot.packages,git,snapshot.testFilesByPackage);
+}
+
+export function createPlan(event, context, workspace, git, api, reuseGit = git) {
+  const range = resolveRange(event,context,git);
+  const full = reason => ({...workPlan(scopeForPaths([],workspace),workspace),reuse:null,reason});
+  if (range.kind === 'full') return full(range.reason);
+  if (range.kind === 'push') {
+    try {
+      const parents = git('show', '-s', '--format=%P', range.head).trim().split(' ').filter(Boolean);
+      assert.ok(parents.length && parents.every(sha => /^(?!0{40}$)[a-f0-9]{40}$/.test(sha)), 'Invalid push topology');
+      if (parents.length !== 1 || parents[0] !== range.base) return selectRevisionPlan(range,workspace,git);
+    } catch {return full('Cannot verify push topology: full suite');}
+    const result = findReuse({...context, event}, {api, git: reuseGit}, '.github/workflows/ci.yml');
+    if (result.reuse) return {packages: [], receipts: [], typecheck: false, reuse: result.reuse, reason: result.reason};
+    if (!permitsRangeSelection(result)) return full(`Unverified PR evidence: ${result.reason}: full suite`);
+  }
+  return selectRevisionPlan(range,workspace,git);
+}
+
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const event = JSON.parse(readFileSync(process.env.GITHUB_EVENT_PATH,'utf8'));
-  const context = {sha:process.env.GITHUB_SHA,repository:process.env.GITHUB_REPOSITORY,branch:process.env.GITHUB_REF_NAME,full:process.env.CI_FORCE_FULL === 'true'};
+  let context = reuseContextFromEnvironment(event);
+  context.full ||= process.env.CI_FORCE_FULL === 'true';
   const git = (...args) => {
     const binary = typeof args.at(-1) === 'object' && args.pop().binary;
     return execFileSync('git', args, {encoding: binary ? undefined : 'utf8', timeout: 30_000, maxBuffer: 64 * 1024 * 1024, stdio: ['ignore', 'pipe', 'pipe']});
@@ -111,10 +153,23 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   catch {
     console.log('::warning title=Documentation-only CI unavailable::Review changed executable inputs, then renew documentation evidence (scripts/ci-input-audit.json in v1; docs records in v2) with --write-staged using docs/ci-documentation-audit.md. V2 peer records may remain stale and retain full work. Docs-only changes retain full CI, and the required root/script freshness check fails until reviewed and renewed.');
   }
-  const plan = createPlan(event,context,loadWorkspace(),git);
+  let record = process.env.CI_RECORD_EVIDENCE === 'true' && evidenceInvocation(context);
+  const dependencies = (record || context.eventName === 'push') && context.repository === 'waitron-io/waitron-cloud'
+    ? runtimeReuseDependencies(context) : {};
+  if (record) {
+      try {context = bindRuntimeWorkflow(context, dependencies.api);}
+      catch {context.full = true; record = false; console.log('Workflow identity unavailable: full work without reusable source evidence');}
+    }
+  const workspace = loadWorkspace();
+  const plan = createPlan(event,context,workspace,git,dependencies.api,dependencies.git);
   // Diagnostics share GitHub's job output budget with the executable work plan.
   if (plan.reason.length > 4096) plan.reason = plan.reason.slice(0, 4096) + '... (explanation truncated)';
+  const range = resolveRange(event, context, git);
+  const complete = workPlan(scopeForPaths([], workspace), workspace);
+  const mode = plan.reuse ? 'reused' : plan.typecheck && JSON.stringify(plan.packages) === JSON.stringify(complete.packages) && JSON.stringify(plan.receipts) === JSON.stringify(complete.receipts) ? 'full' : 'selected';
+  if (record) publishRuntimePlan(context, plan, git, mode);
   const outputs = {
+    mode,
     plan:JSON.stringify(plan), typecheck:String(plan.typecheck),
     documentation:String(Boolean(plan.documentation)),
     scripts:String(Boolean(plan.scripts)),

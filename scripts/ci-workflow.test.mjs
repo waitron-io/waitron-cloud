@@ -120,25 +120,25 @@ test('audited root scripts run their own immutable checks without package instal
 // separately establish GitHub's real expression, permission and job-name behavior.
 const nightly = readFileSync(new URL('../.github/workflows/nightly.yml', import.meta.url), 'utf8');
 const nightlyJob = name => nightly.match(new RegExp(`^  ${name}:\\n([\\s\\S]*?)(?=^  [\\w-]+:|$(?![\\s\\S]))`, 'm'))?.[1] ?? '';
-test('nightly contract keeps a daily trigger and all three full reusable families', () => {
+test('nightly contract keeps a daily trigger and all four full reusable families', () => {
   const cron = /^    - cron: '(\d+) (\d+) \* \* \*'$/m.exec(nightly);
   assert.ok(cron, 'Nightly must execute every calendar day');
   assert.ok(Number(cron[1]) > 0 && Number(cron[1]) < 60 && Number(cron[2]) < 24, 'Use a valid time away from the hour');
   assert.match(nightly, /^  workflow_dispatch:$/m);
-  for (const [name, path] of [['standard', 'ci'], ['cost', 'cloud-cost'], ['venue', 'venue-services-proof']]) {
+  for (const [name, path] of [['standard', 'ci'], ['cost', 'cloud-cost'], ['venue', 'venue-services-proof'], ['aws', 'aws-infrastructure']]) {
     assert.match(nightlyJob(name), new RegExp(String.raw`uses: \./\.github/workflows/${path}\.yml`));
     assert.match(nightlyJob(name), /full: true/);
     const called = readFileSync(new URL(`../.github/workflows/${path}.yml`, import.meta.url), 'utf8');
     assert.match(called, /^  workflow_call:$/m);
     assert.match(called, /CI_FORCE_FULL: \$\{\{ inputs.full \}\}/);
-    assert.match(called, /group: (?:ci|cost-conformance|venue-services)-\$\{\{ inputs.full && 'nightly-' \|\| '' \}\}\$\{\{ github.event_name == 'pull_request' && github.ref \|\| github.run_id \}\}/);
+    assert.match(called, /group: (?:ci|cost-conformance|venue-services|aws-infrastructure)-\$\{\{ inputs.full && 'nightly-' \|\| '' \}\}\$\{\{ github.event_name == 'pull_request' && github.ref \|\| github.run_id \}\}/);
     assert.match(called, /cancel-in-progress: \$\{\{ !inputs.full && github.event_name == 'pull_request' \}\}/);
   }
 });
 test('nightly final gate always receives every reusable workflow result', () => {
   const final = nightlyJob('summary');
   assert.match(final, /if: \$\{\{ always\(\) \}\}/);
-  assert.match(final, /needs: \[standard, cost, venue\]/);
+  assert.match(final, /needs: \[standard, cost, venue, aws\]/);
   assert.match(final, /CI_NIGHTLY_RESULTS: \$\{\{ toJSON\(needs\) \}\}/);
   assert.match(final, /run: node scripts\/ci-nightly-summary\.mjs/);
   assert.match(nightlyJob('standard'), /job-prefix: 'standard \/ '/);

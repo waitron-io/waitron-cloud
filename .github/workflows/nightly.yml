@@ -27,14 +27,21 @@ jobs:
     uses: ./.github/workflows/cloud-cost.yml
     with:
       full: true
+      job-prefix: 'cost / '
   venue:
     uses: ./.github/workflows/venue-services-proof.yml
     with:
       full: true
+      job-prefix: 'venue / '
+  aws:
+    uses: ./.github/workflows/aws-infrastructure.yml
+    with:
+      full: true
+      job-prefix: 'aws / '
   summary:
     name: nightly-summary
     if: ${{ always() }}
-    needs: [standard, cost, venue]
+    needs: [standard, cost, venue, aws]
     runs-on: ubuntu-latest
     timeout-minutes: 2
     steps:

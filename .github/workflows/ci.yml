@@ -4,7 +4,7 @@ on:
     inputs:
       full:
         type: boolean
-        default: false
+        default: true
       job-prefix:
         type: string
         default: ''
@@ -26,6 +26,8 @@ jobs:
     timeout-minutes: 2
     outputs:
       plan: ${{ steps.plan.outputs.plan }}
+      decision_artifact: ${{ steps.plan.outputs.decision_artifact }}
+      mode: ${{ steps.plan.outputs.mode }}
       typecheck: ${{ steps.plan.outputs.typecheck }}
       packages: ${{ steps.plan.outputs.packages }}
       receipts: ${{ steps.plan.outputs.receipts }}
@@ -47,12 +49,32 @@ jobs:
           npm_config_fetch_timeout: '15000'
           npm_config_fetch_retries: '1'
           npm_config_fetch_retry_mintimeout: '1000'
-      # Pull requests select affected work; every main push runs the full suite.
+      # A main push reuses only independently verified identical-tree evidence.
       - id: plan
         run: node scripts/ci-plan.mjs
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CI_FORCE_FULL: ${{ inputs.full }}
+          CI_WORKFLOW_INPUTS: ${{ toJSON(inputs) }}
+          CI_RECORD_EVIDENCE: 'true'
+      - name: Retain source plan
+        if: steps.plan.outputs.source_artifact != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.plan.outputs.source_artifact }}
+          path: .ci-evidence/source/plan.json
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 14
+      - name: Retain main decision
+        if: steps.plan.outputs.decision_artifact != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.plan.outputs.decision_artifact }}
+          path: .ci-evidence/decision/plan.json
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 14
   documentation:
     needs: changes
     if: needs.changes.outputs.documentation == 'true'
@@ -358,11 +380,30 @@ jobs:
       - uses: actions/checkout@v5
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
-      - name: Require precisely the planned jobs
+          fetch-depth: 0
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '26'
+          package-manager-cache: false
+      - id: complete-decision
+        name: Require precisely the planned jobs
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CI_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
           CI_PLAN: ${{ needs.changes.outputs.plan }}
+          CI_RECORD_DECISION: 'true'
+          CI_MODE: ${{ needs.changes.outputs.mode }}
+          CI_DECISION_ARTIFACT: ${{ needs.changes.outputs.decision_artifact }}
           CI_JOB_PREFIX: ${{ inputs.job-prefix }}
+          CI_WORKFLOW_INPUTS: ${{ toJSON(inputs) }}
           CI_RESULTS: ${{ toJSON(needs) }}
         run: node scripts/ci-summary.mjs
+      - name: Retain completed full decision
+        if: steps.complete-decision.outputs.decision_artifact != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.complete-decision.outputs.decision_artifact }}
+          path: .ci-evidence/decision/plan.json
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 14

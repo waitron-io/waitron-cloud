@@ -3,7 +3,7 @@ import {appendFileSync} from 'node:fs';
 
 try {
   const results = JSON.parse(process.env.CI_NIGHTLY_RESULTS);
-  const families = ['standard', 'cost', 'venue'];
+  const families = ['standard', 'cost', 'venue', 'aws'];
   assert.ok(results && typeof results === 'object' && !Array.isArray(results), 'Invalid nightly results');
   assert.ok(Object.keys(results).every(key => families.includes(key)), 'Unexpected nightly workflow');
   const rows = families.map(name => {

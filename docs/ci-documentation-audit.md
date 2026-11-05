@@ -5,10 +5,10 @@ that changes only regular Markdown under `docs/` (outside `docs/receipts/`) or a
 the repository root can run `changes`, `documentation` and `summary` alone.
 The document check reads both exact Git revisions, validates UTF-8, rejects NUL
 characters and requires a final newline. It accepts deleted regular documents.
-The standard main-push policy still runs all package, receipt and compiler
-checks, including an equal-tree merge of a green documentation-only pull request.
-The [nightly full backstop](ci-nightly.md) adds independent full coverage; D571
-part 5 owns the later change to merge checks.
+The standard main-push planner can reuse verified identical-tree PR evidence or
+select the actual changed range. Read the [merge evidence checklist](ci-merge-evidence.md)
+before counting skipped jobs. The [nightly full backstop](ci-nightly.md) supplies
+independent full coverage.
 
 ## Independent evidence for each input
 
@@ -51,7 +51,9 @@ V2 review composes independently reviewed input changes. It does not establish
 that every combination of readers is correct. Before the second landing, inspect
 the combined readers against the prose exemptions even when source paths differ.
 A new reader of exempt prose needs a policy and behavioral-test change before
-renewal. Keep the normal whole-branch review and full main CI.
+renewal. Keep the normal whole-branch review, required current-head CI and
+[exact-merge evidence checks](ci-merge-evidence.md). The nightly full run is a
+separate backstop.
 
 ## Renew documentation evidence before pushing code
 
@@ -90,7 +92,7 @@ while the planner retains full work. Both revisions must qualify for a prose-onl
 shortcut. A fresh head cannot repair an unaudited base, whether it uses v1 or v2.
 
 Venue service proof and Cloud cost conformance select their own reviewed inputs
-through `CI_PROOF_KIND` and `node scripts/ci-docs.mjs --plan`. The
+through `CI_WORKFLOW_PATH` and `node scripts/ci-native-plan.mjs`. The
 [proof selection guide](ci-proof-selection.md) lists consumed paths, refusal
 controls and complete manual runs. Both omit unrelated pull-request changes and
 stop running on main pushes. The [nightly backstop](ci-nightly.md) still calls
@@ -134,8 +136,10 @@ inputs keep full work. Prose plus evidence alone cannot produce an empty success
 package plan. Existing unresolved package readers can also retain all packages.
 
 Cloud cost and venue proof workflows use the same two-revision check through
-`node scripts/ci-docs.mjs --plan`. Mixed changes, pinned prose and stale evidence
-retain their tests. Their existing main policies remain unchanged.
+`node scripts/ci-native-plan.mjs`. Mixed changes, pinned prose and stale evidence
+retain their tests. Neither workflow triggers on main pushes; manual and nightly
+calls retain complete work. Read the [merge evidence checklist](ci-merge-evidence.md)
+for the workflows that do run after a merge.
 
 ## Historical evidence and migration
 
