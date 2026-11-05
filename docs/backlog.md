@@ -3772,3 +3772,18 @@ job 121387722438). The cause remains unknown and belongs to D530's investigation
 Keep the ownership assertion, deadlines, resource collection and refusal to claim
 cleanup after ownership loss. Qualify any repair with the genuine runtime fixture;
 a passing remote-guidance qualification does not establish a repair.
+
+## Relay control private mailbox (D578)
+
+A sibling monitoring reminder changed the shared inbox during the relay control
+test in runs 41940873278 and the earlier D75 qualification. The command test now
+uses its own loopback SMTP capture, a local server that records every message.
+Every direct, root and package command inherits that capture, and the final
+assertion requires no deliveries to any destination. The test also sends a
+competing reminder to the shared Mailpit inbox while a command runs; that
+reproduces the old comparison failure and passes with the private capture.
+Database snapshots, acknowledgements, state, authority and deadline assertions
+remain intact. Run `node scripts/test-postgres.mjs exec pnpm --dir
+packages/registration exec node --test test/relay-control-cli.test.ts` to check
+the command contract. Production delivery code and shared mail fixtures are
+unchanged; this repair does not settle other D530 failures.
