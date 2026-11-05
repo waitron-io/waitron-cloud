@@ -122,6 +122,30 @@ test('an unreviewed long path produces a bounded refusal diagnostic', () => fixt
   assert.match(result.reason, /Unreviewed root input/); assert.ok(result.reason.length <= 512, 'Refusals must not serialize an unbounded inventory');
 }));
 
+test('checkout attributes at every package depth retain full work after review renewal', () => fixture(({git, write, renew, docs, commit, base, changedPaths, plan}) => {
+  const workspace = [{name: '@waitron-cloud/control', directory: 'packages/control', scripts: {test: 'node --test test/*.test.mjs'}}];
+  for (const withRoot of [false, true]) for (const path of ['packages/control/.gitattributes', 'packages/control/src/.gitattributes']) {
+    git('reset', '--hard', base); git('clean', '-fdq');
+    if (withRoot) write(rootPath, 'changed root test\n');
+    write(path, '*.mjs filter=checkout-control\n');
+    renew(withRoot ? [rootPath, path] : [path]); docs(); const head = commit();
+    const mapped = plan(head);
+    assert.equal(mapped.full, true, `${path} must not inherit package ownership`);
+    assert.match(mapped.reason, /Checkout attributes require full root work/);
+    const selected = createPlan({pull_request: {base: {sha: base}, head: {sha: head}}}, {}, workspace, git);
+    assert.equal(selected.rootInputs, undefined);
+    assert.equal(selected.rootTests, undefined);
+    assert.equal(selected.typecheck, true);
+    assert.deepEqual(selected.receipts, ['test:two-venue-milestone-receipt', 'test:backup-capacity',
+      'test:public-gateway-limits', 'test:local-stack', 'test:database-recovery-receipt', 'test:cloud-cost']);
+    assert.doesNotThrow(() => api.assertRootInputWork(selected, {base, head, git}));
+    const forged = {packages: [{package: '@waitron-cloud/control', shard: 1}], receipts: [], typecheck: true,
+      rootTests: true, reuse: null, rootInputs: {version: 1, base, head, paths: changedPaths(head),
+        entryIds: withRoot ? ['root-partition-contract'] : []}};
+    assert.throws(() => api.assertRootInputWork(forged, {base, head, git}), /Root refusal requires full work/);
+  }
+}));
+
 test('changed package test commands remain full after explicit root review renewal', () => fixture(({write, renew, docs, commit, plan}) => {
   write(rootPath, 'root change\n');
   write('packages/control/package.json', {name: '@waitron-cloud/control', scripts: {test: 'node --test a-different-test.mjs'}});
@@ -207,6 +231,50 @@ test('stale head fails mandatory summary even for full or legacy work and after 
   ]) assert.throws(() => api.assertRootInputWork(plan, {base, head: stale, git}), /Unreviewed root input/);
   rmSync(join(root, registryPath)); rmSync(join(root, recordRoot), {recursive: true}); docs(); const removed = commit();
   assert.throws(() => api.assertRootInputWork({packages: [], receipts: [], typecheck: true}, {base, head: removed, git}), /Missing root registry/);
+}));
+
+test('trusted root and receipt summaries reject every incomplete required job', () => fixture(({git, write, renew, docs, commit, base, changedPaths}) => {
+  const health = 'deploy/local-stack/operations-health.test.mjs';
+  for (const mode of ['root', 'receipt', 'mixed']) {
+    git('reset', '--hard', base); git('clean', '-fdq');
+    const paths = mode === 'root' ? [rootPath] : mode === 'receipt' ? [health] : [rootPath, health];
+    for (const path of paths) write(path, `changed ${mode} check\n`);
+    renew(paths); docs(); const head = commit(), verification = {base, head, git};
+    const root = mode !== 'receipt', receipts = mode !== 'root';
+    const plan = {packages: [], receipts: receipts ? ['test:local-stack'] : [], typecheck: false, reuse: null, rootTests: root,
+      rootInputs: {version: 1, base, head, paths: changedPaths(head), entryIds: mode === 'root' ? ['root-partition-contract']
+        : mode === 'receipt' ? ['local-health-test'] : ['local-health-test', 'root-partition-contract']}};
+    const results = {changes: 'success', typecheck: 'skipped', packages: 'skipped', root: root ? 'success' : 'skipped',
+      receipts: receipts ? 'success' : 'skipped'};
+    const names = ['changes', ...(root ? ['root (1/4)', 'root (2/4)', 'root (3/4)', 'root (4/4)'] : []), ...(receipts ? ['receipts'] : [])];
+    const jobs = names.map(name => ({name, status: 'completed', conclusion: 'success'}));
+    const skipped = {name: 'typecheck', status: 'completed', conclusion: 'skipped'};
+    const self = {name: 'summary', status: 'in_progress', conclusion: null};
+    assert.doesNotThrow(() => assertSummary(plan, results, [...jobs, skipped, self], verification), mode);
+    for (const job of jobs) {
+      const remaining = jobs.filter(row => row !== job);
+      assert.throws(() => assertSummary(plan, results, remaining, verification), /Missing or duplicate job/, `${mode}: omitted ${job.name}`);
+      assert.throws(() => assertSummary(plan, results, [...jobs, job], verification), /Missing or duplicate job/, `${mode}: duplicated ${job.name}`);
+      for (const conclusion of ['failure', 'cancelled', 'skipped', null]) {
+        assert.throws(() => assertSummary(plan, results, [...remaining, {...job, conclusion}], verification), /did not pass/,
+          `${mode}: ${job.name} ${conclusion}`);
+      }
+      for (const status of ['queued', 'in_progress']) {
+        assert.throws(() => assertSummary(plan, results, [...remaining, {...job, status}], verification), /unfinished/,
+          `${mode}: ${job.name} ${status}`);
+      }
+    }
+    assert.throws(() => assertSummary(plan, results, [...jobs, skipped, skipped], verification), /duplicate job/);
+    assert.throws(() => assertSummary(plan, results, [...jobs, self, self], verification), /duplicate job/);
+    assert.throws(() => assertSummary(plan, results, [...jobs, {...skipped, name: 'undeclared owner'}], verification), /Unexpected executed job/);
+    for (const group of ['changes', ...(root ? ['root'] : []), ...(receipts ? ['receipts'] : [])]) {
+      for (const status of ['failure', 'cancelled', 'skipped', undefined]) {
+        assert.throws(() => assertSummary(plan, {...results, [group]: status}, jobs, verification), /must succeed|did not match its plan/);
+      }
+    }
+    const forged = {...plan}; delete forged.rootInputs; delete forged.rootTests;
+    assert.throws(() => assertSummary(forged, {...results, root: 'skipped', receipts: 'skipped'}, [jobs[0]], verification), /Root refusal requires full work/);
+  }
 }));
 
 test('execution preflight rejects a different checkout dirty tracked bytes and forged command metadata', () => fixture(({root, git, write, renew, docs, commit, base, changedPaths}) => {

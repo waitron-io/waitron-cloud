@@ -58,6 +58,9 @@ export function rootInputPlan(paths, base, head, git) {
       assert.equal(trees[0].entries.find(e => e.path === path)?.objectId,
         trees[1].entries.find(e => e.path === path)?.objectId, `Shared root policy changed: ${path}`);
     }
+    // Checkout filters affect the bytes that jobs receive, including inside a
+    // package. A renewed path record cannot make that installation boundary local.
+    assert.ok(!paths.some(path => /(?:^|\/)\.gitattributes$/.test(path)), 'Checkout attributes require full root work');
     const inventories = [base, head].map((revision, i) => packageInventory(revision, trees[i].entries, git));
     assert.deepEqual([...inventories[0]], [...inventories[1]], 'Root workspace identity or test commands changed');
     const inputs = new Map();
