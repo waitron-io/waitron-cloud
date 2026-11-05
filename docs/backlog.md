@@ -3610,7 +3610,9 @@ cleanup remain. A forced worker refusal must still fail the case and expose only
 the admitted diagnostic; raw exception text stays private. The historical failure
 in [run 41903018206](https://github.com/waitron-io/waitron-cloud/actions/runs/41903018206/job/126834825942)
 remains unexplained. A later passing run qualifies the wrapper, not a repair;
-capture its diagnostic on recurrence before choosing a fix.
+capture its diagnostic on recurrence before choosing a fix. A worker's early-wake
+count exit can still have an unknown refusal stage. Later phase-assertion failures
+retain their checks but do not report individual phase timings.
 
 ### Litestream LIST-response interruption (D352 qualification)
 
