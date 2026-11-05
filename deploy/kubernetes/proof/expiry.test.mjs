@@ -153,11 +153,11 @@ test('a malformed volume snapshot prevents an earlier valid instance from being 
   assert.deepEqual(mutations(f), []);
 });
 
-test('unconfirmed termination responses never publish health or continue volume deletion', async () => {
+test('unconfirmed termination responses withhold health while independent volume cleanup continues', async () => {
   for (const response of [{}, { TerminatingInstances: [] }, { TerminatingInstances: [{ InstanceId: 'i-0123456789abcdef0', CurrentState: { Name: 'terminated' } }, { InstanceId: 'i-fffffffffffffffff', CurrentState: { Name: 'terminated' } }] }, { TerminatingInstances: [{ InstanceId: 'i-fffffffffffffffff', CurrentState: { Name: 'terminated' } }] }, { TerminatingInstances: [{ InstanceId: 'i-0123456789abcdef0', CurrentState: { Name: 'running' } }] }]) {
     const f = fixture({ instances: [instance()], volumes: [volume()], respond: operation => operation === 'TerminateInstances' ? response : undefined });
     await assert.rejects(sweep(f.options), /Unconfirmed termination/);
-    assert.deepEqual(mutations(f).map(c => c.operation), ['TerminateInstances']);
+    assert.deepEqual(mutations(f).map(c => c.operation), ['TerminateInstances', 'DeleteVolume']);
   }
 });
 
@@ -200,4 +200,54 @@ test('unknown instance and volume states withhold every mutation', async () => {
     await assert.rejects(sweep(f.options), /inventory/);
     assert.deepEqual(mutations(f), []);
   }
+});
+
+test('a failed termination still attempts later eligible instances and volumes without publishing health', async () => {
+  const failure = new Error('first termination refused');
+  const f = fixture({
+    instances: [instance(), instance({ InstanceId: 'i-11111111111111111' }),
+      instance({ InstanceId: 'i-22222222222222222', Tags: tags({ Proof: 'OTHER' }) }),
+      instance({ InstanceId: 'i-33333333333333333', Tags: tags({ ExpiresAt: '2026-11-05T20:01:00Z' }) })],
+    volumes: [volume(), volume({ VolumeId: 'vol-11111111111111111', Tags: tags({ Stack: `${stackId}-foreign` }) }),
+      volume({ VolumeId: 'vol-22222222222222222', Attachments: [{ InstanceId: 'i-0123456789abcdef0', State: 'attached' }] })],
+    respond(operation, input) {
+      if (operation === 'TerminateInstances' && input.InstanceIds[0] === 'i-0123456789abcdef0') throw failure;
+    },
+  });
+  await assert.rejects(sweep(f.options), error => error === failure);
+  assert.deepEqual(mutations(f), [
+    { service: 'ec2', operation: 'TerminateInstances', input: { InstanceIds: ['i-0123456789abcdef0'] } },
+    { service: 'ec2', operation: 'TerminateInstances', input: { InstanceIds: ['i-11111111111111111'] } },
+    { service: 'ec2', operation: 'DeleteVolume', input: { VolumeId: 'vol-0123456789abcdef0' } },
+  ]);
+});
+
+test('a failed volume deletion still attempts the next eligible volume and retains the first failure', async () => {
+  const failure = new Error('first volume refused');
+  const f = fixture({ volumes: [volume(), volume({ VolumeId: 'vol-11111111111111111' })],
+    respond(operation, input) {
+      if (operation === 'DeleteVolume' && input.VolumeId === 'vol-0123456789abcdef0') throw failure;
+    },
+  });
+  await assert.rejects(sweep(f.options), error => error === failure);
+  assert.deepEqual(mutations(f), [
+    { service: 'ec2', operation: 'DeleteVolume', input: { VolumeId: 'vol-0123456789abcdef0' } },
+    { service: 'ec2', operation: 'DeleteVolume', input: { VolumeId: 'vol-11111111111111111' } },
+  ]);
+});
+
+test('multiple cleanup failures cannot erase the first failure or stop subsequent cleanup', async () => {
+  const first = new Error('termination refused'), second = new Error('volume refused');
+  const f = fixture({ instances: [instance()], volumes: [volume(), volume({ VolumeId: 'vol-11111111111111111' })],
+    respond(operation, input) {
+      if (operation === 'TerminateInstances') throw first;
+      if (operation === 'DeleteVolume' && input.VolumeId === 'vol-0123456789abcdef0') throw second;
+    },
+  });
+  await assert.rejects(sweep(f.options), error => error === first);
+  assert.deepEqual(mutations(f).map(c => [c.operation, c.input]), [
+    ['TerminateInstances', { InstanceIds: ['i-0123456789abcdef0'] }],
+    ['DeleteVolume', { VolumeId: 'vol-0123456789abcdef0' }],
+    ['DeleteVolume', { VolumeId: 'vol-11111111111111111' }],
+  ]);
 });
