@@ -56,8 +56,10 @@ uvx --from cfn-lint==1.59.0 cfn-lint deploy/kubernetes/proof/setup.yaml
 ```
 
 The unprivileged `Kubernetes proof prerequisites` workflow runs those checks on
-pull requests and main, including validation of the fully rendered synthetic
-template with its actual inline Lambda source. It requests no AWS session and has no recurring or manual
+pull requests that change `deploy/kubernetes/proof/**` or the workflow itself,
+and on every main push. This avoids asking unrelated older PR heads to run files
+that they do not contain. It validates the fully rendered synthetic template
+with its actual inline Lambda source. It requests no AWS session and has no recurring or manual
 launch trigger. The Lambda test executes the rendered inline source with synthetic
 SDK responses, including termination and volume deletion; it makes no claim about
 a live AWS termination actor. The fixture uses made-up AMI and prefix-list IDs;

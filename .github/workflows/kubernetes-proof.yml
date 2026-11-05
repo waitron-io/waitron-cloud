@@ -1,6 +1,9 @@
 name: Kubernetes proof prerequisites
 on:
   pull_request:
+    paths:
+      - 'deploy/kubernetes/proof/**'
+      - '.github/workflows/kubernetes-proof.yml'
   push:
     branches: [main]
 permissions:
