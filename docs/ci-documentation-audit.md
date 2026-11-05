@@ -200,6 +200,18 @@ all four inventories; an old branch's matching hash does not qualify these
 combined readers. The generated policy records that boundary without extending
 any allowlist or proving behaviour outside the exercised controls.
 
+## Translation startup diagnostic reader review (D574)
+
+The translation fixture adds a bounded, project-scoped Compose state read on
+command failure. Its controls run that exact test file against a temporary Docker
+command, record command arguments and inspect its output. The ignored-signal
+control records and, if necessary, stops only its own fake child process. All
+nested scratch files live inside that control's temporary directory. They read no exempt
+Cloud Markdown. The additional state evidence selects service lifecycle fields
+without reading container configuration or private logs. No workflow, manifest,
+installation hook, identity or gateway target changes. Generate all four
+inventories from this complete staged candidate after reviewing these readers.
+
 ## Contract reader and renewal
 
 With commit

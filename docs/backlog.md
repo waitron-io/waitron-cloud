@@ -3125,6 +3125,15 @@ on-prem mirrors, fiscal filing recovery, offline log growth, local credentials,
 box image networking and the end-to-end selling proof. These cloud entries do not
 declare those core prerequisites implemented.
 
+## Translation startup failure evidence (D574)
+
+The translation launcher fixture now retains its failed command's exit status,
+signal, process error and elapsed time, plus a bounded read of its own service
+states before cleanup. Controlled failures retain the original assertions and
+deadlines. The historical bootstrap exit 255 remains unexplained; capture the
+new evidence on recurrence before choosing a repair. See the
+[startup investigation](backlog/translation-startup.md).
+
 ## Linux download-supervision fixture timing (D126)
 
 The historical Linux failure phase and a separate macOS timing failure remain
