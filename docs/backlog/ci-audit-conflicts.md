@@ -1,12 +1,12 @@
 # CI audit conflicts before D577
 
-Independent code PRs repeatedly conflict because each renews the same whole-tree hashes. The [D577 plan](../superpowers/plans/2026-11-05-independent-ci-audit-evidence.md) replaces routine shared-file renewal with current documentation records for each input. Implementation and the two-PR proof remain open.
+Independent code PRs repeatedly conflict because each renews the same whole-tree hashes. The [D577 plan](../superpowers/plans/2026-11-05-independent-ci-audit-evidence.md) replaces routine shared-file renewal with current documentation records for each input. The implementation includes target-anchored removals, ancestry retention, explicit historical v1 fixtures and real workflow freshness controls. The controlled two-PR proof below is complete. Production current-head and merge CI remain required before landing.
 
 Measured on 5 November 2026 at main `dca4ab55e184e88b73e3e2c3c01964bcdbbacf9a`: **21 of 30** repeated-branch CI head transitions replay with audit-only conflicts. **19** conflict only in `scripts/ci-input-audit.json`; **two** also conflict in its reader-review notes. The remaining **nine** are not attributed solely to the audit. These are extra runs after changed PR heads, not repeated attempts of one Actions run.
 
 Take the latest 100 standard CI pull-request runs, then the latest 30 consecutive changed-head pairs for the same branch. Find each head’s merge-base with that main revision. Compare the two branch patches using `git diff --unified=0` and `git patch-id --stable`, excluding only `scripts/ci-input-audit.json` and `docs/ci-documentation-audit.md`. Recreate merging the older head with the newer base using `git merge-tree --write-tree --name-only`. Count a pair only when its remaining branch patch is unchanged and every conflict belongs to those two audit files. This reproduces the technical need for audit conflict resolution; it does not establish the author’s private motive for every push.
 
-The table retains exact revision links and Actions runs so you can repeat the classification. Raw API responses, merge outputs and patch comparisons remain in Lane I’s local `receipts/d577/`. No post-change rate or CI saving is claimed.
+The table retains exact revision links and Actions runs so you can repeat the classification. Raw API responses, merge outputs and patch comparisons remain in Lane I’s local `receipts/d577/`. The controlled proof below is separate from this production-history sample; no new production rate or CI saving is claimed.
 
 | New run | Branch | Previous head | New head | Audit-only conflict |
 | --- | --- | --- | --- | --- |
@@ -40,3 +40,22 @@ The table retains exact revision links and Actions runs so you can repeat the cl
 | [Run 41902232272](https://github.com/waitron-io/waitron-cloud/actions/runs/41902232272) | `docs/close-d452-extraction-refusals` | [5cd4196974ee203a57005b7eca553d943e75dd67](https://github.com/waitron-io/waitron-cloud/commit/5cd4196974ee203a57005b7eca553d943e75dd67) | [d3e34a1e26e90f999f823bb3627f8c47b566005e](https://github.com/waitron-io/waitron-cloud/commit/d3e34a1e26e90f999f823bb3627f8c47b566005e) | Not attributed |
 | [Run 41902233649](https://github.com/waitron-io/waitron-cloud/actions/runs/41902233649) | `docs/close-d467-worker-failures` | [04931adec2b9a5c7b1ce06cd9eb538cc1d9fd451](https://github.com/waitron-io/waitron-cloud/commit/04931adec2b9a5c7b1ce06cd9eb538cc1d9fd451) | [e640661e18d740618c48ddb1587608ff78472c00](https://github.com/waitron-io/waitron-cloud/commit/e640661e18d740618c48ddb1587608ff78472c00) | Not attributed |
 | [Run 41899580088](https://github.com/waitron-io/waitron-cloud/actions/runs/41899580088) | `feat/aws-infrastructure` | [0d2d5f8035b7641d42e5b0027b10079e095c9076](https://github.com/waitron-io/waitron-cloud/commit/0d2d5f8035b7641d42e5b0027b10079e095c9076) | [49530a29460883dc142eb379e8875e7e7f33b15b](https://github.com/waitron-io/waitron-cloud/commit/49530a29460883dc142eb379e8875e7e7f33b15b) | Not attributed |
+
+## Controlled two-PR proof
+
+Draft [#946](https://github.com/waitron-io/waitron-cloud/pull/946) at `a33181d9354ada8040b93f988c5573129d1be1de` and draft [#947](https://github.com/waitron-io/waitron-cloud/pull/947) at `f9e4ee7507d33e5c0730a08531d0f356f9dd7520` started from the same complete implementation, `5cfe719bcdb2519db6f5ca8c866f8be95a3e34b3`. Each changes a different executable script, a separate backlog paragraph and exactly its own documentation record. Default staged renewal leaves peer records unchanged.
+
+Both local merge orders complete with **zero conflicts, zero evidence regeneration and zero audit-caused reruns**. Each head passes its 27 owning checks. A prose-only child after each combined merge passes the actual planner and document checker; stale peer records retain full work where required. Negative controls reject an unreviewed shared-source state, a missing new reader, a rename and executable or symbolic-link Markdown.
+
+The original, unchanged heads each complete standard CI, cost and venue checks on attempt 1:
+
+| Head | Standard CI | Cost | Venue |
+| --- | --- | --- | --- |
+| A | [41969053884](https://github.com/waitron-io/waitron-cloud/actions/runs/41969053884) | [41969053899](https://github.com/waitron-io/waitron-cloud/actions/runs/41969053899) | [41969053837](https://github.com/waitron-io/waitron-cloud/actions/runs/41969053837) |
+| B | [41969060105](https://github.com/waitron-io/waitron-cloud/actions/runs/41969060105) | [41969060074](https://github.com/waitron-io/waitron-cloud/actions/runs/41969060074) | [41969060093](https://github.com/waitron-io/waitron-cloud/actions/runs/41969060093) |
+
+Each standard run has 38 final jobs, 36 matching checkouts, 19,430 passing tests and 26 unchanged optional skips. Its strict summary independently matches all 28 package allocations and six receipt suites. The raw receipt log also contains one intentionally failing child: its passing parent asserts the controlled admin refusal and cleanup (`deploy/test-cloud/storage-admin-progress-integration.test.mjs`). That child is preserved in the raw counts, not treated as a flake or a repaired failure. Each cost run passes 247 tests; each venue run passes nine. All successful jobs check out their recorded head.
+
+Both drafts are closed without merging. Their three recorded temporary remote branches and the owned clone are removed. Local Lane I receipts retain raw logs, independent summary inputs, exact merge commits and cleanup checks. No scratch branch targets production main. This proves the controlled composition boundary, not a post-change production thirty-run trend.
+
+The initial migration also bounds the planner's diagnostic explanation before publishing job outputs. Its real unbounded output measured 1,902,172 UTF-16 bytes, exceeding [GitHub's per-job output limit](https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax#jobsjob_idoutputs). The first production-PR run [41975639448](https://github.com/waitron-io/waitron-cloud/actions/runs/41975639448) confirms the boundary: the planner job reports `Job outputs exceed 1,048,576 bytes`, and the strict summary refuses its missing plan. A complete-candidate migration control first fails its output-size assertion, then requires the published plan to fit while retaining all 28 package allocations, six receipts and type checks. Only explanation text is shortened.

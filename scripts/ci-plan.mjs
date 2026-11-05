@@ -8,12 +8,13 @@ import {scriptPlan} from './ci-scripts.mjs';
 import {scopeForRevisions, readGitBlobs} from './ci-package-revisions.mjs';
 import {describeLockChanges} from './ci-lock.mjs';
 import {lockPackageScope} from './ci-lock-selection.mjs';
-import {auditInputMode, readInputAudit, unreadMarkdown} from './ci-input-audit.mjs';
+import {auditInputMode, auditAllInputModes, readInputAudit, unreadMarkdown} from './ci-input-audit.mjs';
 
 function mixedCodePaths(paths, base, head, git) {
   const prose = paths.filter(unreadMarkdown);
   if (!prose.length || prose.length === paths.length) return paths;
   const policyPath = 'scripts/ci-input-audit.json';
+  const evidenceChanged = paths.some(path => path === policyPath || path === 'scripts/ci-input-audit-v2.json' || path.startsWith('scripts/ci-input-audit.d/'));
   try {
     documentationPlan(prose, base, head, git);
     for (const revision of [base, head]) {
@@ -25,13 +26,14 @@ function mixedCodePaths(paths, base, head, git) {
       }
       // Prose-only base commits keep the document audit current while changing
       // peer inventories. The renewed head must prove every policy mode.
-      if (paths.includes(policyPath) && revision === head) {
-        for (const mode of ['docs', 'identity', 'gateway', 'lock']) {
+      if (evidenceChanged && revision === head) {
+        if (policy.version === 2) auditAllInputModes(revision, git);
+        else for (const mode of ['docs', 'identity', 'gateway', 'lock']) {
           auditInputMode(mode, revision, git, Object.keys(policy.manifests));
         }
       }
     }
-    return paths.filter(path => !prose.includes(path) && path !== policyPath);
+    return paths.filter(path => !prose.includes(path) && path !== policyPath && path !== 'scripts/ci-input-audit-v2.json' && !path.startsWith('scripts/ci-input-audit.d/'));
   } catch {
     return paths;
   }
@@ -94,15 +96,20 @@ export function createPlan(event, context, workspace, git, api) {
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const event = JSON.parse(readFileSync(process.env.GITHUB_EVENT_PATH,'utf8'));
   const context = {sha:process.env.GITHUB_SHA,repository:process.env.GITHUB_REPOSITORY,branch:process.env.GITHUB_REF_NAME};
-  const git = (...args) => execFileSync('git',args,{encoding:'utf8',timeout:30_000,stdio:['ignore','pipe','pipe']});
+  const git = (...args) => {
+    const binary = typeof args.at(-1) === 'object' && args.pop().binary;
+    return execFileSync('git', args, {encoding: binary ? undefined : 'utf8', timeout: 30_000, maxBuffer: 64 * 1024 * 1024, stdio: ['ignore', 'pipe', 'pipe']});
+  };
   git.readBlobs = readGitBlobs;
   // Warn on every plan, including paths that never enter the document selector.
   // Audit renewal requires explicit reader review; warnings never bypass admission checks.
   try { auditDocumentation(git('rev-parse', 'HEAD').trim(), git); }
   catch {
-    console.log('::warning title=Documentation-only CI unavailable::Review changed executable inputs and renew scripts/ci-input-audit.json with --write-staged using docs/ci-documentation-audit.md. Docs-only changes retain full CI, and the required root/script freshness check fails until reviewed and renewed.');
+    console.log('::warning title=Documentation-only CI unavailable::Review changed executable inputs, then renew documentation evidence (scripts/ci-input-audit.json in v1; docs records in v2) with --write-staged using docs/ci-documentation-audit.md. V2 peer records may remain stale and retain full work. Docs-only changes retain full CI, and the required root/script freshness check fails until reviewed and renewed.');
   }
   const plan = createPlan(event,context,loadWorkspace(),git);
+  // Diagnostics share GitHub's job output budget with the executable work plan.
+  if (plan.reason.length > 4096) plan.reason = plan.reason.slice(0, 4096) + '... (explanation truncated)';
   const outputs = {
     plan:JSON.stringify(plan), typecheck:String(plan.typecheck),
     documentation:String(Boolean(plan.documentation)),
