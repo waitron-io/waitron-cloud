@@ -661,19 +661,26 @@ test('new and deleted helper files under a root-relative directory retain their 
 });
 
 test('unresolved live repository readers keep every package consumer', () => {
-  const git = (...args) => execFileSync('git', args, {encoding: 'utf8', maxBuffer: 64 * 1024 * 1024});
-  git.readBlobs = packageInputs.readGitBlobs;
-  const sha = git('rev-parse', 'HEAD').trim(), workspace = loadWorkspace();
-  for (const path of ['apps/portal/src/app.ts', 'packages/identity/src/index.ts']) {
-    assert.throws(() => scopeForRevisions([path], workspace, sha, sha, git), /Unresolved directory input/);
-    const changed = (...args) => args[0] === 'diff' ? path + '\0' : git(...args);
-    changed.readBlobs = git.readBlobs;
-    const result = createPlan({pull_request: {base: {sha}, head: {sha}}}, {sha}, workspace, changed, () => {throw Error('No API expected');});
-    assert.deepEqual([...new Set(result.packages.flatMap(row => row.members ?? [row.package]))].sort(),
-      ['@waitron-cloud/account-http', '@waitron-cloud/backups',  '@waitron-cloud/identity',
-        '@waitron-cloud/operations', '@waitron-cloud/portal', '@waitron-cloud/registration', '@waitron-cloud/remote-access', '@waitron-cloud/translation', '@waitron-cloud/ui-smoke']);
-    if (path.startsWith('apps/portal/')) assert.match(result.reason, /Unresolved directory input/);
-  }
+  const root = mkdtempSync(join(tmpdir(), 'cloud-live-reader-revisions-'));
+  const git = (...args) => execFileSync('git', ['-c', 'maintenance.auto=false', ...args], {cwd: root, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024, stdio: ['ignore', 'pipe', 'pipe']});
+  try {
+    execFileSync('git', ['clone', '--shared', '--quiet', process.cwd(), root], {stdio: 'pipe'});
+    git('config', 'user.name', 'CI test'); git('config', 'user.email', 'ci@example.test');
+    const base = git('rev-parse', 'HEAD').trim();
+    git('commit', '--allow-empty', '-sm', 'Separate live reader fixture revisions');
+    const sha = git('rev-parse', 'HEAD').trim(), workspace = loadWorkspace(root);
+    git.readBlobs = ids => packageInputs.readGitBlobs(ids, input => execFileSync('git', ['cat-file', '--batch'], {cwd: root, input, maxBuffer: 64 * 1024 * 1024}));
+    for (const path of ['apps/portal/src/app.ts', 'packages/identity/src/index.ts']) {
+      assert.throws(() => scopeForRevisions([path], workspace, sha, sha, git), /Unresolved directory input/);
+      const changed = (...args) => args[0] === 'diff' ? path + '\0' : git(...args);
+      changed.readBlobs = git.readBlobs;
+      const result = createPlan({pull_request: {base: {sha: base}, head: {sha}}}, {sha}, workspace, changed, () => {throw Error('No API expected');});
+      assert.deepEqual([...new Set(result.packages.flatMap(row => row.members ?? [row.package]))].sort(),
+        ['@waitron-cloud/account-http', '@waitron-cloud/backups',  '@waitron-cloud/identity',
+          '@waitron-cloud/operations', '@waitron-cloud/portal', '@waitron-cloud/registration', '@waitron-cloud/remote-access', '@waitron-cloud/translation', '@waitron-cloud/ui-smoke']);
+      if (path.startsWith('apps/portal/')) assert.match(result.reason, /Unresolved directory input/);
+    }
+  } finally {rmSync(root, {recursive: true, force: true});}
 });
 
 test('equivalent root-relative directory spellings retain the same helper consumers', () => {

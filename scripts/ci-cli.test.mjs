@@ -62,6 +62,7 @@ test('real squash merges run full on main for equal trees and advanced main with
       writeFileSync(outputPath, '');
       const env = {...process.env, PATH:`${root}:${process.env.PATH}`, CI_API_MARKER:marker,
         GITHUB_EVENT_PATH:eventPath, GITHUB_OUTPUT:outputPath, GITHUB_SHA:sha,
+        GITHUB_RUN_ID:'', GITHUB_RUN_ATTEMPT:'', CI_RECORD_EVIDENCE:'false', CI_WORKFLOW_INPUTS:'{}', CI_FORCE_FULL:'false',
         GITHUB_REPOSITORY:repository, GITHUB_REF_NAME:'main',GITHUB_EVENT_NAME:'push',GITHUB_REF:'refs/heads/main',CI_FULL:'false',CI_CALLED:'false'};
       const executed = spawnSync(process.execPath, ['scripts/ci-plan.mjs'], {cwd:root, env, encoding:'utf8', timeout:30_000});
       assert.equal(executed.status, 0, executed.stdout + executed.stderr);

@@ -1393,7 +1393,10 @@ implementation or production evidence.
   empty ranges, oversized plans and summary checkouts. Focused controls cover their
   full-work fallbacks, bounded historical reconstruction and final summary proof.
   Missing immutable PR objects are fetched by exact hash without moving refs.
-  Runtime landing still requires final review triage, current-head CI and
+  CLI fixtures set their own run identity so hosted inputs cannot change the
+  refusal they exercise. The live-reader control uses distinct saved revisions
+  to reach package discovery without bypassing the empty-range guard.
+  Runtime landing still requires current-head CI and
   the watcher's post-merge runbook update.
   Part 6 adds the [nightly full backstop](ci-nightly.md):
   one 03:17 UTC schedule and a manual trigger call all four workflows
