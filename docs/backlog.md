@@ -508,7 +508,13 @@ Spain's trusted policy still has no qualified email flows. A supplied file canno
 qualify itself; recognised public and VPC SES endpoints refuse unqualified SMTP.
 TLS transport requires authentication even when AUTH is not advertised; a named
 pipe configuration refuses without blocking startup.
-Trusted queue consumption, audited removal and production enablement remain future tasks. Task 8 must qualify any additional event types;
+Task 6 has an internal one-message queue intake seam. Local PostgreSQL checks
+require committed feedback before deletion, retain malformed and conflicting
+messages, and replay a failed acknowledgement without a second durable effect.
+A shutdown observed before processing or after commit leaves the message for replay.
+The authenticated SQS adapter, database and request time limits, health reporting,
+CLI and complete shutdown proof remain unbuilt. Audited removal and production
+enablement remain future tasks. Task 8 must qualify any additional event types;
 `Rendering Failure` currently refuses. It must also reconcile historical Paris-only
 supplier wording and retired enablement dates before any live qualification. AWS resources,
 spending, credentials, production access and live mail remain unauthorised for this
