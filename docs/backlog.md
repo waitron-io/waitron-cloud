@@ -3054,6 +3054,17 @@ See [the remaining checks](backlog/backup-recovery-http.md#backup-catalogue-qual
 qualify Docker-reported memory kills with exits 137 and 1 and no entry report.
 See [the boundaries and remaining work](backlog/verifier-build.md#container-verifier-memory-refusal-observation-d335).
 
+## Monitoring shutdown fixture migration timeout (D530)
+
+**Open.** Registration shard 1 fails during migration 013 under its unchanged
+3,000 ms statement cap, before the shutdown checks run. The original failure
+precedes GitHub's published 5 November Actions incident. The same-source hosted
+rerun passes 343 cases; focused Debian runs pass four and 86 cases, with a
+temporary probe measuring 47 applications of migration 013 at 25–30 ms. None
+reproduces or repairs the failure. Preserve the cap and assertions; capture the
+active PostgreSQL wait and failing statement on recurrence before choosing a fix.
+See [the failure and qualification limits](backlog/worker-scheduling.md#migration-setup-timeout-remains-unexplained-d530).
+
 ## Passive security-audit session timestamp check (D530)
 
 [PR889's account HTTP job](https://github.com/waitron-io/waitron-cloud/actions/runs/41799209730/job/126471471556)
