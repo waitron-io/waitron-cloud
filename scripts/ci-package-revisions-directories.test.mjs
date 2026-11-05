@@ -261,8 +261,8 @@ import {scopeForRevisions} from ${JSON.stringify(new URL('./ci-package-revisions
 const git = (...args) => execFileSync('git', args, {encoding: 'utf8'});
 console.log(JSON.stringify(scopeForRevisions(['packages/catalogue/src/index.mjs'], ${JSON.stringify(loadWorkspace(root))}, '${base}', '${head}', git)));
 `;
-    assert.deepEqual(JSON.parse(execFileSync(process.execPath, ['--input-type=module', '-e', program],
-    {cwd: root, encoding: 'utf8', timeout: 5_000})), {full: false, packages: ['catalogue']});
+    assert.deepEqual(JSON.parse(execFileSync(process.execPath, ['--input-type=module'],
+    {cwd: root, input: program, encoding: 'utf8', timeout: 5_000})), {full: false, packages: ['catalogue']});
   });
 });
 
