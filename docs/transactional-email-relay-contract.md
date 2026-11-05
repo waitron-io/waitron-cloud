@@ -598,3 +598,16 @@ in-flight outcomes and leaves Cloud account recovery independent. Enablement nee
 
 Cloud owns this contract and its backlog. Waitron must link it when its separately
 queued caller work begins; this document does not authorise edits to that repository.
+
+## Internal SES adapter boundary
+
+The standalone `createSesRelaySender` adapter sends fixed relay templates through
+certificate-verified, authenticated TLS with a 15-second total budget. It uses
+only qualified configuration and the committed opaque attempt for SES headers,
+and returns an outcome separately from optional provider acceptance metadata.
+`settleSesRelayReceipt` binds accepted metadata to the original attempt without
+changing the queue, grant, allowance or outcome. Lost post-DATA acknowledgements
+remain uncertain; malformed optional IDs do not turn acceptance into a retry.
+These local fixtures establish no live provider qualification. Normal startup
+still exposes no production relay path, and `RelayWorkerConfig.mode` remains
+`local-proof`. A later enabling change must meet every existing relay gate.

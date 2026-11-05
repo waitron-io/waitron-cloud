@@ -6,7 +6,8 @@ import type { PasswordRecoveryMailer } from './password-recovery.ts';
 import { normaliseEmail, validLocale, type AccountEmail, type AccountNotification } from './account-input.ts';
 import { EmailDeliveryError, type EmailDeliveryFailure, type EmailDeliveryReceipt } from './email-delivery.ts';
 import { transaction } from './transaction.ts';
-import {admitMailAttempt,type SesHandoffConfig} from './mail-attempts.ts';
+import {admitMailAttempt,type SesHandoffConfig,type HandoffAdmission} from './mail-attempts.ts';
+import {bindSesProviderReceipt} from './ses-smtp-receipt.ts';
 import {lockMailScope} from './recipient-suppression.ts';
 
 export type EmailKind = 'verification' | 'password_reset' | 'password_changed' | 'service_alert';
@@ -140,7 +141,8 @@ export class EmailWorker {
     let message: AccountEmail | AccountNotification | ServiceAlert;
     try { message = this.#outbox.open(claim); }
     catch { await this.#fail(claim, 'payload_unavailable'); return true; }
-    try{if(!await this.#handoff(claim,message))return true;}
+    let handoff:boolean|HandoffAdmission;
+    try{handoff=await this.#handoff(claim,message);if(!handoff)return true;}
     catch(error){
       const reason=error instanceof Error?error.message:'';
       if(reason==='mail_claim_unavailable')return true;
@@ -150,7 +152,8 @@ export class EmailWorker {
     }
     let timer: ReturnType<typeof setTimeout> | undefined;
     const controller = new AbortController();
-    const context = {deliveryId: claim.id, signal: controller.signal};
+    const admission=typeof handoff==='object'?handoff:undefined;
+    const context = {deliveryId: claim.id, signal: controller.signal,...(admission?{ses:admission}:{})};
     let receipt: void | EmailDeliveryReceipt;
     try {
       const send = () => claim.kind === 'service_alert' ? this.#sendAlert(message as ServiceAlert,context) : claim.kind === 'verification' ? this.#mailer.sendVerification(message as AccountEmail, context)
@@ -172,6 +175,7 @@ export class EmailWorker {
     }
     finally { clearTimeout(timer); }
     await this.#finish(claim, 'sent', receipt);
+    await bindSesProviderReceipt(this.#pool,admission,receipt?.providerReceipt);
     return true;
   }
 
@@ -180,7 +184,7 @@ export class EmailWorker {
     return this.#mailer.sendServiceAlert(message,context);
   }
 
-  async #handoff(row:MessageRow,message:AccountEmail|AccountNotification|ServiceAlert):Promise<boolean>{
+  async #handoff(row:MessageRow,message:AccountEmail|AccountNotification|ServiceAlert):Promise<boolean|HandoffAdmission>{
     return transaction(this.#pool,async client=>{
       if(!await this.#live(client,row,message)){await this.#finish(row,'cancelled',undefined,client);return false;}
       if(row.kind==='verification')await client.query('SELECT token_hash FROM signup_requests WHERE token_hash=$1 FOR SHARE',[row.token_hash]);
@@ -223,9 +227,10 @@ export class EmailWorker {
       if(current.expires_at<=now){await this.#finish(row,'expired',undefined,client);return false;}
       if(row.kind!=='service_alert'&&!await this.#live(client,row,message)){await this.#finish(row,'cancelled',undefined,client);return false;}
       if(this.#ses){
-        await admitMailAttempt(client,{...this.#ses,recipient:message.email,claim:{purpose:'cloud-account-email',outboxId:row.id,claimId:row.claim_id,attempt:row.attempts}});
+        const admission=await admitMailAttempt(client,{...this.#ses,recipient:message.email,claim:{purpose:'cloud-account-email',outboxId:row.id,claimId:row.claim_id,attempt:row.attempts}});
         // Retained-key locks can wait after the earlier authority check. Roll admission back if time ran out.
         if(!await this.#live(client,row,message))throw Error('mail_authority_unavailable');
+        return admission;
       }
       return true;
     });

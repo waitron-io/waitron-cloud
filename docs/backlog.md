@@ -456,8 +456,18 @@ Task 7 must distinguish block lifetimes so a later unscoped re-add cannot revive
 old country mappings, and refuse clearing a legacy row mapped to another scope.
 Before production wiring, qualify retained-key failures that leave relay work
 queued until its original expiry and occupy capacity until the claim lease ends.
-SMTP metadata, provider receipts, trusted queue consumption, audited removal and
-production wiring remain future tasks. Task 8 must qualify any additional event types;
+Task 5 adds qualified SES configuration-set and opaque attempt headers to both
+TLS adapters. Account delivery passes its committed admission, retains the original
+RFC Message-ID and binds a separately parsed provider acceptance ID only to that
+attempt. Early feedback keeps the first provider binding; a conflicting receipt
+emits a fixed operational diagnostic without replaying accepted mail. Malformed
+optional metadata does not change acceptance. A late receipt cannot settle a
+replacement claim. The internal standalone relay adapter and separate receipt
+settlement keep the local-proof worker's outcome contract and startup gate.
+The opt-in account loader reads a bounded binding file and recipient keys, but
+Spain's trusted policy still has no qualified email flows. A supplied file cannot
+qualify itself; direct SES SMTP-host selection without admission refuses.
+Trusted queue consumption, audited removal and production enablement remain future tasks. Task 8 must qualify any additional event types;
 `Rendering Failure` currently refuses. It must also reconcile historical Paris-only
 supplier wording and retired enablement dates before any live qualification. AWS resources,
 spending, credentials, production access and live mail remain unauthorised for this
