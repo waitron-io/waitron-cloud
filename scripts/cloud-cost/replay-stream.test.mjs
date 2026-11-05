@@ -38,6 +38,33 @@ test('replay cancellation retires settled sockets before collecting its writer',
   clean(f);
 });
 
+for (const operation of ['finish', 'close', 'cancel-finish']) test(`a frozen keep-alive writer cannot extend the ${operation} collection budget`, { timeout: 12000 }, async t => {
+  const f = await fixture(t, 'reset-on-stop'), run = await open(t, f);
+  await upload(f);
+  const entries = JSON.parse(readFileSync(f.journal.path, 'utf8')).localResources;
+  const writer = entries.find(row => row.kind === 'stream-process' && row.state === 'started' && row.operation === 'replicate');
+  assert.ok(writer);
+  process.kill(writer.pid, 'SIGSTOP');
+  let frozen = false;
+  for (let n = 0; n < 100 && !frozen; n++) {
+    frozen = execFileSync('ps', ['-p', String(writer.pid), '-o', 'stat='], { encoding: 'utf8' }).includes('T');
+    if (!frozen) await wait(5);
+  }
+  assert.equal(frozen, true);
+  const began = performance.now();
+  if (operation === 'finish') await assert.rejects(run.finish({ expectedSales: 1 }), bad);
+  else if (operation === 'close') await run.close();
+  else {
+    let closing;
+    const refused = assert.rejects(run.finish({ expectedSales: 1 }), bad);
+    const cancel = setTimeout(() => { closing = run.close().catch(() => {}); }, 1200);
+    try { await refused; assert.ok(closing); await closing; }
+    finally { clearTimeout(cancel); }
+  }
+  assert.ok(performance.now() - began < 3000, 'the existing two-second force-stop budget includes the new peer drain');
+  clean(f);
+});
+
 // The child performs real HTTP/SQLite I/O; the separate storage endpoint inventories its bytes.
 async function fixture(t, mode = 'normal', { holdAfterStop = false, interruptQueuedUpload = false } = {}) {
   const parent = realpathSync(mkdtempSync(join(tmpdir(), 'cost-replay-stream-')));

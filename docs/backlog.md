@@ -22,16 +22,21 @@ controlled native reproduction, not attribution of the historical paced replay.
 Replay shutdown now gracefully half-closes previously used storage sockets and
 waits for their peers to close before signalling the writer. It checks again for
 requests admitted during that drain. Fresh connections remain available for their
-first request; unfinished headers and interrupted replies still refuse. The same
-drain applies during collection, within its existing two-second budget.
+first request. A peer closing with unfinished headers and interrupted replies
+still refuse. Silent partial headers are not qualified by the transport.
+The drain shares the existing two-second force-stop budget during finish and
+collection; waiting for a peer cannot postpone that timer.
 Run `node --test scripts/cloud-cost/litestream-idle-retirement.test.mjs
 scripts/cloud-cost/replay-stream.test.mjs` for socket, restore and collection
 controls. The padded official-writer Linux probe records nineteen reset refusals
 with writer exit zero and one force-collected stop, then passes all twenty with
 graceful retirement. This repairs that measured
 shutdown ordering; the older CI traces cannot establish every historical cause.
-The separate native LIST investigation and requests starting after the final drain
-remain open. No acceptance rule, existing assertion, accounting or deadline changes.
+A request reusing a half-closed socket can reach storage before its reply refuses.
+That race, the separate native LIST investigation and requests starting after the
+final drain remain open. The diagnostic idle-action count includes drain attempts
+before signalling; it does not prove that the writer was signalled. No existing
+assertion, accounting check or configured deadline value changes.
 
 ## Cloud backup box identity (D451)
 

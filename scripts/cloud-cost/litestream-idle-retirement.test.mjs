@@ -79,7 +79,10 @@ test('retirement waits for a request admitted while an older peer finishes closi
   f.client.write(request); await reply; await f.front.whenIdle(() => {});
   const halfClosed = once(f.client, 'end');
   let called = false;
-  const draining = f.front.whenIdle(() => { called = true; }, { retireConnections: true });
+  const draining = f.front.whenIdle(() => {
+    called = true;
+    assert.equal(f.incoming[1].destroyed, true, 'retire the later socket before signalling');
+  }, { retireConnections: true });
   await halfClosed;
   f.hold();
   const next = connect(Number(new URL(f.front.url).port), '127.0.0.1');
@@ -93,6 +96,45 @@ test('retirement waits for a request admitted while an older peer finishes closi
   f.release(); await completed; await draining;
   assert.equal(called, true); assert.equal(f.front.checkpoint().completed, 2);
   assert.equal(f.front.checkpoint().reason, undefined);
+});
+
+test('retirement rechecks a later socket whose request finished before the old peer closed', { timeout: 5000 }, async t => {
+  const f = await fixture(t), reply = once(f.client, 'data');
+  f.client.allowHalfOpen = true;
+  f.client.write(request); await reply; await f.front.whenIdle(() => {});
+  const halfClosed = once(f.client, 'end');
+  let called = false;
+  const draining = f.front.whenIdle(() => {
+    called = true;
+    assert.equal(f.incoming[1].destroyed, true, 'recheck used connections after the first drain');
+  }, { retireConnections: true });
+  await halfClosed;
+  const next = connect(Number(new URL(f.front.url).port), '127.0.0.1');
+  next.on('error', () => {}); t.after(() => next.destroy()); await once(next, 'connect');
+  const completed = once(next, 'data');
+  next.write(request.replace('11111111-2222-4333-8444-555555555555', 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee'));
+  await completed; await f.front.whenIdle(() => {});
+  assert.equal(f.front.checkpoint().completed, 2); assert.equal(called, false);
+  f.client.end(); await draining;
+  assert.equal(called, true); assert.equal(f.front.checkpoint().reason, undefined);
+});
+
+// A later request on the half-closed connection must remain refused even if storage received it.
+test('a request reusing a half-closed socket refuses before any stop signal', { timeout: 5000 }, async t => {
+  const f = await fixture(t), reply = once(f.client, 'data');
+  f.client.allowHalfOpen = true;
+  f.client.write(request); await reply; await f.front.whenIdle(() => {});
+  const halfClosed = once(f.client, 'end');
+  let called = false;
+  const rejected = assert.rejects(f.front.whenIdle(() => { called = true; }, { retireConnections: true }), /Invalid cloud cost Litestream audit/);
+  await halfClosed; f.hold();
+  f.client.write(request.replace('11111111-2222-4333-8444-555555555555', 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee'));
+  await f.heldRequest; f.release(); f.client.end();
+  await rejected;
+  assert.equal(called, false); assert.equal(f.front.checkpoint().completed, 2);
+  assert.equal(f.front.checkpoint().reason, 'transfer-interrupted');
+  assert.equal(f.front.checkpoint().idleActionsAtAdmission, 2, 'idle callbacks include the drain before the stop action');
+  await assert.rejects(f.front.close(), /Invalid cloud cost Litestream audit/);
 });
 
 // A partial next message must still reach the parser's refusal after the graceful half-close.
