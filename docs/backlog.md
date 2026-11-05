@@ -3221,6 +3221,28 @@ skips. The test box is busy, so no fresh Linux or Docker setup runs. These contr
 qualify the diagnostics and cleanup; the historical timeouts and Linux transfer
 and native-build causes remain open. See the detail file for the bounded attempt.
 
+### Gateway container startup refusal (D349 qualification)
+
+The outside-request browser control in [cost run 40536958436, job
+122305238271](https://github.com/waitron-io/waitron-cloud/actions/runs/40536958436/job/122305238271)
+refused while starting its generated gateway, before the browser journey, after
+30.6 seconds. The command helper discarded the original exit and stderr; the
+cause remains unknown. The duration matches the command bound, but a timeout
+is only an inference. Retain this failure in the shared CI-failure investigation.
+Fresh qualification preserves the original outside-request, accounting, cleanup
+and deadline checks; a passing run does not establish the historical cause.
+
+At commit `bfc5e38d`, D349 qualification failed the source-fetch fixture's
+“browser preparation refuses the historical replay revision before installation”
+case in [CI run 41169033630, job
+124443297790](https://github.com/waitron-io/waitron-cloud/actions/runs/41169033630/job/124443297790).
+Reading the generated state at the then-current `conformance-source-fetch.test.mjs:60`
+threw `Unexpected end of JSON input`; 2,506 other cases in that suite passed.
+Main now has D530's interrupted-write and helper-cleanup controls. The current
+case is “browser preparation refuses the current replay revision before installation”.
+Its historical timing remains unknown; fresh current-head CI still qualifies
+this separate monitoring change. Preserve every source-revision refusal and cleanup check.
+
 ### Interrupted source-fetch fixture state (D530)
 
 **Interrupted writes reproduced and handled; historical timing remains unknown.**
