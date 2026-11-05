@@ -67,7 +67,7 @@ test('required dependency results cannot ignore a job failure after its steps fi
 });
 test('all work gates follow the planner and every checkout tests the exact PR head',()=>{
   for (const name of ['root','typecheck','receipts','packages','documentation']) {
-    assert.match(job(name),new RegExp(`if: needs.changes.outputs.${name === 'root' ? 'typecheck' : name} == 'true'`));
+    assert.match(job(name),new RegExp(`if: needs.changes.outputs.${name === 'root' ? 'root_tests' : name} == 'true'`));
     assert.match(job(name),/needs: changes/);
   }
   for (const name of ['changes','root','typecheck','receipts','packages','summary','documentation']) {
@@ -75,6 +75,19 @@ test('all work gates follow the planner and every checkout tests the exact PR he
   }
   assert.match(job('changes'),/fetch-depth: 0/);
   assert.match(job('changes'),/run: node scripts\/ci-plan.mjs/);
+});
+
+test('root-only and receipt-only work execute their families without the compiler gate', () => {
+  const enabled = (name, outputs) => {
+    const gate = /if: needs.changes.outputs.([a-z_]+) == 'true'/.exec(job(name));
+    assert.ok(gate, `Missing fixed planner gate: ${name}`);
+    return outputs[gate[1]] === 'true';
+  };
+  for (const [outputs, expected] of [
+    [{root_tests: 'true', typecheck: 'false', receipts: 'false', packages: 'false'}, ['root']],
+    [{root_tests: 'false', typecheck: 'false', receipts: 'true', packages: 'false'}, ['receipts']],
+    [{root_tests: 'true', typecheck: 'true', receipts: 'true', packages: 'true'}, ['root', 'typecheck', 'receipts', 'packages']],
+  ]) assert.deepEqual(['root', 'typecheck', 'receipts', 'packages'].filter(name => enabled(name, outputs)), expected);
 });
 
 test('planner disables automatic caching because it creates no package store to save',()=>{

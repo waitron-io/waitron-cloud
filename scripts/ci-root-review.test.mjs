@@ -240,3 +240,22 @@ test('registry sites cannot duplicate a reviewed reader with reordered fields', 
   write(registryPath, registry); docs();
   assert.throws(() => api.checkRootReview(commit(), git), /Duplicate root registry site/);
 }));
+
+test('several removals inspect their common reviewed ancestor only once', () => fixture(({root, git, write, renew, docs, cli, commit}) => {
+  write('scripts/second-reader.mjs', 'second reader\n');
+  renew(['scripts/reader.mjs', 'scripts/second-reader.mjs'], 'reviewer', 'review/common-ancestor'); docs();
+  const ancestor = commit();
+  for (const path of ['scripts/reader.mjs', 'scripts/second-reader.mjs']) rmSync(join(root, path));
+  git('add', '-A');
+  const result = cli(['--write-staged', '--input', 'scripts/reader.mjs', '--input', 'scripts/second-reader.mjs',
+    '--reviewer', 'reviewer', '--reference', 'review/bounded-removals']);
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  docs(); const head = commit(); let ancestorInventories = 0;
+  const observe = (...args) => {
+    if (args[0] === 'ls-tree' && args.includes(ancestor)) ancestorInventories++;
+    return git(...args);
+  };
+  observe.readBlobs = git.readBlobs;
+  assert.doesNotThrow(() => api.checkRootReview(head, observe));
+  assert.equal(ancestorInventories, 1, 'Removal proof must scale with distinct ancestors, not removed input count');
+}));

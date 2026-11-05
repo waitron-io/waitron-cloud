@@ -1,7 +1,13 @@
 import assert from 'node:assert/strict';
-import {checkRootReview, rootReviewProjection, rootRecordRoot, rootRegistryPath} from './ci-root-review.mjs';
+import {execFileSync} from 'node:child_process';
+import {readFileSync, readdirSync, lstatSync} from 'node:fs';
+import {pathToFileURL} from 'node:url';
+import {checkRootReview, rootReviewProjection, rootRecordRoot, rootRegistryPath, rootReviewActivated} from './ci-root-review.mjs';
 import {auditDescriptor, auditRecordRoot} from './ci-input-audit-records.mjs';
 import {readInputAudit, unreadMarkdown} from './ci-input-audit.mjs';
+import {receiptSuites} from './ci-scope.mjs';
+import {packageMembers} from './ci-package-groups.mjs';
+import {readGitBlobs} from './ci-package-revisions.mjs';
 
 const candidates = new Set(['scripts/ci-root-shards.test.mjs', 'scripts/verify-backup-capacity-receipt.test.mjs',
   'deploy/local-stack/operations-health.test.mjs']);
@@ -78,4 +84,92 @@ export function rootInputPlan(paths, base, head, git) {
   } catch (error) {
     return {full: true, reason: `Root ownership refused: ${error.message.split('\n')[0]}`.slice(0, 512)};
   }
+}
+
+export function assertRootInputWork(plan, {base, head, git}) {
+  assert.ok(sha.test(head) && typeof git === 'function', 'Missing trusted root verification context');
+  // Freshness applies after historical activation even when all current metadata
+  // or every proposed ownership marker has been removed.
+  if (rootReviewActivated(head, git)) checkRootReview(head, git);
+  if (!base) {
+    assert.ok(!Object.hasOwn(plan, 'rootInputs') && !Object.hasOwn(plan, 'rootTests'), 'Root work requires a trusted event range');
+    return;
+  }
+  assert.ok(sha.test(base), 'Invalid trusted root base');
+  const paths = git('diff', '--name-only', '--no-renames', '-z', base, head).split('\0');
+  assert.equal(paths.pop(), '', 'Incomplete trusted root paths');
+  const expected = rootInputPlan(paths, base, head, git);
+  const marked = Object.hasOwn(plan, 'rootInputs') || Object.hasOwn(plan, 'rootTests');
+  if (!expected && !marked) return;
+  const full = () => {
+    assert.ok(!marked && plan.typecheck === true && !plan.scripts && !plan.documentation && !plan.reuse, 'Root refusal requires full work');
+    const {entries} = readInputAudit(head, git), inventory = packageInventory(head, entries, git);
+    const selected = new Set(plan.packages.flatMap(packageMembers));
+    assert.deepEqual([...selected].sort(), [...inventory.values()].map(row => row.name).sort(), 'Root fallback requires every package owner');
+    assert.deepEqual([...plan.receipts].sort(), [...receiptSuites].sort(), 'Root fallback requires every receipt owner');
+  };
+  if (!expected || expected.full || !marked) {full(); return;}
+  assert.ok(!plan.scripts && !plan.documentation && !plan.reuse, 'Root work cannot mix legacy modes');
+  assert.deepEqual(plan.rootInputs, expected.rootInputs, 'Root marker differs from trusted event ownership');
+  assert.equal(plan.typecheck, plan.packages.length > 0, 'Root compiler work differs from package work');
+  assert.equal(plan.rootTests, expected.rootTests || plan.typecheck, 'Root execution gate differs from required owners');
+  if (expected.packagePaths.length) assert.ok(plan.packages.length > 0, 'Missing root-associated package work');
+  else assert.equal(plan.packages.length, 0, 'Unexpected root-associated package work');
+  for (const suite of expected.receipts) assert.ok(plan.receipts.includes(suite), `Missing root receipt owner: ${suite}`);
+  assert.equal(new Set(plan.receipts).size, plan.receipts.length, 'Duplicate root receipt owner');
+  assert.ok(plan.receipts.every(suite => receiptSuites.includes(suite)), 'Unknown root receipt owner');
+  assert.ok(plan.rootTests || plan.packages.length || plan.receipts.length, 'Empty root work cannot pass');
+}
+
+export function rootVerificationContext(plan, env = process.env) {
+  const git = (...args) => {
+    const binary = typeof args.at(-1) === 'object' && args.pop().binary;
+    return execFileSync('git', args, {encoding: binary ? undefined : 'utf8', timeout: 30_000,
+      maxBuffer: 64 * 1024 * 1024, stdio: ['ignore', 'pipe', 'pipe']});
+  };
+  git.readBlobs = readGitBlobs;
+  const checkout = git('rev-parse', 'HEAD').trim();
+  const event = env.GITHUB_EVENT_PATH ? JSON.parse(readFileSync(env.GITHUB_EVENT_PATH, 'utf8')) : {};
+  const head = event.pull_request?.head.sha ?? env.CI_HEAD_SHA ?? env.GITHUB_SHA ?? checkout;
+  assert.match(head, sha, 'Invalid trusted root event head');
+  const activated = rootReviewActivated(head, git);
+  if (activated || plan.rootInputs || Object.hasOwn(plan, 'rootTests')) {
+    assert.equal(checkout, head, 'Root work requires the exact head checkout');
+    if (env.CI_HEAD_SHA) assert.equal(head, env.CI_HEAD_SHA, 'Root event differs from the expected head');
+    assert.equal(git('diff', '--name-only', head, '--'), '', 'Root work requires a clean tracked checkout; dirty bytes refuse execution');
+    if (env.GITHUB_ACTIONS === 'true') assert.ok(env.GITHUB_EVENT_PATH, 'Root verification requires the original event');
+  }
+  let base;
+  if (event.pull_request) {
+    assert.match(event.pull_request.base.sha, sha, 'Invalid trusted root event base');
+    base = git('merge-base', event.pull_request.base.sha, head).trim();
+    assert.match(base, sha, 'Missing trusted root merge base');
+  }
+  return {base, head, git};
+}
+
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  try {
+    assert.deepEqual(process.argv.slice(2), ['--check'], 'Usage: ci-root-inputs.mjs --check');
+    const plan = JSON.parse(process.env.CI_PLAN);
+    const context = rootVerificationContext(plan);
+    assertRootInputWork(plan, context);
+    if (plan.rootInputs ? plan.rootTests : plan.typecheck) {
+      const selected = path => /^scripts\/ci-[^/]+\.test\.mjs$/.test(path) ||
+        ['scripts/identity-upstream.test.mjs', 'scripts/verify-gateway-reconnection-receipt.test.mjs'].includes(path);
+      const {entries} = readInputAudit(context.head, context.git), files = entries.filter(row => selected(row.path));
+      assert.ok(files.length >= 4 && files.some(row => row.path === 'scripts/identity-upstream.test.mjs') &&
+        files.some(row => row.path === 'scripts/verify-gateway-reconnection-receipt.test.mjs'), 'Missing complete nonempty root test inventory');
+      assert.ok(files.every(row => row.mode === '100644' && row.type === 'blob'), 'Nonregular root test inventory');
+      const actual = readdirSync('scripts').map(name => `scripts/${name}`).filter(selected);
+      assert.deepEqual(actual.sort(), files.map(row => row.path).sort(), 'Root filesystem inventory differs from the exact head');
+      assert.ok(actual.every(path => lstatSync(path).isFile()), 'Nonregular root filesystem inventory');
+    }
+    if (plan.receipts?.length) {
+      assert.ok(new Set(plan.receipts).size === plan.receipts.length && plan.receipts.every(suite => receiptSuites.includes(suite)), 'Invalid root receipt commands');
+      const manifest = JSON.parse(context.git('show', `${context.head}:package.json`));
+      for (const suite of plan.receipts) assert.ok(typeof manifest.scripts?.[suite] === 'string' && manifest.scripts[suite].trim(), `Missing root receipt command: ${suite}`);
+    }
+    console.log('Root input work verified');
+  } catch (error) {console.error(error.message); process.exitCode = 1;}
 }

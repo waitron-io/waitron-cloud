@@ -177,13 +177,20 @@ export function checkRootReview(revision, git) {
       record.registryObjectId === registryObjectId, `Unreviewed root input: ${input.path}`);
   }
   const expected = new Set(inputs.map(e => e.path));
+  const ancestors = new Map();
   for (const [path, record] of records) {
     if (record.state === 'present') assert.ok(expected.has(path), `Removed root input needs a tombstone: ${path}`);
     else {
       assert.ok(!expected.has(path) && record.registryObjectId === registryObjectId, `Invalid root review tombstone: ${path}`);
       assert.ok(kind !== 'commit' || record.previousRevision !== revision, 'Root tombstone must name a prior ancestor');
       git('merge-base', '--is-ancestor', record.previousRevision, ancestor);
-      const prior = projectionAt(record.previousRevision, git), evidence = readRecords(prior.entries, git).get(path);
+      if (!ancestors.has(record.previousRevision)) {
+        const prior = projectionAt(record.previousRevision, git);
+        const removed = new Set([...records.values()].filter(row => row.state === 'absent' && row.previousRevision === record.previousRevision)
+          .map(row => rootRecordFilename(row.path)));
+        ancestors.set(record.previousRevision, {prior, records: readRecords(prior.entries.filter(row => removed.has(row.path)), git)});
+      }
+      const {prior, records: previousRecords} = ancestors.get(record.previousRevision), evidence = previousRecords.get(path);
       assert.ok(prior.inputs.some(input => input.path === path && evidence?.state === 'present' &&
         evidence.mode === input.mode && evidence.type === input.type && evidence.objectId === input.objectId &&
         evidence.registryObjectId === prior.registryObjectId), `Unreviewed root tombstone ancestor: ${path}`);

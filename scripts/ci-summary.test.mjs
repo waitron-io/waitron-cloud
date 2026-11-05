@@ -70,6 +70,19 @@ test('summary rejects unexpected executed jobs while allowing unused skipped fam
   ]) assert.throws(() => assertSummary(plan, results, [...jobs, self, extra]), /Unexpected executed job/);
 });
 
+test('summary rejects unknown skipped identities duplicate placeholders and duplicate self records', () => {
+  for (const name of ['unknown', 'root (5/4)', 'package (unused)', 'package (@waitron-cloud/made-up)']) {
+    assert.throws(() => assertSummary(plan, results, [...jobs, {name, status: 'completed', conclusion: 'skipped'}]), /Unexpected executed job/);
+  }
+  const skipped = {name: 'documentation', status: 'completed', conclusion: 'skipped'};
+  assert.throws(() => assertSummary(plan, results, [...jobs, skipped, skipped]), /duplicate/i);
+  const self = {name: 'summary', status: 'in_progress', conclusion: null};
+  assert.throws(() => assertSummary(plan, results, [...jobs, self, self]), /duplicate/i);
+  for (const conclusion of ['failure', 'cancelled', 'skipped']) {
+    assert.throws(() => assertSummary(plan, results, [...jobs, {...self, status: 'completed', conclusion}]), /summary/);
+  }
+});
+
 
 test('executed summary waits for a stale job record to publish its final result', () => {
   const root = mkdtempSync(join(tmpdir(), 'cloud-summary-publication-'));
@@ -509,18 +522,19 @@ test('a rerun can reuse a completed successful earlier attempt but never unfinis
 test('executed summary binds completed shard steps to the workflow run, attempt and source commit', () => {
   const root = mkdtempSync(join(tmpdir(), 'cloud-summary-steps-'));
   try {
-    writeFileSync(join(root, 'jobs.json'), JSON.stringify([{jobs: withShard(finishedShard())}]));
+    const head = childProcess.execFileSync('git', ['rev-parse', 'HEAD'], {encoding: 'utf8'}).trim();
+    writeFileSync(join(root, 'jobs.json'), JSON.stringify([{jobs: withShard({...finishedShard(), head_sha: head})}]));
     writeFileSync(join(root, 'gh'), '#!/bin/sh\ncat "$CI_PUBLICATION_FIXTURE/jobs.json"\n', {mode: 0o700});
     const run = spawnSync(process.execPath, ['scripts/ci-summary.mjs'], {
       env: {...process.env, PATH: `${root}:${process.env.PATH}`, CI_PUBLICATION_FIXTURE: root,
         CI_PLAN: JSON.stringify(plan),
         CI_RESULTS: JSON.stringify(Object.fromEntries(Object.entries(results).map(([name, result]) => [name, {result}]))),
-        GITHUB_REPOSITORY: 'waitron-io/waitron-cloud', GITHUB_RUN_ID: '42', GITHUB_RUN_ATTEMPT: '2', CI_HEAD_SHA: identity.headSha},
+        GITHUB_REPOSITORY: 'waitron-io/waitron-cloud', GITHUB_RUN_ID: '42', GITHUB_RUN_ATTEMPT: '2', CI_HEAD_SHA: head},
       encoding: 'utf8', timeout: 5_000,
     });
     assert.equal(run.status, 0, run.stderr);
     assert.match(run.stdout, /Final needs and completed steps:.*shard 6\/6/);
-    assert.match(run.stdout, /run 42, attempt 2, a{40}/);
+    assert.ok(run.stdout.includes(`run 42, attempt 2, ${head}`));
     assert.match(run.stdout, /Passed 6 package jobs/);
   } finally {
     rmSync(root, {recursive: true, force: true});
@@ -533,7 +547,7 @@ test('step evidence never supplies an omitted or duplicated partition or unplann
     await assert.rejects(() => summary.waitForSummary(plan, results, {...clock, identity}), /Missing or duplicate job/);
   }
   const clock = publication([[...jobs, {...finishedShard(), name: 'legacy'}]]);
-  await assert.rejects(() => summary.waitForSummary(plan, results, {...clock, identity}), /Timed out.*legacy/);
+  await assert.rejects(() => summary.waitForSummary(plan, results, {...clock, identity}), /Unexpected executed job: legacy/);
 });
 
 test('transient API timeouts retry within the existing total allowance then require real records', async () => {
