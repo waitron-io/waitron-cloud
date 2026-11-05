@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
+import {constants, lstatSync, readdirSync, mkdirSync, openSync, closeSync, fstatSync, ftruncateSync, writeFileSync, readFileSync} from 'node:fs';
+import {dirname} from 'node:path';
 
 export const auditDescriptor = 'scripts/ci-input-audit-v2.json';
 export const auditRecordRoot = 'scripts/ci-input-audit.d/';
@@ -100,4 +102,65 @@ export function verifyModeRecords(mode, projection, records) {
   const inputSha256 = sha256(projection.rows.map(entry => entry.raw).join(''));
   assert.equal(sha256(reconstructed.join('')), inputSha256, 'Reconstructed audit inventory differs');
   return {inputSha256, documents: projection.documents, manifests: projection.manifests};
+}
+
+
+export function writeAuditRecords(outputs, allowedRecords = []) {
+  const allowed = new Set([...allowedRecords, ...outputs.keys()]);
+  const stat = path => {
+    try { return lstatSync(path); }
+    catch (error) { if (error.code === 'ENOENT') return null; throw error; }
+  };
+  const directories = new Set();
+  const validateDirectory = path => {
+    if (path === '.') return;
+    validateDirectory(dirname(path));
+    const info = stat(path);
+    assert.ok(!info || info.isDirectory(), `Audit output directory must be a real directory: ${path}`);
+    directories.add(path);
+  };
+  const validateFile = path => {
+    const info = stat(path);
+    assert.ok(!info || info.isFile() && info.nlink === 1, `Audit output must be a regular single-link file: ${path}`);
+    return info;
+  };
+  const scan = directory => {
+    const info = stat(directory);
+    if (!info) return;
+    assert.ok(info.isDirectory(), `Audit output directory must be a real directory: ${directory}`);
+    for (const entry of readdirSync(directory, {withFileTypes: true})) {
+      const path = `${directory}/${entry.name}`;
+      if (entry.isDirectory()) {
+        assert.ok(auditModes.some(mode => path === auditRecordRoot + mode), `Unknown audit output directory: ${path}`);
+        scan(path);
+      } else {
+        assert.ok(allowed.has(path), `Unknown audit output collision: ${path}`);
+        validateFile(path);
+      }
+    }
+  };
+  // Complete preflight precedes directory creation or the first write. Refusal
+  // must not partly renew the evidence or follow a linked output's target.
+  for (const [path, content] of outputs) {
+    validateDirectory(dirname(path));
+    validateFile(path);
+    assert.equal(typeof content, 'string', 'Invalid audit output bytes');
+  }
+  scan(auditRecordRoot.slice(0, -1));
+  for (const directory of directories) mkdirSync(directory, {recursive: true});
+  for (const [path, content] of outputs) {
+    const before = validateFile(path);
+    if (before && readFileSync(path, 'utf8') === content) continue;
+    const fd = openSync(path, before ? constants.O_WRONLY | constants.O_NOFOLLOW : 'wx');
+    try {
+      const actual = fstatSync(fd);
+      assert.ok(actual.isFile() && actual.nlink === 1 && (!before || actual.ino === before.ino && actual.dev === before.dev), 'Audit output changed during write');
+      writeFileSync(fd, content);
+      // Existing canonical records may shrink when a source becomes a tombstone.
+      if (before) {
+        // ftruncate applies to the verified descriptor, never a second path lookup.
+        ftruncateSync(fd, Buffer.byteLength(content));
+      }
+    } finally {closeSync(fd);}
+  }
 }

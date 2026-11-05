@@ -1,10 +1,11 @@
 import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
 import {execFileSync} from 'node:child_process';
-import {lstatSync, writeFileSync} from 'node:fs';
+import {lstatSync, writeFileSync, readFileSync} from 'node:fs';
+import {readGitBlobs} from './ci-package-revisions.mjs';
 import {pathToFileURL} from 'node:url';
 
-import {auditDescriptor, auditRecordRoot, readModeRecords, verifyModeRecords, assertRecordRetention} from './ci-input-audit-records.mjs';
+import {auditDescriptor, auditRecordRoot, readModeRecords, verifyModeRecords, assertRecordRetention, auditModes, recordFilename, serializeRecord, writeAuditRecords} from './ci-input-audit-records.mjs';
 
 const immutableAudits = new WeakMap();
 
@@ -253,29 +254,87 @@ function workspaceManifests(revision, git, entries) {
   return paths;
 }
 
+function currentRecord(mode, path, revision, git) {
+  const prior = readInputAudit(revision, git);
+  if (prior.policy.version !== 2) return null;
+  const record = prior.records[mode].get(path);
+  if (!record || record.state === 'absent') return null;
+  const manifests = mode === 'lock' ? workspaceManifests(revision, git, prior.entries) : [];
+  const projection = projectInputMode(mode, revision, git, prior.entries, manifests);
+  const row = projection.rows.find(entry => entry.path === path);
+  return (record.state === 'present' ? row && row.mode === record.gitMode && row.type === record.gitType && row.objectId === record.objectId :
+    Object.hasOwn(projection.manifests, path) && projection.manifests[path] === record.sha256) ? record : null;
+}
+
+function generateRecords(modes, revision, git, entries, existing, manifests) {
+  const outputs = new Map([[auditDescriptor, '{"version":2}\n']]);
+  let ancestors;
+  for (const mode of modes) {
+    const projection = projectInputMode(mode, revision, git, entries, manifests);
+    const records = new Map();
+    for (const {path, mode: gitMode, type: gitType, objectId} of projection.rows) {
+      records.set(path, {version: 2, mode, path, state: 'present', gitMode, gitType, objectId});
+    }
+    for (const [path, sha256] of Object.entries(projection.manifests)) records.set(path, {version: 2, mode, path, state: 'manifest', sha256});
+    for (const [path, record] of existing?.[mode] ?? []) {
+      if (records.has(path)) continue;
+      if (record.state === 'absent') { records.set(path, record); continue; }
+      ancestors ??= git('rev-list', '--topo-order', 'HEAD').trim().split('\n');
+      const previousRevision = ancestors.find(ancestor => currentRecord(mode, path, ancestor, git));
+      assert.ok(previousRevision, `No reviewed ancestor for audit tombstone: ${path}`);
+      records.set(path, {version: 2, mode, path, state: 'absent', previousRevision});
+    }
+    for (const [path, record] of records) outputs.set(recordFilename(mode, path), serializeRecord(record));
+  }
+  return outputs;
+}
+
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   try {
     const args = process.argv.slice(2);
-    const write = args.length === 1 && args[0] === '--write-staged';
+    const init = args.length === 1 && args[0] === '--init-v2-staged';
+    const write = args[0] === '--write-staged' && (args.length === 1 || args.length === 3 && args[1] === '--mode' && [...auditModes, 'all'].includes(args[2]));
     const check = args.length === 2 && args[0] === '--check' && /^[a-f0-9]{40}$/.test(args[1]);
-    assert.ok(write || check, 'Usage: ci-input-audit.mjs --write-staged | --check <commit>');
-    const git = (...args) => execFileSync('git', args, {encoding: 'utf8', timeout: 30_000, stdio: ['ignore', 'pipe', 'pipe']});
-    if (write) {
+    const checkMode = args.length === 3 && args[0] === '--check-mode' && auditModes.includes(args[1]) && /^[a-f0-9]{40}$/.test(args[2]);
+    assert.ok(init || write || check || checkMode, 'Usage: ci-input-audit.mjs --init-v2-staged | --write-staged [--mode docs|identity|gateway|lock|all] | --check <commit> | --check-mode <mode> <commit>');
+    const git = (...args) => {
+      const binary = typeof args.at(-1) === 'object' && args.pop().binary;
+      return execFileSync('git', args, {encoding: binary ? undefined : 'utf8', timeout: 30_000, maxBuffer: 64 * 1024 * 1024, stdio: ['ignore', 'pipe', 'pipe']});
+    };
+    git.readBlobs = readGitBlobs;
+    if (write || init) {
       assert.equal(git('rev-parse', '--is-inside-work-tree').trim(), 'true', 'Generate input audits from the repository root');
       assert.equal(git('rev-parse', '--show-prefix').trim(), '', 'Generate input audits from the repository root');
     }
-    const revision = write ? git('write-tree').trim() : args[1];
-    if (check) assert.equal(git('cat-file', '-t', revision).trim(), 'commit', 'Check requires an immutable commit');
-    const {policy, entries} = readInputAudit(revision, git);
+    const revision = write || init ? git('write-tree').trim() : args.at(-1);
+    if (check || checkMode) assert.equal(git('cat-file', '-t', revision).trim(), 'commit', 'Check requires an immutable commit');
+    const {policy, entries, records} = readInputAudit(revision, git);
     const manifests = workspaceManifests(revision, git, entries);
-    const generated = {...policy};
-    for (const mode of Object.keys(digestFields)) {
-      const result = write ? fingerprintInputMode(mode, revision, git, entries, manifests) : auditInputMode(mode, revision, git, manifests);
-      generated[digestFields[mode]] = result.inputSha256;
-      if (mode === 'lock') generated.manifests = result.manifests;
-      if (check) console.log(`${mode}: current`);
-    }
-    if (write) {
+    if (init || policy.version === 2 && write) {
+      assert.ok(!init || policy.version === 1, 'V2 is already staged; use --write-staged');
+      const modes = init || args[2] === 'all' ? auditModes : [args[2] ?? 'docs'];
+      const outputs = generateRecords(modes, revision, git, entries, records, manifests);
+      if (init) {
+        let existingOutputs = 0;
+        for (const [path, content] of outputs) {
+          try {
+            const info = lstatSync(path);
+            assert.ok(info.isFile() && info.nlink === 1 && readFileSync(path, 'utf8') === content, `Audit initialization collision: ${path}`);
+            existingOutputs++;
+          } catch (error) { if (error.code !== 'ENOENT') throw error; }
+        }
+        assert.ok(existingOutputs === 0 || existingOutputs === outputs.size, 'Partial audit initialization output; inspect and remove only your incomplete outputs');
+      }
+      writeAuditRecords(outputs, entries.filter(entry => entry.path.startsWith(auditRecordRoot)).map(entry => entry.path));
+      console.log(`Wrote ${modes.join(', ')} audit records from staged inputs; inspect and stage explicitly`);
+    } else if (write) {
+      assert.equal(args.length, 1, 'Explicit mode renewal requires v2');
+      const generated = {...policy};
+      for (const mode of auditModes) {
+        const result = fingerprintInputMode(mode, revision, git, entries, manifests);
+        generated[digestFields[mode]] = result.inputSha256;
+        if (mode === 'lock') generated.manifests = result.manifests;
+      }
       const content = JSON.stringify(generated, null, 2) + '\n';
       parsePolicy(content);
       assert.ok(lstatSync('scripts').isDirectory(), 'Audit output directory must be a real directory');
@@ -284,6 +343,12 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
       assert.equal(output.nlink, 1, 'Audit output must have exactly one hard link');
       writeFileSync(policyPath, content);
       console.log(`Wrote ${policyPath} from staged inputs; inspect and stage it explicitly`);
+    } else {
+      assert.ok(!checkMode || policy.version === 2, 'Selected-mode checking requires v2');
+      for (const mode of checkMode ? [args[1]] : auditModes) {
+        try { auditInputMode(mode, revision, git, manifests); console.log(`${mode}: current`); }
+        catch (error) { console.error(`${mode}: ${error.message}`); process.exitCode = 1; }
+      }
     }
   } catch (error) {
     console.error(error.message);
