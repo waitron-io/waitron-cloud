@@ -105,3 +105,33 @@ test('executed summary consumes needs objects and the current job API, refusing 
     writeFileSync(gh,'#!/bin/sh\nexit 1\n',{mode:0o700});assert.equal(run().status,1);
   } finally {rmSync(root,{recursive:true,force:true});}
 });
+
+test('executed planner forces a full reusable run even with an audited prose pull request event', () => {
+  const root = mkdtempSync(join(tmpdir(), 'cloud-nightly-cli-'));
+  const git = (...args) => execFileSync('git', ['-c', 'maintenance.auto=false', ...args], {cwd: root, encoding: 'utf8', stdio: 'pipe'}).trim();
+  try {
+    execFileSync('git', ['clone', '--shared', '--quiet', process.cwd(), root], {stdio: 'pipe'});
+    cpSync('scripts', join(root, 'scripts'), {recursive: true});
+    git('config', 'user.name', 'CI test'); git('config', 'user.email', 'ci@example.test');
+    git('add', '-A');
+    execFileSync(process.execPath, ['scripts/ci-input-audit.mjs', '--write-staged'], {cwd: root, stdio: 'pipe'});
+    git('add', 'scripts/ci-input-audit.json'); git('commit', '-sm', 'Reviewed nightly fixture');
+    const base = git('rev-parse', 'HEAD');
+    writeFileSync(join(root, 'docs/nightly-control.md'), '# Nightly control\n');
+    git('add', 'docs/nightly-control.md'); git('commit', '-sm', 'Prose control');
+    const head = git('rev-parse', 'HEAD');
+    const event = join(root, 'event.json'), output = join(root, 'output');
+    writeFileSync(event, JSON.stringify({pull_request: {base: {sha: base}, head: {sha: head}}}));
+    for (const full of ['false', 'true']) {
+      writeFileSync(output, '');
+      const result = spawnSync(process.execPath, ['scripts/ci-plan.mjs'], {cwd: root, encoding: 'utf8', timeout: 30_000, env: {...process.env, CI_FORCE_FULL: full, GITHUB_EVENT_PATH: event, GITHUB_OUTPUT: output, GITHUB_SHA: head, GITHUB_REF_NAME: 'main', GITHUB_REPOSITORY: repository}});
+      assert.equal(result.status, 0, result.stdout + result.stderr);
+      const line = readFileSync(output, 'utf8').split('\n').find(line => line.startsWith('plan='));
+      const selected = JSON.parse(line.slice(5));
+      assert.equal(selected.packages.length, full === 'true' ? 28 : 0);
+      assert.equal(selected.receipts.length, full === 'true' ? 6 : 0);
+      assert.equal(selected.typecheck, full === 'true');
+      assert.equal(Boolean(selected.documentation), full !== 'true');
+    }
+  } finally {rmSync(root, {recursive: true, force: true});}
+});

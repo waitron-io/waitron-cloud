@@ -5,8 +5,10 @@ that changes only regular Markdown under `docs/` (outside `docs/receipts/`) or a
 the repository root can run `changes`, `documentation` and `summary` alone.
 The document check reads both exact Git revisions, validates UTF-8, rejects NUL
 characters and requires a final newline. It accepts deleted regular documents.
-Every push to `main` runs all package, receipt and compiler checks, including
-an equal-tree merge of a green documentation-only pull request.
+The standard main-push policy still runs all package, receipt and compiler
+checks, including an equal-tree merge of a green documentation-only pull request.
+The [nightly full backstop](ci-nightly.md) adds independent full coverage; D571
+part 5 owns the later change to merge checks.
 
 ## Independent evidence for each input
 
@@ -134,3 +136,10 @@ the descriptor and all four initial record inventories, leaving v1 bytes intact.
 Repeating before staging succeeds only with an identical complete output set;
 partial output or collisions refuse. Once you stage activation, use the ordinary
 writer. Saved v1 fixture inventories and their behavioral assertions stay v1.
+
+## Nightly full work
+
+An explicit full call bypasses the documentation shortcut in standard, cost and
+venue workflows. A documentation-only PR rehearsal therefore still executes all
+packages and receipts when the nightly parent asks for full work. Ordinary
+documentation PRs keep their audited narrow path.

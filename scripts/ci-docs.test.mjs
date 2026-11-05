@@ -277,3 +277,29 @@ test('proof planner skips only audited prose and keeps code, pinned documents, m
   put('docs/backlog.md', '# Later prose\n');
   run(pr(commit(), stale), true);
 }));
+
+// A reusable full run must ignore a narrow PR event inherited from its caller.
+test('explicit full execution overrides a real audited prose PR without changing ordinary selection', () => fixture(({put, commit, base, git, plan}) => {
+  put('docs/backlog.md', '# Nightly prose control\n');
+  const head = commit();
+  assert.equal(plan(head).documentation.paths[0], 'docs/backlog.md');
+  const full = createPlan({pull_request: {base: {sha: base}, head: {sha: head}}}, {sha: head, full: true}, workspace, git);
+  assert.equal(full.typecheck, true);
+  assert.equal(full.packages.length, 28);
+  assert.equal(full.documentation, undefined);
+  assert.equal(full.reuse, null);
+  assert.deepEqual(full.receipts, ['test:two-venue-milestone-receipt', 'test:backup-capacity', 'test:public-gateway-limits', 'test:local-stack', 'test:database-recovery-receipt', 'test:cloud-cost']);
+}));
+
+test('full proof command overrides a real audited prose PR while ordinary proof stays unselected', () => fixture(({root, put, commit, base}) => {
+  put('docs/backlog.md', '# Full proof control\n');
+  const head = commit();
+  const event = join(root, 'event.json'), output = join(root, 'output');
+  writeFileSync(event, JSON.stringify({pull_request: {base: {sha: base}, head: {sha: head}}}));
+  for (const [flag, required] of [['false', 'false'], ['true', 'true']]) {
+    writeFileSync(output, '');
+    const result = spawnSync(process.execPath, [checker, '--plan'], {cwd: root, encoding: 'utf8', env: {...process.env, CI_FORCE_FULL: flag, GITHUB_EVENT_PATH: event, GITHUB_OUTPUT: output}});
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    assert.equal(readFileSync(output, 'utf8'), `required=${required}\n`);
+  }
+}));

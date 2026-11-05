@@ -535,3 +535,14 @@ test('live summary preserves every surviving package shard after registry retire
     '@waitron-cloud/remote-access': 4, '@waitron-cloud/translation': 1, '@waitron-cloud/ui-smoke': 1,
   });
 });
+
+test('reused standard workflow checks only its exact job family within the nightly run', async () => {
+  const nested = jobs.map(job => ({...job, name: `standard / ${job.name}`}));
+  const other = [{name: 'cost / discover', status: 'in_progress', conclusion: null}, {name: 'venue / changes', status: 'queued', conclusion: null}, {name: 'nightly-summary', status: 'queued', conclusion: null}];
+  const run = records => summary.waitForSummary(plan, results, {jobPrefix: 'standard / ', readJobs: async () => records, timeoutMs: 100, pollMs: 0});
+  await run([...nested, ...other]);
+  for (const broken of [nested.slice(1), [...nested, nested[0]], nested.map((job, i) => i ? job : {...job, conclusion: 'failure'}), nested.map(job => ({...job, name: job.name.replace('standard / ', 'impostor / ')}))]) {
+    await assert.rejects(run([...broken, ...other]));
+  }
+  await assert.rejects(summary.waitForSummary(plan, results, {jobPrefix: 'package', readJobs: async () => jobs}), /prefix/i);
+});

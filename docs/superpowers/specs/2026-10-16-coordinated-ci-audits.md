@@ -1,5 +1,10 @@
 # Coordinated CI reader audits
 
+Current policy note, 5 November 2026: [D571's nightly full backstop](../../ci-nightly.md)
+adds a scheduled full run under the owner's 4 November decision. This historical
+slice's main-push policy remains until D571 part 5 changes it; earlier references
+to withdrawn daily testing describe the October decision, not the new backstop.
+
 You cannot keep the documentation, script and lockfile shortcuts current by renewing their certificates in turn: each certificate is an input to its peers. Replace those three files with one strict, manually reviewed policy. This is one bounded D69 follow-up to [precise CI selection](2026-10-14-precise-ci-selection.md), not the broader resolver or scheduling project.
 
 Owner amendment, 2026-10-18 09:05: proceed with D69 using recommended option 1. Keep the original nine-manifest evidence in a separate immutable test-only certificate and validate current production membership and metadata separately. Every push to `main` runs the full suite, including an equal-tree merge of a green PR. This supersedes D67 main-push reuse preservation in this slice; D70 is withdrawn. PR narrowing and its refusal checks remain. No further approval is required.

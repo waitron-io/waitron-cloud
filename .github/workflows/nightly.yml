@@ -1,0 +1,52 @@
+name: Nightly full CI
+on:
+  schedule:
+    # Off the hour, after the usual European working day. GitHub uses UTC.
+    - cron: '17 3 * * *'
+  workflow_dispatch:
+  # Exercise the real reusable calls when the nightly wiring itself changes.
+  pull_request:
+    paths:
+      - '.github/workflows/nightly.yml'
+permissions:
+  contents: read
+  packages: read
+  actions: read
+  pull-requests: read
+concurrency:
+  # Keep every scheduled/manual run; a PR update may cancel its older rehearsal.
+  group: nightly-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+jobs:
+  standard:
+    uses: ./.github/workflows/ci.yml
+    with:
+      full: true
+      job-prefix: 'standard / '
+  cost:
+    uses: ./.github/workflows/cloud-cost.yml
+    with:
+      full: true
+  venue:
+    uses: ./.github/workflows/venue-services-proof.yml
+    with:
+      full: true
+  summary:
+    name: nightly-summary
+    if: ${{ always() }}
+    needs: [standard, cost, venue]
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '26'
+          package-manager-cache: false
+      - name: Require every full workflow and publish its result
+        run: node scripts/ci-nightly-summary.mjs
+        env:
+          CI_NIGHTLY_RESULTS: ${{ toJSON(needs) }}

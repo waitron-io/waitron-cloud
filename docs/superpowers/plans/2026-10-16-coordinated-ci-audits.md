@@ -1,5 +1,10 @@
 # Coordinated CI reader audits implementation plan
 
+Current policy note, 5 November 2026: [D571's nightly full backstop](../../ci-nightly.md)
+adds a scheduled full run under the owner's 4 November decision. This historical
+slice's main-push policy remains until D571 part 5 changes it; earlier references
+to withdrawn daily testing describe the October decision, not the new backstop.
+
 > **For agentic workers:** Use `superpowers:executing-plans` to resume the already authorised native inline implementation task by task. This invocation amends only the two documents; do not implement here or request another approval cycle.
 
 **Goal:** Renew four existing CI reader audits together, separate historical fixture evidence from current production validation, and run full work on every main push while preserving PR narrowing.
