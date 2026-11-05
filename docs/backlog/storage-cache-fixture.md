@@ -520,3 +520,65 @@ identify a historical owner. The existing port-handoff investigation must also
 cover those defaults and other ephemeral test listeners before claiming all
 fixtures cooperate. These controlled admin tests do not qualify that broader
 protocol or native admin-worker functionality.
+
+
+## Storage test socket attribution and live progress (D575)
+
+An unexpected bind failure in the reservation control previously named only a
+socket, so you could not distinguish its initial competing listener from a
+cleanup-verification rebind. Run
+`node --test scripts/ci-backup-storage-reservation-refusals.test.mjs scripts/ci-storage-control-diagnostics.test.mjs`
+to check both control phases and a deliberate takeover after cleanup. A refused
+bind retains its original error and adds `storageControl` with the phase, actual
+port and a bounded `lsof` TCP snapshot, including outgoing connections. On Linux,
+if that query returns no socket rows, an additional `ss -B` query looks for bound
+but inactive sockets. Real controls require the holding process and port in both
+cases. Each command requests a five-second timeout and uses `SIGKILL` to collect
+its own unresponsive inspector. The five-second budget covers a controlled
+2.2-second inspector response; the earlier two-second budget lost that response.
+No competing process is stopped. A nonzero inspector exit retains partial output,
+stderr, status and signal; a missing executable records its reason. No returned
+rows does not prove the port was free: visibility and ownership can change before
+inspection. A process ID alone does not identify which test created that listener.
+
+The admin wrapper now forwards stdout and stderr into its enclosing test output
+as they arrive and keeps both in its failure transcript. Run
+`node --test deploy/test-cloud/storage-admin-progress-integration.test.mjs`
+to hold a child before native startup and require its operation record while it
+is still running. This closes the wrapper's buffering gap. The existing held-bucket
+and cancellation checks still verify owned-resource cleanup. The underlying
+90-second case and 120-second wrapper limits and all original checks remain.
+The default stderr write is exercised by the installed wrapper check; deleting
+that write must fail it. Node's ordered file reporter can still hold the enclosing
+output behind an earlier file. Review controls observed a record after a test
+deadline and after `SIGTERM`, but lost it after `SIGKILL`. GitHub job-timeout and
+PostgreSQL-wrapper signal behaviour remain unqualified. A blocked event loop or
+a failure before the child emits a record can also leave no operation evidence.
+A review stand-in with a closed stderr failed before its cleanup; the real
+wrapper and its earlier baseline have not been compared for that condition.
+Capture that actual case before changing shared stream-error or shutdown handling.
+
+The recorded first-reservation refusal at
+[PR932's root job](https://github.com/waitron-io/waitron-cloud/actions/runs/41897316384/job/126812884123)
+has only Node's internal bind stack for port 43549. It does not establish which
+control phase failed or who held the port. The held-bucket wrapper also reaches
+its 120-second limit on
+[main 9b7c540a](https://github.com/waitron-io/waitron-cloud/actions/runs/41850829904/job/126652888279)
+and [PR926](https://github.com/waitron-io/waitron-cloud/actions/runs/41882127691/job/126757174361).
+A two-week history audit ending 4 November 2026 at 20:43:49 UTC lists 1,957
+runs created in that window and reviews 85 failed root/receipt job logs,
+including earlier attempts of successful reruns. It finds one named reservation
+`EADDRINUSE` and these two held-bucket cancellations. The wider daily inventory
+also includes 21 October's earlier runs; all three matches occur on 4 November,
+so the exact fourteen-day boundary changes none of the counts. Fourteen runs
+remain unfinished, and cancelled-job transcripts are not exhaustively inspected.
+These are observed named failures, not a measured collision rate. The separate
+31 October wrong bind-number assertion and 2 November six-versus-seven held-port
+assertion are not counted as this unlabelled bind refusal.
+
+Those old buffered logs do not identify a stalled operation. Two observed ordinary
+stores have extra default admin listeners, including port 33647 inside the service
+allocator range. That observation establishes a possible collision path, not a
+cause for these historical failures. Keep the existing allocation and retry rules;
+use a new attributed recurrence to select a cause repair rather than repeat a
+passing baseline or introduce a broader claiming protocol.

@@ -323,3 +323,29 @@ tests use their independently pinned nine-manifest certificate; current lock
 validation requires every current manifest and its metadata. See the
 [dependency-update audit](ci-lockfile-audit.md) and the
 [coordinated design](superpowers/specs/2026-10-16-coordinated-ci-audits.md).
+
+
+## Storage control diagnostic reader review (D575)
+
+The control helper reads child stdout and stderr and asks `lsof` for TCP sockets
+on the one refused numeric port, with an `ss -B` fallback for empty Linux results. Its test programs use explicit JavaScript file
+paths and private runtime state. The parent retains the same transcript for
+existing assertions and now also forwards it while the child runs. These
+readers consume no exempt Markdown. The added backlog prose is not a runtime
+input. Identity and gateway target programs, their readers, manifests, lockfile,
+installation hooks and CI wiring remain unchanged. All four inventories are
+renewed from the reviewed staged candidate; no selection rule or manifest
+expectation changes.
+
+
+The combined renewal also includes the SES configuration and bounded-event
+readers from main `59cabe75`. They parse supplied configuration, notification JSON
+and inline test fixtures; they add no Cloud Markdown reader. The identity and
+gateway targets, dependency manifests and installation hooks remain unchanged.
+
+The renewal on main `88ddbc83` also retains the mixed-prose planner from D571
+part 1. Its new reader loads saved Git trees and the existing audit policy,
+checks regular Markdown modes and each head inventory, and selects code paths.
+The accompanying tests use private Git fixtures. This storage branch adds no
+Markdown reader or selection-rule change; the combined inventories are renewed
+from the staged tree.
