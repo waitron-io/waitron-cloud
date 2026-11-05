@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import {execFileSync, spawnSync} from 'node:child_process';
-import {appendFileSync, copyFileSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync} from 'node:fs';
+import {appendFileSync, copyFileSync, existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import test from 'node:test';
@@ -53,7 +53,13 @@ test('a complete candidate activates in full and requires current review before 
     git('add', '-A');
     const projection = rootReviewProjection(git('write-tree').trim(), git);
     assert.ok(projection.inputs.length >= 2000, 'Use the complete repository input volume');
-    const paths = projection.inputs.map(row => row.path);
+    // Replacing the synthetic registry also requires renewed retained absences.
+    const reviewDirectory = join(root, 'scripts/ci-root-review.d');
+    const absences = existsSync(reviewDirectory) ? readdirSync(reviewDirectory).flatMap(name => {
+      const record = JSON.parse(readFileSync(join(reviewDirectory, name), 'utf8'));
+      return record.state === 'absent' ? [record.path] : [];
+    }) : [];
+    const paths = [...projection.inputs.map(row => row.path), ...absences];
     const frozen = git('show', 'HEAD:scripts/ci-input-audit.json');
     review(paths);
     const records = () => readdirSync(join(root, 'scripts/ci-root-review.d')).sort()

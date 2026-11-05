@@ -17,7 +17,9 @@ function isolatedSummaryContext(root) {
   const git = (...args) => childProcess.execFileSync('git', ['-c', 'maintenance.auto=false', ...args], {cwd: root, encoding: 'utf8', stdio: 'pipe'}).trim();
   git('init', '-q'); git('config', 'user.name', 'CI test'); git('config', 'user.email', 'ci@example.test');
   writeFileSync(join(root, 'baseline'), 'Isolated summary job-contract fixture.\n');
-  git('add', 'baseline'); git('commit', '-s', '-qm', 'Save isolated summary history');
+  // The extensionless gh stub uses CommonJS even inside a module-typed TMPDIR.
+  writeFileSync(join(root, 'package.json'), '{"type":"commonjs"}\n');
+  git('add', 'baseline', 'package.json'); git('commit', '-s', '-qm', 'Save isolated summary history');
   const head = git('rev-parse', 'HEAD'), event = join(root, '.git', 'event.json');
   writeFileSync(event, '{}\n');
   return {head, env: {GITHUB_EVENT_PATH: event, GITHUB_SHA: head, CI_HEAD_SHA: head, CI_JOB_PREFIX: ''}};
