@@ -44,9 +44,11 @@ The venue matrix checks the composition of its existing legacy and venue suites.
 Its own wrappers, `scripts/fixtures/service-proof.ts`, `scripts/test-cloud-*`,
 `scripts/venue-service-*` and `deploy/test-cloud/` select it. So do the package
 `venue-service-*` test files and both suite matrices' explicitly listed package
-tests, including translation's `worker-cli` case. Shared backend test helpers and fixture data, installation inputs, the workflow
-and planner also select it. This includes the registration venue-service
-fixture, backup verification helpers and fake translation provider.
+tests, including translation's `worker-cli` case. Shared backend test helpers
+and fixture data, installation inputs, the workflow and planner also select it. This includes the registration venue-service
+fixture, backup verification helpers and fake translation provider. The imported
+`deploy/local-stack/{runtime,lease,bootstrap}.mjs` helpers and
+`deploy/backup-verifier/target.json` also select venue.
 
 Other product-source edits use package CI without repeating this composition
 proof on every PR. A complete manual run remains available, and the planned
@@ -63,7 +65,12 @@ A companion `scripts/ci-input-audit.json` renewal counts as evidence only after
 all four saved head inventories verify. A stale or malformed peer keeps full
 proof work. This prevents the required renewal from waking both matrices for
 every code PR. Root Markdown is unrelated prose for these proof readers.
-This is a declared input boundary, not a general JavaScript dependency resolver.
+New directories inside known `docs/`, `deploy/`, workspace or workflow areas
+use their declared ownership rather than the unknown-root fallback. Review a new
+reader before relying on that boundary. The fallback also retains all root-script changes, including the other proof
+workflow's script tree. That conservative extra work remains a limit of this
+part. This is a declared input boundary, not a general JavaScript dependency
+resolver.
 
 The planner compares the common ancestor of the PR base and head with the exact
 checked-out head. It uses immutable Git paths, including both sides of a rename,

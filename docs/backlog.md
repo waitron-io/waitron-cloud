@@ -1283,7 +1283,9 @@ implementation or production evidence.
   [reviewed proof inputs](ci-proof-selection.md). Cost retains backend sources,
   migrations, shared fixtures, gateway and installation inputs; venue selects
   its proof programs and named suite tests. Portal code and ordinary unrelated
-  package tests omit both matrices. Unknown inputs retain work. Both workflows
+  package tests omit both matrices. Unknown packages, root areas and
+  unclassified scripts retain work, including changes in the other proof's
+  script tree. Narrower root ownership remains part 3. Both workflows
   support complete manual runs and stop running on main pushes, while the nightly
   backstop below retains both full matrices. Real-Git controls cover positive
   inputs, omissions, renames, missing history and checkout refusals. No rehearsal

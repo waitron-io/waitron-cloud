@@ -3,12 +3,8 @@ import {auditInputMode, readInputAudit} from './ci-input-audit.mjs';
 
 const revision = /^[a-f0-9]{40}$/;
 const backend = /^packages\/(account-http|backups|identity|operations|registration|remote-access|translation)\//;
-const shared = new Set([
-  'scripts/ci-docs.mjs', 'scripts/ci-proof-inputs.mjs', 'scripts/test-postgres.mjs',
-  'scripts/ci-setup-pnpm.mjs', 'scripts/ci-pnpm-diagnostics.cjs',
-]);
 // These named proof cases do not carry the venue-service filename prefix.
-const legacyTests = new Set([
+const packageProofCases = new Set([
   'packages/translation/test/free-service-plans.test.ts',
   ...['relay-grants', 'relay-worker', 'relay-control', 'relay-operator-stop', 'content-translation-service']
     .map(name => `packages/registration/test/${name}.test.ts`),
@@ -20,8 +16,8 @@ const legacyTests = new Set([
 
 function consumes(kind, path) {
   if (/^[^/]+\.md$/.test(path)) return false;
-  // Root configuration and every workspace manifest can change installation or execution.
-  if (!path.includes('/') || /^(apps|packages)\/[^/]+\/package\.json$/.test(path) || shared.has(path)) return true;
+  // Every workspace manifest can change installation or execution.
+  if (/^(apps|packages)\/[^/]+\/package\.json$/.test(path)) return true;
   if (path === `.github/workflows/${kind === 'cost' ? 'cloud-cost' : 'venue-services-proof'}.yml`) return true;
   // Both matrices import backend test helpers and generated-data fixture builders.
   if (backend.test(path) && /\/test\//.test(path) && !/\.test\.[cm]?[jt]sx?$/.test(path)) return true;
@@ -34,15 +30,15 @@ function consumes(kind, path) {
   } else {
     // Product source is already exercised by package CI. This matrix is selected by
     // edits to its proof programs and their test cases, rather than every product edit.
-    if (path.startsWith('deploy/test-cloud/') || path.startsWith('scripts/test-cloud-') ||
-      path.startsWith('scripts/venue-service-') || path === 'scripts/legacy-service-proof.test.ts' ||
-      path === 'scripts/fixtures/service-proof.ts' || legacyTests.has(path) ||
+    if (['deploy/local-stack/runtime.mjs', 'deploy/local-stack/lease.mjs',
+      'deploy/local-stack/bootstrap.mjs', 'deploy/backup-verifier/target.json'].includes(path)) return true;
+    if (path.startsWith('deploy/test-cloud/') || packageProofCases.has(path) ||
       /^packages\/[^/]+\/test\/venue-service-/.test(path)) return true;
   }
   if (path.startsWith('packages/') && !backend.test(path) && !path.startsWith('packages/ui-smoke/')) return true;
   if (path.startsWith('apps/') && !path.startsWith('apps/portal/')) return true;
   if (/^(apps|packages|docs|deploy)\//.test(path) || path.startsWith('.github/workflows/')) return false;
-  // Unclassified scripts and new top-level areas retain proof work until reviewed.
+  // Root configuration, script changes and new top-level areas retain proof work until reviewed.
   return true;
 }
 

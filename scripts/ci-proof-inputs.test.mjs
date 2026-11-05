@@ -86,7 +86,7 @@ test('each proof selects its own workflow without waking the other matrix', () =
 
 test('deletion and rename of a consumed input still select cost', () => fixture(({git, put, commit, plan, pr}) => {
   put('scripts/cloud-cost/mail.mjs'); const base = commit();
-  git('mv', 'scripts/cloud-cost/mail.mjs', 'scripts/not-a-cost-input.mjs');
+  git('mv', 'scripts/cloud-cost/mail.mjs', 'docs/not-a-cost-input.md');
   const head = commit(); assert.equal(plan('cost', pr(head, base)).required, true);
 }));
 
@@ -140,8 +140,15 @@ test('the PR merge environment does not widen a verified head checkout', () => f
   for (const kind of ['cost', 'venue']) assert.equal(plan(kind, pr(head), base).required, false, kind);
 }));
 
-for (const path of ['packages/registration/test/relay-worker.test.ts', 'packages/translation/test/worker-cli.test.ts']) {
-  test(`venue retains named legacy proof case ${path}`, () => fixture(({put, commit, plan, pr}) => {
+for (const path of ['packages/translation/test/free-service-plans.test.ts',
+  'packages/registration/test/relay-grants.test.ts', 'packages/registration/test/relay-worker.test.ts',
+  'packages/registration/test/relay-control.test.ts', 'packages/registration/test/relay-operator-stop.test.ts',
+  'packages/registration/test/content-translation-service.test.ts', 'packages/translation/test/machine.test.ts',
+  'packages/translation/test/worker.test.ts', 'packages/translation/test/collect-page.test.ts',
+  'packages/translation/test/consent.test.ts', 'packages/translation/test/worker-cli.test.ts',
+  'packages/account-http/test/relay-disabled.test.ts', 'packages/account-http/test/translation.test.ts',
+  'packages/account-http/test/translation-collect-pages.test.ts', 'packages/account-http/test/content-translation-readers.test.ts']) {
+  test(`venue retains named package proof case ${path}`, () => fixture(({put, commit, plan, pr}) => {
     put(path); assert.equal(plan('venue', pr(commit())).required, true);
   }));
 }
@@ -198,8 +205,65 @@ test('a real portal PR with all four renewed inventories still omits both matric
 });
 
 for (const path of ['packages/registration/test/fixtures/venue-service.ts',
-  'packages/backups/test/fixtures/verification.ts', 'packages/translation/test/fake-openai.ts']) {
+  'packages/registration/test/fixtures/relay-worker.ts', 'packages/registration/test/fixtures/relay-stop-barrier.ts',
+  'packages/registration/test/fixtures/reset-schema.ts', 'packages/backups/test/fixtures/recovery-v2.ts',
+  'packages/backups/test/fixtures/verification.ts', 'packages/translation/test/fixtures.ts',
+  'packages/translation/test/fake-openai.ts', 'packages/account-http/test/fixtures.ts']) {
   test(`venue keeps its imported proof helper ${path}`, () => fixture(({put, commit, plan, pr}) => {
     put(path); assert.equal(plan('venue', pr(commit())).required, true);
+  }));
+}
+
+for (const path of ['deploy/local-stack/runtime.mjs', 'deploy/local-stack/lease.mjs',
+  'deploy/local-stack/bootstrap.mjs', 'deploy/backup-verifier/target.json']) {
+  test(`venue keeps its imported deployment fixture ${path}`, () => fixture(({put, commit, plan, pr}) => {
+    put(path); assert.equal(plan('venue', pr(commit())).required, true);
+  }));
+}
+
+
+test('deleting a consumed backend source still selects cost', () => fixture(({git, put, commit, plan, pr}) => {
+  put('packages/remote-access/src/gateway-cli.ts'); const base = commit();
+  git('rm', 'packages/remote-access/src/gateway-cli.ts');
+  assert.equal(plan('cost', pr(commit(), base)).required, true);
+}));
+
+test('unfamiliar apps keep both proofs while UI smoke source omits them', () => fixture(({put, commit, plan, pr}) => {
+  put('apps/new-service/src/index.ts'); const unknown = commit();
+  for (const kind of ['cost', 'venue']) assert.equal(plan(kind, pr(unknown)).required, true);
+  put('packages/ui-smoke/src/proof-control.ts'); const ui = commit();
+  for (const kind of ['cost', 'venue']) assert.equal(plan(kind, pr(ui, unknown)).required, false);
+}));
+
+test('calculator publication changes keep cost conformance', () => fixture(({put, commit, plan, pr}) => {
+  put('docs/cloud-cost-calculator.html'); assert.equal(plan('cost', pr(commit())).required, true);
+}));
+
+// Evaluate the workflow's trigger and job condition with the actual planner output.
+// No condition means Actions schedules the job; an unknown condition is not evidence to skip it.
+function workflowSchedules(name, event, required) {
+  const workflow = readFileSync(resolve('.github/workflows', name), 'utf8');
+  const triggerBlock = /^on:\n([\s\S]*?)(?=^\S)/m.exec(workflow)?.[1] ?? '';
+  const events = [...triggerBlock.matchAll(/^  ([a-z_]+):/gm)].map(match => match[1]);
+  if (!events.includes(event)) return false;
+  const [job, producer] = name === 'cloud-cost.yml' ? ['conformance', 'discover'] : ['service-receipts', 'changes'];
+  const block = new RegExp(`^  ${job}:\\n([\\s\\S]*?)(?=^  [a-z-]+:|$(?![\\s\\S]))`, 'm').exec(workflow)?.[1];
+  assert.ok(block, 'Missing proof job');
+  const condition = /^    if: (.+)$/m.exec(block)?.[1];
+  if (!condition) return true;
+  const expression = /^needs\.([a-z-]+)\.outputs\.required == '(true|false)'$/.exec(condition);
+  assert.ok(expression, `Unrecognised proof gate: ${condition}`);
+  const outputs = {[producer]: String(required)};
+  return outputs[expression[1]] === expression[2];
+}
+
+for (const [kind, name] of [['cost', 'cloud-cost.yml'], ['venue', 'venue-services-proof.yml']]) {
+  test(`${kind} workflow schedules selected PRs and manual full runs, without main-push repetition`, () => fixture(({put, commit, plan, pr}) => {
+    put('apps/portal/src/account.ts'); const unrelated = commit();
+    assert.equal(workflowSchedules(name, 'pull_request', plan(kind, pr(unrelated)).required), false);
+    put(`.github/workflows/${name}`); const own = commit();
+    assert.equal(workflowSchedules(name, 'pull_request', plan(kind, pr(own, unrelated)).required), true);
+    assert.equal(workflowSchedules(name, 'workflow_dispatch', plan(kind, {}).required), true);
+    assert.equal(workflowSchedules(name, 'push', plan(kind, {}).required), false);
   }));
 }
