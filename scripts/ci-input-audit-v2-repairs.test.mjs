@@ -66,6 +66,7 @@ test('an ancestor with a stale record cannot authorize removal', () => fixture((
 }));
 
 test('a peer record stored under the wrong hash fails documentation metadata validation', () => fixture(({root, git, commit, audit}) => {
+  git('checkout', '--orphan', 'malformed-metadata-root');
   git('mv', recordPath('identity', 'package.json'), recordPath('identity', 'wrong-path')); commit();
   assert.throws(() => audit('docs'), /filename/);
 }));
@@ -143,3 +144,13 @@ test('many distinct removal ancestors use bounded path proofs', async () => {
     assert.ok(commands < 100, `Prior-path proof must not audit each ancestor's whole inventory: ${commands}`);
   });
 });
+
+
+test('a read-only parent refuses a new record before earlier records change', () => fixture(({root, git, put}) => {
+  const first = recordPath('docs', 'package.json'), directory = join(root, records, 'docs');
+  const before = readFileSync(join(root, first));
+  put('package.json', '{"private":true,"description":"changed"}\n'); put('scripts/new-reader.mjs', 'export const value = 1;\n'); git('add', '-A');
+  chmodSync(directory, 0o555);
+  try {const result = run(root, '--write-staged'); assert.notEqual(result.status, 0); assert.deepEqual(readFileSync(join(root, first)), before);}
+  finally {chmodSync(directory, 0o755);}
+}));
