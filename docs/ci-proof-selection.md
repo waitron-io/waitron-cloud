@@ -56,6 +56,12 @@ nightly run exercises every suite regardless of the changed paths.
 
 ## Review and verify the boundary
 
+When you renew [root-input review](ci-root-input-ownership.md), its records alone
+do not select a proof matrix. Both saved root reviews and documentation
+authorities must qualify first, with an unchanged registry and checker. A stale,
+forged or removed record keeps proof work. Every other changed path still uses
+the rules below, so a valid renewal cannot hide a real proof input.
+
 You maintain the reviewed input list in `scripts/ci-proof-inputs.mjs`. When you
 change a proof reader or add an import, helper, fixture or file read, follow that
 input and update its ownership here and in the selector. Broad directory rules
