@@ -38,10 +38,12 @@ for (const stage of ["before request", "headers", "body", "retry pause"]) {
     const acquisition = downloadStorageArchive(`http://127.0.0.1:${server.address().port}/archive`, {
       signal: controller.signal, timeoutMs: 120000, inactivityMs: 30000,
       report(record) {
-        if (stage === "body" && record.event === "body" ||
-            stage === "retry pause" && record.event === "retry") controller.abort(reason);
+        if (stage === "body" && record.event === "body") controller.abort(reason);
         if (stage === "retry pause" && record.event === "retry") {
-          setImmediate(() => { pendingAtNextTurn = !settled; });
+          setImmediate(() => {
+            controller.abort(reason);
+            setImmediate(() => { pendingAtNextTurn = !settled; });
+          });
         }
       },
     });
