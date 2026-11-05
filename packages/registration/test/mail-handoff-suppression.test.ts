@@ -5,6 +5,7 @@ import {test,type TestContext} from 'node:test';
 import {SMTPServer,type SMTPServerOptions} from 'smtp-server';
 import type {Pool} from 'pg';
 import {EmailOutbox,EmailWorker} from '../src/email-outbox.ts';
+import {EmailDeliveryError,type EmailDeliveryContext} from '../src/email-delivery.ts';
 import {RelayWorker} from '../src/relay-worker.ts';
 import {admitMailAttempt,mailRecipientRefs,type SesHandoffConfig} from '../src/mail-attempts.ts';
 import {applySesFeedback} from '../src/ses-feedback-store.ts';
@@ -126,6 +127,7 @@ test('provider feedback blocks both venues and account mail while country provid
  const f=await relayFixture();try{
   await block(f);const a=await f.venue(),b=await f.venue(),s=await smtp(t),worker=new RelayWorker(f.pool,{...f.config,smtpPort:s.port,ses});
   for(const venue of [a,b]){const body=await venue.submit({recipient:'owner@example.test'});await worker.runOnce();assert.equal((await f.row(body.messageId)).state,'failed');assert.equal((await f.row(body.messageId)).attempts,0);}
+  assert.equal((await f.pool.query('SELECT count(*) FROM relay_reservations')).rows[0].count,'2');
   const id=await enqueue(f.pool);let sends=0;await accountWorker(f.pool,async()=>{sends++;}).runOnce();
   assert.equal((await f.pool.query('SELECT status FROM email_outbox WHERE id=$1',[id])).rows[0].status,'failed');assert.equal(sends,0);assert.equal(s.captured.length,0);
   for(const configValue of [config('eu-north-1','FR'),config('eu-north-1','ES','999999999999'),config('eu-west-3')]){
@@ -133,6 +135,31 @@ test('provider feedback blocks both venues and account mail while country provid
    const id=await enqueue(f.pool);await accountWorker(f.pool,async()=>{sends++;},{...ses,config:configValue}).runOnce();assert.equal((await f.pool.query('SELECT status FROM email_outbox WHERE id=$1',[id])).rows[0].status,'sent');
   }
   assert.equal(s.captured.length,3);assert.equal(sends,3);
+ }finally{await f.close();}
+});
+
+test('an unmapped local block still refuses scoped relay but is never guessed into an account mail scope',async t=>{
+ const f=await relayFixture();try{
+  await new RelayWorker(f.pool,f.config).suppress('owner@example.test');const v=await f.venue(),body=await v.submit({recipient:'owner@example.test'}),s=await smtp(t);
+  await new RelayWorker(f.pool,{...f.config,smtpPort:s.port,ses}).runOnce();assert.equal((await f.row(body.messageId)).state,'failed');assert.equal(s.captured.length,0);
+  const id=await enqueue(f.pool);let sends=0;await accountWorker(f.pool,async()=>{sends++;}).runOnce();
+  assert.equal(sends,1);assert.equal((await f.pool.query('SELECT status FROM email_outbox WHERE id=$1',[id])).rows[0].status,'sent');
+  assert.deepEqual((await f.pool.query('SELECT * FROM mail_legacy_suppression_scopes')).rows,[]);
+  assert.equal((await f.pool.query('SELECT count(*) FROM relay_suppressions')).rows[0].count,'1');
+ }finally{await f.close();}
+});
+
+test('account retries receive fresh admitted tags and retain the same transport delivery identity',async()=>{
+ const f=await fixture();try{
+  const id=await enqueue(f.pool),deliveries:string[]=[];
+  const send=async(_message:unknown,context?:EmailDeliveryContext)=>{deliveries.push(context!.deliveryId);if(deliveries.length===1)throw new EmailDeliveryError('delivery_deferred');};
+  const worker=new EmailWorker(f.pool,outbox,{sendVerification:send,sendPasswordReset:send,sendPasswordChanged:send,sendServiceAlert:send},{ses});
+  await worker.runOnce();assert.equal((await f.pool.query('SELECT status FROM email_outbox WHERE id=$1',[id])).rows[0].status,'pending');
+  await f.pool.query('UPDATE email_outbox SET available_at=clock_timestamp() WHERE id=$1',[id]);await worker.runOnce();
+  const attempts=(await f.pool.query('SELECT attempt_tag,attempt,claim_id,recipient_refs_sealed FROM mail_attempts WHERE queue_id=$1 ORDER BY attempt',[id])).rows;
+  assert.equal(attempts.length,2);assert.deepEqual(attempts.map(a=>a.attempt),[1,2]);assert.notEqual(attempts[0].attempt_tag,attempts[1].attempt_tag);assert.notEqual(attempts[0].claim_id,attempts[1].claim_id);
+  assert.deepEqual(attempts.map(a=>a.recipient_refs_sealed),[true,true]);assert.deepEqual(deliveries,[id,id]);
+  assert.deepEqual((await f.pool.query('SELECT status,payload FROM email_outbox WHERE id=$1',[id])).rows[0],{status:'sent',payload:null});
  }finally{await f.close();}
 });
 
