@@ -1,5 +1,9 @@
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
+import { createHash } from "node:crypto";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import test from "node:test";
 import { downloadStorageArchive } from "./fixtures/storage-archive-download.mjs";
 import { downloadConformanceArchive } from "./cloud-cost/conformance-archive.mjs";
@@ -105,5 +109,38 @@ for (const callerSignal of [false, true]) {
     }), error => callerSignal ? error.name === "TimeoutError" :
       error.name === "AbortError" && error.cause?.name === "TimeoutError");
     assert.equal(requests, 1, "the deadline interrupts the first retry pause");
+  });
+}
+
+for (const reason of [new Error("preparation cancelled"), null, "interrupted", undefined]) {
+  test(`pre-cancelled conformance retains its attempt record for ${String(reason)}`, async t => {
+    const controller = new AbortController(); controller.abort(reason);
+    const records = [];
+    t.mock.method(console, "error", line => records.push(JSON.parse(line.slice("conformance_archive=".length))));
+    let requests = 0;
+    t.mock.method(globalThis, "fetch", async () => { requests++; throw Error("cancelled acquisition cannot request an archive"); });
+    await assert.rejects(() => downloadConformanceArchive("https://example.invalid/archive", "0".repeat(64),
+      "unused-cancelled-archive", { signal: controller.signal, phase: "storage-archive" }),
+    error => Object.is(error, controller.signal.reason));
+    assert.deepEqual(records.map(record => record.event), ["start", "attempt", "failure"]);
+    for (const record of records) {
+      assert.equal(record.attempt, 1); assert.equal(record.bytesReceived, 0);
+      assert.equal(record.phase, "storage-archive"); assert.equal("status" in record, false);
+    }
+    assert.equal(requests, 0);
+  });
+}
+
+for (const signal of [undefined, null, false, "not a signal"]) {
+  test(`conformance refuses an absent or invalid cancellation signal ${JSON.stringify(signal)}`, async t => {
+    const root = mkdtempSync(join(tmpdir(), "cloud-conformance-signal-"));
+    t.after(() => rmSync(root, { recursive: true, force: true }));
+    const bytes = Buffer.from("verified archive bytes");
+    const digest = createHash("sha256").update(bytes).digest("hex");
+    let requests = 0;
+    t.mock.method(globalThis, "fetch", async () => { requests++; return new Response(bytes); });
+    await assert.rejects(() => downloadConformanceArchive("https://example.invalid/archive", digest,
+      join(root, "archive"), { signal, phase: "storage-archive" }), TypeError);
+    assert.equal(requests, 0, "the preparer must supply its cancellation signal before any archive request");
   });
 }

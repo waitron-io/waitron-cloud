@@ -34,8 +34,10 @@ export async function downloadConformanceArchive(url,digest,path,{signal,phase})
   report('start');
   const progress=setInterval(()=>report('progress'),10000);
   try {
+    const callerSignal=AbortSignal.any([signal]);
+    if(callerSignal.aborted){report('attempt');callerSignal.throwIfAborted();}
     const bytes=await downloadStorageArchive(url,{
-      signal,attempts:3,timeoutMs:120000,inactivityMs:30000,
+      signal:callerSignal,attempts:3,timeoutMs:120000,inactivityMs:30000,
       inactivityReason:new DOMException('Fixture archive download stalled','ArchiveInactivityError'),
       // A reset while discarding a refusal body retains the conformance retry policy.
       retryStatusErrors:true,

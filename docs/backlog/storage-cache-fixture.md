@@ -328,7 +328,7 @@ stop there.
 | --- | --- |
 | `scripts/fixtures/storage-tar-seed.mjs` | Shared test acquisition: at most three temporary attempts within 30 seconds, ten-second inactivity, exact digest, read-only cache. |
 | `scripts/ci-backup-storage-{concurrent-extraction,concurrent-publication,extraction,issuer-bind,process-extraction,publication,readiness-diagnostics,reservation-refusals,tls-refusals,tar-refusals}.test.mjs` | Each setup uses that helper and removes its own returned seed directory. Existing setup and test deadlines remain. |
-| `scripts/fixtures/storage-archive-download.mjs` | Shared header/body supervision and caller-selected attempt policy. Native startup uses one attempt and a 30-second total deadline; seeds retain their existing retry/inactivity policy. |
+| `scripts/fixtures/storage-archive-download.mjs` | Shared header/body supervision and caller-selected attempt policy. Native startup uses one attempt and a 30-second total deadline; seeds retain three attempts, 30 seconds total and ten-second inactivity; conformance retains three attempts, 120 seconds total and 30-second inactivity. |
 | `scripts/backup-storage-fixture.mjs` | Shared supervision on a cache miss. Original header/status/body diagnostics and causes, digest validation, atomic cache publication and extraction stay with the native fixture. |
 | `scripts/cloud-cost/conformance-prepare.mjs` | Calls `downloadConformanceArchive` through the shared helper, retaining up to three attempts, a shared 120 seconds and 30-second inactivity. Verified bytes are written into its private image context. |
 | `deploy/local-stack/Dockerfile` | Still separate: version 4.47 and supplied architecture digest; `curl` has no own retry or deadline. Outer build limits are separate. |
@@ -338,6 +338,10 @@ cancellation and caller-specific refusal policies. The existing
 `conformance-archive*.test.mjs` checks retain real HTTP retries, inactivity,
 cancellation, digest refusal and redacted response identity coverage. These
 controlled checks do not explain the historical upstream HTTP 504 replies.
+The helper can interrupt its fetch and retry pause; a custom validation or body
+hook that ignores cancellation must settle before the helper can reject it.
+The three current callers use abort-aware response operations. Arbitrary hook
+preemption is unqualified.
 
 D585 remains open for the image build, which must work without a host Node
 helper. Native header/body controls and unchanged refusal checks retain its
