@@ -1,3 +1,4 @@
+import { downloadStorageArchive } from "./fixtures/storage-archive-download.mjs";
 import { createServer as httpsServer, Agent } from "node:https";
 import { createServer as netServer } from "node:net";
 import { createRequire } from "node:module";
@@ -53,17 +54,18 @@ async function binary(root) {
   } catch (error) {
     if (error.code !== "ENOENT") throw error;
     const url = "https://github.com/seaweedfs/seaweedfs/releases/download/4.47/" + pin[0];
-    let phase = "headers", response;
+    let phase = "headers", httpStatus = null;
     try {
-      response = await fetch(url);
-      phase = "status";
-      if (!response.ok) throw Error("SeaweedFS download failed");
-      phase = "body";
-      bytes = Buffer.from(await response.arrayBuffer());
+      bytes = await downloadStorageArchive(url, {
+        attempts: 1, inactivityMs: null,
+        report(event) { phase = event.phase; httpStatus = event.status; },
+        validate(response) { if (!response.ok) throw Error("SeaweedFS download failed"); },
+        consume: async response => Buffer.from(await response.arrayBuffer()),
+      });
     } catch (cause) {
       const failure = new Error(`SeaweedFS download failed (${phase})`, { cause });
       // Redirect URLs may carry signed credentials; identify only the public request.
-      failure.storageDownload = { phase, url, httpStatus: response?.status ?? null };
+      failure.storageDownload = { phase, url, httpStatus };
       throw failure;
     }
     downloaded = true;
