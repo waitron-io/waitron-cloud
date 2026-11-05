@@ -111,7 +111,7 @@ for (const {exhausted, occupied, http = false} of [
       }
       // Probe an unsafe interval at its upper edge so a widened range cannot
       // escape the ownership check merely because its random draw was lucky.
-      if (min < 32768 && max - 1 + ${exhausted ? 100 : 10100} >= 32768) return max - 1;
+      if (min < 32768 && max - 1 + ${exhausted ? 200 : 10100} >= 32768) return max - 1;
       return choose(min, max, ...rest);
     };
     net.createServer = (...args) => {
@@ -196,7 +196,7 @@ for (const {exhausted, occupied, http = false} of [
   assert.ok(adminCandidates.length >= (exhausted ? 101 : 1), 'observe the real admin listener attempts');
   for (const candidate of adminCandidates) assert.ok(candidate + (exhausted ? 100 : 10100) < 32768,
     'admin listeners and their derived fallback ports must remain below the service range' +
-    ` (port=${candidate}, firstPort=${adminCandidates[0]})`);
+    ` (port=${candidate}, firstAttempted=${adminCandidates[0]})`);
   assert.ok(controlChildren.every(child => child.exited), 'the original admin case collects its native child');
   for (const path of controlRoots) await assert.rejects(access(path), {code:'ENOENT'});
   if (occupied) {

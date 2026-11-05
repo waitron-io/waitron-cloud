@@ -515,7 +515,7 @@ listeners, admin-worker functionality and other programs' bind races remain unqu
 D584 narrows the exhaustion starting range so the 101 owners and the parent’s
 additional 100-port check stay below 32768. The original upper edge fails a
 controlled reproduction; the historical CI draw is unknown. Future failures print
-the actual candidate and first port, with every predicate retained.
+the actual candidate and first attempted port, with every predicate retained.
 See [the controls and unresolved failures](backlog/storage-cache-fixture.md#native-storage-admin-fallback-exhaustion-d506).
 
 ## Repository licence
