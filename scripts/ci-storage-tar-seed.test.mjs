@@ -124,3 +124,43 @@ test("permanent HTTP refusal still stops if cancelling its body reports a reset"
   assert.equal(result.events.at(-1)?.attempt, 1);
   assert.equal(result.events.filter(event => event.event === "retry").length, 0);
 });
+
+for (const phase of ["headers", "body"]) {
+  test(`an unclassified seed ${phase} refusal stops without retrying`, { timeout: 10000 }, async t => {
+    const result = await runSeedCase(t, `globalThis.fetch = async () => {
+      calls++;
+      const error = new Error("unclassified seed refusal");
+      ${phase === "headers" ? 'throw error;' : 'return new Response(new ReadableStream({start(controller) {controller.error(error);}}));'}
+    };`);
+    assert.equal(result.code, 1, result.output);
+    assert.match(result.output, /seed_fetch_calls=1/);
+    assert.match(result.output, /unclassified seed refusal/);
+    assert.equal(result.events.at(-1)?.phase, phase);
+    assert.equal(result.events.at(-1)?.event, "failure");
+  });
+}
+
+test("body progress renews inactivity without restarting the seed download", { timeout: 45000 }, async t => {
+  const result = await runSeedCase(t, `
+const bytes = await readFile(${JSON.stringify(fixture.seed)});
+let bodyStarted = false;
+globalThis.setTimeout = (fn, ms, ...args) => nativeSetTimeout(fn, ms === 10000 && bodyStarted ? 100 : ms, ...args);
+globalThis.fetch = async (url, options) => {
+  calls++; bodyStarted = true;
+  return new Response(new ReadableStream({async start(controller) {
+    let stopped = false;
+    options.signal.addEventListener("abort", () => {stopped = true; controller.error(options.signal.reason);}, {once: true});
+    for (let offset = 0; offset < bytes.length; offset += Math.ceil(bytes.length / 8)) {
+      await new Promise(resolve => nativeSetTimeout(resolve, 25));
+      if (stopped) return;
+      controller.enqueue(bytes.subarray(offset, offset + Math.ceil(bytes.length / 8)));
+    }
+    controller.close();
+  }}));
+};`);
+  assert.equal(result.code, 0, result.output);
+  assert.match(result.output, /# pass 3\b/);
+  assert.match(result.output, /seed_fetch_calls=1/);
+  assert.equal(result.events.at(-1)?.event, "complete");
+  assert.ok(result.events.at(-1)?.elapsedMs >= 200);
+});
