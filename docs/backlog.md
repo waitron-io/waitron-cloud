@@ -3623,9 +3623,9 @@ recurrence before changing delivery or inbox capture, preserving the original
 assertions, single lookup and deadlines. Read the [reporting boundaries and
 redaction limits](backlog/mail-capture.md#portal-reset-mail-boundary-reporting).
 All monitoring and signup/recovery mail lookups now include their fixture's queue,
-worker and SMTP evidence, alongside the authenticator lookup. Controlled misses
-verify every call; the natural missing-mail cause and Linux load qualification
-remain open.
+worker and SMTP evidence, alongside the authenticator lookup. A one-off controlled
+check at `e31dea70` verified every call. The natural missing-mail cause, Linux load
+qualification and the observer's unbounded database-connection wait remain open.
 
 ## Account HTTP reset-mail capture
 
