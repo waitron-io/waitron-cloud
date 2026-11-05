@@ -1,7 +1,7 @@
 import type {Pool} from 'pg';
 
 // Only the explicit authority clock is controlled; PostgreSQL still executes every query and lock.
-// A short deadline must begin expiring after the waiter is observed, regardless of runner pauses.
+// Freeze the authority clock through setup pauses; keep the real lock-observation limits.
 export function databaseClock(pool:Pool,time:()=>number):Pool {
  return new Proxy(pool,{get(target,name){
   if(name==='connect')return async()=>{

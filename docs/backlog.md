@@ -2942,6 +2942,13 @@ Production clocks and authority checks are unchanged. This reproduces the fixtur
 weakness; the original CI runners' pause durations were not captured. Current-head
 CI qualification remains required before landing.
 
+The existing lock-observation limits still apply. A separate failure-cleanup
+weakness is open: if installation lock observation times out, the test can skip
+waiting for its outstanding request before the next schema reset. A controlled
+stall reproduced the resulting reset deadlock on both the original and repaired
+tests. Drain the outstanding request on that failure path in a follow-up, retaining
+the lock limits and all authority assertions.
+
 ## Storage test socket attribution and live progress (D575)
 
 Unexpected reservation-control binds now report the failed phase, port and
