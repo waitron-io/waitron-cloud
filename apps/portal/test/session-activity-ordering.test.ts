@@ -16,6 +16,7 @@ const lateReplies: Array<[string, Reply]> = [
 
 function fixture(t: TestContext) {
   t.mock.timers.enable({apis: ['Date', 'setTimeout'], now});
+  const clockStart = Date.now(); t.mock.method(performance, 'now', () => Date.now() - clockStart);
   const document = Object.assign(new EventTarget(), {
     visibilityState: 'visible', cookie: '__Host-cloud_csrf=activity-proof',
   });
@@ -132,7 +133,7 @@ for (const [label, logoutReply, success] of [
         const expected = success ? {kind: 'anonymous'} : {kind: 'authenticated', ...owner};
         assert.deepEqual(f.session.state, expected);
         const changes = structuredClone(f.changes), retryAt = f.session.retryAt;
-        assert.equal(retryAt, label === 'refused' ? now + 30_000 : success ? 0 : now);
+        assert.equal(retryAt, label === 'refused' ? now + 30_000 : 0);
         if (when === 'after') {f.requests[2]!.finish(oldReply); await renewal;}
         assert.deepEqual(f.session.state, expected);
         assert.equal(f.session.retryAt, retryAt);

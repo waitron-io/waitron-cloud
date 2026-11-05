@@ -31,7 +31,9 @@ for(const action of actions)test(`${action} keeps general feedback for server in
  const {c,calls}=fixture();await c[action]();assert.equal(calls.length,1);assert.equal(c.error,action==='completeLogin'?'factorUnavailable':'factorCheckSettings');assert.equal(c.requiredField,undefined);
 });
 for(const action of actions)for(const gate of ['pending','cooldown'] as const)test(`${action}: malformed input cannot replace feedback during ${gate}`,async()=>{
- const {c,calls}=fixture();c.error='limited';c.requiredField='password';c.pending=gate==='pending';c.retryAt=gate==='cooldown'?Date.now()+60000:0;c.proofCode='12345';
+ const {c,calls}=fixture({ok:false,status:429,code:'rate_limited',retryAfterMs:60000});
+ if(gate==='cooldown'){await c.load();calls.length=0;}
+ c.error='limited';c.requiredField='password';c.pending=gate==='pending';c.proofCode='12345';
  await c[action]();assert.deepEqual(calls,[]);assert.equal(c.error,'limited');assert.equal(c.requiredField,'password');assert.equal(c.proofCode,'12345');
 });
 for(const action of actions)test(`${action}: well-formed wrong codes and outages retain existing feedback`,async()=>{

@@ -58,6 +58,7 @@ for (const flow of flows) {
 
   for (const mode of ['broken JSON', 'empty acknowledgement', 'network loss', 'refused success body', 'known refusal', 'unknown refusal']) {
     test(`${flow.path} keeps ${mode} unsuccessful without an automatic retry`, async t => {
+      t.mock.method(performance, 'now', () => 0);
       let calls = 0;
       t.mock.method(globalThis, 'fetch', async () => {
         calls++;

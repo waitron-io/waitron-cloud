@@ -53,6 +53,7 @@ function held(t: TestContext, phase: Phase, outcome: Outcome, boundary: Boundary
 
 function fixture(t: TestContext) {
   t.mock.timers.enable({apis: ['Date'], now});
+  const clockStart = Date.now(); t.mock.method(performance, 'now', () => Date.now() - clockStart);
   for (const [key, value] of [['location', {protocol: 'https:'}],
     ['document', {cookie: '__Host-cloud_csrf=lifecycle-proof'}]] as const) {
     const before = Object.getOwnPropertyDescriptor(globalThis, key);

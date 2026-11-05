@@ -65,8 +65,8 @@ test('checking passkeys clears the old password and reads the current list witho
   await c.enroll(c.password); await c.remove(id, c.password); assert.equal(calls.length, 1, 'another change needs a fresh password');
 });
 for (const gate of ['anonymous', 'pending', 'cooldown'] as const) test(`checking passkeys respects ${gate}`, async () => {
-  const {c, calls} = fixture('verify');
-  if (gate === 'anonymous') c.account(undefined); else if (gate === 'pending') c.pending = true; else c.retryAt = Date.now() + 60000;
+  const {c, calls} = fixture('options', {ok:false,status:429,code:'rate_limited',retryAfterMs:60000});
+  if (gate === 'anonymous') c.account(undefined); else if (gate === 'pending') c.pending = true; else {await c.enroll(c.password); calls.length = 0;}
   const before = c.password;
   assert.equal(typeof c.refresh, 'function', 'offer an explicit read-only passkey check');
   await c.refresh(); assert.deepEqual(calls, []); assert.equal(c.password, before);

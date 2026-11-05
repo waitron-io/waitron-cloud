@@ -171,9 +171,9 @@ for(const active of [false,true])test(`activation: blank new code gives feedback
 for(const action of ['completeLogin','begin','activate','remove','regenerate'] as const)for(const gate of ['pending','cooldown'] as const){
   test(`${action}: blank input cannot replace an error during ${gate}`,async()=>{
     let redraws=0,requests=0;
-    const c=new module!.AuthenticatorController(()=>{redraws++;},async()=>{requests++;return lost;});
-    c.account('owner');c.status=status;c.challenge={factorRequired:true,challengeToken:token,expiresAt};c.enrolment=enrolment;c.error='limited';
-    c.pending=gate==='pending';c.retryAt=gate==='cooldown'?Date.now()+60_000:0;
+    const c=new module!.AuthenticatorController(()=>{redraws++;},async()=>{requests++;return {ok:false,status:429,code:'rate_limited',retryAfterMs:60_000};});
+    c.account('owner');if(gate==='cooldown'){await c.load();redraws=0;requests=0;}c.status=status;c.challenge={factorRequired:true,challengeToken:token,expiresAt};c.enrolment=enrolment;c.error='limited';
+    c.pending=gate==='pending';
     await c[action]();assert.equal(c.error,'limited');assert.equal(redraws,0);assert.equal(requests,0);assert.equal(c.pending,gate==='pending');
   });
 }
@@ -219,14 +219,15 @@ for(const context of [
   });
 }
 
-for(const reset of ['fence','account','load'] as const)test(`required field moves between missing inputs and clears on ${reset}`,async()=>{
-  const c=controller([ok(status)]);c.account('owner');c.status=status;c.enrolment=enrolment;
+for(const reset of ['fence','account','load'] as const)test(`required field moves between missing inputs and clears on ${reset}`,async t=>{
+  let elapsed=0;t.mock.method(performance,'now',()=>elapsed);
+  const c=controller([{ok:false,status:429,code:'rate_limited',retryAfterMs:60_000},ok(status)]);c.account('owner');c.status=status;c.enrolment=enrolment;
   await c.activate();assert.equal(c.requiredField,'password');assert.equal(c.error,'requiredPassword');
   c.password='current';await c.activate();assert.equal(c.requiredField,'proof');
   c.proofCode='123456';await c.activate();assert.equal(c.requiredField,'confirmation');
   c.pending=true;c.password='';await c.activate();assert.equal(c.requiredField,'confirmation');
-  c.pending=false;c.retryAt=Date.now()+60_000;await c.activate();assert.equal(c.requiredField,'confirmation');
-  c.retryAt=0;
+  c.pending=false;await c.load();c.requiredField='confirmation';await c.activate();assert.equal(c.requiredField,'confirmation');
+  elapsed=60_000;
   if(reset==='fence')c.fence();else if(reset==='account')c.account('other');else await c.load();
   assert.equal(c.requiredField,undefined);assert.equal(c.error,undefined);
 });

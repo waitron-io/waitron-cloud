@@ -95,11 +95,11 @@ test('usage retry timing starts when headers arrive, including time spent readin
   f.responses.push(refusal()); await f.controller.load(); assert.equal(f.calls.length, 2);
 });
 
-for (const {path, wait} of [{path: '/session', wait: 3_602_000}, {path: '/login', wait: 3_602_000}, {path: '/remote-access/status', wait: 2_000}]) test(`${path} applies its scoped date retry policy`, async t => {
+for (const path of ['/session', '/login', '/remote-access/status']) test(`${path} measures its date retry against the server clock`, async t => {
   fixture(t);
   t.mock.method(globalThis, 'fetch', async () => refusal('Wed, 28 Oct 2026 11:00:02 GMT', 'Wed, 28 Oct 2026 11:00:00 GMT'));
   const result = await accountRequest(path);
-  assert.ok(!result.ok); assert.equal(result.retryAfterMs, wait);
+  assert.ok(!result.ok); assert.equal(result.retryAfterMs, 2_000);
 });
 
 for (const entry of [

@@ -9,7 +9,9 @@ export class AccountSecurityController {
   loaded = false;
   loadAttempted = false;
   pending = false;
-  retryAt = 0;
+  // Server delays measure elapsed time, including across account and wall-clock changes.
+  #retryUntil = 0;
+  get retryAt() { const remaining = this.#retryUntil - performance.now(); return remaining > 0 ? Date.now() + remaining : 0; }
   error: keyof Copy | undefined;
   notice: keyof Copy | undefined;
   #account: string | undefined;
@@ -24,7 +26,7 @@ export class AccountSecurityController {
     this.#request = request;
   }
 
-  get waiting() { return Math.max(0, Math.ceil((this.retryAt - Date.now()) / 1000)); }
+  get waiting() { return Math.max(0, Math.ceil((this.#retryUntil - performance.now()) / 1000)); }
 
   fence() { this.#generation++; this.pending = false; this.loaded = false; this.loadAttempted = false; this.error = undefined; this.notice = undefined; }
 
@@ -39,7 +41,7 @@ export class AccountSecurityController {
   async #list(generation: number): Promise<ApiResult<{sessions: AccountSessionSummary[]}>> {
     const result = await this.#request<{sessions: AccountSessionSummary[]}>('/sessions');
     if (generation === this.#generation) {
-      if (!result.ok) this.retryAt = Math.max(this.retryAt, Date.now() + result.retryAfterMs);
+      if (!result.ok) this.#retryUntil = Math.max(this.#retryUntil, performance.now() + result.retryAfterMs);
       this.loaded = result.ok;
       this.sessions = result.ok ? result.value.sessions : [];
     }
@@ -68,7 +70,7 @@ export class AccountSecurityController {
     this.pending = true; this.error = undefined; this.notice = undefined; this.#changed();
     const result = await this.#request<void>('/sessions/revoke', {id});
     if (generation !== this.#generation) return;
-    if (!result.ok) this.retryAt = Math.max(this.retryAt, Date.now() + result.retryAfterMs);
+    if (!result.ok) this.#retryUntil = Math.max(this.#retryUntil, performance.now() + result.retryAfterMs);
     if (!result.ok && result.status === 401) {
       this.pending = false; this.#sessionEnded(); this.#changed(); return;
     }

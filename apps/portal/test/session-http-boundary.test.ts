@@ -10,6 +10,7 @@ const activity = {isTrusted: true, type: 'keydown'} as Event;
 
 function fixture(t: TestContext) {
   t.mock.timers.enable({apis: ['Date', 'setTimeout'], now});
+  const clockStart = Date.now(); t.mock.method(performance, 'now', () => Date.now() - clockStart);
   const document = Object.assign(new EventTarget(), {
     visibilityState: 'visible', cookie: '__Host-cloud_csrf=session-proof',
   });
@@ -67,7 +68,7 @@ for (const [label, reply] of malformed) for (const boundary of ['passive', 'acti
     if (boundary === 'activity') await session.activity(activity);
     else await session.check();
     assert.deepEqual(session.state, {kind: 'unavailable'});
-    assert.equal(session.retryAt, now);
+    assert.equal(session.retryAt, 0);
     assert.deepEqual(changes.at(-1), {kind: 'unavailable'});
     assert.equal(requests.at(-1)!.url, '/api/account/session' + (boundary === 'activity' ? '/activity' : ''));
     replies.push({body: owner});
@@ -139,7 +140,7 @@ for (const [label, reply] of [
     assert.equal(await session.logout(), false);
     assert.deepEqual(session.state, {kind: 'authenticated', ...owner});
     assert.equal(changes.some(state => state.kind === 'anonymous'), false);
-    assert.equal(session.retryAt, label === 'server refusal with retry' ? now + 30_000 : now);
+    assert.equal(session.retryAt, label === 'server refusal with retry' ? now + 30_000 : 0);
     assert.deepEqual(requests.map(request => request.url), [
       '/api/account/session', '/api/account/session', '/api/account/logout',
     ], 'an uncertain write must not be replayed');

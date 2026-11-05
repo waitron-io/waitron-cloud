@@ -36,6 +36,7 @@ for (const boundary of ['revoke', 'reconciliation'] as const) {
       for (const outcome of ['success', 'lost', 'unauthorized', 'forbidden', 'limited', 'unavailable'] as const) {
         test(`old session ${boundary} ${outcome} cannot affect ${account} account with ${newer} list`, {timeout: 5_000}, async t => {
           t.mock.timers.enable({apis: ['Date'], now: Date.parse('2026-10-28T00:00:00Z')});
+  const clockStart = Date.now(); t.mock.method(performance, 'now', () => Date.now() - clockStart);
           const oldReply = deferred<ApiResult<unknown>>();
           const newReply = deferred<ApiResult<unknown>>();
           const oldRequest = deferred<void>();

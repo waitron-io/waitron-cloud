@@ -179,6 +179,7 @@ for (const action of actions) {
     const {controller: c, replies, calls} = harness(t);
     let now = 1_800_000_000_000;
     t.mock.method(Date, 'now', () => now);
+    t.mock.method(performance, 'now', () => now - 1_800_000_000_000);
     await c.load();
     if (action === 'activate') {authority(c); await c.begin();}
     authority(c);

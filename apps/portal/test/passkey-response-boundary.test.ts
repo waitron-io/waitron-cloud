@@ -291,6 +291,7 @@ for (const [status, code, error] of [
 test('passkey HTTP rate limits block another browser prompt until the advertised wait ends', async t => {
   let now = Date.parse('2026-10-28T09:00:00.000Z');
   t.mock.method(Date, 'now', () => now);
+    t.mock.method(performance, 'now', () => now - Date.parse('2026-10-28T09:00:00.000Z'));
   const events: string[] = [], paths: unknown[] = [];
   t.mock.method(globalThis, 'fetch', async (url: unknown, init?: RequestInit) => {
     paths.push(url);

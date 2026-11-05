@@ -37,7 +37,7 @@ test('refresh failure removes stale controls and leaves status retry available',
  await c.load();assert.deepEqual(c.status,active);assert.equal(c.loaded,true);assert.equal(calls.length,2);
 });
 for(const gate of ['pending','cooldown','anonymous'] as const)test(`refresh respects ${gate} without dropping local setup`,async()=>{
- const {c,calls}=fixture([]);if(gate==='anonymous')c.account(undefined);else if(gate==='pending')c.pending=true;else c.retryAt=Date.now()+60000;
+ const {c,calls}=fixture([{ok:false,status:429,code:'rate_limited',retryAfterMs:60000}]);if(gate==='anonymous')c.account(undefined);else if(gate==='pending')c.pending=true;else {await c.load();calls.length=0;}
  const before={status:c.status,enrolment:c.enrolment,password:c.password};await c.refresh();assert.deepEqual(calls,[]);
  assert.deepEqual({status:c.status,enrolment:c.enrolment,password:c.password},before);
 });

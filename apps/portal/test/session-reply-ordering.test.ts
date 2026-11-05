@@ -18,6 +18,7 @@ const oldReplies: Array<[string, Reply]> = [
 
 function fixture(t: TestContext) {
   t.mock.timers.enable({apis: ['Date', 'setTimeout'], now});
+  const clockStart = Date.now(); t.mock.method(performance, 'now', () => Date.now() - clockStart);
   const document = Object.assign(new EventTarget(), {visibilityState: 'visible'});
   const previous = Object.getOwnPropertyDescriptor(globalThis, 'document');
   Object.defineProperty(globalThis, 'document', {configurable: true, value: document});

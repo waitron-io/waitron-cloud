@@ -503,7 +503,7 @@ See [the remaining checks](backlog/diagnostic-download-http.md#diagnostic-downlo
 
 ## Usage-read transport refusals and retry waits (D434, D436)
 
-**Open.** Installation, diagnostic, remote, recovery and translation-consent retry waits now survive clock corrections. Passkey, authenticator, account-security, session/logout and email waits still need the same change; server authority and production metering remain unqualified.
+**Open.** Account retry waits and email cooldowns now measure elapsed time through clock corrections, including passkey, authenticator, session management and sign-out (D562). Native and browser controls cover their request gates and countdowns; server authority and production metering remain unqualified.
 See [the boundaries and remaining work](backlog/usage-metering.md#usage-read-transport-refusals-and-retry-waits-d434-d436).
 
 ## Native storage admin fallback exhaustion (D506)
