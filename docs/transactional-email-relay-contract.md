@@ -346,7 +346,8 @@ Run the focused proof from the repository root:
 
 ```sh
 node scripts/test-postgres.mjs exec pnpm --dir packages/registration exec node --test \
-  test/relay-grants.test.ts test/account-mail.test.ts test/email-outbox.test.ts \
+  test/relay-grants.test.ts test/billing-allowance-relay.test.ts \
+  test/account-mail.test.ts test/email-outbox.test.ts \
   test/schema-compatibility.test.ts test/registration.test.ts \
   ../account-http/test/relay-disabled.test.ts
 ```

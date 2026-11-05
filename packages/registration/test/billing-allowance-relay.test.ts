@@ -207,9 +207,11 @@ test('monthly relay uses the legacy policy period after its new bucket wait',asy
   pending=transaction(f.pool,c=>grants.reserve(c,{installationId:v.installation,publicKey},{grantId:v.grant.id,grantRevision:1,messageId:randomUUID(),binding:'fixed-binding'}));void pending.then(()=>{done=true;},()=>{done=true;});
   let waiting=false;const until=performance.now()+5000;
   while(!done&&performance.now()<until){waiting=!!(await f.pool.query('SELECT 1 FROM pg_stat_activity WHERE $1=ANY(pg_blocking_pids(pid))',[pid])).rowCount;if(waiting)break;await setImmediate();}
-  assert.equal(waiting,true);await new Promise(resolve=>setTimeout(resolve,1100));await holder.query('COMMIT');await pending;
+  assert.equal(waiting,true);await new Promise(resolve=>setTimeout(resolve,1100));
+  const released=(await f.pool.query('SELECT clock_timestamp() AS now')).rows[0].now;
+  await holder.query('COMMIT');await pending;
   const saved=(await f.pool.query('SELECT period_start,period_end,created_at FROM relay_reservations')).rows[0];
-  assert.ok(saved.period_start<=saved.created_at&&saved.created_at<saved.period_end,'legacy debit must use the period containing actual admission');assert.equal(await f.total(),1n);
+  assert.ok(saved.period_start<=saved.created_at&&saved.created_at<saved.period_end,'legacy debit must use the period containing actual admission');assert.ok(saved.period_end>released,'legacy period must be chosen after the monthly bucket wait');assert.equal(await f.total(),1n);
  }finally{await holder.query('ROLLBACK');await pending?.catch(()=>{});holder.release();}
 });
 
