@@ -3783,7 +3783,7 @@ assertion requires no deliveries to any destination. The test also sends a
 competing reminder to the shared Mailpit inbox while a command runs; that
 reproduces the old comparison failure and passes with the private capture.
 Database snapshots, acknowledgements, state, authority and deadline assertions
-remain intact. Run `node scripts/test-postgres.mjs exec pnpm --dir
+remain intact. Run `NODE_AUTH_TOKEN=local-fixture node scripts/test-postgres.mjs exec pnpm --dir
 packages/registration exec node --test test/relay-control-cli.test.ts` to check
 the command contract. Production delivery code and shared mail fixtures are
 unchanged; this repair does not settle other D530 failures.
