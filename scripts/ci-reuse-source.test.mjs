@@ -882,3 +882,96 @@ test('full readback preserves an invalid range and still requires every native c
   currentJobs = currentJobs.filter(job => job.name !== 'verify (guards-3)');
   assert.throws(() => readbackDecision(decision, {api: f.api, git, now: f.now}), /Incomplete main job inventory/);
 });
+
+
+test('source qualification and reused main readback require every page of a legitimate 39-job source', () => {
+  const directory = mkdtempSync(join(tmpdir(), 'cloud-reuse-paginated-'));
+  try {
+    execFileSync('git', ['clone', '--shared', '--quiet', root, directory], {stdio: 'pipe'});
+    const variantGit = (...args) => execFileSync('git', ['-c', 'maintenance.auto=false', ...args],
+      {cwd: directory, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe']});
+    variantGit.readBlobs = ids => readGitBlobs(ids, input => execFileSync('git', ['cat-file', '--batch'], {cwd: directory, input}));
+    variantGit('config', 'user.name', 'CI pagination test'); variantGit('config', 'user.email', 'ci@example.test');
+    variantGit('checkout', '--detach', base);
+    const allocations = [['account-http', 3], ['backups', 7], ['portal', 6], ['registration', 6],
+      ['remote-access', 4], ['translation', 1], ['ui-smoke', 1]];
+    const rows = allocations.flatMap(([name, count]) => Array.from({length: count}, (_, i) =>
+      count === 1 ? {package: `@waitron-cloud/${name}`, shard: 1}
+        : {package: `@waitron-cloud/${name}`, shard: i + 1, shards: count}));
+    rows.push({package: '@waitron-cloud/identity + @waitron-cloud/operations',
+      members: ['@waitron-cloud/identity', '@waitron-cloud/operations'], shard: 1});
+    for (const [name, count] of [...allocations, ['identity', 1]]) {
+      const path = join(directory, 'packages', name);
+      mkdirSync(join(path, 'test'), {recursive: true});
+      writeFileSync(join(path, 'package.json'), JSON.stringify({name: `@waitron-cloud/${name}`, scripts: {test: 'node --test test/*.test.ts'}}));
+      for (let n = 1; n <= count; n++) writeFileSync(join(path, `test/case-${n}.test.ts`),
+        "import test from 'node:test'; test('available', () => {});\n");
+    }
+    variantGit('add', '.'); variantGit('commit', '-qsm', 'Independent package inventory');
+    const originalBase = variantGit('rev-parse', 'HEAD').trim();
+    writeFileSync(join(directory, 'pagination-input'), 'Unknown input requires every package\n');
+    variantGit('add', '.'); variantGit('commit', '-qsm', 'Full source work');
+    const originalHead = variantGit('rev-parse', 'HEAD').trim(), originalTree = variantGit('rev-parse', 'HEAD^{tree}').trim();
+    const originalExecution = variantGit('commit-tree', originalTree, '-p', originalBase, '-p', originalHead, '-m', 'PR execution').trim();
+    const squash = variantGit('commit-tree', originalTree, '-p', originalBase, '-m', 'Squash').trim();
+    variantGit('checkout', '--detach', squash);
+    const selection = selectPlan({base: originalBase, head: originalHead}, loadWorkspaceAtRevision(originalHead, variantGit), variantGit);
+    assert.deepEqual(selection.packages, rows);
+    const record = structuredClone(source);
+    Object.assign(record.event, {mergeBase: originalBase, sha: originalExecution});
+    record.event.base.sha = originalBase; record.event.head.sha = originalHead;
+    Object.assign(record.checkout, {sha: originalHead, tree: originalTree});
+    Object.assign(record.workflow, {sha: originalExecution, executionSha: originalExecution});
+    record.selection = selection;
+    const content = archive(createPlanEvidence(record));
+    const metadata = {...artifact, size_in_bytes: content.length, digest: 'sha256:' + createHash('sha256').update(content).digest('hex'),
+      workflow_run: {...artifact.workflow_run, head_sha: originalHead}};
+    const required = ['changes', 'summary', 'typecheck', 'root (1/4)', 'root (2/4)', 'root (3/4)', 'root (4/4)',
+      'receipts', ...rows.map(row => `package (${row.package}${row.shards ? `, shard ${row.shard}/${row.shards}` : ''})`)];
+    const sourceJobs = [...required, 'scripts', 'documentation'].map((name, i) => ({id: i + 1, name, run_id: 42,
+      run_attempt: 2, head_sha: originalHead, status: 'completed', conclusion: required.includes(name) ? 'success' : 'skipped'}));
+    assert.equal(sourceJobs.length, 39);
+    const f = fixture({root: directory, base: originalBase, head: originalHead, merge: squash, execution: originalExecution,
+      tree: originalTree, jobs: sourceJobs, bytes: content, artifact: metadata});
+    const pagesRead = [];
+    f.api.listAttemptJobs = (_id, _attempt, number) => {
+      pagesRead.push(number);
+      return {items: f.data.jobs.slice((number - 1) * 30, number * 30), total_count: 39,
+        nextPage: number === 1 ? 2 : null, terminal: number !== 1};
+    };
+    const qualify = () => findReuse(f.context, {api: f.api, git: variantGit, now: f.now}, workflow);
+    const accepted = qualify();
+    assert.equal(accepted.reuse?.runId, 42, accepted.reason);
+    assert.deepEqual(pagesRead, [1, 2]);
+    const context = {...f.context, workflowPath: workflow, workflowRef: `${repository}/${workflow}@refs/heads/main`,
+      workflowSha: squash, full: false, called: false};
+    const decision = createDecisionEvidence(context, {packages: [], receipts: [], typecheck: false, reuse: accepted.reuse}, variantGit, 'reused');
+    const decisionBytes = archive(decision);
+    const hosted = {id: 62, name: 'ci-decision-v1-ci-90-1', expired: false, size_in_bytes: decisionBytes.length,
+      digest: 'sha256:' + createHash('sha256').update(decisionBytes).digest('hex'),
+      workflow_run: {id: 90, head_sha: squash, repository_id: 123, head_repository_id: 123}};
+    const skipped = ['scripts', 'documentation', 'typecheck', 'root (${{ matrix.shard }}/4)',
+      "package (${{ matrix.package }}${{ ((matrix.shards && format(', shard {0}/{1}', matrix.shard, matrix.shards)) || '') }})", 'receipts'];
+    const mainJobs = ['changes', 'summary', ...skipped].map((name, i) => ({id: i + 100, name, run_id: 90, run_attempt: 1,
+      head_sha: squash, status: 'completed', conclusion: skipped.includes(name) ? 'skipped' : 'success'}));
+    const readRun = f.api.readRun, listArtifacts = f.api.listArtifacts, readArtifact = f.api.readPlanArtifact, listJobs = f.api.listAttemptJobs;
+    f.api.remaining = () => 30_000;
+    f.api.readRun = id => id === 90 ? {...readRun(id), status: 'completed', conclusion: 'success'} : readRun(id);
+    f.api.listArtifacts = id => id === 90 ? page([hosted]) : listArtifacts(id);
+    f.api.readPlanArtifact = id => id === 62 ? decisionBytes : readArtifact(id);
+    f.api.listAttemptJobs = (id, ...args) => id === 90 ? page(mainJobs) : listJobs(id, ...args);
+    const readback = () => readbackDecision(decision, {api: f.api, git: variantGit, now: f.now});
+    const observed = readback();
+    assert.equal(observed.mode, 'reused');
+    assert.equal(observed.inherited.succeeded.length, 37);
+    assert.equal(observed.inherited.skipped.length, 2);
+    assert.equal(observed.newlyExecutedProductChecks, 0);
+    f.data.jobs[31].conclusion = 'failure';
+    assert.equal(qualify().reuse, null, 'A red required job on page two must defeat reuse');
+    assert.throws(readback, /Inherited job evidence differs|not pass|Source|source/i);
+    f.data.jobs[31].conclusion = 'success';
+    f.data.jobs.pop();
+    assert.equal(qualify().reuse, null, 'A missing second-page job must defeat reuse');
+    assert.throws(readback, /Incomplete terminal page/);
+  } finally {rmSync(directory, {recursive: true, force: true});}
+});

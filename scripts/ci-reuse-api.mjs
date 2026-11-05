@@ -89,6 +89,7 @@ function createGithubReader({repository, now = () => performance.now(), execute 
     return body;
   };
   const list = (endpoint, key, number, remainingMs) => {
+    const lookupDeadline = now() + (remainingMs ?? remaining());
     const pageSize = key === 'jobs' ? 30 : 100;
     pageIdentity(number, pageSize);
     const target = `${endpoint}${endpoint.includes('?') ? '&' : '?'}per_page=${pageSize}&page=${number}`;
@@ -112,7 +113,7 @@ function createGithubReader({repository, now = () => performance.now(), execute 
         const numeric = actual.pathname.match(/^\/repositories\/([1-9][0-9]*)\//);
         if (numeric) {
           if (repositoryId === undefined) {
-            const record = object(root, remainingMs);
+            const record = object(root, Math.floor(lookupDeadline - now()));
             assert.equal(record.full_name, repository, 'Pagination repository name differs');
             identity(record.id);
             repositoryId = record.id;

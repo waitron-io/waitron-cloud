@@ -1396,14 +1396,22 @@ implementation or production evidence.
   CLI fixtures set their own run identity so hosted inputs cannot change the
   refusal they exercise. The live-reader control uses distinct saved revisions
   to reach package discovery without bypassing the empty-range guard.
-  Job evidence now reads complete 30-record pages in current summaries, source
-  qualification and post-merge readback. A controlled slow large-page response
-  reproduces the native summary timeout; smaller pages pass that control while
-  missing, duplicated, truncated or changing evidence still fails. The existing
-  500-record, request and time limits remain. Numeric pagination aliases require
-  an independently verified repository name and ID. The hosted timeout's natural cause
-  is not proved. The watcher has updated all six operator runbooks; runtime
-  landing still requires fresh current-head CI.
+  The bounded native, source and readback readers now collect 30-record job
+  pages. A controlled slow large-page response reproduces native summary
+  exhaustion; smaller pages pass that control. Missing, duplicated, truncated
+  or changing evidence still fails in those bounded readers. The 500-record
+  ceiling and request/time limits remain; shared readback requests can exhaust
+  their budget earlier. Numeric aliases require an independently verified
+  repository name and ID. The ordinary strict summary requests 30 records
+  through its existing reader, preserving its expected-name/result checks and
+  retry bounds. Its existing total-count/unique-ID gap remains separate: a
+  fake-GitHub command reproduced acceptance of a declared 14-job list delivering
+  12 jobs, changing totals and a duplicate skipped-job ID, while a missing
+  required job still fails. The watcher needs to assign that existing reader's
+  completeness follow-up; this change does not claim those controls there.
+  The hosted timeout's natural cause is not proved. The watcher
+  has updated all six operator runbooks; runtime landing still requires fresh
+  current-head CI.
   Part 6 adds the [nightly full backstop](ci-nightly.md):
   one 03:17 UTC schedule and a manual trigger call all four workflows
   at the same revision. All package partitions, six receipt suites, cost,

@@ -256,8 +256,10 @@ test('numeric repository pagination is bound to the independently verified named
   assert.throws(read, /repository/i);
   linkedId = 123; returned = {id: 123, full_name: 'someone/other-repository'};
   assert.throws(read, /repository/i);
-  returned = {id: 0, full_name: repository};
-  assert.throws(read, /identity/i);
+  for (const id of ['123', [123], 0, 1.5, Number.MAX_SAFE_INTEGER + 1]) {
+    returned = {id, full_name: repository};
+    assert.throws(read, /Invalid numeric identity/);
+  }
 });
 
 
@@ -272,4 +274,61 @@ test('job page and list bounds hold without declared totals', () => {
   for (const invalid of [0, -1, 101, 1.5, NaN]) {
     assert.throws(() => module.collectPages(() => page([], 0), invalid), /Invalid page size/);
   }
+});
+
+
+test('numeric pagination keeps exact link checks and caches only verified repository identity', () => {
+  const endpoint = `https://api.github.com/repositories/123/actions/runs/42/attempts/2/jobs?per_page=30&page=2`;
+  let link = endpoint, record = {id: 123, full_name: repository}, reads = 0;
+  const execute = (_command, args) => {
+    if (args.at(-1) === `repos/${repository}`) {reads++; return response(record);}
+    return response({total_count: 31, jobs: Array.from({length: 30}, (_, i) => ({id: i + 1}))}, `<${link}>; rel="next"`);
+  };
+  for (const invalid of [endpoint.replace('api.github.com', 'foreign.invalid'), endpoint.replace('/42/', '/43/'),
+    endpoint.replace('/attempts/2/', '/attempts/3/'), endpoint.replace('page=2', 'page=3'),
+    endpoint.replace('per_page=30', 'per_page=100'), endpoint + '&filter=latest', endpoint + '#fragment']) {
+    link = invalid;
+    const api = module.createReuseApi({repository, execute});
+    assert.throws(() => api.listAttemptJobs(42, 2, 1), /Foreign or nonconsecutive/);
+  }
+  link = endpoint.replace('/123/', '/999/'); record = {id: 999, full_name: 'someone/other'}; reads = 0;
+  const api = module.createReuseApi({repository, execute});
+  assert.throws(() => api.listAttemptJobs(42, 2, 1), /repository name differs/);
+  record = {id: 123, full_name: repository};
+  assert.throws(() => api.listAttemptJobs(42, 2, 1), /repository identity differs/);
+  assert.equal(reads, 2, 'A refused repository record must not be cached');
+});
+
+test('numeric pagination reads repository identity once across the complete 500-job inventory', () => {
+  const jobs = Array.from({length: 500}, (_, i) => ({id: i + 1}));
+  let reads = 0, changed = false;
+  const api = module.createReuseApi({repository, execute: (_command, args) => {
+    const endpoint = args.at(-1);
+    if (endpoint === `repos/${repository}`) {reads++; return response({id: 123, full_name: repository});}
+    const number = Number(new URL(`https://api.github.com/${endpoint}`).searchParams.get('page'));
+    return response({total_count: 500, jobs: jobs.slice((number - 1) * 30, number * 30)}, number < 17
+      ? `<https://api.github.com/repositories/${changed && number === 2 ? 124 : 123}/actions/runs/42/attempts/2/jobs?per_page=30&page=${number + 1}>; rel="next"` : '');
+  }});
+  assert.deepEqual(module.collectJobPages(number => api.listAttemptJobs(42, 2, number)), jobs);
+  assert.equal(reads, 1);
+  changed = true;
+  assert.throws(() => api.listAttemptJobs(42, 2, 2), /repository identity differs/);
+  assert.equal(reads, 1);
+});
+
+test('numeric pagination identity lookup consumes the caller budget left after reading the page', () => {
+  let time = 0, observed;
+  const api = module.createReuseApi({repository, now: () => time, execute: (_command, args, options) => {
+    if (args.at(-1) === `repos/${repository}`) {
+      observed = options.timeout;
+      time += 900;
+      return response({id: 123, full_name: repository});
+    }
+    time += 4000;
+    return response({total_count: 31, jobs: Array.from({length: 30}, (_, i) => ({id: i + 1}))},
+      '<https://api.github.com/repositories/123/actions/runs/42/attempts/2/jobs?per_page=30&page=2>; rel="next"');
+  }});
+  assert.equal(api.listAttemptJobs(42, 2, 1, 5000).nextPage, 2);
+  assert.equal(observed, 1000);
+  assert.equal(time, 4900);
 });
