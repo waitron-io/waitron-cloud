@@ -2,21 +2,32 @@
 
 You need a new package version whenever Waitron main changes the shared controls, without editing source versions by hand. Cloud must test each released version against the portal and fail CI when its installed version falls seven days behind.
 
-**Status:** revised planning checkpoint only. The owner/watcher decisions in `~/waitron-campaign-k/questions.md` and `queue.md`, 2026-11-05 ~14:40/~14:45, supersede the earlier npmjs design. Keep private **`@waitron-io/ui-core` on GitHub Packages**, `.npmrc`, `NODE_AUTH_TOKEN`, BuildKit secrets and D110 guards. Elastic License 2.0 with `LICENSE-GRANTS.md` and the seven-day lag are confirmed decisions.
+**Status:** owner-approved design, 5 November 2026. Cloud keeps private
+**`@waitron-io/ui-core` on GitHub Packages**, `.npmrc`, `NODE_AUTH_TOKEN`, BuildKit
+secrets and D110 guards. The owner chose option B: Cloud publishes with its own
+`GITHUB_TOKEN`, at offset 15-minute intervals with per-merge catch-up. The
+24-hour publisher heartbeat, seven-day unpublished-source deadline, seven-day
+installed-version lag, Elastic License 2.0 and `LICENSE-GRANTS.md` are approved.
 
-The npmjs migration, package rename, Trusted Publisher, hand first publish, token removal, visibility change and SWITCH/test-box credential retirement are superseded and provide no implementation authority. No new registry publication is authorised. This checkpoint changes only this plan. After review and documentation checks, the driver records it in a local signed-off commit. It performs no publication, workflow dispatch, credential/access/global-setting change, push, PR creation or Cloud landing. Other lanes and worktrees stay untouched.
+The owner also authorised the validated `0.2.0` release as the write-authority
+test, once its preparation is reviewed. If that write fails, stop and tell the
+watcher; never fall back to another token. Lane F/A1336 owns its preparation.
+This documentation change publishes the reviewed plan and its backlog handoff;
+it does not dispatch a workflow, publish a package or change credentials or
+visibility. The npmjs migration, rename, Trusted Publisher, token removal and
+SWITCH/test-box credential retirement remain superseded.
 
 ## Choose the publishing authority
 
-Recommend **B: Cloud notices public Waitron main changes and publishes with its own `GITHUB_TOKEN`**, conditional on the authority gate below. This keeps the existing package association and avoids a new stored write secret. It meets automatic per-merge release through catch-up, with scheduling delay rather than an immediate cross-repository trigger.
+The owner chose **B: Cloud notices public Waitron main changes and publishes with its own `GITHUB_TOKEN`**, subject to the reviewed-release gate below. This keeps the existing package association and avoids a new stored write secret. It meets automatic per-merge release through catch-up, with scheduling delay rather than an immediate cross-repository trigger.
 
-| Question | A: classic write PAT stored in Waitron | B: scheduled/manual-dispatch publisher in Cloud |
+| Question | A: rejected alternative, classic write PAT | B: approved Cloud publisher |
 | --- | --- | --- |
 | Publisher and owner | Lane F/A1336 runs the publisher in Waitron. Proposed credential owner is `clintongormley`; effective package Write permission and organisation policy are unverified. No token has been requested or inspected. | Lane K implements the publisher in Cloud. Each publish job receives Cloud's temporary `GITHUB_TOKEN` with `packages: write`; public Waitron source needs no cross-repository secret. |
-| Effective reach | `write:packages`, including required read access, is limited by the actor's package permissions, not to this one package. Inventory every package that actor can write before choosing A. Do not request `delete:packages` or `repo` unnecessarily. | Job permissions and the package's Cloud Actions grant both matter. Keep package association `waitron-io/waitron-cloud`; the workflow declaration alone does not prove present write authority. |
+| Effective reach | `write:packages`, including required read access, is limited by the actor's package permissions, not to this one package. This alternative is not authorised and is not a fallback. Do not request `delete:packages` or `repo` unnecessarily. | Job permissions and the package's Cloud Actions grant both matter. Keep package association `waitron-io/waitron-cloud`; the workflow declaration alone does not prove present write authority. |
 | Expiry and rotation | Proposed policy: 90-day expiry or shorter organisation limit; record exact UTC expiry, named owner and rotation receipt without secret bytes. Warn at 14/7/1 days; replace and verify before expiry, then revoke the old token. | No stored publisher token to rotate. GitHub issues a new workflow-scoped token for each job; loss of package grant or workflow permission still stops publication. |
 | Exact refusal | At expiry, or if expiry/owner evidence is missing, refuse before upload. A 401/403 or revoked access stops the queue, preserves reservations, fails visibly and needs operator repair; never skip a source or substitute another credential. | A 401/403 stops the queue with the same durable recovery behavior. This session cannot prove a fresh job token can write; activation remains blocked on that evidence. |
-| Delay and recovery | A main push can wake the publisher promptly; runner queues, source CI and outages still add unbounded delay. Reconciliation must recover lost/cancelled runs. | Proposed cron `7,22,37,52 * * * *`: nominal detection within 15 minutes, plus source CI/build/runner time. Delays and dropped runs have no guaranteed maximum. Manual dispatch is recovery, not a required per-version human step. |
+| Delay and recovery | A main push can wake the publisher promptly; runner queues, source CI and outages still add unbounded delay. Reconciliation must recover lost/cancelled runs. | Approved cron `7,22,37,52 * * * *`: nominal detection within 15 minutes, plus source CI/build/runner time. Delays and dropped runs have no guaranteed maximum. Manual dispatch is recovery, not a required per-version human step. |
 
 [GitHub's npm registry](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-npm-registry) supports classic PATs and workflow `GITHUB_TOKEN` publication for associated repositories. [Package permissions](https://docs.github.com/en/packages/learn-github-packages/about-permissions-for-github-packages) require both token scope and actor/package access; classic PAT scopes do not supply a per-package boundary. A public source repository does not make its associated package public.
 
@@ -31,9 +42,27 @@ Recommend **B: Cloud notices public Waitron main changes and publishes with its 
 
 **Experiment limit:** no fresh workflow-scoped `GITHUB_TOKEN` is available in this planning session. The configured gh credential is a different identity and is not read or substituted. Package GETs and `npm publish --dry-run` cannot prove server write authority. No documented, verified no-op registry-write experiment is established here. A throwaway package has persistent creation/access/deletion consequences and would not prove the existing package's grant; its safety is not demonstrated, so do not create or delete one.
 
-**Activation gate:** retain B as the recommendation, not as freshly proven authority. The safe next experiment, in a separately reviewed nonpublishing Cloud workflow, can obtain its own job token, record its declared permissions and observable package-grant/read evidence without printing authentication data. It must contain no publish/delete path. That narrows uncertainty but still does not prove writes. No such workflow is added or dispatched now.
+**Reviewed-release gate:** historical success and package reads do not prove a
+fresh job token can write. The owner authorised the intended `0.2.0` release as
+that test after its preparation is reviewed. Do not create a throwaway package
+or substitute the configured gh credential, a PAT or another token.
 
-Before relying on B for unattended publication, the watcher must resolve the outstanding demand for fresh write proof: identify a documented side-effect-free test that actually establishes this package's write authority, or explicitly revise the gate to authorise a real intended release as the permission test. Neither path is authorised by this plan; historical success alone does not close the gate. Do not silently fall back to A or ask the owner to create a token now.
+F/A1336 must first return the exact current green source SHA, staged package,
+manifest, complete notices and package-consumer evidence. K reviews that
+preparation and the Cloud upload path, preserving the source/build isolation,
+reserved version, immutable bytes and readback checks below. Only the reviewed
+Cloud job receives its own `GITHUB_TOKEN` with package-write permission. It
+publishes the intended restricted `@waitron-io/ui-core@0.2.0` artifact once,
+then reads back the exact source mapping, bytes, integrity, notices, publication
+time and private package visibility. The normal interrupted-upload rules below
+still apply; an uncertain result must not trigger a blind second upload.
+
+A refused or unsuccessful write stops publication and is reported to the
+watcher with the status and bounded diagnostics, without authentication data.
+Do not fall back to option A or request a new token. A successful verified
+release supplies current write evidence; only then may the unattended publisher
+rely on that authority. No preparation has been newly qualified and no registry
+write or workflow dispatch occurs in this documentation change.
 
 ## Keep source identity and release identity separate
 
@@ -65,7 +94,7 @@ With B, **K/Cloud owns discovery, durable version allocation, staging integratio
 - [ ] Build reproducibly, normalising pack timestamps/order, and persist prepared manifest hash and tarball SHA-512 before upload. Retain the candidate artifact for retries; if it expires, rebuild and demand identical recorded bytes or stop for investigation. Do not allocate a different version to escape failed recovery.
 - [ ] Persist an `uploading` attempt before sending bytes. After upload, read back the exact version with the workflow's registry authority, compare downloaded bytes/integrity, full `waitronSource`, notices and registry publication time, then append `published` and advance the cursor. If upload succeeds but ledger finalisation fails, the next run reads the reserved version back and completes that same record without uploading again. Retry identical bytes only when absence and no prior successful upload are established; an interrupted attempt followed by absence could hide withdrawal, so uncertain/conflicting readback blocks rather than reusing a version.
 - [ ] Preserve immutable published records, including withdrawn/deprecated releases, and expose backlog, oldest pending source, last success and refusal reason. Store no token or authentication header. The ledger also supplies release observations to updater/freshness jobs, so their missed polls do not erase a release.
-- [ ] First fail tests for simultaneous triggers, two/three-merge bursts, test-only changes, red-then-green source, cancelled pending runs, allocation/build/upload interruption, upload-success/ledger-failure, artifact expiry, paginated catch-up and registry conflicts. Prove one version per qualifying source and stable retry readback. These tests and a later authorised live release gate remain unimplemented.
+- [ ] First fail tests for simultaneous triggers, two/three-merge bursts, test-only changes, red-then-green source, cancelled pending runs, allocation/build/upload interruption, upload-success/ledger-failure, artifact expiry, paginated catch-up and registry conflicts. Prove one version per qualifying source and stable retry readback. These tests and the reviewed `0.2.0` release gate remain unimplemented.
 
 ## Retain the measured compatibility evidence
 
@@ -128,7 +157,7 @@ PR creation with `GITHUB_TOKEN` does not guarantee unattended normal PR CI. [Git
 
 - [ ] Add an unconditional independent freshness job to `ci.yml`, including docs-only, reused and narrowly selected runs. Run the reader from trusted workflow code with `contents: read`, `pull-requests: read` and existing `packages: read` `GITHUB_TOKEN`; read registry data plus trusted ledger/PR observations. Compare bootstrap against the trusted migration baseline, not candidate-provided expectations alone. `summary.needs` and `scripts/ci-summary.mjs` must require success regardless of package selection. Run the same check daily on main so idle drift is visible.
 - [ ] Independently discover qualifying green Waitron main changes in that job, rather than trusting the publisher's last cursor. Compare complete source history with the release ledger and registry readback. A missing or incomplete history, conflicting identity or unreadable publisher evidence fails. An unpublished qualifying source fails once seven days have elapsed from its earliest verified trusted main-green completion; retain that original time across retries. This source backlog check is separate from the publication deadline below.
-- [ ] Record a publisher heartbeat after each complete discovery/reconciliation run, including a no-change run. Proposed operational default: the independent check refuses a missing heartbeat or one at least 24 hours old; an upload or partial discovery is not a successful heartbeat. Report the oldest unpublished source and last complete run. The daily main check and ordinary PR/main CI enforce this even when no newer package exists; externally monitor a disabled daily schedule, since a disabled observer cannot report its own absence.
+- [ ] Record a publisher heartbeat after each complete discovery/reconciliation run, including a no-change run. Owner-approved policy: the independent check refuses a missing heartbeat or one at least 24 hours old; an upload or partial discovery is not a successful heartbeat. Report the oldest unpublished source and last complete run. The daily main check and ordinary PR/main CI enforce this even when no newer package exists; externally monitor a disabled daily schedule, since a disabled observer cannot report its own absence.
 - [ ] For installed V, take the **oldest original publication time of any stable version greater than V**, from the union of live registry data and durable published/observed records, including withdrawn releases. Deadline is that time plus **exactly seven days**; fail at or after the deadline. Later releases do not restart it. With no newer release, an old current version does not expire.
 - [ ] Validate both exact pins, expected source, installed artifact and lock integrity before age evaluation. Reject missing/invalid publication dates, changed recorded timestamps, missing bootstrap, wrong registry hosts/redirects, incomplete pagination and conflicting observations. Preserve original publication times, never substitute first-seen time. Trust append-only publisher records and validated updater-authored PR records, including closed ones.
 - [ ] A rollback, disappeared/deprecated version or changed `latest` requires investigation and must not erase the oldest-newer record or permit downgrade. Registry-only history removed before any observation cannot be reconstructed; the publisher ledger protects future owned releases once recorded. Ambiguous upload followed by disappearance before readback blocks recovery and freshness rather than fabricating a publication time.
@@ -153,7 +182,7 @@ D110 was inspected read-only at **`bb686d7aa17deb9f9bac606bee76b84814a2c6f1`**, 
 
 ## Later implementation validation and handoff
 
-Implement in dependency order: F source/staging evidence and K reservation/recovery tests; permission resolution and authorised baseline release; Cloud pin/notices qualification; every-version updater and exact-head dispatch; independent lag and image integration. Preparation and deterministic tests can proceed while publication authority remains unresolved.
+Implement in dependency order: F source/staging evidence and K reservation/recovery tests; reviewed preparation and the authorised baseline release; Cloud pin/notices qualification; every-version updater and exact-head dispatch; independent lag and image integration. Preparation and deterministic tests can proceed before the reviewed release establishes current write authority.
 
 Use these focused commands during that later implementation, adding named tests for any changed caller. They are not commands to run during this planning checkpoint, and new test files do not exist yet.
 
@@ -184,9 +213,15 @@ Each checkpoint returns its exact candidate SHA, command results and artifact/so
 - [ ] Use TDD for subsequent features/bugfixes: observe each expected behavioral failure, implement minimally, then observe passing results. Run focused release, updater, registry, dispatch, summary and existing authentication/isolation tests. Do not rerun these completed compatibility samples merely to revise a plan.
 - [ ] Qualify the actual authorised release through an authenticated frozen-lockfile install with a fresh isolated store, exact source/integrity/notices checks, declarations, `pnpm test:ui`, `pnpm typecheck`, `pnpm portal:build` and portal tests through `scripts/test-postgres.mjs`. Retain existing assertions; extend form/accessibility cases before repairs. Inspect eight combinations: English/Spanish × light/dark × 390/1280px, including initial, invalid and hovered primary-button states, with no page errors, overflow or axe violations.
 - [ ] Build relevant local-stack, backup-verifier and integrated D110 images using existing package-read BuildKit secrets, clean source archives and frozen locks. Record source labels/image identities and secret-absence results without credentials in logs/layers. Use owned cache namespaces for fresh-cache qualification; `--no-cache` alone does not clear cache mounts. Stop/remove only owned resources, with no shared pruning.
-- [ ] Rewrite `docs/shared-ui-release.md` for chosen Cloud publication, automatic release allocation, preserved private installs, source mapping, every-version PRs, exact-head dispatch, refusal/retry and seven-day lag. Update measured backlog status only after actual evidence. Implementation commits, normal hooks, finish-branch review and current-head CI belong to later authorised implementation. This planning checkpoint permits only the driver's local signed-off plan commit after review and checks.
-- [ ] This revision's validation is docs-only: review the diff for superseded authority, retained evidence and decision coverage; run `git diff --check` and verify only this path changed. No code/test/config change or new compatibility result is claimed. Return the locally signed plan and one decision question to the watcher; do not push it, open a PR or land it during this checkpoint.
+- [ ] Rewrite `docs/shared-ui-release.md` for chosen Cloud publication, automatic release allocation, preserved private installs, source mapping, every-version PRs, exact-head dispatch, refusal/retry and seven-day lag. Update measured backlog status only after actual evidence. Implementation commits, normal hooks, finish-branch review and current-head CI belong to the later product slices; this PR publishes the approved plan and backlog handoff only.
+- [ ] This revision's validation is docs-only: review the diff for superseded authority, retained evidence and decision coverage; run `git diff --check` and verify only this path changed. No code/test/config change or new compatibility result is claimed. Publish and land this documentation PR after normal checks and exact-head CI, then give the watcher its stable plan link for F/A1336.
 
-## One owner/watcher decision
+## Approved handoff
 
-**Confirm B, Cloud's scheduled/manual-recovery workflow, as the publishing authority and release F/A1336 preparation without a first-publish dependency, while keeping publication inactive until the fresh-permission gate is resolved.** The unresolved issue is how to establish present-day write authority without an unsafe publication probe; historical success is recorded, not substituted for that proof. No package-name, licence or lag decision remains, and no owner token-creation request is made. This is the requested publishing-authority decision, not an extra approval ceremony for the planning edit.
+The owner approved B and released F/A1336 preparation without a first-publish
+dependency. The selected name, private visibility, licence, notices, cadence,
+heartbeat and seven-day deadlines need no further decision. The intended
+reviewed `0.2.0` release is the authorised write test; failure stops for the
+watcher, with no token fallback. F reads this landed plan before returning the
+preparation evidence. K resumes the product slices from that evidence, and the
+existing validation and readback requirements remain open until actually run.
