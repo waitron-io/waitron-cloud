@@ -129,7 +129,7 @@ test('executed planner forces a full reusable run even with an audited prose pul
       assert.equal(result.status, 0, result.stdout + result.stderr);
       const line = readFileSync(output, 'utf8').split('\n').find(line => line.startsWith('plan='));
       const selected = JSON.parse(line.slice(5));
-      assert.equal(selected.packages.length, full === 'true' ? 28 : 0, result.stdout + result.stderr);
+      assert.equal(selected.packages.length, full === 'true' ? 29 : 0, result.stdout + result.stderr);
       assert.equal(selected.receipts.length, full === 'true' ? 6 : 0);
       assert.equal(selected.typecheck, full === 'true');
       assert.equal(Boolean(selected.documentation), full !== 'true');

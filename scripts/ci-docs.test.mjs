@@ -286,7 +286,7 @@ test('explicit full execution overrides a real audited prose PR without changing
   const full = createPlan({pull_request: {base: {sha: base}, head: {sha: head}}}, {sha: head, full: true}, workspace, git);
   assert.match(full.reason, /Explicit full run/);
   assert.equal(full.typecheck, true);
-  assert.equal(full.packages.length, 28);
+  assert.equal(full.packages.length, 29);
   assert.equal(full.documentation, undefined);
   assert.equal(full.reuse, null);
   assert.deepEqual(full.receipts, ['test:two-venue-milestone-receipt', 'test:backup-capacity', 'test:public-gateway-limits', 'test:local-stack', 'test:database-recovery-receipt', 'test:cloud-cost']);
