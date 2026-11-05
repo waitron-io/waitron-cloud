@@ -1378,9 +1378,12 @@ implementation or production evidence.
   Runtime implementation is in progress. Its local planner can qualify an
   identical-tree PR source, and its final summary rechecks that source before
   accepting skipped work. Main decision readback verifies the hosted artifact,
-  every final job and the reconstructed push range or full inventory. These
-  paths are not enabled in workflows. Independent sibling selection, workflow
-  uploads, nightly AWS coverage and the whole-branch review remain. Runtime
+  every final job and the reconstructed push range or full inventory. Each of
+  AWS, cost, venue and download diagnostics now has independent local source
+  reconstruction and decision readback, including legitimate unselected proofs.
+  The verifier compares source and execution workflow inputs with the reviewed
+  definitions. These paths are not enabled in workflows. Workflow planners,
+  summaries, uploads, nightly AWS coverage and the whole-branch review remain. Runtime
   landing waits for the nightly backstop and the watcher's post-merge runbook update.
   Part 6 adds the [nightly full backstop](ci-nightly.md):
   one 03:17 UTC schedule and a manual trigger call the existing three workflows

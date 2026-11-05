@@ -5,7 +5,7 @@ const commitSHA = value => typeof value === 'string' && /^[a-f0-9]{40}$/.test(va
 export function resolveRange(event, context, git) {
   const full = reason => ({kind:'full', head:context.sha, reason});
   if (context.full || context.called || ['schedule','workflow_dispatch','workflow_call'].includes(context.eventName)) {
-    return full('Full invocation: full suite');
+    return full(context.full ? 'Explicit full run: all packages and receipts' : 'Full invocation: full suite');
   }
   try {
     if (context.eventName === 'pull_request' || (!context.eventName && event.pull_request)) {

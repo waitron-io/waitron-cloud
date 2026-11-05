@@ -13,6 +13,8 @@ import {waitForSummary} from './ci-summary.mjs';
 import {createPlanEvidence} from './ci-evidence.mjs';
 import {readGitBlobs} from './ci-package-revisions.mjs';
 import {auditDocumentation} from './ci-docs.mjs';
+import {conformanceMatrix} from './cloud-cost/conformance.mjs';
+import {createDecisionEvidence, readbackDecision} from './ci-decision.mjs';
 
 const repository = 'waitron-io/waitron-cloud', workflow = '.github/workflows/ci.yml';
 const repo = {id: 123, full_name: repository, default_branch: 'main'};
@@ -97,6 +99,60 @@ function fixture(state = primaryState()) {
 const verify = f => findReuse(f.context, {api: f.api, git, now: f.now}, workflow);
 const refusal = f => {const value = verify(f); assert.equal(value?.reuse, null, JSON.stringify(value)); assert.ok(value.reason.length > 0);};
 
+const siblingCases = [
+  ['aws-infrastructure', ['verify (guards-1)', 'verify (guards-2)', 'verify (guards-3)', 'verify (suites)']],
+  ['venue-services-proof', ['service-receipts (legacy)', 'service-receipts (venue)']],
+  ['download-supervision-diagnostic', ['linux-contention']],
+  ['cloud-cost', [
+    ...['cadence', 'day', 'foreground'].map(name => `cost (${name}-conformance.test.mjs, 1/1)`),
+    ...[1, 2, 3].map(n => `cost (isolated-replay-conformance.test.mjs, ${n}/3)`),
+    ...['mail', 'paced-replay', 'private-replay', 'remote-browser', 'remote', 'remote-waitron', 'replay', 'service-receipt',
+      'source-bills', 'source-clock', 'source-days'].map(name => `cost (${name}-conformance.test.mjs, 1/1)`),
+    ...[1, 2, 3].map(n => `cost (stack-conformance.test.mjs, ${n}/3)`),
+    'cost (worker-storage-conformance.test.mjs, 1/1)',
+  ]],
+];
+
+function siblingFixture(key, names) {
+  const f = fixture(), nativeWorkflow = `.github/workflows/${key}.yml`;
+  const selection = {base, head, paths: ['unknown-input'], required: true,
+    ...(key === 'cloud-cost' ? {matrix: conformanceMatrix()} : {})};
+  const record = structuredClone(source);
+  Object.assign(record.workflow, {path: nativeWorkflow, ref: `${repository}/${nativeWorkflow}@refs/pull/51/merge`});
+  record.selection = selection;
+  const content = archive(createPlanEvidence(record));
+  f.data.workflow.path = nativeWorkflow;
+  f.data.run.path = nativeWorkflow; f.data.runs[0].path = nativeWorkflow;
+  const originalReadRun = f.api.readRun;
+  f.api.readRun = id => ({...originalReadRun(id), path: nativeWorkflow});
+  f.data.artifacts[0] = {...artifact, name: `ci-plan-v1-${key}-42-2`, size_in_bytes: content.length,
+    digest: 'sha256:' + createHash('sha256').update(content).digest('hex')};
+  f.api.readPlanArtifact = () => content;
+  f.data.jobs = [key === 'cloud-cost' ? 'discover' : 'changes', ...names, 'summary'].map((name, i) => ({
+    id: i + 1, run_id: 42, run_attempt: 2, head_sha: head, name, status: 'completed', conclusion: 'success',
+  }));
+  return {...f, nativeWorkflow, selection};
+}
+
+for (const [key, names] of siblingCases) {
+  test(`${key} independently reconstructs its native source and requires every exact job`, () => {
+    const f = siblingFixture(key, names);
+    const verifyNative = () => findReuse(f.context, {api: f.api, git, now: f.now}, f.nativeWorkflow);
+    const accepted = verifyNative();
+    assert.equal(accepted.reuse?.workflowPath, f.nativeWorkflow, accepted.reason);
+    assert.equal(accepted.reuse?.runId, 42);
+    for (let i = 0; i < f.data.jobs.length; i++) {
+      const previous = f.data.jobs[i];
+      f.data.jobs.splice(i, 1);
+      assert.equal(verifyNative().reuse, null, `Missing ${previous.name} must refuse this workflow`);
+      f.data.jobs.splice(i, 0, previous);
+    }
+    f.data.run.conclusion = 'failure'; f.data.runs[0].conclusion = 'failure';
+    assert.equal(verifyNative().reuse, null, 'A red native workflow cannot borrow CI evidence');
+    assert.equal(verify(fixture()).reuse?.runId, 42, 'An independent CI proof still qualifies');
+  });
+}
+
 for (const kind of ['docs', 'scoped']) {
   test(`a legitimate ${kind} PR source reuses only its reconstructed successes and explicit skips`, () => {
     const directory = mkdtempSync(join(tmpdir(), `cloud-reuse-${kind}-`));
@@ -153,6 +209,51 @@ for (const kind of ['docs', 'scoped']) {
         tree: originalTree, jobs: variantJobs, bytes: content, artifact: metadata});
       const accepted = findReuse(f.context, {api: f.api, git: variantGit, now: f.now}, workflow);
       assert.equal(accepted.reuse?.runId, 42, accepted.reason);
+      if (kind === 'docs') for (const key of ['cloud-cost', 'venue-services-proof']) {
+        const nativeWorkflow = `.github/workflows/${key}.yml`;
+        const nativeRecord = structuredClone(record);
+        Object.assign(nativeRecord.workflow, {path: nativeWorkflow, ref: `${repository}/${nativeWorkflow}@refs/pull/51/merge`});
+        nativeRecord.selection = {base: originalBase, head: originalHead, paths: ['docs/guide.md'], required: false};
+        const nativeBytes = archive(createPlanEvidence(nativeRecord));
+        const skippedName = key === 'cloud-cost' ? 'cost (${{ matrix.file }}, ${{ matrix.group }})' : 'service-receipts (${{ matrix.receipt }})';
+        const nativeJobs = [key === 'cloud-cost' ? 'discover' : 'changes', 'summary', skippedName].map((name, i) => ({
+          id: i + 1, name, run_id: 42, run_attempt: 2, head_sha: originalHead,
+          status: 'completed', conclusion: name === skippedName ? 'skipped' : 'success',
+        }));
+        const native = fixture({root: directory, base: originalBase, head: originalHead, merge: squash, execution: originalExecution,
+          tree: originalTree, jobs: nativeJobs, bytes: nativeBytes, artifact: {...metadata, name: `ci-plan-v1-${key}-42-2`,
+            size_in_bytes: nativeBytes.length, digest: 'sha256:' + createHash('sha256').update(nativeBytes).digest('hex')}});
+        native.data.workflow.path = nativeWorkflow; native.data.run.path = nativeWorkflow; native.data.runs[0].path = nativeWorkflow;
+        const readRun = native.api.readRun;
+        native.api.readRun = id => ({...readRun(id), path: nativeWorkflow});
+        const verifyNative = () => findReuse(native.context, {api: native.api, git: variantGit, now: native.now}, nativeWorkflow);
+        assert.equal(verifyNative().reuse?.workflowPath, nativeWorkflow, verifyNative().reason);
+        for (const conclusion of ['success', 'failure', 'cancelled']) {
+          native.data.jobs.at(-1).conclusion = conclusion;
+          assert.equal(verifyNative().reuse, null, `A ${conclusion} unselected native job contradicts its docs plan`);
+        }
+        const context = {...native.context, workflowPath: nativeWorkflow, workflowRef: `${repository}/${nativeWorkflow}@refs/heads/main`,
+          workflowSha: squash, full: false, called: false};
+        const decision = createDecisionEvidence(context, {...nativeRecord.selection, head: squash}, variantGit, 'unselected');
+        const decisionBytes = archive(decision);
+        const hostedArtifact = {id: 62, name: `ci-decision-v1-${key}-90-1`, expired: false, size_in_bytes: decisionBytes.length,
+          digest: 'sha256:' + createHash('sha256').update(decisionBytes).digest('hex'),
+          workflow_run: {id: 90, head_sha: squash, repository_id: 123, head_repository_id: 123}};
+        native.api.remaining = () => 30_000;
+        native.api.listArtifacts = () => page([hostedArtifact]);
+        native.api.readPlanArtifact = () => decisionBytes;
+        const originalRun = native.api.readRun;
+        native.api.readRun = id => ({...originalRun(id), status: 'completed', conclusion: 'success'});
+        const mainJobs = nativeJobs.map(job => ({...job, head_sha: squash, run_id: 90, run_attempt: 1}));
+        native.api.listAttemptJobs = () => page(mainJobs);
+        const observed = readbackDecision(decision, {api: native.api, git: variantGit, now: native.now});
+        assert.equal(observed.mode, 'unselected');
+        assert.equal(observed.inherited, null, 'Unselected work does not borrow a PR source');
+        assert.deepEqual(observed.succeeded, [key === 'cloud-cost' ? 'discover' : 'changes', 'summary']);
+        assert.deepEqual(observed.skipped, [skippedName]);
+        mainJobs.pop();
+        assert.throws(() => readbackDecision(decision, {api: native.api, git: variantGit, now: native.now}), /Incomplete main/);
+      }
       for (const job of variantJobs) {
         const changed = f.data.jobs.find(value => value.id === job.id), previous = changed.conclusion;
         changed.conclusion = previous === 'success' ? 'skipped' : 'success';
@@ -311,7 +412,7 @@ test('operator readback binds the local decision to its main artifact, final job
       assert.equal(readback().status, 1, `Main identity/result must be final and exact: ${JSON.stringify(change)}`);
       Object.assign(mainRun, original);
     }
-    for (const change of [{run_id: 91}, {run_attempt: 2}, {head_sha: head}, {name: 'unknown'},
+    for (const change of [{id: currentJobs[1].id}, {run_id: 91}, {run_attempt: 2}, {head_sha: head}, {name: 'unknown'},
       {status: 'in_progress'}, {conclusion: 'failure'}]) {
       const original = {...currentJobs[0]}; Object.assign(currentJobs[0], change);
       assert.equal(readback().status, 1, `Main job must match the exact attempt and plan: ${JSON.stringify(change)}`);
@@ -343,12 +444,76 @@ function hostDecision(runtime, decision, currentJobs) {
   const endpoint = `repos/${repository}`, content = archive(decision);
   Object.assign(runtime.responses[`${endpoint}/actions/runs/90`], {status: 'completed', conclusion: 'success'});
   runtime.responses[`${endpoint}/actions/runs/90/artifacts?per_page=100&page=1`] = {total_count: 1, artifacts: [{id: 62,
-    name: 'ci-decision-v1-ci-90-1', expired: false, size_in_bytes: content.length,
+    name: `ci-decision-v1-${decision.workflowPath.slice('.github/workflows/'.length, -4)}-90-1`, expired: false, size_in_bytes: content.length,
     digest: 'sha256:' + createHash('sha256').update(content).digest('hex'),
     workflow_run: {id: 90, head_sha: merge, repository_id: 123, head_repository_id: 123}}]};
   runtime.responses[`${endpoint}/actions/artifacts/62/zip`] = {binary: content.toString('base64')};
   runtime.responses[`${endpoint}/actions/runs/90/attempts/1/jobs?per_page=100&page=1`] = {total_count: currentJobs.length, jobs: currentJobs};
   writeFileSync(join(runtime.directory, 'responses.json'), JSON.stringify(runtime.responses));
+}
+
+for (const [key, names] of siblingCases) for (const mode of ['reused', 'selected', 'full']) {
+  test(`${key} ${mode} operator CLI reads its own hosted decision and complete native jobs`, () => {
+    const f = siblingFixture(key, names), runtime = runtimeFixture(f);
+    try {
+      const endpoint = `repos/${repository}`;
+      for (const path of Object.keys(runtime.responses)) if (path.includes('/workflows/ci.yml')) {
+        runtime.responses[path.replace('/workflows/ci.yml', `/workflows/${key}.yml`)] = runtime.responses[path];
+        delete runtime.responses[path];
+      }
+      runtime.responses[`${endpoint}/actions/artifacts/61/zip`] = {binary: f.api.readPlanArtifact().toString('base64')};
+      runtime.env.GITHUB_WORKFLOW_REF = `${repository}/${f.nativeWorkflow}@refs/heads/main`;
+      runtime.env.GITHUB_WORKFLOW_SHA = merge;
+      runtime.env.CI_MODE = mode;
+      const proof = findReuse(f.context, {api: f.api, git, now: f.now}, f.nativeWorkflow).reuse;
+      assert.ok(proof, 'Native source qualifies before readback');
+      runtime.env.CI_PLAN = JSON.stringify(mode === 'reused' ? {required: false, reuse: proof} : mode === 'full'
+        ? {full: true, head: merge, required: true, ...(key === 'cloud-cost' ? {matrix: conformanceMatrix()} : {})}
+        : {...f.selection, head: merge});
+      const decisionPath = join(runtime.directory, 'decision.json');
+      const written = spawnSync(process.execPath, ['scripts/ci-evidence.mjs', '--decision', decisionPath],
+        {cwd: root, env: runtime.env, encoding: 'utf8', timeout: 30_000});
+      assert.equal(written.status, 0, written.stdout + written.stderr);
+      const decision = JSON.parse(readFileSync(decisionPath));
+      assert.equal(decision.workflowPath, f.nativeWorkflow, 'Decision belongs to the invoked workflow');
+      const unused = mode !== 'reused' ? [] : [key === 'cloud-cost' ? 'cost (${{ matrix.file }}, ${{ matrix.group }})'
+        : key === 'venue-services-proof' ? 'service-receipts (${{ matrix.receipt }})'
+        : key === 'aws-infrastructure' ? 'verify (${{ matrix.cell }})' : 'linux-contention'];
+      const currentJobs = [key === 'cloud-cost' ? 'discover' : 'changes', 'summary', ...(mode !== 'reused' ? names : unused)]
+        .map((name, i) => ({id: i + 100, run_id: 90, run_attempt: 1, head_sha: merge, name,
+          status: 'completed', conclusion: unused.includes(name) ? 'skipped' : 'success'}));
+      const readback = () => {
+        writeFileSync(decisionPath, JSON.stringify(decision));
+        hostDecision(runtime, decision, currentJobs);
+        return spawnSync(process.execPath, ['scripts/ci-evidence.mjs', '--readback', decisionPath],
+          {cwd: root, env: runtime.env, encoding: 'utf8', timeout: 30_000});
+      };
+      const accepted = readback();
+      assert.equal(accepted.status, 0, accepted.stdout + accepted.stderr);
+      const result = JSON.parse(accepted.stdout);
+      assert.equal(result.inherited?.proof.workflowPath ?? null, mode === 'reused' ? f.nativeWorkflow : null);
+      assert.deepEqual(result.succeeded.sort(), (mode !== 'reused'
+        ? [key === 'cloud-cost' ? 'discover' : 'changes', 'summary', ...names]
+        : [key === 'cloud-cost' ? 'discover' : 'changes', 'summary']).sort());
+      assert.deepEqual(result.skipped, unused);
+      if (mode === 'selected') {
+        const savedPaths = decision.selection.paths;
+        decision.selection.paths = ['unrelated-input'];
+        const forged = readback();
+        assert.equal(forged.status, 1, 'A hosted decision still needs independent range reconstruction');
+        assert.match(forged.stderr, /Recomputed main selection/);
+        decision.selection.paths = savedPaths;
+      } else if (mode === 'reused') {
+        const sourceRun = runtime.responses[`${endpoint}/actions/runs/42`], previous = sourceRun.conclusion;
+        sourceRun.conclusion = 'failure';
+        assert.equal(readback().status, 1, 'Native readback must requalify its own source');
+        sourceRun.conclusion = previous;
+      }
+      currentJobs.pop();
+      assert.equal(readback().status, 1, 'Every current native job/skip is required');
+      if (mode === 'reused') assert.equal(result.newlyExecutedProductChecks, 0);
+    } finally {rmSync(runtime.directory, {recursive: true, force: true});}
+  });
 }
 
 test('executed planner forces full work for an explicit false-input call and every full invocation without API reads', () => {
@@ -455,6 +620,30 @@ test('newest red run and changes during final rereads invalidate an older green 
   }
 });
 
+test('source qualification follows a second run page and refuses its latest red result', () => {
+  const f = fixture(), record = structuredClone(source);
+  record.runId = 142;
+  const content = archive(createPlanEvidence(record));
+  f.data.run.id = 142; f.data.runs[0].id = 142;
+  for (const job of f.data.jobs) job.run_id = 142;
+  Object.assign(f.data.artifacts[0], {name: 'ci-plan-v1-ci-142-2', size_in_bytes: content.length,
+    digest: 'sha256:' + createHash('sha256').update(content).digest('hex'),
+    workflow_run: {...artifact.workflow_run, id: 142}});
+  f.api.readPlanArtifact = () => content;
+  const older = Array.from({length: 100}, (_, i) => ({...f.data.run, id: i + 1, conclusion: 'failure'}));
+  f.api.listRuns = (_path, _head, number) => number === 1
+    ? {items: older, total_count: 101, nextPage: 2, terminal: false}
+    : {items: [f.data.run], total_count: 101, nextPage: null, terminal: true};
+  const accepted = verify(f);
+  assert.equal(accepted.reuse?.runId, 142, accepted.reason);
+  f.data.run.conclusion = 'failure';
+  assert.equal(verify(f).reuse, null, 'The latest run on the second page must defeat all older results');
+  f.data.run.conclusion = 'success';
+  const complete = f.api.listRuns;
+  f.api.listRuns = (...args) => args[2] === 2 ? {...complete(...args), total_count: 102} : complete(...args);
+  assert.equal(verify(f).reuse, null, 'Changing page totals cannot certify a latest result');
+});
+
 test('expired, forged, duplicate or unavailable artifacts and all failed reads refuse reuse', () => {
   for (const change of [{expired: true}, {digest: 'sha256:' + '0'.repeat(64)}, {name: 'ci-plan-v1-ci-42-1'}, {size_in_bytes: 0}]) {
     const f = fixture(); Object.assign(f.data.artifacts[0], change); refusal(f);
@@ -505,12 +694,13 @@ test('a self-consistent artifact cannot forge original provenance or alter the r
 });
 
 test('execution definitions and the operator checkout must match the exact source', () => {
-  for (const fault of ['execution-definition', 'operator-tree']) {
+  for (const fault of ['execution-definition', 'operator-tree', 'unreviewed-workflow']) {
     const f = fixture();
     const altered = (...args) => {
       const value = git(...args);
       if (fault === 'operator-tree' && args.join(' ') === 'rev-parse HEAD^{tree}') return 'e'.repeat(40);
-      if (fault === 'execution-definition' && args[0] === 'ls-tree' && args.at(-1) === execution) {
+      if (args[0] === 'ls-tree' && ((fault === 'execution-definition' && args.at(-1) === execution) ||
+        (fault === 'unreviewed-workflow' && [head, execution].includes(args.at(-1))))) {
         return value.split('\0').map(entry => entry.endsWith(`\t${workflow}`) ? entry.replace(/blob [a-f0-9]{40}/, 'blob ' + 'e'.repeat(40)) : entry).join('\0');
       }
       return value;

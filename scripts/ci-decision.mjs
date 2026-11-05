@@ -5,14 +5,16 @@ import {collectPages} from './ci-reuse-api.mjs';
 import {assertCurrentReuse, assertReviewedInputs} from './ci-reuse.mjs';
 import {loadWorkspaceAtRevision} from './ci-workspace-snapshot.mjs';
 import {resolveRange} from './ci-range.mjs';
-import {selectPlan} from './ci-plan.mjs';
 import {scopeForPaths, workPlan} from './ci-scope.mjs';
+import {workflowPaths} from './ci-reuse-proof.mjs';
+import {selectWorkflowPlan, fullWorkflowPlan} from './ci-workflow-plan.mjs';
 
-const workflowPath = '.github/workflows/ci.yml';
+const ci = '.github/workflows/ci.yml';
 const revision = value => assert.match(value, /^(?!0{40}$)[a-f0-9]{40}$/, 'Invalid decision revision');
 const positive = value => assert.ok(Number.isSafeInteger(value) && value > 0, 'Invalid decision numeric identity');
 
 export function createDecisionEvidence(context, selection, git, mode) {
+  const workflowPath = context.workflowPath ?? ci;
   const event = Object.fromEntries(['before', 'after', 'forced', 'deleted', 'created']
     .filter(key => context.event?.[key] !== undefined).map(key => [key, context.event[key]]));
   const saved = Object.fromEntries(['sha', 'repository', 'repositoryId', 'runId', 'attempt', 'workflowId', 'eventName', 'ref', 'full', 'called',
@@ -26,21 +28,27 @@ export function createDecisionEvidence(context, selection, git, mode) {
 export function validateDecisionEvidence(record) {
   assert.deepEqual(Object.keys(record).sort(), ['version', 'workflowPath', 'context', 'mode', 'selection', 'tree'].sort(), 'Invalid decision fields');
   assert.equal(record.version, 1, 'Unsupported decision version');
-  assert.equal(record.workflowPath, workflowPath, 'Unsupported decision workflow');
-  assert.ok(['reused', 'selected', 'full'].includes(record.mode), 'Unsupported decision mode');
+  assert.ok(workflowPaths.includes(record.workflowPath), 'Unsupported decision workflow');
+  assert.ok(['reused', 'selected', 'full', 'unselected'].includes(record.mode), 'Unsupported decision mode');
+  if (record.workflowPath === ci) assert.notEqual(record.mode, 'unselected', 'CI cannot have an empty scope');
   const context = record.context;
   assert.equal(context?.repository, 'waitron-io/waitron-cloud', 'Wrong decision repository');
   for (const key of ['repositoryId', 'runId', 'attempt', 'workflowId']) positive(context[key]);
   assert.equal(context.eventName, 'push', 'Decision is not a main push');
   assert.equal(context.ref, 'refs/heads/main', 'Decision is not for main');
-  assert.equal(context.workflowRef, `${context.repository}/${workflowPath}@refs/heads/main`, 'Decision workflow reference differs');
+  assert.equal(context.workflowRef, `${context.repository}/${record.workflowPath}@refs/heads/main`, 'Decision workflow reference differs');
   revision(context.sha); revision(record.tree);
   assert.equal(context.workflowSha, context.sha, 'Decision execution revision differs');
   assert.equal(context.event?.after, context.sha, 'Decision event head differs');
   assert.equal(typeof context.full, 'boolean', 'Missing full invocation marker');
   assert.equal(typeof context.called, 'boolean', 'Missing called invocation marker');
   assert.equal(Boolean(record.selection?.reuse), record.mode === 'reused', 'Decision reuse mode differs');
-  expectedJobContract(workflowPath, record.selection);
+  if (record.workflowPath !== ci) {
+    assert.equal(record.selection.required, ['full', 'selected'].includes(record.mode), 'Native decision mode differs from its work');
+    assert.equal(record.selection.full === true, record.mode === 'full', 'Native full decision marker differs');
+    if (!record.selection.reuse) assert.equal(record.selection.head, context.sha, 'Native selection head differs from decision');
+  }
+  expectedJobContract(record.workflowPath, record.selection);
   assert.ok(Buffer.byteLength(canonicalJson(record)) <= maxEvidenceBytes, 'Decision is too large');
   return record;
 }
@@ -61,7 +69,7 @@ function assertJobs(jobs, contract, context) {
 
 export function readbackDecision(record, {api, git, now} = {}) {
   validateDecisionEvidence(record);
-  const {context, selection, mode} = record;
+  const {context, selection, mode, workflowPath} = record;
   const call = (method, ...args) => api[method](...args, api.remaining());
   const pages = (method, ...args) => collectPages(number => call(method, ...args, number));
   const repository = call('readRepository');
@@ -84,7 +92,7 @@ export function readbackDecision(record, {api, git, now} = {}) {
   assert.equal(git('rev-parse', 'HEAD^{tree}').trim(), record.tree, 'Operator checkout tree differs from decision');
   assert.equal(git('rev-parse', `${context.sha}^{tree}`).trim(), record.tree);
   assertReviewedInputs(context.sha, git);
-  const artifactName = `ci-decision-v1-ci-${context.runId}-${context.attempt}`;
+  const artifactName = `ci-decision-v1-${workflowPath.slice('.github/workflows/'.length, -4)}-${context.runId}-${context.attempt}`;
   const artifacts = pages('listArtifacts', context.runId).filter(artifact => artifact.name === artifactName);
   assert.equal(artifacts.length, 1, 'Missing or duplicate main decision artifact');
   const archive = call('readPlanArtifact', artifacts[0].id);
@@ -93,12 +101,14 @@ export function readbackDecision(record, {api, git, now} = {}) {
   const hosted = JSON.parse(new TextDecoder('utf-8', {fatal: true}).decode(decodePlanArchive(archive, maxEvidenceBytes)));
   assert.equal(canonicalJson(hosted), canonicalJson(record), 'Local decision differs from hosted attempt artifact');
   if (mode !== 'reused') {
-    const snapshot = loadWorkspaceAtRevision(context.sha, git);
-    if (mode === 'selected') {
+    if (mode === 'selected' || mode === 'unselected') {
       const range = resolveRange(context.event, context, git);
       assert.equal(range.kind, 'push', 'Selected decision lacks a trusted range');
-      assert.equal(canonicalJson(selection), canonicalJson(selectPlan(range, snapshot, git)), 'Recomputed main selection differs');
+      assert.equal(canonicalJson(selection), canonicalJson(selectWorkflowPlan(workflowPath, range, git)), 'Recomputed main selection differs');
+    } else if (workflowPath !== ci) {
+      assert.equal(canonicalJson(selection), canonicalJson(fullWorkflowPlan(workflowPath, context.sha)), 'Full native decision omits required work');
     } else {
+      const snapshot = loadWorkspaceAtRevision(context.sha, git);
       const full = {...workPlan(scopeForPaths([], snapshot.packages), snapshot.packages, undefined, undefined, snapshot.testFilesByPackage), reuse: null};
       const {reason, ...plannedWork} = selection;
       assert.equal(canonicalJson(plannedWork), canonicalJson(full), 'Full decision omits required work');

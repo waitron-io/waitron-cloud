@@ -5,8 +5,7 @@ import {readFileSync, readdirSync} from 'node:fs';
 import {collectPages} from './ci-reuse-api.mjs';
 import {assertSourceEvidence, canonicalJson, evidenceDigest, expectedJobContract, readPlanArtifact} from './ci-evidence.mjs';
 import {workflowPaths, assertReuseProof} from './ci-reuse-proof.mjs';
-import {loadWorkspaceAtRevision} from './ci-workspace-snapshot.mjs';
-import {selectPlan} from './ci-plan.mjs';
+import {selectWorkflowPlan} from './ci-workflow-plan.mjs';
 
 const positive = value => Number.isSafeInteger(value) && value > 0;
 const validSha = value => typeof value === 'string' && /^(?!0{40}$)[a-f0-9]{40}$/.test(value);
@@ -112,6 +111,9 @@ function assertWorkflowProvenance(source, run, git) {
     const file = headFiles.get(path);
     assert.ok(file?.type === 'blob' && ['100644', '100755'].includes(file.mode), `Missing regular workflow input: ${path}`);
     assert.deepEqual(executedFiles.get(path), file, `Execution workflow input differs: ${path}`);
+    const reviewed = readFileSync(new URL(`../${path}`, import.meta.url));
+    assert.equal(file.id, createHash('sha1').update(`blob ${reviewed.length}\0`).update(reviewed).digest('hex'),
+      `Current reviewed workflow input differs: ${path}`);
   };
   const visit = path => {
     if (checked.has(path)) return;
@@ -232,9 +234,7 @@ export function findReuse(context, {api, git, now = () => performance.now()} = {
     readGit('merge-base', '--is-ancestor', source.event.mergeBase, head.sha);
     assert.equal(readGit('merge-base', originalBase.sha, head.sha).trim(), source.event.mergeBase, 'Original merge base differs');
     assertWorkflowProvenance(source, run, readGit);
-    assert.equal(workflowPath, workflowPaths[0], 'Sibling selector is not yet supported');
-    const snapshot = loadWorkspaceAtRevision(head.sha, readGit);
-    const selection = selectPlan({base: source.event.mergeBase, head: head.sha}, snapshot, readGit);
+    const selection = selectWorkflowPlan(workflowPath, {base: source.event.mergeBase, head: head.sha}, readGit);
     const jobs = collectPages(number => call('listAttemptJobs', run.id, run.run_attempt, number));
     assertSourceEvidence(source, selection, jobs, expectedJobContract(workflowPath, selection));
     const reread = call('readRun', run.id), latest = newest();

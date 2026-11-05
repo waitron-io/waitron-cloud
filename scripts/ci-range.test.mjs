@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
-import {execFileSync} from 'node:child_process';
-import {mkdtempSync, mkdirSync, writeFileSync, rmSync} from 'node:fs';
+import {execFileSync, spawnSync} from 'node:child_process';
+import {mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync} from 'node:fs';
+import {fileURLToPath} from 'node:url';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import test from 'node:test';
@@ -20,8 +21,79 @@ function fixture(t) {
   }
   const commit = () => {git('add','.'); git('commit','-qsm','Range fixture'); return git('rev-parse','HEAD').trim();};
   const before = commit();
-  return {git,write,commit,before,packages};
+  return {root,git,write,commit,before,packages};
 }
+
+test('executed main range selection covers an unequal squash, a direct push and every commit in a batch', t => {
+  const {root, git, write, commit, before} = fixture(t);
+  write('package.json', '{"name":"ci-range-fixture","private":true}\n');
+  const baseline = commit();
+  write('apps/portal/test/feature.test.ts', 'export const feature = true;\n');
+  const sourceHead = commit();
+  git('checkout', '--detach', baseline);
+  write('unrelated-main.md', '# Independent main change\n');
+  const advancedMain = commit();
+  git('merge', '--squash', sourceHead);
+  const squash = commit();
+  assert.notEqual(git('rev-parse', `${sourceHead}^{tree}`).trim(), git('rev-parse', `${squash}^{tree}`).trim());
+  const repository = {id: 123, full_name: 'waitron-io/waitron-cloud', default_branch: 'main'};
+  const workflow = {id: 17, path: '.github/workflows/ci.yml', state: 'active'};
+  const directory = mkdtempSync(join(tmpdir(), 'cloud-range-cli-'));
+  t.after(() => rmSync(directory, {recursive: true, force: true}));
+  writeFileSync(join(directory, 'gh'), `#!${process.execPath}
+const fs = require('node:fs');
+const responses = JSON.parse(fs.readFileSync(process.env.CI_RESPONSES));
+const data = responses[process.argv.at(-1)];
+if (data === undefined) process.exit(2);
+process.stdout.write('HTTP/2 200 OK\\r\\n\\r\\n' + JSON.stringify(data));
+`, {mode: 0o700});
+  const run = (base, head, prs, unavailable = false) => {
+    const endpoint = `repos/${repository.full_name}`;
+    const commits = {};
+    for (const sha of [base, head, sourceHead]) commits[`${endpoint}/git/commits/${sha}`] = {
+      sha, tree: {sha: git('rev-parse', `${sha}^{tree}`).trim()},
+      parents: git('show', '-s', '--format=%P', sha).trim().split(' ').filter(Boolean).map(sha => ({sha})),
+    };
+    const responses = {...commits, [endpoint]: repository, [`${endpoint}/actions/workflows/ci.yml`]: workflow,
+      [`${endpoint}/actions/runs/90`]: {id: 90, run_attempt: 1, workflow_id: 17, path: workflow.path,
+        event: 'push', head_sha: head, head_branch: 'main', repository, head_repository: repository},
+      ...(!unavailable ? {[`${endpoint}/commits/${head}/pulls?per_page=100&page=1`]: prs} : {})};
+    writeFileSync(join(directory, 'responses.json'), JSON.stringify(responses));
+    writeFileSync(join(directory, 'event.json'), JSON.stringify({before: base, after: head, commits: []}));
+    writeFileSync(join(directory, 'output'), '');
+    const result = spawnSync(process.execPath, [fileURLToPath(new URL('./ci-plan.mjs', import.meta.url))], {cwd: root,
+      encoding: 'utf8', timeout: 30_000, env: {...process.env, PATH: `${directory}:${process.env.PATH}`,
+        CI_RESPONSES: join(directory, 'responses.json'), GITHUB_EVENT_PATH: join(directory, 'event.json'),
+        GITHUB_OUTPUT: join(directory, 'output'), GITHUB_REPOSITORY: repository.full_name, GITHUB_REPOSITORY_ID: '123',
+        GITHUB_EVENT_NAME: 'push', GITHUB_REF: 'refs/heads/main', GITHUB_REF_NAME: 'main', GITHUB_SHA: head,
+        GITHUB_RUN_ID: '90', GITHUB_RUN_ATTEMPT: '1', CI_WORKFLOW_ID: '17',
+        CI_FULL: 'false', CI_CALLED: 'false', CI_FORCE_FULL: 'false', CI_WORKFLOW_INPUTS: '{}'}});
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    const line = readFileSync(join(directory, 'output'), 'utf8').split('\n').find(line => line.startsWith('plan='));
+    return JSON.parse(line.slice(5));
+  };
+  const pr = {id: 951, number: 51, state: 'closed', merged_at: '2026-11-05T08:00:00Z', merge_commit_sha: squash,
+    base: {ref: 'main', sha: baseline, repo: repository}, head: {sha: sourceHead, ref: 'feature', repo: repository}};
+  const portal = [1, 2, 3, 4, 5, 6].map(shard => ({package: '@waitron-cloud/portal', shard, shards: 6}));
+  const unequal = run(advancedMain, squash, [pr]);
+  assert.deepEqual(unequal.packages, portal);
+  assert.deepEqual(unequal.receipts, ['test:local-stack']);
+  assert.equal(unequal.reuse, null);
+  write('packages/ui-smoke/test/direct.test.ts', 'export const direct = true;\n');
+  const directHead = commit();
+  const direct = run(squash, directHead, []);
+  assert.deepEqual(direct.packages, [{package: '@waitron-cloud/ui-smoke', shard: 1}]);
+  assert.deepEqual(direct.receipts, []);
+  write('apps/portal/test/batch.test.ts', 'export const batched = true;\n');
+  const batchHead = commit();
+  const batch = run(squash, batchHead, []);
+  assert.deepEqual(batch.packages, portal.concat({package: '@waitron-cloud/ui-smoke', shard: 1}));
+  assert.deepEqual(batch.receipts, ['test:local-stack']);
+  const refused = run(squash, directHead, [], true);
+  assert.deepEqual(refused.packages, portal.concat({package: '@waitron-cloud/ui-smoke', shard: 1}));
+  assert.equal(refused.receipts.length, 6);
+  assert.notEqual(before, baseline);
+});
 
 test('a main push selects the actual changed package instead of repeating full work', t => {
   const {git,write,commit,before,packages} = fixture(t);

@@ -76,7 +76,16 @@ export function expectedJobContract(workflowPath, selection) {
     add(selection.packages.length > 0, selection.packages.map(row => `package (${row.package}${row.shards ? `, shard ${row.shard}/${row.shards}` : ''})`), [packagePlaceholder]);
     add(selection.receipts.length > 0, ['receipts']);
   } else {
-    assertRange(selection);
+    if (selection.reuse) {
+      assertReuseProof(selection.reuse, workflowPath);
+      assert.equal(selection.required, false, 'Reused sibling cannot run native checks');
+      assert.equal(selection.full, undefined, 'Reused sibling cannot be a full invocation');
+    } else if (selection.full === true) {
+      assert.equal(selection.required, true, 'A full workflow must run native checks');
+      assert.match(selection.head, sha, 'Invalid full workflow head');
+      assert.equal(selection.base, undefined, 'Full workflow cannot claim a selected range');
+      assert.equal(selection.paths, undefined, 'Full workflow cannot claim selected paths');
+    } else assertRange(selection);
     required.push(workflowPath.endsWith('/cloud-cost.yml') ? 'discover' : 'changes');
     if (workflowPath.endsWith('/cloud-cost.yml')) {
       if (selection.required) {
@@ -86,11 +95,11 @@ export function expectedJobContract(workflowPath, selection) {
     } else if (workflowPath.endsWith('/venue-services-proof.yml')) {
       add(selection.required, ['service-receipts (legacy)', 'service-receipts (venue)'], ['service-receipts (${{ matrix.receipt }})']);
     } else if (workflowPath.endsWith('/aws-infrastructure.yml')) {
-      assert.equal(selection.required, true, 'AWS source must run its checks');
-      add(true, ['verify (guards-1)', 'verify (guards-2)', 'verify (guards-3)', 'verify (suites)']);
+      assert.ok(selection.required || selection.reuse, 'AWS source must run its checks');
+      add(selection.required, ['verify (guards-1)', 'verify (guards-2)', 'verify (guards-3)', 'verify (suites)'], ['verify (${{ matrix.cell }})']);
     } else {
-      assert.equal(selection.required, true, 'Diagnostic source must run its checks');
-      add(true, ['linux-contention']);
+      assert.ok(selection.required || selection.reuse, 'Diagnostic source must run its checks');
+      add(selection.required, ['linux-contention']);
     }
   }
   required.push('summary');
@@ -195,7 +204,8 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
         const {git} = runtimeReuseDependencies(context);
         const record = createDecisionEvidence(context, JSON.parse(process.env.CI_PLAN), git, process.env.CI_MODE);
         writeFileSync(process.argv[3], canonicalJson(record) + '\n', {flag: 'wx'});
-        if (process.env.GITHUB_OUTPUT) appendFileSync(process.env.GITHUB_OUTPUT, `artifact_name=ci-decision-v1-ci-${context.runId}-${context.attempt}\n`);
+        const key = record.workflowPath.slice('.github/workflows/'.length, -4);
+        if (process.env.GITHUB_OUTPUT) appendFileSync(process.env.GITHUB_OUTPUT, `artifact_name=ci-decision-v1-${key}-${context.runId}-${context.attempt}\n`);
       }
     } else {
       const env = process.env;

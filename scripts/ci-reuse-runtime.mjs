@@ -8,6 +8,7 @@ export function reuseContextFromEnvironment(event, env = process.env) {
   return {event, sha: env.GITHUB_SHA, repository: env.GITHUB_REPOSITORY, branch: env.GITHUB_REF_NAME,
     repositoryId: Number(env.GITHUB_REPOSITORY_ID), runId: Number(env.GITHUB_RUN_ID), attempt: Number(env.GITHUB_RUN_ATTEMPT),
     workflowId: Number(env.CI_WORKFLOW_ID), eventName: env.GITHUB_EVENT_NAME, ref: env.GITHUB_REF,
+    workflowPath: env.GITHUB_WORKFLOW_REF?.match(/^waitron-io\/waitron-cloud\/(\.github\/workflows\/[a-z-]+\.yml)@/)?.[1],
     workflowRef: env.GITHUB_WORKFLOW_REF, workflowSha: env.GITHUB_WORKFLOW_SHA,
     full: env.CI_FULL === 'true', called: env.CI_CALLED === 'true' || Object.hasOwn(inputs, 'full')};
 }
