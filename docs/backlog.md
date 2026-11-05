@@ -237,21 +237,26 @@ at Waitron `4fbb76eaf`, routing edition proposal-2026-10-23.2 accepted by G with
 E's matching record still required, and the original 83-byte empty manifest unchanged.
 The [D132 appliance response](waitron-integration-contract.md#a951-appliance-response-2026-10-23-d132)
 still accepts no full appliance artifact or executable pair. The [D560 mapping response](waitron-integration-contract.md#a951-g1-hostcustody-mapping-response-2026-11-02-d560)
-returns immutable `cloud-a951-g1-host-custody-v1` / `proposal-2026-11-02.1` for E/G
-engineering planning against exact helper and host digests; Cloud's scoped
-acceptance still needs E's matching record. It maps closures,
-complete 256-entry lifetime trust history within each 64 KiB safety cap, the shared
-256 KiB journal, all-store crash reconciliation with protected PP participants
-and separate role-local replay progress, approval dependencies and intact reboot, preserving every D132/H bound. E must record matching mapping acceptance
-and focused T1/T2/T3/T5/T14 amendments, then return a revised full appliance edition
-and complete signed-byte corpus. Actual establish/recover/reconnect approval
-consumers, authenticated one-use channel/ledger, registration/node mapping,
-root/origin/peer provisioning and separate issuer custody remain named missing
-engineering dependencies. G2 actual A947 authority, G3 test-only staff policy,
-G4 independent upstream, G5 movement, G6 routing/diagnostics/privacy and G7 exact
-host/device/runtime evidence retain their path-scoped gates. Source pins are not
-running consumers; no runtime proof is supplied. Admission stays CLOSED and
-`.local` independent.
+returns immutable `cloud-a951-g1-host-custody-v1` / `proposal-2026-11-02.1`.
+E's [matching intake](https://github.com/clintongormley/waitron/blob/9b2adbf7dbe9ef2b29eaff22eda352129bba1b32/docs/developers/cloud-connection.md#g1-mapping-acceptance-2-november-2026-d560)
+accepts its exact publication digest for isolated engineering planning only.
+The mapping preserves closures, 256 lifetime trust entries within each 64 KiB
+safety cap, the shared 256 KiB journal, four-store crash reconciliation and
+separate role-local progress. Complete appliance acceptance and both executable
+consumers remain NONE. The [D582 Cloud build plan](superpowers/plans/2026-11-05-a951-cloud-tunnel.md)
+assigns the approval receiver and one-use Permit ledger, registration/node
+mapping, public root/origin/peer policy and separate issuer custody to Cloud.
+E owns local permission decisions, provisioning, private keys, client and native
+confinement. The accepted responsibility split does not accept the missing
+approval channel, revised full appliance or complete signed corpus; those must
+precede affected adapters. The first target is one fixed box with opt-in test
+staff access on Debian 13. Exact host pins and runtime proof remain G7 work.
+E also records D136 routing revision 2 acceptance at the linked pin solely for
+isolated T4 fixtures; the original 83-byte production manifest is unchanged.
+G2 actual A947 authority, G3 client limits, G4 independent customer upstream,
+G5 movement, G6 diagnostics/privacy and G7 runtime evidence retain their
+path-scoped gates. G4/G5 are outside the first target. No tunnel or consumer is
+qualified by the plan. Admission stays CLOSED and `.local` independent.
 
 **D101 data protection, approved design and published build planning:** the owner
 approved the complete D101/D88 data-protection engineering design from PR283
