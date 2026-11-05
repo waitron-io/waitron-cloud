@@ -58,8 +58,14 @@ async function binary(root) {
     try {
       bytes = await downloadStorageArchive(url, {
         attempts: 1, inactivityMs: null,
-        report(event) { phase = event.phase; httpStatus = event.status; },
-        validate(response) { if (!response.ok) throw Error("SeaweedFS download failed"); },
+        report(event) { phase = event.phase; httpStatus = event.status ?? null; },
+        async validate(response) {
+          if (!response.ok) {
+            // Closing a refused response must preserve the original status error.
+            try { await response.body?.cancel(); } catch {}
+            throw Error("SeaweedFS download failed");
+          }
+        },
         consume: async response => Buffer.from(await response.arrayBuffer()),
       });
     } catch (cause) {

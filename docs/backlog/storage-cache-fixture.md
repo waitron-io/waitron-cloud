@@ -116,8 +116,12 @@ startup removes its private directory and publishes no archive; a complete
 archive with the wrong digest remains refused. The fixture still makes exactly one download attempt; archive pins,
 cache publication and permission checks are unchanged. D585 adds a shared
 30-second deadline over headers and body. Run `node --test scripts/ci-backup-storage-download-budget.test.mjs`
-to hold either stage on a real local HTTP server and verify abort, connection
-closure, an empty cache and removal of the private startup directory. These
+to hold headers or a body on a real local HTTP server and verify abort, an empty
+cache and removal of the private startup directory. Its HTTP-refusal case
+requires connection closure before the deadline can fire. Run
+`node --test scripts/ci-backup-storage-download-contract.test.mjs` to check native
+body silence without a seed inactivity limit, late completion after abort,
+unavailable status, cancellation errors and a failed diagnostic sink. These
 controls qualify reporting and bounded acquisition, not the historical Linux
 failure.
 
@@ -334,10 +338,11 @@ The frozen `scripts/fixtures/ci-deployment-inputs.json` also contains a copy of
 the Dockerfile, materialised by `scripts/ci-dependency-fixture.mjs`; it represents
 the same build edge in historical receipt fixtures. Mock fetches and URL
 assertions in the refusal tests are not additional upstream acquisition sites.
-Thirty-three source files import or reference the native storage fixture in
-this inventory; their cache misses enter the shared single-attempt supervision.
-Native refusal checks retain their original assertions. The frozen fixture is
-unchanged.
+Native fixture consumers enter the shared single-attempt supervision on a cache
+miss.
+Native refusal checks retain their original assertions. Refused HTTP bodies
+are cancelled immediately, with the original HTTP error retained if cancellation
+also fails. The frozen fixture is unchanged.
 
 The wider evidence is distinct from the tar-hook timeout. Nightly run
 `42042160125`, job `127302872285`, records three HTTP 504 replies at the

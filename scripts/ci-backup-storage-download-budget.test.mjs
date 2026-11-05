@@ -8,7 +8,7 @@ import test from "node:test";
 
 const execute = promisify(execFile);
 
-// Without the fixture's deadline, the real server completes with invalid bytes.
+// Header/body stalls must abort; an HTTP refusal must close its body immediately.
 for (const phase of ["headers", "body", "status"]) {
   test(`native archive ${phase} refusal closes its request within the acquisition budget`, { timeout: 10000 }, async t => {
     const root = await mkdtemp(join(tmpdir(), "cloud-native-budget-"));
@@ -20,7 +20,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { startBackupStorage } from "./scripts/backup-storage-fixture.mjs";
 const timeout = AbortSignal.timeout.bind(AbortSignal), budgets = [];
-AbortSignal.timeout = ms => { budgets.push(ms); return timeout(ms === 30000 ? 75 : ms); };
+AbortSignal.timeout = ms => { budgets.push(ms); return timeout(ms === 30000 ? ${phase === "status" ? 1000 : 75} : ms); };
 let calls = 0, completed = false, disconnected = false;
 let releaseConnection;
 const connectionClosed = new Promise(resolve => { releaseConnection = resolve; });
@@ -61,7 +61,7 @@ console.log(JSON.stringify({ message: failure?.message, causeName: failure?.caus
     assert.equal(stderr, "");
     const result = JSON.parse(stdout);
     assert.equal(result.message, `SeaweedFS download failed (${phase})`);
-    assert.ok((phase === "status" ? ["Error"] : ["TimeoutError", "AbortError"]).includes(result.causeName), stdout);
+    assert.equal(result.causeName, phase === "status" ? "Error" : "TimeoutError", stdout);
     assert.deepEqual(result.budgets, [30000], "one deadline must cover headers and body");
     assert.equal(result.diagnostic.phase, phase);
     assert.equal(result.diagnostic.httpStatus, phase === "headers" ? null : phase === "status" ? 503 : 200);

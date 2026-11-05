@@ -18,8 +18,9 @@ open. This documentation change does not publish or dispatch anything.
 The [storage archive acquisition record](backlog/storage-cache-fixture.md#every-seaweedfs-archive-fetch-and-a-controlled-copy-proposal-d530-4)
 tracks D585: native startup and ten test seed hooks share bounded acquisition.
 Native startup retains one attempt, with a 30-second deadline covering headers
-and body. Conformance preparation and the Dockerfile remain separate follow-up
-paths.
+and body. HTTP refusals close their response body immediately without replacing
+the original refusal. Conformance preparation and the Dockerfile remain separate
+follow-up paths.
 
 ## Admin listener shutdown and paced replay (D581)
 
