@@ -30,7 +30,7 @@ export function createSesRelaySender(config:SesFeedbackConfig,smtp:SmtpAccountMa
  return async(content:RelayContent,admission:HandoffAdmission,signal:AbortSignal):Promise<RelaySesResult>=>{
   const rendered=relayTemplate(content);
   try{
-   const result=await deliver(content.recipient,rendered,`<${content.messageId}@${domain}>`,{deliveryId:content.messageId,signal,ses:admission});
+   const result=await deliver(content.recipient,()=>rendered,`<${content.messageId}@${domain}>`,{deliveryId:content.messageId,signal,ses:admission});
    return {outcome:'accepted',...(result.providerReceipt?{providerReceipt:result.providerReceipt}:{})};
   }catch(error){if(error instanceof RelaySmtpFailure)return {outcome:error.outcome};throw error;}
  };

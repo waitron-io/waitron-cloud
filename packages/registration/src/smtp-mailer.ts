@@ -42,7 +42,7 @@ export function createSmtpDelivery(config:SmtpAccountMailConfig,trust:{ca?:strin
   // Capture configuration so a caller cannot change the destination or credential during a send.
   const {host, user, password, from} = config;
   const ca = Buffer.isBuffer(trust.ca) ? Buffer.from(trust.ca) : trust.ca;
-  return async (recipient:string,rendered:{subject:string;text:string},messageId:string,context?:EmailDeliveryContext):Promise<EmailDeliveryReceipt>=>{
+  return async (recipient:string,render:()=>{subject:string;text:string},messageId:string,context?:EmailDeliveryContext):Promise<EmailDeliveryReceipt>=>{
     if(normaliseEmail(recipient)!==recipient)throw new EmailDeliveryError('delivery_rejected');
     const headers=ses?sesSmtpHeaders(ses,context?.ses):undefined;
     if(!ses&&context?.ses)throw new EmailDeliveryError('delivery_configuration');
@@ -72,6 +72,7 @@ export function createSmtpDelivery(config:SmtpAccountMailConfig,trust:{ca?:strin
     try {
       signal?.addEventListener('abort', abort, {once: true});
       timer = setTimeout(abort, timeout);
+      const rendered=render();
       const result = await Promise.race([abortPromise, transport.sendMail({from: {name: 'Waitron Cloud', address: from},
         to: {address: recipient, name: ''}, subject: rendered.subject, text: rendered.text, messageId,headers})]);
       if (result.rejected.length || result.accepted.length !== 1) throw new EmailDeliveryError('delivery_rejected');
@@ -95,7 +96,7 @@ export function createSmtpAccountMailer(config:SmtpAccountMailConfig,trust:{ca?:
    ||(kind!=='password_changed'&&kind!=='service_alert'&&(!('token' in message)||!/^[A-Za-z0-9_-]{43}$/.test(message.token)||!Number.isFinite(Date.parse(message.expiresAt)))))throw new EmailDeliveryError('delivery_rejected');
   const deliveryId=context?.deliveryId??randomUUID();
   if(!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(deliveryId))throw new EmailDeliveryError('delivery_rejected');
-  return deliver(message.email,accountMail(origin,kind,message),`<${deliveryId}@${domain}>`,context);
+  return deliver(message.email,()=>accountMail(origin,kind,message),`<${deliveryId}@${domain}>`,context);
  };
   return {
     sendVerification: (message: AccountEmail, context?: EmailDeliveryContext) => send('verification', message, context),

@@ -70,6 +70,17 @@ test('generic SMTP cannot silently discard an SES handoff',async()=>{
  }finally{await smtp.close();}
 });
 
+test('account template refusal retains fixed diagnostics and checks cancellation before rendering',async()=>{
+ const smtp=await tlsSmtp();try{
+  const mailer=createSmtpAccountMailer({...smtpConfig,port:smtp.port},{ca:smtp.cert});
+  const message={email:'owner@example.test',locale:'unsupported' as any};
+  await assert.rejects(mailer.sendPasswordChanged(message),{code:'delivery_failed',message:'delivery_failed'});
+  const stopped=AbortSignal.abort();
+  await assert.rejects(mailer.sendPasswordChanged(message,{deliveryId:randomUUID(),signal:stopped}),{code:'delivery_timeout'});
+  assert.equal(smtp.connections,0);
+ }finally{await smtp.close();}
+});
+
 // Parsing optional provider metadata must never turn an accepted send into a retry.
 test('only bounded SES acceptance IDs produce a separate provider receipt',async()=>{
  const metadata={sesSmtpHeaders,sesProviderReceipt};

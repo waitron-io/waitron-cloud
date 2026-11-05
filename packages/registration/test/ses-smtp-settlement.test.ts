@@ -12,6 +12,8 @@ import {EmailDeliveryError} from '../src/email-delivery.ts';
 import {RelayWorker} from '../src/relay-worker.ts';
 import {fixture as relayFixture} from './fixtures/relay-worker.ts';
 import * as relaySes from '../src/relay-ses-smtp.ts';
+import {createSmtpAccountMailer} from '../src/smtp-mailer.ts';
+import {tlsSmtp,smtpConfig} from './fixtures/ses-smtp.ts';
 
 const outbox=new EmailOutbox({activeKeyId:'payload',keys:{payload:'77'.repeat(32)}});
 const ses={config:config(),recipientKeys:keys};
@@ -136,4 +138,41 @@ test('provider-binding database failure leaves acceptance terminal before the wo
   assert.equal(row.status,'sent');assert.equal(row.failures,0);assert.equal(row.payload,null);
   assert.equal((await f.pool.query('SELECT provider_message_id FROM mail_attempts')).rows[0].provider_message_id,null);
  }finally{await f.close();}
+});
+
+test('an unconfigured mailer cannot create provider evidence without its own admitted attempt',async()=>{
+ const f=await fixture();try{
+  const id=await enqueue(f.pool);
+  const send=async()=>({transport:'smtp' as const,messageId:`<${id}@mail.example.test>`,providerReceipt:{provider:'ses' as const,messageId:'unadmitted'}});
+  const w=new EmailWorker(f.pool,outbox,{sendVerification:send,sendPasswordReset:send,sendPasswordChanged:send,sendServiceAlert:send});
+  await assert.doesNotReject(w.runOnce());
+  assert.equal((await f.pool.query('SELECT status FROM email_outbox')).rows[0].status,'sent');
+  assert.equal((await f.pool.query('SELECT count(*) FROM mail_attempts')).rows[0].count,'0');
+ }finally{await f.close();}
+});
+
+test('real TLS account handoff correlates early feedback and acceptance to its committed opaque tag',async()=>{
+ const f=await fixture();let smtp:Awaited<ReturnType<typeof tlsSmtp>>|undefined;
+ try{
+  const id=await enqueue(f.pool);let received=0;
+  smtp=await tlsSmtp({onData(stream,session,done){
+   let raw='';stream.on('data',bytes=>raw+=bytes);stream.on('end',()=>{
+    void (async()=>{
+     received++;assert.equal(session.secure,true);
+     const tag=/X-SES-MESSAGE-TAGS: waitron-attempt=([A-Za-z0-9_-]{43})/i.exec(raw.replace(/\r\n[ \t]+/g,' '))?.[1];
+     assert.ok(tag);assert.ok(raw.includes(`Message-ID: <${id}@mail.example.test>`));
+     assert.equal((await f.pool.query('SELECT attempt_tag FROM mail_attempts WHERE queue_id=$1',[id])).rows[0].attempt_tag,tag);
+     assert.equal(await earlyFeedback(f.pool,tag,'ses-joint'),'applied');
+    })().then(()=>done(null,'Ok ses-joint'),()=>done(new Error('fixture feedback refused')));
+   });
+  }});
+  const mailer=createSmtpAccountMailer({...smtpConfig,port:smtp.port},{ca:smtp.cert},ses.config);
+  const w=new EmailWorker(f.pool,outbox,mailer,{ses});
+  await w.runOnce();assert.equal(await w.runOnce(),false);assert.equal(received,1);
+  const row=(await f.pool.query('SELECT * FROM email_outbox')).rows[0];
+  assert.equal(row.status,'sent');assert.equal(row.failures,0);assert.equal(row.payload,null);assert.equal(row.message_id,`<${id}@mail.example.test>`);
+  assert.equal((await f.pool.query('SELECT provider_message_id FROM mail_attempts')).rows[0].provider_message_id,'ses-joint');
+  assert.equal((await f.pool.query('SELECT count(*) FROM mail_feedback_receipts')).rows[0].count,'1');
+  assert.equal((await f.pool.query('SELECT count(*) FROM mail_suppressions')).rows[0].count,'1');
+ }finally{await smtp?.close();await f.close();}
 });

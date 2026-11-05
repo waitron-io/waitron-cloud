@@ -18,6 +18,9 @@ test('SES configuration files require independent qualification and retained rec
   const handoff=read(f.policy);
   assert.equal(handoff.config.configurationSet,'transactional');assert.equal(handoff.config.scope.region,'eu-north-1');
   assert.deepEqual(handoff.recipientKeys,{activeKeyId:'v1',keys:{v1:'11'.repeat(32)}});
+  process.env.CLOUD_MAIL_PROVIDER='generic';assert.throws(()=>configured.configuredAccountMailer(handoff),/Invalid email transport configuration/);
+  process.env.CLOUD_MAIL_PROVIDER='ses';process.env.CLOUD_MAIL_TRANSPORT='local';assert.throws(()=>configured.configuredAccountMailer(handoff),/Invalid SES mail configuration/);
+  process.env.CLOUD_MAIL_TRANSPORT='smtp';
   for(const field of ['CLOUD_SES_FEEDBACK_CONFIG_FILE','CLOUD_MAIL_RECIPIENT_KEYS','CLOUD_MAIL_RECIPIENT_ACTIVE_KEY_ID']){
    const saved=process.env[field];delete process.env[field];assert.throws(()=>read(f.policy),/Invalid SES mail configuration/);process.env[field]=saved;
   }
