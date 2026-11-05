@@ -32,6 +32,8 @@ if(args[0]==='init'){
  mkdirSync(source,{recursive:true});save();
 }else if(args.includes('fetch')){
  data.pids.push(process.pid);const failure=data.failures.shift();save();
+ if(data.fetchDelayMs&&data.calls.filter(args=>args.includes('fetch')).length===(data.fetchDelayAttempt??1))
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,data.fetchDelayMs);
  if(failure){writeFileSync(join(args[args.indexOf('-C')+1],'partial'),'generated');
   if(failure==='hang')setInterval(()=>{},1000);
   else {console.error(failure);process.exit(128);}
@@ -40,8 +42,10 @@ if(args[0]==='init'){
 else if(!args.includes('checkout'))process.exit(90);
 `,{mode:0o700});
   await writeFile(join(bin,'pnpm'),`#!${process.execPath}\nconsole.error('REACHED_SOURCE_INSTALL');process.exit(73);\n`,{mode:0o700});
-  // Accelerate supervisor time only in this disposable child; retain reported limits.
-  const clock='const timer=setTimeout;globalThis.setTimeout=(fn,ms,...args)=>timer(fn,ms===300000?2500:ms===75000?350:ms,...args);';
+  // Healthy child scheduling must not become a transport timeout; accelerate only deliberate stalls.
+  const stalls=(scenario.failures??[]).map(failure=>failure==='hang');
+  if(scenario.pauseStateWrite)stalls[0]=true;
+  const clock=`const timer=setTimeout,stalls=${JSON.stringify(stalls)};globalThis.setTimeout=(fn,ms,...args)=>timer(fn,ms===300000?2500:ms===75000&&stalls.shift()?350:ms,...args);`;
   const preparation=Array.isArray(scenario.selected)
     ?['--input-type=module','-e',`import {prepareConformance} from ${JSON.stringify(new URL('./conformance-prepare.mjs',import.meta.url).href)}; await prepareConformance(${JSON.stringify(scenario.selected)});`]
     :[new URL('./conformance.mjs',import.meta.url).pathname,'--only',scenario.selected??'cadence-conformance.test.mjs'];
@@ -135,6 +139,21 @@ test('healthy fetch checks out and verifies the pinned source without retry',asy
   const result=await prepare(t);
   assert.match(result.output,/REACHED_SOURCE_INSTALL/);
   assert.equal(result.calls.filter(args=>args.includes('fetch')).length,1);
+  assert.equal(result.calls.filter(args=>args.includes('checkout')).length,1);
+});
+
+test('healthy fetch delayed by scheduling still checks out without retry',async t=>{
+  const result=await prepare(t,{fetchDelayMs:500});
+  assert.match(result.output,/REACHED_SOURCE_INSTALL/);
+  assert.equal(result.calls.filter(args=>args.includes('fetch')).length,1);
+  assert.equal(result.calls.filter(args=>args.includes('checkout')).length,1);
+});
+
+test('a healthy retry delayed by scheduling follows only the deliberate stalled attempt',async t=>{
+  const result=await prepare(t,{failures:['hang'],fetchDelayMs:500,fetchDelayAttempt:2});
+  assert.match(result.output,/REACHED_SOURCE_INSTALL/);
+  assert.equal(result.calls.filter(args=>args.includes('fetch')).length,2);
+  assert.deepEqual(result.fetches.filter(record=>record.event==='timeout').map(record=>record.attempt),[1]);
   assert.equal(result.calls.filter(args=>args.includes('checkout')).length,1);
 });
 
