@@ -10,8 +10,17 @@ inbox subjects and synthetic recipients. Bodies, reset tokens, message IDs and
 raw errors stay out. The fixture reuses Account HTTP's bounded mail observer and
 keeps the original single lookup, recipient match, assertions and deadlines.
 Capture a recurrence with this evidence before changing delivery or inbox capture.
-Local PostgreSQL and SMTP reproduction waits for Docker to return; controlled
-HTTP and database stubs verify the reporting independently.
+Controlled HTTP and database checks verify the reporting independently.
+All four monitoring lookups and five signup/recovery lookups now pass their own
+fixture's evidence callback, as the authenticator lookup already does. This
+includes the [Spanish recovery-mail miss on PR959](https://github.com/waitron-io/waitron-cloud/actions/runs/42096811129/job/127489056104).
+Previously those callers reported inbox metadata alone. Controlled empty-inbox
+calls execute all ten lookup expressions: the nine unwired callers first fail
+for missing queue evidence, then all ten report queue, worker and SMTP evidence.
+The original helper checks still cover redaction, successful reads and unavailable
+diagnostics. These checks do not reproduce the missing delivery. Capture a natural
+recurrence with the callback before choosing a delivery fix; a shared cause with
+the venue-service receipt's unsent queue row is unproved.
 
 ## Account HTTP reset-mail capture
 
