@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test, {before, after} from 'node:test';
 import {execFileSync, spawnSync} from 'node:child_process';
-import {cpSync, mkdtempSync, mkdirSync, rmSync, writeFileSync, readFileSync, existsSync} from 'node:fs';
+import {cpSync, mkdtempSync, mkdirSync, rmSync, writeFileSync, readFileSync, existsSync, symlinkSync} from 'node:fs';
 import {join} from 'node:path';
 import {tmpdir} from 'node:os';
 import {createHash} from 'node:crypto';
@@ -328,7 +328,8 @@ function runtimeFixture(f) {
   writeFileSync(join(directory, 'responses.json'), JSON.stringify(responses));
   writeFileSync(join(directory, 'event.json'), JSON.stringify(f.context.event));
   writeFileSync(join(directory, 'output'), '');
-  writeFileSync(join(directory, 'gh'), `#!${process.execPath}
+  // An explicit module entry keeps the CLI fixture independent of Node's syntax detection.
+  writeFileSync(join(directory, 'gh.mjs'), `#!${process.execPath}
 import {readFileSync, appendFileSync} from 'node:fs';
 const endpoint = process.argv.at(-1);
 appendFileSync(process.env.CI_API_CALLS, endpoint + '\\n');
@@ -337,6 +338,7 @@ if (response === undefined) process.exit(2);
 if (response.binary) process.stdout.write(Buffer.from(response.binary, 'base64'));
 else process.stdout.write((process.argv.includes('--include') ? 'HTTP/2 200 OK\\r\\n\\r\\n' : '') + JSON.stringify(response));
 `, {mode: 0o700});
+  symlinkSync('gh.mjs', join(directory, 'gh'));
   return {directory, responses, env: {...process.env, PATH: `${directory}:${process.env.PATH}`,
     CI_API_CALLS: join(directory, 'calls'), CI_API_RESPONSES: join(directory, 'responses.json'),
     GITHUB_EVENT_PATH: join(directory, 'event.json'), GITHUB_OUTPUT: join(directory, 'output'),
@@ -657,7 +659,7 @@ test('expired, forged, duplicate or unavailable artifacts and all failed reads r
 });
 
 test('historical selector and native directory inventories must match the running reviewed code', () => {
-  for (const path of ['scripts/ci-plan.mjs', 'scripts/ci-input-audit-records.mjs', 'scripts/cloud-cost/conformance.mjs']) {
+  for (const path of ['scripts/ci-plan.mjs', 'scripts/ci-input-audit-records.mjs', 'scripts/cloud-cost/conformance.mjs', 'package.json', 'pnpm-lock.yaml']) {
     const f = fixture();
     const changed = (...args) => {
       let result = git(...args);
@@ -709,4 +711,149 @@ test('execution definitions and the operator checkout must match the exact sourc
     const result = findReuse(f.context, {api: f.api, git: altered, now: f.now}, workflow);
     assert.equal(result.reuse, null, fault);
   }
+});
+
+// A clean main checkout has only commits reachable from main. GitHub can still
+// serve the immutable PR head and execution commit after their refs disappear.
+test('fresh main checkout fetches exact PR proof objects without changing HEAD', () => {
+  const directory = mkdtempSync(join(tmpdir(), 'cloud-main-proof-objects-'));
+  const remote = join(directory, 'origin.git'), checkout = join(directory, 'main');
+  const command = (cwd, ...args) => execFileSync('git', args, {cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe']});
+  try {
+    command(directory, 'init', '--bare', '--initial-branch=main', remote);
+    command(root, 'push', remote, `${merge}:refs/heads/main`, `${head}:refs/heads/source`, `${execution}:refs/heads/execution`);
+    command(remote, 'update-ref', '-d', 'refs/heads/source'); command(remote, 'update-ref', '-d', 'refs/heads/execution');
+    command(remote, 'config', 'uploadpack.allowAnySHA1InWant', 'true');
+    command(directory, 'clone', '--no-local', '--single-branch', '--branch', 'main', remote, checkout);
+    const freshGit = (...args) => {
+      const binary = typeof args.at(-1) === 'object' && args.pop().binary;
+      return execFileSync('git', args, {cwd: checkout, encoding: binary ? null : 'utf8', stdio: ['ignore', 'pipe', 'pipe']});
+    };
+    freshGit.readBlobs = ids => readGitBlobs(ids, input => execFileSync('git', ['cat-file', '--batch'], {cwd: checkout, input}));
+    assert.throws(() => freshGit('cat-file', '-e', `${head}^{commit}`), 'Source head is absent before verification');
+    assert.throws(() => freshGit('cat-file', '-e', `${execution}^{commit}`), 'Synthetic execution is absent before verification');
+    const f = fixture(), refs = freshGit('show-ref');
+    const refusingGit = (...args) => {
+      if (args[0] === 'fetch') throw Error('Controlled source object fetch refused');
+      return freshGit(...args);
+    };
+    refusingGit.readBlobs = freshGit.readBlobs;
+    const refused = findReuse(f.context, {api: f.api, git: refusingGit, now: f.now}, workflow);
+    assert.equal(refused.reuse, null);
+    assert.match(refused.reason, /Controlled source object fetch refused/);
+    assert.equal(freshGit('rev-parse', 'HEAD').trim(), merge);
+    const result = findReuse(f.context, {api: f.api, git: freshGit, now: f.now}, workflow);
+    assert.equal(result.reuse?.runId, 42, result.reason);
+    assert.equal(freshGit('show-ref'), refs, 'Fetching proof objects cannot move branch refs');
+    assert.equal(freshGit('rev-parse', 'HEAD').trim(), merge);
+    assert.equal(freshGit('rev-parse', `${head}^{commit}`).trim(), head);
+    assert.equal(freshGit('rev-parse', `${execution}^{commit}`).trim(), execution);
+  } finally {rmSync(directory, {recursive: true, force: true});}
+});
+
+
+function sourceWithRecord(record) {
+  const f = fixture(), forged = archive(createPlanEvidence(record));
+  f.data.artifacts[0].size_in_bytes = forged.length;
+  f.data.artifacts[0].digest = 'sha256:' + createHash('sha256').update(forged).digest('hex');
+  f.api.readPlanArtifact = () => forged;
+  return f;
+}
+
+test('source execution must be the original base and head merge even when its tracked tree matches', () => {
+  const singleParent = execFileSync('git', ['commit-tree', tree, '-p', base, '-m', 'Single-parent execution control'],
+    {cwd: root, encoding: 'utf8'}).trim();
+  const record = structuredClone(source);
+  record.event.sha = record.workflow.sha = record.workflow.executionSha = singleParent;
+  const f = sourceWithRecord(record);
+  f.data.commits[singleParent] = {sha: singleParent, tree: {sha: tree}, parents: [{sha: base}]};
+  const result = verify(f);
+  assert.equal(result.reuse, null);
+  assert.match(result.reason, /Original PR execution topology differs/);
+});
+
+test('a self-consistent selection cannot replace the actual original merge base with an earlier ancestor', () => {
+  const commit = (savedTree, parents, label) => execFileSync('git', ['commit-tree', savedTree,
+    ...parents.flatMap(parent => ['-p', parent]), '-m', label], {cwd: root, encoding: 'utf8'}).trim();
+  const originalBase = commit(git('rev-parse', `${base}^{tree}`).trim(), [base], 'Advanced original base');
+  const originalHead = commit(tree, [originalBase], 'Original feature');
+  const originalExecution = commit(tree, [originalBase, originalHead], 'Original execution');
+  const squash = commit(tree, [originalBase], 'Original squash');
+  const record = structuredClone(source);
+  record.event.base.sha = originalBase; record.event.head.sha = record.checkout.sha = originalHead;
+  record.event.sha = record.workflow.sha = record.workflow.executionSha = originalExecution;
+  record.event.mergeBase = base; // An ancestor of both sides, but not their actual merge base.
+  record.selection = selectPlan({base, head: originalHead}, loadWorkspaceAtRevision(originalHead, git), git);
+  const forged = archive(createPlanEvidence(record));
+  const metadata = {...artifact, size_in_bytes: forged.length, digest: 'sha256:' + createHash('sha256').update(forged).digest('hex'),
+    workflow_run: {...artifact.workflow_run, head_sha: originalHead}};
+  const f = fixture({root, base: originalBase, head: originalHead, merge: squash, execution: originalExecution, tree,
+    jobs: jobs.map(job => ({...job, head_sha: originalHead})), bytes: forged, artifact: metadata});
+  f.data.commits[base] = fixture().data.commits[base];
+  const result = verify(f);
+  assert.equal(result.reuse, null);
+  assert.match(result.reason, /Original merge base differs/);
+});
+
+test('a source listing cannot recycle the current main run identity', () => {
+  const record = structuredClone(source); record.runId = 90;
+  const f = sourceWithRecord(record), current = f.api.readRun(90);
+  f.data.run.id = 90; f.data.runs[0].id = 90;
+  f.data.jobs = f.data.jobs.map(job => ({...job, run_id: 90}));
+  Object.assign(f.data.artifacts[0], {name: 'ci-plan-v1-ci-90-2', workflow_run: {...f.data.artifacts[0].workflow_run, id: 90}});
+  let reads = 0;
+  f.api.readRun = id => id === 90 && ++reads === 1 ? current : f.data.run;
+  const result = verify(f);
+  assert.equal(result.reuse, null);
+  assert.match(result.reason, /Current run cannot be its own source/);
+});
+
+function mainReadbackFixture() {
+  const f = fixture(), proof = verify(f).reuse;
+  assert.ok(proof);
+  const context = {...f.context, workflowPath: workflow, workflowRef: `${repository}/${workflow}@refs/heads/main`,
+    workflowSha: merge, full: false, called: false};
+  const decision = createDecisionEvidence(context, {packages: [], receipts: [], typecheck: false, reuse: proof}, git, 'reused');
+  const content = archive(decision);
+  const metadata = {id: 62, name: 'ci-decision-v1-ci-90-1', expired: false, size_in_bytes: content.length,
+    digest: 'sha256:' + createHash('sha256').update(content).digest('hex'),
+    workflow_run: {id: 90, head_sha: merge, repository_id: 123, head_repository_id: 123}};
+  const skipped = ['scripts', 'documentation', 'typecheck', 'root (${{ matrix.shard }}/4)',
+    "package (${{ matrix.package }}${{ ((matrix.shards && format(', shard {0}/{1}', matrix.shard, matrix.shards)) || '') }})", 'receipts'];
+  const mainJobs = ['changes', 'summary', ...skipped].map((name, i) => ({id: i + 100, name, run_id: 90, run_attempt: 1,
+    head_sha: merge, status: 'completed', conclusion: skipped.includes(name) ? 'skipped' : 'success'}));
+  const readRun = f.api.readRun;
+  f.api.readRun = id => id === 90 ? {...readRun(id), status: 'completed', conclusion: 'success'} : readRun(id);
+  const listArtifacts = f.api.listArtifacts, readArtifact = f.api.readPlanArtifact, listJobs = f.api.listAttemptJobs;
+  f.api.remaining = () => 30_000;
+  f.api.listArtifacts = id => id === 90 ? page([metadata]) : listArtifacts(id);
+  f.api.readPlanArtifact = id => id === 62 ? content : readArtifact(id);
+  f.api.listAttemptJobs = (id, ...args) => id === 90 ? page(mainJobs) : listJobs(id, ...args);
+  return {...f, decision};
+}
+
+test('main readback rechecks its own run after the inherited source has been qualified', () => {
+  const f = mainReadbackFixture();
+  assert.equal(readbackDecision(f.decision, {api: f.api, git, now: f.now}).mode, 'reused');
+  const readRun = f.api.readRun;
+  let sourceReads = 0;
+  f.api.readRun = id => {
+    if (id === 42) sourceReads++;
+    const result = readRun(id);
+    return id === 90 && sourceReads >= 2 ? {...result, run_attempt: 2} : result;
+  };
+  assert.throws(() => readbackDecision(f.decision, {api: f.api, git, now: f.now}));
+  assert.equal(sourceReads, 2, 'The refusal must happen after source qualification');
+});
+
+test('main readback binds its first inherited job snapshot even when a later source read is green', () => {
+  const f = mainReadbackFixture();
+  assert.equal(readbackDecision(f.decision, {api: f.api, git, now: f.now}).mode, 'reused');
+  const listJobs = f.api.listAttemptJobs;
+  let inheritedReads = 0;
+  f.api.listAttemptJobs = (id, ...args) => {
+    const result = listJobs(id, ...args);
+    return id === 42 && ++inheritedReads === 1 ? {...result, items: result.items.map((job, i) => i ? job : {...job, id: 99999})} : result;
+  };
+  assert.throws(() => readbackDecision(f.decision, {api: f.api, git, now: f.now}), /Inherited job evidence differs/);
 });

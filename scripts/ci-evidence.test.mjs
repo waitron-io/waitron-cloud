@@ -7,6 +7,7 @@ import {join} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {crc32, deflateRawSync} from 'node:zlib';
 import test from 'node:test';
+import {reuseProof} from './fixtures/ci-evidence.mjs';
 const evidence = await import('./ci-evidence.mjs').catch(error => {
   if (error.code === 'ERR_MODULE_NOT_FOUND' && error.url?.endsWith('/ci-evidence.mjs')) return {};
   throw error;
@@ -173,6 +174,7 @@ test('artifact admission binds attempt, name, size and digest and decodes only o
   const identity = {workflowPath: ci, runId: 42, attempt: 2, head: sha('b'), repositoryId: 123};
   for (const change of [{id: 0}, {name: 'ci-plan-v1-ci-42-1'}, {expired: true}, {size_in_bytes: zip.length - 1},
     {digest: 'sha256:' + 'a'.repeat(64)}, {workflow_run: {...artifact(zip).workflow_run, id: 43}},
+    {workflow_run: {...artifact(zip).workflow_run, head_sha: sha('d')}},
     {workflow_run: {...artifact(zip).workflow_run, head_repository_id: 124}}]) {
     assert.throws(() => evidence.readPlanArtifact({...artifact(zip), ...change}, zip, identity));
   }
@@ -251,4 +253,13 @@ test('archive data descriptors and malformed local or directory records cannot b
   const wrongAttempt = evidence.createPlanEvidence({...source(), attempt: 1});
   const wrongBytes = zipMember(Buffer.from(JSON.stringify(wrongAttempt)));
   assert.throws(() => evidence.readPlanArtifact(meta(wrongBytes), wrongBytes, identity));
+});
+
+
+test('native reuse cannot also claim a full invocation', () => {
+  for (const key of ['aws-infrastructure', 'cloud-cost', 'venue-services-proof', 'download-supervision-diagnostic']) {
+    const path = `.github/workflows/${key}.yml`, proof = {...reuseProof(), workflowPath: path};
+    assert.doesNotThrow(() => evidence.expectedJobContract(path, {required: false, reuse: proof}));
+    assert.throws(() => evidence.expectedJobContract(path, {required: false, reuse: proof, full: true}), /Reused sibling cannot be a full invocation/);
+  }
 });

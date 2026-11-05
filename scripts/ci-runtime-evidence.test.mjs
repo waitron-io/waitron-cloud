@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import {mkdtempSync, readFileSync, rmSync} from 'node:fs';
+import {existsSync, mkdtempSync, readFileSync, rmSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import * as runtime from './ci-reuse-runtime.mjs';
+import {createDecisionEvidence} from './ci-decision.mjs';
 
 const context = () => ({repository: 'waitron-io/waitron-cloud', repositoryId: 123, runId: 90, attempt: 2,
   workflowPath: '.github/workflows/aws-infrastructure.yml', eventName: 'push', sha: 'a'.repeat(40), ref: 'refs/heads/main',
@@ -32,5 +33,25 @@ test('main publication keeps decision JSON isolated from PR source evidence', ()
     assert.equal(decision.mode, 'full'); assert.equal(decision.context.workflowId, 17);
     assert.equal(readFileSync(output, 'utf8'), 'decision_artifact=ci-decision-v1-aws-infrastructure-90-2\n');
     assert.throws(() => readFileSync(join(root, 'source/plan.json')));
+  } finally {rmSync(root, {recursive: true, force: true});}
+});
+
+
+test('decision admission rejects a self-consistent but wrong execution revision', () => {
+  const git = (...args) => args[1] === 'HEAD^{tree}' ? 'c'.repeat(40) : 'a'.repeat(40);
+  assert.throws(() => createDecisionEvidence({...context(), workflowId: 17, workflowSha: 'b'.repeat(40)},
+    {full: true, head: 'a'.repeat(40), required: true}, git, 'full'), /Decision execution revision differs/);
+});
+
+test('reusable and explicit-full publication cannot manufacture source or decision evidence', () => {
+  const root = mkdtempSync(join(tmpdir(), 'cloud-no-called-evidence-'));
+  try {
+    for (const marker of [{called: true}, {full: true}]) {
+      runtime.publishRuntimePlan({...context(), workflowId: 17, ...marker}, {full: true, head: 'a'.repeat(40), required: true},
+        (...args) => args[1] === 'HEAD^{tree}' ? 'c'.repeat(40) : 'a'.repeat(40), 'full', {root, output: join(root, 'output')});
+      assert.equal(existsSync(join(root, 'output')), false);
+      assert.equal(existsSync(join(root, 'source/plan.json')), false);
+      assert.equal(existsSync(join(root, 'decision/plan.json')), false);
+    }
   } finally {rmSync(root, {recursive: true, force: true});}
 });

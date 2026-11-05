@@ -184,3 +184,15 @@ test('job-publication reads consume only the summary time remaining', () => {
   assert.throws(() => api.readRun(42), /deadline exhausted/);
   assert.equal(observed, 37);
 });
+
+test('a short nonterminal page refuses evidence even when later pages can reach the declared total', () => {
+  const first = Array.from({length: 99}, (_, i) => ({id: i + 1}));
+  assert.throws(() => module.collectPages(number => number === 1 ? page(first, 100, 2) : page([{id: 100}], 100)), /Truncated nonterminal page/);
+});
+
+test('duplicate Link headers cannot silently select only the first pagination instruction', () => {
+  const endpoint = `https://api.github.com/repos/${repository}/actions/workflows/ci.yml/runs?head_sha=${head}&event=pull_request&per_page=100&page=2`;
+  const api = module.createReuseApi({repository, execute: () => response({total_count: 100, workflow_runs: [{id: 42}]},
+    `<${endpoint}>; rel="next"\r\nLink: <${endpoint}>; rel="last"`)});
+  assert.throws(() => api.listRuns('.github/workflows/ci.yml', head, 1), /Duplicate pagination headers/);
+});

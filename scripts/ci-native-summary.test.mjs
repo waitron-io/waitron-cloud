@@ -44,6 +44,7 @@ for (const [key, planner, work, names] of cases) {
       assert.equal(execute(jobs.map((job, i) => i === 1 ? {...job, id: jobs[0].id} : job)).status, 1);
       assert.equal(execute(jobs.map((job, i) => i === 1 ? {...job, name: jobs[0].name} : job)).status, 1);
       assert.equal(execute(jobs, results, 'unknown / ').status, 1);
+      assert.equal(execute(jobs.map(job => ({...job, name: 'unknown / ' + job.name})), results, 'unknown / ').status, 1);
       if (key !== 'download-supervision-diagnostic') {
         const prefix = key === 'aws-infrastructure' ? 'aws / ' : 'venue / ';
         assert.equal(execute(jobs.map(job => ({...job, name: prefix + job.name})), results, prefix).status, 0);

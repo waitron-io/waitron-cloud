@@ -57,4 +57,8 @@ test('historical workspace reconstruction ignores newer manifests, source depend
   assert.throws(()=>loadWorkspaceAtRevision(head,truncated),/Incomplete workspace inventory/);
   const duplicated=(...args)=>{const value=git(...args);return args[0]==='ls-tree'?value+value.split('\0')[0]+'\0':value;};
   assert.throws(()=>loadWorkspaceAtRevision(head,duplicated),/Duplicate workspace path/);
+  git('reset','--hard',head);
+  write('.gitattributes','* -text\n');git('add','.gitattributes');git('commit','-qsm','Attributed checkout');
+  const attributed=git('rev-parse','HEAD').trim();
+  assert.throws(()=>loadWorkspaceAtRevision(attributed,git),/Checkout attributes require full work/);
 });

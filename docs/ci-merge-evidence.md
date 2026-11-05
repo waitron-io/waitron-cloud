@@ -55,7 +55,9 @@ another workflow cannot fill a gap. The verifier requires one merged PR in this
 repository, matching trees, the latest exact-head PR run and its exact latest
 attempt, complete paginated job evidence, and the original source artifact.
 It reconstructs the selection from immutable Git data using the reviewed
-selector. It never executes downloaded or historical code.
+selector. Missing PR objects are fetched only by verified immutable commit hash under the
+same bounds, without moving the checkout or branch references. It never executes
+downloaded or historical code.
 
 The source and execution workflow definitions must match the reviewed files.
 Every selected job must succeed and every unselected job must have its known

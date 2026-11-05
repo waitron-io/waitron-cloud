@@ -182,7 +182,15 @@ export function findReuse(context, {api, git, now = () => performance.now()} = {
       if (!commits.has(sha)) {
         const value = call('readCommit', sha);
         assert.equal(value?.sha, sha, 'Commit response identity differs'); assert.ok(validSha(value.tree?.sha), 'Invalid commit tree');
-        assert.equal(readGit('rev-parse', '--verify', `${sha}^{commit}`).trim(), sha, 'Local commit identity differs');
+        let resolved;
+        try {resolved = readGit('rev-parse', '--verify', `${sha}^{commit}`).trim();}
+        catch {
+          // Squash main history does not retain PR heads or their execution commits.
+          // Fetch only the immutable identity already returned by GitHub, without moving refs.
+          readGit('fetch', '--no-tags', '--no-write-fetch-head', '--no-auto-maintenance', 'origin', sha);
+          resolved = readGit('rev-parse', '--verify', `${sha}^{commit}`).trim();
+        }
+        assert.equal(resolved, sha, 'Local commit identity differs');
         assert.equal(readGit('rev-parse', `${sha}^{tree}`).trim(), value.tree.sha, 'Local commit tree differs');
         assert.ok(Array.isArray(value.parents) && value.parents.every(parent => validSha(parent.sha)), 'Invalid commit parents');
         assert.deepEqual(value.parents.map(parent => parent.sha), readGit('show', '-s', '--format=%P', sha).trim().split(' ').filter(Boolean), 'Commit topology differs from Git');
