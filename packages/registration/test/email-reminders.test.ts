@@ -107,12 +107,18 @@ async function queuedReminder(remoteIssue=false){
 for(const change of ['owner','preference','disabled','email','verified','revoked','service','environment','placement','hostname','revision','opening','episode','snapshot','episodeRevision','episodeStatus','claim','lease','expiry'] as const)test('reminderHandoffRechecksEveryGate: '+change,async()=>{
  const row=await queuedReminder(true),delivered:ServiceAlert[]=[];
  let ready!:()=>void,resume!:()=>void;const reached=new Promise<void>(r=>{ready=r;}),held=new Promise<void>(r=>{resume=r;});
- const query=db.secondPool.query;
- db.secondPool.query=(async(...args:unknown[])=>{
-  const result=await Reflect.apply(query,db.secondPool,args);
-  if(typeof args[0]==='string'&&args[0].startsWith('SELECT expires_at > clock_timestamp()')){ready();await held;}
-  return result;
- }) as typeof db.secondPool.query;
+ const connect=db.secondPool.connect;
+ db.secondPool.connect=(async()=>{
+  const client=await Reflect.apply(connect,db.secondPool,[]);let paused=false;
+  return new Proxy(client,{get(connection,property){
+   if(property==='query')return async(sql:string,args?:unknown[])=>{
+    const result=await connection.query(sql,args);
+    if(!paused&&sql.startsWith('SELECT p.locale FROM service_alert_deliveries')){paused=true;ready();await held;}
+    return result;
+   };
+   const value=Reflect.get(connection,property);return typeof value==='function'?value.bind(connection):value;
+  }});
+ }) as typeof db.secondPool.connect;
  const sending=emailWorker(delivered,db.secondPool).runOnce();
  try{
   await reached;
@@ -135,7 +141,7 @@ for(const change of ['owner','preference','disabled','email','verified','revoked
   await db.pool.query(statements[change],[target]);resume();await sending;
   assert.equal(delivered.length,0,'no reminder after '+change+' changes during the last database wait');
   const final=(await reminders())[0];assert.equal(final.status,change==='claim'?'processing':'cancelled');
- }finally{resume();await sending;db.secondPool.query=query;}
+ }finally{resume();await sending;db.secondPool.connect=connect;}
 });
 test('reminder encrypted payload must agree with its delivery discriminator',async()=>{
  const row=await queuedReminder(),message=db.outbox.open(row);assert('issue' in message);delete message.notification;

@@ -216,10 +216,11 @@ export class EmailWorker {
       if(this.#ses)await lockMailScope(client,this.#ses.config.scope);
       const current=(await client.query(`SELECT * FROM email_outbox WHERE id=$1 AND claim_id=$2 AND status='processing' FOR UPDATE`,[row.id,row.claim_id])).rows[0];
       if(!current)return false;
+      if(row.kind==='service_alert'&&!await this.#live(client,row,message)){await this.#finish(row,'cancelled',undefined,client);return false;}
       const now:Date=(await client.query('SELECT clock_timestamp() AS now')).rows[0].now;
       if(current.lease_until<=now)return false;
       if(current.expires_at<=now){await this.#finish(row,'expired',undefined,client);return false;}
-      if(!await this.#live(client,row,message)){await this.#finish(row,'cancelled',undefined,client);return false;}
+      if(row.kind!=='service_alert'&&!await this.#live(client,row,message)){await this.#finish(row,'cancelled',undefined,client);return false;}
       if(this.#ses)await admitMailAttempt(client,{...this.#ses,recipient:message.email,claim:{purpose:'cloud-account-email',outboxId:row.id,claimId:row.claim_id,attempt:row.attempts}});
       return true;
     });
