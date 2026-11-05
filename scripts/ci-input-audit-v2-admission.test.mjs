@@ -130,3 +130,17 @@ test('v2 fresh evidence never repairs a stale v1 base in either revision order',
     assert.equal(selected.packages.length, 2); assert.equal(selected.typecheck, true);
   }
 }));
+
+test('v2 shallow refusal cannot hide record deletion behind unrelated children and a merge', () => consumerFixture(({root, git, put, commit, base}) => {
+  git('rm', 'packages/stock/src/index.mjs', recordPath('docs', 'packages/stock/src/index.mjs'));
+  commit(); put('README.md', '# Unrelated child after deletion\n'); const deleted = commit();
+  git('checkout', '-b', 'side-before-merge', base); put('docs/backlog.md', '# Independent side\n'); commit();
+  git('merge', '--no-ff', '--no-edit', '--signoff', deleted); const head = git('rev-parse', 'HEAD').trim();
+  const clone = mkdtempSync(join(tmpdir(), 'cloud-v2-hidden-deletion-'));
+  try {
+    execFileSync('git', ['clone', '--quiet', '--depth=1', `file://${root}`, clone], {stdio: 'pipe'});
+    const shallow = node(clone, './ci-docs.mjs', ['--audit', head]); bad(shallow); assert.match(shallow.stderr, /complete history/);
+    execFileSync('git', ['-C', clone, 'fetch', '--unshallow'], {stdio: 'pipe'});
+    const complete = node(clone, './ci-docs.mjs', ['--audit', head]); bad(complete); assert.match(complete.stderr, /retained/);
+  } finally {rmSync(clone, {recursive: true, force: true});}
+}));
