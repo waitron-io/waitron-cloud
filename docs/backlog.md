@@ -348,8 +348,12 @@ synthetic checks cover refusals and classification; they prove no effective AWS
 publisher authentication or live delivery. Task 2 adds durable, one-recipient
 attempt bindings, retained key commitments and shared suppression lookup under a
 transaction lock for each country/provider account/region. Migration 049 retains
-all 48 previous ledger entries. Both send paths, authenticated feedback application,
-queue consumption and production wiring remain future tasks. Task 8 must qualify any additional event types;
+all 48 previous ledger entries. Task 3 applies parsed feedback in one transaction,
+deduplicates transport and semantic events, and preserves blocking evidence after
+payload erasure. Local process-death checks cover both sides of commit. Missing
+retained keys leave feedback retryable; unknown bindings never guess a recipient.
+Both send paths, trusted queue consumption and production wiring remain future
+tasks. Task 8 must qualify any additional event types;
 `Rendering Failure` currently refuses. It must also reconcile historical Paris-only
 supplier wording and retired enablement dates before any live qualification. AWS resources,
 spending, credentials, production access and live mail remain unauthorised for this

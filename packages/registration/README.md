@@ -400,6 +400,36 @@ node scripts/test-postgres.mjs exec pnpm --dir packages/registration exec node -
 The store accepts policy revisions through 2147483647, matching its SQL column;
 larger qualified revisions refuse with a fixed configuration diagnostic.
 
-These checks qualify local storage and locking. Feedback application, SMTP
-admission wiring, queue polling, audited removal and provider qualification remain
-separate implementation tasks. No live sender or AWS resource is enabled.
+These checks qualify local storage and locking. SMTP admission wiring, queue
+polling, audited removal and provider qualification remain separate implementation
+tasks. No live sender or AWS resource is enabled.
+
+## Apply parsed feedback without changing sending state
+
+Feedback can arrive before an SMTP receipt or after payload erasure. Use
+`applySesFeedback(pool, config, recipientKeys, event)` to commit the provider
+binding, event and any recipient block together. The helper owns its transaction.
+Only a trusted queue consumer may supply the parsed event; that consumer remains
+a separate task. Configuration validation and parsing do not authenticate AWS.
+
+An unknown or mismatched binding records an `ignored` receipt with `unresolved`.
+A different recipient or provider ID records `conflict` with `binding_conflict`.
+Missing, changed or revoked retained key material throws `mail_keys_unavailable`
+without committing a receipt, so you can retry after restoring the required keys.
+A redacted complaint uses the sealed single-recipient binding. It never looks up
+a current contact address or tries to recover an erased token.
+
+The same SNS ID and content returns `duplicate`. Changed content under that ID
+returns `conflict` and retains the original receipt. A repeated semantic event
+with a new SNS ID also returns `duplicate`; its new transport receipt is recorded
+as `ignored` with `non_blocking`, while the original event and blocks stay intact.
+Distinct bounce, complaint and provider-suppression reasons remain separate.
+Delivery, temporary and unclassified events add no block and never clear one.
+Sending, debit and reservation records are not changed.
+
+Run the focused PostgreSQL checks, including competing consumers and process death
+immediately before and after commit:
+
+```sh
+node scripts/test-postgres.mjs exec pnpm --dir packages/registration exec node --test --test-timeout=120000 test/ses-feedback-store.test.ts
+```

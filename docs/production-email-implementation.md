@@ -88,10 +88,10 @@ complaint events. It binds feedback before sending, keeps provider IDs separate 
 the original Message-ID and blocks future handoffs without replaying accepted mail.
 The [implementation plan](superpowers/plans/2026-11-02-ses-feedback-implementation.md)
 covers the local build and separate provider qualification. D565 authorises code
-and synthetic tests only. Task 1 validates configuration and event envelopes;
-queue intake and the shared account/venue suppression boundary remain
-unimplemented. Account/provider qualification is still required in the selected
-region.
+and synthetic tests only. Task 1 validates configuration and event envelopes.
+Tasks 2 and 3 retain recipient bindings and apply parsed feedback atomically.
+Trusted queue intake and suppression checks in both sending paths remain
+unimplemented. Account/provider qualification is still required in the selected region.
 
 D102 must qualify and configure the selected SES account/region and verified sender
 domain. Confirm the processing/storage locations, retention, subcontractors and suppression rules for the
@@ -149,3 +149,10 @@ and shared suppression lookup. It retains original keyed recipient references
 after payload erasure and refuses conflicting provider IDs. The account and relay
 workers still use their existing sending paths; Task 4 must join them to the new
 admission helpers before this protocol governs a real handoff.
+
+Task 3 adds `applySesFeedback`, which owns the database transaction for a parsed
+event. Only a future trusted queue consumer may call it. It binds the original
+recipient, records repeat or conflicting observations and preserves every blocking
+reason independently of the sending state. A missing retained key leaves work
+retryable. Local PostgreSQL process-death checks cover interruption before and
+after commit; they do not authenticate an AWS publisher or exercise a live queue.
