@@ -1443,8 +1443,9 @@ implementation or production evidence.
   that proved consumer. Every other unknown root input retains full work.
   Once activated, mandatory summary independently verifies complete head review
   even for full and legacy plans. Missing or stale records and complete metadata
-  removal fail; stale base evidence refuses narrowing. Valid record renewal
-  preserves each separate proof decision only after both saved root reviews and
+  removal fail; stale base evidence refuses narrowing. Removal anchors must
+  already exist in the trusted PR base so they survive a squash. Valid record
+  renewal preserves each separate proof decision only after both saved root reviews and
   documentation authorities qualify. Real proof inputs and forced full/nightly
   work remain selected. Bootstrap and registry changes themselves run full.
   Ownership review does not complete global root precision or establish a time

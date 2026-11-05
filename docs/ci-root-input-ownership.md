@@ -55,6 +55,9 @@ files as well as the diff, then repeat the same command and require identical
 output. Name multiple reviewed inputs with repeated `--input` options. For a
 removal, name the old path; its retained record must identify a previously
 reviewed ancestor shared with main.
+The pull-request checks also require that ancestor in the original PR base.
+Squashing keeps main's history and discards intermediate feature commits, so
+a record anchored only in your unmerged work cannot qualify for publication.
 
 Then [renew documentation evidence](ci-documentation-audit.md#renew-documentation-evidence-before-pushing-code)
 for the source and its new root records. Commit the complete result with sign-off:

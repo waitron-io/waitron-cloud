@@ -42,7 +42,7 @@ export function rootInputPlan(paths, base, head, git) {
     // base, and a missing base must not hide a separate head refusal.
     const trees = [base, head].map((revision, index) => {
       try {
-        const registry = checkRootReview(revision, git), projection = rootReviewProjection(revision, git);
+        const registry = checkRootReview(revision, git, index ? base : undefined), projection = rootReviewProjection(revision, git);
         const {entries} = readInputAudit(revision, git);
         return {registry, projection, entries};
       } catch (error) {return {error: `${index ? 'head' : 'base'}: ${error.message}`};}
@@ -93,7 +93,7 @@ export function assertRootInputWork(plan, {base, head, git}) {
   assert.ok(sha.test(head) && typeof git === 'function', 'Missing trusted root verification context');
   // Freshness applies after historical activation even when all current metadata
   // or every proposed ownership marker has been removed.
-  if (rootReviewActivated(head, git)) checkRootReview(head, git);
+  if (rootReviewActivated(head, git)) checkRootReview(head, git, base);
   if (!base) {
     assert.ok(!Object.hasOwn(plan, 'rootInputs') && !Object.hasOwn(plan, 'rootTests'), 'Root work requires a trusted event range');
     return;

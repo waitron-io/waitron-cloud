@@ -164,8 +164,12 @@ const retention = (revision, git, entries) => assertInputRecordRetention(revisio
   descriptor: rootRegistryPath, root: rootRecordRoot, canonical: /^scripts\/ci-root-review\.d\/[a-f0-9]{64}\.json$/,
 });
 
-export function checkRootReview(revision, git) {
+export function checkRootReview(revision, git, sharedBase) {
   const {entries, registry, registryObjectId, inputs} = projectionAt(revision, git);
+  if (sharedBase !== undefined) {
+    assert.match(sharedBase, sha, 'Invalid shared root review base');
+    git('merge-base', '--is-ancestor', sharedBase, revision);
+  }
   const {ancestor, kind} = retention(revision, git, entries);
   // Prose and existing evidence are excluded only by their independent authority.
   auditInputMode('docs', revision, git);
@@ -184,6 +188,11 @@ export function checkRootReview(revision, git) {
       assert.ok(!expected.has(path) && record.registryObjectId === registryObjectId, `Invalid root review tombstone: ${path}`);
       assert.ok(kind !== 'commit' || record.previousRevision !== revision, 'Root tombstone must name a prior ancestor');
       git('merge-base', '--is-ancestor', record.previousRevision, ancestor);
+      // Squash merges retain target history, not intermediate feature commits.
+      if (sharedBase !== undefined) {
+        try {git('merge-base', '--is-ancestor', record.previousRevision, sharedBase);}
+        catch {assert.fail(`Root removal requires an ancestor shared with the pull request base: ${path}`);}
+      }
       if (!ancestors.has(record.previousRevision)) {
         const prior = projectionAt(record.previousRevision, git);
         const removed = new Set([...records.values()].filter(row => row.state === 'absent' && row.previousRevision === record.previousRevision)

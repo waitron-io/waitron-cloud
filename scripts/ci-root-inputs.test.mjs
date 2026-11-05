@@ -6,6 +6,8 @@ import {spawnSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
 import test from 'node:test';
 import {rootReviewFixture} from './ci-root-review-fixture.mjs';
+import {rootRecordFilename} from './ci-root-review.mjs';
+import {receiptSuites} from './ci-scope.mjs';
 import {createPlan} from './ci-plan.mjs';
 import {assertSummary} from './ci-summary.mjs';
 
@@ -231,6 +233,26 @@ test('stale head fails mandatory summary even for full or legacy work and after 
   ]) assert.throws(() => api.assertRootInputWork(plan, {base, head: stale, git}), /Unreviewed root input/);
   rmSync(join(root, registryPath)); rmSync(join(root, recordRoot), {recursive: true}); docs(); const removed = commit();
   assert.throws(() => api.assertRootInputWork({packages: [], receipts: [], typecheck: true}, {base, head: removed, git}), /Missing root registry/);
+}));
+
+test('removal evidence must survive a squash onto the trusted pull request base', () => fixture(({root, git, write, renew, docs, commit, base, plan}) => {
+  git('checkout', '-b', 'unlanded-removal');
+  const changed = 'packages/control/src/index.mjs';
+  write(changed, 'export const value = 2;\n'); renew([changed]); docs(); const unlanded = commit();
+  const removed = 'scripts/reader.mjs', recordPath = rootRecordFilename(removed);
+  const record = JSON.parse(readFileSync(join(root, recordPath), 'utf8'));
+  rmSync(join(root, removed));
+  const removal = previousRevision => write(recordPath, {version: 1, path: removed, state: 'absent', previousRevision,
+    registryObjectId: record.registryObjectId, reviewer: 'Removal control', reference: 'review/squash-retention'});
+  removal(unlanded); docs(); const head = commit();
+  const full = {packages: [{package: '@waitron-cloud/control', shard: 1}], receipts: [...receiptSuites], typecheck: true, reuse: null};
+  assert.throws(() => api.assertRootInputWork(full, {base, head, git}), /Root removal.*shared.*base/);
+  assert.match(plan(head).reason, /head.*Root removal.*shared.*base/);
+  removal(base); docs(); const repaired = commit();
+  assert.doesNotThrow(() => api.assertRootInputWork(full, {base, head: repaired, git}));
+  git('checkout', 'main'); git('merge', '--squash', 'unlanded-removal'); const squash = commit();
+  assert.throws(() => git('merge-base', '--is-ancestor', unlanded, squash));
+  assert.doesNotThrow(() => api.assertRootInputWork(full, {head: squash, git}));
 }));
 
 test('trusted root and receipt summaries reject every incomplete required job', () => fixture(({git, write, renew, docs, commit, base, changedPaths}) => {

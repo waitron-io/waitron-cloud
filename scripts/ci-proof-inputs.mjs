@@ -82,10 +82,10 @@ export function proofInputPlanRange(kind, {base, head}, git) {
     if (paths.some(rootMetadata)) {
       // Metadata can omit only its own bytes. Both saved authorities must
       // qualify before the existing rules classify every remaining input.
-      const reviewed = [base, pr.head.sha].map(saved => {
+      const reviewed = [base, pr.head.sha].map((saved, index) => {
         try {
           assert.ok(rootReviewActivated(saved, git), 'Root proof metadata requires prior activation');
-          checkRootReview(saved, git);
+          checkRootReview(saved, git, index ? base : undefined);
           return {...rootReviewProjection(saved, git), entries: readInputAudit(saved, git).entries};
         } catch (error) {return {error};}
       });

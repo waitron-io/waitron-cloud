@@ -43,6 +43,21 @@ test('reviewed portal renewal preserves both original proof omissions', () => fi
   for (const kind of ['cost', 'venue']) assert.equal(plan(kind).required, false, `${kind} must not execute for review metadata`);
 }));
 
+test('proof metadata refuses a removal anchored only in unlanded history', () => fixture(({root, git, write, docs, commit, base, portal, plan}) => {
+  git('checkout', '-b', 'unlanded-proof-removal'); const unlanded = commit();
+  const recordPath = rootRecordFilename(portal), record = JSON.parse(readFileSync(join(root, recordPath), 'utf8'));
+  rmSync(join(root, portal));
+  const removal = previousRevision => write(recordPath, {version: 1, path: portal, state: 'absent', previousRevision,
+    registryObjectId: record.registryObjectId, reviewer: 'Removal proof control', reference: 'review/shared-removal'});
+  removal(unlanded); docs(); commit();
+  for (const kind of ['cost', 'venue']) {
+    const result = plan(kind); assert.equal(result.required, true, kind);
+    assert.match(result.reason, /Root removal.*shared.*base/, kind);
+  }
+  removal(base); docs(); commit();
+  for (const kind of ['cost', 'venue']) assert.equal(plan(kind).required, false, kind);
+}));
+
 test('executed proof planners use saved review evidence and forced full overrides omission', () => fixture(({root, git, base, change, portal}) => {
   const head = change([portal]);
   const output = join(root, '.git', 'proof-output'), eventPath = join(root, '.git', 'proof-event.json');
