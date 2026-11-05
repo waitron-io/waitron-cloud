@@ -2237,7 +2237,7 @@ implementation or production evidence.
   foreign containers and a lost create response, requiring refusal and cleanup.
   This repairs the inventory assertion; it does not explain unrelated historical
   browser, transport, install or backup-cleanup failures.
-  **Nested package authentication (D530).** All three package-test entry points
+  **Nested package authentication (D530).** All four package-test entry points
   and the grouped receipt step now pass the existing read-only package token to descendant installs. A cold
   loopback-registry control reproduces the placeholder-token 401 and loads the
   installed package with each workflow binding. See the
