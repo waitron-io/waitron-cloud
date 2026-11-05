@@ -1,0 +1,218 @@
+import assert from 'node:assert/strict';
+import {createHash} from 'node:crypto';
+import {execFileSync} from 'node:child_process';
+import {mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, unlinkSync, chmodSync, symlinkSync} from 'node:fs';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
+import test from 'node:test';
+import {auditInputMode, readInputAudit} from './ci-input-audit.mjs';
+import {readGitBlobs} from './ci-package-revisions.mjs';
+
+const marker = 'scripts/ci-input-audit-v2.json', policy = 'scripts/ci-input-audit.json';
+const recordRoot = 'scripts/ci-input-audit.d/';
+const modes = ['docs', 'identity', 'gateway', 'lock'];
+const identity = ['scripts/identity-upstream.mjs', 'scripts/identity-upstream.test.mjs'];
+const gateway = ['scripts/verify-gateway-reconnection-receipt.mjs', 'scripts/verify-gateway-reconnection-receipt.test.mjs'];
+const manifestPath = 'packages/stock/package.json';
+const manifest = {name: 'stock', scripts: {test: 'node --test'}, dependencies: {adapter: '^1'}};
+const hash = source => createHash('sha256').update(source).digest('hex');
+const recordPath = (mode, path) => `${recordRoot}${mode}/${hash(path)}.json`;
+const canonical = record => JSON.stringify(record) + '\n';
+
+// Literal fixture membership deliberately does not call production projection/writer code.
+function fixture(run) {
+  const root = mkdtempSync(join(tmpdir(), 'cloud-audit-v2-'));
+  const git = (...args) => {
+    const binary = typeof args.at(-1) === 'object' && args.pop().binary;
+    return execFileSync('git', ['-c', 'maintenance.auto=false', ...args],
+      {cwd: root, encoding: binary ? undefined : 'utf8', maxBuffer: 64 * 1024 * 1024, stdio: ['ignore', 'pipe', 'pipe']});
+  };
+  git.readBlobs = ids => readGitBlobs(ids, input => execFileSync('git', ['cat-file', '--batch'],
+    {cwd: root, input, maxBuffer: 64 * 1024 * 1024, stdio: ['pipe', 'pipe', 'pipe']}));
+  const put = (path, content) => {mkdirSync(join(root, path, '..'), {recursive: true}); writeFileSync(join(root, path), content);};
+  const commit = () => {git('add', '-A'); git('commit', '-sm', 'Independent v2 audit fixture'); return git('rev-parse', 'HEAD').trim();};
+  const exclusions = {
+    docs: [policy, marker, 'README.md', 'docs/backlog.md'],
+    identity: [policy, marker, ...identity], gateway: [policy, marker, ...gateway],
+    lock: [policy, marker, 'pnpm-lock.yaml', manifestPath],
+  };
+  const seed = () => {
+    git('add', '-A');
+    const rows = git('ls-tree', '-rz', '--full-tree', git('write-tree').trim()).split('\0').filter(Boolean);
+    for (const mode of modes) {
+      for (const raw of rows) {
+        const [, gitMode, gitType, objectId, path] = raw.match(/^(\d+) (\w+) (\w+)\t([\s\S]+)$/);
+        if (path.startsWith(recordRoot) || exclusions[mode].includes(path)) continue;
+        put(recordPath(mode, path), canonical({version: 2, mode, path, state: 'present', gitMode, gitType, objectId}));
+      }
+    }
+    put(recordPath('lock', manifestPath), canonical({version: 2, mode: 'lock', path: manifestPath,
+      state: 'manifest', sha256: hash('{"name":"stock","scripts":{"test":"node --test"}}')}));
+  };
+  try {
+    git('init', '-b', 'main'); git('config', 'user.name', 'CI fixture'); git('config', 'user.email', 'ci@example.test');
+    put(policy, JSON.stringify({version: 1, docsInputSha256: '0'.repeat(64), identityInputSha256: '0'.repeat(64),
+      gatewayInputSha256: '0'.repeat(64), lockInputSha256: '0'.repeat(64), manifests: {[manifestPath]: '0'.repeat(64)}}));
+    put(marker, '{"version":2}\n'); put('README.md', '# Cloud\n'); put('docs/backlog.md', '# Backlog\n');
+    put('docs/waitron-integration-contract.md', '# Contract\n'); put('docs/cloud-cost-model.md', '# Cost\n');
+    put('package.json', '{"private":true}\n'); put(manifestPath, JSON.stringify(manifest) + '\n');
+    put('pnpm-workspace.yaml', "packages:\n  - 'packages/*'\n  - 'apps/*'\n"); put('pnpm-lock.yaml', 'lockfileVersion: 9\n');
+    for (const path of [...identity, ...gateway, 'scripts/gateway-reconnection-receipt.mjs', 'packages/stock/src/index.mjs']) put(path, 'export const value = 1;\n');
+    seed(); const base = commit();
+    run({root, git, put, commit, seed, base, audit: (mode, sha = git('rev-parse', 'HEAD').trim()) => auditInputMode(mode, sha, git, [manifestPath])});
+  } finally {rmSync(root, {recursive: true, force: true});}
+}
+
+// Fails if dispatch ignores v2 or reconstructs a different ordered inventory.
+test('v2 checks exact current rows and keeps v1 evidence frozen', () => fixture(({git, base, audit}) => {
+  assert.deepEqual(readInputAudit(base, git).policy, {version: 2});
+  const rows = git('ls-tree', '-rz', '--full-tree', base).split('\0').filter(Boolean);
+  const expected = rows.filter(raw => {
+    const path = raw.split('\t')[1];
+    return ![policy, marker, 'README.md', 'docs/backlog.md'].includes(path) && !path.startsWith(recordRoot);
+  }).map(raw => raw + '\0').join('');
+  assert.equal(audit('docs').inputSha256, hash(expected));
+  for (const mode of modes) assert.doesNotThrow(() => audit(mode));
+}));
+
+// Each change must invalidate only the modes whose inputs really changed.
+test('v2 preserves four distinct mode projections', () => fixture(({root, git, put, commit, base, audit}) => {
+  const changes = [
+    ['README.md', '# New prose\n', ['identity', 'gateway', 'lock']],
+    [identity[0], 'export const value = 2;\n', ['docs', 'gateway', 'lock']],
+    [gateway[0], 'export const value = 2;\n', ['docs', 'identity', 'lock']],
+    ['pnpm-lock.yaml', 'lockfileVersion: 9\n# changed\n', ['docs', 'identity', 'gateway']],
+    [manifestPath, JSON.stringify({...manifest, dependencies: {adapter: '^2'}}), ['docs', 'identity', 'gateway']],
+    [manifestPath, JSON.stringify({...manifest, license: 'MIT'}), modes],
+    ['docs/waitron-integration-contract.md', '# Changed contract\n', modes],
+    ['docs/cloud-cost-model.md', '# Changed cost\n', modes],
+  ];
+  for (const [path, source, stale] of changes) {
+    git('reset', '--hard', base); put(path, source); commit();
+    for (const mode of modes) {
+      if (stale.includes(mode)) assert.throws(() => audit(mode), /Unreviewed/, `${path}: ${mode}`);
+      else assert.doesNotThrow(() => audit(mode));
+    }
+  }
+  for (const path of [identity[0], gateway[1], 'pnpm-lock.yaml', manifestPath]) {
+    git('reset', '--hard', base); unlinkSync(join(root, path)); symlinkSync('README.md', join(root, path)); commit();
+    assert.throws(() => audit(path === 'pnpm-lock.yaml' || path === manifestPath ? 'lock' : identity.includes(path) ? 'identity' : 'gateway'), /regular/);
+  }
+}));
+
+test('v2 rejects malformed metadata and incomplete inventories', () => fixture(({root, git, put, commit, base, audit}) => {
+  const path = recordPath('docs', 'package.json');
+  const original = readFileSync(join(root, path), 'utf8');
+  const record = JSON.parse(original);
+  const corrupt = [
+    original.replace('"version":2', '"version":2,"version":2'),
+    original.replace('"mode"', '"\\u006dode"'), original.replace(/\n$/, ''),
+    canonical({...record, extra: true}), canonical({...record, mode: 'other'}), canonical({...record, state: 'other'}),
+    canonical({...record, objectId: 'A'.repeat(40)}), canonical({...record, path: '../outside'}),
+    canonical({...record, path: '/outside'}), canonical({...record, path: 'packages/./stock'}),
+    canonical({...record, gitType: 'tree'}), canonical({...record, state: 'manifest', sha256: '0'.repeat(64)}),
+  ];
+  for (const source of corrupt) {
+    git('reset', '--hard', base); put(path, source); commit();
+    for (const mode of modes) assert.throws(() => audit(mode));
+  }
+  for (const fault of ['marker', 'marker-missing', 'unknown', 'symlink', 'executable', 'missing-record', 'record-wrong-name', 'row-mode', 'added-row', 'removed-row', 'renamed-row']) {
+    git('reset', '--hard', base);
+    if (fault === 'marker') put(marker, '{"version":3}\n');
+    if (fault === 'marker-missing') unlinkSync(join(root, marker));
+    if (fault === 'unknown') put(`${recordRoot}notes.txt`, 'not evidence\n');
+    if (fault === 'symlink') {unlinkSync(join(root, path)); symlinkSync('../elsewhere', join(root, path));}
+    if (fault === 'executable') chmodSync(join(root, path), 0o755);
+    if (fault === 'missing-record') unlinkSync(join(root, path));
+    if (fault === 'record-wrong-name') {unlinkSync(join(root, path)); put(recordPath('docs', 'wrong'), original);}
+    if (fault === 'row-mode') chmodSync(join(root, 'package.json'), 0o755);
+    if (fault === 'added-row') put('scripts/new-reader.mjs', 'export const value = 1;\n');
+    if (fault === 'removed-row') unlinkSync(join(root, 'package.json'));
+    if (fault === 'renamed-row') git('mv', 'package.json', 'renamed.json');
+    commit(); assert.throws(() => audit('docs'), undefined, fault);
+  }
+}));
+
+// Deleting a source and its evidence must not erase the obligation to review removal.
+test('v2 checks explicit removals and retains record names through children and merges', () => fixture(({root, git, put, commit, base, audit}) => {
+  const source = 'packages/stock/src/index.mjs', record = recordPath('docs', source);
+  unlinkSync(join(root, source));
+  put(record, canonical({version: 2, mode: 'docs', path: source, state: 'absent', previousRevision: base}));
+  const removed = commit(); assert.doesNotThrow(() => audit('docs'));
+  // A valid removal stays valid across unrelated prose children.
+  put('README.md', '# Child\n'); commit(); assert.doesNotThrow(() => audit('docs'));
+  for (const previousRevision of ['f'.repeat(40), removed]) {
+    git('reset', '--hard', removed);
+    put(record, canonical({version: 2, mode: 'docs', path: source, state: 'absent', previousRevision}));
+    commit(); assert.throws(() => audit('docs'), /tombstone|ancestor/i);
+  }
+  git('reset', '--hard', base); unlinkSync(join(root, source)); unlinkSync(join(root, record));
+  const missing = commit(); put('README.md', '# Later\n'); commit();
+  assert.throws(() => audit('docs'), /retained|retention/i);
+  // Restoring the original evidence fixes retention, but remains stale until removal is reviewed.
+  put(record, git('show', `${base}:${record}`)); commit(); assert.throws(() => audit('docs'), /tombstone/);
+  put(record, canonical({version: 2, mode: 'docs', path: source, state: 'absent', previousRevision: base}));
+  commit(); assert.doesNotThrow(() => audit('docs'));
+  git('checkout', '-b', 'deleted-record', missing); put('README.md', '# Deleted branch child\n'); const child = commit();
+  git('checkout', '-b', 'merge-parent', base); put('docs/backlog.md', '# Other branch\n'); commit();
+  git('merge', '--no-ff', '--no-edit', '--signoff', child);
+  assert.throws(() => audit('docs'), /retained|retention/i);
+}));
+
+test('v2 rejects old-state replay and unreviewed combined states', () => fixture(({git, put, commit, seed, base, audit}) => {
+  const source = 'packages/stock/src/index.mjs';
+  put(source, 'export const value = 2;\n'); seed(); const renewed = commit();
+  assert.doesNotThrow(() => audit('docs'));
+  put(source, 'export const value = 1;\n'); commit(); assert.throws(() => audit('docs'), /Unreviewed/);
+  git('reset', '--hard', renewed); put(source, 'export const value = 3;\n'); commit(); assert.throws(() => audit('docs'), /Unreviewed/);
+  // Unrelated records cannot authorize the third source state.
+  assert.doesNotThrow(() => audit('docs', base));
+}));
+
+// Exempting a row is a reviewed removal, not permission to drop its old record.
+test('v2 requires explicit transitions into prose exemptions and complete manifest membership', () => fixture(({root, git, put, commit, seed, audit}) => {
+  put('docs/operator.md', '# Read as executable input\n'); chmodSync(join(root, 'docs/operator.md'), 0o755); seed();
+  const base = commit(); assert.doesNotThrow(() => audit('docs'));
+  chmodSync(join(root, 'docs/operator.md'), 0o644); commit(); assert.throws(() => audit('docs'), /tombstone/);
+  put(recordPath('docs', 'docs/operator.md'), canonical({version: 2, mode: 'docs', path: 'docs/operator.md', state: 'absent', previousRevision: base}));
+  commit(); assert.doesNotThrow(() => audit('docs'));
+  put('docs/operator.md', '# Ordinary prose may now change\n'); commit(); assert.doesNotThrow(() => audit('docs'));
+  put('packages/other/package.json', '{"name":"other","scripts":{"test":"node --test"}}\n'); seed(); commit();
+  assert.throws(() => audit('lock'), /Incomplete manifest inventory/);
+}));
+
+test('v2 validates complete raw tree bytes before accepting path records', () => fixture(({root, git, put, commit, seed, audit}) => {
+  for (const path of ['scripts/spaced reader.mjs', 'scripts/new\nline.mjs', 'scripts/literal\\reader.mjs', 'scripts/valid-\ufffd.mjs']) put(path, 'export const value = 1;\n');
+  seed(); commit(); assert.doesNotThrow(() => audit('docs'));
+  // Build raw Git index bytes: macOS refuses invalid UTF-8 filesystem names.
+  const objectId = git('rev-parse', 'HEAD:scripts/identity-upstream.mjs').trim();
+  const invalid = Buffer.concat([Buffer.from(`100644 ${objectId}\tscripts/invalid-`), Buffer.from([255]), Buffer.from('.mjs\0')]);
+  execFileSync('git', ['update-index', '-z', '--index-info'], {cwd: root, input: invalid});
+  for (const mode of modes) put(recordPath(mode, 'scripts/invalid-\ufffd.mjs'), canonical({version: 2, mode,
+    path: 'scripts/invalid-\ufffd.mjs', state: 'present', gitMode: '100644', gitType: 'blob', objectId}));
+  git('add', recordRoot); git('commit', '-sm', 'Invalid raw path fixture');
+  assert.throws(() => audit('docs'), /UTF-8|roundtrip|tree bytes/);
+}));
+
+test('v2 discovers complete workspace membership before all-mode approval', async () => {
+  const {auditAllInputModes} = await import('./ci-input-audit.mjs');
+  fixture(({git, put, commit, seed, audit}) => {
+    assert.doesNotThrow(() => auditAllInputModes(git('rev-parse', 'HEAD').trim(), git));
+    put('packages/missing/src/reader.mjs', 'export const value = 1;\n'); seed(); commit();
+    assert.throws(() => auditAllInputModes(git('rev-parse', 'HEAD').trim(), git), /Incomplete workspace manifest/);
+    put('packages/missing/package.json', '{"name":"stock","scripts":{"test":"node --test"}}'); seed(); commit();
+    assert.throws(() => auditAllInputModes(git('rev-parse', 'HEAD').trim(), git), /duplicate package/);
+    assert.doesNotThrow(() => audit('docs'));
+  });
+});
+
+test('v2 batches immutable record blobs once across all-mode checking', async () => {
+  const {auditAllInputModes} = await import('./ci-input-audit.mjs');
+  fixture(({git, base}) => {
+    let batches = 0;
+    const read = (...args) => git(...args);
+    read.readBlobs = ids => {batches++; return git.readBlobs(ids);};
+    assert.doesNotThrow(() => auditAllInputModes(base, read));
+    assert.equal(batches, 1, 'One immutable inventory must not spawn a batch per mode');
+  });
+});

@@ -4,6 +4,10 @@ import {execFileSync} from 'node:child_process';
 import {lstatSync, writeFileSync} from 'node:fs';
 import {pathToFileURL} from 'node:url';
 
+import {auditDescriptor, auditRecordRoot, readModeRecords, verifyModeRecords, assertRecordRetention} from './ci-input-audit-records.mjs';
+
+const immutableAudits = new WeakMap();
+
 const policyPath = 'scripts/ci-input-audit.json';
 const digestPattern = /^[a-f0-9]{64}$/;
 const digestFields = {
@@ -84,6 +88,8 @@ function regular(entries, path) {
 }
 
 export function readInputAudit(revision, git) {
+  const cached = immutableAudits.get(git)?.get(revision);
+  if (cached) return cached;
   const records = git('ls-tree', '-rz', '--full-tree', revision).split('\0');
   assert.equal(records.pop(), '', 'Incomplete input audit inventory');
   const paths = new Set();
@@ -96,7 +102,24 @@ export function readInputAudit(revision, git) {
     return {mode, type, objectId, path, raw: raw + '\0'};
   });
   regular(entries, policyPath);
-  return {policy: parsePolicy(git('show', `${revision}:${policyPath}`)), entries};
+  const policy = parsePolicy(git('show', `${revision}:${policyPath}`));
+  if (entries.some(entry => entry.path === auditDescriptor || entry.path.startsWith(auditRecordRoot))) {
+    const rawTree = git('ls-tree', '-rz', '--full-tree', revision, {binary: true});
+    assert.ok(Buffer.isBuffer(rawTree), 'V2 audit requires raw tree bytes');
+    let treeText;
+    try { treeText = new TextDecoder('utf-8', {fatal: true}).decode(rawTree); }
+    catch { throw new Error('Invalid UTF-8 audit tree bytes'); }
+    assert.equal(treeText, entries.map(entry => entry.raw).join(''), 'Audit tree bytes do not roundtrip');
+    const records = readModeRecords(revision, git, entries);
+    const {kind} = assertRecordRetention(revision, git, entries);
+    const result = {policy: {version: 2}, entries, records};
+    if (kind === 'commit') {
+      if (!immutableAudits.has(git)) immutableAudits.set(git, new Map());
+      immutableAudits.get(git).set(revision, result);
+    }
+    return result;
+  }
+  return {policy, entries};
 }
 
 export function fingerprintInputMode(mode, revision, git, entries, manifestPaths = []) {
@@ -134,8 +157,64 @@ export function fingerprintInputMode(mode, revision, git, entries, manifestPaths
   return {inputSha256: digest(inputs.join('')), documents, manifests};
 }
 
+export function projectInputMode(mode, revision, git, entries, manifestPaths = []) {
+  assert.ok(Object.hasOwn(digestFields, mode), 'Unknown input audit mode');
+  regular(entries, policyPath);
+  for (const path of targets[mode] ?? []) regular(entries, path);
+  const documents = new Set(), manifests = {}, inputs = [];
+  if (mode === 'lock') {
+    regular(entries, 'pnpm-lock.yaml');
+    assert.ok(Array.isArray(manifestPaths) && manifestPaths.every(manifestPath) &&
+      new Set(manifestPaths).size === manifestPaths.length, 'Invalid manifest paths');
+    assert.deepEqual(entries.filter(entry => manifestPath(entry.path)).map(entry => entry.path).sort(),
+      [...manifestPaths].sort(), 'Incomplete manifest inventory');
+    for (const path of manifestPaths) regular(entries, path);
+  }
+  for (const entry of entries) {
+    const {path, type, mode: fileMode} = entry;
+    if (path === policyPath || path === auditDescriptor || path.startsWith(auditRecordRoot)) continue;
+    if (mode === 'docs' && fileMode === '100644' && type === 'blob' && unreadMarkdown(path)) documents.add(path);
+    else if (targets[mode]?.includes(path)) continue;
+    else if (mode === 'lock' && path === 'pnpm-lock.yaml') continue;
+    else if (mode === 'lock' && manifestPaths.includes(path)) {
+      const manifest = JSON.parse(git('show', `${revision}:${path}`));
+      assert.ok(object(manifest), `Invalid manifest: ${path}`);
+      for (const field of ['dependencies', 'devDependencies', 'optionalDependencies', 'peerDependencies']) {
+        if (!Object.hasOwn(manifest, field)) continue;
+        assert.ok(object(manifest[field]) && Object.values(manifest[field]).every(value => typeof value === 'string'),
+          `Invalid manifest dependencies: ${path}`);
+        delete manifest[field];
+      }
+      const projected = JSON.stringify(Object.fromEntries(Object.entries(manifest).sort(([a], [b]) => a.localeCompare(b, 'en'))));
+      manifests[path] = digest(projected);
+    } else inputs.push(entry);
+  }
+  return {rows: inputs, documents, manifests};
+}
+
 export function auditInputMode(mode, revision, git, manifestPaths = []) {
-  const {policy, entries} = readInputAudit(revision, git);
+  const {policy, entries, records} = readInputAudit(revision, git);
+  if (policy.version === 2) {
+    const projection = projectInputMode(mode, revision, git, entries, manifestPaths);
+    const {ancestor, kind} = assertRecordRetention(revision, git, entries);
+    for (const record of records[mode]?.values() ?? []) {
+      if (record.state !== 'absent') continue;
+      try {
+        assert.ok(kind !== 'commit' || record.previousRevision !== revision, 'Tombstone must name a prior ancestor');
+        git('merge-base', '--is-ancestor', record.previousRevision, ancestor);
+        const previous = readInputAudit(record.previousRevision, git);
+        assert.equal(previous.policy.version, 2, 'Tombstone ancestor requires v2 evidence');
+        const paths = mode === 'lock' ? workspaceManifests(record.previousRevision, git, previous.entries) : [];
+        const priorProjection = projectInputMode(mode, record.previousRevision, git, previous.entries, paths);
+        const prior = previous.records[mode].get(record.path);
+        assert.ok(prior && prior.state !== 'absent', 'Missing present tombstone ancestor record');
+        const row = priorProjection.rows.find(entry => entry.path === record.path);
+        assert.ok(prior.state === 'present' ? row && row.mode === prior.gitMode && row.type === prior.gitType && row.objectId === prior.objectId :
+          priorProjection.manifests[record.path] === prior.sha256, 'Stale tombstone ancestor evidence');
+      } catch (error) { throw new Error(`Invalid audit tombstone for ${record.path}: ${error.message}`); }
+    }
+    return verifyModeRecords(mode, projection, records);
+  }
   const result = fingerprintInputMode(mode, revision, git, entries, manifestPaths);
   const message = mode === 'docs' ? 'Executable inputs changed since the document audit' :
     mode === 'lock' ? 'Inputs changed since the lock reader audit' : 'Inputs changed since the root-script consumer audit';
@@ -144,6 +223,12 @@ export function auditInputMode(mode, revision, git, manifestPaths = []) {
   return result;
 }
 
+
+export function auditAllInputModes(revision, git) {
+  const {entries} = readInputAudit(revision, git);
+  const manifests = workspaceManifests(revision, git, entries);
+  return Object.fromEntries(Object.keys(digestFields).map(mode => [mode, auditInputMode(mode, revision, git, manifests)]));
+}
 
 function workspaceManifests(revision, git, entries) {
   regular(entries, 'pnpm-workspace.yaml');
