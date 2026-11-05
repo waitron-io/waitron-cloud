@@ -51,6 +51,31 @@ final drain remain open. The diagnostic idle-action count includes drain attempt
 before signalling; it does not prove that the writer was signalled. No existing
 assertion, accounting check or configured deadline value changes.
 
+Official 0.5.17 macOS controls also reproduce the native LIST's
+`response-pipeline / ERR_STREAM_PREMATURE_CLOSE` signature in three of three
+trials: all 213 reply bytes reach the counter, both HTTP messages are complete,
+and the writer exits zero. The control deliberately postpones downstream
+response completion by 100 ms after the body passes through. It establishes a
+possible ordering, not the natural cause of the historical 743-byte refusal.
+One refusal snapshot has equal four-attempt counters and another pending
+request; two include extra refused work.
+Do not transplant replay's socket retirement into this smoke: all three native
+trials refuse at retry-sequence validation, and two need forced collection.
+A passive pre-signal idle wait still permits a later LIST cancellation in all
+three trials. The ledger reports unknown cost; the control's additional demand
+for full reconciliation fails. A generated writer alone passes the proposed drain, but that
+change fails 15 of 92 existing shutdown checks; restoring the implementation
+passes all 92. Keep the current acceptance guard and absolute two-second stop
+budget.
+
+The same official 0.5.17 controls on Debian 13 reproduce all three delayed
+LIST cancellations with writer exit zero. Socket retirement fails all three
+trials at retry-sequence validation and needs forced collection in each.
+Passive idle still permits a later LIST cancellation in all three trials;
+the ledger retains unknown cost. These controlled Linux results confirm the
+counterexamples, not the historical cause. Next, establish a background-work
+completion boundary without treating one idle observation as completion.
+
 ## Cloud backup box identity (D451)
 
 Cloud's backup verifier reads `WAITRON_NODE_ID`, and generated replay state writes
