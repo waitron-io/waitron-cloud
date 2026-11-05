@@ -1,0 +1,17 @@
+{
+  "schema": "d570-setup-v1",
+  "account": "462991287391",
+  "forbiddenAccount": "949687825720",
+  "region": "eu-south-2",
+  "repository": "waitron-io/waitron-cloud",
+  "environment": "kubernetes-proof-staging",
+  "accessExpiry": "2027-02-28T23:59:00Z",
+  "monthlyCapUsd": 10,
+  "approvedBaselineUsd": 0,
+  "instanceType": "m7g.2xlarge",
+  "sessionSeconds": 8100,
+  "officialImageOwner": "137112412989",
+  "admission": "CLOSED",
+  "repositoryId": 1381507078,
+  "repositoryOwnerId": 332029685
+}
