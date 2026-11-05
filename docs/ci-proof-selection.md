@@ -44,8 +44,9 @@ The venue matrix checks the composition of its existing legacy and venue suites.
 Its own wrappers, `scripts/fixtures/service-proof.ts`, `scripts/test-cloud-*`,
 `scripts/venue-service-*` and `deploy/test-cloud/` select it. So do the package
 `venue-service-*` test files and both suite matrices' explicitly listed package
-tests, including translation's `worker-cli` case. The shared account database
-fixture, installation inputs, workflow and planner also select it.
+tests, including translation's `worker-cli` case. Shared backend test helpers and fixture data, installation inputs, the workflow
+and planner also select it. This includes the registration venue-service
+fixture, backup verification helpers and fake translation provider.
 
 Other product-source edits use package CI without repeating this composition
 proof on every PR. A complete manual run remains available, and the planned

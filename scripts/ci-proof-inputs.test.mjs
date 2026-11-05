@@ -196,3 +196,10 @@ test('a real portal PR with all four renewed inventories still omits both matric
     }
   } finally {rmSync(root, {recursive: true, force: true});}
 });
+
+for (const path of ['packages/registration/test/fixtures/venue-service.ts',
+  'packages/backups/test/fixtures/verification.ts', 'packages/translation/test/fake-openai.ts']) {
+  test(`venue keeps its imported proof helper ${path}`, () => fixture(({put, commit, plan, pr}) => {
+    put(path); assert.equal(plan('venue', pr(commit())).required, true);
+  }));
+}

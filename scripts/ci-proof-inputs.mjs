@@ -23,13 +23,14 @@ function consumes(kind, path) {
   // Root configuration and every workspace manifest can change installation or execution.
   if (!path.includes('/') || /^(apps|packages)\/[^/]+\/package\.json$/.test(path) || shared.has(path)) return true;
   if (path === `.github/workflows/${kind === 'cost' ? 'cloud-cost' : 'venue-services-proof'}.yml`) return true;
+  // Both matrices import backend test helpers and generated-data fixture builders.
+  if (backend.test(path) && /\/test\//.test(path) && !/\.test\.[cm]?[jt]sx?$/.test(path)) return true;
   if (kind === 'cost') {
     if (path.startsWith('scripts/cloud-cost/') || path.startsWith('deploy/local-remote/') ||
       path.startsWith('docs/cost-model/') || ['docs/cloud-cost-model.md', 'docs/cloud-cost-calculator.html'].includes(path)) return true;
     // Account-server imports cross backend boundaries. Preparation also reads migrations,
     // the account database fixture, and SDK/esbuild dependencies through manifests.
     if (backend.test(path) && /\/(src|migrations)\//.test(path)) return true;
-    if (backend.test(path) && /\/test\//.test(path) && !/\.test\.[cm]?[jt]sx?$/.test(path)) return true;
   } else {
     // Product source is already exercised by package CI. This matrix is selected by
     // edits to its proof programs and their test cases, rather than every product edit.
@@ -37,7 +38,6 @@ function consumes(kind, path) {
       path.startsWith('scripts/venue-service-') || path === 'scripts/legacy-service-proof.test.ts' ||
       path === 'scripts/fixtures/service-proof.ts' || legacyTests.has(path) ||
       /^packages\/[^/]+\/test\/venue-service-/.test(path)) return true;
-    if (path === 'packages/account-http/test/fixtures.ts') return true;
   }
   if (path.startsWith('packages/') && !backend.test(path) && !path.startsWith('packages/ui-smoke/')) return true;
   if (path.startsWith('apps/') && !path.startsWith('apps/portal/')) return true;
