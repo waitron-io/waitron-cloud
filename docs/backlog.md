@@ -1,5 +1,12 @@
 # Waitron Cloud backlog
 
+## Admin listener shutdown and paced replay (D581)
+
+The exhaustion fixture drains probe data before closing its owned listeners.
+The [socket regression and limits](backlog/storage-cache-fixture.md#admin-owner-probe-draining-d581)
+cover a disconnected peer that previously prevented shutdown. Historical CI
+client attribution and the separate paced-replay checkpoint failure remain open.
+
 ## Cloud backup box identity (D451)
 
 Cloud's backup verifier reads `WAITRON_NODE_ID`, and generated replay state writes
