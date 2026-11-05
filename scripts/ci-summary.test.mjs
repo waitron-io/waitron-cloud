@@ -96,6 +96,16 @@ test('summary rejects unknown skipped identities duplicate placeholders and dupl
   }
 });
 
+test('summary accepts the exact skipped matrix names reported by hosted Actions', () => {
+  for (const name of ['root (${{ matrix.shard }}/4)',
+    "package (${{ matrix.package }}${{ ((matrix.shards && format(', shard {0}/{1}', matrix.shard, matrix.shards)) || '') }})"]) {
+    const placeholder = {name, status: 'completed', conclusion: 'skipped'};
+    assert.doesNotThrow(() => assertSummary(plan, results, [...jobs, placeholder]));
+    assert.throws(() => assertSummary(plan, results, [...jobs, placeholder, placeholder]), /duplicate/);
+    assert.throws(() => assertSummary(plan, results, [...jobs, {...placeholder, conclusion: 'success'}]), /Unexpected executed job/);
+  }
+});
+
 
 test('executed summary waits for a stale job record to publish its final result', () => {
   const root = mkdtempSync(join(tmpdir(), 'cloud-summary-publication-'));

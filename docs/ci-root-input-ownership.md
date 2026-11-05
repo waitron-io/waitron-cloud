@@ -58,6 +58,8 @@ reviewed ancestor shared with main.
 The pull-request checks also require that ancestor in the original PR base.
 Squashing keeps main's history and discards intermediate feature commits, so
 a record anchored only in your unmerged work cannot qualify for publication.
+If you add and remove an input before its first landing, consolidate those
+unlanded edits before renewal. There is no reviewed main ancestor to retain.
 
 Then [renew documentation evidence](ci-documentation-audit.md#renew-documentation-evidence-before-pushing-code)
 for the source and its new root records. Commit the complete result with sign-off:
@@ -76,12 +78,18 @@ The mandatory summary verifies the complete current head after activation.
 Missing, stale or removed review records fail that check even when all package
 jobs ran. Removing the registry and every record cannot disable the check:
 activation is retained in Git history. Fetch complete history before checking.
+Rebase code branches opened before activation before landing them. After any
+registry change, renew inputs against the new registry before combining older
+branches; an earlier green head does not qualify the combined tree.
 
 Narrow selection additionally requires complete current reviews in both saved
 trees and the same registry in each. Activation cannot grant its own shortcut.
 Forced full and nightly runs keep all their existing work. Exclusive identity,
 gateway and lock shortcuts keep their original rules; accompanying root records
 can make those changes run in full.
+Workspace-policy changes and files outside known workspace members retain full
+work. Large changed-path ownership markers also retain full work, keeping the
+plan passed to each job bounded.
 
 Valid root-record renewal does not by itself select either separate proof
 matrix. Both saved root reviews and documentation authorities must qualify

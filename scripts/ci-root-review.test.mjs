@@ -90,6 +90,16 @@ test('removed inputs require retained evidence from a reviewed target ancestor',
   assert.throws(() => api.checkRootReview(commit(), git), /must be retained/);
 }));
 
+test('a retained removal cannot claim a different registry identity', () => fixture(({root, git, write, renew, docs, commit, base}) => {
+  const path = 'scripts/reader.mjs', record = JSON.parse(readFileSync(join(root, recordPath(path)), 'utf8'));
+  rmSync(join(root, path));
+  write(recordPath(path), {version: 1, path, state: 'absent', previousRevision: base,
+    registryObjectId: record.registryObjectId, reviewer: 'reviewer', reference: 'review/removal-identity'});
+  docs(); const removed = commit(); assert.doesNotThrow(() => api.checkRootReview(removed, git));
+  write(recordPath(path), {...JSON.parse(readFileSync(join(root, recordPath(path)), 'utf8')), registryObjectId: '0'.repeat(40)});
+  docs(); assert.throws(() => api.checkRootReview(commit(), git), /Invalid root review tombstone/);
+}));
+
 test('unrelated branches renew different records and merge in either order', () => fixture(({root, git, write, renew, docs, commit, base}) => {
   // V2 docs records also avoid a shared policy rewrite, as on the real branch.
   write('scripts/identity-upstream.mjs', 'identity\n'); write('scripts/identity-upstream.test.mjs', 'identity test\n');

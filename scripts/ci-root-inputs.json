@@ -27,7 +27,7 @@
         },
         {
           "reader": "scripts/ci-root-inputs.mjs",
-          "site": "preflight:161-169",
+          "site": "preflight:172-180",
           "kind": "inventory",
           "boundary": "exact-head Git names and modes plus immediate scripts directory membership; no candidate module is imported",
           "role": "metadata validation"
@@ -342,7 +342,7 @@
         },
         {
           "reader": "scripts/ci-root-inputs.mjs",
-          "site": "rootInputPlan/assertRootInputWork and CLI:39-130,152-174",
+          "site": "rootInputPlan/assertRootInputWork and CLI:41-136,167-185",
           "kind": "inventory",
           "boundary": "Complete immutable metadata; immediate scripts root-test membership filtered by /^scripts\\/ci-[^/]+\\.test\\.mjs$/ plus identity/gateway peers",
           "role": "metadata validation"
@@ -524,7 +524,7 @@
         },
         {
           "reader": "deploy/local-stack/operations-health.test.mjs",
-          "site": "import:4, loopback servers:8-25",
+          "site": "import:4, loopback servers:8-22",
           "kind": "import",
           "boundary": "operations-health.mjs; generated ephemeral 127.0.0.1 HTTP listeners, no dynamic file imports",
           "role": "execution"
@@ -853,7 +853,7 @@
         },
         {
           "reader": "scripts/ci-root-inputs.mjs",
-          "site": "rootInputPlan/assertRootInputWork and CLI:39-130,152-174",
+          "site": "rootInputPlan/assertRootInputWork and CLI:41-136,167-185",
           "kind": "inventory",
           "boundary": "Complete immutable metadata; immediate scripts root-test membership filtered by /^scripts\\/ci-[^/]+\\.test\\.mjs$/ plus identity/gateway peers",
           "role": "metadata validation"

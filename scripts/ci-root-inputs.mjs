@@ -14,14 +14,8 @@ const candidates = new Set(['scripts/ci-root-shards.test.mjs', 'scripts/verify-b
 const sha = /^[a-f0-9]{40}$/;
 const manifestPattern = /^(?:apps|packages)\/[^/\\]+\/package\.json$/;
 
-function packageInventory(revision, entries, git) {
+function packageManifests(revision, entries, git) {
   const manifests = entries.filter(e => manifestPattern.test(e.path));
-  const policy = entries.find(e => e.path === 'pnpm-workspace.yaml');
-  assert.ok(policy?.mode === '100644' && policy.type === 'blob', 'Missing regular root workspace policy');
-  assert.match(git('show', `${revision}:pnpm-workspace.yaml`), /^packages:\s*\n  - 'packages\/\*'\s*\n  - 'apps\/\*'\s*$/, 'Unsupported root workspace policy');
-  const directories = new Set(entries.filter(e => /^(?:apps|packages)\//.test(e.path)).map(e => e.path.split('/').slice(0, 2).join('/')));
-  assert.deepEqual(manifests.map(e => e.path.slice(0, -'/package.json'.length)).sort(), [...directories].sort(),
-    'Shared or unknown root input: incomplete root workspace membership');
   const packages = new Map(), names = new Set();
   for (const entry of manifests) {
     assert.ok(entry.mode === '100644' && entry.type === 'blob', `Nonregular root workspace manifest: ${entry.path}`);
@@ -30,6 +24,17 @@ function packageInventory(revision, entries, git) {
     assert.ok(typeof manifest.scripts?.test === 'string' && manifest.scripts.test.trim(), 'Missing root workspace test command');
     names.add(manifest.name); packages.set(entry.path.slice(0, -'/package.json'.length), {name: manifest.name, test: manifest.scripts.test});
   }
+  return packages;
+}
+
+function packageInventory(revision, entries, git) {
+  const policy = entries.find(e => e.path === 'pnpm-workspace.yaml');
+  assert.ok(policy?.mode === '100644' && policy.type === 'blob', 'Missing regular root workspace policy');
+  assert.match(git('show', `${revision}:pnpm-workspace.yaml`), /^packages:\s*\n  - 'packages\/\*'\s*\n  - 'apps\/\*'\s*$/, 'Unsupported root workspace policy');
+  const packages = packageManifests(revision, entries, git);
+  const directories = new Set(entries.filter(e => /^(?:apps|packages)\//.test(e.path)).map(e => e.path.split('/').slice(0, 2).join('/')));
+  assert.deepEqual([...packages.keys()].sort(), [...directories].sort(),
+    'Shared or unknown root input: incomplete root workspace membership');
   return packages;
 }
 
@@ -81,7 +86,11 @@ export function rootInputPlan(paths, base, head, git) {
     }
     assert.ok(selected.size > 0 || packagePaths.length > 0, 'Evidence or prose alone cannot create root work');
     const entries = [...selected.values()];
-    return {rootInputs: {version: 1, base, head, paths, entryIds: [...selected.keys()].sort()},
+    const rootInputs = {version: 1, base, head, paths, entryIds: [...selected.keys()].sort()};
+    // Leave room for package rows and diagnostics below Linux's per-value
+    // environment limit; full work needs no changed-path ownership marker.
+    assert.ok(Buffer.byteLength(JSON.stringify(rootInputs), 'utf8') <= 64 * 1024, 'Root ownership size exceeds the step environment budget');
+    return {rootInputs,
       rootTests: entries.some(entry => entry.owners.rootTests),
       receipts: [...new Set(entries.flatMap(entry => entry.owners.receipts))].sort(), packagePaths};
   } catch (error) {
@@ -106,7 +115,9 @@ export function assertRootInputWork(plan, {base, head, git}) {
   if (!expected && !marked) return;
   const full = () => {
     assert.ok(!marked && plan.typecheck === true && !plan.scripts && !plan.documentation && !plan.reuse, 'Root refusal requires full work');
-    const {entries} = readInputAudit(head, git), inventory = packageInventory(head, entries, git);
+    // Unknown policy or directory membership refuses narrowing, not full work.
+    // Full work still requires every saved package manifest and receipt owner.
+    const {entries} = readInputAudit(head, git), inventory = packageManifests(head, entries, git);
     const selected = new Set(plan.packages.flatMap(packageMembers));
     assert.deepEqual([...selected].sort(), [...inventory.values()].map(row => row.name).sort(), 'Root fallback requires every package owner');
     assert.deepEqual([...plan.receipts].sort(), [...receiptSuites].sort(), 'Root fallback requires every receipt owner');

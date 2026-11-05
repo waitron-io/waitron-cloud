@@ -58,6 +58,7 @@ test('strict summary always runs and receives the plan and every dependency resu
   assert.match(job('summary'),/CI_RESULTS: \$\{\{ toJSON\(needs\) \}\}/);
   assert.match(job('summary'),/CI_HEAD_SHA: \$\{\{ github.event.pull_request.head.sha \|\| github.sha \}\}/);
   assert.match(job('summary'),/run: node scripts\/ci-summary.mjs/);
+  assert.match(job('summary'), /fetch-depth: 0/);
 });
 
 test('required dependency results cannot ignore a job failure after its steps finish', () => {

@@ -235,6 +235,76 @@ test('stale head fails mandatory summary even for full or legacy work and after 
   assert.throws(() => api.assertRootInputWork({packages: [], receipts: [], typecheck: true}, {base, head: removed, git}), /Missing root registry/);
 }));
 
+for (const [label, path, source] of [
+  ['workspace policy', 'pnpm-workspace.yaml', "packages:\n  - 'packages/*'\n  - 'apps/*'\nonlyBuiltDependencies: []\n"],
+  ['workspace pattern', 'pnpm-workspace.yaml', "packages:\n  - 'packages/*'\n  - 'apps/*'\n  - 'tools/*'\n"],
+  ['unowned app directory', 'apps/placeholder/notes.txt', 'workspace notes\n'],
+  ['package directory file', 'packages/notes.txt', 'package notes\n'],
+]) test(`shared workspace changes retain executable full work and every receipt owner: ${label}`, () => fixture(({root, git, write, renew, docs, commit}) => {
+  const receipts = ['test:two-venue-milestone-receipt', 'test:backup-capacity', 'test:public-gateway-limits',
+    'test:local-stack', 'test:database-recovery-receipt', 'test:cloud-cost'];
+  write('packages/control/package.json', {name: '@waitron-cloud/identity', scripts: {test: 'node --test test/*.test.mjs'}});
+  write('scripts/ci-another.test.mjs', 'another root check\n');
+  write('package.json', {scripts: Object.fromEntries(receipts.map(name => [name, 'node --version']))});
+  renew(['packages/control/package.json', 'scripts/ci-another.test.mjs', 'package.json']); docs(); const base = commit();
+  const full = {packages: [{package: '@waitron-cloud/identity', shard: 1}], receipts, typecheck: true, reuse: null};
+  const jobs = ['changes', 'typecheck', 'root (1/4)', 'root (2/4)', 'root (3/4)', 'root (4/4)',
+    'package (@waitron-cloud/identity)', 'receipts'].map(name => ({name, status: 'completed', conclusion: 'success'}));
+  const results = {changes: 'success', typecheck: 'success', root: 'success', packages: 'success', receipts: 'success'};
+  {
+    write(path, source); renew([path]); docs(); const head = commit();
+    const context = {base, head, git};
+    assert.equal(api.rootInputPlan(git('diff', '--name-only', '--no-renames', '-z', base, head).split('\0').filter(Boolean), base, head, git).full, true);
+    assert.doesNotThrow(() => assertSummary(full, results, jobs, context), path);
+    write('event.json', JSON.stringify({pull_request: {base: {sha: base}, head: {sha: head}}}));
+    const checked = spawnSync(process.execPath, [fileURLToPath(new URL('./ci-root-inputs.mjs', import.meta.url)), '--check'], {
+      cwd: root, encoding: 'utf8', timeout: 30_000, env: {...process.env, GITHUB_EVENT_PATH: join(root, 'event.json'), CI_HEAD_SHA: head, CI_PLAN: JSON.stringify(full)}});
+    assert.equal(checked.status, 0, checked.stdout + checked.stderr);
+    for (const omitted of receipts) assert.throws(() => assertSummary({...full, receipts: receipts.filter(name => name !== omitted)}, results, jobs, context),
+      /Root fallback requires every receipt owner/, omitted);
+  }
+}));
+
+test('large reviewed package changes retain a bounded full plan instead of overflowing a step environment', () => fixture(({git, write, renew, docs, commit, base}) => {
+  const paths = Array.from({length: 400}, (_, i) => `packages/control/src/${'long-'.repeat(25)}${i}.mjs`);
+  for (const path of paths) write(path, 'export const value = 1;\n');
+  renew(paths); docs(); const head = commit();
+  const workspace = [{name: '@waitron-cloud/control', directory: 'packages/control', scripts: {test: 'node --test test/*.test.mjs'}}];
+  const plan = createPlan({pull_request: {base: {sha: base}, head: {sha: head}}}, {}, workspace, git);
+  assert.ok(Buffer.byteLength(JSON.stringify(plan), 'utf8') < 120_000, 'The complete executable plan must fit one Linux environment value');
+  assert.equal(plan.rootInputs, undefined); assert.equal(plan.typecheck, true);
+  assert.deepEqual(plan.packages, [{package: '@waitron-cloud/control', shard: 1}]);
+  assert.equal(plan.receipts.length, 6);
+  assert.match(plan.reason, /Root.*(large|budget|size)/i);
+  assert.doesNotThrow(() => api.assertRootInputWork(plan, {base, head, git}));
+  const launched = spawnSync(process.execPath, ['-e', 'JSON.parse(process.env.CI_PLAN)'], {
+    encoding: 'utf8', timeout: 30_000, env: {...process.env, CI_PLAN: JSON.stringify(plan)}});
+  assert.equal(launched.status, 0, launched.error?.message ?? launched.stderr);
+}));
+
+test('configured root and receipt preflights verify the event plan before running tests', () => fixture(({root, git, write, renew, docs, commit, base, changedPaths}) => {
+  const workflow = readFileSync(new URL('../.github/workflows/ci.yml', import.meta.url), 'utf8');
+  const health = 'deploy/local-stack/operations-health.test.mjs';
+  write(health, 'changed health check\n'); renew([health]); docs(); const head = commit();
+  const plan = {packages: [], receipts: ['test:local-stack'], typecheck: false, rootTests: false, reuse: null,
+    rootInputs: {version: 1, base, head, paths: changedPaths(head), entryIds: ['local-health-test']}};
+  write('event.json', JSON.stringify({pull_request: {base: {sha: base}, head: {sha: head}}}));
+  for (const job of ['root', 'receipts']) {
+    const body = new RegExp(`^  ${job}:\\n([\\s\\S]*?)(?=^  [\\w-]+:|$(?![\\s\\S]))`, 'm').exec(workflow)?.[1] ?? '';
+    const step = /- name: Verify exact root input work\n\s+run: ([^\n]+)\n\s+env:\n\s+CI_PLAN: ([^\n]+)/.exec(body);
+    assert.ok(step, `Missing executed preflight in ${job}`);
+    assert.equal(step[2], '${{ needs.changes.outputs.plan }}');
+    assert.ok(step.index < body.indexOf(job === 'root' ? '- run: node --test' : '- run: node scripts/ci-run-receipts.mjs'));
+    const [runtime, program, ...args] = step[1].split(' '); assert.equal(runtime, 'node');
+    const run = () => spawnSync(process.execPath, [fileURLToPath(new URL(`../${program}`, import.meta.url)), ...args], {
+      cwd: root, encoding: 'utf8', timeout: 30_000, env: {...process.env, GITHUB_EVENT_PATH: join(root, 'event.json'), CI_HEAD_SHA: head, CI_PLAN: JSON.stringify(plan)}});
+    let result = run(); assert.equal(result.status, 0, result.stdout + result.stderr);
+    write(health, 'dirty tracked health bytes\n'); result = run();
+    assert.notEqual(result.status, 0); assert.match(result.stderr, /dirty tracked checkout|dirty bytes|clean tracked checkout/);
+    git('restore', '--', health);
+  }
+}));
+
 test('removal evidence must survive a squash onto the trusted pull request base', () => fixture(({root, git, write, renew, docs, commit, base, plan}) => {
   git('checkout', '-b', 'unlanded-removal');
   const changed = 'packages/control/src/index.mjs';
