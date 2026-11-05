@@ -195,7 +195,8 @@ for (const {exhausted, occupied, http = false} of [
   assert.match(output, /(?:#|ℹ) fail 0\b/, output);
   assert.ok(adminCandidates.length >= (exhausted ? 101 : 1), 'observe the real admin listener attempts');
   for (const candidate of adminCandidates) assert.ok(candidate + (exhausted ? 100 : 10100) < 32768,
-    'admin listeners and their derived fallback ports must remain below the service range');
+    'admin listeners and their derived fallback ports must remain below the service range' +
+    ` (port=${candidate}, firstPort=${adminCandidates[0]})`);
   assert.ok(controlChildren.every(child => child.exited), 'the original admin case collects its native child');
   for (const path of controlRoots) await assert.rejects(access(path), {code:'ENOENT'});
   if (occupied) {

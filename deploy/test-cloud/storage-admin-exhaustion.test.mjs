@@ -23,7 +23,8 @@ async function occupyAdminRange() {
     const servers = [];
     // Service fixtures claim ports from 32768 upward. Keep this whole range
     // below them so admin owners cannot enter a socket-to-child handoff.
-    const firstPort = randomInt(10000, 32668);
+    // Leave another 100 ports below the service range after the 101 retained owners.
+    const firstPort = randomInt(10000, 32568);
     try {
       for (let index = 0; index < 101; index++) {
         const server = createAdminPortOwner(`admin-owner-${index}`);

@@ -512,6 +512,10 @@ See [the boundaries and remaining work](backlog/usage-metering.md#usage-read-tra
 service-port range; paused-child controls reproduce the old S3 refusals.
 Historical port owners, the progress-control timeout, default native admin
 listeners, admin-worker functionality and other programs' bind races remain unqualified.
+D584 narrows the exhaustion starting range so the 101 owners and the parent’s
+additional 100-port check stay below 32768. The original upper edge fails a
+controlled reproduction; the historical CI draw is unknown. Future failures print
+the actual candidate and first port, with every predicate retained.
 See [the controls and unresolved failures](backlog/storage-cache-fixture.md#native-storage-admin-fallback-exhaustion-d506).
 
 ## Repository licence
