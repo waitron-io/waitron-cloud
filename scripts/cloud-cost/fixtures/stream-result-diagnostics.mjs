@@ -1,4 +1,6 @@
 import { isProxy } from 'node:util/types';
+import fs from 'node:fs';
+import { syncBuiltinESMExports } from 'node:module';
 import { workerFailureTrace } from '../worker-diagnostic.mjs';
 import { withOwnershipDiagnostics } from './ownership-diagnostics.mjs';
 
@@ -23,12 +25,26 @@ function summarizeRefusal(error) {
   return evidence;
 }
 
-export async function withStreamResultDiagnostics(operation, readJournal, observation, report) {
-  let observed;
-  return withOwnershipDiagnostics(operation, readJournal, () => (observed = observation()), async text => {
-    const evidence = JSON.parse(text.slice('ownership-start-refusal '.length));
-    evidence.resultRead = observed.resultRead === true;
-    evidence.refusal = summarizeRefusal(observed.refusal);
-    await report('isolated-stream-result-refusal ' + JSON.stringify(evidence));
-  });
+export async function withStreamResultDiagnostics(operation, readJournal, observation, report, resultPath) {
+  let observed, resultRead = false;
+  const read = fs.readFileSync;
+  if (resultPath !== undefined) {
+    fs.readFileSync = (path, ...args) => {
+      const contents = read(path, ...args);
+      // Parsing and admission may refuse after the complete result has already been read.
+      if (path === resultPath) resultRead = true;
+      return contents;
+    };
+    syncBuiltinESMExports();
+  }
+  try {
+    return await withOwnershipDiagnostics(operation, readJournal, () => (observed = observation()), async text => {
+      const evidence = JSON.parse(text.slice('ownership-start-refusal '.length));
+      evidence.resultRead = resultPath === undefined ? observed.resultRead === true : resultRead;
+      evidence.refusal = summarizeRefusal(observed.refusal);
+      await report('isolated-stream-result-refusal ' + JSON.stringify(evidence));
+    });
+  } finally {
+    if (resultPath !== undefined) { fs.readFileSync = read; syncBuiltinESMExports(); }
+  }
 }

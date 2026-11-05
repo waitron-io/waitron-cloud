@@ -3601,7 +3601,10 @@ controls. The historical job did not measure helper scheduling, so the exact
 cause of that run's delay remains unknown. D583's separate isolated early-wake
 failure still needs diagnosis. Its isolated early-wake case now uses the existing
 stream-result reporter to retain fixed controller/worker refusal stages and the
-admitted trace before fixture cleanup. The original success assertion, both
+admitted trace before fixture cleanup. Its result-read flag observes a successful
+read of the exact worker result, including a later JSON or admission refusal;
+a failed or unrelated read cannot satisfy it, and the reader is restored after
+success or refusal. The original success assertion, both
 two-second phase checks, three restored sales, source fingerprints and owned
 cleanup remain. A forced worker refusal must still fail the case and expose only
 the admitted diagnostic; raw exception text stays private. The historical failure

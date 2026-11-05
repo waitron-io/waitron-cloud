@@ -716,7 +716,7 @@ test('isolatedHostCompletesTheIdleObservationAfterAnEarlyTimerWake', async t => 
   assert.deepEqual(result.admission.stream.restored, { sales: 3, integrity: true });
   clean(f, before);
   }, () => readFileSync(f.journal.path, 'utf8'), () => ({ elapsedMilliseconds: performance.now() - began,
-    changed: false, resultRead: result !== undefined, refusal, signalAborted: false }), text => t.diagnostic(text));
+    changed: false, refusal, signalAborted: false }), text => t.diagnostic(text), join(f.root, 'isolated-replay/result.json'));
 });
 
 // Dropping the archive flag at either controller/worker boundary must not silently produce ordinary replay evidence.
