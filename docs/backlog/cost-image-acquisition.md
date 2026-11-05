@@ -105,3 +105,51 @@ pull after a completed build, without the registry challenge or credential
 selection needed to attribute it. Keep both investigations open and capture
 those details during a controlled Linux recurrence, without recording secrets.
 
+### Linux qualification on 5 November 2026 (D530-4)
+
+At Cloud commit `800717778b6ca28779ed7c0347b0911f8bd56148`, the Debian 13
+x86-64 test box passes all 104 existing acquisition controls with no failures,
+cancellations or skips:
+
+```sh
+node --test --test-concurrency=1 --test-timeout=30000 \
+  scripts/ci-test-postgres.test.mjs \
+  scripts/cloud-cost/conformance-image-acquisition.test.mjs \
+  scripts/cloud-cost/conformance-image-build.test.mjs \
+  scripts/cloud-cost/isolation-image-acquisition.test.mjs
+```
+
+The real conformance preparer also downloads both checksum-pinned archives on
+their first attempts and builds its fixture image on the first attempt. It
+resolves Node and Mailpit metadata but reuses cached build layers. A separate
+`docker pull node:26.11.1-slim`, with only `PATH`, `LANG`, `TZ` and `CI` in the
+client environment, succeeds and reports the existing image up to date. This
+checks current registry access; it does not qualify an empty image cache or
+establish which credentials the daemon or Docker's default configuration uses.
+
+An unauthenticated request for the public Node manifest returns HTTP 401 with
+Docker Hub's Bearer challenge, which names the token endpoint and public pull
+scope. That challenge is part of registry authentication; it does not reproduce
+the historical daemon refusal after a pull. The old log has neither that
+exchange nor credential-selection evidence, so D462's authentication cause
+remains unknown.
+
+Both original isolation and source-copy suites pass all 29 cases against real
+Docker, without failures, cancellations or skips:
+
+```sh
+node --test --test-concurrency=1 --test-timeout=30000 \
+  scripts/cloud-cost/local.test.mjs scripts/cloud-cost/source-copy.test.mjs
+```
+
+The preparer's owned image tag and scratch directory are absent after cleanup.
+The real PostgreSQL/Mailpit launcher reaches its child command and collects
+both owned containers on exit.
+The three pre-existing application containers retain their identities. These
+results qualify the existing recovery paths on this machine. They do not
+explain the historical provider failures or repair authentication. Preserve
+immediate authentication refusal, all retry and deadline limits, and every
+isolation assertion. On a new recurrence, capture the registry challenge and
+credential-selection evidence without recording credentials before choosing a
+repair; repeating these passing selections supplies no historical explanation.
+
