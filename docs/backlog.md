@@ -1197,9 +1197,10 @@ implementation or production evidence.
   v1 assertions remain intact in isolated fixture history. The complete current
   candidate and its required workflow freshness commands have executable controls. The
   [history sample](backlog/ci-audit-conflicts.md) reproduces audit-only conflicts
-  in 21 of 30 repeated-head transitions. The two owned draft scratch PRs and
-  current-head/exact-merge CI still need qualification before claiming the
-  production conflict reduction complete.
+  in 21 of 30 repeated-head transitions. The two owned drafts #946/#947 pass on unchanged first-attempt heads;
+  both merge orders need zero audit conflicts, regeneration or reruns. The
+  history report retains exact runs and cleanup. Production current-head and
+  exact-merge CI remain required before landing; no production trend is claimed.
 
 - **CI execution budget.** You can read one summary job and the individual package
   and receipt jobs to check a candidate. The summary also checks the plan's
