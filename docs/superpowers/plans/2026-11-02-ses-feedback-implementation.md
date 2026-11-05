@@ -110,6 +110,18 @@ Proposed `applySesFeedback(pool: Pool, config: SesFeedbackConfig, recipientKeys:
 **New:** `packages/registration/test/mail-handoff-suppression.test.ts`.
 **Inspect/retain consumers:** `packages/registration/src/{relay-control,relay-grants,relay-messages,venue-service-permissions}.ts`; signup, recovery and service-alert liveness writers. Use T2's interfaces, without widening their authority.
 
+The explicit legacy mapping requires additive migration
+`050_mail_legacy_suppression_scopes.sql` and `mail-handoff-migration.test.ts`;
+049 remains unchanged. The mapping links retained shared references to a local
+key/digest without fabricating provider evidence. Shared lookup joins that mapping
+to the still-present local block, and reconciliation retains the immutable mapping.
+Schema receipt version 11 adds `--mail-handoff` for the exact 47-to-50 pair while
+retaining the historical version 10 proof. Empty mapping checks on both restored
+backup paths preserve existing unmapped blocks without guessing their scope.
+The retained-key read can itself wait after authority locking. Both workers must
+recheck authority deadlines after admission and roll back that admission when
+its authority expires. Queue and lease deadlines retain their independent checks.
+
 Proposed worker additions: account `EmailWorker` options and local-proof `RelayWorkerConfig` gain optional internal `ses:{config:SesFeedbackConfig;recipientKeys:RelayKeyConfig}`. `RelayKeyConfig` is the current key-ring shape, reused with distinct suppression key material. Trusted worker construction supplies it; message callers cannot. This prepares synthetic scoped handoffs, not a production relay mode.
 
 - [ ] **RED:** Add `suppressionWinsBeforeAdmission`, `admittedSendCannotBeRecalled`, `sameCountryBlockCrossesPurposesOnly`, `rotationCannotSplitHandoff`, `staleClaimCannotAdmitOrSettleReplacement` and `expiryOrAuthorityChangeDuringLockWaitRefuses`. Cover two accounts/venues, another country/provider scope, changed contact email, unavailable historical keys and both lock winners. Observe actual database blockers rather than relying on sleeps.
@@ -154,6 +166,14 @@ Proposed queue port: `receive(signal:AbortSignal):Promise<{body:string;receiptHa
 - [ ] **GREEN C6:** `node scripts/test-postgres.mjs exec pnpm --dir packages/registration exec node --test --test-timeout=120000 test/ses-feedback-worker.test.ts test/ses-feedback-shutdown.test.ts test/worker-loop.test.ts test/email-worker-shutdown.test.ts`. Expect bounded exits, no premature delete and one durable effect after restarts. Real encrypted DLQ transfer and IAM are provider qualification, not established by the fake queue. Commit with `git commit -s`.
 
 ## Task 7: Require audited manual removal and provider reconciliation
+
+Task 4 review identified a required removal boundary: mappings name a legacy
+digest, not a particular lifetime of that block. Before implementing removal,
+add a block-lifetime identity or explicit retired-mapping state so an unscoped
+re-add cannot reactivate historical country mappings. Test deletion and unscoped
+re-add after retirement, including one legacy row mapped to two countries.
+The current global legacy relay gate remains; account lookup uses explicit scopes.
+There is no production removal path in Task 4.
 
 **New:** `packages/registration/src/{mail-suppression-admin,ses-suppression-reconcile}.ts`; `packages/registration/test/mail-suppression-admin.test.ts`.
 **Use:** T2's scope locks/operator records, `packages/identity/src/sessions.ts` and `packages/registration/src/{support-grants,security-audit}.ts` as authentication/audit references. Do not repurpose venue-scoped audit events for a cross-account block or use local `suppress` as removal authority.

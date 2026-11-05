@@ -420,8 +420,22 @@ scope; revocation cannot be undone and has no supported recovery path yet.
 The owner accepted that full stop for this task. Production remains blocked on
 a separately approved key-retirement and recovery design, including whether an
 unrelated revoked key should exceed the design's required-key refusal.
-Both send paths, trusted queue consumption and production wiring remain future
-tasks. Task 8 must qualify any additional event types;
+Task 4 adds optional trusted SES admission to both send paths. Account authority
+and relay control, message and authority locks precede shared suppression; workers
+recheck claims and deadlines after waits and commit each original-recipient attempt
+before transport. Synthetic fixtures cover blocked handoffs, admitted sends,
+rotation, replaced claims and current reset and alert authority. Migration 050
+retains the first 49 ledger entries and maps explicitly scoped local blocks to
+shared recipient references without inventing provider events or assigning old
+unmapped rows to a country. Unconfigured local capture retains its existing gate.
+Retained-key lock waits now receive a final authority-deadline check before commit.
+The legacy relay gate remains global across country settings. Before removal,
+Task 7 must distinguish block lifetimes so a later unscoped re-add cannot revive
+old country mappings, and refuse clearing a legacy row mapped to another scope.
+Before production wiring, qualify retained-key failures that leave relay work
+queued until its original expiry and occupy capacity until the claim lease ends.
+SMTP metadata, provider receipts, trusted queue consumption, audited removal and
+production wiring remain future tasks. Task 8 must qualify any additional event types;
 `Rendering Failure` currently refuses. It must also reconcile historical Paris-only
 supplier wording and retired enablement dates before any live qualification. AWS resources,
 spending, credentials, production access and live mail remain unauthorised for this

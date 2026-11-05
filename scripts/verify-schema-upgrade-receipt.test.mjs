@@ -113,3 +113,20 @@ test('SES receipt preserves every allowance check and requires exact release49 a
   const changed=structuredClone(valid);mutate(changed);assert.throws(()=>verify(changed),/schema_upgrade_receipt/);
  }
 });
+
+test('mail handoff receipt requires release50 and unmapped legacy blocks preserved on both backup paths',async()=>{
+ const {verifySchemaUpgradeReceipt:verify}=await import(path.href);
+ const checks=['oldStarted','newRefusedOld','migrationInterrupted','rollbackComplete','newRefusedInterrupted','retryApplied','oldRefusedNew','newStarted','identityPreserved','tenantsIsolated','completionRetry','pendingMailPreserved','mailDelivered','backupRestored','oldRecovered','wrongKeyRefused','upgradedUnchanged','accountStatePreserved','relayStatePreserved','monitoringStatePreserved'];
+ const allowances=['oldSqlUnchanged','oldRowsPreserved','interruptedRollback','restartIdempotent','defaultOff','configRestored','reservationsRestored','spentNotReleased','trafficSourcesRestored','trafficLedgerRestored','trafficRetryStable','gapsRemainIncomplete','foreignScopeRefused','oldBackupUpgradeEmpty'];
+ const sesFeedback=['emptyAfterUpgrade','oldBackupUpgradeEmpty','newBackupSchemaRestored'];
+ const mailHandoff=['unmappedLegacyPreserved','oldBackupUpgradeUnmapped','newBackupSchemaRestored'];
+ const valid={schemaVersion:11,measuredAt:'2026-11-05T16:00:00.000Z',driver:{head:'b'.repeat(40),dirty:false},releases:{old:{head:'1aae8f14c05113cc2a2c71337940ff7721ad5f5b',migrations:47,digest:'a'.repeat(64)},new:{head:'b'.repeat(40),migrations:50,digest:'b'.repeat(64)}},checks:Object.fromEntries(checks.map(name=>[name,true])),allowances:Object.fromEntries(allowances.map(name=>[name,true])),sesFeedback:Object.fromEntries(sesFeedback.map(name=>[name,true])),mailHandoff:Object.fromEntries(mailHandoff.map(name=>[name,true])),timings:{upgradeMs:1,recoveryMs:2},cleanup:{containers:0,volumes:0,checkouts:0},limitations:['Synthetic allowances and empty mapping schema with retained unmapped local blocks; no provider qualification.']};
+ assert.equal(verify(valid),valid);
+ for(const section of ['checks','allowances','sesFeedback','mailHandoff'])for(const key of Object.keys(valid[section]))for(const value of [undefined,false,'true',1,null]){
+  const changed=structuredClone(valid);if(value===undefined)delete changed[section][key];else changed[section][key]=value;
+  assert.throws(()=>verify(changed),/schema_upgrade_receipt/,`${section}.${key}: ${value}`);
+ }
+ for(const mutate of [v=>v.releases.new.migrations=49,v=>v.releases.new.migrations=51,v=>v.driver.head='c'.repeat(40),v=>v.releases.old.head='c'.repeat(40),v=>v.releases.old.migrations=48,v=>v.mailHandoff.extra=true,v=>delete v.mailHandoff,v=>v.schemaVersion=10]){
+  const changed=structuredClone(valid);mutate(changed);assert.throws(()=>verify(changed),/schema_upgrade_receipt/);
+ }
+});

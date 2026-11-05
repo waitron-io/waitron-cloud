@@ -26,9 +26,9 @@ test('allowance upgrade preserves every prior ledger row',async()=>{
   for(const name of f.old.names)assert.deepEqual(await readFile(new URL('../migrations/'+name,import.meta.url)),await readFile(f.old.root+'/packages/registration/migrations/'+name),name);
   await Promise.all([migrate(f.pool),migrate(f.pool)]);
   const ledger=(await f.pool.query('SELECT to_jsonb(t) AS row FROM schema_migrations t ORDER BY name')).rows;
-  assert.equal(ledger.length,49,'the current migration retains the allowance schema and appends SES persistence');
+  assert.equal(ledger.length,50,'the current migration retains allowances and appends SES persistence and handoff mapping');
   assert.deepEqual(ledger.slice(0,47),f.prior.schema_migrations);
-  assert.equal(ledger[48].row.name,'049_ses_feedback.sql');assert.equal(ledger[47].row.name,'048_billing_allowances_traffic.sql');assert.equal(migrationNames.at(47),'048_billing_allowances_traffic.sql');assert.equal(migrationNames.at(-1),'049_ses_feedback.sql');
+  assert.equal(ledger[48].row.name,'049_ses_feedback.sql');assert.equal(ledger[47].row.name,'048_billing_allowances_traffic.sql');assert.equal(migrationNames.at(47),'048_billing_allowances_traffic.sql');assert.equal(migrationNames.at(48),'049_ses_feedback.sql');assert.equal(migrationNames.at(-1),'050_mail_legacy_suppression_scopes.sql');
   for(const [name,before] of Object.entries(f.prior))if(name!=='schema_migrations')assert.deepEqual((await f.pool.query(`SELECT to_jsonb(t) AS row FROM "${name}" t ORDER BY to_jsonb(t)::text`)).rows,before,name);
   for(const name of added)assert.equal((await f.pool.query(`SELECT count(*) FROM ${name}`)).rows[0].count,'0',name);
   await migrate(f.pool);assert.deepEqual((await f.pool.query('SELECT to_jsonb(t) AS row FROM schema_migrations t ORDER BY name')).rows,ledger);
@@ -39,7 +39,7 @@ test('allowance upgrade preserves every prior ledger row',async()=>{
 test('interrupted allowance migration rolls back and retries once',async()=>{
  const f=await fixture(),blocker=await f.pool.connect();let pending:Promise<unknown>|undefined;
  try{
-  assert.equal(migrationNames.at(47),'048_billing_allowances_traffic.sql');assert.equal(migrationNames.at(-1),'049_ses_feedback.sql','the interrupted candidate must contain the actual allowance migration');
+  assert.equal(migrationNames.at(47),'048_billing_allowances_traffic.sql');assert.equal(migrationNames.at(48),'049_ses_feedback.sql');assert.equal(migrationNames.at(-1),'050_mail_legacy_suppression_scopes.sql','the interrupted candidate must contain the actual allowance migration');
   await blocker.query('BEGIN');await blocker.query('LOCK TABLE schema_migrations IN SHARE MODE');
   const blockerPid=Number((await blocker.query('SELECT pg_backend_pid() AS pid')).rows[0].pid);
   pending=migrate(f.pool).then(()=>({ok:true}),error=>({error}));let target:number|undefined;const until=performance.now()+5000;
@@ -54,7 +54,7 @@ test('interrupted allowance migration rolls back and retries once',async()=>{
   for(const name of added)assert.equal((await f.pool.query('SELECT to_regclass($1) AS relation',[name])).rows[0].relation,null,name);
   assert.deepEqual((await f.pool.query('SELECT to_jsonb(t) AS row FROM schema_migrations t ORDER BY name')).rows,f.prior.schema_migrations);
   await Promise.all([migrate(f.pool),migrate(f.pool)]);const ledger=(await f.pool.query('SELECT to_jsonb(t) AS row FROM schema_migrations t ORDER BY name')).rows;
-  assert.equal(ledger.length,49);assert.deepEqual(ledger.slice(0,47),f.prior.schema_migrations);
+  assert.equal(ledger.length,50);assert.deepEqual(ledger.slice(0,47),f.prior.schema_migrations);
   await migrate(f.pool);assert.deepEqual((await f.pool.query('SELECT to_jsonb(t) AS row FROM schema_migrations t ORDER BY name')).rows,ledger);
  }finally{await blocker.query('ROLLBACK');blocker.release();await pending;await f.close();}
 });

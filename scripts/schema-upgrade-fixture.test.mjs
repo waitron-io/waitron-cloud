@@ -74,3 +74,11 @@ test('SES upgrade extends the allowance proof through migration49 without changi
  for(const flag of ['--allowances','--lifecycle','--venue-services','--billing','--backup-verification','--monitoring-quiet','--relay-stop','--ses-feedback'])
   for(const args of [['--ses-feedback',flag,...pair],[flag,'--ses-feedback',...pair]])assert.throws(()=>fixture.upgradeRevisions(args),/revisions/);
 });
+
+test('mail handoff upgrade requires its own distinct complete pair and retains the SES proof',()=>{
+ const pair=['--old','a'.repeat(40),'--new','b'.repeat(40)];
+ const want={oldHead:'a'.repeat(40),newHead:'b'.repeat(40),factor:false,allowances:true,sesFeedback:true,mailHandoff:true};
+ assert.deepEqual(fixture.upgradeRevisions(['--mail-handoff',...pair]),want);
+ assert.deepEqual(fixture.upgradeRevisions([...pair,'--mail-handoff']),want);
+ for(const args of [['--mail-handoff'],['--mail-handoff','--old','main','--new','b'.repeat(40)],['--mail-handoff','--old','a'.repeat(40),'--new','a'.repeat(40)],...['--mail-handoff','--ses-feedback','--allowances','--lifecycle','--venue-services','--billing','--backup-verification','--monitoring-quiet','--relay-stop'].map(flag=>['--mail-handoff',flag,...pair])])assert.throws(()=>fixture.upgradeRevisions(args),/revisions/);
+});

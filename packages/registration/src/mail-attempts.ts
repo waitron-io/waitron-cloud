@@ -7,12 +7,13 @@ import {lockMailScope,recipientIsSuppressed,type RecipientRef} from './recipient
 export type QueueClaim={purpose:'cloud-account-email';outboxId:string;claimId:string;attempt:number}
  |{purpose:'venue-email';installationId:string;messageId:string;claimId:string;attempt:number};
 export interface AttemptInput {config:SesFeedbackConfig;recipientKeys:RelayKeyConfig;claim:QueueClaim;recipient:string}
+export type SesHandoffConfig=Pick<AttemptInput,'config'|'recipientKeys'>;
 export interface HandoffAdmission {attemptTag:string;configurationSet:string}
 const accountInstallation='00000000-0000-0000-0000-000000000000';
 const uuid=(value:unknown):value is string=>typeof value==='string'&&/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
 const fail=(reason:string):never=>{throw Error(reason);};
 
-async function recipientRefs(client:PoolClient,input:AttemptInput):Promise<RecipientRef[]> {
+export async function mailRecipientRefs(client:PoolClient,input:SesHandoffConfig&{recipient:string}):Promise<RecipientRef[]> {
  const {country,providerAccountId,region}=input.config.scope;
  const config=input.recipientKeys,recipient=normaliseEmail(input.recipient);
  if(!recipient)return fail('mail_recipient_unavailable');
@@ -61,7 +62,7 @@ export async function admitMailAttempt(client:PoolClient,input:AttemptInput):Pro
   VALUES($1,$2,$3,$4,$5,$6) ON CONFLICT DO NOTHING`,[claim.purpose,installation,queueId,country,providerAccountId,region]);
  const pinned=(await client.query('SELECT country,provider_account_id,region FROM mail_queue_scopes WHERE purpose=$1 AND installation_id=$2 AND queue_id=$3',[claim.purpose,installation,queueId])).rows[0];
  if(pinned.country!==country||pinned.provider_account_id!==providerAccountId||pinned.region!==region)return fail('mail_scope_conflict');
- const refs=await recipientRefs(client,input);
+ const refs=await mailRecipientRefs(client,input);
  if(await recipientIsSuppressed(client,scope,refs))return fail('mail_recipient_suppressed');
  // A SELECT predicate can run before its row-lock wait; sample deadlines after that wait.
  const deadline=claim.purpose==='cloud-account-email'

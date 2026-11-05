@@ -239,19 +239,26 @@ test('opting in during an incident waits for future transitions and delivery ret
  const row=(await alerts())[0];assert.equal(row.status,'pending');assert.equal(row.failures,1);assert.equal(row.last_error,'delivery_failed');assert(!JSON.stringify(row).includes('private-provider-detail'));
  await due();await monitor.runOnce();assert.equal((await alerts()).length,1);
 });
-test('an ownership change during the final queue wait prevents transport dispatch',async()=>{
+test('an ownership change before handoff authority locks prevents transport dispatch',async()=>{
  await monitor.schedule();await contact(901);await monitor.runOnce();
  const worker=new EmailWorker(db.pool,db.outbox,{async sendVerification(){},async sendPasswordReset(){},async sendPasswordChanged(){},async sendServiceAlert(message:unknown){sent.push(message);}});
  await worker.runOnce();
  let entered!:()=>void,release!:()=>void;const started=new Promise<void>(r=>{entered=r;}),gate=new Promise<void>(r=>{release=r;});
- const original=db.pool.query;
- db.pool.query=(async(...args:unknown[])=>{
-  if(typeof args[0]==='string'&&args[0].startsWith('SELECT expires_at > clock_timestamp() AS live FROM email_outbox')){entered();await gate;}
-  return Reflect.apply(original,db.pool,args);
- }) as typeof db.pool.query;
+ const original=db.pool.connect;
+ db.pool.connect=(async()=>{
+  const client=await Reflect.apply(original,db.pool,[]);let paused=false;
+  return new Proxy(client,{get(connection,property){
+   if(property==='query')return async(sql:string,args?:unknown[])=>{
+    const result=await connection.query(sql,args);
+    if(!paused&&sql.startsWith('SELECT p.locale FROM service_alert_deliveries')){paused=true;entered();await gate;}
+    return result;
+   };
+   const value=Reflect.get(connection,property);return typeof value==='function'?value.bind(connection):value;
+  }});
+ }) as typeof db.pool.connect;
  const pending=worker.runOnce();
  try{await started;await db.secondPool.query('UPDATE organisation_memberships SET is_owner=false');}
- finally{release();await pending;db.pool.query=original;}
+ finally{release();await pending;db.pool.connect=original;}
  assert.equal(sent.length,0);assert.equal((await alerts())[0].status,'cancelled');
 });
 test('a new owner receives no recovery for an opening sent to a former owner',async()=>{

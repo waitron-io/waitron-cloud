@@ -7,7 +7,7 @@ import {Pool} from 'pg';
 import {migrate,migrationNames} from '../src/migrate.ts';
 
 const tables=['mail_queue_scopes','mail_attempts','mail_attempt_recipients','mail_feedback_receipts',
-  'mail_feedback_events','mail_suppressions','mail_recipient_key_versions','mail_suppression_actions'];
+  'mail_feedback_events','mail_suppressions','mail_recipient_key_versions','mail_suppression_actions','mail_legacy_suppression_scopes'];
 async function fixture() {
   const schema='ses_upgrade_'+randomUUID().replaceAll('-','');
   const admin=new Pool({connectionString:process.env.TEST_DATABASE_URL});
@@ -34,7 +34,7 @@ test('SES upgrade appends empty feedback records and preserves every old row and
   const f=await fixture();try {
     await Promise.all([migrate(f.pool),migrate(f.pool)]);await migrate(f.pool);
     const ledger=(await f.pool.query('SELECT to_jsonb(t) AS row FROM schema_migrations t ORDER BY name')).rows;
-    assert.equal(ledger.length,49,'SES persistence appends its own migration');
+    assert.equal(ledger.length,50,'SES persistence and handoff mapping append their own migrations');
     assert.equal(ledger[48].row.name,'049_ses_feedback.sql');
     assert.deepEqual(ledger.slice(0,48),f.before.schema_migrations);
     for(const [name,rows] of Object.entries(f.before))if(name!=='schema_migrations')
@@ -48,7 +48,7 @@ test('SES upgrade appends empty feedback records and preserves every old row and
 test('interrupted SES ledger insert rolls back every new relation before a repeatable retry',async()=>{
   const f=await fixture(),held=await f.pool.connect();let pending:Promise<unknown>|undefined;
   try {
-    assert.equal(migrationNames.at(-1),'049_ses_feedback.sql');
+    assert.equal(migrationNames.at(48),'049_ses_feedback.sql');assert.equal(migrationNames.at(-1),'050_mail_legacy_suppression_scopes.sql');
     await held.query('BEGIN');await held.query('LOCK TABLE schema_migrations IN SHARE MODE');
     const pid=(await held.query('SELECT pg_backend_pid() AS pid')).rows[0].pid;
     pending=migrate(f.pool).then(()=>null,error=>error);
@@ -63,7 +63,7 @@ test('interrupted SES ledger insert rolls back every new relation before a repea
     for(const name of tables)assert.equal((await f.pool.query('SELECT to_regclass($1) AS relation',[name])).rows[0].relation,null);
     assert.deepEqual((await f.pool.query('SELECT to_jsonb(t) AS row FROM schema_migrations t ORDER BY name')).rows,f.before.schema_migrations);
     await Promise.all([migrate(f.pool),migrate(f.pool)]);
-    assert.equal((await f.pool.query('SELECT count(*) FROM schema_migrations')).rows[0].count,'49');
+    assert.equal((await f.pool.query('SELECT count(*) FROM schema_migrations')).rows[0].count,'50');
   }finally{await held.query('ROLLBACK');held.release();await pending;await f.close();}
 });
 

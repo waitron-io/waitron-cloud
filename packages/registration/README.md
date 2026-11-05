@@ -352,10 +352,12 @@ To check the current release and both backup paths, run:
 node scripts/test-postgres.mjs exec pnpm --dir packages/registration exec node --test --test-timeout=360000 test/billing-allowance-upgrade-recovery.test.ts
 ```
 
-Schema receipt version 10 binds the exact 47-to-49 predecessor and clean candidate.
-It retains every allowance check and also requires empty feedback tables after
-upgrade and both backup paths. Populated mail-attempt recovery is not claimed here.
-Historical version 9 retains its strict 47-to-48 pair.
+Schema receipt version 11 uses `--mail-handoff` to bind the exact 47-to-50
+predecessor and clean candidate. It retains every allowance and feedback check,
+and requires existing local blocks to survive without a guessed scope after
+upgrade and both backup paths. Populated mail-attempt and mapping recovery are
+not claimed here. Historical versions 9 and 10 retain their strict 47-to-48 and
+47-to-49 pairs.
 The proof interrupts the migration, checks complete rollback, then retries with
 concurrent consumers stopped. It restores the old backup to an empty, unenabled
 allowance schema, and separately restores a populated new backup. Matching external
@@ -374,8 +376,9 @@ A provider event can arrive after you have erased a mail payload. Migration 049
 adds a separate attempt ledger with opaque tags and keyed recipient references,
 so you can retain the binding without retaining the address, body or token.
 `admitMailAttempt` checks the current queue claim and commits no mail itself.
-Its caller must commit the transaction before SMTP starts. Production workers
-are not wired to this helper yet.
+Its caller must commit the transaction before SMTP starts. You can supply the
+optional internal `ses: {config, recipientKeys}` worker setting to exercise that
+boundary with synthetic qualification. Ordinary startup does not enable SES.
 
 Each call to `lockMailScope`, `admitMailAttempt`, `recipientIsSuppressed` and
 `bindProviderId` requires an open transaction. Commit admission before SMTP.
@@ -400,9 +403,52 @@ node scripts/test-postgres.mjs exec pnpm --dir packages/registration exec node -
 The store accepts policy revisions through 2147483647, matching its SQL column;
 larger qualified revisions refuse with a fixed configuration diagnostic.
 
-These checks qualify local storage and locking. SMTP admission wiring, queue
-polling, audited removal and provider qualification remain separate implementation
-tasks. No live sender or AWS resource is enabled.
+These checks qualify local storage and locking. SMTP metadata, queue polling,
+audited removal and provider qualification remain separate implementation tasks.
+No live sender or AWS resource is enabled.
+
+## Block a recipient before transport starts
+
+A suppression decision must share the same database turn as handoff admission.
+Otherwise a worker can send between checking the block and claiming the message.
+The optional SES setting makes both workers commit their original-recipient
+attempt before opening transport. Account handoff locks current request and
+credential authority first; alerts retain their owner, preference, incident,
+installation and service checks. Relay handoff keeps control, message, authority
+and existing local suppression locks before the shared scope lock. Both sample
+database time again after waits. Feedback needs only the shared scope lock.
+
+A confirmed block finishes account work as `failed/delivery_rejected` and relay
+work as `failed/refused`. Missing retained keys refuse transport without claiming
+that the recipient is blocked. A block committed after admission cannot recall
+that send. Account retries keep their original Message-ID and receive fresh
+attempt tags; relay uncertainty still refuses automatic resend.
+
+For an explicitly scoped local worker, trusted `suppress` also records a mapping
+in `mail_legacy_suppression_scopes`. Shared lookup checks that mapping against the
+still-present local block. Migration 050 leaves older local blocks unmapped because
+you cannot infer their country or provider from a keyed digest. The mapping stays
+immutable for later reconciliation. Authenticated removal and provider
+reconciliation remain a separate task; this API adds no removal authority.
+The legacy relay gate is global: an ES-scoped trusted block also refuses FR relay
+mail, while shared account-mail lookup uses only its explicit country mapping.
+Before adding removal, you must identify each block's lifetime. Otherwise deleting
+a local row and later adding the same digest without a scope revives its old
+mappings. Task 7 must prevent that revival and refuse to clear a local row with
+mappings outside the reconciled scope.
+
+Missing retained relay keys leave queued ciphertext and its original expiry intact,
+with no SMTP handoff or attempt. The failed claim occupies worker capacity until
+its 60-second lease expires. Account configuration failures use the existing bounded
+retry policy. Qualify both operational outcomes before production wiring. A revoked
+retained key also rolls back a trusted manual block and its mappings together;
+the owner's separately approved key-retirement and recovery design remains required.
+
+Run the handoff and migration races against disposable PostgreSQL:
+
+```sh
+node scripts/test-postgres.mjs exec pnpm --dir packages/registration exec node --test --test-timeout=120000 test/mail-handoff-suppression.test.ts test/mail-handoff-migration.test.ts test/email-outbox.test.ts test/relay-worker.test.ts test/relay-operator-stop.test.ts test/password-recovery.test.ts test/service-alert.test.ts
+```
 
 ## Apply parsed feedback without changing sending state
 
