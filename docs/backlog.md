@@ -1165,11 +1165,15 @@ implementation or production evidence.
   steps. Later test-only changes through #921 are included in the reviewed
   combined inventory; no additional Cloud prose reader is introduced. Production
   landing still requires every job on the current head to finish successfully.
-  The [D577 design](superpowers/plans/2026-11-05-independent-ci-audit-evidence.md)
-  proposes current records for each input, with docs-only routine renewal. Its
+  D577 adds current records for each input, with docs-only routine renewal and
+  separately reviewed peer modes. The [audit guide](ci-documentation-audit.md)
+  explains staged generation, retained removal records and full-history checks.
+  Local sequential merges pass in both orders without evidence regeneration;
+  shared-source third states still require explicit renewal. The
   [history sample](backlog/ci-audit-conflicts.md) reproduces audit-only conflicts
-  in 21 of 30 repeated-head transitions. Implementation, two draft scratch PRs
-  and the sequential-merge proof remain open.
+  in 21 of 30 repeated-head transitions. The two owned draft scratch PRs and
+  current-head/exact-merge CI still need qualification before claiming the
+  production conflict reduction complete.
 
 - **CI execution budget.** You can read one summary job and the individual package
   and receipt jobs to check a candidate. The summary also checks the plan's

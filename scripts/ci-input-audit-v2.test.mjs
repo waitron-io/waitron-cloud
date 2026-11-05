@@ -167,3 +167,9 @@ test('v2 batches immutable record blobs once across all-mode checking', async ()
     assert.equal(batches, 1, 'One immutable inventory must not spawn a batch per mode');
   });
 });
+
+test('v2 rejects a manifest record for a non-workspace path in every selected mode', () => fixture(({put, commit, audit}) => {
+  put(recordPath('lock', 'package.json'), canonical({version: 2, mode: 'lock', path: 'package.json', state: 'manifest', sha256: '0'.repeat(64)}));
+  commit();
+  for (const mode of modes) assert.throws(() => audit(mode), /manifest.*path/i);
+}));

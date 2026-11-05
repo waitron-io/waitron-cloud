@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import {execFileSync} from 'node:child_process';
 import {auditInputMode} from './ci-input-audit.mjs';
+import {readGitBlobs} from './ci-package-revisions.mjs';
 import {pathToFileURL} from 'node:url';
 
 const families = [
@@ -52,7 +53,11 @@ export function checkScripts(plan, git, execute) {
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   try {
-    const git = (...args) => execFileSync('git', args, {encoding: 'utf8', timeout: 30_000, maxBuffer: 16 * 1024 * 1024});
+    const git = (...args) => {
+      const binary = typeof args.at(-1) === 'object' && args.pop().binary;
+      return execFileSync('git', args, {encoding: binary ? undefined : 'utf8', timeout: 30_000, maxBuffer: 64 * 1024 * 1024});
+    };
+    git.readBlobs = readGitBlobs;
     checkScripts(JSON.parse(process.env.CI_PLAN), git, args => execFileSync(process.execPath, args, {stdio: 'inherit', timeout: 60_000}));
     console.log('Passed root script checks: syntax and owning behavioral test');
   } catch (error) {
