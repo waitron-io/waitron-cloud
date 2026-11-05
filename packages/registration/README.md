@@ -415,7 +415,10 @@ a separate task. Configuration validation and parsing do not authenticate AWS.
 An unknown or mismatched binding records an `ignored` receipt with `unresolved`.
 A different recipient or provider ID records `conflict` with `binding_conflict`.
 Missing, changed or revoked retained key material throws `mail_keys_unavailable`
-without committing a receipt, so you can retry after restoring the required keys.
+without committing a receipt. You can retry after restoring missing or changed
+material. Revocation is irreversible in the current schema: any revoked key closes
+feedback and admission for the entire scope, even for attempts that used other
+keys. No supported recovery path exists yet; do not enable this store in production.
 A redacted complaint uses the sealed single-recipient binding. It never looks up
 a current contact address or tries to recover an erased token.
 
@@ -426,6 +429,12 @@ as `ignored` with `non_blocking`, while the original event and blocks stay intac
 Distinct bounce, complaint and provider-suppression reasons remain separate.
 Delivery, temporary and unclassified events add no block and never clear one.
 Sending, debit and reservation records are not changed.
+
+The local implementation still records a known attempt with a changed policy or
+configuration revision as permanently unresolved. A later retry under the original
+configuration returns `duplicate`, so it cannot recover a late bounce or complaint.
+This behavior and recovery from key revocation need owner decisions before Task 3
+can land. The sending paths and queue consumer remain unconnected.
 
 Run the focused PostgreSQL checks, including competing consumers and process death
 immediately before and after commit:

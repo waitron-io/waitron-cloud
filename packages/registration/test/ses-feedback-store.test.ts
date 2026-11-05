@@ -14,6 +14,17 @@ import {transaction} from '../src/transaction.ts';
 import {fixture,keys,rotated,config} from './fixtures/mail-attempt.ts';
 import {feedbackEnvelope,feedbackEvent,feedbackFixture} from './fixtures/ses-feedback.ts';
 
+test('feedback refuses an out-of-range policy revision before storing a receipt',async()=>{
+ const f=await fixture();try{
+  const a=await transaction(f.pool,async c=>admitMailAttempt(c,await f.account('owner@example.test')));
+  const binding=feedbackFixture();binding.policy.revision=2147483648;binding.input.policyRevision=2147483648;
+  for(const flow of binding.input.flows)flow.policyRevision=2147483648;
+  const large=validateSesFeedbackConfig(binding.policy,binding.input);
+  await assert.rejects(applySesFeedback(f.pool,large,keys,event(a.attemptTag)),/mail_configuration_unavailable/);
+  assert.deepEqual(await counts(f),{receipts:0,events:0,suppressions:0});
+ }finally{await f.close();}
+});
+
 // These normalized events exercise storage; the separate parser suite owns raw envelopes.
 function event(tag:string,changes:Partial<ParsedFeedback>={}):ParsedFeedback {
  const raw=feedbackEvent();raw.mail.tags['waitron-attempt']=[tag];
@@ -59,6 +70,68 @@ test('a semantic repeat with a new SNS ID records transport without a second eve
   assert.equal(await applySesFeedback(f.pool,config(),keys,event(a.attemptTag,{snsId:'new-transport',eventTime:'2026-11-04T11:00:00.000Z'})),'duplicate');
   assert.deepEqual(await counts(f),{receipts:2,events:1,suppressions:1});
   assert.equal(await applySesFeedback(f.pool,config(),keys,event(a.attemptTag,{snsId:'new-transport',eventTime:'2026-11-04T11:00:00.000Z'})),'duplicate');
+ }finally{await f.close();}
+});
+
+test('one feedback ID keeps bounce and complaint evidence distinct',async()=>{
+ const f=await fixture();try{
+  const a=await transaction(f.pool,async c=>admitMailAttempt(c,await f.account('owner@example.test')));
+  assert.equal(await applySesFeedback(f.pool,config(),keys,event(a.attemptTag,{snsId:'bounce',eventId:'shared-feedback'})),'applied');
+  assert.equal(await applySesFeedback(f.pool,config(),keys,event(a.attemptTag,{kind:'complaint',recipient:null,snsId:'complaint',eventId:'shared-feedback'})),'applied');
+  assert.deepEqual(await counts(f),{receipts:2,events:2,suppressions:2});
+  assert.deepEqual((await f.pool.query('SELECT reason FROM mail_suppressions ORDER BY reason')).rows,[{reason:'complaint'},{reason:'hard_bounce'}]);
+ }finally{await f.close();}
+});
+
+test('redacted feedback retries without partial state until retained keys return',async()=>{
+ const f=await fixture();try{
+  const input=await f.account('owner@example.test');input.recipientKeys=rotated;
+  const a=await transaction(f.pool,c=>admitMailAttempt(c,input));
+  const complaint=event(a.attemptTag,{kind:'complaint',recipient:null});
+  await assert.rejects(applySesFeedback(f.pool,config(),keys,complaint),/mail_keys_unavailable/);
+  assert.deepEqual(await counts(f),{receipts:0,events:0,suppressions:0});
+  assert.equal((await f.pool.query('SELECT provider_message_id FROM mail_attempts')).rows[0].provider_message_id,null);
+  assert.equal(await applySesFeedback(f.pool,config(),rotated,complaint),'applied');
+  assert.equal(await applySesFeedback(f.pool,config(),rotated,complaint),'duplicate');
+  assert.deepEqual(await counts(f),{receipts:1,events:1,suppressions:2});
+ }finally{await f.close();}
+});
+
+test('conflicting first provider observations compete and retain exactly one winner',async()=>{
+ const f=await fixture();try{
+  const a=await transaction(f.pool,async c=>admitMailAttempt(c,await f.account('owner@example.test')));
+  const answers=await Promise.all([
+   applySesFeedback(f.pool,config(),keys,event(a.attemptTag,{snsId:'first',providerMessageId:'provider-first'})),
+   applySesFeedback(f.pool,config(),keys,event(a.attemptTag,{snsId:'second',providerMessageId:'provider-second'})),
+  ]);
+  assert.deepEqual(answers.sort(),['applied','conflict']);
+  assert.deepEqual(await counts(f),{receipts:2,events:1,suppressions:1});
+  const winner=(await f.pool.query('SELECT provider_message_id FROM mail_attempts')).rows[0].provider_message_id;
+  assert.ok(['provider-first','provider-second'].includes(winner));
+  assert.deepEqual((await f.pool.query('SELECT result,diagnostic FROM mail_feedback_receipts ORDER BY result')).rows,
+   [{result:'applied',diagnostic:'applied'},{result:'conflict',diagnostic:'binding_conflict'}]);
+ }finally{await f.close();}
+});
+
+test('one provider ID cannot be rebound to a second attempt',async()=>{
+ const f=await fixture();try{
+  const first=await transaction(f.pool,async c=>admitMailAttempt(c,await f.account('owner@example.test')));
+  const second=await transaction(f.pool,async c=>admitMailAttempt(c,await f.account('other@example.test')));
+  assert.equal(await applySesFeedback(f.pool,config(),keys,event(first.attemptTag)),'applied');
+  assert.equal(await applySesFeedback(f.pool,config(),keys,event(second.attemptTag,{snsId:'second-attempt',recipient:'other@example.test'})),'conflict');
+  assert.deepEqual((await f.pool.query('SELECT provider_message_id FROM mail_attempts WHERE attempt_tag=$1',[first.attemptTag])).rows,[{provider_message_id:'ses-message-1'}]);
+  assert.equal((await f.pool.query('SELECT provider_message_id FROM mail_attempts WHERE attempt_tag=$1',[second.attemptTag])).rows[0].provider_message_id,null);
+  assert.deepEqual(await counts(f),{receipts:2,events:1,suppressions:1});
+ }finally{await f.close();}
+});
+
+test('an older hard bounce still blocks after delivery arrived first',async()=>{
+ const f=await fixture();try{
+  const a=await transaction(f.pool,async c=>admitMailAttempt(c,await f.account('owner@example.test')));
+  assert.equal(await applySesFeedback(f.pool,config(),keys,event(a.attemptTag,{kind:'delivery',snsId:'delivery',eventId:null,eventTime:'2026-11-05T10:00:00.000Z'})),'ignored');
+  assert.equal(await applySesFeedback(f.pool,config(),keys,event(a.attemptTag,{snsId:'older-bounce',eventTime:'2026-11-04T10:00:00.000Z'})),'applied');
+  assert.deepEqual(await counts(f),{receipts:2,events:2,suppressions:1});
+  assert.deepEqual((await f.pool.query('SELECT reason FROM mail_suppressions')).rows,[{reason:'hard_bounce'}]);
  }finally{await f.close();}
 });
 
@@ -119,7 +192,7 @@ test('country provider region configuration and purpose mismatches cannot mutate
  }finally{await f.close();}
 });
 
-test('unavailable changed or revoked retained keys leave feedback retryable without partial state',async()=>{
+test('unavailable changed or revoked retained keys refuse feedback without partial state',async()=>{
  const f=await fixture();try{
   const input=await f.account('owner@example.test');input.recipientKeys=rotated;
   const a=await transaction(f.pool,c=>admitMailAttempt(c,input));

@@ -152,7 +152,14 @@ admission helpers before this protocol governs a real handoff.
 
 Task 3 adds `applySesFeedback`, which owns the database transaction for a parsed
 event. Only a future trusted queue consumer may call it. It binds the original
-recipient, records repeat or conflicting observations and preserves every blocking
-reason independently of the sending state. A missing retained key leaves work
+recipient, detects repeat or conflicting observations and preserves every blocking
+reason independently of the sending state. Repeated SNS IDs retain their first
+receipt unchanged; a changed payload returns `conflict` without a new stored record.
+A missing retained key leaves work
 retryable. Local PostgreSQL process-death checks cover interruption before and
 after commit; they do not authenticate an AWS publisher or exercise a live queue.
+
+Task 3 remains local pending owner decisions. A changed policy or configuration
+revision currently consumes late feedback as permanently unresolved, and an
+irreversibly revoked retained key closes the whole feedback/admission scope.
+Do not enable the store until late-feedback handling and key recovery are agreed.
