@@ -207,9 +207,12 @@ test('a failed termination still attempts later eligible instances and volumes w
   const f = fixture({
     instances: [instance(), instance({ InstanceId: 'i-11111111111111111' }),
       instance({ InstanceId: 'i-22222222222222222', Tags: tags({ Proof: 'OTHER' }) }),
-      instance({ InstanceId: 'i-33333333333333333', Tags: tags({ ExpiresAt: '2026-11-05T20:01:00Z' }) })],
+      instance({ InstanceId: 'i-33333333333333333', Tags: tags({ ExpiresAt: '2026-11-05T20:01:00Z' }) }),
+      instance({ InstanceId: 'i-44444444444444444', State: { Name: 'terminated' } })],
     volumes: [volume(), volume({ VolumeId: 'vol-11111111111111111', Tags: tags({ Stack: `${stackId}-foreign` }) }),
-      volume({ VolumeId: 'vol-22222222222222222', Attachments: [{ InstanceId: 'i-0123456789abcdef0', State: 'attached' }] })],
+      volume({ VolumeId: 'vol-22222222222222222', Attachments: [{ InstanceId: 'i-0123456789abcdef0', State: 'attached' }] }),
+      volume({ VolumeId: 'vol-33333333333333333', Tags: tags({ ExpiresAt: '2026-11-05T20:01:00Z' }) }),
+      volume({ VolumeId: 'vol-44444444444444444', State: 'in-use' })],
     respond(operation, input) {
       if (operation === 'TerminateInstances' && input.InstanceIds[0] === 'i-0123456789abcdef0') throw failure;
     },
@@ -250,4 +253,12 @@ test('multiple cleanup failures cannot erase the first failure or stop subsequen
     ['DeleteVolume', { VolumeId: 'vol-0123456789abcdef0' }],
     ['DeleteVolume', { VolumeId: 'vol-11111111111111111' }],
   ]);
+});
+
+test('a falsy cleanup rejection still withholds health after later cleanup attempts', async () => {
+  const f = fixture({ instances: [instance()], volumes: [volume()],
+    respond(operation) { if (operation === 'TerminateInstances') throw undefined; },
+  });
+  await assert.rejects(sweep(f.options), error => error === undefined);
+  assert.deepEqual(mutations(f).map(c => c.operation), ['TerminateInstances', 'DeleteVolume']);
 });

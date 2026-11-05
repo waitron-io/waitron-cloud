@@ -45,10 +45,12 @@ also requires available state and no attachments. Each inventory is bounded to
 A successful heartbeat at `d570/health/reaper.json` records accepted termination
 and deletion requests. It does not prove the machine stopped, its disk disappeared,
 or billing ended. Any read, mutation, response-validation or clock failure prevents
-a successful heartbeat. Once both inventories pass validation, a failed mutation
-or unconfirmed termination response does not stop later eligible cleanup attempts.
-After those attempts, the sweep rethrows the first failure without publishing
-health, so a partial cleanup cannot look healthy. The launcher must eventually
+a successful heartbeat. Once both inventories pass validation, a refused mutation
+or unconfirmed termination response allows later eligible cleanup attempts. If
+those calls finish, the sweep rethrows the first failure without publishing health.
+A stalled call can still delay later attempts until another sweep and reach the
+Lambda timeout before the first error is reported. Real SDK request timeouts
+remain unqualified; no healthy heartbeat is written during that wait. The launcher must eventually
 check heartbeat freshness, actual cleanup and the durable cost reservation
 independently.
 
@@ -76,7 +78,7 @@ Two named expiry gates must be resolved before enabling the sweep:
   terminated row or an unattached volume, currently stops all mutations. Mutation
   failures now allow later eligible cleanup attempts, with synthetic checks for
   the engine and rendered Lambda. Malformed-inventory isolation still needs a
-  per-resource strategy that cannot delete a foreign volume. Follow the plan's changed-check rule before changing ownership assertions.
+  per-resource strategy that cannot delete a foreign volume.
 - **Unbounded future expiry:** a syntactically valid future tag currently has no
   independent lifetime bound. Prove a cap against immutable EC2 launch time,
   the reserved 120-minute proof plus 15-minute cleanup window and the approved

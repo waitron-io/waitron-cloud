@@ -2961,8 +2961,9 @@ implementation or production evidence.
   2027-02-28T23:59:00Z with an initial USD 0 baseline. The private setup template,
   identity-checked renderer and bounded expiry engine now have synthetic checks
   and an unprivileged CI gate. The engine and rendered Lambda now attempt later
-  eligible cleanup after a mutation or termination-response failure, then rethrow
-  the first error without publishing healthy status. Complete-inventory ownership
+  eligible cleanup after a mutation or termination-response failure. If those calls
+  finish, the first error is rethrown without publishing healthy status; a stalled
+  call can still delay later attempts and error reporting. Complete-inventory ownership
   validation stays in force; malformed-inventory isolation and an independent
   maximum lifetime remain open before activation. That workflow selects
   proof/workflow PR changes and runs on every main push, so unrelated older PR heads need no absent proof

@@ -55,8 +55,9 @@ prerequisite to finish without a full live P1 proof.
 **Named pre-activation gates from the prerequisite review:** a malformed `Run`
 currently stops the whole sweep; resolve this starvation without weakening
 foreign-volume ownership assertions. Mutation and termination-response failures
-now allow later eligible cleanup attempts, then rethrow the first failure without
-publishing health. Synthetic engine and rendered-Lambda checks cover this behavior;
+now allow later eligible cleanup attempts and, if those calls finish, rethrow the
+first failure without publishing health. A stalled call can still delay later
+attempts and error reporting; real SDK request timeouts remain unqualified. Synthetic engine and rendered-Lambda checks cover this behavior;
 complete-inventory ownership validation is unchanged.
 A valid far-future `ExpiresAt` currently has no independent cap; prove immutable
 launch-time plus the reserved 135-minute window and approved access-expiry bounds,
