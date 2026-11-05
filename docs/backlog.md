@@ -26,8 +26,9 @@ first request; unfinished headers and interrupted replies still refuse. The same
 drain applies during collection, within its existing two-second budget.
 Run `node --test scripts/cloud-cost/litestream-idle-retirement.test.mjs
 scripts/cloud-cost/replay-stream.test.mjs` for socket, restore and collection
-controls. The padded official-writer Linux probe resets in all twenty unchanged
-trials and passes all twenty with graceful retirement. This repairs that measured
+controls. The padded official-writer Linux probe records nineteen reset refusals
+with writer exit zero and one force-collected stop, then passes all twenty with
+graceful retirement. This repairs that measured
 shutdown ordering; the older CI traces cannot establish every historical cause.
 The separate native LIST investigation and requests starting after the final drain
 remain open. No acceptance rule, existing assertion, accounting or deadline changes.
