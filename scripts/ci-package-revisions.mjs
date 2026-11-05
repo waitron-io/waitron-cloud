@@ -106,7 +106,8 @@ function workspaceAt(sha, workspace, git) {
     files.set(path, {mode, type, id});
   }
   const inputs = [...files].filter(([path]) => path === 'pnpm-workspace.yaml' ||
-    /\.[cm]?[jt]sx?$/.test(path) || workspace.some(pkg => path === `${pkg.directory}/package.json`));
+    /\.[cm]?[jt]sx?$/.test(path) || workspace.some(pkg => path === `${pkg.directory}/package.json` ||
+      (path.startsWith(`${pkg.directory}/`) && /\.(?:jsonc?|ya?ml)$/.test(path))));
   const blobs = git.readBlobs?.([...new Set(inputs.map(([, file]) => file.id))]);
   const read = path => {
     const file = files.get(path);
@@ -368,11 +369,13 @@ function workspaceAt(sha, workspace, git) {
       }
     }
     pkg.pathDependencies = sourceDependencies(pkg, packages, sources);
+    pkg.sources = sources;
+    pkg.metadata = [...files.keys()].filter(path => path.startsWith(`${pkg.directory}/`) && /\.(?:jsonc?|ya?ml)$/.test(path)).map(path => ({path, source:read(path)}));
   }
   return packages;
 }
 
-export function scopeForRevisions(paths, workspace, base, head, git) {
+export function scopeForRevisions(paths, workspace, base, head, git, options) {
   // Each saved revision has independent evidence. Keep both batch reads even
   // when one refuses narrowing, then preserve the first refusal for the caller.
   const snapshots = [base, head].map(sha => {
@@ -385,9 +388,13 @@ export function scopeForRevisions(paths, workspace, base, head, git) {
     const previous = before.find(other => other.name === pkg.name);
     const dependencies = Object.assign({}, ...[previous, pkg].flatMap(member =>
       ['dependencies', 'devDependencies', 'optionalDependencies', 'peerDependencies', 'pathDependencies'].map(field => member[field])));
-    return {...pkg, dependencies};
+    return {...pkg, dependencies, sources: [...previous.sources, ...pkg.sources], metadata: [...previous.metadata, ...pkg.metadata],
+      exports: [previous.exports ?? previous.main ?? './index.js', pkg.exports ?? pkg.main ?? './index.js']};
   });
-  return scopeForPaths(paths, combined);
+  const result = scopeForPaths(paths, combined, options);
+  // Narrow package selection must not narrow the separately audited receipts.
+  if (options?.receiptScope) result.receiptPackages = scopeForPaths(paths, combined).packages;
+  return result;
 }
 
 export function readGitBlobs(ids, execute = input => execFileSync('git', ['cat-file', '--batch'], {

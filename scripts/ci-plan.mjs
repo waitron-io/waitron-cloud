@@ -42,6 +42,7 @@ function mixedCodePaths(paths, base, head, git) {
 export function createPlan(event, context, workspace, git, api) {
   let scope = scopeForPaths([],workspace);
   let revisions;
+  let receiptScope;
   let lockSelection;
   let reason = context.full === true ? 'Explicit full run: all packages and receipts' : 'Main push or unknown diff: full suite';
   if (context.full !== true && event.pull_request) {
@@ -60,19 +61,22 @@ export function createPlan(event, context, workspace, git, api) {
         if (scripts) return {packages: [], receipts: [], typecheck: false, reuse: null, scripts, reason: `Audited root script: ${paths.join(', ')}`};
       } catch { /* Missing or stale reader evidence keeps the existing full fallback. */ }
       const codePaths = mixedCodePaths(paths, mergeBase, head.sha, git);
-      scope = scopeForPaths(codePaths,workspace);
+      scope = scopeForPaths(codePaths,workspace,{direct:true});
+      receiptScope = scopeForPaths(codePaths,workspace);
       if (paths.includes('pnpm-lock.yaml') && paths.every(path => path === 'pnpm-lock.yaml' || workspace.some(pkg => path === `${pkg.directory}/package.json`))) {
         try { lockSelection = lockPackageScope(mergeBase, head.sha, workspace, git, paths); scope = lockSelection.scope; }
         catch { /* Unproved root or package readers retain full lockfile work. */ }
       }
       if (!lockSelection && !scope.full && scope.packages.length < workspace.length) {
         try {
-          const revisions = scopeForRevisions(codePaths, workspace, mergeBase, head.sha, git);
+          const revisions = scopeForRevisions(codePaths, workspace, mergeBase, head.sha, git, {direct:true, receiptScope:true});
           scope.packages = [...new Set([...scope.packages, ...revisions.packages])].sort();
+          receiptScope.packages = [...new Set([...receiptScope.packages, ...revisions.receiptPackages])].sort();
         }
         catch (error) {
           // Package evidence cannot invalidate an independent receipt audit.
           scope.packages = scopeForPaths([], workspace).packages;
+          receiptScope.packages = [...scope.packages];
           reason = `Unverified package revisions: ${error.message}: full package suite (${paths.join(', ')})`;
         }
       }
@@ -83,10 +87,10 @@ export function createPlan(event, context, workspace, git, api) {
       reason = 'Cannot determine PR diff: full suite';
     }
   }
-  const work = workPlan(scope,workspace);
+  const work = workPlan(scope,workspace,undefined,receiptScope ?? scope);
   if (lockSelection) work.receipts = [...receiptSuites];
   if (revisions && !lockSelection) {
-    const selection = receiptPlan(work.receipts, scope, revisions.base, revisions.head, git);
+    const selection = receiptPlan(work.receipts, receiptScope ?? scope, revisions.base, revisions.head, git);
     work.receipts = selection.receipts;
     if (selection.reason) reason += `; ${selection.reason}`;
   }

@@ -189,3 +189,19 @@ installation, image acquisition or browser case is qualified here. This bounded
 attempt does not explain the original unlabelled timeout, the Linux canvas
 transfer slowdown or the native-build wait. Keep those causes open and investigate
 a labelled Linux recurrence before proposing a repair.
+
+## Healthy source-fetch fixture records a retry
+
+The healthy-fetch control reaches installation but records two fetches in
+[PR #953's standard run, job 127179355072](https://github.com/waitron-io/waitron-cloud/actions/runs/42007512040/job/127179355072).
+Its unchanged assertion at `scripts/cloud-cost/conformance-source-fetch.test.mjs:137`
+requires one. The fixture and preparation code match main `d05ccc9b`; the exact
+named case passes once on macOS with `node --test --test-name-pattern
+'healthy fetch checks out and verifies the pinned source without retry'
+scripts/cloud-cost/conformance-source-fetch.test.mjs`. That pass does not explain
+the hosted retry. The earlier interrupted-state failure checks a different case.
+
+Capture the attempt diagnostics and generated helper state on a labelled
+recurrence before changing the fixture. Lane H's shared CI-failure investigation
+is the proposed owner, pending watcher assignment. Preserve the healthy-fetch
+count, revision checks, retry bounds, deadlines and owned-child cleanup.
