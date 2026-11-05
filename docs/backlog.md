@@ -3491,8 +3491,11 @@ retained when removal also fails. The historical CI timeout has no recorded HTTP
 provider cause stays unknown. Capture a new labelled failure before attributing
 it to the registry. The historical inventory names thirteen acquisition sites. Ten storage suites
 and the seed-control suite now share supervision with native fixture startup,
-which retains one attempt and adds a 30-second deadline. Conformance and image
-build remain separate D585 slices. The owner has deferred
+which retains one attempt and adds a 30-second deadline. Conformance also uses
+that acquisition helper while retaining three attempts, a 120-second total
+budget, 30-second inactivity and its existing diagnostic and digest checks.
+Caller cancellation interrupts requests and retry pauses without replacing the
+cancellation reason. The image build remains a separate D585 slice. The owner has deferred
 the costed controlled-copy proposal; no mirror is built. See [the seed controls and limits](backlog/storage-cache-fixture.md#extraction-refusal-seed-acquisition-d530-4)
 and [the complete inventory and proposal](backlog/storage-cache-fixture.md#every-seaweedfs-archive-fetch-and-a-controlled-copy-proposal-d530-4).
 

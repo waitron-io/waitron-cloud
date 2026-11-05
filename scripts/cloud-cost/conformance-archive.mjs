@@ -1,6 +1,6 @@
 import {createHash} from 'node:crypto';
 import {writeFileSync} from 'node:fs';
-import {setTimeout as delay} from 'node:timers/promises';
+import {downloadStorageArchive} from '../fixtures/storage-archive-download.mjs';
 
 function responseIdentity(response) {
   const identity={};
@@ -32,49 +32,35 @@ export async function downloadConformanceArchive(url,digest,path,{signal,phase})
     event,phase,url,elapsedMs:Math.round(performance.now()-started),timeoutMs:120000,
     attempt,bytesReceived,...(status===undefined?{}:{status}),...identity,...details}));
   report('start');
-  // Connections, bodies and retry pauses share one budget so retries cannot extend setup.
-  const downloadSignal=AbortSignal.any([signal,AbortSignal.timeout(120000)]);
   const progress=setInterval(()=>report('progress'),10000);
   try {
-    for(;;attempt++) {
-      bytesReceived=0;status=undefined;identity={};report('attempt');
-      downloadSignal.throwIfAborted();
-      let bytes,retryable=false;
-      const inactivity=new AbortController();let idleTimer;
-      const progressReceived=()=>{
-        clearTimeout(idleTimer);
-        idleTimer=setTimeout(()=>inactivity.abort(new DOMException('Fixture archive download stalled','ArchiveInactivityError')),30000);
-      };
-      try {
-        // Only progress restarts inactivity; every attempt still shares the overall deadline.
-        progressReceived();
-        const response=await fetch(url,{signal:AbortSignal.any([downloadSignal,inactivity.signal])});
-        progressReceived();
-        status=response.status;identity=responseIdentity(response);report('headers');
+    const bytes=await downloadStorageArchive(url,{
+      signal,attempts:3,timeoutMs:120000,inactivityMs:30000,
+      inactivityReason:new DOMException('Fixture archive download stalled','ArchiveInactivityError'),
+      // A reset while discarding a refusal body retains the conformance retry policy.
+      retryStatusErrors:true,
+      report(record){
+        attempt=record.attempt;bytesReceived=record.bytesReceived;status=record.status??undefined;
+        if(record.event==='attempt'){identity={};report('attempt');}
+        if(record.event==='retry')report('retry',{pauseMs:attempt*1000,
+          errorName:record.error?.name??'UnknownError',errorCode:record.error?.cause?.code??record.error?.code});
+      },
+      async validate(response){
+        identity=responseIdentity(response);report('headers');
         if(!response.ok){
-          retryable=status>=500&&status<=599;
           await response.body?.cancel();
           throw Error('Fixture archive download failed');
         }
+      },
+      async consume(response,progressReceived){
         const chunks=[];
-        for await(const chunk of response.body){chunks.push(chunk);bytesReceived+=chunk.length;progressReceived();}
-        bytes=Buffer.concat(chunks);
-      } catch(error) {
-        clearTimeout(idleTimer);
-        downloadSignal.throwIfAborted();
-        const reset=['ECONNRESET','UND_ERR_SOCKET'].includes(error?.cause?.code??error?.code);
-        if(attempt>=3||(!retryable&&!reset&&!inactivity.signal.aborted))throw error;
-        const pauseMs=attempt*1000;
-        report('retry',{pauseMs,errorName:error?.name??'UnknownError',errorCode:error?.cause?.code??error?.code});
-        try {await delay(pauseMs,undefined,{signal:downloadSignal});}
-        catch(error) {downloadSignal.throwIfAborted();throw error;}
-        continue;
-      } finally {clearTimeout(idleTimer);}
-      downloadSignal.throwIfAborted();
-      if(createHash('sha256').update(bytes).digest('hex')!==digest)throw Error('Fixture archive digest mismatch');
-      writeFileSync(path,bytes);
-      report('complete');return;
-    }
+        for await(const chunk of response.body){chunks.push(chunk);bytesReceived+=chunk.length;progressReceived(chunk.length);}
+        return Buffer.concat(chunks);
+      },
+    });
+    if(createHash('sha256').update(bytes).digest('hex')!==digest)throw Error('Fixture archive digest mismatch');
+    writeFileSync(path,bytes);
+    report('complete');
   } catch(error) {report('failure',{errorName:error?.name??'UnknownError',errorCode:error?.cause?.code??error?.code});throw error;}
   finally {clearInterval(progress);}
 }

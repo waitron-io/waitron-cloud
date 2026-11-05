@@ -18,13 +18,16 @@ async function readChunks(response, progress) {
 // Callers retain their digest/publication rules and choose their attempt policy.
 export async function downloadStorageArchive(url, {
   attempts = 3, timeoutMs = 30000, inactivityMs = 10000,
+  signal, inactivityReason = new DOMException("Storage seed transfer stalled", "TimeoutError"),
+  retryStatusErrors = false,
   report = () => {}, validate = checkStatus, consume = readChunks,
 } = {}) {
-  const budget = AbortSignal.timeout(timeoutMs);
+  const deadline = AbortSignal.timeout(timeoutMs);
+  const budget = signal ? AbortSignal.any([signal, deadline]) : deadline;
   let phase, status, bytesReceived, attempt;
-  const emit = event => {
+  const emit = (event, details = {}) => {
     // A diagnostic sink cannot change acquisition or hide its original error.
-    try { report({ event, phase, status, bytesReceived, attempt }); } catch {}
+    try { report({ event, phase, status, bytesReceived, attempt, ...details }); } catch {}
   };
   for (attempt = 1; ; attempt++) {
     budget.throwIfAborted();
@@ -34,8 +37,7 @@ export async function downloadStorageArchive(url, {
     const progress = (length = 0) => {
       bytesReceived += length;
       clearTimeout(idleTimer);
-      if (inactivityMs !== null) idleTimer = setTimeout(() => inactivity.abort(
-        new DOMException("Storage seed transfer stalled", "TimeoutError")), inactivityMs);
+      if (inactivityMs !== null) idleTimer = setTimeout(() => inactivity.abort(inactivityReason), inactivityMs);
     };
     try {
       progress();
@@ -52,11 +54,12 @@ export async function downloadStorageArchive(url, {
       clearTimeout(idleTimer);
       budget.throwIfAborted();
       const reset = ["ECONNRESET", "UND_ERR_SOCKET"].includes(error?.cause?.code ?? error?.code);
-      if (attempt >= attempts || (phase === "status" && !retryable) ||
+      if (attempt >= attempts || (!retryStatusErrors && phase === "status" && !retryable) ||
           (!retryable && !reset && !inactivity.signal.aborted)) throw error;
-      emit("retry");
+      emit("retry", { error });
       // Pauses spend the original budget; a new attempt never resets it.
-      await delay(attempt * 1000, undefined, { signal: budget });
+      try { await delay(attempt * 1000, undefined, { signal: budget }); }
+      catch (error) { budget.throwIfAborted(); throw error; }
     } finally {
       clearTimeout(idleTimer);
       emit("settled");
