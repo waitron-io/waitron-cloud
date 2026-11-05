@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import {execFileSync} from 'node:child_process';
+import {execFileSync, spawnSync} from 'node:child_process';
 import {mkdtempSync, mkdirSync, writeFileSync, rmSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
@@ -101,6 +101,64 @@ test('missing reader evidence and unknown paths retain conservative work', () =>
   }
 });
 
+test('mixed changes in the same package keep source consumers and any shared test keeps its reader', () => {
+  assert.deepEqual(scopeForPaths(['packages/catalogue/test/one.mjs', 'packages/catalogue/src/index.mjs'], members, direct).packages,
+    ['catalogue', 'gateway']);
+  const graph = members.map(pkg => ({...pkg}));
+  graph[1].sources = [{path: 'packages/gateway/test/read.mjs', source: "import '../../catalogue/test/one.mjs';"}];
+  assert.deepEqual(scopeForPaths(['packages/catalogue/test/one.mjs', 'packages/catalogue/test/two.mjs'], graph, direct).packages,
+    ['catalogue', 'gateway']);
+});
+
+test('stored directories, composed paths and anchored references retain test readers', () => {
+  for (const source of [
+    "const d = new URL('../../catalogue/test/', import.meta.url); readdirSync(d);",
+    "join(here, '../../catalogue/test', 'prices.test.mjs');",
+    "const dir = '../../catalogue/test'; await import(`${dir}/${name}`);",
+    "await import('../../catalogue/test/' + name);",
+    "export default {include: ['../../catalogue/test/*.mjs']};",
+    "export default {alias: {prices: '../../catalogue/test'}};",
+    'await import(`${root}/packages/catalogue/test/prices.test.mjs`);',
+    "await import(root + '/packages/catalogue/test/prices.test.mjs');",
+    "const input = './packages/catalogue/test/prices.test.mjs';",
+  ]) {
+    const graph = members.map(pkg => ({...pkg}));
+    graph[1].sources = [{path: 'packages/gateway/src/read.mjs', source}];
+    assert.deepEqual(scopeForPaths(['packages/catalogue/test/prices.test.mjs'], graph, direct).packages,
+      ['catalogue', 'gateway'], source);
+  }
+});
+
+test('test entry resolution retains declaration, JSON, pattern, folder and index readers', () => {
+  for (const [input, changed, exports] of [
+    ['../../catalogue/test/prices.js', 'prices.d.ts'],
+    ['../../catalogue/test/prices', 'prices.json'],
+    ['../../catalogue/test/prices.mjs?raw', 'prices.mjs'],
+    ['../../catalogue/test/prices', 'prices/index.mjs'],
+    ['../../catalogue/test/prices.mjs#data', 'prices.mjs'],
+    ['catalogue/test/${name}', 'prices.mjs'],
+    ['catalogue/test/pric${name}.mjs', 'prices.mjs'],
+    ['catalogue/prices', 'prices.mjs', {'./*': './test/*'}],
+    ['catalogue/prices', 'prices.mjs', {'./*': './test/pric*'}],
+    ['catalogue/fx/prices.mjs', 'prices.mjs', {'./fx/': './test/'}],
+    ['../../catalogue/test/prices.mjs', 'prices.mts'],
+    ['../../catalogue/test/prices.cjs', 'prices.cts'],
+  ]) {
+    const graph = members.map(pkg => ({...pkg}));
+    if (exports) graph[0].exports = exports;
+    graph[1].sources = [{path: 'packages/gateway/src/read.mjs', source: `await import(${JSON.stringify(input)});`}];
+    assert.deepEqual(scopeForPaths(['packages/catalogue/test/' + changed], graph, direct).packages,
+      ['catalogue', 'gateway'], input);
+  }
+});
+
+test('an entry point that exposes its own tests keeps direct manifest consumers', () => {
+  const graph = members.map(pkg => ({...pkg}));
+  graph[0].sources = [{path: 'packages/catalogue/src/index.mjs', source: "export * from '../test/prices.test.mjs';"}];
+  graph[1].sources = [{path: 'packages/gateway/src/read.mjs', source: "import 'catalogue';"}];
+  assert.deepEqual(scopeForPaths(['packages/catalogue/test/prices.test.mjs'], graph, direct).packages, ['catalogue', 'gateway']);
+});
+
 function fixture(run) {
   const root = mkdtempSync(join(tmpdir(), 'cloud-ci-direct-'));
   const git = (...args) => execFileSync('git', ['-c', 'maintenance.auto=false', ...args], {cwd: root, encoding: 'utf8'});
@@ -158,5 +216,77 @@ test('removing a test export cannot erase a former named importer from saved evi
   write('packages/catalogue/test/prices.test.mjs', 'export const price = 2;\n');
   const head = commit();
   assert.deepEqual(scopeForRevisions(['packages/catalogue/test/prices.test.mjs'], loadWorkspace(root), base, head, git, direct).packages,
+    ['catalogue', 'gateway']);
+}));
+
+test('package commands and configuration retain their saved test-file consumers', () => {
+  for (const config of ['package.json', 'tsconfig.json', 'test/aliases.json']) fixture(({root, git, write, commit}) => {
+    const gateway = {...members[1], scripts: {test: config === 'package.json' ? 'node --test ../catalogue/test/*.mjs' : 'node --test'}};
+    write('packages/gateway/package.json', JSON.stringify(gateway));
+    if (config !== 'package.json') write('packages/gateway/' + config, JSON.stringify({include: [config.startsWith('test/') ? '../../catalogue/test/*.mjs' : '../catalogue/test/*.mjs']}));
+    write('packages/catalogue/test/prices.test.mjs', 'export const price = 1;\n');
+    const base = commit();
+    write('packages/catalogue/test/prices.test.mjs', 'export const price = 2;\n');
+    const head = commit();
+    assert.deepEqual(scopeForRevisions(['packages/catalogue/test/prices.test.mjs'], loadWorkspace(root), base, head, git, direct).packages,
+      ['catalogue', 'gateway'], config);
+  });
+});
+
+test('stored directory and joined-path readers really fail when their imported test breaks', () => {
+  for (const body of [
+    "const d = new URL('../../catalogue/test/', import.meta.url); for (const file of readdirSync(d)) await import(new URL(file, d));",
+    "await import(pathToFileURL(join(here, '../../catalogue/test', 'prices.test.mjs')));",
+  ]) fixture(({root, git, write, commit}) => {
+    write('packages/catalogue/test/prices.test.mjs', 'export const price = 1;\n');
+    write('packages/gateway/src/index.mjs', `import {readdirSync} from 'node:fs'; import {join, dirname} from 'node:path'; import {fileURLToPath, pathToFileURL} from 'node:url'; const here = dirname(fileURLToPath(import.meta.url)); ${body}\n`);
+    const base = commit();
+    const command = ['packages/gateway/src/index.mjs'];
+    assert.equal(spawnSync(process.execPath, command, {cwd: root}).status, 0);
+    write('packages/catalogue/test/prices.test.mjs', "throw Error('changed-test-breaks-reader');\n");
+    const head = commit();
+    const broken = spawnSync(process.execPath, command, {cwd: root, encoding: 'utf8'});
+    assert.equal(broken.status, 1); assert.match(broken.stderr, /changed-test-breaks-reader/);
+    assert.deepEqual(scopeForRevisions(['packages/catalogue/test/prices.test.mjs'], loadWorkspace(root), base, head, git, direct).packages,
+      ['catalogue', 'gateway']);
+  });
+});
+
+test('narrow package selection preserves receipts reached through a former transitive consumer', () => fixture(({root, git, write, commit}) => {
+  write('apps/portal/test/view.test.mjs', 'export const price = 1;\n');
+  write('packages/gateway/package.json', JSON.stringify({name: 'gateway', dependencies: {portal: 'workspace:*'}, scripts: {test: 'node --test'}}));
+  const base = commit();
+  write('apps/portal/test/view.test.mjs', 'export const price = 2;\n');
+  const head = commit();
+  const plan = createPlan({pull_request: {base: {sha: base}, head: {sha: head}}}, {}, loadWorkspace(root), git);
+  assert.deepEqual(plan.packages.map(row => row.package), ['portal']);
+  assert.equal(plan.receipts.length, 6);
+  assert.equal(plan.typecheck, true);
+}));
+
+test('saved receipt consumers survive removed manifest edges independently of the package filter', () => fixture(({root, git, write, commit}) => {
+  write('apps/portal/package.json', JSON.stringify({name: 'portal', scripts: {test: 'node --test'}}));
+  write('apps/shell/package.json', JSON.stringify({name: 'shell', dependencies: {portal: 'workspace:*'}, scripts: {test: 'node --test'}}));
+  write('packages/gateway/package.json', JSON.stringify({name: 'gateway', dependencies: {shell: 'workspace:*'}, scripts: {test: 'node --test'}}));
+  write('apps/portal/test/view.mjs', 'export const price = 1;\n');
+  const base = commit();
+  write('packages/gateway/package.json', JSON.stringify({name: 'gateway', scripts: {test: 'node --test'}}));
+  write('apps/portal/test/view.mjs', 'export const price = 2;\n');
+  const head = commit();
+  const result = scopeForRevisions(['apps/portal/test/view.mjs'], loadWorkspace(root), base, head, git, {direct: true, receiptScope: true});
+  assert.deepEqual(result.packages, ['portal']);
+  assert.deepEqual(result.receiptPackages, ['gateway', 'portal', 'shell']);
+}));
+
+test('a removed main test entry keeps its former named reader', () => fixture(({root, git, write, commit}) => {
+  const catalogue = {name: 'catalogue', scripts: {test: 'node --test'}, main: './test/prices.mjs'};
+  write('packages/catalogue/package.json', JSON.stringify(catalogue));
+  write('packages/catalogue/test/prices.mjs', 'export const price = 1;\n');
+  write('packages/gateway/src/index.mjs', "import 'catalogue';\n");
+  const base = commit();
+  write('packages/catalogue/package.json', JSON.stringify({...catalogue, main: './src/index.mjs'}));
+  write('packages/catalogue/test/prices.mjs', 'export const price = 2;\n');
+  const head = commit();
+  assert.deepEqual(scopeForRevisions(['packages/catalogue/test/prices.mjs'], loadWorkspace(root), base, head, git, direct).packages,
     ['catalogue', 'gateway']);
 }));

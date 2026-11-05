@@ -39,7 +39,7 @@ export function loadWorkspace(root = process.cwd()) {
   // Tests may import sibling source and fixtures directly rather than through manifests.
   // Include those file consumers so a scoped PR cannot hide a broken sibling fixture.
   for (const pkg of packages) {
-    const sources = [];
+    const sources = [], metadata = [];
     const visit = directory => {
       for (const entry of readdirSync(directory,{withFileTypes:true})) {
         const file=join(directory,entry.name);
@@ -47,41 +47,55 @@ export function loadWorkspace(root = process.cwd()) {
           if (!['node_modules','dist','.git','coverage'].includes(entry.name)) visit(file);
         } else if (/\.[cm]?[jt]sx?$/.test(entry.name)) {
           sources.push({path:relative(root,file), source:readFileSync(file,'utf8')});
+        } else if (/\.(?:jsonc?|ya?ml)$/.test(entry.name)) {
+          metadata.push({path:relative(root,file), source:readFileSync(file,'utf8')});
         }
       }
     };
     visit(join(root,pkg.directory));
     pkg.pathDependencies=sourceDependencies(pkg,packages,sources,root);
     pkg.sources = sources;
+    pkg.metadata = metadata;
   }
   return packages;
 }
 
-function readsTestPath(pkg, path, workspace) {
+function testReaderIndex(sources, workspace) {
+  const files = new Set(), directories = new Set(), uncertain = new Set();
   const values = value => typeof value === 'string' ? [value] :
     value && typeof value === 'object' ? Object.values(value).flatMap(values) : [];
-  const matches = (target, uncertain = false) => {
-    target = posix.normalize(target).replace(/\/$/, '');
-    return path === target || (uncertain && (target === '.' || path.startsWith(target))) ||
-      [target.replace(/\.js$/, '.ts'), target.replace(/\.mjs$/, '.mts'), target.replace(/\.cjs$/, '.cts'), target.replace(/\.jsx?$/, '.tsx'),
-        ...['.mjs', '.cjs', '.js', '.ts', '.mts', '.cts', '.tsx', '.jsx'].flatMap(ext => [target + ext, posix.join(target, 'index' + ext)])].includes(path);
+  const add = (value, dynamic = false) => {
+    const target = posix.normalize(value).replace(/\/$/, '');
+    if (dynamic) uncertain.add(target);
+    // A test-directory reference may be composed later by join, a stored URL,
+    // a config glob or a folder export. A package-root value alone is not a reader.
+    if ((!posix.extname(target) || value.endsWith('/')) && /\/test(?:\/|$)/.test(target)) directories.add(target);
+    for (const path of [target, target.replace(/\.js$/, '.ts'), target.replace(/\.mjs$/, '.mts'), target.replace(/\.cjs$/, '.cts'),
+      target.replace(/\.jsx?$/, '.tsx'), target.replace(/\.js$/, '.d.ts'),
+      ...['.mjs', '.cjs', '.js', '.ts', '.mts', '.cts', '.tsx', '.jsx', '.json'].flatMap(ext => [target + ext, posix.join(target, 'index' + ext)])]) files.add(path);
   };
-  for (const {path: sourcePath, source, references = []} of pkg.sources) {
-    const directoryInputs = new Set([...source.matchAll(/\b(?:readdirSync|readdir|opendirSync|opendir|globSync|glob)\s*\(\s*(?:new\s+URL\s*\(\s*)?(['"`])([^'"`\n]+)\1/g)].map(match => match[2]));
-    for (const value of [...quotedReferences(source), ...references]) {
-      const prefix = value.split('${')[0];
+  for (const {path: sourcePath, source, references = []} of sources) {
+    // Config commands and anchored expressions can contain a path after other
+    // tokens. Retain those fragments without evaluating the generated program.
+    const fragments = [...source.matchAll(/(?:packages|apps)\/[^'"`\s),;]+/g),
+      ...source.matchAll(/(?:\.{1,2}\/)+[^'"`\s),;]+/g)].map(match => match[0]);
+    for (const value of [...quotedReferences(source), ...references, ...fragments]) {
+      const prefix = value.split(/\$\{|[?#*]/)[0];
       if (!prefix) continue;
+      const dynamic = value.includes('${') || value.includes('*');
       const named = workspace.find(other => prefix === other.name || prefix.startsWith(`${other.name}/`));
       if (named) {
-        const exports = values(named.exports ?? named.main ?? './index.js');
-        if (exports.some(entry => matches(posix.join(named.directory, entry.split('*')[0]), entry.includes('*')))) return true;
-        if (prefix !== named.name && matches(posix.join(named.directory, prefix.slice(named.name.length + 1)), value.includes('${'))) return true;
-      } else if ((prefix.startsWith('./') || prefix.startsWith('../') || prefix === '.' || prefix === '..' || /^(?:packages|apps)(?:\/|$)/.test(prefix)) &&
-        matches(prefix.startsWith('.') ? posix.join(posix.dirname(sourcePath), prefix) : prefix,
-          value.includes('${') || directoryInputs.has(value))) return true;
+        for (const entry of values(named.exports ?? named.main ?? './index.js')) {
+          add(posix.join(named.directory, entry.split(/[?#*]/)[0]), entry.includes('*'));
+        }
+        if (prefix !== named.name) add(posix.join(named.directory, prefix.slice(named.name.length + 1)), dynamic);
+      } else if (prefix.startsWith('./') || prefix.startsWith('../') || prefix === '.' || prefix === '..' || /^(?:packages|apps)(?:\/|$)/.test(prefix)) {
+        add(prefix.startsWith('.') ? posix.join(posix.dirname(sourcePath), prefix) : prefix, dynamic);
+      }
     }
   }
-  return false;
+  return path => files.has(path) || [...directories].some(directory => path.startsWith(`${directory}/`)) ||
+    [...uncertain].some(prefix => prefix === '.' || path.startsWith(prefix));
 }
 
 export function scopeForPaths(paths, workspace, {direct = false} = {}) {
@@ -98,15 +112,24 @@ export function scopeForPaths(paths, workspace, {direct = false} = {}) {
     changed.get(owner.name).push(path);
   }
   if (direct) {
+    const indexes = new Map();
+    const indexFor = pkg => {
+      if (!indexes.has(pkg.name)) indexes.set(pkg.name, testReaderIndex([...pkg.sources, ...(pkg.metadata ?? [])], workspace));
+      return indexes.get(pkg.name);
+    };
+    const changes = [...changed].map(([name, inputs]) => {
+      const owner = workspace.find(pkg => pkg.name === name);
+      const entrySources = (owner.sources ?? []).filter(source => source.path.startsWith(`${owner.directory}/`) && !source.path.startsWith(`${owner.directory}/test/`));
+      const entryReads = testReaderIndex(entrySources, workspace);
+      return {name, inputs, ownTests: inputs.every(path => path.startsWith(`${owner.directory}/test/`)) && !inputs.some(entryReads)};
+    });
     // Only diff owners seed the next level. A consumer selected here must not
     // become another seed, even when workspace order or dependency cycles vary.
     for (const pkg of workspace) {
       const dependencies = {...pkg.pathDependencies, ...pkg.dependencies, ...pkg.devDependencies, ...pkg.optionalDependencies, ...pkg.peerDependencies};
-      for (const [name, inputs] of changed) {
-        const owner = workspace.find(other => other.name === name);
-        const ownTests = inputs.every(path => path.startsWith(`${owner.directory}/test/`));
+      for (const {name, inputs, ownTests} of changes) {
         const consumes = ownTests && Array.isArray(pkg.sources)
-          ? inputs.some(path => readsTestPath(pkg, path, workspace)) : Object.hasOwn(dependencies, name);
+          ? inputs.some(indexFor(pkg)) : Object.hasOwn(dependencies, name);
         if (consumes) {
           selected.add(pkg.name);
         }
@@ -127,7 +150,7 @@ export function scopeForPaths(paths, workspace, {direct = false} = {}) {
 
 export const receiptSuites = ['test:two-venue-milestone-receipt','test:backup-capacity','test:public-gateway-limits','test:local-stack','test:database-recovery-receipt','test:cloud-cost'];
 const shards = {'@waitron-cloud/registration':6, '@waitron-cloud/account-http':3, '@waitron-cloud/backups':7, '@waitron-cloud/portal':6, '@waitron-cloud/remote-access':4};
-export function workPlan(scope, workspace, root = process.cwd()) {
+export function workPlan(scope, workspace, root = process.cwd(), receiptScope = scope) {
   const packages = [];
   for (const name of scope.packages) {
     const pkg = workspace.find(pkg=>pkg.name === name);
@@ -142,6 +165,6 @@ export function workPlan(scope, workspace, root = process.cwd()) {
   if (!packages.length) throw new Error('Scope selected no tests');
   // The baseline covers unbounded backend and deployment inputs. The PR planner
   // may omit a receipt only with unchanged audited inputs in both revisions.
-  const backend = scope.packages.some(name=>workspace.find(pkg=>pkg.name===name).directory.startsWith('packages/') && name !== '@waitron-cloud/ui-smoke');
-  return {packages:groupShortPackages(packages), receipts:scope.full || backend ? receiptSuites : scope.packages.includes('@waitron-cloud/portal') ? ['test:local-stack'] : [], typecheck:true};
+  const backend = receiptScope.packages.some(name=>workspace.find(pkg=>pkg.name===name).directory.startsWith('packages/') && name !== '@waitron-cloud/ui-smoke');
+  return {packages:groupShortPackages(packages), receipts:receiptScope.full || backend ? receiptSuites : receiptScope.packages.includes('@waitron-cloud/portal') ? ['test:local-stack'] : [], typecheck:true};
 }

@@ -12,15 +12,20 @@ including a test exposed through package exports. A manifest dependency alone
 does not mean that a package imports another package's tests. File references,
 extension substitutions, templates and directory reads retain possible readers.
 This can deliberately select more than one package for a shared fixture.
+Stored directories, composed paths and configuration references count too.
+If your package's source exposes its own tests, its direct consumers still run.
+The planner builds each reader index once, rather than scanning source text
+again for every changed test file.
 
 The planner checks both saved Git revisions. Removing an import, changing an
 export or editing a local checkout cannot erase a consumer from either revision.
-Missing reader evidence retains conservative work. Unknown paths and shared
+Missing or invalid saved-tree evidence retains conservative work. Unknown paths and shared
 configuration still select the full suite. Audited lockfile selection keeps its
 existing rule of following every dependency level.
 
-This changes package selection only. Compiler checks and receipt selection keep
-their existing checks and deadlines. Main pushes still run the full suite;
+This changes package selection only. Receipts use the original dependency scope
+from both revisions, so a narrower package list cannot omit them. Compiler checks
+and all deadlines stay in force. Main pushes still run the full suite;
 verified merge reuse and the nightly full run are separate D571 changes.
 
 ## What the measurement establishes
@@ -43,7 +48,7 @@ diffs change: #943, 28 to 5; #939, 28 to 1; #930, 28 to 27; and #918, 28 to 7.
 The other 46 retain their projected counts. D571's reader-boundary and shared-path
 work must establish the remaining exemptions independently.
 
-On the current workspace, a registration source change still selects 27 package
+At the measured `be28f5d6` workspace, a registration source change still selects 27 package
 jobs rather than 28. Its consumers really are broad. An unshared registration
 test selects its five existing partitions. Do not narrow registration source
 selection further without measuring which files its consumers read.
