@@ -1,9 +1,33 @@
 import assert from 'node:assert/strict';
 import {spawnSync} from 'node:child_process';
-import {cpSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync} from 'node:fs';
+import {cpSync, mkdirSync, mkdtempSync, readdirSync, rmSync, symlinkSync, writeFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import test from 'node:test';
+
+test('a symlinked registration command executes selected tests and refuses invalid partitions', () => {
+  const root = mkdtempSync(join(tmpdir(), 'cloud-registration-link-'));
+  try {
+    mkdirSync(join(root, 'scripts'));
+    cpSync('scripts/ci-run-registration-shard.mjs', join(root, 'scripts/ci-run-registration-shard.mjs'));
+    mkdirSync(join(root, 'packages/registration/test'), {recursive: true});
+    writeFileSync(join(root, 'package.json'), '{"type":"module"}\n');
+    writeFileSync(join(root, 'packages/registration/test/a.test.ts'),
+      "import test from 'node:test'; test('selected through link',()=>console.log('LINK_SELECTED_TEST_RAN'));\n");
+    symlinkSync('scripts', join(root, 'linked-scripts'));
+    symlinkSync('scripts/ci-run-registration-shard.mjs', join(root, 'linked-runner.mjs'));
+    const env = {...process.env};
+    delete env.NODE_TEST_CONTEXT;
+    for (const command of ['linked-scripts/ci-run-registration-shard.mjs', 'linked-runner.mjs']) {
+      const selected = spawnSync(process.execPath, [command, '1'], {cwd: root, env, encoding: 'utf8', timeout: 10_000});
+      assert.equal(selected.status, 0, selected.stderr + selected.stdout);
+      assert.match(selected.stdout, /LINK_SELECTED_TEST_RAN/);
+      const invalid = spawnSync(process.execPath, [command, '0'], {cwd: root, env, encoding: 'utf8', timeout: 10_000});
+      assert.equal(invalid.status, 1, invalid.stderr + invalid.stdout);
+      assert.doesNotMatch(invalid.stdout, /LINK_SELECTED_TEST_RAN/);
+    }
+  } finally {rmSync(root, {recursive: true, force: true});}
+});
 
 test('registration runner moves the three measured slow files and executes all current and future files exactly once', () => {
   const root = mkdtempSync(join(tmpdir(), 'cloud-registration-balanced-'));
@@ -17,6 +41,9 @@ test('registration runner moves the three measured slow files and executes all c
       .concat('zz-future-registration.test.ts').sort();
     for (const file of files) writeFileSync(join(directory, file),
       `import test from 'node:test'; import assert from 'node:assert/strict'; test(${JSON.stringify(file)}, () => {assert.ok(process.execArgv.includes('--test-timeout=30000')); console.log(${JSON.stringify(`D576_FILE ${file}`)}); console.log('D576_PARENT '+process.ppid);});\n`);
+    writeFileSync(join(directory, 'metadata.json'), '{"not a test":true}\n');
+    mkdirSync(join(directory, 'fixtures'));
+    writeFileSync(join(directory, 'fixtures/unrelated.test.ts'), "throw Error('UNRELATED_FIXTURE_RAN');\n");
     const env = {...process.env};
     delete env.NODE_TEST_CONTEXT;
     const groups = [];
@@ -28,6 +55,13 @@ test('registration runner moves the three measured slow files and executes all c
       assert.ok(selected.length > 0, `Empty shard ${shard}`);
       const parents = [...result.stdout.matchAll(/D576_PARENT (\d+)/g)].map(match => Number(match[1]));
       assert.deepEqual(parents, selected.map(() => result.pid), 'The runner must become the Node test process');
+      const original = spawnSync(process.execPath, ['--test', '--test-timeout=30000', `--test-shard=${shard}/6`,
+        ...files.map(file => `test/${file}`)], {cwd: join(root, 'packages/registration'), env, encoding: 'utf8', timeout: 30_000});
+      assert.equal(original.status, 0, original.stderr + original.stdout);
+      const originallySelected = [...original.stdout.matchAll(/D576_FILE ([\w.-]+\.test\.ts)/g)].map(match => match[1]);
+      const unmoved = file => !['monitoring.test.ts', 'support-grants.test.ts', 'venue-service-legacy-schema-guards.test.ts'].includes(file);
+      assert.deepEqual(selected.filter(unmoved).sort(), originallySelected.filter(unmoved).sort(),
+        'Files outside the three measured moves must keep Node\'s original partition');
       groups.push(selected);
     }
     assert.deepEqual(groups.flat().sort(), files);

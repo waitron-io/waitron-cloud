@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import {readdirSync} from 'node:fs';
+import {readdirSync, realpathSync} from 'node:fs';
 import {dirname, resolve} from 'node:path';
 import {fileURLToPath, pathToFileURL} from 'node:url';
 
@@ -16,7 +16,7 @@ export function registrationFiles(shard, files) {
   return [...files].sort().filter((file, index) => (destinations.get(file) ?? index % 6 + 1) === shard);
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+if (process.argv[1] && import.meta.url === pathToFileURL(realpathSync(process.argv[1])).href) {
   const root = resolve(dirname(fileURLToPath(import.meta.url)), '../packages/registration');
   const files = readdirSync(resolve(root, 'test')).filter(file => file.endsWith('.test.ts'));
   const selected = registrationFiles(Number(process.argv[2]), files);

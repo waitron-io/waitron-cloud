@@ -7,8 +7,9 @@ On the Linux test box, the unchanged five-partition layout at
 1.90 times slower. These runs do not reproduce the historical cancellation.
 
 The planner and final CI check now require six registration partitions.
-Each partition keeps Node's dynamic `test/*.test.ts` discovery and the existing
-30-second test deadline. The eight-minute job limit stays unchanged. Portable
+Each partition discovers current `.test.ts` filenames in the test directory and
+gives Node an explicit file list with the existing 30-second test deadline.
+The eight-minute job limit stays unchanged. Portable
 checks run every current filename and a future filename exactly once through
 Node, reject each missing partition and reject the old five-partition allocation.
 Account HTTP and the other package allocations stay unchanged.
@@ -42,6 +43,8 @@ improvement. The first Linux attempt at the balanced layout refused because
 another lane held the test box; its complete runtime qualification remains open.
 The portable runner checks preserve all-file discovery, reject invalid and empty
 partitions, forward test failures and keep the same Node test-process identity.
+They exclude non-test files and nested fixtures, compare every unmoved file with
+Node's original partition, and execute both file and directory symlink commands.
 
 Aim for about four minutes per registration job, and require each exact-head job
 to finish within 300 seconds. The workflow's eight-minute cap stays unchanged.
@@ -68,6 +71,11 @@ that slowdown. A memory-backed database control takes 47.124 seconds versus
 the launcher. SQL measurements put the time in schema removal and migrations;
 1,008 migration-file reads take only 0.169 seconds. Nested measurements overlap.
 Keep the database launcher, migration behavior, assertions and deadlines intact.
+
+The run-it review observed both the original and new Node commands still running
+after 42 seconds when a test retained a live timer. The 30-second test deadline
+does not establish process termination in that case; the existing eight-minute
+job cap remains the outer limit. This branch does not change that behavior.
 
 The [recorded account HTTP event](https://github.com/waitron-io/waitron-cloud/actions/runs/41859910075/job/126686634772)
 is separate: runner setup takes about 402 seconds,
