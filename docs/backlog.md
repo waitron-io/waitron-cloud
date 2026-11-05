@@ -3456,6 +3456,27 @@ controls. The historical job did not measure helper scheduling, so the exact
 cause of that run's delay remains unknown. D583's separate isolated early-wake
 failure still needs diagnosis.
 
+### Litestream LIST-response interruption (D352 qualification)
+
+[Cost run40546771851, job122339634344](https://github.com/waitron-io/waitron-cloud/actions/runs/40546771851/job/122339634344)
+refused the transport body-accounting case after10.20seconds. At stop/idle, a
+response listing storage objects closed prematurely after headers; the native
+process exited0 but the audit remained unfinished. Retain the parsed diagnostic
+with the [Litestream shutdown investigation](backlog/cost-stack-replication.md).
+The cause is unknown. Keep all accounting guards and deadlines unchanged.
+A later [qualification run41183089824, job124484426019](https://github.com/waitron-io/waitron-cloud/actions/runs/41183089824/job/124484426019)
+failed two unchanged portal cases: translation consent waited five seconds for
+its uncertain-write message at `translation-consent-browser.test.ts:76`, and
+usage waited four seconds for its rate-limit state at
+`usage-read-message-browser.test.ts:46`. The consent trace ends with an activity
+request and consent write received by the server, without their finish events.
+The usage failure has no equivalent request trace. Both focused cases passed
+on the Linux test box (eight checks); the usage case also passed natively
+(seven checks). None of eight recent failed main runs contained these exact
+failures. D530 retains the historical failures. Fresh current-head CI qualifies this
+separate clock change; a passing retest does not establish the cause of those
+timeouts or the storage interruption. Keep every assertion and deadline.
+
 ### Fixture archive download retries (D311)
 
 **Open; the upstream 504 and later HTTP 500 causes remain unknown.** D457's

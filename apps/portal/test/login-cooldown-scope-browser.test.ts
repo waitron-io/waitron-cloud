@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import {mkdir, readFile} from 'node:fs/promises';
 import {test} from 'node:test';
+import {setTimeout as delay} from 'node:timers/promises';
 import {build} from 'esbuild';
 import {chromium, type Browser} from 'playwright';
 import {translations, type Locale} from '../src/locale.ts';
@@ -21,10 +22,12 @@ const flows = [
   {path: '/signup', endpoint: '/signup/complete', button: 'create'},
 ] as const;
 
-async function open(browser: Browser, locale: Locale, theme: 'light' | 'dark', width: number, limitedResetPath?: string) {
+async function open(browser: Browser, locale: Locale, theme: 'light' | 'dark', width: number, limitedResetPath?: string, setupDelay = 0) {
   const page = await browser.newPage({locale, colorScheme: theme, viewport: {width, height: 900}});
   page.setDefaultTimeout(3000);
-  await page.clock.install({time: new Date('2026-10-24T12:00:00Z')});
+  // The clock runs after installation; freeze before registering application timers.
+  await page.clock.install({time: new Date('2026-10-23T12:00:01Z')});
+  if (setupDelay) await delay(setupDelay);
   await page.clock.pauseAt(new Date('2026-10-24T12:00:01Z'));
   const calls: {path: string; body: unknown}[] = [];
   await page.route('https://portal.test/login', route => route.fulfill({contentType: 'text/html', body: '<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><div id="portal" class="portal"></div>'}));
@@ -55,12 +58,14 @@ async function open(browser: Browser, locale: Locale, theme: 'light' | 'dark', w
   return {page, calls};
 }
 
+for (const setupDelay of [0, 1100])
 for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'] as const) for (const width of [390, 1280]) {
-  test(`${locale} ${theme} ${width}: a sign-in cooldown leaves other account forms usable`, async t => {
+  if (setupDelay && (theme !== 'light' || width !== 390)) continue;
+  test(`${locale} ${theme} ${width}${setupDelay ? ' with delayed clock setup' : ''}: a sign-in cooldown leaves other account forms usable`, async t => {
     const browser = await chromium.launch({headless: true});
     try {
       for (const flow of flows) await t.test(flow.endpoint, async () => {
-        const {page, calls} = await open(browser, locale, theme, width), c = translations[locale];
+        const {page, calls} = await open(browser, locale, theme, width, undefined, setupDelay), c = translations[locale];
         try {
           const completion = flow.endpoint.endsWith('/complete');
           if (completion) await page.evaluate(path => {
@@ -106,11 +111,12 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
   });
 }
 
-for (const locale of ['en', 'es'] as const) for (const completion of [false, true]) test(`${locale}: password recovery ${completion ? 'completion' : 'request'} keeps its own retry delay during a sign-in cooldown`, async () => {
+for (const setupDelay of [0, 1100])
+for (const locale of ['en', 'es'] as const) for (const completion of [false, true]) test(`${locale}${setupDelay ? ' with delayed clock setup' : ''}: password recovery ${completion ? 'completion' : 'request'} keeps its own retry delay during a sign-in cooldown`, async () => {
   const browser = await chromium.launch({headless: true});
   try {
     const endpoint = completion ? '/password-reset/complete' : '/password-reset/request';
-    const {page, calls} = await open(browser, locale, 'light', 390, endpoint), c = translations[locale];
+    const {page, calls} = await open(browser, locale, 'light', 390, endpoint, setupDelay), c = translations[locale];
     try {
       if (completion) {
         await page.evaluate(path => {history.pushState(null, '', path); dispatchEvent(new PopStateEvent('popstate'));}, `/reset-password#token=${token}`);
