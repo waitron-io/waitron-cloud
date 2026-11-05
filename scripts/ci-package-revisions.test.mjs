@@ -180,14 +180,14 @@ test('a removed sibling import keeps its former transitive consumers selected', 
   assert.equal(result.typecheck, true);
 }));
 
-test('an unchanged committed transitive reader survives dirty local import removal', () => fixture(({write, commit, plan}) => {
+test('an unchanged committed direct reader survives dirty local import removal', () => fixture(({write, commit, plan}) => {
   write('packages/gateway/src/index.mjs', "import '../../catalogue/src/index.mjs';\n");
   write('packages/portal/src/index.mjs', "import '../../gateway/src/index.mjs';\n");
   const base = commit();
   write('packages/catalogue/src/index.mjs', 'export const value = 2;\n');
   const head = commit();
   write('packages/portal/src/index.mjs', 'export const value = 3;\n');
-  assert.deepEqual(plan(base, head).packages.map(row => row.package), ['catalogue', 'gateway', 'portal']);
+  assert.deepEqual(plan(base, head).packages.map(row => row.package), ['catalogue', 'gateway']);
 }));
 
 test('removed manifest dependencies keep former consumers of another changed package', () => fixture(({write, commit, plan}) => {
@@ -734,7 +734,7 @@ await import(pathToFileURL('${input}'));
       assert.deepEqual(scopeForRevisions(['packages/catalogue/src/index.mjs'], loadWorkspace(root), base, head, git),
         {full: false, packages: ['catalogue', 'gateway', 'portal']}, input + ' ' + revision);
       const result = plan(base, head, (...args) => args[0] === 'diff' ? 'packages/catalogue/src/index.mjs\0' : git(...args));
-      assert.deepEqual(result.packages.map(row => row.package), ['catalogue', 'gateway', 'portal'], input + ' ' + revision);
+      assert.deepEqual(result.packages.map(row => row.package), ['catalogue', 'portal'], input + ' ' + revision);
     });
   }
 });

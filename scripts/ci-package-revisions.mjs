@@ -368,11 +368,12 @@ function workspaceAt(sha, workspace, git) {
       }
     }
     pkg.pathDependencies = sourceDependencies(pkg, packages, sources);
+    pkg.sources = sources;
   }
   return packages;
 }
 
-export function scopeForRevisions(paths, workspace, base, head, git) {
+export function scopeForRevisions(paths, workspace, base, head, git, options) {
   // Each saved revision has independent evidence. Keep both batch reads even
   // when one refuses narrowing, then preserve the first refusal for the caller.
   const snapshots = [base, head].map(sha => {
@@ -385,9 +386,10 @@ export function scopeForRevisions(paths, workspace, base, head, git) {
     const previous = before.find(other => other.name === pkg.name);
     const dependencies = Object.assign({}, ...[previous, pkg].flatMap(member =>
       ['dependencies', 'devDependencies', 'optionalDependencies', 'peerDependencies', 'pathDependencies'].map(field => member[field])));
-    return {...pkg, dependencies};
+    return {...pkg, dependencies, sources: [...previous.sources, ...pkg.sources],
+      exports: [previous.exports ?? previous.main ?? './index.js', pkg.exports ?? pkg.main ?? './index.js']};
   });
-  return scopeForPaths(paths, combined);
+  return scopeForPaths(paths, combined, options);
 }
 
 export function readGitBlobs(ids, execute = input => execFileSync('git', ['cat-file', '--batch'], {

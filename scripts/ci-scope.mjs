@@ -52,19 +52,67 @@ export function loadWorkspace(root = process.cwd()) {
     };
     visit(join(root,pkg.directory));
     pkg.pathDependencies=sourceDependencies(pkg,packages,sources,root);
+    pkg.sources = sources;
   }
   return packages;
 }
 
-export function scopeForPaths(paths, workspace) {
+function readsTestPath(pkg, path, workspace) {
+  const values = value => typeof value === 'string' ? [value] :
+    value && typeof value === 'object' ? Object.values(value).flatMap(values) : [];
+  const matches = (target, uncertain = false) => {
+    target = posix.normalize(target).replace(/\/$/, '');
+    return path === target || (uncertain && (target === '.' || path.startsWith(target))) ||
+      [target.replace(/\.js$/, '.ts'), target.replace(/\.mjs$/, '.mts'), target.replace(/\.cjs$/, '.cts'),
+        ...['.mjs', '.cjs', '.js', '.ts', '.mts', '.cts', '.tsx', '.jsx'].flatMap(ext => [target + ext, posix.join(target, 'index' + ext)])].includes(path);
+  };
+  for (const {path: sourcePath, source, references = []} of pkg.sources) {
+    const directoryInputs = new Set([...source.matchAll(/\b(?:readdirSync|readdir|opendirSync|opendir|globSync|glob)\s*\(\s*(?:new\s+URL\s*\(\s*)?(['"`])([^'"`\n]+)\1/g)].map(match => match[2]));
+    for (const value of [...quotedReferences(source), ...references]) {
+      const prefix = value.split('${')[0];
+      if (!prefix) continue;
+      const named = workspace.find(other => prefix === other.name || prefix.startsWith(`${other.name}/`));
+      if (named) {
+        const exports = values(named.exports ?? named.main ?? './index.js');
+        if (exports.some(entry => matches(posix.join(named.directory, entry.split('*')[0]), entry.includes('*')))) return true;
+        if (prefix !== named.name && matches(posix.join(named.directory, prefix.slice(named.name.length + 1)), value.includes('${'))) return true;
+      } else if ((prefix.startsWith('./') || prefix.startsWith('../') || prefix === '.' || prefix === '..' || /^(?:packages|apps)(?:\/|$)/.test(prefix)) &&
+        matches(prefix.startsWith('.') ? posix.join(posix.dirname(sourcePath), prefix) : prefix,
+          value.includes('${') || directoryInputs.has(value))) return true;
+    }
+  }
+  return false;
+}
+
+export function scopeForPaths(paths, workspace, {direct = false} = {}) {
   const all = workspace.map(pkg=>pkg.name).sort();
   const full = () => ({full:true, packages:all});
   if (!paths.length || paths.some(path => !path)) return full();
   const selected = new Set();
+  const changed = new Map();
   for (const path of paths) {
     const owner = workspace.find(pkg=>path.startsWith(`${pkg.directory}/`));
     if (!owner) return full();
     selected.add(owner.name);
+    if (!changed.has(owner.name)) changed.set(owner.name, []);
+    changed.get(owner.name).push(path);
+  }
+  if (direct) {
+    // Only diff owners seed the next level. A consumer selected here must not
+    // become another seed, even when workspace order or dependency cycles vary.
+    for (const pkg of workspace) {
+      const dependencies = {...pkg.pathDependencies, ...pkg.dependencies, ...pkg.devDependencies, ...pkg.optionalDependencies, ...pkg.peerDependencies};
+      for (const [name, inputs] of changed) {
+        const owner = workspace.find(other => other.name === name);
+        const ownTests = inputs.every(path => path.startsWith(`${owner.directory}/test/`));
+        const consumes = ownTests && Array.isArray(pkg.sources)
+          ? inputs.some(path => readsTestPath(pkg, path, workspace)) : Object.hasOwn(dependencies, name);
+        if (consumes) {
+          selected.add(pkg.name);
+        }
+      }
+    }
+    return {full: false, packages: [...selected].sort()};
   }
   let previous;
   do {

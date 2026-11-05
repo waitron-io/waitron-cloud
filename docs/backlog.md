@@ -1316,7 +1316,19 @@ implementation or production evidence.
   regenerated per-path evidence before saving its baseline; a changed-reader
   control preserves both ordinary prose-only and forced-full assertions.
   Real PR rehearsal and exact-main full execution
-  still need their current-run receipts before a runtime coverage claim. The real portal-plus-prose candidate
+  still need their current-run receipts before a runtime coverage claim.
+  D571 part 2b adds
+  [one-level package selection](ci-package-selection.md): a source change selects
+  its package and direct consumers; changes only under its `test/` directory
+  retain file readers rather than every manifest consumer. Both immutable
+  revisions contribute readers, including removed imports and exports. Lockfile
+  selection retains its original full dependency walk. The 50-merge replay
+  through `be28f5d6` remains 980 package jobs before and after because other
+  audit and reader refusals still select full work. A separate projection that
+  excludes prose and audit metadata changes 410 to 338 package jobs; this is
+  potential selection reduction, not measured CI savings. Registration source
+  still selects 27 jobs, so further narrowing needs file-level consumer evidence.
+  The real portal-plus-prose candidate
   still selects 28 package jobs: its saved graph refuses an unresolved directory
   read in `scripts/ci-audit-fixture-dependencies.mjs`. Keep that conservative
   fallback for part 2 to bound; part 1 claims no measured package-job saving.

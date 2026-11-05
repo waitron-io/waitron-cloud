@@ -60,14 +60,14 @@ export function createPlan(event, context, workspace, git, api) {
         if (scripts) return {packages: [], receipts: [], typecheck: false, reuse: null, scripts, reason: `Audited root script: ${paths.join(', ')}`};
       } catch { /* Missing or stale reader evidence keeps the existing full fallback. */ }
       const codePaths = mixedCodePaths(paths, mergeBase, head.sha, git);
-      scope = scopeForPaths(codePaths,workspace);
+      scope = scopeForPaths(codePaths,workspace,{direct:true});
       if (paths.includes('pnpm-lock.yaml') && paths.every(path => path === 'pnpm-lock.yaml' || workspace.some(pkg => path === `${pkg.directory}/package.json`))) {
         try { lockSelection = lockPackageScope(mergeBase, head.sha, workspace, git, paths); scope = lockSelection.scope; }
         catch { /* Unproved root or package readers retain full lockfile work. */ }
       }
       if (!lockSelection && !scope.full && scope.packages.length < workspace.length) {
         try {
-          const revisions = scopeForRevisions(codePaths, workspace, mergeBase, head.sha, git);
+          const revisions = scopeForRevisions(codePaths, workspace, mergeBase, head.sha, git, {direct:true});
           scope.packages = [...new Set([...scope.packages, ...revisions.packages])].sort();
         }
         catch (error) {
