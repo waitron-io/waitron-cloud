@@ -177,6 +177,11 @@ export function writeAuditRecords(outputs, allowedRecords = []) {
       }
     }
   };
+  const writable = (path, directory = false) => {
+    const info = stat(path);
+    assert.ok(info && info.mode & 0o222, `Read-only audit output: ${path}`);
+    accessSync(path, constants.W_OK | (directory ? constants.X_OK : 0));
+  };
   // Validate known path, link and permission refusals before the first write.
   // Immutable checks still reject incomplete output after an unexpected I/O failure.
   for (const [path, content] of outputs) {
@@ -184,8 +189,11 @@ export function writeAuditRecords(outputs, allowedRecords = []) {
     const info = validateFile(path);
     assert.equal(typeof content, 'string', 'Invalid audit output bytes');
     if (info && readFileSync(path, 'utf8') !== content) {
-      assert.ok(info.mode & 0o222, `Read-only audit output: ${path}`);
-      accessSync(path, constants.W_OK);
+      writable(path);
+    } else if (!info) {
+      let parent = dirname(path);
+      while (!stat(parent)) parent = dirname(parent);
+      writable(parent, true);
     }
   }
   scan(auditRecordRoot.slice(0, -1));
