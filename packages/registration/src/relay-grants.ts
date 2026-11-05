@@ -181,10 +181,11 @@ export class RelayGrantStore {
   const start=epoch+Math.floor((time-epoch)/duration)*duration;
   const used=Number((await client.query('SELECT count(*) FROM relay_reservations WHERE account_id=$1 AND period_start=$2',[grant.account_id,new Date(start)])).rows[0].count);
   if(used>=policy.units)fail('allowance_exhausted');
+  // Persist the checked admission instant so a later insert cannot move it outside its period.
   const saved=(await client.query<ReservationRow>(`INSERT INTO relay_reservations
-   (installation_id,message_id,grant_id,grant_revision,account_id,policy_version,period_start,period_end,binding)
-   VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,
-   [installation.id,input.messageId,grant.id,grant.revision,grant.account_id,policy.version,new Date(start),new Date(start+duration),input.binding])).rows[0]!;
+   (installation_id,message_id,grant_id,grant_revision,account_id,policy_version,period_start,period_end,binding,created_at)
+   VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *`,
+   [installation.id,input.messageId,grant.id,grant.revision,grant.account_id,policy.version,new Date(start),new Date(start+duration),input.binding,new Date(time)])).rows[0]!;
   return reservationView(saved,false);
  }
 
