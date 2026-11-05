@@ -395,6 +395,18 @@ on file (driver's call). Restoring, fencing, activation, moving the tills and th
 itself are A1018's and P6's to build. The rules in this section are what those designs must
 honour for billing.
 
+Read this alongside the owner's later approval of Waitron A1188 on 29 October:
+its separate emergency and code-entry addresses, new destination node identity
+and stop lasting until declaration confirmation refine the earlier wording above.
+The [D568 contract proposal](../../waitron-integration-contract.md#emergency-hosting-display-and-code-proposed-d568)
+records Cloud's response, separate display/code reads and the remaining joint
+formats. It awaits Waitron agreement and implements none of section 7 or P6.
+Lane A's reply agrees with the four A1018 answers, with the proposed hosted
+prerequisites now covering the copied person's permission, the destination's
+local node record, valid operation IDs and settings/image compatibility.
+This is separate from agreement to the emergency reads; hosted authentication,
+enrolment and environment-backed settings still need joint formats and tests.
+
 ## 8. Cancelling, lapsing and closing an account
 
 - **Cancelling follows the exit the owner approved on 2026-10-21:** "Full standard-format

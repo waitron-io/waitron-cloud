@@ -1925,7 +1925,354 @@ owner decisions raised by Lane B. Version 1 requires an explicit configured
 calendar with no production default; it does not choose between country-wide
 and per-venue production calendars. Production prices, retention, collection,
 hosted-stop legality and provider/invoice qualification retain their existing
-gates. Emergency hosting facts need a separate agreed read or a later version.
+gates. The [D568 emergency display proposal](#emergency-hosting-display-and-code-proposed-d568)
+defines a separate read for A1188; it still needs Waitron's agreement. Billing
+display version 1 gains no fields or new authority from that proposal.
+
+## Emergency hosting display and code (proposed, D568)
+
+**Cloud proposal, 4 November 2026. Awaiting Waitron agreement; no endpoint,
+signing vector or runtime is qualified here.** This answers A1188 part 1 and
+A1187's recovery-pack dependency. The source is Waitron
+`e0da0ad18aa952306e39c1a8e3cade6302794b43`,
+[A1188 sections 1, 2, 9, 11 and 13](https://github.com/clintongormley/waitron/blob/e0da0ad18aa952306e39c1a8e3cade6302794b43/docs/superpowers/specs/2026-10-29-a1188-cloud-emergency-start-design.md),
+and Cloud's [billing design, section 7](superpowers/specs/2026-10-29-cloud-billing-design.md#7-emergency-hosting-when-the-owner-cannot-be-reached).
+The owner approved A1188's defaults on 29 October. Agreement to this proposed
+wire and permission to build Cloud billing section 7 or P6 are separate gates.
+This revision incorporates Lane B's eight part 1 amendments. Its review agreed
+with the separate-read approach subject to those amendments; final agreement
+on this exact emergency-read revision remains open. Lane A agrees with the four
+A1018 answers subject to the amendments recorded below; that agreement does not
+qualify a hosted format or implementation.
+
+### Read the facts without starting a copy
+
+When your box stops answering, tills need an address they already learned.
+Use a separate emergency display read, so the existing billing display and its
+consumer keep their version 1 meaning. The facts describe Cloud's current offer;
+they grant no restore, hosting, trading or fiscal authority. Reading changes no
+owner setting, code, installation, billing or service state. Ordinary rate-limit
+accounting remains the only expected write.
+
+Proposed POST `/api/installations/emergency-hosting-display` accepts only
+`{payload,signature}` with signed body exactly `{"version":1}`, action
+`emergency-hosting-display` and a fresh operation UUID in the existing
+`waitron-cloud-machine-v1` envelope. Use the saved installation key, exact trusted
+country origin and current control lease. Apply the billing display's stored-key
+authentication, post-lock revalidation, scope resolution, proof/lease bounds,
+browser-Origin refusal and shared rate budgets. Accept no selectors or query
+parameters. Never derive venue, account or permission from caller-supplied IDs.
+Keep the read available at every level, Registered included, whether the
+setting is on or off. A venue that is not at an active Connected level under
+billing section 7 answers `open:false`. Otherwise a box whose venue dropped a
+level keeps an obsolete `open:true`.
+
+The proposed closed response has exactly these fields. UUIDs, `UtcInstant` and
+price validation follow the billing display section. Examples below are
+synthetic wire examples, not runnable endpoints or production prices.
+
+```ts
+type EmergencyDisplayV1 = {
+  version:1; installationId:string; venueId:string; countryCode:'ES';
+  asOf:UtcInstant;
+  emergency:{status:'ready'; open:boolean;
+    closedReason:null|'setting_off'|'level_inactive'|'no_payment_method'|'not_provisioned';
+    address:string|null;
+    codeIssuedAt:UtcInstant|null}
+    | {status:'unavailable'; reason:'state_not_ready'};
+  prices:Prices;
+};
+```
+
+`Prices` is the exact published/unavailable union in billing display version 1.
+It keeps the published price revision, currency, tax treatment and hosted-day
+divisor together. Billing display v1 supplies a VAT-exclusive monthly/30 basis,
+not a rounded daily quote. Before displaying a daily amount, jointly pin its
+informational projection, tax label and rounding vectors; do not reuse the
+whole-charge rounding rule or change invoice calculations. Until that agreement,
+show the daily amount as unavailable. Do not infer a quote from another venue's bill. Unpublished
+prices stay unavailable; they do not become zero. Production prices remain an
+owner gate. The display can report `open:true` with prices unavailable, but it
+must show the price as unavailable and supplies no permission to start hosting.
+
+`open` is true only when Cloud knows the owner's advance setting is on, the
+venue's Connected level is active under billing section 7, a payment method is
+on file, and its emergency address and current code exist. Resolve all of these
+facts in the same scoped snapshot. `closedReason` is null exactly when `open`
+is true; otherwise it names the first known closure in this order:
+setting off, Connected level not active, no payment method on file, address or
+code not provisioned. A known closure wins over unrelated unknown facts: in
+particular, a known inactive level returns `open:false` even if no setting was
+ever recorded. An unset setting is unknown, not an implicit opt-in or off value;
+this read never applies the sign-up default. With no known closure, return
+`state_not_ready` unless every required fact is known and consistent. A closed
+reply may withhold an unknown address or issuance date as null; in that reply,
+null alone does not assert that provisioning never happened.
+The reason names no payment method or provider. The code read's
+403 body is `{"error":"emergency_hosting_closed","reason":<the same value>}`.
+An unprovisioned code or address gives `not_provisioned` unless an earlier known
+closure wins; 503
+`temporarily_unavailable` is kept for unknown or inconsistent state.
+`codeIssuedAt` is the issuance instant of the current code, including
+after replacement, not the time of this read or print. It lets you compare a
+printed recovery pack with the current card. Neither this instant nor an address
+is a code or authority. With no current code return null; do not create one.
+
+`address` is the complete saved HTTPS emergency URL with no userinfo, query or
+fragment. Cloud provisions its origin separately from the staff address and
+code-entry page; the box cannot verify the latter separation from this reply alone.
+In version 1 the box accepts the address only from this installation-authenticated
+reply from its configured Cloud origin, with redirects refused. The address must
+be HTTPS on the default port, with path `/` and no userinfo, query or fragment.
+Require the exact canonical text `https://<dns-host>/`, with a lowercase ASCII
+DNS hostname, no trailing dot and no explicit port. Reject normalization of
+another raw spelling, IP literals (including encoded IPv4), single-label names,
+`localhost` and names under `.localhost`, `.local`, `.internal` or `.lan`.
+Compare hosts after canonicalizing the trusted staff (`WAITRON_MANAGEMENT_ORIGIN`)
+and Cloud origins and removing a trailing dot from those trusted hosts. The
+emergency host must differ from both. These shape checks do not prove its DNS
+destination: Cloud must provision the name away from the local box and qualify
+that separately. A pinned list or parent domain of emergency
+names is a later version: the box has no such configuration today.
+A venue must never point this name at its local
+box. If no address is provisioned, return null and `open:false`; an unavailable
+snapshot supplies neither field. The address reveals no code or staff credential.
+
+For an open venue with unpublished prices, the proposed response is:
+
+```json
+{"version":1,"installationId":"11111111-1111-4111-8111-111111111111","venueId":"22222222-2222-4222-8222-222222222222","countryCode":"ES","asOf":"2026-11-10T12:00:00.000Z","emergency":{"status":"ready","open":true,"closedReason":null,"address":"https://harbour-emergency.cloud.example.test/","codeIssuedAt":"2026-11-01T09:00:00.000Z"},"prices":{"status":"unavailable","reason":"not_published"}}
+```
+
+An unavailable emergency snapshot is exactly
+`{"status":"unavailable","reason":"state_not_ready"}`. Prices remain
+independently published or unavailable. Reject extra fields, mismatched saved
+registration, malformed dates/URLs/prices and `open:true` with a null address
+or issuance date, and any `open`/`closedReason` mismatch. An off setting can retain
+its provisioned address and current issuance date; it never permits start or code disclosure by itself.
+
+Use the billing display's error mappings, 16,384-byte request/response limits,
+five-second body bound, eight-second client bound, redirect refusal and
+`Cache-Control: no-store`. Unsupported versions use
+`unsupported_emergency_hosting_version` and map to `cloud.request_invalid`.
+The box shares one read per minute across dashboards for this endpoint, fences
+overlapping replies by registration and request generation, and treats errors
+as unavailable. Billing and emergency reads do not order one another.
+
+A1188 needs one deliberate difference from billing display: the box keeps the
+last successfully validated emergency address and open flag for the tills and
+their existing saved view when the box disappears. Include its issuance and
+observation dates so the card can describe its age. The box keeps the saved facts
+beside its installation key, outside the venue database and its backups, so a
+restored copy never carries them and no table is added. The till start read uses
+only these saved facts and never waits on Cloud. Only `open` and `address` reach
+the tills; the issue and observation dates stay on the dashboard card.
+Bind saved facts to the
+registration; clear them on disconnect, replacement registration or known
+revocation. A failed read marks the display stale/unavailable without presenting
+the saved flag as current permission. A known `open:false` replaces an older
+true. Old facts can offer a link only; Cloud must recheck current eligibility
+at the code page and before confirmation. No emergency code is saved here.
+
+### Fetch the code only when someone asks
+
+Proposed POST `/api/installations/emergency-hosting-code` uses the same machine
+envelope and authority checks, with the distinct action
+`emergency-hosting-code` and body exactly `{"version":1}`. Bind it to the
+installation Cloud currently records as the venue's box: the paired installation,
+or a replacement after **Complete replacement** durably succeeds with the required
+owner confirmations and old-credential retirement. **Start replacement** and
+tunnel reconnection do not transfer this read; the original remains the box
+until completion. An A1188 locked copy's
+installation, any restored copy the owner has not approved, and an unrelated
+installation cannot fetch it. Once Cloud confirms a declaration, the previous
+box's installation is refused the code read, as one of the services A1188
+section 9 item 8 withdraws. A Cloud account cookie is no
+substitute. The box's authenticated local route checks the person's current
+`node.promote` permission before requesting, returning or printing the code.
+Follow its successor `node.manage` only when A1002 actually provides it.
+Cloud authenticates the installation; this endpoint does not claim to verify
+the staff member or map a Cloud account to that permission.
+
+A successful answer is exactly `{version:1,installationId,venueId,countryCode,
+asOf,code,codeIssuedAt,address}`. The IDs and address obey the display rules;
+the code and its issuance instant are one current generation read together.
+The code encoding, length and fixed validation vectors must be jointly pinned
+before implementation; do not guess a production secret format from this prose.
+When the emergency path is closed, return 403 `emergency_hosting_closed` with
+the display's `closedReason` as `reason`, including `not_provisioned` for an
+unprovisioned code or address. Unknown or inconsistent state returns 503
+`temporarily_unavailable`. Do not issue or rotate a code as a read side effect.
+Other bounds and refusals follow the display read, with
+`unsupported_emergency_hosting_version` for an unsupported body version.
+
+The code endpoint makes one explicit exception to billing display's error-only
+body: 403 `emergency_hosting_closed` contains exactly `error` and `reason` as
+defined above. Waitron maps it to a new local `cloud.emergency_hosting_closed`
+with that closed reason, never to installation revocation. A validly authenticated
+locked copy, not-yet-completed replacement or previous box after declaration
+gets 403 `{"error":"emergency_hosting_installation_ineligible"}`, mapped to
+`cloud.unavailable` without clearing its connection. Actual key revocation or
+supersession retains the existing `revoked` response. Eligibility for this code
+read grants no access to, and cannot withdraw, the separate returning-box read.
+These new mappings need joint vectors before either adapter implements them.
+
+The code read has its own rate budget, which Cloud states, separate from the
+display read's one read per minute. The box never shares, caches or replays a
+code answer across requests: each Show code or pack makes one read for that
+request alone, and a 429 is shown with its `Retry-After` wait. This endpoint
+also consumes the inherited Cloud shared budgets, including 30 reads per
+authenticated installation per minute; its separate budget is an additional cap.
+Validate the code reply's address by the same rule. For that interaction use
+its newly validated address with its code and issuance date; an older display
+address cannot override it or be combined with its code. Refresh the card through
+the display endpoint rather than persisting anything from a code reply.
+
+Fetch only on Show code or Print recovery pack. Keep the answer in request/UI
+memory for that interaction; put no code in the venue database, browser storage,
+backups, logs, URLs or telemetry. Clear it when the interaction closes or its
+registration changes. A1187's explicit printed/downloaded recovery pack is the
+intended saved copy in the person's custody. It includes the address and exact
+issuance date. A1188's local permission check is mandatory even if somebody can
+see the display card. Code possession starts at most a locked copy; it never
+signs someone in or authorises activation.
+
+### Disposition of A1188's remaining Cloud requests
+
+Cloud proposes the following reconciliation of A1188 section 9. These are
+design boundaries for later joint formats and tests, not implemented effects.
+
+| A1188 request | Cloud response |
+| --- | --- |
+| 1: facts; 2: code and issue date | Separate reads above. Billing display v1 remains closed. |
+| 3: addresses | Follow owner-approved A1188 section 13 items 5–6: separate emergency name, separate code-entry origin, never locally pointed at the box. No staff password enters the code-entry page; the copy itself still runs on Cloud's machines. |
+| 4: locked restore | Follow item 13: M2 has its own new node identity, no source private node key and no fiscal authority before declaration. This requires an explicit restore amendment and A947/A1018 qualification; today's source-identity restore is unchanged. Cloud starts the locked copy from the venue's live stream with the backup key it already holds, and asks nobody for the node recovery key. Until Cloud confirms the declaration, the copy can only read the venue's bucket; write access for its own new generation is granted only after confirmation (A1188 section 9 item 8). |
+| 5: copy identity/certificate | A fresh Cloud installation is required. Production certificates and issuance for the emergency name need a separately agreed certificate/lease profile; do not widen staff certificate v1 implicitly. |
+| 6: still open; 7: box last heard | Require a new authenticated copy-operation read of current eligibility and the original box's observed heartbeat time, including explicit unknown. These display facts cannot supply it or replace the two-minute refusal in A1188 section 13 item 9. |
+| 8: declaration confirmation | Bind one durable operation to the actor, selected copy and exact declaration. Same inputs replay the stored result; changed inputs conflict. Later implementation must coordinate charging, owner mail, source-service withdrawal and the new backup generation without inventing a second operation after an uncertain reply. |
+| 9: stop and repeated starts | Follow A1188 section 5, "The time limit", and section 9 item 9, approved with the design on 29 October: the 30-minute stop ends only when Cloud confirms the declaration. Sign-in does not cancel it. The limit on how often valid codes start copies, and its durable counters, are agreed before Waitron builds A1188 part 3, because the copy's own count of wrong sign-ins restarts with every copy. |
+| 10: returning box | A separate narrow authenticated read must remain possible after service withdrawal. A positive move result keeps the box restricted; it grants no activation, trusted membership key or general service access. Its format/revocation policy remains a joint prerequisite. |
+
+### A1018: answers to Lane A's four questions
+
+These answer the 2 November notice at Waitron plan Slice 0, Task 0.3. The
+[existing handover agreement](#map-the-person-and-the-retry-without-granting-new-authority)
+already supplies the invariants; it does not supply the requested wire formats.
+The local-only version 1 remains unchanged. Hosted use waits for a jointly
+pinned amendment and adversarial tests, even after this proposal is published.
+Lane A's 4 November reply agrees with these four answers, with amendments to
+1, 3 and 4. Its source inspection names unpublished Waitron
+`f84c0b38f474d7f8950037edb2d9e4870e1a27d3`; the Slice 5 code can still change
+in review. The following requirements incorporate that reply. They are not a
+Cloud runtime receipt or agreement to the whole emergency-read proposal.
+
+1. **Account-to-person authentication bridge.** No qualified bridge exists in
+   this agreement. A1188's staff path avoids an account mapping by authenticating
+   the person inside the locked copy and checking its own venue permission
+   (A1188, “Who decides what”). That does not resolve the owner's Cloud-account
+   handover path. Propose a separately signed, purpose-bound authorisation
+   carrying the account/venue/installation mapping, Waitron actor and permission,
+   operation UUID/fingerprint, M1/M2, scenario, membership term/digest, issuer,
+   audience, authentication method/time, issue/expiry times, unique nonce and
+   revocation generation. The receiving Waitron node must verify the venue
+   permission independently. The offer's `authorisedBy` must identify an active
+   person in the received copy whose role holds `node.promote`, following its
+   successor only when A1002 provides it. The inspected Slice 5 comparison
+   refuses otherwise with `handover.authoriser_not_permitted`. The hosted
+   bridge must preserve this local check and bind that same person; a Cloud
+   account alone cannot satisfy it. Cloud ownership, matching email and support access
+   supply none of it. Issuer trust, canonical bytes, maximum age, clock tolerance,
+   revocation delivery and one-use/replay storage are still unagreed; accept no
+   token until these are pinned and tested. Expiry/revocation stops new authority;
+   it must not erase an already recorded outcome or permit a second activation.
+2. **Hosted M1's provider field.** Keep `provider:null` for every local M1.
+   For hosted M1 propose a versioned resource reference, bound to the operation:
+   provider, provider-account scope, region/cell, immutable resource UID and
+   allocation generation, mapped to Cloud installation and M1 node ID. A reusable
+   name, hostname, pod label or a customer-entered free string is insufficient.
+   Cloud's authenticated resource inventory supplies the exact reference; the
+   freshly authenticated venue actor records the declaration that this resource
+   was stopped in the provider console and restart prevented. Keep the actor
+   and any separately authorised executor distinct. This is human evidence,
+   not automatic provider stop proof. The exact P6 resource kind and closed wire
+   schema remain unqualified; do not put this object into a local v1 envelope.
+3. **An unknown hosted M2's membership key.** A Cloud installation credential,
+   TLS certificate or account binding is not a Waitron membership trust anchor.
+   Do not add a blanket Cloud signing key or accept the unknown M2's own chart.
+   Where possible, enrol M2's public key through the venue's existing trusted
+   signed membership before the move. For a controlled move, the inspected
+   Slice 5 source also requires M1's own `nodes` row for M2 to contain the key
+   vouched for by that chart before it starts. A later hosted enrolment design
+   must name the authorised writer of that row and qualify both requirements;
+   a chart entry alone is insufficient. If M1 is already lost and never trusted
+   that key, keep the return restricted. A joint explicit recovery/enrolment
+   ceremony must bind the venue, M2 node/public-key fingerprint, operation and
+   current chart through independently verified venue authority. Its delivery,
+   key replacement and rollback rules still need A1275's design/qualification;
+   this proposal does not claim A1275 fixed. A1188's Cloud move answer may make
+   the box stop, as approved in section 13 item 15; it cannot make an unknown
+   membership signer trusted or authorise trading.
+4. **The same operation and fingerprint.** Yes as a correlation key: propose
+   retaining Waitron's UUID v4 and SHA-256 of its sorted-key JSON binding, without
+   adding Cloud fields to that local binding. A Cloud-supplied operation ID must
+   pass Waitron's `isOperationId` and its operation-directory constraints,
+   including the 64-character ceiling named in Lane A's reply. At the inspected
+   revision, `isOperationId` accepts only the canonical lowercase UUID v4
+   spelling; a shorter arbitrary folder name still fails. They are insufficient authority
+   and insufficient as the complete Cloud command fingerprint. Store a separate
+   versioned Cloud context containing the original binding/fingerprint, trusted
+   account/venue/installation mappings, actor authorisation, exact hosted
+   resource references/generations, selected copy/indicator and declaration
+   digest as applicable. Bind its canonical digest to the journal command.
+   Same operation and identical command inputs return the stored outcome;
+   any changed mapping, target, declaration or resource conflicts. A later step
+   uses its own command kind within the same operation, not a conflicting rewrite
+   of the earlier step. Retain the original actor-authority decision separately
+   from fresh transport proofs: reauthenticating a status or replay read must
+   not rewrite the admitted command or bypass current access checks.
+   The inspected Slice 5 offer also carries `backup.env` and `modules.json`
+   digests, key-ring versions and an image-migration digest outside that binding.
+   Its spare refuses a mismatch. Include these exact admitted offer values in
+   the separately versioned hosted context, with conflict and replay vectors,
+   without silently extending the local binding. Where those settings come
+   from the environment, both file digests are null; that is no evidence that
+   the effective settings match. The hosted amendment must specify how to
+   establish that compatibility before it can be used; this proposal chooses
+   no replacement settings check and permits no bypass of the local guards.
+   Membership key trust, the named node-row writer, settings compatibility and
+   the bridge remain prerequisites.
+   Canonical vectors for both digests and lost-reply/conflicting-input tests
+   must precede hosted implementation. A new hosted wire version is required
+   if the signed declaration needs extra fields; do not silently extend v1.
+
+### Agreement and implementation gates
+
+Waitron must reply to this exact proposal revision before the read becomes an
+agreed contract. Pin both repository revisions and shared request/signature,
+closed-response, URL and code-format vectors, including the independent code-read
+rate budget. Then qualify both adapters with
+same-venue/sibling isolation, post-wait revocation/key changes, stale out-of-order
+replies, code rotation during print, no persisted code, unavailable prices and
+facts, and old cached links after owner withdrawal. Explicitly test locked-copy,
+uncompleted-replacement and previous-box code refusals, completed replacement
+admission, each closed-reason precedence with unknown facts, and unset settings.
+Test clearing saved facts on disconnect/replacement/revocation and their absence
+from both archive and stream restores. Pin adversarial URL vectors for trailing
+dots, trusted-host aliases, IP/local names and noncanonical raw spellings; test
+that code responses cannot mix an older address with a newer code. Delete the critical guards
+in disposable copies and require their named behavioural checks to fail.
+
+Before hosted A1018 use, also qualify the copied-person permission check,
+the chart and local node-row key checks, rejected operation IDs, conflicting
+offer digests/versions and environment-backed settings with null file digests.
+Reconcile the inspected unpublished Slice 5 revision with its final reviewed
+revision before pinning those joint vectors.
+
+The display/card and code-read work cannot restore or activate a copy. Parts
+0 and 3–6 keep A1188 section 11's independent dependencies. The A1018 bridge,
+resource declaration and unknown-key return remain held until their separate
+joint formats and tests exist. No production price, payment collection, provider
+operation, certificate enablement, P6 build or deployment is authorised here.
 
 ## A951 G1 host/custody mapping response, 2026-11-02 (D560)
 
