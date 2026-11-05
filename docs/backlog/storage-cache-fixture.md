@@ -412,6 +412,20 @@ the service allocator's 32768–60999 range. An occupied admin candidate retries
 within 20 selections. The original admin assertions, all 101
 competing listeners, single-child checks and deadlines remain.
 
+D584 also bounds the exhaustion fixture's first port below 32568. The retained
+101 listeners end at most at 32667, leaving another 100 ports for the parent's
+unchanged range check. Forcing the original upper-edge start of 32667 reproduces
+the parent failure after its native child passes; a start of 32567 passes.
+The historical draw in [merge 11840894's root job](https://github.com/waitron-io/waitron-cloud/actions/runs/42036627987/job/127276526890)
+was not printed and remains unknown. This repairs the proved failing range,
+without claiming that exact historical value. Future range failures print both
+the actual candidate and the first attempted port. On a retry, that first attempt
+is not necessarily the retained range’s start. Every range, owner and cleanup predicate,
+all 101 listeners and native fallback checks stay in place.
+The parent observes the first 101 created admin servers across retries, so a
+late collision can leave later retained listeners unobserved. The narrowed
+fixture bound is safe for every draw; this observation limit remains open.
+
 These controls identify their deliberately selected competing listener.
 They do not identify historical CI listeners or explain every native startup
 failure. In particular,
