@@ -54,6 +54,13 @@ test('relay refuses untrusted certificates and authentication failure before DAT
  }finally{await smtp.close();await untrusted.close();}
 });
 
+test('relay refuses a trusted TLS server that omits authentication',async()=>{
+ const smtp=await tlsSmtp({disabledCommands:['AUTH'],authOptional:true});try{
+  assert.deepEqual(await createSesRelaySender(config(),{...smtpConfig,port:smtp.port},{ca:smtp.cert})(content(),admission,new AbortController().signal),{outcome:'refused'});
+  assert.equal(smtp.captured.length,0);
+ }finally{await smtp.close();}
+});
+
 test('relay deadlines and cancellation destroy the owned stalled socket',async()=>{
  const create=createSesRelaySender;
  for(const external of [false,true]){

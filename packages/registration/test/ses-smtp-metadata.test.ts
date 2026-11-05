@@ -44,7 +44,7 @@ test('account SES retries keep the original RFC ID and emit only fresh opaque at
 });
 
 test('direct SES hosts cannot bypass qualified handoff and mismatched resource or sender bindings refuse construction',()=>{
- for(const host of ['email-smtp.eu-north-1.amazonaws.com','email-smtp.us-east-1.amazonaws.com','EMAIL-SMTP.EU-WEST-3.AMAZONAWS.COM','email-smtp-fips.us-gov-west-1.amazonaws.com','email-smtp.eu-north-1.api.aws','email-smtp-fips.us-gov-west-1.api.aws']){
+ for(const host of ['email-smtp.eu-north-1.amazonaws.com','email-smtp.us-east-1.amazonaws.com','EMAIL-SMTP.EU-WEST-3.AMAZONAWS.COM','email-smtp-fips.us-gov-west-1.amazonaws.com','email-smtp.eu-north-1.api.aws','email-smtp-fips.us-gov-west-1.api.aws','vpce-0abc-1.email-smtp.eu-north-1.vpce.amazonaws.com']){
   assert.throws(()=>createSmtpAccountMailer({...smtpConfig,host}),/Invalid production mail configuration/);
  }
  const trusted=config();
@@ -60,6 +60,15 @@ test('direct SES hosts cannot bypass qualified handoff and mismatched resource o
 
 test('generic SMTP hostnames outside the SES service retain their explicit transport',()=>{
  assert.doesNotThrow(()=>createSmtpAccountMailer({...smtpConfig,host:'email-smtp.example.test'}));
+ assert.doesNotThrow(()=>createSmtpAccountMailer({...smtpConfig,host:'mail.email-smtp.example.test'}));
+});
+
+test('account mail refuses a trusted TLS server that omits authentication',async()=>{
+ const smtp=await tlsSmtp({disabledCommands:['AUTH'],authOptional:true});try{
+  const mailer=createSmtpAccountMailer({...smtpConfig,port:smtp.port},{ca:smtp.cert},config());
+  await assert.rejects(mailer.sendPasswordChanged({email:'owner@example.test'},{deliveryId:randomUUID(),signal:new AbortController().signal,ses:{attemptTag:'A'.repeat(43),configurationSet:'transactional'}}),{code:'delivery_configuration'});
+  assert.equal(smtp.captured.length,0);
+ }finally{await smtp.close();}
 });
 
 test('generic SMTP cannot silently discard an SES handoff',async()=>{

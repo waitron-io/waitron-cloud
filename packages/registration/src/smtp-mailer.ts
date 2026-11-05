@@ -16,7 +16,7 @@ export interface SmtpAccountMailConfig {
 const hostname = (value: string) => typeof value === 'string' && value.length <= 253
   && value.split('.').every(label => /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?$/.test(label));
 
-/** Explicit TLS relay configuration. A custom CA adds trust; it never disables certificate validation. */
+/** Explicit TLS relay configuration. A custom CA never disables certificate validation. */
 export function createSmtpDelivery(config:SmtpAccountMailConfig,trust:{ca?:string|Buffer}={},ses?:SesFeedbackConfig,
  purpose:MailPurpose='cloud-account-email',failure:(error:unknown)=>Error=classify){
   let origin: URL;
@@ -37,7 +37,7 @@ export function createSmtpDelivery(config:SmtpAccountMailConfig,trust:{ca?:strin
       if(!isValidatedSesFeedbackConfig(ses)||!ses.purposes.includes(purpose)
         ||(!loopback&&(config.host!==ses.smtpHost||port!==465))
         ||(identity!==config.from&&identity!==config.from.split('@')[1]))throw new Error();
-    }else if(/^email-smtp(?:-fips)?\.[a-z0-9-]+\.(?:amazonaws\.com(?:\.cn)?|api\.aws)$/i.test(config.host))throw new Error();
+    }else if(/(?:^|\.)email-smtp(?:-fips)?\.[a-z0-9-]+\.(?:vpce\.)?(?:amazonaws\.com(?:\.cn)?|api\.aws)$/i.test(config.host))throw new Error();
   } catch { throw new Error('Invalid production mail configuration'); }
   // Capture configuration so a caller cannot change the destination or credential during a send.
   const {host, user, password, from} = config;
@@ -54,7 +54,7 @@ export function createSmtpDelivery(config:SmtpAccountMailConfig,trust:{ca?:strin
     let rejectAbort!: (error: EmailDeliveryError) => void;
     const abortPromise = new Promise<never>((_, reject) => {rejectAbort = reject;});
     const abort = () => {cancelled = true; socket?.destroy(); rejectAbort(new EmailDeliveryError('delivery_timeout'));};
-    const transport = nodemailer.createTransport({host, port, secure: true, auth: {user, pass: password},
+    const transport = nodemailer.createTransport({host, port, secure: true, forceAuth:true, auth: {user, pass: password},
       logger: false, debug: false, transactionLog: false, disableFileAccess: true, disableUrlAccess: true,
       connectionTimeout: timeout, greetingTimeout: timeout, socketTimeout: timeout,
       getSocket(_options, callback) {

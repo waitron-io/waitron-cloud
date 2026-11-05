@@ -63,7 +63,8 @@ no path, credentials, query or fragment. It supplies the signup and reset links;
 configure it only after the corresponding public routes exist. Port 465 uses TLS
 from the start of the connection. A STARTTLS-only port such as 587 is unsupported.
 Certificate trust uses Node's certificate store; custom deployments can add a trusted
-CA through `NODE_EXTRA_CA_CERTS`. The adapter always verifies the relay certificate.
+CA through `NODE_EXTRA_CA_CERTS`. The adapter always verifies the relay certificate and completes authentication
+before sending message data; a trusted certificate alone is not enough.
 
 Run `pnpm mail:worker` continuously or `pnpm mail:worker --once` for one due message.
 `pnpm mail:status` reads queue counts using only `DATABASE_URL`. Provider failures
@@ -168,11 +169,13 @@ For SES, select `CLOUD_MAIL_PROVIDER=ses` with `CLOUD_MAIL_TRANSPORT=smtp` and s
 `CLOUD_SES_FEEDBACK_CONFIG_FILE`, `CLOUD_MAIL_RECIPIENT_KEYS` and
 `CLOUD_MAIL_RECIPIENT_ACTIVE_KEY_ID`. The file holds the validator's resource
 bindings, not policy or credentials, and must be a regular file of at most 64 KiB.
+Named pipes refuse without waiting for a writer.
 The trusted policy independently qualifies every purpose and SMTP/resource
 binding. The sender must match its qualified SES identity; production uses its
 exact regional host and port 465. Only local TLS fixtures may inject a loopback
-port and test CA. Direct SES-host configuration without the qualified path
-refuses. Generic SMTP fixtures and local Mailpit keep their existing modes.
+port and test CA. Recognised public and VPC SES endpoints refuse generic SMTP
+selection. Use the qualified SES setting for any private alias you maintain.
+Generic SMTP fixtures and local Mailpit keep their existing modes.
 Spain's default policy has no qualified flows, so these settings cannot enable
 SES delivery today. Status remains credential-free. Production enablement still
 requires separate qualification.

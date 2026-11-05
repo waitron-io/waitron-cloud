@@ -466,7 +466,9 @@ replacement claim. The internal standalone relay adapter and separate receipt
 settlement keep the local-proof worker's outcome contract and startup gate.
 The opt-in account loader reads a bounded binding file and recipient keys, but
 Spain's trusted policy still has no qualified email flows. A supplied file cannot
-qualify itself; direct SES SMTP-host selection without admission refuses.
+qualify itself; recognised public and VPC SES endpoints refuse unqualified SMTP.
+TLS transport requires authentication even when AUTH is not advertised; a named
+pipe configuration refuses without blocking startup.
 Trusted queue consumption, audited removal and production enablement remain future tasks. Task 8 must qualify any additional event types;
 `Rendering Failure` currently refuses. It must also reconcile historical Paris-only
 supplier wording and retired enablement dates before any live qualification. AWS resources,

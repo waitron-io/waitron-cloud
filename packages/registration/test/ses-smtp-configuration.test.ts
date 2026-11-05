@@ -3,6 +3,7 @@ import {test} from 'node:test';
 import {mkdtempSync,writeFileSync,rmSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
+import {execFileSync,spawnSync} from 'node:child_process';
 import * as configured from '../src/configured-mailer.ts';
 import {feedbackFixture} from './fixtures/ses-feedback.ts';
 
@@ -45,4 +46,19 @@ test('SES provider selection cannot fall back to local or generic SMTP',()=>{
   }
   process.env={CLOUD_MAIL_PROVIDER:'unknown'};assert.throws(()=>configured.configuredAccountMailer(),/Invalid email transport configuration/);
  }finally{process.env=original;}
+});
+
+test('a named-pipe configuration refuses without blocking worker startup',()=>{
+ const directory=mkdtempSync(join(tmpdir(),'ses-config-pipe-')),path=join(directory,'config');
+ try{
+  execFileSync('mkfifo',[path]);
+  const result=spawnSync(process.execPath,['--input-type=module','-e',`
+   import {configuredSesHandoff} from './src/configured-mailer.ts';
+   import {feedbackFixture} from './test/fixtures/ses-feedback.ts';
+   try{configuredSesHandoff(feedbackFixture().policy);process.exitCode=2;}
+   catch(error){if(error.message!=='Invalid SES mail configuration')process.exitCode=3;}
+  `],{timeout:2000,killSignal:'SIGKILL',encoding:'utf8',env:{...process.env,CLOUD_MAIL_TRANSPORT:'smtp',CLOUD_MAIL_PROVIDER:'ses',CLOUD_SES_FEEDBACK_CONFIG_FILE:path,CLOUD_MAIL_RECIPIENT_ACTIVE_KEY_ID:'v1',CLOUD_MAIL_RECIPIENT_KEYS:JSON.stringify({v1:'11'.repeat(32)})}});
+  assert.equal(result.status,0,'configuration pipe blocked or failed without its fixed refusal');
+  assert.equal(result.stdout,'');assert.equal(result.stderr,'');
+ }finally{rmSync(directory,{recursive:true,force:true});}
 });

@@ -1,6 +1,6 @@
 import { createLocalAccountMailer } from './local-mailer.ts';
 import { createSmtpAccountMailer } from './smtp-mailer.ts';
-import {openSync,readSync,closeSync,fstatSync} from 'node:fs';
+import {openSync,readSync,closeSync,fstatSync,constants} from 'node:fs';
 import {validateSesFeedbackConfig,type SesFeedbackPolicy} from './ses-feedback-config.ts';
 import {spainCountryPolicy} from './country-policy.ts';
 import {RelayKeys,type RelayKeyConfig} from './relay-payload.ts';
@@ -14,7 +14,7 @@ export function configuredSesHandoff(policy:SesFeedbackPolicy=spainCountryPolicy
  try{
   if(env.CLOUD_MAIL_TRANSPORT!=='smtp'||!env.CLOUD_SES_FEEDBACK_CONFIG_FILE
    ||!env.CLOUD_MAIL_RECIPIENT_KEYS||!env.CLOUD_MAIL_RECIPIENT_ACTIVE_KEY_ID)throw Error();
-  fd=openSync(env.CLOUD_SES_FEEDBACK_CONFIG_FILE,'r');
+  fd=openSync(env.CLOUD_SES_FEEDBACK_CONFIG_FILE,constants.O_RDONLY|constants.O_NONBLOCK);
   const stat=fstatSync(fd);if(!stat.isFile()||stat.size>65536)throw Error();
   const bytes=Buffer.alloc(65537),length=readSync(fd,bytes,0,bytes.length,0);if(length>65536)throw Error();
   const config=validateSesFeedbackConfig(policy,JSON.parse(bytes.subarray(0,length).toString('utf8')));
