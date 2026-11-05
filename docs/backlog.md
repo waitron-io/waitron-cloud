@@ -1487,6 +1487,9 @@ implementation or production evidence.
   `deploy/kubernetes/proof/`. The guide is a reviewed root input. Their fixed
   unit-test and generated-Lambda readers preserve the existing registered test
   boundaries; the separate cost-input renewal remains independently owned.
+  The executable output fixture gives its synthetic PR an explicit event and
+  call inputs, including when its parent is a full nightly invocation. Its
+  original root, compiler, package, receipt and forced-full assertions remain.
   Ownership review does not complete global root precision or establish a time
   saving. Unresolved package readers, including the separate #938 fix, remain
   outside this slice.
