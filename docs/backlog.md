@@ -18,7 +18,7 @@ generated timestamp and no external clock request. This does not qualify product
 time sources.
 
 The gateway scenario reads the release's authenticated device profiles and themes.
-It requires nonempty profiles without retired canvas identifiers, a theme list and
+It requires nonempty profiles without retired canvas identifiers, a theme list and <!-- D577 scratch A -->
 its `inUse` field. The private peer carries the real theme handler and its CSS token
 files. Authentication refusals, logout, reconnect, nine staff requests, six public
 requests, isolation and independent socket and byte accounting remain. Historical

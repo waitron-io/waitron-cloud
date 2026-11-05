@@ -30,3 +30,5 @@ try {
   console.error(error.message);
   process.exitCode = 1;
 }
+
+// D577 scratch A: independent executable input.
