@@ -1,0 +1,917 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Description": "D570 setup prerequisite. Admission CLOSED; not qualified for owner up.",
+  "Parameters": {
+    "ExistingOidcProviderArn": {
+      "Type": "String",
+      "Default": "D570_OIDC_ARN"
+    },
+    "ImageId": {
+      "Type": "AWS::EC2::Image::Id",
+      "Description": "Immutable official ARM image, still requires live bootstrap qualification"
+    }
+  },
+  "Conditions": {
+    "D570Scope": {
+      "Fn::And": [
+        {
+          "Fn::Equals": [
+            {
+              "Ref": "AWS::AccountId"
+            },
+            "462991287391"
+          ]
+        },
+        {
+          "Fn::Equals": [
+            {
+              "Ref": "AWS::Region"
+            },
+            "eu-south-2"
+          ]
+        }
+      ]
+    },
+    "CreateOidc": {
+      "Fn::And": [
+        {
+          "Condition": "D570Scope"
+        },
+        {
+          "Fn::Equals": [
+            {
+              "Ref": "ExistingOidcProviderArn"
+            },
+            ""
+          ]
+        }
+      ]
+    }
+  },
+  "Resources": {
+    "Vpc": {
+      "Type": "AWS::EC2::VPC",
+      "Condition": "D570Scope",
+      "Properties": {
+        "CidrBlock": "10.157.0.0/24",
+        "EnableDnsSupport": true,
+        "EnableDnsHostnames": true,
+        "Tags": [
+          {
+            "Key": "Proof",
+            "Value": "D570"
+          }
+        ]
+      }
+    },
+    "Subnet": {
+      "Type": "AWS::EC2::Subnet",
+      "Condition": "D570Scope",
+      "Properties": {
+        "VpcId": {
+          "Ref": "Vpc"
+        },
+        "CidrBlock": "10.157.0.0/25",
+        "MapPublicIpOnLaunch": false
+      }
+    },
+    "RouteTable": {
+      "Type": "AWS::EC2::RouteTable",
+      "Condition": "D570Scope",
+      "Properties": {
+        "VpcId": {
+          "Ref": "Vpc"
+        }
+      }
+    },
+    "SubnetRouteTable": {
+      "Type": "AWS::EC2::SubnetRouteTableAssociation",
+      "Condition": "D570Scope",
+      "Properties": {
+        "SubnetId": {
+          "Ref": "Subnet"
+        },
+        "RouteTableId": {
+          "Ref": "RouteTable"
+        }
+      }
+    },
+    "SecurityGroup": {
+      "Type": "AWS::EC2::SecurityGroup",
+      "Condition": "D570Scope",
+      "Properties": {
+        "VpcId": {
+          "Ref": "Vpc"
+        },
+        "GroupDescription": "D570 private proof, no ingress, S3 HTTPS only",
+        "SecurityGroupIngress": [],
+        "SecurityGroupEgress": [
+          {
+            "IpProtocol": "tcp",
+            "FromPort": 443,
+            "ToPort": 443,
+            "DestinationPrefixListId": "D570_S3_PREFIX_LIST"
+          }
+        ]
+      }
+    },
+    "Bucket": {
+      "Type": "AWS::S3::Bucket",
+      "Condition": "D570Scope",
+      "Properties": {
+        "PublicAccessBlockConfiguration": {
+          "BlockPublicAcls": true,
+          "BlockPublicPolicy": true,
+          "IgnorePublicAcls": true,
+          "RestrictPublicBuckets": true
+        },
+        "OwnershipControls": {
+          "Rules": [
+            {
+              "ObjectOwnership": "BucketOwnerEnforced"
+            }
+          ]
+        },
+        "BucketEncryption": {
+          "ServerSideEncryptionConfiguration": [
+            {
+              "ServerSideEncryptionByDefault": {
+                "SSEAlgorithm": "AES256"
+              }
+            }
+          ]
+        },
+        "LifecycleConfiguration": {
+          "Rules": [
+            {
+              "Id": "Payload",
+              "Status": "Enabled",
+              "Prefix": "d570/payload/",
+              "ExpirationInDays": 1,
+              "AbortIncompleteMultipartUpload": {
+                "DaysAfterInitiation": 1
+              }
+            },
+            {
+              "Id": "Receipts",
+              "Status": "Enabled",
+              "Prefix": "d570/receipt/",
+              "ExpirationInDays": 30
+            }
+          ]
+        }
+      }
+    },
+    "BucketPolicy": {
+      "Type": "AWS::S3::BucketPolicy",
+      "Condition": "D570Scope",
+      "Properties": {
+        "Bucket": {
+          "Ref": "Bucket"
+        },
+        "PolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Sid": "TlsOnly",
+              "Effect": "Deny",
+              "Action": "s3:*",
+              "Resource": [
+                {
+                  "Fn::GetAtt": [
+                    "Bucket",
+                    "Arn"
+                  ]
+                },
+                {
+                  "Fn::Sub": "${Bucket.Arn}/*"
+                }
+              ],
+              "Condition": {
+                "Bool": {
+                  "aws:SecureTransport": "false"
+                }
+              },
+              "Principal": "*"
+            },
+            {
+              "Sid": "ConditionalLedger",
+              "Effect": "Deny",
+              "Action": "s3:PutObject",
+              "Resource": {
+                "Fn::Sub": "${Bucket.Arn}/d570/ledger/*"
+              },
+              "Condition": {
+                "Null": {
+                  "s3:if-match": "true",
+                  "s3:if-none-match": "true"
+                },
+                "Bool": {
+                  "s3:ObjectCreationOperation": "true"
+                }
+              },
+              "Principal": "*"
+            },
+            {
+              "Sid": "CreateOnlyEvidence",
+              "Effect": "Deny",
+              "Action": "s3:PutObject",
+              "Resource": [
+                {
+                  "Fn::Sub": "${Bucket.Arn}/d570/payload/*"
+                },
+                {
+                  "Fn::Sub": "${Bucket.Arn}/d570/receipt/*"
+                }
+              ],
+              "Condition": {
+                "Null": {
+                  "s3:if-none-match": "true"
+                },
+                "Bool": {
+                  "s3:ObjectCreationOperation": "true"
+                }
+              },
+              "Principal": "*"
+            }
+          ]
+        }
+      }
+    },
+    "S3Endpoint": {
+      "Type": "AWS::EC2::VPCEndpoint",
+      "Condition": "D570Scope",
+      "Properties": {
+        "VpcId": {
+          "Ref": "Vpc"
+        },
+        "VpcEndpointType": "Gateway",
+        "ServiceName": "com.amazonaws.eu-south-2.s3",
+        "RouteTableIds": [
+          {
+            "Ref": "RouteTable"
+          }
+        ],
+        "PolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Sid": "ProofObjects",
+              "Effect": "Allow",
+              "Action": [
+                "s3:GetObject",
+                "s3:PutObject",
+                "s3:AbortMultipartUpload",
+                "s3:ListMultipartUploadParts"
+              ],
+              "Resource": {
+                "Fn::Sub": "${Bucket.Arn}/d570/*"
+              },
+              "Principal": "*"
+            }
+          ]
+        }
+      }
+    },
+    "OidcProvider": {
+      "Type": "AWS::IAM::OIDCProvider",
+      "Condition": "CreateOidc",
+      "Properties": {
+        "Url": "https://token.actions.githubusercontent.com",
+        "ClientIdList": [
+          "sts.amazonaws.com"
+        ]
+      }
+    },
+    "LauncherRole": {
+      "Type": "AWS::IAM::Role",
+      "Condition": "D570Scope",
+      "Properties": {
+        "MaxSessionDuration": 8100,
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": {
+                "Federated": {
+                  "Fn::If": [
+                    "CreateOidc",
+                    {
+                      "Ref": "OidcProvider"
+                    },
+                    {
+                      "Ref": "ExistingOidcProviderArn"
+                    }
+                  ]
+                }
+              },
+              "Action": "sts:AssumeRoleWithWebIdentity",
+              "Condition": {
+                "StringEquals": {
+                  "token.actions.githubusercontent.com:aud": "sts.amazonaws.com",
+                  "token.actions.githubusercontent.com:sub": "D570_SUBJECT"
+                },
+                "DateLessThan": {
+                  "aws:CurrentTime": "2027-02-28T23:59:00Z"
+                }
+              }
+            }
+          ]
+        },
+        "Policies": [
+          {
+            "PolicyName": "D570Runtime",
+            "PolicyDocument": {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Sid": "UnqualifiedLaunch",
+                  "Effect": "Deny",
+                  "Action": "ec2:RunInstances",
+                  "Resource": "*"
+                },
+                {
+                  "Sid": "FixedTemplateResources",
+                  "Effect": "Allow",
+                  "Action": "ec2:RunInstances",
+                  "Resource": [
+                    {
+                      "Fn::Sub": "arn:aws:ec2:eu-south-2::image/${ImageId}"
+                    },
+                    {
+                      "Fn::Sub": "arn:aws:ec2:eu-south-2:462991287391:subnet/${Subnet}"
+                    },
+                    {
+                      "Fn::Sub": "arn:aws:ec2:eu-south-2:462991287391:security-group/${SecurityGroup}"
+                    },
+                    {
+                      "Fn::Sub": "arn:aws:ec2:eu-south-2:462991287391:launch-template/${LaunchTemplate}"
+                    }
+                  ],
+                  "Condition": {
+                    "StringEquals": {
+                      "aws:RequestedRegion": "eu-south-2"
+                    },
+                    "ArnEquals": {
+                      "ec2:LaunchTemplate": {
+                        "Fn::Sub": "arn:aws:ec2:eu-south-2:462991287391:launch-template/${LaunchTemplate}"
+                      }
+                    },
+                    "Bool": {
+                      "ec2:IsLaunchTemplateResource": "true"
+                    },
+                    "DateLessThan": {
+                      "aws:CurrentTime": "2027-02-28T23:59:00Z"
+                    }
+                  }
+                },
+                {
+                  "Sid": "TaggedRun",
+                  "Effect": "Allow",
+                  "Action": "ec2:RunInstances",
+                  "Resource": [
+                    "arn:aws:ec2:eu-south-2:462991287391:instance/*",
+                    "arn:aws:ec2:eu-south-2:462991287391:volume/*"
+                  ],
+                  "Condition": {
+                    "StringEquals": {
+                      "aws:RequestedRegion": "eu-south-2",
+                      "aws:RequestTag/Proof": "D570",
+                      "aws:RequestTag/Stack": {
+                        "Ref": "AWS::StackId"
+                      },
+                      "ec2:InstanceType": "m7g.2xlarge"
+                    },
+                    "ArnEquals": {
+                      "ec2:LaunchTemplate": {
+                        "Fn::Sub": "arn:aws:ec2:eu-south-2:462991287391:launch-template/${LaunchTemplate}"
+                      }
+                    },
+                    "Null": {
+                      "aws:RequestTag/Run": "false",
+                      "aws:RequestTag/ExpiresAt": "false"
+                    },
+                    "DateLessThan": {
+                      "aws:CurrentTime": "2027-02-28T23:59:00Z"
+                    }
+                  }
+                },
+                {
+                  "Sid": "LaunchTags",
+                  "Effect": "Allow",
+                  "Action": "ec2:CreateTags",
+                  "Resource": [
+                    "arn:aws:ec2:eu-south-2:462991287391:instance/*",
+                    "arn:aws:ec2:eu-south-2:462991287391:volume/*"
+                  ],
+                  "Condition": {
+                    "StringEquals": {
+                      "aws:RequestedRegion": "eu-south-2",
+                      "ec2:CreateAction": "RunInstances",
+                      "aws:RequestTag/Proof": "D570",
+                      "aws:RequestTag/Stack": {
+                        "Ref": "AWS::StackId"
+                      }
+                    },
+                    "DateLessThan": {
+                      "aws:CurrentTime": "2027-02-28T23:59:00Z"
+                    }
+                  }
+                },
+                {
+                  "Sid": "RegionalInspection",
+                  "Effect": "Allow",
+                  "Action": [
+                    "ec2:DescribeInstances",
+                    "ec2:DescribeVolumes",
+                    "ec2:DescribeNetworkInterfaces",
+                    "ec2:DescribeLaunchTemplateVersions",
+                    "ec2:DescribeImages",
+                    "ec2:DescribeSubnets",
+                    "ec2:DescribeSecurityGroups",
+                    "ec2:DescribeRouteTables",
+                    "ec2:DescribeVpcEndpoints"
+                  ],
+                  "Resource": "*",
+                  "Condition": {
+                    "StringEquals": {
+                      "aws:RequestedRegion": "eu-south-2"
+                    },
+                    "DateLessThan": {
+                      "aws:CurrentTime": "2027-02-28T23:59:00Z"
+                    }
+                  }
+                },
+                {
+                  "Sid": "OwnedShutdownRead",
+                  "Effect": "Allow",
+                  "Action": "ec2:DescribeInstanceAttribute",
+                  "Resource": "arn:aws:ec2:eu-south-2:462991287391:instance/*",
+                  "Condition": {
+                    "StringEquals": {
+                      "aws:RequestedRegion": "eu-south-2",
+                      "ec2:ResourceTag/Proof": "D570",
+                      "ec2:ResourceTag/Stack": {
+                        "Ref": "AWS::StackId"
+                      }
+                    },
+                    "DateLessThan": {
+                      "aws:CurrentTime": "2027-02-28T23:59:00Z"
+                    }
+                  }
+                },
+                {
+                  "Sid": "OwnedCleanup",
+                  "Effect": "Allow",
+                  "Action": [
+                    "ec2:TerminateInstances",
+                    "ec2:DeleteVolume"
+                  ],
+                  "Resource": [
+                    "arn:aws:ec2:eu-south-2:462991287391:instance/*",
+                    "arn:aws:ec2:eu-south-2:462991287391:volume/*"
+                  ],
+                  "Condition": {
+                    "StringEquals": {
+                      "aws:RequestedRegion": "eu-south-2",
+                      "ec2:ResourceTag/Proof": "D570",
+                      "ec2:ResourceTag/Stack": {
+                        "Ref": "AWS::StackId"
+                      }
+                    },
+                    "DateLessThan": {
+                      "aws:CurrentTime": "2027-02-28T23:59:00Z"
+                    }
+                  }
+                },
+                {
+                  "Sid": "ReadObjects",
+                  "Effect": "Allow",
+                  "Action": "s3:GetObject",
+                  "Resource": [
+                    {
+                      "Fn::Sub": "${Bucket.Arn}/d570/ledger/*"
+                    },
+                    {
+                      "Fn::Sub": "${Bucket.Arn}/d570/health/*"
+                    },
+                    {
+                      "Fn::Sub": "${Bucket.Arn}/d570/payload/*"
+                    },
+                    {
+                      "Fn::Sub": "${Bucket.Arn}/d570/receipt/*"
+                    }
+                  ],
+                  "Condition": {
+                    "DateLessThan": {
+                      "aws:CurrentTime": "2027-02-28T23:59:00Z"
+                    }
+                  }
+                },
+                {
+                  "Sid": "WriteObjects",
+                  "Effect": "Allow",
+                  "Action": "s3:PutObject",
+                  "Resource": [
+                    {
+                      "Fn::Sub": "${Bucket.Arn}/d570/ledger/*"
+                    },
+                    {
+                      "Fn::Sub": "${Bucket.Arn}/d570/payload/*"
+                    },
+                    {
+                      "Fn::Sub": "${Bucket.Arn}/d570/receipt/*"
+                    }
+                  ],
+                  "Condition": {
+                    "DateLessThan": {
+                      "aws:CurrentTime": "2027-02-28T23:59:00Z"
+                    }
+                  }
+                },
+                {
+                  "Sid": "ListPrefixes",
+                  "Effect": "Allow",
+                  "Action": "s3:ListBucket",
+                  "Resource": {
+                    "Fn::GetAtt": [
+                      "Bucket",
+                      "Arn"
+                    ]
+                  },
+                  "Condition": {
+                    "StringLike": {
+                      "s3:prefix": [
+                        "d570/ledger/*",
+                        "d570/health/*",
+                        "d570/payload/*",
+                        "d570/receipt/*"
+                      ]
+                    },
+                    "DateLessThan": {
+                      "aws:CurrentTime": "2027-02-28T23:59:00Z"
+                    }
+                  }
+                },
+                {
+                  "Sid": "PayloadMultipart",
+                  "Effect": "Allow",
+                  "Action": [
+                    "s3:AbortMultipartUpload",
+                    "s3:ListMultipartUploadParts"
+                  ],
+                  "Resource": {
+                    "Fn::Sub": "${Bucket.Arn}/d570/payload/*"
+                  },
+                  "Condition": {
+                    "DateLessThan": {
+                      "aws:CurrentTime": "2027-02-28T23:59:00Z"
+                    }
+                  }
+                },
+                {
+                  "Sid": "TerminationAudit",
+                  "Effect": "Allow",
+                  "Action": "cloudtrail:LookupEvents",
+                  "Resource": "*",
+                  "Condition": {
+                    "StringEquals": {
+                      "aws:RequestedRegion": "eu-south-2"
+                    },
+                    "DateLessThan": {
+                      "aws:CurrentTime": "2027-02-28T23:59:00Z"
+                    }
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    "ExpiryLog": {
+      "Type": "AWS::Logs::LogGroup",
+      "Condition": "D570Scope",
+      "Properties": {
+        "RetentionInDays": 1
+      }
+    },
+    "ExpiryRole": {
+      "Type": "AWS::IAM::Role",
+      "Condition": "D570Scope",
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": {
+                "Service": "lambda.amazonaws.com"
+              },
+              "Action": "sts:AssumeRole"
+            }
+          ]
+        },
+        "Policies": [
+          {
+            "PolicyName": "D570Expiry",
+            "PolicyDocument": {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Sid": "FindOwned",
+                  "Effect": "Allow",
+                  "Action": [
+                    "ec2:DescribeInstances",
+                    "ec2:DescribeVolumes"
+                  ],
+                  "Resource": "*",
+                  "Condition": {
+                    "StringEquals": {
+                      "aws:RequestedRegion": "eu-south-2"
+                    }
+                  }
+                },
+                {
+                  "Sid": "TerminateOwned",
+                  "Effect": "Allow",
+                  "Action": [
+                    "ec2:TerminateInstances",
+                    "ec2:DeleteVolume"
+                  ],
+                  "Resource": [
+                    "arn:aws:ec2:eu-south-2:462991287391:instance/*",
+                    "arn:aws:ec2:eu-south-2:462991287391:volume/*"
+                  ],
+                  "Condition": {
+                    "StringEquals": {
+                      "aws:RequestedRegion": "eu-south-2",
+                      "ec2:ResourceTag/Proof": "D570",
+                      "ec2:ResourceTag/Stack": {
+                        "Ref": "AWS::StackId"
+                      }
+                    }
+                  }
+                },
+                {
+                  "Sid": "WriteHealth",
+                  "Effect": "Allow",
+                  "Action": "s3:PutObject",
+                  "Resource": {
+                    "Fn::Sub": "${Bucket.Arn}/d570/health/reaper.json"
+                  }
+                },
+                {
+                  "Sid": "ExpiryLogs",
+                  "Effect": "Allow",
+                  "Action": [
+                    "logs:CreateLogStream",
+                    "logs:PutLogEvents"
+                  ],
+                  "Resource": {
+                    "Fn::GetAtt": [
+                      "ExpiryLog",
+                      "Arn"
+                    ]
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    "ExpiryFunction": {
+      "Type": "AWS::Lambda::Function",
+      "Condition": "D570Scope",
+      "Properties": {
+        "Runtime": "nodejs24.x",
+        "Handler": "index.handler",
+        "Architectures": [
+          "arm64"
+        ],
+        "MemorySize": 128,
+        "Timeout": 120,
+        "ReservedConcurrentExecutions": 1,
+        "Role": {
+          "Fn::GetAtt": [
+            "ExpiryRole",
+            "Arn"
+          ]
+        },
+        "LoggingConfig": {
+          "LogGroup": {
+            "Ref": "ExpiryLog"
+          }
+        },
+        "Environment": {
+          "Variables": {
+            "ACCOUNT": "462991287391",
+            "STACK_ID": {
+              "Ref": "AWS::StackId"
+            },
+            "BUCKET": {
+              "Ref": "Bucket"
+            }
+          }
+        },
+        "Code": {
+          "ZipFile": "D570_EXPIRY_SOURCE"
+        }
+      }
+    },
+    "ExpiryRule": {
+      "Type": "AWS::Events::Rule",
+      "Condition": "D570Scope",
+      "Properties": {
+        "State": "DISABLED",
+        "ScheduleExpression": "rate(1 minute)",
+        "Targets": [
+          {
+            "Id": "D570Expiry",
+            "Arn": {
+              "Fn::GetAtt": [
+                "ExpiryFunction",
+                "Arn"
+              ]
+            },
+            "RetryPolicy": {
+              "MaximumEventAgeInSeconds": 60,
+              "MaximumRetryAttempts": 0
+            }
+          }
+        ]
+      }
+    },
+    "ExpiryPermission": {
+      "Type": "AWS::Lambda::Permission",
+      "Condition": "D570Scope",
+      "Properties": {
+        "FunctionName": {
+          "Ref": "ExpiryFunction"
+        },
+        "Action": "lambda:InvokeFunction",
+        "Principal": "events.amazonaws.com",
+        "SourceArn": {
+          "Fn::GetAtt": [
+            "ExpiryRule",
+            "Arn"
+          ]
+        },
+        "SourceAccount": "462991287391"
+      }
+    },
+    "LaunchTemplate": {
+      "Type": "AWS::EC2::LaunchTemplate",
+      "Condition": "D570Scope",
+      "Properties": {
+        "LaunchTemplateData": {
+          "ImageId": {
+            "Ref": "ImageId"
+          },
+          "InstanceType": "m7g.2xlarge",
+          "InstanceInitiatedShutdownBehavior": "terminate",
+          "MetadataOptions": {
+            "HttpEndpoint": "enabled",
+            "HttpTokens": "required",
+            "HttpPutResponseHopLimit": 1,
+            "InstanceMetadataTags": "disabled"
+          },
+          "NetworkInterfaces": [
+            {
+              "DeviceIndex": 0,
+              "AssociatePublicIpAddress": false,
+              "DeleteOnTermination": true,
+              "SubnetId": {
+                "Ref": "Subnet"
+              },
+              "Groups": [
+                {
+                  "Ref": "SecurityGroup"
+                }
+              ]
+            }
+          ],
+          "BlockDeviceMappings": [
+            {
+              "DeviceName": "/dev/xvda",
+              "Ebs": {
+                "Encrypted": true,
+                "DeleteOnTermination": true,
+                "VolumeSize": 64,
+                "VolumeType": "gp3",
+                "Iops": 3000,
+                "Throughput": 125
+              }
+            }
+          ]
+        }
+      }
+    }
+  },
+  "Outputs": {
+    "StackId": {
+      "Condition": "D570Scope",
+      "Value": {
+        "Ref": "AWS::StackId"
+      }
+    },
+    "Bucket": {
+      "Condition": "D570Scope",
+      "Value": {
+        "Ref": "Bucket"
+      }
+    },
+    "VpcId": {
+      "Condition": "D570Scope",
+      "Value": {
+        "Ref": "Vpc"
+      }
+    },
+    "SubnetId": {
+      "Condition": "D570Scope",
+      "Value": {
+        "Ref": "Subnet"
+      }
+    },
+    "SecurityGroupId": {
+      "Condition": "D570Scope",
+      "Value": {
+        "Ref": "SecurityGroup"
+      }
+    },
+    "LaunchTemplateId": {
+      "Condition": "D570Scope",
+      "Value": {
+        "Ref": "LaunchTemplate"
+      }
+    },
+    "LaunchTemplateVersion": {
+      "Condition": "D570Scope",
+      "Value": {
+        "Fn::GetAtt": [
+          "LaunchTemplate",
+          "LatestVersionNumber"
+        ]
+      }
+    },
+    "ImageId": {
+      "Condition": "D570Scope",
+      "Value": {
+        "Ref": "ImageId"
+      }
+    },
+    "LauncherRoleArn": {
+      "Condition": "D570Scope",
+      "Value": {
+        "Fn::GetAtt": [
+          "LauncherRole",
+          "Arn"
+        ]
+      }
+    },
+    "ExpiryRoleArn": {
+      "Condition": "D570Scope",
+      "Value": {
+        "Fn::GetAtt": [
+          "ExpiryRole",
+          "Arn"
+        ]
+      }
+    },
+    "ExpiryRuleArn": {
+      "Condition": "D570Scope",
+      "Value": {
+        "Fn::GetAtt": [
+          "ExpiryRule",
+          "Arn"
+        ]
+      }
+    },
+    "RepositoryId": {
+      "Condition": "D570Scope",
+      "Value": "D570_REPO_ID"
+    },
+    "RepositoryOwnerId": {
+      "Condition": "D570Scope",
+      "Value": "D570_OWNER_ID"
+    },
+    "Subject": {
+      "Condition": "D570Scope",
+      "Value": "D570_SUBJECT"
+    },
+    "AccessExpiry": {
+      "Condition": "D570Scope",
+      "Value": "2027-02-28T23:59:00Z"
+    },
+    "MonthlyCapUsd": {
+      "Condition": "D570Scope",
+      "Value": "10"
+    },
+    "Admission": {
+      "Condition": "D570Scope",
+      "Value": "CLOSED"
+    }
+  }
+}
