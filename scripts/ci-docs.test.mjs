@@ -236,7 +236,7 @@ test('proof planner skips only audited prose and keeps code, pinned documents, m
       const eventPath = join(scratch, 'event.json'), output = join(scratch, 'output');
       writeFileSync(eventPath, JSON.stringify(event)); writeFileSync(output, '');
       const result = spawnSync(process.execPath, [checker, '--plan'], {cwd: root, encoding: 'utf8',
-        env: {...process.env, GITHUB_EVENT_PATH: eventPath, GITHUB_OUTPUT: output}});
+        env: {...process.env, CI_FORCE_FULL: 'false', GITHUB_EVENT_PATH: eventPath, GITHUB_OUTPUT: output}});
       assert.equal(result.status, 0, result.stderr);
       assert.equal(readFileSync(output, 'utf8'), `required=${expected}\n`);
     } finally {rmSync(scratch, {recursive: true, force: true});}
