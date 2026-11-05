@@ -20,5 +20,11 @@ export async function recipientIsSuppressed(client:PoolClient,scope:MailScope,re
  const found=await client.query(`SELECT 1 FROM mail_suppressions s JOIN unnest($4::text[],$5::text[]) AS r(key_id,digest)
   ON s.key_id=r.key_id AND s.digest=r.digest WHERE s.country=$1 AND s.provider_account_id=$2 AND s.region=$3 LIMIT 1`,
   [scope.country,scope.providerAccountId,scope.region,refs.map(r=>r.keyId),refs.map(r=>r.digest)]);
- return found.rowCount!==0;
+ if(found.rowCount!==0)return true;
+ const mapped=await client.query(`SELECT 1 FROM mail_legacy_suppression_scopes s
+  JOIN relay_suppressions legacy ON legacy.key_id=s.legacy_key_id AND legacy.digest=s.legacy_digest
+  JOIN unnest($4::text[],$5::text[]) AS r(key_id,digest) ON s.key_id=r.key_id AND s.digest=r.digest
+  WHERE s.country=$1 AND s.provider_account_id=$2 AND s.region=$3 LIMIT 1`,
+  [scope.country,scope.providerAccountId,scope.region,refs.map(r=>r.keyId),refs.map(r=>r.digest)]);
+ return mapped.rowCount!==0;
 }

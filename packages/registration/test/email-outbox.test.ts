@@ -276,10 +276,16 @@ function pauseEligibility() {
   const held = new Promise<void>(resolve => { resume = resolve; });
   const started = new Promise<void>(resolve => { reached = resolve; });
   const paused = new Proxy(pool, {get(target, property) {
-    if (property === 'query') return async (sql: string, values?: unknown[]) => {
-      const result = await target.query(sql, values);
-      if (sql.startsWith('SELECT 1 FROM signup_requests')) { reached(); await held; }
-      return result;
+    if (property === 'connect') return async () => {
+      const client=await target.connect();let pausedOnce=false;
+      return new Proxy(client,{get(connection,name){
+        if(name==='query')return async(sql:string,values?:unknown[])=>{
+          const result=await connection.query(sql,values);
+          if(!pausedOnce&&sql.startsWith('SELECT 1 FROM signup_requests')){pausedOnce=true;reached();await held;}
+          return result;
+        };
+        const value=Reflect.get(connection,name);return typeof value==='function'?value.bind(connection):value;
+      }});
     };
     const value = Reflect.get(target, property);
     return typeof value === 'function' ? value.bind(target) : value;

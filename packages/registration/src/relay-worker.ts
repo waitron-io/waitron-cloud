@@ -8,8 +8,11 @@ import {localRelaySmtp,relayTemplate,type RelayContent,type RelayDelivery} from 
 import {transaction} from './transaction.ts';
 import {RelayControl} from './relay-control.ts';
 import {validateAllowanceOptions,type AllowanceOptions} from './billing-allowance-rules.ts';
+import {admitMailAttempt,mailRecipientRefs,type SesHandoffConfig} from './mail-attempts.ts';
+import {lockMailScope} from './recipient-suppression.ts';
+import {isValidatedSesFeedbackConfig} from './ses-feedback-config.ts';
 export interface RelayWorkerConfig {
- mode:'local-proof';grants:RelayConfig;payloadKeys:RelayKeyConfig;suppressionKeys:RelayKeyConfig;smtpPort:number;sendTimeoutMs?:number;
+ mode:'local-proof';grants:RelayConfig;payloadKeys:RelayKeyConfig;suppressionKeys:RelayKeyConfig;smtpPort:number;sendTimeoutMs?:number;ses?:SesHandoffConfig;
 }
 interface Row extends RelayPayloadBinding {
  payload:Buffer;binding:string;state:string;claim_id:string;lease_until:Date;expires_at:Date;attempts:number;
@@ -24,11 +27,13 @@ export class RelayWorker {
  readonly #pool:Pool;readonly #grants:RelayGrantStore|undefined;readonly #payload:RelayKeys|undefined;
  readonly #suppression=new Map<string,Buffer>();readonly #active:string|undefined;
  readonly #send:ReturnType<typeof localRelaySmtp>|undefined;readonly #timeout:number;
+ readonly #ses:SesHandoffConfig|undefined;
  constructor(pool:Pool,config?:RelayWorkerConfig,planMode:PlanMode='existing',allowances?:AllowanceOptions){
   allowances=validateAllowanceOptions(allowances,planMode);
   requireTestPlanVenue('test',planMode);
   this.#pool=pool;this.#timeout=config?.sendTimeoutMs??20000;
   if(!config)return;
+  this.#ses=config.ses&&{config:config.ses.config,recipientKeys:{activeKeyId:config.ses.recipientKeys.activeKeyId,keys:{...config.ses.recipientKeys.keys}}};
   if(config.mode!=='local-proof'||!Number.isInteger(this.#timeout)||this.#timeout<1||this.#timeout>20000)messageError('relay_unavailable');
   this.#grants=new RelayGrantStore(pool,config.grants,planMode,allowances);this.#payload=new RelayKeys(config.payloadKeys);
   new RelayKeys(config.suppressionKeys);
@@ -43,9 +48,16 @@ export class RelayWorker {
  /** Trusted local administration only. No unauthenticated provider event endpoint is installed. */
  async suppress(recipient:string):Promise<void>{
   if(!this.#active||normaliseEmail(recipient)!==recipient)messageError('relay_unavailable');
+  if(this.#ses&&(!isValidatedSesFeedbackConfig(this.#ses.config)||!this.#ses.config.purposes.includes('venue-email')||this.#ses.config.policyRevision>2147483647))throw Error('mail_configuration_unavailable');
   await transaction(this.#pool,async c=>{
    await c.query(suppressionLock);await this.#checkSuppressionKeys(c);
    await c.query('INSERT INTO relay_suppressions(key_id,digest) VALUES($1,$2) ON CONFLICT DO NOTHING',[this.#active,this.#digest(this.#active!,recipient)]);
+   if(this.#ses){
+    await lockMailScope(c,this.#ses.config.scope);
+    const refs=await mailRecipientRefs(c,{...this.#ses,recipient});
+    for(const ref of refs)await c.query(`INSERT INTO mail_legacy_suppression_scopes(country,provider_account_id,region,key_id,digest,legacy_key_id,legacy_digest)
+     VALUES($1,$2,$3,$4,$5,$6,$7) ON CONFLICT DO NOTHING`,[this.#ses.config.scope.country,this.#ses.config.scope.providerAccountId,this.#ses.config.scope.region,ref.keyId,ref.digest,this.#active,this.#digest(this.#active!,recipient)]);
+   }
   });
  }
  async status(){
@@ -114,6 +126,7 @@ export class RelayWorker {
     if(!reserved.replay)messageError('relay_unavailable');
    }catch(e){if(e instanceof RelayError&&e.code==='grant_unavailable')authorised=false;else throw e;}
    await c.query(suppressionLock);
+   if(this.#ses)await lockMailScope(c,this.#ses.config.scope);
    const row=(await c.query<Row>('SELECT * FROM relay_messages WHERE installation_id=$1 AND message_id=$2 FOR UPDATE',key(claim))).rows[0];
    const now=(await c.query('SELECT clock_timestamp() AS now')).rows[0].now.getTime();
    if(!row||row.state!=='queued'||row.claim_id!==claim.claim_id||row.lease_until.getTime()<=now)return;
@@ -135,9 +148,18 @@ export class RelayWorker {
     if((await c.query('SELECT 1 FROM relay_suppressions WHERE key_id=$1 AND digest=$2',[id,this.#digest(id,content.recipient)])).rowCount){await this.#terminal(c,row,'failed','refused');return;}
    }
    // This commit is the handoff boundary. Later revoke/cancel cannot recall SMTP.
+   await c.query('SAVEPOINT relay_mail_admission');
    const changed=await c.query(`UPDATE relay_messages SET state='sending',attempts=attempts+1,status_revision=status_revision+1
     WHERE installation_id=$1 AND message_id=$2 AND claim_id=$3 AND lease_until>clock_timestamp() AND expires_at>clock_timestamp()`,[...key(row),claim.claim_id]);
-   return changed.rowCount?content:undefined;
+   if(!changed.rowCount)return;
+   if(this.#ses){
+    try{await admitMailAttempt(c,{...this.#ses,recipient:content.recipient,claim:{purpose:'venue-email',installationId:row.installation_id,messageId:row.message_id,claimId:claim.claim_id,attempt:row.attempts+1}});}
+    catch(error){
+     if(!(error instanceof Error)||error.message!=='mail_recipient_suppressed')throw error;
+     await c.query('ROLLBACK TO SAVEPOINT relay_mail_admission');await this.#terminal(c,row,'failed','refused');return;
+    }
+   }
+   return content;
   });
  }
  async #settle(claim:Row,result:RelayDelivery){

@@ -6,6 +6,8 @@ import type { PasswordRecoveryMailer } from './password-recovery.ts';
 import { normaliseEmail, validLocale, type AccountEmail, type AccountNotification } from './account-input.ts';
 import { EmailDeliveryError, type EmailDeliveryFailure, type EmailDeliveryReceipt } from './email-delivery.ts';
 import { transaction } from './transaction.ts';
+import {admitMailAttempt,type SesHandoffConfig} from './mail-attempts.ts';
+import {lockMailScope} from './recipient-suppression.ts';
 
 export type EmailKind = 'verification' | 'password_reset' | 'password_changed' | 'service_alert';
 type Status = 'pending' | 'processing' | 'sent' | 'expired' | 'cancelled' | 'failed';
@@ -106,9 +108,11 @@ export class EmailWorker {
   readonly #outbox: EmailOutbox;
   readonly #mailer: SignupMailer & PasswordRecoveryMailer & ServiceAlertMailer;
   readonly #timeout: number;
-  constructor(pool: Pool, outbox: EmailOutbox, mailer: SignupMailer & PasswordRecoveryMailer & ServiceAlertMailer, options: {sendTimeoutMs?: number} = {}) {
+  readonly #ses:SesHandoffConfig|undefined;
+  constructor(pool: Pool, outbox: EmailOutbox, mailer: SignupMailer & PasswordRecoveryMailer & ServiceAlertMailer, options: {sendTimeoutMs?: number;ses?:SesHandoffConfig} = {}) {
     this.#pool = pool; this.#outbox = outbox; this.#mailer = mailer;
     this.#timeout = options.sendTimeoutMs ?? 20_000;
+    this.#ses=options.ses&&{config:options.ses.config,recipientKeys:{activeKeyId:options.ses.recipientKeys.activeKeyId,keys:{...options.ses.recipientKeys.keys}}};
     if (!Number.isInteger(this.#timeout) || this.#timeout < 1 || this.#timeout > 30_000) throw new Error('Invalid email worker timeout');
   }
 
@@ -136,15 +140,13 @@ export class EmailWorker {
     let message: AccountEmail | AccountNotification | ServiceAlert;
     try { message = this.#outbox.open(claim); }
     catch { await this.#fail(claim, 'payload_unavailable'); return true; }
-    // Recheck after decrypting and any database wait, before handing a link to the transport.
-    const live = await this.#live(claim, message);
-    if (!live) { await this.#finish(claim, 'cancelled'); return true; }
-    const ready = await this.#pool.query(`SELECT expires_at > clock_timestamp() AS live FROM email_outbox
-      WHERE id = $1 AND claim_id = $2 AND status = 'processing' AND lease_until > clock_timestamp()`, [claim.id, claim.claim_id]);
-    if (!ready.rowCount) return true;
-    if (!ready.rows[0].live) { await this.#finish(claim, 'expired'); return true; }
-    // A queue wait can outlast an ownership change; recheck alert authority and claim together at handoff.
-    if(claim.kind==='service_alert'&&!await this.#live(claim,message)){await this.#finish(claim,'cancelled');return true;}
+    try{if(!await this.#handoff(claim,message))return true;}
+    catch(error){
+      const reason=error instanceof Error?error.message:'';
+      if(reason==='mail_claim_unavailable')return true;
+      if(reason.startsWith('mail_')){await this.#fail(claim,reason==='mail_recipient_suppressed'?'delivery_rejected':'delivery_configuration',reason!=='mail_recipient_suppressed');return true;}
+      throw error;
+    }
     let timer: ReturnType<typeof setTimeout> | undefined;
     const controller = new AbortController();
     const context = {deliveryId: claim.id, signal: controller.signal};
@@ -177,10 +179,56 @@ export class EmailWorker {
     return this.#mailer.sendServiceAlert(message,context);
   }
 
-  async #live(row: MessageRow, message: AccountEmail | AccountNotification | ServiceAlert): Promise<boolean> {
+  async #handoff(row:MessageRow,message:AccountEmail|AccountNotification|ServiceAlert):Promise<boolean>{
+    return transaction(this.#pool,async client=>{
+      if(!await this.#live(client,row,message)){await this.#finish(row,'cancelled',undefined,client);return false;}
+      if(row.kind==='verification')await client.query('SELECT token_hash FROM signup_requests WHERE token_hash=$1 FOR SHARE',[row.token_hash]);
+      if(row.kind==='password_reset'){
+        const request=(await client.query('SELECT account_id FROM password_reset_requests WHERE token_hash=$1',[row.token_hash])).rows[0];
+        if(request?.account_id){
+          // Match reset completion: account, credential, request, then suppression and queue.
+          await client.query('SELECT id FROM cloud_accounts WHERE id=$1 FOR SHARE',[request.account_id]);
+          await client.query('SELECT account_id FROM cloud_credentials WHERE account_id=$1 FOR SHARE',[request.account_id]);
+          await client.query('SELECT token_hash FROM password_reset_requests WHERE token_hash=$1 FOR SHARE',[row.token_hash]);
+        }
+      }
+      if(row.kind==='service_alert'){
+        const authority=(await client.query(`SELECT d.account_id,d.episode_id,i.id AS incident_id,i.venue_id,v.organisation_id
+          FROM service_alert_deliveries d JOIN venue_incidents i ON i.id=d.incident_id JOIN venues v ON v.id=i.venue_id
+          WHERE d.outbox_id=$1`,[row.id])).rows[0];
+        if(authority){
+          await client.query('SELECT id FROM cloud_accounts WHERE id=$1 FOR SHARE',[authority.account_id]);
+          await client.query('SELECT account_id FROM cloud_credentials WHERE account_id=$1 FOR SHARE',[authority.account_id]);
+          await client.query('SELECT account_id FROM organisation_memberships WHERE account_id=$1 AND organisation_id=$2 FOR SHARE',[authority.account_id,authority.organisation_id]);
+          await client.query('SELECT account_id FROM account_alert_preferences WHERE account_id=$1 FOR SHARE',[authority.account_id]);
+          await client.query('SELECT id FROM venues WHERE id=$1 FOR SHARE',[authority.venue_id]);
+          // Monitoring and service writers take installations before incident and episode rows.
+          await client.query('SELECT id FROM installations WHERE venue_id=$1 ORDER BY id FOR SHARE',[authority.venue_id]);
+          await client.query(`SELECT s.installation_id FROM installation_services s JOIN installations n ON n.id=s.installation_id
+            WHERE n.venue_id=$1 ORDER BY s.installation_id,s.service FOR SHARE OF s`,[authority.venue_id]);
+          await client.query('SELECT id FROM venue_incidents WHERE id=$1 FOR SHARE',[authority.incident_id]);
+          if(authority.episode_id){
+            await client.query('SELECT id FROM venue_alert_episodes WHERE id=$1 FOR SHARE',[authority.episode_id]);
+            await client.query('SELECT account_id FROM venue_alert_recipients WHERE episode_id=$1 AND account_id=$2 FOR SHARE',[authority.episode_id,authority.account_id]);
+          }
+        }
+      }
+      if(this.#ses)await lockMailScope(client,this.#ses.config.scope);
+      const current=(await client.query(`SELECT * FROM email_outbox WHERE id=$1 AND claim_id=$2 AND status='processing' FOR UPDATE`,[row.id,row.claim_id])).rows[0];
+      if(!current)return false;
+      const now:Date=(await client.query('SELECT clock_timestamp() AS now')).rows[0].now;
+      if(current.lease_until<=now)return false;
+      if(current.expires_at<=now){await this.#finish(row,'expired',undefined,client);return false;}
+      if(!await this.#live(client,row,message)){await this.#finish(row,'cancelled',undefined,client);return false;}
+      if(this.#ses)await admitMailAttempt(client,{...this.#ses,recipient:message.email,claim:{purpose:'cloud-account-email',outboxId:row.id,claimId:row.claim_id,attempt:row.attempts}});
+      return true;
+    });
+  }
+
+  async #live(client:PoolClient,row: MessageRow, message: AccountEmail | AccountNotification | ServiceAlert): Promise<boolean> {
     if(row.kind==='service_alert'){
       if(!validServiceAlert(message))return false;
-      const live=(await this.#pool.query(`SELECT p.locale FROM service_alert_deliveries d JOIN email_outbox e ON e.id=d.outbox_id JOIN venue_incidents i ON i.id=d.incident_id
+      const live=(await client.query(`SELECT p.locale FROM service_alert_deliveries d JOIN email_outbox e ON e.id=d.outbox_id JOIN venue_incidents i ON i.id=d.incident_id
         LEFT JOIN venue_alert_episodes episode ON episode.id=d.episode_id
         JOIN venues v ON v.id=i.venue_id JOIN installations n ON n.venue_id=v.id
         JOIN organisation_memberships m ON m.organisation_id=v.organisation_id AND m.account_id=d.account_id
@@ -216,10 +264,10 @@ export class EmailWorker {
     }
     if (row.kind === 'password_changed') return true;
     if (row.kind === 'verification') {
-      return !!(await this.#pool.query(`SELECT 1 FROM signup_requests WHERE token_hash = $1 AND email = $2
+      return !!(await client.query(`SELECT 1 FROM signup_requests WHERE token_hash = $1 AND email = $2
         AND consumed_at IS NULL AND expires_at > clock_timestamp()`, [row.token_hash, message.email])).rowCount;
     }
-    const credential = (await this.#pool.query(`SELECT c.password_hash, r.password_fingerprint FROM password_reset_requests r
+    const credential = (await client.query(`SELECT c.password_hash, r.password_fingerprint FROM password_reset_requests r
       JOIN cloud_accounts a ON a.id = r.account_id JOIN cloud_credentials c ON c.account_id = a.id
       WHERE r.token_hash = $1 AND r.email = $2 AND c.email = r.email AND a.disabled_at IS NULL
         AND c.email_verified_at IS NOT NULL AND c.password_hash IS NOT NULL
@@ -227,8 +275,8 @@ export class EmailWorker {
     return !!credential && digest(credential.password_hash) === credential.password_fingerprint;
   }
 
-  async #finish(row: MessageRow, status: 'sent' | 'expired' | 'cancelled', receipt?: void | EmailDeliveryReceipt) {
-    await this.#pool.query(`UPDATE email_outbox SET status = $3, payload = NULL, key_id = NULL,
+  async #finish(row: MessageRow, status: 'sent' | 'expired' | 'cancelled', receipt?: void | EmailDeliveryReceipt,client:Pool|PoolClient=this.#pool) {
+    await client.query(`UPDATE email_outbox SET status = $3, payload = NULL, key_id = NULL,
       claim_id = NULL, lease_until = NULL, finished_at = clock_timestamp(), transport = $4, message_id = $5
       WHERE id = $1 AND claim_id = $2 AND status = 'processing'`, [row.id, row.claim_id, status, receipt?.transport ?? null, receipt?.messageId ?? null]);
   }

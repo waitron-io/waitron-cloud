@@ -90,7 +90,7 @@ The [implementation plan](superpowers/plans/2026-11-02-ses-feedback-implementati
 covers the local build and separate provider qualification. D565 authorises code
 and synthetic tests only. Task 1 validates configuration and event envelopes.
 Tasks 2 and 3 retain recipient bindings and apply parsed feedback atomically.
-Trusted queue intake and suppression checks in both sending paths remain
+Trusted queue intake and production wiring for suppression checks remain
 unimplemented. Account/provider qualification is still required in the selected region.
 
 D102 must qualify and configure the selected SES account/region and verified sender
@@ -147,8 +147,13 @@ and effective publisher policies can authenticate the actual sender.
 Task 2 adds the [durable attempt ledger](../packages/registration/README.md#keep-mail-attempts-bound-before-a-future-provider-handoff)
 and shared suppression lookup. It retains original keyed recipient references
 after payload erasure and refuses conflicting provider IDs. The account and relay
-workers still use their existing sending paths; Task 4 must join them to the new
-admission helpers before this protocol governs a real handoff.
+workers keep ordinary startup unchanged. Task 4 joins both workers to admission
+through optional trusted SES settings for synthetic scoped handoffs. Each worker
+holds its current authority through the suppression decision and commits the
+attempt before transport starts. Explicitly scoped trusted local blocks also
+receive an immutable legacy-to-scope mapping; older unmapped blocks keep their
+local gate without a guessed country. SMTP metadata and provider receipts remain
+Task 5, and production wiring still needs separate enablement.
 
 Task 3 adds `applySesFeedback`, which owns the database transaction for a parsed
 event. Only a future trusted queue consumer may call it. It binds the original
