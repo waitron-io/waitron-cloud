@@ -3,6 +3,7 @@ import {execFileSync} from 'node:child_process';
 import {appendFileSync, readFileSync} from 'node:fs';
 import {auditInputMode, unreadMarkdown} from './ci-input-audit.mjs';
 export {unreadMarkdown} from './ci-input-audit.mjs';
+import {readGitBlobs} from './ci-package-revisions.mjs';
 import {pathToFileURL} from 'node:url';
 
 const shaPattern = /^[a-f0-9]{40}$/;
@@ -51,8 +52,9 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   try {
     const git = (...args) => {
       const binary = typeof args.at(-1) === 'object' && args.pop().binary;
-      return execFileSync('git', args, {encoding: binary ? undefined : 'utf8', timeout: 30_000, maxBuffer: 16 * 1024 * 1024});
+      return execFileSync('git', args, {encoding: binary ? undefined : 'utf8', timeout: 30_000, maxBuffer: 64 * 1024 * 1024});
     };
+    git.readBlobs = readGitBlobs;
     const args = process.argv.slice(2);
     if (args.length === 2 && args[0] === '--audit') {
       try { auditDocumentation(args[1], git); }

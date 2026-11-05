@@ -64,6 +64,7 @@ export function readModeRecords(revision, git, entries) {
     } else if (record.state === 'manifest') {
       keys.push('sha256');
       assert.equal(record.mode, 'lock', 'Manifest record outside lock mode');
+      assert.match(record.path, /^(apps|packages)\/[^/\\]+\/package\.json$/, 'Invalid manifest record path');
       assert.match(record.sha256 ?? '', /^[a-f0-9]{64}$/, 'Invalid manifest record digest');
     } else if (record.state === 'absent') {
       keys.push('previousRevision');
