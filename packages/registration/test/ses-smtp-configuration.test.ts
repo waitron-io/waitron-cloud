@@ -26,7 +26,9 @@ test('SES configuration files require independent qualification and retained rec
   }
   process.env.CLOUD_MAIL_RECIPIENT_KEYS=JSON.stringify({v1:'11'.repeat(32)});
   writeFileSync(path,JSON.stringify({...f.input,policy:f.policy}));assert.throws(()=>read(),/Invalid SES mail configuration/);
-  writeFileSync(path,' '.repeat(65537));assert.throws(()=>read(f.policy),/Invalid SES mail configuration/);
+  writeFileSync(path,JSON.stringify(f.input).padEnd(65537,' '));assert.throws(()=>read(f.policy),/Invalid SES mail configuration/);
+  const venueOnly=feedbackFixture('eu-north-1',['venue-email']);
+  writeFileSync(path,JSON.stringify(venueOnly.input));assert.throws(()=>read(venueOnly.policy),/Invalid SES mail configuration/);
   process.env.CLOUD_MAIL_TRANSPORT='local';assert.throws(()=>read(f.policy),/Invalid SES mail configuration/);
  }finally{process.env=original;rmSync(directory,{recursive:true,force:true});}
 });

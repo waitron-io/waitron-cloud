@@ -85,7 +85,7 @@ test('early feedback and conflicting acceptance metadata never resend or replace
     sends++;assert.ok(context?.ses);assert.equal(await earlyFeedback(f.pool,context.ses.attemptTag),'applied');
     return {transport:'smtp',messageId:`<${id}@mail.example.test>`,providerReceipt:{provider:'ses',messageId:providerId}};
    });
-   await w.runOnce();assert.equal(await w.runOnce(),false);
+   await assert.doesNotReject(w.runOnce());assert.equal(await w.runOnce(),false);
    const row=(await f.pool.query('SELECT * FROM email_outbox')).rows[0];
    assert.equal(row.status,'sent');assert.equal(row.failures,0);assert.equal(row.attempts,1);assert.equal(sends,1);
    assert.equal((await f.pool.query('SELECT provider_message_id FROM mail_attempts')).rows[0].provider_message_id,'ses-early');
@@ -111,7 +111,7 @@ test('late receipts enrich only their original attempt and cannot finish a repla
 
 test('malformed optional provider metadata cannot retry or erase a valid original receipt',async()=>{
  const f=await fixture();try{
-  for(const providerReceipt of [{provider:'other',messageId:'id'},{provider:'ses',messageId:'x'.repeat(257)},{provider:'ses',messageId:'bad\r\nid'},{}]){
+  for(const providerReceipt of [{provider:'other',messageId:'id'},{provider:'ses',messageId:'x'.repeat(257)},{provider:'ses',messageId:'bad\r\nid'},{provider:'ses',messageId:'bad:id'},{}]){
    const id=await enqueue(f.pool);let sends=0;
    const w=worker(f.pool,async()=>{sends++;return {transport:'smtp',messageId:`<${id}@mail.example.test>`,providerReceipt:providerReceipt as any};});
    await w.runOnce();assert.equal(await w.runOnce(),false);

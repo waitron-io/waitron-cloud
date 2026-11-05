@@ -48,11 +48,14 @@ test('direct SES hosts cannot bypass qualified handoff and mismatched resource o
   assert.throws(()=>createSmtpAccountMailer({...smtpConfig,host}),/Invalid production mail configuration/);
  }
  const trusted=config();
+ assert.throws(()=>createSmtpAccountMailer({...smtpConfig,host:trusted.smtpHost},{},{...trusted}),/Invalid production mail configuration/);
  for(const override of [{host:'smtp.example.test'},{port:587},{from:'other@example.test'}]){
   assert.throws(()=>createSmtpAccountMailer({...smtpConfig,host:trusted.smtpHost,...override},{},trusted),/Invalid production mail configuration/);
  }
  const accountOnly=feedbackFixture(),accountConfig=validateSesFeedbackConfig(accountOnly.policy,accountOnly.input);
  assert.throws(()=>createSesRelaySender(accountConfig,{...smtpConfig,host:accountConfig.smtpHost}),/Invalid production mail configuration/);
+ const venueOnly=feedbackFixture('eu-north-1',['venue-email']),venueConfig=validateSesFeedbackConfig(venueOnly.policy,venueOnly.input);
+ assert.throws(()=>createSmtpAccountMailer({...smtpConfig,host:venueConfig.smtpHost},{},venueConfig),/Invalid production mail configuration/);
 });
 
 test('generic SMTP cannot silently discard an SES handoff',async()=>{
