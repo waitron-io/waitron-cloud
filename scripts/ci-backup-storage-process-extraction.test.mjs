@@ -5,6 +5,7 @@ import { chmod, mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from "n
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test, { before, after } from "node:test";
+import { prepareStorageTarSeed } from "./fixtures/storage-tar-seed.mjs";
 
 const pins = {
   "darwin-arm64": ["darwin_arm64", "3ad466db33e83d0b103f90a06997feeb1cc42fd536e6cbdcdded975778f64fda"],
@@ -14,26 +15,8 @@ const pins = {
 let seedRoot, seed, archiveName, digest;
 
 before(async () => {
-  const pin = pins[process.platform + "-" + process.arch];
-  assert.ok(pin, "concurrent extraction needs a supported storage fixture platform");
-  const [name, checksum] = pin;
-  digest = checksum;
-  archiveName = "seaweed-4.47-" + name + ".tar.gz";
-  let bytes;
-  try {
-    bytes = await readFile(join(tmpdir(), "waitron-cloud-test-binaries", archiveName));
-  } catch (error) {
-    if (error.code !== "ENOENT") throw error;
-    const response = await fetch("https://github.com/seaweedfs/seaweedfs/releases/download/4.47/" + name + ".tar.gz", {
-      signal: AbortSignal.timeout(30000),
-    });
-    assert.equal(response.ok, true, "the pinned release archive must be available");
-    bytes = Buffer.from(await response.arrayBuffer());
-  }
-  assert.equal(createHash("sha256").update(bytes).digest("hex"), checksum);
-  seedRoot = await mkdtemp(join(tmpdir(), "cloud-storage-process-extraction-seed-"));
-  seed = join(seedRoot, archiveName);
-  await writeFile(seed, bytes, { flag: "wx", mode: 0o400 });
+  ({ seedRoot, seed, archiveName } = await prepareStorageTarSeed());
+  [, digest] = pins[process.platform + "-" + process.arch];
 }, { timeout: 45000 });
 after(async () => { if (seedRoot) await rm(seedRoot, { recursive: true, force: true }); });
 

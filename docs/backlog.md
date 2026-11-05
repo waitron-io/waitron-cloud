@@ -13,6 +13,12 @@ watcher without a token fallback. Preparation review, the actual release,
 automation, exact-head upgrade validation and fresh-registry/image checks remain
 open. This documentation change does not publish or dispatch anything.
 
+## Shared storage-test seed downloads (D585)
+
+The [storage archive acquisition record](backlog/storage-cache-fixture.md#every-seaweedfs-archive-fetch-and-a-controlled-copy-proposal-d530-4)
+tracks D585: ten test seed hooks share bounded acquisition; native startup,
+conformance preparation and the Dockerfile remain separate follow-up paths.
+
 ## Admin listener shutdown and paced replay (D581)
 
 The exhaustion fixture drains probe data before closing its owned listeners.
@@ -3153,10 +3159,10 @@ immediately. All three extraction checks, pins, cache preservation and outer
 limits remain. Disk and cleanup failures have separate stages, with both errors
 retained when removal also fails. The historical CI timeout has no recorded HTTP stage, so its
 provider cause stays unknown. Capture a new labelled failure before attributing
-it to the registry. The wider inventory names thirteen acquisition sites; this
-helper covers two seed-setup consumers, leaving the other hooks, native fixture,
-conformance and image build separate. A costed controlled-copy proposal remains
-an owner decision, with no mirror built. See [the seed controls and limits](backlog/storage-cache-fixture.md#extraction-refusal-seed-acquisition-d530-4)
+it to the registry. The historical inventory names thirteen acquisition sites. Ten storage suites
+and the seed-control suite now use the shared helper; native fixture startup,
+conformance and image build remain separate D585 slices. The owner has deferred
+the costed controlled-copy proposal; no mirror is built. See [the seed controls and limits](backlog/storage-cache-fixture.md#extraction-refusal-seed-acquisition-d530-4)
 and [the complete inventory and proposal](backlog/storage-cache-fixture.md#every-seaweedfs-archive-fetch-and-a-controlled-copy-proposal-d530-4).
 
 ## Parallel storage-cache fixture failure on main

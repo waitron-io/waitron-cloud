@@ -278,51 +278,52 @@ for the three existing extraction checks. Acquisition records identify only the
 public pinned request, attempt, stage, status, received bytes and elapsed time;
 signed redirect URLs and response bodies stay out of those records.
 
-Only this test's seed download gains recovery. It makes at most three attempts
+The ten storage-test seed hooks share this acquisition. It makes at most three attempts
 for HTTP 5xx, reset connections or ten seconds without header/body progress.
 Every attempt and its one- or two-second pause share the existing 30-second
 download budget. Other HTTP refusals and digest failures stop immediately,
-including a permanent refusal whose body cancellation also resets. The
-45-second setup limit and each extraction test's 30-second limit remain.
+including a permanent refusal whose body cancellation also resets. Every
+45-second setup limit and every existing test and child-process limit remain.
 The shared cache stays read-only, the exact platform digests remain required,
 and failed setup removes only its private seed directory. Disk failures have a
 separate seed stage. If the filesystem also refuses cleanup, the error retains
 both failures with the original setup error as its cause; its private folder
-may remain. The two test files each need a real pinned archive before controlled
-checks run, so an empty cache can require two downloads. An unavailable upstream
+may remain. Each suite needs a real pinned archive before its controlled
+checks run, so an empty cache can require separate downloads. An unavailable upstream
 fails setup rather than skipping controls. The storage fixture's
 own single download attempt and historical startup investigations remain separate.
 
 ## Every SeaweedFS archive fetch and a controlled-copy proposal (D530-4)
 
-The 5 November inventory finds thirteen live-source acquisition sites for
-SeaweedFS 4.47. They do not share one supervised acquisition. This repair covers
-the tar-refusal setup and its new controls through `storage-tar-seed.mjs`.
-It does not cover the nine other seed hooks, ordinary native fixture startup,
-conformance preparation or the local-stack image build.
+The D585 test-seed slice replaces the nine remaining raw seed hooks with
+`prepareStorageTarSeed`, already used by tar refusals. Ten test suites now share
+its bounded acquisition, stage diagnostics, exact platform digests and private
+seed cleanup. Run `node --test scripts/ci-storage-tar-seed.test.mjs` to inject a
+first-response HTTP 503 into every migrated suite and then run its original
+storage checks. The shared controls also exercise permanent HTTP refusals,
+body resets, inactivity, the total budget, checksum refusal and cleanup errors.
+The original probe bodies and their assertions remain unchanged.
 
 | Acquisition site | Current boundary |
 | --- | --- |
-| `scripts/fixtures/storage-tar-seed.mjs:49` | This repair: three temporary attempts within 30 seconds, ten-second inactivity, exact digest, read-only cache. Used by tar refusals and seed controls. |
-| `scripts/ci-backup-storage-concurrent-extraction.test.mjs:29` | One raw seed fetch, 30 seconds; digest required. |
-| `scripts/ci-backup-storage-concurrent-publication.test.mjs:30` | One raw seed fetch, 30 seconds; digest required. |
-| `scripts/ci-backup-storage-extraction.test.mjs:30` | One raw seed fetch, 30 seconds; digest required. |
-| `scripts/ci-backup-storage-issuer-bind.test.mjs:29` | One raw seed fetch, 30 seconds; digest required. |
-| `scripts/ci-backup-storage-process-extraction.test.mjs:27` | One raw seed fetch, 30 seconds; digest required. |
-| `scripts/ci-backup-storage-publication.test.mjs:30` | One raw seed fetch, 30 seconds; digest required. |
-| `scripts/ci-backup-storage-readiness-diagnostics.test.mjs:24` | One raw seed fetch, 30 seconds; digest required. |
-| `scripts/ci-backup-storage-reservation-refusals.test.mjs:29` | One raw seed fetch, 30 seconds; digest required. |
-| `scripts/ci-backup-storage-tls-refusals.test.mjs:29` | One raw seed fetch, 30 seconds; digest required. |
-| `scripts/backup-storage-fixture.mjs:58` | One cache-miss fetch, header/status/body diagnostics and digest; fetch has no own abort deadline. Caller limits remain separate. |
-| `scripts/cloud-cost/conformance-prepare.mjs:252` | Calls `downloadConformanceArchive`: up to three attempts, shared 120 seconds and 30-second inactivity; extracts into its private image context. |
-| `deploy/local-stack/Dockerfile:15` | Version 4.47 and supplied architecture digest; its `curl` has no own retry or deadline. Outer build limits are separate. |
+| `scripts/fixtures/storage-tar-seed.mjs` | Shared test acquisition: at most three temporary attempts within 30 seconds, ten-second inactivity, exact digest, read-only cache. |
+| `scripts/ci-backup-storage-{concurrent-extraction,concurrent-publication,extraction,issuer-bind,process-extraction,publication,readiness-diagnostics,reservation-refusals,tls-refusals,tar-refusals}.test.mjs` | Each setup uses that helper and removes its own returned seed directory. Existing setup and test deadlines remain. |
+| `scripts/backup-storage-fixture.mjs` | Still separate: one cache-miss fetch with header/status/body diagnostics and digest, without its own abort deadline. Existing refusal tests require one attempt and preservation of the original error. |
+| `scripts/cloud-cost/conformance-prepare.mjs` | Still separate: calls `downloadConformanceArchive`, with up to three attempts, a shared 120 seconds and 30-second inactivity. It extracts into its private image context. |
+| `deploy/local-stack/Dockerfile` | Still separate: version 4.47 and supplied architecture digest; `curl` has no own retry or deadline. Outer build limits are separate. |
+
+D585 remains open for those three paths. They need distinct integration checks:
+the native fixture must preserve its single-attempt refusal contract, conformance
+must retain its 120-second budget, and the image build must work without a host
+Node helper. Consolidating test setup does not qualify any of those paths or
+repair the upstream HTTP 504 cause. No controlled copy or provider is built.
 
 The frozen `scripts/fixtures/ci-deployment-inputs.json` also contains a copy of
 the Dockerfile, materialised by `scripts/ci-dependency-fixture.mjs`; it represents
 the same build edge in historical receipt fixtures. Mock fetches and URL
 assertions in the refusal tests are not additional upstream acquisition sites.
 Thirty-three source files import or reference the native storage fixture in
-this inventory; their cache misses still enter its single fetch. This repair
+this inventory; their cache misses still enter its single fetch. The test-seed consolidation
 leaves those contracts and the frozen fixture unchanged.
 
 The wider evidence is distinct from the tar-hook timeout. Nightly run
@@ -333,13 +334,18 @@ cancellation and seed/readiness failures. A later same-head root job passes;
 that does not explain the first timeout or establish one cause for every case.
 Do not label those paths repaired by this helper.
 
-### Optional controlled copy, owner decision required
+### Controlled-copy proposal, deferred by the owner
+
+The owner has not authorised a copy. Keep the costing below as a proposal.
+D585 must measure whether wider retry pauses help only after GitHub is healthy;
+its current one- and two-second pauses remain unchanged. Count any new archive
+failures after consolidation and incident recovery before revisiting this proposal.
 
 Recommend evaluating a Cloud-owned R2 Standard bucket behind a custom domain
 for the exact approved archives, rather than fetching upstream release assets
 in each test job. Publish only checksum-verified, versioned bytes, preserve the
 upstream notices, and keep the existing digests as the final check. Switching
-all thirteen acquisition sites and the historical fixture needs its own scoped
+all remaining acquisition edges and the historical fixture needs its own scoped
 change. No bucket, domain, upload, publishing credential or endpoint change is
 part of this repair.
 
