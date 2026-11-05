@@ -1,6 +1,8 @@
 import {execFileSync} from 'node:child_process';
 import assert from 'node:assert/strict';
 import {resolveRange} from './ci-range.mjs';
+import {findReuse, permitsRangeSelection} from './ci-reuse.mjs';
+import {reuseContextFromEnvironment, runtimeReuseDependencies} from './ci-reuse-runtime.mjs';
 import {appendFileSync, readFileSync} from 'node:fs';
 import {pathToFileURL} from 'node:url';
 import {loadWorkspace, scopeForPaths, workPlan, receiptSuites} from './ci-scope.mjs';
@@ -109,17 +111,27 @@ export function selectPlan(range, snapshot, git) {
   return selectRevisionPlan(range,snapshot.packages,git,snapshot.testFilesByPackage);
 }
 
-export function createPlan(event, context, workspace, git, api) {
+export function createPlan(event, context, workspace, git, api, reuseGit = git) {
   const range = resolveRange(event,context,git);
-  if (range.kind === 'full') return {...workPlan(scopeForPaths([],workspace),workspace),reuse:null,reason:range.reason};
+  const full = reason => ({...workPlan(scopeForPaths([],workspace),workspace),reuse:null,reason});
+  if (range.kind === 'full') return full(range.reason);
+  if (range.kind === 'push') {
+    try {
+      const parents = git('show', '-s', '--format=%P', range.head).trim().split(' ').filter(Boolean);
+      assert.ok(parents.length && parents.every(sha => /^(?!0{40}$)[a-f0-9]{40}$/.test(sha)), 'Invalid push topology');
+      if (parents.length !== 1 || parents[0] !== range.base) return selectRevisionPlan(range,workspace,git);
+    } catch {return full('Cannot verify push topology: full suite');}
+    const result = findReuse({...context, event}, {api, git: reuseGit}, '.github/workflows/ci.yml');
+    if (result.reuse) return {packages: [], receipts: [], typecheck: false, reuse: result.reuse, reason: result.reason};
+    if (!permitsRangeSelection(result)) return full(`Unverified PR evidence: ${result.reason}: full suite`);
+  }
   return selectRevisionPlan(range,workspace,git);
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const event = JSON.parse(readFileSync(process.env.GITHUB_EVENT_PATH,'utf8'));
-  const context = {sha:process.env.GITHUB_SHA,repository:process.env.GITHUB_REPOSITORY,branch:process.env.GITHUB_REF_NAME,
-    eventName:process.env.GITHUB_EVENT_NAME,ref:process.env.GITHUB_REF,
-    full:process.env.CI_FORCE_FULL === 'true' || process.env.CI_FULL === 'true',called:process.env.CI_CALLED === 'true'};
+  const context = reuseContextFromEnvironment(event);
+  context.full ||= process.env.CI_FORCE_FULL === 'true';
   const git = (...args) => {
     const binary = typeof args.at(-1) === 'object' && args.pop().binary;
     return execFileSync('git', args, {encoding: binary ? undefined : 'utf8', timeout: 30_000, maxBuffer: 64 * 1024 * 1024, stdio: ['ignore', 'pipe', 'pipe']});
@@ -131,7 +143,9 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   catch {
     console.log('::warning title=Documentation-only CI unavailable::Review changed executable inputs, then renew documentation evidence (scripts/ci-input-audit.json in v1; docs records in v2) with --write-staged using docs/ci-documentation-audit.md. V2 peer records may remain stale and retain full work. Docs-only changes retain full CI, and the required root/script freshness check fails until reviewed and renewed.');
   }
-  const plan = createPlan(event,context,loadWorkspace(),git);
+  const dependencies = context.eventName === 'push' && context.repository === 'waitron-io/waitron-cloud'
+    ? runtimeReuseDependencies(context) : {};
+  const plan = createPlan(event,context,loadWorkspace(),git,dependencies.api,dependencies.git);
   // Diagnostics share GitHub's job output budget with the executable work plan.
   if (plan.reason.length > 4096) plan.reason = plan.reason.slice(0, 4096) + '... (explanation truncated)';
   const outputs = {

@@ -1375,8 +1375,13 @@ implementation or production evidence.
   peer shortcuts. No measured GitHub time saving is claimed. D571 part 5 has a
   [verified-merge design](superpowers/specs/2026-11-05-verified-merge-ci-design.md)
   and [implementation plan](superpowers/plans/2026-11-05-verified-merge-ci.md).
-  Reuse and changed-tree main selection are not implemented. Runtime landing
-  waits for the nightly backstop and the watcher's post-merge runbook update.
+  Runtime implementation is in progress. Its local planner can qualify an
+  identical-tree PR source, and its final summary rechecks that source before
+  accepting skipped work. Main decision readback verifies the hosted artifact,
+  every final job and the reconstructed push range or full inventory. These
+  paths are not enabled in workflows. Independent sibling selection, workflow
+  uploads, nightly AWS coverage and the whole-branch review remain. Runtime
+  landing waits for the nightly backstop and the watcher's post-merge runbook update.
   Part 6 adds the [nightly full backstop](ci-nightly.md):
   one 03:17 UTC schedule and a manual trigger call the existing three workflows
   at the same revision. All package partitions, six receipt suites, cost and

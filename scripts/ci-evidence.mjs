@@ -10,6 +10,8 @@ import {assertPackageAllocations} from './ci-summary.mjs';
 import {assertReceiptSuites} from './ci-run-receipts.mjs';
 import {conformanceMatrix} from './cloud-cost/conformance.mjs';
 import {assertReuseProof, workflowPaths} from './ci-reuse-proof.mjs';
+import {createDecisionEvidence, readbackDecision} from './ci-decision.mjs';
+import {readRuntimeReuseContext, runtimeReuseDependencies} from './ci-reuse-runtime.mjs';
 
 export {assertReuseProof};
 export const maxEvidenceBytes = 256 * 1024;
@@ -181,21 +183,36 @@ export function readPlanArtifact(artifact, bytes, identity) {
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   try {
-    assert.ok(process.argv.length === 4 && process.argv[2] === '--write', 'Use --write <plan.json>');
-    const env = process.env;
-    const workflowPath = env.GITHUB_WORKFLOW_REF?.match(/^waitron-io\/waitron-cloud\/(\.github\/workflows\/[a-z-]+\.yml)@/)?.[1];
-    const context = {repository: env.GITHUB_REPOSITORY, repositoryId: Number(env.GITHUB_REPOSITORY_ID),
-      eventName: env.GITHUB_EVENT_NAME, sha: env.GITHUB_SHA, runId: Number(env.GITHUB_RUN_ID), attempt: Number(env.GITHUB_RUN_ATTEMPT),
-      workflowId: Number(env.CI_WORKFLOW_ID), workflowPath, workflowRef: env.GITHUB_WORKFLOW_REF, workflowSha: env.GITHUB_WORKFLOW_SHA};
-    const git = (...args) => execFileSync('git', args, {encoding: 'utf8', timeout: 5000, maxBuffer: maxEvidenceBytes, killSignal: 'SIGKILL'});
-    const eventBytes = readFileSync(env.GITHUB_EVENT_PATH);
-    assert.ok(eventBytes.length <= 1024 * 1024, 'Original event is too large');
-    const record = capturePlanEvidence(JSON.parse(eventBytes), context, JSON.parse(env.CI_PLAN), git);
-    writeFileSync(process.argv[3], canonicalJson(record) + '\n', {flag: 'wx'});
-    const key = workflowPath.slice('.github/workflows/'.length, -'.yml'.length);
-    const artifactName = `ci-plan-v1-${key}-${record.runId}-${record.attempt}`;
-    if (env.GITHUB_OUTPUT) appendFileSync(env.GITHUB_OUTPUT, `artifact_name=${artifactName}\n`);
-    console.log(`Recorded source plan for run ${record.runId}, attempt ${record.attempt}: ${artifactName}`);
+    assert.ok(process.argv.length === 4 && ['--write', '--decision', '--readback'].includes(process.argv[2]), 'Use --write, --decision or --readback <plan.json>');
+    if (process.argv[2] !== '--write') {
+      if (process.argv[2] === '--readback') {
+        const bytes = readFileSync(process.argv[3]);
+        assert.ok(bytes.length > 0 && bytes.length <= maxEvidenceBytes, 'Invalid decision size');
+        const record = JSON.parse(new TextDecoder('utf-8', {fatal: true}).decode(bytes));
+        console.log(canonicalJson(readbackDecision(record, runtimeReuseDependencies(record.context))));
+      } else {
+        const context = readRuntimeReuseContext();
+        const {git} = runtimeReuseDependencies(context);
+        const record = createDecisionEvidence(context, JSON.parse(process.env.CI_PLAN), git, process.env.CI_MODE);
+        writeFileSync(process.argv[3], canonicalJson(record) + '\n', {flag: 'wx'});
+        if (process.env.GITHUB_OUTPUT) appendFileSync(process.env.GITHUB_OUTPUT, `artifact_name=ci-decision-v1-ci-${context.runId}-${context.attempt}\n`);
+      }
+    } else {
+      const env = process.env;
+      const workflowPath = env.GITHUB_WORKFLOW_REF?.match(/^waitron-io\/waitron-cloud\/(\.github\/workflows\/[a-z-]+\.yml)@/)?.[1];
+      const context = {repository: env.GITHUB_REPOSITORY, repositoryId: Number(env.GITHUB_REPOSITORY_ID),
+        eventName: env.GITHUB_EVENT_NAME, sha: env.GITHUB_SHA, runId: Number(env.GITHUB_RUN_ID), attempt: Number(env.GITHUB_RUN_ATTEMPT),
+        workflowId: Number(env.CI_WORKFLOW_ID), workflowPath, workflowRef: env.GITHUB_WORKFLOW_REF, workflowSha: env.GITHUB_WORKFLOW_SHA};
+      const git = (...args) => execFileSync('git', args, {encoding: 'utf8', timeout: 5000, maxBuffer: maxEvidenceBytes, killSignal: 'SIGKILL'});
+      const eventBytes = readFileSync(env.GITHUB_EVENT_PATH);
+      assert.ok(eventBytes.length <= 1024 * 1024, 'Original event is too large');
+      const record = capturePlanEvidence(JSON.parse(eventBytes), context, JSON.parse(env.CI_PLAN), git);
+      writeFileSync(process.argv[3], canonicalJson(record) + '\n', {flag: 'wx'});
+      const key = workflowPath.slice('.github/workflows/'.length, -'.yml'.length);
+      const artifactName = `ci-plan-v1-${key}-${record.runId}-${record.attempt}`;
+      if (env.GITHUB_OUTPUT) appendFileSync(env.GITHUB_OUTPUT, `artifact_name=${artifactName}\n`);
+      console.log(`Recorded source plan for run ${record.runId}, attempt ${record.attempt}: ${artifactName}`);
+    }
   } catch (error) {
     console.error(error.message);
     process.exitCode = 1;

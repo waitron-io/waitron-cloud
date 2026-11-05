@@ -29,10 +29,24 @@ test('a main push selects the actual changed package instead of repeating full w
   const after = commit();
   const calls=[];
   const observed = (...args) => {calls.push(args); return git(...args);};
-  const plan=createPlan({before,after}, {eventName:'push',ref:'refs/heads/main',sha:after,repository:'waitron-io/waitron-cloud',branch:'main'}, packages, observed);
+  const repository = {id: 123, full_name: 'waitron-io/waitron-cloud', default_branch: 'main'};
+  const api = {readRepository: () => repository,
+    readWorkflow: () => ({id: 17, path: '.github/workflows/ci.yml', state: 'active'}),
+    readRun: () => ({id: 90, run_attempt: 1, workflow_id: 17, path: '.github/workflows/ci.yml', event: 'push',
+      head_sha: after, head_branch: 'main', repository, head_repository: repository}),
+    readCommit: sha => ({sha, tree: {sha: git('rev-parse', `${sha}^{tree}`).trim()},
+      parents: git('show', '-s', '--format=%P', sha).trim().split(' ').filter(Boolean).map(sha => ({sha}))}),
+    listAssociatedPRs: () => ({items: [], total_count: 0, terminal: true, nextPage: null})};
+  const context = {eventName:'push',ref:'refs/heads/main',sha:after,repository:repository.full_name,repositoryId:123,
+    runId:90,attempt:1,workflowId:17,branch:'main'};
+  const plan=createPlan({before,after}, context, packages, observed, api);
   assert.deepEqual(plan.packages, [1,2,3,4,5,6].map(shard=>({package:'@waitron-cloud/portal',shard,shards:6})));
   assert.deepEqual(plan.receipts,['test:local-stack']);
   assert.ok(calls.some(args=>JSON.stringify(args)===JSON.stringify(['diff','--name-only','--no-renames','-z',before,after])));
+  const unavailable = createPlan({before,after}, context, packages, observed,
+    {...api, listAssociatedPRs: () => {throw Error('Unavailable association evidence');}});
+  assert.equal(unavailable.packages.length, 7);
+  assert.equal(unavailable.receipts.length, 6);
 });
 
 test('a multi-commit push covers every changed owner in before through after', t => {

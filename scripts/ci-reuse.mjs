@@ -11,6 +11,17 @@ import {selectPlan} from './ci-plan.mjs';
 const positive = value => Number.isSafeInteger(value) && value > 0;
 const validSha = value => typeof value === 'string' && /^(?!0{40}$)[a-f0-9]{40}$/.test(value);
 const repository = 'waitron-io/waitron-cloud';
+const rangeReasons = new Set(['Multiple pushed commits: use range selection', 'No associated PR: use range selection',
+  'Merge tree differs from PR head: use range selection']);
+
+export const permitsRangeSelection = result => result.reuse === null && rangeReasons.has(result.reason);
+
+export function assertCurrentReuse(proof, context, dependencies) {
+  assertReuseProof(proof, proof.workflowPath);
+  const result = findReuse(context, dependencies, proof.workflowPath);
+  assert.ok(result.reuse, `Reuse source no longer qualifies: ${result.reason}`);
+  assert.equal(canonicalJson(result.reuse), canonicalJson(proof), 'Reuse proof differs from current evidence');
+}
 
 function assertRepository(value, id) {
   assert.equal(value?.id, id, 'Repository identity differs');
@@ -54,7 +65,7 @@ function treeInventory(revision, git) {
   return entries;
 }
 
-function assertReviewedInputs(head, git) {
+export function assertReviewedInputs(head, git) {
   const files = treeInventory(head, git), native = new Map();
   const executable = path => /\.(?:[cm]?[jt]s|py|sh)$/.test(path) && !/\.test\.[cm]?[jt]s$/.test(path);
   const walk = path => {

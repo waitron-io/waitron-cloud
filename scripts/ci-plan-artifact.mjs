@@ -65,12 +65,13 @@ export function decodePlanArchive(bytes, limit) {
   return decoded;
 }
 
-export function assertArtifactMetadata(artifact, bytes, identity, limit) {
+export function assertArtifactMetadata(artifact, bytes, identity, limit, kind = 'plan') {
   const {workflowPath, runId, attempt, head, repositoryId} = identity;
   assert.ok(Number.isSafeInteger(artifact?.id) && artifact.id > 0, 'Invalid artifact identity');
   const key = workflowPath.match(/^\.github\/workflows\/([a-z-]+)\.yml$/)?.[1];
   assert.ok(key && Number.isSafeInteger(runId) && runId > 0 && Number.isSafeInteger(attempt) && attempt > 0, 'Invalid artifact binding');
-  assert.equal(artifact.name, `ci-plan-v1-${key}-${runId}-${attempt}`, 'Wrong artifact name or attempt');
+  assert.ok(['plan', 'decision'].includes(kind), 'Unsupported artifact kind');
+  assert.equal(artifact.name, `ci-${kind}-v1-${key}-${runId}-${attempt}`, 'Wrong artifact name or attempt');
   assert.equal(artifact.expired, false, 'Expired artifact');
   assert.ok(Buffer.isBuffer(bytes) && bytes.length <= limit + 2048 && bytes.length > 0, 'Invalid artifact size');
   assert.equal(artifact.size_in_bytes, bytes.length, 'Wrong artifact size');

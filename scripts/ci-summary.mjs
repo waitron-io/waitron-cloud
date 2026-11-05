@@ -7,6 +7,8 @@ import {packageMembers} from './ci-package-groups.mjs';
 import {assertReceiptSuites} from './ci-run-receipts.mjs';
 import {assertScriptWork} from './ci-scripts.mjs';
 import {assertReuseProof} from './ci-reuse-proof.mjs';
+import {assertCurrentReuse} from './ci-reuse.mjs';
+import {readRuntimeReuseContext, runtimeReuseDependencies} from './ci-reuse-runtime.mjs';
 
 export const packageShards = Object.freeze({
   '@waitron-cloud/registration': 6,
@@ -168,6 +170,8 @@ export async function waitForSummary(plan, results, {
   pollMs = 2_000,
   identity = {runId: Number(process.env.GITHUB_RUN_ID), runAttempt: Number(process.env.GITHUB_RUN_ATTEMPT), headSha: process.env.CI_HEAD_SHA},
   report = message => console.log(message),
+  reuseContext,
+  reuseDependencies,
 } = {}) {
   assert.ok(['', 'standard / '].includes(jobPrefix), 'Invalid CI job prefix');
   const expected = expectedSummaryJobs(plan, results);
@@ -225,7 +229,13 @@ export async function waitForSummary(plan, results, {
         reported.add(jobs[index].name);
       }
     }
-    if (waiting.length === 0) return;
+    if (waiting.length === 0) {
+      if (plan.reuse) {
+        const context = reuseContext ?? readRuntimeReuseContext();
+        assertCurrentReuse(plan.reuse, context, reuseDependencies ?? runtimeReuseDependencies(context));
+      }
+      return;
+    }
     await sleep(Math.max(0, Math.min(pollMs, deadline - now())));
   }
 }
