@@ -115,7 +115,7 @@ test('executed planner forces a full reusable run even with an audited prose pul
     git('config', 'user.name', 'CI test'); git('config', 'user.email', 'ci@example.test');
     git('add', '-A');
     execFileSync(process.execPath, ['scripts/ci-input-audit.mjs', '--write-staged'], {cwd: root, stdio: 'pipe'});
-    git('add', 'scripts/ci-input-audit.json'); git('commit', '-sm', 'Reviewed nightly fixture');
+    git('add', 'scripts/ci-input-audit.json'); git('commit', '--allow-empty', '-sm', 'Reviewed nightly fixture');
     const base = git('rev-parse', 'HEAD');
     writeFileSync(join(root, 'docs/nightly-control.md'), '# Nightly control\n');
     git('add', 'docs/nightly-control.md'); git('commit', '-sm', 'Prose control');
