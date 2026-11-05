@@ -34,6 +34,34 @@ Inspect the next recurrence's immediate build report before changing the fixture
 Keep the original verifier assertions, 120-second build limit, 150-second setup
 limit and CI job limit. A passing reproduction or CI run does not close this item.
 
+Three later failures also reach the unchanged 120-second Docker command limit.
+Two are `docker image inspect postgres:18-alpine`, before any container or package
+test: account HTTP on 4 November (run 41859910075, job 126686634772) and UI smoke
+on 5 November (run 42094443206, job 127481196486). Their retained logs show empty
+output and a killed client. The first launcher starts about seven minutes after
+the first runner log; the second starts after 53 seconds, including browser
+package setup. Neither log contains a Docker service response during the stall.
+The third is the backup worker fixture build on 5 November (run 42090041704,
+job 127468647143), during local-stack receipts while cloud-cost receipts also
+run. It returns a timeout with empty build output and status 255. These are
+observations from logs, not evidence that the failures share one cause.
+
+Run `node --test scripts/ci-test-postgres.test.mjs` for the launcher controls.
+An inspection timeout now prints one `docker_stall` record before rethrowing the
+original error. You get host uptime, load averages and memory, followed by a
+separate read-only Docker service probe with a one-second limit. The probe
+reports a version, client timeout, nonzero exit, killed or missing client, oversized
+output or unrecognized reply; it omits raw service output and errors. It runs only after an inspection timeout. Normal launches,
+missing-image handling, acquisition limits and retry decisions stay unchanged.
+The extra probe can add one second after the original timeout. These samples
+describe the host immediately after the client timeout; they do not measure the
+preceding stall or enumerate other processes on the runner. A probe timeout
+does not establish whether its client or the service stalled. Use the next
+recurrence to see whether the service answers this separate request before
+proposing a repair. The backup-worker build
+still needs its own immediate progress and service evidence. No timeout cause
+is closed by these diagnostics or by a clean retry.
+
 ## Verifier source isolation from local edits (D445)
 
 Your verifier build must use the pinned committed source even when its checkout

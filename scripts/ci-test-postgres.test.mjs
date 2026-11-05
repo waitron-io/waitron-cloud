@@ -38,6 +38,13 @@ if (command === 'image' && args[1] === 'inspect') {
   data.calls.push({command: 'inspect', image: args[2]});
   if (data.inspectFailure) fail(data.inspectFailure);
   if (!data.cached.includes(args[2])) fail('Error: No such image: ' + args[2]);
+} else if (command === 'info') {
+  data.calls.push({command}); save();
+  if (data.daemonMode === 'hang') Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 10000);
+  if (data.daemonMode === 'refused') fail('PRIVATE_DAEMON_ERROR');
+  if (data.daemonMode === 'killed') process.kill(process.pid, 'SIGKILL');
+  if (data.daemonMode === 'oversized') console.log('PRIVATE_DAEMON_OUTPUT'.repeat(300));
+  console.log(data.daemonMode === 'malformed' ? 'PRIVATE_DAEMON_OUTPUT' : '29.9.3');
 } else if (command === 'pull') {
   data.calls.push({command, image: args[1]});
   if (data.cancelSignal) process.kill(process.ppid, data.cancelSignal);
@@ -94,11 +101,13 @@ Object.defineProperty(performance, 'now', {value: () => {
   await writeFile(invocations, '');
   await writeFile(probe, `
 import childProcess from 'node:child_process';
+import os from 'node:os';
 import {appendFileSync} from 'node:fs';
 import {syncBuiltinESMExports} from 'node:module';
 const execute = childProcess.execFileSync;
 childProcess.execFileSync = (command, args, options) => {
-  appendFileSync(process.env.LAUNCHER_INVOCATIONS, JSON.stringify({command, args}) + '\\n');
+  appendFileSync(process.env.LAUNCHER_INVOCATIONS, JSON.stringify({command, args, timeout: options.timeout, killSignal: options.killSignal, maxBuffer: options.maxBuffer}) + '\\n');
+  if (args[0] === 'info' && ${JSON.stringify(scenario.daemonMode === 'spawn')}) throw Object.assign(new Error('PRIVATE_DAEMON_ERROR'), {code: 'ENOENT'});
   try { return execute(command, args, options); }
   catch (error) {
     if (String(error.stderr).includes('CONTROLLED_EARLY_TIMEOUT')) {
@@ -108,6 +117,7 @@ childProcess.execFileSync = (command, args, options) => {
     throw error;
   }
 };
+if (${JSON.stringify(!!scenario.reportThrows)}) os.uptime = () => {throw new Error('PRIVATE_HOST_ERROR');};
 syncBuiltinESMExports();
 const phase = ${JSON.stringify(scenario.budgetPhase ?? null)};
 if (phase) {
@@ -121,7 +131,7 @@ if (phase) {
 }
 `);
   const clockArgs = scenario.shortBudget ? ['--import', clock] : [];
-  if (scenario.budgetPhase || scenario.failures?.includes('CONTROLLED_EARLY_TIMEOUT')) clockArgs.push('--import', probe);
+  if (scenario.budgetPhase || scenario.failures?.includes('CONTROLLED_EARLY_TIMEOUT') || scenario.inspectFailure === 'CONTROLLED_EARLY_TIMEOUT') clockArgs.push('--import', probe);
   const child = spawn(process.execPath, [...clockArgs, launcher.pathname, 'exec', 'node', 'controlled-test'], {
     env: {...process.env, PATH: `${root}:${process.env.PATH}`, LAUNCHER_STATE: state,
       LAUNCHER_INVOCATIONS: invocations, LAUNCHER_PORT: String(server.address().port)}, stdio: ['ignore', 'pipe', 'pipe'],
@@ -391,3 +401,67 @@ for (const [signal, code] of [['SIGINT', 130], ['SIGTERM', 143]]) {
     assert.equal(result.calls.some(call => ['run', 'pnpm', 'rm'].includes(call.command)), false);
   });
 }
+
+// Removing failure reporting must lose the host and daemon witnesses while the launch still refuses.
+for (const daemonMode of ['responsive', 'refused', 'hang', 'malformed', 'oversized', 'killed', 'spawn']) {
+  test(`an inspection timeout reports bounded diagnostics with a ${daemonMode} daemon`, {timeout: 15000}, async t => {
+    const result = await launch(t, {inspectFailure: 'CONTROLLED_EARLY_TIMEOUT', daemonMode});
+    assert.equal(result.code, 1);
+    const originalError = result.output.split('\n').filter(line => !line.startsWith('docker_stall=')).join('\n');
+    assert.match(originalError, /code: 'ETIMEDOUT'/);
+    assert.equal(result.calls.filter(call => call.command === 'inspect').length, 1);
+    assert.equal(result.calls.some(call => ['pull', 'run', 'pnpm', 'rm'].includes(call.command)), false);
+    const lines = result.output.split('\n').filter(line => line.startsWith('docker_stall='));
+    assert.equal(lines.length, 1, result.output);
+    const report = JSON.parse(lines[0].slice('docker_stall='.length));
+    assert.equal(report.operation, 'image-inspect');
+    assert.equal(report.image, 'postgres:18-alpine');
+    assert.equal(report.error, 'ETIMEDOUT');
+    assert.ok(Number.isFinite(report.elapsedMs) && report.elapsedMs >= 0);
+    assert.ok(report.host.uptimeSeconds > 0);
+    assert.ok(report.host.totalMemoryBytes > 0);
+    assert.ok(report.host.freeMemoryBytes >= 0);
+    assert.equal(report.host.loadAverage.length, 3);
+    assert.deepEqual(report.daemon, daemonMode === 'responsive'
+      ? {status: 'responsive', version: '29.9.3'}
+      : {status: ({hang: 'timeout', refused: 'exit-error', malformed: 'unrecognized', oversized: 'output-limit', killed: 'client-killed', spawn: 'spawn-error'})[daemonMode]});
+    assert.doesNotMatch(result.output, /PRIVATE_DAEMON/);
+    assert.doesNotMatch(lines[0], /CONTROLLED_EARLY_TIMEOUT|POSTGRES_PASSWORD|LAUNCHER_STATE/);
+    const inspect = result.invocations.find(call => call.args[0] === 'image');
+    assert.ok(inspect.timeout > 0 && inspect.timeout <= 120000);
+    assert.equal(inspect.killSignal, 'SIGKILL');
+    const probe = result.invocations.filter(call => call.args[0] === 'info');
+    assert.equal(probe.length, 1);
+    assert.deepEqual(probe[0].args, ['info', '--format', '{{.ServerVersion}}']);
+    assert.equal(probe[0].timeout, 1000);
+    assert.equal(probe[0].killSignal, 'SIGKILL');
+    assert.equal(probe[0].maxBuffer, 2048);
+  });
+}
+
+for (const scenario of [{}, {inspectFailure: 'Cannot connect to the Docker daemon'}]) {
+  test(`inspection without a timeout does not run diagnostics (${scenario.inspectFailure ? 'refusal' : 'success'})`, async t => {
+    const result = await launch(t, scenario);
+    assert.equal(result.code, scenario.inspectFailure ? 1 : 0);
+    assert.equal(result.calls.some(call => call.command === 'info'), false);
+    assert.doesNotMatch(result.output, /docker_stall=/);
+  });
+}
+
+
+test('a pull deadline does not collect inspection diagnostics', {timeout: 20000}, async t => {
+  const result = await launch(t, {cached: [mailpit], hangPull: true, shortBudget: true});
+  assert.equal(result.code, 1);
+  assert.match(result.output, /code: 'ETIMEDOUT'/);
+  assert.equal(result.calls.filter(call => call.command === 'pull').length, 1);
+  assert.equal(result.calls.some(call => ['info', 'run', 'pnpm', 'rm'].includes(call.command)), false);
+  assert.doesNotMatch(result.output, /docker_stall=/);
+});
+
+test('a diagnostic failure preserves the original inspection error', async t => {
+  const result = await launch(t, {inspectFailure: 'CONTROLLED_EARLY_TIMEOUT', reportThrows: true});
+  assert.equal(result.code, 1);
+  assert.match(result.output, /code: 'ETIMEDOUT'/);
+  assert.doesNotMatch(result.output, /PRIVATE_HOST_ERROR/);
+  assert.equal(result.calls.some(call => ['info', 'pull', 'run', 'pnpm', 'rm'].includes(call.command)), false);
+});
