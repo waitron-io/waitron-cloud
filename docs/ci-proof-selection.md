@@ -7,8 +7,9 @@ The ordinary CI workflow keeps its own package and receipt selection.
 
 You can run either complete proof manually with **Run workflow** in GitHub Actions.
 Automatic main-push runs are removed. D571 part 6 will add a nightly full run;
-that schedule is not installed by this change. Until then, manual runs are the
-full-run fallback. The standard main workflow still runs its full package,
+that schedule is not installed by this change. Land part 6 first, or qualify
+both changes together, so automatic full proofs have no gap. Manual full runs
+remain available. The standard main workflow still runs its full package,
 compiler and six-receipt plan, including the cost unit checks.
 
 ## Cost conformance inputs
@@ -42,7 +43,7 @@ changes its Cloud preparation program and selects the rehearsals.
 The venue matrix checks the composition of its existing legacy and venue suites.
 Its own wrappers, `scripts/fixtures/service-proof.ts`, `scripts/test-cloud-*`,
 `scripts/venue-service-*` and `deploy/test-cloud/` select it. So do the package
-`venue-service-*` test files and the legacy suite's explicitly listed package
+`venue-service-*` test files and both suite matrices' explicitly listed package
 tests, including translation's `worker-cli` case. The shared account database
 fixture, installation inputs, workflow and planner also select it.
 
@@ -57,6 +58,10 @@ change a proof reader or add an import, helper, fixture or file read, follow tha
 input and update its ownership here and in the selector. Broad directory rules
 include new files within their existing boundary. New packages, unfamiliar
 root areas and unclassified scripts keep both proofs until you review them.
+A companion `scripts/ci-input-audit.json` renewal counts as evidence only after
+all four saved head inventories verify. A stale or malformed peer keeps full
+proof work. This prevents the required renewal from waking both matrices for
+every code PR. Root Markdown is unrelated prose for these proof readers.
 This is a declared input boundary, not a general JavaScript dependency resolver.
 
 The planner compares the common ancestor of the PR base and head with the exact

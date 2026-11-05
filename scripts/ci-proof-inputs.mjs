@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import {auditInputMode, readInputAudit} from './ci-input-audit.mjs';
 
 const revision = /^[a-f0-9]{40}$/;
 const backend = /^packages\/(account-http|backups|identity|operations|registration|remote-access|translation)\//;
@@ -6,7 +7,7 @@ const shared = new Set([
   'scripts/ci-docs.mjs', 'scripts/ci-proof-inputs.mjs', 'scripts/test-postgres.mjs',
   'scripts/ci-setup-pnpm.mjs', 'scripts/ci-pnpm-diagnostics.cjs',
 ]);
-// The legacy proof deliberately repeats these package tests under its own composition.
+// These named proof cases do not carry the venue-service filename prefix.
 const legacyTests = new Set([
   'packages/translation/test/free-service-plans.test.ts',
   ...['relay-grants', 'relay-worker', 'relay-control', 'relay-operator-stop', 'content-translation-service']
@@ -18,6 +19,7 @@ const legacyTests = new Set([
 ]);
 
 function consumes(kind, path) {
+  if (/^[^/]+\.md$/.test(path)) return false;
   // Root configuration and every workspace manifest can change installation or execution.
   if (!path.includes('/') || /^(apps|packages)\/[^/]+\/package\.json$/.test(path) || shared.has(path)) return true;
   if (path === `.github/workflows/${kind === 'cost' ? 'cloud-cost' : 'venue-services-proof'}.yml`) return true;
@@ -58,7 +60,14 @@ export function proofInputPlan(kind, event, git) {
     assert.ok(paths.length > 0, 'Empty proof diff');
     assert.ok(paths.every(path => path && !/[\\\n\r]/.test(path) &&
       !path.split('/').some(part => ['', '.', '..'].includes(part))), 'Unclassified proof path');
-    const inputs = paths.filter(path => consumes(kind, path));
+    const policyPath = 'scripts/ci-input-audit.json';
+    if (paths.includes(policyPath)) {
+      const {policy} = readInputAudit(pr.head.sha, git);
+      for (const mode of ['docs', 'identity', 'gateway', 'lock']) {
+        auditInputMode(mode, pr.head.sha, git, Object.keys(policy.manifests));
+      }
+    }
+    const inputs = paths.filter(path => path !== policyPath && consumes(kind, path));
     return {required: inputs.length > 0, reason: inputs.length
       ? `Selected ${kind} proof inputs: ${inputs.join(', ')}`
       : `No ${kind} proof inputs changed across ${paths.length} paths`};
