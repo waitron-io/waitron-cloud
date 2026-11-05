@@ -3387,6 +3387,23 @@ remain unknown. A separate control kills the supervisor while its helper is
 paused; fixture cleanup records that helper's PID independently and waits for
 it to exit, so a failing supervisor cannot leave the test process behind.
 
+### Healthy source-fetch fixture deadline (D583 cause 1)
+
+**First cause repaired; the isolated early-wake investigation remains open.**
+A controlled 500 ms scheduling delay reproduces the healthy-fetch retry in
+[#953's receipt job](https://github.com/waitron-io/waitron-cloud/actions/runs/42007512040/job/127179355072):
+the fixture shortened every 75-second fetch timer to 350 ms, including successful
+fetches. The fixture now accelerates a fetch only after its helper confirms the
+deliberate stall. A delayed healthy first fetch completes once, and a delayed
+healthy retry follows only the intended stalled attempt. A helper delayed before
+recording its call still enters the intended stall and receives the accelerated
+timeout; scheduling cannot move the queued hang onto an unaccelerated retry. All original assertions, source revisions, production deadlines,
+two-attempt maximum, accelerated outer limit, fixture bound and cleanup remain.
+Run `node --test scripts/cloud-cost/conformance-source-fetch.test.mjs` for these
+controls. The historical job did not measure helper scheduling, so the exact
+cause of that run's delay remains unknown. D583's separate isolated early-wake
+failure still needs diagnosis.
+
 ### Fixture archive download retries (D311)
 
 **Open; the upstream 504 and later HTTP 500 causes remain unknown.** D457's
