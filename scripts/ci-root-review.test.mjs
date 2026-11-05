@@ -1,11 +1,12 @@
 import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
 import {execFileSync, spawnSync} from 'node:child_process';
-import {chmodSync, linkSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync} from 'node:fs';
+import {chmodSync, linkSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync} from 'node:fs';
 import {join} from 'node:path';
+import {tmpdir} from 'node:os';
 import test from 'node:test';
 import {rootReviewFixture as fixture} from './ci-root-review-fixture.mjs';
-import {fileURLToPath} from 'node:url';
+import {fileURLToPath, pathToFileURL} from 'node:url';
 
 const api = await import('./ci-root-review.mjs').catch(error => {
   if (error.code !== 'ERR_MODULE_NOT_FOUND') throw error;
@@ -258,4 +259,51 @@ test('several removals inspect their common reviewed ancestor only once', () => 
   observe.readBlobs = git.readBlobs;
   assert.doesNotThrow(() => api.checkRootReview(head, observe));
   assert.equal(ancestorInventories, 1, 'Removal proof must scale with distinct ancestors, not removed input count');
+}));
+
+test('staged removal renewal reads a shared ancestor once', () => fixture(({root, git, write, renew, docs, commit}) => {
+  write('scripts/reader.mjs', 'changed first reader\n');
+  write('scripts/second-reader.mjs', 'second reader\n');
+  renew(['scripts/reader.mjs', 'scripts/second-reader.mjs']); docs();
+  const ancestor = commit(), registryObjectId = git('rev-parse', `${ancestor}:${registryPath}`).trim();
+  for (const path of ['scripts/reader.mjs', 'scripts/second-reader.mjs']) rmSync(join(root, path));
+  git('add', '-A');
+  const bin = join(root, 'probe-bin'), calls = join(root, 'git-calls.jsonl'); mkdirSync(bin);
+  writeFileSync(join(bin, 'package.json'), '{"type":"module"}\n');
+  const realGit = execFileSync('which', ['git'], {encoding: 'utf8'}).trim();
+  writeFileSync(join(bin, 'git'), `#!${process.execPath}\n` +
+    `import {appendFileSync} from 'node:fs'; import {spawnSync} from 'node:child_process';\n` +
+    `const args=process.argv.slice(2); appendFileSync(${JSON.stringify(calls)},JSON.stringify(args)+'\\n');\n` +
+    `const result=spawnSync(${JSON.stringify(realGit)},args,{stdio:'inherit'}); process.exit(result.status??1);\n`, {mode: 0o700});
+  const result = spawnSync(process.execPath, [fileURLToPath(new URL('./ci-root-review.mjs', import.meta.url)),
+    '--write-staged', '--input', 'scripts/reader.mjs', '--input', 'scripts/second-reader.mjs',
+    '--reviewer', 'Removal reviewer', '--reference', 'review/bounded-cli'],
+  {cwd: root, encoding: 'utf8', timeout: 30_000, env: {...process.env, PATH: `${bin}:${process.env.PATH}`}});
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  const observed = readFileSync(calls, 'utf8').trim().split('\n').map(line => JSON.parse(line));
+  assert.equal(observed.filter(args => args[0] === 'ls-tree' && args.includes(ancestor)).length, 1,
+    'Renewing several removals must share their immutable ancestor inventory');
+  for (const path of ['scripts/reader.mjs', 'scripts/second-reader.mjs']) {
+    assert.deepEqual(JSON.parse(readFileSync(join(root, recordPath(path)))), {version: 1, path, state: 'absent',
+      previousRevision: ancestor, registryObjectId, reviewer: 'Removal reviewer', reference: 'review/bounded-cli'});
+  }
+}));
+
+test('a genuine shallow checkout refuses admission until its history is fetched', () => fixture(({root, base}) => {
+  const scratch = mkdtempSync(join(tmpdir(), 'cloud-root-shallow-')), checkout = join(scratch, 'checkout');
+  const program = fileURLToPath(new URL('./ci-root-review.mjs', import.meta.url));
+  try {
+    execFileSync('git', ['clone', '--quiet', '--depth=1', pathToFileURL(root).href, checkout], {stdio: 'pipe'});
+    const check = revision => spawnSync(process.execPath, [program, '--check', revision],
+      {cwd: checkout, encoding: 'utf8', timeout: 30_000});
+    const shallow = check(base);
+    assert.equal(shallow.status, 1, shallow.stdout + shallow.stderr);
+    assert.match(shallow.stderr, /requires complete history/);
+    const missing = check('0'.repeat(40));
+    assert.equal(missing.status, 1, 'A missing object cannot receive review authority');
+    execFileSync('git', ['-C', checkout, 'fetch', '--unshallow'], {stdio: 'pipe'});
+    const complete = check(base);
+    assert.equal(complete.status, 0, complete.stdout + complete.stderr);
+    assert.match(complete.stdout, /Root input review is current/);
+  } finally {rmSync(scratch, {recursive: true, force: true});}
 }));

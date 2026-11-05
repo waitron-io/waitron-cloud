@@ -237,16 +237,22 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
       const revision = git('write-tree').trim(), projection = projectionAt(revision, git);
       retention(revision, git, projection.entries);
       const records = readRecords(projection.entries, git), outputs = new Map();
+      const ancestorReviews = new Map(), requestedRecords = new Set(inputs.map(rootRecordFilename));
+      let removalBase;
       for (const path of inputs) {
         const input = projection.inputs.find(input => input.path === path);
         let record;
         if (input) record = {version: 1, path, state: 'present', mode: input.mode, type: input.type, objectId: input.objectId};
         else {
           assert.ok(records.has(path), `Unknown root input removal: ${path}`);
-          const base = stableReviewBase(git);
+          const base = removalBase ??= stableReviewBase(git);
           const candidates = git('--literal-pathspecs', 'rev-list', '--topo-order', base, '--', path, rootRecordFilename(path), rootRegistryPath).trim().split('\n').filter(Boolean);
           const previousRevision = candidates.find(candidate => {
-            const prior = projectionAt(candidate, git), evidence = readRecords(prior.entries, git).get(path);
+            if (!ancestorReviews.has(candidate)) {
+              const prior = projectionAt(candidate, git);
+              ancestorReviews.set(candidate, {prior, records: readRecords(prior.entries.filter(row => requestedRecords.has(row.path)), git)});
+            }
+            const {prior, records: priorRecords} = ancestorReviews.get(candidate), evidence = priorRecords.get(path);
             return prior.inputs.some(input => input.path === path && evidence?.state === 'present' &&
               evidence.mode === input.mode && evidence.type === input.type && evidence.objectId === input.objectId && evidence.registryObjectId === prior.registryObjectId);
           });

@@ -266,3 +266,54 @@ test('root execution preflight refuses missing required files and extra undiscov
   rmSync(join(root, 'scripts/identity-upstream.test.mjs'));
   result = run(); assert.notEqual(result.status, 0); assert.match(result.stderr, /dirty|checkout|inventory/i);
 }));
+
+test('executed planner publishes every root-only receipt-only mixed and forced-full gate', () => fixture(({root, git, write, renew, docs, commit, base}) => {
+  const health = 'deploy/local-stack/operations-health.test.mjs', packagePath = 'packages/control/src/index.mjs';
+  const scratch = mkdtempSync(join(tmpdir(), 'cloud-root-output-'));
+  try {
+    for (const [paths, full, want] of [
+      [[rootPath], false, {root_tests: 'true', typecheck: 'false', packages: 'false', receipts: 'false', ids: ['root-partition-contract']}],
+      [[health], false, {root_tests: 'false', typecheck: 'false', packages: 'false', receipts: 'true', ids: ['local-health-test']}],
+      [[packagePath, health], false, {root_tests: 'true', typecheck: 'true', packages: 'true', receipts: 'true', ids: ['local-health-test']}],
+      [[rootPath], true, {root_tests: 'true', typecheck: 'true', packages: 'true', receipts: 'true', ids: null}],
+    ]) {
+      git('reset', '--hard', base);
+      for (const path of paths) write(path, 'reviewed output control\n');
+      renew(paths); docs(); const head = commit();
+      const event = join(scratch, 'event.json'), output = join(scratch, 'output');
+      writeFileSync(event, JSON.stringify({pull_request: {base: {sha: base}, head: {sha: head}}})); writeFileSync(output, '');
+      const result = spawnSync(process.execPath, [fileURLToPath(new URL('./ci-plan.mjs', import.meta.url))],
+        {cwd: root, encoding: 'utf8', timeout: 30_000, env: {...process.env, GITHUB_EVENT_PATH: event, GITHUB_OUTPUT: output,
+          GITHUB_SHA: head, CI_FORCE_FULL: String(full)}});
+      assert.equal(result.status, 0, result.stdout + result.stderr);
+      const rows = readFileSync(output, 'utf8').trim().split('\n').map(line => [line.slice(0, line.indexOf('=')), line.slice(line.indexOf('=') + 1)]);
+      assert.equal(rows.length, 8, 'Every gate and matrix must be published exactly once');
+      assert.equal(new Set(rows.map(([key]) => key)).size, 8, 'Outputs cannot silently overwrite a gate');
+      const outputs = Object.fromEntries(rows), plan = JSON.parse(outputs.plan);
+      for (const key of ['root_tests', 'typecheck', 'packages', 'receipts']) assert.equal(outputs[key], want[key], `${paths}: ${key}`);
+      for (const key of ['documentation', 'scripts']) assert.equal(outputs[key], 'false');
+      assert.equal(plan.reuse, null);
+      assert.deepEqual(plan.rootInputs?.entryIds ?? null, want.ids);
+      assert.deepEqual(JSON.parse(outputs.package_matrix), {include: want.packages === 'true'
+        ? [{package: '@waitron-cloud/control', shard: 1}] : [{package: 'unused', shard: 1}]});
+      if (paths.length === 1 && paths[0] === health) assert.deepEqual(plan.receipts, ['test:local-stack']);
+      if (full) assert.equal(plan.receipts.length, 6);
+    }
+  } finally {rmSync(scratch, {recursive: true, force: true});}
+}));
+
+test('receipt-only preflight refuses a missing head command instead of accepting an empty check', () => fixture(({root, git, write, renew, docs, commit}) => {
+  const health = 'deploy/local-stack/operations-health.test.mjs';
+  write('package.json', {scripts: {'test:backup-capacity': `node --test ${capacityPath}`}});
+  renew(['package.json']); docs(); const base = commit();
+  write(health, 'changed health check\n'); renew([health]); docs(); const head = commit();
+  const plan = {packages: [], receipts: ['test:local-stack'], typecheck: false, rootTests: false, reuse: null,
+    rootInputs: {version: 1, base, head, paths: git('diff', '--name-only', '--no-renames', '-z', base, head).split('\0').filter(Boolean),
+      entryIds: ['local-health-test']}};
+  const event = join(root, '.git', 'root-event.json');
+  writeFileSync(event, JSON.stringify({pull_request: {base: {sha: base}, head: {sha: head}}}));
+  const result = spawnSync(process.execPath, [fileURLToPath(new URL('./ci-root-inputs.mjs', import.meta.url)), '--check'],
+    {cwd: root, encoding: 'utf8', timeout: 30_000, env: {...process.env, GITHUB_EVENT_PATH: event, CI_HEAD_SHA: head, CI_PLAN: JSON.stringify(plan)}});
+  assert.equal(result.status, 1, result.stdout + result.stderr);
+  assert.match(result.stderr, /Missing root receipt command: test:local-stack/);
+}));
