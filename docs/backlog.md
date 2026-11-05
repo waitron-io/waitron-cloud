@@ -53,7 +53,14 @@ three trials. The ledger reports unknown cost; the control's additional demand
 for full reconciliation fails. A generated writer alone passes the proposed drain, but that
 change fails 15 of 92 existing shutdown checks; restoring the implementation
 passes all 92. Keep the current acceptance guard and absolute two-second stop
-budget. Next, reproduce this ordering on Linux and establish a background-work
+budget.
+
+The same official 0.5.17 controls on Debian 13 reproduce all three delayed
+LIST cancellations with writer exit zero. Socket retirement fails all three
+trials at retry-sequence validation and needs forced collection in each.
+Passive idle still permits a later LIST cancellation in all three trials;
+the ledger retains unknown cost. These controlled Linux results confirm the
+counterexamples, not the historical cause. Next, establish a background-work
 completion boundary without treating one idle observation as completion.
 
 ## Cloud backup box identity (D451)
