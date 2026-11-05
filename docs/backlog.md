@@ -504,7 +504,7 @@ Migration 038, its dormant tables and stored rows remain unchanged. Registration
 owns the seven retained schema tests and the digest/ledger-position check. Removal
 regressions compare every dormant table and the migration ledger before and after
 old calls and free/paid/free plan changes. Shared account, session, recovery and
-mail assertions remain. Live CI keeps nine packages, 29 logical shards in 28
+mail assertions remain. Live CI keeps nine packages, 30 logical shards in 29
 jobs and all six receipt suites, including all six portal shards. Saved historical
 manifests and cost receipts remain historical evidence; their parsers and positive
 receipt-selection checks remain. The [registry reference](fiscal-allocation-registry.md)
@@ -1212,7 +1212,7 @@ implementation or production evidence.
   partitions separate its five expensive guard files while preserving every assertion
   and the eight-minute limit. The summary requires every registration partition
   and rejects five- and seven-partition allocations. The
-  [registration runtime investigation](backlog/package-ci-runtime.md) records
+  [registration runtime investigation (D576)](backlog/package-ci-runtime.md) records
   the Linux measurements and the historical failures that remain unexplained. A Node subprocess
   check partitions copies of every current registration filename plus a new
   filename and requires each to execute exactly once. Its file workers run one
@@ -1226,10 +1226,12 @@ implementation or production evidence.
   reached 259 seconds but used the same 23 rounded registration minutes as seven
   jobs, and its backup job failed the strict native-memory OOM check. The start
   ordering fix below addresses a reproduced mechanism for that failure.
-  Matched case durations guide the five-job allocation; they do not prove its
-  elapsed time or a saving. Require every registration job within 300 seconds
-  and fewer than 23 rounded registration minutes on the exact candidate head.
-  The wider target of 55 rounded minutes for a full run remains open.
+  Whole-file measurements now guide the six-job allocation and three explicit
+  filename moves; they do not prove the balanced layout's elapsed time or a saving.
+  Aim for about four minutes per registration job and require every exact-head
+  registration job within 300 seconds. Use observed wall times and complete case
+  counts rather than the retired rounded-minute budgets. The balanced Linux run,
+  current-head CI and post-merge verification remain required.
 
   The relay-capacity test keeps its four SMTP deliveries open until all four
   competing worker attempts return without work. Its unchanged sending, queued

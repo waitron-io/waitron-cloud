@@ -6,6 +6,7 @@ import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import * as summary from './ci-summary.mjs';
 import {loadWorkspace, workPlan} from './ci-scope.mjs';
+import {registrationFiles} from './ci-run-registration-shard.mjs';
 
 const {assertSummary} = summary;
 const results = {changes: 'success', typecheck: 'success', root: 'success', packages: 'success', receipts: 'skipped'};
@@ -93,8 +94,10 @@ test(${JSON.stringify(name)}, async () => {
     const env = {...process.env};
     delete env.NODE_TEST_CONTEXT;
     for (const row of rows) {
+      const selectedFiles = registrationFiles(row.shard, files);
+      assert.ok(selectedFiles.length > 0);
       const output = execFileSync(process.execPath, ['--test', '--test-reporter=tap', '--test-concurrency=1', '--test-timeout=30000',
-        `--test-shard=${row.shard}/${row.shards}`, '*.test.ts'], {cwd: root, env, encoding: 'utf8', timeout: 30_000});
+        ...selectedFiles], {cwd: root, env, encoding: 'utf8', timeout: 30_000});
       const selected = [...output.matchAll(/^ok \d+ - (.+)$/gm)].map(match => match[1]);
       assert.ok(selected.length > 0, `Empty registration shard ${row.shard}`);
       assert.match(output, /^# fail 0$/m);

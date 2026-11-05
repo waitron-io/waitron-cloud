@@ -15,17 +15,43 @@ Account HTTP and the other package allocations stay unchanged.
 
 ## Linux qualification
 
-The six-partition trial uses the same registration tree, PostgreSQL launcher
-and lockfile. Its first three partitions pass 199, 344 and 345 cases in
-133.415, 228.054 and 214.297 seconds of test-runner time. Including the database
-and mail fixture wrapper, they take 139.343, 233.864 and 221.602 seconds.
-The remaining three partitions are still being measured. These partial results
-are not full qualification or a claim that the runtime target is met.
+The count-only six-partition control uses the same registration tree, PostgreSQL
+launcher and lockfile. All 1,684 cases pass without failures, cancellations or
+skips. The observer records every one of the 139 test files exactly once.
+
+| Partition | Cases | Test runner seconds | Whole wrapper seconds |
+| --- | ---: | ---: | ---: |
+| 1 | 199 | 133.415 | 139.343 |
+| 2 | 344 | 228.054 | 233.864 |
+| 3 | 345 | 214.297 | 221.602 |
+| 4 | 264 | 174.554 | 180.899 |
+| 5 | 347 | 287.421 | 293.499 |
+| 6 | 185 | 239.193 | 245.136 |
+
+The slowest wrapper takes 293.499 seconds, so adding a partition alone does not
+meet the four-minute target. Earlier six-partition layouts also failed to
+establish a runtime saving; their historical observations remain in the
+[CI execution budget](../backlog.md). More partitions alone are not qualification.
+
+The runner now moves `monitoring.test.ts` and
+`venue-service-legacy-schema-guards.test.ts` to partition 1, and
+`support-grants.test.ts` to partition 2. Other files keep the sorted round-robin
+assignment. A scheduling model using the measured whole-file durations predicts
+about 230 seconds for its slowest test runner. That is an estimate, not a measured
+improvement. The first Linux attempt at the balanced layout refused because
+another lane held the test box; its complete runtime qualification remains open.
+The portable runner checks preserve all-file discovery, reject invalid and empty
+partitions, forward test failures and keep the same Node test-process identity.
+
+Aim for about four minutes per registration job, and require each exact-head job
+to finish within 300 seconds. The workflow's eight-minute cap stays unchanged.
+Use complete case counts and observed job wall times; rounded-minute budgets no
+longer gate this work. Current-head CI and the merge's own CI are still required.
 
 From a complete-history checkout, run each partition with the original deadline:
 
 ```sh
-node scripts/test-postgres.mjs exec pnpm --dir packages/registration exec node --test --test-timeout=30000 --test-shard=1/6 'test/*.test.ts'
+node scripts/test-postgres.mjs exec pnpm --dir packages/registration exec node ../../scripts/ci-run-registration-shard.mjs 1
 ```
 
 Run partitions 2 through 6 too. The campaign's Linux box wrapper supplies the
