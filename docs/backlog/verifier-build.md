@@ -50,13 +50,15 @@ Run `node --test scripts/ci-test-postgres.test.mjs` for the launcher controls.
 An inspection timeout now prints one `docker_stall` record before rethrowing the
 original error. You get host uptime, load averages and memory, followed by a
 separate read-only Docker service probe with a one-second limit. The probe
-reports a version, refusal, timeout or unrecognized reply; it omits raw service
-output and errors. It runs only after an inspection timeout. Normal launches,
+reports a version, client timeout, nonzero exit, killed or missing client, oversized
+output or unrecognized reply; it omits raw service output and errors. It runs only after an inspection timeout. Normal launches,
 missing-image handling, acquisition limits and retry decisions stay unchanged.
-These samples describe the host immediately after the client timeout; they do
-not measure the preceding stall or enumerate other processes on the runner.
-Use the next recurrence to distinguish an unresponsive Docker service from a
-refused image operation before proposing a repair. The backup-worker build
+The extra probe can add one second after the original timeout. These samples
+describe the host immediately after the client timeout; they do not measure the
+preceding stall or enumerate other processes on the runner. A probe timeout
+does not establish whether its client or the service stalled. Use the next
+recurrence to see whether the service answers this separate request before
+proposing a repair. The backup-worker build
 still needs its own immediate progress and service evidence. No timeout cause
 is closed by these diagnostics or by a clean retry.
 

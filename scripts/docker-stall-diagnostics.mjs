@@ -16,7 +16,12 @@ export function reportDockerInspectionStall({image, elapsedMs}) {
     daemon = /^\d+\.\d+\.\d+(?:[-+][a-zA-Z0-9.-]+)?$/.test(version)
       ? {status: 'responsive', version} : {status: 'unrecognized'};
   } catch (error) {
-    daemon = {status: error.code === 'ETIMEDOUT' ? 'timeout' : 'refused'};
+    // A killed or missing client does not establish that the service refused a request.
+    const status = error.code === 'ETIMEDOUT' ? 'timeout'
+      : error.code === 'ENOBUFS' ? 'output-limit'
+      : error.signal ? 'client-killed'
+      : Number.isInteger(error.status) ? 'exit-error' : 'spawn-error';
+    daemon = {status};
   }
   console.error('docker_stall=' + JSON.stringify({
     operation: 'image-inspect', image, error: 'ETIMEDOUT', elapsedMs, host, daemon,
