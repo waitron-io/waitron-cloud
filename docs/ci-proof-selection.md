@@ -6,11 +6,10 @@ workflows. It runs their test jobs only when their reviewed inputs change.
 The ordinary CI workflow keeps its own package and receipt selection.
 
 You can run either complete proof manually with **Run workflow** in GitHub Actions.
-Automatic main-push runs are removed. D571 part 6 will add a nightly full run;
-that schedule is not installed by this change. Land part 6 first, or qualify
-both changes together, so automatic full proofs have no gap. Manual full runs
-remain available. The standard main workflow still runs its full package,
-compiler and six-receipt plan, including the cost unit checks.
+Automatic main-push runs are removed. The [nightly full run](ci-nightly.md)
+executes both complete matrices, even when called from an unrelated pull request.
+Manual full runs remain available. The standard main workflow still runs its full
+package, compiler and six-receipt plan, including the cost unit checks.
 
 ## Cost conformance inputs
 
@@ -51,8 +50,8 @@ fixture, backup verification helpers and fake translation provider. The imported
 `deploy/backup-verifier/target.json` also select venue.
 
 Other product-source edits use package CI without repeating this composition
-proof on every PR. A complete manual run remains available, and the planned
-nightly run will exercise every suite regardless of the changed paths.
+proof on every PR. A complete manual run remains available, and the
+nightly run exercises every suite regardless of the changed paths.
 
 ## Review and verify the boundary
 
@@ -61,10 +60,12 @@ change a proof reader or add an import, helper, fixture or file read, follow tha
 input and update its ownership here and in the selector. Broad directory rules
 include new files within their existing boundary. New packages, unfamiliar
 root areas and unclassified scripts keep both proofs until you review them.
-A companion `scripts/ci-input-audit.json` renewal counts as evidence only after
-all four saved head inventories verify. A stale or malformed peer keeps full
-proof work. This prevents the required renewal from waking both matrices for
-every code PR. Root Markdown is unrelated prose for these proof readers.
+With v2, accompanying audit records count as evidence only after the saved head's
+documentation records verify. Unused identity, gateway and lock shortcuts can
+remain stale; the proof selector never uses their authority. Damaged metadata,
+a changed frozen v1 policy or stale documentation records keep full proof work.
+Historical v1 renewals still require all four inventories. This keeps required
+record renewal from waking both matrices for unrelated code PRs. Root Markdown is unrelated prose for these proof readers.
 New directories inside known `docs/`, `deploy/`, workspace or workflow areas
 use their declared ownership rather than the unknown-root fallback. Review a new
 reader before relying on that boundary. The fallback also retains all root-script changes, including the other proof

@@ -4,6 +4,7 @@ import {mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync} from 'node:
 import {tmpdir} from 'node:os';
 import {join, resolve} from 'node:path';
 import test from 'node:test';
+import {recordFilename} from './ci-input-audit-records.mjs';
 
 const checker = resolve('scripts/ci-docs.mjs');
 function fixture(run) {
@@ -14,11 +15,11 @@ function fixture(run) {
     mkdirSync(join(root, path, '..'), {recursive: true}); writeFileSync(join(root, path), text);
   };
   const commit = () => {git('add', '-A'); git('commit', '-sm', 'Proof input fixture'); return git('rev-parse', 'HEAD');};
-  const plan = (kind, event, sha = git('rev-parse', 'HEAD')) => {
+  const plan = (kind, event, sha = git('rev-parse', 'HEAD'), full = 'false') => {
     const eventPath = join(root, '.git/event.json'), output = join(root, '.git/output');
     writeFileSync(eventPath, JSON.stringify(event)); writeFileSync(output, '');
     const result = spawnSync(process.execPath, [checker, '--plan'], {cwd: root, encoding: 'utf8',
-      env: {...process.env, CI_PROOF_KIND: kind, GITHUB_SHA: sha,
+      env: {...process.env, CI_PROOF_KIND: kind, CI_FORCE_FULL: full, GITHUB_SHA: sha,
         GITHUB_EVENT_PATH: eventPath, GITHUB_OUTPUT: output}});
     assert.equal(result.status, 0, result.stderr);
     const lines = readFileSync(output, 'utf8').trim().split('\n');
@@ -97,6 +98,15 @@ test('an advanced target uses the common ancestor and ignores uncommitted files'
   assert.equal(plan('cost', pr(head, target)).required, false);
 }));
 
+for (const kind of ['cost', 'venue']) {
+  test(`${kind} full execution overrides unrelated PR inputs without changing ordinary selection`, () => fixture(({put, commit, plan, pr}) => {
+    put('apps/portal/src/account.ts'); const head = commit(), event = pr(head);
+    assert.equal(plan(kind, event, head).required, false);
+    assert.equal(plan(kind, event, head, 'true').required, true);
+    assert.equal(plan(kind, event, head).required, false);
+  }));
+}
+
 test('manual and scheduled events run both complete matrices', () => fixture(({plan}) => {
   for (const kind of ['cost', 'venue']) for (const event of [{}, {schedule: '17 2 * * *'}, {before: 'a'.repeat(40)}]) {
     assert.equal(plan(kind, event).required, true);
@@ -166,43 +176,64 @@ test('root prose does not wake either proof matrix', () => fixture(({put, commit
 }));
 
 // A required audit renewal is evidence; it must not select otherwise unrelated proof work.
-test('a real portal PR with all four renewed inventories still omits both matrices', () => {
-  const root = mkdtempSync(join(tmpdir(), 'cloud-proof-audit-'));
-  const repo = join(root, 'repo');
-  try {
-    execFileSync('git', ['clone', '--shared', '--quiet', resolve('.'), repo]);
-    const git = (...args) => execFileSync('git', ['-c', 'maintenance.auto=false', ...args],
-      {cwd: repo, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe']}).trim();
-    git('config', 'user.name', 'Proof test'); git('config', 'user.email', 'proof@example.test');
-    const base = git('rev-parse', 'HEAD');
-    writeFileSync(join(repo, 'apps/portal/src/proof-selection-control.ts'), 'export const selected = true;\n');
-    writeFileSync(join(repo, 'docs/backlog.md'), readFileSync(join(repo, 'docs/backlog.md'), 'utf8') + '\nProof selection control.\n');
-    git('add', '-A');
-    const renew = spawnSync(process.execPath, [resolve('scripts/ci-input-audit.mjs'), '--write-staged'],
-      {cwd: repo, encoding: 'utf8'});
-    assert.equal(renew.status, 0, renew.stdout + renew.stderr);
-    git('add', 'scripts/ci-input-audit.json'); git('commit', '-sm', 'Renew complete proof control');
-    const head = git('rev-parse', 'HEAD');
-    const output = join(root, 'output'), eventPath = join(root, 'event.json');
-    const execute = (kind, old = base) => {
-      writeFileSync(output, '');
-      writeFileSync(eventPath, JSON.stringify({pull_request: {base: {sha: old}, head: {sha: git('rev-parse', 'HEAD')}}}));
-      const result = spawnSync(process.execPath, [checker, '--plan'], {cwd: repo, encoding: 'utf8',
-        env: {...process.env, CI_PROOF_KIND: kind, GITHUB_EVENT_PATH: eventPath, GITHUB_OUTPUT: output}});
-      assert.equal(result.status, 0, result.stdout + result.stderr);
-      return readFileSync(output, 'utf8');
-    };
-    for (const kind of ['cost', 'venue']) assert.equal(execute(kind), 'required=false\n', kind);
-    const policyPath = join(repo, 'scripts/ci-input-audit.json');
-    const reviewedPolicy = JSON.parse(readFileSync(policyPath, 'utf8'));
-    for (const field of ['docsInputSha256', 'identityInputSha256', 'gatewayInputSha256', 'lockInputSha256']) {
-      const policy = {...reviewedPolicy, [field]: '0'.repeat(64)};
-      writeFileSync(policyPath, JSON.stringify(policy));
-      git('add', '-A'); git('commit', '-sm', `Refuse stale ${field}`);
-      for (const kind of ['cost', 'venue']) assert.equal(execute(kind, head), 'required=true\n', `${kind}: ${field}`);
-    }
-  } finally {rmSync(root, {recursive: true, force: true});}
-});
+for (const historical of [false, true]) {
+  test(`a real portal PR with all four renewed inventories still omits both matrices (${historical ? 'historical v1' : 'current v2'})`, () => {
+    const root = mkdtempSync(join(tmpdir(), 'cloud-proof-audit-'));
+    const repo = join(root, 'repo');
+    try {
+      execFileSync('git', ['clone', '--shared', '--quiet', resolve('.'), repo]);
+      const git = (...args) => execFileSync('git', ['-c', 'maintenance.auto=false', ...args],
+        {cwd: repo, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe']}).trim();
+      git('config', 'user.name', 'Proof test'); git('config', 'user.email', 'proof@example.test');
+      git('checkout', '--detach', historical ? 'dca4ab55e184e88b73e3e2c3c01964bcdbbacf9a'
+        : execFileSync('git', ['rev-parse', 'HEAD'], {encoding: 'utf8'}).trim());
+      const base = git('rev-parse', 'HEAD');
+      writeFileSync(join(repo, 'apps/portal/src/proof-selection-control.ts'), 'export const selected = true;\n');
+      writeFileSync(join(repo, 'docs/backlog.md'), readFileSync(join(repo, 'docs/backlog.md'), 'utf8') + '\nProof selection control.\n');
+      git('add', '-A');
+      const renew = spawnSync(process.execPath, [resolve('scripts/ci-input-audit.mjs'), '--write-staged', ...(historical ? [] : ['--mode', 'all'])],
+        {cwd: repo, encoding: 'utf8'});
+      assert.equal(renew.status, 0, renew.stdout + renew.stderr);
+      git('add', historical ? 'scripts/ci-input-audit.json' : 'scripts/ci-input-audit.d'); git('commit', '-sm', 'Renew complete proof control');
+      const head = git('rev-parse', 'HEAD');
+      const output = join(root, 'output'), eventPath = join(root, 'event.json');
+      const execute = (kind, old = base) => {
+        writeFileSync(output, '');
+        writeFileSync(eventPath, JSON.stringify({pull_request: {base: {sha: old}, head: {sha: git('rev-parse', 'HEAD')}}}));
+        const result = spawnSync(process.execPath, [checker, '--plan'], {cwd: repo, encoding: 'utf8',
+          env: {...process.env, CI_PROOF_KIND: kind, GITHUB_EVENT_PATH: eventPath, GITHUB_OUTPUT: output}});
+        assert.equal(result.status, 0, result.stdout + result.stderr);
+        return readFileSync(output, 'utf8');
+      };
+      for (const kind of ['cost', 'venue']) assert.equal(execute(kind), 'required=false\n', kind);
+      if (!historical) {
+        // Documentation-only renewal must compose without reviving unused peer shortcuts.
+        writeFileSync(join(repo, 'apps/portal/src/proof-selection-control.ts'), 'export const selected = false;\n');
+        git('add', '-A');
+        const docsRenew = spawnSync(process.execPath, [resolve('scripts/ci-input-audit.mjs'), '--write-staged'],
+          {cwd: repo, encoding: 'utf8'});
+        assert.equal(docsRenew.status, 0, docsRenew.stdout + docsRenew.stderr);
+        git('add', 'scripts/ci-input-audit.d/docs'); git('commit', '-sm', 'Renew only documentation control');
+        for (const kind of ['cost', 'venue']) assert.equal(execute(kind, head), 'required=false\n', kind);
+        const recordPath = join(repo, recordFilename('docs', 'apps/portal/src/proof-selection-control.ts'));
+        const validRecord = readFileSync(recordPath, 'utf8');
+        writeFileSync(recordPath, JSON.stringify({...JSON.parse(validRecord), objectId: '0'.repeat(40)}) + '\n');
+        git('add', '-A'); git('commit', '-sm', 'Refuse stale documentation record');
+        for (const kind of ['cost', 'venue']) assert.equal(execute(kind, head), 'required=true\n', kind);
+        writeFileSync(recordPath, validRecord); git('add', '-A'); git('commit', '-sm', 'Restore documentation record');
+        for (const kind of ['cost', 'venue']) assert.equal(execute(kind, head), 'required=false\n', kind);
+      }
+      const policyPath = join(repo, 'scripts/ci-input-audit.json');
+      const reviewedPolicy = JSON.parse(readFileSync(policyPath, 'utf8'));
+      for (const field of ['docsInputSha256', 'identityInputSha256', 'gatewayInputSha256', 'lockInputSha256']) {
+        const policy = {...reviewedPolicy, [field]: '0'.repeat(64)};
+        writeFileSync(policyPath, JSON.stringify(policy));
+        git('add', '-A'); git('commit', '-sm', `Refuse stale ${field}`);
+        for (const kind of ['cost', 'venue']) assert.equal(execute(kind, head), 'required=true\n', `${kind}: ${field}`);
+      }
+    } finally {rmSync(root, {recursive: true, force: true});}
+  });
+}
 
 for (const path of ['packages/registration/test/fixtures/venue-service.ts',
   'packages/registration/test/fixtures/relay-worker.ts', 'packages/registration/test/fixtures/relay-stop-barrier.ts',

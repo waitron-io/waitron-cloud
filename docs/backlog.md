@@ -1289,8 +1289,9 @@ implementation or production evidence.
   support complete manual runs and stop running on main pushes, while the nightly
   backstop below retains both full matrices. Real-Git controls cover positive
   inputs, omissions, renames, missing history and checkout refusals. No rehearsal
-  assertion, command or deadline changes, and no measured GitHub time saving is
-  claimed. D571 part 5 has a
+  assertion, command or deadline changes. The combined controls preserve the
+  nightly full flag and v2 documentation-record renewal without requiring unused
+  peer shortcuts. No measured GitHub time saving is claimed. D571 part 5 has a
   [verified-merge design](superpowers/specs/2026-11-05-verified-merge-ci-design.md)
   and [implementation plan](superpowers/plans/2026-11-05-verified-merge-ci.md).
   Reuse and changed-tree main selection are not implemented. Runtime landing

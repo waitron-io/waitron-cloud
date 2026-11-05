@@ -57,13 +57,16 @@ export function proofInputPlan(kind, event, git) {
     assert.ok(paths.every(path => path && !/[\\\n\r]/.test(path) &&
       !path.split('/').some(part => ['', '.', '..'].includes(part))), 'Unclassified proof path');
     const policyPath = 'scripts/ci-input-audit.json';
-    if (paths.includes(policyPath)) {
+    const auditPath = path => path === policyPath || path === 'scripts/ci-input-audit-v2.json' ||
+      path.startsWith('scripts/ci-input-audit.d/');
+    if (paths.some(auditPath)) {
       const {policy} = readInputAudit(pr.head.sha, git);
-      for (const mode of ['docs', 'identity', 'gateway', 'lock']) {
+      if (policy.version === 2) auditInputMode('docs', pr.head.sha, git);
+      else for (const mode of ['docs', 'identity', 'gateway', 'lock']) {
         auditInputMode(mode, pr.head.sha, git, Object.keys(policy.manifests));
       }
     }
-    const inputs = paths.filter(path => path !== policyPath && consumes(kind, path));
+    const inputs = paths.filter(path => !auditPath(path) && consumes(kind, path));
     return {required: inputs.length > 0, reason: inputs.length
       ? `Selected ${kind} proof inputs: ${inputs.join(', ')}`
       : `No ${kind} proof inputs changed across ${paths.length} paths`};

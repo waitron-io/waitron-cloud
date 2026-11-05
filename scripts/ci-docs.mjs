@@ -64,7 +64,10 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
       }
       console.log('Documentation reader audit is current');
     } else if (args.length === 1 && args[0] === '--plan') {
-      if (process.env.CI_PROOF_KIND) {
+      if (process.env.CI_FORCE_FULL === 'true') {
+        appendFileSync(process.env.GITHUB_OUTPUT, 'required=true\n');
+        console.log('Explicit full proof run');
+      } else if (process.env.CI_PROOF_KIND) {
         let event = {};
         try { event = JSON.parse(readFileSync(process.env.GITHUB_EVENT_PATH, 'utf8')); }
         catch { /* Missing event evidence retains a complete proof run. */ }
