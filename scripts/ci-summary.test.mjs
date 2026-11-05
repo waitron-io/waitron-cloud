@@ -5,12 +5,23 @@ import {syncBuiltinESMExports} from 'node:module';
 import {mkdtempSync, readFileSync, rmSync, writeFileSync, symlinkSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
+import {fileURLToPath} from 'node:url';
 import {assertSummary} from './ci-summary.mjs';
 import {reuseProof} from './fixtures/ci-evidence.mjs';
 import * as summary from './ci-summary.mjs';
 const plan = {packages:[1,2,3,4,5,6].map(shard=>({package:'@waitron-cloud/portal',shard,shards:6})),receipts:[],typecheck:true,reuse:null};
 const results = {changes:'success',typecheck:'success',root:'success',receipts:'skipped',packages:'success'};
 const jobs = ['changes','typecheck','root (1/4)','root (2/4)','root (3/4)','root (4/4)', ...[1,2,3,4,5,6].map(i=>`package (@waitron-cloud/portal, shard ${i}/6)`)].map(name=>({name,status:'completed',conclusion:'success'}));
+const summaryProgram = fileURLToPath(new URL('./ci-summary.mjs', import.meta.url));
+function isolatedSummaryContext(root) {
+  const git = (...args) => childProcess.execFileSync('git', ['-c', 'maintenance.auto=false', ...args], {cwd: root, encoding: 'utf8', stdio: 'pipe'}).trim();
+  git('init', '-q'); git('config', 'user.name', 'CI test'); git('config', 'user.email', 'ci@example.test');
+  writeFileSync(join(root, 'baseline'), 'Isolated summary job-contract fixture.\n');
+  git('add', 'baseline'); git('commit', '-s', '-qm', 'Save isolated summary history');
+  const head = git('rev-parse', 'HEAD'), event = join(root, '.git', 'event.json');
+  writeFileSync(event, '{}\n');
+  return {head, env: {GITHUB_EVENT_PATH: event, GITHUB_SHA: head, CI_HEAD_SHA: head, CI_JOB_PREFIX: ''}};
+}
 test('summary accepts precisely the planned work and skips only unnecessary receipts', () => {
   assert.doesNotThrow(()=>assertSummary(plan,results,jobs));
 });
@@ -87,6 +98,7 @@ test('summary rejects unknown skipped identities duplicate placeholders and dupl
 test('executed summary waits for a stale job record to publish its final result', () => {
   const root = mkdtempSync(join(tmpdir(), 'cloud-summary-publication-'));
   try {
+    const context = isolatedSummaryContext(root);
     const first = [...jobs.slice(0, -1), {...jobs.at(-1), status: 'in_progress', conclusion: null}];
     writeFileSync(join(root, 'first.json'), JSON.stringify([{jobs: first}]));
     writeFileSync(join(root, 'settled.json'), JSON.stringify([{jobs}]));
@@ -102,8 +114,8 @@ else
   cat "$CI_PUBLICATION_FIXTURE/first.json"
 fi
 `, {mode: 0o700});
-    const run = spawnSync(process.execPath, ['scripts/ci-summary.mjs'], {
-      env: {...process.env, PATH: `${root}:${process.env.PATH}`, CI_PUBLICATION_FIXTURE: root,
+    const run = spawnSync(process.execPath, [summaryProgram], {
+      cwd: root, env: {...process.env, ...context.env, PATH: `${root}:${process.env.PATH}`, CI_PUBLICATION_FIXTURE: root,
         CI_PLAN: JSON.stringify(plan),
         CI_RESULTS: JSON.stringify(Object.fromEntries(Object.entries(results).map(([name, result]) => [name, {result}]))),
         GITHUB_REPOSITORY: 'waitron-io/waitron-cloud', GITHUB_RUN_ID: '42'},
@@ -522,11 +534,11 @@ test('a rerun can reuse a completed successful earlier attempt but never unfinis
 test('executed summary binds completed shard steps to the workflow run, attempt and source commit', () => {
   const root = mkdtempSync(join(tmpdir(), 'cloud-summary-steps-'));
   try {
-    const head = childProcess.execFileSync('git', ['rev-parse', 'HEAD'], {encoding: 'utf8'}).trim();
+    const context = isolatedSummaryContext(root), {head} = context;
     writeFileSync(join(root, 'jobs.json'), JSON.stringify([{jobs: withShard({...finishedShard(), head_sha: head})}]));
     writeFileSync(join(root, 'gh'), '#!/bin/sh\ncat "$CI_PUBLICATION_FIXTURE/jobs.json"\n', {mode: 0o700});
-    const run = spawnSync(process.execPath, ['scripts/ci-summary.mjs'], {
-      env: {...process.env, PATH: `${root}:${process.env.PATH}`, CI_PUBLICATION_FIXTURE: root,
+    const run = spawnSync(process.execPath, [summaryProgram], {
+      cwd: root, env: {...process.env, ...context.env, PATH: `${root}:${process.env.PATH}`, CI_PUBLICATION_FIXTURE: root,
         CI_PLAN: JSON.stringify(plan),
         CI_RESULTS: JSON.stringify(Object.fromEntries(Object.entries(results).map(([name, result]) => [name, {result}]))),
         GITHUB_REPOSITORY: 'waitron-io/waitron-cloud', GITHUB_RUN_ID: '42', GITHUB_RUN_ATTEMPT: '2', CI_HEAD_SHA: head},
@@ -668,6 +680,7 @@ test('nested summaries refuse malformed job names before selecting a workflow fa
 test('actual nested summary command receives the prefix configured by both workflow files', () => {
   const root = mkdtempSync(join(tmpdir(), 'cloud-nested-summary-cli-'));
   try {
+    const context = isolatedSummaryContext(root);
     const caller = readFileSync(new URL('../.github/workflows/nightly.yml', import.meta.url), 'utf8');
     const callee = readFileSync(new URL('../.github/workflows/ci.yml', import.meta.url), 'utf8');
     const value = /job-prefix: '([^']+)'/.exec(caller)?.[1];
@@ -679,7 +692,7 @@ test('actual nested summary command receives the prefix configured by both workf
   writeFileSync(join(root, 'package.json'), '{"type":"module"}\n');
     writeFileSync(join(root, 'gh.cjs'), `#!${process.execPath}\nconst fs=require('node:fs');const assert=require('node:assert/strict');assert.deepEqual(process.argv.slice(2),['api','--paginate','--slurp','repos/waitron-io/waitron-cloud/actions/runs/42/jobs?filter=latest&per_page=30']);process.stdout.write(fs.readFileSync(process.env.CI_JOB_FIXTURE,'utf8'));\n`, {mode: 0o700});
     symlinkSync('gh.cjs', join(root, 'gh'));
-    const result = spawnSync(process.execPath, ['scripts/ci-summary.mjs'], {encoding: 'utf8', timeout: 3_000, env: {...process.env, PATH: `${root}:${process.env.PATH}`, GITHUB_REPOSITORY: 'waitron-io/waitron-cloud', GITHUB_RUN_ID: '42', CI_JOB_FIXTURE: join(root, 'jobs.json'), CI_JOB_PREFIX: prefix, CI_PLAN: JSON.stringify(plan), CI_RESULTS: JSON.stringify(Object.fromEntries(Object.entries(results).map(([name, result]) => [name, {result}])))} });
+    const result = spawnSync(process.execPath, [summaryProgram], {cwd: root, encoding: 'utf8', timeout: 3_000, env: {...process.env, ...context.env, PATH: `${root}:${process.env.PATH}`, GITHUB_REPOSITORY: 'waitron-io/waitron-cloud', GITHUB_RUN_ID: '42', CI_JOB_FIXTURE: join(root, 'jobs.json'), CI_JOB_PREFIX: prefix, CI_PLAN: JSON.stringify(plan), CI_RESULTS: JSON.stringify(Object.fromEntries(Object.entries(results).map(([name, result]) => [name, {result}])))} });
     assert.equal(result.status, 0, result.stdout + result.stderr);
     assert.match(result.stdout, /Passed 6 package jobs and 0 receipts/);
   } finally {rmSync(root, {recursive: true, force: true});}

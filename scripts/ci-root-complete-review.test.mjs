@@ -76,6 +76,18 @@ test('a complete candidate activates in full and requires current review before 
     assert.equal(full.rootInputs, undefined);
     assert.doesNotThrow(() => assertRootInputWork(full, {base: beforeActivation, head: activated, git}));
 
+    const eventPath = join(root, '.git', 'root-activation-event.json');
+    writeFileSync(eventPath, JSON.stringify({pull_request: {base: {sha: beforeActivation}, head: {sha: activated}}}));
+    const fixtureEnv = {...process.env, GITHUB_ACTIONS: 'true', GITHUB_EVENT_NAME: 'pull_request', GITHUB_EVENT_PATH: eventPath,
+      GITHUB_SHA: activated, CI_HEAD_SHA: activated};
+    delete fixtureEnv.NODE_TEST_CONTEXT;
+    const summaryFixture = spawnSync(process.execPath, ['--test', '--test-reporter=tap', '--test-name-pattern=^(executed summary|actual nested summary|executed planner emits)',
+      'scripts/ci-cli.test.mjs', 'scripts/ci-summary.test.mjs', 'scripts/ci-scripts.test.mjs'], {cwd: root, encoding: 'utf8', timeout: 30_000, maxBuffer: 64 * 1024 * 1024,
+      env: fixtureEnv});
+    assert.equal(summaryFixture.status, 0,
+      `The legacy job-contract fixture must remain independent of its caller's activated PR event: ${summaryFixture.stdout}${summaryFixture.stderr}`);
+    assert.match(summaryFixture.stdout, /# pass 5\b/, summaryFixture.stdout + summaryFixture.stderr);
+
     appendFileSync(join(root, rootPath), '\n// Complete-candidate owner control.\n');
     git('add', '--', rootPath); review([rootPath]); docs(); const head = commit();
     const narrowed = rootInputPlan(changedPaths(activated, head), activated, head, git);

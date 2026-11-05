@@ -244,7 +244,7 @@ test('executed planner emits the script-only job and summary consumes its needs 
   const gh = '#!/bin/sh\nprintf \'%s\\n\' \'[{"jobs":[{"name":"changes","status":"completed","conclusion":"success"},{"name":"scripts","status":"completed","conclusion":"success"}]}]\'\n';
   put('gh', gh); git('update-index', '--refresh');
   execFileSync('chmod', ['+x', join(root, 'gh')]);
-  const summary = spawnSync(process.execPath, [resolve('scripts/ci-summary.mjs')], {cwd: root, env: {...process.env, PATH: `${root}:${process.env.PATH}`, CI_PLAN: output.plan, CI_RESULTS: JSON.stringify({changes: {result: 'success'}, scripts: {result: 'success'}, packages: {result: 'skipped'}, receipts: {result: 'skipped'}, typecheck: {result: 'skipped'}, documentation: {result: 'skipped'}})}, encoding: 'utf8'});
+  const summary = spawnSync(process.execPath, [resolve('scripts/ci-summary.mjs')], {cwd: root, env: {...process.env, PATH: `${root}:${process.env.PATH}`, GITHUB_EVENT_PATH: join(root, 'event.json'), GITHUB_SHA: head, CI_HEAD_SHA: head, CI_JOB_PREFIX: '', CI_PLAN: output.plan, CI_RESULTS: JSON.stringify({changes: {result: 'success'}, scripts: {result: 'success'}, packages: {result: 'skipped'}, receipts: {result: 'skipped'}, typecheck: {result: 'skipped'}, documentation: {result: 'skipped'}})}, encoding: 'utf8'});
   assert.equal(summary.status, 0, summary.stderr);
   assert.match(summary.stdout, /Passed root script checks/);
 }));
