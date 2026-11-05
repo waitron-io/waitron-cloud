@@ -2913,9 +2913,20 @@ implementation or production evidence.
   for local building and rehearsal. D110's
   [P1 country-cell plan](superpowers/plans/2026-10-22-cloud-country-cell.md)
   specifies images, repository-driven Kubernetes deployment and genuine three-node
-  availability checks for sign-in, remote access and backups. The plan is a documentation
-  milestone; implementation and those runtime checks remain unfinished. AWS accounts,
-  spending, live infrastructure and production schema changes need separate authority.
+  availability checks for sign-in, remote access and backups. Full service/fault proof
+  and the strict common verifier remain unbuilt. D570's
+  [weekly proof plan](superpowers/plans/2026-11-04-kubernetes-weekly-proof.md) carries
+  the first complete proof on one disposable on-demand ARM m7g.2xlarge in staging
+  462991287391/eu-south-2, within USD 5/month; production 949687825720 is forbidden.
+  One access answer gates a removable setup template you run in one sitting, with
+  automatic resource setup and removal. No prior full Mac proof or recurring Mac probe
+  is required; the supported Mac path and every capacity floor remain unchanged.
+  Independent verifier/control prerequisites may land before live qualification.
+  Private ARM inputs, all-in reservations, real termination/cleanup drills, measured
+  build/steady/fault/verifier/healing peaks and the full same-head/tree proof remain
+  open. The observed 6.10 GiB owned-memory sample is only a lower bound. Template and
+  AWS-action build and spend wait for the access answer; no infrastructure or access
+  exists from this plan. No general AWS, production or schema authority follows.
   Global account separation and the action controller have planning entries below;
   release waves, hosted venues and regional failover remain later plans.
   Country/provider/cell registry, repeatable resource
