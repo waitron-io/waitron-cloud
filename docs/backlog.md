@@ -7,6 +7,18 @@ The [socket regression and limits](backlog/storage-cache-fixture.md#admin-owner-
 cover a disconnected peer that previously prevented shutdown. Historical CI
 client attribution and the separate paced-replay checkpoint failure remain open.
 
+Paced-replay checkpoint failures retain the failed socket's count of forwarding
+requests through worker serialization. Run `node --test
+scripts/cloud-cost/checkpoint-socket-diagnostics.test.mjs` to reproduce a real
+connection reset after a completed request: the count is zero, but measurement
+still refuses. Counts outside 0–1,000,000,000, private values and accessors refuse.
+Five ordinary official-writer macOS probes pass; with a padded 512 KiB LIST reply,
+two of five stop-at-idle probes instead record `client-error / ECONNRESET`, zero
+forwarding requests, equal successful counters and writer exit zero. This is a
+controlled native reproduction, not attribution of the historical paced replay.
+The native shutdown repair and the separate LIST investigation remain open;
+no acceptance rule, assertion, accounting or deadline changes.
+
 ## Cloud backup box identity (D451)
 
 Cloud's backup verifier reads `WAITRON_NODE_ID`, and generated replay state writes

@@ -14,6 +14,7 @@ const transportDetails = {
   operation: value => ['put', 'get', 'head', 'list', 'delete', 'delete-many',
     'multipart-create', 'multipart-upload', 'multipart-complete', 'multipart-abort'].includes(value),
   idleActionsAtAdmission: value => Number.isSafeInteger(value) && value >= 0 && value <= 1000000000,
+  forwardingTransfers: value => Number.isSafeInteger(value) && value >= 0 && value <= 1000000000,
   clientClosed: value => typeof value === 'boolean',
   responseHeadersSeen: value => typeof value === 'boolean',
 };
