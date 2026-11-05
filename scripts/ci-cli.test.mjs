@@ -9,7 +9,7 @@ import {loadWorkspace} from './ci-scope.mjs';
 import {assertSummary} from './ci-summary.mjs';
 
 const repository='waitron-io/waitron-cloud';
-test('unknown-input squash merges keep complete full work for equal and advanced main trees',()=>{
+test('real squash merges run full on main for equal trees and advanced main without API access',()=>{
   const root=mkdtempSync(join(tmpdir(),'cloud-ci-merge-'));
   try {
     const git=(...args)=>execFileSync('git',['-c','maintenance.auto=false',...args],{cwd:root,encoding:'utf8'}).trim();
