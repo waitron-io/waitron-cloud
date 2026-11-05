@@ -6,6 +6,7 @@ import {assertDocumentation} from './ci-docs.mjs';
 import {packageMembers} from './ci-package-groups.mjs';
 import {assertReceiptSuites} from './ci-run-receipts.mjs';
 import {assertScriptWork} from './ci-scripts.mjs';
+import {assertReuseProof} from './ci-reuse-proof.mjs';
 
 export const packageShards = Object.freeze({
   '@waitron-cloud/registration': 6,
@@ -19,6 +20,28 @@ export const packageShards = Object.freeze({
   '@waitron-cloud/ui-smoke': 1,
 });
 
+export function assertPackageAllocations(packages) {
+  assert.ok(Array.isArray(packages), 'Missing package allocations');
+  const logicalPackages = packages.flatMap(row => packageMembers(row).map(name => `${name}:${row.shard}`));
+  assert.equal(new Set(logicalPackages).size, logicalPackages.length, 'Duplicate package execution');
+  const groupedPackages = packages.filter(row => Object.hasOwn(row, 'members')).flatMap(packageMembers);
+  for (const name of groupedPackages) {
+    assert.equal(packages.filter(row => packageMembers(row).includes(name)).length, 1, 'Duplicate package execution');
+  }
+  // Successful jobs cannot prove completeness when the plan itself omits a shard.
+  // Check the execution contract independently of the plan's declared counts.
+  const allocations = new Map();
+  for (const row of packages) {
+    if (Object.hasOwn(row, 'members')) continue;
+    const count = packageShards[row.package];
+    assert.ok(count && Number.isSafeInteger(row.shard) && row.shard >= 1 && row.shard <= count, 'Invalid package allocation');
+    assert.deepEqual(Object.keys(row).sort(), count > 1 ? ['package', 'shard', 'shards'] : ['package', 'shard'], 'Invalid package allocation fields');
+    if (count > 1) assert.equal(row.shards, count, 'Invalid package allocation partition count');
+    allocations.set(row.package, (allocations.get(row.package) ?? 0) + 1);
+  }
+  for (const [name, count] of allocations) assert.equal(count, packageShards[name], `Incomplete package allocation: ${name}`);
+}
+
 function expectedSummaryJobs(plan, results) {
   assert.equal(results.changes, 'success', 'CI planner must succeed');
   assert.ok(Array.isArray(plan.packages) && Array.isArray(plan.receipts) && typeof plan.typecheck === 'boolean', 'Missing CI plan');
@@ -26,8 +49,7 @@ function expectedSummaryJobs(plan, results) {
     assertScriptWork(plan);
   } else if (plan.reuse) {
     assert.ok(!plan.documentation, 'Reuse cannot declare document work');
-    assert.match(plan.reuse.sha, /^[a-f0-9]{40}$/);
-    assert.ok(Number.isSafeInteger(plan.reuse.runId) && plan.reuse.runId > 0);
+    assertReuseProof(plan.reuse, '.github/workflows/ci.yml');
     assert.equal(plan.packages.length + plan.receipts.length, 0);
     assert.equal(plan.typecheck, false);
   } else if (plan.documentation) {
@@ -51,24 +73,7 @@ function expectedSummaryJobs(plan, results) {
   if (plan.typecheck || results.root !== undefined) {
     assert.equal(results.root, plan.typecheck ? 'success' : 'skipped', 'root did not match its plan');
   }
-  const logicalPackages = plan.packages.flatMap(row => packageMembers(row).map(name => `${name}:${row.shard}`));
-  assert.equal(new Set(logicalPackages).size, logicalPackages.length, 'Duplicate package execution');
-  const groupedPackages = plan.packages.filter(row => Object.hasOwn(row, 'members')).flatMap(packageMembers);
-  for (const name of groupedPackages) {
-    assert.equal(plan.packages.filter(row => packageMembers(row).includes(name)).length, 1, 'Duplicate package execution');
-  }
-  // Successful jobs cannot prove completeness when the plan itself omits a shard.
-  // Check the execution contract independently of the plan's declared counts.
-  const allocations = new Map();
-  for (const row of plan.packages) {
-    if (Object.hasOwn(row, 'members')) continue;
-    const count = packageShards[row.package];
-    assert.ok(count && Number.isSafeInteger(row.shard) && row.shard >= 1 && row.shard <= count, 'Invalid package allocation');
-    assert.deepEqual(Object.keys(row).sort(), count > 1 ? ['package', 'shard', 'shards'] : ['package', 'shard'], 'Invalid package allocation fields');
-    if (count > 1) assert.equal(row.shards, count, 'Invalid package allocation partition count');
-    allocations.set(row.package, (allocations.get(row.package) ?? 0) + 1);
-  }
-  for (const [name, count] of allocations) assert.equal(count, packageShards[name], `Incomplete package allocation: ${name}`);
+  assertPackageAllocations(plan.packages);
   for (const row of plan.packages) expected.push(`package (${row.package}${row.shards ? `, shard ${row.shard}/${row.shards}` : ''})`);
   if (plan.receipts.length) {
     assertReceiptSuites(plan.receipts);

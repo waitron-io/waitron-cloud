@@ -5,6 +5,7 @@ import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import test from 'node:test';
 import {assertSummary} from './ci-summary.mjs';
+import {reuseProof} from './fixtures/ci-evidence.mjs';
 
 const workflow = readFileSync(new URL('../.github/workflows/ci.yml', import.meta.url), 'utf8');
 const rootJob = workflow.match(/^  root:\n([\s\S]*?)(?=^  [\w-]+:)/m)?.[1] ?? '';
@@ -68,7 +69,7 @@ test('summary requires all four root partitions even when the compiler and packa
 });
 
 test('summary skips root partitions only when the plan skips the compiler', () => {
-  const reused = {packages: [], receipts: [], typecheck: false, reuse: {sha: 'a'.repeat(40), runId: 42}};
+  const reused = {packages: [], receipts: [], typecheck: false, reuse: reuseProof()};
   const skipped = {changes: 'success', root: 'skipped', typecheck: 'skipped', packages: 'skipped', receipts: 'skipped'};
   assert.doesNotThrow(() => assertSummary(reused, skipped, [jobs[0]]));
   assert.throws(() => assertSummary(reused, {...skipped, root: 'success'}, [jobs[0]]));
