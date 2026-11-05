@@ -3303,8 +3303,12 @@ transport failures before creating resources, within a shared 120-second
 preparation budget; it retains every isolation assertion and immediate permanent
 refusal. The historical provider outage remains unexplained.
 All 54 unchanged pull, build and isolation-image acquisition controls pass on
-macOS with replacement Docker commands. This qualifies the existing recovery
-controls; live Linux acquisition and the historical causes remain open.
+macOS with replacement Docker commands. The 5 November Debian test-box check
+also passes all 104 launcher and acquisition controls and all 29 real-Docker
+isolation and source-copy cases. A live pinned Node pull and fixture build
+succeed using cached images or layers; the owned fixture image and scratch
+directory are collected. This qualifies the current recovery paths, not an
+empty image cache or the historical authentication and provider failures.
 See the
 [image acquisition detail](backlog/cost-image-acquisition.md).
 
