@@ -1490,6 +1490,11 @@ implementation or production evidence.
   The executable output fixture gives its synthetic PR an explicit event and
   call inputs, including when its parent is a full nightly invocation. Its
   original root, compiler, package, receipt and forced-full assertions remain.
+  The first manual full-nightly at `b883ee69` also exposes nine older synthetic
+  CLI assertions across seven files. They reproduce at pre-integration `7105610a`
+  when the parent event is `workflow_dispatch`; the owning fixture-context
+  follow-up (D587) remains open. Their expected selections and full-nightly checks
+  must remain unchanged.
   Ownership review does not complete global root precision or establish a time
   saving. Unresolved package readers, including the separate #938 fix, remain
   outside this slice.
