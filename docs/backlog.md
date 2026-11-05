@@ -82,6 +82,25 @@ the ledger retains unknown cost. These controlled Linux results confirm the
 counterexamples, not the historical cause. Next, establish a background-work
 completion boundary without treating one idle observation as completion.
 
+Native runtime profiles now identify the background task in that controlled
+case. On Debian 13 and macOS, each of three official 0.5.17 trials still has
+one Store maintenance task inside `EnforceSnapshotRetention` after the database
+stop acknowledgement. Three other maintenance tasks are waiting between turns.
+The held task can continue listing lower levels after an idle observation;
+waiting for its whole turn after stop reaches the existing three-request guard
+in all six profiled trials. The writers exit zero. These results identify the
+controlled task, not the natural cause of the historical 743-byte refusal.
+
+Completing that same held retention sequence before requesting stop passes
+three controls on each platform. Both independent counters pair every LIST,
+all four maintenance tasks then wait between turns, and no request enters the
+after-stop subset. The original two-second trial budget still covers release,
+completion, stop and exit. This is an experimental ordering control, not a
+readiness rule for the full smoke: its final sale and concurrent maintenance
+still need qualification. No runtime implementation, acceptance guard, existing
+check or deadline changes. Next, reproduce this boundary in the real smoke
+without assuming that a temporary idle transport means maintenance is finished.
+
 ## Cloud backup box identity (D451)
 
 Cloud's backup verifier reads `WAITRON_NODE_ID`, and generated replay state writes
