@@ -1226,12 +1226,16 @@ implementation or production evidence.
   reached 259 seconds but used the same 23 rounded registration minutes as seven
   jobs, and its backup job failed the strict native-memory OOM check. The start
   ordering fix below addresses a reproduced mechanism for that failure.
-  Whole-file measurements now guide the six-job allocation and three explicit
-  filename moves; they do not prove the balanced layout's elapsed time or a saving.
+  Whole-file measurements guide the six-job allocation and three explicit
+  filename moves. The balanced Linux trial passes all 1,684 cases and runs every
+  one of the 139 files exactly once. Its slowest wrapper falls from 293.499 to
+  234.678 seconds, with every group within four minutes. These sequential Linux
+  runs do not establish concurrent hosted-job timing or explain the historical
+  cancellation.
   Aim for about four minutes per registration job and require every exact-head
   registration job within 300 seconds. Use observed wall times and complete case
-  counts rather than the retired rounded-minute budgets. The balanced Linux run,
-  current-head CI and post-merge verification remain required.
+  counts rather than the retired rounded-minute budgets. Current-head CI and
+  post-merge verification remain required.
 
   The relay-capacity test keeps its four SMTP deliveries open until all four
   competing worker attempts return without work. Its unchanged sending, queued

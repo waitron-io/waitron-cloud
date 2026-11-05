@@ -37,10 +37,27 @@ establish a runtime saving; their historical observations remain in the
 The runner now moves `monitoring.test.ts` and
 `venue-service-legacy-schema-guards.test.ts` to partition 1, and
 `support-grants.test.ts` to partition 2. Other files keep the sorted round-robin
-assignment. A scheduling model using the measured whole-file durations predicts
-about 230 seconds for its slowest test runner. That is an estimate, not a measured
-improvement. The first Linux attempt at the balanced layout refused because
-another lane held the test box; its complete runtime qualification remains open.
+assignment. The balanced Linux trial at
+`936ebc8a9dbe6fc74e66c1edc1c5b75809ad738a` uses the same package source, lockfile
+and PostgreSQL launcher as the control. All 1,684 cases pass without failures,
+cancellations or skips, and all 139 test files run exactly once.
+
+| Partition | Cases | Test runner seconds | Whole wrapper seconds |
+| --- | ---: | ---: | ---: |
+| 1 | 243 | 213.796 | 220.289 |
+| 2 | 361 | 228.112 | 234.678 |
+| 3 | 345 | 216.644 | 223.401 |
+| 4 | 264 | 173.768 | 179.526 |
+| 5 | 287 | 225.737 | 231.272 |
+| 6 | 184 | 177.336 | 183.745 |
+
+The slowest wrapper falls from 293.499 to 234.678 seconds, a 20.0 percent
+reduction. Every group finishes within four minutes. These groups run one after
+another on the Linux test box; this does not establish concurrent hosted-job
+timing or explain the historical cancellation. The earlier scheduling model's
+approximately 230-second prediction was an estimate; the measured slowest test
+runner takes 228.112 seconds.
+
 The portable runner checks preserve all-file discovery, reject invalid and empty
 partitions, forward test failures and keep the same Node test-process identity.
 They exclude non-test files and nested fixtures, compare every unmoved file with
