@@ -75,6 +75,7 @@ export async function prepareStorageTarSeed() {
     }
     phase = "digest";
     assert.equal(createHash("sha256").update(bytes).digest("hex"), checksum, "SeaweedFS archive digest mismatch");
+    phase = "seed";
     seedRoot = await mkdtemp(join(tmpdir(), "cloud-storage-tar-seed-"));
     const seed = join(seedRoot, archiveName);
     await writeFile(seed, bytes, { flag: "wx", mode: 0o400 });
@@ -82,7 +83,13 @@ export async function prepareStorageTarSeed() {
     return { seedRoot, seed, archiveName };
   } catch (error) {
     report("failure");
-    if (seedRoot) await rm(seedRoot, { recursive: true, force: true });
+    if (seedRoot) {
+      try { await rm(seedRoot, { recursive: true, force: true }); }
+      catch (cleanupError) {
+        phase = "cleanup"; report("failure");
+        throw new AggregateError([error, cleanupError], "Storage seed setup and cleanup failed", { cause: error });
+      }
+    }
     throw error;
   }
 }

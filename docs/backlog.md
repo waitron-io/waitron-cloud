@@ -3065,7 +3065,8 @@ storage fixture. Cold downloads allow at most three attempts for temporary
 HTTP 5xx, reset connections and ten seconds without transfer progress, within
 one unchanged 30-second budget. Permanent HTTP refusals and invalid digests stop
 immediately. All three extraction checks, pins, cache preservation and outer
-limits remain. The historical CI timeout has no recorded HTTP stage, so its
+limits remain. Disk and cleanup failures have separate stages, with both errors
+retained when removal also fails. The historical CI timeout has no recorded HTTP stage, so its
 provider cause stays unknown. Capture a new labelled failure before attributing
 it to the registry. See [the seed controls and limits](backlog/storage-cache-fixture.md#extraction-refusal-seed-acquisition-d530-4).
 

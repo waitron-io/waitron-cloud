@@ -285,7 +285,12 @@ download budget. Other HTTP refusals and digest failures stop immediately,
 including a permanent refusal whose body cancellation also resets. The
 45-second setup limit and each extraction test's 30-second limit remain.
 The shared cache stays read-only, the exact platform digests remain required,
-and failed setup removes only its private seed directory. The storage fixture's
+and failed setup removes only its private seed directory. Disk failures have a
+separate seed stage. If the filesystem also refuses cleanup, the error retains
+both failures with the original setup error as its cause; its private folder
+may remain. The two test files each need a real pinned archive before controlled
+checks run, so an empty cache can require two downloads. An unavailable upstream
+fails setup rather than skipping controls. The storage fixture's
 own single download attempt and historical startup investigations remain separate.
 
 ## Storage partial port-reservation refusals (D464)

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
-import { mkdtemp, writeFile, rm } from "node:fs/promises";
+import { mkdtemp, writeFile, rm, readdir, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
@@ -12,7 +12,7 @@ let fixture;
 before(async () => { fixture = await prepareStorageTarSeed(); }, { timeout: 45000 });
 after(async () => { if (fixture) await rm(fixture.seedRoot, { recursive: true, force: true }); });
 
-async function runSeedCase(t, setup) {
+async function runSeedCase(t, setup, { direct = false } = {}) {
   const root = await mkdtemp(join(tmpdir(), "cloud-tar-seed-control-"));
   t.after(() => rm(root, { recursive: true, force: true }));
   const preload = join(root, "preload.mjs");
@@ -29,7 +29,21 @@ process.once("exit", () => console.error("seed_fetch_calls=" + calls));
   delete env.NODE_TEST_CONTEXT;
   let result;
   try {
-    result = await execute(process.execPath, ["--import", preload, "--test", "--test-reporter=tap", "scripts/ci-backup-storage-tar-refusals.test.mjs"], {
+    const args = direct ? ["--import", preload, "--input-type=module", "-e", `
+const { prepareStorageTarSeed } = await import("./scripts/fixtures/storage-tar-seed.mjs");
+try {
+  const fixture = await prepareStorageTarSeed();
+  console.log("seed_accepted=" + fixture.archiveName);
+} catch (error) {
+  console.log("seed_failure=" + JSON.stringify({
+    originalKept: error === globalThis.seedWriteFailure || error.cause === globalThis.seedWriteFailure,
+    cleanupKept: error.errors?.includes(globalThis.seedCleanupFailure) ?? false,
+    name: error.name,
+  }));
+  process.exitCode = 1;
+}
+`] : ["--import", preload, "--test", "--test-reporter=tap", "scripts/ci-backup-storage-tar-refusals.test.mjs"];
+    result = await execute(process.execPath, args, {
       cwd: new URL("..", import.meta.url), env, timeout: 40000, maxBuffer: 1024 * 1024,
     });
     result.code = 0;
@@ -37,7 +51,7 @@ process.once("exit", () => console.error("seed_fetch_calls=" + calls));
   assert.equal(result.killed ?? false, false, "the acquisition must settle before the outer child cutoff");
   const output = result.stdout + result.stderr;
   const events = [...output.matchAll(/storage_seed_acquisition=(\{[^\n]+\})/g)].map(match => JSON.parse(match[1]));
-  return { ...result, output, events };
+  return { ...result, output, events, root, remaining: await readdir(root) };
 }
 
 for (const mode of ["status", "headers", "body", "inactivity"]) {
@@ -83,7 +97,13 @@ for (const status of [401, 403, 404, 429, 503]) {
 for (const phase of ["headers", "body", "retry"]) {
   test(`seed ${phase} cannot outlive the shared acquisition budget`, { timeout: 10000 }, async t => {
     const result = await runSeedCase(t, `
-AbortSignal.timeout = ms => nativeTimeout(ms === 30000 ? 100 : ms);
+let budgetAbortedAt;
+AbortSignal.timeout = ms => {
+  const signal = nativeTimeout(ms === 30000 ? 100 : ms);
+  if (ms === 30000) signal.addEventListener("abort", () => {budgetAbortedAt = performance.now();}, {once: true});
+  return signal;
+};
+process.once("exit", () => console.error("seed_abort_lag=" + Math.round(performance.now() - budgetAbortedAt)));
 globalThis.fetch = async (url, options) => {
   calls++;
   ${phase === "retry" ? 'return new Response("temporary", {status: 503});' :
@@ -98,6 +118,10 @@ globalThis.fetch = async (url, options) => {
     assert.equal(last.timeoutMs, 30000);
     assert.equal(result.events.filter(event => event.event === "attempt").length, 1);
     if (phase === "body") assert.equal(last.bytesReceived, 2);
+    if (phase === "retry") {
+      const lag = Number(/seed_abort_lag=(\d+)/.exec(result.output)?.[1]);
+      assert.ok(Number.isFinite(lag) && lag < 600, `retry pause continued after abort for ${lag} ms`);
+    }
   });
 }
 
@@ -164,3 +188,67 @@ globalThis.fetch = async (url, options) => {
   assert.equal(result.events.at(-1)?.event, "complete");
   assert.ok(result.events.at(-1)?.elapsedMs >= 200);
 });
+
+test("a later seed attempt shares the first attempt's remaining budget", { timeout: 10000 }, async t => {
+  const result = await runSeedCase(t, `
+AbortSignal.timeout = ms => nativeTimeout(ms === 30000 ? 1500 : ms);
+globalThis.fetch = async (url, options) => {
+  if (++calls === 1) return new Response("temporary", {status: 503});
+  return new Promise((resolve, reject) => {
+    options.signal.addEventListener("abort", () => reject(options.signal.reason), {once: true});
+    nativeSetTimeout(() => {if (!options.signal.aborted) resolve(good());}, 800);
+  });
+};`);
+  assert.equal(result.code, 1, result.output);
+  assert.match(result.output, /seed_fetch_calls=2/);
+  assert.match(result.output, /# pass 0\b/);
+  assert.equal(result.events.at(-1)?.event, "failure");
+  assert.equal(result.events.at(-1)?.phase, "headers");
+  assert.equal(result.events.at(-1)?.attempt, 2);
+});
+
+for (const status of [500, 504, 599]) {
+  test(`seed HTTP ${status} can recover before the extraction checks`, { timeout: 45000 }, async t => {
+    const result = await runSeedCase(t, `globalThis.fetch = async () => {
+      if (++calls === 1) return new Response("temporary", {status: ${status}});
+      return good();
+    };`);
+    assert.equal(result.code, 0, result.output);
+    assert.match(result.output, /# pass 3\b/);
+    assert.match(result.output, /seed_fetch_calls=2/);
+    assert.equal(result.events.at(-1)?.event, "complete");
+  });
+}
+
+for (const cleanupRefuses of [false, true]) {
+  test(`seed write refusal preserves its cause and ${cleanupRefuses ? "reports refused cleanup" : "removes only its private root"}`, { timeout: 10000 }, async t => {
+    const result = await runSeedCase(t, `
+import fs from "node:fs/promises";
+import { syncBuiltinESMExports } from "node:module";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
+await fs.writeFile(join(tmpdir(), "neighbour"), "unrelated input");
+const write = fs.writeFile, remove = fs.rm;
+globalThis.seedWriteFailure = Object.assign(new Error("controlled seed write refused"), {code: "ENOSPC"});
+globalThis.seedCleanupFailure = Object.assign(new Error("controlled seed cleanup refused"), {code: "EPERM"});
+fs.writeFile = async (path, ...args) => {
+  if (String(path).includes("cloud-storage-tar-seed-")) throw globalThis.seedWriteFailure;
+  return write(path, ...args);
+};
+fs.rm = async (path, ...args) => {
+  if (${cleanupRefuses} && String(path).includes("cloud-storage-tar-seed-")) throw globalThis.seedCleanupFailure;
+  return remove(path, ...args);
+};
+syncBuiltinESMExports();
+globalThis.fetch = async () => {calls++; return good();};`, {direct: true});
+    assert.equal(result.code, 1, result.output);
+    const failure = JSON.parse(/seed_failure=(\{[^\n]+\})/.exec(result.output)?.[1] ?? "null");
+    assert.equal(failure?.originalKept, true, result.output);
+    assert.equal(failure.cleanupKept, cleanupRefuses, result.output);
+    assert.equal(result.events.at(-1)?.phase, cleanupRefuses ? "cleanup" : "seed");
+    assert.equal(await readFile(join(result.root, "neighbour"), "utf8"), "unrelated input");
+    const seedRoots = result.remaining.filter(name => name.startsWith("cloud-storage-tar-seed-"));
+    assert.equal(seedRoots.length, cleanupRefuses ? 1 : 0, result.output);
+    assert.deepEqual(result.remaining.filter(name => !name.startsWith("cloud-storage-tar-seed-")).sort(), ["neighbour", "preload.mjs"]);
+  });
+}
