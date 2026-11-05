@@ -1,9 +1,9 @@
 {
   "version": 1,
-  "docsInputSha256": "4e8a32a2b07e0107fc908a2db33003d871ab19bd9171b44dd20280008da3a4cc",
-  "identityInputSha256": "1b8d0c2cc1c13f90849e333470e119ae4d3c70cc25282c34399c34dff20f33e2",
-  "gatewayInputSha256": "63de03117cf176fa0fcbb8cbeded04139be8efb3e433958e81bfd4e86c7b8074",
-  "lockInputSha256": "b5195a3a467f41ee4b502dc98792d176f3b771714bf1f4a306ce0929a87ea2c0",
+  "docsInputSha256": "3adad7b5df4bda5ce592423e049c11c678938dfc068a31e2076490d9e4d8f0c3",
+  "identityInputSha256": "ac81cbcbed24eedfa69a6b42e5cca25be94e5249101be3a2982831eeec41a702",
+  "gatewayInputSha256": "e3a5bdaf1eb45ac65da071c3dcf80a767cf8193fbdd61c7a0c79c7898b1ddd2c",
+  "lockInputSha256": "9ec55fd79e8f1b54bf7881ad3f82b1651dfb348cbb40398a783f683f54aae27f",
   "manifests": {
     "apps/portal/package.json": "04c1855ea1518f15bafa0391f68bbcdd1b2d43047003b9c66f441ca9a561f8e2",
     "packages/account-http/package.json": "bbc6a26bacc19538e39565d4d42e50ad5f509f7e9fa2024bf5b0e128f4cc9328",
