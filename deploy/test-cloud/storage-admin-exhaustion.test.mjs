@@ -26,7 +26,7 @@ async function occupyAdminRange() {
     const firstPort = randomInt(10000, 32668);
     try {
       for (let index = 0; index < 101; index++) {
-        const server = createAdminPortOwner(index);
+        const server = createAdminPortOwner(`admin-owner-${index}`);
         servers.push(server);
         await new Promise((resolve, reject) => {
           server.once('error', reject);

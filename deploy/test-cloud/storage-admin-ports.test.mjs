@@ -2,12 +2,13 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import childProcess from 'node:child_process';
 import {syncBuiltinESMExports} from 'node:module';
-import {createServer, connect} from 'node:net';
+import {connect} from 'node:net';
 import {access, readFile, rm} from 'node:fs/promises';
 import {writeFileSync} from 'node:fs';
 import {join} from 'node:path';
 import {randomInt} from 'node:crypto';
 import {startBackupStorage} from '../../scripts/backup-storage-fixture.mjs';
+import {createAdminPortOwner} from './storage-admin-owner.mjs';
 
 async function readOwner(port) {
   return new Promise((resolve, reject) => {
@@ -18,6 +19,7 @@ async function readOwner(port) {
     socket.on('data', bytes => { body += bytes; });
     socket.on('error', reject);
     socket.on('end', () => resolve(body));
+    socket.end('PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n');
   });
 }
 
@@ -48,7 +50,7 @@ for (const {kinds, explicit} of [
     });
     for (const kind of kinds) {
       const marker = `owned-admin-${kind}`;
-      const server = createServer(socket => socket.end(marker));
+      const server = createAdminPortOwner(marker);
       owners.push({kind, marker, server});
       // Implicit admin gRPC adds 10000 to HTTP. Leave room for another 100
       // fallback choices below the service fixtures' 32768-and-up range.

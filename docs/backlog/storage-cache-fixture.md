@@ -588,15 +588,15 @@ passing baseline or introduce a broader claiming protocol.
 The newer [admin exhaustion failure](https://github.com/waitron-io/waitron-cloud/actions/runs/41986274075/job/127107818923)
 completes both storage shutdown and all ownership checks, then waits while
 releasing its 101 test listeners. A real TCP reproduction sends an HTTP/2 preface
-and disconnects. The listener retains 24 unread bytes and cannot finish closing,
+and disconnects. The accepted connection retains 24 unread bytes and cannot finish closing,
 even though its peer has closed. Draining those bytes lets the stream observe
 the peer's end and complete shutdown.
 
-The exhaustion fixture now drains incoming probe bytes while returning its
-unchanged ownership marker. Every ownership check also sends that preface, so
+Both admin fixtures now drain incoming probe bytes while returning their
+unchanged ownership markers. Every ownership check also sends that preface, so
 the installed native case exercises the demonstrated shutdown failure. Run
-`node --test deploy/test-cloud/storage-admin-owner.test.mjs deploy/test-cloud/storage-admin-exhaustion.test.mjs`
-for the socket regression and real pinned storage case. The socket regression
+`node --test deploy/test-cloud/storage-admin-owner.test.mjs deploy/test-cloud/storage-admin-exhaustion.test.mjs deploy/test-cloud/storage-admin-ports.test.mjs`
+for the socket regression and real pinned storage cases. The socket regression
 first fails because the owner cannot close; deleting the drain reproduces that
 failure. Original ownership, bucket, child, scratch and recovery assertions and
 the 90-second deadline remain unchanged.
@@ -606,3 +606,5 @@ which client left a connection unread or prove that each earlier timeout shared
 this cause. The ordinary isolated Linux baseline passes and does not reproduce
 CI concurrency. Keep that attribution limit and the separate paced-replay
 checkpoint reset open; neither a clean run nor this socket repair explains them.
+A peer that remains connected can still delay listener shutdown; draining data
+does not disconnect that peer or establish a general cleanup deadline.

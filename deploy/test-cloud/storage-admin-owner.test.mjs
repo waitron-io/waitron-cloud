@@ -6,7 +6,7 @@ import {createAdminPortOwner} from './storage-admin-owner.mjs';
 
 // Without draining probe bytes, a closed peer can leave the owner unable to close.
 test('admin port owners close after a peer sends an HTTP/2 preface and disconnects', {timeout:5000}, async t => {
-  const server = createAdminPortOwner(7), accepted = new Set();
+  const server = createAdminPortOwner('admin-owner-7'), accepted = new Set();
   server.on('connection', socket => accepted.add(socket));
   t.after(() => {
     for (const socket of accepted) socket.destroy();
