@@ -21,7 +21,7 @@ function completeFixture(run) {
   git.readBlobs = ids => { batches++; return readGitBlobs(ids, input => execFileSync('git', ['cat-file', '--batch'], {cwd: root, input, maxBuffer: 64 * 1024 * 1024, stdio: 'pipe'})); };
   const node = (file, args = [], env = {}) => spawnSync(process.execPath, [file, ...args], {cwd: root, env: {...childEnv, ...env}, encoding: 'utf8', timeout: 90_000, maxBuffer: 64 * 1024 * 1024});
   const ok = result => assert.equal(result.status, 0, result.stdout + result.stderr);
-  const commit = () => {git('add', '-A'); git('commit', '-sm', 'Complete v2 audit control'); return git('rev-parse', 'HEAD').trim();};
+  const commit = () => {git('add', '-A'); git('commit', '--allow-empty', '-sm', 'Complete v2 audit control'); return git('rev-parse', 'HEAD').trim();};
   try {
     execFileSync('git', ['clone', '--shared', '--quiet', process.cwd(), root], {stdio: 'pipe'});
     cpSync('scripts', join(root, 'scripts'), {recursive: true});
