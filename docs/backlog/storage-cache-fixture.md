@@ -582,3 +582,27 @@ allocator range. That observation establishes a possible collision path, not a
 cause for these historical failures. Keep the existing allocation and retry rules;
 use a new attributed recurrence to select a cause repair rather than repeat a
 passing baseline or introduce a broader claiming protocol.
+
+## Admin owner probe draining (D581)
+
+The newer [admin exhaustion failure](https://github.com/waitron-io/waitron-cloud/actions/runs/41986274075/job/127107818923)
+completes both storage shutdown and all ownership checks, then waits while
+releasing its 101 test listeners. A real TCP reproduction sends an HTTP/2 preface
+and disconnects. The listener retains 24 unread bytes and cannot finish closing,
+even though its peer has closed. Draining those bytes lets the stream observe
+the peer's end and complete shutdown.
+
+The exhaustion fixture now drains incoming probe bytes while returning its
+unchanged ownership marker. Every ownership check also sends that preface, so
+the installed native case exercises the demonstrated shutdown failure. Run
+`node --test deploy/test-cloud/storage-admin-owner.test.mjs deploy/test-cloud/storage-admin-exhaustion.test.mjs`
+for the socket regression and real pinned storage case. The socket regression
+first fails because the owner cannot close; deleting the drain reproduces that
+failure. Original ownership, bucket, child, scratch and recovery assertions and
+the 90-second deadline remain unchanged.
+
+The historical CI log contains no accepted-socket data, so it cannot identify
+which client left a connection unread or prove that each earlier timeout shared
+this cause. The ordinary isolated Linux baseline passes and does not reproduce
+CI concurrency. Keep that attribution limit and the separate paced-replay
+checkpoint reset open; neither a clean run nor this socket repair explains them.

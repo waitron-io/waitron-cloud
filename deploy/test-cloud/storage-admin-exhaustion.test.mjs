@@ -2,12 +2,13 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import childProcess from 'node:child_process';
 import {syncBuiltinESMExports} from 'node:module';
-import {createServer, connect} from 'node:net';
+import {connect} from 'node:net';
 import {access, readFile, rm} from 'node:fs/promises';
 import {writeFileSync} from 'node:fs';
 import {join} from 'node:path';
 import {randomInt} from 'node:crypto';
 import {storageAdminOperations} from './storage-admin-diagnostics.mjs';
+import {createAdminPortOwner} from './storage-admin-owner.mjs';
 import {startBackupStorage} from '../../scripts/backup-storage-fixture.mjs';
 
 async function close(servers) {
@@ -25,11 +26,7 @@ async function occupyAdminRange() {
     const firstPort = randomInt(10000, 32668);
     try {
       for (let index = 0; index < 101; index++) {
-        const server = createServer(socket => {
-          // Native readiness probes may reset their non-gRPC connection.
-          socket.on('error', () => {});
-          socket.end(`admin-owner-${index}`);
-        });
+        const server = createAdminPortOwner(index);
         servers.push(server);
         await new Promise((resolve, reject) => {
           server.once('error', reject);
@@ -54,6 +51,7 @@ async function readOwner(port) {
     socket.on('data', bytes => { body += bytes; });
     socket.on('error', reject);
     socket.on('end', () => resolve(body));
+    socket.end('PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n');
   });
 }
 
