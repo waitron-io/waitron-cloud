@@ -167,6 +167,37 @@ check. Active monitoring, other command modes, database failures, longer waits a
 production deployment retain separate qualification gates.
 For active observations held by an incident-table lock, see [D552](#monitoring-command-shutdown-during-an-active-observation-d552).
 
+#### Migration setup timeout remains unexplained (D530)
+
+[Registration shard 1's original failure](https://github.com/waitron-io/waitron-cloud/actions/runs/42051650100/job/127329749507)
+occurs in the shared setup hook, before any monitoring command starts. The
+migration diagnostic names `migration-apply`, ordinal 13; PostgreSQL reports
+`57014`, a statement timeout under the fixture's existing 3,000 ms cap. All four
+shutdown cases inherit that one setup failure. Their bodies did not fail.
+
+The diagnostic is timestamped 5 November 2026 at 15:19:24 UTC, before GitHub's
+[published Actions incident](https://www.githubstatus.com/incidents/t89g2q1800fr)
+began at 16:50 UTC. Do not attribute the SQL cancellation to that incident.
+The registration checkout took two seconds; a sibling account checkout took
+181 seconds, so the original run does not qualify as a healthy timing baseline.
+The retained six-lane log search finds one occurrence of this exact setup
+failure, saved in three copies of the same job. An older migration timeout in
+relay tests names different fixtures and does not establish a shared cause.
+
+[The existing hosted rerun](https://github.com/waitron-io/waitron-cloud/actions/runs/42051650100/job/127362279925)
+passes all 343 shard cases, including these four, on the same source. It runs
+before the published incident too. On the Debian 13 test box, the unchanged
+shutdown file passes all four cases. A separate six-file run at concurrency two
+passes 86 cases. Its temporary query probe measures 47 applications of migration
+013 at 25–30 ms. These are local observations, not healthy hosted timing evidence
+or a reproduction of the original cancellation. Neither passing run repairs it.
+
+Keep the timeout and every shutdown assertion. If this setup fails again, capture
+bounded PostgreSQL wait categories and blocker counts while migration 013 is still
+running, together with the failing statement and runner health. Do not log SQL
+parameters, credentials or row contents. D530 owns that causal investigation;
+lock contention, slow storage and runner scheduling remain unproved explanations.
+
 ### Monitoring command shutdown during an active observation (D552)
 
 Run `node scripts/test-postgres.mjs exec pnpm --dir packages/registration exec
