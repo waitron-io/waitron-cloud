@@ -1277,8 +1277,13 @@ implementation or production evidence.
   the parked `feat/precise-ci-selection` branch remains untouched. D69 ended in
   #262 with full work for unresolved directory readers; its unmerged replacement
   is reference material, not the current implementation. Dependency precision,
-  root-input owners, narrower cost/venue work, verified merge reuse and nightly
-  full runs remain D571 parts 2 through 6. The real portal-plus-prose candidate
+  root-input owners, narrower cost/venue work and nightly full runs remain
+  D571 parts 2 through 6. D571 part 5 now has a
+  [verified-merge design](superpowers/specs/2026-11-05-verified-merge-ci-design.md)
+  and [implementation plan](superpowers/plans/2026-11-05-verified-merge-ci.md).
+  Reuse and changed-tree main selection are not implemented. Runtime landing
+  waits for the nightly backstop and the watcher's post-merge runbook update.
+  The real portal-plus-prose candidate
   still selects 28 package jobs: its saved graph refuses an unresolved directory
   read in `scripts/ci-audit-fixture-dependencies.mjs`. Keep that conservative
   fallback for part 2 to bound; part 1 claims no measured package-job saving.
