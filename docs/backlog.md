@@ -1278,8 +1278,20 @@ implementation or production evidence.
   the parked `feat/precise-ci-selection` branch remains untouched. D69 ended in
   #262 with full work for unresolved directory readers; its unmerged replacement
   is reference material, not the current implementation. Dependency precision,
-  root-input owners, narrower cost/venue work and verified merge reuse remain
-  D571 parts 2 through 5. D571 part 5 has a
+  root-input owners and verified merge reuse remain D571 parts 2, 3 and 5.
+  Part 4 selects the separate cost and venue matrices from their
+  [reviewed proof inputs](ci-proof-selection.md). Cost retains backend sources,
+  migrations, shared fixtures, gateway and installation inputs; venue selects
+  its proof programs and named suite tests. Portal code and ordinary unrelated
+  package tests omit both matrices. Unknown packages, root areas and
+  unclassified scripts retain work, including changes in the other proof's
+  script tree. Narrower root ownership remains part 3. Both workflows
+  support complete manual runs and stop running on main pushes, while the nightly
+  backstop below retains both full matrices. Real-Git controls cover positive
+  inputs, omissions, renames, missing history and checkout refusals. No rehearsal
+  assertion, command or deadline changes. The combined controls preserve the
+  nightly full flag and v2 documentation-record renewal without requiring unused
+  peer shortcuts. No measured GitHub time saving is claimed. D571 part 5 has a
   [verified-merge design](superpowers/specs/2026-11-05-verified-merge-ci-design.md)
   and [implementation plan](superpowers/plans/2026-11-05-verified-merge-ci.md).
   Reuse and changed-tree main selection are not implemented. Runtime landing

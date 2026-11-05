@@ -5,6 +5,7 @@ import {auditInputMode, unreadMarkdown} from './ci-input-audit.mjs';
 export {unreadMarkdown} from './ci-input-audit.mjs';
 import {readGitBlobs} from './ci-package-revisions.mjs';
 import {pathToFileURL} from 'node:url';
+import {proofInputPlan} from './ci-proof-inputs.mjs';
 
 const shaPattern = /^[a-f0-9]{40}$/;
 
@@ -63,19 +64,31 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
       }
       console.log('Documentation reader audit is current');
     } else if (args.length === 1 && args[0] === '--plan') {
-      let documentation = null;
-      try {
-        const {pull_request: pr} = JSON.parse(readFileSync(process.env.GITHUB_EVENT_PATH, 'utf8'));
-        if (process.env.CI_FORCE_FULL !== 'true' && pr) {
-          assert.ok([pr.base.sha, pr.head.sha].every(sha => shaPattern.test(sha)), 'Invalid proof revisions');
-          const base = git('merge-base', pr.base.sha, pr.head.sha).trim();
-          const paths = git('diff', '--name-only', '--no-renames', '-z', base, pr.head.sha).split('\0');
-          assert.equal(paths.pop(), '', 'Incomplete proof diff');
-          documentation = documentationPlan(paths, base, pr.head.sha, git);
-        }
-      } catch { /* Missing or stale evidence retains all proof work. */ }
-      appendFileSync(process.env.GITHUB_OUTPUT, `required=${!documentation}\n`);
-      console.log(documentation ? 'Audited unread Markdown: no proof tests required' : 'Full proof work required');
+      if (process.env.CI_FORCE_FULL === 'true') {
+        appendFileSync(process.env.GITHUB_OUTPUT, 'required=true\n');
+        console.log('Explicit full proof run');
+      } else if (process.env.CI_PROOF_KIND) {
+        let event = {};
+        try { event = JSON.parse(readFileSync(process.env.GITHUB_EVENT_PATH, 'utf8')); }
+        catch { /* Missing event evidence retains a complete proof run. */ }
+        const plan = proofInputPlan(process.env.CI_PROOF_KIND, event, git);
+        appendFileSync(process.env.GITHUB_OUTPUT, `required=${plan.required}\n`);
+        console.log(plan.reason);
+      } else {
+        let documentation = null;
+        try {
+          const {pull_request: pr} = JSON.parse(readFileSync(process.env.GITHUB_EVENT_PATH, 'utf8'));
+          if (process.env.CI_FORCE_FULL !== 'true' && pr) {
+            assert.ok([pr.base.sha, pr.head.sha].every(sha => shaPattern.test(sha)), 'Invalid proof revisions');
+            const base = git('merge-base', pr.base.sha, pr.head.sha).trim();
+            const paths = git('diff', '--name-only', '--no-renames', '-z', base, pr.head.sha).split('\0');
+            assert.equal(paths.pop(), '', 'Incomplete proof diff');
+            documentation = documentationPlan(paths, base, pr.head.sha, git);
+          }
+        } catch { /* Missing or stale evidence retains all proof work. */ }
+        appendFileSync(process.env.GITHUB_OUTPUT, `required=${!documentation}\n`);
+        console.log(documentation ? 'Audited unread Markdown: no proof tests required' : 'Full proof work required');
+      }
     } else {
       assert.equal(args.length, 0, 'Usage: ci-docs.mjs [--audit <commit> | --plan]');
       const count = checkDocumentation(JSON.parse(process.env.CI_PLAN), git);

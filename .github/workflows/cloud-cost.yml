@@ -5,10 +5,8 @@ on:
       full:
         type: boolean
         default: false
-  push:
-    branches: [main]
-    paths: ['**', '!docs/**', '!**/*.md']
   pull_request:
+  workflow_dispatch:
 permissions:
   contents: read
   packages: read
@@ -35,6 +33,7 @@ jobs:
         run: node scripts/ci-docs.mjs --plan
         env:
           CI_FORCE_FULL: ${{ inputs.full }}
+          CI_PROOF_KIND: cost
       - id: files
         if: steps.plan.outputs.required == 'true'
         run: echo "files=$(node scripts/cloud-cost/conformance.mjs --matrix)" >> "$GITHUB_OUTPUT"
