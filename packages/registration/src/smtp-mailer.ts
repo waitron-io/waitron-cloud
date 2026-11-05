@@ -37,7 +37,7 @@ export function createSmtpDelivery(config:SmtpAccountMailConfig,trust:{ca?:strin
       if(!isValidatedSesFeedbackConfig(ses)||!ses.purposes.includes(purpose)
         ||(!loopback&&(config.host!==ses.smtpHost||port!==465))
         ||(identity!==config.from&&identity!==config.from.split('@')[1]))throw new Error();
-    }else if(/^email-smtp\./i.test(config.host))throw new Error();
+    }else if(/^email-smtp(?:-fips)?\.[a-z0-9-]+\.(?:amazonaws\.com(?:\.cn)?|api\.aws)$/i.test(config.host))throw new Error();
   } catch { throw new Error('Invalid production mail configuration'); }
   // Capture configuration so a caller cannot change the destination or credential during a send.
   const {host, user, password, from} = config;

@@ -44,7 +44,7 @@ test('account SES retries keep the original RFC ID and emit only fresh opaque at
 });
 
 test('direct SES hosts cannot bypass qualified handoff and mismatched resource or sender bindings refuse construction',()=>{
- for(const host of ['email-smtp.eu-north-1.amazonaws.com','email-smtp.us-east-1.amazonaws.com','EMAIL-SMTP.EU-WEST-3.AMAZONAWS.COM']){
+ for(const host of ['email-smtp.eu-north-1.amazonaws.com','email-smtp.us-east-1.amazonaws.com','EMAIL-SMTP.EU-WEST-3.AMAZONAWS.COM','email-smtp-fips.us-gov-west-1.amazonaws.com','email-smtp.eu-north-1.api.aws','email-smtp-fips.us-gov-west-1.api.aws']){
   assert.throws(()=>createSmtpAccountMailer({...smtpConfig,host}),/Invalid production mail configuration/);
  }
  const trusted=config();
@@ -56,6 +56,10 @@ test('direct SES hosts cannot bypass qualified handoff and mismatched resource o
  assert.throws(()=>createSesRelaySender(accountConfig,{...smtpConfig,host:accountConfig.smtpHost}),/Invalid production mail configuration/);
  const venueOnly=feedbackFixture('eu-north-1',['venue-email']),venueConfig=validateSesFeedbackConfig(venueOnly.policy,venueOnly.input);
  assert.throws(()=>createSmtpAccountMailer({...smtpConfig,host:venueConfig.smtpHost},{},venueConfig),/Invalid production mail configuration/);
+});
+
+test('generic SMTP hostnames outside the SES service retain their explicit transport',()=>{
+ assert.doesNotThrow(()=>createSmtpAccountMailer({...smtpConfig,host:'email-smtp.example.test'}));
 });
 
 test('generic SMTP cannot silently discard an SES handoff',async()=>{
