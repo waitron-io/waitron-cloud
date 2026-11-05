@@ -52,8 +52,8 @@ export async function prepareStorageTarSeed() {
           if (!response.ok) {
             retryable = status >= 500 && status <= 599;
             await response.body?.cancel();
-            throw Error("Storage seed HTTP refusal");
           }
+          assert.equal(response.ok, true, "the pinned release archive must be available");
           phase = "body"; report("body");
           const chunks = [];
           for await (const chunk of response.body) {
