@@ -339,12 +339,15 @@ policy it uses, so a second process or new installation cannot reset its balance
 changing the version, limit or period. Changing that binding needs a separately
 specified upgrade policy; do not edit the rows to reset an exhausted allowance.
 Deadlines and UTC periods are checked with database time after lock waits.
+The reservation records that checked admission instant in `created_at`, so a
+later insert cannot place its timestamp outside the admitted period.
 
 Run the focused proof from the repository root:
 
 ```sh
 node scripts/test-postgres.mjs exec pnpm --dir packages/registration exec node --test \
-  test/relay-grants.test.ts test/account-mail.test.ts test/email-outbox.test.ts \
+  test/relay-grants.test.ts test/billing-allowance-relay.test.ts \
+  test/account-mail.test.ts test/email-outbox.test.ts \
   test/schema-compatibility.test.ts test/registration.test.ts \
   ../account-http/test/relay-disabled.test.ts
 ```

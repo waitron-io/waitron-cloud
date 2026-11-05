@@ -3162,6 +3162,35 @@ timeout remains unexplained. See [the reproduction and remaining investigation](
 Keep every verifier assertion and the existing build and job limits.
 
 
+## Relay reservation admission timestamp (D530)
+
+A delayed reservation-counter query could put the recorded creation time in a
+later policy period than the one checked at admission. Two real PostgreSQL
+controls cross a one-second period while that query waits, with monthly
+allowances enabled and disabled. A reservation now records the same database
+time used to check its period, grant and installation after lock waits. The
+existing monthly-wait, expiry, replay, allowance and rollback assertions remain.
+An independent database-time observation immediately before releasing the monthly
+wait also requires a period that ends after that observation; this prevents the
+shared stored timestamp from hiding a period chosen before the wait.
+No landed migration or historical reservation changes.
+
+The original failure is registration job
+[127430816673](https://github.com/waitron-io/waitron-cloud/actions/runs/42079861800/job/127430816673)
+on main `d108bebc39`. The controlled delay reproduces its assertion, but that
+runner did not retain the two timestamps needed to prove its exact interleaving.
+Run `node scripts/test-postgres.mjs exec pnpm --dir packages/registration exec
+node --test test/billing-allowance-relay.test.ts test/relay-grants.test.ts`
+for the admission and legacy-policy checks. Current-head CI still qualifies
+landing; this repair does not close the separate migration-setup or mail failures.
+
+A separate controlled review probe on both paths still admits when a grant expires
+during the counter query, after its admission-time check. The baseline-equivalent
+probe has the same outcome. This change does not move that guard; measuring time
+again at a later write would need its own authority and period design. The original
+CI interleaving, production-role behavior and mixed-version deployment remain
+unqualified.
+
 ## Registration expiry checks during lock waits (D580)
 
 The relay replay and installation session tests could expire their short-lived

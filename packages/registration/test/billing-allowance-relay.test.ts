@@ -207,9 +207,11 @@ test('monthly relay uses the legacy policy period after its new bucket wait',asy
   pending=transaction(f.pool,c=>grants.reserve(c,{installationId:v.installation,publicKey},{grantId:v.grant.id,grantRevision:1,messageId:randomUUID(),binding:'fixed-binding'}));void pending.then(()=>{done=true;},()=>{done=true;});
   let waiting=false;const until=performance.now()+5000;
   while(!done&&performance.now()<until){waiting=!!(await f.pool.query('SELECT 1 FROM pg_stat_activity WHERE $1=ANY(pg_blocking_pids(pid))',[pid])).rowCount;if(waiting)break;await setImmediate();}
-  assert.equal(waiting,true);await new Promise(resolve=>setTimeout(resolve,1100));await holder.query('COMMIT');await pending;
+  assert.equal(waiting,true);await new Promise(resolve=>setTimeout(resolve,1100));
+  const released=(await f.pool.query('SELECT clock_timestamp() AS now')).rows[0].now;
+  await holder.query('COMMIT');await pending;
   const saved=(await f.pool.query('SELECT period_start,period_end,created_at FROM relay_reservations')).rows[0];
-  assert.ok(saved.period_start<=saved.created_at&&saved.created_at<saved.period_end,'legacy debit must use the period containing actual admission');assert.equal(await f.total(),1n);
+  assert.ok(saved.period_start<=saved.created_at&&saved.created_at<saved.period_end,'legacy debit must use the period containing actual admission');assert.ok(saved.period_end>released,'legacy period must be chosen after the monthly bucket wait');assert.equal(await f.total(),1n);
  }finally{await holder.query('ROLLBACK');await pending?.catch(()=>{});holder.release();}
 });
 
@@ -229,4 +231,27 @@ for(const setupPause of [0,600])test('monthly relay replay rechecks grant expiry
   assert.equal(waiting,true);time=grant.expires_at.getTime();
   await holder.query('COMMIT');await assert.rejects(pending,{code:'grant_unavailable'});assert.deepEqual(await f.rows(),saved);
  }finally{await holder.query('ROLLBACK');await pending?.catch(()=>{});holder.release();}
+});
+
+for(const monthly of [false,true])test('relay admission records its checked period despite a delayed counter read '+(monthly?'with monthly allowance':'without monthly allowance'),async t=>{
+ const f=await setup(t),v=await f.venue(),publicKey=(await f.pool.query('SELECT public_key FROM installations WHERE id=$1',[v.installation])).rows[0].public_key;
+ const grants=new RelayGrantStore(f.pool,{...f.config.grants,policy:{...f.config.grants.policy,periodSeconds:1}},mode,monthly?options:undefined);
+ let checkedAt:Date|undefined;
+ await transaction(f.pool,async client=>{
+  const delayed=new Proxy(client,{get(target,key){
+   if(key==='query')return async(sql:string,values?:unknown[])=>{
+    const result=await target.query(sql,values);
+    if(sql==='SELECT clock_timestamp() AS now')checkedAt=result.rows[0].now;
+    if(sql==='SELECT count(*) FROM relay_reservations WHERE account_id=$1 AND period_start=$2')await target.query('SELECT pg_sleep(1.1)');
+    return result;
+   };
+   const value=Reflect.get(target,key);return typeof value==='function'?value.bind(target):value;
+  }});
+  await grants.reserve(delayed,{installationId:v.installation,publicKey},{grantId:v.grant.id,grantRevision:1,messageId:randomUUID(),binding:'delayed-counter'});
+ });
+ const saved=(await f.pool.query('SELECT period_start,period_end,created_at FROM relay_reservations')).rows[0];
+ assert.ok(saved.period_start<=saved.created_at&&saved.created_at<saved.period_end,'recorded admission must belong to the checked legacy period');
+ assert.deepEqual(saved.created_at,checkedAt,'reservation must retain the database time used for admission checks');
+ assert.ok((await f.pool.query('SELECT clock_timestamp() AS now')).rows[0].now>=saved.period_end,'the counter delay must cross the checked period boundary');
+ assert.equal(await f.total(),monthly?1n:0n);
 });
