@@ -340,10 +340,26 @@ order. Remote access matters most because Waitron's customer-facing features wai
    production schema changes need a separate go-ahead (its section 12). Its section 3 replaces
    the statements in C39, C41 and the hosting proposal that put the owner's approval on every
    step. The build is [seven plans](superpowers/plans/2026-10-22-cloud-production-deployment.md),
-   each written when its turn comes: P1 and P2 can start now; P3 waits for the migration slot.
+   each written when its turn comes: P1 can start now; P3 waits for the migration slot.
+   P2 now provides the [AWS layer](aws-infrastructure.md): independent global and Spain
+   roots, three-zone primary cells, encrypted cold copies, separate key authority,
+   scoped workload permissions, ingress, DNS and infrastructure signals. Its offline
+   pinned checks produce complete version 1 references for each exact cell and validate
+   the unchanged handoff schema. Integration checks run each independent root in its
+   own container under the original command and container deadlines. CI separates
+   three guard-test shards from the full plan and formatting checks, keeping every
+   test file and the original job limits. These are mocked
+   plans, not a deployment. Account/state
+   custody, populated secrets, actual service and collector permissions, recovery and
+   provider availability still need their separately authorised qualification.
+   Very deeply nested source remains subject to Python's limits; no exact boundary
+   or exception name is qualified.
+   State qualification must cover first initialization at an absent key under the exact
+   conditional list policy, separate bootstrap-key creation and later deployment-role
+   refresh. Database recovery grants still belong to P7's qualification.
    The owner approved gVisor for P6 and running Spain from Paris for P7 on
    2026-10-23. P6 still waits for P1/P4 and the accepted Waitron handover contract
-   (A1018); P7 still waits for P2/P3. Neither answer grants live/provider authority.
+   (A1018); P7 still waits for P3. Neither answer grants live/provider authority.
    Cloud agrees the [revised A1018 direction](waitron-integration-contract.md#handover-between-local-and-hosted-machines-a1018)
    at Waitron `d9252ac34f2b7e946e1154dd5af1a443c2c39ad4`, including the owner’s
    15:37 correction: after controlled or emergency takeover M2 alone handles AEAT.

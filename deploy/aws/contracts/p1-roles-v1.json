@@ -1,0 +1,36 @@
+{
+  "version": 1,
+  "status": "agreed",
+  "roles": [
+    "api",
+    "portal",
+    "registration-worker",
+    "backup-worker",
+    "backup-verifier",
+    "remote-gateway",
+    "remote-reconciler",
+    "monitor-worker"
+  ],
+  "namespaces": {
+    "global": "waitron-cloud-global",
+    "country": "waitron-cloud-es"
+  },
+  "service_accounts": {
+    "api": "api",
+    "portal": "portal",
+    "registration-worker": "registration-worker",
+    "backup-worker": "backup-worker",
+    "backup-verifier": "backup-verifier",
+    "remote-gateway": "remote-gateway",
+    "remote-reconciler": "remote-reconciler",
+    "monitor-worker": "monitor-worker"
+  },
+  "ingress": {
+    "tcp_node_port": 30443,
+    "udp_node_port": 31820,
+    "health_node_port": 30999,
+    "tcp_port": 443,
+    "udp_port": 51820,
+    "external_traffic_policy": "Cluster"
+  }
+}

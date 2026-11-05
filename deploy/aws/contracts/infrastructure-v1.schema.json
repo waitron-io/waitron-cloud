@@ -1,0 +1,470 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Waitron Cloud infrastructure_v1 references",
+  "description": "Infrastructure references only. This shape does not grant activation or recovery authority and cannot establish the custody of a string value.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "version",
+    "scope",
+    "country",
+    "regions",
+    "cells",
+    "database",
+    "storage",
+    "secrets",
+    "workload_roles",
+    "observability",
+    "dns",
+    "recovery"
+  ],
+  "properties": {
+    "version": {
+      "const": 1
+    },
+    "scope": {
+      "type": "string"
+    },
+    "country": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "regions": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "primary",
+        "backup"
+      ],
+      "properties": {
+        "primary": {
+          "$ref": "#/definitions/reference"
+        },
+        "backup": {
+          "$ref": "#/definitions/reference"
+        }
+      }
+    },
+    "cells": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": {
+        "$ref": "#/definitions/cell"
+      }
+    },
+    "database": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "endpoint",
+        "port",
+        "name",
+        "admin_secret_ref",
+        "kms_key_ref",
+        "backup_ref"
+      ],
+      "properties": {
+        "endpoint": {
+          "$ref": "#/definitions/reference"
+        },
+        "port": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65535
+        },
+        "name": {
+          "$ref": "#/definitions/reference"
+        },
+        "admin_secret_ref": {
+          "$ref": "#/definitions/reference"
+        },
+        "kms_key_ref": {
+          "$ref": "#/definitions/reference"
+        },
+        "backup_ref": {
+          "$ref": "#/definitions/reference"
+        }
+      }
+    },
+    "storage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "stream_bucket",
+        "snapshot_bucket",
+        "backup_buckets",
+        "kms_key_refs"
+      ],
+      "properties": {
+        "stream_bucket": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/reference"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "snapshot_bucket": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/reference"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "backup_buckets": {
+          "$ref": "#/definitions/references"
+        },
+        "kms_key_refs": {
+          "$ref": "#/definitions/referenceMap"
+        }
+      }
+    },
+    "secrets": {
+      "$ref": "#/definitions/referenceMap"
+    },
+    "workload_roles": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "api": {
+          "$ref": "#/definitions/reference"
+        },
+        "portal": {
+          "$ref": "#/definitions/reference"
+        },
+        "registration-worker": {
+          "$ref": "#/definitions/reference"
+        },
+        "backup-worker": {
+          "$ref": "#/definitions/reference"
+        },
+        "backup-verifier": {
+          "$ref": "#/definitions/reference"
+        },
+        "remote-gateway": {
+          "$ref": "#/definitions/reference"
+        },
+        "remote-reconciler": {
+          "$ref": "#/definitions/reference"
+        },
+        "monitor-worker": {
+          "$ref": "#/definitions/reference"
+        }
+      }
+    },
+    "observability": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "logs",
+        "signals",
+        "budget_ref"
+      ],
+      "properties": {
+        "logs": {
+          "$ref": "#/definitions/referenceMap"
+        },
+        "signals": {
+          "$ref": "#/definitions/referenceMap"
+        },
+        "budget_ref": {
+          "$ref": "#/definitions/reference"
+        }
+      }
+    },
+    "dns": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "zone_id",
+        "name",
+        "name_servers"
+      ],
+      "properties": {
+        "zone_id": {
+          "$ref": "#/definitions/reference"
+        },
+        "name": {
+          "$ref": "#/definitions/reference"
+        },
+        "name_servers": {
+          "type": "array",
+          "allOf": [
+            {
+              "$ref": "#/definitions/references"
+            }
+          ],
+          "minItems": 1
+        }
+      }
+    },
+    "recovery": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "region",
+        "database_backup_ref",
+        "key_refs",
+        "secret_refs",
+        "runtime_enabled"
+      ],
+      "properties": {
+        "region": {
+          "$ref": "#/definitions/reference"
+        },
+        "database_backup_ref": {
+          "$ref": "#/definitions/reference"
+        },
+        "key_refs": {
+          "$ref": "#/definitions/referenceMap"
+        },
+        "secret_refs": {
+          "$ref": "#/definitions/referenceMap"
+        },
+        "runtime_enabled": {
+          "const": false
+        }
+      }
+    }
+  },
+  "definitions": {
+    "reference": {
+      "type": "string",
+      "minLength": 1
+    },
+    "references": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/reference"
+      },
+      "uniqueItems": true,
+      "minItems": 0
+    },
+    "threeReferences": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/reference"
+      },
+      "uniqueItems": true,
+      "minItems": 3,
+      "maxItems": 3
+    },
+    "referenceMap": {
+      "type": "object",
+      "propertyNames": {
+        "pattern": "^[a-z][a-z0-9_-]*$"
+      },
+      "additionalProperties": {
+        "$ref": "#/definitions/reference"
+      }
+    },
+    "cell": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "cluster_name",
+        "region",
+        "az_ids",
+        "private_subnet_ids",
+        "node_security_group_id",
+        "oidc_issuer",
+        "ingress"
+      ],
+      "properties": {
+        "cluster_name": {
+          "$ref": "#/definitions/reference"
+        },
+        "region": {
+          "$ref": "#/definitions/reference"
+        },
+        "az_ids": {
+          "$ref": "#/definitions/threeReferences"
+        },
+        "private_subnet_ids": {
+          "$ref": "#/definitions/threeReferences"
+        },
+        "node_security_group_id": {
+          "$ref": "#/definitions/reference"
+        },
+        "oidc_issuer": {
+          "$ref": "#/definitions/reference"
+        },
+        "ingress": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "dns_name",
+            "zone_id",
+            "tcp_ports",
+            "udp_ports",
+            "target_group_arns"
+          ],
+          "properties": {
+            "dns_name": {
+              "$ref": "#/definitions/reference"
+            },
+            "zone_id": {
+              "$ref": "#/definitions/reference"
+            },
+            "tcp_ports": {
+              "type": "array",
+              "items": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 65535
+              },
+              "uniqueItems": true,
+              "minItems": 1
+            },
+            "udp_ports": {
+              "type": "array",
+              "items": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 65535
+              },
+              "uniqueItems": true,
+              "minItems": 0
+            },
+            "target_group_arns": {
+              "allOf": [
+                {
+                  "$ref": "#/definitions/references"
+                }
+              ],
+              "minItems": 1,
+              "type": "array"
+            }
+          }
+        }
+      }
+    }
+  },
+  "oneOf": [
+    {
+      "type": "object",
+      "properties": {
+        "scope": {
+          "const": "global"
+        },
+        "country": {
+          "const": null
+        },
+        "regions": {
+          "type": "object",
+          "properties": {
+            "primary": {
+              "const": "eu-central-1"
+            },
+            "backup": {
+              "const": "eu-west-1"
+            }
+          }
+        },
+        "cells": {
+          "type": "object",
+          "propertyNames": {
+            "pattern": "^global-[a-z0-9]+(?:-[a-z0-9]+)*$"
+          },
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "region": {
+                "const": "eu-central-1"
+              }
+            }
+          }
+        },
+        "storage": {
+          "type": "object",
+          "properties": {
+            "stream_bucket": {
+              "type": "null"
+            },
+            "snapshot_bucket": {
+              "type": "null"
+            },
+            "backup_buckets": {
+              "type": "array",
+              "maxItems": 0
+            }
+          }
+        },
+        "recovery": {
+          "type": "object",
+          "properties": {
+            "region": {
+              "const": "eu-west-1"
+            }
+          }
+        }
+      }
+    },
+    {
+      "type": "object",
+      "properties": {
+        "scope": {
+          "const": "country"
+        },
+        "country": {
+          "const": "es"
+        },
+        "regions": {
+          "type": "object",
+          "properties": {
+            "primary": {
+              "const": "eu-south-2"
+            },
+            "backup": {
+              "const": "eu-west-3"
+            }
+          }
+        },
+        "cells": {
+          "type": "object",
+          "propertyNames": {
+            "pattern": "^es-[a-z0-9]+(?:-[a-z0-9]+)*$"
+          },
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "region": {
+                "const": "eu-south-2"
+              }
+            }
+          }
+        },
+        "storage": {
+          "type": "object",
+          "properties": {
+            "stream_bucket": {
+              "$ref": "#/definitions/reference"
+            },
+            "snapshot_bucket": {
+              "$ref": "#/definitions/reference"
+            },
+            "backup_buckets": {
+              "type": "array",
+              "minItems": 1
+            }
+          }
+        },
+        "recovery": {
+          "type": "object",
+          "properties": {
+            "region": {
+              "const": "eu-west-3"
+            }
+          }
+        }
+      }
+    }
+  ]
+}

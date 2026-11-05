@@ -1,0 +1,70 @@
+name: AWS infrastructure
+on:
+  push:
+    branches: [main]
+  pull_request:
+permissions:
+  contents: read
+concurrency:
+  # Each main merge needs its own result; an older PR candidate may be cancelled.
+  group: aws-infrastructure-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+jobs:
+  verify:
+    name: verify (${{ matrix.cell }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - cell: guards-1
+            shard: 1
+          - cell: guards-2
+            shard: 2
+          - cell: guards-3
+            shard: 3
+          - cell: suites
+            shard: 0
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '26'
+          package-manager-cache: false
+      - run: node scripts/ci-setup-pnpm.mjs
+        shell: bash
+        env:
+          NODE_OPTIONS: --require=${{ github.workspace }}/scripts/ci-pnpm-diagnostics.cjs
+          npm_config_fetch_timeout: '15000'
+          npm_config_fetch_retries: '1'
+          npm_config_fetch_retry_mintimeout: '1000'
+      - name: Check isolated infrastructure plans
+        shell: bash
+        run: |
+          mkdir -p .aws-check-logs
+          node deploy/aws/check.mjs --prepare-tools 2>&1 | tee .aws-check-logs/prepare.log
+          pnpm --dir deploy/aws install --ignore-workspace --frozen-lockfile 2>&1 | tee .aws-check-logs/install.log
+          if [ "${{ matrix.shard }}" != "0" ]; then
+            node --test --test-concurrency=1 --test-shard=${{ matrix.shard }}/3 deploy/aws/*.test.mjs 2>&1 | tee .aws-check-logs/guards.log
+          else
+            node deploy/aws/check.mjs --all 2>&1 | tee .aws-check-logs/suites.log
+            docker run --rm --pull never --network none --user 65532:65532 \
+              --cap-drop ALL --security-opt no-new-privileges --read-only \
+              --memory 256m --cpus 1 --pids-limit 32 \
+              --mount "type=bind,source=$PWD/deploy/aws,target=/source,readonly" \
+              waitron-cloud-aws-tools:1.13.2-aws6.70.0 \
+              tofu fmt -check -recursive /source 2>&1 | tee .aws-check-logs/format.log
+          fi
+      - name: Retain assertion counts and diagnostics
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: aws-infrastructure-${{ github.event.pull_request.head.sha || github.sha }}-${{ github.run_attempt }}-${{ matrix.cell }}
+          path: .aws-check-logs/
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 14

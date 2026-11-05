@@ -1,0 +1,10 @@
+terraform {
+  backend "s3" {}
+  required_version = "= 1.13.2"
+  required_providers {
+    aws = {
+      source  = "hashicorp/aws"
+      version = "6.70.0"
+    }
+  }
+}
