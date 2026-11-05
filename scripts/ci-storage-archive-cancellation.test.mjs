@@ -10,6 +10,7 @@ for (const stage of ["before request", "headers", "body", "retry pause"]) {
     const controller = new AbortController();
     const reason = new Error("archive preparation interrupted");
     let requests = 0;
+    let settled = false, pendingAtNextTurn = false;
     const timers = new Set();
     const server = createServer((request, response) => {
       requests++;
@@ -30,13 +31,19 @@ for (const stage of ["before request", "headers", "body", "retry pause"]) {
       await new Promise(resolve => server.close(resolve));
     });
     if (stage === "before request") controller.abort(reason);
-    await assert.rejects(() => downloadStorageArchive(`http://127.0.0.1:${server.address().port}/archive`, {
+    const acquisition = downloadStorageArchive(`http://127.0.0.1:${server.address().port}/archive`, {
       signal: controller.signal, timeoutMs: 120000, inactivityMs: 30000,
       report(record) {
         if (stage === "body" && record.event === "body" ||
             stage === "retry pause" && record.event === "retry") controller.abort(reason);
+        if (stage === "retry pause" && record.event === "retry") {
+          setImmediate(() => { pendingAtNextTurn = !settled; });
+        }
       },
-    }), error => error === reason);
+    });
+    acquisition.then(() => { settled = true; }, () => { settled = true; });
+    await assert.rejects(acquisition, error => error === reason);
+    assert.equal(pendingAtNextTurn, false, "caller cancellation must interrupt the retry pause before the next event-loop turn");
     assert.equal(requests, stage === "before request" ? 0 : 1, "cancellation cannot admit another request");
   });
 }
