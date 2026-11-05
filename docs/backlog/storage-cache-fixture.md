@@ -615,6 +615,13 @@ recurrence to releasing the competing listeners; it does not explain why that
 release waits or establish the cause of the earlier timeout. Reproduce that
 operation before changing the fixture; preserve every owner check and deadline.
 
+The timeout recurs in [PR951's documentation-only merge run](https://github.com/waitron-io/waitron-cloud/actions/runs/41996943278/job/127142507219).
+After owner verification, `release-admin` waits until the unchanged 90-second
+case limit; cleanup then completes. The separate controlled child refusal remains
+an expected negative check. The required receipts job fails and the strict summary
+refuses it. D581 owns the admin-listener investigation; this occurrence does not
+establish the historical peer or claim a repair.
+
 Three Linux waves of four concurrent unchanged exhaustion cases pass on
 2 November at Cloud `601cf19f`. Each case retains all 101 competing listeners,
 both storage lifetimes, every original assertion and the 90-second limit. An
