@@ -68,7 +68,8 @@ test('unrelated package changes omit capacity while retaining packages, types an
     assert.deepEqual(select().receipts, expected);
     const plan = createPlan({pull_request: {base: {sha: base}, head: {sha: head}}}, {}, workspace, git, () => {throw Error('No reuse');});
     assert.deepEqual(plan.receipts, expected);
-    assert.equal(plan.packages.length, 29);
+    assert.equal(plan.packages.length, 28);
+    assert.deepEqual([...new Set(plan.packages.map(row => row.package))], ["@waitron-cloud/account-http", "@waitron-cloud/backups", "@waitron-cloud/fiscal-allocation", "@waitron-cloud/operations", "@waitron-cloud/portal", "@waitron-cloud/registration", "@waitron-cloud/remote-access"]);
     assert.equal(plan.typecheck, true);
     assert.match(plan.reason, /omitted capacity receipt.*both revisions/i);
     assert.doesNotMatch(plan.reason, /Unverified package revisions:/);
