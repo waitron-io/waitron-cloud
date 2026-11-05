@@ -25,6 +25,10 @@ const writeFileSync=(file,value,...options)=>{
 };
 // A supervisor can kill this helper during a write; readers need the last complete state.
 const save=()=>{writeFileSync(path+'.next',JSON.stringify(data));renameSync(path+'.next',path);};
+if(data.fetchStartDelayMs&&args.includes('fetch')&&!existsSync(path+'.fetch-start-delayed')){
+ persistFileSync(path+'.fetch-start-delayed','');
+ Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,data.fetchStartDelayMs);
+}
 data.calls.push(args);save();
 if(args[0]==='init'){
  const source=args.at(-1);data.scratch=dirname(source);
@@ -35,17 +39,35 @@ if(args[0]==='init'){
  if(data.fetchDelayMs&&data.calls.filter(args=>args.includes('fetch')).length===(data.fetchDelayAttempt??1))
   Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,data.fetchDelayMs);
  if(failure){writeFileSync(join(args[args.indexOf('-C')+1],'partial'),'generated');
-  if(failure==='hang')setInterval(()=>{},1000);
+  if(failure==='hang'){console.error('STALLED_SOURCE_FETCH');setInterval(()=>{},1000);}
   else {console.error(failure);process.exit(128);}
  }
 }else if(args.includes('rev-parse'))console.log(data.wrongRevision?'wrong-revision':data.sourceRevision??'b1b0f10952a59eb59f7358bd681a3cdc94d9b61c');
 else if(!args.includes('checkout'))process.exit(90);
 `,{mode:0o700});
   await writeFile(join(bin,'pnpm'),`#!${process.execPath}\nconsole.error('REACHED_SOURCE_INSTALL');process.exit(73);\n`,{mode:0o700});
-  // Healthy child scheduling must not become a transport timeout; accelerate only deliberate stalls.
-  const stalls=(scenario.failures??[]).map(failure=>failure==='hang');
-  if(scenario.pauseStateWrite)stalls[0]=true;
-  const clock=`const timer=setTimeout,stalls=${JSON.stringify(stalls)};globalThis.setTimeout=(fn,ms,...args)=>timer(fn,ms===300000?2500:ms===75000&&stalls.shift()?350:ms,...args);`;
+  // A stall starts when the helper confirms it, so scheduling cannot move it to another attempt.
+  const clock=`
+const timer=setTimeout,clear=clearTimeout,write=process.stderr.write.bind(process.stderr),replacements=new Map();
+let pendingFetch,tail='';
+globalThis.setTimeout=(fn,ms,...args)=>{
+ const handle=timer(fn,ms===300000?2500:ms,...args);
+ if(ms===75000)pendingFetch={handle,fn,args};
+ return handle;
+};
+globalThis.clearTimeout=handle=>{
+ clear(replacements.get(handle));replacements.delete(handle);clear(handle);
+ if(pendingFetch?.handle===handle)pendingFetch=undefined;
+};
+process.stderr.write=(bytes,...args)=>{
+ tail=(tail+bytes.toString()).slice(-256);
+ if(pendingFetch&&/STALLED_SOURCE_FETCH|PAUSED_STATE_WRITE/.test(tail)){
+  clear(pendingFetch.handle);
+  replacements.set(pendingFetch.handle,timer(pendingFetch.fn,350,...pendingFetch.args));
+  pendingFetch=undefined;tail='';
+ }
+ return write(bytes,...args);
+};`;
   const preparation=Array.isArray(scenario.selected)
     ?['--input-type=module','-e',`import {prepareConformance} from ${JSON.stringify(new URL('./conformance-prepare.mjs',import.meta.url).href)}; await prepareConformance(${JSON.stringify(scenario.selected)});`]
     :[new URL('./conformance.mjs',import.meta.url).pathname,'--only',scenario.selected??'cadence-conformance.test.mjs'];
@@ -153,6 +175,14 @@ test('a healthy retry delayed by scheduling follows only the deliberate stalled 
   const result=await prepare(t,{failures:['hang'],fetchDelayMs:500,fetchDelayAttempt:2});
   assert.match(result.output,/REACHED_SOURCE_INSTALL/);
   assert.equal(result.calls.filter(args=>args.includes('fetch')).length,2);
+  assert.deepEqual(result.fetches.filter(record=>record.event==='timeout').map(record=>record.attempt),[1]);
+  assert.equal(result.calls.filter(args=>args.includes('checkout')).length,1);
+});
+
+test('a stalled fetch delayed before recording its call retains its accelerated timeout',async t=>{
+  const result=await prepare(t,{failures:['hang'],fetchStartDelayMs:500});
+  assert.match(result.output,/REACHED_SOURCE_INSTALL/);
+  assert.deepEqual(result.fetches.filter(record=>record.event==='start').map(record=>record.attempt),[1,2]);
   assert.deepEqual(result.fetches.filter(record=>record.event==='timeout').map(record=>record.attempt),[1]);
   assert.equal(result.calls.filter(args=>args.includes('checkout')).length,1);
 });
