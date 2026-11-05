@@ -1206,12 +1206,14 @@ implementation or production evidence.
 - **CI execution budget.** You can read one summary job and the individual package
   and receipt jobs to check a candidate. The summary also checks the plan's
   package allocation against the planner's registered package names and shard
-  counts. Registration uses five partitions, account HTTP uses three, portal uses six
+  counts. Registration uses six partitions, account HTTP uses three, portal uses six
   and backups uses seven. The [backup job budget investigation](backlog/backup-ci-budget.md)
   records a job cancelled during cleanup after all 569 cases passed. Seven
   partitions separate its five expensive guard files while preserving every assertion
   and the eight-minute limit. The summary requires every registration partition
-  and rejects the former six- and seven-partition allocations. A Node subprocess
+  and rejects five- and seven-partition allocations. The
+  [registration runtime investigation](backlog/package-ci-runtime.md) records
+  the Linux measurements and the historical failures that remain unexplained. A Node subprocess
   check partitions copies of every current registration filename plus a new
   filename and requires each to execute exactly once. Its file workers run one
   at a time; overlapping fixture bodies fail on a shared scratch-directory lock.
@@ -2272,7 +2274,7 @@ implementation or production evidence.
   Unknown/full changes retain all five;
   portal source changes also omit local-stack when its audit holds, otherwise they
   retain it. Isolated ui-smoke needs no receipt. Registration
-  uses five file shards, account HTTP uses three, portal uses six and backups uses
+  uses six file shards, account HTTP uses three, portal uses six and backups uses
   seven. Selected identity, operations and remote-access suites share one job when at
   least two are needed. Each keeps its full package command and deadline, runs
   once in sequence, and reports its own result. One PostgreSQL/Mailpit setup
