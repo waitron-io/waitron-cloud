@@ -1,6 +1,6 @@
 # CI audit conflicts before D577
 
-Independent code PRs repeatedly conflict because each renews the same whole-tree hashes. The [D577 plan](../superpowers/plans/2026-11-05-independent-ci-audit-evidence.md) replaces routine shared-file renewal with current documentation records for each input. Implementation and the two-PR proof remain open.
+Independent code PRs repeatedly conflict because each renews the same whole-tree hashes. The [D577 plan](../superpowers/plans/2026-11-05-independent-ci-audit-evidence.md) replaces routine shared-file renewal with current documentation records for each input. The implementation includes target-anchored removals, ancestry retention, explicit historical v1 fixtures and real workflow freshness controls. Live two-PR and exact-head/merge qualification remain open until their receipts are recorded.
 
 Measured on 5 November 2026 at main `dca4ab55e184e88b73e3e2c3c01964bcdbbacf9a`: **21 of 30** repeated-branch CI head transitions replay with audit-only conflicts. **19** conflict only in `scripts/ci-input-audit.json`; **two** also conflict in its reader-review notes. The remaining **nine** are not attributed solely to the audit. These are extra runs after changed PR heads, not repeated attempts of one Actions run.
 

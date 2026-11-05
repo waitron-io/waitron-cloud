@@ -52,6 +52,13 @@ const expectedDigest = mode => sha256(included[mode].map(index => records[index]
 
 function fixture({audit = policy(), tree = records.join(''), packageJson = JSON.stringify(manifest)} = {}) {
   return (...args) => {
+    if (args[0] === 'rev-parse') {assert.deepEqual(args, ['rev-parse', '--is-shallow-repository']); return 'false\n';}
+    if (args[0] === 'cat-file') {assert.deepEqual(args, ['cat-file', '-t', revision]); return 'commit\n';}
+    if (args[0] === 'log') {
+      assert.equal(args.at(-1), 'scripts/ci-input-audit-v2.json');
+      assert.ok(args.includes(revision));
+      return '';
+    }
     if (args[0] === 'ls-tree') {
       assert.deepEqual(args, ['ls-tree', '-rz', '--full-tree', revision]);
       return tree;

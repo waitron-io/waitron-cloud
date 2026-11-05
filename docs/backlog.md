@@ -1169,7 +1169,11 @@ implementation or production evidence.
   separately reviewed peer modes. The [audit guide](ci-documentation-audit.md)
   explains staged generation, retained removal records and full-history checks.
   Local sequential merges pass in both orders without evidence regeneration;
-  shared-source third states still require explicit renewal. The
+  shared-source third states still require explicit renewal. Removal records use
+  reviewed target ancestry and survive squash or rebase; malformed metadata,
+  lost records, rename inference and later v1 downgrades are refused. Historical
+  v1 assertions remain intact in isolated fixture history. The complete current
+  candidate and its required workflow freshness commands have executable controls. The
   [history sample](backlog/ci-audit-conflicts.md) reproduces audit-only conflicts
   in 21 of 30 repeated-head transitions. The two owned draft scratch PRs and
   current-head/exact-merge CI still need qualification before claiming the
@@ -1237,11 +1241,11 @@ implementation or production evidence.
   receipt inputs can select their actual checks. The first implementation selects
   one Markdown check for a documentation-only change under `docs/` (excluding
   receipts) or at the repository root when both immutable trees match the audited
-  non-document input inventory in `scripts/ci-input-audit.json`. The check reads the
+  non-document input inventory in the [current audit evidence](ci-documentation-audit.md). The check reads the
   selected git blobs and requires valid UTF-8, no NUL and a final newline; deleted
   regular documents are accepted. Audited regular prose no longer widens mixed
   package changes: both saved documentation inventories must verify, and an
-  accompanying policy renewal is ignored for package selection only when all four
+  accompanying evidence renewal is ignored for package selection only when all four
   head inventories are current. Base peer inventories may be stale after ordinary
   prose changes; its documentation inventory must still verify. Saved consumers
   remain selected. Pinned and
@@ -1281,7 +1285,8 @@ implementation or production evidence.
   to `scripts/identity-upstream.mjs` or its behavioral test can select only syntax
   checks and that test, without
   package, receipt or compiler work. Both saved Git trees must match the complete
-  other-input digest in `scripts/ci-input-audit.json`; a new reader, changed
+  other-input inventory in the current per-path records (the shared policy is
+  retained only for historical v1 trees); a new reader, changed
   installation input, missing test, symbolic link or stale audit retains full work.
   The gateway-reconnection validator and its behavioral test have another
   audited exemption. Their script job checks both files and the measurement
@@ -1358,13 +1363,14 @@ implementation or production evidence.
   Duplicate keys, missing or unused records, unsupported syntax and incomplete
   evidence cannot produce a partial comparison. YAML separation uses ordinary
   spaces; other Unicode spaces remain part of scalar values. The direct parser
-  accepts at most two MiB, while production Git reads retain their one-MiB cap.
+  accepts at most two MiB, while individual source blobs retain their one-MiB cap; tree and batch
+  transports use the bounded 64-MiB reader.
   Shared records are hashed once. The graph has a 500,000-visit limit and the
   complete comparison hashes at most 32 MiB of serialized input per lockfile.
   A lockfile PR, alone or with workspace manifest dependency edits, can select the
   affected packages and their saved source/helper
-  consumers when both revisions match the complete other-input audit in
-  `scripts/ci-input-audit.json`. Version 2 pins each manifest with its four dependency fields removed and every
+  consumers when both revisions match the complete lock-mode audit described in
+  [the current guide](ci-lockfile-audit.md). Its projection pins each manifest with its four dependency fields removed and every
   other tracked file, including installation policy, root readers and documentation. Any
   change to those inputs invalidates it until you review them again; follow the
   [lockfile audit procedure](ci-lockfile-audit.md). The selected packages

@@ -5,7 +5,7 @@ import {lstatSync, writeFileSync, readFileSync} from 'node:fs';
 import {readGitBlobs} from './ci-package-revisions.mjs';
 import {pathToFileURL} from 'node:url';
 
-import {auditDescriptor, auditRecordRoot, readModeRecords, verifyModeRecords, assertRecordRetention, auditModes, recordFilename, serializeRecord, writeAuditRecords} from './ci-input-audit-records.mjs';
+import {auditDescriptor, auditRecordRoot, readModeRecords, verifyModeRecords, assertRecordRetention, assertHistoricalV1, auditModes, recordFilename, serializeRecord, writeAuditRecords} from './ci-input-audit-records.mjs';
 
 const immutableAudits = new WeakMap();
 
@@ -88,13 +88,11 @@ function regular(entries, path) {
   assert.ok(entry?.mode === '100644' && entry.type === 'blob', `Missing regular audit input: ${path}`);
 }
 
-export function readInputAudit(revision, git) {
-  const cached = immutableAudits.get(git)?.get(revision);
-  if (cached) return cached;
-  const records = git('ls-tree', '-rz', '--full-tree', revision).split('\0');
+function parseEntries(source) {
+  const records = source.split('\0');
   assert.equal(records.pop(), '', 'Incomplete input audit inventory');
   const paths = new Set();
-  const entries = records.map(raw => {
+  return records.map(raw => {
     const match = raw.match(/^([0-7]{6}) (blob|commit) ([a-f0-9]{40})\t([\s\S]+)$/);
     assert.ok(match, 'Malformed input audit inventory');
     const [, mode, type, objectId, path] = match;
@@ -102,6 +100,12 @@ export function readInputAudit(revision, git) {
     paths.add(path);
     return {mode, type, objectId, path, raw: raw + '\0'};
   });
+}
+
+export function readInputAudit(revision, git) {
+  const cached = immutableAudits.get(git)?.get(revision);
+  if (cached) return cached;
+  const entries = parseEntries(git('ls-tree', '-rz', '--full-tree', revision));
   regular(entries, policyPath);
   const policy = parsePolicy(git('show', `${revision}:${policyPath}`));
   if (entries.some(entry => entry.path === auditDescriptor || entry.path.startsWith(auditRecordRoot))) {
@@ -114,12 +118,13 @@ export function readInputAudit(revision, git) {
     const records = readModeRecords(revision, git, entries);
     const {kind} = assertRecordRetention(revision, git, entries);
     const result = {policy: {version: 2}, entries, records};
-    if (kind === 'commit') {
+    if (kind === 'commit' && /^[a-f0-9]{40}$/.test(revision)) {
       if (!immutableAudits.has(git)) immutableAudits.set(git, new Map());
       immutableAudits.get(git).set(revision, result);
     }
     return result;
   }
+  assertHistoricalV1(revision, git);
   return {policy, entries};
 }
 
@@ -203,15 +208,7 @@ export function auditInputMode(mode, revision, git, manifestPaths = []) {
       try {
         assert.ok(kind !== 'commit' || record.previousRevision !== revision, 'Tombstone must name a prior ancestor');
         git('merge-base', '--is-ancestor', record.previousRevision, ancestor);
-        const previous = readInputAudit(record.previousRevision, git);
-        assert.equal(previous.policy.version, 2, 'Tombstone ancestor requires v2 evidence');
-        const paths = mode === 'lock' ? workspaceManifests(record.previousRevision, git, previous.entries) : [];
-        const priorProjection = projectInputMode(mode, record.previousRevision, git, previous.entries, paths);
-        const prior = previous.records[mode].get(record.path);
-        assert.ok(prior && prior.state !== 'absent', 'Missing present tombstone ancestor record');
-        const row = priorProjection.rows.find(entry => entry.path === record.path);
-        assert.ok(prior.state === 'present' ? row && row.mode === prior.gitMode && row.type === prior.gitType && row.objectId === prior.objectId :
-          priorProjection.manifests[record.path] === prior.sha256, 'Stale tombstone ancestor evidence');
+        assert.ok(currentRecord(mode, record.path, record.previousRevision, git), 'Stale tombstone ancestor evidence');
       } catch (error) { throw new Error(`Invalid audit tombstone for ${record.path}: ${error.message}`); }
     }
     return verifyModeRecords(mode, projection, records);
@@ -254,21 +251,77 @@ function workspaceManifests(revision, git, entries) {
   return paths;
 }
 
+const proofTrees = new WeakMap();
+const priorRecords = new WeakMap();
+
 function currentRecord(mode, path, revision, git) {
-  const prior = readInputAudit(revision, git);
-  if (prior.policy.version !== 2) return null;
-  const record = prior.records[mode].get(path);
-  if (!record || record.state === 'absent') return null;
-  const manifests = mode === 'lock' ? workspaceManifests(revision, git, prior.entries) : [];
-  const projection = projectInputMode(mode, revision, git, prior.entries, manifests);
-  const row = projection.rows.find(entry => entry.path === path);
-  return (record.state === 'present' ? row && row.mode === record.gitMode && row.type === record.gitType && row.objectId === record.objectId :
-    Object.hasOwn(projection.manifests, path) && projection.manifests[path] === record.sha256) ? record : null;
+  const key = `${revision}\0${mode}\0${path}`;
+  if (priorRecords.get(git)?.has(key)) return priorRecords.get(git).get(key);
+  if (!proofTrees.has(git)) proofTrees.set(git, new Map());
+  const trees = proofTrees.get(git);
+  const treeKey = `${revision}\0${mode}\0${path}`;
+  if (!trees.has(treeKey)) {
+    const wanted = [policyPath, auditDescriptor, recordFilename(mode, path), path, ...targets[mode] ?? [],
+      ...(mode === 'lock' ? ['pnpm-lock.yaml'] : [])];
+    const bytes = git('--literal-pathspecs', 'ls-tree', '-rz', '--full-tree', revision, '--', ...wanted, {binary: true});
+    assert.ok(Buffer.isBuffer(bytes), 'Prior audit tree requires raw bytes');
+    trees.set(treeKey, parseEntries(new TextDecoder('utf-8', {fatal: true}).decode(bytes)));
+  }
+  const entries = trees.get(treeKey);
+  const policyEntry = entries.find(entry => entry.path === policyPath);
+  const descriptor = entries.find(entry => entry.path === auditDescriptor);
+  const recordEntry = entries.find(entry => entry.path === recordFilename(mode, path));
+  let result = null;
+  if (policyEntry && descriptor && recordEntry) try {
+    regular(entries, policyPath);
+    const source = entries.find(entry => entry.path === path);
+    const manifest = mode === 'lock' && manifestPath(path);
+    const wanted = [policyEntry, descriptor, recordEntry, ...(manifest && source ? [source] : [])];
+    const blobs = git.readBlobs(wanted.map(entry => entry.objectId));
+    parsePolicy(blobs.get(policyEntry.objectId));
+    const read = () => assert.fail('Prior-path metadata must use its batched blobs');
+    read.readBlobs = () => blobs;
+    const record = readModeRecords(revision, read, [descriptor, recordEntry])[mode].get(path);
+    for (const target of targets[mode] ?? []) regular(entries, target);
+    if (mode === 'lock') regular(entries, 'pnpm-lock.yaml');
+    const included = source && path !== policyPath && path !== auditDescriptor && !path.startsWith(auditRecordRoot) &&
+      !(mode === 'docs' && source.mode === '100644' && source.type === 'blob' && unreadMarkdown(path)) &&
+      !targets[mode]?.includes(path) && !(mode === 'lock' && path === 'pnpm-lock.yaml');
+    if (included && manifest) {
+      regular(entries, path);
+      const value = JSON.parse(blobs.get(source.objectId));
+      assert.ok(object(value), 'Invalid prior manifest');
+      for (const field of ['dependencies', 'devDependencies', 'optionalDependencies', 'peerDependencies']) {
+        if (!Object.hasOwn(value, field)) continue;
+        assert.ok(object(value[field]) && Object.values(value[field]).every(value => typeof value === 'string'), 'Invalid prior manifest dependencies');
+        delete value[field];
+      }
+      const sha256 = digest(JSON.stringify(Object.fromEntries(Object.entries(value).sort(([a], [b]) => a.localeCompare(b, 'en')))));
+      if (record?.state === 'manifest' && record.sha256 === sha256) result = record;
+    } else if (included && record?.state === 'present' && source.mode === record.gitMode && source.type === record.gitType && source.objectId === record.objectId) result = record;
+  } catch (error) {
+    if (error.code !== 'ERR_ASSERTION' && !(error instanceof SyntaxError)) throw error;
+  }
+  if (!priorRecords.has(git)) priorRecords.set(git, new Map());
+  priorRecords.get(git).set(key, result);
+  return result;
+}
+
+function stableReviewBase(git) {
+  // A squash or rebase does not retain branch-only commits. Removal proofs must
+  // already belong to the target's common history before a branch can land.
+  for (const ref of ['refs/remotes/origin/main', 'refs/remotes/origin/master', 'refs/heads/main', 'refs/heads/master']) {
+    let target;
+    try { target = git('rev-parse', '--verify', `${ref}^{commit}`).trim(); }
+    catch { continue; }
+    return git('merge-base', 'HEAD', target).trim();
+  }
+  throw new Error('Removal review requires a main or master target reference');
 }
 
 function generateRecords(modes, revision, git, entries, existing, manifests) {
   const outputs = new Map([[auditDescriptor, '{"version":2}\n']]);
-  let ancestors;
+  let ancestors, proofBase;
   for (const mode of modes) {
     const projection = projectInputMode(mode, revision, git, entries, manifests);
     const records = new Map();
@@ -278,10 +331,15 @@ function generateRecords(modes, revision, git, entries, existing, manifests) {
     for (const [path, sha256] of Object.entries(projection.manifests)) records.set(path, {version: 2, mode, path, state: 'manifest', sha256});
     for (const [path, record] of existing?.[mode] ?? []) {
       if (records.has(path)) continue;
-      if (record.state === 'absent') { records.set(path, record); continue; }
-      ancestors ??= git('rev-list', '--topo-order', 'HEAD').trim().split('\n');
-      const previousRevision = ancestors.find(ancestor => currentRecord(mode, path, ancestor, git));
-      assert.ok(previousRevision, `No reviewed ancestor for audit tombstone: ${path}`);
+      proofBase ??= stableReviewBase(git);
+      ancestors ??= git('rev-list', '--topo-order', proofBase).trim().split('\n');
+      if (record.state === 'absent' && ancestors.includes(record.previousRevision) && currentRecord(mode, path, record.previousRevision, git)) {
+        records.set(path, record); continue;
+      }
+      const candidates = git('--literal-pathspecs', 'rev-list', '--topo-order', proofBase, '--',
+        path, recordFilename(mode, path), auditDescriptor).trim().split('\n').filter(Boolean);
+      const previousRevision = candidates.find(ancestor => currentRecord(mode, path, ancestor, git));
+      assert.ok(previousRevision, `No reviewed target ancestor for audit tombstone (consolidate unlanded additions/removals first): ${path}`);
       records.set(path, {version: 2, mode, path, state: 'absent', previousRevision});
     }
     for (const [path, record] of records) outputs.set(recordFilename(mode, path), serializeRecord(record));
@@ -309,7 +367,9 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
     const revision = write || init ? git('write-tree').trim() : args.at(-1);
     if (check || checkMode) assert.equal(git('cat-file', '-t', revision).trim(), 'commit', 'Check requires an immutable commit');
     const {policy, entries, records} = readInputAudit(revision, git);
-    const manifests = workspaceManifests(revision, git, entries);
+    const needsManifests = policy.version === 1 || init || check || args[2] === 'all' ||
+      (write ? args[2] : checkMode ? args[1] : null) === 'lock';
+    const manifests = needsManifests ? workspaceManifests(revision, git, entries) : [];
     if (init || policy.version === 2 && write) {
       assert.ok(!init || policy.version === 1, 'V2 is already staged; use --write-staged');
       const modes = init || args[2] === 'all' ? auditModes : [args[2] ?? 'docs'];

@@ -63,3 +63,21 @@ test('complete v2 candidate qualifies immutable prose while dirty code cannot in
   ok(node('scripts/ci-docs.mjs', [], {CI_PLAN: JSON.stringify(plan)}));
   assert.notEqual(node('scripts/ci-input-audit.mjs', ['--check', head]).status, 0, 'Peer prose inventories must stay stale');
 }));
+
+test('both configured workflow freshness gates refuse the real stale v2 head', {timeout: 120_000}, () => completeFixture(({root, git, commit}) => {
+  appendFileSync(join(root, 'scripts/ci-docs.mjs'), '\n// Stale-reader workflow control.\n'); commit();
+  const workflow = readFileSync(new URL('../.github/workflows/ci.yml', import.meta.url), 'utf8');
+  for (const job of ['root', 'scripts']) {
+    const body = workflow.split(`\n  ${job}:\n`)[1]?.split(/\n  [\w-]+:\n/)[0] ?? '';
+    const gates = body.split('\n').flatMap(line => {
+      const match = /^\s*(?:- )?run: (.+ci-docs\.mjs --audit .+)$/.exec(line);
+      return match ? [match[1]] : [];
+    });
+    // Execute the configured command against the same committed stale input.
+    // A missing gate becomes a successful no-op and must fail this control.
+    const env = {...process.env}; delete env.NODE_TEST_CONTEXT;
+    const result = spawnSync('/bin/sh', ['-c', gates.length ? gates.join('\n') : 'true'], {cwd: root, env, encoding: 'utf8', timeout: 30_000});
+    assert.notEqual(result.status, 0, `${job} must reject stale documentation evidence`);
+    assert.match(result.stderr, /Unreviewed audit input/, `${job} must run the actual immutable freshness check`);
+  }
+}));

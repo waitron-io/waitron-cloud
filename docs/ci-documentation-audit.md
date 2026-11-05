@@ -20,7 +20,9 @@ that change different readers change different documentation records.
 Each current record identifies an exact Git file, a lock-mode manifest projection,
 or a reviewed removal. The frozen `scripts/ci-input-audit.json` remains valid v1
 evidence for historical revisions; v2 does not rewrite or trust its old digests.
-Malformed v2 evidence never falls back to v1.
+Malformed v2 evidence never falls back to v1. A later commit cannot remove all
+v2 metadata and renew historical v1 evidence. The original v1 policy blob stays
+fixed after activation.
 
 The documentation mode excludes only regular root and `docs/` Markdown. Package
 Markdown, receipt data, executable Markdown, links and submodules remain pinned.
@@ -31,9 +33,16 @@ for artifact verification. Any edit to either needs review and renewal.
 Each mode independently enumerates its current inputs. Every included file needs
 an exact matching record. An addition, rename, changed mode or changed content
 fails until you review it. Removing an input needs a removal record that names an
-ancestor with matching evidence. You cannot hide a removal by deleting its record:
+ancestor with matching evidence. The writer chooses an ancestor already shared
+with the target branch, so squash and rebase keep that proof valid. It repairs an
+invalid previous reference when a matching target ancestor exists. A file added
+and removed only within your branch has no such anchor: consolidate that
+unlanded history before renewal instead of publishing a dangling proof.
+You cannot hide a removal by deleting its record:
 the checker retains every record name introduced in the reachable v2 history,
-including merged branches. Full Git history is required; shallow reads refuse
+including merged branches and Git-detected renames. Invalid noncanonical junk
+is refused while present, but its removal does not create a permanent obligation.
+Full Git history is required; shallow reads refuse
 shortcuts and fail the required documentation freshness check.
 
 V2 review composes independently reviewed input changes. It does not establish
@@ -62,7 +71,9 @@ Generation reads only the index. It never stages outputs or reads unstaged sourc
 as evidence. Inspect new records with `git status` as well as the diff. The second
 generation must leave identical bytes and filenames. Linked directories, linked
 files, hard-linked outputs and unexpected metadata files are refused before any
-output is changed. Keep reader-review notes in your PR, so a routine renewal does
+output is changed. Known read-only output failures are checked in the same
+preflight. Unexpected I/O failures can leave incomplete live output; immutable
+checks refuse it, and generation never stages it. Keep reader-review notes in your PR, so a routine renewal does
 not create another shared-file conflict in this guide.
 
 `--write-staged --mode docs` is the same operation. Neither form renews identity,
