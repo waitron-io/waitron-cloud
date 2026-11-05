@@ -4,6 +4,14 @@ Cloud consumes a versioned build of Waitron's account controls. You develop the
 controls in Waitron; this repository owns their private distribution as
 `@waitron-io/ui-core` on GitHub Packages.
 
+The [approved release plan](superpowers/plans/2026-11-05-public-ui-registry.md)
+replaces manual version selection with one private release per qualifying
+Waitron merge. Its [reservation ledger](shared-ui-release-ledger.md) is available,
+but workflow integration, the reviewed `0.2.0` upload and registry qualification
+remain open. The workflow below still builds its September `0.1.0` pin. Do not
+dispatch it as a `0.2.0` write test; that release needs the plan's reviewed
+preparation and upload gates first.
+
 ## Choose and publish a version
 
 Update `scripts/release/ui-source.json` with a full Waitron commit and the version

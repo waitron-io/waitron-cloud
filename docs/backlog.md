@@ -3,15 +3,21 @@
 ## Keep the private shared UI release current (D579)
 
 The owner approved the [private GitHub release plan](superpowers/plans/2026-11-05-public-ui-registry.md).
-Cloud publishes with its own `GITHUB_TOKEN` on an offset 15-minute schedule,
+The approved publisher uses Cloud's own `GITHUB_TOKEN` on an offset 15-minute schedule,
 reconciles every qualifying merge, creates one upgrade PR per stable release,
 and checks the 24-hour publisher heartbeat and both seven-day deadlines.
 The package stays private with its existing authenticated install and image
 build paths. F/A1336 owns source and package preparation; the reviewed `0.2.0`
 release is the authorised write-permission test. A refused write stops for the
-watcher without a token fallback. Preparation review, the actual release,
-automation, exact-head upgrade validation and fresh-registry/image checks remain
-open. This documentation change does not publish or dispatch anything.
+watcher without a token fallback. The [release ledger](shared-ui-release-ledger.md)
+now reserves one release per source, retains artifact identities and requires
+matching private-registry readback before finalising an upload. Its dedicated
+Git checkout preserves each transition with a signed-off commit and refuses a
+changed remote head. Local tests exercise competing writers against a real
+throwaway Git remote. Source CI selection, complete registry enumeration,
+automation-branch bootstrap, workflow integration and actual upload/readback
+remain open. Preparation review, exact-head upgrade validation and fresh
+registry/image checks also remain open. No publisher is activated by this slice.
 
 ## Shared storage-test seed downloads (D585)
 
