@@ -2,6 +2,14 @@
 
 **C39 · 2026-10-22 · Full design approved for planning only. Documentation only.**
 
+Read this policy with the [production deployment corrections, section 3](2026-10-22-cloud-production-deployment-design.md#3-what-this-design-corrects-in-the-existing-proposals)
+and the [monitoring and alerting corrections, section 3](2026-10-24-cloud-monitoring-alerting-status-design.md#3-what-this-design-changes-in-the-earlier-papers).
+The historical references below to later C41 release and C60 compute decisions
+are resolved by the deployment design's sections 8 and 10. The [alerts plan's
+constraints](../plans/2026-10-22-cloud-monitoring-thresholds.md#global-constraints)
+still require owner approval of the exact daily UTC backup schedule, its first due
+slot and the first monitored group before enablement.
+
 You need a phone alert when you must act, unknown status when evidence stops, and useful incident
 mail without a message for every blip. The owner approved this full policy and its starting
 thresholds on 2026-10-22 around 08:35 for planning only. Implementation, the exact daily

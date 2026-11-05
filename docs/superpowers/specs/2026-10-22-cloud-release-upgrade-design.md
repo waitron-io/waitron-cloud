@@ -1,6 +1,15 @@
 # Release Cloud and upgrade hosted venues without losing accepted work
 
-**C41 · 2026-10-22 · PROPOSED, unapproved and unbuilt. Engineering design only.**
+**C41 · 2026-10-22 · Historical engineering proposal, superseded by the approved production deployment design.**
+
+Use the [production deployment design, section 8](2026-10-22-cloud-production-deployment-design.md#8-releases-slow-at-first-faster-with-experience)
+for release policy and [section 10](2026-10-22-cloud-production-deployment-design.md#10-how-it-is-built-our-call-all-of-it)
+for the compute choice. Its [section 3](2026-10-22-cloud-production-deployment-design.md#3-what-this-design-corrects-in-the-existing-proposals)
+names the corrections to this proposal. The [seven-plan build order](../plans/2026-10-22-cloud-production-deployment.md)
+tracks the remaining build. Keep this document as the source for retained release
+identity, compatibility and forward-migration decisions; its old approval requests
+and separate C60 decision below no longer apply. AWS access, spending and production
+deployment still need the separate authority in the deployment design's section 12.
 
 You need to stop a bad release before it reaches more venues, without treating an old
 image or backup as permission to undo accepted work. Recommend one recorded release
