@@ -298,8 +298,11 @@ acceptance. All six lawyer questions, KMS deletion-waiting policy, exact provide
 access-location evidence, D102 email qualification and runtime proof remain open.
 The published plan records the reviewed roadmap; local build authority for slices
 2–5 leaves every legal, provider, shared-contract and enablement gate in place. This does not approve broader D88 hosting/isolation/shared contracts,
-spending, deployment, provider resources or contracts. D103's first C39 monitoring
-design is approved for planning only; C41 release/upgrade and C60 compute decisions remain separate.
+spending, deployment, provider resources or contracts. The C39 monitoring design
+remains approved for planning only, subject to the production deployment and
+monitoring designs' corrections. The [alerts plan](superpowers/plans/2026-10-22-cloud-monitoring-thresholds.md#global-constraints)
+keeps the exact daily UTC backup schedule, first due slot and first monitored
+group subject to owner approval before enablement.
 D102's [feedback and suppression design](superpowers/specs/2026-11-01-ses-feedback-design.md)
 was approved for authenticated private-queue intake on 2026-11-01. The owner
 subsequently authorised the local code and tests (D565), accepting Stockholm
@@ -315,7 +318,7 @@ queue consumption and production wiring remain unimplemented. Task 8 must qualif
 supplier wording and retired enablement dates before any live qualification. AWS resources,
 spending, credentials, production access and live mail remain unauthorised for this
 build; the owner's existing DNS setup grants none of those permissions. D101's
-legal, retention and supplier gates, D103's alert thresholds and D104's independent
+legal, retention and supplier gates, C39's alert thresholds and D104's independent
 alert route remain open; a second country needs its own approved provider-account
 policy. D68 is landed, including
 `b8ff5555c996c5dec1086be49f7d046018bd3187`, but does not price hosting. D79's local
@@ -323,20 +326,6 @@ backup verification includes migration 043 and the complete same-run recovery pr
 Snapshots remain unavailable in the delivered deployment and plan enforcement stays
 off until release qualification. Recheck active migration reservations before new
 database work; D101 slices 1–3 are SQL-free and slice 4 adds the lifecycle journal.
-
-**D103 / C41 release and upgrade design, published proposal:** the
-[engineering proposal](superpowers/specs/2026-10-22-cloud-release-upgrade-design.md)
-is **unapproved and unbuilt**. It recommends immutable release identity, separate
-shared Cloud maintenance and hosted-venue cohorts, bounded evidence/soak gates,
-durable human-controlled pause/resume, stopped-writer migration and independent
-restore proof. Compatible code rollback preserves current data; incompatible
-changes repair forward, with restoration and any data-loss authority separate.
-Publication is neither an implementation plan nor operational proof. One fresh
-builder check and driver review are complete; the full-proposal owner decision
-precedes separate planning. Build, rollout,
-provider, Waitron authority and existing migration gates remain closed. C39's full
-design was approved on 2026-10-22 around 08:35 for planning only, with exact daily
-schedule and first monitoring cohort still gated. C60 remains separate.
 
 ## Launch platform work, in priority order
 

@@ -43,8 +43,10 @@ planning approval recorded below, carried into D101 and D88:
 | Suppliers need exact qualification | AWS infrastructure, owner-selected Amazon SES in the EU; OpenAI is the actual translation adapter, Anthropic and Google remain candidates. No supplier chain is certified Spain-only by these decisions. |
 
 The engineering design below is approved for planning, with the legal, provider and
-separate AI-eligibility gates still open. D103's first C39 monitoring design was approved
-for planning only on 2026-10-22 around 08:35; release and compute decisions remain separate.
+separate AI-eligibility gates still open. The C39 monitoring design remains approved
+for planning only, subject to the later deployment and monitoring corrections. The
+[production deployment design](2026-10-22-cloud-production-deployment-design.md)
+now governs release policy and compute in sections 8 and 10.
 D104 owns the incident runbook and an external public status page. Neither is built here.
 
 ## 2. Use one application map and purpose-specific roles
@@ -324,7 +326,7 @@ for complete investigation: awareness time, affected A980 categories/venues, kno
 scope, containment, contact and next update. Record delivery/acknowledgement and
 escalate failed notice attempts without waiting for the next scheduled update. Supply phased evidence to A980's breach
 guide; D104's single-owner on-call path handles failed delivery/contact attempts.
-Do not expose identifiers or payloads on the public status page. D103 sets measured
+Do not expose identifiers or payloads on the public status page. The C39 monitoring policy sets measured
 alert thresholds later. Reuse reviewed customer diagnostics before asking for logs;
 A980 O9 masking and Q57 role resolution also apply at Cloud intake and onward sharing.
 
@@ -350,7 +352,7 @@ These are approved engineering acceptance cases, not executed tests. The linked
 1. **Design approval recorded:** the owner approved the complete D101/D88 data-protection engineering design from PR283 on 2026-10-22 around 08:30 for build planning only. O1 is answered, including the 24-hour maximum, conditional Paris destination and exit/retry/concurrency rules. Broader D88 hosting/isolation and shared contracts are not approved.
 2. **Roadmap approved, local slices 1–5 authorised:** the [roadmap](../plans/2026-10-22-cloud-data-protection.md) records the reviewed slices. Slice 1 was authorised on 2026-10-22; local slices 2–5 were authorised on 2026-10-23, slices 2/3 first and 4/5 subject to the actual migration slot. Slices 6–12 remain unauthorised. Complete lawyer-reviewed annexes, shared A980/Waitron contracts and supplier/location evidence before affected flows can be enabled. All six section 10 questions remain open; AI additionally requires separate privacy review and owner acceptance of eligibility examples and limits.
 3. **Slice 1 implemented locally:** the outbound AI boundary refuses production calls; only explicit synthetic loopback proof is available. Later authorised work covers country-policy controls, support/KMS authority, export/90-day/purge and incident handoffs, with refusal/concurrency evidence. Reuse actual landed interfaces; D79 migration 043 and PR5/6 are landed; PR7 final local integration/release qualification remains incomplete. Reconcile Lane G's actual migration reservations before schema work; slices 1–3 are SQL-free.
-4. **Before enablement:** satisfy the [launch evidence gate](../../launch-evidence.md#pass-the-production-evidence-gate), legal/provider/location and KMS deletion-waiting policy, D102 email evidence and applicable D88/A951/fiscal/isolation contracts. D68 is landed, but hosting/recovery costs and reliability still need measurement. D103's first C39 monitoring design is approved for planning only; release/compute remain separate. D102/D104 hands-on work waits until 3 November.
+4. **Before enablement:** satisfy the [launch evidence gate](../../launch-evidence.md#pass-the-production-evidence-gate), legal/provider/location and KMS deletion-waiting policy, D102 email evidence and applicable D88/A951/fiscal/isolation contracts. D68 is landed, but hosting/recovery costs and reliability still need measurement. The C39 monitoring design remains approved for planning only, subject to the later deployment and monitoring corrections; the production deployment design's sections 8 and 10 govern release policy and compute. D102/D104 hands-on work waits until 3 November.
 
 **O1, answered:** full data-protection engineering design approved for build planning
 only on 2026-10-22 around 08:30. No repeat owner question. AI eligibility, all six lawyer
