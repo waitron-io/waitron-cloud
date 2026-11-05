@@ -1574,6 +1574,11 @@ implementation or production evidence.
   Controlled incomplete, changing, duplicated and missing-page responses refuse
   immediately. Complete single-page and multi-page lists still pass, while
   missing required jobs and failed results retain their original refusals.
+  A controlled nightly response also proves that a sibling job appearing
+  between pages can change the declared total and cause this refusal. Whether
+  GitHub produces that race in practice remains unverified. If it occurs,
+  investigate that saved response under this CI investigation before changing
+  the existing retry policy; D586 does not retry contradictory evidence.
   The hosted timeout's natural cause is not proved. The watcher
   has updated all six operator runbooks; runtime landing still requires fresh
   current-head CI.

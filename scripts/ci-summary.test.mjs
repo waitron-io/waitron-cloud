@@ -103,6 +103,41 @@ test('ordinary reader accepts complete single and multiple pages before checking
     syncBuiltinESMExports();
   }
 });
+
+test('ordinary reader validates every page and sibling before selecting the standard workflow', async t => {
+  const records = [...jobs.map(job => ({...job, name: `standard / ${job.name}`})),
+    ...Array.from({length: 49}, (_, index) => ({name: `cost / unused ${index}`, status: 'queued', conclusion: null}))]
+    .map((job, index) => ({...job, id: index + 1}));
+  const paged = items => Array.from({length: Math.ceil(items.length / 30)}, (_, index) => ({total_count: records.length, jobs: items.slice(index * 30, (index + 1) * 30)}));
+  let pages = paged(records);
+  let reads = 0;
+  const previousPrefix = process.env.CI_JOB_PREFIX;
+  process.env.CI_JOB_PREFIX = 'standard / ';
+  t.mock.method(childProcess, 'execFileSync', () => { reads++; return JSON.stringify(pages); });
+  syncBuiltinESMExports();
+  try {
+    await summary.waitForSummary(plan, results);
+    assert.equal(reads, 1);
+    for (const [name, invalid, reason] of [
+      ['duplicate sibling identity across pages', paged(records.map((job, index) => index === records.length - 1 ? {...job, id: records[15].id} : job)), /Duplicate job identity/],
+      ['missing middle page containing only siblings', paged(records).filter((_, index) => index !== 1), /Incomplete job list/],
+      ['missing final sibling page', paged(records).slice(0, -1), /Incomplete job list/],
+      ['invalid sibling identity', paged(records.map((job, index) => index === records.length - 1 ? {...job, id: String(job.id)} : job)), /Invalid job identity/],
+    ]) {
+      await t.test(name, async () => {
+        pages = invalid;
+        reads = 0;
+        await assert.rejects(() => summary.waitForSummary(plan, results), reason);
+        assert.equal(reads, 1);
+      });
+    }
+  } finally {
+    if (previousPrefix === undefined) delete process.env.CI_JOB_PREFIX;
+    else process.env.CI_JOB_PREFIX = previousPrefix;
+    t.mock.restoreAll();
+    syncBuiltinESMExports();
+  }
+});
 test('summary accepts precisely the planned work and skips only unnecessary receipts', () => {
   assert.doesNotThrow(()=>assertSummary(plan,results,jobs));
 });
