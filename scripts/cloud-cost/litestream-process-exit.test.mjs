@@ -46,7 +46,7 @@ function run(holdReply) {
       export const readFileSync=()=>JSON.stringify({config:{},initial:{}});`,
     'node:sqlite': `export class DatabaseSync {prepare(){return {get:()=>({integrity_check:'ok',n:2})};}close(){}}`,
     'node:module': `class Command{};export const createRequire=()=>()=>({S3Client:class {
-      async send(){await globalThis.writerReady;return {Contents:[{Key:'stream/one.ltx',Size:4}]};}destroy(){}},
+      async send(){await globalThis.writerReady;return {Contents:[{Key:'stream/0009/0000000000000001-0000000000000001.ltx',Size:4}]};}destroy(){}},
       CreateBucketCommand:Command,ListObjectsV2Command:Command,DeleteObjectCommand:Command,DeleteBucketCommand:Command});`,
     '/code/cost-waitron-adapter.mjs': `export const openReplay=async()=>({recordSale:async()=>{await globalThis.secondSale?.();},
       counts:()=>({attempted:2,successful:2,failed:0}),verify:async()=>({ok:true,issues:0}),close:async()=>{

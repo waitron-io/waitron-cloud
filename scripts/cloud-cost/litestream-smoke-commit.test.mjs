@@ -4,7 +4,7 @@ import { spawnSync } from 'node:child_process';
 
 // The real smoke, audit, counters and forwarding proxy run against a local HTTP store.
 // Only the external venue, SDK administration, SQLite reader and native process are substituted.
-function run({ backendStatus = 200, versionId = null, transport = '1', holdInitialReply = false, holdRetry = false, incomplete = null, backendReply = null, uploadBody = null } = {}) {
+function run({ backendStatus = 200, versionId = null, transport = '1', holdInitialReply = false, holdRetry = false, holdSnapshot = false, incomplete = null, backendReply = null, uploadBody = null } = {}) {
   const actual = new URL('./litestream.mjs', import.meta.url).href;
   const meter = new URL('./meter.mjs', import.meta.url).href;
   const fixture = new URL('./fixtures/litestream-smoke.mjs', import.meta.url).href;
@@ -14,7 +14,7 @@ function run({ backendStatus = 200, versionId = null, transport = '1', holdIniti
       export const readFileSync=()=>JSON.stringify({config:{},initial:{}});`,
     'node:sqlite': `export class DatabaseSync {prepare(){return {get:()=>({integrity_check:'ok',n:globalThis.closedWriter?2:0})};}close(){}}`,
     'node:module': `class Command{};export const createRequire=()=>()=>({S3Client:class {
-      async send(){if(globalThis.writerReady)await (globalThis.retryWaiting??globalThis.initialReplyHeld??globalThis.writerReady);return {Contents:[{Key:'stream/one.ltx',Size:4}]};}destroy(){}},
+      async send(){if(globalThis.writerReady)await (globalThis.retryWaiting??globalThis.initialReplyHeld??globalThis.writerReady);if(${holdSnapshot} && globalThis.writerReady){globalThis.initialInventoryReads=(globalThis.initialInventoryReads??0)+1;globalThis.snapshotReady=globalThis.initialInventoryReads>1;}return {Contents:[{Key:globalThis.snapshotReady===false?'stream/0000/0000000000000001-0000000000000001.ltx':'stream/0009/0000000000000001-0000000000000001.ltx',Size:4}]};}destroy(){}},
       CreateBucketCommand:Command,ListObjectsV2Command:Command,DeleteObjectCommand:Command,DeleteBucketCommand:Command});`,
     '/code/cost-waitron-adapter.mjs': `export const openReplay=async()=>({recordSale:async()=>{if(globalThis.secondSale)await globalThis.secondSale();},
       counts:()=>({attempted:2,successful:2,failed:0}),verify:async()=>({ok:true,issues:0}),close:async()=>{}});`,
@@ -113,6 +113,7 @@ function run({ backendStatus = 200, versionId = null, transport = '1', holdIniti
         if(${holdInitialReply})globalThis.initialReplyHeld=new Promise(resolve=>globalThis.initialStored=resolve);
         if(${holdRetry})globalThis.retryWaiting=new Promise(resolve=>globalThis.retryBackoff=resolve);
         globalThis.secondSale=async()=>{let committed;const wait=new Promise(resolve=>committed=resolve);globalThis.secondCommitted=committed;
+          if(${holdSnapshot} && !globalThis.snapshotReady)throw Error('INITIAL_SNAPSHOT_PENDING');
           if(${holdInitialReply} && !globalThis.initialReplyComplete)throw Error('INITIAL_REPLY_PENDING');
           if(${holdRetry} && !globalThis.retryComplete)throw Error('RETRY_STILL_WAITING');
           active=put('22222222-2222-4333-8444-555555555555',1);active.catch(()=>{});await wait;};
@@ -280,4 +281,15 @@ test('the smoke prints aborted reply progress in its stop and cleanup reports', 
     assert.equal(detail.code, 'ECONNRESET');
   }
   assert.doesNotMatch(result.stderr, /Synthetic Litestream phase: restore/);
+});
+
+// Removing the snapshot readiness condition lets a completed L0 upload start the final sale too soon.
+test('initial readiness waits for the startup snapshot rather than only the first L0 object', () => {
+  const result = run({ holdSnapshot: true });
+  assert.equal(result.error, undefined, 'the startup barrier must fit the existing process deadline');
+  assert.equal(result.status, 0, result.stderr);
+  const output = JSON.parse(result.stdout);
+  assert.equal(output.restoredSales, 2);
+  assert.equal(output.injectedFailures, 1);
+  assert.equal(output.afterStop.lateAdmissions, 0);
 });

@@ -121,8 +121,8 @@ async function smoke() {
     let uploaded = false;
     for (let n = 0; n < 40; n++) {
       if (!children.has(replicator.child)) fail();
-      // An idle transfer counter excludes SDK backoff; require the injected upload's retry as well as its reply.
-      if ((await list()).some(r => r.Key.endsWith('.ltx')) && replication.transport.checkpoint().pending === 0
+      // L0 can finish before the startup snapshot is admitted; wait for that snapshot and the retry reply.
+      if ((await list()).some(r => /^stream\/0009\/[a-f0-9]{16}-[a-f0-9]{16}\.ltx$/.test(r.Key)) && replication.transport.checkpoint().pending === 0
         && (injectedFailures === 0 || retryAcknowledged)) { uploaded = true; break; }
       await delay(500);
     }

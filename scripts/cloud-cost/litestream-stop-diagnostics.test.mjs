@@ -27,7 +27,7 @@ function run(failure) {
     'node:http': `const http=process.getBuiltinModule('http');export const createServer=http.createServer;
       export const request=(options,...args)=>http.request(options?.socketPath?{...options,socketPath:'/tmp/d325-stop-'+process.pid+'.sock'}:options,...args);`,
     'node:sqlite': `export class DatabaseSync {prepare(){return {get:()=>({integrity_check:'ok',n:2})};}close(){}}`,
-    'node:module': `class Command{}; export const createRequire=()=>()=>({S3Client:class {async send(){return {Contents:[{Key:'stream/one.ltx',Size:1024}]};}destroy(){}},
+    'node:module': `class Command{}; export const createRequire=()=>()=>({S3Client:class {async send(){return {Contents:[{Key:'stream/0009/0000000000000001-0000000000000001.ltx',Size:1024}]};}destroy(){}},
       CreateBucketCommand:Command,ListObjectsV2Command:Command,DeleteObjectCommand:Command,DeleteBucketCommand:Command});`,
     '/code/cost-waitron-adapter.mjs': `export const openReplay=async()=>({recordSale:async()=>{},counts:()=>({attempted:2,successful:2,failed:0}),
       verify:async()=>({ok:true,issues:0}),close:async()=>{}});`,
