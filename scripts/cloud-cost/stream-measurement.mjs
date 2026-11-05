@@ -107,9 +107,9 @@ export async function openStreamMeasurement({ target, sdk, bucket, versioned, cl
       if (nativeUploaded) return;
       return new Promise((resolve, reject) => activityWaiters.add({ after: 0, upload: true, resolve, reject }));
     },
-    whenIdle: async action => {
+    whenIdle: async (action, options) => {
       need(!invalid && state === 'active' && !signal?.aborted);
-      return front.whenIdle(action);
+      return front.whenIdle(action, options);
     },
     changePhase: async next => {
       try {

@@ -58,6 +58,7 @@ export async function openReplayStream(input) {
     item.done = new Promise(resolve => {
       child.once('error', () => { item.bad = true; });
       child.once('close', (code, signal) => {
+        clearTimeout(item.stopTimer);
         children.delete(item);
         diagnose({ kind: 'native', operation: argv[0], code, signal: nativeFailureSignal(signal), stderrBytes, stderrFlags: [...flags].sort() });
         try {
@@ -73,11 +74,16 @@ export async function openReplayStream(input) {
     }
     return item;
   };
+  // Draining and signalling share one force-stop deadline, including cancellation during finish.
+  const budgetStop = item => {
+    if (!item.stopTimer && children.has(item))
+      item.stopTimer = setTimeout(() => { item.bad = true; item.child.kill('SIGKILL'); }, 2000);
+  };
   const stop = async item => {
     if (!item) return;
+    budgetStop(item);
     if (children.has(item) && !item.stopping) { item.stopping = true; item.child.kill('SIGTERM'); }
-    const timer = setTimeout(() => { item.bad = true; item.child.kill('SIGKILL'); }, 2000);
-    try { return await item.done; } finally { clearTimeout(timer); }
+    try { return await item.done; } finally { clearTimeout(item.stopTimer); }
   };
   const successful = result => need(result && result.code === 0 && !result.signal && !result.bad);
   const dispose = () => disposal ??= (async () => {
@@ -86,11 +92,12 @@ export async function openReplayStream(input) {
     // A fast native exit can interrupt its admitted upload. Drain before signalling,
     // while bounding this handoff so an unresponsive backend cannot prevent collection.
     if (writer && children.has(writer) && session) {
+      budgetStop(writer);
       let drainTimer;
       try {
         await Promise.race([session.whenIdle(() => {
           writer.stopping = true; writer.child.kill('SIGTERM');
-        }), new Promise((_, reject) => { drainTimer = setTimeout(() => reject(Error()), 2000); })]);
+        }, { retireConnections: true }), new Promise((_, reject) => { drainTimer = setTimeout(() => reject(Error()), 2000); })]);
       } catch { /* Collection below still stops the owned child and refuses invalid evidence. */ }
       finally { clearTimeout(drainTimer); }
     }
@@ -110,7 +117,8 @@ export async function openReplayStream(input) {
   const abort = () => { invalid = true; dispose().catch(() => {}); };
   const quiesce = async () => {
     healthy();
-    at('quiesce-idle'); await session.whenIdle(() => { writer.stopping = true; writer.child.kill('SIGTERM'); });
+    budgetStop(writer);
+    at('quiesce-idle'); await session.whenIdle(() => { writer.stopping = true; writer.child.kill('SIGTERM'); }, { retireConnections: true });
     at('quiesce-stop'); const result = await stop(writer);
     at('quiesce-stop-result'); successful(result); writer = undefined;
     at('quiesce-health'); healthy();

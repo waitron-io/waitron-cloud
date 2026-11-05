@@ -494,6 +494,8 @@ export async function createLitestreamTransport({ target, meter, phase, lifetime
   } catch { fail(); }
   let invalid = false, closing, refusal, currentPhase = phase;
   const invocations = new Map(), pending = new Set(), connections = new Set();
+  const clients = new Set();
+  const requestClients = new WeakSet();
   const transfers = new Map();
   const socketTransfers = new WeakMap();
   const idleWaiters = new Set();
@@ -509,6 +511,7 @@ export async function createLitestreamTransport({ target, meter, phase, lifetime
     const n = Number(value ?? 0); requireThat(Number.isSafeInteger(n)); return n;
   };
   const server = createServer(async (source, destination) => {
+    requestClients.add(source.socket);
     const idleActionsAtAdmission = idleActionsStarted, requestPhase = currentPhase;
     let id, name, expectedOut, completeLifetime, body, producerAttempt;
     let validationStage = 'transport-state';
@@ -641,12 +644,31 @@ export async function createLitestreamTransport({ target, meter, phase, lifetime
     remember('client-error', error, 'client-error', operation, { forwardingTransfers: active?.size ?? 0, ...context });
     poison('client-error', error, 'client-error'); socket.destroy();
   });
+  server.on('connection', socket => {
+    clients.add(socket); socket.once('close', () => clients.delete(socket));
+  });
   server.listen(0, '127.0.0.1'); await once(server, 'listening');
   return { url: `http://127.0.0.1:${server.address().port}`, pendingTransfers: () => [...transfers.values()].map(snapshot => snapshot()), checkpoint: () => ({ ...refusal, pending: pending.size, completed,
-    connections: connections.size, ...(meter.checkpoint ? { accounting: meter.checkpoint() } : {}) }), whenIdle: async action => {
-    requireThat(!invalid && !closing && typeof action === 'function');
-    if (pending.size === 0) return runIdleAction(action);
-    return new Promise((resolve, reject) => idleWaiters.add({ action, resolve, reject }));
+    connections: connections.size, ...(meter.checkpoint ? { accounting: meter.checkpoint() } : {}) }), whenIdle: async (action, { retireConnections = false } = {}) => {
+    requireThat(!invalid && !closing && typeof action === 'function' && typeof retireConnections === 'boolean');
+    const idleAction = () => {
+      if (!retireConnections) return action();
+      const retire = async () => {
+        requireThat(!invalid && !closing && pending.size === 0);
+        const sockets = [...clients].filter(socket => requestClients.has(socket));
+        if (sockets.length === 0) return action();
+        const ended = sockets.map(socket => new Promise(resolve => socket.once('close', resolve)));
+        // A half-close flushes replies and leaves parsing active until the peer closes its side.
+        for (const socket of sockets) socket.end();
+        await Promise.all(ended);
+        requireThat(!invalid && !closing);
+        if (pending.size === 0) return retire();
+        return new Promise((resolve, reject) => idleWaiters.add({ action: retire, resolve, reject }));
+      };
+      return retire();
+    };
+    if (pending.size === 0) return runIdleAction(idleAction);
+    return new Promise((resolve, reject) => idleWaiters.add({ action: idleAction, resolve, reject }));
   }, setPhase: next => {
     try {
       // Both independent counters must see one phase for the entire transfer.
