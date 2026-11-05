@@ -259,3 +259,17 @@ test('numeric repository pagination is bound to the independently verified named
   returned = {id: 0, full_name: repository};
   assert.throws(read, /identity/i);
 });
+
+
+test('job page and list bounds hold without declared totals', () => {
+  const records = count => Array.from({length: count}, (_, i) => ({id: i + 1}));
+  assert.throws(() => module.collectJobPages(() => page(records(31), undefined)), /malformed page/i);
+  const read = number => page(records(number === 17 ? 20 : 30).map(item => ({id: (number - 1) * 30 + item.id})),
+    undefined, number === 17 ? null : number + 1);
+  assert.equal(module.collectJobPages(read).length, 500);
+  assert.throws(() => module.collectJobPages(number => number < 17 ? read(number)
+    : page(records(30).map(item => ({id: 480 + item.id})), undefined)), /record limit/i);
+  for (const invalid of [0, -1, 101, 1.5, NaN]) {
+    assert.throws(() => module.collectPages(() => page([], 0), invalid), /Invalid page size/);
+  }
+});
