@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import {performance} from 'node:perf_hooks';
 import {createHash} from 'node:crypto';
 import {readFileSync, readdirSync} from 'node:fs';
-import {collectPages} from './ci-reuse-api.mjs';
+import {collectPages, collectJobPages} from './ci-reuse-api.mjs';
 import {assertSourceEvidence, canonicalJson, evidenceDigest, expectedJobContract, readPlanArtifact} from './ci-evidence.mjs';
 import {workflowPaths, assertReuseProof} from './ci-reuse-proof.mjs';
 import {selectWorkflowPlan} from './ci-workflow-plan.mjs';
@@ -243,7 +243,7 @@ export function findReuse(context, {api, git, now = () => performance.now()} = {
     assert.equal(readGit('merge-base', originalBase.sha, head.sha).trim(), source.event.mergeBase, 'Original merge base differs');
     assertWorkflowProvenance(source, run, readGit);
     const selection = selectWorkflowPlan(workflowPath, {base: source.event.mergeBase, head: head.sha}, readGit);
-    const jobs = collectPages(number => call('listAttemptJobs', run.id, run.run_attempt, number));
+    const jobs = collectJobPages(number => call('listAttemptJobs', run.id, run.run_attempt, number));
     assertSourceEvidence(source, selection, jobs, expectedJobContract(workflowPath, selection));
     const reread = call('readRun', run.id), latest = newest();
     assertSourceRun(reread, binding); assertSourceRun(latest, binding);

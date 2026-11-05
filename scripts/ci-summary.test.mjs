@@ -79,7 +79,7 @@ test('executed summary waits for a stale job record to publish its final result'
     writeFileSync(join(root, 'settled.json'), JSON.stringify([{jobs}]));
     writeFileSync(join(root, 'gh'), `#!/bin/sh
 case "$*" in
-  'api --paginate --slurp repos/waitron-io/waitron-cloud/actions/runs/42/jobs?filter=latest&per_page=100') ;;
+  'api --paginate --slurp repos/waitron-io/waitron-cloud/actions/runs/42/jobs?filter=latest&per_page=30') ;;
   *) exit 2 ;;
 esac
 if [ -f "$CI_PUBLICATION_FIXTURE/read" ]; then
@@ -663,7 +663,7 @@ test('actual nested summary command receives the prefix configured by both workf
     const records = [...jobs.map(job => ({...job, name: `standard / ${job.name}`})), {name: 'cost / discover', status: 'in_progress', conclusion: null}];
     writeFileSync(join(root, 'jobs.json'), JSON.stringify([{jobs: records}]));
   writeFileSync(join(root, 'package.json'), '{"type":"module"}\n');
-    writeFileSync(join(root, 'gh.cjs'), `#!${process.execPath}\nconst fs=require('node:fs');const assert=require('node:assert/strict');assert.deepEqual(process.argv.slice(2),['api','--paginate','--slurp','repos/waitron-io/waitron-cloud/actions/runs/42/jobs?filter=latest&per_page=100']);process.stdout.write(fs.readFileSync(process.env.CI_JOB_FIXTURE,'utf8'));\n`, {mode: 0o700});
+    writeFileSync(join(root, 'gh.cjs'), `#!${process.execPath}\nconst fs=require('node:fs');const assert=require('node:assert/strict');assert.deepEqual(process.argv.slice(2),['api','--paginate','--slurp','repos/waitron-io/waitron-cloud/actions/runs/42/jobs?filter=latest&per_page=30']);process.stdout.write(fs.readFileSync(process.env.CI_JOB_FIXTURE,'utf8'));\n`, {mode: 0o700});
     symlinkSync('gh.cjs', join(root, 'gh'));
     const result = spawnSync(process.execPath, ['scripts/ci-summary.mjs'], {encoding: 'utf8', timeout: 3_000, env: {...process.env, PATH: `${root}:${process.env.PATH}`, GITHUB_REPOSITORY: 'waitron-io/waitron-cloud', GITHUB_RUN_ID: '42', CI_JOB_FIXTURE: join(root, 'jobs.json'), CI_JOB_PREFIX: prefix, CI_PLAN: JSON.stringify(plan), CI_RESULTS: JSON.stringify(Object.fromEntries(Object.entries(results).map(([name, result]) => [name, {result}])))} });
     assert.equal(result.status, 0, result.stdout + result.stderr);

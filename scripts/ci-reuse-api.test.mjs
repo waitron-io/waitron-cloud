@@ -37,7 +37,7 @@ test('bounded GitHub reader preserves raw identities and exact-attempt endpoint 
     `repos/${repository}`, `repos/${repository}/actions/workflows/ci.yml`, `repos/${repository}/git/commits/${head}`,
     `repos/${repository}/commits/${head}/pulls?per_page=100&page=1`,
     `repos/${repository}/actions/workflows/ci.yml/runs?head_sha=${head}&event=pull_request&per_page=100&page=1`,
-    `repos/${repository}/actions/runs/42`, `repos/${repository}/actions/runs/42/attempts/2/jobs?per_page=100&page=1`,
+    `repos/${repository}/actions/runs/42`, `repos/${repository}/actions/runs/42/attempts/2/jobs?per_page=30&page=1`,
     `repos/${repository}/actions/runs/42/artifacts?per_page=100&page=1`,
   ]);
   assert.ok(calls.every(call => call.options.timeout === 5000 && call.options.killSignal === 'SIGKILL'));
@@ -72,7 +72,7 @@ test('all pages are required, including a newer red run on the second page', () 
 
 test('pagination follows only the same endpoint with consecutive page identity', () => {
   assert.equal(typeof module.createReuseApi, 'function', 'Missing bounded GitHub reader');
-  const endpoint = `https://api.github.com/repos/${repository}/actions/runs/42/attempts/2/jobs?per_page=100&page=2`;
+  const endpoint = `https://api.github.com/repos/${repository}/actions/runs/42/attempts/2/jobs?per_page=30&page=2`;
   let link = `<${endpoint}>; rel="next"`;
   const api = module.createReuseApi({repository, execute: () => response({total_count: 101, jobs: [{id: 1}]}, link)});
   assert.equal(api.listAttemptJobs(42, 2, 1).nextPage, 2);
@@ -203,7 +203,59 @@ test('current job reads bind to their own repository without relaxing reuse repo
   const read = module.createCurrentJobReader({repository: 'someone/waitron-cloud', runId: 42, attempt: 2,
     execute: (_command, args, options) => {calls.push({args, options}); return response({total_count: 1, jobs: [{id: 1}]});}});
   assert.deepEqual(read(123), [{id: 1}]);
-  assert.equal(calls[0].args.at(-1), 'repos/someone/waitron-cloud/actions/runs/42/attempts/2/jobs?per_page=100&page=1');
+  assert.equal(calls[0].args.at(-1), 'repos/someone/waitron-cloud/actions/runs/42/attempts/2/jobs?per_page=30&page=1');
   assert.ok(calls[0].options.timeout <= 123);
   assert.throws(() => module.createReuseApi({repository: 'someone/waitron-cloud'}), /Unsupported evidence repository/);
+});
+
+
+test('small job pages retain the 500-record ceiling and reject incomplete or changing inventories', () => {
+  const jobs = Array.from({length: 500}, (_, i) => ({id: i + 1}));
+  let mode = 'complete', reads = 0;
+  const read = module.createCurrentJobReader({repository, runId: 42, attempt: 2, now: () => 0,
+    execute: (_command, args) => {
+      reads++;
+      const url = new URL(`https://api.github.com/${args.at(-1)}`);
+      const size = Number(url.searchParams.get('per_page')), number = Number(url.searchParams.get('page'));
+      if (size > 30) throw Object.assign(Error('Large jobs page times out'), {code: 'ETIMEDOUT'});
+      let items = jobs.slice((number - 1) * size, number * size);
+      if (number === 2 && mode === 'duplicate') items[0] = jobs[0];
+      if (number === 2 && mode === 'short') items.pop();
+      let total = mode === 'over-limit' ? 501 : 500;
+      if (number === 2 && mode === 'changed') total--;
+      const next = number * size < total && mode !== 'terminal';
+      url.searchParams.set('page', String(number + 1));
+      return response({total_count: total, jobs: items}, next ? `<${url}>; rel="next"` : '');
+    }});
+  assert.deepEqual(read(30_000), jobs);
+  assert.equal(reads, 17);
+  for (const [value, error] of [['duplicate', /Duplicate/], ['short', /Truncated/],
+    ['changed', /total changed/], ['terminal', /Incomplete/], ['over-limit', /Unsupported list total/]]) {
+    mode = value;
+    assert.throws(() => read(30_000), error);
+  }
+});
+
+
+test('numeric repository pagination is bound to the independently verified named repository', () => {
+  const jobs = Array.from({length: 31}, (_, i) => ({id: i + 1}));
+  let linkedId = 123, returned = {id: 123, full_name: repository};
+  const read = () => {
+    const api = module.createReuseApi({repository, execute: (_command, args) => {
+      const endpoint = args.at(-1);
+      if (endpoint === `repos/${repository}`) return response(returned);
+      const url = new URL(`https://api.github.com/${endpoint}`), number = Number(url.searchParams.get('page'));
+      assert.equal(url.pathname, `/repos/${repository}/actions/runs/42/attempts/2/jobs`);
+      return response({total_count: 31, jobs: jobs.slice((number - 1) * 30, number * 30)}, number === 1
+        ? `<https://api.github.com/repositories/${linkedId}/actions/runs/42/attempts/2/jobs?per_page=30&page=2>; rel="next"` : '');
+    }});
+    return module.collectJobPages(number => api.listAttemptJobs(42, 2, number));
+  };
+  assert.deepEqual(read(), jobs);
+  linkedId = 124;
+  assert.throws(read, /repository/i);
+  linkedId = 123; returned = {id: 123, full_name: 'someone/other-repository'};
+  assert.throws(read, /repository/i);
+  returned = {id: 0, full_name: repository};
+  assert.throws(read, /identity/i);
 });

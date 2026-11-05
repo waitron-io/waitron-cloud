@@ -1396,8 +1396,14 @@ implementation or production evidence.
   CLI fixtures set their own run identity so hosted inputs cannot change the
   refusal they exercise. The live-reader control uses distinct saved revisions
   to reach package discovery without bypassing the empty-range guard.
-  Runtime landing still requires current-head CI and
-  the watcher's post-merge runbook update.
+  Job evidence now reads complete 30-record pages in current summaries, source
+  qualification and post-merge readback. A controlled slow large-page response
+  reproduces the native summary timeout; smaller pages pass that control while
+  missing, duplicated, truncated or changing evidence still fails. The existing
+  500-record, request and time limits remain. Numeric pagination aliases require
+  an independently verified repository name and ID. The hosted timeout's natural cause
+  is not proved. The watcher has updated all six operator runbooks; runtime
+  landing still requires fresh current-head CI.
   Part 6 adds the [nightly full backstop](ci-nightly.md):
   one 03:17 UTC schedule and a manual trigger call all four workflows
   at the same revision. All package partitions, six receipt suites, cost,

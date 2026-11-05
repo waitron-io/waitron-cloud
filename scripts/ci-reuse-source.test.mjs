@@ -317,10 +317,10 @@ function runtimeFixture(f) {
     [`${endpoint}/actions/workflows/ci.yml/runs?head_sha=${head}&event=pull_request&per_page=100&page=1`]: {total_count: f.data.runs.length, workflow_runs: f.data.runs},
     [`${endpoint}/actions/runs/42`]: f.data.run,
     [`${endpoint}/actions/runs/90`]: f.api.readRun(90),
-    [`${endpoint}/actions/runs/42/attempts/2/jobs?per_page=100&page=1`]: {total_count: f.data.jobs.length, jobs: f.data.jobs},
+    [`${endpoint}/actions/runs/42/attempts/2/jobs?per_page=30&page=1`]: {total_count: f.data.jobs.length, jobs: f.data.jobs},
     [`${endpoint}/actions/runs/42/artifacts?per_page=100&page=1`]: {total_count: f.data.artifacts.length, artifacts: f.data.artifacts},
     [`${endpoint}/actions/artifacts/61/zip`]: {binary: bytes.toString('base64')},
-    [`${endpoint}/actions/runs/90/jobs?filter=latest&per_page=100`]: [{jobs: [
+    [`${endpoint}/actions/runs/90/jobs?filter=latest&per_page=30`]: [{jobs: [
       {name: 'changes', status: 'completed', conclusion: 'success'},
     ]}],
   };
@@ -393,7 +393,7 @@ test('operator readback binds the local decision to its main artifact, final job
       "package (${{ matrix.package }}${{ ((matrix.shards && format(', shard {0}/{1}', matrix.shard, matrix.shards)) || '') }})", 'receipts'];
     const currentJobs = ['changes', 'summary', ...unused].map((name, i) => ({id: i + 100, run_id: 90, run_attempt: 1,
       head_sha: merge, name, status: 'completed', conclusion: unused.includes(name) ? 'skipped' : 'success'}));
-    runtime.responses[`${endpoint}/actions/runs/90/attempts/1/jobs?per_page=100&page=1`] = {total_count: currentJobs.length, jobs: currentJobs};
+    runtime.responses[`${endpoint}/actions/runs/90/attempts/1/jobs?per_page=30&page=1`] = {total_count: currentJobs.length, jobs: currentJobs};
     runtime.responses[`${endpoint}/actions/runs/90/artifacts?per_page=100&page=1`] = {total_count: 1, artifacts: [{id: 62,
       name: 'ci-decision-v1-ci-90-1', expired: false, size_in_bytes: decisionBytes.length,
       digest: 'sha256:' + createHash('sha256').update(decisionBytes).digest('hex'),
@@ -430,11 +430,11 @@ test('operator readback binds the local decision to its main artifact, final job
     assert.match(altered.stderr, /Local decision differs from hosted/);
     writeFileSync(decisionPath, JSON.stringify(decision));
     currentJobs.pop();
-    runtime.responses[`${endpoint}/actions/runs/90/attempts/1/jobs?per_page=100&page=1`].total_count--;
+    runtime.responses[`${endpoint}/actions/runs/90/attempts/1/jobs?per_page=30&page=1`].total_count--;
     assert.equal(readback().status, 1, 'A missing current skipped family is not qualified reuse');
-    runtime.responses[`${endpoint}/actions/runs/90/attempts/1/jobs?per_page=100&page=1`].jobs = [
+    runtime.responses[`${endpoint}/actions/runs/90/attempts/1/jobs?per_page=30&page=1`].jobs = [
       ...currentJobs, {id: 999, run_id: 90, run_attempt: 1, head_sha: merge, name: 'receipts', status: 'completed', conclusion: 'skipped'}];
-    runtime.responses[`${endpoint}/actions/runs/90/attempts/1/jobs?per_page=100&page=1`].total_count++;
+    runtime.responses[`${endpoint}/actions/runs/90/attempts/1/jobs?per_page=30&page=1`].total_count++;
     f.data.run.conclusion = 'failure';
     const red = readback();
     assert.equal(red.status, 1, red.stdout + red.stderr);
@@ -450,7 +450,7 @@ function hostDecision(runtime, decision, currentJobs) {
     digest: 'sha256:' + createHash('sha256').update(content).digest('hex'),
     workflow_run: {id: 90, head_sha: merge, repository_id: 123, head_repository_id: 123}}]};
   runtime.responses[`${endpoint}/actions/artifacts/62/zip`] = {binary: content.toString('base64')};
-  runtime.responses[`${endpoint}/actions/runs/90/attempts/1/jobs?per_page=100&page=1`] = {total_count: currentJobs.length, jobs: currentJobs};
+  runtime.responses[`${endpoint}/actions/runs/90/attempts/1/jobs?per_page=30&page=1`] = {total_count: currentJobs.length, jobs: currentJobs};
   writeFileSync(join(runtime.directory, 'responses.json'), JSON.stringify(runtime.responses));
 }
 

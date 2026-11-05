@@ -93,3 +93,41 @@ test('native summary retries transient lookups within its unchanged publication 
   await assert.rejects(run(() => {reads++; throw Error('Invalid current evidence');}), /Invalid current evidence/);
   assert.equal(reads, 1);
 });
+
+
+test('native summary survives slow large job pages without extending its publication deadline', async () => {
+  const {waitForNativeSummary} = await import('./ci-native-summary.mjs');
+  const {createCurrentJobReader} = await import('./ci-reuse-api.mjs');
+  const identity = {runId: 42, runAttempt: 1, headSha: 'a'.repeat(40)};
+  const names = [...Array.from({length: 69}, (_, i) => `standard / package ${i}`),
+    'venue / changes', 'venue / service-receipts (legacy)', 'venue / service-receipts (venue)', 'venue / summary'];
+  const jobs = names.map((name, i) => ({id: i + 1, name, run_id: 42, run_attempt: 1, head_sha: identity.headSha,
+    status: 'completed', conclusion: 'success'}));
+  let time = 0, truncate = false, unavailable = false;
+  const readJobs = createCurrentJobReader({repository: 'waitron-io/waitron-cloud', runId: 42, attempt: 1,
+    now: () => time, execute: (_command, args, options) => {
+      const url = new URL(`https://api.github.com/${args.at(-1)}`);
+      const size = Number(url.searchParams.get('per_page')), page = Number(url.searchParams.get('page'));
+      if (size > 30 || unavailable) {
+        time += options.timeout;
+        throw Object.assign(Error('Controlled slow job page'), {code: 'ETIMEDOUT'});
+      }
+      time += 1;
+      const items = jobs.slice((page - 1) * size, page * size);
+      const next = page * size < jobs.length && !truncate;
+      url.searchParams.set('page', String(page + 1));
+      return Buffer.from(`HTTP/2.0 200 OK\r\n${next ? `Link: <${url}>; rel="next"\r\n` : ''}\r\n` +
+        JSON.stringify({total_count: jobs.length, jobs: items}));
+    }});
+  const run = () => waitForNativeSummary('.github/workflows/venue-services-proof.yml',
+    {full: true, required: true, head: identity.headSha},
+    {changes: {result: 'success'}, 'service-receipts': {result: 'success'}},
+    {identity, prefix: 'venue / ', readJobs, now: () => time, sleep: async ms => {time += ms;}});
+  await run();
+  assert.ok(time < 60_000);
+  truncate = true;
+  await assert.rejects(run(), /Incomplete terminal page/);
+  truncate = false; unavailable = true; time = 0;
+  await assert.rejects(run(), /Timed out waiting for native job records.*Controlled slow job page/);
+  assert.equal(time, 60_000);
+});

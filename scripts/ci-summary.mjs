@@ -115,7 +115,7 @@ export function assertSummary(plan, results, jobs) {
 }
 
 function readCurrentJobs(timeoutMs) {
-  const pages = JSON.parse(execFileSync('gh', ['api','--paginate','--slurp',`repos/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}/jobs?filter=latest&per_page=100`], {encoding:'utf8',timeout:timeoutMs,killSignal:'SIGKILL'}));
+  const pages = JSON.parse(execFileSync('gh', ['api','--paginate','--slurp',`repos/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}/jobs?filter=latest&per_page=30`], {encoding:'utf8',timeout:timeoutMs,killSignal:'SIGKILL'}));
   return pages.flatMap(page => page.jobs);
 }
 

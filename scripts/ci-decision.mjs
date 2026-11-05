@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import {canonicalJson, evidenceDigest, expectedJobContract, maxEvidenceBytes} from './ci-evidence.mjs';
 import {assertArtifactMetadata, decodePlanArchive} from './ci-plan-artifact.mjs';
-import {collectPages} from './ci-reuse-api.mjs';
+import {collectPages, collectJobPages} from './ci-reuse-api.mjs';
 import {assertCurrentReuse, assertReviewedInputs} from './ci-reuse.mjs';
 import {loadWorkspaceAtRevision} from './ci-workspace-snapshot.mjs';
 import {resolveRange} from './ci-range.mjs';
@@ -71,7 +71,7 @@ export function readbackDecision(record, {api, git, now} = {}) {
   validateDecisionEvidence(record);
   const {context, selection, mode, workflowPath} = record;
   const call = (method, ...args) => api[method](...args, api.remaining());
-  const pages = (method, ...args) => collectPages(number => call(method, ...args, number));
+  const pages = (method, ...args) => (method === 'listAttemptJobs' ? collectJobPages : collectPages)(number => call(method, ...args, number));
   const repository = call('readRepository');
   assert.equal(repository.id, context.repositoryId); assert.equal(repository.full_name, context.repository);
   assert.equal(repository.default_branch, 'main');

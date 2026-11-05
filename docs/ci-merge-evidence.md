@@ -71,7 +71,13 @@ Every selected job must succeed and every unselected job must have its known
 skipped identity. The verifier rereads the source before granting reuse; the
 current strict summary requalifies it again after main's jobs finish. Newer red
 or unfinished attempts defeat older green evidence. Reads have bounded request,
-page and time budgets. Missing or uncertain evidence retains full work.
+page and time budgets. Missing or uncertain evidence retains full work. Job reads use
+30 records per page, including current summaries, source qualification and main
+readback. The 500-record ceiling, 30-request verification budget, five-second
+API command limit and 60-second summary publication deadline still apply.
+An incomplete last page, duplicate identity or changing total refuses evidence.
+Numeric repository links must match an independently read repository ID and
+name; subsequent requests keep using the named repository endpoint.
 
 A proven different tree uses the actual push range. Direct and multi-commit
 pushes also use that complete range. Forced, deleted, newly created, malformed,

@@ -7,15 +7,16 @@ import {readGitBlobs} from './ci-package-revisions.mjs';
 const positive = value => Number.isSafeInteger(value) && value > 0;
 const revision = value => assert.match(value, /^(?!0{40}$)[a-f0-9]{40}$/, 'Invalid commit identity');
 const identity = value => assert.ok(positive(value), 'Invalid numeric identity');
-const pageIdentity = value => assert.ok(positive(value) && value <= 5, 'Invalid page identity');
+const pageIdentity = (value, pageSize) => assert.ok(positive(value) && value <= Math.ceil(500 / pageSize), 'Invalid page identity');
 const binaryLimit = 256 * 1024 + 2048;
 
-export function collectPages(readPage) {
+export function collectPages(readPage, pageSize = 100) {
+  assert.ok(positive(pageSize) && pageSize <= 100, 'Invalid page size');
   const items = [], ids = new Set();
   let total;
-  for (let number = 1; number <= 5; number++) {
+  for (let number = 1; number <= Math.ceil(500 / pageSize); number++) {
     const page = readPage(number);
-    assert.ok(page && Array.isArray(page.items) && page.items.length <= 100, 'Missing or malformed page');
+    assert.ok(page && Array.isArray(page.items) && page.items.length <= pageSize, 'Missing or malformed page');
     assert.equal(typeof page.terminal, 'boolean', 'Missing terminal-page proof');
     assert.equal(page.terminal, page.nextPage === null, 'Conflicting terminal-page proof');
     if (page.total_count !== undefined) {
@@ -28,16 +29,20 @@ export function collectPages(readPage) {
       ids.add(item.id);
       items.push(item);
     }
+    assert.ok(items.length <= 500, 'Evidence record limit exceeded');
     if (total !== undefined) assert.ok(items.length <= total, 'List exceeds declared total');
     if (page.terminal) {
       if (total !== undefined) assert.equal(items.length, total, 'Incomplete terminal page');
       return items;
     }
     assert.equal(page.nextPage, number + 1, 'Nonconsecutive or cyclic next page');
-    assert.equal(page.items.length, 100, 'Truncated nonterminal page');
+    assert.equal(page.items.length, pageSize, 'Truncated nonterminal page');
   }
   throw Error('Evidence page limit exceeded');
 }
+
+// Smaller job pages reduce response size within the unchanged lookup deadlines.
+export const collectJobPages = readPage => collectPages(readPage, 30);
 
 export function createReuseApi(options = {}) {
   assert.equal(options.repository, 'waitron-io/waitron-cloud', 'Unsupported evidence repository');
@@ -49,7 +54,7 @@ function createGithubReader({repository, now = () => performance.now(), execute 
     !['.', '..'].includes(repository.split('/')[1]), 'Invalid current repository');
   assert.ok(Number.isFinite(budgetMs) && budgetMs > 0 && budgetMs <= 30_000, 'Invalid evidence deadline');
   const deadline = now() + budgetMs;
-  let requests = 0;
+  let requests = 0, repositoryId;
   const remaining = () => {
     const value = Math.floor(deadline - now());
     assert.ok(Number.isFinite(value) && value > 0, 'Evidence deadline exhausted');
@@ -84,8 +89,9 @@ function createGithubReader({repository, now = () => performance.now(), execute 
     return body;
   };
   const list = (endpoint, key, number, remainingMs) => {
-    pageIdentity(number);
-    const target = `${endpoint}${endpoint.includes('?') ? '&' : '?'}per_page=100&page=${number}`;
+    const pageSize = key === 'jobs' ? 30 : 100;
+    pageIdentity(number, pageSize);
+    const target = `${endpoint}${endpoint.includes('?') ? '&' : '?'}per_page=${pageSize}&page=${number}`;
     const {body, link} = read(target, remainingMs);
     const items = key ? body?.[key] : body;
     assert.ok(Array.isArray(items), 'Missing evidence page items');
@@ -103,6 +109,18 @@ function createGithubReader({repository, now = () => performance.now(), execute 
         const expected = new URL(`https://api.github.com/${target}`);
         expected.searchParams.set('page', String(number + 1));
         const actual = new URL(next[0]);
+        const numeric = actual.pathname.match(/^\/repositories\/([1-9][0-9]*)\//);
+        if (numeric) {
+          if (repositoryId === undefined) {
+            const record = object(root, remainingMs);
+            assert.equal(record.full_name, repository, 'Pagination repository name differs');
+            identity(record.id);
+            repositoryId = record.id;
+          }
+          assert.equal(numeric[1], String(repositoryId), 'Pagination repository identity differs');
+          // GitHub emits numeric repository aliases; every request still uses the named endpoint.
+          actual.pathname = actual.pathname.replace(/^\/repositories\/[1-9][0-9]*\//, `/repos/${repository}/`);
+        }
         actual.searchParams.sort();
         expected.searchParams.sort();
         assert.equal(actual.href, expected.href, 'Foreign or nonconsecutive next-page link');
@@ -137,7 +155,7 @@ export function createCurrentJobReader({repository, runId, attempt, ...options} 
   identity(runId); identity(attempt);
   return remainingMs => {
     const api = createGithubReader({...options, repository, budgetMs: Math.min(30_000, remainingMs)});
-    return collectPages(page => api.listAttemptJobs(runId, attempt, page, api.remaining()));
+    return collectJobPages(page => api.listAttemptJobs(runId, attempt, page, api.remaining()));
   };
 }
 
