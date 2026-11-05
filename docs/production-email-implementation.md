@@ -159,7 +159,10 @@ A missing retained key leaves work
 retryable. Local PostgreSQL process-death checks cover interruption before and
 after commit; they do not authenticate an AWS publisher or exercise a live queue.
 
-Task 3 remains local pending owner decisions. A changed policy or configuration
-revision currently consumes late feedback as permanently unresolved, and an
-irreversibly revoked retained key closes the whole feedback/admission scope.
-Do not enable the store until late-feedback handling and key recovery are agreed.
+Late feedback keeps its original recipient across later policy and configuration
+revisions when country, provider account, region, purpose and configuration set
+still match. The owner approved that exception on 5 November. All other binding
+and key refusals remain. An irreversibly revoked retained key still closes the
+whole feedback/admission scope, including attempts using unrelated keys. This
+exceeds the design's required-key refusal. Before production, you need a separately
+approved key-retirement and recovery design that settles that difference.

@@ -177,18 +177,41 @@ test('country provider region configuration and purpose mismatches cannot mutate
  const f=await fixture();try{
   const a=await transaction(f.pool,async c=>admitMailAttempt(c,await f.account('owner@example.test')));
   const onlyVenue=feedbackFixture('eu-north-1',['venue-email']);
-  const revision=feedbackFixture();revision.input.revision='synthetic-config-2';
-  for(const binding of revision.policy.smtpBindings)binding.revision=revision.input.revision;
-  const policy=feedbackFixture();policy.policy.revision=4;policy.input.policyRevision=4;
-  for(const flow of policy.input.flows)flow.policyRevision=4;
   const set=feedbackFixture();set.input.configurationSet='other';set.input.configurationSetArn=set.input.configurationSetArn.replace('transactional','other');
   for(const binding of set.policy.smtpBindings)binding.configurationSetArn=set.input.configurationSetArn;
   const configs=[config('eu-west-3'),config('eu-north-1','FR'),config('eu-north-1','ES','999999999012'),
-   validateSesFeedbackConfig(onlyVenue.policy,onlyVenue.input),validateSesFeedbackConfig(revision.policy,revision.input),validateSesFeedbackConfig(set.policy,set.input),validateSesFeedbackConfig(policy.policy,policy.input)];
+   validateSesFeedbackConfig(onlyVenue.policy,onlyVenue.input),validateSesFeedbackConfig(set.policy,set.input)];
   for(const [i,current] of configs.entries())assert.equal(await applySesFeedback(f.pool,current,keys,event(a.attemptTag,{snsId:'wrong-scope-'+i})),'ignored');
-  assert.deepEqual(await counts(f),{receipts:7,events:0,suppressions:0});
+  assert.deepEqual(await counts(f),{receipts:5,events:0,suppressions:0});
   assert.equal((await f.pool.query('SELECT provider_message_id FROM mail_attempts')).rows[0].provider_message_id,null);
   await assert.rejects(applySesFeedback(f.pool,{...config()},keys,event(a.attemptTag)),/mail_configuration_unavailable/);
+ }finally{await f.close();}
+});
+
+// A revision upgrade cannot consume authenticated late feedback without blocking the original recipient.
+for(const kind of ['configuration','policy'])test(`late feedback retains the original recipient across a ${kind} revision`,async()=>{
+ const f=await fixture();try{
+  const input=await f.account('original@example.test');
+  const a=await transaction(f.pool,c=>admitMailAttempt(c,input));
+  const original=(await f.pool.query('SELECT policy_revision,configuration_revision FROM mail_attempts WHERE attempt_tag=$1',[a.attemptTag])).rows;
+  const queue=(await f.pool.query('SELECT * FROM email_outbox')).rows;
+  const binding=feedbackFixture('eu-north-1',['cloud-account-email','venue-email']);
+  if(kind==='configuration'){
+   binding.input.revision='synthetic-config-2';
+   for(const smtp of binding.policy.smtpBindings)smtp.revision=binding.input.revision;
+  }else{
+   binding.policy.revision=4;binding.input.policyRevision=4;
+   for(const flow of binding.input.flows)flow.policyRevision=4;
+  }
+  const changed=validateSesFeedbackConfig(binding.policy,binding.input);
+  const complaint=event(a.attemptTag,{kind:'complaint',recipient:null});
+  assert.equal(await applySesFeedback(f.pool,changed,keys,complaint),'applied');
+  assert.equal(await applySesFeedback(f.pool,input.config,keys,complaint),'duplicate');
+  assert.deepEqual(await counts(f),{receipts:1,events:1,suppressions:1});
+  const refs=(await f.pool.query('SELECT key_id,digest FROM mail_attempt_recipients WHERE attempt_tag=$1',[a.attemptTag])).rows.map(r=>({keyId:r.key_id,digest:r.digest}));
+  assert.equal(await transaction(f.pool,c=>recipientIsSuppressed(c,changed.scope,refs)),true);
+  assert.deepEqual((await f.pool.query('SELECT policy_revision,configuration_revision FROM mail_attempts WHERE attempt_tag=$1',[a.attemptTag])).rows,original);
+  assert.deepEqual((await f.pool.query('SELECT * FROM email_outbox')).rows,queue);
  }finally{await f.close();}
 });
 

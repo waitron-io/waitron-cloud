@@ -352,11 +352,14 @@ all 48 previous ledger entries. Task 3 applies parsed feedback in one transactio
 deduplicates transport and semantic events, and preserves blocking evidence after
 payload erasure. Local process-death checks cover both sides of commit. Missing
 retained keys leave feedback retryable; unknown bindings never guess a recipient.
-Task 3 remains local pending owner decisions: a changed policy or configuration
-revision currently consumes late blocking feedback as permanently unresolved.
-Any revoked retained key closes feedback and admission across its entire scope;
-revocation cannot be undone and has no supported recovery path yet. Agree the
-late-feedback rule and key-recovery policy before landing or enabling Task 3.
+Task 3 retains the original recipient across later policy or configuration
+revisions when its country, provider account, region, purpose and configuration
+set still match. The owner approved this late-feedback rule on 5 November.
+Any revoked retained key still closes feedback and admission across its entire
+scope; revocation cannot be undone and has no supported recovery path yet.
+The owner accepted that full stop for this task. Production remains blocked on
+a separately approved key-retirement and recovery design, including whether an
+unrelated revoked key should exceed the design's required-key refusal.
 Both send paths, trusted queue consumption and production wiring remain future
 tasks. Task 8 must qualify any additional event types;
 `Rendering Failure` currently refuses. It must also reconcile historical Paris-only

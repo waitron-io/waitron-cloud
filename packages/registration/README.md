@@ -430,11 +430,15 @@ Distinct bounce, complaint and provider-suppression reasons remain separate.
 Delivery, temporary and unclassified events add no block and never clear one.
 Sending, debit and reservation records are not changed.
 
-The local implementation still records a known attempt with a changed policy or
-configuration revision as permanently unresolved. A later retry under the original
-configuration returns `duplicate`, so it cannot recover a late bounce or complaint.
-This behavior and recovery from key revocation need owner decisions before Task 3
-can land. The sending paths and queue consumer remain unconnected.
+Late feedback still applies after a policy or configuration revision advances,
+provided country, provider account, region, purpose and configuration set match.
+You keep the original sealed recipient and admission revisions; a settings upgrade
+cannot discard its late bounce or complaint. Other binding and key checks remain.
+
+Key retirement and recovery need a separately approved design before production.
+The feedback design promises refusal for required keys; the current full stop also
+covers an unrelated revoked key in the same scope. That difference must be settled
+before enablement. The sending paths and queue consumer remain unconnected.
 
 Run the focused PostgreSQL checks, including competing consumers and process death
 immediately before and after commit:
