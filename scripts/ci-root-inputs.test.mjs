@@ -8,8 +8,9 @@ import test from 'node:test';
 import {rootReviewFixture} from './ci-root-review-fixture.mjs';
 import {rootRecordFilename} from './ci-root-review.mjs';
 import {receiptSuites} from './ci-scope.mjs';
-import {createPlan} from './ci-plan.mjs';
+import {createPlan, selectPlan} from './ci-plan.mjs';
 import {assertSummary} from './ci-summary.mjs';
+import {reuseProof} from './fixtures/ci-evidence.mjs';
 
 const api = await import('./ci-root-inputs.mjs').catch(error => {
   if (error.code !== 'ERR_MODULE_NOT_FOUND') throw error;
@@ -447,8 +448,8 @@ test('executed planner publishes every root-only receipt-only mixed and forced-f
           GITHUB_SHA: head, CI_FORCE_FULL: String(full)}});
       assert.equal(result.status, 0, result.stdout + result.stderr);
       const rows = readFileSync(output, 'utf8').trim().split('\n').map(line => [line.slice(0, line.indexOf('=')), line.slice(line.indexOf('=') + 1)]);
-      assert.equal(rows.length, 8, 'Every gate and matrix must be published exactly once');
-      assert.equal(new Set(rows.map(([key]) => key)).size, 8, 'Outputs cannot silently overwrite a gate');
+      assert.equal(rows.length, 9, 'Every gate, mode and matrix must be published exactly once');
+      assert.deepEqual(rows.map(([key]) => key).sort(), ['documentation', 'mode', 'package_matrix', 'packages', 'plan', 'receipts', 'root_tests', 'scripts', 'typecheck'], 'Outputs cannot silently overwrite a gate');
       const outputs = Object.fromEntries(rows), plan = JSON.parse(outputs.plan);
       for (const key of ['root_tests', 'typecheck', 'packages', 'receipts']) assert.equal(outputs[key], want[key], `${paths}: ${key}`);
       for (const key of ['documentation', 'scripts']) assert.equal(outputs[key], 'false');
@@ -476,4 +477,49 @@ test('receipt-only preflight refuses a missing head command instead of accepting
     {cwd: root, encoding: 'utf8', timeout: 30_000, env: {...process.env, GITHUB_EVENT_PATH: event, CI_HEAD_SHA: head, CI_PLAN: JSON.stringify(plan)}});
   assert.equal(result.status, 1, result.stdout + result.stderr);
   assert.match(result.stderr, /Missing root receipt command: test:local-stack/);
+}));
+
+
+test('source reconstruction refuses stale root reviews even for package-only work', () => fixture(({git, write, renew, docs, commit, base}) => {
+  const path = 'packages/control/src/index.mjs';
+  const workspace = [{name: '@waitron-cloud/control', directory: 'packages/control', scripts: {test: 'node --test test/*.test.mjs'}, sources: []}];
+  write(path, 'export const changed = true;\n'); docs(); const stale = commit();
+  const snapshot = head => ({revision: head, packages: workspace, testFilesByPackage: {'@waitron-cloud/control': []}});
+  assert.throws(() => selectPlan({base, head: stale}, snapshot(stale), git), /Unreviewed root input: packages\/control\/src\/index.mjs/);
+  renew([path]); docs(); const current = commit();
+  const selected = selectPlan({base, head: current}, snapshot(current), git);
+  assert.equal(selected.typecheck, true);
+  assert.equal(selected.packages.length, 1);
+}));
+
+
+test('main root preflight derives the literal push range and refuses a forced narrow plan', () => fixture(({root, git, write, renew, docs, commit, base, changedPaths}) => {
+  write(capacityPath, 'changed capacity check\n'); renew([capacityPath]); docs(); const head = commit();
+  const plan = {packages: [], receipts: ['test:backup-capacity'], typecheck: false, rootTests: false, reuse: null,
+    rootInputs: {version: 1, base, head, paths: changedPaths(head), entryIds: ['capacity-verifier-test']}};
+  const event = join(root, '.git', 'root-push.json');
+  const env = {...process.env, GITHUB_EVENT_PATH: event, GITHUB_EVENT_NAME: 'push', GITHUB_REF: 'refs/heads/main',
+    GITHUB_SHA: head, CI_HEAD_SHA: head, CI_PLAN: JSON.stringify(plan), CI_FULL: 'false', CI_CALLED: 'false', CI_WORKFLOW_INPUTS: '{}'};
+  const run = value => {
+    writeFileSync(event, JSON.stringify(value));
+    return spawnSync(process.execPath, [fileURLToPath(new URL('./ci-root-inputs.mjs', import.meta.url)), '--check'],
+      {cwd: root, encoding: 'utf8', timeout: 30_000, env});
+  };
+  let result = run({before: base, after: head});
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  for (const value of [{before: head, after: head}, {before: base, after: head, forced: true}, {before: '0'.repeat(40), after: head}]) {
+    result = run(value); assert.notEqual(result.status, 0); assert.match(result.stderr, /trusted event range/);
+  }
+}));
+
+
+test('reuse keeps complete head review without requiring previously checked root work again', () => fixture(({git, write, renew, docs, commit, base}) => {
+  write(rootPath, 'reviewed root change\n'); renew([rootPath]); docs(); const head = commit();
+  const reused = {packages: [], receipts: [], typecheck: false, reuse: reuseProof()};
+  assert.doesNotThrow(() => api.assertRootInputWork(reused, {base, head, git}));
+  for (const bad of [{...reused, rootTests: false}, {...reused, reuse: {sha: head, runId: 42}}]) {
+    assert.throws(() => api.assertRootInputWork(bad, {base, head, git}));
+  }
+  write(rootPath, 'unreviewed root change\n'); docs(); const stale = commit();
+  assert.throws(() => api.assertRootInputWork(reused, {base, head: stale, git}), /Unreviewed root input/);
 }));

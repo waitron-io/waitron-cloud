@@ -7,6 +7,9 @@ import {packageMembers} from './ci-package-groups.mjs';
 import {assertReceiptSuites} from './ci-run-receipts.mjs';
 import {assertScriptWork} from './ci-scripts.mjs';
 import {assertRootInputWork, rootVerificationContext} from './ci-root-inputs.mjs';
+import {assertReuseProof} from './ci-reuse-proof.mjs';
+import {assertCurrentReuse} from './ci-reuse.mjs';
+import {bindRuntimeWorkflow, completeMissingMainDecision, readRuntimeReuseContext, runtimeReuseDependencies} from './ci-reuse-runtime.mjs';
 
 export const packageShards = Object.freeze({
   '@waitron-cloud/registration': 6,
@@ -20,6 +23,28 @@ export const packageShards = Object.freeze({
   '@waitron-cloud/ui-smoke': 1,
 });
 
+export function assertPackageAllocations(packages) {
+  assert.ok(Array.isArray(packages), 'Missing package allocations');
+  const logicalPackages = packages.flatMap(row => packageMembers(row).map(name => `${name}:${row.shard}`));
+  assert.equal(new Set(logicalPackages).size, logicalPackages.length, 'Duplicate package execution');
+  const groupedPackages = packages.filter(row => Object.hasOwn(row, 'members')).flatMap(packageMembers);
+  for (const name of groupedPackages) {
+    assert.equal(packages.filter(row => packageMembers(row).includes(name)).length, 1, 'Duplicate package execution');
+  }
+  // Successful jobs cannot prove completeness when the plan itself omits a shard.
+  // Check the execution contract independently of the plan's declared counts.
+  const allocations = new Map();
+  for (const row of packages) {
+    if (Object.hasOwn(row, 'members')) continue;
+    const count = packageShards[row.package];
+    assert.ok(count && Number.isSafeInteger(row.shard) && row.shard >= 1 && row.shard <= count, 'Invalid package allocation');
+    assert.deepEqual(Object.keys(row).sort(), count > 1 ? ['package', 'shard', 'shards'] : ['package', 'shard'], 'Invalid package allocation fields');
+    if (count > 1) assert.equal(row.shards, count, 'Invalid package allocation partition count');
+    allocations.set(row.package, (allocations.get(row.package) ?? 0) + 1);
+  }
+  for (const [name, count] of allocations) assert.equal(count, packageShards[name], `Incomplete package allocation: ${name}`);
+}
+
 function expectedSummaryJobs(plan, results, rootVerification) {
   assert.equal(results.changes, 'success', 'CI planner must succeed');
   assert.ok(Array.isArray(plan.packages) && Array.isArray(plan.receipts) && typeof plan.typecheck === 'boolean', 'Missing CI plan');
@@ -30,8 +55,7 @@ function expectedSummaryJobs(plan, results, rootVerification) {
     assertScriptWork(plan);
   } else if (plan.reuse) {
     assert.ok(!plan.documentation, 'Reuse cannot declare document work');
-    assert.match(plan.reuse.sha, /^[a-f0-9]{40}$/);
-    assert.ok(Number.isSafeInteger(plan.reuse.runId) && plan.reuse.runId > 0);
+    assertReuseProof(plan.reuse, '.github/workflows/ci.yml');
     assert.equal(plan.packages.length + plan.receipts.length, 0);
     assert.equal(plan.typecheck, false);
   } else if (plan.documentation) {
@@ -57,24 +81,7 @@ function expectedSummaryJobs(plan, results, rootVerification) {
   if (rootTests || results.root !== undefined) {
     assert.equal(results.root, rootTests ? 'success' : 'skipped', 'root did not match its plan');
   }
-  const logicalPackages = plan.packages.flatMap(row => packageMembers(row).map(name => `${name}:${row.shard}`));
-  assert.equal(new Set(logicalPackages).size, logicalPackages.length, 'Duplicate package execution');
-  const groupedPackages = plan.packages.filter(row => Object.hasOwn(row, 'members')).flatMap(packageMembers);
-  for (const name of groupedPackages) {
-    assert.equal(plan.packages.filter(row => packageMembers(row).includes(name)).length, 1, 'Duplicate package execution');
-  }
-  // Successful jobs cannot prove completeness when the plan itself omits a shard.
-  // Check the execution contract independently of the plan's declared counts.
-  const allocations = new Map();
-  for (const row of plan.packages) {
-    if (Object.hasOwn(row, 'members')) continue;
-    const count = packageShards[row.package];
-    assert.ok(count && Number.isSafeInteger(row.shard) && row.shard >= 1 && row.shard <= count, 'Invalid package allocation');
-    assert.deepEqual(Object.keys(row).sort(), count > 1 ? ['package', 'shard', 'shards'] : ['package', 'shard'], 'Invalid package allocation fields');
-    if (count > 1) assert.equal(row.shards, count, 'Invalid package allocation partition count');
-    allocations.set(row.package, (allocations.get(row.package) ?? 0) + 1);
-  }
-  for (const [name, count] of allocations) assert.equal(count, packageShards[name], `Incomplete package allocation: ${name}`);
+  assertPackageAllocations(plan.packages);
   for (const row of plan.packages) expected.push(`package (${row.package}${row.shards ? `, shard ${row.shard}/${row.shards}` : ''})`);
   if (plan.receipts.length) {
     assertReceiptSuites(plan.receipts);
@@ -129,11 +136,11 @@ export function assertSummary(plan, results, jobs, rootVerification) {
 }
 
 function readCurrentJobs(timeoutMs) {
-  const pages = JSON.parse(execFileSync('gh', ['api','--paginate','--slurp',`repos/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}/jobs?filter=latest&per_page=100`], {encoding:'utf8',timeout:Math.min(10_000, timeoutMs),killSignal:'SIGKILL'}));
+  const pages = JSON.parse(execFileSync('gh', ['api','--paginate','--slurp',`repos/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}/jobs?filter=latest&per_page=30`], {encoding:'utf8',timeout:timeoutMs,killSignal:'SIGKILL'}));
   return pages.flatMap(page => page.jobs);
 }
 
-function hasFinishedSteps(job, identity) {
+export function hasFinishedSteps(job, identity) {
   if (!identity || !Number.isSafeInteger(identity.runId) || identity.runId <= 0 ||
       !Number.isSafeInteger(identity.runAttempt) || identity.runAttempt <= 0 ||
       !/^[a-f0-9]{40}$/.test(identity.headSha)) return false;
@@ -185,32 +192,44 @@ export async function waitForSummary(plan, results, {
   identity = {runId: Number(process.env.GITHUB_RUN_ID), runAttempt: Number(process.env.GITHUB_RUN_ATTEMPT), headSha: process.env.CI_HEAD_SHA},
   report = message => console.log(message),
   rootVerification,
+  reuseContext,
+  reuseDependencies,
 } = {}) {
   assert.ok(['', 'standard / '].includes(jobPrefix), 'Invalid CI job prefix');
   const expected = expectedSummaryJobs(plan, results, rootVerification);
   const deadline = now() + timeoutMs;
   let waiting = [];
   let lookupError;
+  let readBudget = 10_000;
+  let attempts = 0;
   let evidence = [];
   const evidenceMessage = () => evidence.length ? `; last observed unmet step evidence: ${evidence.join('; ')}` : '';
   const reported = new Set();
   for (;;) {
-    const remaining = deadline - now();
+    const started = now();
+    const remaining = deadline - started;
     const names = waiting.join(', ') || expected.join(', ');
     assert.ok(remaining > 0, `Timed out waiting for job records: ${names}${lookupError ? `; last lookup: ${lookupError.message}` : ''}${evidenceMessage()}`);
     let jobs;
+    const budget = Math.ceil(Math.min(readBudget, remaining));
+    attempts++;
     try {
-      jobs = await readJobs(Math.ceil(remaining));
+      jobs = await readJobs(budget);
     } catch (error) {
       if (error.code !== 'ETIMEDOUT') {
         throw new Error(`Could not read job records for ${names}: ${error.message}`, {cause: error});
       }
       lookupError = error;
-      await sleep(Math.max(0, Math.min(pollMs, deadline - now())));
+      const finished = now();
+      report(`Job records lookup ${attempts} timed out after ${Math.round(finished - started)} ms (budget ${budget} ms; ${Math.max(0, Math.floor(deadline - finished))} ms remaining)`);
+      // A slow healthy lookup needs more time on retry, inside the same deadline.
+      readBudget *= 2;
+      await sleep(Math.max(0, Math.min(pollMs, deadline - finished)));
       continue;
     }
     assert.ok(now() < deadline, `Timed out reading job records: ${names}${evidenceMessage()}`);
     lookupError = undefined;
+    readBudget = 10_000;
     // A called workflow shares its run with cost and venue. The parent requires
     // those families separately; this summary still checks every standard job.
     if (jobPrefix) {
@@ -232,7 +251,15 @@ export async function waitForSummary(plan, results, {
         reported.add(jobs[index].name);
       }
     }
-    if (waiting.length === 0) return;
+    if (waiting.length === 0) {
+      if (plan.reuse) {
+        let context = reuseContext ?? readRuntimeReuseContext();
+        const dependencies = reuseDependencies ?? runtimeReuseDependencies(context);
+        if (!reuseContext) context = bindRuntimeWorkflow(context, dependencies.api);
+        assertCurrentReuse(plan.reuse, context, dependencies);
+      }
+      return;
+    }
     await sleep(Math.max(0, Math.min(pollMs, deadline - now())));
   }
 }
@@ -242,6 +269,11 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
     const plan = JSON.parse(process.env.CI_PLAN);
     const results = Object.fromEntries(Object.entries(JSON.parse(process.env.CI_RESULTS)).map(([name,job])=>[name,job.result]));
     await waitForSummary(plan, results, {rootVerification: rootVerificationContext(plan)});
+    if (process.env.CI_RECORD_DECISION === 'true') {
+      const context = readRuntimeReuseContext();
+      context.workflowPath = process.env.CI_WORKFLOW_PATH ?? context.workflowPath;
+      completeMissingMainDecision(plan, process.env.CI_MODE, {context, published: process.env.CI_DECISION_ARTIFACT});
+    }
     console.log(plan.reuse ? `same tree as PR head ${plan.reuse.sha}, run ${plan.reuse.runId}` : plan.documentation ? `Passed 1 document check (${plan.documentation.paths.length} paths)` : plan.scripts ? 'Passed root script checks' : `Passed ${plan.packages.length} package jobs and ${plan.receipts.length} receipts`);
   } catch (error) {
     console.error(error.message);

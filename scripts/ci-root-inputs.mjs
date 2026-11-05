@@ -1,3 +1,5 @@
+import {assertReuseProof} from './ci-reuse-proof.mjs';
+import {resolveRange} from './ci-range.mjs';
 import assert from 'node:assert/strict';
 import {execFileSync} from 'node:child_process';
 import {readFileSync, readdirSync, lstatSync} from 'node:fs';
@@ -103,6 +105,11 @@ export function assertRootInputWork(plan, {base, head, git}) {
   // Freshness applies after historical activation even when all current metadata
   // or every proposed ownership marker has been removed.
   if (rootReviewActivated(head, git)) checkRootReview(head, git, base);
+  if (plan.reuse) {
+    assertReuseProof(plan.reuse, '.github/workflows/ci.yml');
+    assert.ok(!Object.hasOwn(plan, 'rootInputs') && !Object.hasOwn(plan, 'rootTests'), 'Reuse cannot declare root work');
+    return;
+  }
   if (!base) {
     assert.ok(!Object.hasOwn(plan, 'rootInputs') && !Object.hasOwn(plan, 'rootTests'), 'Root work requires a trusted event range');
     return;
@@ -158,6 +165,13 @@ export function rootVerificationContext(plan, env = process.env) {
     assert.match(event.pull_request.base.sha, sha, 'Invalid trusted root event base');
     base = git('merge-base', event.pull_request.base.sha, head).trim();
     assert.match(base, sha, 'Missing trusted root merge base');
+  }
+  if (!base && env.GITHUB_EVENT_NAME === 'push') {
+    const inputs = JSON.parse(env.CI_WORKFLOW_INPUTS || '{}') ?? {};
+    const range = resolveRange(event, {sha: head, eventName: 'push', ref: env.GITHUB_REF,
+      full: env.CI_FULL === 'true' || env.CI_FORCE_FULL === 'true',
+      called: env.CI_CALLED === 'true' || Object.hasOwn(inputs, 'full')}, git);
+    if (range.kind === 'push') base = range.base;
   }
   return {base, head, git};
 }

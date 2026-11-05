@@ -1448,6 +1448,12 @@ implementation or production evidence.
   renewal preserves each separate proof decision only after both saved root reviews and
   documentation authorities qualify. Real proof inputs and forced full/nightly
   work remain selected. Bootstrap and registry changes themselves run full.
+  The merged-tree review also remains mandatory when main reuses a verified
+  PR run. Independent source reconstruction rejects stale root reviews, and
+  source evidence records root-only and receipt-only work without selecting
+  compiler jobs. Different-tree pushes derive ownership from their literal
+  before/after range. Integration controls retain the bounded summary lookup,
+  source recheck and original proof-selector assertions.
   Ownership review does not complete global root precision or establish a time
   saving. Unresolved package readers, including the separate #938 fix, remain
   outside this slice.

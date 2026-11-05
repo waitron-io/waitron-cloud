@@ -1,4 +1,8 @@
 import {execFileSync} from 'node:child_process';
+import assert from 'node:assert/strict';
+import {resolveRange} from './ci-range.mjs';
+import {findReuse, permitsRangeSelection} from './ci-reuse.mjs';
+import {bindRuntimeWorkflow, evidenceInvocation, publishRuntimePlan, reuseContextFromEnvironment, runtimeReuseDependencies} from './ci-reuse-runtime.mjs';
 import {appendFileSync, readFileSync} from 'node:fs';
 import {pathToFileURL} from 'node:url';
 import {loadWorkspace, scopeForPaths, workPlan, receiptSuites} from './ci-scope.mjs';
@@ -6,7 +10,7 @@ import {auditDocumentation, documentationPlan} from './ci-docs.mjs';
 import {receiptPlan} from './ci-receipts.mjs';
 import {scriptPlan} from './ci-scripts.mjs';
 import {scopeForRevisions, readGitBlobs} from './ci-package-revisions.mjs';
-import {rootInputPlan} from './ci-root-inputs.mjs';
+import {assertRootInputWork, rootInputPlan} from './ci-root-inputs.mjs';
 import {describeLockChanges} from './ci-lock.mjs';
 import {lockPackageScope} from './ci-lock-selection.mjs';
 import {auditInputMode, auditAllInputModes, readInputAudit, unreadMarkdown} from './ci-input-audit.mjs';
@@ -40,7 +44,7 @@ function mixedCodePaths(paths, base, head, git) {
   }
 }
 
-export function packageWorkForPaths(paths, workspace, base, head, git) {
+export function packageWorkForPaths(paths, workspace, base, head, git, testFilesByPackage) {
   if (!paths.length) throw Error('Package work requires nonempty paths');
   let scope = scopeForPaths(paths, workspace, {direct: true});
   let receiptScope = scopeForPaths(paths, workspace), lockSelection;
@@ -63,7 +67,7 @@ export function packageWorkForPaths(paths, workspace, base, head, git) {
   }
   reason ??= scope.full ? `Shared, unaudited or unknown paths: full suite (${paths.join(', ')})` : `Selected ${scope.packages.join(', ')}`;
   if (paths.includes('pnpm-lock.yaml')) reason += `; ${lockSelection?.reason ?? describeLockChanges(base, head, git)}`;
-  const work = workPlan(scope, workspace, undefined, receiptScope);
+  const work = workPlan(scope, workspace, undefined, receiptScope, testFilesByPackage);
   if (lockSelection) work.receipts = [...receiptSuites];
   else {
     const selection = receiptPlan(work.receipts, receiptScope, base, head, git);
@@ -73,44 +77,77 @@ export function packageWorkForPaths(paths, workspace, base, head, git) {
   return {...work, reason};
 }
 
-export function createPlan(event, context, workspace, git, api) {
-  const full = reason => ({...workPlan(scopeForPaths([], workspace), workspace), reuse: null, reason});
-  if (context.full === true) return full('Explicit full run: all packages and receipts');
-  if (!event.pull_request) return full('Main push or unknown diff: full suite');
+function buildRevisionPlan(range, workspace, git, testFilesByPackage) {
+  const full = reason => ({...workPlan(scopeForPaths([], workspace), workspace, undefined, undefined, testFilesByPackage), reuse: null, reason});
   try {
-    const {head, base} = event.pull_request;
-    if (![head.sha, base.sha].every(sha => /^[a-f0-9]{40}$/.test(sha))) throw Error('Invalid event SHA');
-    const mergeBase = git('merge-base', base.sha, head.sha).trim();
-    const paths = git('diff', '--name-only', '--no-renames', '-z', mergeBase, head.sha).split('\0');
-    if (paths.at(-1) === '') paths.pop();
+    const {base, head} = range;
+    const paths = git('diff', '--name-only', '--no-renames', '-z', base, head).split('\0');
+    if (paths.pop() !== '' || !paths.length) throw Error('Incomplete or empty NUL path inventory');
     try {
-      const documentation = documentationPlan(paths, mergeBase, head.sha, git);
+      const documentation = documentationPlan(paths, base, head, git);
       if (documentation) return {packages: [], receipts: [], typecheck: false, reuse: null, documentation, reason: `Audited unread Markdown: ${paths.join(', ')}`};
     } catch { /* Missing or stale audit evidence keeps the existing full fallback. */ }
     try {
-      const scripts = scriptPlan(paths, mergeBase, head.sha, git);
+      const scripts = scriptPlan(paths, base, head, git);
       if (scripts) return {packages: [], receipts: [], typecheck: false, reuse: null, scripts, reason: `Audited root script: ${paths.join(', ')}`};
     } catch { /* Missing or stale reader evidence keeps the existing full fallback. */ }
-    const root = rootInputPlan(paths, mergeBase, head.sha, git);
+    const root = rootInputPlan(paths, base, head, git);
     if (root?.full) return full(root.reason);
     if (root) {
-      const work = root.packagePaths.length ? packageWorkForPaths(root.packagePaths, workspace, mergeBase, head.sha, git)
+      const work = root.packagePaths.length ? packageWorkForPaths(root.packagePaths, workspace, base, head, git, testFilesByPackage)
         : {packages: [], receipts: [], typecheck: false, reason: 'Reviewed root inputs'};
       return {...work, receipts: [...new Set([...work.receipts, ...root.receipts])].sort(), reuse: null,
         rootInputs: root.rootInputs, rootTests: root.rootTests || work.typecheck};
     }
     if (paths.includes('pnpm-lock.yaml') && !paths.every(path => path === 'pnpm-lock.yaml' || workspace.some(pkg => path === `${pkg.directory}/package.json`))) {
-      return full(`Shared, unaudited or unknown paths: full suite (${paths.join(', ')}); ${describeLockChanges(mergeBase, head.sha, git)}`);
+      return full(`Shared, unaudited or unknown paths: full suite (${paths.join(', ')}); ${describeLockChanges(base, head, git)}`);
     }
-    return {...packageWorkForPaths(mixedCodePaths(paths, mergeBase, head.sha, git), workspace, mergeBase, head.sha, git), reuse: null};
+    return {...packageWorkForPaths(mixedCodePaths(paths, base, head, git), workspace, base, head, git, testFilesByPackage), reuse: null};
   } catch {
-    return full('Cannot determine PR diff: full suite');
+    return full('Cannot determine revision diff: full suite');
   }
+}
+
+function selectRevisionPlan(range, workspace, git, testFilesByPackage) {
+  const plan = buildRevisionPlan(range, workspace, git, testFilesByPackage);
+  if (plan.reason.length > 4096) plan.reason = plan.reason.slice(0, 4096) + '... (explanation truncated)';
+  if (Buffer.byteLength(JSON.stringify(plan)) > 240 * 1024) {
+    return {...workPlan(scopeForPaths([], workspace), workspace, undefined, undefined, testFilesByPackage), reuse: null,
+      reason: 'Plan evidence exceeds its bound: full suite'};
+  }
+  return plan;
+}
+
+export function selectPlan(range, snapshot, git) {
+  assert.equal(snapshot.revision,range.head,'Workspace snapshot revision mismatch');
+  assert.ok(Array.isArray(snapshot.packages) && snapshot.packages.length,'Missing workspace packages');
+  assert.ok(snapshot.testFilesByPackage && typeof snapshot.testFilesByPackage==='object','Missing saved test inventory');
+  const plan = selectRevisionPlan(range,snapshot.packages,git,snapshot.testFilesByPackage);
+  assertRootInputWork(plan, {base: range.base, head: range.head, git});
+  return plan;
+}
+
+export function createPlan(event, context, workspace, git, api, reuseGit = git) {
+  const range = resolveRange(event,context,git);
+  const full = reason => ({...workPlan(scopeForPaths([],workspace),workspace),reuse:null,reason});
+  if (range.kind === 'full') return full(range.reason);
+  if (range.kind === 'push') {
+    try {
+      const parents = git('show', '-s', '--format=%P', range.head).trim().split(' ').filter(Boolean);
+      assert.ok(parents.length && parents.every(sha => /^(?!0{40}$)[a-f0-9]{40}$/.test(sha)), 'Invalid push topology');
+      if (parents.length !== 1 || parents[0] !== range.base) return selectRevisionPlan(range,workspace,git);
+    } catch {return full('Cannot verify push topology: full suite');}
+    const result = findReuse({...context, event}, {api, git: reuseGit}, '.github/workflows/ci.yml');
+    if (result.reuse) return {packages: [], receipts: [], typecheck: false, reuse: result.reuse, reason: result.reason};
+    if (!permitsRangeSelection(result)) return full(`Unverified PR evidence: ${result.reason}: full suite`);
+  }
+  return selectRevisionPlan(range,workspace,git);
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const event = JSON.parse(readFileSync(process.env.GITHUB_EVENT_PATH,'utf8'));
-  const context = {sha:process.env.GITHUB_SHA,repository:process.env.GITHUB_REPOSITORY,branch:process.env.GITHUB_REF_NAME,full:process.env.CI_FORCE_FULL === 'true'};
+  let context = reuseContextFromEnvironment(event);
+  context.full ||= process.env.CI_FORCE_FULL === 'true';
   const git = (...args) => {
     const binary = typeof args.at(-1) === 'object' && args.pop().binary;
     return execFileSync('git', args, {encoding: binary ? undefined : 'utf8', timeout: 30_000, maxBuffer: 64 * 1024 * 1024, stdio: ['ignore', 'pipe', 'pipe']});
@@ -122,10 +159,23 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   catch {
     console.log('::warning title=Documentation-only CI unavailable::Review changed executable inputs, then renew documentation evidence (scripts/ci-input-audit.json in v1; docs records in v2) with --write-staged using docs/ci-documentation-audit.md. V2 peer records may remain stale and retain full work. Docs-only changes retain full CI, and the required root/script freshness check fails until reviewed and renewed.');
   }
-  const plan = createPlan(event,context,loadWorkspace(),git);
+  let record = process.env.CI_RECORD_EVIDENCE === 'true' && evidenceInvocation(context);
+  const dependencies = (record || context.eventName === 'push') && context.repository === 'waitron-io/waitron-cloud'
+    ? runtimeReuseDependencies(context) : {};
+  if (record) {
+      try {context = bindRuntimeWorkflow(context, dependencies.api);}
+      catch {context.full = true; record = false; console.log('Workflow identity unavailable: full work without reusable source evidence');}
+    }
+  const workspace = loadWorkspace();
+  const plan = createPlan(event,context,workspace,git,dependencies.api,dependencies.git);
   // Diagnostics share GitHub's job output budget with the executable work plan.
   if (plan.reason.length > 4096) plan.reason = plan.reason.slice(0, 4096) + '... (explanation truncated)';
+  const range = resolveRange(event, context, git);
+  const complete = workPlan(scopeForPaths([], workspace), workspace);
+  const mode = plan.reuse ? 'reused' : plan.typecheck && JSON.stringify(plan.packages) === JSON.stringify(complete.packages) && JSON.stringify(plan.receipts) === JSON.stringify(complete.receipts) ? 'full' : 'selected';
+  if (record) publishRuntimePlan(context, plan, git, mode);
   const outputs = {
+    mode,
     plan:JSON.stringify(plan), typecheck:String(plan.typecheck), root_tests:String(plan.rootInputs ? plan.rootTests : plan.typecheck),
     documentation:String(Boolean(plan.documentation)),
     scripts:String(Boolean(plan.scripts)),

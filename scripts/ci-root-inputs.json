@@ -13,7 +13,7 @@
       "sites": [
         {
           "reader": ".github/workflows/ci.yml",
-          "site": "root job run:149",
+          "site": "root job run:171",
           "kind": "command",
           "boundary": "scripts/ci-*.test.mjs, immediate scripts directory, all four partitions",
           "role": "execution"
@@ -27,7 +27,7 @@
         },
         {
           "reader": "scripts/ci-root-inputs.mjs",
-          "site": "preflight:172-180",
+          "site": "preflight:186-196",
           "kind": "inventory",
           "boundary": "exact-head Git names and modes plus immediate scripts directory membership; no candidate module is imported",
           "role": "metadata validation"
@@ -499,6 +499,27 @@
           "site": "stdin manifest measurement:2-11",
           "kind": "file",
           "boundary": "bounded JSON/stdin {files} forwarded only to integration-source.measureIntegrationFiles(process.cwd(),input.files); hashes candidate bytes, never executes them",
+          "role": "metadata validation"
+        },
+        {
+          "reader": "scripts/ci-reuse.mjs",
+          "site": "treeInventory/assertReviewedInputs:55-104",
+          "kind": "inventory",
+          "boundary": "complete immutable Git tree names/modes/object IDs; executable bytes under scripts exclude .test files; candidate test modules are never imported or executed",
+          "role": "metadata validation"
+        },
+        {
+          "reader": "scripts/ci-reuse-source.test.mjs",
+          "site": "synthetic source copy:42-46; fixed children:354,383-405,476-490,526-557",
+          "kind": "command",
+          "boundary": "copies scripts and workflows into a synthetic one-package Git history; excludes live root registry and records; runs only named planner/summary/evidence/audit CLIs, never test-file discovery",
+          "role": "dependency preparation"
+        },
+        {
+          "reader": "scripts/ci-evidence.test.mjs",
+          "site": "source-contract fixture:268-294",
+          "kind": "file",
+          "boundary": "literal root test path is serialized as plan metadata; no candidate file bytes are read or executed",
           "role": "metadata validation"
         }
       ]
@@ -1024,6 +1045,13 @@
           "site": "stdin manifest measurement:2-11",
           "kind": "file",
           "boundary": "bounded JSON/stdin {files} forwarded only to integration-source.measureIntegrationFiles(process.cwd(),input.files); hashes candidate bytes, never executes them",
+          "role": "metadata validation"
+        },
+        {
+          "reader": "scripts/ci-reuse.mjs",
+          "site": "treeInventory/assertReviewedInputs:55-104",
+          "kind": "inventory",
+          "boundary": "complete immutable Git tree names/modes/object IDs; executable bytes under scripts exclude .test files; candidate test modules are never imported or executed",
           "role": "metadata validation"
         }
       ]

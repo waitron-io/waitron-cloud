@@ -82,6 +82,12 @@ Rebase code branches opened before activation before landing them. After any
 registry change, renew inputs against the new registry before combining older
 branches; an earlier green head does not qualify the combined tree.
 
+When main reuses verified pull-request checks, its summary still checks the
+complete merged input review. It then verifies the source run again before
+accepting skipped work. A different-tree merge derives ownership from the
+literal pushed range. Source reconstruction uses the same saved reviews and
+keeps root partitions independent of compiler checks in its job evidence.
+
 Narrow selection additionally requires complete current reviews in both saved
 trees and the same registry in each. Activation cannot grant its own shortcut.
 Forced full and nightly runs keep all their existing work. Exclusive identity,

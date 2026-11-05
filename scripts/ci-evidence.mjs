@@ -60,7 +60,13 @@ export function expectedJobContract(workflowPath, selection) {
     assert.ok(Array.isArray(selection.packages) && Array.isArray(selection.receipts) && typeof selection.typecheck === 'boolean', 'Missing CI plan');
     const modes = [selection.scripts, selection.documentation, selection.reuse].filter(Boolean);
     assert.ok(modes.length <= 1, 'CI work modes cannot mix');
-    if (selection.scripts) assertScriptWork(selection);
+    if (selection.rootInputs || Object.hasOwn(selection, 'rootTests')) {
+      assert.equal(modes.length, 0, 'Root work cannot mix special modes');
+      assert.ok(selection.rootInputs && selection.rootInputs.version === 1, 'Missing root ownership marker');
+      assert.equal(typeof selection.rootTests, 'boolean', 'Missing root execution gate');
+      assert.equal(selection.typecheck, selection.packages.length > 0, 'Root package work requires types');
+      assert.ok(selection.rootTests || selection.packages.length || selection.receipts.length, 'Empty root work cannot pass');
+    } else if (selection.scripts) assertScriptWork(selection);
     else if (selection.documentation || selection.reuse) {
       if (selection.documentation) assertDocumentation(selection.documentation);
       else assertReuseProof(selection.reuse, workflowPath);
@@ -76,7 +82,7 @@ export function expectedJobContract(workflowPath, selection) {
     add(Boolean(selection.scripts), ['scripts']);
     add(Boolean(selection.documentation), ['documentation']);
     add(selection.typecheck, ['typecheck']);
-    add(selection.typecheck, ['root (1/4)', 'root (2/4)', 'root (3/4)', 'root (4/4)'], ['root (${{ matrix.shard }}/4)']);
+    add(selection.rootInputs ? selection.rootTests : selection.typecheck, ['root (1/4)', 'root (2/4)', 'root (3/4)', 'root (4/4)'], ['root (${{ matrix.shard }}/4)']);
     add(selection.packages.length > 0, selection.packages.map(row => `package (${row.package}${row.shards ? `, shard ${row.shard}/${row.shards}` : ''})`), [packagePlaceholder]);
     add(selection.receipts.length > 0, ['receipts']);
   } else {
