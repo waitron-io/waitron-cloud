@@ -1297,6 +1297,13 @@ implementation or production evidence.
   #262 with full work for unresolved directory readers; its unmerged replacement
   is reference material, not the current implementation. Dependency precision,
   root-input owners and verified merge reuse remain D571 parts 2, 3 and 5.
+  Part 3's [design](superpowers/specs/2026-11-05-ci-root-input-ownership-design.md)
+  and [plan](superpowers/plans/2026-11-05-ci-root-input-ownership.md) describe a
+  foundation with separate review records for each input and three initial
+  test-file candidates. Implementation, complete reader review, mandatory
+  freshness, bounded proof-metadata validation and all-workflow measurements
+  remain open. Unregistered root inputs retain full work; this plan does not
+  complete root precision or establish a time saving.
   Part 4 selects the separate cost and venue matrices from their
   [reviewed proof inputs](ci-proof-selection.md). Cost retains backend sources,
   migrations, shared fixtures, gateway and installation inputs; venue selects
