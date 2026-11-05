@@ -1,5 +1,18 @@
 # Waitron Cloud backlog
 
+## Keep the private shared UI release current (D579)
+
+The owner approved the [private GitHub release plan](superpowers/plans/2026-11-05-public-ui-registry.md).
+Cloud publishes with its own `GITHUB_TOKEN` on an offset 15-minute schedule,
+reconciles every qualifying merge, creates one upgrade PR per stable release,
+and checks the 24-hour publisher heartbeat and both seven-day deadlines.
+The package stays private with its existing authenticated install and image
+build paths. F/A1336 owns source and package preparation; the reviewed `0.2.0`
+release is the authorised write-permission test. A refused write stops for the
+watcher without a token fallback. Preparation review, the actual release,
+automation, exact-head upgrade validation and fresh-registry/image checks remain
+open. This documentation change does not publish or dispatch anything.
+
 ## Admin listener shutdown and paced replay (D581)
 
 The exhaustion fixture drains probe data before closing its owned listeners.
