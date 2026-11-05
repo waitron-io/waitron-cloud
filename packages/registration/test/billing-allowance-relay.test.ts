@@ -1,3 +1,4 @@
+import {databaseClock} from './fixtures/database-clock.ts';
 import assert from 'node:assert/strict';
 import {randomBytes,randomUUID} from 'node:crypto';
 import {test} from 'node:test';
@@ -212,17 +213,20 @@ test('monthly relay uses the legacy policy period after its new bucket wait',asy
  }finally{await holder.query('ROLLBACK');await pending?.catch(()=>{});holder.release();}
 });
 
-test('monthly relay replay rechecks grant expiry after its retained debit lock wait',async t=>{
+for(const setupPause of [0,600])test('monthly relay replay rechecks grant expiry after its retained debit lock wait'+(setupPause?' after a setup pause':''),async t=>{
  const f=await setup(t),v=await f.venue(),body=v.body();await v.submit(body);const saved=await f.rows(),holder=await f.pool.connect();let pending:Promise<unknown>|undefined;
  try{
-  const grant=(await f.pool.query("UPDATE relay_grants SET expires_at=clock_timestamp()+interval '300 milliseconds' WHERE id=$1 RETURNING expires_at",[v.grant.id])).rows[0];
+  let time=(await f.pool.query('SELECT clock_timestamp() AS now')).rows[0].now.getTime();
+  const clock=databaseClock(f.pool,()=>time);
+  const grant=(await f.pool.query('UPDATE relay_grants SET expires_at=$2 WHERE id=$1 RETURNING expires_at',[v.grant.id,new Date(time+300)])).rows[0];
+  if(setupPause)await new Promise(resolve=>setTimeout(resolve,setupPause));
   const publicKey=(await f.pool.query('SELECT public_key FROM installations WHERE id=$1',[v.installation])).rows[0].public_key;
   await holder.query('BEGIN');await holder.query('SELECT id FROM billing_allowance_reservations WHERE id=$1 FOR UPDATE',[saved[0].id]);
-  const pid=(await holder.query('SELECT pg_backend_pid() AS pid')).rows[0].pid,grants=new api.RelayGrantStore(f.pool,f.config.grants,mode,options);let done=false;
-  pending=transaction(f.pool,c=>grants.reserve(c,{installationId:v.installation,publicKey},{grantId:v.grant.id,grantRevision:1,messageId:body.messageId,binding:saved[0].binding}));void pending.then(()=>{done=true;},()=>{done=true;});
+  const pid=(await holder.query('SELECT pg_backend_pid() AS pid')).rows[0].pid,grants=new api.RelayGrantStore(clock,f.config.grants,mode,options);let done=false;
+  pending=transaction(clock,c=>grants.reserve(c,{installationId:v.installation,publicKey},{grantId:v.grant.id,grantRevision:1,messageId:body.messageId,binding:saved[0].binding}));void pending.then(()=>{done=true;},()=>{done=true;});
   let waiting=false;const until=performance.now()+5000;
   while(!done&&performance.now()<until){waiting=!!(await f.pool.query('SELECT 1 FROM pg_stat_activity WHERE $1=ANY(pg_blocking_pids(pid))',[pid])).rowCount;if(waiting)break;await setImmediate();}
-  assert.equal(waiting,true);while(Date.now()<=grant.expires_at.getTime())await new Promise(resolve=>setTimeout(resolve,10));
+  assert.equal(waiting,true);time=grant.expires_at.getTime();
   await holder.query('COMMIT');await assert.rejects(pending,{code:'grant_unavailable'});assert.deepEqual(await f.rows(),saved);
  }finally{await holder.query('ROLLBACK');await pending?.catch(()=>{});holder.release();}
 });
