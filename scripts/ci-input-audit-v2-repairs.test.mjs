@@ -28,10 +28,12 @@ test('the writer repairs a restored record after source and record were committe
 }));
 
 test('record retention treats a Git-detected rename as a reviewed deletion plus addition', () => fixture(({root, git, put, commit, base, audit}) => {
-  const renamed = 'packages/stock/src/renamed.mjs', oldRecord = recordPath('docs', source), newRecord = recordPath('docs', renamed);
+  const renamed = 'packages/stock/src/other.mjs', oldRecord = recordPath('docs', source), newRecord = recordPath('docs', renamed);
+  git('config', 'diff.renames', 'true');
   git('mv', source, renamed); git('mv', oldRecord, newRecord);
   const record = JSON.parse(readFileSync(join(root, newRecord), 'utf8')); put(newRecord, canonical({...record, path: renamed}));
-  commit();
+  const renamedHead = commit();
+  assert.match(git('diff-tree', '--no-commit-id', '-r', '-M', '--name-status', base, renamedHead, '--', `${records}/docs`), /^R[0-9]+\t/m, 'The fixture must actually trigger Git rename detection');
   put(oldRecord, canonical({version: 2, mode: 'docs', path: source, state: 'absent', previousRevision: base})); commit();
   assert.doesNotThrow(() => audit('docs'));
   unlinkSync(join(root, renamed)); unlinkSync(join(root, newRecord)); commit();
