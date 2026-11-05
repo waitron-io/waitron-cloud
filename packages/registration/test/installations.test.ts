@@ -1,3 +1,4 @@
+import {databaseClock} from './fixtures/database-clock.ts';
 import {resetSchema} from './fixtures/reset-schema.ts';
 import assert from 'node:assert/strict';
 import {generateKeyPairSync,randomUUID,sign} from 'node:crypto';
@@ -163,15 +164,19 @@ test('account access uses customer membership and ownership, CSRF and current se
   await db.pool.query('UPDATE cloud_accounts SET disabled_at=clock_timestamp()');await assert.rejects(store.listWithSession(session.token),/session_unavailable/);
 });
 async function waitForLock(){for(let n=0;n<100;n++){const r=await db.pool.query("SELECT pid,state,query,wait_event,pg_blocking_pids(pid) AS blockers FROM pg_stat_activity WHERE application_name=$1 AND wait_event_type='Lock'",[db.schema]);if(r.rowCount)return r.rows;await new Promise(r=>setTimeout(r,10));}throw new Error('request did not reach lock');}
-test('request freshness and owner session expiry are checked after installation lock waits',async()=>{
+for(const setupPause of [0,600])test('request freshness and owner session expiry are checked after installation lock waits'+(setupPause?' after a setup pause':''),async t=>{
+  let time=Date.now();t.mock.method(Date,'now',()=>time);
+  const clockStore=new InstallationStore(databaseClock(db.pool,()=>time),issuer,origin);
   let blocker=await db.secondPool.connect();await blocker.query('BEGIN');await blocker.query('SELECT 1 FROM installations WHERE id=$1 FOR UPDATE',[a.installationId]);
-  const pending=assert.rejects(store.execute('renew',request(a,'renew',undefined,{},randomUUID(),Date.now()-59750)),/invalid_proof/);
-  try{await waitForLock();await new Promise(r=>setTimeout(r,300));}finally{await blocker.query('COMMIT');blocker.release();}await pending;
+  if(setupPause)await new Promise(r=>setTimeout(r,setupPause));
+  const pending=assert.rejects(clockStore.execute('renew',request(a,'renew',undefined,{},randomUUID(),Date.now()-59750)),/invalid_proof/);
+  try{await waitForLock();time+=300;}finally{await blocker.query('COMMIT');blocker.release();}await pending;
   assert.equal((await db.pool.query('SELECT count(*) FROM installation_operations')).rows[0].count,'0');
   blocker=await db.secondPool.connect();await blocker.query('BEGIN');await blocker.query('SELECT 1 FROM installations WHERE id=$1 FOR UPDATE',[a.installationId]);
-  await db.pool.query("UPDATE cloud_sessions SET absolute_expires_at=clock_timestamp()+interval '250 milliseconds'");
-  const expired=assert.rejects(store.revokeWithSession(session.token,session.csrfToken,a.installationId),/session_expired/);
-  try{await waitForLock();await new Promise(r=>setTimeout(r,300));}finally{await blocker.query('COMMIT');blocker.release();}await expired;
+  await db.pool.query('UPDATE cloud_sessions SET absolute_expires_at=$1',[new Date(time+250)]);
+  if(setupPause)await new Promise(r=>setTimeout(r,setupPause));
+  const expired=assert.rejects(clockStore.revokeWithSession(session.token,session.csrfToken,a.installationId),/session_expired/);
+  try{await waitForLock();time+=300;}finally{await blocker.query('COMMIT');blocker.release();}await expired;
   assert.equal((await db.pool.query('SELECT revoked_at FROM installations WHERE id=$1',[a.installationId])).rows[0].revoked_at,null);
   assert.equal((await db.pool.query("SELECT count(*) FROM security_audit_events WHERE event_type='installation.revoked'")).rows[0].count,'0');
 });

@@ -2969,6 +2969,26 @@ timeout remains unexplained. See [the reproduction and remaining investigation](
 Keep every verifier assertion and the existing build and job limits.
 
 
+## Registration expiry checks during lock waits (D580)
+
+The relay replay and installation session tests could expire their short-lived
+credentials before reaching the lock they needed to exercise. A controlled
+600-millisecond setup pause reproduces both CI failures on real PostgreSQL.
+Those tests now hold their authority clocks steady until they observe the real
+lock wait, then advance across the unchanged expiry boundary. Both ordinary and
+paused setup cases retain the rejection and unchanged-data assertions. The
+installation case also retains request freshness and no-revocation checks.
+Production clocks and authority checks are unchanged. This reproduces the fixture
+weakness; the original CI runners' pause durations were not captured. Current-head
+CI qualification remains required before landing.
+
+The existing lock-observation limits still apply. A separate failure-cleanup
+weakness is open: if installation lock observation times out, the test can skip
+waiting for its outstanding request before the next schema reset. A controlled
+stall reproduced the resulting reset deadlock on both the original and repaired
+tests. Drain the outstanding request on that failure path in a follow-up, retaining
+the lock limits and all authority assertions.
+
 ## Storage test socket attribution and live progress (D575)
 
 Unexpected reservation-control binds now report the failed phase, port and
