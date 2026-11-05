@@ -1,6 +1,7 @@
 import { execFileSync, spawn } from 'node:child_process';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { setTimeout as delay } from 'node:timers/promises';
+import { reportDockerInspectionStall } from './docker-stall-diagnostics.mjs';
 
 // Each run owns its container and random loopback port; no developer database is reset.
 const name = `waitron-cloud-test-${randomUUID()}`;
@@ -12,9 +13,20 @@ const docker = (...args) => execFileSync('docker', args, { encoding: 'utf8', tim
 async function ensureTestImage(image) {
   const deadline = performance.now() + 120_000;
   const remaining = () => Math.ceil(deadline - performance.now());
-  const command = (...args) => execFileSync('docker', args, {
-    encoding: 'utf8', timeout: Math.max(1, remaining()), killSignal: 'SIGKILL',
-  });
+  const command = (...args) => {
+    const started = Date.now();
+    try {
+      return execFileSync('docker', args, {
+        encoding: 'utf8', timeout: Math.max(1, remaining()), killSignal: 'SIGKILL',
+      });
+    } catch (error) {
+      if (args[0] === 'image' && error.code === 'ETIMEDOUT') {
+        // Diagnostics must not replace the original refusal or turn inspection into a pull.
+        try { reportDockerInspectionStall({image, elapsedMs: Math.max(0, Date.now() - started)}); } catch {}
+      }
+      throw error;
+    }
+  };
   try {
     command('image', 'inspect', image);
     return;
