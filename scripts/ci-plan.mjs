@@ -10,6 +10,7 @@ import {auditDocumentation, documentationPlan} from './ci-docs.mjs';
 import {receiptPlan} from './ci-receipts.mjs';
 import {scriptPlan} from './ci-scripts.mjs';
 import {scopeForRevisions, readGitBlobs} from './ci-package-revisions.mjs';
+import {assertRootInputWork, rootInputPlan} from './ci-root-inputs.mjs';
 import {describeLockChanges} from './ci-lock.mjs';
 import {lockPackageScope} from './ci-lock-selection.mjs';
 import {auditInputMode, auditAllInputModes, readInputAudit, unreadMarkdown} from './ci-input-audit.mjs';
@@ -43,65 +44,68 @@ function mixedCodePaths(paths, base, head, git) {
   }
 }
 
-function buildRevisionPlan(range, workspace, git, testFilesByPackage) {
-  let scope = scopeForPaths([],workspace);
-  let revisions;
-  let receiptScope;
-  let lockSelection;
-  let reason = 'Main push or unknown diff: full suite';
-  {
+export function packageWorkForPaths(paths, workspace, base, head, git, testFilesByPackage) {
+  if (!paths.length) throw Error('Package work requires nonempty paths');
+  let scope = scopeForPaths(paths, workspace, {direct: true});
+  let receiptScope = scopeForPaths(paths, workspace), lockSelection;
+  let reason;
+  if (paths.includes('pnpm-lock.yaml') && paths.every(path => path === 'pnpm-lock.yaml' || workspace.some(pkg => path === `${pkg.directory}/package.json`))) {
+    try {lockSelection = lockPackageScope(base, head, workspace, git, paths); scope = lockSelection.scope;}
+    catch { /* Unproved root or package readers retain full lockfile work. */ }
+  }
+  if (!lockSelection && !scope.full && scope.packages.length < workspace.length) {
     try {
-      const head = {sha:range.head};
-      const mergeBase = range.base;
-      const paths = git('diff','--name-only','--no-renames','-z',mergeBase,head.sha).split('\0');
-      if (paths.pop() !== '') throw Error('Incomplete NUL path inventory');
-      if (!paths.length) throw Error('Empty revision range');
-      try {
-        const documentation = documentationPlan(paths, mergeBase, head.sha, git);
-        if (documentation) return {packages:[], receipts:[], typecheck:false, reuse:null, documentation, reason:`Audited unread Markdown: ${paths.join(', ')}`};
-      } catch { /* Missing or stale audit evidence keeps the existing full fallback. */ }
-      try {
-        const scripts = scriptPlan(paths, mergeBase, head.sha, git);
-        if (scripts) return {packages: [], receipts: [], typecheck: false, reuse: null, scripts, reason: `Audited root script: ${paths.join(', ')}`};
-      } catch { /* Missing or stale reader evidence keeps the existing full fallback. */ }
-      const codePaths = mixedCodePaths(paths, mergeBase, head.sha, git);
-      scope = scopeForPaths(codePaths,workspace,{direct:true});
-      receiptScope = scopeForPaths(codePaths,workspace);
-      if (paths.includes('pnpm-lock.yaml') && paths.every(path => path === 'pnpm-lock.yaml' || workspace.some(pkg => path === `${pkg.directory}/package.json`))) {
-        try { lockSelection = lockPackageScope(mergeBase, head.sha, workspace, git, paths); scope = lockSelection.scope; }
-        catch { /* Unproved root or package readers retain full lockfile work. */ }
-      }
-      if (!lockSelection && !scope.full && scope.packages.length < workspace.length) {
-        try {
-          const revisions = scopeForRevisions(codePaths, workspace, mergeBase, head.sha, git, {direct:true, receiptScope:true});
-          scope.packages = [...new Set([...scope.packages, ...revisions.packages])].sort();
-          receiptScope.packages = [...new Set([...receiptScope.packages, ...revisions.receiptPackages])].sort();
-        }
-        catch (error) {
-          // Package evidence cannot invalidate an independent receipt audit.
-          scope.packages = scopeForPaths([], workspace).packages;
-          receiptScope.packages = [...scope.packages];
-          reason = `Unverified package revisions: ${error.message}: full package suite (${paths.join(', ')})`;
-        }
-      }
-      revisions = {base:mergeBase, head:head.sha};
-      if (!reason.startsWith('Unverified package revisions:')) reason = scope.full ? `Shared, unaudited or unknown paths: full suite (${paths.join(', ')})` : `Selected ${scope.packages.join(', ')}`;
-      if (paths.includes('pnpm-lock.yaml')) reason += `; ${lockSelection?.reason ?? describeLockChanges(mergeBase, head.sha, git)}`;
-    } catch {
-      scope = scopeForPaths([],workspace);
-      revisions = undefined;
-      lockSelection = undefined;
-      reason = 'Cannot determine revision diff: full suite';
+      const revisions = scopeForRevisions(paths, workspace, base, head, git, {direct: true, receiptScope: true});
+      scope.packages = [...new Set([...scope.packages, ...revisions.packages])].sort();
+      receiptScope.packages = [...new Set([...receiptScope.packages, ...revisions.receiptPackages])].sort();
+    } catch (error) {
+      // Package evidence cannot invalidate an independent receipt audit.
+      scope.packages = scopeForPaths([], workspace).packages;
+      receiptScope.packages = [...scope.packages];
+      reason = `Unverified package revisions: ${error.message}: full package suite (${paths.join(', ')})`;
     }
   }
-  const work = workPlan(scope,workspace,undefined,receiptScope ?? scope,testFilesByPackage);
+  reason ??= scope.full ? `Shared, unaudited or unknown paths: full suite (${paths.join(', ')})` : `Selected ${scope.packages.join(', ')}`;
+  if (paths.includes('pnpm-lock.yaml')) reason += `; ${lockSelection?.reason ?? describeLockChanges(base, head, git)}`;
+  const work = workPlan(scope, workspace, undefined, receiptScope, testFilesByPackage);
   if (lockSelection) work.receipts = [...receiptSuites];
-  if (revisions && !lockSelection) {
-    const selection = receiptPlan(work.receipts, receiptScope ?? scope, revisions.base, revisions.head, git);
+  else {
+    const selection = receiptPlan(work.receipts, receiptScope, base, head, git);
     work.receipts = selection.receipts;
     if (selection.reason) reason += `; ${selection.reason}`;
   }
-  return {...work,reuse:null,reason};
+  return {...work, reason};
+}
+
+function buildRevisionPlan(range, workspace, git, testFilesByPackage) {
+  const full = reason => ({...workPlan(scopeForPaths([], workspace), workspace, undefined, undefined, testFilesByPackage), reuse: null, reason});
+  try {
+    const {base, head} = range;
+    const paths = git('diff', '--name-only', '--no-renames', '-z', base, head).split('\0');
+    if (paths.pop() !== '' || !paths.length) throw Error('Incomplete or empty NUL path inventory');
+    try {
+      const documentation = documentationPlan(paths, base, head, git);
+      if (documentation) return {packages: [], receipts: [], typecheck: false, reuse: null, documentation, reason: `Audited unread Markdown: ${paths.join(', ')}`};
+    } catch { /* Missing or stale audit evidence keeps the existing full fallback. */ }
+    try {
+      const scripts = scriptPlan(paths, base, head, git);
+      if (scripts) return {packages: [], receipts: [], typecheck: false, reuse: null, scripts, reason: `Audited root script: ${paths.join(', ')}`};
+    } catch { /* Missing or stale reader evidence keeps the existing full fallback. */ }
+    const root = rootInputPlan(paths, base, head, git);
+    if (root?.full) return full(root.reason);
+    if (root) {
+      const work = root.packagePaths.length ? packageWorkForPaths(root.packagePaths, workspace, base, head, git, testFilesByPackage)
+        : {packages: [], receipts: [], typecheck: false, reason: 'Reviewed root inputs'};
+      return {...work, receipts: [...new Set([...work.receipts, ...root.receipts])].sort(), reuse: null,
+        rootInputs: root.rootInputs, rootTests: root.rootTests || work.typecheck};
+    }
+    if (paths.includes('pnpm-lock.yaml') && !paths.every(path => path === 'pnpm-lock.yaml' || workspace.some(pkg => path === `${pkg.directory}/package.json`))) {
+      return full(`Shared, unaudited or unknown paths: full suite (${paths.join(', ')}); ${describeLockChanges(base, head, git)}`);
+    }
+    return {...packageWorkForPaths(mixedCodePaths(paths, base, head, git), workspace, base, head, git, testFilesByPackage), reuse: null};
+  } catch {
+    return full('Cannot determine revision diff: full suite');
+  }
 }
 
 function selectRevisionPlan(range, workspace, git, testFilesByPackage) {
@@ -118,7 +122,9 @@ export function selectPlan(range, snapshot, git) {
   assert.equal(snapshot.revision,range.head,'Workspace snapshot revision mismatch');
   assert.ok(Array.isArray(snapshot.packages) && snapshot.packages.length,'Missing workspace packages');
   assert.ok(snapshot.testFilesByPackage && typeof snapshot.testFilesByPackage==='object','Missing saved test inventory');
-  return selectRevisionPlan(range,snapshot.packages,git,snapshot.testFilesByPackage);
+  const plan = selectRevisionPlan(range,snapshot.packages,git,snapshot.testFilesByPackage);
+  assertRootInputWork(plan, {base: range.base, head: range.head, git});
+  return plan;
 }
 
 export function createPlan(event, context, workspace, git, api, reuseGit = git) {
@@ -170,7 +176,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   if (record) publishRuntimePlan(context, plan, git, mode);
   const outputs = {
     mode,
-    plan:JSON.stringify(plan), typecheck:String(plan.typecheck),
+    plan:JSON.stringify(plan), typecheck:String(plan.typecheck), root_tests:String(plan.rootInputs ? plan.rootTests : plan.typecheck),
     documentation:String(Boolean(plan.documentation)),
     scripts:String(Boolean(plan.scripts)),
     packages:String(plan.packages.length>0), receipts:String(plan.receipts.length>0),

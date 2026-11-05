@@ -6,15 +6,17 @@ import {dirname} from 'node:path';
 export const auditDescriptor = 'scripts/ci-input-audit-v2.json';
 export const auditRecordRoot = 'scripts/ci-input-audit.d/';
 export const auditModes = ['docs', 'identity', 'gateway', 'lock'];
-export const recordFilename = (mode, path) => `${auditRecordRoot}${mode}/${createHash('sha256').update(path).digest('hex')}.json`;
+export const inputRecordFilename = (path, root) => `${root}${createHash('sha256').update(path).digest('hex')}.json`;
+export const recordFilename = (mode, path) => inputRecordFilename(path, `${auditRecordRoot}${mode}/`);
 export const serializeRecord = record => JSON.stringify(record) + '\n';
 const sha256 = source => createHash('sha256').update(source).digest('hex');
 
 const immutableHistory = new WeakMap();
 const verifiedRetention = new WeakMap();
 
-function auditHistory(revision, git) {
-  const cached = immutableHistory.get(git)?.get(revision);
+export function inputRecordHistory(revision, git, descriptor = auditDescriptor) {
+  const key = `${descriptor}\0${revision}`;
+  const cached = immutableHistory.get(git)?.get(key);
   if (cached) return cached;
   assert.equal(git('rev-parse', '--is-shallow-repository').trim(), 'false', 'Audit retention requires complete history');
   const kind = git('cat-file', '-t', revision).trim();
@@ -25,14 +27,31 @@ function auditHistory(revision, git) {
     catch { /* An unborn branch has no ancestral evidence to retain. */ }
   }
   const activations = ancestor ? git('log', '--full-history', '-m', '--root', '--reverse', '--format=%H',
-    '--diff-filter=A', '--no-renames', ancestor, '--', auditDescriptor).trim().split('\n').filter(Boolean) : [];
+    '--diff-filter=A', '--no-renames', ancestor, '--', descriptor).trim().split('\n').filter(Boolean) : [];
   assert.ok(activations.every(sha => /^[a-f0-9]{40}$/.test(sha)), 'Invalid activation history');
   const result = {ancestor, kind, activations};
   if (kind === 'commit' && /^[a-f0-9]{40}$/.test(revision)) {
     if (!immutableHistory.has(git)) immutableHistory.set(git, new Map());
-    immutableHistory.get(git).set(revision, result);
+    immutableHistory.get(git).set(key, result);
   }
   return result;
+}
+
+const auditHistory = (revision, git) => inputRecordHistory(revision, git);
+
+export function assertInputRecordRetention(revision, git, entries, {descriptor, root, canonical}) {
+  const history = inputRecordHistory(revision, git, descriptor);
+  // Disable rename inference so names removed behind later children or merges
+  // remain independently accountable.
+  const source = history.ancestor ? git('log', '--full-history', '-m', '--root', '--format=', '--name-only', '-z',
+    '--diff-filter=A', '--no-renames', history.ancestor, '--', root) : '';
+  const names = source.split('\0');
+  assert.equal(names.pop(), '', 'Incomplete audit record history');
+  const current = new Set(entries.map(entry => entry.path));
+  for (const path of names) {
+    if (canonical.exec(path)?.[0] === path) assert.ok(current.has(path), `Audit record must be retained: ${path}`);
+  }
+  return history;
 }
 
 export function assertHistoricalV1(revision, git) {
@@ -42,18 +61,10 @@ export function assertHistoricalV1(revision, git) {
 export function assertRecordRetention(revision, git, entries) {
   const cached = verifiedRetention.get(git)?.get(revision);
   if (cached) return cached;
-  const history = auditHistory(revision, git), {ancestor, kind} = history;
-  // Disable rename inference: both sides of a rename remain independently
-  // accountable, including names hidden behind later children or merges.
-  const source = ancestor ? git('log', '--full-history', '-m', '--root', '--format=', '--name-only', '-z',
-    '--diff-filter=A', '--no-renames', ancestor, '--', auditRecordRoot) : '';
-  const names = source.split('\0');
-  assert.equal(names.pop(), '', 'Incomplete audit record history');
-  const current = new Set(entries.map(entry => entry.path));
-  for (const path of names) {
-    const canonical = /^scripts\/ci-input-audit\.d\/(?:docs|identity|gateway|lock)\/[a-f0-9]{64}\.json$/.exec(path);
-    if (canonical?.[0] === path) assert.ok(current.has(path), `Audit record must be retained: ${path}`);
-  }
+  const history = assertInputRecordRetention(revision, git, entries, {
+    descriptor: auditDescriptor, root: auditRecordRoot,
+    canonical: /^scripts\/ci-input-audit\.d\/(?:docs|identity|gateway|lock)\/[a-f0-9]{64}\.json$/,
+  }), {ancestor, kind} = history;
   if (history.activations.length) {
     const original = git('ls-tree', '-z', '--full-tree', history.activations[0], '--', 'scripts/ci-input-audit.json');
     const match = /^100644 blob ([a-f0-9]{40})\tscripts\/ci-input-audit\.json\0$/.exec(original);
@@ -143,7 +154,9 @@ export function verifyModeRecords(mode, projection, records) {
 }
 
 
-export function writeAuditRecords(outputs, allowedRecords = []) {
+export function writeAuditRecords(outputs, allowedRecords = [], namespace = {
+  root: auditRecordRoot, directories: auditModes.map(mode => auditRecordRoot + mode),
+}) {
   const allowed = new Set([...allowedRecords, ...outputs.keys()]);
   const stat = path => {
     try { return lstatSync(path); }
@@ -169,7 +182,7 @@ export function writeAuditRecords(outputs, allowedRecords = []) {
     for (const entry of readdirSync(directory, {withFileTypes: true})) {
       const path = `${directory}/${entry.name}`;
       if (entry.isDirectory()) {
-        assert.ok(auditModes.some(mode => path === auditRecordRoot + mode), `Unknown audit output directory: ${path}`);
+        assert.ok(namespace.directories.includes(path), `Unknown audit output directory: ${path}`);
         scan(path);
       } else {
         assert.ok(allowed.has(path), `Unknown audit output collision: ${path}`);
@@ -196,7 +209,7 @@ export function writeAuditRecords(outputs, allowedRecords = []) {
       writable(parent, true);
     }
   }
-  scan(auditRecordRoot.slice(0, -1));
+  scan(namespace.root.slice(0, -1));
   for (const directory of directories) mkdirSync(directory, {recursive: true});
   for (const [path, content] of outputs) {
     const before = validateFile(path);

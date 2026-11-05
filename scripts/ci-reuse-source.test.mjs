@@ -40,7 +40,7 @@ before(() => {
   const put = (path, text) => {mkdirSync(join(root, path, '..'), {recursive: true}); writeFileSync(join(root, path), text);};
   real('init', '-b', 'main'); real('config', 'user.name', 'CI test'); real('config', 'user.email', 'ci@example.test');
   cpSync(new URL('./', import.meta.url), join(root, 'scripts'), {recursive: true,
-    filter: path => !String(path).includes('ci-input-audit.d')});
+    filter: path => !['ci-input-audit.d', 'ci-root-review.d', 'ci-root-inputs.json'].some(name => String(path).includes(name))});
   cpSync(new URL('../.github', import.meta.url), join(root, '.github'), {recursive: true});
   cpSync(new URL('../package.json', import.meta.url), join(root, 'package.json'));
   cpSync(new URL('../pnpm-lock.yaml', import.meta.url), join(root, 'pnpm-lock.yaml'));

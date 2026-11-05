@@ -263,3 +263,26 @@ test('native reuse cannot also claim a full invocation', () => {
     assert.throws(() => evidence.expectedJobContract(path, {required: false, reuse: proof, full: true}), /Reused sibling cannot be a full invocation/);
   }
 });
+
+
+test('reviewed root owners publish independent root and receipt job contracts', () => {
+  const marker = {version: 1, base: sha('a'), head: sha('b'), paths: ['scripts/ci-root-shards.test.mjs'], entryIds: ['root-partition-contract']};
+  const root = {packages: [], receipts: [], typecheck: false, reuse: null, rootInputs: marker, rootTests: true};
+  assert.deepEqual(evidence.expectedJobContract(ci, root), {
+    required: ['changes', 'root (1/4)', 'root (2/4)', 'root (3/4)', 'root (4/4)', 'summary'],
+    skipped: ['scripts', 'documentation', 'typecheck', packageSkip, 'receipts'],
+  });
+  const receipt = {...root, rootTests: false, receipts: ['test:local-stack']};
+  assert.deepEqual(evidence.expectedJobContract(ci, receipt), {
+    required: ['changes', 'receipts', 'summary'],
+    skipped: ['scripts', 'documentation', 'typecheck', rootSkip, packageSkip],
+  });
+  for (const selection of [root, receipt]) {
+    const input = {...source(), selection};
+    assert.deepEqual(evidence.parsePlanEvidence(Buffer.from(JSON.stringify(evidence.createPlanEvidence(input)))).selection, selection);
+  }
+  for (const bad of [{...root, rootTests: false}, {...root, rootTests: undefined}, {...root, typecheck: true},
+    {...root, reuse: reuseProof()}, {...root, documentation: {base: sha('a'), head: sha('b'), paths: ['README.md']}}]) {
+    assert.throws(() => evidence.expectedJobContract(ci, bad));
+  }
+});

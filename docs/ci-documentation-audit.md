@@ -57,6 +57,11 @@ separate backstop.
 
 ## Renew documentation evidence before pushing code
 
+After root-input review activates, first [review and renew each changed root
+input](ci-root-input-ownership.md), including changes that run full CI. Stage
+those records before renewing documentation evidence, because the documentation
+audit also pins their bytes. Both checks are required independently.
+
 Trace changed imports, directory scans, generated programs, file reads, child
 commands, installation hooks and their effects on the prose exemptions. Then
 stage the complete reviewed source and generate documentation records:

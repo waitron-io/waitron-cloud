@@ -6,6 +6,7 @@ import {assertDocumentation} from './ci-docs.mjs';
 import {packageMembers} from './ci-package-groups.mjs';
 import {assertReceiptSuites} from './ci-run-receipts.mjs';
 import {assertScriptWork} from './ci-scripts.mjs';
+import {assertRootInputWork, rootVerificationContext} from './ci-root-inputs.mjs';
 import {assertReuseProof} from './ci-reuse-proof.mjs';
 import {assertCurrentReuse} from './ci-reuse.mjs';
 import {bindRuntimeWorkflow, completeMissingMainDecision, readRuntimeReuseContext, runtimeReuseDependencies} from './ci-reuse-runtime.mjs';
@@ -44,10 +45,13 @@ export function assertPackageAllocations(packages) {
   for (const [name, count] of allocations) assert.equal(count, packageShards[name], `Incomplete package allocation: ${name}`);
 }
 
-function expectedSummaryJobs(plan, results) {
+function expectedSummaryJobs(plan, results, rootVerification) {
   assert.equal(results.changes, 'success', 'CI planner must succeed');
   assert.ok(Array.isArray(plan.packages) && Array.isArray(plan.receipts) && typeof plan.typecheck === 'boolean', 'Missing CI plan');
-  if (plan.scripts) {
+  if (rootVerification) assertRootInputWork(plan, rootVerification);
+  if (plan.rootInputs || Object.hasOwn(plan, 'rootTests')) {
+    assert.ok(rootVerification, 'Root work requires trusted verification context');
+  } else if (plan.scripts) {
     assertScriptWork(plan);
   } else if (plan.reuse) {
     assert.ok(!plan.documentation, 'Reuse cannot declare document work');
@@ -71,9 +75,11 @@ function expectedSummaryJobs(plan, results) {
   if (plan.documentation || results.documentation !== undefined) {
     assert.equal(results.documentation, plan.documentation ? 'success' : 'skipped', 'documentation did not match its plan');
   }
-  if (plan.typecheck) expected.push('typecheck', 'root (1/4)', 'root (2/4)', 'root (3/4)', 'root (4/4)');
-  if (plan.typecheck || results.root !== undefined) {
-    assert.equal(results.root, plan.typecheck ? 'success' : 'skipped', 'root did not match its plan');
+  const rootTests = plan.rootInputs ? plan.rootTests : plan.typecheck;
+  if (plan.typecheck) expected.push('typecheck');
+  if (rootTests) expected.push('root (1/4)', 'root (2/4)', 'root (3/4)', 'root (4/4)');
+  if (rootTests || results.root !== undefined) {
+    assert.equal(results.root, rootTests ? 'success' : 'skipped', 'root did not match its plan');
   }
   assertPackageAllocations(plan.packages);
   for (const row of plan.packages) expected.push(`package (${row.package}${row.shards ? `, shard ${row.shard}/${row.shards}` : ''})`);
@@ -89,9 +95,24 @@ function expectedSummaryJobs(plan, results) {
 }
 
 function assertSummaryJobs(expected, jobs, waiting = null) {
+  const known = new Set(['changes', 'typecheck', 'root (1/4)', 'root (2/4)', 'root (3/4)', 'root (4/4)',
+    'receipts', 'scripts', 'documentation', 'summary',
+    'root (${{ matrix.shard }}/4)',
+    "package (${{ matrix.package }}${{ ((matrix.shards && format(', shard {0}/{1}', matrix.shard, matrix.shards)) || '') }})",
+    'package (@waitron-cloud/identity + @waitron-cloud/operations)',
+    ...Object.entries(packageShards).flatMap(([name, count]) => Array.from({length: count}, (_, index) =>
+      `package (${name}${count > 1 ? `, shard ${index + 1}/${count}` : ''})`)),
+  ]);
+  const seen = new Set();
   for (const job of jobs) {
     assert.ok(job && typeof job.name === 'string' && job.name.trim().length > 0, 'Invalid job record: missing job name');
-    if (job.name === 'summary' || expected.includes(job.name)) continue;
+    assert.ok(!seen.has(job.name), `Missing or duplicate job: ${job.name}`); seen.add(job.name);
+    assert.ok(known.has(job.name), `Unexpected executed job: ${job.name}`);
+    if (job.name === 'summary') {
+      assert.ok(job.status === 'in_progress' && job.conclusion === null || job.status === 'completed' && job.conclusion === 'success', 'summary did not pass or remain live');
+      continue;
+    }
+    if (expected.includes(job.name)) continue;
     if (waiting && job.status !== 'completed') {
       waiting.push(job.name);
     } else {
@@ -110,8 +131,8 @@ function assertSummaryJobs(expected, jobs, waiting = null) {
   }
 }
 
-export function assertSummary(plan, results, jobs) {
-  assertSummaryJobs(expectedSummaryJobs(plan, results), jobs);
+export function assertSummary(plan, results, jobs, rootVerification) {
+  assertSummaryJobs(expectedSummaryJobs(plan, results, rootVerification), jobs);
 }
 
 function readCurrentJobs(timeoutMs) {
@@ -170,11 +191,12 @@ export async function waitForSummary(plan, results, {
   pollMs = 2_000,
   identity = {runId: Number(process.env.GITHUB_RUN_ID), runAttempt: Number(process.env.GITHUB_RUN_ATTEMPT), headSha: process.env.CI_HEAD_SHA},
   report = message => console.log(message),
+  rootVerification,
   reuseContext,
   reuseDependencies,
 } = {}) {
   assert.ok(['', 'standard / '].includes(jobPrefix), 'Invalid CI job prefix');
-  const expected = expectedSummaryJobs(plan, results);
+  const expected = expectedSummaryJobs(plan, results, rootVerification);
   const deadline = now() + timeoutMs;
   let waiting = [];
   let lookupError;
@@ -246,7 +268,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   try {
     const plan = JSON.parse(process.env.CI_PLAN);
     const results = Object.fromEntries(Object.entries(JSON.parse(process.env.CI_RESULTS)).map(([name,job])=>[name,job.result]));
-    await waitForSummary(plan, results);
+    await waitForSummary(plan, results, {rootVerification: rootVerificationContext(plan)});
     if (process.env.CI_RECORD_DECISION === 'true') {
       const context = readRuntimeReuseContext();
       context.workflowPath = process.env.CI_WORKFLOW_PATH ?? context.workflowPath;

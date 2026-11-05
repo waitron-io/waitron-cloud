@@ -81,6 +81,21 @@ test('removing an indirect resolution still runs its former importer and readers
   assertSelected(plan(base, commit()));
 }));
 
+test('audited prose alongside a lock change retains the original full-diff lock refusal', () => fixture(({git, write, lock, save, commit, plan}) => {
+  for (const path of ['scripts/identity-upstream.mjs', 'scripts/identity-upstream.test.mjs',
+    'scripts/verify-gateway-reconnection-receipt.mjs', 'scripts/verify-gateway-reconnection-receipt.test.mjs']) write(path, 'export {};\n');
+  const renew = () => {
+    git('add', '-A');
+    execFileSync(process.execPath, [join(process.cwd(), 'scripts/ci-input-audit.mjs'), '--write-staged'], {cwd: git('rev-parse', '--show-toplevel').trim(), stdio: 'pipe'});
+  };
+  write('docs/lock.md', '# Original explanation\n'); renew(); const base = commit();
+  lock.packages['leaf@1.0.0'].resolution.integrity = 'sha512-Y2hhbmdlZA=='; save();
+  write('docs/lock.md', '# Updated explanation\n'); renew();
+  const result = plan(base, commit());
+  assert.deepEqual(result.packages.map(row => row.package), ['catalogue', 'page', 'unrelated']);
+  assert.equal(result.receipts.length, 6); assert.equal(result.typecheck, true);
+}));
+
 test('a new resolved version can select one isolated package without a manifest edit', () => fixture(({lock, save, commit, plan}) => {
   lock.importers['packages/unrelated'] = {dependencies: {leaf: {specifier: '^1.0.0', version: '1.0.0'}}};
   save(); const base = commit();

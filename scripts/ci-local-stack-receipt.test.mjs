@@ -28,7 +28,8 @@ const directories = ['deploy/local-stack', 'packages/registration/migrations'];
 function fixture(run) {
   const root = mkdtempSync(join(tmpdir(), 'cloud-local-stack-inputs-'));
   // Disposable repositories must not start detached Git maintenance.
-  const git = (...args) => execFileSync('git', ['-c', 'maintenance.auto=false', ...args], {cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe']});
+  // Reconstructing a historical fixture can change every audit record at once.
+  const git = (...args) => execFileSync('git', ['-c', 'maintenance.auto=false', ...args], {cwd: root, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024, stdio: ['ignore', 'pipe', 'pipe']});
   // Use the planner's batch protocol so source discovery does not spawn once per file.
   git.readBlobs = ids => readGitBlobs(ids, input => execFileSync('git', ['-c', 'maintenance.auto=false', 'cat-file', '--batch'],
     {cwd: root, input, timeout: 30_000, maxBuffer: 64 * 1024 * 1024, stdio: ['pipe', 'pipe', 'pipe']}));

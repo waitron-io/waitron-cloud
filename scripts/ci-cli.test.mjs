@@ -3,6 +3,7 @@ import {execFileSync,spawnSync} from 'node:child_process';
 import {mkdtempSync,writeFileSync,readFileSync,cpSync,existsSync,rmSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
+import {fileURLToPath} from 'node:url';
 import test from 'node:test';
 import {createPlan} from './ci-plan.mjs';
 import {loadWorkspace} from './ci-scope.mjs';
@@ -80,15 +81,22 @@ test('real squash merges run full on main for equal trees and advanced main with
 test('executed summary consumes needs objects and the current job API, refusing omissions and lookup failures',()=>{
   const root=mkdtempSync(join(tmpdir(),'cloud-ci-summary-'));
   try {
+    const git=(...args)=>execFileSync('git',['-c','maintenance.auto=false',...args],{cwd:root,encoding:'utf8',stdio:'pipe'}).trim();
+    git('init','-q');git('config','user.name','CI test');git('config','user.email','ci@example.test');
+    writeFileSync(join(root,'baseline'),'Isolated job-contract fixture.\n');
+    git('add','baseline');git('commit','-s','-qm','Save isolated summary history');
+    const head=git('rev-parse','HEAD'),event=join(root,'.git','event.json');
+    writeFileSync(event,'{}\n');
     const fixture=join(root,'jobs.json');
     const gh=join(root,'gh');
     writeFileSync(gh,'#!/bin/sh\n[ "$1" = api ] || exit 2\ncat "$CI_FIXTURE"\n',{mode:0o700});
     const plan={packages:[{package:'@waitron-cloud/operations',shard:1}],receipts:['test:local-stack'],typecheck:true,reuse:null};
     const results={changes:{result:'success'},typecheck:{result:'success'},root:{result:'success'},packages:{result:'success'},receipts:{result:'success'}};
     const jobs=['changes','typecheck','root (1/4)','root (2/4)','root (3/4)','root (4/4)','package (@waitron-cloud/operations)','receipts'].map(name=>({name,status:'completed',conclusion:'success'}));
-    const env={...process.env,PATH:`${root}:${process.env.PATH}`,CI_FIXTURE:fixture,CI_PLAN:JSON.stringify(plan),CI_RESULTS:JSON.stringify(results),GITHUB_REPOSITORY:repository,GITHUB_RUN_ID:'42'};
-    const run=()=>spawnSync(process.execPath,['scripts/ci-summary.mjs'],{env,encoding:'utf8'});
-    writeFileSync(fixture,JSON.stringify([{jobs}]));assert.equal(run().status,0);
+    const env={...process.env,PATH:`${root}:${process.env.PATH}`,CI_FIXTURE:fixture,CI_PLAN:JSON.stringify(plan),CI_RESULTS:JSON.stringify(results),GITHUB_REPOSITORY:repository,GITHUB_RUN_ID:'42',
+      GITHUB_EVENT_PATH:event,GITHUB_SHA:head,CI_HEAD_SHA:head,CI_JOB_PREFIX:''};
+    const run=()=>spawnSync(process.execPath,[fileURLToPath(new URL('./ci-summary.mjs',import.meta.url))],{cwd:root,env,encoding:'utf8'});
+    writeFileSync(fixture,JSON.stringify([{jobs}]));const original=run();assert.equal(original.status,0,original.stdout+original.stderr);
     writeFileSync(fixture,JSON.stringify([{jobs:jobs.slice(0,-1)}]));const missing=run();assert.equal(missing.status,1);assert.match(missing.stderr,/Missing or duplicate job/);
     writeFileSync(fixture,JSON.stringify([{jobs}]));
     for (const group of ['changes','typecheck','root','packages','receipts']) {

@@ -1431,22 +1431,39 @@ implementation or production evidence.
   evidence retain conservative work. D571 part 1 reuses these existing audits;
   the parked `feat/precise-ci-selection` branch remains untouched. D69 ended in
   #262 with full work for unresolved directory readers; its unmerged replacement
-  is reference material, not the current implementation. Dependency precision,
-  root-input owners and verified merge reuse remain D571 parts 2, 3 and 5.
-  Part 3's [design](superpowers/specs/2026-11-05-ci-root-input-ownership-design.md)
-  and [plan](superpowers/plans/2026-11-05-ci-root-input-ownership.md) describe a
-  foundation with separate review records for each input and three initial
-  test-file candidates. Implementation, complete reader review, mandatory
-  freshness, bounded proof-metadata validation and all-workflow measurements
-  remain open. Unregistered root inputs retain full work; this plan does not
-  complete root precision or establish a time saving.
+  is reference material, not the current implementation. Part 2b supplies the
+  direct package selection below; part 5 still owns verified merge reuse.
+  Part 3 implements the [reviewed root-input design](superpowers/specs/2026-11-05-ci-root-input-ownership-design.md)
+  with [separate records and an explicit renewal procedure](ci-root-input-ownership.md).
+  Its complete initial input review admits the root-partition contract test to
+  all four root jobs and the local health test to the entire `test:local-stack`
+  receipt command. Their union composes with existing package selection without
+  dropping mandatory receipts. The capacity verifier test remains unregistered:
+  a root selector fixture copies its live bytes, so receipt-only work would miss
+  that proved consumer. Every other unknown root input retains full work.
+  Once activated, mandatory summary independently verifies complete head review
+  even for full and legacy plans. Missing or stale records and complete metadata
+  removal fail; stale base evidence refuses narrowing. Removal anchors must
+  already exist in the trusted PR base so they survive a squash. Valid record
+  renewal preserves each separate proof decision only after both saved root reviews and
+  documentation authorities qualify. Real proof inputs and forced full/nightly
+  work remain selected. Bootstrap and registry changes themselves run full.
+  The merged-tree review also remains mandatory when main reuses a verified
+  PR run. Independent source reconstruction rejects stale root reviews, and
+  source evidence records root-only and receipt-only work without selecting
+  compiler jobs. Different-tree pushes derive ownership from their literal
+  before/after range. Integration controls retain the bounded summary lookup,
+  source recheck and original proof-selector assertions.
+  Ownership review does not complete global root precision or establish a time
+  saving. Unresolved package readers, including the separate #938 fix, remain
+  outside this slice.
   Part 4 selects the separate cost and venue matrices from their
   [reviewed proof inputs](ci-proof-selection.md). Cost retains backend sources,
   migrations, shared fixtures, gateway and installation inputs; venue selects
   its proof programs and named suite tests. Portal code and ordinary unrelated
   package tests omit both matrices. Unknown packages, root areas and
   unclassified scripts retain work, including changes in the other proof's
-  script tree. Narrower root ownership remains part 3. Both workflows
+  script tree. Part 3 narrows only its two admitted root tests. Both workflows
   support complete manual runs and stop running on main pushes, while the nightly
   backstop below retains both full matrices. Real-Git controls cover positive
   inputs, omissions, renames, missing history and checkout refusals. No rehearsal
