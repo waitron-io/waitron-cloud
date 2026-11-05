@@ -44,11 +44,13 @@ trials: all 213 reply bytes reach the counter, both HTTP messages are complete,
 and the writer exits zero. The control deliberately postpones downstream
 response completion by 100 ms after the body passes through. It establishes a
 possible ordering, not the natural cause of the historical 743-byte refusal.
-One trial retains equal four-attempt counters; two include extra refused work.
+One refusal snapshot has equal four-attempt counters and another pending
+request; two include extra refused work.
 Do not transplant replay's socket retirement into this smoke: all three native
 trials refuse at retry-sequence validation, and two need forced collection.
-A passive pre-signal idle wait also refuses all three trials when a later LIST
-is cancelled. A generated writer alone passes the proposed drain, but that
+A passive pre-signal idle wait still permits a later LIST cancellation in all
+three trials. The ledger reports unknown cost; the control's additional demand
+for full reconciliation fails. A generated writer alone passes the proposed drain, but that
 change fails 15 of 92 existing shutdown checks; restoring the implementation
 passes all 92. Keep the current acceptance guard and absolute two-second stop
 budget. Next, reproduce this ordering on Linux and establish a background-work
