@@ -75,3 +75,5 @@ test('summary skips root partitions only when the plan skips the compiler', () =
   assert.throws(() => assertSummary(reused, {...skipped, root: 'success'}, [jobs[0]]));
   assert.throws(() => assertSummary(reused, skipped, [jobs[0], jobs.at(-1)]));
 });
+
+// Root-only edits retain all four partitions so the partition contract stays covered.
