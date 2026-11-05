@@ -334,13 +334,18 @@ cancellation and seed/readiness failures. A later same-head root job passes;
 that does not explain the first timeout or establish one cause for every case.
 Do not label those paths repaired by this helper.
 
-### Optional controlled copy, owner decision required
+### Controlled-copy proposal, deferred by the owner
+
+The owner has not authorised a copy. Keep the costing below as a proposal.
+D585 must measure whether wider retry pauses help only after GitHub is healthy;
+its current one- and two-second pauses remain unchanged. Count any new archive
+failures after consolidation and incident recovery before revisiting this proposal.
 
 Recommend evaluating a Cloud-owned R2 Standard bucket behind a custom domain
 for the exact approved archives, rather than fetching upstream release assets
 in each test job. Publish only checksum-verified, versioned bytes, preserve the
 upstream notices, and keep the existing digests as the final check. Switching
-all thirteen acquisition sites and the historical fixture needs its own scoped
+all remaining acquisition edges and the historical fixture needs its own scoped
 change. No bucket, domain, upload, publishing credential or endpoint change is
 part of this repair.
 

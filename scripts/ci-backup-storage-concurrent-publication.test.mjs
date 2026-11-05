@@ -15,7 +15,7 @@ const pins = {
 };
 let seedRoot, seed, archiveName, digest;
 
-// Reuse a real pinned archive read-only, or fetch it once. Digest validation stays real.
+// Reuse the pinned archive read-only; each fault injection receives a private seed.
 before(async () => {
   ({ seedRoot, seed, archiveName } = await prepareStorageTarSeed());
   [, digest] = pins[process.platform + "-" + process.arch];

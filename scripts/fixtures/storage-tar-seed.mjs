@@ -14,7 +14,7 @@ const pins = {
 // The shared cache is read-only; callers own and remove the returned seedRoot.
 export async function prepareStorageTarSeed() {
   const pin = pins[process.platform + "-" + process.arch];
-  assert.ok(pin, "tar refusal checks need a supported storage fixture platform");
+  assert.ok(pin, "storage seed checks need a supported storage fixture platform");
   const [name, checksum] = pin;
   const archiveName = "seaweed-4.47-" + name + ".tar.gz";
   let seedRoot;
