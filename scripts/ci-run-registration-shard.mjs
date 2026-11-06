@@ -18,7 +18,7 @@ export function registrationFiles(shard, files) {
 
 if (process.argv[1] && import.meta.url === pathToFileURL(realpathSync(process.argv[1])).href) {
   const root = resolve(dirname(fileURLToPath(import.meta.url)), '../packages/registration');
-  const files = readdirSync(resolve(root, 'test')).filter(file => file.endsWith('.test.ts'));
+  const files = readdirSync(resolve(root, 'test')).filter(file => !file.startsWith('.') && file.endsWith('.test.ts'));
   const selected = registrationFiles(Number(process.argv[2]), files);
   assert.ok(selected.length > 0, 'Empty registration shard');
   process.chdir(root);

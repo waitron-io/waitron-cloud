@@ -42,6 +42,7 @@ test('registration runner moves the three measured slow files and executes all c
     for (const file of files) writeFileSync(join(directory, file),
       `import test from 'node:test'; import assert from 'node:assert/strict'; test(${JSON.stringify(file)}, () => {assert.ok(process.execArgv.includes('--test-timeout=30000')); console.log(${JSON.stringify(`D576_FILE ${file}`)}); console.log('D576_PARENT '+process.ppid);});\n`);
     writeFileSync(join(directory, 'metadata.json'), '{"not a test":true}\n');
+    writeFileSync(join(directory, '.hidden.test.ts'), "throw Error('HIDDEN_REGISTRATION_TEST_RAN');\n");
     mkdirSync(join(directory, 'fixtures'));
     writeFileSync(join(directory, 'fixtures/unrelated.test.ts'), "throw Error('UNRELATED_FIXTURE_RAN');\n");
     const env = {...process.env};

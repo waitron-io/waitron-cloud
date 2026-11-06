@@ -33,6 +33,10 @@ fixture tests stay outside the native wildcard's discovery. The runner keeps the
 default and each test's existing explicit deadline. An invalid or empty
 partition fails before Node can discover unrelated tests.
 
+The registration runner uses the same hidden-file exclusion. Its existing
+allocation regression now includes a throwing hidden file, preserving its
+original six-job allocation and deadlines.
+
 The saved official incident history has no relevant incident overlapping this
 run; the latest prior relevant incident resolved at 00:20:49 UTC on 6 November
 2026. The slowest checkout is four seconds. The complete saved logs show no
