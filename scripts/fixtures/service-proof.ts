@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import {execFile} from 'node:child_process';
 import {promisify} from 'node:util';
+import {parseServiceProofFailure} from '../test-cloud-free-services.mjs';
 const exec=promisify(execFile);
 
 export async function checkServiceReceipt(venueLevels:boolean,root:string){
@@ -14,6 +15,8 @@ export async function checkServiceReceipt(venueLevels:boolean,root:string){
    for(const line of lines){if(/^Free-service proof: (account-mail|relay-plans|translation-plans|relay-guards|translation-guards|http-guards|deployment-gates|rules|installations|backups|recovery|remote|translation|relay|runtime|storage)$/.test(line))
     console.log(`SERVICE_PROOF_PROGRESS ${venueLevels?'venue':'legacy'} ${Math.round(performance.now()-started)}ms ${line}`);
     if(line.startsWith('SERVICE_PROOF_TIMING '))console.log(`SERVICE_PROOF_TIMING ${venueLevels?'venue':'legacy'} ${line.slice('SERVICE_PROOF_TIMING '.length)}`);
+    const failure=parseServiceProofFailure(line);
+    if(failure)console.log(`SERVICE_PROOF_FAILURE ${venueLevels?'venue':'legacy'} ${JSON.stringify(failure)}`);
    }
   });
   const result=await pending;

@@ -3439,6 +3439,40 @@ Production session behaviour and landed migrations are unchanged. Activity
 updates delayed by sixty seconds and changes to absolute session expiry remain
 outside this test's coverage, as they were before this repair.
 
+## Service-proof failure diagnostics (D530)
+
+The [first venue-proof attempt for PR381](https://github.com/waitron-io/waitron-cloud/actions/runs/41805521835/attempts/1)
+failed after 231 seconds with only `Free-service proof failed`. Its later passing
+attempt does not explain the original failure. That cause remains open.
+
+You now get `SERVICE_PROOF_FAILURE` records from both proof matrices and the
+single-suite command. An observed failure event identifies its service group,
+zero-based file number, reported source line, runner failure category and an
+allowlisted error code.
+Match the file number against that group's file list in
+`scripts/test-cloud-free-services.mjs`. Unknown codes stay unclassified; messages,
+test names, paths, assertion values and child output remain private. Unexpected
+output still refuses the proof and records only its stream and file position.
+The sender retains at most sixteen event records plus a truncation marker.
+The command also reports its final refusal stage and allowlisted code.
+
+Summary refusals retain safe counts and mark the event stream incomplete,
+because Node can report a failed file summary before its failure event. The
+proof still stops at its first refusal. Earlier output can hide a later error,
+and the cap can omit a parent hook failure after many cancelled children. An
+unmapped helper has an unknown position; line zero means unavailable, and a
+file-level line one can be a runner placeholder. These records identify the
+observed boundary, not every underlying error. Single-suite runs now also
+honour the existing optional timing setting.
+
+The receipt parent validates and forwards these records before a child refusal,
+including records split across reads. Controlled real assertion, timeout, output
+and CLI failures exercise reporting without issuing a receipt. A controlled
+late rejection and a dirty checkout after passing cases both report their
+refusal. The existing receipt checks, case counts, cleanup and time limits
+remain unchanged. Historical causes and signal delivery through the parent's
+330-second cutoff remain unqualified.
+
 ## Bound verifier test failure cleanup (D530)
 
 [The D462 backup job](https://github.com/waitron-io/waitron-cloud/actions/runs/41311315472/job/124862280459)
