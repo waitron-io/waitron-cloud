@@ -272,9 +272,14 @@ Independent inventory must find an exact sum of owned part sizes; a value merely
 between those sums refuses. Distinct sums share the 100,000-entry history scale.
 A retained version also needs its own request and the original admission order;
 one ambiguous completion cannot explain two versions. Hidden storage time remains
-unknown. Further requests on an upload after an uncertain completion or abort,
-and multiple deferred completions for one unversioned key, still need the wider
-forwarding policy. These controls do not prove SQLite recovery.
+unknown. Multiple deferred completions for one unversioned key now keep separate
+transitions in admission order. A retained upload contributes no completed object;
+a later committed completion or ordinary mutation excludes an older current size.
+Independent inventory still rejects unsupported sizes and missing objects. The
+same test file includes two real HTTP completions whose replies are lost, with
+both callbacks collected. Further requests on the same upload after an uncertain
+completion or abort still need the wider forwarding policy. These controls do
+not prove SQLite recovery.
 The full nonblocking accounting path, publication refusal, lost-write
 restore control and saved-failure replay remain open. These partial changes do
 not establish the historical cause or relax functional admission.

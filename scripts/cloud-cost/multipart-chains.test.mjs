@@ -564,3 +564,138 @@ for (const distinct of [false, true]) test(`completion candidate budget counts d
   f.uploads.clear(); f.objects.push({ id: 'completed', bytes: 9, latest: true });
   f.time(22); await assert.doesNotReject(f.audit.verify()); result(f, 9, 0, true);
 });
+
+// Each missing completion reply owns its own deferred transition. A later
+// completion must neither discard the first callback nor borrow its inventory.
+async function twoDeferredCompletions(f, { first = true, second = true, acknowledged = false } = {}) {
+  for (const [id, bytes, from, committed] of [[UploadId, 4, 1, first], ['PRIVATE_SECOND', 8, 7, second]]) {
+    createAt(f, id, from); f.time(from + 2);
+    begin(f, 'part', { id, bytes })({ statusCode: 200, bytesOut: bytes, responseHeaders: { etag: 'one' } });
+    f.uploads.get(id).set(1, { bytes, etag: 'one' });
+    f.time(from + 4); const end = begin(f, 'complete', { id });
+    if (acknowledged && id === 'PRIVATE_SECOND') end({ statusCode: 200, bytesOut: completion.length,
+      responseBody: completedReply() });
+    else end({ statusCode: null, bytesOut: completion.length, interrupted: true });
+    if (committed) { f.uploads.delete(id); f.objects.splice(0, f.objects.length, { bytes, latest: true }); }
+  }
+}
+
+for (const first of [false, true]) for (const second of [false, true])
+  test(`deferred same-key completions retain independent outcomes ${first}/${second}`, async t => {
+    const f = await fixture(t, false); await twoDeferredCompletions(f, { first, second });
+    f.time(14); await assert.doesNotReject(f.audit.verify());
+    // Both retained uploads: 4+8; only first complete: 4+8;
+    // only second complete: 4+8; both complete: only the later 8-byte object.
+    result(f, first && second ? 8 : 12, Number(!first) + Number(!second), true);
+    f.time(16); await assert.doesNotReject(f.audit.verify());
+    result(f, first && second ? 8 : 12, Number(!first) + Number(!second), true);
+  });
+
+for (const first of [false, true]) test(`deferred same-key earlier completion cannot replace an acknowledged later one ${first}`, async t => {
+  const f = await fixture(t, false); await twoDeferredCompletions(f, { first, acknowledged: true });
+  f.time(14); await assert.doesNotReject(f.audit.verify()); result(f, first ? 8 : 12, Number(!first), true);
+});
+
+for (const failure of ['older-current', 'unowned-size', 'missing-current', 'duplicate-current', 'foreign-retained-part'])
+  test(`deferred same-key completions reject unsupported inventory ${failure}`, async t => {
+    const f = await fixture(t, false); await twoDeferredCompletions(f, { second: failure !== 'foreign-retained-part' });
+    if (failure === 'older-current') f.objects[0].bytes = 4;
+    if (failure === 'unowned-size') f.objects[0].bytes = 6;
+    if (failure === 'missing-current') f.objects.length = 0;
+    if (failure === 'duplicate-current') f.objects.push({ bytes: 8, latest: true });
+    if (failure === 'foreign-retained-part') f.uploads.get('PRIVATE_SECOND').set(1, { bytes: 6, etag: 'one' });
+    f.time(14); await assert.rejects(f.audit.verify(), bad);
+    assert.throws(() => f.meter.snapshot(), /Invalid cloud cost meter/);
+  });
+
+for (const status of ['acknowledged', 'lost-committed', 'lost-uncommitted']) for (const method of ['PUT', 'DELETE'])
+  test(`deferred same-key completions preserve later ordinary outcomes ${method}/${status}`, async t => {
+    const f = await fixture(t, false); await twoDeferredCompletions(f);
+    f.time(13); const end = f.audit.begin({ method, path, headers: { 'content-length': method === 'PUT' ? '2' : '0' } });
+    const bytes = method === 'PUT' ? 2 : 0;
+    end(status === 'acknowledged' ? { statusCode: method === 'PUT' ? 200 : 204, bytesOut: bytes }
+      : { statusCode: null, interrupted: true, bytesOut: bytes });
+    if (status !== 'lost-uncommitted') f.objects.splice(0, f.objects.length, ...(method === 'PUT' ? [{ bytes: 2, latest: true }] : []));
+    f.time(16); await assert.doesNotReject(f.audit.verify());
+    result(f, status === 'lost-uncommitted' ? 8 : bytes, 0, true);
+  });
+
+for (const acknowledged of [false, true]) test(`deferred same-key third completion keeps original order ${acknowledged}`, async t => {
+  const f = await fixture(t, false); await twoDeferredCompletions(f);
+  createAt(f, 'PRIVATE_THIRD', 13); f.time(15);
+  begin(f, 'part', { id: 'PRIVATE_THIRD', bytes: 2 })({ statusCode: 200, bytesOut: 2, responseHeaders: { etag: 'one' } });
+  f.uploads.get('PRIVATE_THIRD').set(1, { bytes: 2, etag: 'one' }); f.time(16);
+  const end = begin(f, 'complete', { id: 'PRIVATE_THIRD' });
+  end(acknowledged ? { statusCode: 200, bytesOut: completion.length, responseBody: completedReply() }
+    : { statusCode: null, interrupted: true, bytesOut: completion.length });
+  f.uploads.clear(); f.objects.splice(0, f.objects.length, { bytes: 2, latest: true });
+  f.time(18); await assert.doesNotReject(f.audit.verify()); result(f, 2, 0, true);
+});
+
+for (const retained of [false, true]) for (const bytes of [4, 6, 8, 10, 12, 14, 18])
+  test(`deferred same-key alternatives keep exact later selection ${retained}/${bytes}`, async t => {
+    const f = await fixture(t, false), first = await ambiguousCompletion(f);
+    f.time(8); finishCompletion(f, first, 'lost-committed'); f.uploads.clear();
+    const second = await ambiguousCompletion(f, { id: 'PRIVATE_SECOND', from: 9, secondPart: true });
+    f.time(15); finishCompletion(f, second, 'lost-committed');
+    if (!retained) f.uploads.clear();
+    f.objects.push({ bytes, latest: true }); f.time(18);
+    const supported = retained ? bytes === 4 || bytes === 8 : [10, 14, 18].includes(bytes);
+    if (!supported) { await assert.rejects(f.audit.verify(), bad); return; }
+    await assert.doesNotReject(f.audit.verify()); result(f, retained ? bytes + 18 : bytes, Number(retained), true);
+  });
+
+for (const first of [false, true]) test(`deferred same-key settlement cannot reuse a completed callback ${first}`, async t => {
+  const f = await fixture(t, false); await twoDeferredCompletions(f, { first }); f.time(13);
+  const finish = f.audit.begin({ method: 'PUT', path, headers: { 'content-length': '2' } });
+  const event = { statusCode: 200, bytesOut: 2 };
+  finish(event); assert.throws(() => finish(event), bad);
+  assert.throws(() => f.meter.snapshot(), /Invalid cloud cost meter/);
+});
+
+test('deferred same-key actual HTTP completions collect both lost replies', async t => {
+  const f = await fixture(t, false), received = [];
+  const backend = createServer((req, res) => {
+    const chunks = []; req.on('data', chunk => chunks.push(chunk)); req.on('end', () => {
+      const body = Buffer.concat(chunks), id = new URL(req.url, 'http://local').searchParams.get('uploadId');
+      received.push({ id, body: body.toString() });
+      const bytes = f.uploads.get(id).get(1).bytes;
+      f.uploads.delete(id); f.objects.splice(0, f.objects.length, { bytes, latest: true }); res.destroy();
+    });
+  });
+  backend.listen(0, '127.0.0.1'); await once(backend, 'listening');
+  t.after(() => { backend.closeAllConnections(); return new Promise(resolve => backend.close(resolve)); });
+  const meter = createMeter({ phase: 'workload', clock: () => 0 });
+  const front = await createLitestreamTransport({ target: `http://127.0.0.1:${backend.address().port}`, meter, phase: 'workload', lifetimes: f.audit });
+  t.after(() => front.close().catch(() => {}));
+  for (const [id, bytes, from, invocation] of [[UploadId, 4, 1, '11111111'], ['PRIVATE_SECOND', 8, 7, '22222222']]) {
+    createAt(f, id, from); f.time(from + 2);
+    begin(f, 'part', { id, bytes })({ statusCode: 200, bytesOut: bytes, responseHeaders: { etag: 'one' } });
+    f.uploads.get(id).set(1, { bytes, etag: 'one' }); f.time(from + 4);
+    const req = input('complete'); req.path = req.path.replace(UploadId, id);
+    await assert.rejects(new Promise((resolve, reject) => {
+      const caller = request(front.url + req.path, { method: req.method, headers: { ...req.headers,
+        'amz-sdk-invocation-id': invocation + '-2222-4333-8444-555555555555', 'amz-sdk-request': 'attempt=1; max=1',
+      } }, async res => {
+        try { for await (const chunk of res) void chunk; resolve(res.statusCode); }
+        catch { reject(Error('Synthetic reply cutoff')); }
+      });
+      caller.once('error', () => reject(Error('Synthetic request cutoff'))); caller.end(req.body);
+    }), /Synthetic (request|reply) cutoff/);
+    await front.whenIdle(() => {});
+  }
+  await assert.doesNotReject(front.close()); f.time(14);
+  await assert.doesNotReject(f.audit.verify()); result(f, 8, 0, true);
+  assert.deepEqual(received, [{ id: UploadId, body: completion.toString() }, { id: 'PRIVATE_SECOND', body: completion.toString() }]);
+  assert.equal(meter.snapshot().accounting.producer.attempts, 2);
+  assert.equal(meter.snapshot().accounting.requests.filter(r => r.outcome === 'transport-error').reduce((n, r) => n + r.attempts, 0), 2);
+  assert.equal(meter.diagnostics().firstInvalidation, null);
+  assert.equal(front.checkpoint().pending, 0); assert.equal(front.checkpoint().connections, 0);
+});
+
+for (const bytes of [4, 6, 8, null]) test(`deferred same-key retained later upload cannot supply current object ${bytes}`, async t => {
+  const f = await fixture(t, false); await twoDeferredCompletions(f, { second: false });
+  f.objects.splice(0, f.objects.length, ...(bytes === null ? [] : [{ bytes, latest: true }])); f.time(14);
+  if (bytes !== 4) { await assert.rejects(f.audit.verify(), bad); return; }
+  await assert.doesNotReject(f.audit.verify()); result(f, 12, 1, true);
+});

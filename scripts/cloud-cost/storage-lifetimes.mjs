@@ -402,11 +402,14 @@ export async function openLitestreamHistories({ client, sdk, meter, bucket, cloc
     return result;
   };
   const historyGap = () => { gaps.add('accounting:incomplete-history'); meter.markGap('accounting:incomplete-history'); };
-  const transition = (row, mutation, by) => {
-    if (row.pendingCompletion) {
-      row.pendingCompletion.overwritten = true;
-      row.pendingCompletion.following.clear();
+  const overwriteCompletions = (row, before = Infinity) => {
+    for (const completion of row.pendingCompletions ?? []) if (completion.order < before) {
+      completion.overwritten = true;
+      completion.following.clear();
     }
+  };
+  const transition = (row, mutation, by, before = Infinity) => {
+    overwriteCompletions(row, before);
     if (row.current && !(mutation.method === 'PUT' && row.current.bytes === mutation.bytes)) {
       retiredLow += row.current.bytes * Math.max(0, mutation.from - row.current.by);
       retiredHigh += row.current.bytes * (by - row.current.from);
@@ -418,10 +421,9 @@ export async function openLitestreamHistories({ client, sdk, meter, bucket, cloc
   };
   // A later different mutation can erase an intermediate retained interval. Keep every
   // possible owned size until inventory, but do not assign byte-time totals to that history.
-  const mutationFor = (row, method, bytes, time) => {
-    if (row.pendingCompletion) {
+  const mutationFor = (row, method, bytes, time, trackPending = true) => {
+    for (const completion of trackPending ? row.pendingCompletions ?? [] : []) {
       historyGap();
-      const completion = row.pendingCompletion;
       completion.advanced = true;
       if (!completion.overwritten) {
         const following = completion.following, candidate = method === 'PUT' ? bytes : null;
@@ -447,22 +449,28 @@ export async function openLitestreamHistories({ client, sdk, meter, bucket, cloc
     let row = rows.get(key);
     requireThat(!row?.active);
     if (!row) { requireThat(rows.size < 100000); row = { current: null, uncertain: null, active: false }; rows.set(key, row); }
-    const mutation = sizes.length === 1 ? mutationFor(row, 'PUT', sizes[0], from) : null;
-    const completion = { following: new Set(sizes), advanced: false, overwritten: false };
-    row.pendingCompletion = completion;
+    if (row.pendingCompletions?.size) historyGap();
+    const order = (row.completionOrder ?? 0) + 1; requireThat(count(order));
+    row.completionOrder = order;
+    // Deferred completions resolve in admission order. An uncommitted later
+    // completion must not add its size to an earlier object's candidates.
+    const mutation = sizes.length === 1 ? mutationFor(row, 'PUT', sizes[0], from, false) : null;
+    const completion = { order, following: new Set(sizes), advanced: false, overwritten: false };
+    row.pendingCompletions ??= new Set();
+    row.pendingCompletions.add(completion);
     const apply = by => {
-      requireThat(row.pendingCompletion === completion && !row.active);
-      row.pendingCompletion = null;
+      requireThat(row.pendingCompletions.delete(completion) && !row.active);
+      overwriteCompletions(row, order);
       // Inventory can witness the completed upload after later work. It cannot
       // replace a newer acknowledged object or date an invisible intermediate interval.
       if (completion.overwritten) { historyGap(); return; }
       if (completion.advanced || !mutation) {
         historyGap();
         row.candidates = new Set(completion.following);
-      } else transition(row, mutation, by);
+      } else transition(row, mutation, by, order);
     };
     apply.resolve = apply;
-    apply.absent = () => { requireThat(row.pendingCompletion === completion); row.pendingCompletion = null; };
+    apply.absent = () => { requireThat(row.pendingCompletions.delete(completion)); };
     return apply;
   } }) : null;
   const beginBatch = ({ headers, body }) => {
