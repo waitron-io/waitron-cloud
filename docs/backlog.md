@@ -2180,8 +2180,16 @@ implementation or production evidence.
   comparison. Eight partitions divide that work
   while preserving both file workers, every selector and every deadline.
   Source evidence and the final summary require all eight jobs exactly once;
-  older four-job evidence cannot qualify. Hosted timing and exact-head CI
-  qualification remain required; no time saving is established locally.
+  older four-job evidence cannot qualify. The first head's
+  [general run 42149153883](https://github.com/waitron-io/waitron-cloud/actions/runs/42149153883)
+  passes every root job in 83–312 seconds, with unchanged limits and selectors.
+  Its complete interval avoids published GitHub incidents, checkout takes at
+  most four seconds, and the logs contain no actual download HTTP 5xx.
+  All 76 jobs across its four workflows qualify with 21,040 reported Node
+  passes and 26 unchanged optional skips. Cost takes the complete fallback
+  after workflow-identity lookup refusal, so it has no reusable source plan.
+  Later rebased heads still require their own CI; aggregate usage savings
+  and the full nightly acceptance remain open.
   Each work job retains its eight-minute cap. Whole-run timing and the owner's
   five-minute work-job/about-ten-minute total goal needs measured CI evidence;
   a passing local run does not establish hosted-runner duration.
