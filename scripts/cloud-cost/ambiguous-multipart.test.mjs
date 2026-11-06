@@ -1,11 +1,12 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createServer } from 'node:http';
+import { createServer, request } from 'node:http';
 import { once } from 'node:events';
 import { createRequire } from 'node:module';
 import { openLitestreamHistories } from './storage-lifetimes.mjs';
 import { openLitestreamVersionHistories } from './stream-versions.mjs';
 import { createMeter, createMeteringProxy, correlatedStorageAttempt, instrumentStorageClient } from './meter.mjs';
+import { createLitestreamTransport } from './litestream.mjs';
 
 const require = createRequire(new URL('../../packages/backups/package.json', import.meta.url));
 const sdk = require('@aws-sdk/client-s3'), bad = /Invalid cloud cost storage lifetimes/;
@@ -59,6 +60,99 @@ function lost(f, op, bytes = 4) {
 function anonymous(f) {
   assert.equal(/PRIVATE|CANARY|UPLOAD|UploadId|VersionId/.test(JSON.stringify(f.audit.snapshot())), false);
   assert.equal(f.meter.snapshot().reconciled, true);
+}
+
+// Inventory, rather than a truncated reply, proves whether each mutation was retained.
+for (const versioned of [false, true]) for (const resolveMultipartReplies of [false, true]) {
+  for (const op of ['create', 'part', 'complete', 'abort']) for (const committed of [false, true]) {
+    test(`multipart cutoff stays unknown ${versioned}/${resolveMultipartReplies}/${op}/${committed}`, async t => {
+      const f = await fixture(t, versioned, { resolveMultipartReplies });
+      if (op !== 'create') create(f);
+      if (op === 'complete' || op === 'abort') part(f);
+      f.time(6); const req = input(op), end = f.audit.begin(req); f.time(7);
+      assert.doesNotThrow(() => end({ statusCode: null, bytesOut: Math.max(0, Number(req.headers['content-length']) - 1),
+        interrupted: true, responseBody: Buffer.from('<PRIVATE_PARTIAL'), responseHeaders: {} }));
+      if (committed) {
+        if (op === 'create') f.uploads.set(UploadId, new Map());
+        if (op === 'part') f.uploads.get(UploadId).set(1, { bytes: 4, etag: 'one' });
+        if (op === 'complete' || op === 'abort') f.uploads.clear();
+        if (op === 'complete') f.objects.push({ id: 'new', bytes: 4, latest: true });
+      }
+      f.time(10); await f.audit.verify(); f.time(12);
+      const result = f.audit.snapshot();
+      assert.equal(result.status, 'unknown'); assert.deepEqual(result.gaps, ['accounting:request-cutoff']);
+      assert.equal(result.objects.bytes, op === 'create' ? 0 : op === 'part' ? committed ? 4 : 0
+        : op === 'abort' && committed ? 0 : 4);
+      assert.equal(result.objects.unfinishedMultipart, op === 'create' ? committed ? 1 : 0
+        : (op === 'complete' || op === 'abort') && committed ? 0 : 1);
+      const bounds = op === 'create' ? { low: 0, high: 0 } : op === 'part'
+        ? committed ? { low: 8, high: 24 } : { low: 0, high: 0 }
+        : committed ? op === 'complete' ? { low: 16, high: 52 } : { low: 8, high: 28 }
+          : { low: 32, high: 36 };
+      assert.deepEqual(result.byteSeconds, bounds);
+      assert.ok(f.meter.snapshot().gaps.includes('accounting:request-cutoff'));
+      await f.audit.verify(); assert.deepEqual(f.audit.snapshot().gaps, ['accounting:request-cutoff']);
+      assert.doesNotMatch(JSON.stringify(f.audit.snapshot()), /PRIVATE|CANARY|UPLOAD|UploadId|VersionId/);
+      assert.equal(f.meter.diagnostics().firstInvalidation, null);
+    });
+  }
+}
+
+for (const versioned of [false, true]) for (const event of [
+  { statusCode: null, bytesOut: 0, interrupted: false },
+  { statusCode: 600, bytesOut: 0, interrupted: true },
+  { statusCode: 200, bytesOut: -1, interrupted: true },
+  { statusCode: 200, bytesOut: 5, interrupted: true },
+  { statusCode: 200, bytesOut: 0, interrupted: 'true' },
+]) test(`multipart malformed cutoff still refuses ${versioned}/${JSON.stringify(event)}`, async t => {
+  const f = await fixture(t, versioned); create(f);
+  assert.throws(() => f.audit.begin(input('part'))(event), bad);
+  assert.throws(() => f.meter.snapshot(), /Invalid cloud cost meter/);
+});
+
+for (const versioned of [false, true]) for (const op of ['create', 'part', 'complete', 'abort']) {
+  test(`real multipart lost reply collects and preserves inventory ${versioned}/${op}`, async t => {
+    const f = await fixture(t, versioned, { resolveMultipartReplies: false });
+    if (op !== 'create') create(f);
+    if (op === 'complete' || op === 'abort') part(f);
+    let received = 0;
+    const backend = createServer((req, res) => { req.resume(); req.once('end', () => {
+      received++;
+      if (op === 'create') f.uploads.set(UploadId, new Map());
+      if (op === 'part') f.uploads.get(UploadId).set(1, { bytes: 4, etag: 'one' });
+      if (op === 'complete' || op === 'abort') f.uploads.clear();
+      if (op === 'complete') f.objects.push({ id: 'new', bytes: 4, latest: true });
+      res.destroy();
+    }); });
+    backend.listen(0, '127.0.0.1'); await once(backend, 'listening');
+    t.after(() => { backend.closeAllConnections(); return new Promise(resolve => backend.close(resolve)); });
+    const meter = createMeter({ phase: 'workload', clock: () => 0 });
+    const front = await createLitestreamTransport({ target: `http://127.0.0.1:${backend.address().port}`,
+      meter, phase: 'workload', lifetimes: f.audit });
+    t.after(() => front.close().catch(() => {}));
+    f.time(6); const req = input(op);
+    await assert.rejects(new Promise((resolve, reject) => {
+      const caller = request(front.url + req.path, { method: req.method, headers: { ...req.headers,
+        'amz-sdk-invocation-id': '11111111-2222-4333-8444-555555555555', 'amz-sdk-request': 'attempt=1; max=1',
+      } }, async res => {
+        try { for await (const chunk of res) void chunk; resolve(res.statusCode); }
+        catch { reject(Error('Synthetic reply cutoff')); }
+      });
+      caller.once('error', () => reject(Error('Synthetic request cutoff')));
+      caller.end(op === 'part' ? Buffer.from('four') : req.body);
+    }), /Synthetic (request|reply) cutoff/);
+    await front.whenIdle(() => {}); await front.close();
+    f.time(10); await f.audit.verify();
+    assert.equal(received, 1);
+    assert.equal(f.audit.snapshot().objects.bytes, op === 'part' || op === 'complete' ? 4 : 0);
+    assert.equal(f.audit.snapshot().objects.unfinishedMultipart, op === 'part' || op === 'create' ? 1 : 0);
+    assert.equal(f.audit.snapshot().status, 'unknown');
+    assert.deepEqual(f.audit.snapshot().gaps, ['accounting:request-cutoff']);
+    assert.equal(meter.snapshot().accounting.requests[0].outcome, 'transport-error');
+    assert.equal(meter.snapshot().status, 'unknown');
+    assert.equal(meter.diagnostics().firstInvalidation, null);
+    assert.equal(front.checkpoint().pending, 0); assert.equal(front.checkpoint().connections, 0);
+  });
 }
 
 // Each case fails if a failed create is dropped or admitted without identifying its owned empty upload.
@@ -115,7 +209,7 @@ test('lostVersionedCompletionRetainsPriorVersion', async t => {
   assert.equal(f.audit.snapshot().objects.noncurrentVersions, 1); anonymous(f);
 });
 
-for (const versioned of [false, true]) for (const mode of ['foreign-create', 'create-parts', 'duplicate-create', 'part-size', 'part-missing', 'part-foreign', 'abort-part-change', 'completion-missing', 'completion-size', 'completion-still-upload', 'overlap', 'repeat-finish']) test(`ambiguousMultipartRefuses_${versioned}_${mode}`, async t => {
+for (const versioned of [false, true]) for (const mode of ['foreign-create', 'create-parts', 'duplicate-create', 'part-size', 'part-missing', 'part-foreign', 'abort-part-change', 'completion-missing', 'completion-size', 'completion-still-upload', 'overlap', 'repeat-finish']) test(mode === 'overlap' ? `settledMultipartAllowsIndependentCreate_${versioned}` : `ambiguousMultipartRefuses_${versioned}_${mode}`, async t => {
   const f = await fixture(t, versioned), op = mode.includes('create') ? 'create' : mode.startsWith('completion') ? 'complete' : mode.startsWith('abort') ? 'abort' : 'part';
   if (op !== 'create') { create(f); part(f); }
   lost(f, op, 6);
@@ -130,7 +224,16 @@ for (const versioned of [false, true]) for (const mode of ['foreign-create', 'cr
   if (mode.startsWith('completion') && mode !== 'completion-still-upload') f.uploads.clear();
   if (mode === 'completion-size' || mode === 'completion-still-upload') f.objects.push({ id: 'new', bytes: mode === 'completion-size' ? 5 : 4, latest: true });
   f.time(10);
-  if (mode === 'overlap') assert.throws(() => f.audit.begin(input('create')), bad);
+  if (mode === 'overlap') {
+    let finish; assert.doesNotThrow(() => { finish = f.audit.begin(input('create')); });
+    finish({ statusCode: null, bytesOut: 0, interrupted: true });
+    await assert.doesNotReject(f.audit.verify());
+    assert.equal(f.audit.snapshot().objects.bytes, 4);
+    assert.equal(f.audit.snapshot().objects.unfinishedMultipart, 1);
+    assert.equal(f.audit.snapshot().status, 'unknown');
+    assert.deepEqual(f.audit.snapshot().gaps, ['accounting:request-cutoff']);
+    assert.equal(f.meter.diagnostics().firstInvalidation, null);
+  }
   else if (mode === 'repeat-finish') {
     // A failed callback has settled its request; it cannot be applied twice.
     const g = await fixture(t, versioned); create(g); const end = g.audit.begin(input('part')); end({ statusCode: 503, bytesOut: 4 });
@@ -142,13 +245,22 @@ for (const versioned of [false, true]) for (const options of [{ resolveMultipart
   await assert.rejects(fixture(t, versioned, options), bad);
 });
 
-// Even explicit resolution cannot reconstruct partial transfers or successful malformed controls.
-for (const versioned of [false, true]) for (const mode of ['short', 'interrupted', 'status', 'malformed-success', 'empty-etag']) test(`ambiguousMultipartKeepsUnprovedTransfersRefused_${versioned}_${mode}`, async t => {
+// Malformed complete replies remain fatal; interrupted replies retain an accounting gap.
+for (const versioned of [false, true]) for (const mode of ['short', 'interrupted', 'status', 'malformed-success', 'empty-etag']) test(mode === 'interrupted'
+  ? `ambiguousMultipartRetainsUnknownInterruptedTransfer_${versioned}` : `ambiguousMultipartKeepsUnprovedTransfersRefused_${versioned}_${mode}`, async t => {
   const f = await fixture(t, versioned); create(f);
   const end = f.audit.begin(input('part'));
   const event = { statusCode: mode === 'status' ? 600 : mode === 'malformed-success' || mode === 'empty-etag' ? 200 : 503,
     bytesOut: mode === 'short' ? 3 : 4, interrupted: mode === 'interrupted', responseHeaders: {} };
   if (mode === 'empty-etag') event.responseHeaders.etag = '';
+  if (mode === 'interrupted') {
+    end(event); await f.audit.verify();
+    assert.equal(f.audit.snapshot().status, 'unknown');
+    assert.deepEqual(f.audit.snapshot().gaps, ['accounting:request-cutoff']);
+    assert.equal(f.audit.snapshot().objects.bytes, 0);
+    assert.equal(f.audit.snapshot().objects.unfinishedMultipart, 1);
+    assert.ok(f.meter.snapshot().gaps.includes('accounting:request-cutoff')); return;
+  }
   assert.throws(() => end(event), bad); assert.throws(() => f.meter.snapshot(), /Invalid cloud cost meter/);
 });
 
@@ -174,8 +286,12 @@ for (const versioned of [false, true]) test(`lostCreateMustMatchRequestedKey_${v
   f.time(10); await assert.rejects(f.audit.verify(), bad); assert.throws(() => f.meter.snapshot(), /Invalid cloud cost meter/);
 });
 
-for (const versioned of [false, true]) for (const method of ['GET', 'PUT', 'DELETE']) test(`lostReplyBlocksAllRequestsBeforeInventory_${versioned}_${method}`, async t => {
-  const f = await fixture(t, versioned); lost(f, 'create');
-  assert.throws(() => f.audit.begin({ method, path, headers: { 'content-length': '0' } }), bad);
-  assert.throws(() => f.meter.snapshot(), /Invalid cloud cost meter/);
+for (const versioned of [false, true]) for (const method of ['GET', 'PUT', 'DELETE']) test(`lostReplyAllowsSettledOrdinaryRequestsBeforeInventory_${versioned}_${method}`, async t => {
+  const f = await fixture(t, versioned); lost(f, 'create'); let finish;
+  assert.doesNotThrow(() => { finish = f.audit.begin({ method, path, headers: { 'content-length': '0' } }); });
+  finish({ statusCode: method === 'DELETE' ? 204 : 200, bytesOut: 0,
+    responseHeaders: { 'x-amz-version-id': 'ordinary', ...(method === 'DELETE' ? { 'x-amz-delete-marker': 'true' } : {}) } });
+  // Settle the request before checking that the unresolved upload still prevents a snapshot.
+  assert.throws(() => f.audit.snapshot(), bad);
+  assert.equal(f.meter.diagnostics().firstInvalidation, null);
 });

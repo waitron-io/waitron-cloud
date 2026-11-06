@@ -23,7 +23,11 @@ function run({ backendStatus = 200, versionId = null, transport = '1', holdIniti
     '/code/litestream.mjs': `import {createLitestreamTransport as open} from ${JSON.stringify(actual)};
       export * from ${JSON.stringify(actual)};
       export const createLitestreamTransport=async options=>options.phase==='restore'
-        ? {url:options.target,whenIdle:async action=>action(),snapshot:()=>({}),close:async()=>{}}:open(options);`,
+        ? {url:options.target,whenIdle:async action=>action(),snapshot:()=>({}),close:async()=>{}}:(async()=>{
+          const transport=await open(options);return {...transport,close:async()=>{
+            console.error(JSON.stringify({kind:'cutoff-collection',status:'started',diagnostic:transport.checkpoint()}));
+            try{return await transport.close();}finally{console.error(JSON.stringify({kind:'cutoff-collection',status:'collected',diagnostic:transport.checkpoint()}));}
+          }};})();`,
     'node:http': `const http=process.getBuiltinModule('http');let firstServer=true;
       export function createServer(listener){
         if(!firstServer)return http.createServer(listener);firstServer=false;
@@ -201,20 +205,21 @@ for (const incomplete of ['request', 'response']) test(`the smoke refuses an inc
 });
 
 // Forwarding backend errors releases the writer so an interrupted reply can finish its refusal.
-test('the smoke handles an actually truncated backend PUT reply without certifying it', () => {
+test('the smoke collects a truncated backend PUT reply with unknown accounting and a stand-in restore', () => {
   const result = run({ backendReply: 'truncated' });
   assert.equal(result.error, undefined, 'collect the smoke before its subprocess deadline');
-  assert.equal(result.status, 1, result.stderr);
-  assert.equal(result.stdout, '', 'an interrupted reply cannot publish a measurement');
+  assert.equal(result.status, 0, result.stderr);
+  const output=JSON.parse(result.stdout);
+  assert.equal(output.observed.status,'unknown');assert.ok(output.observed.gaps.includes('accounting:request-cutoff'));
+  assert.equal(output.restoredSales,2);assert.equal(output.integrity,'ok');
   const records = result.stderr.split('\n').filter(line => line.startsWith('{')).map(line => JSON.parse(line));
   assert.deepEqual(records.filter(row => row.kind === 'backend-reply'), [{ kind: 'backend-reply', responseBytes: 1,
     requestComplete: true, responseComplete: false, requestBytes: 4, expectedRequestBytes: 4,
     statusCode: 200, expectedResponseBytes: 4 }]);
-  assert.equal(records.find(row => row.kind === 'litestream-stop')?.step, 'idle', result.stderr);
-  const diagnostic = records.find(row => row.kind === 'litestream-stop')?.diagnostic;
+  const diagnostic = records.find(row => row.kind === 'cutoff-collection' && row.status === 'collected')?.diagnostic;
   assert.equal(diagnostic?.reason, 'upstream-response-interrupted');
   assert.equal(diagnostic?.ioEvent, 'response-aborted');
-  assert.match(result.stderr, /Synthetic Litestream phase: stop/);
+  assert.equal(diagnostic.pending,0);assert.equal(diagnostic.connections,0);
   assert.doesNotMatch(result.stderr, /Unhandled 'error' event|uncaughtException|Synthetic Litestream phase: restore/);
 });
 
@@ -236,23 +241,23 @@ test('the smoke certifies the paired complete backend PUT reply with its actual 
 });
 
 // A real short body must finish refusal and collection without publishing restore evidence.
-test('the smoke collects a genuinely truncated PUT body without certifying it', () => {
+test('the smoke collects a truncated PUT body with unknown accounting and a stand-in restore', () => {
   const result = run({ uploadBody: 'truncated' });
   assert.equal(result.error, undefined, 'collect the smoke within its subprocess deadline');
-  assert.equal(result.status, 1, result.stderr);
-  assert.equal(result.stdout, '', 'a short upload cannot publish a measurement');
+  assert.equal(result.status, 0, result.stderr);
+  const output=JSON.parse(result.stdout);assert.equal(output.observed.status,'unknown');
+  assert.ok(output.observed.gaps.includes('accounting:request-cutoff'));
+  assert.equal(output.restoredSales,2);assert.equal(output.integrity,'ok');
   const records = result.stderr.split('\n').filter(line => line.startsWith('{')).map(line => JSON.parse(line));
   assert.deepEqual(records.filter(row => row.kind === 'upload-body'), [{ kind: 'upload-body',
     requestBytes: 1, expectedRequestBytes: 4, requestComplete: false }]);
-  const stop = records.find(row => row.kind === 'litestream-stop');
-  assert.equal(stop?.step, 'idle', result.stderr);
+  const stop = records.find(row => row.kind === 'cutoff-collection' && row.status === 'collected');
   assert.equal(stop.diagnostic.reason, 'client-error', result.stderr);
   assert.equal(stop.diagnostic.ioEvent, 'client-error', result.stderr);
-  assert.equal(records.some(row => row.kind === 'restore-started'), false);
+  assert.equal(records.some(row => row.kind === 'restore-started'), true);
   assert.equal(stop.diagnostic.pending, 0);
   assert.equal(stop.diagnostic.completed, 3);
-  const collected = records.find(row => row.kind === 'litestream-close'
-    && row.stage === 'cleanup-replication-transport' && row.status === 'rejected');
+  const collected = records.find(row => row.kind === 'cutoff-collection' && row.status === 'collected');
   assert.equal(collected?.diagnostic.pending, 0, result.stderr);
   assert.equal(collected?.diagnostic.connections, 0, result.stderr);
   for (const stage of ['cleanup-replication-transport', 'cleanup-restore-transport',
@@ -279,14 +284,14 @@ test('the paired complete PUT body reconciles both hops and completes the stand-
   assert.equal(records.filter(row => row.kind === 'restore-started').length, 1);
 });
 
-test('the smoke prints aborted reply progress in its stop and cleanup reports', () => {
+test('the smoke retains aborted reply progress before and after successful owned collection', () => {
   const result = run({ backendReply: 'truncated' });
-  assert.equal(result.error, undefined); assert.equal(result.status, 1, result.stderr); assert.equal(result.stdout, '');
+  assert.equal(result.error, undefined); assert.equal(result.status, 0, result.stderr);
+  const output=JSON.parse(result.stdout);assert.equal(output.observed.status,'unknown');
+  assert.equal(output.restoredSales,2);assert.equal(output.integrity,'ok');
   const records = result.stderr.split('\n').filter(line => line.startsWith('{')).map(line => JSON.parse(line));
-  const stop = records.find(row => row.kind === 'litestream-stop');
-  const close = records.find(row => row.kind === 'litestream-close'
-    && row.stage === 'cleanup-replication-transport' && row.status === 'rejected');
-  assert.equal(stop?.step, 'idle');
+  const stop = records.find(row => row.kind === 'cutoff-collection' && row.status === 'started');
+  const close = records.find(row => row.kind === 'cutoff-collection' && row.status === 'collected');
   for (const detail of [stop?.diagnostic, close?.diagnostic]) {
     assert.equal(detail?.ioEvent, 'response-aborted');
     assert.equal(detail.bytesIn, 1); assert.equal(detail.expectedIn, 4);

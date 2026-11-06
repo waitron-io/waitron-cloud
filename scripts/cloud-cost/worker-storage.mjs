@@ -8,7 +8,12 @@ import { assertOwnedRoot } from './schema.mjs';
 
 const fail = () => { throw Error('Invalid cloud cost worker storage'); };
 const need = value => { if (!value) fail(); };
-export const streamCounters = ({ reconciled, accounting, observedRequests }) => ({ reconciled, accounting, observedRequests });
+export const streamCounters = value => {
+  const { reconciled, accounting, observedRequests } = value;
+  // Equal transfer totals do not establish billing; retain original evidence before projection.
+  return structuredClone(value.status === 'unknown' || value.gaps?.length || value.billing?.some(row => row.status === 'unknown')
+    ? value : { reconciled, accounting, observedRequests });
+};
 
 // Only the isolated worker may start this local backend. Its bucket and directory are fresh.
 // No host port, provider endpoint or caller-selected deletion target is admitted here.
@@ -16,6 +21,7 @@ export async function openWorkerStorage(args) {
   const { sdk, signal } = args, directory = join(args.root, 'local-storage');
   let identity, child, done, proxy, client, meter, created = false, stopping = false, exited = false, bad = false, disposal, evidence;
   let retained, retainedInvalid = false, last = -Infinity;
+  let bucketCreated = false, bucketRemoved = false;
   let stage = 'storage-health', reported = false;
   const refused = (operation = stage) => {
     if (reported) return;
@@ -129,22 +135,25 @@ export async function openWorkerStorage(args) {
         await send(new sdk.DeleteBucketCommand({ Bucket: bucket }));
       }
       need(!await bucketPresent() && !(await bucketInventory()).some(b => b.Name === bucket));
+      bucketRemoved = true;
       stage = 'bucket-ownership';
       record({ kind: 'storage-bucket', state: 'removed', bucket }); created = false;
     });
     let counters;
     await attempt(async () => { if (meter) {
       stage = 'accounting';
-      const value = meter.snapshot(); need(value.reconciled); counters = streamCounters(value);
+      const value = meter.snapshot(); counters = value;
       if (retained) {
         stage = 'retained-accounting';
         need(!retainedInvalid && retained.deleted === retained.objects);
         const windowSeconds = now() - retained.since;
-        need(Number.isFinite(retained.high) && retained.high >= retained.low && retained.low >= 0
+        const overflow = !Number.isFinite(retained.high) || retained.high > Number.MAX_SAFE_INTEGER;
+        if (!overflow) need(retained.high >= retained.low && retained.low >= 0
           && retained.high <= retained.bytes * windowSeconds);
-        counters.retainedStorage = { status: 'measured', scope: 'unversioned-cleanup-tail', windowSeconds,
+        counters.retainedStorage = { status: overflow ? 'unknown' : 'measured', scope: 'unversioned-cleanup-tail',
+          ...(overflow ? { gaps: ['accounting:overflow'] } : {}), windowSeconds,
           initialBytes: retained.bytes, deletedObjects: retained.deleted, remainingBytes: 0, remainingObjects: 0,
-          byteSeconds: { low: retained.low, high: retained.high } };
+          byteSeconds: overflow ? { low: null, high: null } : { low: retained.low, high: retained.high } };
       }
     } });
     await attempt(async () => { stage = 'client-close'; client?.destroy(); });
@@ -165,7 +174,8 @@ export async function openWorkerStorage(args) {
       record({ kind: 'storage-root', state: 'cleanup-intent', path: directory }); rmSync(directory, { recursive: true });
       need(!existsSync(directory)); record({ kind: 'storage-root', state: 'removed', path: directory });
     });
-    if (failures.length || retainedInvalid) fail(); return counters;
+    if (failures.length || retainedInvalid) fail();
+    return counters && { ...counters, functional: { bucketCreated, bucketRemoved } };
   })().catch(error => { refused(); throw error; });
   try {
     assertOwnedRoot(args); healthy();
@@ -194,6 +204,7 @@ export async function openWorkerStorage(args) {
     need(ready); healthy();
     record({ kind: 'storage-bucket', state: 'intent', bucket }); created = true;
     await send(new sdk.CreateBucketCommand({ Bucket: bucket }));
+    bucketCreated = true;
     need((await listObjects()).length === 0 && (await uploads()).length === 0);
     healthy();
     record({ kind: 'storage-bucket', state: 'ready', bucket });

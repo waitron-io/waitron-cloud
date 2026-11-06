@@ -51,10 +51,16 @@ for (const value of [-1, NaN, Infinity]) test(`a refused snapshot identifies the
   assert.deepEqual(diagnostics(f.meter), { firstInvalidation: null, snapshotRefusal: 'clock', pendingAttempts: 0 });
 });
 
-test('a refused snapshot distinguishes storage integration overflow from clock failure', () => {
+test('storage integration overflow becomes unknown while clock failure still refuses', () => {
   const f = fixture(); f.meter.observeObject({ ...object, bytes: Number.MAX_SAFE_INTEGER }); f.time(1e308);
+  const result = f.meter.snapshot();
+  assert.equal(result.status, 'unknown');
+  assert.deepEqual(result.gaps, ['accounting:overflow']);
+  assert.equal(result.accounting.objects[0].byteSeconds, null);
+  assert.equal(diagnostics(f.meter).snapshotRefusal, null);
+  f.time(-1);
   assert.throws(() => f.meter.snapshot(), refused);
-  assert.equal(diagnostics(f.meter).snapshotRefusal, 'storage-integral');
+  assert.equal(diagnostics(f.meter).snapshotRefusal, 'clock');
 });
 
 test('a refused snapshot identifies after-stop refusal without reading its error', () => {
@@ -65,12 +71,18 @@ test('a refused snapshot identifies after-stop refusal without reading its error
   assert.deepEqual(diagnostics(meter), { firstInvalidation: null, snapshotRefusal: 'after-stop', pendingAttempts: 0 });
 });
 
-test('unsafe aggregate byte totals remain refused and identify their guard', () => {
+test('unsafe aggregate byte totals remain unknown without refusing valid individual observations', () => {
   const { meter } = fixture();
   for (const token of ['PRIVATE_ONE', 'PRIVATE_TWO']) for (const channel of ['producer', 'observer'])
     meter.observeAttempt(attempt(token, channel, Number.MAX_SAFE_INTEGER));
-  assert.throws(() => meter.snapshot(), refused);
-  assert.equal(diagnostics(meter).snapshotRefusal, 'attempt-totals');
+  const result = meter.snapshot();
+  assert.equal(result.status, 'unknown');
+  assert.deepEqual(result.gaps, ['accounting:overflow']);
+  assert.equal(result.accounting.producer.bytesOut, null);
+  assert.equal(result.accounting.observer.bytesOut, null);
+  assert.equal(result.accounting.discrepancy.bytesOut, null);
+  assert.equal(result.accounting.producer.attempts, 2);
+  assert.equal(diagnostics(meter).snapshotRefusal, null);
 });
 
 test('reading diagnostics does not advance the clock or alter valid accounting', () => {

@@ -3,6 +3,7 @@ import { once } from 'node:events';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { Readable } from 'node:stream';
 import { randomUUID } from 'node:crypto';
+import { isAccountingGap } from './accounting-policy.mjs';
 
 const fail = () => { throw new Error('Invalid cloud cost meter'); };
 const requireThat = condition => { if (!condition) fail(); };
@@ -35,6 +36,8 @@ function validateAttempt(e) {
   return structuredClone(e);
 }
 function billable(e) {
+  // A matching partial transfer does not independently witness complete request billing.
+  if (e.outcome === 'transport-error') return null;
   const requestClass = requestClasses[e.operation];
   if (requestClass === 's3-control') return null;
   if (requestClass === 's3-delete') return 0;
@@ -55,14 +58,28 @@ export function createMeter({ phase, clock, afterStop }) {
   const pending = new Set();
   let lastTime = clock(); requireThat(Number.isFinite(lastTime) && lastTime >= 0);
   let invalid = false;
+  const accountingGaps = new Set();
   let firstInvalidation = null, snapshotRefusal = null, advanceGuard = null;
   const invalidate = boundary => { invalid = true; firstInvalidation ??= boundary; afterStop?.invalidate(); };
+  const markGap = code => {
+    if (!isAccountingGap(code)) { invalidate('mark-gap'); fail(); }
+    accountingGaps.add(code);
+  };
+  const addQuantity = (left, right, gaps) => {
+    const value = left === null || right === null ? null : left + right;
+    if (value === null || !Number.isFinite(value) || value > Number.MAX_SAFE_INTEGER) {
+      gaps.add('accounting:overflow'); return null;
+    }
+    return value;
+  };
   const advance = () => {
     advanceGuard = 'clock';
     const time = clock(); requireThat(Number.isFinite(time) && time >= lastTime);
     advanceGuard = 'storage-integral';
-    for (const o of objects.values()) if (!o.deleted) rows.get(o.class).byteSeconds += o.bytes * (time - lastTime);
-    requireThat([...rows.values()].every(r => Number.isFinite(r.byteSeconds)));
+    for (const o of objects.values()) if (!o.deleted) {
+      const row = rows.get(o.class);
+      row.byteSeconds = addQuantity(row.byteSeconds, o.bytes * (time - lastTime), accountingGaps);
+    }
     lastTime = time;
   };
   const observeAttempt = (event, interruption = null) => {
@@ -70,6 +87,7 @@ export function createMeter({ phase, clock, afterStop }) {
       const e = validateAttempt(event);
       requireThat(!attempts[e.channel].has(e.token)); advance(); attempts[e.channel].set(e.token, e);
       const acceptedInterruption = afterStop?.settle(e, interruption) ?? false;
+      if (e.outcome === 'transport-error') markGap('accounting:request-cutoff');
       if (e.channel === 'observer') pending.delete(e.token);
       return acceptedInterruption;
     } catch { invalidate('observe-attempt'); fail(); }
@@ -105,10 +123,11 @@ export function createMeter({ phase, clock, afterStop }) {
     try {
       requireThat(!invalid && pending.size === 0);
       guard = 'advance'; advance(); guard = 'aggregation';
-      const producer = totals(); const observer = totals(); const requests = new Map(); const observedRequests = new Map(); const billing = new Map(); const gaps = [];
+      const producer = totals(); const observer = totals(); const requests = new Map(); const observedRequests = new Map(); const billing = new Map();
+      const gaps = new Set(accountingGaps);
       for (const channel of ['producer', 'observer']) for (const e of attempts[channel].values()) {
         const total = channel === 'producer' ? producer : observer;
-        total.attempts++; total.bytesIn += e.bytesIn; total.bytesOut += e.bytesOut;
+        total.attempts++; total.bytesIn = addQuantity(total.bytesIn, e.bytesIn, gaps); total.bytesOut = addQuantity(total.bytesOut, e.bytesOut, gaps);
         const requestClass = requestClasses[e.operation]; const key = [e.phase, e.operation, e.outcome, e.retryOrdinal].join(':');
         const table = channel === 'producer' ? requests : observedRequests;
         if (!table.has(key)) table.set(key, { phase: e.phase, operation: e.operation, requestClass, outcome: e.outcome,
@@ -116,34 +135,48 @@ export function createMeter({ phase, clock, afterStop }) {
           bytesIn: 0, bytesOut: 0, attemptedBytesIn: 0, attemptedBytesOut: 0 });
         const r = table.get(key); r.attempts++; r[e.outcome === 'success' ? 'successful' : 'failed']++;
         if (e.retryOrdinal > 0) r.retried++;
-        for (const k of ['bytesIn', 'bytesOut', 'attemptedBytesIn', 'attemptedBytesOut']) r[k] += e[k];
+        for (const k of ['bytesIn', 'bytesOut', 'attemptedBytesIn', 'attemptedBytesOut']) r[k] = addQuantity(r[k], e[k], gaps);
         if (channel !== 'producer') continue;
         const billingKey = `${e.phase}:${requestClass}`;
         if (!billing.has(billingKey)) billing.set(billingKey, { phase: e.phase, requestClass, quantity: 0, status: 'measured' });
-        const b = billing.get(billingKey); const quantity = billable(e);
-        if (quantity === null) { b.quantity = null; b.status = 'unknown'; gaps.push('request-billing:unknown'); }
+        const b = billing.get(billingKey); let quantity = billable(e);
+        const witness = attempts.observer.get(e.token);
+        if (witness && billable(witness) !== quantity) quantity = null;
+        if (quantity === null) { b.quantity = null; b.status = 'unknown'; gaps.add('request-billing:unknown'); }
         else if (b.quantity !== null) b.quantity += quantity;
       }
       guard = 'after-stop'; const subset = afterStop?.snapshot();
+      for (const gap of subset?.gaps ?? []) gaps.add(gap);
       guard = 'aggregation';
       const incomplete = subset?.gaps.includes('after-stop:list-response-interrupted') === true;
-      const discrepancy = Object.fromEntries(Object.keys(producer).map(k => [k, observer[k] - producer[k]]));
+      const discrepancy = Object.fromEntries(Object.keys(producer).map(k => [k,
+        observer[k] === null || producer[k] === null ? null : observer[k] - producer[k]]));
       const same = (p, o) => o && ['phase', 'operation', 'retryOrdinal', 'outcome', 'statusCode', 'bytesIn', 'bytesOut',
         'attemptedBytesIn', 'attemptedBytesOut'].every(k => p[k] === o[k]);
       const reconciled = attempts.producer.size === attempts.observer.size
         && [...attempts.producer].every(([id, p]) => same(p, attempts.observer.get(id)));
       if (!reconciled || incomplete) {
-        if (!reconciled) gaps.push('accounting:unreconciled');
-        if (incomplete) gaps.push('request-billing:unknown', 'after-stop:list-response-interrupted');
-        for (const row of billing.values()) { row.quantity = null; row.status = 'unknown'; }
+        if (!reconciled) gaps.add('accounting:unreconciled');
+        if (incomplete) { gaps.add('request-billing:unknown'); gaps.add('after-stop:list-response-interrupted'); }
+        const unknown = event => {
+          const requestClass = requestClasses[event.operation], key = `${event.phase}:${requestClass}`;
+          // Either hop can reveal an unwitnessed request in this phase and billing class.
+          billing.set(key, { phase: event.phase, requestClass, quantity: null, status: 'unknown' });
+        };
+        for (const id of new Set([...attempts.producer.keys(), ...attempts.observer.keys()])) {
+          const p = attempts.producer.get(id), o = attempts.observer.get(id);
+          if (!p || !same(p, o)) { if (p) unknown(p); if (o) unknown(o); }
+        }
+        if (incomplete) for (const row of subset.requests)
+          if (row.operation === 'list' && row.outcome === 'transport-error') unknown(row);
       }
       const aggregatedObjects = [...rows.values()].map(r => ({ ...r, bytes: 0, currentVersions: 0, noncurrentVersions: 0, deleteMarkers: 0, unfinishedMultipart: 0 }));
       for (const o of objects.values()) if (!o.deleted) {
-        const r = aggregatedObjects.find(r => r.class === o.class); r.bytes += o.bytes;
+        const r = aggregatedObjects.find(r => r.class === o.class); r.bytes = addQuantity(r.bytes, o.bytes, gaps);
         r[{ current: 'currentVersions', noncurrent: 'noncurrentVersions', marker: 'deleteMarkers', multipart: 'unfinishedMultipart' }[o.state]]++;
       }
-      guard = 'attempt-totals'; requireThat([producer, observer].every(t => Object.values(t).every(count)));
-      return { status: reconciled && !incomplete ? 'measured' : 'unknown', reconciled, gaps: [...new Set(gaps)], billing: [...billing.values()],
+      return { status: reconciled && !incomplete && subset?.status !== 'unknown' && accountingGaps.size === 0 && !gaps.has('accounting:overflow') ? 'measured' : 'unknown',
+        reconciled, gaps: [...gaps], billing: [...billing.values()],
         observedRequests: [...observedRequests.values()],
         accounting: { requests: [...requests.values()], objects: aggregatedObjects, producer, observer, discrepancy } };
     } catch { snapshotRefusal = guard === 'advance' ? advanceGuard : guard; fail(); }
@@ -154,16 +187,18 @@ export function createMeter({ phase, clock, afterStop }) {
   };
   const checkpoint = () => {
     const producer = totals(), observer = totals(), outcomes = new Map();
+    const gaps = new Set();
     for (const hop of ['producer', 'observer']) for (const row of attempts[hop].values()) {
-      const sum = hop === 'producer' ? producer : observer;
-      sum.attempts++; sum.bytesIn += row.bytesIn; sum.bytesOut += row.bytesOut;
+      const total = hop === 'producer' ? producer : observer;
+      total.attempts++;
+      for (const key of ['bytesIn', 'bytesOut']) total[key] = addQuantity(total[key], row[key], gaps);
       const key = hop + ':' + row.outcome;
       if (!outcomes.has(key)) outcomes.set(key, { hop, outcome: row.outcome, attempts: 0 });
       outcomes.get(key).attempts++;
     }
     return { pending: pending.size, producer, observer, outcomes: [...outcomes.values()] };
   };
-  return { observeAttempt, observeObject, snapshot, checkpoint, beginAttempt, ...(afterStop ? { afterStop } : {}),
+  return { observeAttempt, observeObject, snapshot, checkpoint, beginAttempt, markGap, ...(afterStop ? { afterStop } : {}),
     // Closed labels retain the first invalidation without reading event fields or advancing accounting.
     diagnostics: () => ({ firstInvalidation, snapshotRefusal, pendingAttempts: pending.size }),
     invalidate: () => invalidate('explicit') };

@@ -21,6 +21,14 @@ async function fixture(t, versioned = false) {
     req.on('data', chunk => chunks.push(chunk));
     req.on('end', () => {
       const url = new URL(req.url, 'http://local'), bytes = Buffer.concat(chunks);
+      const end = body => {
+        if (state.cutoff === req.method && !url.search) { state.cutoff = null; res.destroy(); }
+        else if (state.partial === req.method && !url.search) {
+          state.partial = null; state.cutoffConnection = res;
+          res.writeHead(200, { 'content-length': '4' }); res.write('x');
+        }
+        else res.end(body);
+      };
       if (req.method === 'POST' && url.searchParams.has('uploads')) {
         res.end(`<InitiateMultipartUploadResult><Bucket>${bucket}</Bucket><Key>${key}</Key><UploadId>part-upload</UploadId></InitiateMultipartUploadResult>`);
       } else if (req.method === 'PUT' && url.searchParams.has('uploadId')) {
@@ -29,7 +37,7 @@ async function fixture(t, versioned = false) {
         if (!versioned) rows.length = 0;
         const row = { version: 'v' + ++number, bytes: bytes.length, marker: false }; rows.push(row);
         if (versioned) res.setHeader('x-amz-version-id', row.version);
-        if (state.failedWrites-- > 0) { res.writeHead(503); res.end('no'); } else res.end();
+        if (state.failedWrites-- > 0) { res.writeHead(503); res.end('no'); } else end();
       } else if (req.method === 'DELETE') {
         const version = url.searchParams.get('versionId');
         if (!versioned) rows.length = 0;
@@ -38,7 +46,7 @@ async function fixture(t, versioned = false) {
           const row = { version: 'v' + ++number, bytes: Buffer.byteLength(key), marker: true }; rows.push(row);
           res.setHeader('x-amz-version-id', row.version); res.setHeader('x-amz-delete-marker', 'true');
         }
-        res.writeHead(204); res.end();
+        res.writeHead(204); end();
       } else if (url.searchParams.has('versioning')) {
         res.end(`<VersioningConfiguration>${state.versioned ? '<Status>Enabled</Status>' : ''}</VersioningConfiguration>`);
       } else if (url.searchParams.has('uploads')) {
@@ -56,7 +64,7 @@ async function fixture(t, versioned = false) {
         if (state.holdList) { const hold = state.holdList; state.holdList = null; hold(respond); }
         else respond();
       } else {
-        res.end(Buffer.alloc(rows.at(-1)?.bytes ?? 0));
+        end(Buffer.alloc(rows.at(-1)?.bytes ?? 0));
       }
     });
   });
@@ -386,4 +394,80 @@ test('streamMeasurementUploadReadinessExcludesACompletedMultipartPart', async t 
   assert.equal(ready, false, 'a completed part cannot release startup');
   assert.equal(await send(session.url, 'PUT', 4, 3), 200);
   await waiting; assert.equal(ready, true);
+});
+
+// Retaining the callback, checkpoint, or final accounting fence breaks these real cutoffs.
+for (const versioned of [false, true]) for (const phase of ['startup', 'workload', 'restore'])
+  for (const method of ['GET', 'HEAD', 'PUT', 'DELETE'])
+    test(`gappedCheckpointStillPermitsLaterWork_${versioned}_${phase}_${method}`, { timeout: 10000 }, async t => {
+      const f = await fixture(t, versioned), session = await open(t, f);
+      f.time(2); assert.equal(await send(session.url, 'PUT', 4, 1), 200);
+      f.time(3); session.setPhase(phase); f.state.cutoff = method;
+      await assert.rejects(send(session.url, method, method === 'PUT' ? 6 : 0, 2), /ECONNRESET|socket hang up/);
+      assert.equal(f.state.cutoff, null, 'the backend receives the operation before losing its reply');
+      await assert.doesNotReject(() => session.whenIdle(() => {}), 'settled cutoff must not block functional work');
+      f.time(4); let checked;
+      await assert.doesNotReject(async () => { checked = await session.checkpoint(); }, 'gapped checkpoint remains usable');
+      assert.equal(checked.requests.status, 'unknown');
+      assert.ok(checked.requests.gaps.includes('accounting:request-cutoff'));
+      assert.ok(checked.requests.gaps.includes('request-billing:unknown'));
+      assert.equal(checked.storage.objects.currentVersions, method === 'DELETE' ? 0 : 1);
+      f.time(5); assert.equal(await send(session.url, 'PUT', 8, 3), 200);
+      f.time(6); let result;
+      await assert.doesNotReject(async () => { result = await session.finish(); }, 'gapped completion still collects resources');
+      assert.equal(result.status, 'unknown');
+      assert.ok(result.gaps.includes('accounting:request-cutoff'));
+      assert.equal(result.requests.status, 'unknown', 'later clean work cannot erase the earlier gap');
+      assert.equal(result.storage.objects.currentVersions, 1);
+      assert.deepEqual(result.cleanup, { listeners: 0, clients: 0 });
+      assert.doesNotMatch(JSON.stringify(result), /PRIVATE|CANARY|synthetic-session|127\.0\.0\.1|11111111/);
+      const again = await session.finish(); assert.deepEqual(again, result);
+      result.gaps.length = 0; assert.ok((await session.finish()).gaps.length > 0);
+      await stopped(session.url);
+    });
+
+// A correct unknown result cannot hide failed collection or an ownership violation.
+for (const fault of ['destroy', 'foreign-inventory', 'cancel'])
+  test(`cleanupFailureWithAccountingGapStillFails_${fault}`, { timeout: 10000 }, async t => {
+    const f = await fixture(t), controller = new AbortController();
+    const session = await open(t, f, { signal: controller.signal });
+    f.time(2); assert.equal(await send(session.url, 'PUT', 4, 1), 200);
+    f.state.cutoff = 'GET'; await assert.rejects(send(session.url, 'GET', 0, 2), /ECONNRESET|socket hang up/);
+    await assert.doesNotReject(() => session.whenIdle(() => {}), 'settled cutoff must not block functional work');
+    if (fault === 'destroy') {
+      const destroy = sdk.S3Client.prototype.destroy;
+      t.mock.method(sdk.S3Client.prototype, 'destroy', function () { destroy.call(this); throw Error('PRIVATE_CLEANUP_CANARY'); });
+    } else if (fault === 'foreign-inventory') f.state.extra = true;
+    else controller.abort();
+    await assert.rejects(session.finish(), bad);
+    await stopped(session.url);
+    await assert.rejects(session.finish(), bad);
+  });
+
+// A response status alone cannot release upload readiness after its body was interrupted.
+test('interruptedUploadStatusCannotReleaseFunctionalReadiness', { timeout: 10000 }, async t => {
+  const f = await fixture(t), session = await open(t, f);
+  let ready = false; const waiting = session.waitForUpload().then(() => { ready = true; });
+  f.state.partial = 'PUT';
+  await assert.rejects(new Promise((resolve, reject) => {
+    const req = request(session.url + '/' + bucket + '/' + key, { method: 'PUT', agent: false, headers: {
+      'content-length': '4', 'amz-sdk-invocation-id': '11111111-2222-4333-8444-000000000001',
+      'amz-sdk-request': 'attempt=1; max=2',
+    } }, res => {
+      assert.equal(res.statusCode, 200); res.once('data', () => f.state.cutoffConnection.destroy());
+      res.on('error', reject); res.on('end', resolve);
+    });
+    req.on('error', reject); req.end('four');
+  }), /aborted|ECONNRESET|socket hang up/);
+  await assert.doesNotReject(() => session.whenIdle(() => {}), 'settled partial reply must permit later functional work');
+  assert.equal(ready, false, 'incomplete upload response cannot establish successful startup');
+  const checkpoint = await session.checkpoint();
+  assert.equal(checkpoint.storage.objects.bytes, 4, 'independent storage readback still observes committed bytes');
+  assert.equal(checkpoint.requests.status, 'unknown');
+  assert.equal(await send(session.url, 'PUT', 4, 2), 200);
+  await waiting; assert.equal(ready, true);
+  const result = await session.finish();
+  assert.equal(result.status, 'unknown');
+  assert.ok(result.gaps.includes('accounting:request-cutoff'));
+  await stopped(session.url);
 });

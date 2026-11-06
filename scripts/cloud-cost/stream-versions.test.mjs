@@ -58,6 +58,58 @@ function success(f, audit, input, start, end, id, marker) {
     responseHeaders: reply(id, marker) });
 }
 
+test('versionedLifetimeOverflowRetainsSafeLowerBoundAfterVersionRemoval', async t => {
+  const f = await fixture(t), audit = await open(f);
+  success(f, audit, put(Number.MAX_SAFE_INTEGER), 0, 1, 'first'); f.add('first', Number.MAX_SAFE_INTEGER);
+  f.time(1); await audit.verify();
+  assert.equal(audit.snapshot().status, 'measured');
+  assert.deepEqual(audit.snapshot().byteSeconds, { low: 0, high: 9007199254740991 });
+  f.time(2);
+  assert.deepEqual(audit.snapshot().byteSeconds, { low: 9007199254740991, high: null });
+  assert.deepEqual(audit.snapshot().gaps, ['accounting:overflow']);
+  success(f, audit, del('first'), 2, 2, 'first', false); f.remove('first');
+  await audit.verify(); f.time(3);
+  assert.equal(audit.snapshot().status, 'unknown');
+  assert.equal(audit.snapshot().objects.bytes, 0);
+  assert.equal(audit.snapshot().objects.currentVersions, 0);
+  assert.deepEqual(audit.snapshot().byteSeconds, { low: 9007199254740991, high: null });
+  assert.equal(f.meter.snapshot().status, 'unknown');
+  assert.deepEqual(f.meter.snapshot().gaps, ['accounting:overflow', 'request-billing:unknown']);
+});
+
+test('versionedAggregateBytesOverflowKeepsEveryRetainedVersionCount', async t => {
+  const f = await fixture(t), audit = await open(f);
+  success(f, audit, put(Number.MAX_SAFE_INTEGER), 0, 0, 'first'); f.add('first', Number.MAX_SAFE_INTEGER);
+  success(f, audit, put(1), 0, 0, 'second'); f.add('second', 1);
+  await audit.verify();
+  assert.deepEqual(audit.snapshot(), { status: 'unknown', scope: 'versioned-object-history', windowSeconds: 0,
+    objects: { class: 'stream', bytes: null, currentVersions: 1, noncurrentVersions: 1, deleteMarkers: 0, unfinishedMultipart: 0 },
+    byteSeconds: { low: 0, high: 0 }, gaps: ['accounting:overflow'] });
+  assert.equal(f.meter.snapshot().status, 'unknown');
+});
+
+test('versionedOverflowCannotHideUnsafeClockOrForeignVersion', async t => {
+  for (const mode of ['clock', 'foreign']) {
+    const f = await fixture(t), audit = await open(f);
+    success(f, audit, put(Number.MAX_SAFE_INTEGER), 0, 1, 'first'); f.add('first', Number.MAX_SAFE_INTEGER);
+    f.time(3); await audit.verify(); assert.equal(audit.snapshot().status, 'unknown');
+    if (mode === 'clock') { f.time(2); assert.throws(() => audit.snapshot(), bad); }
+    else { f.add('FOREIGN_PRIVATE', 1); await assert.rejects(audit.verify(), bad); }
+    assert.throws(() => f.meter.snapshot(), /Invalid cloud cost meter/);
+  }
+});
+
+test('versionedLifetimeGapSurvivesCleanupThatMakesTheCurrentTotalSafe', async t => {
+  const f = await fixture(t), audit = await open(f);
+  success(f, audit, put(Number.MAX_SAFE_INTEGER), 0, 0, 'first'); f.add('first', Number.MAX_SAFE_INTEGER);
+  success(f, audit, put(1), 0, 0, 'second'); f.add('second', 1);
+  await audit.verify(); assert.equal(audit.snapshot().objects.bytes, null);
+  success(f, audit, del('first'), 0, 0, 'first', false); f.remove('first'); await audit.verify();
+  assert.deepEqual(audit.snapshot(), { status: 'unknown', scope: 'versioned-object-history', windowSeconds: 0,
+    objects: { class: 'stream', bytes: 1, currentVersions: 1, noncurrentVersions: 0, deleteMarkers: 0, unfinishedMultipart: 0 },
+    byteSeconds: { low: 0, high: 0 }, gaps: ['accounting:overflow'] });
+});
+
 // Earlier versions remain billable when a new current version or a marker replaces them.
 test('nativeVersionsRetainEveryVersionAndUtf8MarkerAcrossPromotionAndDeletion', async t => {
   const f = await fixture(t), audit = await open(f);
@@ -132,13 +184,22 @@ test('nativeVersionsReadEveryPageAndRequireExactlyThePossibleLatestVersion', asy
 });
 
 for (const mode of ['overlap', 'pending', 'twice', 'clock', 'short', 'interrupt', 'status', 'missing-id', 'null-id', 'reused-id', 'wrong-marker', 'wrong-removal']) {
-  test(`nativeVersionsRefuseUnprovableCompletion_${mode}`, async t => {
+  test(mode === 'interrupt' ? 'nativeVersionsRetainUnknownInterruptedCompletion' : `nativeVersionsRefuseUnprovableCompletion_${mode}`, async t => {
     const f = await fixture(t), audit = await open(f);
     success(f, audit, put(4), 1, 2, 'first'); f.add('first', 4);
     f.time(4); const finish = audit.begin(mode === 'wrong-removal' ? del('first') : put(6));
     if (mode === 'overlap') assert.throws(() => audit.begin(put(6)), bad);
     else if (mode === 'pending') await assert.rejects(audit.verify(), bad);
     else if (mode === 'twice') { finish({ statusCode: 200, bytesOut: 6, responseHeaders: reply('second') }); assert.throws(() => finish({ statusCode: 200, bytesOut: 6, responseHeaders: reply('second') }), bad); }
+    else if (mode === 'interrupt') {
+      finish({ statusCode: 200, bytesOut: 6, interrupted: true, responseHeaders: reply('second') });
+      await audit.verify();
+      assert.equal(audit.snapshot().status, 'unknown');
+      assert.deepEqual(audit.snapshot().gaps, ['accounting:request-cutoff']);
+      assert.equal(audit.snapshot().objects.bytes, 4);
+      assert.ok(f.meter.snapshot().gaps.includes('accounting:request-cutoff'));
+      return;
+    }
     else {
       if (mode === 'clock') f.time(3);
       const responseHeaders = mode === 'missing-id' ? {} : reply(mode === 'null-id' ? 'null' : mode === 'reused-id' ? 'first' : 'second', mode === 'wrong-marker' ? true : undefined);
@@ -303,6 +364,40 @@ const deleted = (k, v, marker) => `<Deleted><Key>${k}</Key>${v === undefined ? '
   + (marker === undefined ? '' : `<DeleteMarker>true</DeleteMarker><DeleteMarkerVersionId>${marker}</DeleteMarkerVersionId>`) + '</Deleted>';
 const failedDelete = k => `<Error><Key>${k}</Key><Code>AccessDenied</Code><Message>PRIVATE_ERROR_CANARY</Message></Error>`;
 const openBulk = f => storage.openLitestreamVersionHistories({ ...f.args, allowBulkDeletes: true });
+
+for (const removeVersion of [false, true]) for (const committed of [false, true]) for (const statusCode of [null, 200, 503]) {
+  test(`versioned batch cutoff retains independent bounds ${removeVersion}/${committed}/${statusCode}`, async t => {
+    const f = await fixture(t), audit = await openBulk(f);
+    success(f, audit, put(4), 1, 2, 'first'); f.add('first', 4);
+    const body = batchBody([[key, removeVersion ? 'first' : undefined]]);
+    f.time(4); const finish = audit.begin(batchInput(body)); f.time(5);
+    assert.doesNotThrow(() => finish({ statusCode, bytesOut: body.length - 1, interrupted: true,
+      responseBody: Buffer.from('<DeleteResult>PRIVATE_PARTIAL') }));
+    if (committed) { if (removeVersion) f.remove('first'); else f.add('marker', Buffer.byteLength(key), true); }
+    f.time(8); await audit.verify(); f.time(10);
+    const result = audit.snapshot(), size = Buffer.byteLength(key);
+    assert.equal(result.status, 'unknown'); assert.deepEqual(result.gaps, ['accounting:request-cutoff']);
+    assert.equal(result.objects.bytes, committed ? removeVersion ? 0 : 4 + size : 4);
+    assert.equal(result.objects.deleteMarkers, committed && !removeVersion ? 1 : 0);
+    assert.deepEqual(result.byteSeconds, committed ? removeVersion ? { low: 8, high: 28 }
+      : { low: 32 + size * 2, high: 36 + size * 6 } : { low: 32, high: 36 });
+    assert.ok(f.meter.snapshot().gaps.includes('accounting:request-cutoff'));
+    await audit.verify(); assert.deepEqual(audit.snapshot().gaps, ['accounting:request-cutoff']);
+    assert.doesNotMatch(JSON.stringify(audit.snapshot()), /PRIVATE|CANARY|first|marker/);
+  });
+}
+
+for (const event of [
+  { statusCode: null, bytesOut: 0, interrupted: false },
+  { statusCode: 600, bytesOut: 0, interrupted: true },
+  { statusCode: 200, bytesOut: -1, interrupted: true },
+  { statusCode: 200, bytesOut: Number.MAX_SAFE_INTEGER, interrupted: true },
+  { statusCode: 200, bytesOut: 0, interrupted: 'true' },
+]) test(`versioned batch malformed cutoff still refuses ${JSON.stringify(event)}`, async t => {
+  const f = await fixture(t), audit = await openBulk(f), body = batchBody([[key]]);
+  assert.throws(() => audit.begin(batchInput(body))(event), bad);
+  assert.throws(() => f.meter.snapshot(), /Invalid cloud cost meter/);
+});
 
 // Counting one batch must preserve failed entries and the storage retained before each deletion.
 test('nativeVersionBatchesRetainMixedResultsAndDeletedVersionByteTime', async t => {
@@ -476,15 +571,22 @@ test('nativeVersionBatchTransportAcceptsActualSignedSdkControlRequests', async t
   assert.equal(history.snapshot().objects.bytes, 0);
 });
 
-for (const mode of ['twice', 'pending', 'clock', 'interrupt', 'status', 'wrong-success-status']) test(`nativeVersionBatchCompletionRemainsBoundedAndSingleUse_${mode}`, async t => {
+for (const mode of ['twice', 'pending', 'clock', 'interrupt', 'status', 'wrong-success-status']) test(mode === 'interrupt'
+  ? 'nativeVersionBatchRetainsUnknownInterruptedCompletion' : `nativeVersionBatchCompletionRemainsBoundedAndSingleUse_${mode}`, async t => {
   const f = await fixture(t), audit = await openBulk(f), body = batchBody([[key]]);
   f.time(2); const finish = audit.begin(batchInput(body));
   const event = { statusCode: 200, bytesOut: body.length, responseBody: batchResult([failedDelete(key)]) };
+  if (mode === 'interrupt') {
+    finish({ ...event, interrupted: true }); await audit.verify();
+    assert.equal(audit.snapshot().status, 'unknown');
+    assert.deepEqual(audit.snapshot().gaps, ['accounting:request-cutoff']);
+    assert.equal(audit.snapshot().objects.bytes, 0);
+    assert.ok(f.meter.snapshot().gaps.includes('accounting:request-cutoff')); return;
+  }
   if (mode === 'pending') await assert.rejects(audit.verify(), bad);
   else if (mode === 'twice') { finish(event); assert.throws(() => finish(event), bad); }
   else {
     if (mode === 'clock') f.time(1);
-    if (mode === 'interrupt') event.interrupted = true;
     if (mode === 'status') event.statusCode = 99;
     if (mode === 'wrong-success-status') event.statusCode = 204;
     assert.throws(() => finish(event), bad);
@@ -562,7 +664,7 @@ for (const versionId of [null, 'null']) test(`after-stop versioned PUT refuses a
   await assert.rejects(e.lifetimes.verify(), bad); assert.throws(() => e.afterStop.snapshot());
 });
 
-test('versioned history reader requires its own producer settlement', async t => {
+test('versioned history reader collects missing producer telemetry as unknown', async t => {
   const { createLitestreamAfterStop } = await import('./litestream.mjs');
   const f = await fixture(t), afterStop = createLitestreamAfterStop({ clock: () => 0 });
   const invocation = '11111111-2222-4333-8444-555555555555';
@@ -570,7 +672,12 @@ test('versioned history reader requires its own producer settlement', async t =>
   const reader = await storage.openLitestreamVersionHistories({ ...f.args, afterStop });
   const finish = reader.begin({ method: 'GET', path: '/synthetic?list-type=2',
     headers: { 'amz-sdk-invocation-id': invocation, 'amz-sdk-request': 'attempt=1; max=3' } });
-  assert.throws(() => finish({ statusCode: 200, bytesOut: 0 }), bad);
+  assert.doesNotThrow(() => finish({ statusCode: 200, bytesOut: 0 }));
+  await reader.verify(); assert.equal(reader.snapshot().objects.bytes, 0);
+  const result = afterStop.snapshot();
+  assert.equal(result.status, 'unknown'); assert.equal(result.requestsReconciled, false);
+  assert.deepEqual(result.gaps, ['accounting:incomplete-history']);
+  assert.equal(result.producer.attempts, 0);
 });
 
 // Final restore uses the same history, with ordinary strict read completion after replication stops.
@@ -590,11 +697,15 @@ for (const method of ['PUT', 'DELETE', 'POST']) test(`the strict restore view re
   assert.throws(() => reader.strictReads.begin({ method, path, headers: {'content-length':'4'} }), bad);
   await assert.rejects(reader.verify(), bad);assert.throws(() => afterStop.snapshot());
 });
-test('an interrupted final restore read still poisons the shared history', async t => {
+test('an interrupted final restore read leaves an accounting gap without invalidating shared history', async t => {
   const { createLitestreamAfterStop } = await import('./litestream.mjs');
   const f = await fixture(t), afterStop = createLitestreamAfterStop({ clock: () => 0 });
   const reader = await storage.openLitestreamVersionHistories({ ...f.args, afterStop });
   const finish = reader.strictReads.begin({ method: 'GET', path, headers: {} });
-  assert.throws(() => finish({ statusCode: 200, bytesOut: 0, interrupted: true, responseHeaders: {} }), bad);
-  await assert.rejects(reader.verify(), bad);assert.throws(() => afterStop.snapshot());
+  finish({ statusCode: 200, bytesOut: 0, interrupted: true, responseHeaders: {} });
+  await reader.verify();
+  assert.equal(reader.snapshot().status, 'unknown');
+  assert.deepEqual(reader.snapshot().gaps, ['accounting:request-cutoff']);
+  assert.ok(f.meter.snapshot().gaps.includes('accounting:request-cutoff'));
+  assert.equal(afterStop.snapshot().used, 0);
 });

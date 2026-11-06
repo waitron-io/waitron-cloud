@@ -51,6 +51,74 @@ function finishBatch(f, body, results, from, by, statusCode = 200) {
   finish({ statusCode, bytesOut: body.length, responseBody: resultFor(results) });
 }
 
+// A partial delete reply cannot say which objects survived; inventory supplies that fact.
+for (const statusCode of [null, 200, 503]) for (const committed of [false, true]) {
+  test(`unversioned batch cutoff retains independent bounds ${statusCode}/${committed}`, async t => {
+    const f = await fixture(t); put(f, key, 4, 1, 2);
+    const body = bodyFor([key]); f.time(4); const finish = f.audit.begin(inputFor(body)); f.time(5);
+    assert.doesNotThrow(() => finish({ statusCode, bytesOut: body.length - 1, interrupted: true,
+      responseBody: Buffer.from('<DeleteResult>PRIVATE_PARTIAL') }));
+    if (committed) f.rows.clear();
+    f.time(8); await f.audit.verify(); f.time(10);
+    assert.deepEqual(f.audit.snapshot().byteSeconds, committed ? { low: 8, high: 28 } : { low: 32, high: 36 });
+    assert.equal(f.audit.snapshot().objects.bytes, committed ? 0 : 4);
+    assert.equal(f.audit.snapshot().status, 'unknown');
+    assert.deepEqual(f.audit.snapshot().gaps, ['accounting:request-cutoff']);
+    assert.ok(f.meter.snapshot().gaps.includes('accounting:request-cutoff'));
+    f.time(11); const next = f.audit.begin(inputFor(body)); f.time(12);
+    next({ statusCode: 200, bytesOut: body.length, responseBody: resultFor([deleted(key)]) }); f.rows.clear();
+    await f.audit.verify();
+    assert.equal(f.audit.snapshot().objects.bytes, 0);
+    assert.deepEqual(f.audit.snapshot().gaps, ['accounting:request-cutoff']);
+    assert.doesNotMatch(JSON.stringify(f.audit.snapshot()), /PRIVATE|CANARY/);
+  });
+}
+
+for (const event of [
+  { statusCode: null, bytesOut: 0, interrupted: false },
+  { statusCode: 600, bytesOut: 0, interrupted: true },
+  { statusCode: 200, bytesOut: -1, interrupted: true },
+  { statusCode: 200, bytesOut: Number.MAX_SAFE_INTEGER, interrupted: true },
+  { statusCode: 200, bytesOut: 0, interrupted: 'true' },
+]) test(`unversioned batch malformed cutoff still refuses ${JSON.stringify(event)}`, async t => {
+  const f = await fixture(t), body = bodyFor([key]);
+  assert.throws(() => f.audit.begin(inputFor(body))(event), bad);
+  assert.throws(() => f.meter.snapshot(), /Invalid cloud cost meter/);
+});
+
+test('real batch lost reply collects and preserves independent deletion', async t => {
+  const f = await fixture(t); put(f, key, 4, 1, 2);
+  let received = 0;
+  const backend = createServer((req, res) => { req.resume(); req.once('end', () => {
+    received++; f.rows.clear(); res.destroy();
+  }); });
+  backend.listen(0, '127.0.0.1'); await once(backend, 'listening');
+  t.after(() => { backend.closeAllConnections(); return new Promise(resolve => backend.close(resolve)); });
+  const meter = createMeter({ phase: 'workload', clock: () => 0 });
+  const front = await createLitestreamTransport({ target: `http://127.0.0.1:${backend.address().port}`,
+    meter, phase: 'workload', lifetimes: f.audit, allowBulkDeletes: true });
+  t.after(() => front.close().catch(() => {}));
+  f.time(4); const body = bodyFor([key]);
+  await assert.rejects(new Promise((resolve, reject) => {
+    const caller = request(front.url + '/synthetic/?delete=', { method: 'POST', headers: {
+      'content-length': String(body.length), 'amz-sdk-invocation-id': '11111111-2222-4333-8444-555555555555',
+      'amz-sdk-request': 'attempt=1; max=1',
+    } }, async res => {
+      try { for await (const chunk of res) void chunk; resolve(res.statusCode); }
+      catch { reject(Error('Synthetic reply cutoff')); }
+    });
+    caller.once('error', () => reject(Error('Synthetic request cutoff'))); caller.end(body);
+  }), /Synthetic (request|reply) cutoff/);
+  await front.whenIdle(() => {}); await front.close();
+  f.time(8); await f.audit.verify();
+  assert.equal(received, 1); assert.equal(f.audit.snapshot().objects.bytes, 0);
+  assert.deepEqual(f.audit.snapshot().byteSeconds, { low: 8, high: 28 });
+  assert.deepEqual(f.audit.snapshot().gaps, ['accounting:request-cutoff']);
+  assert.equal(meter.snapshot().accounting.requests[0].outcome, 'transport-error');
+  assert.equal(meter.diagnostics().firstInvalidation, null);
+  assert.equal(front.checkpoint().pending, 0); assert.equal(front.checkpoint().connections, 0);
+});
+
 // Losing retired intervals, treating all entries alike, or retaining locks breaks these hand-calculated bounds.
 test('unversionedNativeBatchesRetainMixedResultHistoryAndReleaseEveryKey', async t => {
   const f = await fixture(t); put(f, key, 4, 1, 2); put(f, other, 6, 3, 4);
@@ -119,7 +187,7 @@ for (const mode of ['default', 'foreign', 'empty', 'many', 'duplicate', 'version
 
 // Missing, repeated or version-bearing replies must never qualify an unversioned deletion.
 for (const mode of ['missing', 'duplicate', 'foreign', 'version', 'marker', 'code', 'unknown', 'malformed', 'status', 'short', 'interrupt', 'twice', 'clock', 'pending']) {
-  test(`unversionedNativeBatchRefusesCompletion_${mode}`, async t => {
+  test(mode === 'interrupt' ? 'unversionedNativeBatchRetainsUnknownInterruptedCompletion' : `unversionedNativeBatchRefusesCompletion_${mode}`, async t => {
     const f = await fixture(t); const body = bodyFor([key]); f.time(2); const finish = f.audit.begin(inputFor(body));
     let entries = [deleted(key)];
     if (mode === 'missing') entries = [];
@@ -131,6 +199,13 @@ for (const mode of ['missing', 'duplicate', 'foreign', 'version', 'marker', 'cod
     if (mode === 'unknown') entries = [deleted(key).replace('</Deleted>', '<Unknown>private</Unknown></Deleted>')];
     const event = { statusCode: mode === 'status' ? 204 : 200, bytesOut: body.length - (mode === 'short' ? 1 : 0),
       interrupted: mode === 'interrupt', responseBody: mode === 'malformed' ? Buffer.from('<DeleteResult>') : resultFor(entries) };
+    if (mode === 'interrupt') {
+      finish(event); await f.audit.verify();
+      assert.equal(f.audit.snapshot().status, 'unknown');
+      assert.deepEqual(f.audit.snapshot().gaps, ['accounting:request-cutoff']);
+      assert.equal(f.audit.snapshot().objects.bytes, 0);
+      assert.ok(f.meter.snapshot().gaps.includes('accounting:request-cutoff')); return;
+    }
     if (mode === 'pending') await assert.rejects(f.audit.verify(), bad);
     else if (mode === 'twice') { finish(event); assert.throws(() => finish(event), bad); }
     else { if (mode === 'clock') f.time(1); assert.throws(() => finish(event), bad); }
@@ -138,11 +213,22 @@ for (const mode of ['missing', 'duplicate', 'foreign', 'version', 'marker', 'cod
   });
 }
 
-// Batches and single mutations share key admission; an unobserved PUT cannot be replaced by a delete.
-for (const mode of ['batch-put', 'put-batch', 'batch-batch', 'ambiguous-put']) test(`unversionedNativeBatchRejectsOverlappingMutation_${mode}`, async t => {
+// Batches and single mutations share active-key admission; missing history alone cannot block the next operation.
+for (const mode of ['batch-put', 'put-batch', 'batch-batch', 'ambiguous-put']) test(mode === 'ambiguous-put' ? 'unversionedNativeBatchForwardsAfterUncertainPutWithUnknownInterval' : `unversionedNativeBatchRejectsOverlappingMutation_${mode}`, async t => {
   const f = await fixture(t); const batch = inputFor(bodyFor([key])), single = { method: 'PUT', path: '/synthetic/' + encodeURIComponent(key), headers: { 'content-length': '4' } };
   const finish = f.audit.begin(mode === 'put-batch' || mode === 'ambiguous-put' ? single : batch);
-  if (mode === 'ambiguous-put') finish({ statusCode: 503, bytesOut: 4 });
+  if (mode === 'ambiguous-put') {
+    finish({ statusCode: 503, bytesOut: 4 });
+    const body = bodyFor([key]); let next;
+    assert.doesNotThrow(() => { next = f.audit.begin(inputFor(body)); });
+    next({ statusCode: 200, bytesOut: body.length, responseBody: resultFor([deleted(key)]) });
+    await f.audit.verify();
+    assert.equal(f.audit.snapshot().objects.bytes, 0);
+    assert.equal(f.audit.snapshot().status, 'unknown');
+    assert.deepEqual(f.audit.snapshot().byteSeconds, { low: null, high: null });
+    assert.deepEqual(f.audit.snapshot().gaps, ['accounting:incomplete-history']);
+    assert.equal(f.meter.diagnostics().firstInvalidation, null); return;
+  }
   assert.throws(() => f.audit.begin(mode === 'batch-put' ? single : batch), bad);
   assert.throws(() => f.meter.snapshot(), /Invalid cloud cost meter/);
 });

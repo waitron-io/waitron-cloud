@@ -74,6 +74,11 @@ for (const acknowledged of [false, true]) test(`a client close after upstream co
   assert.equal(diagnostic.clientClosed, true);
   assert.equal(diagnostic.pending, 0);
   assert.equal(diagnostic.completed, 2);
+  await front.whenIdle(() => {});
+  assert.equal(front.snapshot().status, 'unknown');
+  assert.ok(meter.snapshot().gaps.includes('accounting:request-cutoff'));
+  assert.equal(afterStop.snapshot().status, 'unknown');
+  assert.throws(() => front.setPhase('PRIVATE_CANARY'), /Invalid cloud cost Litestream audit/);
   assert.throws(() => front.snapshot(), /Invalid cloud cost Litestream audit/);
   assert.throws(() => meter.snapshot(), /Invalid cloud cost meter/);
   assert.throws(() => afterStop.snapshot(), /Invalid cloud cost Litestream audit/);

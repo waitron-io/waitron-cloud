@@ -19,7 +19,14 @@ function fixture(t, hooks = {}) {
   writeFileSync(journal.path, JSON.stringify({ schemaVersion: 1, source, root, ownershipToken: token }), { mode: 0o600 });
   const calls = [], clients = [];
   class Client extends sdk.S3Client {
-    constructor(options) { super(options); clients.push(this); }
+    constructor(options) {
+      super(options); clients.push(this);
+      if (hooks.response) {
+        const handler = this.config.requestHandler;
+        this.config.requestHandler = { metadata: handler.metadata, destroy: () => handler.destroy?.(),
+          handle: async (...args) => hooks.response(await handler.handle(...args)) };
+      }
+    }
     async send(command, options) {
       calls.push(command.constructor.name);
       const intercepted = await hooks.before?.(command);
@@ -280,4 +287,40 @@ test('workerStorageReportsRetainedInventoryMismatchBeforeLaterAccountingFailure'
   await assert.rejects(storage.finish({ retained: { since: 10, bytes: 4, objects: 1 } }), bad);
   assert.deepEqual(records, [{ kind: 'storage-refusal', stage: 'retained-inventory' }]);
   assert.equal(f.entries().some(e => e.kind === 'storage-process' && e.state === 'collected'), true);
+});
+
+// The same successful HTTP exchange can lose accounting agreement without losing the real bucket.
+for (const failure of [false, true]) test(`workerStorageGappedRealAdministrationRetainsCleanupOutcome_${failure}`, async t => {
+  let changed = false, cleanup = false, refused = false;
+  const f = fixture(t, { response: result => {
+    if (!changed && result.response.statusCode === 200) {
+      changed = true; result.response.statusCode = 201;
+    }
+    return result;
+  }, before: command => {
+    if (cleanup && failure && command instanceof sdk.DeleteBucketCommand) {
+      refused = true; throw Error('PRIVATE_DELETE_CANARY');
+    }
+  } });
+  const storage = await open(t, f);
+  await writeGeneratedObjects(t, storage); cleanup = true;
+  if (failure) {
+    await assert.rejects(storage.finish(), bad);
+    assert.equal(refused, true);
+  } else {
+    const result = await storage.finish();
+    assert.equal(result.status, 'unknown');
+    assert.equal(result.reconciled, false);
+    assert.ok(result.gaps.includes('accounting:unreconciled'));
+    assert.ok(result.gaps.includes('request-billing:unknown'));
+    assert.ok(result.billing.some(row => row.status === 'unknown' && row.quantity === null));
+    assert.deepEqual(result.accounting.producer, result.accounting.observer, 'equal grand totals cannot erase an original status mismatch');
+    assert.equal(result.accounting.requests.filter(row => row.operation === 'bucket-delete').reduce((n, row) => n + row.successful, 0), 1);
+    assert.deepEqual(await storage.finish(), result, 'collected evidence remains stable');
+    assert.doesNotMatch(JSON.stringify(result), /PRIVATE|CANARY|127\.0\.0\.1|cost-/);
+  }
+  assert.equal(changed, true, 'perturb one actual successful SDK response after the observer saw it');
+  assert.equal(f.entries().some(e => e.kind === 'storage-process' && e.state === 'collected'), true);
+  assert.equal(existsSync(join(f.root, 'local-storage')), failure);
+  assert.equal(f.entries().some(e => e.kind === 'storage-bucket' && e.state === 'removed'), !failure);
 });

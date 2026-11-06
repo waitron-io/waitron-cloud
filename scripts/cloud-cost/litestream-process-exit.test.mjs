@@ -55,6 +55,7 @@ function run(holdReply) {
         await globalThis.upload;
         console.error(JSON.stringify({kind:'collected',writerClosed:globalThis.writerClosed,
           pending:globalThis.transport.checkpoint().pending,connections:globalThis.transport.checkpoint().connections}));
+        console.error(JSON.stringify({kind:'collected-cutoff',diagnostic:globalThis.transport.checkpoint()}));
       }});`,
     '/code/meter.mjs': `export {createMeter,createMeteringProxy,classifyStorageOperation,correlatedStorageAttempt} from ${JSON.stringify(meter)};
       export const instrumentStorageClient=()=>{};`,
@@ -67,8 +68,10 @@ function run(holdReply) {
         if(options.phase==='restore')return {url:options.target,whenIdle:async action=>action(),snapshot:()=>({}),close:async()=>{}};
         const transport=await open(options);
         return globalThis.transport={...transport,pendingTransfers:()=>{
-          console.error(JSON.stringify({kind:'transfer-snapshot',writerClosed:globalThis.writerClosed===true}));
-          return transport.pendingTransfers();
+          const transfers=transport.pendingTransfers();
+          console.error(JSON.stringify({kind:'transfer-snapshot',writerClosed:globalThis.writerClosed===true,
+            beforeSignal:{pending:transfers.length,truncated:transfers.length>16,transfers:transfers.slice(0,16)}}));
+          return transfers;
         },whenIdle:action=>{
           console.error(JSON.stringify({kind:'idle-admission',writerClosed:globalThis.writerClosed,pending:transport.checkpoint().pending}));
           return transport.whenIdle(action);
@@ -151,22 +154,25 @@ for (const held of [true, false]) test(`real writer exit before final smoke rest
   assert.deepEqual(records.filter(row => row.kind === 'collected'),
     [{ kind: 'collected', writerClosed: true, pending: 0, connections: 0 }]);
   if (held) {
-    assert.equal(result.status, 1, result.stderr);
-    assert.equal(result.stdout, '', 'an interrupted writer cannot publish measurement');
-    assert.equal(records.some(row => row.kind === 'restore-admission'), false, result.stderr);
-    const stop = records.find(row => row.kind === 'litestream-stop');
-    assert.equal(stop?.step, 'idle', result.stderr);
+    assert.equal(result.status, 0, result.stderr);
+    const output=JSON.parse(result.stdout);
+    assert.equal(output.restoredSales,2);assert.equal(output.integrity,'ok');
+    assert.equal(output.observed.status,'unknown');
+    assert.ok(output.observed.gaps.includes('accounting:request-cutoff'));
+    assert.deepEqual(records.filter(row=>row.kind==='restore-admission'),
+      [{kind:'restore-admission',writerClosed:true,pending:0,replyEnded:false}]);
     const firstSnapshot = records.findIndex(row => row.kind === 'transfer-snapshot');
     assert.ok(firstSnapshot >= 0 && firstSnapshot < records.findIndex(row => row.kind === 'writer-signal'),
       'capture pending transfers before the signal call, while the real writer is still running');
     const acknowledged = records.findIndex(row => row.kind === 'stop-acknowledged');
     assert.ok(acknowledged >= 0 && acknowledged < firstSnapshot, 'capture after the stop reply is actually validated');
     assert.equal(records[firstSnapshot].writerClosed, false);
-    assert.ok(stop.beforeSignal, 'retain the transport state before signalling the writer');
-    assert.equal(stop.beforeSignal.pending, 1, 'retain active transfers before the real writer closes');
-    assert.equal(stop.beforeSignal.truncated, false);
-    assert.equal(stop.beforeSignal.transfers.length, 1);
-    const transfer = stop.beforeSignal.transfers[0];
+    const beforeSignal=records[firstSnapshot].beforeSignal;
+    assert.ok(beforeSignal, 'retain the transport state before signalling the writer');
+    assert.equal(beforeSignal.pending, 1, 'retain active transfers before the real writer closes');
+    assert.equal(beforeSignal.truncated, false);
+    assert.equal(beforeSignal.transfers.length, 1);
+    const transfer = beforeSignal.transfers[0];
     assert.equal(transfer.operation, 'put');
     assert.equal(transfer.phase, 'workload');
     assert.equal(transfer.retryOrdinal, 0);
@@ -179,12 +185,13 @@ for (const held of [true, false]) test(`real writer exit before final smoke rest
     assert.equal(transfer.statusCode, 200);
     assert.equal(transfer.clientClosed, false);
     assert.ok(Number.isInteger(transfer.elapsedMs) && transfer.elapsedMs >= 0);
-    assert.equal(stop.diagnostic.clientClosed, true, result.stderr);
-    assert.equal(stop.diagnostic.responseHeadersSeen, true, result.stderr);
-    assert.deepEqual(stop.diagnostic.accounting.producer, { attempts: 3, bytesIn: 5, bytesOut: 12 });
-    assert.deepEqual(stop.diagnostic.accounting.observer, { attempts: 3, bytesIn: 5, bytesOut: 12 });
-    assert.equal(stop.diagnostic.pending, 0);
-    assert.equal(stop.diagnostic.completed, 3);
+    const diagnostic=records.find(row=>row.kind==='collected-cutoff').diagnostic;
+    assert.equal(diagnostic.clientClosed, true, result.stderr);
+    assert.equal(diagnostic.responseHeadersSeen, true, result.stderr);
+    assert.deepEqual(diagnostic.accounting.producer, { attempts: 3, bytesIn: 5, bytesOut: 12 });
+    assert.deepEqual(diagnostic.accounting.observer, { attempts: 3, bytesIn: 5, bytesOut: 12 });
+    assert.equal(diagnostic.pending, 0);
+    assert.equal(diagnostic.completed, 3);
   } else {
     assert.equal(result.status, 0, result.stderr);
     assert.deepEqual(records.filter(row => row.kind === 'restore-admission'),

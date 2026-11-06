@@ -56,6 +56,24 @@ function part(f, bytes = 4, from = 3, by = 4, etag = 'one') {
   finish({ statusCode: 200, bytesOut: bytes, responseHeaders: { etag } }); f.uploads.get(UploadId).set(1, { bytes, etag });
 }
 
+test('multipartLifetimeOverflowSurvivesActualPartRetirementWithKnownCounts', async t => {
+  const f = await fixture(t); create(f); part(f, Number.MAX_SAFE_INTEGER, 3, 4);
+  f.time(4); await f.audit.verify();
+  assert.equal(f.audit.snapshot().status, 'measured');
+  assert.deepEqual(f.audit.snapshot().byteSeconds, { low: 0, high: 9007199254740991 });
+  f.time(5);
+  assert.deepEqual(f.audit.snapshot().byteSeconds, { low: 9007199254740991, high: null });
+  assert.equal(f.audit.snapshot().status, 'unknown');
+  const finish = f.audit.begin(input('abort')); finish({ statusCode: 204, bytesOut: 0 }); f.uploads.clear();
+  await f.audit.verify(); f.time(6);
+  assert.deepEqual(f.audit.snapshot().byteSeconds, { low: 9007199254740991, high: null });
+  assert.deepEqual(f.audit.snapshot().gaps, ['accounting:overflow']);
+  assert.equal(f.audit.snapshot().objects.bytes, 0);
+  assert.equal(f.audit.snapshot().objects.unfinishedMultipart, 0);
+  assert.equal(f.meter.snapshot().status, 'unknown');
+  assert.deepEqual(f.meter.snapshot().gaps, ['accounting:overflow', 'request-billing:unknown']);
+});
+
 // Discarding replaced/aborted parts loses these hand-calculated retained byte-seconds.
 test('nativeMultipartRetainsReplacedAndAbortedParts', async t => {
   const f = await fixture(t); create(f); part(f); f.time(5); await f.audit.verify();
@@ -102,7 +120,8 @@ for (const mode of ['default', 'foreign', 'escape', 'copy', 'encoding', 'body', 
   assert.throws(() => f.meter.snapshot(), /Invalid cloud cost meter/);
 });
 
-for (const mode of ['lost-create', 'lost-part', 'lost-complete', 'lost-abort', 'embedded-error', 'wrong-key', 'wrong-bucket', 'create-key', 'create-bucket', 'duplicate-upload', 'empty-upload', 'missing-etag', 'short', 'interrupted', 'twice', 'backward-clock']) test(`nativeMultipartRefusesUnprovedCompletion_${mode}`, async t => {
+for (const mode of ['lost-create', 'lost-part', 'lost-complete', 'lost-abort', 'embedded-error', 'wrong-key', 'wrong-bucket', 'create-key', 'create-bucket', 'duplicate-upload', 'empty-upload', 'missing-etag', 'short', 'interrupted', 'twice', 'backward-clock']) test(mode === 'interrupted'
+  ? 'nativeMultipartRetainsUnknownInterruptedCompletion' : `nativeMultipartRefusesUnprovedCompletion_${mode}`, async t => {
   const f = await fixture(t); let op = 'create';
   if (['lost-part', 'missing-etag'].includes(mode)) { create(f); op = 'part'; }
   if (['lost-complete', 'lost-abort', 'embedded-error', 'wrong-key', 'wrong-bucket'].includes(mode)) { create(f); part(f); op = mode === 'lost-abort' ? 'abort' : 'complete'; }
@@ -118,6 +137,14 @@ for (const mode of ['lost-create', 'lost-part', 'lost-complete', 'lost-abort', '
   if (mode === 'empty-upload') event.responseBody = Buffer.from(createReply().toString().replace(UploadId, ''));
   if (mode === 'create-key') event.responseBody = Buffer.from(createReply().toString().replace(Key, 'foreign'));
   if (mode === 'create-bucket') event.responseBody = Buffer.from(createReply().toString().replace('synthetic', 'foreign'));
+  if (mode === 'interrupted') {
+    finish(event); await f.audit.verify();
+    assert.equal(f.audit.snapshot().status, 'unknown');
+    assert.deepEqual(f.audit.snapshot().gaps, ['accounting:request-cutoff']);
+    assert.equal(f.audit.snapshot().objects.bytes, 0);
+    assert.equal(f.audit.snapshot().objects.unfinishedMultipart, 0);
+    assert.ok(f.meter.snapshot().gaps.includes('accounting:request-cutoff')); return;
+  }
   if (mode === 'twice') finish(event);
   assert.throws(() => finish(event), bad); assert.throws(() => f.meter.snapshot(), /Invalid cloud cost meter/);
 });

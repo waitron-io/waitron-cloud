@@ -132,6 +132,19 @@ for (const [mode, expected] of [
     }
     await closed;
   }
+  if (mode === 'mismatch') {
+    await assert.doesNotReject(meter.close());
+    evidence(meter, 'none'); assert.equal(reads, 0);
+    assert.equal(meter.snapshot().status, 'unknown');
+    assert.equal(meter.snapshot().reconciled, false);
+    assert.deepEqual(meter.snapshot().gaps, ['accounting:meter-disagreement']);
+    assert.doesNotMatch(JSON.stringify(meter.snapshot()), /PRIVATE/);
+    upstream.emit('error', Object.assign(Error('PRIVATE_LATER_ERROR'), {code: 'ECONNRESET'}));
+    evidence(meter, 'socket-upstream-reset');
+    assert.doesNotMatch(meter.failure(), /PRIVATE/);
+    assert.throws(() => meter.snapshot(), /Invalid cloud cost remote measurement/);
+    return;
+  }
   await assert.rejects(meter.close(), /Invalid cloud cost remote measurement/);
   evidence(meter, expected); assert.equal(reads, 0);
   upstream.emit('error', Object.assign(Error('PRIVATE_LATER_ERROR'), {code: 'ECONNRESET'}));

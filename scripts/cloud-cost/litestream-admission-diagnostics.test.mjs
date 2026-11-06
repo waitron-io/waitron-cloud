@@ -21,19 +21,18 @@ for (const [guard, setup, input] of [
   ['row-identity', () => {}, admission({ invocation: 'PRIVATE_CANARY' })],
   ['row-operation', s => s.issue(row({ operation: 'put' })), admission()],
   ['duplicate-hop', s => s.admit(admission()), admission()],
-  ['retry-sequence', () => {}, admission({ ordinal: 1 })],
-  ['observer-pairing', () => {}, admission({ hop: 'observer' })],
+  ['retry-sequence', s => s.admit(admission({ ordinal: 2 })), admission({ ordinal: 1 })],
+  ['observer-pairing', s => s.admit(admission({ hop: 'observer' })), admission({ phase: 'idle' })],
   ['observer-pairing', s => s.admit(admission()), admission({ hop: 'observer', phase: 'idle' })],
-  ['post-stop-operation', stop, admission({ operation: 'put' })],
-  ['post-stop-ordinal', s => { s.admit(admission()); stop(s); }, admission({ ordinal: 1 })],
+  ['row-operation', s => { stop(s); s.issue(row()); }, admission({ operation: 'put' })],
+  ['retry-sequence', s => { s.admit(admission({ ordinal: 2 })); stop(s); }, admission({ ordinal: 1 })],
   ['affected-cap', s => {
     stop(s);
     for (let n = 1; n <= 3; n++) {
       s.admit(admission({ invocation: invocation(n) }));
       s.admit(admission({ invocation: invocation(n), hop: 'observer' }));
     }
-    s.admit(admission({ invocation: invocation(4) }));
-  }, admission({ invocation: invocation(4), hop: 'observer' })],
+  }, admission({ invocation: invocation(4) })],
   ['row-cap', s => { for (let n = 1; n <= 100000; n++) s.issue(row({ invocation: invocation(n) })); },
     admission({ invocation: invocation(100001) })],
 ]) test(`admission refusal names ${guard} and retains the first cause after poisoning`, () => {
@@ -73,7 +72,7 @@ for (const stopped of [false, true]) test(`admission labels preserve the existin
   const s = createLitestreamAfterStop({ clock: () => 0 });
   if (stopped) stop(s);
   let reads = 0;
-  const limit = stopped ? 3 : 2;
+  const limit = 2;
   const input = new Proxy(admission(), { get(target, key, receiver) {
     if (key === 'operation' && ++reads > limit) throw Error('PRIVATE_CANARY');
     return Reflect.get(target, key, receiver);
@@ -88,6 +87,7 @@ test('the independent observer audit retains its first admission guard without r
   const input = { operation: 'list', headers: {
     'amz-sdk-invocation-id': invocation(1), 'amz-sdk-request': 'attempt=1; max=3', authorization: 'PRIVATE_CANARY',
   } };
+  afterStop.admit(admission({ phase: 'idle' }));
   assert.throws(() => audit.observe(input), bad);
   assert.equal(audit.checkpoint().failure.afterStopAdmissionGuard, 'observer-pairing');
   assert.throws(() => audit.observe(input), bad);
@@ -143,15 +143,16 @@ async function httpFixture(t, afterStop, options = {}) {
 
 test('real HTTP refusal carries the admission guard through stop checkpoints and repeated close reporting', async t => {
   const s = createLitestreamAfterStop({ clock: () => 0 }); stop(s);
+  for (let n = 2; n <= 4; n++) s.admit(admission({ invocation: invocation(n) }));
   const f = await httpFixture(t, s);
   assert.equal(await f.send('PUT'), 400); assert.equal(await f.send('PATCH'), 400);
   assert.equal(f.forwarded(), 0);
-  assert.equal(f.transport.checkpoint().afterStopAdmissionGuard, 'post-stop-operation');
+  assert.equal(f.transport.checkpoint().afterStopAdmissionGuard, 'affected-cap');
   for (const stage of ['replication-transport', 'cleanup-replication-transport']) {
     const records = [];
     await assert.rejects(withLitestreamCloseDiagnostics({ stage, close: () => f.transport.close(),
       report: line => records.push(JSON.parse(line)) }), bad);
-    assert.equal(records.at(-1).diagnostic.afterStopAdmissionGuard, 'post-stop-operation');
+    assert.equal(records.at(-1).diagnostic.afterStopAdmissionGuard, 'affected-cap');
     assert.doesNotMatch(JSON.stringify([records, f.transport.checkpoint()]), /PRIVATE_CANARY|55555555|amz-sdk|127\.0\.0\.1/);
   }
   assert.throws(() => f.meter.snapshot(), /Invalid cloud cost meter/);
@@ -206,6 +207,7 @@ test('the transport drops an unknown admission category without evaluating acces
 
 test('the shared tracker reports its first observer refusal when a later producer is already poisoned', async t => {
   const s = createLitestreamAfterStop({ clock: () => 0 });
+  s.admit(admission({ phase: 'idle' }));
   assert.throws(() => s.admit(admission({ hop: 'observer' })), bad);
   const f = await httpFixture(t, s);
   assert.equal(await f.send('PUT'), 400); assert.equal(f.forwarded(), 0);

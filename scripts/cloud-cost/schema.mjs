@@ -1,4 +1,8 @@
 import { validateInput } from './input.mjs';
+import { isDeepStrictEqual, types } from 'node:util';
+import { assessAccounting } from './accounting-policy.mjs';
+import { validateReplayAdmission } from './isolated-replay.mjs';
+import { summarizeStreamAccounting } from './stream-admission.mjs';
 export { validateInput } from './input.mjs';
 import { existsSync, lstatSync, readdirSync, readFileSync, realpathSync } from 'node:fs';
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
@@ -99,9 +103,95 @@ function receiptUnchecked(receipt) {
 export function validateReceipt(receipt) {
   try { return receiptUnchecked(receipt); } catch { fail(); }
 }
-export function exportAggregate(privateResult) {
-  // Reject instead of dropping unrecognised data so new producer fields cannot leak silently.
-  return validateReceipt(privateResult);
+function exportData(value, ancestors = new Set(), budget = { remaining: 250000 }) {
+  requireThat(--budget.remaining >= 0);
+  if (value === null || ['string', 'number', 'boolean'].includes(typeof value)) return;
+  requireThat(value && typeof value === 'object' && !types.isProxy(value) && ancestors.size < 12 && !ancestors.has(value));
+  requireThat([Object.prototype, Array.prototype, null].includes(Object.getPrototypeOf(value)));
+  ancestors.add(value);
+  for (const key of Reflect.ownKeys(value)) {
+    const descriptor = Object.getOwnPropertyDescriptor(value, key);
+    requireThat(Object.hasOwn(descriptor, 'value'));
+    exportData(descriptor.value, ancestors, budget);
+  }
+  ancestors.delete(value);
+}
+export function exportAggregate(privateResult, originals) {
+  try {
+    // Historical shape validation cannot recover billing or coverage discarded by a projection.
+    exportData(originals);
+    closed(originals, ['producer', 'sources', ...(Object.hasOwn(originals, 'measurements') ? ['measurements'] : [])]);
+    requireThat(assessAccounting({ producer: originals.producer, sources: originals.sources }).publicationEligible);
+    requireThat(['local-stream', 'archive'].includes(originals.producer));
+    exportData(privateResult);
+    const receipt = validateReceipt(privateResult);
+    const source = scope => originals.sources.find(source => source.scope === scope).record;
+    const native = source('requests').accounting, administration = source('administration').accounting;
+    requireThat(native && administration);
+    const identity = row => JSON.stringify([row.phase, row.operation, row.requestClass, row.outcome, row.retryOrdinal]);
+    const restored = source('restore').accounting;
+    requireThat(restored && (isDeepStrictEqual(restored, native)
+      || isDeepStrictEqual(restored.requests, native.requests.filter(row => row.phase === 'restore'))));
+    // Equal quantities in separate meters still describe separate admitted work.
+    const meters = [native, administration, source('storage').accounting].filter(Boolean);
+    const requests = new Map(), objects = new Map();
+    const add = (map, key, row, numeric) => {
+      if (!map.has(key)) map.set(key, { ...row });
+      else for (const field of numeric) {
+        const total = map.get(key)[field] + row[field];
+        requireThat(field === 'byteSeconds' ? finite(total) && total <= Number.MAX_SAFE_INTEGER : count(total));
+        map.get(key)[field] = total;
+      }
+    };
+    for (const meter of meters) {
+      for (const row of meter.requests) add(requests, identity(row), row, requestKeys.slice(5));
+      for (const row of meter.objects) add(objects, row.class, row, objectKeys.slice(1));
+    }
+    const sorted = (rows, key) => [...rows].sort((a, b) => key(a).localeCompare(key(b)));
+    requireThat(isDeepStrictEqual(sorted(receipt.accounting.requests, identity), sorted(requests.values(), identity))
+      && isDeepStrictEqual(sorted(receipt.accounting.objects, row => row.class), sorted(objects.values(), row => row.class)));
+    for (const field of totalsKeys) for (const channel of ['producer', 'observer']) {
+      const total = meters.reduce((total, meter) => total + meter[channel][field], 0);
+      requireThat(count(total) && receipt.accounting[channel][field] === total);
+    }
+    requireThat(totalsKeys.every(field => receipt.accounting.discrepancy[field] === 0));
+    requireThat(receipt.inputs.every(row => ['measured', 'unknown'].includes(row.status)));
+    if (Object.hasOwn(originals, 'measurements') || receipt.inputs.some(row => row.status === 'measured')) {
+      requireThat(originals.producer === 'local-stream');
+      closed(originals.measurements, ['replay', 'stream', 'options']);
+      const { replay, stream, options } = originals.measurements;
+      closed(options, ['expected', 'originalInventory', 'cadence', 'replayWindowSeconds', 'stream']);
+      closed(options.expected, ['sales', 'paid', 'tradingDays', 'busiest']);
+      closed(options.originalInventory, ['days', 'busiest']);
+      closed(options.cadence, ['mode', 'factor']);
+      closed(options.stream, ['startupSeconds', 'idleSeconds', 'windowSeconds']);
+      requireThat(finite(options.replayWindowSeconds) && options.replayWindowSeconds > 0 && options.replayWindowSeconds <= 3600
+        && Object.values(options.stream).every(value => finite(value) && value > 0)
+        && options.stream.startupSeconds <= 300 && options.stream.idleSeconds <= 3600 && options.stream.windowSeconds <= 7200
+        && options.stream.startupSeconds + options.stream.idleSeconds + options.replayWindowSeconds < options.stream.windowSeconds);
+      const admitted = validateReplayAdmission(replay, options);
+      const accounting = summarizeStreamAccounting(stream, { ...options.stream, expectedSales: options.expected.busiest });
+      requireThat(receipt.window.elapsedSeconds >= accounting.storage.windowSeconds
+        && receipt.window.elapsedSeconds >= stream.phases.reduce((total, phase) => total + phase.elapsedSeconds, 0) + stream.retainedStorage.windowSeconds);
+      for (const [scope, record] of [['requests', stream.requests], ['restore', stream.requests],
+        ['administration', stream.administration], ['storage', stream.storage]]) requireThat(isDeepStrictEqual(source(scope), record));
+      const values = { 'orders-per-day': [admitted.replay.counts.successful, 'count'],
+        'bill-count': [admitted.replay.counts.successful, 'count'], 'successful-sales': [admitted.replay.counts.successful, 'count'],
+        'database-bytes': [admitted.storage.copiedDatabaseBytes, 'bytes'],
+        'database-growth-bytes': [admitted.storage.freshGrowthBytes, 'bytes'],
+        'replay-seconds': [admitted.replay.timing.elapsedSeconds, 'seconds'],
+        'stream-byte-seconds-low': [accounting.storage.byteSeconds.low, 'byte-seconds'],
+        'stream-byte-seconds-high': [accounting.storage.byteSeconds.high, 'byte-seconds'],
+        'stream-storage-seconds': [accounting.storage.windowSeconds, 'seconds'] };
+      requireThat(isDeepStrictEqual(receipt.cadence, { ...admitted.replay.cadence, configuredSchedule: null, observedSchedule: null }));
+      for (const row of receipt.inputs.filter(row => row.status === 'measured')) {
+        requireThat(Object.hasOwn(values, row.id) && row.value === values[row.id][0] && row.unit === values[row.id][1]
+          && row.source === 'receipt:' + receipt.runId && row.observedAt === receipt.window.endedAt
+          && row.scope === 'venue' && row.region === 'local');
+      }
+    }
+    return receipt;
+  } catch { fail(); }
 }
 
 const within = (parent, child) => child === parent || (relative(parent, child) !== '..'

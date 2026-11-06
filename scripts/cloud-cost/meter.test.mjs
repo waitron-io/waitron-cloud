@@ -142,9 +142,10 @@ test('streamingProxyReconcilesRetryDeniedAndInterruptedMultipart', async t => {
     bytesIn: 3, bytesOut: 0, attemptedBytesIn: 10, attemptedBytesOut: 0 }));
   const result = f.meter.snapshot();
   assert.equal(result.accounting.producer.attempts, 5); assert.equal(result.accounting.producer.bytesOut, 8);
-  assert.equal(result.accounting.producer.bytesIn, 3); assert.equal(result.status, 'measured');
+  assert.equal(result.accounting.producer.bytesIn, 3); assert.equal(result.status, 'unknown');
+  assert.deepEqual(result.gaps, ['accounting:request-cutoff', 'request-billing:unknown']);
   assert.equal(result.billing.find(r => r.requestClass === 's3-multipart').quantity, 1);
-  assert.equal(result.billing.find(r => r.requestClass === 's3-read').quantity, 2);
+  assert.equal(result.billing.find(r => r.requestClass === 's3-read').quantity, null);
   assert.ok(!JSON.stringify(result).includes('/partial'));
 });
 test('proxyRejectsExternalTargetsBeforeListening', async () => {
@@ -185,7 +186,8 @@ test('streamingProxyCountsAnInterruptedMultipartUpload', { timeout: 5000 }, asyn
   f.meter.observeAttempt(attempt('partial-part', { operation: 'multipart-upload', outcome: 'transport-error',
     statusCode: null, bytesOut: 4, attemptedBytesOut: 8 }));
   const result = f.meter.snapshot();
-  assert.equal(result.status, 'measured'); assert.equal(result.accounting.observer.bytesOut, 4);
+  assert.equal(result.status, 'unknown'); assert.equal(result.accounting.observer.bytesOut, 4);
+  assert.deepEqual(result.gaps, ['accounting:request-cutoff', 'request-billing:unknown']);
   assert.equal(result.accounting.requests[0].attemptedBytesOut, 8); assert.equal(result.accounting.requests[0].failed, 1);
   assert.equal(result.billing[0].quantity, null); assert.ok(!JSON.stringify(result).includes('PRIVATE_SYNTHETIC_CANARY'));
 });
@@ -227,7 +229,9 @@ test('meterAccountingExportsThroughTheClosedAnonymousSchema', () => {
     window: { startedAt: '2026-10-14T12:00:00.000Z', endedAt: '2026-10-14T12:00:02.000Z', elapsedSeconds: 2 },
     cadence: { mode: 'original', factor: 1, coveredSeconds: 2, configuredSchedule: null, observedSchedule: null },
     inputs: [], accounting: result.accounting, checks: [{ code: 'accounting-reconciled', passed: result.reconciled, count: 1 }],
-    cleanup: { ownedProcesses: 0, ownedContainers: 0, ownedNetworks: 0, ownedVolumes: 0, ownedObjects: 0, residualKinds: [] } });
+    cleanup: { ownedProcesses: 0, ownedContainers: 0, ownedNetworks: 0, ownedVolumes: 0, ownedObjects: 0, residualKinds: [] } }, { producer: 'local-stream',
+      sources: ['requests', 'restore', 'administration', 'storage'].map(scope => ({ scope,
+        record: ['requests', 'restore'].includes(scope) ? result : createMeter({ phase: 'cleanup', clock: () => 0 }).snapshot() })) });
   assert.equal(receipt.accounting.objects[0].byteSeconds, 20); assert.equal(receipt.accounting.producer.bytesOut, 10);
   assert.ok(!JSON.stringify(receipt).includes('PRIVATE_SYNTHETIC_CANARY'));
 });

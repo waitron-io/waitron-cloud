@@ -10,6 +10,7 @@ import {waitForGatewayReady} from '../remote-readiness.mjs';
 import * as journey from '../local.mjs';
 import {runBrowserFixture} from './browser-diagnostics.mjs';
 import { signManifest } from '../../../packages/remote-access/src/manifest.ts';
+import { assessAccounting } from '../accounting-policy.mjs';
 
 const environment = { PATH: process.env.PATH, LANG: 'C', TZ: 'UTC' };
 const run = (command, args) => runBrowserFixture(command, args, environment);
@@ -79,7 +80,7 @@ process.kill(process.pid, 'SIGTERM');
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
 
-for (const fault of ['none', 'extra-config', 'missing-cookie', 'missing-bundle', 'late-asset-error', 'page-error', 'outside-request'])
+for (const fault of ['none', 'extra-config', 'missing-cookie', 'missing-bundle', 'late-asset-error', 'page-error', 'outside-request', 'missing-counter', 'mismatched-counter'])
 test('pinnedDashboardBrowserLoadsAssetsAuthenticatesReconnectsAndSignsOut_' + fault, { timeout: 120000 }, async t => {
   assert.equal(typeof journey.measureRemoteBrowser, 'function', 'measure genuine owner and public routes');
   const fixture = JSON.parse(readFileSync(process.env.COST_BROWSER_FIXTURE, 'utf8'));
@@ -88,6 +89,7 @@ test('pinnedDashboardBrowserLoadsAssetsAuthenticatesReconnectsAndSignsOut_' + fa
   const root = realpathSync(mkdtempSync(join(tmpdir(), 'cloud-cost-browser-'))), owner = randomUUID();
   const label = 'io.waitron.cloud-cost.remote-browser=' + owner, network = 'cost-remote-' + owner;
   const containers = []; let networkId;
+  const accountingFault = ['missing-counter', 'mismatched-counter'].includes(fault);
   const secret = (path, value) => writeFileSync(join(root, path), value, { mode: 0o600 });
   const journal = entries => secret('ownership.json', JSON.stringify({ owner, containers, networkId, entries }));
   const start = args => {
@@ -104,6 +106,14 @@ test('pinnedDashboardBrowserLoadsAssetsAuthenticatesReconnectsAndSignsOut_' + fa
     mkdirSync(join(root, 'state'), { mode: 0o700 }); mkdirSync(join(root, 'measure'), { mode: 0o700 });
     cpSync(new URL('../remote.mjs', import.meta.url), join(root, 'measure/remote.mjs'));
     cpSync(new URL('./remote-browser-smoke.mjs', import.meta.url), join(root, 'measure/remote-browser-smoke.mjs'));
+    if (accountingFault) secret('measure/remote-browser-smoke.mjs', `
+import net from 'node:net'; import {syncBuiltinESMExports} from 'node:module';
+const originalServer = net.createServer, written = Object.getOwnPropertyDescriptor(net.Socket.prototype, 'bytesWritten').get;
+net.createServer = (options, handle) => originalServer(options, socket => {
+  Object.defineProperty(socket, 'bytesWritten', {get() {return ${fault === 'missing-counter' ? 'undefined' : 'written.call(this) + 1'};}});
+  handle(socket);
+}); syncBuiltinESMExports();
+` + readFileSync(new URL('./remote-browser-smoke.mjs', import.meta.url), 'utf8'));
     cpSync(new URL('./remote-waitron-smoke.mjs', import.meta.url), join(root, 'measure/remote-waitron-smoke.mjs'));
     cpSync(new URL('../remote-journey.mjs', import.meta.url), join(root, 'measure/remote-journey.mjs'));
     cpSync(new URL('../remote-readiness.mjs', import.meta.url), join(root, 'measure/remote-readiness.mjs'));
@@ -190,7 +200,7 @@ test('pinnedDashboardBrowserLoadsAssetsAuthenticatesReconnectsAndSignsOut_' + fa
       "import {chromium} from '/measure/node_modules/playwright-core/index.mjs'; const browser = await chromium.launch({args:['--no-sandbox']}); process.stdout.write(browser.version()); await browser.close();");
     assert.match(chromiumVersion, /^\d+\.\d+\.\d+\.\d+$/);
     const gatewayBefore = wire(gateway), peerBefore = wire(peer);
-    if (fault !== 'none') {
+    if (fault !== 'none' && !accountingFault) {
       assert.throws(() => docker('exec', runner, 'node', '/measure/remote-browser-smoke.mjs', fault),
         error => error.journeyRefused === true, 'incomplete or outside browser evidence refuses without partial output');
       return;
@@ -208,8 +218,17 @@ test('pinnedDashboardBrowserLoadsAssetsAuthenticatesReconnectsAndSignsOut_' + fa
     assert.equal(result.failedRequests, 0); assert.equal(result.unexpectedResponses, 0);
     assert.equal(result.pageErrors, 0); assert.equal(result.outsideRequests, 0);
     assert.ok(result.completedResponseBodyBytes > 100000, 'real bundled dashboard assets are counted');
-    assert.deepEqual(result.snapshot.producer, result.snapshot.observer);
-    assert.ok(result.snapshot.producer.bytesFromGateway > result.completedResponseBodyBytes);
+    if (accountingFault) {
+      assert.equal(result.snapshot.status, 'unknown');
+      assert.equal(result.snapshot.reconciled, false);
+      assert.equal(assessAccounting({ producer: 'remote', sources: [{ scope: 'remote', record: result.snapshot }] }).publicationEligible, false);
+      assert.ok(result.snapshot.observer.bytesFromGateway > result.completedResponseBodyBytes);
+      assert.equal(result.snapshot.producer.bytesFromGateway, fault === 'missing-counter' ? null
+        : result.snapshot.observer.bytesFromGateway + result.snapshot.producer.connections);
+    } else {
+      assert.deepEqual(result.snapshot.producer, result.snapshot.observer);
+      assert.ok(result.snapshot.producer.bytesFromGateway > result.completedResponseBodyBytes);
+    }
     for (const value of ['owner@example.test', 'Generated local password', 'Generated owner', staffHost, publicHost])
       assert.equal(JSON.stringify(result).includes(value), false);
     assert.equal(Object.keys(JSON.parse(docker('inspect', gateway))[0].HostConfig.PortBindings ?? {}).length, 0);

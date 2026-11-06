@@ -1,5 +1,5 @@
 import { deletionXml, deletionFields } from './s3-deletion.mjs';
-import { nativeMultipartHistory } from './storage-lifetimes.mjs';
+import { nativeMultipartHistory, storageHistorySnapshot } from './storage-lifetimes.mjs';
 import { assertStorageClientBinding, classifyStorageOperation } from './meter.mjs';
 
 const fail = () => { throw Error('Invalid cloud cost storage lifetimes'); };
@@ -11,7 +11,7 @@ const identity = (key, version) => JSON.stringify([key, version]);
 // Versioning retains a failed write's possible extra version until an independent inventory resolves it.
 // Payloads and provider identities stay private; only counts and conservative storage bounds are returned.
 export async function openLitestreamVersionHistories({ client, sdk, meter, bucket, clock, afterStop, allowBulkDeletes = false, allowMultipart = false, resolveMultipartReplies = false }) {
-  const rows = new Map(), unresolved = [], pending = new Set(), activeKeys = new Set();
+  const rows = new Map(), unresolved = [], pending = new Set(), activeKeys = new Set(), gaps = new Set();
   let invalid = false, verifying = false, verified = false, last = -Infinity, sequence = 0, endpoint, start;
   let retiredLow = 0, retiredHigh = 0;
   const poison = () => { invalid = true; try { afterStop?.invalidate(); meter?.invalidate?.(); } finally { fail(); } };
@@ -38,12 +38,28 @@ export async function openLitestreamVersionHistories({ client, sdk, meter, bucke
     retiredHigh += row.bytes * (by - row.from);
     row.deleted = true; row.removing = null;
   };
-  const multipart = allowMultipart ? nativeMultipartHistory({ bucket, now, inspect, resolveReplies: resolveMultipartReplies, complete: (key, bytes, from, by, headers) => {
-    const version = headers?.['x-amz-version-id'], marker = headers?.['x-amz-delete-marker'];
-    need(text(version) && version !== 'null' && !rows.has(identity(key, version))
-      && (marker === undefined || marker === 'false') && rows.size < 100000 && sequence < 100000);
-    rows.set(identity(key, version), { key, version, bytes, marker: false, from, by,
-      orders: [++sequence], latest: false, deleted: false, removing: null });
+  const completionStates = new WeakMap();
+  const multipart = allowMultipart ? nativeMultipartHistory({ bucket, now, inspect, resolveReplies: resolveMultipartReplies,
+    markGap: code => { gaps.add(code); meter.markGap(code); }, prepareComplete: (key, sizes, from) => {
+    need(sequence < 100000); const order = ++sequence;
+    const bytes = sizes.length === 1 ? sizes[0] : null, possibleBytes = bytes === null ? sizes : undefined;
+    const apply = (by, headers) => {
+      const version = headers?.['x-amz-version-id'], marker = headers?.['x-amz-delete-marker'];
+      need(text(version) && version !== 'null' && !rows.has(identity(key, version))
+        && (marker === undefined || marker === 'false') && rows.size < 100000);
+      rows.set(identity(key, version), { key, version, bytes, possibleBytes, marker: false, from, by,
+        orders: [order], latest: false, deleted: false, removing: null });
+    };
+    // The vanished upload requires a retained version. Reserve request order at
+    // admission so later ordinary writes cannot become older during inventory.
+    const candidate = { key, bytes, possibleBytes, marker: false, from, order };
+    completionStates.set(apply, candidate);
+    apply.resolve = (by, { alternatives = [], optional = false } = {}) => {
+      const choices = [candidate, ...alternatives.map(fn => completionStates.get(fn))];
+      need(choices.every(choice => choice && choice.key === key));
+      unresolved.push({ ...candidate, ...(choices.length > 1 ? { choices } : {}), required: !optional });
+    };
+    return apply;
   } }) : null;
   const beginBatch = ({ headers, body }) => {
     need(allowBulkDeletes === true && headers && !Object.hasOwn(headers, 'content-encoding')
@@ -66,9 +82,12 @@ export async function openLitestreamVersionHistories({ client, sdk, meter, bucke
     verified = false;
     const token = {}; pending.add(token);
     return guarded(({ statusCode, bytesOut, interrupted = false, responseBody }) => {
-      need(pending.has(token) && !interrupted && Number.isInteger(statusCode) && statusCode >= 200 && statusCode <= 599 && bytesOut === body.length);
+      need(pending.has(token) && typeof interrupted === 'boolean' && count(bytesOut)
+        && (interrupted && statusCode === null || Number.isInteger(statusCode) && statusCode >= 200 && statusCode <= 599)
+        && (interrupted ? bytesOut <= body.length : bytesOut === body.length));
+      if (interrupted) { gaps.add('accounting:request-cutoff'); meter.markGap('accounting:request-cutoff'); }
       const time = now(), results = new Map();
-      if (statusCode < 300) {
+      if (!interrupted && statusCode < 300) {
         need(statusCode === 200);
         for (const entry of deletionXml(responseBody, 'DeleteResult')) {
           need(entry.name === 'Deleted' || entry.name === 'Error');
@@ -139,12 +158,15 @@ export async function openLitestreamVersionHistories({ client, sdk, meter, bucke
     const settleLifetime = strictRead ? undefined : afterStop?.beginLifetime({ headers, operation, versioned: true });
     const token = {}; pending.add(token);
     return guarded(({ statusCode, bytesOut, interrupted = false, responseHeaders }) => {
-      if (settleLifetime) ({ statusCode, responseHeaders } = settleLifetime({ statusCode, bytesOut, interrupted, responseHeaders }));
-      need(pending.has(token) && (!interrupted || settleLifetime) && Number.isInteger(statusCode) && statusCode >= 200 && statusCode <= 599);
+      if (settleLifetime) ({ statusCode, responseHeaders, interrupted } = settleLifetime({ statusCode, bytesOut, interrupted, responseHeaders }));
+      need(pending.has(token) && typeof interrupted === 'boolean' && count(bytesOut)
+        && (interrupted && statusCode === null || Number.isInteger(statusCode) && statusCode >= 200 && statusCode <= 599));
+      if (interrupted) { gaps.add('accounting:request-cutoff'); meter.markGap('accounting:request-cutoff'); }
       const time = now();
       if (mutation) {
-        need(bytesOut === (operation === 'put' ? mutation.bytes : 0));
-        if (statusCode < 300) {
+        const expectedBytes = operation === 'put' ? mutation.bytes : 0;
+        need(interrupted ? bytesOut <= expectedBytes : bytesOut === expectedBytes);
+        if (statusCode !== null && statusCode < 300 && !interrupted) {
           need(responseHeaders && typeof responseHeaders === 'object');
           const returned = responseHeaders['x-amz-version-id'], marker = responseHeaders['x-amz-delete-marker'];
           if (mutation.row) {
@@ -164,11 +186,80 @@ export async function openLitestreamVersionHistories({ client, sdk, meter, bucke
     });
   };
   const begin = guarded(input => beginOperation(input, false));
-  // Final restore shares inventory and pending-token guards, with no replication shutdown allowance.
+  // Restore shares inventory and pending-token guards; its read-only view cannot mutate storage.
   const strictReads = { begin: guarded(input => {
     need(['get', 'head', 'list'].includes(classifyStorageOperation(input)));
     return beginOperation(input, true);
   }) };
+  const assignPossibleVersions = (found, time) => {
+    const keys = new Set(unresolved.map(mutation => mutation.key));
+    for (const [id, observed] of found) if (!rows.has(id)) keys.add(observed.key);
+    const matches = (mutation, observed) => mutation.marker === observed.marker
+      && (mutation.possibleBytes ? mutation.possibleBytes.includes(observed.bytes) : mutation.bytes === observed.bytes);
+    const compatible = (mutation, observed, before = Infinity) => (mutation.choices ?? [mutation])
+      .filter(choice => choice.order < before && matches(choice, observed));
+    for (const key of keys) {
+      const requests = unresolved.filter(mutation => mutation.key === key);
+      const retained = [...found].filter(([, observed]) => observed.key === key);
+      const unknown = retained.filter(([id]) => !rows.has(id));
+      if (!unknown.length) { need(!requests.some(mutation => mutation.required)); continue; }
+      const latest = retained.filter(([, observed]) => observed.latest); need(latest.length === 1);
+      const [latestId, latestObserved] = latest[0], knownLatest = rows.get(latestId);
+      const latestOrders = knownLatest ? [knownLatest.orders.at(-1)]
+        : requests.flatMap(mutation => compatible(mutation, latestObserved).map(choice => choice.order));
+      let selected;
+      // Alternative sizes share one request, so separate size groups cannot each
+      // consume it. Match required completions first and keep the latest version last.
+      for (const latestOrder of latestOrders) {
+        const assigned = new Map(), earlier = new Map();
+        for (const [id] of retained) {
+          const row = rows.get(id);
+          if (row && id !== latestId) earlier.set(row.orders, (earlier.get(row.orders) ?? 0) + 1);
+        }
+        if ([...earlier].some(([orders, required]) => orders.filter(order => order < latestOrder).length < required)) continue;
+        const latestRequest = knownLatest ? null : requests.find(mutation => compatible(mutation, latestObserved)
+          .some(choice => choice.order === latestOrder));
+        if (latestRequest) assigned.set(latestId, latestRequest);
+        const assign = request => {
+          const queue = [request], parents = new Map([[request, null]]), seen = new Set();
+          for (let n = 0; n < queue.length; n++) {
+            let current = queue[n];
+            for (const [id, observed] of unknown) {
+              if (id === latestId || seen.has(id) || !compatible(current, observed, latestOrder).length) continue;
+              seen.add(id); const previous = assigned.get(id);
+              if (previous) {
+                if (!parents.has(previous)) { parents.set(previous, { request: current, id }); queue.push(previous); }
+              } else {
+                assigned.set(id, current);
+                for (let edge = parents.get(current); edge; edge = parents.get(current)) {
+                  assigned.set(edge.id, edge.request); current = edge.request;
+                }
+                return true;
+              }
+            }
+          }
+          return false;
+        };
+        let valid = true;
+        for (const request of requests.filter(mutation => mutation.required)) {
+          if (request === latestRequest) continue;
+          if (!assign(request)) { valid = false; break; }
+        }
+        if (!valid) continue;
+        for (const request of requests.filter(mutation => !mutation.required && mutation !== latestRequest)) assign(request);
+        if (assigned.size === unknown.length) {
+          selected = new Map([...assigned].map(([id, request]) => [id, compatible(request, found.get(id), id === latestId ? Infinity : latestOrder)
+            .find(choice => id !== latestId || choice.order === latestOrder)]));
+          break;
+        }
+      }
+      need(selected);
+      for (const [id, request] of selected) {
+        need(rows.size < 100000);
+        rows.set(id, { ...found.get(id), from: request.from, by: time, orders: [request.order], deleted: false, removing: null });
+      }
+    }
+  };
   const verify = async () => {
     try {
       need(!invalid && !verifying && pending.size === 0); verifying = true; verified = false; now();
@@ -192,17 +283,22 @@ export async function openLitestreamVersionHistories({ client, sdk, meter, bucke
         markers = { KeyMarker: page.NextKeyMarker, VersionIdMarker: page.NextVersionIdMarker };
         const id = JSON.stringify(markers); need(!tokens.has(id)); tokens.add(id);
       }
-      if (multipart) await multipart.verify([...found].filter(([id]) => !rows.has(id)).map(([, row]) => row));
+      if (multipart) await multipart.verify();
       else {
         const uploads = await inspect('ListMultipartUploadsCommand');
         need(uploads.IsTruncated === false && (uploads.Uploads === undefined || Array.isArray(uploads.Uploads) && uploads.Uploads.length === 0));
       }
       const time = now(), groups = new Map(), used = new Map(), orders = new Map();
       const group = row => JSON.stringify([row.key, row.bytes, row.marker]);
-      for (const mutation of unresolved) {
+      const alternatives = unresolved.some(mutation => mutation.possibleBytes || mutation.choices);
+      if (alternatives) assignPossibleVersions(found, time);
+      for (const mutation of alternatives ? [] : unresolved) {
         const id = group(mutation); if (!groups.has(id)) groups.set(id, []); groups.get(id).push(mutation);
       }
-      for (const [id, candidates] of groups) orders.set(id, candidates.map(c => c.order));
+      for (const [id, candidates] of groups) {
+        candidates.sort((a, b) => a.order - b.order);
+        orders.set(id, candidates.map(c => c.order));
+      }
       for (const [id, observed] of found) {
         let row = rows.get(id);
         if (!row) {
@@ -212,9 +308,13 @@ export async function openLitestreamVersionHistories({ client, sdk, meter, bucke
             orders: orders.get(g), deleted: false, removing: null };
           rows.set(id, row);
         }
+        if (row.possibleBytes) {
+          need(row.possibleBytes.includes(observed.bytes)); row.bytes = observed.bytes; delete row.possibleBytes;
+        }
         need(!row.deleted && row.bytes === observed.bytes && row.marker === observed.marker);
         row.latest = observed.latest;
       }
+      for (const [id, candidates] of groups) need((used.get(id) ?? 0) >= candidates.filter(c => c.required).length);
       const byKey = new Map();
       for (const [id, row] of rows) {
         if (row.deleted) { need(!found.has(id)); continue; }
@@ -245,8 +345,7 @@ export async function openLitestreamVersionHistories({ client, sdk, meter, bucke
       }
       const parts = multipart?.snapshot(time) ?? { bytes: 0, uploads: 0, low: 0, high: 0 };
       objects.bytes += parts.bytes; objects.unfinishedMultipart = parts.uploads; low += parts.low; high += parts.high;
-      need(count(objects.bytes) && Number.isFinite(low) && Number.isFinite(high) && low >= 0 && high >= low);
-      return { status: 'measured', scope: 'versioned-object-history', windowSeconds: time - start, objects, byteSeconds: { low, high } };
+      return storageHistorySnapshot({ scope: 'versioned-object-history', windowSeconds: time - start, objects, byteSeconds: { low, high } }, meter, gaps);
     })();
   };
   await verify(); return { begin, verify, snapshot, ...(afterStop ? { afterStop, strictReads } : {}) };

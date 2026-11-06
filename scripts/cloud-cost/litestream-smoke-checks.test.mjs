@@ -15,11 +15,23 @@ function evidence(interrupted = false) {
       discrepancy: { attempts: 0, bytesIn: interrupted ? 6 : 0, bytesOut: 0 },
       requests: [producer, { ...row('success', 20), operation: 'put', attempts: 2, bytesOut: 40 }],
     }, observedRequests: [observer, { ...row('success', 20), operation: 'put', attempts: 2, bytesOut: 40 }] };
+  for (const rows of [proof.accounting.requests, proof.observedRequests]) for (const row of rows) {
+    row.requestClass = row.operation === 'put' ? 's3-write' : 's3-list';
+    row.successful = row.outcome === 'success' ? row.attempts : 0;
+    row.failed = row.attempts - row.successful; row.retried = 0;
+    row.attemptedBytesIn = Math.max(row.attemptedBytesIn, row.bytesIn);
+    row.attemptedBytesOut = Math.max(row.attemptedBytesOut, row.bytesOut);
+  }
+  proof.accounting.objects = [];
+  proof.billing[0].phase = 'workload'; proof.billing[0].requestClass = 's3-list';
+  proof.billing[0].quantity = interrupted ? null : 1;
+  proof.billing.push({ phase: 'workload', requestClass: 's3-write', quantity: 2, status: 'measured' });
   const afterStop = { cap: 3, used: 1, lateAdmissions: interrupted ? 0 : 1, lateSettlements: interrupted ? 1 : 0,
     producer: { attempts: 1, bytesIn: producer.bytesIn, bytesOut: 0 }, observer: { attempts: 1, bytesIn: 8, bytesOut: 0 },
     requests: [{ hop: 'producer', ...producer }, { hop: 'observer', ...observer }], requestsReconciled: true,
     bodiesReconciled: !interrupted, status: interrupted ? 'unknown' : 'measured',
     gaps: interrupted ? ['after-stop:list-response-interrupted', 'after-stop:body-bytes-unpaired'] : [] };
+  afterStop.requests = afterStop.requests.map(({ requestClass, successful, failed, retried, ...row }) => row);
   return { replication: { requestsReconciled: true, producerAttempts: 3 }, afterStop,
     observed: structuredClone(proof), transport: { replication: proof },
     costAccuracy: { status: 'incomplete', reason: 'after-stop', message: 'Cost may be a few requests short after stop.' } };

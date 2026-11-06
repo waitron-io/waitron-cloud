@@ -170,7 +170,7 @@ test('remoteCloseWaitsForUpstreamSocketsAfterTheLastHttpResponse', async t => {
   assert.deepEqual(run.snapshot().producer, run.snapshot().observer);
 });
 
-// Independent counter disagreement must block evidence, even when every application byte arrived.
+// Independent counter disagreement blocks measured evidence after functional completion.
 test('remoteCounterDisagreementCannotPublishAMeasuredRun', async t => {
   const f = await backend(t, socket => { socket.resume(); socket.once('end', () => socket.end('four')); });
   const original = net.connect, written = Object.getOwnPropertyDescriptor(net.Socket.prototype, 'bytesWritten').get;
@@ -184,5 +184,10 @@ test('remoteCounterDisagreementCannotPublishAMeasuredRun', async t => {
   t.after(() => { net.connect = original; syncBuiltinESMExports(); });
   const run = await open(t, f);
   assert.equal((await exchange(run.port, 'four')).toString(), 'four');
-  await assert.rejects(run.close(), bad); assert.throws(() => run.snapshot(), bad);
+  await assert.doesNotReject(run.close());
+  assert.equal(run.snapshot().status, 'unknown');
+  assert.equal(run.snapshot().reconciled, false);
+  assert.deepEqual(run.snapshot().producer, { connections: 1, bytesToGateway: 4, bytesFromGateway: 4 });
+  assert.deepEqual(run.snapshot().observer, { connections: 1, bytesToGateway: 5, bytesFromGateway: 4 });
+  assert.deepEqual(run.snapshot().gaps, ['accounting:meter-disagreement']);
 });

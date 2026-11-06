@@ -24,7 +24,7 @@ export async function openReplayStream(input) {
   };
   const at = stage => { diagnosticStage = stage; diagnose({ kind: 'stream', stage }); };
   const refused = () => diagnose({ kind: 'stream-refusal', stage: diagnosticStage });
-  let invalid = false, closed = false, resourcesCollected = false, starts = 0, phase = 'startup';
+  let invalid = false, closed = false, resourcesCollected = false, starts = 0, phase = 'startup', startupUpload = false;
   const children = new Set();
   const record = entry => {
     assertOwnedRoot(args);
@@ -175,7 +175,7 @@ export async function openReplayStream(input) {
     writeFileSync(join(workRoot, 'stream.json'), JSON.stringify({ snapshot: { interval: '24h', retention: '168h' },
       dbs: [{ path: database, 'monitor-interval': '1s', replica: { type: 's3', bucket, path: 'stream', endpoint: session.url,
         region: 'eu-north-1', 'force-path-style': true, 'sync-interval': '1s' } }] }), { mode: 0o600, flag: 'wx' });
-    await start();
+    await start(); startupUpload = true;
   } catch { refused(); invalid = true; await dispose().catch(() => {}); fail(); }
   return {
     setPhase: async next => {
@@ -209,6 +209,7 @@ export async function openReplayStream(input) {
           } finally { db.close(); }
           at('accounting'); const stream = await session.finish(); healthy();
           const result = { stream, restored: { sales: expectedSales, integrity: true },
+            functional: { startupUpload, restore: true },
             native: { version: '0.5.17', writerStarts: starts, phaseRestarts: starts - 1 },
             cleanup: { processes: 0, privateRoots: 0 } };
           at('cleanup'); await dispose(); evidence = result; return result;

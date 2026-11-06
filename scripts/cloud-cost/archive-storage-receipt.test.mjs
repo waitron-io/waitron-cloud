@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { validateReceipt } from './schema.mjs';
+import { readFileSync } from 'node:fs';
 const module = await import('./archive-storage-receipt.mjs').catch(error => {
   if (error.code === 'ERR_MODULE_NOT_FOUND' && error.url === new URL('./archive-storage-receipt.mjs', import.meta.url).href) return {};
   throw error;
@@ -48,6 +49,15 @@ const build = input => {
   return module.buildArchiveStorageReceipt(input);
 };
 const bad = { message: 'Invalid cloud cost archive storage evidence' };
+test('unknown archive billing finishes the rehearsal without generating a new receipt', () => {
+  const completed = build(fixture());
+  assert.equal(completed.functional, 'passed');
+  assert.equal(completed.costMeasured, false);
+  assert.equal(completed.receipt, null);
+  assert.equal(completed.accounting.status, 'unknown');
+  assert.equal(completed.accounting.publicationEligible, false);
+  assert.ok(completed.accounting.gaps.includes('request-billing:unknown'));
+});
 function changeWireBytes(input, operation, field, delta) {
   const m = input.result.accounting, a = m.accounting;
   for (const rows of [a.requests, m.observedRequests]) {
@@ -58,22 +68,23 @@ function changeWireBytes(input, operation, field, delta) {
 }
 
 // Dropping SDK/proxy traffic or relabelling this synthetic archive would understate usage.
-test('archiveStorageReceiptRetainsEveryAttemptAndOnlyTheSyntheticMeasuredShape', () => {
-  const input = fixture(), output = build(input);
-  assert.doesNotThrow(() => validateReceipt(output));
-  assert.equal(output.cloudRevision, 'a'.repeat(40));
-  assert.deepEqual(output.accounting.producer, { attempts: 11, bytesIn: 4811, bytesOut: 4696 });
-  assert.deepEqual(output.accounting.observer, output.accounting.producer);
-  assert.deepEqual(output.inputs.map(row => [row.id, row.value, row.status, row.unit]), [
-    ['archive-bytes', 4500, 'measured', 'bytes'], ['restore-bytes', 4500, 'measured', 'bytes'],
-    ['successful-sales', 1, 'measured', 'count'],
-  ]);
-  assert.deepEqual(output.checks, [{ code: 'synthetic-only', passed: true, count: 1 },
-    { code: 'all-sales-replayed', passed: true, count: 1 }, { code: 'accounting-reconciled', passed: true, count: 11 },
-    { code: 'cleanup-complete', passed: true, count: 0 }]);
-  assert.deepEqual(output.accounting.objects, [], 'object lifetimes are not measured by this scenario');
+test('archiveStorageRetainsOriginalAttemptsAndHistoricalReadbackWithoutNewExport', () => {
+  const input = fixture(), completed = build(input), output = completed.evidence;
+  const historical = JSON.parse(readFileSync(new URL('../../docs/cost-model/archive-storage.json', import.meta.url)));
+  assert.deepEqual(validateReceipt(historical), historical);
+  assert.equal(output.metadata.cloudRevision, 'a'.repeat(40));
+  assert.deepEqual(output.result.accounting.accounting.producer, { attempts: 11, bytesIn: 4811, bytesOut: 4696 });
+  assert.deepEqual(output.result.accounting.accounting.observer, output.result.accounting.accounting.producer);
+  assert.equal(output.result.capturedBytes, 4500);
+  assert.equal(output.result.downloadedBytes, 4500);
+  assert.deepEqual(output.result.restored, { ok: true, issues: 0, sales: 1 });
+  assert.deepEqual(output.result.integrity, { ok: true, issues: 0 });
+  assert.deepEqual(output.result.sales, { attempted: 1, successful: 1, failed: 0 });
+  assert.deepEqual(output.cleanup, input.cleanup);
+  assert.equal(completed.receipt, null);
+  assert.deepEqual(output.result.accounting.accounting.objects, [], 'object lifetimes are not measured by this scenario');
   input.result.accounting.accounting.requests[1].bytesOut = 1;
-  assert.equal(output.accounting.requests[1].bytesOut, 4500);
+  assert.equal(output.result.accounting.accounting.requests[1].bytesOut, 4500);
 });
 
 const changes = [
@@ -86,6 +97,9 @@ const changes = [
   ['raw-billing', f => { f.result.accounting.billing[0].path = 'PRIVATE_CANARY'; }],
   ['raw-cleanup', f => { f.cleanup.bucket = 'PRIVATE_CANARY'; }],
   ['wrong-pin', f => { f.metadata.waitronRevision = 'b'.repeat(40); }],
+  ['invalid-run-id', f => { f.metadata.runId = 'PRIVATE_CANARY'; }],
+  ['invalid-cloud-revision', f => { f.metadata.cloudRevision = 'PRIVATE_CANARY'; }],
+  ['invalid-window', f => { f.metadata.window.elapsedSeconds = 1; }],
   ['leak', f => { f.result.leaked = true; }],
   ['unreconciled', f => { f.result.accounting.reconciled = false; }],
   ['false-status', f => { f.result.accounting.status = 'unknown'; }],
@@ -130,6 +144,10 @@ test('archiveStorageDoesNotInvokeRawProducerGetters', () => {
   const input = fixture(); let invoked = false;
   Object.defineProperty(input.result, 'accounting', { get() { invoked = true; throw Error('PRIVATE_CANARY'); } });
   try { assert.throws(() => build(input), bad); } finally { assert.equal(invoked, false); }
+  const proxyInput = fixture(); let touched = 0;
+  proxyInput.result = new Proxy({}, { getPrototypeOf() { touched++; throw Error('PRIVATE_CANARY'); } });
+  assert.throws(() => build(proxyInput), bad);
+  assert.equal(touched, 0);
 });
 
 test('currentProducerRejectsHistoricalRevision',()=>{

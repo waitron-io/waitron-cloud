@@ -8,9 +8,9 @@ import { checkpointTransportDiagnostic, workerFailureTrace } from './worker-diag
 
 // Dropping the first HTTP failure at worker admission hides whether shutdown cancelled a LIST.
 test('cancelled list keeps its first HTTP event through checkpoint and worker admission', { timeout: 5000 }, async t => {
-  let arrived, reply, invalidated, clientClosed;
+  let arrived, reply, observed, clientClosed;
   const admitted = new Promise(resolve => { arrived = resolve; });
-  const refused = new Promise(resolve => { invalidated = resolve; });
+  const settled = new Promise(resolve => { observed = resolve; });
   const destinationClosed = new Promise(resolve => { clientClosed = resolve; });
   const backend = createServer((req, res) => {
     req.resume(); req.on('end', () => { reply = () => res.end('PRIVATE_BODY'); arrived(); });
@@ -19,7 +19,7 @@ test('cancelled list keeps its first HTTP event through checkpoint and worker ad
   t.after(() => { backend.closeAllConnections(); return new Promise(resolve => backend.close(resolve)); });
   const meter = createMeter({ phase: 'workload', clock: () => 0 });
   const front = await createLitestreamTransport({ target: `http://127.0.0.1:${backend.address().port}`, phase: 'workload',
-    meter: { observeAttempt: meter.observeAttempt, invalidate() { meter.invalidate(); invalidated(); } } });
+    meter: { observeAttempt: (...args) => { try { return meter.observeAttempt(...args); } finally { observed(); } }, invalidate: meter.invalidate } });
   t.after(() => front.close().catch(() => {}));
   const emit = Server.prototype.emit;
   t.mock.method(Server.prototype, 'emit', function (event, ...args) {
@@ -33,7 +33,7 @@ test('cancelled list keeps its first HTTP event through checkpoint and worker ad
   } });
   caller.on('error', () => {}); t.after(() => caller.destroy());
   const closed = new Promise(resolve => caller.once('close', resolve)); caller.end();
-  await admitted; caller.destroy(); await closed; await destinationClosed; reply(); await refused;
+  await admitted; caller.destroy(); await closed; await destinationClosed; reply(); await settled;
   const event = checkpointTransportDiagnostic(front.checkpoint());
   assert.deepEqual(event, {
     kind: 'checkpoint-transport', reason: 'transfer-interrupted', validationStage: 'none', pending: 0, completed: 1,
@@ -43,8 +43,9 @@ test('cancelled list keeps its first HTTP event through checkpoint and worker ad
   const admittedTrace = workerFailureTrace([event]);
   assert.deepEqual(admittedTrace, [event]);
   assert.doesNotMatch(JSON.stringify(admittedTrace), /PRIVATE|127\.0\.0\.1|11111111|amz-sdk/);
-  await assert.rejects(front.close(), /Invalid cloud cost Litestream audit/);
-  assert.throws(() => meter.snapshot(), /Invalid cloud cost meter/);
+  await front.close();
+  assert.equal(meter.snapshot().status, 'unknown');
+  assert.ok(meter.snapshot().gaps.includes('accounting:request-cutoff'));
 });
 
 const base = { kind: 'checkpoint-transport', reason: 'transfer-interrupted', validationStage: 'none', pending: 0, completed: 1 };

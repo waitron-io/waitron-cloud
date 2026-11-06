@@ -49,7 +49,7 @@ test('CI stack groups select every current and future case exactly once', () => 
     'genuineNativeStreamHistoriesPairBinaryRetriesWithIndependentStorageBounds',
     'genuineNativeMultipartHistoriesKeepUnfinishedCompletedAndAbortedStorage',
     'genuineAmbiguousMultipartRepliesReconcileEveryCommittedStage_true',
-    'generatedArchiveStoragePublishesACompleteAnonymousReceiptAfterCleanup','futureStackCheck',
+    'generatedArchiveStorageCompletesWithoutExportWhenBillingIsUnknown','futureStackCheck',
   ]) assert.equal(stack.filter(row=>new RegExp(row.pattern).test(name)).length,1,name);
   assert.equal(new Set(rows.map(row=>row.file)).size,17);
 });

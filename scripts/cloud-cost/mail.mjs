@@ -18,10 +18,10 @@ export async function openMailMeasurement({ target, maxAttempts = 1000, timeoutM
     requireThat(Number.isInteger(timeoutMs) && timeoutMs > 0 && timeoutMs <= 30000 && !signal?.aborted);
     requireThat(Number.isInteger(maxAttempts) && maxAttempts >= 1 && maxAttempts <= 10000);
   } catch { fail(); }
-  const sockets = new Set(), histories = new Map(), operations = [];
+  const sockets = new Set(), collected = [], histories = new Map(), operations = [], gaps = new Set();
   const producer = { attempts: 0, accepted: 0, refused: 0, retried: 0 };
   const observer = { attempts: 0, accepted: 0, refused: 0 };
-  let invalid = false, invalidReason, active, closing, closed = false;
+  let invalid = false, invalidReason, active, closing, closed = false, admitted = 0;
   const poison = reason => {
     invalidReason ??= reason;
     invalid = true;
@@ -38,6 +38,8 @@ export async function openMailMeasurement({ target, maxAttempts = 1000, timeoutM
     observer.attempts++;
     const upstream = connect(Number(endpoint.port), '127.0.0.1');
     for (const socket of [client, upstream]) sockets.add(socket);
+    let clientClosed, upstreamClosed;
+    collected.push(new Promise(resolve => { clientClosed = resolve; }), new Promise(resolve => { upstreamClosed = resolve; }));
     let pending = ['greeting'], data = false, uploaded = 0, multiline = null, recipients = 0;
     const lines = (reason, callback) => {
       let buffer = '';
@@ -79,8 +81,8 @@ export async function openMailMeasurement({ target, maxAttempts = 1000, timeoutM
       else requireThat(code === (command === 'greeting' ? 220 : command === 'QUIT' ? 221 : 250));
     }));
     upstream.on('error', () => poison('upstream-connection-error'));
-    client.once('close', () => { sockets.delete(client); upstream.destroy(); });
-    upstream.once('close', () => { sockets.delete(upstream); client.destroy(); finish(); });
+    client.once('close', () => { sockets.delete(client); upstream.destroy(); clientClosed(); });
+    upstream.once('close', () => { sockets.delete(upstream); client.destroy(); upstreamClosed(); finish(); });
     client.pipe(upstream); upstream.pipe(client);
   });
   server.on('error', () => poison('capture-server-error'));
@@ -94,7 +96,7 @@ export async function openMailMeasurement({ target, maxAttempts = 1000, timeoutM
       let timer, observedRefusal = false, failureReason = 'delivery-admission';
       const deliveryAbort = () => poison('delivery-aborted');
       try {
-        requireThat(!invalid && !closing && !active && !signal?.aborted && !context?.signal?.aborted && observer.attempts < maxAttempts
+        requireThat(!invalid && !closing && !active && !signal?.aborted && !context?.signal?.aborted && admitted < maxAttempts
           && typeof mailer[method] === 'function' && typeof context?.deliveryId === 'string'
           && /^[a-f0-9-]{36}$/.test(context.deliveryId));
         const previous = histories.get(context.deliveryId);
@@ -102,6 +104,7 @@ export async function openMailMeasurement({ target, maxAttempts = 1000, timeoutM
         requireThat(!previous || previous.action === action);
         const ordinal = previous?.attempts ?? 0;
         histories.set(context.deliveryId, { action, attempts: ordinal + 1 });
+        admitted++;
         let cancel;
         const cancelled = new Promise((_, reject) => { cancel = () => reject(Error('Invalid cloud cost mail measurement')); });
         active = { cancel, record: null };
@@ -113,11 +116,13 @@ export async function openMailMeasurement({ target, maxAttempts = 1000, timeoutM
           await Promise.race([cancelled, (async () => {
             try { receipt = await mailer[method](message, context); } catch { failed = true; }
             failureReason = 'unobserved-delivery';
-            requireThat(current.record); await current.record.done;
+            if (current.record) await current.record.done;
+            else { requireThat(!failed); gaps.add('accounting:incomplete-total'); }
           })()]);
           failureReason = 'delivery-outcome-mismatch';
-          requireThat(!invalid && current.record?.outcome === (failed ? 'refused' : 'accepted'));
-          const outcome = current.record.outcome;
+          requireThat(!invalid && (!current.record || current.record.outcome !== null));
+          const outcome = failed ? 'refused' : 'accepted';
+          if (current.record?.outcome !== outcome) gaps.add('accounting:meter-disagreement');
           producer.attempts++; producer[outcome]++; if (ordinal > 0) producer.retried++;
           const row = operations.find(r => r.action === action && r.outcome === outcome && r.retryOrdinal === ordinal);
           if (row) row.attempts++; else operations.push({ action, outcome, retryOrdinal: ordinal, attempts: 1 });
@@ -125,7 +130,7 @@ export async function openMailMeasurement({ target, maxAttempts = 1000, timeoutM
           return receipt;
         } finally { clearTimeout(timer); context.signal?.removeEventListener('abort', deliveryAbort); active = null; }
       } catch {
-        // An observed SMTP refusal is valid evidence; all uncertain or unmatched outcomes poison it.
+        // A completed mailer refusal stays a refusal even when SMTP telemetry disagrees.
         if (observedRefusal && !invalid) throw Error('Captured email delivery refused');
         poison(failureReason); fail();
       }
@@ -137,9 +142,10 @@ export async function openMailMeasurement({ target, maxAttempts = 1000, timeoutM
     closing = (async () => {
       for (const socket of sockets) socket.destroy();
       await new Promise(resolve => server.close(resolve)); signal?.removeEventListener('abort', abort);
+      // Listener closure does not collect outgoing sockets or their final callbacks.
+      await Promise.all(collected);
       try {
-        requireThat(!invalid && producer.attempts > 0 && producer.attempts === observer.attempts
-          && producer.accepted === observer.accepted && producer.refused === observer.refused);
+        requireThat(!invalid && producer.attempts > 0 && producer.attempts === admitted && sockets.size === 0);
       } catch {
         const error = Error('Invalid cloud cost mail measurement');
         // Keep only the first fixed reason and independent counts; protocol text and mail stay private.
@@ -153,9 +159,10 @@ export async function openMailMeasurement({ target, maxAttempts = 1000, timeoutM
   };
   const snapshot = () => {
     requireThat(closed && !invalid && !active);
-    return structuredClone({ scope: 'captured-mail-operations', status: 'measured', reconciled: true,
-      producer, observer, discrepancy: { attempts: 0, accepted: 0, refused: 0 }, operations,
-      billing: { quantity: null, status: 'unknown' } });
+    const reconciled = gaps.size === 0;
+    return structuredClone({ scope: 'captured-mail-operations', status: reconciled ? 'measured' : 'unknown', reconciled,
+      producer, observer, discrepancy: Object.fromEntries(Object.keys(observer).map(key => [key, observer[key] - producer[key]])), operations,
+      billing: { quantity: null, status: 'unknown' }, ...(gaps.size ? { gaps: [...gaps].sort() } : {}) });
   };
   return { port: server.address().port, wrapMailer, close, snapshot };
 }

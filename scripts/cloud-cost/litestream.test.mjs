@@ -35,7 +35,7 @@ test('equalCountsWithWrongLitestreamOperationOrRetryRemainUnreconciled', () => {
 });
 // Duplicate/truncated headers, unsupported operations and overflowing logs must poison all later evidence.
 test('malformedAndTruncatedLitestreamLogsCannotProduceValidEvidence', () => {
-  for (const text of [log({ extra: 'Amz-Sdk-Invocation-Id: ' + id + '\r\n' }), log({ attempt: 2 }),
+  for (const text of [log({ extra: 'Amz-Sdk-Invocation-Id: ' + id + '\r\n' }), log({ attempt: 2 }).replace('attempt=2', 'attempt=11'),
     log({ method: 'POST', path: '/private-bucket?delete' }), log().replace('attempt=1', 'attempt=0'),
     log().replace('max=10', 'max=0'), log().slice(0, -2), 'x'.repeat(65537)]) {
     const a = audit();
@@ -161,7 +161,7 @@ test('after-stop boundary is one-way and cannot be moved or configured to forgiv
 // Equal timestamps use event order; a backwards clock or changed phase must refuse evidence.
 for (const action of ['backwards-clock', 'duplicate-issue', 'duplicate-admission', 'duplicate-settlement', 'unknown-hop',
   'missing-producer', 'missing-issue', 'wrong-operation', 'wrong-phase', 'ordinal-reset', 'private-field', 'unknown-outcome', 'invalid-status'])
-  test(`after-stop correlation cannot accept ${action}`, () => {
+  test(`after-stop correlation ${['missing-issue', 'missing-producer'].includes(action) ? 'retains unknown accounting for' : 'cannot accept'} ${action}`, () => {
     let now = 1; const session = afterStopSession(() => now);
     if (action !== 'missing-issue') session.issue(issued());
     const run = () => {
@@ -174,7 +174,7 @@ for (const action of ['backwards-clock', 'duplicate-issue', 'duplicate-admission
       if (action === 'duplicate-admission') return session.admit(admitted('producer'));
       if (action === 'wrong-operation') return session.admit(admitted('observer', 0, 'get'));
       if (action === 'wrong-phase') return session.admit({ ...admitted('observer'), phase: 'idle' });
-      if (action === 'ordinal-reset') return session.admit(admitted('producer', 2));
+      if (action === 'ordinal-reset') { session.admit(admitted('producer', 2)); return session.admit(admitted('producer', 1)); }
       session.admit(admitted('observer'));
       if (action === 'unknown-outcome') return session.settle(settled('producer', { outcome: 'PRIVATE_CANARY' }));
       if (action === 'invalid-status') return session.settle(settled('producer', { statusCode: 503 }));
@@ -182,17 +182,31 @@ for (const action of ['backwards-clock', 'duplicate-issue', 'duplicate-admission
       if (action === 'duplicate-settlement') return session.settle(settled('producer'));
       return session.snapshot();
     };
-    assert.throws(run, /Invalid cloud cost Litestream audit/);
-    assert.throws(() => session.snapshot(), /Invalid cloud cost Litestream audit/);
+    if (['missing-issue', 'missing-producer'].includes(action)) {
+      run(); const snapshot = session.snapshot();
+      assert.equal(snapshot.status, 'unknown');
+      assert.equal(snapshot.requestsReconciled, false);
+      assert.deepEqual(snapshot.gaps, ['accounting:incomplete-history']);
+    } else {
+      assert.throws(run, /Invalid cloud cost Litestream audit/);
+      assert.throws(() => session.snapshot(), /Invalid cloud cost Litestream audit/);
+    }
   });
 
-// The exception is a closed signature, not permission to ignore arbitrary I/O failure.
+// Network categories stay closed; a different valid cutoff signature is still accounting uncertainty.
 for (const [label, change] of [['event', { ioEvent: 'response-aborted' }], ['code', { code: 'ECONNRESET' }],
   ['reason', { reason: 'upstream-error' }], ['client open', { clientClosed: false }], ['no headers', { responseHeadersSeen: false }],
-  ['extra key', { private: 'PRIVATE_CANARY' }]]) test(`after-stop interrupted list refuses unrelated ${label}`, () => {
+  ['extra key', { private: 'PRIVATE_CANARY' }]]) test(`after-stop interrupted list collects valid ${label} and refuses private metadata`, () => {
     const session = afterStopSession(); startAttempt(session); session.acknowledgeStop(ack());
-    assert.throws(() => session.settle(settled('producer', { outcome: 'transport-error' }), { ...knownInterruption(), ...change }), /Invalid cloud cost Litestream audit/);
-    assert.throws(() => session.snapshot(), /Invalid cloud cost Litestream audit/);
+    const finish = () => session.settle(settled('producer', { outcome: 'transport-error' }), { ...knownInterruption(), ...change });
+    if (label === 'extra key') {
+      assert.throws(finish, /Invalid cloud cost Litestream audit/);
+      assert.throws(() => session.snapshot(), /Invalid cloud cost Litestream audit/);
+    } else {
+      assert.equal(finish(), true); session.settle(settled('observer'));
+      assert.equal(session.snapshot().status, 'unknown');
+      assert.ok(session.snapshot().gaps.includes('after-stop:list-response-interrupted'));
+    }
   });
 
 // Buffering SDK logs cannot backdate a real storage admission; identities must still pair by completion.
@@ -247,33 +261,43 @@ test('late admission and interrupted settlement count the same SDK attempt only 
   assert.equal(result.bodiesReconciled, false, 'equal fragments still do not prove a complete response');
 });
 
-for (const invalid of ['missing storage admission', 'observer interruption', 'changed settlement phase'])
-  test(`after-stop settlement refuses ${invalid} immediately`, () => {
+for (const invalid of ['missing storage admission', 'changed settlement phase'])
+  test(`after-stop settlement ${invalid === 'missing storage admission' ? 'retains unknown' : 'refuses'} ${invalid} immediately`, () => {
     const session = afterStopSession(); session.issue(issued()); session.admit(admitted('producer'));
     if (invalid !== 'missing storage admission') session.admit(admitted('observer'));
     session.acknowledgeStop(ack());
     const input = invalid === 'changed settlement phase' ? settled('producer', { phase: 'idle' })
-      : settled(invalid === 'observer interruption' ? 'observer' : 'producer', { outcome: 'transport-error' });
-    assert.throws(() => session.settle(input, invalid === 'changed settlement phase' ? null : knownInterruption()), /Invalid cloud cost Litestream audit/);
-    assert.throws(() => session.snapshot(), /Invalid cloud cost Litestream audit/);
+      : settled('producer', { outcome: 'transport-error' });
+    if (invalid === 'missing storage admission') {
+      assert.equal(session.settle(input, knownInterruption()), true);
+      const snapshot = session.snapshot();
+      assert.equal(snapshot.status, 'unknown'); assert.equal(snapshot.requestsReconciled, false);
+      assert.ok(snapshot.gaps.includes('accounting:incomplete-history'));
+      assert.equal(snapshot.used, 1); assert.equal(snapshot.producer.attempts, 1);
+      assert.equal(snapshot.observer.attempts, 0);
+    } else {
+      assert.throws(() => session.settle(input), /Invalid cloud cost Litestream audit/);
+      assert.throws(() => session.snapshot(), /Invalid cloud cost Litestream audit/);
+    }
   });
 
 test('changing phases cannot reset the one session allowance', () => {
   const session = afterStopSession(); session.acknowledgeStop(ack());
   for (const [index, phase] of ['startup', 'workload', 'idle', 'verification'].entries()) {
     const invocation = `${String(index + 1).padStart(8, '0')}-2222-4333-8444-555555555555`, token = invocation + ':1';
-    session.issue({ ...issued(), invocation }); session.admit({ ...admitted('producer'), invocation, phase });
+    session.issue({ ...issued(), invocation });
     if (index === 3) {
-      assert.throws(() => session.admit({ ...admitted('observer'), invocation, phase }), /Invalid cloud cost Litestream audit/);
+      assert.throws(() => session.admit({ ...admitted('producer'), invocation, phase }), /Invalid cloud cost Litestream audit/);
       assert.throws(() => session.snapshot(), /Invalid cloud cost Litestream audit/);
     } else {
+      session.admit({ ...admitted('producer'), invocation, phase });
       session.admit({ ...admitted('observer'), invocation, phase });
       for (const channel of ['producer', 'observer']) session.settle({ ...settled(channel), token, phase });
     }
   }
 });
 
-test('after-stop aggregate refuses byte totals that no longer fit a safe integer', () => {
+test('after-stop aggregate keeps overflowing byte totals unknown with supported counts', () => {
   const session = afterStopSession(); session.acknowledgeStop(ack());
   for (let n = 1; n <= 2; n++) {
     const invocation = `${String(n).padStart(8, '0')}-2222-4333-8444-555555555555`, token = invocation + ':1';
@@ -282,7 +306,13 @@ test('after-stop aggregate refuses byte totals that no longer fit a safe integer
     for (const channel of ['producer', 'observer']) session.settle({ ...settled(channel, {
       bytesIn: Number.MAX_SAFE_INTEGER, attemptedBytesIn: Number.MAX_SAFE_INTEGER }), token });
   }
-  assert.throws(() => session.snapshot(), /Invalid cloud cost Litestream audit/);
+  const snapshot = session.snapshot();
+  assert.equal(snapshot.status, 'unknown');
+  assert.deepEqual(snapshot.gaps, ['accounting:overflow']);
+  assert.deepEqual(snapshot.producer, { attempts: 2, bytesIn: null, bytesOut: 0 });
+  assert.deepEqual(snapshot.observer, { attempts: 2, bytesIn: null, bytesOut: 0 });
+  assert.equal(snapshot.requestsReconciled, true);
+  assert.equal(snapshot.bodiesReconciled, true);
 });
 
 const putCommit = (changes = {}) => ({ token: `${id}:1`, statusCode: 200, bytesOut: 4, expectedBytesOut: 4,
@@ -299,7 +329,7 @@ test('ordinary successful retry can retain backend evidence before stop without 
   assert.equal(s.snapshot().used, 0); assert.equal(s.snapshot().status, 'measured');
 });
 for (const mode of ['second-upload', 'retry', 'uncommitted', 'partial-settlement', 'pre-ack-interruption', 'wrong-signature']) {
-  test(`prior PUT completion remains bounded: ${mode}`, () => {
+  test(`prior PUT completion retains accounting while malformed commit bytes refuse: ${mode}`, () => {
     const s = afterStopSession(); startAttempt(s, 'put');
     if (mode === 'retry') {
       for (const hop of ['producer', 'observer']) s.settle(putSettlement(hop, { outcome: 'server-error', statusCode: 503 }));
@@ -324,8 +354,18 @@ for (const mode of ['second-upload', 'retry', 'uncommitted', 'partial-settlement
         ...(interrupted ? { outcome: 'transport-error' } : {}) }), interrupted
         ? { ...knownInterruption(), ...(mode === 'wrong-signature' ? { code: 'ECONNRESET' } : {}) } : null);
     };
-    assert.throws(run, /Invalid cloud cost Litestream audit/);
-    assert.throws(() => s.snapshot(), /Invalid cloud cost Litestream audit/);
+    if (mode === 'partial-settlement') {
+      assert.throws(run, /Invalid cloud cost Litestream audit/);
+      assert.throws(() => s.snapshot(), /Invalid cloud cost Litestream audit/);
+    } else {
+      assert.doesNotThrow(run);
+      if (mode === 'second-upload') s.settle(putSettlement('observer', { token: id.replace('11111111', '22222222') + ':1' }));
+      else s.settle(putSettlement('observer', { ordinal }));
+      const result = s.snapshot();
+      assert.equal(result.used, mode === 'pre-ack-interruption' ? 0 : mode === 'second-upload' ? 2 : 1);
+      assert.equal(result.status, ['pre-ack-interruption', 'wrong-signature'].includes(mode) ? 'unknown' : 'measured');
+      assert.equal(result.gaps.length > 0, ['pre-ack-interruption', 'wrong-signature'].includes(mode));
+    }
   });
 }
 
@@ -344,7 +384,6 @@ for (const [label, change] of [
   ['unsafe byte count', { bytesOut: Number.MAX_SAFE_INTEGER + 1, expectedBytesOut: Number.MAX_SAFE_INTEGER + 1 }],
   ['negative byte count', { bytesOut: -1, expectedBytesOut: -1 }], ['failed status', { statusCode: 503 }],
   ['fractional status', { statusCode: 200.5 }], ['null status', { statusCode: null }],
-  ['unknown identity', { token: '22222222-2222-4333-8444-555555555555:1' }],
   ['malformed identity', { token: 'PRIVATE_CANARY' }], ['empty version', { versionId: '' }],
   ['private control character', { versionId: 'PRIVATE\nCANARY' }], ['oversized version', { versionId: 'x'.repeat(1025) }],
   ['delete marker', { deleteMarker: 'true' }], ['unexpected marker', { deleteMarker: false }],
@@ -354,19 +393,47 @@ for (const [label, change] of [
   assert.throws(() => s.commit(putCommit(change)), /Invalid cloud cost Litestream audit/);
   assert.throws(() => s.snapshot(), /Invalid cloud cost Litestream audit/);
 });
-for (const mode of ['missing-observer', 'wrong-operation', 'duplicate']) test(`commit witnesses cannot invent or replace an upload: ${mode}`, () => {
+test('a commit with missing observer telemetry retains unknown history without inventing the observer', () => {
+  const s = afterStopSession(); s.issue(issued(0, 'put')); s.admit(admitted('producer', 0, 'put'));
+  assert.doesNotThrow(() => s.commit(putCommit()));
+  assert.equal(s.snapshot().status, 'unknown'); assert.equal(s.snapshot().requestsReconciled, false);
+  assert.deepEqual(s.snapshot().gaps, ['accounting:incomplete-history']);
+  assert.equal(s.snapshot().observer.attempts, 0);
+});
+test('a commit for an otherwise unobserved identity stays unknown and cannot confirm another lifetime', () => {
+  const s = afterStopSession(); startAttempt(s, 'put');
+  const finish = s.beginLifetime({ headers: headers(), operation: 'put', versioned: true });
+  assert.doesNotThrow(() => s.commit(putCommit({ token: '22222222-2222-4333-8444-555555555555:1' })));
+  s.acknowledgeStop(ack());
+  s.settle(putSettlement('producer', { outcome: 'transport-error' }), knownInterruption());
+  assert.deepEqual(finish({ statusCode: 200, bytesOut: 4, interrupted: true, responseHeaders: {} }),
+    { statusCode: 200, interrupted: true, responseHeaders: {} });
+  assert.equal(s.snapshot().status, 'unknown'); assert.ok(s.snapshot().gaps.includes('accounting:incomplete-history'));
+  assert.equal(s.snapshot().requestsReconciled, false);
+});
+for (const mode of ['wrong-operation', 'duplicate']) test(`commit witnesses cannot invent or replace an upload: ${mode}`, () => {
   const s = afterStopSession(), operation = mode === 'wrong-operation' ? 'list' : 'put';
   s.issue(issued(0, operation)); s.admit(admitted('producer', 0, operation));
   if (mode !== 'missing-observer') s.admit(admitted('observer', 0, operation));
   if (mode === 'duplicate') s.commit(putCommit());
   assert.throws(() => s.commit(putCommit()), /Invalid cloud cost Litestream audit/);
 });
-for (const mode of ['twice', 'unsettled', 'wrong-bytes', 'wrong-status', 'wrong-interruption', 'wrong-version', 'unexpected-version']) {
+test('lifetime completion with missing producer settlement keeps unknown history and real version evidence', () => {
+  const s = afterStopSession(); startAttempt(s, 'put');
+  const finish = s.beginLifetime({ headers: headers(), operation: 'put', versioned: true });
+  s.commit(putCommit({ versionId: 'COMMIT_PRIVATE_CANARY' })); s.acknowledgeStop(ack());
+  assert.deepEqual(finish({ statusCode: 200, bytesOut: 4, interrupted: false,
+    responseHeaders: { 'x-amz-version-id': 'COMMIT_PRIVATE_CANARY' } }),
+  { statusCode: 200, interrupted: false, responseHeaders: { 'x-amz-version-id': 'COMMIT_PRIVATE_CANARY' } });
+  assert.equal(s.snapshot().status, 'unknown'); assert.equal(s.snapshot().producer.attempts, 0);
+  assert.equal(s.snapshot().requestsReconciled, false); assert.ok(s.snapshot().gaps.includes('accounting:incomplete-history'));
+});
+for (const mode of ['twice', 'wrong-bytes', 'wrong-status', 'wrong-interruption', 'wrong-version', 'unexpected-version']) {
   test(`lifetime completion stays paired to its own producer and version: ${mode}`, () => {
     const s = afterStopSession(); startAttempt(s, 'put');
     const finish = s.beginLifetime({ headers: headers(), operation: 'put', versioned: mode !== 'unexpected-version' });
     s.commit(putCommit({ versionId: 'COMMIT_PRIVATE_CANARY' })); s.acknowledgeStop(ack());
-    if (mode !== 'unsettled') s.settle(putSettlement('producer'));
+    s.settle(putSettlement('producer'));
     const event = { statusCode: mode === 'wrong-status' ? 201 : 200, bytesOut: mode === 'wrong-bytes' ? 3 : 4,
       interrupted: mode === 'wrong-interruption', responseHeaders: { 'x-amz-version-id': mode === 'wrong-version' ? 'OTHER_PRIVATE_CANARY' : 'COMMIT_PRIVATE_CANARY' } };
     if (mode === 'twice') finish(event);
@@ -380,10 +447,10 @@ for (const listCount of [2, 3]) test(`late committed PUT and lists share the dis
   for (const hop of ['producer', 'observer']) s.settle(putSettlement(hop));
   for (let n = 0; n < listCount; n++) {
     const invocation = `${String(n + 2).padStart(8, '0')}-2222-4333-8444-555555555555`;
-    s.issue({ ...issued(), invocation }); s.admit({ ...admitted('producer'), invocation });
-    const admit = () => s.admit({ ...admitted('observer'), invocation });
-    if (n === 2) { assert.throws(admit, /Invalid cloud cost Litestream audit/); return; }
-    admit(); for (const hop of ['producer', 'observer']) s.settle({ ...settled(hop), token: `${invocation}:1` });
+    s.issue({ ...issued(), invocation });
+    if (n === 2) { assert.throws(() => s.admit({ ...admitted('producer'), invocation }), /Invalid cloud cost Litestream audit/); return; }
+    s.admit({ ...admitted('producer'), invocation }); s.admit({ ...admitted('observer'), invocation });
+    for (const hop of ['producer', 'observer']) s.settle({ ...settled(hop), token: `${invocation}:1` });
   }
   assert.equal(s.snapshot().used, 3); assert.equal(s.snapshot().lateAdmissions, 2); assert.equal(s.snapshot().lateSettlements, 1);
   assert.equal(s.snapshot().bodiesReconciled, true);

@@ -80,8 +80,8 @@ export async function openStreamMeasurement({ target, sdk, bucket, versioned, cl
         need(state === 'active'); const complete = history.begin(input);
         const upload = classifyStorageOperation({ ...input, allowBulkDeletes }) === 'put';
         return event => {
-          complete(event); need(!event.interrupted); nativeCompleted++;
-          const uploaded = upload && event.statusCode >= 200 && event.statusCode < 300;
+          complete(event); nativeCompleted++;
+          const uploaded = upload && !event.interrupted && event.statusCode >= 200 && event.statusCode < 300;
           if (uploaded) nativeUploaded = true;
           for (const waiter of activityWaiters) if (nativeCompleted > waiter.after && (!waiter.upload || uploaded)) {
             activityWaiters.delete(waiter); waiter.resolve(nativeCompleted);
@@ -128,7 +128,6 @@ export async function openStreamMeasurement({ target, sdk, bucket, versioned, cl
         need(!invalid && !signal?.aborted);
         stage = 'checkpoint-accounting';
         const storage = history.snapshot(), requests = meter.snapshot();
-        need(requests.reconciled === true && requests.status === 'measured');
         state = 'active'; return { requests, storage };
       } catch {
         // Preserve the transport refusal counts before disposal settles pending requests.
@@ -153,8 +152,10 @@ export async function openStreamMeasurement({ target, sdk, bucket, versioned, cl
           need(!invalid && !signal?.aborted);
           // Cleanup must resume at the history's clock, before later reporting or listener collection.
           const storage = history.snapshot(), storageEndedAt = last, requests = meter.snapshot(), time = now();
-          need(requests.reconciled === true && requests.status === 'measured');
-          result = { status: 'measured', scope: 'native-stream-session',
+          const gaps = [...new Set([...requests.gaps, ...(storage.gaps ?? [])])].sort();
+          // Session status describes transfer/history coverage; billing eligibility is assessed from the original records.
+          const measured = requests.status === 'measured' && storage.status === 'measured';
+          result = { status: measured ? 'measured' : 'unknown', ...(measured ? {} : { gaps }), scope: 'native-stream-session',
             phases: [...windows, { phase, elapsedSeconds: time - phaseStart }], requests, storage, storageEndedAt,
             cleanup: { listeners: 0, clients: 0 } };
         } catch { invalid = true; fail(); }

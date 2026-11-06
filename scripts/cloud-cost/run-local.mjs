@@ -55,6 +55,7 @@ export async function runLocal({ privateConfig, cadence, windowSeconds, signal }
     if (stage === 'stream-receipt') {
       const ended = Date.now(), elapsedSeconds = (ended - started) / 1000;
       need(Math.abs(elapsedSeconds - (performance.now() - monotonicStart) / 1000) < 0.25);
+      if (result.functional === 'passed') return { stage, ...result };
       const { expected, cadence, replayWindowSeconds, originalInventory: { days, busiest },
         stream: { startupSeconds, idleSeconds, windowSeconds: streamWindow } } = input;
       const receipt = buildLocalReceipt({ result,

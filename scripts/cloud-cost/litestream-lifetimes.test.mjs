@@ -11,6 +11,52 @@ const sdk = require('@aws-sdk/client-s3');
 const key = 'PRIVATE_CANARY.ltx', path = '/synthetic/' + key;
 const put = (bytes = 4) => ({ method: 'PUT', path, headers: { 'content-length': String(bytes) } });
 const bad = /Invalid cloud cost storage lifetimes/;
+
+test('putOnlyLifetimeOverflowPreservesIndependentlyKnownBoundsAndLaterInventory', async t => {
+  const f = await fixture(t), audit = await open(f), bytes = Number.MAX_SAFE_INTEGER;
+  const finish = audit.begin(put(bytes)); f.time(1); finish({ statusCode: 200, bytesOut: bytes }); f.rows.set(key, bytes);
+  await audit.verify();
+  assert.deepEqual(audit.snapshot().byteSeconds, { low: 0, high: 9007199254740991 });
+  assert.equal(audit.snapshot().status, 'measured');
+  f.time(2);
+  const uncertain = audit.snapshot();
+  assert.equal(uncertain.status, 'unknown');
+  assert.deepEqual(uncertain.gaps, ['accounting:overflow']);
+  assert.deepEqual(uncertain.byteSeconds, { low: 9007199254740991, high: null });
+  assert.equal(uncertain.objects.bytes, 9007199254740991);
+  assert.equal(uncertain.objects.currentVersions, 1);
+  await audit.verify();
+  assert.deepEqual(audit.snapshot(), uncertain);
+  assert.equal(f.meter.snapshot().status, 'unknown');
+  assert.deepEqual(f.meter.snapshot().gaps, ['accounting:overflow', 'request-billing:unknown']);
+  f.time(3);
+  assert.deepEqual(audit.snapshot().byteSeconds, { low: null, high: null });
+  assert.equal(JSON.stringify(audit.snapshot()).includes(key), false);
+});
+
+test('putOnlyAggregateBytesOverflowKeepsSafeObjectCountsAndZeroDuration', async t => {
+  const f = await fixture(t), audit = await open(f);
+  for (const [Key, bytes] of [[key, Number.MAX_SAFE_INTEGER], ['SECOND_PRIVATE', 1]]) {
+    audit.begin({ method: 'PUT', path: '/synthetic/' + Key, headers: { 'content-length': String(bytes) } })({ statusCode: 200, bytesOut: bytes });
+    f.rows.set(Key, bytes);
+  }
+  await audit.verify();
+  assert.deepEqual(audit.snapshot(), { status: 'unknown', scope: 'unversioned-put-only', windowSeconds: 0,
+    objects: { class: 'stream', bytes: null, currentVersions: 2, noncurrentVersions: 0, deleteMarkers: 0, unfinishedMultipart: 0 },
+    byteSeconds: { low: 0, high: 0 }, gaps: ['accounting:overflow'] });
+  assert.equal(f.meter.snapshot().status, 'unknown');
+});
+
+test('putOnlyOverflowCannotHideAnInvalidClockOrForeignInventory', async t => {
+  for (const mode of ['clock', 'foreign']) {
+    const f = await fixture(t), audit = await open(f), bytes = Number.MAX_SAFE_INTEGER;
+    const finish = audit.begin(put(bytes)); f.time(1); finish({ statusCode: 200, bytesOut: bytes }); f.rows.set(key, bytes);
+    f.time(3); await audit.verify(); assert.equal(audit.snapshot().status, 'unknown');
+    if (mode === 'clock') { f.time(2); assert.throws(() => audit.snapshot(), bad); }
+    else { f.rows.set('FOREIGN_PRIVATE', 1); await assert.rejects(audit.verify(), bad); }
+    assert.throws(() => f.meter.snapshot(), /Invalid cloud cost meter/);
+  }
+});
 async function fixture(t, options = {}) {
   let time = 0;
   const rows = new Map(options.rows), state = { versioning: '', uploads: '', duplicate: false, truncated: false, paged: false, received: 0 };
@@ -74,7 +120,7 @@ test('streamFailedUploadPresenceIsBoundedByIndependentInventoryAndAbsenceResetsI
   f.time(10); assert.deepEqual(audit.snapshot().byteSeconds, { low: 12, high: 24 });
 });
 
-// Unpaired mutations, unsupported histories and ambiguous transfer completion cannot earn a storage receipt.
+// Unsupported mutations and malformed completion cannot earn storage evidence.
 test('streamStorageRefusesUnsupportedMutationsAndPoisonsEvidence', async t => {
   for (const input of [
     { ...put(), method: 'DELETE' }, { ...put(), method: 'POST', path: path + '?uploads' },
@@ -91,7 +137,15 @@ test('streamStorageRefusesUnsupportedMutationsAndPoisonsEvidence', async t => {
   for (const completion of [{ statusCode: 200, bytesOut: 3 }, { statusCode: null, bytesOut: 4, interrupted: true }, { statusCode: 200, bytesOut: 4, interrupted: true },
     { statusCode: 99, bytesOut: 4 }]) {
     const f = await fixture(t), audit = await open(f), finish = audit.begin(put());
-    assert.throws(() => finish(completion), bad); assert.throws(() => audit.snapshot(), bad);
+    if (completion.interrupted) {
+      finish(completion); await audit.verify();
+      assert.equal(audit.snapshot().status, 'unknown');
+      assert.deepEqual(audit.snapshot().gaps, ['accounting:request-cutoff']);
+      assert.equal(audit.snapshot().objects.bytes, 0);
+      assert.deepEqual(audit.snapshot().byteSeconds, { low: 0, high: 0 });
+    } else {
+      assert.throws(() => finish(completion), bad); assert.throws(() => audit.snapshot(), bad);
+    }
   }
 });
 
@@ -186,9 +240,9 @@ test('streamStorageIntegratesEachObjectWindowAndReadsEveryInventoryPage', async 
   assert.deepEqual(audit.snapshot().byteSeconds, { low: 36, high: 44 });
 });
 
-// A known interrupted list can retire its pending token only after the validated runtime boundary.
+// Cutoff collection is independent of stop timing; foreign inventory still refuses.
 import { lifetimeExchange, assertIncompleteList } from './litestream-lifetime-test-utils.mjs';
-for (const stopped of [false, true]) test(`put-only lifetimes retain narrow interrupted-list settlement: stopped=${stopped}`, async t => {
+for (const stopped of [false, true]) test(`put-only lifetimes collect interrupted-list accounting: stopped=${stopped}`, async t => {
   const f = await fixture(t);
   const e = await lifetimeExchange(t, { open: afterStop => storage.openLitestreamLifetimes({ ...f.args, afterStop }),
     input: { method: 'GET', path: '/synthetic?list-type=2', headers: {} }, stopped });
@@ -199,8 +253,12 @@ for (const stopped of [false, true]) test(`put-only lifetimes retain narrow inte
     assert.throws(() => e.afterStop.snapshot(), /Invalid cloud cost Litestream audit/);
   }
   else {
-    await assert.rejects(e.transport.close(), /Invalid cloud cost Litestream audit/);
-    await assert.rejects(e.lifetimes.verify(), bad); assert.throws(() => e.meter.snapshot());
+    await e.transport.close(); await e.lifetimes.verify();
+    assert.equal(e.lifetimes.snapshot().objects.bytes, 0);
+    assert.equal(e.lifetimes.snapshot().status, 'unknown');
+    assert.ok(e.lifetimes.snapshot().gaps.includes('accounting:request-cutoff'));
+    assert.equal(e.meter.snapshot().status, 'unknown');
+    assert.equal(e.afterStop.snapshot().used, 0);
   }
 });
 for (const interrupted of [false, true]) test(`put-only lifetimes require a real committed prior PUT after stop: interrupted=${interrupted}`, async t => {
@@ -216,9 +274,9 @@ for (const interrupted of [false, true]) test(`put-only lifetimes require a real
   assert.equal(e.meter.snapshot().status, interrupted ? 'unknown' : 'measured');
 });
 
-// An inventory containing the bytes must never substitute for an independently witnessed commit.
+// Inventory can bound a missing reply; it cannot turn malformed commit metadata into a valid witness.
 for (const mode of ['missing-witness', 'incomplete-body', 'partial-body', 'failed-backend', 'unknown-token', 'unknown-field']) {
-  test(`put-only after-stop refuses uncertain commit evidence: ${mode}`, async t => {
+  test(`put-only after-stop bounds a missing witness and refuses malformed commit evidence: ${mode}`, async t => {
     const f = await fixture(t);
     const run = () => lifetimeExchange(t, { open: afterStop => storage.openLitestreamLifetimes({ ...f.args, afterStop }),
       input: put(), commit: () => f.rows.set(key, 4), witness: mode !== 'missing-witness', statusCode: mode === 'failed-backend' ? 503 : 200,
@@ -226,9 +284,13 @@ for (const mode of ['missing-witness', 'incomplete-body', 'partial-body', 'faile
         : mode === 'partial-body' ? { ...event, bytesOut: 3 }
         : mode === 'unknown-token' ? { ...event, token: event.token.replace('11111111', '22222222') }
         : mode === 'unknown-field' ? { ...event, privateCanary: 'PRIVATE_CANARY' } : event });
-    if (mode === 'missing-witness') {
-      const e = await run(); await assert.rejects(e.transport.close(), /Invalid cloud cost Litestream audit/);
-      await assert.rejects(e.lifetimes.verify(), bad); assert.throws(() => e.afterStop.snapshot());
+    if (mode === 'missing-witness' || mode === 'unknown-token') {
+      const e = await run(); await e.transport.close(); await e.lifetimes.verify();
+      assert.equal(e.lifetimes.snapshot().objects.bytes, 4);
+      assert.equal(e.lifetimes.snapshot().status, 'unknown');
+      assert.ok(e.lifetimes.snapshot().gaps.includes('accounting:request-cutoff'));
+      assert.equal(e.afterStop.snapshot().status, 'unknown');
+      if (mode === 'unknown-token') assert.ok(e.afterStop.snapshot().gaps.includes('accounting:incomplete-history'));
     } else await assert.rejects(run(), /Invalid cloud cost Litestream audit/);
   });
 }
@@ -243,14 +305,19 @@ test('transport refuses a lifetime reader from another stop-accounting session b
     phase: 'workload', meter: createMeter({ phase: 'workload', clock: () => 0, afterStop }) }); }, /Invalid cloud cost Litestream audit/);
 });
 
-test('put-only reader cannot settle a bound lifetime before its producer counter', async t => {
+test('put-only reader collects a bound lifetime with missing producer telemetry as unknown', async t => {
   const { createLitestreamAfterStop } = await import('./litestream.mjs');
   const f = await fixture(t), afterStop = createLitestreamAfterStop({ clock: () => 0 });
   const invocation = headers['amz-sdk-invocation-id'];
   afterStop.admit({ invocation, ordinal: 0, operation: 'list', hop: 'producer', phase: 'workload' });
   const reader = await storage.openLitestreamLifetimes({ ...f.args, afterStop });
   const finish = reader.begin({ method: 'GET', path: '/synthetic?list-type=2', headers });
-  assert.throws(() => finish({ statusCode: 200, bytesOut: 0 }), bad);
+  assert.doesNotThrow(() => finish({ statusCode: 200, bytesOut: 0 }));
+  await reader.verify(); assert.equal(reader.snapshot().objects.bytes, 0);
+  const result = afterStop.snapshot();
+  assert.equal(result.status, 'unknown'); assert.equal(result.requestsReconciled, false);
+  assert.deepEqual(result.gaps, ['accounting:incomplete-history']);
+  assert.equal(result.producer.attempts, 0);
 });
 
 // Final restore uses the same history, with ordinary strict read completion after replication stops.
@@ -270,11 +337,15 @@ for (const method of ['PUT', 'DELETE', 'POST']) test(`the strict restore view re
   assert.throws(() => reader.strictReads.begin({ method, path, headers: {'content-length':'4'} }), bad);
   await assert.rejects(reader.verify(), bad);assert.throws(() => afterStop.snapshot());
 });
-test('an interrupted final restore read still poisons the shared history', async t => {
+test('an interrupted final restore read leaves an accounting gap without invalidating shared history', async t => {
   const { createLitestreamAfterStop } = await import('./litestream.mjs');
   const f = await fixture(t), afterStop = createLitestreamAfterStop({ clock: () => 0 });
   const reader = await storage.openLitestreamLifetimes({ ...f.args, afterStop });
   const finish = reader.strictReads.begin({ method: 'GET', path, headers: {} });
-  assert.throws(() => finish({ statusCode: 200, bytesOut: 0, interrupted: true, responseHeaders: {} }), bad);
-  await assert.rejects(reader.verify(), bad);assert.throws(() => afterStop.snapshot());
+  finish({ statusCode: 200, bytesOut: 0, interrupted: true, responseHeaders: {} });
+  await reader.verify();
+  assert.equal(reader.snapshot().status, 'unknown');
+  assert.deepEqual(reader.snapshot().gaps, ['accounting:request-cutoff']);
+  assert.ok(f.meter.snapshot().gaps.includes('accounting:request-cutoff'));
+  assert.equal(afterStop.snapshot().used, 0);
 });

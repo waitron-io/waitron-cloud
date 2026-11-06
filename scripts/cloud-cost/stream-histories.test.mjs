@@ -58,6 +58,63 @@ function success(f, audit, input, start, end, bytes) {
   if (input.method === 'DELETE') f.rows.delete(key); else f.rows.set(key, bytes);
 }
 
+test('unversionedLifetimeOverflowRetainsSafeLowerBoundAcrossDeletion', async t => {
+  const f = await fixture(t), audit = await open(f);
+  success(f, audit, put(Number.MAX_SAFE_INTEGER), 0, 1, Number.MAX_SAFE_INTEGER);
+  f.time(1); await audit.verify();
+  assert.deepEqual(audit.snapshot().byteSeconds, { low: 0, high: 9007199254740991 });
+  assert.equal(audit.snapshot().status, 'measured');
+  f.time(2);
+  assert.deepEqual(audit.snapshot().byteSeconds, { low: 9007199254740991, high: null });
+  assert.deepEqual(audit.snapshot().gaps, ['accounting:overflow']);
+  success(f, audit, del(), 2, 2);
+  await audit.verify(); f.time(3);
+  const result = audit.snapshot();
+  assert.equal(result.status, 'unknown');
+  assert.deepEqual(result.byteSeconds, { low: 9007199254740991, high: null });
+  assert.equal(result.objects.bytes, 0);
+  assert.equal(result.objects.currentVersions, 0);
+  assert.equal(f.meter.snapshot().status, 'unknown');
+  assert.deepEqual(f.meter.snapshot().gaps, ['accounting:overflow', 'request-billing:unknown']);
+});
+
+test('unversionedAggregateBytesOverflowPreservesCountsAndSafeZeroBounds', async t => {
+  const f = await fixture(t), audit = await open(f);
+  for (const [Key, bytes] of [[key, Number.MAX_SAFE_INTEGER], ['SECOND_PRIVATE', 1]]) {
+    audit.begin({ method: 'PUT', path: '/synthetic/' + Key, headers: { 'content-length': String(bytes) } })({ statusCode: 200, bytesOut: bytes });
+    f.rows.set(Key, bytes);
+  }
+  await audit.verify();
+  assert.deepEqual(audit.snapshot(), { status: 'unknown', scope: 'unversioned-object-history', windowSeconds: 0,
+    objects: { class: 'stream', bytes: null, currentVersions: 2, noncurrentVersions: 0, deleteMarkers: 0, unfinishedMultipart: 0 },
+    byteSeconds: { low: 0, high: 0 }, gaps: ['accounting:overflow'] });
+  assert.equal(f.meter.snapshot().status, 'unknown');
+});
+
+test('unversionedOverflowCannotHideUnsafeClockOrStorageInventory', async t => {
+  for (const mode of ['clock', 'foreign']) {
+    const f = await fixture(t), audit = await open(f);
+    success(f, audit, put(Number.MAX_SAFE_INTEGER), 0, 1, Number.MAX_SAFE_INTEGER);
+    f.time(3); await audit.verify(); assert.equal(audit.snapshot().status, 'unknown');
+    if (mode === 'clock') { f.time(2); assert.throws(() => audit.snapshot(), bad); }
+    else { f.rows.set('FOREIGN_PRIVATE', 1); await assert.rejects(audit.verify(), bad); }
+    assert.throws(() => f.meter.snapshot(), /Invalid cloud cost meter/);
+  }
+});
+
+test('unversionedLifetimeGapSurvivesCleanupThatMakesTheCurrentTotalSafe', async t => {
+  const f = await fixture(t), audit = await open(f);
+  for (const [Key, bytes] of [[key, Number.MAX_SAFE_INTEGER], ['SECOND_PRIVATE', 1]]) {
+    audit.begin({ method: 'PUT', path: '/synthetic/' + Key, headers: { 'content-length': String(bytes) } })({ statusCode: 200, bytesOut: bytes });
+    f.rows.set(Key, bytes);
+  }
+  await audit.verify(); assert.equal(audit.snapshot().objects.bytes, null);
+  success(f, audit, del(), 0, 0); await audit.verify();
+  assert.deepEqual(audit.snapshot(), { status: 'unknown', scope: 'unversioned-object-history', windowSeconds: 0,
+    objects: { class: 'stream', bytes: 1, currentVersions: 1, noncurrentVersions: 0, deleteMarkers: 0, unfinishedMultipart: 0 },
+    byteSeconds: { low: 0, high: 0 }, gaps: ['accounting:overflow'] });
+});
+
 // Dropping retired intervals or resetting an unchanged upload's start undercounts these literal totals.
 test('streamHistoryRetainsStorageAcrossReplacementDeletionAndRecreation', async t => {
   const f = await fixture(t), audit = await open(f);
@@ -110,21 +167,37 @@ for (const mutation of ['create', 'replace', 'delete']) {
   });
 }
 
-// Resolving a failed mutation by an unrelated next mutation would hide which size existed in between.
+// A missing intermediate size cannot become a measured interval; malformed and active work still refuses.
 for (const mode of ['overlap', 'ambiguous', 'twice', 'clock', 'short', 'interrupt', 'null', 'status']) {
-  test(`streamHistoryPoisonsUnprovableTransition_${mode}`, async t => {
+  test(mode === 'interrupt' ? 'streamHistoryRetainsUnknownInterruptedTransition' : mode === 'ambiguous' ? 'streamHistoryForwardsAfterAmbiguityWithUnknownInterval' : `streamHistoryPoisonsUnprovableTransition_${mode}`, async t => {
     const f = await fixture(t), audit = await open(f);
     success(f, audit, put(4), 1, 2, 4);
     f.time(4); const finish = audit.begin(del());
     if (mode === 'overlap') assert.throws(() => audit.begin(put(6)), bad);
     else if (mode === 'clock') { f.time(3); assert.throws(() => finish({ statusCode: 204, bytesOut: 0 }), bad); }
     else if (mode === 'short') assert.throws(() => finish({ statusCode: 204, bytesOut: 1 }), bad);
-    else if (mode === 'interrupt') assert.throws(() => finish({ statusCode: 204, bytesOut: 0, interrupted: true }), bad);
+    else if (mode === 'interrupt') {
+      finish({ statusCode: 204, bytesOut: 0, interrupted: true });
+      await audit.verify();
+      assert.equal(audit.snapshot().status, 'unknown');
+      assert.deepEqual(audit.snapshot().gaps, ['accounting:request-cutoff']);
+      assert.equal(audit.snapshot().objects.bytes, 4);
+      assert.ok(f.meter.snapshot().gaps.includes('accounting:request-cutoff'));
+      return;
+    }
     else if (mode === 'null') assert.throws(() => finish({ statusCode: null, bytesOut: 0 }), bad);
     else if (mode === 'status') assert.throws(() => finish({ statusCode: 99, bytesOut: 0 }), bad);
     else {
       finish({ statusCode: mode === 'ambiguous' ? 503 : 204, bytesOut: 0 });
-      if (mode === 'ambiguous') assert.throws(() => audit.begin(put(6)), bad);
+      if (mode === 'ambiguous') {
+        const next = audit.begin(put(6)); f.time(5); next({ statusCode: 200, bytesOut: 6 }); f.rows.set(key, 6);
+        f.time(6); await audit.verify();
+        assert.equal(audit.snapshot().status, 'unknown');
+        assert.deepEqual(audit.snapshot().gaps, ['accounting:incomplete-history']);
+        assert.deepEqual(audit.snapshot().byteSeconds, { low: null, high: null });
+        assert.equal(audit.snapshot().objects.bytes, 6);
+        assert.equal(f.meter.diagnostics().firstInvalidation, null); return;
+      }
       else assert.throws(() => finish({ statusCode: 204, bytesOut: 0 }), bad);
     }
     assert.throws(() => audit.snapshot(), bad); assert.throws(() => f.meter.snapshot(), /Invalid cloud cost meter/);
@@ -292,7 +365,7 @@ for (const interrupted of [false, true]) test(`unversioned histories retain a wi
   assert.deepEqual(e.lifetimes.snapshot().byteSeconds, { low: 40, high: 40 });
 });
 
-test('unversioned history reader requires its own producer settlement', async t => {
+test('unversioned history reader collects missing producer telemetry as unknown', async t => {
   const { createLitestreamAfterStop } = await import('./litestream.mjs');
   const f = await fixture(t), afterStop = createLitestreamAfterStop({ clock: () => 0 });
   const invocation = '11111111-2222-4333-8444-555555555555';
@@ -300,7 +373,12 @@ test('unversioned history reader requires its own producer settlement', async t 
   const reader = await storage.openLitestreamHistories({ ...f.args, afterStop });
   const finish = reader.begin({ method: 'GET', path: '/synthetic?list-type=2',
     headers: { 'amz-sdk-invocation-id': invocation, 'amz-sdk-request': 'attempt=1; max=3' } });
-  assert.throws(() => finish({ statusCode: 200, bytesOut: 0 }), bad);
+  assert.doesNotThrow(() => finish({ statusCode: 200, bytesOut: 0 }));
+  await reader.verify(); assert.equal(reader.snapshot().objects.bytes, 0);
+  const result = afterStop.snapshot();
+  assert.equal(result.status, 'unknown'); assert.equal(result.requestsReconciled, false);
+  assert.deepEqual(result.gaps, ['accounting:incomplete-history']);
+  assert.equal(result.producer.attempts, 0);
 });
 
 // Final restore uses the same history, with ordinary strict read completion after replication stops.
@@ -320,11 +398,15 @@ for (const method of ['PUT', 'DELETE', 'POST']) test(`the strict restore view re
   assert.throws(() => reader.strictReads.begin({ method, path, headers: {'content-length':'4'} }), bad);
   await assert.rejects(reader.verify(), bad);assert.throws(() => afterStop.snapshot());
 });
-test('an interrupted final restore read still poisons the shared history', async t => {
+test('an interrupted final restore read leaves an accounting gap without invalidating shared history', async t => {
   const { createLitestreamAfterStop } = await import('./litestream.mjs');
   const f = await fixture(t), afterStop = createLitestreamAfterStop({ clock: () => 0 });
   const reader = await storage.openLitestreamHistories({ ...f.args, afterStop });
   const finish = reader.strictReads.begin({ method: 'GET', path, headers: {} });
-  assert.throws(() => finish({ statusCode: 200, bytesOut: 0, interrupted: true, responseHeaders: {} }), bad);
-  await assert.rejects(reader.verify(), bad);assert.throws(() => afterStop.snapshot());
+  finish({ statusCode: 200, bytesOut: 0, interrupted: true, responseHeaders: {} });
+  await reader.verify();
+  assert.equal(reader.snapshot().status, 'unknown');
+  assert.deepEqual(reader.snapshot().gaps, ['accounting:request-cutoff']);
+  assert.ok(f.meter.snapshot().gaps.includes('accounting:request-cutoff'));
+  assert.equal(afterStop.snapshot().used, 0);
 });

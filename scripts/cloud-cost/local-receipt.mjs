@@ -71,6 +71,9 @@ export function buildLocalReceipt(input) {
       checks: [['no-raw-data', 1], ['outbound-denied', 5], ['all-sales-replayed', admitted.replay.counts.successful],
         ['accounting-reconciled', accounting.producer.attempts], ['cleanup-complete', 0]]
         .map(([code, count]) => ({ code, passed: true, count })),
-      cleanup: { ownedProcesses: 0, ownedContainers: 0, ownedNetworks: 0, ownedVolumes: 0, ownedObjects: 0, residualKinds: [] } });
+      cleanup: { ownedProcesses: 0, ownedContainers: 0, ownedNetworks: 0, ownedVolumes: 0, ownedObjects: 0, residualKinds: [] } }, { producer: 'local-stream', sources: [
+        { scope: 'requests', record: stream.requests }, { scope: 'restore', record: stream.requests },
+        { scope: 'administration', record: stream.administration }, { scope: 'storage', record: stream.storage },
+      ], measurements: { replay, stream, options } });
   } catch { fail(); }
 }

@@ -10,6 +10,23 @@ const identity = (key, version) => JSON.stringify([key, version]);
 const safeKey = key => text(key) && Buffer.byteLength(key) <= 1024 && !key.startsWith('/')
   && !/[\\\0]/.test(key) && !key.split('/').some(part => part === '.' || part === '..');
 
+// Aggregates can exceed the numeric range after valid events. Keep supported quantities
+// and retain the gap even when cleanup makes the live byte count representable again.
+export function storageHistorySnapshot(record, meter, gaps) {
+  const bounded = value => {
+    requireThat(typeof value === 'number' && value >= 0);
+    if (value <= Number.MAX_SAFE_INTEGER) return value;
+    gaps.add('accounting:overflow'); meter.markGap('accounting:overflow'); return null;
+  };
+  requireThat(Number.isInteger(record.objects.bytes));
+  requireThat(record.byteSeconds.high >= record.byteSeconds.low);
+  const objects = { ...record.objects, bytes: bounded(record.objects.bytes) };
+  const byteSeconds = { low: bounded(record.byteSeconds.low), high: bounded(record.byteSeconds.high) };
+  if (gaps.has('accounting:incomplete-history')) byteSeconds.low = byteSeconds.high = null;
+  return { status: gaps.size ? 'unknown' : 'measured', ...record, objects, byteSeconds,
+    ...(gaps.size ? { gaps: [...gaps] } : {}) };
+}
+
 // Use exclusively owned, initially empty buckets. Provider IDs and keys stay in these private maps.
 export async function openStorageLifetimes({ clients, sdk, meter, bucket, versioned, objectClass, allowBulkDeletes = false }) {
   const versions = new Map(), uploads = new Map();
@@ -240,7 +257,7 @@ export async function openStorageLifetimes({ clients, sdk, meter, bucket, versio
 // Owned, initially empty unversioned buckets only. No deletion or size-changing replacement is admitted.
 // A failed reply can follow a commit; bound its first possible write until an independent inventory.
 export async function openLitestreamLifetimes({ client, sdk, meter, bucket, clock, afterStop }) {
-  const rows = new Map(), pending = new Set();
+  const rows = new Map(), pending = new Set(), gaps = new Set();
   let invalid = false, verifying = false, verified = false, last = -Infinity, endpoint;
   const poison = () => { invalid = true; afterStop?.invalidate(); meter?.invalidate(); fail(); };
   const guarded = fn => (...args) => {
@@ -288,19 +305,21 @@ export async function openLitestreamLifetimes({ client, sdk, meter, bucket, cloc
     const settleLifetime = strictRead ? undefined : afterStop?.beginLifetime({ headers, operation, versioned: false });
     const token = {}; pending.add(token);
     return guarded(({ statusCode, bytesOut, interrupted = false, responseHeaders }) => {
-      if (settleLifetime) ({ statusCode } = settleLifetime({ statusCode, bytesOut, interrupted, responseHeaders }));
-      requireThat(pending.has(token) && (!interrupted || settleLifetime) && Number.isInteger(statusCode) && statusCode >= 200 && statusCode <= 599);
+      if (settleLifetime) ({ statusCode, interrupted } = settleLifetime({ statusCode, bytesOut, interrupted, responseHeaders }));
+      requireThat(pending.has(token) && typeof interrupted === 'boolean' && count(bytesOut)
+        && (interrupted && statusCode === null || Number.isInteger(statusCode) && statusCode >= 200 && statusCode <= 599));
+      if (interrupted) { gaps.add('accounting:request-cutoff'); meter.markGap('accounting:request-cutoff'); }
       const time = now();
       if (row) {
-        requireThat(bytesOut === bytes);
-        if (statusCode < 300) row.by ??= time;
+        requireThat(interrupted ? bytesOut <= bytes : bytesOut === bytes);
+        if (statusCode !== null && statusCode < 300 && !interrupted) row.by ??= time;
         row.pending = false;
       }
       pending.delete(token);
     });
   };
   const begin = guarded(input => beginOperation(input, false));
-  // Final restore shares inventory and pending-token guards, with no replication shutdown allowance.
+  // Restore shares inventory and pending-token guards; its read-only view cannot mutate storage.
   const strictReads = { begin: guarded(input => {
     requireThat(['get', 'head', 'list'].includes(classifyStorageOperation(input)));
     return beginOperation(input, true);
@@ -343,10 +362,9 @@ export async function openLitestreamLifetimes({ client, sdk, meter, bucket, cloc
         requireThat(row.by !== null); bytes += row.bytes;
         low += row.bytes * (time - row.by); high += row.bytes * (time - row.from);
       }
-      requireThat(count(bytes) && Number.isFinite(low) && Number.isFinite(high) && low >= 0 && high >= low);
-      return { status: 'measured', scope: 'unversioned-put-only', windowSeconds: time - start,
+      return storageHistorySnapshot({ scope: 'unversioned-put-only', windowSeconds: time - start,
         objects: { class: 'stream', bytes, currentVersions: rows.size, noncurrentVersions: 0, deleteMarkers: 0, unfinishedMultipart: 0 },
-        byteSeconds: { low, high } };
+        byteSeconds: { low, high } }, meter, gaps);
     })();
   };
   await verify();
@@ -356,7 +374,7 @@ export async function openLitestreamLifetimes({ client, sdk, meter, bucket, cloc
 // Owned, initially empty unversioned buckets only. Commit times are bounded by request and reply;
 // an ambiguous reply stays unresolved until inventory or an identical successful retry bounds it.
 export async function openLitestreamHistories({ client, sdk, meter, bucket, clock, afterStop, allowBulkDeletes = false, allowMultipart = false, resolveMultipartReplies = false }) {
-  const rows = new Map(), pending = new Set();
+  const rows = new Map(), pending = new Set(), gaps = new Set();
   let invalid = false, verifying = false, verified = false, last = -Infinity, endpoint, start;
   let retiredLow = 0, retiredHigh = 0;
   const poison = () => { invalid = true; afterStop?.invalidate(); meter?.invalidate(); fail(); };
@@ -383,7 +401,15 @@ export async function openLitestreamHistories({ client, sdk, meter, bucket, cloc
     requireThat(result.$metadata?.httpStatusCode === 200 && result.$metadata.attempts === 1);
     return result;
   };
-  const transition = (row, mutation, by) => {
+  const historyGap = () => { gaps.add('accounting:incomplete-history'); meter.markGap('accounting:incomplete-history'); };
+  const overwriteCompletions = (row, before = Infinity) => {
+    for (const completion of row.pendingCompletions ?? []) if (completion.order < before) {
+      completion.overwritten = true;
+      completion.following.clear();
+    }
+  };
+  const transition = (row, mutation, by, before = Infinity) => {
+    overwriteCompletions(row, before);
     if (row.current && !(mutation.method === 'PUT' && row.current.bytes === mutation.bytes)) {
       retiredLow += row.current.bytes * Math.max(0, mutation.from - row.current.by);
       retiredHigh += row.current.bytes * (by - row.current.from);
@@ -391,12 +417,77 @@ export async function openLitestreamHistories({ client, sdk, meter, bucket, cloc
     }
     if (mutation.method === 'PUT' && !row.current) row.current = { bytes: mutation.bytes, from: mutation.from, by };
     row.uncertain = null;
+    row.candidates = null;
   };
-  const multipart = allowMultipart ? nativeMultipartHistory({ bucket, now, inspect, resolveReplies: resolveMultipartReplies, complete: (key, bytes, from, by) => {
+  // A later different mutation can erase an intermediate retained interval. Keep every
+  // possible owned size until inventory, but do not assign byte-time totals to that history.
+  const mutationFor = (row, method, bytes, time, trackPending = true) => {
+    for (const completion of trackPending ? row.pendingCompletions ?? [] : []) {
+      historyGap();
+      completion.advanced = true;
+      if (!completion.overwritten) {
+        const following = completion.following, candidate = method === 'PUT' ? bytes : null;
+        requireThat(following.has(candidate) || following.size < 100000);
+        following.add(candidate);
+      }
+    }
+    if (row.uncertain && (row.uncertain.method !== method || row.uncertain.bytes !== bytes)) {
+      gaps.add('accounting:incomplete-history'); meter.markGap('accounting:incomplete-history');
+      row.candidates ??= new Set([row.current?.bytes ?? null,
+        row.uncertain.method === 'PUT' ? row.uncertain.bytes : null]);
+    }
+    const candidate = method === 'PUT' ? bytes : null;
+    requireThat(!row.candidates || row.candidates.has(candidate) || row.candidates.size < 100000);
+    return { method, bytes, from: row.uncertain && !row.candidates ? row.uncertain.from : time };
+  };
+  const uncertainMutation = (row, mutation) => {
+    if (row.candidates) row.candidates.add(mutation.method === 'PUT' ? mutation.bytes : null);
+    if (row.candidates || (mutation.method === 'PUT' ? row.current?.bytes !== mutation.bytes : row.current !== null)) row.uncertain = mutation;
+  };
+  const completionStates = new WeakMap();
+  const multipart = allowMultipart ? nativeMultipartHistory({ bucket, now, inspect, resolveReplies: resolveMultipartReplies,
+    markGap: code => { gaps.add(code); meter.markGap(code); }, prepareComplete: (key, sizes, from) => {
     let row = rows.get(key);
-    requireThat(!row?.active && !row?.uncertain);
+    requireThat(!row?.active);
     if (!row) { requireThat(rows.size < 100000); row = { current: null, uncertain: null, active: false }; rows.set(key, row); }
-    transition(row, { method: 'PUT', bytes, from }, by);
+    if (row.pendingCompletions?.size) historyGap();
+    const order = (row.completionOrder ?? 0) + 1; requireThat(count(order));
+    row.completionOrder = order;
+    // Deferred completions resolve in admission order. An uncommitted later
+    // completion must not add its size to an earlier object's candidates.
+    const mutation = sizes.length === 1 ? mutationFor(row, 'PUT', sizes[0], from, false) : null;
+    const before = new Set(row.candidates ?? [row.current?.bytes ?? null]);
+    if (row.uncertain) before.add(row.uncertain.method === 'PUT' ? row.uncertain.bytes : null);
+    const completion = { order, before, following: new Set(sizes), advanced: false, overwritten: false };
+    row.pendingCompletions ??= new Set();
+    row.pendingCompletions.add(completion);
+    const apply = by => {
+      requireThat(row.pendingCompletions.delete(completion) && !row.active);
+      overwriteCompletions(row, order);
+      // Inventory can witness the completed upload after later work. It cannot
+      // replace a newer acknowledged object or date an invisible intermediate interval.
+      if (completion.overwritten) { historyGap(); return; }
+      if (completion.advanced || !mutation) {
+        historyGap();
+        row.candidates = new Set(completion.following);
+      } else transition(row, mutation, by, order);
+    };
+    completionStates.set(apply, completion);
+    apply.resolve = (by, { alternatives = [], optional = false } = {}) => {
+      if (!alternatives.length && !optional) return apply(by);
+      historyGap();
+      const choices = [apply, ...alternatives].map(fn => completionStates.get(fn));
+      requireThat(choices.every(choice => choice && row.pendingCompletions.has(choice)));
+      for (const choice of choices) row.pendingCompletions.delete(choice);
+      const supported = new Set();
+      for (const choice of choices) if (!choice.overwritten) {
+        for (const bytes of choice.following) supported.add(bytes);
+        if (optional) for (const bytes of choice.before) supported.add(bytes);
+      }
+      if (supported.size) { requireThat(supported.size <= 100000); row.candidates = supported; }
+    };
+    apply.absent = () => { requireThat(row.pendingCompletions.delete(completion)); };
+    return apply;
   } }) : null;
   const beginBatch = ({ headers, body }) => {
     requireThat(allowBulkDeletes === true && headers && !Object.hasOwn(headers, 'content-encoding')
@@ -411,18 +502,20 @@ export async function openLitestreamHistories({ client, sdk, meter, bucket, cloc
       requireThat(text(key) && Buffer.byteLength(key) <= 1024 && !/[\\\x00-\x1f\x7f]/.test(key)
         && !key.split('/').some(s => s === '.' || s === '..') && !selected.has(key));
       let row = rows.get(key);
-      requireThat(!row?.active && (!row?.uncertain || row.uncertain.method === 'DELETE'));
+      requireThat(!row?.active);
       if (!row) { requireThat(rows.size < 100000); row = { current: null, uncertain: null, active: false }; rows.set(key, row); }
-      selected.set(key, { row, mutation: { method: 'DELETE', bytes: 0, from: row.uncertain?.from ?? time } });
+      selected.set(key, { row, mutation: mutationFor(row, 'DELETE', 0, time) });
     }
     requireThat(selected.size > 0 && selected.size <= 1000);
     for (const { row } of selected.values()) row.active = true;
     verified = false; const token = {}; pending.add(token);
     return guarded(({ statusCode, bytesOut, interrupted = false, responseBody }) => {
-      requireThat(pending.has(token) && !interrupted && Number.isInteger(statusCode) && statusCode >= 200 && statusCode <= 599
-        && bytesOut === body.length);
+      requireThat(pending.has(token) && typeof interrupted === 'boolean' && count(bytesOut)
+        && (interrupted && statusCode === null || Number.isInteger(statusCode) && statusCode >= 200 && statusCode <= 599)
+        && (interrupted ? bytesOut <= body.length : bytesOut === body.length));
+      if (interrupted) { gaps.add('accounting:request-cutoff'); meter.markGap('accounting:request-cutoff'); }
       const time = now(), results = new Map();
-      if (statusCode < 300) {
+      if (!interrupted && statusCode < 300) {
         requireThat(statusCode === 200);
         for (const entry of deletionXml(responseBody, 'DeleteResult')) {
           requireThat(entry.name === 'Deleted' || entry.name === 'Error');
@@ -435,7 +528,7 @@ export async function openLitestreamHistories({ client, sdk, meter, bucket, cloc
       }
       for (const [key, { row, mutation }] of selected) {
         if (results.get(key) === true) transition(row, mutation, time);
-        else if (row.current) row.uncertain = mutation;
+        else uncertainMutation(row, mutation);
         row.active = false;
       }
       pending.delete(token);
@@ -457,7 +550,7 @@ export async function openLitestreamHistories({ client, sdk, meter, bucket, cloc
     requireThat(!url.searchParams.has('versionId'));
     const time = now();
     if (operation.startsWith('multipart-')) {
-      requireThat(pending.size === 0 && !rows.get(key)?.uncertain);
+      requireThat(pending.size === 0);
       const finish = multipart.begin({ operation, key, query: url.searchParams, headers, body, time });
       verified = false; const token = {}; pending.add(token);
       return guarded(event => { requireThat(pending.has(token)); finish(event); pending.delete(token); });
@@ -473,27 +566,29 @@ export async function openLitestreamHistories({ client, sdk, meter, bucket, cloc
       requireThat(count(bytes));
       row = rows.get(key);
       if (!row) { requireThat(rows.size < 100000); row = { current: null, uncertain: null, active: false }; rows.set(key, row); }
-      requireThat(!row.active && (!row.uncertain || row.uncertain.method === method && row.uncertain.bytes === bytes));
-      mutation = { method, bytes, from: row.uncertain?.from ?? time };
+      requireThat(!row.active);
+      mutation = mutationFor(row, method, bytes, time);
       row.active = true; verified = false;
     }
     const settleLifetime = strictRead ? undefined : afterStop?.beginLifetime({ headers, operation, versioned: false });
     const token = {}; pending.add(token);
     return guarded(({ statusCode, bytesOut, interrupted = false, responseHeaders }) => {
-      if (settleLifetime) ({ statusCode } = settleLifetime({ statusCode, bytesOut, interrupted, responseHeaders }));
-      requireThat(pending.has(token) && (!interrupted || settleLifetime) && Number.isInteger(statusCode) && statusCode >= 200 && statusCode <= 599);
+      if (settleLifetime) ({ statusCode, interrupted } = settleLifetime({ statusCode, bytesOut, interrupted, responseHeaders }));
+      requireThat(pending.has(token) && typeof interrupted === 'boolean' && count(bytesOut)
+        && (interrupted && statusCode === null || Number.isInteger(statusCode) && statusCode >= 200 && statusCode <= 599));
+      if (interrupted) { gaps.add('accounting:request-cutoff'); meter.markGap('accounting:request-cutoff'); }
       const time = now();
       if (mutation) {
-        requireThat(bytesOut === mutation.bytes);
-        if (statusCode < 300) transition(row, mutation, time);
-        else if (mutation.method === 'PUT' ? row.current?.bytes !== mutation.bytes : row.current !== null) row.uncertain = mutation;
+        requireThat(interrupted ? bytesOut <= mutation.bytes : bytesOut === mutation.bytes);
+        if (statusCode !== null && statusCode < 300 && !interrupted) transition(row, mutation, time);
+        else uncertainMutation(row, mutation);
         row.active = false;
       }
       pending.delete(token);
     });
   };
   const begin = guarded(input => beginOperation(input, false));
-  // Final restore shares inventory and pending-token guards, with no replication shutdown allowance.
+  // Restore shares inventory and pending-token guards; its read-only view cannot mutate storage.
   const strictReads = { begin: guarded(input => {
     requireThat(['get', 'head', 'list'].includes(classifyStorageOperation(input)));
     return beginOperation(input, true);
@@ -515,7 +610,7 @@ export async function openLitestreamHistories({ client, sdk, meter, bucket, cloc
         continuation = page.NextContinuationToken;
         requireThat(text(continuation) && !tokens.has(continuation)); tokens.add(continuation);
       }
-      if (multipart) await multipart.verify([...found].map(([key, bytes]) => ({ key, bytes })));
+      if (multipart) await multipart.verify();
       else {
         const uploads = await inspect('ListMultipartUploadsCommand');
         requireThat(uploads.IsTruncated === false && (uploads.Uploads === undefined || Array.isArray(uploads.Uploads) && uploads.Uploads.length === 0));
@@ -524,7 +619,12 @@ export async function openLitestreamHistories({ client, sdk, meter, bucket, cloc
       requireThat([...found.keys()].every(key => rows.has(key)));
       for (const [key, row] of rows) {
         const bytes = found.get(key), uncertain = row.uncertain;
-        if (uncertain) {
+        if (row.candidates) {
+          requireThat(row.candidates.has(bytes ?? null));
+          // Inventory witnesses the current size, not which earlier request committed.
+          row.current = bytes === undefined ? null : { bytes, from: start, by: time };
+          row.candidates = null; row.uncertain = null;
+        } else if (uncertain) {
           if (uncertain.method === 'PUT' ? bytes === uncertain.bytes : bytes === undefined) transition(row, uncertain, time);
           else {
             requireThat(row.current ? bytes === row.current.bytes : bytes === undefined);
@@ -548,35 +648,71 @@ export async function openLitestreamHistories({ client, sdk, meter, bucket, cloc
       }
       const parts = multipart?.snapshot(time) ?? { bytes: 0, uploads: 0, low: 0, high: 0 };
       bytes += parts.bytes; low += parts.low; high += parts.high;
-      requireThat(count(bytes) && Number.isFinite(low) && Number.isFinite(high) && low >= 0 && high >= low);
-      return { status: 'measured', scope: 'unversioned-object-history', windowSeconds: time - start,
+      return storageHistorySnapshot({ scope: 'unversioned-object-history', windowSeconds: time - start,
         objects: { class: 'stream', bytes, currentVersions: objects, noncurrentVersions: 0, deleteMarkers: 0, unfinishedMultipart: parts.uploads },
-        byteSeconds: { low, high } };
+        byteSeconds: { low, high } }, meter, gaps);
     })();
   };
   await verify();
   return { begin, verify, snapshot, ...(afterStop ? { afterStop, strictReads } : {}) };
 }
 
-// A full-body failed reply may have committed. The opt-in resolver blocks further requests
-// until independent inventories bound that one possible mutation; transport failures stay refused.
-export function nativeMultipartHistory({ bucket, now, inspect, complete, resolveReplies = false }) {
-  const uploads = new Map(); let busy = false, uncertain = null, retiredLow = 0, retiredHigh = 0;
+// Independent inventory bounds an interrupted mutation without claiming a successful reply.
+// Only an active request fences ordinary work; settled uncertainty still requires inventory.
+export function nativeMultipartHistory({ bucket, now, inspect, prepareComplete, markGap, resolveReplies = false }) {
+  const uploads = new Map(), uncertain = []; let busy = false, retiredLow = 0, retiredHigh = 0, candidates = 0;
   const retire = (part, from, by) => {
     retiredLow += part.bytes * Math.max(0, from - part.by);
     retiredHigh += part.bytes * (by - part.from);
   };
   const fields = (body, root, allowed) => deletionFields({ value: '', children: deletionXml(body, root) }, allowed);
   const cleanText = value => text(value) && value.length <= 2048 && !/[\x00-\x1f\x7f]/.test(value);
+  // A later mutation can hide the interval of an earlier part replacement. Keep
+  // every owned size until inventory, without treating a missing ETag as observed.
+  const retainPart = u => {
+    const upload = u.upload, n = u.partNumber;
+    upload.candidates ??= new Map();
+    if (!upload.candidates.has(n)) {
+      requireThat(candidates < 100000); candidates++;
+      upload.candidates.set(n, [upload.parts.get(n) ?? null]);
+    }
+    requireThat(candidates < 100000); candidates++;
+    upload.candidates.get(n).push({ bytes: u.bytes, etag: null });
+    markGap('accounting:incomplete-history');
+  };
+  const clearCandidates = (upload, n) => {
+    const selected = upload.candidates?.get(n);
+    if (selected) { candidates -= selected.length; upload.candidates.delete(n); }
+  };
+  const discardTerminals = id => {
+    for (let i = uncertain.length - 1; i >= 0; i--) if (uncertain[i].id === id
+      && ['multipart-complete', 'multipart-abort'].includes(uncertain[i].operation)) {
+      uncertain[i].applyCompletion?.absent?.(); uncertain.splice(i, 1);
+    }
+  };
+  const resolveTerminals = (entries, by) => {
+    const completions = entries.filter(u => u.operation === 'multipart-complete');
+    if (completions.length) completions[0].applyCompletion.resolve(by, {
+      alternatives: completions.slice(1).map(u => u.applyCompletion),
+      optional: entries.some(u => u.operation === 'multipart-abort'),
+    });
+  };
   const begin = ({ operation, key, query, headers, body, time }) => {
-    requireThat(!busy && !uncertain && safeKey(key) && !/[\x00-\x1f\x7f]/.test(key) && headers
+    requireThat(!busy && uncertain.length < 100000 && safeKey(key) && !/[\x00-\x1f\x7f]/.test(key) && headers
       && !Object.hasOwn(headers, 'content-encoding') && !Object.hasOwn(headers, 'x-amz-copy-source'));
     const length = headers['content-length'] ?? '0';
     requireThat(/^(0|[1-9]\d*)$/.test(length) && count(Number(length)));
     const bytes = Number(length), uploadId = query.get('uploadId'), id = identity(key, uploadId);
-    const upload = uploads.get(id); let selected;
+    const upload = uploads.get(id); let selected, applyCompletion;
     if (operation === 'multipart-create') requireThat(bytes === 0 && uploads.size < 100000);
-    else requireThat(upload);
+    else {
+      requireThat(upload);
+      for (let i = uncertain.length - 1; i >= 0; i--) if (uncertain[i].id === id) {
+        if (uncertain[i].operation === 'multipart-upload') {
+          retainPart(uncertain[i]); uncertain.splice(i, 1);
+        } else markGap('accounting:incomplete-history');
+      }
+    }
     if (operation === 'multipart-upload') requireThat(bytes >= 0 && upload.parts.size < 10000);
     if (operation === 'multipart-abort') requireThat(bytes === 0);
     if (operation === 'multipart-complete') {
@@ -584,18 +720,35 @@ export function nativeMultipartHistory({ bucket, now, inspect, complete, resolve
       selected = []; let previous = 0;
       for (const entry of deletionXml(body, 'CompleteMultipartUpload')) {
         requireThat(entry.name === 'Part'); const f = deletionFields(entry, ['PartNumber', 'ETag']);
-        requireThat(/^[1-9]\d*$/.test(f.PartNumber)); const n = Number(f.PartNumber), part = upload.parts.get(n);
-        requireThat(n > previous && part && f.ETag === part.etag); previous = n; selected.push(part);
+        requireThat(/^[1-9]\d*$/.test(f.PartNumber) && cleanText(f.ETag)); const n = Number(f.PartNumber);
+        const possible = upload.candidates?.get(n) ?? [upload.parts.get(n)];
+        const matching = possible.filter(part => part && (part.etag === null || f.ETag === part.etag));
+        // A missing reply leaves its ETag unknown. Inventory must select an exact
+        // sum of owned part sizes, rather than an arbitrary value inside a range.
+        requireThat(n > previous && matching.length > 0);
+        previous = n; selected.push(new Set(matching.map(part => part.bytes)));
       }
       requireThat(selected.length > 0);
+      let sizes = new Set([0]);
+      for (const part of selected) {
+        const next = new Set();
+        for (const size of sizes) for (const bytes of part) {
+          requireThat(count(size + bytes)); next.add(size + bytes); requireThat(next.size <= 100000);
+        }
+        sizes = next;
+      }
+      applyCompletion = prepareComplete(key, [...sizes], time);
     }
     busy = true;
     return ({ statusCode, bytesOut, interrupted = false, responseBody, responseHeaders }) => {
-      requireThat(busy && !interrupted && bytesOut === bytes && Number.isInteger(statusCode) && statusCode >= 200 && statusCode <= 599);
+      requireThat(busy && typeof interrupted === 'boolean' && count(bytesOut)
+        && (interrupted ? bytesOut <= bytes : bytesOut === bytes)
+        && (interrupted && statusCode === null || Number.isInteger(statusCode) && statusCode >= 200 && statusCode <= 599));
       const by = now();
-      if (statusCode >= 300) {
-        requireThat(resolveReplies === true);
-        uncertain = { operation, key, id, upload, bytes, time, partNumber: Number(query.get('partNumber')), selected };
+      if (interrupted || statusCode >= 300) {
+        requireThat(interrupted || resolveReplies === true);
+        if (interrupted) markGap('accounting:request-cutoff');
+        uncertain.push({ operation, key, id, upload, bytes, time, partNumber: Number(query.get('partNumber')), selected, applyCompletion });
         busy = false; return;
       }
       requireThat(statusCode === (operation === 'multipart-abort' ? 204 : 200));
@@ -605,17 +758,28 @@ export function nativeMultipartHistory({ bucket, now, inspect, complete, resolve
         uploads.set(identity(key, f.UploadId), { key, uploadId: f.UploadId, parts: new Map() });
       } else if (operation === 'multipart-upload') {
         requireThat(cleanText(responseHeaders?.etag));
+        // A successful part proves the upload survived every earlier terminal
+        // request. Earlier lost completions cannot also own a completed object.
+        discardTerminals(id);
         const n = Number(query.get('partNumber')), previous = upload.parts.get(n);
+        clearCandidates(upload, n);
         if (previous) retire(previous, time, by);
         upload.parts.set(n, { bytes, etag: responseHeaders.etag, from: time, by });
       } else {
         if (operation === 'multipart-complete') {
           const f = fields(responseBody, 'CompleteMultipartUploadResult', ['Location', 'Bucket', 'Key', 'ETag']);
           requireThat(f.Bucket === bucket && f.Key === key && cleanText(f.ETag));
-          const size = selected.reduce((n, part) => n + part.bytes, 0); requireThat(count(size));
-          complete(key, size, time, by, responseHeaders);
+          discardTerminals(id);
+          applyCompletion(by, responseHeaders);
+        } else {
+          const prior = uncertain.filter(u => u.id === id);
+          if (prior.length) {
+            resolveTerminals([...prior, { operation: 'multipart-abort' }], by);
+            for (let i = uncertain.length - 1; i >= 0; i--) if (uncertain[i].id === id) uncertain.splice(i, 1);
+          }
         }
         for (const part of upload.parts.values()) retire(part, time, by);
+        for (const n of upload.candidates?.keys() ?? []) clearCandidates(upload, n);
         uploads.delete(id);
       }
       busy = false;
@@ -634,7 +798,7 @@ export function nativeMultipartHistory({ bucket, now, inspect, complete, resolve
     }
     fail();
   };
-  return { begin, active: () => busy || uncertain !== null, verify: async (objects = []) => {
+  return { begin, active: () => busy, verify: async () => {
     requireThat(!busy);
     const observed = new Map();
     for (const entry of await pages('ListMultipartUploadsCommand', 'Uploads', [['KeyMarker', 'NextKeyMarker'], ['UploadIdMarker', 'NextUploadIdMarker']])) {
@@ -649,17 +813,36 @@ export function nativeMultipartHistory({ bucket, now, inspect, complete, resolve
       }
       observed.set(id, { key: entry.Key, uploadId: entry.UploadId, parts });
     }
-    if (uncertain) {
-      const u = uncertain, by = now(), found = observed.get(u.id);
-      if (u.operation === 'multipart-create') {
-        const added = [...observed].filter(([id]) => !uploads.has(id));
-        requireThat(added.length <= 1);
-        for (const [id, upload] of added) {
-          requireThat(upload.key === u.key && upload.parts.size === 0 && uploads.size < 100000);
-          uploads.set(id, { ...upload, parts: new Map() });
-        }
-      } else if (u.operation === 'multipart-upload') {
+    const creates = new Map();
+    for (const u of uncertain) if (u.operation === 'multipart-create') creates.set(u.key, (creates.get(u.key) ?? 0) + 1);
+    for (const [id, found] of observed) if (!uploads.has(id)) {
+      const remaining = creates.get(found.key) ?? 0;
+      requireThat(remaining > 0 && found.parts.size === 0 && uploads.size < 100000);
+      creates.set(found.key, remaining - 1);
+      uploads.set(id, { ...found, parts: new Map() });
+    }
+    const terminalGroups = new Map();
+    for (const u of uncertain) if (['multipart-complete', 'multipart-abort'].includes(u.operation)) {
+      if (!terminalGroups.has(u.id)) terminalGroups.set(u.id, []);
+      terminalGroups.get(u.id).push(u);
+    }
+    for (const [id, entries] of terminalGroups) {
+      if (observed.has(id)) for (const u of entries) u.applyCompletion?.absent?.();
+      else {
+        const by = now(), upload = entries[0].upload;
+        resolveTerminals(entries, by);
+        for (const part of upload.parts.values()) retire(part, entries[0].time, by);
+        for (const n of upload.candidates?.keys() ?? []) clearCandidates(upload, n);
+        uploads.delete(id);
+      }
+    }
+    for (const u of uncertain) {
+      const by = now(), found = observed.get(u.id);
+      if (u.operation === 'multipart-create') continue;
+      if (u.operation === 'multipart-upload') {
+        if (!found && terminalGroups.has(u.id)) continue;
         requireThat(found);
+        if (u.upload.candidates?.has(u.partNumber)) { retainPart(u); continue; }
         const part = found.parts.get(u.partNumber), previous = u.upload.parts.get(u.partNumber);
         const unchanged = previous && part && previous.bytes === part.bytes && previous.etag === part.etag;
         if (!unchanged && part) {
@@ -667,17 +850,16 @@ export function nativeMultipartHistory({ bucket, now, inspect, complete, resolve
           if (previous) retire(previous, u.time, by);
           u.upload.parts.set(u.partNumber, { ...part, from: u.time, by });
         } else requireThat(unchanged || !previous && !part);
-      } else if (!found) {
-        if (u.operation === 'multipart-complete') {
-          const size = u.selected.reduce((n, p) => n + p.bytes, 0); requireThat(count(size));
-          const candidates = objects.filter(row => row.key === u.key && row.bytes === size && row.marker !== true);
-          requireThat(candidates.length === 1);
-          complete(u.key, size, u.time, by, candidates[0].version ? { 'x-amz-version-id': candidates[0].version } : undefined);
-        }
-        for (const part of u.upload.parts.values()) retire(part, u.time, by);
-        uploads.delete(u.id);
       }
-      uncertain = null;
+    }
+    uncertain.length = 0;
+    for (const [id, upload] of uploads) for (const [n, possible] of upload.candidates ?? []) {
+      const part = observed.get(id)?.parts.get(n);
+      requireThat(possible.some(candidate => part ? candidate && candidate.bytes === part.bytes
+        && (candidate.etag === null || candidate.etag === part.etag) : candidate === null));
+      if (part) upload.parts.set(n, { ...part, from: 0, by: now() });
+      else upload.parts.delete(n);
+      clearCandidates(upload, n);
     }
     requireThat(observed.size === uploads.size);
     for (const [id, found] of observed) {
@@ -687,7 +869,7 @@ export function nativeMultipartHistory({ bucket, now, inspect, complete, resolve
       }
     }
   }, snapshot: time => {
-    requireThat(!busy && !uncertain); let bytes = 0, low = retiredLow, high = retiredHigh;
+    requireThat(!busy && uncertain.length === 0 && candidates === 0); let bytes = 0, low = retiredLow, high = retiredHigh;
     for (const upload of uploads.values()) for (const part of upload.parts.values()) {
       bytes += part.bytes; low += part.bytes * (time - part.by); high += part.bytes * (time - part.from);
     }

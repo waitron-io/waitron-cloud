@@ -29,7 +29,10 @@ test('the copied stack adapter imports every required release dependency before 
  const args={source,root,codeRoot,stateRoot,journal,image:'sha256:'+'a'.repeat(64)};
  const prepared=prepareIsolatedStack(args);
  await assert.rejects(startIsolatedStack({...args,prepared}),error=>error.diagnostic?.stage==='preexisting-resources');
- const script=`const adapter=await import(${JSON.stringify(pathToFileURL(join(codeRoot,'cost-waitron-adapter.mjs')).href)});
+ const script=`const {createMeter}=await import(${JSON.stringify(pathToFileURL(join(codeRoot,'meter.mjs')).href)});
+ const meter=createMeter({phase:'workload',clock:()=>0});meter.markGap('accounting:request-cutoff');
+ if(meter.snapshot().status!=='unknown')throw Error('copied meter lost uncertainty');
+ const adapter=await import(${JSON.stringify(pathToFileURL(join(codeRoot,'cost-waitron-adapter.mjs')).href)});
  if(typeof adapter.openReplay!=='function')throw Error('missing copied adapter');console.log('copied adapter ready');`;
  const imported=spawnSync(process.execPath,['--input-type=module','-e',script],{encoding:'utf8',timeout:10000});
  assert.equal(imported.status,0,imported.stderr);

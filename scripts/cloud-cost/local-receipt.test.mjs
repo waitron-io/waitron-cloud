@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { summarizeStreamAccounting } from './stream-admission.mjs';
-import { exportAggregate } from './schema.mjs';
+import { summarizeStreamAccounting, validateStreamAdmission } from './stream-admission.mjs';
+import { validateReceipt, exportAggregate } from './schema.mjs';
 const module = await import('./local-receipt.mjs').catch(error => {
   if (error.code === 'ERR_MODULE_NOT_FOUND' && error.url === new URL('./local-receipt.mjs', import.meta.url).href) return {};
   throw error;
@@ -12,7 +12,14 @@ const request = (phase, operation, requestClass, bytesIn, bytesOut, retryOrdinal
   successful: outcome === 'success' ? 1 : 0, failed: outcome === 'success' ? 0 : 1,
   retried: retryOrdinal > 0 ? 1 : 0, bytesIn, bytesOut, attemptedBytesIn: bytesIn, attemptedBytesOut: bytesOut,
 });
-const counters = (requests, totals) => ({ reconciled: true,
+// This complete test record supplies known billing; real bucket-control unknowns have their own refusal case.
+const counters = (requests, totals) => ({ status: 'measured', reconciled: true, gaps: [],
+  billing: [...new Set(requests.map(row => row.phase + ':' + row.requestClass))].map(key => {
+    const rows = requests.filter(row => row.phase + ':' + row.requestClass === key);
+    return { phase: rows[0].phase, requestClass: rows[0].requestClass, status: 'measured',
+      quantity: rows[0].requestClass === 's3-delete' || rows[0].requestClass === 's3-control' ? 0
+        : rows.reduce((n, row) => n + row.attempts, 0) };
+  }),
   accounting: { requests, objects: [], producer: { ...totals }, observer: { ...totals },
     discrepancy: { attempts: 0, bytesIn: 0, bytesOut: 0 } }, observedRequests: structuredClone(requests) });
 function fixture() {
@@ -20,6 +27,7 @@ function fixture() {
     originalInventory: { days: 2, busiest: 3 }, cadence: { mode: 'accelerated', factor: 100 },
     replayWindowSeconds: 10, stream: { startupSeconds: 2, idleSeconds: 2, windowSeconds: 60 } };
   const stream = {
+    functional: { startupUpload: true, restore: true, bucketCreated: true, bucketRemoved: true },
     phases: ['startup', 'workload', 'idle', 'verification', 'restore'].map(phase => ({ phase, elapsedSeconds: 2 })),
     requests: counters([
       request('startup', 'put', 's3-write', 3, 4096),
@@ -62,10 +70,97 @@ function build(f) {
   return module.buildLocalReceipt(f);
 }
 
+for (const mode of ['lifetime', 'totals', 'attempted-bytes']) test(`combined ${mode} overflow stays unknown without failing functional replay`, async () => {
+  const f = fixture(), stream = f.result.admission.stream;
+  if (mode === 'lifetime') stream.storage.byteSeconds = { low: Number.MAX_SAFE_INTEGER - 4095, high: Number.MAX_SAFE_INTEGER - 4095 };
+  else if (mode === 'totals') {
+    const native = stream.requests, admin = stream.administration;
+    for (const rows of [native.accounting.requests, native.observedRequests]) rows[0].bytesOut = rows[0].attemptedBytesOut = Number.MAX_SAFE_INTEGER - 256;
+    native.accounting.producer.bytesOut = native.accounting.observer.bytesOut = Number.MAX_SAFE_INTEGER;
+    for (const rows of [admin.accounting.requests, admin.observedRequests]) rows[0].bytesOut = rows[0].attemptedBytesOut = 1;
+    admin.accounting.producer.bytesOut = admin.accounting.observer.bytesOut = 1;
+  } else {
+    for (const rows of [stream.requests.accounting.requests, stream.requests.observedRequests]) {
+      const row = rows.find(row => row.operation === 'list'); row.phase = 'cleanup'; row.attemptedBytesIn = Number.MAX_SAFE_INTEGER;
+    }
+    stream.requests.billing.find(row => row.requestClass === 's3-list').phase = 'cleanup';
+  }
+  assert.doesNotThrow(() => validateStreamAdmission(stream, { ...f.options.stream, expectedSales: 3 }), 'each original record remains valid');
+  const { completeReplayResult } = await import('./isolated-replay.mjs');
+  const result = completeReplayResult({ admission: f.result.admission, isolation: f.result.isolation, cleanup: f.result.cleanup }, f.options);
+  assert.equal(result.functional, 'passed'); assert.equal(result.costMeasured, false); assert.equal(result.receipt, null);
+  assert.equal(result.accounting.status, 'unknown'); assert.equal(result.accounting.publicationEligible, false);
+  assert.ok(result.accounting.gaps.includes('accounting:overflow'));
+  assert.deepEqual(result.evidence.admission, f.result.admission);
+  f.result.streamAccounting = summarizeStreamAccounting(stream, { ...f.options.stream, expectedSales: 3 });
+  assert.throws(() => build(f), bad);
+});
+
+test('a measured receipt needs the original successful restore request as well as the functional witness', async () => {
+  const f = fixture(), meter = f.result.admission.stream.requests;
+  meter.accounting.requests = meter.accounting.requests.filter(row => row.phase !== 'restore');
+  meter.observedRequests = meter.observedRequests.filter(row => row.phase !== 'restore');
+  meter.billing = meter.billing.filter(row => row.phase !== 'restore');
+  for (const channel of ['producer', 'observer']) meter.accounting[channel] = { attempts: 4, bytesIn: 32, bytesOut: 4352 };
+  f.result.streamAccounting = summarizeStreamAccounting(f.result.admission.stream, { ...f.options.stream, expectedSales: 3 });
+  assert.throws(() => build(f), bad);
+  const { completeReplayResult } = await import('./isolated-replay.mjs');
+  const completed = completeReplayResult({ admission: f.result.admission, isolation: f.result.isolation, cleanup: f.result.cleanup }, f.options);
+  assert.equal(completed.functional, 'passed'); assert.equal(completed.receipt, null);
+  assert.equal(completed.accounting.publicationEligible, false);
+  assert.ok(completed.accounting.gaps.includes('accounting:incomplete-history'));
+});
+
+test('new local export binds every measured value to its original replay and stream', () => {
+  const f = fixture(), receipt = build(f), { stream, ...replay } = f.result.admission;
+  const originals = { producer: 'local-stream', sources: [
+    { scope: 'requests', record: stream.requests }, { scope: 'restore', record: stream.requests },
+    { scope: 'administration', record: stream.administration }, { scope: 'storage', record: stream.storage },
+  ], measurements: { replay, stream, options: f.options } };
+  assert.deepEqual(exportAggregate(receipt, originals), receipt);
+  for (const row of receipt.inputs.filter(row => row.status === 'measured')) {
+    for (const [field, value] of [['value', row.value + 1], ['unit', 'hours'],
+      ['source', 'receipt:22345678-1234-4234-8234-123456789012'], ['observedAt', '2026-10-21T00:00:00.000Z']]) {
+      const changed = structuredClone(receipt);
+      changed.inputs.find(input => input.id === row.id)[field] = value;
+      assert.throws(() => exportAggregate(changed, originals), { message: 'Invalid cloud cost evidence' }, row.id + ':' + field);
+    }
+  }
+  const changed = structuredClone(receipt), row = changed.inputs.find(input => input.id === 'archive-bytes');
+  Object.assign(row, { value: 1, status: 'measured', source: 'receipt:' + changed.runId,
+    observedAt: changed.window.endedAt, reason: null });
+  assert.throws(() => exportAggregate(changed, originals), { message: 'Invalid cloud cost evidence' });
+  for (const path of ['options', 'options.expected', 'options.originalInventory', 'options.cadence', 'options.stream']) {
+    const source = structuredClone(originals);
+    path.split('.').reduce((value, key) => value[key], source.measurements).private = 'PRIVATE_CANARY';
+    assert.throws(() => exportAggregate(receipt, source), { message: 'Invalid cloud cost evidence' }, path);
+  }
+  const source = structuredClone(originals);
+  source.measurements = structuredClone(source.measurements);
+  const meter = source.measurements.stream.requests;
+  for (const rows of [meter.accounting.requests, meter.observedRequests]) {
+    rows[0].bytesOut++; rows[0].attemptedBytesOut++;
+  }
+  meter.accounting.producer.bytesOut++; meter.accounting.observer.bytesOut++;
+  assert.throws(() => exportAggregate(receipt, source), { message: 'Invalid cloud cost evidence' });
+  const changedCadence = structuredClone(receipt); changedCadence.cadence.factor++;
+  assert.throws(() => exportAggregate(changedCadence, originals), { message: 'Invalid cloud cost evidence' });
+  for (const change of [options => { options.replayWindowSeconds = Infinity; },
+    options => { options.stream.startupSeconds = -1; }, options => { options.stream.idleSeconds = 3601; },
+    options => { options.stream.windowSeconds = 8000; }, options => { options.replayWindowSeconds = 59; }]) {
+    const source = structuredClone(originals); change(source.measurements.options);
+    assert.throws(() => exportAggregate(receipt, source), { message: 'Invalid cloud cost evidence' });
+  }
+  const shortWindow = structuredClone(receipt);
+  shortWindow.window.endedAt = '2026-10-21T00:00:02.000Z'; shortWindow.window.elapsedSeconds = 2;
+  for (const row of shortWindow.inputs.filter(row => row.status === 'measured')) row.observedAt = shortWindow.window.endedAt;
+  assert.throws(() => exportAggregate(shortWindow, originals), { message: 'Invalid cloud cost evidence' });
+});
+
 // Dropping either meter or collapsing storage uncertainty changes these hand-derived quantities.
 test('localReceiptPreservesAllStreamTrafficBoundsAndKnownReplayQuantities', () => {
   const f = fixture(), receipt = build(f), inputs = Object.fromEntries(receipt.inputs.map(row => [row.id, row]));
-  assert.deepEqual(exportAggregate(receipt), receipt);
+  assert.deepEqual(validateReceipt(receipt), receipt);
   assert.deepEqual(receipt.accounting.producer, { attempts: 9, bytesIn: 4174, bytesOut: 4352 });
   assert.deepEqual(receipt.accounting.observer, receipt.accounting.producer);
   assert.deepEqual(receipt.accounting.discrepancy, { attempts: 0, bytesIn: 0, bytesOut: 0 });
@@ -174,4 +269,19 @@ for (const field of ['expected', 'originalInventory', 'cadence', 'stream'])
 test('currentProducerRejectsHistoricalRevision',()=>{
  const input=fixture();input.metadata.waitronRevision='fbadd15785464e59747e697c11048bfbc6e4938f';
  assert.throws(()=>build(input),bad);
+});
+
+// New exports need original billing witnesses; matching transfer totals alone are insufficient.
+test('local receipt refuses unknown original billing even with equal transfer counters', () => {
+  const f = fixture();
+  f.result.admission.stream.administration.billing[0] = {
+    phase: 'setup', requestClass: 's3-control', quantity: null, status: 'unknown' };
+  assert.throws(() => build(f), bad);
+});
+test('a legacy local aggregate without original coverage remains readable but cannot be newly built', () => {
+  const f = fixture(); delete f.result.admission.stream.functional;
+  for (const scope of ['requests', 'administration']) {
+    for (const key of ['status', 'gaps', 'billing']) delete f.result.admission.stream[scope][key];
+  }
+  assert.throws(() => build(f), bad);
 });

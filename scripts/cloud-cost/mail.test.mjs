@@ -6,13 +6,17 @@ import { randomUUID } from 'node:crypto';
 import { createRequire } from 'node:module';
 import { createLocalAccountMailer } from '../../packages/registration/src/local-mailer.ts';
 import * as local from './local.mjs';
+import { assessAccounting } from './accounting-policy.mjs';
+import { perturbMailObserver } from './mail-observer-test-utils.mjs';
+import net from 'node:net';
+import { syncBuiltinESMExports } from 'node:module';
 const nodemailer = createRequire(new URL('../../packages/registration/package.json', import.meta.url))('nodemailer');
 
 const bad = /Invalid cloud cost mail measurement/;
 const context = id => ({ deliveryId: id ?? randomUUID(), signal: new AbortController().signal });
 const message = { email: 'private-canary@example.test', locale: 'es' };
 async function fixture(t, modes = []) {
-  let calls = 0;
+  let calls = 0, accepted = 0;
   const sockets = new Set();
   const server = createServer(socket => {
     sockets.add(socket); socket.on('error', () => {}); socket.once('close', () => sockets.delete(socket));
@@ -28,7 +32,7 @@ async function fixture(t, modes = []) {
       while (buffer.includes('\r\n')) {
         const end = buffer.indexOf('\r\n'), line = buffer.slice(0, end); buffer = buffer.slice(end + 2);
         if (data) {
-          if (line === '.') { data = false; socket.write('250 captured\r\n'); }
+          if (line === '.') { data = false; accepted++; socket.write('250 captured\r\n'); }
         } else if (line.startsWith('EHLO')) socket.write('250-capture\r\n250 8BITMIME\r\n');
         else if (line.startsWith('RCPT') && mode === 'refuse') socket.write('451 deferred private-canary\r\n');
         else if (line === 'DATA') { data = true; socket.write('354 send body\r\n'); }
@@ -39,7 +43,8 @@ async function fixture(t, modes = []) {
   });
   server.listen(0, '127.0.0.1'); await once(server, 'listening');
   t.after(async () => { for (const s of sockets) s.destroy(); await new Promise(resolve => server.close(resolve)); });
-  return { target: `smtp://127.0.0.1:${server.address().port}`, calls: () => calls, sockets };
+  return { target: `smtp://127.0.0.1:${server.address().port}`, calls: () => calls, accepted: () => accepted, sockets,
+    settled: () => Promise.all([...sockets].map(socket => once(socket, 'close', { signal: AbortSignal.timeout(500) }))) };
 }
 async function open(t, f, options = {}) {
   assert.equal(typeof local.openMailMeasurement, 'function', 'measure real SMTP independently of mailer completion');
@@ -47,6 +52,32 @@ async function open(t, f, options = {}) {
   t.after(() => run.close().catch(() => {}));
   return { run, mailer: run.wrapMailer(createLocalAccountMailer({ port: run.port })) };
 }
+
+test('mail collection waits for owned socket close notifications', async t => {
+  const f = await fixture(t), original = net.createServer, pending = []; let notified = 0;
+  net.createServer = handler => original(socket => {
+    const once = socket.once;
+    socket.once = function(event, listener) {
+      if (event !== 'close') return Reflect.apply(once, this, [event, listener]);
+      return Reflect.apply(once, this, [event, function(...args) {
+        pending.push(new Promise(resolve => setTimeout(() => {
+          Reflect.apply(listener, this, args); notified++; resolve();
+        }, 20)));
+      }]);
+    };
+    handler(socket);
+  });
+  syncBuiltinESMExports();
+  let measured;
+  try { measured = await open(t, f); }
+  finally { net.createServer = original; syncBuiltinESMExports(); }
+  t.after(async () => { await Promise.all(pending); });
+  await measured.mailer.sendPasswordChanged(message, context());
+  await measured.run.close();
+  assert.ok(notified > 0, 'owned close callbacks completed before collection returned');
+  assert.equal(f.accepted(), 1);
+  assert.equal(measured.run.snapshot().producer.accepted, 1);
+});
 
 // Counting logical messages alone loses the refused physical attempt before a worker retry.
 test('mailIndependentSmtpRefusalRetryAndAcceptedOperationsReconcile', async t => {
@@ -81,8 +112,8 @@ test('mailRejectsExternalTargetsAndUnboundedDeadlinesBeforeConnecting', async ()
     await assert.rejects(local.openMailMeasurement({ target: 'smtp://127.0.0.1:42', timeoutMs }), bad);
 });
 
-// No SMTP exchange, a false client result or missing identity cannot qualify evidence.
-test('mailRejectsEmptyUnobservedAndMismatchedDeliveries', async t => {
+// Empty runs and missing identity refuse; absent or mismatched telemetry stays unknown.
+test('mailEmptyAndMissingIdentityRefuseWhileOutcomeGapsStayUnknown', async t => {
   const f = await fixture(t);
   const { run: empty } = await open(t, f);
   await assert.rejects(empty.close(), bad);
@@ -91,8 +122,17 @@ test('mailRejectsEmptyUnobservedAndMismatchedDeliveries', async t => {
     const actual = createLocalAccountMailer({ port: run.port });
     const mailer = run.wrapMailer(mode === 'unobserved' ? { sendPasswordChanged: async () => {} }
       : mode === 'mismatch' ? { async sendPasswordChanged(m, c) { await actual.sendPasswordChanged(m, c); throw Error('private-canary'); } } : actual);
-    await assert.rejects(mailer.sendPasswordChanged(message, mode === 'missing-context' ? undefined : context()), bad);
-    await assert.rejects(run.close(), bad); assert.throws(() => run.snapshot(), bad);
+    if (mode === 'missing-context') {
+      await assert.rejects(mailer.sendPasswordChanged(message, undefined), bad);
+      await assert.rejects(run.close(), bad); assert.throws(() => run.snapshot(), bad);
+    } else {
+      if (mode === 'mismatch') await assert.rejects(mailer.sendPasswordChanged(message, context()), /Captured email delivery refused/);
+      else await assert.doesNotReject(mailer.sendPasswordChanged(message, context()));
+      await assert.doesNotReject(run.close());
+      assert.equal(run.snapshot().status, 'unknown'); assert.equal(run.snapshot().reconciled, false);
+      assert.equal(run.snapshot().producer.attempts, 1);
+      assert.equal(run.snapshot().observer.attempts, mode === 'mismatch' ? 1 : 0);
+    }
   }
 });
 
@@ -172,13 +212,19 @@ test('mailMalformedTruncatedAndOversizedRepliesRefuseEvidenceWithoutRawErrors', 
   }
 });
 
-// A caller resolving a refused SMTP attempt is an accounting mismatch, not a delivery success.
-test('mailFalseSuccessAfterServerRefusalCannotQualify', async t => {
+// A resolved caller cannot turn a captured SMTP refusal into measured acceptance.
+test('mailCallerSuccessPreservesActualSmtpRefusalAsUnknown', async t => {
   const f = await fixture(t, ['refuse']);
   const { run } = await open(t, f), actual = createLocalAccountMailer({ port: run.port });
   const mailer = run.wrapMailer({ async sendPasswordChanged(m, c) { await actual.sendPasswordChanged(m, c).catch(() => {}); } });
-  await assert.rejects(mailer.sendPasswordChanged(message, context()), bad);
-  await assert.rejects(run.close(), bad);
+  await assert.doesNotReject(mailer.sendPasswordChanged(message, context()));
+  await assert.doesNotReject(run.close());
+  assert.equal(f.accepted(), 0);
+  assert.deepEqual(run.snapshot().producer, { attempts: 1, accepted: 1, refused: 0, retried: 0 });
+  assert.deepEqual(run.snapshot().observer, { attempts: 1, accepted: 0, refused: 1 });
+  assert.deepEqual(run.snapshot().discrepancy, { attempts: 0, accepted: -1, refused: 1 });
+  assert.equal(run.snapshot().status, 'unknown'); assert.equal(run.snapshot().reconciled, false);
+  assert.deepEqual(run.snapshot().gaps, ['accounting:meter-disagreement']);
 });
 
 // Cancellation belonging to one delivery must terminate its real capture socket too.
@@ -268,8 +314,8 @@ test('mailDeadlineRejectsBeforeTheServerResponds', async t => {
   } finally { clearTimeout(timer); for (const s of f.sockets) s.destroy(); await pending; await run.close().catch(() => {}); }
 });
 
-// A close refusal must distinguish an empty run from a real SMTP/client disagreement without exposing mail.
-test('mailCloseRefusalsIdentifyTheFirstInvalidStateAndIndependentCounts', async t => {
+// Empty runs refuse; a completed disagreement retains both observations without exposing mail.
+test('mailCloseDistinguishesEmptyRunFromCompletedOutcomeDisagreement', async t => {
   const f = await fixture(t), { run: empty } = await open(t, f);
   await assert.rejects(empty.close(), error => {
     assert.deepEqual(error.diagnostic, { reason: 'empty-measurement', invalid: false,
@@ -281,19 +327,14 @@ test('mailCloseRefusalsIdentifyTheFirstInvalidStateAndIndependentCounts', async 
   const mailer = run.wrapMailer({ async sendPasswordChanged(m, c) {
     await actual.sendPasswordChanged(m, c); throw Error('private-canary');
   } });
-  await assert.rejects(mailer.sendPasswordChanged(message, identity), bad);
-  let first;
-  await assert.rejects(run.close(), error => {
-    first = error;
-    assert.deepEqual(error.diagnostic, { reason: 'delivery-outcome-mismatch', invalid: true,
-      producer: { attempts: 0, accepted: 0, refused: 0, retried: 0 },
-      observer: { attempts: 1, accepted: 1, refused: 0 } });
-    assert.equal([message.email, identity.deliveryId, 'private-canary', f.target].some(value =>
-      JSON.stringify(error).includes(value) || error.message.includes(value)), false);
-    return bad.test(error.message);
-  });
-  await assert.rejects(run.close(), error => error === first);
-  assert.throws(() => run.snapshot(), bad);
+  await assert.rejects(mailer.sendPasswordChanged(message, identity), /Captured email delivery refused/);
+  await assert.doesNotReject(run.close()); await assert.doesNotReject(run.close());
+  assert.deepEqual(run.snapshot().producer, { attempts: 1, accepted: 0, refused: 1, retried: 0 });
+  assert.deepEqual(run.snapshot().observer, { attempts: 1, accepted: 1, refused: 0 });
+  assert.deepEqual(run.snapshot().discrepancy, { attempts: 0, accepted: 1, refused: -1 });
+  assert.deepEqual(run.snapshot().gaps, ['accounting:meter-disagreement']);
+  assert.equal([message.email, identity.deliveryId, 'private-canary', f.target].some(value =>
+    JSON.stringify(run.snapshot()).includes(value)), false);
 });
 
 // Later cleanup cannot replace the protocol failure that first invalidated the measurement.
@@ -329,4 +370,128 @@ test('mailCloseDiagnosticsDistinguishDeadlineCancellationAndActiveClose', async 
     await pending;
     assert.throws(() => run.snapshot(), bad);
   }
+});
+
+// The mailer's result and the SMTP reply are separate observations of the same attempt.
+test('mailAccountingMismatchPreservesActualDeliveryOutcomeAndLaterRetry', async t => {
+  const f = await fixture(t), { run } = await open(t, f), identity = context();
+  const actual = createLocalAccountMailer({ port: run.port });
+  let first = true;
+  const mailer = run.wrapMailer({ async sendPasswordChanged(m, c) {
+    await actual.sendPasswordChanged(m, c);
+    if (first) { first = false; throw Error('private-canary'); }
+    return 'completed';
+  } });
+  await assert.rejects(mailer.sendPasswordChanged(message, identity), /Captured email delivery refused/);
+  assert.equal(f.accepted(), 1);
+  assert.equal(await mailer.sendPasswordChanged(message, identity).catch(() => 'refused'), 'completed');
+  await assert.doesNotReject(run.close());
+  const snapshot = run.snapshot();
+  await f.settled();
+  assert.equal(f.accepted(), 2); assert.equal(f.sockets.size, 0);
+  assert.equal(snapshot.status, 'unknown'); assert.equal(snapshot.reconciled, false);
+  assert.deepEqual(snapshot.gaps, ['accounting:meter-disagreement']);
+  assert.deepEqual(snapshot.producer, { attempts: 2, accepted: 1, refused: 1, retried: 1 });
+  assert.deepEqual(snapshot.observer, { attempts: 2, accepted: 2, refused: 0 });
+  assert.deepEqual(snapshot.discrepancy, { attempts: 0, accepted: 1, refused: -1 });
+  assert.deepEqual(snapshot.operations, [
+    { action: 'password_changed', outcome: 'refused', retryOrdinal: 0, attempts: 1 },
+    { action: 'password_changed', outcome: 'accepted', retryOrdinal: 1, attempts: 1 },
+  ]);
+  assert.deepEqual(snapshot.billing, { quantity: null, status: 'unknown' });
+  const assessment = assessAccounting({ producer: 'service', sources: [{ scope: 'mail', record: snapshot }] });
+  assert.equal(assessment.publicationEligible, false);
+  assert.ok(assessment.gaps.includes('accounting:meter-disagreement'));
+  assert.equal([message.email, identity.deliveryId, 'private-canary', f.target].some(value => JSON.stringify(snapshot).includes(value)), false);
+  snapshot.producer.attempts = 99; snapshot.gaps.length = 0;
+  assert.equal(run.snapshot().producer.attempts, 2);
+  assert.deepEqual(run.snapshot().gaps, ['accounting:meter-disagreement']);
+});
+
+// A later opposite mismatch cannot erase an earlier disagreement from equal final totals.
+test('mailBalancedFinalTotalsRetainEarlierOutcomeDisagreement', async t => {
+  const f = await fixture(t, ['accept', 'refuse']), { run } = await open(t, f);
+  const actual = createLocalAccountMailer({ port: run.port });
+  const mailer = run.wrapMailer({ async sendPasswordChanged(m, c) {
+    try { await actual.sendPasswordChanged(m, c); }
+    catch { return 'caller-accepted'; }
+    throw Error('private-canary');
+  } });
+  await assert.rejects(mailer.sendPasswordChanged(message, context()), /Captured email delivery refused/);
+  assert.equal(await mailer.sendPasswordChanged(message, context()).catch(() => 'refused'), 'caller-accepted');
+  await assert.doesNotReject(run.close());
+  await f.settled();
+  assert.equal(f.accepted(), 1); assert.equal(f.calls(), 2); assert.equal(f.sockets.size, 0);
+  assert.deepEqual(run.snapshot().producer, { attempts: 2, accepted: 1, refused: 1, retried: 0 });
+  assert.deepEqual(run.snapshot().observer, { attempts: 2, accepted: 1, refused: 1 });
+  assert.deepEqual(run.snapshot().discrepancy, { attempts: 0, accepted: 0, refused: 0 });
+  assert.equal(run.snapshot().status, 'unknown'); assert.equal(run.snapshot().reconciled, false);
+  assert.deepEqual(run.snapshot().gaps, ['accounting:meter-disagreement']);
+});
+
+// Losing capture telemetry must neither invent an observed delivery nor reopen the call budget.
+test('mailUnobservedDeliveryRetainsCallerResultAndConsumesAttemptBudget', async t => {
+  const f = await fixture(t), { run } = await open(t, f, { maxAttempts: 1 });
+  const actual = createLocalAccountMailer({ port: Number(new URL(f.target).port) });
+  const mailer = run.wrapMailer({ async sendPasswordChanged(m, c) {
+    await actual.sendPasswordChanged(m, c); return 'completed';
+  } });
+  assert.equal(await mailer.sendPasswordChanged(message, context()).catch(() => 'refused'), 'completed');
+  assert.equal(f.accepted(), 1);
+  await assert.doesNotReject(run.close());
+  await f.settled();
+  assert.equal(f.sockets.size, 0);
+  const snapshot = run.snapshot();
+  assert.equal(snapshot.status, 'unknown'); assert.equal(snapshot.reconciled, false);
+  assert.deepEqual(snapshot.producer, { attempts: 1, accepted: 1, refused: 0, retried: 0 });
+  assert.deepEqual(snapshot.observer, { attempts: 0, accepted: 0, refused: 0 });
+  assert.deepEqual(snapshot.discrepancy, { attempts: -1, accepted: -1, refused: 0 });
+  assert.deepEqual(snapshot.gaps, ['accounting:incomplete-total', 'accounting:meter-disagreement']);
+  assert.deepEqual(snapshot.billing, { quantity: null, status: 'unknown' });
+
+  const next = await open(t, f, { maxAttempts: 1 });
+  const unobserved = next.run.wrapMailer(actual);
+  await assert.doesNotReject(unobserved.sendPasswordChanged(message, context()));
+  await assert.rejects(unobserved.sendPasswordChanged(message, context()), bad);
+  assert.equal(f.accepted(), 2); assert.equal(f.calls(), 2);
+  await assert.rejects(next.run.close(), bad);
+});
+
+// Accounting uncertainty cannot hide a real protocol failure on the following attempt.
+test('mailAccountingGapStillRefusesLaterMalformedCaptureAndCancellation', async t => {
+  for (const mode of ['malformed', 'cancel']) {
+    const f = await fixture(t, ['accept', mode === 'cancel' ? 'hang' : 'malformed']);
+    const controller = new AbortController();
+    const { run } = await open(t, f, { signal: controller.signal });
+    const actual = createLocalAccountMailer({ port: run.port });
+    let first = true;
+    const mailer = run.wrapMailer({ async sendPasswordChanged(m, c) {
+      await actual.sendPasswordChanged(m, c);
+      if (first) { first = false; throw Error('private-canary'); }
+    } });
+    await assert.rejects(mailer.sendPasswordChanged(message, context()), /Captured email delivery refused/);
+    const pending = assert.rejects(mailer.sendPasswordChanged(message, context()), bad);
+    if (mode === 'cancel') {
+      while (f.calls() < 2) await new Promise(resolve => setTimeout(resolve, 1));
+      controller.abort();
+    }
+    await pending; await assert.rejects(run.close(), bad); await f.settled();
+    assert.throws(() => run.snapshot(), bad); assert.equal(f.sockets.size, 0);
+  }
+});
+
+test('mailIndependentReplyObservationCannotRefuseActuallyAcceptedDelivery', async t => {
+  const f = await fixture(t);
+  const observation = perturbMailObserver(t, Number(new URL(f.target).port));
+  const { run, mailer } = await open(t, f);
+  await assert.doesNotReject(mailer.sendPasswordChanged(message, context()));
+  await assert.doesNotReject(mailer.sendPasswordChanged(message, context()));
+  await assert.doesNotReject(run.close()); await f.settled();
+  assert.equal(f.accepted(), 2); assert.equal(f.calls(), 2); assert.equal(f.sockets.size, 0);
+  assert.equal(observation.changed(), 1);
+  assert.deepEqual(run.snapshot().producer, { attempts: 2, accepted: 2, refused: 0, retried: 0 });
+  assert.deepEqual(run.snapshot().observer, { attempts: 2, accepted: 1, refused: 1 });
+  assert.deepEqual(run.snapshot().discrepancy, { attempts: 0, accepted: -1, refused: 1 });
+  assert.equal(run.snapshot().status, 'unknown'); assert.equal(run.snapshot().reconciled, false);
+  assert.deepEqual(run.snapshot().gaps, ['accounting:meter-disagreement']);
 });
