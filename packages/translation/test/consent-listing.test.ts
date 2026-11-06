@@ -3,7 +3,7 @@ import {generateKeyPairSync,randomUUID} from 'node:crypto';
 import {after,before,test} from 'node:test';
 import type {PoolClient} from 'pg';
 import {createLeaseIssuer,transaction} from '@waitron-cloud/registration';
-import {listConsents,type ConsentView} from '../src/index.ts';
+import {agreeConsent,listConsents,type ConsentView} from '../src/index.ts';
 import {connectedVenue,database} from './fixtures.ts';
 let db:Awaited<ReturnType<typeof database>>;
 const origin='https://cloud.example.test',issuer=createLeaseIssuer(generateKeyPairSync('ed25519').privateKey.export({type:'pkcs8',format:'der'}).toString('base64url'));
@@ -75,4 +75,37 @@ test('one batch keeps consent tied to each organisation and its own current owne
  await db.pool.query('UPDATE organisation_memberships SET is_owner=false WHERE account_id=$1 AND organisation_id=$2',[second.accountId,second.organisationId]);
  result=await measuredListing(first.accountId);
  assert.deepEqual(result.rows,expected.map(row=>row.venueId===second.venueId?{venueId:second.venueId,consented:false,consentedAt:null}:row));
+});
+
+for(const [name,change] of [
+ ['ownership removal','DELETE FROM organisation_memberships WHERE account_id=$1'],
+ ['account disable','UPDATE cloud_accounts SET disabled_at=clock_timestamp() WHERE id=$1'],
+ ['email verification removal','UPDATE cloud_credentials SET email_verified_at=NULL WHERE account_id=$1'],
+] as const)
+test(`listing cannot combine old authority with consent recorded after ${name}`,async()=>{
+ const v=await connectedVenue(db,issuer,origin),viewer=randomUUID();
+ await db.pool.query('INSERT INTO cloud_accounts(id) VALUES($1)',[viewer]);
+ await db.pool.query('INSERT INTO cloud_credentials(account_id,email,email_verified_at) VALUES($1,$2,clock_timestamp())',[viewer,`snapshot-${viewer}@example.test`]);
+ await db.pool.query('INSERT INTO organisation_memberships(account_id,organisation_id,is_owner) VALUES($1,$2,true)',[viewer,v.organisationId]);
+ const result=await transaction(db.pool,async client=>{
+  const query=client.query;let first=true;
+  // Keep both reads real; commit the authority change only after the first result exists.
+  client.query=async function(this:PoolClient,...args:unknown[]){
+   const result=await Reflect.apply(query,this,args);
+   if(first){
+    first=false;
+    await transaction(db.secondPool,async concurrent=>{
+     await concurrent.query("SET LOCAL lock_timeout='5s'");
+     await concurrent.query(change,[viewer]);
+     await agreeConsent(concurrent,v.accountId,{venueId:v.venueId,consentVersion:'providers-2026-10-14'});
+    });
+   }
+   return result;
+  } as PoolClient['query'];
+  try{return await listConsents(client,viewer);}finally{client.query=query;}
+ });
+ assert.deepEqual(result,[{venueId:v.venueId,consented:false,consentedAt:null}],
+  'the answer must use the consent snapshot read while this account still had access');
+ assert.deepEqual(await transaction(db.pool,c=>listConsents(c,viewer)),[]);
+ assert.equal((await transaction(db.pool,c=>listConsents(c,v.accountId)))[0]!.consented,true);
 });

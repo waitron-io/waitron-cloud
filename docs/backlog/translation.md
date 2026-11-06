@@ -480,13 +480,20 @@ checks keep real provider activation and wider release qualification open.
 
 ## Translation consent during account changes (D392)
 
-**Open.** Qualify provider behavior and database authority separately from the
-browser controller. Late reads, agreements and withdrawals cannot change current
-choices or release a pending read after an account change, including signing back
-into the original account. They cannot add a warning or retry wait for that account.
-Preserving an existing warning or retry deadline still needs a separate check.
-The [remote-browser reconnect investigation](../backlog.md#platform-work-to-scope) retains the
-earlier reconnect/takings qualification failures; a clean qualification does not
+When you change accounts, late consent reads, agreements and withdrawals cannot
+replace your current choices or release a pending read, even if you sign back into
+the original account. Native HTTP-response checks also preserve an existing write
+warning and its venue, or the exact retry deadline, when an old reply arrives.
+
+Listing reads your current ownership and the recorded consent in one PostgreSQL
+snapshot. It cannot combine access you had before an account change with consent
+recorded after ownership, account status or email verification changed. Existing
+owner, session, origin and browser-token checks still govern writes. Account
+changes and consent withdrawal prevent later provider work under the existing
+worker rules; withdrawal after the worker's consent check does not cancel work
+already in flight. Real providers and the broader release gates above remain
+unqualified. The [remote-browser reconnect investigation](../backlog.md#platform-work-to-scope)
+retains its separate reconnect and takings failures; these consent checks do not
 establish their cause.
 
 ## Translation-consent HTTP retry deadlines (D430)
