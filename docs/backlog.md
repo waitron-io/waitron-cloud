@@ -1964,8 +1964,8 @@ implementation or production evidence.
   command and deadline stays unchanged; production color handling is unchanged.
   Local PostgreSQL suites are unavailable while Docker is down until 3 November;
   GitHub CI qualifies the original database-backed journeys.
-  The parser's current-lock inventory check still pins 215 package/snapshot
-  records and the original importer counts. A new dependency record needs an
+  The parser's current-lock inventory check retains independently reviewed literal
+  package, snapshot and importer counts. A new dependency record needs an
   explicitly reviewed inventory update. The disposable
   [dependency-only control #164](https://github.com/waitron-io/waitron-cloud/pull/164)
   replaces the portal's resolved axe-core version with unchanged inventory counts
