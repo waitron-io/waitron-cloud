@@ -61,13 +61,27 @@ restore and reconciler guard children also keep their original database path.
 All 29 cases, their before/omitted/restored assertions and their deadlines stay
 unchanged. No additional source-mutation test is introduced.
 
-## Remaining qualification
+## Qualified result
 
-Measure all four jobs on the candidate's exact current head, using the same
-health checks and whole-job definition. Record each job's link, run attempt,
-checkout and test count in the pull request. Keep this entry open if any job
-exceeds 240 seconds or the run cannot qualify. A timing estimate from the moved
-test is not an observed improvement.
+[Run 42227911328](https://github.com/waitron-io/waitron-cloud/actions/runs/42227911328),
+attempt 1, checks `38b1c384208e8932646b31c160f3eb94e5d7dc20`.
+Each job checks out that exact commit and passes:
+
+| Job | Whole job | Test step | Reported outer passes |
+| --- | ---: | ---: | ---: |
+| [1/4](https://github.com/waitron-io/waitron-cloud/actions/runs/42227911328/job/127926160743) | 100 s | 84 s | 382 |
+| [2/4](https://github.com/waitron-io/waitron-cloud/actions/runs/42227911328/job/127926160670) | 171 s | 153 s | 567 |
+| [3/4](https://github.com/waitron-io/waitron-cloud/actions/runs/42227911328/job/127926160635) | 151 s | 131 s | 452 |
+| [4/4](https://github.com/waitron-io/waitron-cloud/actions/runs/42227911328/job/127926160679) | 150 s | 126 s | 298 |
+
+The third job also prints 23 passing child checks; those are separate from its
+452 outer passes. Every job is below 240 seconds. The complete measured run
+finishes successfully with 43 final jobs, including two planned skips. Official
+GitHub incident history has no relevant incident during its full
+13:44:18–14:15:12 UTC interval on 6 November 2026. Its slowest checkout is five
+seconds. All 41 HTTP 5xx log matches name passing application tests; none is a
+download failure. These results qualify this measured commit, rather than a
+future head or an estimate from the changed fixture.
 
 The guard wrapper's separate intermittent timeout investigation stays with
 D530. Moving its file does not repair that cause. D463's collector and billing
