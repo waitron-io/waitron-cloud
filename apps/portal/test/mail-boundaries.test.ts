@@ -32,7 +32,7 @@ test('a missing portal message reports queue and inbox boundaries without messag
 
 test('portal evidence retains real worker and SMTP outcomes and filters database payloads', async () => {
   const send = async () => {};
-  const pool = {async connect() {return {release() {}, async query() {return {rows: [{kind: 'password_reset', status: 'sent', attempts: 1, failures: 0,
+  const pool = {async connect() {return {release() {}, once() {}, removeListener() {}, async query() {return {rows: [{kind: 'password_reset', status: 'sent', attempts: 1, failures: 0,
     last_error: null, transport: null, has_message_id: false, token_hash: 'private-hash', payload: 'private-token'}]};}};}} as unknown as Parameters<typeof createMailCapture>[0]['pool'];
   const capture = createMailCapture({pool, inbox: 'http://127.0.0.1', mailer: {
     sendVerification: send, sendPasswordReset: send, sendPasswordChanged: send, sendServiceAlert: send,

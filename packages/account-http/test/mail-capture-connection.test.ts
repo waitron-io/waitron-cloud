@@ -73,8 +73,11 @@ test('connection acquisition and a blocked outbox read share one diagnostic dead
   await lock.query('BEGIN'); await lock.query('LOCK TABLE email_outbox IN ACCESS EXCLUSIVE MODE');
   const release = setTimeout(() => held.release(), 700);
   const result = missing(c);
-  try {unavailable(await within(result, 1450));}
-  finally {
+  try {
+    unavailable(await within(result, 1450));
+    await delay(25);
+    assert.equal(pool.totalCount, 0, 'a timed-out read must discard its still-blocked connection');
+  } finally {
     clearTimeout(release);
     // The release timer has fired before either diagnostic deadline.
     await lock.query('ROLLBACK'); lock.release(); await result;
@@ -103,4 +106,26 @@ test('a database disconnect during evidence collection preserves the mail assert
     unavailable(await within(result));
   } finally {await lock.query('ROLLBACK'); lock.release(); await result;}
   assert.deepEqual((await c.evidence()).outbox, []);
+});
+
+test('an unexpected socket close during the outbox read stays inside the mail diagnostic', async t => {
+  const sockets = new Set<Socket>();
+  const server = createTcpServer(socket => {
+    sockets.add(socket); socket.once('close', () => sockets.delete(socket));
+    // Complete PostgreSQL startup, then drop the transport for the actual query.
+    socket.once('data', () => {
+      socket.write(Buffer.from('5200000008000000005a0000000549', 'hex'));
+      socket.once('data', () => socket.destroy());
+    });
+  });
+  await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
+  const address = server.address(); assert.ok(address && typeof address !== 'string');
+  const pool = new Pool({host: '127.0.0.1', port: address.port, user: 'private-user', database: 'private-db', ssl: false, max: 1});
+  const c = await capture(t, pool), result = missing(c);
+  try {unavailable(await within(result));}
+  finally {
+    for (const socket of sockets) socket.destroy();
+    await new Promise<void>(resolve => server.close(() => resolve()));
+    await result; await pool.end();
+  }
 });

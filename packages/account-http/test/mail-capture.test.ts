@@ -17,7 +17,7 @@ async function fixture(t: TestContext, options: {messages?: object[]; status?: n
   t.after(() => new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve())));
   const address = server.address(); assert.ok(address && typeof address !== 'string');
   const send = async () => {if (options.smtpFails) throw privateError;};
-  const pool = {async connect() {return {release() {}, async query() {
+  const pool = {async connect() {return {release() {}, once() {}, removeListener() {}, async query() {
     if (options.queryFails) throw privateError;
     return {rows: [{kind: 'password_reset', status: 'sent', attempts: 1, failures: 0, last_error: null, transport: null,
       email, payload: `token=${token}`, message_id: 'private-message-id', has_message_id: false},

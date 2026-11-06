@@ -36,12 +36,15 @@ export function createMailCapture(options: {pool: Pick<Pool, 'connect'>; inbox: 
         // Return a late client without issuing a stale diagnostic query.
         if (expired || remaining <= 0) {client.release(); throw new Error('Mail evidence unavailable');}
         let failed = false;
+        // pg also emits transport failures as client events while rejecting the query.
+        const connectionError = () => {};
+        client.once('error', connectionError);
         try {
           const query = {text: `SELECT kind, status, attempts, failures, last_error, transport,
             message_id IS NOT NULL AS has_message_id FROM email_outbox ORDER BY created_at, id LIMIT 20`, query_timeout: remaining};
           return await client.query<Record<string, unknown>>(query);
         } catch (error) {failed = true; throw error;}
-        finally {client.release(failed);}
+        finally {client.removeListener('error', connectionError); client.release(failed);}
       } finally {reading = false;}
     })();
     try {
