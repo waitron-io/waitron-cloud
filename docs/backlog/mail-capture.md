@@ -18,7 +18,10 @@ Previously those callers reported inbox metadata alone. A one-off controlled emp
 lookup expressions: the nine unwired callers first failed for missing queue
 evidence, then all ten reported queue, worker and SMTP evidence.
 The original helper checks still cover redaction, successful reads and unavailable
-diagnostics. These checks do not reproduce the missing delivery. Capture a natural
+diagnostics. Three Debian 13 trials ran the four real browser, account recovery,
+monitoring and venue-mail files concurrently at reviewed commit `de4b42d8`.
+All 21 checks passed in each trial, 63 total, without reproducing the missing
+delivery. Capture a natural
 recurrence with the callback before choosing a delivery fix; a shared cause with
 the [venue signup/reset receipt](../../deploy/test-cloud/venue-service-basic.test.mjs)
 is unproved. That receipt separately found a queued message not marked sent.
