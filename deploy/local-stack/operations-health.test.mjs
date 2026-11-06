@@ -3,6 +3,7 @@ import {createServer} from 'node:http';
 import {test} from 'node:test';
 import {localHealthFetch} from './operations-health.mjs';
 
+// Transport bounds belong to the complete local-stack receipt command.
 test('local health transport preserves account authority and response bounds',async()=>{
  let authority,path;
  const server=createServer((request,response)=>{authority=request.headers.host;path=request.url;response.setHeader('content-length','17');response.end('{"status":"live"}');});
