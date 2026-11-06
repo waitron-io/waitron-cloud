@@ -171,7 +171,7 @@ test('litestreamTransportRejectsUnidentifiedDuplicateAndConflictingRetriesBefore
   let forwarded = 0;
   const target = await server(t, (req, res) => { forwarded++; req.resume(); req.on('end', () => res.end()); });
   for (const input of [
-    { headers: {} }, { headers: headers(id, 3) },
+    { headers: {} }, { headers: { ...headers(), 'amz-sdk-request': 'attempt=4; max=3' } },
     { headers: headers(), method: 'POST' },
     { headers: { ...headers(), 'x-amz-copy-source': '/bucket/PRIVATE_CANARY' } },
     { headers: headers(), path: '/bucket/PRIVATE_CANARY?x-id=GetObject' },
@@ -351,13 +351,13 @@ test('counter settlement survives a lifetime-completion refusal', async t => {
   assert.throws(() => meter.snapshot(), /Invalid cloud cost meter/);
 });
 
-// An old SDK issue is never permission for a new mutation or read admitted after acknowledgement.
+// Valid after-stop work consumes the cap at admission rather than refusing by operation shape.
 for (const [method, path, operation] of [['PUT', '/bucket/key', 'put'], ['GET', '/bucket/key', 'get'],
   ['HEAD', '/bucket/key', 'head'], ['DELETE', '/bucket/key', 'delete'],
   ['POST', '/bucket?delete=', 'delete-many'], ['POST', '/bucket/key?uploads=', 'multipart-create'],
   ['PUT', '/bucket/key?uploadId=x&partNumber=1', 'multipart-upload'],
   ['POST', '/bucket/key?uploadId=x', 'multipart-complete'], ['DELETE', '/bucket/key?uploadId=x', 'multipart-abort']])
-  test(`after-stop ${operation} is refused before forwarding even with a pre-stop issue`, async t => {
+  test(`after-stop ${operation} forwards with a pre-stop issue and retains missing observer history`, async t => {
     let forwarded = 0;
     const target = await server(t, (req, res) => { forwarded++; req.resume(); res.end(); });
     const afterStop = stream.createLitestreamAfterStop({ clock: () => 0 });
@@ -367,21 +367,28 @@ for (const [method, path, operation] of [['PUT', '/bucket/key', 'put'], ['GET', 
     t.after(() => front.close().catch(() => {}));
     audit.write(Buffer.from(`SDK 2026/10/25 03:00:00 DEBUG Request\n${method} ${path} HTTP/1.1\r\nAmz-Sdk-Invocation-Id: ${id}\r\nAmz-Sdk-Request: attempt=1; max=3\r\n\r\n`));
     afterStop.acknowledgeStop(stopAcknowledgement());
-    assert.equal((await send(front.url, { method, path, headers: headers() })).code, 400);
-    assert.equal(forwarded, 0);
-    await assert.rejects(front.close(), /Invalid cloud cost Litestream audit/);
-    assert.throws(() => meter.snapshot(), /Invalid cloud cost meter/);
-    assert.throws(() => afterStop.snapshot(), /Invalid cloud cost Litestream audit/);
+    const body = operation === 'delete-many' ? '<Delete><Object><Key>key</Key></Object></Delete>' : '';
+    assert.equal((await send(front.url, { method, path, headers: headers(), body })).code, 200);
+    await front.whenIdle(() => {}); audit.end(); await front.close();
+    assert.equal(forwarded, 1);
+    assert.equal(meter.snapshot().accounting.producer.attempts, 1);
+    assert.equal(meter.snapshot().accounting.observer.attempts, 0);
+    assert.equal(meter.snapshot().status, 'unknown');
+    assert.ok(meter.snapshot().gaps.includes('accounting:incomplete-history'));
+    assert.equal(afterStop.snapshot().used, 1); assert.equal(afterStop.snapshot().lateAdmissions, 1);
+
   });
 
-test('an after-stop retry cannot reset the same invocation or consume a new allowance', async t => {
+test('an after-stop retry consumes the shared allowance and cannot repeat its ordinal', async t => {
   let forwarded = 0;
   const target = await server(t, (req, res) => { forwarded++; req.resume(); req.on('end', () => res.end('ok')); });
   const { afterStop, audit, meter, front } = await afterStopTransport(t, { target });
   issueList(audit, id); await send(front.url, { method: 'GET', path: '/bucket?list-type=2', headers: headers() });
   afterStop.acknowledgeStop(stopAcknowledgement()); issueList(audit, id, 2);
+  assert.equal((await send(front.url, { method: 'GET', path: '/bucket?list-type=2', headers: headers(id, 2) })).code, 200);
+  await front.whenIdle(() => {}); assert.equal(afterStop.snapshot().used, 1);
   assert.equal((await send(front.url, { method: 'GET', path: '/bucket?list-type=2', headers: headers(id, 2) })).code, 400);
-  assert.equal(forwarded, 1);
+  assert.equal(forwarded, 2);
   await assert.rejects(front.close(), /Invalid cloud cost Litestream audit/);
   assert.throws(() => meter.snapshot(), /Invalid cloud cost meter/);
 });
@@ -426,7 +433,7 @@ for (const source of ['audit', 'meter']) test(`a later ${source} validation fail
   assert.throws(() => afterStop.snapshot(), /Invalid cloud cost Litestream audit/);
 });
 
-test('a PUT admitted at the first hop before stop cannot reach storage for the first time after stop', async t => {
+test('a PUT reaching storage after stop retains both real hop counts and one capped attempt', async t => {
   let arrived, release, forwarded = 0; const active = new Promise(resolve => { arrived = resolve; });
   const target = await server(t, (req, res) => { forwarded++; req.resume(); res.end(); });
   const gate = async endpoint => server(t, (req, res) => {
@@ -440,7 +447,11 @@ test('a PUT admitted at the first hop before stop cannot reach storage for the f
   audit.write(Buffer.from(`SDK 2026/10/25 03:00:00 DEBUG Request\nPUT /bucket/PRIVATE_CANARY HTTP/1.1\r\nAmz-Sdk-Invocation-Id: ${id}\r\nAmz-Sdk-Request: attempt=1; max=3\r\n\r\n`));
   const pending = send(front.url, { method: 'PUT', headers: headers(), body: 'upload' });
   await active; afterStop.acknowledgeStop(stopAcknowledgement()); release();
-  assert.equal((await pending).code, 400); assert.equal(forwarded, 0);
-  await assert.rejects(front.close(), /Invalid cloud cost Litestream audit/);
-  assert.throws(() => meter.snapshot(), /Invalid cloud cost meter/);
+  assert.equal((await pending).code, 200); assert.equal(forwarded, 1);
+  await front.whenIdle(() => {}); audit.end(); await front.close();
+  assert.equal(meter.snapshot().reconciled, true);
+  assert.deepEqual(meter.snapshot().accounting.producer, { attempts: 1, bytesIn: 0, bytesOut: 6 });
+  assert.deepEqual(meter.snapshot().accounting.observer, { attempts: 1, bytesIn: 0, bytesOut: 6 });
+  assert.equal(afterStop.snapshot().used, 1); assert.equal(afterStop.snapshot().lateAdmissions, 1);
+  assert.equal(afterStop.snapshot().status, 'measured');
 });

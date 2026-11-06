@@ -7,7 +7,7 @@ import { createLitestreamAfterStop, createLitestreamRequestAudit, createLitestre
 
 const invocation = '11111111-2222-4333-8444-555555555555';
 
-// Removing the post-stop PUT admission guard must forward the held upload and fail this refusal.
+// Moving issuance across stop must not hide the real upload or its admission-time classification.
 for (const completeBeforeStop of [false, true]) {
   test(`an SDK-issued PUT held before admission: completeBeforeStop=${completeBeforeStop}`, { timeout: 3000 }, async t => {
     const afterStop = createLitestreamAfterStop({ clock: () => performance.now() / 1000 });
@@ -69,26 +69,14 @@ for (const completeBeforeStop of [false, true]) {
     afterStop.acknowledgeStop({ statusCode: 200, ownedPath: '/synthetic.db',
       body: Buffer.from('{"status":"stopped","path":"/synthetic.db","txid":2}') });
     events.push('validated-stop');
-    if (!completeBeforeStop) {
-      release(); assert.equal(await reply, 400);
-      const diagnostic = transport.checkpoint();
-      assert.equal(diagnostic.reason, 'request-validation');
-      assert.equal(diagnostic.validationStage, 'after-stop-admission');
-      assert.equal(diagnostic.afterStopAdmissionGuard, 'post-stop-operation');
-      assert.equal(diagnostic.afterStopAdmissionOperation, 'put');
-      assert.equal(diagnostic.afterStopAdmissionAttemptClass, 'initial');
-      assert.equal(backendPuts, 0, 'an issued request is not permission to admit a late upload');
-      assert.equal(body, '');
-      await assert.rejects(transport.close(), /Invalid cloud cost Litestream audit/);
-      assert.throws(() => afterStop.snapshot(), /Invalid cloud cost Litestream audit/);
-    } else {
-      audit.end(); await transport.close(); await proxy.close();
-      assert.equal(backendPuts, 1); assert.equal(body, 'four');
-      assert.equal(audit.snapshot().requestsReconciled, true);
-      assert.equal(meter.snapshot().accounting.producer.attempts, 1);
-      assert.equal(meter.snapshot().accounting.observer.attempts, 1);
-      assert.equal(afterStop.snapshot().used, 0);
-    }
+    if (!completeBeforeStop) { release(); assert.equal(await reply, 200); await transport.whenIdle(() => {}); }
+    audit.end(); await transport.close(); await proxy.close();
+    assert.equal(backendPuts, 1); assert.equal(body, 'four');
+    assert.equal(audit.snapshot().requestsReconciled, true);
+    assert.equal(meter.snapshot().accounting.producer.attempts, 1);
+    assert.equal(meter.snapshot().accounting.observer.attempts, 1);
+    assert.equal(afterStop.snapshot().used, Number(!completeBeforeStop));
+    assert.equal(afterStop.snapshot().lateAdmissions, Number(!completeBeforeStop));
     assert.deepEqual(events, completeBeforeStop
       ? ['sdk-issued', 'relay-arrival', 'relay-forward', 'validated-stop']
       : ['sdk-issued', 'relay-arrival', 'validated-stop', 'relay-forward']);

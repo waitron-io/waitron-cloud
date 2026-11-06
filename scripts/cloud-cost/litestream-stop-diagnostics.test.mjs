@@ -144,7 +144,7 @@ for(const boundary of ['issue','admission'])test(`the audit distinguishes after-
   if(boundary==='issue'){
     afterStop.invalidate();assert.throws(()=>audit.write(Buffer.from(log)));
   }else{
-    audit.write(Buffer.from(log));afterStop.admit({invocation,ordinal:0,operation:'put',hop:'producer',phase:'workload'});
+    audit.write(Buffer.from(log));afterStop.admit({invocation,ordinal:0,operation:'put',hop:'producer',phase:'idle'});
     afterStop.acknowledgeStop({statusCode:200,ownedPath:'/venue.db',body:Buffer.from(JSON.stringify({status:'stopped',path:'/venue.db',txid:0}))});
     assert.throws(()=>audit.observe({headers:{'amz-sdk-invocation-id':invocation,'amz-sdk-request':'attempt=1; max=3'},operation:'put'}));
   }

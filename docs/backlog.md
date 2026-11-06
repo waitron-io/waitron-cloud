@@ -211,8 +211,7 @@ subset retains actual observed counts, while overflowing grouped or combined
 byte totals become `null`; safe boundary values stay exact. Run `node --test
 scripts/cloud-cost/litestream-history-accounting.test.mjs` for missing-record,
 late-collection, numeric-boundary and malformed-output controls. These ledger
-controls do not prove actual SQLite recovery. Accounting-dependent forwarding
-admission still needs the wider policy.
+controls do not prove actual SQLite recovery.
 When an admission callback is missing, the shutdown ledger now collects valid
 settlements without inventing the missing event. An observer arriving first
 also leaves a persistent history gap. Either admitted hop, or a settlement with
@@ -221,8 +220,19 @@ telemetry cannot hide a fourth request. Conflicting phases, duplicate events,
 malformed inputs and invalid clocks still refuse. Run `node --test
 scripts/cloud-cost/litestream-event-history.test.mjs` for all ten storage
 operations and six real HTTP controls. These controls prove forwarding and
-collection, not SQLite recovery. Late operation/retry policy and future mutation
-forwarding still need implementation.
+collection, not SQLite recovery.
+The forwarding path now admits every valid late operation and retry within the
+same three-request stop bound. A missing earlier attempt leaves unknown history;
+only observed attempts are counted. A real late PUT response can still prove
+its storage commit. Repeated or decreasing attempts, changed targets or
+operations, contradictory phases and malformed controls still refuse. Run
+`node --test scripts/cloud-cost/litestream-admission-accounting.test.mjs
+scripts/cloud-cost/litestream-transport.test.mjs
+scripts/cloud-cost/litestream-pre-admission-put.test.mjs` for ledger, real
+forwarding, cap and commit controls. The writer-running stop-acknowledgement
+boundary remains covered independently of permission to admit a late PUT.
+Lifetime callbacks with missing producer records and forwarding after an
+uncertain mutation still need the wider policy.
 The full nonblocking accounting path, publication refusal, lost-write
 restore control and saved-failure replay remain open. These partial changes do
 not establish the historical cause or relax functional admission.

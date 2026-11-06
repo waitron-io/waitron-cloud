@@ -14,17 +14,21 @@ const detail = value => ({ operation: value.afterStopAdmissionOperation, attempt
 const errorDetail = value => ({ operation: value.litestreamAfterStopAdmissionOperation, attemptClass: value.litestreamAfterStopAdmissionAttemptClass });
 const privateText = /PRIVATE_CANARY|11111111|55555555|amz-sdk|127\.0\.0\.1/;
 
+const fillCap = s => {
+  for (let n = 1; n <= 3; n++) s.admit(input({ operation: 'list', invocation: `${String(n).padStart(8, '0')}-2222-4333-8444-555555555555` }));
+};
+
 // Dropping the validated row context, misclassifying a retry, or stamping a later call must fail these cases.
 for (const operation of ['put', 'get', 'head', 'delete', 'delete-many', 'multipart-create', 'multipart-upload', 'multipart-complete', 'multipart-abort']) {
   for (const [ordinal, attemptClass] of [[0, 'initial'], [1, 'retry']]) {
     test(`the first refused ${operation} ${attemptClass} retains its own categories across later poisoned calls`, () => {
       const s = createLitestreamAfterStop({ clock: () => 0 });
       if (ordinal) s.admit(input({ operation }));
-      stop(s);
+      stop(s); fillCap(s);
       for (const call of [input({ operation, ordinal }), input({ operation: 'list' })]) {
         assert.throws(() => s.admit(call), error => {
           assert.match(error.message, bad);
-          assert.equal(error.litestreamAfterStopAdmissionGuard, 'post-stop-operation');
+          assert.equal(error.litestreamAfterStopAdmissionGuard, 'affected-cap');
           assert.deepEqual(errorDetail(error), { operation, attemptClass });
           assert.doesNotMatch(JSON.stringify(error), privateText); return true;
         });
@@ -46,7 +50,7 @@ test('a refusal before row validation never acquires a later request context or 
 });
 
 test('the independent observer audit carries the first shared row rather than a later observer input', () => {
-  const s = createLitestreamAfterStop({ clock: () => 0 }); s.admit(input()); stop(s);
+  const s = createLitestreamAfterStop({ clock: () => 0 }); s.admit(input()); stop(s); fillCap(s);
   const audit = createLitestreamRequestAudit({ phase: 'workload', afterStop: s });
   const headers = { 'amz-sdk-invocation-id': invocation, 'amz-sdk-request': 'attempt=1; max=3', authorization: 'PRIVATE_CANARY' };
   assert.throws(() => audit.observe({ operation: 'put', headers }), bad);
@@ -77,7 +81,7 @@ for (const [ordinal, attemptClass] of [[0, 'initial'], [1, 'retry']]) {
   test(`real HTTP ${attemptClass} refusal reaches checkpoints and repeated sanitized close reports`, async t => {
     const s = createLitestreamAfterStop({ clock: () => 0 }), f = await fixture(t, s);
     if (ordinal) { assert.equal(await f.send(), 200); await f.transport.whenIdle(() => {}); }
-    stop(s); assert.equal(await f.send(ordinal), 400); assert.equal(await f.send(0, 'PATCH'), 400);
+    stop(s); fillCap(s); assert.equal(await f.send(ordinal), 400); assert.equal(await f.send(0, 'PATCH'), 400);
     assert.equal(f.forwarded(), ordinal);
     assert.deepEqual(detail(f.transport.checkpoint()), { operation: 'put', attemptClass });
     for (const stage of ['replication-transport', 'cleanup-replication-transport']) {
@@ -93,7 +97,7 @@ for (const [ordinal, attemptClass] of [[0, 'initial'], [1, 'retry']]) {
 
 test('a later producer reports the earlier observer refusal operation without attaching its own metadata', async t => {
   const s = createLitestreamAfterStop({ clock: () => 0 });
-  s.admit(input({ operation: 'get' })); stop(s);
+  s.admit(input({ operation: 'get' })); stop(s); fillCap(s);
   assert.throws(() => s.admit(input({ operation: 'get', hop: 'observer' })), bad);
   const f = await fixture(t, s); assert.equal(await f.send(), 400); assert.equal(f.forwarded(), 0);
   assert.deepEqual(detail(f.transport.checkpoint()), { operation: 'get', attemptClass: 'initial' });
@@ -161,10 +165,10 @@ test('a refusal before the post-stop checks keeps its existing context-free audi
   assert.deepEqual(audit.checkpoint().failure, { stage: 'after-stop-admission', afterStopAdmissionGuard: 'observer-pairing' });
 });
 
-test('a refused post-stop list retry retains its ordinal category', () => {
-  const s = createLitestreamAfterStop({ clock: () => 0 }); s.admit(input({ operation: 'list' })); stop(s);
+test('a fourth post-stop list retry retains its ordinal category', () => {
+  const s = createLitestreamAfterStop({ clock: () => 0 }); s.admit(input({ operation: 'list' })); stop(s); fillCap(s);
   assert.throws(() => s.admit(input({ operation: 'list', ordinal: 1 })), error => {
-    assert.equal(error.litestreamAfterStopAdmissionGuard, 'post-stop-ordinal');
+    assert.equal(error.litestreamAfterStopAdmissionGuard, 'affected-cap');
     assert.deepEqual(errorDetail(error), { operation: 'list', attemptClass: 'retry' }); return true;
   });
 });

@@ -89,7 +89,8 @@ export function createLitestreamAfterStop(options) {
   const next = (source, e, mark = unlabelled) => {
     const key = source + ':' + e.invocation, prior = sequences.get(key);
     mark('retry-sequence');
-    requireThat(e.ordinal === (prior?.ordinal ?? -1) + 1 && (!prior || prior.operation === e.operation));
+    requireThat(e.ordinal > (prior?.ordinal ?? -1) && (!prior || prior.operation === e.operation));
+    if (e.ordinal !== (prior?.ordinal ?? -1) + 1) historyGap = true;
     sequences.set(key, { ordinal: e.ordinal, operation: e.operation });
   };
   const affect = (row, mark = unlabelled) => {
@@ -120,10 +121,7 @@ export function createLitestreamAfterStop(options) {
     requireThat(Object.values(row.admissions).every(a => a.phase === input.phase)
       && Object.values(row.settlements).every(e => e.phase === input.phase));
     if (input.hop === 'observer' && !row.admissions.producer) historyGap = true;
-    if (acknowledged) {
-      mark('post-stop-operation', row); requireThat(input.operation === 'list');
-      mark('post-stop-ordinal'); requireThat(input.ordinal === 0);
-    }
+    if (acknowledged) mark('clock', row);
     row.admissions[input.hop] = { ...event(mark), phase: input.phase };
     if (acknowledged) { row.lateAdmission = true; affect(row, mark); }
   });
@@ -156,7 +154,6 @@ export function createLitestreamAfterStop(options) {
     exactFields(input, ['token', 'statusCode', 'bytesOut', 'expectedBytesOut', 'requestComplete', 'versionId', 'deleteMarker']);
     const row = attemptForToken(input.token);
     requireThat(row.operation === 'put' && !row.commit && row.admissions.producer && row.admissions.observer
-      && (!acknowledged || Object.values(row.admissions).every(a => a.sequence < acknowledged.sequence))
       && (input.deleteMarker === null || input.deleteMarker === 'false')
       && input.requestComplete === true && nonnegative(input.bytesOut) && input.bytesOut === input.expectedBytesOut
       && Number.isInteger(input.statusCode) && input.statusCode >= 200 && input.statusCode < 300
@@ -229,7 +226,6 @@ export function createLitestreamAfterStop(options) {
       row.lateSettlement = true; affect(row);
       if (input.operation === 'put' && row.commit) {
         requireThat(Object.values(row.admissions).length === 2
-          && Object.values(row.admissions).every(a => a.sequence < acknowledged.sequence)
           && input.bytesOut === row.commit.bytesOut && input.attemptedBytesOut === row.commit.expectedBytesOut
           && input.statusCode === row.commit.statusCode && (interrupted || input.outcome === 'success'));
         row.latePut = true;
@@ -357,7 +353,7 @@ export function litestreamAfterStopOutput(input) {
 export function createLitestreamRequestAudit({ phase, allowBulkDeletes = false, afterStop }) {
   requireThat(phases.includes(phase));
   const decoder = new StringDecoder('utf8'), producer = new Map(), observer = new Map(), sequences = new Map();
-  let buffer = '', current = null, ended = false, invalid = false, validationStage, failure;
+  let buffer = '', current = null, ended = false, invalid = false, validationStage, failure, historyGap = false;
   const guarded = (stage, fn) => (...args) => {
     validationStage = stage;
     try { requireThat(!invalid); return fn(...args); }
@@ -379,7 +375,9 @@ export function createLitestreamRequestAudit({ phase, allowBulkDeletes = false, 
     if (text === '') {
       validationStage = 'request-identity';
       const id = identity(current.invocation, current.attempt);
-      requireThat(!producer.has(id.key) && id.ordinal === (sequences.get(id.invocation) ?? -1) + 1 && producer.size < 100000);
+      const prior = sequences.get(id.invocation);
+      requireThat(!producer.has(id.key) && id.ordinal > (prior ?? -1) && producer.size < 100000);
+      if (id.ordinal !== (prior ?? -1) + 1) historyGap = true;
       validationStage = 'after-stop-issue';
       afterStop?.issue({ invocation: id.invocation, ordinal: id.ordinal, operation: current.operation });
       producer.set(id.key, { operation: current.operation, ordinal: id.ordinal }); sequences.set(id.invocation, id.ordinal);
@@ -427,6 +425,7 @@ export function createLitestreamRequestAudit({ phase, allowBulkDeletes = false, 
     // Header logs prove request attempts only; response bytes and retained objects require separate evidence.
     return { requestsReconciled, status: 'unknown', producerAttempts: producer.size, observerAttempts: observer.size,
       requests: [...requests.values()], gaps: [...(!requestsReconciled ? ['litestream:requests-unreconciled'] : []),
+        ...(historyGap ? ['accounting:incomplete-history'] : []),
         'litestream:body-bytes-unpaired', 'litestream:object-lifetimes-unpaired'] };
   };
   // A refused audit cannot publish a snapshot; these counts identify its first failed boundary without SDK text.
@@ -559,8 +558,9 @@ export async function createLitestreamTransport({ target, meter, phase, lifetime
       name = operation(`${source.method} ${source.url} HTTP/1.1`, allowBulkDeletes);
       validationStage = 'retry-sequence';
       const previous = invocations.get(id.invocation);
-      requireThat(id.ordinal === (previous?.ordinal ?? -1) + 1 && (!previous || previous.name === name && previous.path === source.url)
+      requireThat(id.ordinal > (previous?.ordinal ?? -1) && (!previous || previous.name === name && previous.path === source.url)
         && invocations.size < 100000);
+      if (id.ordinal !== (previous?.ordinal ?? -1) + 1) meter.markGap('accounting:incomplete-history');
       validationStage = 'after-stop-admission';
       afterStop?.admit({ invocation: id.invocation, ordinal: id.ordinal, operation: name, hop: 'producer', phase: requestPhase });
       validationStage = 'content-length';

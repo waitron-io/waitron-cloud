@@ -33,15 +33,16 @@ for (const [stage, options, requestOptions] of [
   ['copy-source', {}, { headers: { 'x-amz-copy-source': '/PRIVATE_CANARY/source' } }],
   ['identity', {}, { headers: { 'amz-sdk-invocation-id': 'PRIVATE_CANARY' } }],
   ['operation', {}, { method: 'PATCH' }],
-  ['retry-sequence', {}, { headers: { 'amz-sdk-request': 'attempt=2; max=3' } }],
+  ['retry-sequence', {}, { headers: { 'amz-sdk-request': 'attempt=1; max=3' } }],
   ['content-length', {}, { headers: { 'content-length': '9007199254740992' } }],
   ['mutation-body', { allowBulkDeletes: true }, { method: 'POST', path: '/PRIVATE_CANARY?delete', headers: { 'content-length': '1048577' } }],
   ['lifetime-begin', { lifetimes: { begin() { throw Error('PRIVATE_CANARY'); } } }, {}],
   ['lifetime-callback', { lifetimes: { begin() { return 'PRIVATE_CANARY'; } } }, {}],
 ]) test(`request validation names ${stage} while still refusing the request and accounting`, async t => {
   const f = await fixture(t, options);
+  if (stage === 'retry-sequence') { assert.equal(await f.send(), 200); await f.transport.whenIdle(() => {}); }
   assert.equal(await f.send(requestOptions), 400);
-  assert.equal(f.forwarded(), 0);
+  assert.equal(f.forwarded(), Number(stage === 'retry-sequence'));
   assert.equal(f.transport.checkpoint().reason, 'request-validation');
   assert.equal(f.transport.checkpoint().validationStage, stage);
   const records = [];
@@ -53,11 +54,12 @@ for (const [stage, options, requestOptions] of [
   assert.doesNotMatch(JSON.stringify([f.transport.checkpoint(), records]), /PRIVATE_CANARY|11111111|amz-sdk|127\.0\.0\.1/);
 });
 
-test('an after-stop mutation identifies admission refusal without changing the stop rule', async t => {
+test('a fourth after-stop mutation identifies admission refusal without changing the stop cap', async t => {
   const afterStop = createLitestreamAfterStop({ clock: () => 0 });
   const path = '/PRIVATE_CANARY.db';
   afterStop.acknowledgeStop({ statusCode: 200, ownedPath: path,
     body: Buffer.from(JSON.stringify({ status: 'stopped', path, txid: 0 })) });
+  for (let n = 1; n <= 3; n++) afterStop.admit({ invocation: `${String(n).padStart(8, '0')}-2222-4333-8444-555555555555`, ordinal: 0, operation: 'list', hop: 'producer', phase: 'workload' });
   const f = await fixture(t, { afterStop });
   assert.equal(await f.send(), 400); assert.equal(f.forwarded(), 0);
   assert.equal(f.transport.checkpoint().validationStage, 'after-stop-admission');

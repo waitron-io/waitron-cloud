@@ -20,7 +20,8 @@ function run(exitAtAcknowledgement) {
         let newPutAllowed=false;
         try{globalThis.ledger.issue(attempt);globalThis.ledger.admit({...attempt,hop:'producer',phase:'workload'});newPutAllowed=true;}catch{}
         console.error(JSON.stringify({kind:'ack-ledger',newPutAllowed,writerRunning:globalThis.writerRunning,
-          closeNotifications:globalThis.closeNotifications,signals:globalThis.signals,restores:globalThis.restores}));
+          closeNotifications:globalThis.closeNotifications,signals:globalThis.signals,restores:globalThis.restores,
+          lateAdmissions:globalThis.ledger.snapshot().lateAdmissions}));
         globalThis.controlServer.closeAllConnections();await new Promise(resolve=>globalThis.controlServer.close(resolve));
       }});`,
     '/code/meter.mjs': `export const createMeter=({afterStop})=>({afterStop,observeAttempt(){},invalidate(){},snapshot:()=>({})});
@@ -78,7 +79,7 @@ function run(exitAtAcknowledgement) {
   });
 }
 
-// Probe the real ledger's new-PUT permission, so refusal elsewhere cannot hide an acknowledgement.
+// The real ledger records admission after acknowledgement even while the writer still runs.
 for (const exited of [true, false]) test(`stop acknowledgement retains the writer-running boundary: exited=${exited}`, () => {
   const result = run(exited);
   assert.equal(result.error, undefined, 'the controlled smoke must collect its HTTP peers before the process deadline');
@@ -90,8 +91,8 @@ for (const exited of [true, false]) test(`stop acknowledgement retains the write
   assert.deepEqual(records.filter(row => row.kind === 'ack-response'), [{ kind: 'ack-response', statusCode: 200, complete: true,
     reply: { status: 'stopped', path: '/state/synthetic-litestream-proof/venue/venue.db', txid: 0 },
     writerRunning: !exited, closeNotifications: exited ? 1 : 0 }]);
-  assert.deepEqual(records.filter(row => row.kind === 'ack-ledger'), [{ kind: 'ack-ledger', newPutAllowed: exited,
-    writerRunning: false, closeNotifications: 1, signals: exited ? [] : ['SIGTERM'], restores: exited ? 0 : 1 }]);
+  assert.deepEqual(records.filter(row => row.kind === 'ack-ledger'), [{ kind: 'ack-ledger', newPutAllowed: true,
+    writerRunning: false, closeNotifications: 1, signals: exited ? [] : ['SIGTERM'], restores: exited ? 0 : 1, lateAdmissions: exited ? 0 : 1 }]);
   assert.equal(result.status, exited ? 1 : 0, result.stderr);
   if (exited) {
     assert.equal(result.stdout, '');

@@ -35,7 +35,7 @@ test('equalCountsWithWrongLitestreamOperationOrRetryRemainUnreconciled', () => {
 });
 // Duplicate/truncated headers, unsupported operations and overflowing logs must poison all later evidence.
 test('malformedAndTruncatedLitestreamLogsCannotProduceValidEvidence', () => {
-  for (const text of [log({ extra: 'Amz-Sdk-Invocation-Id: ' + id + '\r\n' }), log({ attempt: 2 }),
+  for (const text of [log({ extra: 'Amz-Sdk-Invocation-Id: ' + id + '\r\n' }), log({ attempt: 2 }).replace('attempt=2', 'attempt=11'),
     log({ method: 'POST', path: '/private-bucket?delete' }), log().replace('attempt=1', 'attempt=0'),
     log().replace('max=10', 'max=0'), log().slice(0, -2), 'x'.repeat(65537)]) {
     const a = audit();
@@ -174,7 +174,7 @@ for (const action of ['backwards-clock', 'duplicate-issue', 'duplicate-admission
       if (action === 'duplicate-admission') return session.admit(admitted('producer'));
       if (action === 'wrong-operation') return session.admit(admitted('observer', 0, 'get'));
       if (action === 'wrong-phase') return session.admit({ ...admitted('observer'), phase: 'idle' });
-      if (action === 'ordinal-reset') return session.admit(admitted('producer', 2));
+      if (action === 'ordinal-reset') { session.admit(admitted('producer', 2)); return session.admit(admitted('producer', 1)); }
       session.admit(admitted('observer'));
       if (action === 'unknown-outcome') return session.settle(settled('producer', { outcome: 'PRIVATE_CANARY' }));
       if (action === 'invalid-status') return session.settle(settled('producer', { statusCode: 503 }));
