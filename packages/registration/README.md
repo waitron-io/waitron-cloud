@@ -460,8 +460,10 @@ node scripts/test-postgres.mjs exec pnpm --dir packages/registration exec node -
 Feedback can arrive before an SMTP receipt or after payload erasure. Use
 `applySesFeedback(pool, config, recipientKeys, event)` to commit the provider
 binding, event and any recipient block together. The helper owns its transaction.
-Only a trusted queue consumer may supply the parsed event; that consumer remains
-a separate task. Configuration validation and parsing do not authenticate AWS.
+Only a trusted queue consumer may supply the parsed event. The internal
+`SesFeedbackWorker` commits feedback before acknowledging it; malformed input,
+conflicts and database failures leave the message for replay. Configuration
+validation and parsing do not authenticate AWS.
 
 An unknown or mismatched binding records an `ignored` receipt with `unresolved`.
 A different recipient or provider ID records `conflict` with `binding_conflict`.
@@ -489,7 +491,89 @@ cannot discard its late bounce or complaint. Other binding and key checks remain
 Key retirement and recovery need a separately approved design before production.
 The feedback design promises refusal for required keys; the current full stop also
 covers an unrelated revoked key in the same scope. That difference must be settled
-before enablement. The sending paths and queue consumer remain unconnected.
+before enablement. The sending paths and queue consumer have no production
+startup connection.
+
+For local transport qualification, `createSesFeedbackQueue` uses the pinned SQS
+SDK to sign requests for the validated queue and region. It receives one message
+with a ten-second poll and sixty-second visibility. Each receive or delete has
+a fifteen-second deadline, including credential lookup, and uses one request.
+Aborting the caller or closing the adapter cancels pending work. Errors expose
+fixed diagnostics instead of envelopes, receipt handles or provider replies.
+The local tests inject synthetic credentials and transport replies; they do not
+qualify IAM, encryption or dead-letter transfer. The worker shares a five-second
+budget across database acquisition, lock waits and transaction work, including
+commit. Failed connections are discarded; a client acquired after expiry cannot
+process feedback. Transaction-local limits also stop stalled server work without
+changing later borrowers' settings. A timed-out pool request is discarded when
+it returns. The standalone CLI supplies the connection and cleanup limits below.
+The worker admits at most two concurrent operations. You can inspect
+`worker.status(sample)` using a trusted operational sample with `observedAt`
+(Unix milliseconds), `queueAgeSeconds`, `deadLetterCount`,
+`configurationRevision` and `configurationDrift`. The sample must come from your
+operational collector, never from a feedback envelope. Provider collection is
+not wired yet; without a fresh sample the report cannot say `ready`.
+
+Readiness requires successful polls from both slots. A failed slot stays failed
+until that slot succeeds; progress in the other slot cannot hide it. A receive
+or delete older than fifteen seconds, processing older than five seconds, or
+an aborted consumer closes readiness. Polls and samples expire after a conservative
+35 seconds. A healthy slot can also report stale while its peer finishes a long
+batch and the next poll waits; this is not a bound on every two-slot cycle. Future samples and backwards
+activity timestamps also refuse readiness. These are local freshness budgets;
+queue-age and rate alert thresholds remain D103's separate decision. A large
+queue age or dead-letter count is reported without selecting an alert threshold.
+
+Exact replays of stored binding conflicts also remain unacknowledged. The store's
+`duplicate` result means it has already seen that envelope. The worker also checks
+the saved result in the same transaction before allowing deletion.
+
+The report's `observedAt` is the producer's observation time. An independent
+reader must age that timestamp rather than retaining an old `ready` value when
+output stops. Production collector freshness and alert delivery still need D104
+qualification.
+The report includes aggregate poll and commit ages, active consumers, fixed
+failure codes, queue age, dead-letter count and the configured revision. A commit
+remains visible when deletion fails, because the next delivery must replay that
+durable result. Drift or a different sampled revision closes readiness. No
+envelope, recipient, receipt handle or arbitrary collector field enters the
+report. Neither this internal adapter nor the worker is exported from the
+package's public entry point.
+
+The standalone `pnpm --dir packages/registration ses:feedback` command runs two
+consumer slots outside normal services; `--once` settles one batch before exiting.
+Startup requires `CLOUD_SES_FEEDBACK_CONSUMER=enabled`, `DATABASE_URL`,
+`CLOUD_SES_FEEDBACK_CONFIG_FILE`, `CLOUD_MAIL_RECIPIENT_KEYS` and
+`CLOUD_MAIL_RECIPIENT_ACTIVE_KEY_ID`. The consumer uses SQS credentials through
+the standard SDK chain, without SMTP credentials. A supplied file cannot qualify
+its own settings. Spain's default policy still refuses these flows, so this code
+does not enable production consumption.
+
+Read aggregate JSON statuses from standard output. You can supply your trusted
+collector's JSON through `CLOUD_SES_FEEDBACK_HEALTH_SAMPLE_FILE`; missing, invalid
+or stale samples cannot produce readiness. Binding and sample files must be
+regular files of at most 64 KiB. Provider metric collection, separate dead-letter
+health permissions and D104's external alert channel remain deployment work.
+The command does not read dead-letter messages or replay them.
+
+SIGINT and SIGTERM stop new receives and abort queue requests. Active database
+work may commit within its existing five-second budget, but shutdown leaves that
+message for replay. Connection establishment and pool cleanup each have a
+five-second limit, sharing the overall twenty-second shutdown grace. Normal
+shutdown drains naturally. If a broken driver retains a live handle, the process
+deadline forces a failing exit within that grace. A failed one-shot batch or
+cleanup also exits with a fixed diagnostic. Local command fixtures cover signals,
+lock waits, restart, death after commit and simulated redrive after five poison
+receives. A completed one-shot run reports stopped after cleanup. Cancelling
+healthy polls or deletion adds no failure code, while earlier genuine failures
+remain visible. These fixtures do not establish provider encryption, IAM or
+real dead-letter transfer.
+
+Run the local health cases and their PostgreSQL durability checks:
+
+```sh
+node scripts/test-postgres.mjs exec pnpm --dir packages/registration exec node --test --test-timeout=120000 test/ses-feedback-health.test.ts test/ses-feedback-health-durability.test.ts test/ses-feedback-shutdown.test.ts test/ses-feedback-supervision.test.ts test/ses-feedback-cli.test.ts
+```
 
 Run the focused PostgreSQL checks, including competing consumers and process death
 immediately before and after commit:

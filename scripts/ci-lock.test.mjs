@@ -32,6 +32,19 @@ test('resolved lock graph keeps indirect inputs and linked importer consumers',(
   assert.deepEqual(delta(fixture(),fixture()).importers,[]);
 });
 
+test('deprecation metadata remains visible and selects every indirect consumer when changed',()=>{
+  const before=fixture(),after=fixture();
+  before.packages['leaf@1.0.0'].deprecated='Use a patched release';
+  after.packages['leaf@1.0.0'].deprecated='A different provider warning';
+  assert.equal(parse(before).packages['leaf@1.0.0'].deprecated,'Use a patched release');
+  assert.deepEqual(delta(before,after).importers,['packages/consumer','packages/provider']);
+});
+
+for(const warning of [true,0,null,[],{},'','bad\0warning'])test(`deprecation metadata refuses malformed warning ${JSON.stringify(warning)}`,()=>{
+  const value=fixture();value.packages['leaf@1.0.0'].deprecated=warning;
+  assert.throws(()=>parse(value),/pnpm-lock.yaml: packages\.leaf@1\.0\.0\.deprecated: expected nonempty string/);
+});
+
 test('importer-only declarations select their linked consumers',()=>{
   const before=fixture(),after=fixture();
   after.importers['packages/provider'].dependencies.alpha.specifier='^1.0.0';
@@ -181,12 +194,12 @@ for(const context of ['()','(peer)','(peer@1.0)','(peer@)'])test(`resolved graph
 
 test('current lock matches independently recorded importer closure counts',()=>{
   const lock=parseLock(readFileSync(new URL('../pnpm-lock.yaml',import.meta.url),'utf8'));
-  assert.equal(Object.keys(lock.packages).length,206);
-  assert.equal(Object.keys(lock.snapshots).length,206);
+  assert.equal(Object.keys(lock.packages).length,226);
+  assert.equal(Object.keys(lock.snapshots).length,226);
   assert.deepEqual(Object.fromEntries(Object.entries(lock.closures).map(([id,closure])=>[id,closure.snapshots.length])),{
-    '.':23,'apps/portal':185,'packages/account-http':117,'packages/backups':83,
+    '.':23,'apps/portal':205,'packages/account-http':137,'packages/backups':103,
     'packages/identity':20,'packages/operations':17,
-    'packages/registration':57,'packages/remote-access':88,'packages/translation':57,'packages/ui-smoke':36,
+    'packages/registration':83,'packages/remote-access':114,'packages/translation':83,'packages/ui-smoke':36,
   });
 });
 

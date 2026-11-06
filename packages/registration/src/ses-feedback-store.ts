@@ -9,9 +9,9 @@ import {bindProviderId} from './mail-attempts.ts';
 import {normaliseEmail} from './account-input.ts';
 
 /** Only the trusted queue consumer supplies parsed events; this function does not authenticate AWS. */
-export async function applySesFeedback(pool:Pool,config:SesFeedbackConfig,recipientKeys:RelayKeyConfig,event:ParsedFeedback):Promise<'applied'|'duplicate'|'ignored'|'conflict'> {
+export async function applySesFeedback(pool:Pool,config:SesFeedbackConfig,recipientKeys:RelayKeyConfig,event:ParsedFeedback,runTransaction:typeof transaction=transaction):Promise<'applied'|'duplicate'|'ignored'|'conflict'> {
  if(!isValidatedSesFeedbackConfig(config)||config.policyRevision>2147483647)throw Error('mail_configuration_unavailable');
- return transaction(pool,async client=>{
+ return runTransaction(pool,async client=>{
   const {country,providerAccountId,region}=config.scope;
   await lockMailScope(client,config.scope);
   const existing=await client.query('SELECT content_digest FROM mail_feedback_receipts WHERE country=$1 AND topic_arn=$2 AND sns_id=$3',[country,config.topicArn,event.snsId]);
