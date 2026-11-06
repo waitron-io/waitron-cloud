@@ -73,6 +73,7 @@ for (const [label, mutate] of [
   ['wrong term code', d => firstTerm(d).offerTermCode = 'FOREIGN'],
   ['wrong rate code', d => firstDimension(d).rateCode = 'FOREIGN'],
   ['wrong currency', d => firstDimension(d).pricePerUnit = { EUR: '0.1' }],
+  ['mixed currencies', d => firstDimension(d).pricePerUnit.EUR = '0.1'],
   ['negative price', d => firstDimension(d).pricePerUnit.USD = '-0.1'],
   ['exponent price', d => firstDimension(d).pricePerUnit.USD = '1e-7'],
   ['numeric price', d => firstDimension(d).pricePerUnit.USD = 0.1],
@@ -94,6 +95,10 @@ for (const [label, changes] of [
   ['invalid current time', { now: '2026-02-30T15:00:00Z' }],
   ['invalid JSON', { body: Buffer.from('{') }],
 ]) test(`${label} refuses the price evidence`, () => assert.throws(() => read('AmazonEC2', fixtures.AmazonEC2, changes), /price/i));
+
+test('an observation from yesterday refuses even when its catalogue was already published', () => {
+  assert.throws(() => read('AmazonEC2', fixtures.AmazonEC2, { now: '2026-11-07T15:00:00Z' }), /price/i);
+});
 
 function transport(overrides = {}) {
   const retained = [], calls = [], bytes = body('AmazonEC2');
@@ -137,6 +142,7 @@ for (const [label, response] of [
   ['HTTP refusal', () => new Response('{}', { status: 503 })],
   ['redirect response', () => new Response('{}', { status: 302 })],
   ['HTML response', () => new Response('<html>', { headers: { 'content-type': 'text/html' } })],
+  ['JSON bytes with unsupported content type', () => new Response(body('AmazonEC2'), { headers: { 'content-type': 'text/plain' } })],
   ['oversized declared response', () => new Response('{}', { headers: { 'content-type': 'application/json', 'content-length': String(256 * 1024 * 1024 + 1) } })],
   ['truncated response', () => new Response(body('AmazonEC2'), { headers: { 'content-type': 'application/json', 'content-length': '9999999' } })],
 ]) test(`${label} cancels the owned body and retains no evidence`, async () => {
