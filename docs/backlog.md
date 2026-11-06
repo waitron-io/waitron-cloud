@@ -285,10 +285,25 @@ not establish SQLite recovery; completion admission and export remain unfinished
 Independent inventory still rejects unsupported sizes and missing objects. The
 same test file includes two real HTTP completions whose replies are lost, with
 both callbacks collected. Further requests on the same upload after an uncertain
-completion or abort still need the wider forwarding policy. These controls do
-not prove SQLite recovery.
-The full nonblocking accounting path, publication refusal, lost-write
-restore control and saved-failure replay remain open. These partial changes do
+completion or abort retain the same independent inventory checks. These HTTP
+controls do not prove SQLite recovery.
+A backend commit also survives an interrupted forwarding reply whose headers
+never arrived. The hop keeps its actual missing status and unknown accounting;
+a known status that contradicts the commit still refuses. Run `node --test
+scripts/cloud-cost/stop-cutoff-accounting.test.mjs` for the two-hop, version and
+stop-order controls.
+The real SQLite proof now runs official Litestream 0.5.17 against synthetic
+Waitron sales. After the writer and all covering writes stop, the negative
+control replaces stored objects with the captured one-sale recovery point and
+reads every retained body back. All twelve restore attempts find one sale and
+SQLite `ok`; the rehearsal refuses at restore validation despite nonblocking
+unknown accounting. Its paired retained-write control cuts the reply, restores
+both sales and passes SQLite and fiscal checks. Run the stack conformance cases
+`lostFinalWriteFailsFunctionalRestoreDespiteNonblockingAccounting` and
+`committedWriteWithCutoffReplyRestoresSuccessfully` for this controlled proof.
+The initial x86 run passes both cases; wider shared-consumer qualification remains.
+The full nonblocking accounting path, publication refusal and saved-failure
+replay remain open. These partial changes do
 not establish the historical cause or relax functional admission.
 
 ## Cloud backup box identity (D451)

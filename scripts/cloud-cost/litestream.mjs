@@ -241,7 +241,8 @@ export function createLitestreamAfterStop(options) {
       row.lateSettlement = true; affect(row);
       if (input.operation === 'put' && row.commit) {
         requireThat(input.bytesOut === row.commit.bytesOut && input.attemptedBytesOut === row.commit.expectedBytesOut
-          && input.statusCode === row.commit.statusCode && (interrupted || input.outcome === 'success'));
+          && (input.statusCode === row.commit.statusCode || interrupted && input.statusCode === null)
+          && (interrupted || input.outcome === 'success'));
       }
     }
     row.settlements[hop] = { ...structuredClone(input), ...event() };

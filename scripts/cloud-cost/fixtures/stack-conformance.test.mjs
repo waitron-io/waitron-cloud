@@ -5,9 +5,10 @@ import { randomBytes } from 'node:crypto';
 import { mkdtempSync, realpathSync, mkdirSync, writeFileSync, readFileSync, cpSync, rmSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import * as local from '../local.mjs';
 import { assertSmokeAccounting, prepareDelayedLitestreamStop, prepareDelayedLitestreamDiagnostics } from '../litestream-smoke-test-utils.mjs';
+import * as smokeControls from '../litestream-smoke-test-utils.mjs';
 import { cleanupRecordedStack } from './stack-parent-cleanup.mjs';
 const prepared = JSON.parse(readFileSync(process.env.COST_STACK_FIXTURE, 'utf8'));
 const docker = (...args) => execFileSync('docker', args, { encoding: 'utf8', env: { PATH: process.env.PATH }, stdio: ['ignore', 'pipe', 'pipe'] }).trim();
@@ -519,6 +520,58 @@ test('genuinePinnedLitestreamDrainsCommittedPutRepliesBeforeShutdown', async t =
   assert.ok(result.lifetimes.objects.bytes >= result.inventoryBytes); assert.ok(result.lifetimes.objects.currentVersions === result.inventoryObjects);
   assert.ok(result.lifetimes.byteSeconds.low > 0); assert.ok(result.lifetimes.byteSeconds.high >= result.lifetimes.byteSeconds.low);
   assert.equal(result.cleanedObjects, true); assert.equal(result.leaked, false); assert.equal(result.administration.reconciled, true);
+  await stack.close();
+  assert.equal(docker('ps', '-aq', '--filter', `label=io.waitron.cloud-cost.owner=${f.journal.token}`), '');
+  assert.equal(docker('network', 'ls', '-q', '--filter', `label=io.waitron.cloud-cost.owner=${f.journal.token}`), '');
+});
+
+// Removing the final-sale restore check must fail the lost-storage case; a lost reply alone must restore.
+for (const loseStoredWrites of [true, false]) test(loseStoredWrites
+  ? 'lostFinalWriteFailsFunctionalRestoreDespiteNonblockingAccounting'
+  : 'committedWriteWithCutoffReplyRestoresSuccessfully', async t => {
+  assert.equal(typeof smokeControls.prepareLitestreamWriteLoss, 'function', 'the real smoke needs a controlled lost-write pair');
+  const f = fixture(t), plan = local.prepareIsolatedStack(f);
+  cpSync(prepared.litestreamBinary, join(f.codeRoot, 'litestream'));
+  cpSync(new URL('../litestream.mjs', import.meta.url), join(f.codeRoot, 'litestream.mjs'));
+  const source = readFileSync(new URL('./litestream-smoke.mjs', import.meta.url), 'utf8');
+  writeFileSync(join(f.codeRoot, 'cost-litestream-smoke.mjs'), smokeControls.prepareLitestreamWriteLoss(source, { loseStoredWrites }));
+  let stack;
+  f.onCleanup(async () => { await stack?.close(); });
+  stack = await local.startIsolatedStack({ ...f, prepared: plan });
+  const s3 = stack.containerIds.find(id => docker('inspect', '--format', '{{index .Config.Labels "io.waitron.cloud-cost.role"}}', id) === 's3');
+  const run = spawnSync('docker', ['exec', s3, 'node', '/code/cost-litestream-smoke.mjs'],
+    { encoding: 'utf8', env: { PATH: process.env.PATH }, timeout: 110000, stdio: ['ignore', 'pipe', 'pipe'] });
+  assert.equal(run.error, undefined, 'the smoke must collect before the enclosing deadline');
+  assert.equal(run.signal, null);
+  const { stdout, stderr, status } = run;
+  const records = stderr.split('\n').filter(line => line.startsWith('{')).map(line => JSON.parse(line));
+  const beforeRestore = records.find(row => row.kind === 'lost-write-control');
+  assert.ok(beforeRestore, stderr);
+  assert.equal(beforeRestore?.version, '0.5.17');
+  assert.equal(beforeRestore?.sourceSales, 2);
+  assert.equal(beforeRestore?.status, 'unknown');
+  assert.ok(beforeRestore?.gaps.includes('accounting:request-cutoff'));
+  assert.ok(beforeRestore?.baselineObjects > 0);
+  assert.ok(beforeRestore?.cutoffReplies > 0);
+  assert.equal(beforeRestore?.baselineRestored, loseStoredWrites);
+  t.diagnostic(JSON.stringify({ control: beforeRestore, restore: records.filter(row => row.kind === 'lost-write-restore') }));
+  if (loseStoredWrites) {
+    assert.equal(status, 1, stderr);
+    assert.equal(stdout, '', 'lost data must not publish a successful rehearsal');
+    assert.match(stderr, /Synthetic Litestream phase: restore/);
+    const restored = records.filter(row => row.kind === 'lost-write-restore');
+    assert.equal(restored.length, 12, 'exercise all unchanged restore attempts');
+    for (const row of restored) assert.deepEqual(row, { kind: 'lost-write-restore', restoredSales: 1, integrity: 'ok' });
+  } else {
+    assert.equal(status, 0, stderr);
+    const result = JSON.parse(stdout);
+    assert.equal(result.version, '0.5.17'); assert.equal(result.restoredSales, 2); assert.equal(result.integrity, 'ok');
+    assert.deepEqual(result.sales, { attempted: 2, successful: 2, failed: 0 });
+    assert.deepEqual(result.fiscal, { ok: true, issues: 0 });
+    assert.equal(result.observed.status, 'unknown');
+    assert.ok(result.observed.gaps.includes('accounting:request-cutoff'));
+    assert.equal(result.cleanedObjects, true); assert.equal(result.leaked, false);
+  }
   await stack.close();
   assert.equal(docker('ps', '-aq', '--filter', `label=io.waitron.cloud-cost.owner=${f.journal.token}`), '');
   assert.equal(docker('network', 'ls', '-q', '--filter', `label=io.waitron.cloud-cost.owner=${f.journal.token}`), '');

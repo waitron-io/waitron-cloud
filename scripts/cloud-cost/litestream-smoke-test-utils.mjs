@@ -124,6 +124,52 @@ export function prepareDelayedLitestreamDiagnostics(source) {
   return source;
 }
 
+// Restore the one-sale recovery point only after the writer and every covering write are collected.
+// This makes missing stored data independent of readiness and the lost HTTP reply.
+export function prepareLitestreamWriteLoss(source, { loseStoredWrites }) {
+  assert.equal(typeof loseStoredWrites, 'boolean');
+  source = prepareDelayedLitestreamStop(source);
+  for (const [anchor, replacement] of [
+    ['let delayedPutReplies = 0;', 'let baseline = [], cutoffReplies = 0; let delayedPutReplies = 0;'],
+    ['finalPutGate.beforeSale(); await sale(2);', `
+      baseline = await Promise.all((await list()).map(async row => {
+        const stored = await clients[1].send(new sdk.GetObjectCommand({ Bucket, Key: row.Key }));
+        return { Key: row.Key, Body: Buffer.from(await stored.Body.transformToByteArray()) };
+      }));
+      if (!baseline.length) fail();
+      finalPutGate.beforeSale(); await sale(2);`],
+    ['delayedPutReplies++; finalPutGate.response(finalPut, incoming.statusCode, () => { if (postSaleRequest) finalPutCommit(); }); setTimeout(forward, 1500);', `
+      delayedPutReplies++; let cutReply = false;
+      finalPutGate.response(finalPut, incoming.statusCode, () => {
+        if (postSaleRequest) { cutReply = true; incoming.resume(); finalPutCommit(); }
+      });
+      setTimeout(() => { if (cutReply) { cutoffReplies++; res.destroy(); } else forward(); }, 1500);`],
+    ["if (refusedUploads.size) fail();", `if (refusedUploads.size) fail();
+      let baselineRestored = false;
+      if (${loseStoredWrites}) {
+        for (const row of await list()) await clients[2].send(new DeleteObjectCommand({ Bucket, Key: row.Key }));
+        for (const row of baseline) await clients[0].send(new sdk.PutObjectCommand({ Bucket, ...row }));
+        const retained = await list();
+        if (retained.length !== baseline.length) fail();
+        for (const row of retained) {
+          const expected = baseline.find(original => original.Key === row.Key);
+          const actual = await clients[1].send(new sdk.GetObjectCommand({ Bucket, Key: row.Key }));
+          if (!expected || !Buffer.from(await actual.Body.transformToByteArray()).equals(expected.Body)) fail();
+        }
+        baselineRestored = true;
+      }
+      const accounting = replication.meter.snapshot();
+      console.error(JSON.stringify({ kind: 'lost-write-control', version, sourceSales: replay.counts().successful,
+        status: accounting.status, gaps: accounting.gaps, baselineObjects: baseline.length, cutoffReplies, baselineRestored }));`],
+    ["finally { db.close(); }", `finally { db.close(); }
+        console.error(JSON.stringify({ kind: 'lost-write-restore', restoredSales, integrity }));`],
+  ]) {
+    assert.equal(source.split(anchor).length, 2, 'lost-write control requires one unambiguous anchor');
+    source = source.replace(anchor, replacement);
+  }
+  return source;
+}
+
 export function assertSmokeAccounting(result) {
   const subset = result.afterStop;
   const output = litestreamAfterStopOutput(subset);

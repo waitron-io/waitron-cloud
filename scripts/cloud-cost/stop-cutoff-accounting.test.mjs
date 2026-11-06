@@ -49,6 +49,56 @@ test('equal cutoff observations stay unknown in the enclosing request meter', ()
   assert.equal(result.billing[0].quantity, null);
 });
 
+test('a known PUT reply status cannot contradict its backend commit witness', () => {
+  const s = createLitestreamAfterStop({ clock: () => 0 }); start(s, 'put'); ack(s);
+  s.commit({ token: invocation + ':1', statusCode: 200, bytesOut: 4, expectedBytesOut: 4,
+    requestComplete: true, versionId: null, deleteMarker: null });
+  assert.throws(() => s.settle(event('put', 'observer', 'success', {
+    statusCode: 201, bytesIn: 0, bytesOut: 4, attemptedBytesIn: 0, attemptedBytesOut: 4,
+  })), /Invalid cloud cost Litestream audit/);
+  assert.throws(() => s.snapshot(), /Invalid cloud cost Litestream audit/);
+});
+
+// An independent backend commit cannot supply response headers that a measuring hop never received.
+for (const versioned of [false, true]) for (const commitAfterStop of [false, true])
+  for (const missing of [['producer'], ['observer'], ['producer', 'observer']]) {
+    test(`committed PUT without reply headers remains unknown: versioned=${versioned}, commitAfterStop=${commitAfterStop}, missing=${missing}`, () => {
+      const afterStop = createLitestreamAfterStop({ clock: () => 0 }); start(afterStop, 'put');
+      const lifetime = afterStop.beginLifetime({ operation: 'put', versioned,
+        headers: { 'amz-sdk-invocation-id': invocation, 'amz-sdk-request': 'attempt=1; max=3' } });
+      const meter = createMeter({ clock: () => 0, phase: 'workload', afterStop });
+      meter.beginAttempt(invocation + ':1');
+      if (commitAfterStop) ack(afterStop);
+      afterStop.commit({ token: invocation + ':1', statusCode: 200, bytesOut: 4, expectedBytesOut: 4,
+        requestComplete: true, versionId: versioned ? 'PRIVATE_VERSION' : null, deleteMarker: null });
+      if (!commitAfterStop) ack(afterStop);
+      for (const channel of ['observer', 'producer']) {
+        const cutoff = missing.includes(channel);
+        let accepted;
+        assert.doesNotThrow(() => { accepted = meter.observeAttempt(event('put', channel, cutoff ? 'transport-error' : 'success', {
+          statusCode: cutoff ? null : 200, bytesIn: 0, bytesOut: 4, attemptedBytesIn: 0, attemptedBytesOut: 4,
+        }), cutoff && channel === 'producer' ? { reason: 'upstream-error', ioEvent: 'upstream-error',
+          code: 'ECONNRESET', clientClosed: true, responseHeadersSeen: false } : null); },
+        'an unseen reply status must not contradict an independently witnessed storage commit');
+        assert.equal(accepted, cutoff);
+      }
+      const cutoff = missing.includes('producer');
+      assert.deepEqual(lifetime({ statusCode: cutoff ? null : 200, bytesOut: 4, interrupted: cutoff,
+        responseHeaders: cutoff ? undefined : versioned ? { 'x-amz-version-id': 'PRIVATE_VERSION' } : {} }), {
+        statusCode: 200, responseHeaders: versioned ? { 'x-amz-version-id': 'PRIVATE_VERSION' } : {}, interrupted: false,
+      });
+      const result = meter.snapshot();
+      assert.equal(result.status, 'unknown'); assert.ok(result.gaps.includes('accounting:request-cutoff'));
+      assert.equal(result.billing[0].quantity, null);
+      assert.equal(result.accounting.requests[0].outcome, cutoff ? 'transport-error' : 'success');
+      assert.equal(result.accounting.requests[0].bytesOut, 4);
+      const subset = afterStop.snapshot();
+      assert.equal(subset.used, 1); assert.equal(subset.status, 'unknown');
+      assert.deepEqual(litestreamAfterStopOutput(subset).afterStop, subset);
+      assert.equal(meter.diagnostics().firstInvalidation, null);
+    });
+  }
+
 for (const operation of ['put', 'get', 'list', 'delete']) test(`four late ${operation} cutoffs still exceed the real stop bound`, () => {
   const s = createLitestreamAfterStop({ clock: () => 0 });
   const ids = [1, 2, 3, 4].map(n => `${String(n).padStart(8, '0')}-2222-4333-8444-555555555555`);
