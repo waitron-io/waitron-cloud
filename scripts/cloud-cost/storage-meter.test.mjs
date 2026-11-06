@@ -101,6 +101,7 @@ test('bucketControlAccountingUsesTheClosedAnonymousExport', () => {
   assert.equal(exported.accounting.producer.attempts, 4);
   assert.equal(JSON.stringify(exported).includes('PRIVATE_SYNTHETIC_CANARY'), false);
   receipt.accounting.requests[0].path = 'PRIVATE_SYNTHETIC_CANARY';
+  assert.throws(() => validateReceipt(receipt), { message: 'Invalid cloud cost evidence' });
   assert.throws(() => exportAggregate(receipt), { message: 'Invalid cloud cost evidence' });
 });
 

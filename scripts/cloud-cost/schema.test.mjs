@@ -65,15 +65,15 @@ test('extraFieldAndRawCanaryRefused', () => {
   for (const target of [r => r, r => r.window, r => r.cadence, r => r.inputs[0],
     r => r.accounting, r => r.accounting.observer, r => r.checks[0], r => r.cleanup, r => r.dataBoundary]) {
     const r = receipt(); target(r).rawCanary = 'PRIVATE_SYNTHETIC_CANARY';
-    refused(() => validateReceipt(r)); refused(() => exportAggregate(r));
+    refused(() => validateReceipt(r)); refused(() => exportAggregate(r, originals()));
   }
 });
 test('knownFieldsCannotCarryRawNamesPathsOrErrors', () => {
   for (const [key, value] of [['id', 'PRIVATE_SYNTHETIC_CANARY'], ['reason', 'PRIVATE_SYNTHETIC_CANARY'],
     ['source', '/private/example/venue.db'], ['source', 'https://aws.amazon.com/s3/pricing/?name=PRIVATE_SYNTHETIC_CANARY']]) {
-    const r = receipt(); r.inputs[0][key] = value; refused(() => exportAggregate(r));
+    const r = receipt(); r.inputs[0][key] = value; refused(() => exportAggregate(r, originals()));
   }
-  const r = receipt(); r.checks[0].code = 'PRIVATE_SYNTHETIC_CANARY'; refused(() => exportAggregate(r));
+  const r = receipt(); r.checks[0].code = 'PRIVATE_SYNTHETIC_CANARY'; refused(() => exportAggregate(r, originals()));
 });
 test('validAnonymousExportIsDetached', () => {
   const r = receipt(); const exported = exportAggregate(r, originals());
@@ -124,7 +124,7 @@ test('malformedAndNonfiniteEvidenceRefusedWithoutEcho', () => {
   for (const value of [NaN, Infinity, -1]) {
     const r = receipt(); r.accounting.producer.bytesIn = value; refused(() => validateReceipt(r));
   }
-  const r = receipt(); r.accounting.requests.push({ key: 'PRIVATE_SYNTHETIC_CANARY' }); refused(() => exportAggregate(r));
+  const r = receipt(); r.accounting.requests.push({ key: 'PRIVATE_SYNTHETIC_CANARY' }); refused(() => exportAggregate(r, originals()));
 });
 test('journalSymlinkAndNestedLinkRefused', t => {
   const args = roots(t); const aliased = join(args.parent, 'alias'); symlinkSync(args.root, aliased);
@@ -202,7 +202,7 @@ test('fractionalCountsAndContradictoryEvidenceRefused', () => {
   refused(() => validateReceipt(r));
 });
 test('allowedSyntaxStillNeedsAnonymousId', () => {
-  const r = receipt(); r.inputs[0].id = 'private-synthetic-canary'; refused(() => exportAggregate(r));
+  const r = receipt(); r.inputs[0].id = 'private-synthetic-canary'; refused(() => exportAggregate(r, originals()));
 });
 test('markerAndJournalMustIndependentlyMatch', t => {
   const args = roots(t);
@@ -223,7 +223,7 @@ test('everyReceiptFieldHasBoundedTypes', () => {
     r => r.checks[0].passed = 'yes', r => r.checks[0].count = -1,
     r => r.inputs.push(structuredClone(r.inputs[0])), r => r.accounting.discrepancy.bytesIn = NaN,
     r => r.accounting.observer.attempts = -1];
-  for (const mutate of mutations) { const r = receipt(); mutate(r); refused(() => exportAggregate(r)); }
+  for (const mutate of mutations) { const r = receipt(); mutate(r); refused(() => exportAggregate(r, originals())); }
 });
 test('measuredAndAssumedInputsNeedTheirEvidence', () => {
   const measured = input({ status: 'measured', value: 2, source: `receipt:${randomUUID()}`, observedAt: instant });
@@ -265,11 +265,11 @@ test('nestedAccessorCannotLeakPrivateError', () => {
   const p = price(); Object.defineProperty(p.attributes, 'regionCode', { get() { throw new Error('PRIVATE_SYNTHETIC_CANARY'); }, enumerable: true });
   refused(() => validateInput(p));
   const r = receipt(); Object.defineProperty(r.window, 'startedAt', { get() { throw new Error('PRIVATE_SYNTHETIC_CANARY'); }, enumerable: true });
-  refused(() => exportAggregate(r));
+  refused(() => exportAggregate(r, originals()));
 });
 test('arrayAccessorCannotLeakPrivateError', () => {
   const r = receipt(); Object.defineProperty(r.inputs, '0', { get() { throw new Error('PRIVATE_SYNTHETIC_CANARY'); }, enumerable: true });
-  refused(() => validateReceipt(r)); refused(() => exportAggregate(r));
+  refused(() => validateReceipt(r)); refused(() => exportAggregate(r, originals()));
 });
 
 // Dropping the distinct batch operation would prevent publishing its counted HTTP attempt.
@@ -287,7 +287,7 @@ test('anonymousBulkDeletionReceiptPreservesOneRequestAndItsWireBytes', () => {
   const source = originals(meter.snapshot());
   assert.deepEqual(exportAggregate(r, source), r);
   r.accounting.requests[0].Key = 'PRIVATE_CANARY';
-  refused(() => exportAggregate(r));
+  refused(() => exportAggregate(r, source));
 });
 
 // Structural readback cannot establish coverage or billing eligibility for a new export.
