@@ -244,6 +244,28 @@ four-second observation boundary. These Chromium checks use stubbed HTTP;
 real server authority and general cleanup bounds remain unqualified.
 See [the diagnostic qualification and open work](backlog/retrospective-reviews.md).
 
+The hostname Enter fixture keeps all nine reachable captures separately. Set
+`REMOTE_ENTER_RECEIPT_DIR` to a fresh directory when you run
+`pnpm --dir apps/portal exec node --test test/remote-hostname-enter-browser.test.ts`.
+Check the filenames independently: all ten browser cases passed before the
+repair, while only eight files survived. The eight ordinary names stay unchanged;
+the English light phone delayed capture adds `-delayed`. Separate files retain
+each run without promising different pixels or stable image bytes. The handler
+that answers without recording returns without a capture; its title names the
+observation timeout. It returns before the request, pending-state and no-apply
+assertions. Every original behavioral assertion and deadline remains unchanged.
+The four-second outer race checks bounded refusal without independently pinning
+the configured three-second observation boundary. These Chromium checks use
+stubbed HTTP; real server authority and general cleanup bounds remain unqualified.
+All five sampled pending-review duplicate mutations were caught, once by a later
+count. The final rate-limit duplicate assertion has no later request count;
+its mutation coverage remains unqualified.
+Capture retention also remains unqualified in the sibling fixtures
+`authenticator-setup-enter-browser.test.ts`, `passkey-enter-browser.test.ts`,
+`passkey-add-keyboard-browser.test.ts`, `session-list-activity-browser.test.ts`
+and `public-challenge-script-fallback-browser.test.ts`. This review did not run
+those siblings; the filename pattern alone does not establish a lost capture.
+
 ## Separate-process storage extraction and failed-startup cleanup (D457)
 
 **Open.** Real store startup and historical failure causes remain open.
