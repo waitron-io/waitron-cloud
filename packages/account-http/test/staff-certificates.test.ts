@@ -1,11 +1,28 @@
 import assert from 'node:assert/strict';
-import {randomUUID} from 'node:crypto';
+import {createHash,randomUUID} from 'node:crypto';
 import {after,before,test} from 'node:test';
 import {verifyLease,type SignedEnvelope} from '@waitron-cloud/registration';
 import {staffExchangeFixture} from '../../remote-access/test/staff-exchange-fixture.ts';
 let f:Awaited<ReturnType<typeof staffExchangeFixture>>;
 before(async()=>{f=await staffExchangeFixture();});after(async()=>f?.close());
 const submit='staff-certificate-submit',status='staff-certificate-status';
+test('discovery recovers the exact predecessor after lost local state and stale configuration',async()=>{
+ const a=await f.venue(),body={version:1,requestId:null},discover=()=>f.request(status,a.proof(status,body,randomUUID(),a.lease));
+ const empty=await discover();assert.equal(empty.status,200,await empty.clone().text());
+ assert.deepEqual(await empty.json(),{version:1,installationId:a.installationId,hostname:a.body.hostname,revision:a.body.revision,request:null});
+ const id=randomUUID();assert.equal((await f.request(submit,a.proof(submit,a.body,id,a.lease))).status,200);
+ const request={requestId:id,hostname:a.body.hostname,revision:a.body.revision,csrDigest:createHash('sha256').update(a.body.csr).digest('hex')};
+ assert.deepEqual(await(await discover()).json(),{version:1,installationId:a.installationId,hostname:a.body.hostname,revision:a.body.revision,request});
+ await f.db.pool.query('UPDATE installations SET configuration_revision=configuration_revision+1 WHERE id=$1',[a.installationId]);
+ for(let i=0;i<4;i++)assert.equal((await f.request(submit,a.proof(submit,{...a.body,revision:a.body.revision+1},randomUUID(),a.lease))).status,409);
+ assert.equal((await f.request(status,a.proof(status,{version:1,requestId:id},randomUUID(),a.lease))).status,409);
+ assert.deepEqual(await(await discover()).json(),{version:1,installationId:a.installationId,hostname:a.body.hostname,revision:a.body.revision+1,request});
+ assert.equal((await f.request(submit,a.proof(submit,{...a.body,revision:a.body.revision+1,previousRequestId:id},randomUUID(),a.lease))).status,200);
+ const b=await f.venue();assert.equal((await f.request(status,b.proof(status,body,randomUUID(),b.lease,a.installationId))).status,401);
+ assert.equal((await f.request(status,a.proof(status,body,randomUUID(),a.lease),{origin:f.origin})).status,403);
+ await f.db.pool.query('UPDATE installations SET revoked_at=clock_timestamp() WHERE id=$1',[a.installationId]);
+ assert.equal((await discover()).status,403);
+});
 test('signed CSR exchange survives a lost reply and binds a bounded current request to its installation',async()=>{
  const a=await f.venue(),id=randomUUID(),envelope=a.proof(submit,a.body,id,a.lease);
  const first=await f.request(submit,envelope);assert.equal(first.status,200,await first.clone().text());const accepted=await first.json();

@@ -748,8 +748,12 @@ consumers remain NONE. The owner parked the earlier D582 protocol work on
 6 November. D582-S first runs the existing two-venue remote proof, then connects
 a real browser to a box through the existing gateway, with manual setup allowed.
 The proof's backup worker now keeps database copies inside its own writable
-temporary parent. Deployment of the lasting gateway and the real external
-browser path remain open. The parked [D582 Cloud build plan](superpowers/plans/2026-11-05-a951-cloud-tunnel.md)
+temporary parent. The test gateway now serves the real external browser path,
+including trusted password sign-in and automatic app and tunnel restart. The
+existing signed certificate status action can discover a lost request ID,
+including a stale predecessor, without exposing a CSR or certificate. Joint
+reboot, renewal, revocation, offline sales and connected-machine isolation checks
+remain open. The parked [D582 Cloud build plan](superpowers/plans/2026-11-05-a951-cloud-tunnel.md)
 assigns the approval receiver and one-use Permit ledger, registration/node
 mapping, public root/origin/peer policy and separate issuer custody to Cloud.
 E owns local permission decisions, provisioning, private keys, client and native
@@ -4789,6 +4793,10 @@ offline sales and connected-machine isolation still need joint qualification.
 Cross-suffix moves also need qualification here: the retained staff hostname and
 the destination-derived challenge name currently differ. Keep that production
 renewal and routing gate open; the single-suffix test does not discharge it.
+The existing signed certificate status action also discovers the stored request
+when its ID is lost, including stale configuration needed to replace it. This
+metadata read retains installation, lease, plan and test-environment checks;
+known-ID status and submit replies keep their existing contract.
 Native save and read-back checks pass; permission and retry rules remain in force.
 See [the remaining checks](backlog/remote-access-http.md#remote-hostname-save-qualification).
 
