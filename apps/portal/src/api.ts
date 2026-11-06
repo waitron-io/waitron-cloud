@@ -38,9 +38,10 @@ function validResult(path: string, value: unknown, status: number): boolean {
   if(path==='/installations/revoke') return validInstallation(data);
   const account = typeof data.accountId === 'string' && data.accountId.length > 0;
   if (path === '/session' || path === '/session/activity') return account && typeof data.expiresAt === 'string' && Number.isFinite(Date.parse(data.expiresAt));
-  if (path === '/signup/complete') return account && typeof data.organisationId === 'string' && typeof data.legalBusinessId === 'string';
-  if (path.endsWith('/request')) return data.status === 'accepted';
-  return path === '/password-reset/complete' && data.status === 'completed';
+  if (path === '/signup/complete') return status === 201 && ['accountId', 'organisationId', 'legalBusinessId']
+    .every(field => typeof data[field] === 'string' && data[field].trim().length > 0);
+  if (path === '/signup/request' || path === '/password-reset/request') return status === 202 && data.status === 'accepted';
+  return path === '/password-reset/complete' && status === 200 && data.status === 'completed';
 }
 export async function accountRequest<T>(path: string, body?: Record<string, unknown>): Promise<ApiResult<T>> {
   const headers: Record<string, string> = {};

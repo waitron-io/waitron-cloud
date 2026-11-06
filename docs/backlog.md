@@ -385,9 +385,13 @@ passing qualification does not establish its cause or repair it.
 
 ## Signup and password-reset HTTP acknowledgements (D423)
 
-**Open.** Qualify production mail, browser and server authority, exact success
-statuses, empty identifiers, request headers and the client deadline. See [the
-client acknowledgement boundaries](backlog/account-http-boundaries.md#signup-and-password-reset-http-acknowledgements-d423).
+**Client and local server qualification complete.** Signup and password reset
+require the exact success status and acknowledgement; signup also requires three
+nonblank identifiers. Browser journeys preserve uncertain results for an explicit
+retry in both languages, themes and widths. Real HTTP checks cover the 15-second
+header and body deadline; local Mailpit checks cover server authority and session
+revocation. Production provider delivery remains with D102's owner-only enablement
+gate. See [the acknowledgement boundaries and runnable checks](backlog/account-http-boundaries.md#signup-and-password-reset-http-acknowledgements-d423).
 
 The historical [PR #669 storage failure](https://github.com/waitron-io/waitron-cloud/actions/runs/40716310898/job/122914999702)
 was a prematurely closed LIST response during Litestream shutdown. D530 owns its

@@ -16,6 +16,19 @@ const flows = [
 ] as const;
 
 for (const flow of flows) {
+  for (const status of [200, 201, 202, 203, 206, 207, 208, 226].filter(status => status !== flow.status)) {
+    test(`${flow.path} refuses a valid body with HTTP ${status}`, async t => {
+      let calls = 0;
+      t.mock.method(globalThis, 'fetch', async () => {
+        calls++;
+        return Response.json(flow.value, {status});
+      });
+      assert.deepEqual(await accountRequest(flow.path, flow.body), {
+        ok: false, status: 503, code: 'unexpected_response', retryAfterMs: 0,
+      });
+      assert.equal(calls, 1, 'a mismatched acknowledgement must not repeat the operation');
+    });
+  }
   const invalid: {name: string; value: unknown}[] = [
     {name: 'null', value: null},
     {name: 'array', value: []},
@@ -29,6 +42,11 @@ for (const flow of flows) {
       }
     }
     invalid.push({name: 'empty account ID', value: {...flow.value, accountId: ''}});
+    for (const field of ['accountId', 'organisationId', 'legalBusinessId']) {
+      for (const value of ['', ' \t']) {
+        invalid.push({name: `blank ${field} ${JSON.stringify(value)}`, value: {...flow.value, [field]: value}});
+      }
+    }
   } else {
     for (const status of ['pending', 'changed', true, 202, null]) {
       invalid.push({name: `wrong status ${String(status)}`, value: {status}});
