@@ -1,12 +1,5 @@
 # Waitron Cloud backlog
 
-## Cost-test fixture wording (D589)
-
-The browser and owner backend fixtures now use English operation and street
-samples. Their Spain-specific country, fiscal territory, invoice locale, time
-zone and test assertions are unchanged. The existing location fields still
-await Waitron's removal of that concept; this wording change adds none.
-
 ## Disposable test slots and repository runners (D592)
 
 The [design](superpowers/specs/2026-11-06-disposable-test-server-design.md) and [implementation plan](superpowers/plans/2026-11-06-disposable-test-server.md) propose isolated one-job VMs, a Mac controller and later JIT runners and a repeatable bridge-to-permanent AX102 migration for Cloud first, Waitron later.
@@ -3816,6 +3809,9 @@ The source is [Waitron's backlog at `830cf71fe854`](https://github.com/clintongo
 Its section titled "The cloud primary" mixed cloud services with core SQLite work.
 The [ownership map](documentation-ownership.md) records what remains in Waitron.
 
+- **Waitron location removal (A1301).** Include the existing `venue.location`
+  samples in both cost-test backend fixtures and the browser backend's
+  `provisioned.locationId` route inputs in the Cloud integration work.
 - **Cloud provisioning and trial onboarding.** Own the service that creates a
   customer's resources and supplies configuration and credentials to Waitron, plus
   the hosted trial entry path. The local integration contract is mapped and proved;
