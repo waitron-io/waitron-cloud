@@ -87,7 +87,7 @@ class GuestLifecycle(unittest.TestCase):
                            '-o', 'ConnectTimeout=3', '-p', '22000', 'root@127.0.0.1']
                     ready = self.command(*ssh, 'cloud-init status --wait', timeout=120)
                     self.assertEqual(ready.returncode, 0, ready.stderr)
-                    serial = self.command(*ssh, "python3 -c \"open('/dev/ttyS0','wb').write(b's'*1048576+b'D592-SERIAL-END')\"")
+                    serial = self.command(*ssh, "python3 -c \"import termios; f=open('/dev/ttyS0','wb'); f.write(b's'*1048576+b'D592-SERIAL-END'); f.flush(); termios.tcdrain(f.fileno())\"")
                     self.assertEqual(serial.returncode, 0, serial.stderr)
                     turn = Path('/var/lib/waitron-disposable/turns') / resource
                     self.assertLessEqual(sum(p.stat().st_size for p in turn.glob('console*')), 16384)
