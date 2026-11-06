@@ -684,7 +684,7 @@ export async function startIsolatedStack(args) {
       requireThat(!existsSync(join(stateRoot, name)));
     stage = 'runtime-files';
     for (const [from, to] of [['stack-runtime.mjs', 'cost-stack-runtime.mjs'], ['waitron-adapter.mjs', 'cost-waitron-adapter.mjs'],
-      ['replay-release.mjs', 'replay-release.mjs'], ['meter.mjs', 'meter.mjs']])
+      ['replay-release.mjs', 'replay-release.mjs'], ['meter.mjs', 'meter.mjs'], ['accounting-policy.mjs', 'accounting-policy.mjs']])
       copyFileSync(new URL(from, import.meta.url), join(codeRoot, to), constants.COPYFILE_EXCL);
     stage = 'certificate';
     await runPrivate('/usr/bin/openssl', ['req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-days', '1',

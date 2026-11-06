@@ -136,6 +136,13 @@ grand totals cannot hide different requests. A paired row also stays unknown
 when the two observations imply different billing, so matching byte counts
 cannot certify an uncertain price. Run `node --test
 scripts/cloud-cost/meter-billing-provenance.test.mjs` for these controls.
+The meter also records fixed accounting-gap labels without invalidating later
+observations. When request totals, grouped object bytes or storage-time integrals
+overflow a safe value, the affected figure becomes `null`; supported counts,
+billing rows and other storage classes
+remain available. Run `node --test
+scripts/cloud-cost/meter-accounting-gaps.test.mjs` for the numeric boundaries and
+fatal-error controls. The isolated stack copies the shared gap-label helper.
 The full nonblocking accounting path, publication refusal, lost-write restore
 control and saved-failure replay remain open. This partial meter change does not
 establish the cause of the historical failures or relax functional admission.
