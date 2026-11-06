@@ -456,7 +456,7 @@
           "reader": "scripts/ci-root-shards.test.mjs",
           "site": "workflow read:9; generated files and child:19-47",
           "kind": "command",
-          "boundary": "Read current ci.yml then run extracted root command only in a mkdtemp containing six generated tests, excluding live target bytes",
+          "boundary": "Read current ci.yml then run extracted root command only in a mkdtemp containing ten generated tests, excluding live target bytes",
           "role": "execution"
         },
         {

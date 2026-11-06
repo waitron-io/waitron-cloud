@@ -1489,7 +1489,7 @@ implementation or production evidence.
   direct package selection below; part 5 still owns verified merge reuse.
   Part 3 implements the [reviewed root-input design](superpowers/specs/2026-11-05-ci-root-input-ownership-design.md)
   with [separate records and an explicit renewal procedure](ci-root-input-ownership.md).
-  Its complete initial input review admits the root-partition contract test to
+  Its input review admits the root-partition contract test to
   all eight root jobs and the local health test to the entire `test:local-stack`
   receipt command. Their union composes with existing package selection without
   dropping mandatory receipts. The capacity verifier test remains unregistered:
@@ -2175,7 +2175,9 @@ implementation or production evidence.
   activation show the slowest root job growing from 347 to 425 seconds.
   PR984 adds a root test file that moves the seed wrapper into the same
   four-way partition as indirect-reader and lock-selection fixtures; its
-  partition reaches the unchanged limit. Eight partitions divide that work
+  partition reaches the unchanged limit in a workflow that started during a
+  GitHub incident. That run is failure evidence, excluded from healthy timing
+  comparison. Eight partitions divide that work
   while preserving both file workers, every selector and every deadline.
   Source evidence and the final summary require all eight jobs exactly once;
   older four-job evidence cannot qualify. Hosted timing and exact-head CI

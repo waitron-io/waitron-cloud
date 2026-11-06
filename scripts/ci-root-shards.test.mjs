@@ -67,6 +67,11 @@ test('summary requires all eight root partitions even when the compiler and pack
   const legacy = jobs.filter(job => !job.name.startsWith('root (') || /^root \([1-4]\//.test(job.name))
     .map(job => ({...job, name: job.name.replace('/8)', '/4)')}));
   assert.throws(() => assertSummary(plan, results, legacy));
+  for (const name of ['root (1/4)', 'root (${{ matrix.shard }}/4)']) {
+    for (const conclusion of ['success', 'skipped']) {
+      assert.throws(() => assertSummary(plan, results, [...jobs, {name, status: 'completed', conclusion}]));
+    }
+  }
   for (const root of ['failure', 'cancelled', 'skipped', undefined]) {
     assert.throws(() => assertSummary(plan, {...results, root}, jobs));
   }

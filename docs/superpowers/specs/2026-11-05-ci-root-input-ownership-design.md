@@ -13,11 +13,11 @@ These observations describe `4018e9cff8a10f4cf02b33e823bd52a5b2bee26b`, not impl
   `ci-scope.mjs:scopeForPaths` full. Its PR range is merge-base to event head, with NUL-delimited `--no-renames` paths.
 - `ci-scripts.mjs:assertScriptWork` prohibits packages, receipts, compiler work, documentation and reuse alongside scripts. Identity and gateway each
   have a two-target family; gateway also syntax-checks its generator caller. Both immutable audit modes must qualify.
-- `ci.yml` gates all eight root jobs on `typecheck`, also used by the compiler job. Root runs `scripts/ci-*.test.mjs` plus identity and gateway tests
-  with TAP, concurrency 2 and eight Node partitions. Neither `ci-run-root.mjs` nor `ci-root-tests.mjs` exists in this tree.
+- `ci.yml` gates all four root jobs on `typecheck`, also used by the compiler job. Root runs `scripts/ci-*.test.mjs` plus identity and gateway tests
+  with TAP, concurrency 2 and four Node partitions. Neither `ci-run-root.mjs` nor `ci-root-tests.mjs` exists in this tree.
 - `workPlan` refuses zero packages. `ci-receipts.mjs` chains five conservative omission audits; Cloud cost is the sixth suite. `ci-run-receipts.mjs`
   accepts only nonempty, unique allowlisted suites, runs fixed `pnpm [suite]` arguments and propagates failures.
-- `ci-summary.mjs` independently checks complete package allocations, actual job names and needs results. It requires eight root jobs whenever
+- `ci-summary.mjs` independently checks complete package allocations, actual job names and needs results. It requires four root jobs whenever
   `typecheck` is true. It allows unexpected jobs only when completed and skipped; its current-run publication exception still requires final needs
   success and exact run/attempt/head step evidence.
 - V2 input records retain frozen v1 evidence, per-path identity, mode and removal provenance. Docs, identity, gateway and lock authority are separate.
@@ -37,7 +37,7 @@ identify checks, never commands supplied by a registry.
 
 | Entry ID | Exact changed input | Inspected boundary and intended owners |
 | --- | --- | --- |
-| `root-partition-contract` | `scripts/ci-root-shards.test.mjs` | Imports `ci-summary.mjs`, reads `ci.yml` at line 9, executes extracted root commands against generated temporary tests. The root wildcard consumes it. Select all four existing root jobs. |
+| `root-partition-contract` | `scripts/ci-root-shards.test.mjs` | Imports `ci-summary.mjs`, reads `ci.yml` at line 9, executes extracted root commands against generated temporary tests. The root wildcard consumes it. Select all eight current root jobs. |
 | `capacity-verifier-test` | `scripts/verify-backup-capacity-receipt.test.mjs` | Imports the transfer verifier at line 3 and constructs receipt data in memory. The root manifest's three-file capacity command consumes it. Select whole `test:backup-capacity`. |
 | `local-health-test` | `deploy/local-stack/operations-health.test.mjs` | Imports `operations-health.mjs` at line 4 and uses temporary loopback HTTP servers. Root `test:local-stack` discovers it through `deploy/local-stack/*.test.mjs`. Select that whole receipt. |
 
