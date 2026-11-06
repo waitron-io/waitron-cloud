@@ -10,6 +10,8 @@ function fixture(run) {
   try {
     mkdirSync(join(root, 'scripts'));
     cpSync(new URL('./ci-run-remote-shard.mjs', import.meta.url), join(root, 'scripts/ci-run-remote-shard.mjs'));
+    cpSync(new URL('./ci-required-cases.mjs', import.meta.url), join(root, 'scripts/ci-required-cases.mjs'));
+    writeFileSync(join(root, 'scripts/ci-required-cases.json'), '{}\n');
     mkdirSync(join(root, 'packages/remote-access/test'), {recursive: true});
     writeFileSync(join(root, 'package.json'), '{"type":"module"}\n');
     symlinkSync('scripts/ci-run-remote-shard.mjs', join(root, 'linked-runner.mjs'));
