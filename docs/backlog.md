@@ -33,11 +33,12 @@ local-lock recovery remain open. No publisher is activated by this slice.
 ## Shared storage-test seed downloads (D585)
 
 The [storage archive acquisition record](backlog/storage-cache-fixture.md#every-seaweedfs-archive-fetch-and-a-controlled-copy-proposal-d530-4)
-tracks D585: native startup and ten test seed hooks share bounded acquisition.
-Native startup retains one attempt, with a 30-second deadline covering headers
-and body. HTTP refusals close their response body immediately without replacing
-the original refusal. Conformance preparation and the Dockerfile remain separate
-follow-up paths.
+tracks D585: native startup, ten test seed hooks and conformance share bounded
+acquisition. Native startup retains one attempt, with a 30-second deadline
+covering headers and body. Conformance retains three attempts, a 120-second
+total budget and 30-second inactivity. HTTP refusals preserve each caller’s
+existing error and retry policy. The Dockerfile and full image preparation
+qualification remain open.
 
 ## Admin listener shutdown and paced replay (D581)
 
