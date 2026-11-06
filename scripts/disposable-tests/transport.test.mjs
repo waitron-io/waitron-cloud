@@ -79,3 +79,23 @@ console.log(h.pid);process.exit(0)`;
     }
   }
 });
+
+// A guest can otherwise flood the shared Mac's memory or captured log files.
+test('ordinary streamed guest output is bounded before it reaches workstation logs', async () => {
+  const {runProcess} = await import('./transport.mjs');
+  let delivered = 0;
+  const program = "const b=Buffer.alloc(1024*1024,120);for(let i=0;i<72;i++)require('fs').writeSync(1,b)";
+  await assert.rejects(runProcess(process.execPath, ['-e', program], {onOutput: data => {delivered += data.length;}}), /output.*limit/i);
+  assert.ok(delivered <= 64*1024*1024, 'Excess guest bytes reached workstation logs');
+});
+
+test('guest error output shares the workstation byte bound', async () => {
+  const {spawnSync} = await import('node:child_process');
+  const program = `import {runProcess} from ${JSON.stringify(new URL('./transport.mjs', import.meta.url).href)};
+try { await runProcess(process.execPath,['-e',"const b=Buffer.alloc(1024*1024,120);for(let i=0;i<72;i++)require('fs').writeSync(2,b)"]);console.log('UNBOUNDED'); }
+catch(error) {console.log(error.message);}`;
+  const result = spawnSync(process.execPath, ['--input-type=module', '-e', program], {encoding: 'utf8', maxBuffer: 80*1024*1024, timeout: 10000});
+  assert.equal(result.status, 0, result.error?.message);
+  assert.match(result.stdout, /output.*limit/i);
+  assert.ok(Buffer.byteLength(result.stderr) <= 64*1024*1024);
+});

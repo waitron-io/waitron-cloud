@@ -57,7 +57,7 @@ export async function runProcess(command, argv, {input, inputPath, signal, captu
   signal?.throwIfAborted();
   return new Promise((resolve, reject) => {
     const child = spawn(command, argv, {detached: true, stdio: ['pipe', 'pipe', 'pipe']});
-    let failure, timer, stdout = '', bytes = 0, source;
+    let failure, timer, stdout = '', bytes = 0, outputBytes = 0, source;
     const kill = sig => {
       if (child.pid) try { process.kill(-child.pid, sig); } catch (error) { if (error.code !== 'ESRCH') failure ??= error; }
     };
@@ -91,7 +91,17 @@ export async function runProcess(command, argv, {input, inputPath, signal, captu
         closePipes();
       }
     });
+    const acceptOutput = data => {
+      if (failure) return false;
+      outputBytes += data.length;
+      if (outputBytes > 64*1024*1024) {
+        stop(new Error('Transport output byte limit exceeded'));
+        return false;
+      }
+      return true;
+    };
     child.stdout.on('data', data => {
+      if (!acceptOutput(data)) return;
       if (capture) {
         bytes += data.length;
         if (bytes > 65536) stop(new Error('Transport output byte limit exceeded'));
@@ -99,7 +109,7 @@ export async function runProcess(command, argv, {input, inputPath, signal, captu
       } else if (onOutput) onOutput(data);
       else process.stdout.write(data);
     });
-    child.stderr.on('data', data => process.stderr.write(data));
+    child.stderr.on('data', data => { if (acceptOutput(data)) process.stderr.write(data); });
     child.stdin.on('error', error => { if (error.code !== 'EPIPE') stop(error); });
     if (inputPath) {
       source = createReadStream(inputPath);
