@@ -58,6 +58,58 @@ function success(f, audit, input, start, end, id, marker) {
     responseHeaders: reply(id, marker) });
 }
 
+test('versionedLifetimeOverflowRetainsSafeLowerBoundAfterVersionRemoval', async t => {
+  const f = await fixture(t), audit = await open(f);
+  success(f, audit, put(Number.MAX_SAFE_INTEGER), 0, 1, 'first'); f.add('first', Number.MAX_SAFE_INTEGER);
+  f.time(1); await audit.verify();
+  assert.equal(audit.snapshot().status, 'measured');
+  assert.deepEqual(audit.snapshot().byteSeconds, { low: 0, high: 9007199254740991 });
+  f.time(2);
+  assert.deepEqual(audit.snapshot().byteSeconds, { low: 9007199254740991, high: null });
+  assert.deepEqual(audit.snapshot().gaps, ['accounting:overflow']);
+  success(f, audit, del('first'), 2, 2, 'first', false); f.remove('first');
+  await audit.verify(); f.time(3);
+  assert.equal(audit.snapshot().status, 'unknown');
+  assert.equal(audit.snapshot().objects.bytes, 0);
+  assert.equal(audit.snapshot().objects.currentVersions, 0);
+  assert.deepEqual(audit.snapshot().byteSeconds, { low: 9007199254740991, high: null });
+  assert.equal(f.meter.snapshot().status, 'unknown');
+  assert.deepEqual(f.meter.snapshot().gaps, ['accounting:overflow', 'request-billing:unknown']);
+});
+
+test('versionedAggregateBytesOverflowKeepsEveryRetainedVersionCount', async t => {
+  const f = await fixture(t), audit = await open(f);
+  success(f, audit, put(Number.MAX_SAFE_INTEGER), 0, 0, 'first'); f.add('first', Number.MAX_SAFE_INTEGER);
+  success(f, audit, put(1), 0, 0, 'second'); f.add('second', 1);
+  await audit.verify();
+  assert.deepEqual(audit.snapshot(), { status: 'unknown', scope: 'versioned-object-history', windowSeconds: 0,
+    objects: { class: 'stream', bytes: null, currentVersions: 1, noncurrentVersions: 1, deleteMarkers: 0, unfinishedMultipart: 0 },
+    byteSeconds: { low: 0, high: 0 }, gaps: ['accounting:overflow'] });
+  assert.equal(f.meter.snapshot().status, 'unknown');
+});
+
+test('versionedOverflowCannotHideUnsafeClockOrForeignVersion', async t => {
+  for (const mode of ['clock', 'foreign']) {
+    const f = await fixture(t), audit = await open(f);
+    success(f, audit, put(Number.MAX_SAFE_INTEGER), 0, 1, 'first'); f.add('first', Number.MAX_SAFE_INTEGER);
+    f.time(3); await audit.verify(); assert.equal(audit.snapshot().status, 'unknown');
+    if (mode === 'clock') { f.time(2); assert.throws(() => audit.snapshot(), bad); }
+    else { f.add('FOREIGN_PRIVATE', 1); await assert.rejects(audit.verify(), bad); }
+    assert.throws(() => f.meter.snapshot(), /Invalid cloud cost meter/);
+  }
+});
+
+test('versionedLifetimeGapSurvivesCleanupThatMakesTheCurrentTotalSafe', async t => {
+  const f = await fixture(t), audit = await open(f);
+  success(f, audit, put(Number.MAX_SAFE_INTEGER), 0, 0, 'first'); f.add('first', Number.MAX_SAFE_INTEGER);
+  success(f, audit, put(1), 0, 0, 'second'); f.add('second', 1);
+  await audit.verify(); assert.equal(audit.snapshot().objects.bytes, null);
+  success(f, audit, del('first'), 0, 0, 'first', false); f.remove('first'); await audit.verify();
+  assert.deepEqual(audit.snapshot(), { status: 'unknown', scope: 'versioned-object-history', windowSeconds: 0,
+    objects: { class: 'stream', bytes: 1, currentVersions: 1, noncurrentVersions: 0, deleteMarkers: 0, unfinishedMultipart: 0 },
+    byteSeconds: { low: 0, high: 0 }, gaps: ['accounting:overflow'] });
+});
+
 // Earlier versions remain billable when a new current version or a marker replaces them.
 test('nativeVersionsRetainEveryVersionAndUtf8MarkerAcrossPromotionAndDeletion', async t => {
   const f = await fixture(t), audit = await open(f);

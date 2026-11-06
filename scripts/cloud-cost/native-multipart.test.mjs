@@ -56,6 +56,24 @@ function part(f, bytes = 4, from = 3, by = 4, etag = 'one') {
   finish({ statusCode: 200, bytesOut: bytes, responseHeaders: { etag } }); f.uploads.get(UploadId).set(1, { bytes, etag });
 }
 
+test('multipartLifetimeOverflowSurvivesActualPartRetirementWithKnownCounts', async t => {
+  const f = await fixture(t); create(f); part(f, Number.MAX_SAFE_INTEGER, 3, 4);
+  f.time(4); await f.audit.verify();
+  assert.equal(f.audit.snapshot().status, 'measured');
+  assert.deepEqual(f.audit.snapshot().byteSeconds, { low: 0, high: 9007199254740991 });
+  f.time(5);
+  assert.deepEqual(f.audit.snapshot().byteSeconds, { low: 9007199254740991, high: null });
+  assert.equal(f.audit.snapshot().status, 'unknown');
+  const finish = f.audit.begin(input('abort')); finish({ statusCode: 204, bytesOut: 0 }); f.uploads.clear();
+  await f.audit.verify(); f.time(6);
+  assert.deepEqual(f.audit.snapshot().byteSeconds, { low: 9007199254740991, high: null });
+  assert.deepEqual(f.audit.snapshot().gaps, ['accounting:overflow']);
+  assert.equal(f.audit.snapshot().objects.bytes, 0);
+  assert.equal(f.audit.snapshot().objects.unfinishedMultipart, 0);
+  assert.equal(f.meter.snapshot().status, 'unknown');
+  assert.deepEqual(f.meter.snapshot().gaps, ['accounting:overflow', 'request-billing:unknown']);
+});
+
 // Discarding replaced/aborted parts loses these hand-calculated retained byte-seconds.
 test('nativeMultipartRetainsReplacedAndAbortedParts', async t => {
   const f = await fixture(t); create(f); part(f); f.time(5); await f.audit.verify();

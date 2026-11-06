@@ -11,6 +11,52 @@ const sdk = require('@aws-sdk/client-s3');
 const key = 'PRIVATE_CANARY.ltx', path = '/synthetic/' + key;
 const put = (bytes = 4) => ({ method: 'PUT', path, headers: { 'content-length': String(bytes) } });
 const bad = /Invalid cloud cost storage lifetimes/;
+
+test('putOnlyLifetimeOverflowPreservesIndependentlyKnownBoundsAndLaterInventory', async t => {
+  const f = await fixture(t), audit = await open(f), bytes = Number.MAX_SAFE_INTEGER;
+  const finish = audit.begin(put(bytes)); f.time(1); finish({ statusCode: 200, bytesOut: bytes }); f.rows.set(key, bytes);
+  await audit.verify();
+  assert.deepEqual(audit.snapshot().byteSeconds, { low: 0, high: 9007199254740991 });
+  assert.equal(audit.snapshot().status, 'measured');
+  f.time(2);
+  const uncertain = audit.snapshot();
+  assert.equal(uncertain.status, 'unknown');
+  assert.deepEqual(uncertain.gaps, ['accounting:overflow']);
+  assert.deepEqual(uncertain.byteSeconds, { low: 9007199254740991, high: null });
+  assert.equal(uncertain.objects.bytes, 9007199254740991);
+  assert.equal(uncertain.objects.currentVersions, 1);
+  await audit.verify();
+  assert.deepEqual(audit.snapshot(), uncertain);
+  assert.equal(f.meter.snapshot().status, 'unknown');
+  assert.deepEqual(f.meter.snapshot().gaps, ['accounting:overflow', 'request-billing:unknown']);
+  f.time(3);
+  assert.deepEqual(audit.snapshot().byteSeconds, { low: null, high: null });
+  assert.equal(JSON.stringify(audit.snapshot()).includes(key), false);
+});
+
+test('putOnlyAggregateBytesOverflowKeepsSafeObjectCountsAndZeroDuration', async t => {
+  const f = await fixture(t), audit = await open(f);
+  for (const [Key, bytes] of [[key, Number.MAX_SAFE_INTEGER], ['SECOND_PRIVATE', 1]]) {
+    audit.begin({ method: 'PUT', path: '/synthetic/' + Key, headers: { 'content-length': String(bytes) } })({ statusCode: 200, bytesOut: bytes });
+    f.rows.set(Key, bytes);
+  }
+  await audit.verify();
+  assert.deepEqual(audit.snapshot(), { status: 'unknown', scope: 'unversioned-put-only', windowSeconds: 0,
+    objects: { class: 'stream', bytes: null, currentVersions: 2, noncurrentVersions: 0, deleteMarkers: 0, unfinishedMultipart: 0 },
+    byteSeconds: { low: 0, high: 0 }, gaps: ['accounting:overflow'] });
+  assert.equal(f.meter.snapshot().status, 'unknown');
+});
+
+test('putOnlyOverflowCannotHideAnInvalidClockOrForeignInventory', async t => {
+  for (const mode of ['clock', 'foreign']) {
+    const f = await fixture(t), audit = await open(f), bytes = Number.MAX_SAFE_INTEGER;
+    const finish = audit.begin(put(bytes)); f.time(1); finish({ statusCode: 200, bytesOut: bytes }); f.rows.set(key, bytes);
+    f.time(3); await audit.verify(); assert.equal(audit.snapshot().status, 'unknown');
+    if (mode === 'clock') { f.time(2); assert.throws(() => audit.snapshot(), bad); }
+    else { f.rows.set('FOREIGN_PRIVATE', 1); await assert.rejects(audit.verify(), bad); }
+    assert.throws(() => f.meter.snapshot(), /Invalid cloud cost meter/);
+  }
+});
 async function fixture(t, options = {}) {
   let time = 0;
   const rows = new Map(options.rows), state = { versioning: '', uploads: '', duplicate: false, truncated: false, paged: false, received: 0 };

@@ -1,5 +1,5 @@
 import { deletionXml, deletionFields } from './s3-deletion.mjs';
-import { nativeMultipartHistory } from './storage-lifetimes.mjs';
+import { nativeMultipartHistory, storageHistorySnapshot } from './storage-lifetimes.mjs';
 import { assertStorageClientBinding, classifyStorageOperation } from './meter.mjs';
 
 const fail = () => { throw Error('Invalid cloud cost storage lifetimes'); };
@@ -11,7 +11,7 @@ const identity = (key, version) => JSON.stringify([key, version]);
 // Versioning retains a failed write's possible extra version until an independent inventory resolves it.
 // Payloads and provider identities stay private; only counts and conservative storage bounds are returned.
 export async function openLitestreamVersionHistories({ client, sdk, meter, bucket, clock, afterStop, allowBulkDeletes = false, allowMultipart = false, resolveMultipartReplies = false }) {
-  const rows = new Map(), unresolved = [], pending = new Set(), activeKeys = new Set();
+  const rows = new Map(), unresolved = [], pending = new Set(), activeKeys = new Set(), gaps = new Set();
   let invalid = false, verifying = false, verified = false, last = -Infinity, sequence = 0, endpoint, start;
   let retiredLow = 0, retiredHigh = 0;
   const poison = () => { invalid = true; try { afterStop?.invalidate(); meter?.invalidate?.(); } finally { fail(); } };
@@ -245,8 +245,7 @@ export async function openLitestreamVersionHistories({ client, sdk, meter, bucke
       }
       const parts = multipart?.snapshot(time) ?? { bytes: 0, uploads: 0, low: 0, high: 0 };
       objects.bytes += parts.bytes; objects.unfinishedMultipart = parts.uploads; low += parts.low; high += parts.high;
-      need(count(objects.bytes) && Number.isFinite(low) && Number.isFinite(high) && low >= 0 && high >= low);
-      return { status: 'measured', scope: 'versioned-object-history', windowSeconds: time - start, objects, byteSeconds: { low, high } };
+      return storageHistorySnapshot({ scope: 'versioned-object-history', windowSeconds: time - start, objects, byteSeconds: { low, high } }, meter, gaps);
     })();
   };
   await verify(); return { begin, verify, snapshot, ...(afterStop ? { afterStop, strictReads } : {}) };

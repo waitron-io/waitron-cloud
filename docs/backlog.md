@@ -149,7 +149,18 @@ Missing source coverage, mismatched rows and unknown billing prevent measurement
 publication; malformed records, private fields and accessors still refuse.
 Run `node --test scripts/cloud-cost/accounting-policy.test.mjs` for the original
 record checks and real loopback traffic. Runtime callers do not yet use this
-assessment. The full nonblocking accounting path, publication refusal, lost-write
+assessment. Native put-only, unversioned, versioned and multipart storage histories
+also leave overflowing totals unknown while keeping supported object counts and
+storage-time bounds. The named overflow gap survives cleanup, so a later smaller
+total cannot erase missing accounting. Clock failures and foreign inventory still
+refuse. Run `node --test scripts/cloud-cost/storage-history-accounting.test.mjs
+scripts/cloud-cost/litestream-lifetimes.test.mjs
+scripts/cloud-cost/stream-histories.test.mjs
+scripts/cloud-cost/stream-versions.test.mjs
+scripts/cloud-cost/native-multipart.test.mjs` for the range and cleanup controls.
+These boundary tests use admitted sizes and independent loopback inventories;
+they do not upload giant objects or establish the lost-write restore proof.
+The full nonblocking accounting path, publication refusal, lost-write
 restore control and saved-failure replay remain open. These partial changes do
 not establish the historical cause or relax functional admission.
 

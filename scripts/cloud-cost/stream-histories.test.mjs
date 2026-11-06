@@ -58,6 +58,63 @@ function success(f, audit, input, start, end, bytes) {
   if (input.method === 'DELETE') f.rows.delete(key); else f.rows.set(key, bytes);
 }
 
+test('unversionedLifetimeOverflowRetainsSafeLowerBoundAcrossDeletion', async t => {
+  const f = await fixture(t), audit = await open(f);
+  success(f, audit, put(Number.MAX_SAFE_INTEGER), 0, 1, Number.MAX_SAFE_INTEGER);
+  f.time(1); await audit.verify();
+  assert.deepEqual(audit.snapshot().byteSeconds, { low: 0, high: 9007199254740991 });
+  assert.equal(audit.snapshot().status, 'measured');
+  f.time(2);
+  assert.deepEqual(audit.snapshot().byteSeconds, { low: 9007199254740991, high: null });
+  assert.deepEqual(audit.snapshot().gaps, ['accounting:overflow']);
+  success(f, audit, del(), 2, 2);
+  await audit.verify(); f.time(3);
+  const result = audit.snapshot();
+  assert.equal(result.status, 'unknown');
+  assert.deepEqual(result.byteSeconds, { low: 9007199254740991, high: null });
+  assert.equal(result.objects.bytes, 0);
+  assert.equal(result.objects.currentVersions, 0);
+  assert.equal(f.meter.snapshot().status, 'unknown');
+  assert.deepEqual(f.meter.snapshot().gaps, ['accounting:overflow', 'request-billing:unknown']);
+});
+
+test('unversionedAggregateBytesOverflowPreservesCountsAndSafeZeroBounds', async t => {
+  const f = await fixture(t), audit = await open(f);
+  for (const [Key, bytes] of [[key, Number.MAX_SAFE_INTEGER], ['SECOND_PRIVATE', 1]]) {
+    audit.begin({ method: 'PUT', path: '/synthetic/' + Key, headers: { 'content-length': String(bytes) } })({ statusCode: 200, bytesOut: bytes });
+    f.rows.set(Key, bytes);
+  }
+  await audit.verify();
+  assert.deepEqual(audit.snapshot(), { status: 'unknown', scope: 'unversioned-object-history', windowSeconds: 0,
+    objects: { class: 'stream', bytes: null, currentVersions: 2, noncurrentVersions: 0, deleteMarkers: 0, unfinishedMultipart: 0 },
+    byteSeconds: { low: 0, high: 0 }, gaps: ['accounting:overflow'] });
+  assert.equal(f.meter.snapshot().status, 'unknown');
+});
+
+test('unversionedOverflowCannotHideUnsafeClockOrStorageInventory', async t => {
+  for (const mode of ['clock', 'foreign']) {
+    const f = await fixture(t), audit = await open(f);
+    success(f, audit, put(Number.MAX_SAFE_INTEGER), 0, 1, Number.MAX_SAFE_INTEGER);
+    f.time(3); await audit.verify(); assert.equal(audit.snapshot().status, 'unknown');
+    if (mode === 'clock') { f.time(2); assert.throws(() => audit.snapshot(), bad); }
+    else { f.rows.set('FOREIGN_PRIVATE', 1); await assert.rejects(audit.verify(), bad); }
+    assert.throws(() => f.meter.snapshot(), /Invalid cloud cost meter/);
+  }
+});
+
+test('unversionedLifetimeGapSurvivesCleanupThatMakesTheCurrentTotalSafe', async t => {
+  const f = await fixture(t), audit = await open(f);
+  for (const [Key, bytes] of [[key, Number.MAX_SAFE_INTEGER], ['SECOND_PRIVATE', 1]]) {
+    audit.begin({ method: 'PUT', path: '/synthetic/' + Key, headers: { 'content-length': String(bytes) } })({ statusCode: 200, bytesOut: bytes });
+    f.rows.set(Key, bytes);
+  }
+  await audit.verify(); assert.equal(audit.snapshot().objects.bytes, null);
+  success(f, audit, del(), 0, 0); await audit.verify();
+  assert.deepEqual(audit.snapshot(), { status: 'unknown', scope: 'unversioned-object-history', windowSeconds: 0,
+    objects: { class: 'stream', bytes: 1, currentVersions: 1, noncurrentVersions: 0, deleteMarkers: 0, unfinishedMultipart: 0 },
+    byteSeconds: { low: 0, high: 0 }, gaps: ['accounting:overflow'] });
+});
+
 // Dropping retired intervals or resetting an unchanged upload's start undercounts these literal totals.
 test('streamHistoryRetainsStorageAcrossReplacementDeletionAndRecreation', async t => {
   const f = await fixture(t), audit = await open(f);

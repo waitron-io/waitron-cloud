@@ -10,6 +10,22 @@ const identity = (key, version) => JSON.stringify([key, version]);
 const safeKey = key => text(key) && Buffer.byteLength(key) <= 1024 && !key.startsWith('/')
   && !/[\\\0]/.test(key) && !key.split('/').some(part => part === '.' || part === '..');
 
+// Aggregates can exceed the numeric range after valid events. Keep supported quantities
+// and retain the gap even when cleanup makes the live byte count representable again.
+export function storageHistorySnapshot(record, meter, gaps) {
+  const bounded = value => {
+    requireThat(typeof value === 'number' && value >= 0);
+    if (value <= Number.MAX_SAFE_INTEGER) return value;
+    gaps.add('accounting:overflow'); meter.markGap('accounting:overflow'); return null;
+  };
+  requireThat(Number.isInteger(record.objects.bytes));
+  requireThat(record.byteSeconds.high >= record.byteSeconds.low);
+  const objects = { ...record.objects, bytes: bounded(record.objects.bytes) };
+  const byteSeconds = { low: bounded(record.byteSeconds.low), high: bounded(record.byteSeconds.high) };
+  return { status: gaps.size ? 'unknown' : 'measured', ...record, objects, byteSeconds,
+    ...(gaps.size ? { gaps: [...gaps] } : {}) };
+}
+
 // Use exclusively owned, initially empty buckets. Provider IDs and keys stay in these private maps.
 export async function openStorageLifetimes({ clients, sdk, meter, bucket, versioned, objectClass, allowBulkDeletes = false }) {
   const versions = new Map(), uploads = new Map();
@@ -240,7 +256,7 @@ export async function openStorageLifetimes({ clients, sdk, meter, bucket, versio
 // Owned, initially empty unversioned buckets only. No deletion or size-changing replacement is admitted.
 // A failed reply can follow a commit; bound its first possible write until an independent inventory.
 export async function openLitestreamLifetimes({ client, sdk, meter, bucket, clock, afterStop }) {
-  const rows = new Map(), pending = new Set();
+  const rows = new Map(), pending = new Set(), gaps = new Set();
   let invalid = false, verifying = false, verified = false, last = -Infinity, endpoint;
   const poison = () => { invalid = true; afterStop?.invalidate(); meter?.invalidate(); fail(); };
   const guarded = fn => (...args) => {
@@ -343,10 +359,9 @@ export async function openLitestreamLifetimes({ client, sdk, meter, bucket, cloc
         requireThat(row.by !== null); bytes += row.bytes;
         low += row.bytes * (time - row.by); high += row.bytes * (time - row.from);
       }
-      requireThat(count(bytes) && Number.isFinite(low) && Number.isFinite(high) && low >= 0 && high >= low);
-      return { status: 'measured', scope: 'unversioned-put-only', windowSeconds: time - start,
+      return storageHistorySnapshot({ scope: 'unversioned-put-only', windowSeconds: time - start,
         objects: { class: 'stream', bytes, currentVersions: rows.size, noncurrentVersions: 0, deleteMarkers: 0, unfinishedMultipart: 0 },
-        byteSeconds: { low, high } };
+        byteSeconds: { low, high } }, meter, gaps);
     })();
   };
   await verify();
@@ -356,7 +371,7 @@ export async function openLitestreamLifetimes({ client, sdk, meter, bucket, cloc
 // Owned, initially empty unversioned buckets only. Commit times are bounded by request and reply;
 // an ambiguous reply stays unresolved until inventory or an identical successful retry bounds it.
 export async function openLitestreamHistories({ client, sdk, meter, bucket, clock, afterStop, allowBulkDeletes = false, allowMultipart = false, resolveMultipartReplies = false }) {
-  const rows = new Map(), pending = new Set();
+  const rows = new Map(), pending = new Set(), gaps = new Set();
   let invalid = false, verifying = false, verified = false, last = -Infinity, endpoint, start;
   let retiredLow = 0, retiredHigh = 0;
   const poison = () => { invalid = true; afterStop?.invalidate(); meter?.invalidate(); fail(); };
@@ -548,10 +563,9 @@ export async function openLitestreamHistories({ client, sdk, meter, bucket, cloc
       }
       const parts = multipart?.snapshot(time) ?? { bytes: 0, uploads: 0, low: 0, high: 0 };
       bytes += parts.bytes; low += parts.low; high += parts.high;
-      requireThat(count(bytes) && Number.isFinite(low) && Number.isFinite(high) && low >= 0 && high >= low);
-      return { status: 'measured', scope: 'unversioned-object-history', windowSeconds: time - start,
+      return storageHistorySnapshot({ scope: 'unversioned-object-history', windowSeconds: time - start,
         objects: { class: 'stream', bytes, currentVersions: objects, noncurrentVersions: 0, deleteMarkers: 0, unfinishedMultipart: parts.uploads },
-        byteSeconds: { low, high } };
+        byteSeconds: { low, high } }, meter, gaps);
     })();
   };
   await verify();
