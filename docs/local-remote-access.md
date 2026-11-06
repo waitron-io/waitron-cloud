@@ -83,7 +83,7 @@ Waitron fixtures bind their temporary demo servers to all host interfaces so Doc
 can reach them; gateway ports bind to loopback. Run this on a development machine.
 The fixture has no fiscal/payment provider and creates no invoices.
 Each venue's backup worker uses its own temporary parent for state and database
-copies. Its filesystem write permission covers only that parent, so capture does
+copies. Node's write permission flag covers only that parent, so capture does
 not need write access to your system temporary directory.
 
 Run the smaller DNS validation proof independently:

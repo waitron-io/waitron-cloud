@@ -453,8 +453,8 @@ consumers remain NONE. The owner parked the earlier D582 protocol work on
 6 November. D582-S first runs the existing two-venue remote proof, then connects
 a real browser to a box through the existing gateway, with manual setup allowed.
 The proof's backup worker now keeps database copies inside its own writable
-temporary parent. A lasting gateway host and the real external browser path
-remain open. The parked [D582 Cloud build plan](superpowers/plans/2026-11-05-a951-cloud-tunnel.md)
+temporary parent. Deployment of the lasting gateway and the real external
+browser path remain open. The parked [D582 Cloud build plan](superpowers/plans/2026-11-05-a951-cloud-tunnel.md)
 assigns the approval receiver and one-use Permit ledger, registration/node
 mapping, public root/origin/peer policy and separate issuer custody to Cloud.
 E owns local permission decisions, provisioning, private keys, client and native
