@@ -173,7 +173,7 @@ export function prepareLitestreamWriteLoss(source, { loseStoredWrites }) {
 }
 
 // Validate original meter records before allowing accounting uncertainty in a native journey.
-function assertSmokeMeter(proof) {
+export function assertMeterAccounting(proof) {
   assessAccounting({ producer: 'local-stream', sources: [{ scope: 'requests', record: proof }] });
   const identity = row => [row.phase, row.operation, row.retryOrdinal, row.outcome].join(':');
   const sorted = rows => [...rows].sort((a, b) => identity(a).localeCompare(identity(b)));
@@ -204,18 +204,27 @@ function assertSmokeMeter(proof) {
   return proof;
 }
 
+// Retained inventory stays checked even when a byte count or time bound is unknown.
+export function assertStorageAccounting(proof, expected = {}) {
+  assessAccounting({ producer: 'local-stream', sources: [{ scope: 'storage', record: proof }] });
+  const incomplete = proof.objects.bytes === null || Object.values(proof.byteSeconds).includes(null);
+  if (incomplete || proof.gaps?.length) {
+    assert.equal(proof.status, 'unknown');
+    assert.ok(proof.gaps?.length > 0, 'unknown storage must retain its original accounting gaps');
+  }
+  for (const group of ['objects', 'byteSeconds']) if (expected[group]) {
+    for (const [key, value] of Object.entries(expected[group])) {
+      if (proof[group][key] === null && (group === 'byteSeconds' || key === 'bytes')) continue;
+      assert.deepEqual(proof[group][key], value, `known storage ${group}.${key}`);
+    }
+  }
+  return proof;
+}
+
 export function assertSmokeAccounting(result) {
   assert.ok(result.observed, 'the native smoke retains its original meter');
   assert.ok(result.replication, 'the native smoke retains its original request audit');
-  if (result.lifetimes) {
-    const proof = result.lifetimes;
-    assessAccounting({ producer: 'local-stream', sources: [{ scope: 'storage', record: proof }] });
-    const incomplete = proof.objects.bytes === null || Object.values(proof.byteSeconds).includes(null);
-    if (incomplete || proof.gaps?.length) {
-      assert.equal(proof.status, 'unknown');
-      assert.ok(proof.gaps?.length > 0, 'unknown storage must retain its original accounting gaps');
-    }
-  }
+  if (result.lifetimes) assertStorageAccounting(result.lifetimes);
   const subset = result.afterStop;
   const output = litestreamAfterStopOutput(subset);
   assert.deepEqual(result.costAccuracy, output.costAccuracy);
@@ -234,7 +243,7 @@ export function assertSmokeAccounting(result) {
   for (const [name, proof] of [['replication', result.observed], ['replication', result.transport?.replication],
     ['restore', result.transport?.restore], ['administration', result.administration]]) {
     if (!proof) continue;
-    assertSmokeMeter(proof);
+    assertMeterAccounting(proof);
     const audit = result[name];
     if (name !== 'administration' && audit) {
       if (audit.requestsReconciled) {

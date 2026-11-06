@@ -7,9 +7,32 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { execFileSync, spawnSync } from 'node:child_process';
 import * as local from '../local.mjs';
-import { assertSmokeAccounting, prepareDelayedLitestreamStop, prepareDelayedLitestreamDiagnostics } from '../litestream-smoke-test-utils.mjs';
+import { assertMeterAccounting, assertStorageAccounting, assertSmokeAccounting, prepareDelayedLitestreamStop, prepareDelayedLitestreamDiagnostics } from '../litestream-smoke-test-utils.mjs';
 import * as smokeControls from '../litestream-smoke-test-utils.mjs';
 import { cleanupRecordedStack } from './stack-parent-cleanup.mjs';
+// This changes an observer record, never the storage request or its actual outcome.
+function copyStorageSmoke(f, name, counterGap) {
+  let source = readFileSync(new URL('./' + name, import.meta.url), 'utf8');
+  if (counterGap) {
+    assert.equal(source.split('createMeter,').length, 2);
+    source = source.replace('createMeter,', 'createMeter as originalCreateMeter,');
+    source += `
+function createMeter(options) {
+  const meter = originalCreateMeter(options), observe = meter.observeAttempt;
+  let perturbed = false;
+  meter.observeAttempt = (event, interruption) => {
+    if (!perturbed && event.channel === 'observer' && event.bytesOut > 0) {
+      perturbed = true; event = { ...event, bytesOut: event.bytesOut - 1 };
+    }
+    return observe(event, interruption);
+  };
+  return meter;
+}
+`;
+  }
+  writeFileSync(join(f.codeRoot, 'cost-' + name), source);
+}
+
 const prepared = JSON.parse(readFileSync(process.env.COST_STACK_FIXTURE, 'utf8'));
 const docker = (...args) => execFileSync('docker', args, { encoding: 'utf8', env: { PATH: process.env.PATH }, stdio: ['ignore', 'pipe', 'pipe'] }).trim();
 function fixture(t) {
@@ -175,19 +198,20 @@ test('genuineStorageTrafficIsPassivelyCountedWithoutInventingReconciliation', as
   assert.equal(docker('network', 'ls', '-q', '--filter', `label=io.waitron.cloud-cost.owner=${f.journal.token}`), '');
 });
 
-// A real signed archive/read/restore and abandoned multipart must agree across two independent meters.
-test('genuineArchiveAndSignedSdkTrafficReconcileThroughRealStorage', async t => {
+// Actual archive restore and retained parts are checked independently of accounting coverage.
+for (const counterGap of [false, true]) test('genuineArchiveAndSignedSdkTrafficReconcileThroughRealStorage' + (counterGap ? '_counterGap' : ''), async t => {
   const f = fixture(t), plan = local.prepareIsolatedStack(f);
-  cpSync(new URL('./archive-storage-smoke.mjs', import.meta.url), join(f.codeRoot, 'cost-archive-storage-smoke.mjs'));
+  copyStorageSmoke(f, 'archive-storage-smoke.mjs', counterGap);
   let stack;
   f.onCleanup(async () => { await stack?.close(); });
   stack = await local.startIsolatedStack({ ...f, prepared: plan });
   const s3 = stack.containerIds.find(id => docker('inspect', '--format', '{{index .Config.Labels "io.waitron.cloud-cost.role"}}', id) === 's3');
   const result = JSON.parse(docker('exec', s3, 'node', '/code/cost-archive-storage-smoke.mjs'));
-  assert.equal(result.accounting.reconciled, true);
-  assert.equal(result.accounting.status, 'measured');
+  assertMeterAccounting(result.accounting);
+  if (counterGap) { assert.equal(result.accounting.reconciled, false); assert.equal(result.accounting.status, 'unknown'); assert.ok(result.accounting.gaps.includes('accounting:unreconciled')); }
+
   assert.equal(result.accounting.accounting.producer.attempts, 11);
-  assert.deepEqual(result.accounting.accounting.producer, result.accounting.accounting.observer);
+  if (result.accounting.reconciled) assert.deepEqual(result.accounting.accounting.producer, result.accounting.accounting.observer);
   const phaseBytes = Object.fromEntries(['setup', 'workload', 'cleanup'].map(phase => [phase,
     result.accounting.accounting.requests.filter(r => r.phase === phase).reduce((sum, r) => sum + r.bytesOut, 0)]));
   t.diagnostic(JSON.stringify({ attempts: result.accounting.accounting.producer.attempts, capturedBytes: result.capturedBytes, phaseBytes }));
@@ -230,9 +254,9 @@ test('genuineVersionAndMultipartLifetimesMatchMeteredStorageInventories', async 
     currentVersions: 1, noncurrentVersions: 0, deleteMarkers: 0, unfinishedMultipart: 0 });
   assert.deepEqual(result.plainResult.accounting.objects.find(row => row.class === 'scratch'), { class: 'scratch', bytes: 0, byteSeconds: 19,
     currentVersions: 0, noncurrentVersions: 0, deleteMarkers: 0, unfinishedMultipart: 0 });
-  assert.equal(result.plainResult.reconciled, true);
-  assert.equal(result.result.reconciled, true); assert.equal(result.result.status, 'measured');
-  assert.deepEqual(result.result.accounting.producer, result.result.accounting.observer);
+  assertMeterAccounting(result.plainResult);
+  assertMeterAccounting(result.result);
+  if (result.result.reconciled) assert.deepEqual(result.result.accounting.producer, result.result.accounting.observer);
   assert.ok(result.result.accounting.requests.some(r => r.phase === 'observer' && r.operation === 'list'));
   assert.equal(result.leaked, false);
   const replacement = JSON.parse(docker('exec', s3, 'node', '/code/cost-lifetime-replacement-smoke.mjs'));
@@ -422,14 +446,14 @@ test('genuineStorageReplacementAndDeletionKeepRetiredStreamHistoryAndPairedTraff
   const result = JSON.parse(docker('exec', s3, 'node', '/code/cost-stream-history-smoke.mjs'));
   assert.equal(result.retained.scope, 'unversioned-object-history');
   assert.equal(result.retained.objects.bytes, 6); assert.equal(result.retained.objects.currentVersions, 1);
-  assert.deepEqual(result.retained.byteSeconds, { low: 30, high: 30 });
+  assertStorageAccounting(result.retained, { byteSeconds: { low: 30, high: 30 } });
   assert.equal(result.final.objects.bytes, 0); assert.equal(result.final.objects.currentVersions, 0);
-  assert.deepEqual(result.final.byteSeconds, { low: 50, high: 50 });
-  assert.equal(result.workload.reconciled, true);
-  assert.deepEqual(result.workload.accounting.producer, result.workload.accounting.observer);
+  assertStorageAccounting(result.final, { byteSeconds: { low: 50, high: 50 } });
+  assertMeterAccounting(result.workload);
+  if (result.workload.reconciled) assert.deepEqual(result.workload.accounting.producer, result.workload.accounting.observer);
   assert.equal(result.workload.accounting.producer.attempts, 5); assert.equal(result.workload.accounting.producer.bytesOut, 12);
   assert.equal(result.workload.accounting.requests.find(r => r.operation === 'delete').attempts, 2);
-  assert.equal(result.administration.reconciled, true); assert.equal(result.leaked, false);
+  assertMeterAccounting(result.administration); assert.equal(result.leaked, false);
   await stack.close();
   assert.equal(docker('ps', '-aq', '--filter', `label=io.waitron.cloud-cost.owner=${f.journal.token}`), '');
   assert.equal(docker('network', 'ls', '-q', '--filter', `label=io.waitron.cloud-cost.owner=${f.journal.token}`), '');
@@ -481,8 +505,8 @@ test('genuineSdkBulkDeletionRetainsVersionsMarkersAndHistoricalStorage', async t
     const proof = result[name];
     assert.deepEqual(proof.final.accounting.objects, [{ class: 'stream', bytes: 0, byteSeconds: seconds,
       currentVersions: 0, noncurrentVersions: 0, deleteMarkers: 0, unfinishedMultipart: 0 }]);
-    assert.equal(proof.final.reconciled, true); assert.equal(proof.complete.reconciled, true);
-    assert.deepEqual(proof.complete.accounting.producer, proof.complete.accounting.observer);
+    assertMeterAccounting(proof.final); assertMeterAccounting(proof.complete);
+    if (proof.complete.reconciled) assert.deepEqual(proof.complete.accounting.producer, proof.complete.accounting.observer);
     const requests = proof.complete.accounting.requests.filter(r => r.operation === 'delete-many');
     assert.equal(requests.reduce((n, r) => n + r.attempts, 0), batches);
     assert.ok(requests.every(r => r.bytesIn > 0 && r.bytesOut > 0));
@@ -505,14 +529,14 @@ test('genuineNativeVersionHistoriesRetainLostWritesMarkersAndPromotedVersions', 
   const s3 = stack.containerIds.find(id => docker('inspect', '--format', '{{index .Config.Labels "io.waitron.cloud-cost.role"}}', id) === 's3');
   const result = JSON.parse(execFileSync('docker', ['exec', s3, 'node', '/code/cost-stream-versions-smoke.mjs'],
     { encoding: 'utf8', env: { PATH: process.env.PATH }, timeout: 30000, stdio: ['ignore', 'pipe', 'pipe'] }));
-  assert.deepEqual(result.retained.objects, { class: 'stream', bytes: 12, currentVersions: 0, noncurrentVersions: 2, deleteMarkers: 1, unfinishedMultipart: 0 });
-  assert.deepEqual(result.promoted.objects, { class: 'stream', bytes: 10, currentVersions: 1, noncurrentVersions: 1, deleteMarkers: 0, unfinishedMultipart: 0 });
-  assert.deepEqual(result.promoted.byteSeconds, { low: 60, high: 84 });
-  assert.deepEqual(result.final.objects, { class: 'stream', bytes: 0, currentVersions: 0, noncurrentVersions: 0, deleteMarkers: 0, unfinishedMultipart: 0 });
-  assert.deepEqual(result.final.byteSeconds, { low: 82, high: 106 });
+  assertStorageAccounting(result.retained, { objects: { class: 'stream', bytes: 12, currentVersions: 0, noncurrentVersions: 2, deleteMarkers: 1, unfinishedMultipart: 0 } });
+  assertStorageAccounting(result.promoted, { objects: { class: 'stream', bytes: 10, currentVersions: 1, noncurrentVersions: 1, deleteMarkers: 0, unfinishedMultipart: 0 } });
+  assertStorageAccounting(result.promoted, { byteSeconds: { low: 60, high: 84 } });
+  assertStorageAccounting(result.final, { objects: { class: 'stream', bytes: 0, currentVersions: 0, noncurrentVersions: 0, deleteMarkers: 0, unfinishedMultipart: 0 } });
+  assertStorageAccounting(result.final, { byteSeconds: { low: 82, high: 106 } });
   assert.equal(result.lostReplies, 1); assert.equal(result.leaked, false);
   for (const evidence of [result.workload, result.administration]) {
-    assert.equal(evidence.reconciled, true); assert.deepEqual(evidence.accounting.producer, evidence.accounting.observer);
+    assertMeterAccounting(evidence); if (evidence.reconciled) assert.deepEqual(evidence.accounting.producer, evidence.accounting.observer);
   }
   assert.equal(result.workload.accounting.producer.attempts, 6); assert.equal(result.workload.accounting.producer.bytesOut, 10);
   await stack.close();
@@ -662,12 +686,12 @@ test('genuineNativeBatchListenerRetainsCommittedLostRepliesAndEveryVersionLifeti
   const result = JSON.parse(execFileSync('docker', ['exec', '-e', 'COST_NATIVE_BATCH_DIAGNOSTIC=1', s3, 'node', '/code/cost-native-batch-smoke.mjs'],
     { encoding: 'utf8', env: { PATH: process.env.PATH }, timeout: 90000, stdio: ['ignore', 'pipe', 'pipe'] }));
   assert.equal(result.lostReplies, 1); assert.equal(result.leaked, false);
-  assert.deepEqual(result.retained.objects, { class: 'stream', bytes: 14, currentVersions: 0, noncurrentVersions: 2, deleteMarkers: 2, unfinishedMultipart: 0 });
-  assert.deepEqual(result.promoted.objects, { class: 'stream', bytes: 10, currentVersions: 1, noncurrentVersions: 1, deleteMarkers: 0, unfinishedMultipart: 0 });
-  assert.deepEqual(result.final.objects, { class: 'stream', bytes: 0, currentVersions: 0, noncurrentVersions: 0, deleteMarkers: 0, unfinishedMultipart: 0 });
-  assert.deepEqual(result.final.byteSeconds, { low: 150, high: 160 });
-  assert.equal(result.workload.reconciled, true); assert.equal(result.administration.reconciled, true);
-  assert.deepEqual(result.workload.accounting.producer, result.workload.accounting.observer);
+  assertStorageAccounting(result.retained, { objects: { class: 'stream', bytes: 14, currentVersions: 0, noncurrentVersions: 2, deleteMarkers: 2, unfinishedMultipart: 0 } });
+  assertStorageAccounting(result.promoted, { objects: { class: 'stream', bytes: 10, currentVersions: 1, noncurrentVersions: 1, deleteMarkers: 0, unfinishedMultipart: 0 } });
+  assertStorageAccounting(result.final, { objects: { class: 'stream', bytes: 0, currentVersions: 0, noncurrentVersions: 0, deleteMarkers: 0, unfinishedMultipart: 0 } });
+  assertStorageAccounting(result.final, { byteSeconds: { low: 150, high: 160 } });
+  assertMeterAccounting(result.workload); assertMeterAccounting(result.administration);
+  if (result.workload.reconciled) assert.deepEqual(result.workload.accounting.producer, result.workload.accounting.observer);
   assert.equal(result.workload.accounting.producer.attempts, 8); assert.ok(result.workload.accounting.producer.bytesOut > 10);
   assert.equal(result.workload.accounting.requests.filter(r => r.operation === 'delete-many').reduce((n, r) => n + r.attempts, 0), 6);
   await stack.close();
@@ -686,12 +710,12 @@ test('genuineUnversionedNativeBatchesRetainLostDeletesRetriesAndRecreation', asy
   const result = JSON.parse(execFileSync('docker', ['exec', s3, 'node', '/code/cost-native-unversioned-batch-smoke.mjs'],
     { encoding: 'utf8', env: { PATH: process.env.PATH }, timeout: 90000, stdio: ['ignore', 'pipe', 'pipe'] }));
   assert.equal(result.lostReplies, 1); assert.equal(result.leaked, false);
-  assert.deepEqual(result.retained.objects, { class: 'stream', bytes: 6, currentVersions: 1, noncurrentVersions: 0, deleteMarkers: 0, unfinishedMultipart: 0 });
-  assert.deepEqual(result.retained.byteSeconds, { low: 46, high: 58 });
-  assert.deepEqual(result.final.objects, { class: 'stream', bytes: 0, currentVersions: 0, noncurrentVersions: 0, deleteMarkers: 0, unfinishedMultipart: 0 });
-  assert.deepEqual(result.final.byteSeconds, { low: 68, high: 80 });
-  assert.equal(result.workload.reconciled, true); assert.equal(result.administration.reconciled, true);
-  assert.deepEqual(result.workload.accounting.producer, result.workload.accounting.observer);
+  assertStorageAccounting(result.retained, { objects: { class: 'stream', bytes: 6, currentVersions: 1, noncurrentVersions: 0, deleteMarkers: 0, unfinishedMultipart: 0 } });
+  assertStorageAccounting(result.retained, { byteSeconds: { low: 46, high: 58 } });
+  assertStorageAccounting(result.final, { objects: { class: 'stream', bytes: 0, currentVersions: 0, noncurrentVersions: 0, deleteMarkers: 0, unfinishedMultipart: 0 } });
+  assertStorageAccounting(result.final, { byteSeconds: { low: 68, high: 80 } });
+  assertMeterAccounting(result.workload); assertMeterAccounting(result.administration);
+  if (result.workload.reconciled) assert.deepEqual(result.workload.accounting.producer, result.workload.accounting.observer);
   assert.equal(result.workload.accounting.producer.attempts, 7);
   assert.ok(result.workload.accounting.producer.bytesOut > 12);
   assert.equal(result.workload.accounting.requests.filter(r => r.operation === 'delete-many').reduce((n, r) => n + r.attempts, 0), 4);
@@ -701,26 +725,28 @@ test('genuineUnversionedNativeBatchesRetainLostDeletesRetriesAndRecreation', asy
 });
 
 // Dropping incomplete/unused parts or double-counting completion breaks this literal integral.
-test('genuineNativeMultipartHistoriesKeepUnfinishedCompletedAndAbortedStorage', async t => {
+for (const counterGap of [false, true]) test('genuineNativeMultipartHistoriesKeepUnfinishedCompletedAndAbortedStorage' + (counterGap ? '_counterGap' : ''), async t => {
   const f = fixture(t), plan = local.prepareIsolatedStack(f);
   for (const name of ['litestream.mjs', 'storage-lifetimes.mjs']) cpSync(new URL('../' + name, import.meta.url), join(f.codeRoot, name));
-  cpSync(new URL('./native-multipart-smoke.mjs', import.meta.url), join(f.codeRoot, 'cost-native-multipart-smoke.mjs'));
+  copyStorageSmoke(f, 'native-multipart-smoke.mjs', counterGap);
   let stack; f.onCleanup(async () => { await stack?.close(); });
   stack = await local.startIsolatedStack({ ...f, prepared: plan });
   const s3 = stack.containerIds.find(id => docker('inspect', '--format', '{{index .Config.Labels "io.waitron.cloud-cost.role"}}', id) === 's3');
   const result = JSON.parse(execFileSync('docker', ['exec', s3, 'node', '/code/cost-native-multipart-smoke.mjs'],
     { encoding: 'utf8', env: { PATH: process.env.PATH }, timeout: 90000, stdio: ['ignore', 'pipe', 'pipe'] }));
   assert.equal(result.leaked, false);
-  assert.deepEqual(result.retained.objects, { class: 'stream', bytes: 4, currentVersions: 0, noncurrentVersions: 0, deleteMarkers: 0, unfinishedMultipart: 1 });
-  assert.deepEqual(result.retained.byteSeconds, { low: 8, high: 8 });
-  assert.deepEqual(result.completed.objects, { class: 'stream', bytes: 4, currentVersions: 1, noncurrentVersions: 0, deleteMarkers: 0, unfinishedMultipart: 0 });
-  assert.deepEqual(result.completed.byteSeconds, { low: 40, high: 40 });
-  assert.deepEqual(result.unfinished.objects, { class: 'stream', bytes: 7, currentVersions: 1, noncurrentVersions: 0, deleteMarkers: 0, unfinishedMultipart: 1 });
-  assert.deepEqual(result.unfinished.byteSeconds, { low: 62, high: 62 });
-  assert.deepEqual(result.final.objects, { class: 'stream', bytes: 0, currentVersions: 0, noncurrentVersions: 0, deleteMarkers: 0, unfinishedMultipart: 0 });
-  assert.deepEqual(result.final.byteSeconds, { low: 84, high: 84 });
-  assert.equal(result.workload.reconciled, true); assert.equal(result.administration.reconciled, true);
-  assert.deepEqual(result.workload.accounting.producer, result.workload.accounting.observer);
+  assertStorageAccounting(result.retained, { objects: { class: 'stream', bytes: 4, currentVersions: 0, noncurrentVersions: 0, deleteMarkers: 0, unfinishedMultipart: 1 } });
+  assertStorageAccounting(result.retained, { byteSeconds: { low: 8, high: 8 } });
+  assertStorageAccounting(result.completed, { objects: { class: 'stream', bytes: 4, currentVersions: 1, noncurrentVersions: 0, deleteMarkers: 0, unfinishedMultipart: 0 } });
+  assertStorageAccounting(result.completed, { byteSeconds: { low: 40, high: 40 } });
+  assertStorageAccounting(result.unfinished, { objects: { class: 'stream', bytes: 7, currentVersions: 1, noncurrentVersions: 0, deleteMarkers: 0, unfinishedMultipart: 1 } });
+  assertStorageAccounting(result.unfinished, { byteSeconds: { low: 62, high: 62 } });
+  assertStorageAccounting(result.final, { objects: { class: 'stream', bytes: 0, currentVersions: 0, noncurrentVersions: 0, deleteMarkers: 0, unfinishedMultipart: 0 } });
+  assertStorageAccounting(result.final, { byteSeconds: { low: 84, high: 84 } });
+  assertMeterAccounting(result.workload);
+  if (counterGap) { assert.equal(result.workload.reconciled, false); assert.equal(result.workload.status, 'unknown'); assert.ok(result.workload.gaps.includes('accounting:unreconciled')); }
+  assertMeterAccounting(result.administration);
+  if (result.workload.reconciled) assert.deepEqual(result.workload.accounting.producer, result.workload.accounting.observer);
   assert.equal(result.workload.accounting.producer.attempts, 8); assert.ok(result.workload.accounting.producer.bytesOut > 13);
   await stack.close();
   assert.equal(docker('ps', '-aq', '--filter', `label=io.waitron.cloud-cost.owner=${f.journal.token}`), '');
@@ -728,35 +754,37 @@ test('genuineNativeMultipartHistoriesKeepUnfinishedCompletedAndAbortedStorage', 
 });
 
 // Earlier versions and replaced/discarded parts remain in the integral after the bucket is empty.
-test('genuineVersionedNativeMultipartRetainsVersionsPartsAndPromotion', async t => {
+for (const counterGap of [false, true]) test('genuineVersionedNativeMultipartRetainsVersionsPartsAndPromotion' + (counterGap ? '_counterGap' : ''), async t => {
   const f = fixture(t), plan = local.prepareIsolatedStack(f);
   for (const name of ['litestream.mjs', 'stream-versions.mjs']) cpSync(new URL('../' + name, import.meta.url), join(f.codeRoot, name));
-  cpSync(new URL('./native-versioned-multipart-smoke.mjs', import.meta.url), join(f.codeRoot, 'cost-native-versioned-multipart-smoke.mjs'));
+  copyStorageSmoke(f, 'native-versioned-multipart-smoke.mjs', counterGap);
   let stack; f.onCleanup(async () => { await stack?.close(); });
   stack = await local.startIsolatedStack({ ...f, prepared: plan });
   const s3 = stack.containerIds.find(id => docker('inspect', '--format', '{{index .Config.Labels "io.waitron.cloud-cost.role"}}', id) === 's3');
   const result = JSON.parse(execFileSync('docker', ['exec', s3, 'node', '/code/cost-native-versioned-multipart-smoke.mjs'],
     { encoding: 'utf8', env: { PATH: process.env.PATH }, timeout: 90000, stdio: ['ignore', 'pipe', 'pipe'] }));
   assert.equal(result.leaked, false);
-  assert.deepEqual(result.retained.objects, { class: 'stream', bytes: 6, currentVersions: 1, noncurrentVersions: 0, deleteMarkers: 0, unfinishedMultipart: 1 });
-  assert.deepEqual(result.retained.byteSeconds, { low: 16, high: 16 });
-  assert.deepEqual(result.completed.objects, { class: 'stream', bytes: 10, currentVersions: 1, noncurrentVersions: 1, deleteMarkers: 0, unfinishedMultipart: 0 });
-  assert.deepEqual(result.completed.byteSeconds, { low: 70, high: 70 });
-  assert.deepEqual(result.unfinished.objects, { class: 'stream', bytes: 13, currentVersions: 1, noncurrentVersions: 1, deleteMarkers: 0, unfinishedMultipart: 1 });
-  assert.deepEqual(result.unfinished.byteSeconds, { low: 116, high: 116 });
-  assert.deepEqual(result.promoted.objects, { class: 'stream', bytes: 2, currentVersions: 1, noncurrentVersions: 0, deleteMarkers: 0, unfinishedMultipart: 0 });
-  assert.deepEqual(result.promoted.byteSeconds, { low: 166, high: 166 });
-  assert.deepEqual(result.final.objects, { class: 'stream', bytes: 0, currentVersions: 0, noncurrentVersions: 0, deleteMarkers: 0, unfinishedMultipart: 0 });
-  assert.deepEqual(result.final.byteSeconds, { low: 168, high: 168 });
-  assert.equal(result.workload.reconciled, true); assert.equal(result.administration.reconciled, true);
-  assert.deepEqual(result.workload.accounting.producer, result.workload.accounting.observer);
+  assertStorageAccounting(result.retained, { objects: { class: 'stream', bytes: 6, currentVersions: 1, noncurrentVersions: 0, deleteMarkers: 0, unfinishedMultipart: 1 } });
+  assertStorageAccounting(result.retained, { byteSeconds: { low: 16, high: 16 } });
+  assertStorageAccounting(result.completed, { objects: { class: 'stream', bytes: 10, currentVersions: 1, noncurrentVersions: 1, deleteMarkers: 0, unfinishedMultipart: 0 } });
+  assertStorageAccounting(result.completed, { byteSeconds: { low: 70, high: 70 } });
+  assertStorageAccounting(result.unfinished, { objects: { class: 'stream', bytes: 13, currentVersions: 1, noncurrentVersions: 1, deleteMarkers: 0, unfinishedMultipart: 1 } });
+  assertStorageAccounting(result.unfinished, { byteSeconds: { low: 116, high: 116 } });
+  assertStorageAccounting(result.promoted, { objects: { class: 'stream', bytes: 2, currentVersions: 1, noncurrentVersions: 0, deleteMarkers: 0, unfinishedMultipart: 0 } });
+  assertStorageAccounting(result.promoted, { byteSeconds: { low: 166, high: 166 } });
+  assertStorageAccounting(result.final, { objects: { class: 'stream', bytes: 0, currentVersions: 0, noncurrentVersions: 0, deleteMarkers: 0, unfinishedMultipart: 0 } });
+  assertStorageAccounting(result.final, { byteSeconds: { low: 168, high: 168 } });
+  assertMeterAccounting(result.workload);
+  if (counterGap) { assert.equal(result.workload.reconciled, false); assert.equal(result.workload.status, 'unknown'); assert.ok(result.workload.gaps.includes('accounting:unreconciled')); }
+  assertMeterAccounting(result.administration);
+  if (result.workload.reconciled) assert.deepEqual(result.workload.accounting.producer, result.workload.accounting.observer);
   assert.equal(result.workload.accounting.producer.attempts, 11); assert.ok(result.workload.accounting.producer.bytesOut > 23);
   await stack.close();
   assert.equal(docker('ps', '-aq', '--filter', `label=io.waitron.cloud-cost.owner=${f.journal.token}`), '');
   assert.equal(docker('network', 'ls', '-q', '--filter', `label=io.waitron.cloud-cost.owner=${f.journal.token}`), '');
 });
 
-// Backend commits whose success replies become HTTP 503 must remain in both independent counters.
+// Actual commits and lost replies retain their inventory and both independent observations.
 for (const versioned of [false, true]) test(`genuineAmbiguousMultipartRepliesReconcileEveryCommittedStage_${versioned}`, async t => {
   const f = fixture(t), plan = local.prepareIsolatedStack(f);
   for (const name of ['litestream.mjs', 'stream-versions.mjs']) cpSync(new URL('../' + name, import.meta.url), join(f.codeRoot, name));
@@ -767,14 +795,14 @@ for (const versioned of [false, true]) test(`genuineAmbiguousMultipartRepliesRec
   const result = JSON.parse(execFileSync('docker', ['exec', '-e', 'COST_MULTIPART_DIAGNOSTIC=1', '-e', 'COST_VERSIONED=' + Number(versioned), s3, 'node', '/code/cost-ambiguous-multipart-smoke.mjs'],
     { encoding: 'utf8', env: { PATH: process.env.PATH }, timeout: 90000, stdio: ['ignore', 'pipe', 'pipe'] }));
   assert.equal(result.leaked, false); assert.equal(result.lostReplies, 6);
-  assert.deepEqual(result.completed.objects, { class: 'stream', bytes: versioned ? 8 : 6, currentVersions: 1,
-    noncurrentVersions: versioned ? 1 : 0, deleteMarkers: 0, unfinishedMultipart: 0 });
-  assert.deepEqual(result.completed.byteSeconds, versioned ? { low: 52, high: 104 } : { low: 46, high: 102 });
-  assert.deepEqual(result.aborted.byteSeconds, versioned ? { low: 122, high: 180 } : { low: 100, high: 162 });
-  assert.deepEqual(result.final.objects, { class: 'stream', bytes: 0, currentVersions: 0, noncurrentVersions: 0, deleteMarkers: 0, unfinishedMultipart: 0 });
-  assert.deepEqual(result.final.byteSeconds, versioned ? { low: 134, high: 192 } : { low: 106, high: 168 });
-  assert.equal(result.workload.reconciled, true); assert.equal(result.administration.reconciled, true);
-  assert.deepEqual(result.workload.accounting.producer, result.workload.accounting.observer);
+  assertStorageAccounting(result.completed, { objects: { class: 'stream', bytes: versioned ? 8 : 6, currentVersions: 1,
+    noncurrentVersions: versioned ? 1 : 0, deleteMarkers: 0, unfinishedMultipart: 0 } });
+  assertStorageAccounting(result.completed, { byteSeconds: versioned ? { low: 52, high: 104 } : { low: 46, high: 102 } });
+  assertStorageAccounting(result.aborted, { byteSeconds: versioned ? { low: 122, high: 180 } : { low: 100, high: 162 } });
+  assertStorageAccounting(result.final, { objects: { class: 'stream', bytes: 0, currentVersions: 0, noncurrentVersions: 0, deleteMarkers: 0, unfinishedMultipart: 0 } });
+  assertStorageAccounting(result.final, { byteSeconds: versioned ? { low: 134, high: 192 } : { low: 106, high: 168 } });
+  assertMeterAccounting(result.workload); assertMeterAccounting(result.administration);
+  if (result.workload.reconciled) assert.deepEqual(result.workload.accounting.producer, result.workload.accounting.observer);
   assert.equal(result.workload.accounting.producer.attempts, versioned ? 10 : 9);
   assert.equal(result.workload.accounting.requests.filter(r => r.outcome === 'server-error').reduce((n, r) => n + r.attempts, 0), 6);
   assert.ok(result.workload.accounting.producer.bytesOut > 15);
@@ -800,11 +828,11 @@ test('genuineAmbiguousMultipartReplacementKeepsDuplicateInventoryRefused', async
 });
 
 // The composed session must agree with a real backend, not just a generated HTTP inventory.
-test('genuineStreamMeasurementJoinsPhasesInventoriesAndIndependentRequestCounters', async t => {
+for (const counterGap of [false, true]) test('genuineStreamMeasurementJoinsPhasesInventoriesAndIndependentRequestCounters' + (counterGap ? '_counterGap' : ''), async t => {
   const f = fixture(t), plan = local.prepareIsolatedStack(f);
   for (const name of ['litestream.mjs', 'storage-lifetimes.mjs', 'stream-versions.mjs', 's3-deletion.mjs', 'stream-measurement.mjs', 'worker-diagnostic.mjs'])
     cpSync(new URL('../' + name, import.meta.url), join(f.codeRoot, name));
-  cpSync(new URL('./stream-measurement-smoke.mjs', import.meta.url), join(f.codeRoot, 'cost-stream-measurement-smoke.mjs'));
+  copyStorageSmoke(f, 'stream-measurement-smoke.mjs', counterGap);
   let stack; f.onCleanup(async () => { await stack?.close(); });
   stack = await local.startIsolatedStack({ ...f, prepared: plan });
   const s3 = stack.containerIds.find(id => docker('inspect', '--format', '{{index .Config.Labels "io.waitron.cloud-cost.role"}}', id) === 's3');
@@ -813,16 +841,17 @@ test('genuineStreamMeasurementJoinsPhasesInventoriesAndIndependentRequestCounter
   assert.equal(results.length, 2);
   for (const [i, { versioned, intermediate, result, administration, leaked }] of results.entries()) {
     assert.equal(versioned, i === 1); assert.equal(leaked, false);
-    assert.equal(intermediate.requests.reconciled, true); assert.equal(result.requests.reconciled, true);
-    assert.equal(administration.reconciled, true);
-    assert.deepEqual(result.requests.accounting.producer, result.requests.accounting.observer);
+    assertMeterAccounting(intermediate.requests); assertMeterAccounting(result.requests);
+    assertMeterAccounting(administration);
+    if (counterGap) { assert.equal(administration.reconciled, false); assert.equal(administration.status, 'unknown'); assert.ok(administration.gaps.includes('accounting:unreconciled')); }
+    if (result.requests.reconciled) assert.deepEqual(result.requests.accounting.producer, result.requests.accounting.observer);
     assert.equal(result.requests.accounting.producer.attempts, 13);
     assert.deepEqual(result.requests.accounting.requests.filter(r => r.phase !== 'observer').map(r => [r.phase, r.operation, r.bytesOut, r.bytesIn]),
       [['startup', 'put', 4, 0], ['workload', 'put', 6, 0], ['idle', 'get', 0, 6], ['restore', 'delete', 0, 0]]);
-    assert.deepEqual(intermediate.storage.byteSeconds, versioned ? { low: 32, high: 32 } : { low: 24, high: 24 });
-    assert.deepEqual(result.storage.byteSeconds, versioned ? { low: 126, high: 126 } : { low: 42, high: 42 });
-    assert.deepEqual(result.storage.objects, { class: 'stream', bytes: versioned ? 32 : 0, currentVersions: 0,
-      noncurrentVersions: versioned ? 2 : 0, deleteMarkers: versioned ? 1 : 0, unfinishedMultipart: 0 });
+    assertStorageAccounting(intermediate.storage, { byteSeconds: versioned ? { low: 32, high: 32 } : { low: 24, high: 24 } });
+    assertStorageAccounting(result.storage, { byteSeconds: versioned ? { low: 126, high: 126 } : { low: 42, high: 42 } });
+    assertStorageAccounting(result.storage, { objects: { class: 'stream', bytes: versioned ? 32 : 0, currentVersions: 0,
+      noncurrentVersions: versioned ? 2 : 0, deleteMarkers: versioned ? 1 : 0, unfinishedMultipart: 0 } });
     assert.deepEqual(result.cleanup, { listeners: 0, clients: 0 });
   }
   await stack.close();

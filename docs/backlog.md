@@ -390,8 +390,19 @@ unknown figures require named gaps. All sale, restore, SQLite, fiscal, stop and
 owned-cleanup checks remain. The shared reader also validates original storage
 histories, refusing hidden unknown time, false measured labels and private fields.
 The three observer-perturbation cases preserve interruption details while changing
-only the selected byte observation. Other storage, archive and service readers
-still need their final audit.
+only the selected byte observation. Storage, version, multipart and archive
+journey readers now validate both original meters without requiring every total
+to agree. Known inventory counts and time bounds keep their literal expectations;
+a missing bound needs unknown status and a named gap, while the other bound
+remains checked. The archive, unversioned and versioned multipart, and session
+administration cases each have an added observer-counter variant. They keep the
+actual storage operations, archive restore, privacy and owned-cleanup checks.
+Unverified multipart snapshots and duplicate-part inventories still refuse.
+Run the `genuineArchiveAnd`, `genuineNativeMultipartHistories`,
+`genuineVersionedNativeMultipart` and `genuineStreamMeasurement` cases in
+`stack-conformance.test.mjs` to check both ordinary and gapped observations.
+The remaining streamed-day and service readers still need their final audit;
+historical archive and service receipt readers keep their existing contracts.
 The full nonblocking accounting path, publication refusal and saved-failure
 replay remain open. These partial changes do
 not establish the historical cause or relax functional admission.

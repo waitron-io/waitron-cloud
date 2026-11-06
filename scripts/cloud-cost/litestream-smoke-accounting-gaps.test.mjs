@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { createMeter } from './meter.mjs';
 import { createLitestreamAfterStop, litestreamAfterStopOutput } from './litestream.mjs';
 import { assertSmokeAccounting } from './litestream-smoke-test-utils.mjs';
+import * as readers from './litestream-smoke-test-utils.mjs';
 
 function observed({ phase = 'workload', operation = 'put', mode = 'paired' } = {}) {
   const meter = createMeter({ phase, clock: () => 0 });
@@ -103,4 +104,24 @@ for (const [name, mutate] of [
 ]) test(`native smoke refuses ${name}`, () => {
   const result = storageEvidence(); mutate(result);
   assert.throws(() => assertSmokeAccounting(result));
+});
+
+// A missing bound must not discard the independent bound or retained object counts.
+test('storage readers keep supported values while allowing a named missing bound', () => {
+  assert.equal(typeof readers.assertStorageAccounting, 'function');
+  const proof = storageEvidence().lifetimes;
+  proof.byteSeconds.high = 160;
+  readers.assertStorageAccounting(proof, { objects: { class: 'stream', bytes: 16, currentVersions: 1, noncurrentVersions: 0, deleteMarkers: 0, unfinishedMultipart: 0 }, byteSeconds: { low: 120, high: 160 } });
+  assert.throws(() => readers.assertStorageAccounting(proof, { byteSeconds: { low: 120, high: 161 } }));
+  assert.throws(() => readers.assertStorageAccounting(proof, { objects: { class: 'stream', bytes: 16, currentVersions: 2, noncurrentVersions: 0, deleteMarkers: 0, unfinishedMultipart: 0 } }));
+});
+
+test('standalone storage traffic readers validate original mismatched meters', () => {
+  assert.equal(typeof readers.assertMeterAccounting, 'function');
+  const proof = observed({ mode: 'disagreement' });
+  readers.assertMeterAccounting(proof);
+  assert.equal(proof.reconciled, false);
+  assert.equal(proof.accounting.producer.bytesOut, 16);
+  assert.equal(proof.accounting.observer.bytesOut, 12);
+  assert.throws(() => readers.assertMeterAccounting({ ...proof, status: 'measured' }));
 });
