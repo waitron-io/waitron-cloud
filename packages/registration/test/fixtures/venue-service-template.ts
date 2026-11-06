@@ -35,7 +35,7 @@ export async function createVenueServiceTemplate(){
 }
 
 export async function cloneVenueServiceTemplate(template:string,schema:string){
- if(!/^venue_services_[a-f0-9]{32}$/.test(schema))throw new Error('invalid_venue_service_schema');
+ if(!/^(?:venue_services|http)_[a-f0-9]{32}$/.test(schema))throw new Error('invalid_venue_service_schema');
  const owned=await database(template),pool=new Pool({connectionString:owned.connectionString});
  try{
   await pool.query(`ALTER SCHEMA ${seedSchema} RENAME TO ${schema}`);

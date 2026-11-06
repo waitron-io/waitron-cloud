@@ -42,6 +42,25 @@ run; the latest prior relevant incident resolved at 00:20:49 UTC on 6 November
 2026. The slowest checkout is four seconds. The complete saved logs show no
 HTTP 5xx download failure. These qualifications apply to this baseline only.
 
+## First candidate
+
+[Run 42217943570](https://github.com/waitron-io/waitron-cloud/actions/runs/42217943570),
+attempt 1, checks `4e2275d9762c54bbfc45cf91603d240e6c66a848`.
+All four remote jobs pass, taking 93, 261, 216 and 142 seconds respectively.
+Job 2 remains 21 seconds over target. The four workflows finish successfully;
+their 76 jobs include two deliberately skipped jobs. The saved incident history
+has no overlapping relevant incident, the slowest checkout is four seconds,
+and all HTTP 5xx log matches are passing application tests.
+
+The second job spends 227.5 seconds in the 29 forward-collection guard cases.
+Its observation children now clone a database prepared once with the real
+migrations, using the same template mechanism as the legacy venue fixture.
+Each clone still verifies every migration digest and has its own schema and
+data. Other HTTP fixture callers keep their existing database path. The backup
+restore and reconciler guard children also keep their original database path.
+All 29 cases, their before/omitted/restored assertions and their deadlines stay
+unchanged. No additional source-mutation test is introduced.
+
 ## Remaining qualification
 
 Measure all four jobs on the candidate's exact current head, using the same

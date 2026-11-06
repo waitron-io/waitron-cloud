@@ -329,8 +329,12 @@ check runs every current remote test filename and a future filename exactly once
 All existing test files, assertions and deadlines remain. A healthy main run
 measured 113, 263, 181 and 92 seconds, so the long omission guard now moves from
 the second job to the fourth. Every other file keeps its native Node allocation.
-[Current-head qualification](backlog/remote-ci-budget.md) must still establish
-the four-minute target. D463's collector and remaining billing work stay on their
+[The next healthy run](backlog/remote-ci-budget.md) must still establish the
+four-minute target. The first candidate measured 93, 261, 216 and 142 seconds;
+the second job's forward-collection guard cases alone took 227.5 seconds.
+Those children now clone a database prepared with the real migrations and
+verify every migration digest before use. All original guard cases and
+deadlines remain. D463's collector and remaining billing work stay on their
 separate branch.
 
 ## How to keep this file honest

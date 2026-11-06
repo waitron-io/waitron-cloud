@@ -7,7 +7,7 @@ import {ForwardObservationStore,registerForwardReporter} from '../../src/forward
 import {routeBinding,signForwardReport,type ForwardReport} from '../../src/forward-report.ts';
 
 export async function forwardFixture(){
- const db=await database(),remote=new RemoteAccessStore(db.pool,'test-free-paid'),store=new ForwardObservationStore(db.pool,'test-free-paid');
+ const db=await database(process.env.TEST_FORWARD_DATABASE_TEMPLATE),remote=new RemoteAccessStore(db.pool,'test-free-paid'),store=new ForwardObservationStore(db.pool,'test-free-paid');
  const signup=new SignupStore(db.pool,db.outbox);await signup.request(`forward-${randomUUID()}@example.test`);
  const mail=db.outbox.open((await db.pool.query("SELECT * FROM email_outbox WHERE kind='verification' ORDER BY created_at DESC LIMIT 1")).rows[0]);assert('token'in mail);
  const owner=await signup.complete(mail.token,{password:'a long private forwarding password',organisationName:'Café Sol',legalBusinessName:'Café Sol SL',countryCode:'ES'});
