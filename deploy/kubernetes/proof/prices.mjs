@@ -7,8 +7,8 @@ const definitions = {
     disk: ['GB-Mo', { usagetype: 'EUS2-EBS:VolumeUsage.gp3', volumeApiName: 'gp3', operation: '' }],
   },
   AWSLambda: {
-    lambdaDuration: ['Lambda-GB-Second', { usagetype: 'EUS2-Lambda-GB-Second', group: 'AWS-Lambda-Duration' }],
-    lambdaRequests: ['Requests', { usagetype: 'EUS2-Request', group: 'AWS-Lambda-Requests' }],
+    lambdaDuration: ['Lambda-GB-Second', { usagetype: 'EUS2-Lambda-GB-Second-ARM', group: 'AWS-Lambda-Duration-ARM' }],
+    lambdaRequests: ['Requests', { usagetype: 'EUS2-Request-ARM', group: 'AWS-Lambda-Requests-ARM' }],
   },
   AmazonS3: {
     storage: ['GB-Mo', { usagetype: 'EUS2-TimedStorage-ByteHrs', storageClass: 'General Purpose', volumeType: 'Standard' }],
@@ -42,14 +42,36 @@ function range(value) {
   return BigInt(value);
 }
 async function bounded(signal, operation) {
+  const settled = Promise.resolve(operation);
+  // Cancellation can reject immediately after the same deadline already fired.
+  settled.catch(() => {});
   signal.throwIfAborted();
   let onAbort;
   const expired = new Promise((resolve, reject) => {
     onAbort = () => reject(signal.reason);
     signal.addEventListener('abort', onAbort, { once: true });
   });
-  try { return await Promise.race([operation, expired]); }
+  try { return await Promise.race([settled, expired]); }
   finally { signal.removeEventListener('abort', onAbort); }
+}
+
+function rejectDuplicateKeys(text) {
+  const stack = [];
+  for (const [token] of text.matchAll(/"(?:[^"\\]|\\[\s\S])*"|[{}\[\]:,]/g)) {
+    if (token === '{') stack.push({ keys: new Set(), expectingKey: true });
+    else if (token === '[') stack.push({ keys: null });
+    else if (token === '}' || token === ']') stack.pop();
+    else {
+      const frame = stack.at(-1);
+      if (!frame?.keys) continue;
+      if (token === ',') frame.expectingKey = true;
+      else if (token === ':') frame.expectingKey = false;
+      else if (frame.expectingKey) {
+        const key = JSON.parse(token);
+        check(!frame.keys.has(key)); frame.keys.add(key); frame.expectingKey = false;
+      }
+    }
+  }
 }
 
 export function readPriceCatalogue({ service, body, observedAt, now }) {
@@ -57,7 +79,11 @@ export function readPriceCatalogue({ service, body, observedAt, now }) {
   check(observed <= current && observedAt.slice(0, 10) === now.slice(0, 10));
   check(body instanceof Uint8Array && body.byteLength > 0 && body.byteLength <= maxBytes);
   let doc;
-  try { doc = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(body)); } catch { check(false); }
+  try {
+    const text = new TextDecoder('utf-8', { fatal: true }).decode(body);
+    rejectDuplicateKeys(text);
+    doc = JSON.parse(text);
+  } catch { check(false); }
   check(plain(doc) && doc.formatVersion === 'v1.0' && doc.offerCode === service
     && typeof doc.version === 'string' && /^\d{14}$/.test(doc.version) && time(doc.publicationDate) <= observed
     && plain(doc.products) && plain(doc.terms?.OnDemand));
@@ -91,17 +117,23 @@ export function readPriceCatalogue({ service, body, observedAt, now }) {
     rates[name] = { sku, termCode, rateCodes: dimensions.map(row => row.code), unit,
       usdNumerator: String(numerator), usdDenominator: '10000000000' };
   }
-  return { service, region, source, digest: createHash('sha256').update(body).digest('hex'),
+  return { kind: 'd570-price-decoded-v1', service, region, source, digest: createHash('sha256').update(body).digest('hex'),
     version: doc.version, publicationDate: doc.publicationDate, observedAt, rates };
 }
 
 export async function acquirePriceCatalogue(service, { fetch = globalThis.fetch, clock = Date.now, retain } = {}) {
   const source = sourceFor(service);
   check(typeof fetch === 'function' && typeof clock === 'function' && typeof retain === 'function');
-  const signal = AbortSignal.timeout(30_000);
-  let response, reader;
+  const deadline = performance.now() + 30_000, controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(new DOMException('D570 price acquisition timed out', 'TimeoutError')), 30_000);
+  const { signal } = controller;
+  let response, reader, finished = false;
   try {
-    response = await bounded(signal, fetch(source, { redirect: 'error', credentials: 'omit', signal }));
+    const pending = Promise.resolve(fetch(source, { redirect: 'error', credentials: 'omit', signal }));
+    pending.then(async late => {
+      if (finished) { try { await late?.body?.cancel(); } catch { /* Preserve the completed acquisition outcome. */ } }
+    }, () => {});
+    response = await bounded(signal, pending);
     check(response.status === 200 && !response.redirected && (!response.url || response.url === source)
       && /^application\/(?:json|octet-stream)(?:\s*;|$)/i.test(response.headers.get('content-type') ?? '') && response.body);
     const length = response.headers.get('content-length'), encoding = response.headers.get('content-encoding');
@@ -125,13 +157,16 @@ export async function acquirePriceCatalogue(service, { fetch = globalThis.fetch,
     await bounded(signal, retain({ service, source, digest: result.digest, observedAt, body }));
     signal.throwIfAborted();
     const after = stamp();
-    check(time(after) >= time(observedAt) && after.slice(0, 10) === observedAt.slice(0, 10));
-    return result;
+    check(time(after) >= time(observedAt) && after.slice(0, 10) === observedAt.slice(0, 10)
+      && performance.now() < deadline);
+    return { ...result, kind: 'd570-price-acquired-v1' };
   } catch (error) {
     if (reader) { try { await bounded(signal, reader.cancel()); } catch { /* Preserve the acquisition failure. */ } }
     else if (response?.body) { try { await bounded(signal, response.body.cancel()); } catch { /* Preserve the acquisition failure. */ } }
     throw error;
   } finally {
+    finished = true;
+    clearTimeout(timer);
     reader?.releaseLock();
   }
 }

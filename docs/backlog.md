@@ -3278,7 +3278,7 @@ implementation or production evidence.
   cleanup and retained original cost evidence. Synthetic checks cover competing
   controllers, partial/lost writes, damaged history, stale evidence, deadline
   expiry during writes and unknown cleanup. A bounded public-catalogue reader
-  now retains source-byte identity and extracts nine paid Spain EC2/gp3/Lambda/S3/log
+  now retains source-byte identity and extracts nine paid Spain EC2/gp3/ARM-Lambda/S3/log
   rates as exact fractions, excluding shared free tiers and bounding every price
   tier conservatively. Complete service-page reconciliation, transfer/events/network,
   taxes, quantities, billing and all-in bound construction, setup integration and

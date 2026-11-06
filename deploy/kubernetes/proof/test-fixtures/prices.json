@@ -164,6 +164,36 @@
           "regionCode": "eu-south-2",
           "servicename": "AWS Lambda"
         }
+      },
+      "HBHNHZU5GAMUNNJH": {
+        "sku": "HBHNHZU5GAMUNNJH",
+        "productFamily": "Serverless",
+        "attributes": {
+          "servicecode": "AWSLambda",
+          "location": "Europe (Spain)",
+          "locationType": "AWS Region",
+          "group": "AWS-Lambda-Duration-ARM",
+          "groupDescription": "Invocation duration weighted by memory assigned to function, measured in GB-s for ARM",
+          "usagetype": "EUS2-Lambda-GB-Second-ARM",
+          "operation": "",
+          "regionCode": "eu-south-2",
+          "servicename": "AWS Lambda"
+        }
+      },
+      "476SBHCHQKEMB5CF": {
+        "sku": "476SBHCHQKEMB5CF",
+        "productFamily": "Serverless",
+        "attributes": {
+          "servicecode": "AWSLambda",
+          "location": "Europe (Spain)",
+          "locationType": "AWS Region",
+          "group": "AWS-Lambda-Requests-ARM",
+          "groupDescription": "Invocation call for a Lambda function for ARM",
+          "usagetype": "EUS2-Request-ARM",
+          "operation": "",
+          "regionCode": "eu-south-2",
+          "servicename": "AWS Lambda"
+        }
       }
     },
     "terms": {
@@ -325,6 +355,70 @@
                 "unit": "Lambda-GB-Second",
                 "pricePerUnit": {
                   "USD": "0.0000133334"
+                },
+                "appliesTo": []
+              }
+            },
+            "termAttributes": {}
+          }
+        },
+        "HBHNHZU5GAMUNNJH": {
+          "HBHNHZU5GAMUNNJH.JRTCKXETXF": {
+            "offerTermCode": "JRTCKXETXF",
+            "sku": "HBHNHZU5GAMUNNJH",
+            "effectiveDate": "2026-10-01T00:00:00Z",
+            "priceDimensions": {
+              "HBHNHZU5GAMUNNJH.JRTCKXETXF.6NBUNBXSC3": {
+                "rateCode": "HBHNHZU5GAMUNNJH.JRTCKXETXF.6NBUNBXSC3",
+                "description": "USD1.33334E-5 per Lambda-GB-Second for Lambda-GB-Second-ARM in Europe (Spain)",
+                "beginRange": "0",
+                "endRange": "7500000000",
+                "unit": "Lambda-GB-Second",
+                "pricePerUnit": {
+                  "USD": "0.0000133334"
+                },
+                "appliesTo": []
+              },
+              "HBHNHZU5GAMUNNJH.JRTCKXETXF.6JGAYSJBNY": {
+                "rateCode": "HBHNHZU5GAMUNNJH.JRTCKXETXF.6JGAYSJBNY",
+                "description": "USD1.20001E-5 per Lambda-GB-Second for Lambda-GB-Second-ARM in Europe (Spain)",
+                "beginRange": "7500000000",
+                "endRange": "18750000000",
+                "unit": "Lambda-GB-Second",
+                "pricePerUnit": {
+                  "USD": "0.0000120001"
+                },
+                "appliesTo": []
+              },
+              "HBHNHZU5GAMUNNJH.JRTCKXETXF.AVR3V96UTF": {
+                "rateCode": "HBHNHZU5GAMUNNJH.JRTCKXETXF.AVR3V96UTF",
+                "description": "USD1.06667E-5 per Lambda-GB-Second for Lambda-GB-Second-ARM in Europe (Spain)",
+                "beginRange": "18750000000",
+                "endRange": "Inf",
+                "unit": "Lambda-GB-Second",
+                "pricePerUnit": {
+                  "USD": "0.0000106667"
+                },
+                "appliesTo": []
+              }
+            },
+            "termAttributes": {}
+          }
+        },
+        "476SBHCHQKEMB5CF": {
+          "476SBHCHQKEMB5CF.JRTCKXETXF": {
+            "offerTermCode": "JRTCKXETXF",
+            "sku": "476SBHCHQKEMB5CF",
+            "effectiveDate": "2026-10-01T00:00:00Z",
+            "priceDimensions": {
+              "476SBHCHQKEMB5CF.JRTCKXETXF.6YS6EN2CT7": {
+                "rateCode": "476SBHCHQKEMB5CF.JRTCKXETXF.6YS6EN2CT7",
+                "description": "USD2.0E-7 per Requests for Request-ARM in Europe (Spain)",
+                "beginRange": "0",
+                "endRange": "Inf",
+                "unit": "Requests",
+                "pricePerUnit": {
+                  "USD": "0.0000002000"
                 },
                 "appliesTo": []
               }
