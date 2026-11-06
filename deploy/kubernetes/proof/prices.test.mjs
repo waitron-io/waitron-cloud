@@ -143,6 +143,16 @@ test('a zero-width tier cannot precede the otherwise complete paid range', () =>
   term.priceDimensions[code] = { ...structuredClone(dimension), rateCode: code, endRange: 'Inf' };
   assert.throws(() => read('AmazonEC2', doc), /price/i);
 });
+test('internally matching product and term IDs still require the catalogue SKU shape', () => {
+  const doc = structuredClone(fixtures.AmazonEC2), old = Object.keys(doc.products)[0], sku = 'BAD';
+  doc.products[sku] = { ...doc.products[old], sku }; delete doc.products[old];
+  const term = firstTerm(doc), replacement = { ...term, sku, priceDimensions: {} };
+  for (const [key, value] of Object.entries(term.priceDimensions)) {
+    const code = key.replace(old, sku); replacement.priceDimensions[code] = { ...value, rateCode: code };
+  }
+  delete doc.terms.OnDemand[old]; doc.terms.OnDemand[sku] = { [`${sku}.${term.offerTermCode}`]: replacement };
+  assert.throws(() => read('AmazonEC2', doc), /price/i);
+});
 
 function transport(overrides = {}) {
   const retained = [], calls = [], bytes = body('AmazonEC2');
