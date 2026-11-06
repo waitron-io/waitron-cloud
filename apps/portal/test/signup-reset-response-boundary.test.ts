@@ -16,6 +16,19 @@ const flows = [
 ] as const;
 
 for (const flow of flows) {
+  for (const error of ['link_unavailable', 'temporarily_unavailable', 'password_compromised', 'credentials_invalid', 'rate_limited']) {
+    test(`${flow.path} treats HTTP success carrying ${error} as an uncertain reply`, async t => {
+      let calls = 0;
+      t.mock.method(globalThis, 'fetch', async () => {
+        calls++;
+        return Response.json({error}, {status: flow.status});
+      });
+      assert.deepEqual(await accountRequest(flow.path, flow.body), {
+        ok: false, status: 503, code: 'unexpected_response', retryAfterMs: 0,
+      });
+      assert.equal(calls, 1);
+    });
+  }
   for (const status of [200, 201, 202, 203, 206, 207, 208, 226].filter(status => status !== flow.status)) {
     test(`${flow.path} refuses a valid body with HTTP ${status}`, async t => {
       let calls = 0;

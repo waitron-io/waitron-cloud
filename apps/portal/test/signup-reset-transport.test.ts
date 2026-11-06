@@ -15,10 +15,13 @@ const flows = [
 for (const flow of flows) {
   test(`${flow.path} does not need a signed-in management cookie`, async t => {
     const previous = Object.getOwnPropertyDescriptor(globalThis, 'document');
+    const previousLocation = Object.getOwnPropertyDescriptor(globalThis, 'location');
+    Object.defineProperty(globalThis, 'location', {configurable: true, value: {protocol: 'https:'}});
     Object.defineProperty(globalThis, 'document', {configurable: true, get() {
       assert.fail('public account actions must not read management cookies');
     }});
     t.after(() => {if (previous) Object.defineProperty(globalThis, 'document', previous); else Reflect.deleteProperty(globalThis, 'document');});
+    t.after(() => {if (previousLocation) Object.defineProperty(globalThis, 'location', previousLocation); else Reflect.deleteProperty(globalThis, 'location');});
     let calls = 0;
     t.mock.method(globalThis, 'fetch', async (url: unknown, init?: RequestInit) => {
       calls++;
@@ -65,7 +68,8 @@ for (const boundary of ['headers', 'body'] as const) {
     });
     const started = performance.now();
     const results = await Promise.all(flows.map(flow => accountRequest(flow.path, flow.body)));
-    assert.ok(performance.now() - started >= 14_900, 'a shorter deadline must not cut off these requests');
+    const elapsed = performance.now() - started;
+    assert.ok(elapsed >= 14_900 && elapsed < 17_000, `the 15-second deadline must cover the request; observed ${elapsed}ms`);
     assert.deepEqual(results, flows.map(() => ({ok: false, status: boundary === 'headers' ? 0 : 503,
       code: boundary === 'headers' ? 'network_error' : 'unexpected_response', retryAfterMs: 0})));
     assert.deepEqual(received.sort(), flows.map(flow => `/api/account${flow.path}`).sort(), 'one request per operation');

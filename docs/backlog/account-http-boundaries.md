@@ -7,7 +7,9 @@ An unexpected reply must not tell you an account is ready or a password has
 changed. The client requires HTTP 202 with `accepted` for either email request,
 HTTP 201 with nonblank account, organisation and business IDs for signup, and
 HTTP 200 with `completed` for password reset. Other success codes, malformed
-bodies and transport failures remain unsuccessful. A deliberate retry can accept
+bodies and transport failures remain unsuccessful. An error code inside a success
+reply is unexpected too, so it cannot turn an uncertain completion into a definite
+refusal. A deliberate retry can accept
 a valid reply; the client never repeats an uncertain account operation itself.
 
 Run the acknowledgement and transport checks:
@@ -31,6 +33,11 @@ journeys intercept server replies and do not prove email delivery.
 The existing `packages/account-http/test/account-http.test.ts` exercises the
 production HTTP handlers with real PostgreSQL and local Mailpit. It checks
 one-use links, origin refusals, exact server statuses, account creation and
-password-reset session revocation. Run it through `scripts/test-postgres.mjs`.
+password-reset session revocation. Run that file with:
+
+```sh
+node scripts/test-postgres.mjs exec pnpm --dir packages/account-http exec node --test --test-timeout=120000 test/account-http.test.ts
+```
+
 This local delivery proof does not qualify the production mail provider. D102's
 owner-only enablement checklist still owns live delivery.

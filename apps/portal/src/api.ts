@@ -69,7 +69,7 @@ export async function accountRequest<T>(path: string, body?: Record<string, unkn
       if(response.status===409)codes.push('approval_required','conflict','target_not_fresh','recovery_active');
       if(response.status===403)codes.push('local_integration_only');
     }
-    const code = value && typeof value === 'object' && 'error' in value && typeof value.error === 'string' && codes.includes(value.error)
+    const code = !response.ok && value && typeof value === 'object' && 'error' in value && typeof value.error === 'string' && codes.includes(value.error)
       ? value.error : 'unexpected_response';
     return {ok: false, status: response.ok ? 503 : response.status, code, retryAfterMs: elapsedRetry ? Math.max(0, retryAfterMs - (performance.now() - receivedAt)) : retryAfterMs};
   } catch { return {ok: false, status: 0, code: 'network_error', retryAfterMs: 0}; }
