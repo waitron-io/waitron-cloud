@@ -4183,15 +4183,23 @@ does not qualify production shutdown.
 
 ## Initial upload admitted after stop (D393)
 
-Startup readiness now requires the first snapshot, stored under level `0009`,
-before the final sale begins. An earlier level-zero upload can finish while that
-snapshot has not reached storage. The existing forty half-second polls still
-require an idle transport and completion of the injected upload retry. This
-changes preparation, with the stop boundary, two-second deadline and late-upload
-refusal retained. The native regression in
-`litestream-smoke-commit.test.mjs` catches readiness based only on the earlier
-upload. This closes that preparation gap; the historical request's native task
-and production shutdown qualification remain open.
+The smoke now waits for the startup snapshot, stored under level `0009`,
+before the final sale. An earlier level-zero upload can finish before that
+snapshot reaches the measuring transport. Readiness retains all forty
+half-second polls, the idle-transport check and the injected retry's completed
+reply. The stop boundary, two-second deadline and late-upload refusal remain.
+
+Run `node --test scripts/cloud-cost/litestream-smoke-commit.test.mjs` for the
+full-smoke regression. It holds the snapshot before HTTP admission while the
+earlier upload is visible. Removing the snapshot barrier reproduces the
+`after-stop-admission / post-stop-operation / put / initial` refusal; restoring
+it reconciles all four exchanges and restores both stand-in sales. No existing
+behavioral assertion is removed. A separate official macOS 0.5.17 run through
+the full smoke reproduces the same refusal with the old rule and restores both
+toy SQLite rows with the barrier. A stack captured while that controlled request
+is held identifies `DB.Snapshot`, called by `Store.monitorCompactionLevel`.
+This fixes startup preparation; it does not identify the historical request's
+native task or qualify production shutdown.
 
 [PR635's merge cost run](https://github.com/waitron-io/waitron-cloud/actions/runs/40634308325/job/122638015466)
 refused an initial PUT after a validated stop reply, with writer exit zero.
@@ -4229,7 +4237,8 @@ You cannot infer first HTTP admission from the earlier SDK request log, an idle
 transfer count or a zero writer exit. Run `node --test
 scripts/cloud-cost/litestream-pre-admission-put.test.mjs` for the two real HTTP
 ordering controls. Removing the admission guard makes the late upload return
-200 instead of the required 400; restoring it passes both checks. Original assertions, accounting, pins, allowances and deadlines remain unchanged.
+200 instead of the required 400; restoring it passes both checks. Original assertions, accounting, pins,
+allowances and deadlines remain unchanged.
 D530 retains the historical cause and production shutdown qualification as open.
 Do not delay production stop or admit late uploads on the strength of these probes.
 
