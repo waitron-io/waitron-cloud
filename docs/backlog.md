@@ -250,13 +250,16 @@ The hostname Enter fixture keeps all nine reachable captures separately. Set
 Check the filenames independently: all ten browser cases passed before the
 repair, while only eight files survived. The eight ordinary names stay unchanged;
 the English light phone delayed capture adds `-delayed`. Separate files retain
-each run without promising different pixels or stable image bytes. The missing
-handler case returns without a capture, and its title names the observation
-timeout it checks. It returns before the request, pending-state and no-apply
+each run without promising different pixels or stable image bytes. The handler
+that answers without recording returns without a capture; its title names the
+observation timeout. It returns before the request, pending-state and no-apply
 assertions. Every original behavioral assertion and deadline remains unchanged.
 The four-second outer race checks bounded refusal without independently pinning
 the configured three-second observation boundary. These Chromium checks use
 stubbed HTTP; real server authority and general cleanup bounds remain unqualified.
+All five sampled pending-review duplicate mutations were caught, once by a later
+count. The final rate-limit duplicate assertion has no later request count;
+its mutation coverage remains unqualified.
 
 ## Separate-process storage extraction and failed-startup cleanup (D457)
 
