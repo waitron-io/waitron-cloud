@@ -10,6 +10,7 @@ test('discovery recovers the exact predecessor after lost local state and stale 
  const a=await f.venue(),body={version:1,requestId:null},discover=()=>f.request(status,a.proof(status,body,randomUUID(),a.lease));
  const empty=await discover();assert.equal(empty.status,200,await empty.clone().text());
  assert.deepEqual(await empty.json(),{version:1,installationId:a.installationId,hostname:a.body.hostname,revision:a.body.revision,request:null});
+ for(const invalid of [{...body,extra:true},{...body,version:2},{version:1},{...body,requestId:''},{...body,requestId:0}])assert.equal((await f.request(status,a.proof(status,invalid,randomUUID(),a.lease))).status,400);
  const id=randomUUID();assert.equal((await f.request(submit,a.proof(submit,a.body,id,a.lease))).status,200);
  const request={requestId:id,hostname:a.body.hostname,revision:a.body.revision,csrDigest:createHash('sha256').update(a.body.csr).digest('hex')};
  assert.deepEqual(await(await discover()).json(),{version:1,installationId:a.installationId,hostname:a.body.hostname,revision:a.body.revision,request});
@@ -17,7 +18,9 @@ test('discovery recovers the exact predecessor after lost local state and stale 
  for(let i=0;i<4;i++)assert.equal((await f.request(submit,a.proof(submit,{...a.body,revision:a.body.revision+1},randomUUID(),a.lease))).status,409);
  assert.equal((await f.request(status,a.proof(status,{version:1,requestId:id},randomUUID(),a.lease))).status,409);
  assert.deepEqual(await(await discover()).json(),{version:1,installationId:a.installationId,hostname:a.body.hostname,revision:a.body.revision+1,request});
- assert.equal((await f.request(submit,a.proof(submit,{...a.body,revision:a.body.revision+1,previousRequestId:id},randomUUID(),a.lease))).status,200);
+ const replacement=randomUUID();assert.equal((await f.request(submit,a.proof(submit,{...a.body,revision:a.body.revision+1,previousRequestId:id},replacement,a.lease))).status,200);
+ const hostname='moved-'+a.body.hostname;await f.db.pool.query("UPDATE remote_hostnames SET hostname=$2 WHERE venue_id=$1 AND kind='staff'",[a.venueId,hostname]);
+ assert.deepEqual(await(await discover()).json(),{version:1,installationId:a.installationId,hostname,revision:a.body.revision+1,request:{...request,requestId:replacement,revision:a.body.revision+1}});
  const b=await f.venue();assert.equal((await f.request(status,b.proof(status,body,randomUUID(),b.lease,a.installationId))).status,401);
  assert.equal((await f.request(status,a.proof(status,body,randomUUID(),a.lease),{origin:f.origin})).status,403);
  await f.db.pool.query('UPDATE installations SET revoked_at=clock_timestamp() WHERE id=$1',[a.installationId]);

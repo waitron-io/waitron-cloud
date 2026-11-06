@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import {randomBytes,randomUUID} from 'node:crypto';
+import {createHash,randomBytes,randomUUID} from 'node:crypto';
 import {after,before,test} from 'node:test';
 import forge from 'node-forge';
 import {staffExchangeFixture} from './staff-exchange-fixture.ts';
@@ -15,6 +15,8 @@ test('database staff worker issues once, survives restart, and renews without ch
  const {a,id}=await setup();let issues=0;const initial=chain(a);const options={staffExchange:true,issueCertificate:async()=>{issues++;return initial;}};
  const worker=new RemoteConfigurationReconciler(f.db.pool,options);await select(worker,a.installationId);assert.equal(await worker.runOnce(),true);
  const result=await(await read(a,id)).json();assert.equal(result.state,'ready');assert.equal(result.certificate,initial);assert.equal(issues,1);
+ const discovered=await(await f.request(status,a.proof(status,{version:1,requestId:null},randomUUID(),a.lease))).json();
+ assert.deepEqual(discovered,{version:1,installationId:a.installationId,hostname:a.body.hostname,revision:a.body.revision,request:{requestId:id,hostname:a.body.hostname,revision:a.body.revision,csrDigest:createHash('sha256').update(a.body.csr).digest('hex')}});
  const restarted=new RemoteConfigurationReconciler(f.db.pool,options);await select(restarted,a.installationId);await restarted.runOnce();assert.equal(issues,1);
  await f.db.pool.query('UPDATE staff_certificate_exchange SET certificate=$2 WHERE installation_id=$1',[a.installationId,chain(a,0.001)]);
  await select(restarted,a.installationId);await restarted.runOnce();assert.equal(issues,2);assert.equal((await(await read(a,id)).json()).certificate,initial);

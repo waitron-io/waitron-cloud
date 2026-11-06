@@ -753,7 +753,8 @@ including trusted password sign-in and automatic app and tunnel restart. The
 existing signed certificate status action can discover a lost request ID,
 including a stale predecessor, without exposing a CSR or certificate. Joint
 reboot, renewal, revocation, offline sales and connected-machine isolation checks
-remain open. The parked [D582 Cloud build plan](superpowers/plans/2026-11-05-a951-cloud-tunnel.md)
+remain open. Deployment of the lasting gateway remains open too. The parked
+[D582 Cloud build plan](superpowers/plans/2026-11-05-a951-cloud-tunnel.md)
 assigns the approval receiver and one-use Permit ledger, registration/node
 mapping, public root/origin/peer policy and separate issuer custody to Cloud.
 E owns local permission decisions, provisioning, private keys, client and native
