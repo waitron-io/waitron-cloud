@@ -79,6 +79,7 @@ test('one batch keeps consent tied to each organisation and its own current owne
 
 for(const [name,change] of [
  ['ownership removal','DELETE FROM organisation_memberships WHERE account_id=$1'],
+ ['owner demotion','UPDATE organisation_memberships SET is_owner=false WHERE account_id=$1'],
  ['account disable','UPDATE cloud_accounts SET disabled_at=clock_timestamp() WHERE id=$1'],
  ['email verification removal','UPDATE cloud_credentials SET email_verified_at=NULL WHERE account_id=$1'],
 ] as const)
@@ -89,7 +90,7 @@ test(`listing cannot combine old authority with consent recorded after ${name}`,
  await db.pool.query('INSERT INTO organisation_memberships(account_id,organisation_id,is_owner) VALUES($1,$2,true)',[viewer,v.organisationId]);
  const result=await transaction(db.pool,async client=>{
   const query=client.query;let first=true;
-  // Keep both reads real; commit the authority change only after the first result exists.
+  // Keep each query real; commit the authority change only after the first result exists.
   client.query=async function(this:PoolClient,...args:unknown[]){
    const result=await Reflect.apply(query,this,args);
    if(first){

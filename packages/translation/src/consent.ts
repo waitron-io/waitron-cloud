@@ -54,12 +54,13 @@ async function ownedVenue(client:PoolClient,accountId:string,venueId:string):Pro
 }
 export async function listConsents(client:PoolClient,accountId:string):Promise<ConsentView[]>{
  // One snapshot must authorize the viewer and select consent; separate reads can mix revoked access with a later agreement.
- const venues=(await client.query<{id:string;consented_at:Date|null}>(`SELECT v.id,c.consented_at FROM venues v
-  JOIN organisation_memberships m ON m.organisation_id=v.organisation_id
+ // Keep the consent lookup correlated and bounded so unrelated tenants do not add consent reads.
+ const venues=(await client.query<{id:string;consented_at:Date|null}>(`SELECT owned.id,c.consented_at FROM venues owned
+  JOIN organisation_memberships m ON m.organisation_id=owned.organisation_id
   JOIN cloud_accounts a ON a.id=m.account_id AND a.disabled_at IS NULL
   JOIN cloud_credentials k ON k.account_id=m.account_id AND k.email_verified_at IS NOT NULL
-  LEFT JOIN (${activeConsents}) c ON c.venue_id=v.id
-  WHERE m.account_id=$1 AND m.is_owner ORDER BY v.id`,[accountId,translationConsentVersion])).rows;
+  LEFT JOIN LATERAL (${activeConsents} AND c.venue_id=owned.id LIMIT 1) c ON true
+  WHERE m.account_id=$1 AND m.is_owner ORDER BY owned.id`,[accountId,translationConsentVersion])).rows;
  return venues.map(venue=>({venueId:venue.id,consented:!!venue.consented_at,consentedAt:venue.consented_at?.toISOString()??null}));
 }
 export async function agreeConsent(client:PoolClient,accountId:string,input:{venueId:string;consentVersion:string}):Promise<ConsentView>{
