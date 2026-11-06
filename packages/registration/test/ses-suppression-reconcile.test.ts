@@ -18,3 +18,19 @@ for(const mode of ['malformed','duplicate','unknown','throw','timeout','aborted'
  assert.equal(reconciler.evidence(observation,binding)?.status,'failed');assert.equal(writes,0);assert.ok(performance.now()-start<1000,'provider refusal remains bounded');
  assert.equal(JSON.stringify(observation).includes('secret'),false);
 });
+
+test('abort after the initial query prevents every provider removal',async()=>{
+ const controller=new AbortController();let removes=0;
+ const reconciler=createSesSuppressionReconciler({async query(){controller.abort();return ['BOUNCE'];},async remove(){removes++;}});
+ const observation=await reconciler.reconcile(binding,'owner@example.test',controller.signal);
+ await new Promise<void>(resolve=>setImmediate(resolve));
+ assert.equal(removes,0);assert.equal(reconciler.evidence(observation,binding)?.status,'failed');
+});
+
+test('expired confirmation cannot clear a block but its historical evidence remains auditable',async()=>{
+ const reconciler=createSesSuppressionReconciler({async query(){return [];},async remove(){}},1);
+ const observation=await reconciler.reconcile(binding,'owner@example.test',new AbortController().signal);
+ await new Promise(resolve=>setTimeout(resolve,5));
+ assert.equal(reconciler.evidence(observation,binding),null);
+ assert.deepEqual(reconciler.auditEvidence(observation,binding),{status:'confirmed',before:[],after:[]});
+});

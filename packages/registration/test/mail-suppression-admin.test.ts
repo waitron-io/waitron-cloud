@@ -274,3 +274,94 @@ test('deleting a mapped block and readding it unscoped cannot reactivate either 
   assert.equal(await blocked('FR'),false,'the new lifetime cannot inherit a different country');
  }finally{await f.close();}
 });
+
+// A country mapping cannot erase an earlier decision made without a country.
+test('an unscoped origin stays blocked after a later scoped write and performs no provider work',async()=>{
+ const f=await relayFixture();try{
+  await new RelayWorker(f.pool,f.config).suppress('owner@example.test');
+  await new RelayWorker(f.pool,{...f.config,ses:{config:config(),recipientKeys:keys}}).suppress('owner@example.test');
+  const operator=await actor(f);let calls=0;
+  const admin=service(f,{async query(){calls++;return [];},async remove(){calls++;}}),op=await request(f,admin,operator);
+  const observation=await admin.reconcile(operator,op.operationId,'owner@example.test',new AbortController().signal);
+  assert.equal(calls,0,'an unknown legacy origin cannot authorise provider removal');
+  assert.equal(await admin.finish(operator,op.operationId,observation),'blocked');
+  assert.equal((await f.pool.query('SELECT count(*) FROM relay_suppressions')).rows[0].count,'1');
+  assert.equal((await f.pool.query('SELECT unscoped FROM relay_suppressions')).rows[0].unscoped,true);
+ }finally{await f.close();}
+});
+
+test('a new unscoped decision on an existing row defeats a pending clear',async()=>{
+ const f=await relayFixture();try{
+  const operator=await actor(f),admin=service(f),scoped=new RelayWorker(f.pool,{...f.config,ses:{config:config(),recipientKeys:keys}});
+  await scoped.suppress('owner@example.test');const op=await request(f,admin,operator);
+  const observation=await admin.reconcile(operator,op.operationId,'owner@example.test',new AbortController().signal);
+  await new RelayWorker(f.pool,f.config).suppress('owner@example.test');
+  assert.equal(await admin.finish(operator,op.operationId,observation),'blocked');
+  assert.equal((await f.pool.query('SELECT count(*) FROM relay_suppressions')).rows[0].count,'1');
+ }finally{await f.close();}
+});
+
+test('a completed blocked operation cannot invoke the provider again',async()=>{
+ const f=await relayFixture();try{
+  await sharedBlock(f);const operator=await actor(f);let calls=0;
+  const admin=service(f,{async query(){calls++;return ['BOUNCE'];},async remove(){calls++;}}),op=await request(f,admin,operator);
+  assert.equal(await admin.finish(operator,op.operationId,{}),'blocked');
+  await assert.rejects(admin.reconcile(operator,op.operationId,'owner@example.test',new AbortController().signal));
+  assert.equal(calls,0);assert.equal((await f.pool.query('SELECT count(*) FROM mail_unblock_outcomes')).rows[0].count,'1');
+ }finally{await f.close();}
+});
+
+test('a foreign legacy mapping refuses provider removal before the external call',async()=>{
+ const f=await relayFixture();try{
+  for(const country of ['ES','FR'])await new RelayWorker(f.pool,{...f.config,ses:{config:config('eu-north-1',country),recipientKeys:keys}}).suppress('owner@example.test');
+  const operator=await actor(f);let calls=0;
+  const admin=service(f,{async query(){calls++;return ['COMPLAINT'];},async remove(){calls++;}}),op=await request(f,admin,operator);
+  const observation=await admin.reconcile(operator,op.operationId,'owner@example.test',new AbortController().signal);
+  assert.equal(calls,0,'a regional provider call must not remove another country protection');
+  assert.equal(await admin.finish(operator,op.operationId,observation),'blocked');
+  assert.equal((await f.pool.query('SELECT count(*) FROM relay_suppressions')).rows[0].count,'1');
+ }finally{await f.close();}
+});
+
+test('every provider removal retains immutable intent and result across repeated reconciliation',async()=>{
+ const f=await relayFixture();try{
+  await sharedBlock(f);const operator=await actor(f);let remaining=['BOUNCE','COMPLAINT'];
+  const admin=service(f,{async query(){return [...remaining];},async remove(_s:unknown,_r:string,reason:string){remaining=remaining.filter(r=>r!==reason);}}),op=await request(f,admin,operator);
+  await admin.reconcile(operator,op.operationId,'owner@example.test',new AbortController().signal);
+  const observation=await admin.reconcile(operator,op.operationId,'owner@example.test',new AbortController().signal);
+  assert.equal(await admin.finish(operator,op.operationId,observation),'cleared');
+  assert.notEqual((await f.pool.query("SELECT to_regclass('mail_unblock_provider_attempts') AS relation")).rows[0].relation,null,'durable provider intent exists');
+  const intents=(await f.pool.query('SELECT * FROM mail_unblock_provider_attempts ORDER BY recorded_at,id')).rows;
+  assert.equal(intents.length,2);for(const row of intents){assert.equal(row.operation_id,op.operationId);assert.equal(row.operator_id,operator.id);}
+  const results=(await f.pool.query('SELECT r.* FROM mail_unblock_provider_results r JOIN mail_unblock_provider_attempts a ON a.id=r.attempt_id ORDER BY a.recorded_at,a.id')).rows;
+  assert.equal(results.length,2);assert.deepEqual(results[0].provider_evidence,{status:'confirmed',before:['BOUNCE','COMPLAINT'],after:[]});
+  assert.deepEqual(results[1].provider_evidence,{status:'confirmed',before:[],after:[]});
+  const audit=JSON.stringify({intents,results});for(const secret of ['owner@example.test',operator.sessionToken,operator.csrfToken])assert.equal(audit.includes(secret),false);
+  for(const table of ['mail_unblock_provider_attempts','mail_unblock_provider_results'])for(const sql of [`DELETE FROM ${table}`,`TRUNCATE ${table} CASCADE`,`UPDATE ${table} SET recorded_at=clock_timestamp()`])await assert.rejects(f.pool.query(sql),/mail_binding_immutable/);
+ }finally{await f.close();}
+});
+
+test('operator expiry during the suppression delete wait rolls back the final clear',async()=>{
+ const f=await relayFixture(),held=await f.pool.connect();let pending:Promise<unknown>|undefined;
+ try{
+  await sharedBlock(f);const operator=await actor(f),admin=service(f),op=await request(f,admin,operator);
+  const observation=await admin.reconcile(operator,op.operationId,'owner@example.test',new AbortController().signal);
+  await f.pool.query("UPDATE cloud_sessions SET absolute_expires_at=clock_timestamp()+interval '400 milliseconds' WHERE account_id=$1",[operator.id]);
+  await held.query('BEGIN');await held.query('SELECT 1 FROM mail_suppressions FOR UPDATE');const blocker=(await held.query('SELECT pg_backend_pid() AS pid')).rows[0].pid;
+  pending=admin.finish(operator,op.operationId,observation);void pending.catch(()=>{});let waiting=false;const until=performance.now()+3000;
+  do{waiting=(await f.pool.query('SELECT 1 FROM pg_stat_activity WHERE application_name=$1 AND $2=ANY(pg_blocking_pids(pid))',[f.schema,blocker])).rowCount!==0;if(!waiting)await setImmediate();}while(!waiting&&performance.now()<until);
+  assert.equal(waiting,true,'the real delete waits after the middle authority check');
+  while(!(await held.query('SELECT clock_timestamp()>=absolute_expires_at AS expired FROM cloud_sessions WHERE account_id=$1',[operator.id])).rows[0].expired)await setImmediate();
+  await held.query('ROLLBACK');await assert.rejects(pending,/session_expired/);
+  assert.equal((await f.pool.query('SELECT count(*) FROM mail_suppressions')).rows[0].count,'1');assert.equal((await f.pool.query('SELECT count(*) FROM mail_unblock_outcomes')).rows[0].count,'0');
+ }finally{await held.query('ROLLBACK');await pending?.catch(()=>{});held.release();await f.close();}
+});
+
+test('provider work starts only after its durable audit intent commits',async()=>{
+ const f=await relayFixture();try{
+  await sharedBlock(f);const operator=await actor(f);let intentPresent=false;
+  const admin=service(f,{async query(){intentPresent=(await f.pool.query('SELECT count(*) FROM mail_unblock_provider_attempts')).rows[0].count==='1';return [];},async remove(){}}),op=await request(f,admin,operator);
+  const observation=await admin.reconcile(operator,op.operationId,'owner@example.test',new AbortController().signal).catch(()=>null);
+  assert.equal(intentPresent,true,'external work observes the already committed intent');assert.notEqual(observation,null);
+ }finally{await f.close();}
+});

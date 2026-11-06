@@ -408,9 +408,9 @@ admission into the account TLS adapter and keeps provider receipts separate from
 RFC Message-ID. The internal standalone relay SES adapter uses the same bounded
 TLS transport; its receipt settlement never changes the relay queue outcome.
 It is not exported through the package or selected by worker configuration.
-Local-proof relay SMTP and its outcome strings retain their contract. Queue polling,
-audited removal and provider qualification remain separate implementation tasks.
-No live sender or AWS resource is enabled.
+Local-proof relay SMTP and its outcome strings retain their contract. Internal
+queue polling and audited removal are implemented below. Provider qualification
+and production wiring remain separate. No live sender or AWS resource is enabled.
 
 ## Block a recipient before transport starts
 
@@ -430,7 +430,8 @@ that send. Account retries keep their original Message-ID and receive fresh
 attempt tags; relay uncertainty still refuses automatic resend.
 
 For an explicitly scoped local worker, trusted `suppress` also records a mapping
-in `mail_legacy_suppression_scopes`. Shared lookup checks that mapping against the
+in `mail_legacy_suppression_scopes` and its current lifetime in
+`mail_legacy_suppression_lifetimes`. Shared lookup joins that lifetime to the
 still-present local block. Migration 050 leaves older local blocks unmapped because
 you cannot infer their country or provider from a keyed digest. The mapping stays
 immutable for reconciliation. This writer API adds no removal authority.
@@ -440,6 +441,10 @@ Migration 051 gives each local block its own lifetime identity and records which
 immutable mappings belong to it. Deleting a local block and later adding the same
 digest without a scope cannot revive old country mappings. A new explicitly scoped
 block records mappings for its new lifetime. The original mapping evidence remains.
+A local decision made without a country stays marked for that lifetime, including
+when a scoped writer later touches the same row. Migration 051 treats every old
+local row as unknown-origin because old mappings cannot prove its initial scope.
+Those rows keep the global gate closed; this interface cannot clear them.
 
 Missing retained relay keys leave queued ciphertext and its original expiry intact,
 with no SMTP handoff or attempt. The failed claim occupies worker capacity until
@@ -610,7 +615,12 @@ external operation stopped, and produces no evidence that permits a clear.
 
 `finish` takes the local suppression lock before the shared scope lock, rechecks
 your authority, the revision and all prior blockers, and commits the audit outcome
-with both store changes. Both provider reasons must be absent. Provider failure,
+with both store changes. Both provider reasons must be absent. Before any provider
+call, the operation must still be pending and every local block must have a known,
+matching origin. Each call has an immutable committed intent and a separate
+immutable result, so another query cannot erase the reasons previously removed.
+An intent without a result records uncertain work after a crash; it is no proof
+of provider completion. Historical audit evidence never extends permission to clear. Provider failure,
 partial removal, expired evidence, a new blocker, an unmapped local row or a mapping
 to another scope keeps the block. Evidence that expires during a database write
 rolls back that transaction. A completed blocked operation needs a new request;

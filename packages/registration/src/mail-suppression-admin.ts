@@ -11,7 +11,7 @@ import {transaction} from './transaction.ts';
 import {createSesSuppressionReconciler,type ProviderSuppressionPort,type ProviderSuppressionObservation,type ReconciliationBinding} from './ses-suppression-reconcile.ts';
 
 export interface OperatorCredentials {sessionToken:string;csrfToken:string}
-interface LegacyBlock {block_id:string;key_id:string;digest:string;mappings:Record<string,string>[]}
+interface LegacyBlock {block_id:string;key_id:string;digest:string;unscoped:boolean;mappings:Record<string,string>[]}
 interface Evidence {shared:Record<string,string>[];legacy:LegacyBlock[];legacyRefs:RecipientRef[];legacyCommitments:RecipientRef[]}
 interface AdminConfig {ses:SesHandoffConfig;legacyKeys:RelayKeyConfig;provider:ProviderSuppressionPort;observationTtlMs?:number;providerTimeoutMs?:number}
 interface UnblockRequest {id:string;country:string;provider_account_id:string;region:MailScope['region'];revision:number;operator_id:string;recipient_refs:RecipientRef[];prior_evidence:Evidence}
@@ -42,7 +42,7 @@ export class MailSuppressionAdmin {
  async #snapshot(client:PoolClient,scope:MailScope,refs:readonly RecipientRef[],legacyRefs:RecipientRef[]):Promise<Evidence>{
   const ids=(await client.query('SELECT DISTINCT key_id FROM relay_suppressions')).rows;
   if(ids.some(row=>!this.#legacy.has(row.key_id)))throw Error('mail_keys_unavailable');
-  const legacy:LegacyBlock[]=(await client.query(`SELECT b.block_id,b.key_id,b.digest FROM relay_suppressions b
+  const legacy:LegacyBlock[]=(await client.query(`SELECT b.block_id,b.key_id,b.digest,b.unscoped FROM relay_suppressions b
    JOIN unnest($1::text[],$2::text[]) r(key_id,digest) ON b.key_id=r.key_id AND b.digest=r.digest ORDER BY b.block_id`,
    [legacyRefs.map(r=>r.keyId),legacyRefs.map(r=>r.digest)])).rows.map(row=>({...row,mappings:[]}));
   for(const row of legacy)row.mappings=(await client.query(`SELECT country,provider_account_id,region,key_id,digest
@@ -94,15 +94,28 @@ export class MailSuppressionAdmin {
   if(op.operator_id!==actor)throw Error('permission_denied');return op;
  }
  #binding(op:UnblockRequest):ReconciliationBinding{return {operationId:op.id,scope:{country:op.country,providerAccountId:op.provider_account_id,region:op.region},revision:op.revision};}
+ #legacyReconciled(evidence:Evidence,scope:MailScope,refs:readonly RecipientRef[]){
+  return evidence.legacy.every(block=>!block.unscoped&&block.mappings.length>0&&block.mappings.every(m=>m.country===scope.country&&m.provider_account_id===scope.providerAccountId&&m.region===scope.region
+   &&refs.some(r=>r.keyId===m.key_id&&r.digest===m.digest)));
+ }
  async reconcile(operator:OperatorCredentials,operationId:string,recipient:string,signal:AbortSignal):Promise<ProviderSuppressionObservation>{
-  const binding=await this.#locked(operator,this.#ses.config.scope,recipient,async(client,actor,refs,evidence)=>{
+  const admitted=await this.#locked(operator,this.#ses.config.scope,recipient,async(client,actor,refs,evidence)=>{
    const op=await this.#operation(client,operationId,actor);
+   if((await client.query('SELECT 1 FROM mail_unblock_outcomes WHERE operation_id=$1',[operationId])).rowCount)throw Error('mail_operation_finished');
    if(op.recipient_refs.some(ref=>!refs.some(r=>r.keyId===ref.keyId&&r.digest===ref.digest)))throw Error('mail_recipient_unavailable');
    if(op.revision!==await mailSuppressionRevision(client,this.#ses.config.scope)||!isDeepStrictEqual(op.prior_evidence,evidence))throw Error('mail_revision_conflict');
-   return this.#binding(op);
+   const binding=this.#binding(op);
+   if(!this.#legacyReconciled(evidence,binding.scope,refs))return {binding,attemptId:null};
+   const attemptId=randomUUID();
+   await client.query('INSERT INTO mail_unblock_provider_attempts(id,operation_id,operator_id) VALUES($1,$2,$3)',[attemptId,operationId,actor]);
+   return {binding,attemptId};
   });
-  // Provider calls run after the database transaction releases every lock.
-  return this.#reconciler.reconcile(binding,normaliseEmail(recipient)!,signal);
+  if(!admitted.attemptId)return this.#reconciler.refuse(admitted.binding);
+  // The committed intent orders provider work; a later outcome cannot recall admitted work.
+  const observation=await this.#reconciler.reconcile(admitted.binding,normaliseEmail(recipient)!,signal);
+  // This records completed work, not new removal authority, even if the operator was revoked meanwhile.
+  await this.#pool.query('INSERT INTO mail_unblock_provider_results(attempt_id,provider_evidence) VALUES($1,$2)',[admitted.attemptId,JSON.stringify(this.#reconciler.auditEvidence(observation,admitted.binding))]);
+  return observation;
  }
  async #verifySharedKeys(client:PoolClient,scope:MailScope){
   const retained=(await client.query('SELECT key_id,commitment,revoked FROM mail_recipient_key_versions WHERE country=$1 AND provider_account_id=$2 AND region=$3 ORDER BY key_id FOR SHARE',[scope.country,scope.providerAccountId,scope.region])).rows;
@@ -124,8 +137,7 @@ export class MailSuppressionAdmin {
    let diagnostic='cleared';
    if(!provider||provider.status!=='confirmed'||provider.after.length!==0)diagnostic='provider_unconfirmed';
    else if(op.revision!==await mailSuppressionRevision(client,scope)||!isDeepStrictEqual(op.prior_evidence,evidence))diagnostic='evidence_changed';
-   else if(evidence.legacy.some(block=>block.mappings.length===0||block.mappings.some(m=>m.country!==scope.country||m.provider_account_id!==scope.providerAccountId||m.region!==scope.region
-    ||!op.recipient_refs.some(r=>r.keyId===m.key_id&&r.digest===m.digest))))diagnostic='legacy_unreconciled';
+   else if(!this.#legacyReconciled(evidence,scope,op.recipient_refs))diagnostic='legacy_unreconciled';
    // Recheck time after every database wait, before either suppression store changes.
    await this.#authorize(client,operator);
    if(!this.#reconciler.evidence(observation,binding))diagnostic='provider_unconfirmed';

@@ -610,6 +610,14 @@ survive lost acknowledgements; pending work needs fresh evidence after restart.
 Migration 051 retains the first 50 ledger entries and adds block-lifetime mappings
 without changing historical attribution. Old feedback deduplication survives
 clearing, new blockers can apply again, and no old mail, attempt or token is revived.
+An unscoped decision stays marked for its lifetime and defeats a pending clear.
+Old local rows keep unknown origin, since earlier mappings cannot prove how they
+began; they remain blocked through this interface. Finished operations and known
+unreconcilable local evidence cannot start provider work. Every admitted provider
+attempt retains immutable intent and result rows, including the original removed
+reasons across another query or a lost acknowledgement. An unfinished intent remains
+uncertain. This internal interface starts from an existing Cloud block; provider-only
+removal is not qualified here.
 Operator permission provisioning, production provider acquisition/removal and
 enablement remain open. Task 8 must qualify any additional event types;
 `Rendering Failure` currently refuses. It must also reconcile historical Paris-only

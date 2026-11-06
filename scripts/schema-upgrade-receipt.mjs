@@ -208,7 +208,7 @@ try{
   allowanceChecks.oldSqlUnchanged=true;
   const currentRows=await storedRows(primary.pool,true);
   for(const name of Object.keys(beforeRows)){
-   const project=rows=>mailReconciliation&&name==='relay_suppressions'?rows.map(({value:{block_id,...value}})=>({value})).sort((a,b)=>JSON.stringify(a).localeCompare(JSON.stringify(b))):rows;
+   const project=rows=>mailReconciliation&&name==='relay_suppressions'?rows.map(({value:{block_id,unscoped,...value}})=>({value})).sort((a,b)=>JSON.stringify(a).localeCompare(JSON.stringify(b))):rows;
    assert.deepEqual(project(currentRows[name]),project(beforeRows[name]),name+' preserved by allowance upgrade');
   }
   allowanceChecks.oldRowsPreserved=true;
@@ -217,7 +217,7 @@ try{
   await assert.rejects(new AllowanceConfigStore(primary.pool).effective('2026-11-01'),{code:'allowance_unavailable'});
   allowanceChecks.defaultOff=await emptyAllowances(primary.pool);
   const currentRelay=await relayState(primary.pool);
-  if(mailReconciliation)currentRelay.relay_suppressions=currentRelay.relay_suppressions.map(({value:{block_id,...value}})=>({value})).sort((a,b)=>JSON.stringify(a).localeCompare(JSON.stringify(b)));
+  if(mailReconciliation)currentRelay.relay_suppressions=currentRelay.relay_suppressions.map(({value:{block_id,unscoped,...value}})=>({value})).sort((a,b)=>JSON.stringify(a).localeCompare(JSON.stringify(b)));
   assert.deepEqual(currentRelay,beforeRelay);checks.relayStatePreserved=true;
   assert.deepEqual(await identityAccountState(primary.pool),relayAccounts);checks.accountStatePreserved=true;
   assert.deepEqual(await monitoringState(primary.pool),monitoringBefore);checks.monitoringStatePreserved=true;

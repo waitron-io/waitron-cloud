@@ -52,7 +52,8 @@ export class RelayWorker {
   if(this.#ses&&(!isValidatedSesFeedbackConfig(this.#ses.config)||!this.#ses.config.purposes.includes('venue-email')||this.#ses.config.policyRevision>2147483647))throw Error('mail_configuration_unavailable');
   await transaction(this.#pool,async c=>{
    await c.query(suppressionLock);await this.#checkSuppressionKeys(c);
-   await c.query('INSERT INTO relay_suppressions(key_id,digest) VALUES($1,$2) ON CONFLICT DO NOTHING',[this.#active,this.#digest(this.#active!,recipient)]);
+   await c.query(`INSERT INTO relay_suppressions(key_id,digest,unscoped) VALUES($1,$2,$3) ON CONFLICT(key_id,digest)
+    DO UPDATE SET unscoped=relay_suppressions.unscoped OR EXCLUDED.unscoped`,[this.#active,this.#digest(this.#active!,recipient),!this.#ses]);
    if(this.#ses){
     await lockMailScope(c,this.#ses.config.scope);
     const refs=await mailRecipientRefs(c,{...this.#ses,recipient});

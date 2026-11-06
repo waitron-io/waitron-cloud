@@ -1,7 +1,14 @@
 ALTER TABLE relay_suppressions ADD COLUMN block_id uuid NOT NULL DEFAULT gen_random_uuid();
 ALTER TABLE relay_suppressions ADD UNIQUE(block_id);
+ALTER TABLE relay_suppressions ADD COLUMN unscoped boolean NOT NULL DEFAULT true;
+CREATE FUNCTION preserve_relay_suppression_identity() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+ IF ROW(NEW.key_id,NEW.digest,NEW.block_id) IS DISTINCT FROM ROW(OLD.key_id,OLD.digest,OLD.block_id)
+  OR (OLD.unscoped AND NOT NEW.unscoped) THEN RAISE EXCEPTION 'mail_binding_immutable'; END IF;
+ RETURN NEW;
+END $$;
 CREATE TRIGGER relay_suppression_identity_immutable BEFORE UPDATE ON relay_suppressions
- FOR EACH ROW EXECUTE FUNCTION preserve_mail_binding();
+ FOR EACH ROW EXECUTE FUNCTION preserve_relay_suppression_identity();
 
 CREATE TABLE mail_legacy_suppression_lifetimes (
  block_id uuid NOT NULL,
@@ -63,4 +70,24 @@ CREATE TABLE mail_unblock_outcomes (
 CREATE TRIGGER mail_unblock_outcomes_immutable BEFORE UPDATE OR DELETE ON mail_unblock_outcomes
  FOR EACH ROW EXECUTE FUNCTION preserve_mail_binding();
 CREATE TRIGGER mail_unblock_outcomes_no_truncate BEFORE TRUNCATE ON mail_unblock_outcomes
+ FOR EACH STATEMENT EXECUTE FUNCTION preserve_mail_binding();
+
+CREATE TABLE mail_unblock_provider_attempts (
+ id uuid PRIMARY KEY,
+ operation_id uuid NOT NULL REFERENCES mail_unblock_requests(id),
+ operator_id uuid NOT NULL REFERENCES cloud_accounts(id),
+ recorded_at timestamptz NOT NULL DEFAULT clock_timestamp()
+);
+CREATE TABLE mail_unblock_provider_results (
+ attempt_id uuid PRIMARY KEY REFERENCES mail_unblock_provider_attempts(id),
+ provider_evidence jsonb NOT NULL CHECK(jsonb_typeof(provider_evidence)='object'),
+ recorded_at timestamptz NOT NULL DEFAULT clock_timestamp()
+);
+CREATE TRIGGER mail_unblock_provider_attempts_immutable BEFORE UPDATE OR DELETE ON mail_unblock_provider_attempts
+ FOR EACH ROW EXECUTE FUNCTION preserve_mail_binding();
+CREATE TRIGGER mail_unblock_provider_attempts_no_truncate BEFORE TRUNCATE ON mail_unblock_provider_attempts
+ FOR EACH STATEMENT EXECUTE FUNCTION preserve_mail_binding();
+CREATE TRIGGER mail_unblock_provider_results_immutable BEFORE UPDATE OR DELETE ON mail_unblock_provider_results
+ FOR EACH ROW EXECUTE FUNCTION preserve_mail_binding();
+CREATE TRIGGER mail_unblock_provider_results_no_truncate BEFORE TRUNCATE ON mail_unblock_provider_results
  FOR EACH STATEMENT EXECUTE FUNCTION preserve_mail_binding();

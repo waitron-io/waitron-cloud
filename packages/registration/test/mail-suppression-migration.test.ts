@@ -66,3 +66,18 @@ test('interrupting release 51 rolls back lifetime assignment and its ledger befo
   await migrate(f.pool);assert.equal((await f.pool.query('SELECT count(*) FROM mail_legacy_suppression_lifetimes')).rows[0].count,'2');
  }finally{await held.query('ROLLBACK');await pending;held.release();await f.close();}
 });
+
+test('unscoped provenance survives upgrade and cannot be changed into scoped authority',async()=>{
+ const f=await populated();try{
+  await migrate(f.pool);
+  const rows=(await f.pool.query("SELECT digest,to_jsonb(relay_suppressions)->'unscoped' AS unscoped FROM relay_suppressions ORDER BY digest")).rows;
+  assert.equal(rows.find(r=>r.digest!==f.local).unscoped,true,'old unmapped origin remains unknown');
+  assert.equal(rows.find(r=>r.digest===f.local).unscoped,true,'an old mapping cannot prove that the block began scoped');
+  await f.pool.query("INSERT INTO relay_suppressions(key_id,digest,unscoped) VALUES('s1',repeat('c',64),false)");
+  await f.pool.query("UPDATE relay_suppressions SET unscoped=true WHERE digest=repeat('c',64)");
+  assert.equal((await f.pool.query("SELECT unscoped FROM relay_suppressions WHERE digest=repeat('c',64)")).rows[0].unscoped,true);
+  await assert.rejects(f.pool.query('UPDATE relay_suppressions SET unscoped=false WHERE digest=$1',[f.local]),/mail_binding_immutable/);
+  for(const column of ['key_id','digest','block_id'])await assert.rejects(f.pool.query(`UPDATE relay_suppressions SET ${column}=${column==='block_id'?'gen_random_uuid()':"repeat('f',64)"}`),/mail_binding_immutable/);
+  for(const table of ['mail_unblock_provider_attempts','mail_unblock_provider_results'])assert.equal((await f.pool.query(`SELECT count(*) FROM ${table}`)).rows[0].count,'0');
+ }finally{await f.close();}
+});

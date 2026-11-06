@@ -172,10 +172,10 @@ export async function unmappedLegacyMail(pool,expected,lifetimes=false){
  return true;
 }
 export async function emptyMailReconciliation(pool){
- for(const table of ['mail_legacy_suppression_lifetimes','mail_unblock_requests','mail_unblock_outcomes','mail_suppression_revisions'])
+ for(const table of ['mail_legacy_suppression_lifetimes','mail_unblock_requests','mail_unblock_outcomes','mail_suppression_revisions','mail_unblock_provider_attempts','mail_unblock_provider_results'])
   assert.equal((await pool.query(`SELECT count(*) FROM ${table}`)).rows[0].count,'0',table+' starts empty');
- const blocks=(await pool.query('SELECT block_id FROM relay_suppressions')).rows;
- assert.ok(blocks.length>0);for(const block of blocks)assert.match(block.block_id,/^[a-f0-9-]{36}$/);
+ const blocks=(await pool.query('SELECT block_id,unscoped FROM relay_suppressions')).rows;
+ assert.ok(blocks.length>0);for(const block of blocks){assert.match(block.block_id,/^[a-f0-9-]{36}$/);assert.equal(block.unscoped,true,'retained unmapped origin stays unscoped');}
  assert.equal(new Set(blocks.map(b=>b.block_id)).size,blocks.length);
  return true;
 }

@@ -22,7 +22,18 @@ export function createSesSuppressionReconciler(port:ProviderSuppressionPort,ttlM
  const observations=new WeakMap<object,{binding:string;expires:number;evidence:ProviderEvidence}>();
  // Bind methods once so caller mutations cannot replace a trusted provider port.
  const query=port.query.bind(port),remove=port.remove.bind(port);
+ const issue=(binding:ReconciliationBinding,evidence:ProviderEvidence)=>{
+  const observation=Object.freeze({}) as ProviderSuppressionObservation;
+  observations.set(observation,{binding:bindingKey(binding),expires:performance.now()+ttlMs,evidence});return observation;
+ };
  return {
+  refuse(binding:ReconciliationBinding):ProviderSuppressionObservation{return issue(binding,{status:'failed',before:[],after:[]});},
+  // Historical audit evidence remains recordable after its permission to clear expires.
+  auditEvidence(observation:ProviderSuppressionObservation,binding:ReconciliationBinding):ProviderEvidence{
+   const registered=observations.get(observation);
+   if(!registered||registered.binding!==bindingKey(binding))throw Error('provider_unconfirmed');
+   return structuredClone(registered.evidence);
+  },
   async reconcile(binding:ReconciliationBinding,recipient:string,signal:AbortSignal):Promise<ProviderSuppressionObservation>{
    const controller=new AbortController(),combined=AbortSignal.any([signal,controller.signal]);
    let timer:ReturnType<typeof setTimeout>|undefined;
@@ -41,8 +52,7 @@ export function createSesSuppressionReconciler(port:ProviderSuppressionPort,ttlM
    try{evidence=await Promise.race([work(),aborted]);}
    catch{evidence={status:'failed',before,after:[]};}
    finally{clearTimeout(timer);controller.abort();}
-   const observation=Object.freeze({}) as ProviderSuppressionObservation;
-   observations.set(observation,{binding:bindingKey(binding),expires:performance.now()+ttlMs,evidence});return observation;
+   return issue(binding,evidence);
   },
   evidence(observation:unknown,binding:ReconciliationBinding):ProviderEvidence|null{
    if(!observation||typeof observation!=='object')return null;
