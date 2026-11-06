@@ -3379,9 +3379,14 @@ millisecond later than its creation timestamp. The unchanged case passes in
 [PR890's job](https://github.com/waitron-io/waitron-cloud/actions/runs/41800780918/job/126476006089).
 A Linux probe calling `createSession` reproduces the same one-millisecond gap
 before any HTTP request. Migration `002_identity.sql` gives the two columns
-independent `clock_timestamp()` defaults. Repair the fixture's assumption while
-preserving proof that passive reads do not update the session. No assertion,
-session behaviour or landed migration has been changed for this investigation.
+independent `clock_timestamp()` defaults. The test now seeds that difference
+and compares activity and creation time independently before and after both
+page reads. Real PostgreSQL reproduces the old one-millisecond failure and
+passes both corrected cases. Four independent controls catch activity or
+creation-time rewrites; every other assertion and deadline is preserved.
+Production session behaviour and landed migrations are unchanged. Activity
+updates delayed by sixty seconds and changes to absolute session expiry remain
+outside this test's coverage, as they were before this repair.
 
 ## Bound verifier test failure cleanup (D530)
 
