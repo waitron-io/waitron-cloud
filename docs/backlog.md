@@ -260,6 +260,11 @@ stubbed HTTP; real server authority and general cleanup bounds remain unqualifie
 All five sampled pending-review duplicate mutations were caught, once by a later
 count. The final rate-limit duplicate assertion has no later request count;
 its mutation coverage remains unqualified.
+Capture retention also remains unqualified in the sibling fixtures
+`authenticator-setup-enter-browser.test.ts`, `passkey-enter-browser.test.ts`,
+`passkey-add-keyboard-browser.test.ts`, `session-list-activity-browser.test.ts`
+and `public-challenge-script-fallback-browser.test.ts`. This review did not run
+those siblings; the filename pattern alone does not establish a lost capture.
 
 ## Separate-process storage extraction and failed-startup cleanup (D457)
 
