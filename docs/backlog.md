@@ -1,5 +1,12 @@
 # Waitron Cloud backlog
 
+## Cost-test fixture wording (D589)
+
+The browser and owner backend fixtures now use English operation and street
+samples. Their Spain-specific country, fiscal territory, invoice locale, time
+zone and test assertions are unchanged. The existing location fields still
+await Waitron's removal of that concept; this wording change adds none.
+
 ## Disposable test slots and repository runners (D592)
 
 The [design](superpowers/specs/2026-11-06-disposable-test-server-design.md) and [implementation plan](superpowers/plans/2026-11-06-disposable-test-server.md) propose isolated one-job VMs, a Mac controller and later JIT runners and a repeatable bridge-to-permanent AX102 migration for Cloud first, Waitron later.
