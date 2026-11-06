@@ -277,8 +277,12 @@ for (const versioned of [false, true]) test(`lostCreateMustMatchRequestedKey_${v
   f.time(10); await assert.rejects(f.audit.verify(), bad); assert.throws(() => f.meter.snapshot(), /Invalid cloud cost meter/);
 });
 
-for (const versioned of [false, true]) for (const method of ['GET', 'PUT', 'DELETE']) test(`lostReplyBlocksAllRequestsBeforeInventory_${versioned}_${method}`, async t => {
-  const f = await fixture(t, versioned); lost(f, 'create');
-  assert.throws(() => f.audit.begin({ method, path, headers: { 'content-length': '0' } }), bad);
-  assert.throws(() => f.meter.snapshot(), /Invalid cloud cost meter/);
+for (const versioned of [false, true]) for (const method of ['GET', 'PUT', 'DELETE']) test(`lostReplyAllowsSettledOrdinaryRequestsBeforeInventory_${versioned}_${method}`, async t => {
+  const f = await fixture(t, versioned); lost(f, 'create'); let finish;
+  assert.doesNotThrow(() => { finish = f.audit.begin({ method, path, headers: { 'content-length': '0' } }); });
+  finish({ statusCode: method === 'DELETE' ? 204 : 200, bytesOut: 0,
+    responseHeaders: { 'x-amz-version-id': 'ordinary', ...(method === 'DELETE' ? { 'x-amz-delete-marker': 'true' } : {}) } });
+  // Settle the request before checking that the unresolved upload still prevents a snapshot.
+  assert.throws(() => f.audit.snapshot(), bad);
+  assert.equal(f.meter.diagnostics().firstInvalidation, null);
 });

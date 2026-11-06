@@ -401,7 +401,12 @@ export async function openLitestreamHistories({ client, sdk, meter, bucket, cloc
     requireThat(result.$metadata?.httpStatusCode === 200 && result.$metadata.attempts === 1);
     return result;
   };
+  const historyGap = () => { gaps.add('accounting:incomplete-history'); meter.markGap('accounting:incomplete-history'); };
   const transition = (row, mutation, by) => {
+    if (row.pendingCompletion) {
+      row.pendingCompletion.overwritten = true;
+      row.pendingCompletion.following.clear();
+    }
     if (row.current && !(mutation.method === 'PUT' && row.current.bytes === mutation.bytes)) {
       retiredLow += row.current.bytes * Math.max(0, mutation.from - row.current.by);
       retiredHigh += row.current.bytes * (by - row.current.from);
@@ -414,6 +419,16 @@ export async function openLitestreamHistories({ client, sdk, meter, bucket, cloc
   // A later different mutation can erase an intermediate retained interval. Keep every
   // possible owned size until inventory, but do not assign byte-time totals to that history.
   const mutationFor = (row, method, bytes, time) => {
+    if (row.pendingCompletion) {
+      historyGap();
+      const completion = row.pendingCompletion;
+      completion.advanced = true;
+      if (!completion.overwritten) {
+        const following = completion.following, candidate = method === 'PUT' ? bytes : null;
+        requireThat(following.has(candidate) || following.size < 100000);
+        following.add(candidate);
+      }
+    }
     if (row.uncertain && (row.uncertain.method !== method || row.uncertain.bytes !== bytes)) {
       gaps.add('accounting:incomplete-history'); meter.markGap('accounting:incomplete-history');
       row.candidates ??= new Set([row.current?.bytes ?? null,
@@ -428,11 +443,27 @@ export async function openLitestreamHistories({ client, sdk, meter, bucket, cloc
     if (row.candidates || (mutation.method === 'PUT' ? row.current?.bytes !== mutation.bytes : row.current !== null)) row.uncertain = mutation;
   };
   const multipart = allowMultipart ? nativeMultipartHistory({ bucket, now, inspect, resolveReplies: resolveMultipartReplies,
-    markGap: code => { gaps.add(code); meter.markGap(code); }, complete: (key, bytes, from, by) => {
+    markGap: code => { gaps.add(code); meter.markGap(code); }, prepareComplete: (key, bytes, from) => {
     let row = rows.get(key);
-    requireThat(!row?.active && !row?.uncertain);
+    requireThat(!row?.active);
     if (!row) { requireThat(rows.size < 100000); row = { current: null, uncertain: null, active: false }; rows.set(key, row); }
-    transition(row, { method: 'PUT', bytes, from }, by);
+    const mutation = mutationFor(row, 'PUT', bytes, from);
+    const completion = { following: new Set([bytes]), advanced: false, overwritten: false };
+    row.pendingCompletion = completion;
+    const apply = by => {
+      requireThat(row.pendingCompletion === completion && !row.active);
+      row.pendingCompletion = null;
+      // Inventory can witness the completed upload after later work. It cannot
+      // replace a newer acknowledged object or date an invisible intermediate interval.
+      if (completion.overwritten) { historyGap(); return; }
+      if (completion.advanced) {
+        historyGap();
+        row.candidates = new Set(completion.following);
+      } else transition(row, mutation, by);
+    };
+    apply.resolve = apply;
+    apply.absent = () => { requireThat(row.pendingCompletion === completion); row.pendingCompletion = null; };
+    return apply;
   } }) : null;
   const beginBatch = ({ headers, body }) => {
     requireThat(allowBulkDeletes === true && headers && !Object.hasOwn(headers, 'content-encoding')
@@ -495,7 +526,7 @@ export async function openLitestreamHistories({ client, sdk, meter, bucket, cloc
     requireThat(!url.searchParams.has('versionId'));
     const time = now();
     if (operation.startsWith('multipart-')) {
-      requireThat(pending.size === 0 && !rows.get(key)?.uncertain);
+      requireThat(pending.size === 0);
       const finish = multipart.begin({ operation, key, query: url.searchParams, headers, body, time });
       verified = false; const token = {}; pending.add(token);
       return guarded(event => { requireThat(pending.has(token)); finish(event); pending.delete(token); });
@@ -555,7 +586,7 @@ export async function openLitestreamHistories({ client, sdk, meter, bucket, cloc
         continuation = page.NextContinuationToken;
         requireThat(text(continuation) && !tokens.has(continuation)); tokens.add(continuation);
       }
-      if (multipart) await multipart.verify([...found].map(([key, bytes]) => ({ key, bytes })));
+      if (multipart) await multipart.verify();
       else {
         const uploads = await inspect('ListMultipartUploadsCommand');
         requireThat(uploads.IsTruncated === false && (uploads.Uploads === undefined || Array.isArray(uploads.Uploads) && uploads.Uploads.length === 0));
@@ -603,8 +634,8 @@ export async function openLitestreamHistories({ client, sdk, meter, bucket, cloc
 }
 
 // Independent inventory bounds an interrupted mutation without claiming a successful reply.
-// Unresolved mutation state still fences further storage operations until verification.
-export function nativeMultipartHistory({ bucket, now, inspect, complete, markGap, resolveReplies = false }) {
+// Only an active request fences ordinary work; settled uncertainty still requires inventory.
+export function nativeMultipartHistory({ bucket, now, inspect, prepareComplete, markGap, resolveReplies = false }) {
   const uploads = new Map(); let busy = false, uncertain = null, retiredLow = 0, retiredHigh = 0;
   const retire = (part, from, by) => {
     retiredLow += part.bytes * Math.max(0, from - part.by);
@@ -618,7 +649,7 @@ export function nativeMultipartHistory({ bucket, now, inspect, complete, markGap
     const length = headers['content-length'] ?? '0';
     requireThat(/^(0|[1-9]\d*)$/.test(length) && count(Number(length)));
     const bytes = Number(length), uploadId = query.get('uploadId'), id = identity(key, uploadId);
-    const upload = uploads.get(id); let selected;
+    const upload = uploads.get(id); let selected, applyCompletion;
     if (operation === 'multipart-create') requireThat(bytes === 0 && uploads.size < 100000);
     else requireThat(upload);
     if (operation === 'multipart-upload') requireThat(bytes >= 0 && upload.parts.size < 10000);
@@ -632,6 +663,8 @@ export function nativeMultipartHistory({ bucket, now, inspect, complete, markGap
         requireThat(n > previous && part && f.ETag === part.etag); previous = n; selected.push(part);
       }
       requireThat(selected.length > 0);
+      const size = selected.reduce((n, part) => n + part.bytes, 0); requireThat(count(size));
+      applyCompletion = prepareComplete(key, size, time);
     }
     busy = true;
     return ({ statusCode, bytesOut, interrupted = false, responseBody, responseHeaders }) => {
@@ -642,7 +675,7 @@ export function nativeMultipartHistory({ bucket, now, inspect, complete, markGap
       if (interrupted || statusCode >= 300) {
         requireThat(interrupted || resolveReplies === true);
         if (interrupted) markGap('accounting:request-cutoff');
-        uncertain = { operation, key, id, upload, bytes, time, partNumber: Number(query.get('partNumber')), selected };
+        uncertain = { operation, key, id, upload, bytes, time, partNumber: Number(query.get('partNumber')), selected, applyCompletion };
         busy = false; return;
       }
       requireThat(statusCode === (operation === 'multipart-abort' ? 204 : 200));
@@ -659,8 +692,7 @@ export function nativeMultipartHistory({ bucket, now, inspect, complete, markGap
         if (operation === 'multipart-complete') {
           const f = fields(responseBody, 'CompleteMultipartUploadResult', ['Location', 'Bucket', 'Key', 'ETag']);
           requireThat(f.Bucket === bucket && f.Key === key && cleanText(f.ETag));
-          const size = selected.reduce((n, part) => n + part.bytes, 0); requireThat(count(size));
-          complete(key, size, time, by, responseHeaders);
+          applyCompletion(by, responseHeaders);
         }
         for (const part of upload.parts.values()) retire(part, time, by);
         uploads.delete(id);
@@ -681,7 +713,7 @@ export function nativeMultipartHistory({ bucket, now, inspect, complete, markGap
     }
     fail();
   };
-  return { begin, active: () => busy || uncertain !== null, verify: async (objects = []) => {
+  return { begin, active: () => busy, verify: async () => {
     requireThat(!busy);
     const observed = new Map();
     for (const entry of await pages('ListMultipartUploadsCommand', 'Uploads', [['KeyMarker', 'NextKeyMarker'], ['UploadIdMarker', 'NextUploadIdMarker']])) {
@@ -716,14 +748,11 @@ export function nativeMultipartHistory({ bucket, now, inspect, complete, markGap
         } else requireThat(unchanged || !previous && !part);
       } else if (!found) {
         if (u.operation === 'multipart-complete') {
-          const size = u.selected.reduce((n, p) => n + p.bytes, 0); requireThat(count(size));
-          const candidates = objects.filter(row => row.key === u.key && row.bytes === size && row.marker !== true);
-          requireThat(candidates.length === 1);
-          complete(u.key, size, u.time, by, candidates[0].version ? { 'x-amz-version-id': candidates[0].version } : undefined);
+          u.applyCompletion.resolve(by);
         }
         for (const part of u.upload.parts.values()) retire(part, u.time, by);
         uploads.delete(u.id);
-      }
+      } else if (u.operation === 'multipart-complete') u.applyCompletion.absent?.();
       uncertain = null;
     }
     requireThat(observed.size === uploads.size);

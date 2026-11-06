@@ -248,8 +248,18 @@ set is bounded at 100,000 distinct possible sizes per key; active overlaps,
 malformed replies, duplicate completions and foreign inventory still refuse.
 Run `node --test scripts/cloud-cost/uncertain-forwarding.test.mjs` for candidate
 ownership, the memory bound and six real HTTP sequences. These controls do not
-prove SQLite recovery. Multipart uncertainty and completion still need the
-wider forwarding policy in both storage modes.
+prove SQLite recovery.
+Settled multipart uncertainty now permits later ordinary reads, writes and
+single or batch deletions. Independent inventory still checks retained objects
+and parts. A completed upload keeps its original request order when inventory
+finds it after later work; it cannot replace a newer acknowledged object.
+Unversioned completion also proceeds after an earlier uncertain ordinary write.
+Hidden intermediate storage time remains unknown, and acknowledged replacements
+release obsolete candidates. Run `node --test
+scripts/cloud-cost/multipart-ordinary-forwarding.test.mjs` for both storage modes,
+version ordering, candidate ownership and two real HTTP sequences. These checks
+do not prove SQLite recovery. Consecutive multipart mutations after a lost
+multipart reply still need the wider forwarding policy.
 The full nonblocking accounting path, publication refusal, lost-write
 restore control and saved-failure replay remain open. These partial changes do
 not establish the historical cause or relax functional admission.

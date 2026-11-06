@@ -39,12 +39,19 @@ export async function openLitestreamVersionHistories({ client, sdk, meter, bucke
     row.deleted = true; row.removing = null;
   };
   const multipart = allowMultipart ? nativeMultipartHistory({ bucket, now, inspect, resolveReplies: resolveMultipartReplies,
-    markGap: code => { gaps.add(code); meter.markGap(code); }, complete: (key, bytes, from, by, headers) => {
-    const version = headers?.['x-amz-version-id'], marker = headers?.['x-amz-delete-marker'];
-    need(text(version) && version !== 'null' && !rows.has(identity(key, version))
-      && (marker === undefined || marker === 'false') && rows.size < 100000 && sequence < 100000);
-    rows.set(identity(key, version), { key, version, bytes, marker: false, from, by,
-      orders: [++sequence], latest: false, deleted: false, removing: null });
+    markGap: code => { gaps.add(code); meter.markGap(code); }, prepareComplete: (key, bytes, from) => {
+    need(sequence < 100000); const order = ++sequence;
+    const apply = (by, headers) => {
+      const version = headers?.['x-amz-version-id'], marker = headers?.['x-amz-delete-marker'];
+      need(text(version) && version !== 'null' && !rows.has(identity(key, version))
+        && (marker === undefined || marker === 'false') && rows.size < 100000);
+      rows.set(identity(key, version), { key, version, bytes, marker: false, from, by,
+        orders: [order], latest: false, deleted: false, removing: null });
+    };
+    // The vanished upload requires a retained version. Reserve request order at
+    // admission so later ordinary writes cannot become older during inventory.
+    apply.resolve = () => { unresolved.push({ key, bytes, marker: false, from, order, required: true }); };
+    return apply;
   } }) : null;
   const beginBatch = ({ headers, body }) => {
     need(allowBulkDeletes === true && headers && !Object.hasOwn(headers, 'content-encoding')
@@ -199,7 +206,7 @@ export async function openLitestreamVersionHistories({ client, sdk, meter, bucke
         markers = { KeyMarker: page.NextKeyMarker, VersionIdMarker: page.NextVersionIdMarker };
         const id = JSON.stringify(markers); need(!tokens.has(id)); tokens.add(id);
       }
-      if (multipart) await multipart.verify([...found].filter(([id]) => !rows.has(id)).map(([, row]) => row));
+      if (multipart) await multipart.verify();
       else {
         const uploads = await inspect('ListMultipartUploadsCommand');
         need(uploads.IsTruncated === false && (uploads.Uploads === undefined || Array.isArray(uploads.Uploads) && uploads.Uploads.length === 0));
@@ -209,7 +216,10 @@ export async function openLitestreamVersionHistories({ client, sdk, meter, bucke
       for (const mutation of unresolved) {
         const id = group(mutation); if (!groups.has(id)) groups.set(id, []); groups.get(id).push(mutation);
       }
-      for (const [id, candidates] of groups) orders.set(id, candidates.map(c => c.order));
+      for (const [id, candidates] of groups) {
+        candidates.sort((a, b) => a.order - b.order);
+        orders.set(id, candidates.map(c => c.order));
+      }
       for (const [id, observed] of found) {
         let row = rows.get(id);
         if (!row) {
@@ -222,6 +232,7 @@ export async function openLitestreamVersionHistories({ client, sdk, meter, bucke
         need(!row.deleted && row.bytes === observed.bytes && row.marker === observed.marker);
         row.latest = observed.latest;
       }
+      for (const [id, candidates] of groups) need((used.get(id) ?? 0) >= candidates.filter(c => c.required).length);
       const byKey = new Map();
       for (const [id, row] of rows) {
         if (row.deleted) { need(!found.has(id)); continue; }
