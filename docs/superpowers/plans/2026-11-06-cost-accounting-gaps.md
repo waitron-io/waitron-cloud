@@ -127,6 +127,10 @@ For each task: add the named failing behavioral tests, run the focused command a
 - [ ] After the signed-off docs/code commits, require both exact-head checks: `node scripts/ci-root-review.mjs --check "$(git rev-parse HEAD)"` and `node scripts/ci-docs.mjs --audit "$(git rev-parse HEAD)"`. Generation must read the exact staged tree; immutable checks and CI must cover the resulting head and any later combined/rebased tree. Do not renew unrelated peer modes to force a shortcut.
 - [ ] Finish using the normal branch review/push/CI gates on the authorised executor, including the required Claude run-it review for the later non-docs branch. Do not substitute a whole-workspace local run for focused tests or current-head CI. Announce readiness for `finish-branch` when implementation and its validation are actually complete.
 
+### 7. Reconcile older accounting-only backlog entries after runtime delivery
+
+- [ ] After the runtime change lands, read the complete D135, D141, D152, D249, D262, D344, D351 and D352 entries and their evidence. The section titles are candidates, not proof that an entry is resolved. In one docs-only pass, close only the accounting refusals the delivered rule actually answers. Preserve failures of working checks and every remaining qualification limit; link each disposition to the delivered behavior and its tests. Do not mark this follow-up complete when only this plan has landed.
+
 ## Evidence at plan handoff
 
 Only source tracing and read-only audits ran here. On `f3e55057a`, `node scripts/ci-root-review.mjs --check "$(git rev-parse HEAD)"` returned “Root input review is current”; `node scripts/ci-docs.mjs --audit "$(git rev-parse HEAD)"` returned “Documentation reader audit is current”. These validate that existing immutable head, not this uncommitted plan or future implementation. No Docker, new behavioral controls, historical replay, fresh-context review or code delivery is claimed.
