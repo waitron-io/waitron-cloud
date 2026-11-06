@@ -792,10 +792,10 @@ to identify a recurrence before changing request or shutdown behavior.
 behaviour. Native refusal and retry checks already pass.
 See [the remaining checks](backlog/diagnostic-download-http.md#diagnostic-download-qualification).
 
-## Usage-read transport refusals and retry waits (D434, D436)
+## Usage deployment qualification
 
-**Open.** Account retry waits and email cooldowns now measure elapsed time through clock corrections, including passkey, authenticator, session management and sign-out (D562). Native and browser controls cover their request gates and countdowns; server authority and production metering remain unqualified.
-See [the boundaries and remaining work](backlog/usage-metering.md#usage-read-transport-refusals-and-retry-waits-d434-d436).
+**Open.** Qualify server authority and production metering before you use totals
+for billing or enforcement. See [the remaining usage qualifications](backlog/usage-metering.md#usage-deployment-qualification).
 
 ## Native storage admin fallback exhaustion (D506)
 
