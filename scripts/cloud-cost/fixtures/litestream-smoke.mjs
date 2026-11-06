@@ -23,7 +23,8 @@ async function smoke() {
   const database = stateRoot + '/venue/venue.db', output = stateRoot + '/restored.db';
   const children = new Set(); let injectedFailures = 0, failedUploadInvocation, retryAcknowledged = false;
   const afterStop = createLitestreamAfterStop({ clock: () => performance.now() / 1000 });
-  const controlSocket = stateRoot + '/control.sock';
+  // Host-shared state mounts need not expose a Unix listener to both processes.
+  const controlSocket = '/tmp/synthetic-litestream-' + process.pid + '.sock';
   const fault = createServer((req, res) => {
     let requestBytes = 0; req.on('data', bytes => { requestBytes += bytes.length; });
     if (req.method === 'PUT' && injectedFailures === 0) {
@@ -121,8 +122,8 @@ async function smoke() {
     let uploaded = false;
     for (let n = 0; n < 40; n++) {
       if (!children.has(replicator.child)) fail();
-      // An idle transfer counter excludes SDK backoff; require the injected upload's retry as well as its reply.
-      if ((await list()).some(r => r.Key.endsWith('.ltx')) && replication.transport.checkpoint().pending === 0
+      // L0 can finish before the startup snapshot is admitted; wait for that snapshot and the retry reply.
+      if ((await list()).some(r => /^stream\/0009\/[a-f0-9]{16}-[a-f0-9]{16}\.ltx$/.test(r.Key)) && replication.transport.checkpoint().pending === 0
         && (injectedFailures === 0 || retryAcknowledged)) { uploaded = true; break; }
       await delay(500);
     }

@@ -4,7 +4,7 @@ import { spawnSync } from 'node:child_process';
 
 // The real smoke, audit, counters and forwarding proxy run against a local HTTP store.
 // Only the external venue, SDK administration, SQLite reader and native process are substituted.
-function run({ backendStatus = 200, versionId = null, transport = '1', holdInitialReply = false, holdRetry = false, incomplete = null, backendReply = null, uploadBody = null } = {}) {
+function run({ backendStatus = 200, versionId = null, transport = '1', holdInitialReply = false, holdRetry = false, holdSnapshot = false, holdSnapshotReply = false, incomplete = null, backendReply = null, uploadBody = null } = {}) {
   const actual = new URL('./litestream.mjs', import.meta.url).href;
   const meter = new URL('./meter.mjs', import.meta.url).href;
   const fixture = new URL('./fixtures/litestream-smoke.mjs', import.meta.url).href;
@@ -14,7 +14,7 @@ function run({ backendStatus = 200, versionId = null, transport = '1', holdIniti
       export const readFileSync=()=>JSON.stringify({config:{},initial:{}});`,
     'node:sqlite': `export class DatabaseSync {prepare(){return {get:()=>({integrity_check:'ok',n:globalThis.closedWriter?2:0})};}close(){}}`,
     'node:module': `class Command{};export const createRequire=()=>()=>({S3Client:class {
-      async send(){if(globalThis.writerReady)await (globalThis.retryWaiting??globalThis.initialReplyHeld??globalThis.writerReady);return {Contents:[{Key:'stream/one.ltx',Size:4}]};}destroy(){}},
+      async send(){if(globalThis.writerReady)await (globalThis.retryWaiting??globalThis.initialReplyHeld??globalThis.writerReady);return {Contents:[{Key:(${holdSnapshotReply}?globalThis.snapshotStored:globalThis.snapshotReady)===false?'stream/0000/0000000000000001-0000000000000001.ltx':'stream/0009/0000000000000001-0000000000000001.ltx',Size:4}]};}destroy(){}},
       CreateBucketCommand:Command,ListObjectsV2Command:Command,DeleteObjectCommand:Command,DeleteBucketCommand:Command});`,
     '/code/cost-waitron-adapter.mjs': `export const openReplay=async()=>({recordSale:async()=>{if(globalThis.secondSale)await globalThis.secondSale();},
       counts:()=>({attempted:2,successful:2,failed:0}),verify:async()=>({ok:true,issues:0}),close:async()=>{}});`,
@@ -66,6 +66,8 @@ function run({ backendStatus = 200, versionId = null, transport = '1', holdIniti
                 callback(incoming);
                 if(${backendReply === 'truncated'})setImmediate(()=>globalThis.truncateBackend());
               };globalThis.secondCommitted();
+            }else if(${holdSnapshotReply} && args[1].headers['amz-sdk-invocation-id']==='33333333-3333-4333-8333-333333333333'){
+              globalThis.snapshotStored=true;setTimeout(()=>callback(incoming),800);
             }else if(${holdInitialReply} && args[1].headers['amz-sdk-invocation-id']==='11111111-2222-4333-8444-555555555555'){
               globalThis.initialStored();setTimeout(()=>callback(incoming),50);
             }else callback(incoming);
@@ -79,12 +81,19 @@ function run({ backendStatus = 200, versionId = null, transport = '1', holdIniti
         const child=new EventEmitter();child.stderr=new EventEmitter();
         if(args[0]==='restore'){if(${uploadBody !== null})console.error(JSON.stringify({kind:'restore-started'}));child.kill=()=>true;setImmediate(()=>child.emit('close',0));return child;}
         const http=process.getBuiltinModule('http'),endpoint=globalThis.nativeConfig.dbs[0].replica.endpoint;
+        globalThis.snapshotReady=!${holdSnapshot};globalThis.snapshotStored=false;
+        let snapshotGate;
+        if(${holdSnapshot}){snapshotGate=http.createServer((req,res)=>{let released=false;globalThis.releaseSnapshot=()=>{
+          if(released)return;released=true;clearTimeout(globalThis.snapshotTimer);
+          const upstream=http.request(endpoint+req.url,{method:req.method,headers:req.headers},incoming=>{res.writeHead(incoming.statusCode,incoming.headers);incoming.pipe(res);});
+          upstream.on('error',()=>res.destroy());req.pipe(upstream);};globalThis.snapshotTimer=setTimeout(globalThis.releaseSnapshot,${holdSnapshotReply}?0:800);globalThis.snapshotHeld();});snapshotGate.listen(0,'127.0.0.1');}
         let active=Promise.resolve();let requests=0;
         const put=async(invocation,ordinal)=>{
-          const path='/synthetic-litestream/stream/'+invocation+'.ltx';
+          const path='/synthetic-litestream/stream/'+(invocation==='33333333-3333-4333-8333-333333333333'?'0009/0000000000000001-0000000000000001':invocation)+'.ltx';
+          const target=invocation==='33333333-3333-4333-8333-333333333333'?'http://127.0.0.1:'+snapshotGate.address().port:endpoint;
           const headers={'content-length':'4','amz-sdk-invocation-id':invocation,'amz-sdk-request':'attempt='+ordinal+'; max=3'};
           child.stderr.emit('data',Buffer.from('SDK 2026/10/25 03:00:00 DEBUG Request\\nPUT '+path+' HTTP/1.1\\r\\nAmz-Sdk-Invocation-Id: '+invocation+'\\r\\nAmz-Sdk-Request: attempt='+ordinal+'; max=3\\r\\n\\r\\n'));
-          return new Promise((resolve,reject)=>{const req=http.request(endpoint+path,{method:'PUT',headers},res=>{
+          return new Promise((resolve,reject)=>{const req=http.request(target+path,{method:'PUT',headers},res=>{
             res.on('error',reject);res.resume();res.on('end',()=>resolve(res.statusCode));});req.on('error',reject);
               if(${uploadBody === 'truncated'} && invocation==='22222222-2222-4333-8444-555555555555'){
                 globalThis.abortUpload=()=>req.destroy();req.write('f');
@@ -92,7 +101,7 @@ function run({ backendStatus = 200, versionId = null, transport = '1', holdIniti
         };
         const socket=http.createServer((req,res)=>{req.resume();req.on('end',()=>{
           res.end(JSON.stringify({status:'stopped',path:'/state/synthetic-litestream-proof/venue/venue.db',txid:0}));
-          setTimeout(()=>globalThis.releaseBackend?.(),25);
+          setTimeout(()=>{globalThis.releaseBackend?.();if(${holdSnapshot}&&!globalThis.snapshotReady)globalThis.releaseSnapshot();},25);
         });});socket.listen('/tmp/d152-commit-'+process.pid+'.sock');
         const backend=http.createServer((req,res)=>{req.resume();req.on('end',()=>{requests++;
           if(${backendReply !== null} && requests===2){
@@ -107,17 +116,24 @@ function run({ backendStatus = 200, versionId = null, transport = '1', holdIniti
             if(${holdRetry}){globalThis.retryBackoff();await new Promise(resolve=>setTimeout(resolve,100));}
             await put('11111111-2222-4333-8444-555555555555',2);globalThis.retryComplete=true;
           });
-          active.then(()=>globalThis.initialReplyComplete=true);ready(active);
+          active.then(()=>globalThis.initialReplyComplete=true);
+          if(${holdSnapshot}){active=active.then(async()=>{
+            const held=new Promise(resolve=>globalThis.snapshotHeld=resolve);
+            globalThis.snapshotUpload=put('33333333-3333-4333-8333-333333333333',1).then(status=>{if(status!==200)throw Error('snapshot refused');globalThis.snapshotReady=true;});
+            globalThis.snapshotUpload.catch(()=>{});await held;
+          });}
+          ready(active);
         });
         let ready;globalThis.writerReady=new Promise(resolve=>ready=resolve);
         if(${holdInitialReply})globalThis.initialReplyHeld=new Promise(resolve=>globalThis.initialStored=resolve);
         if(${holdRetry})globalThis.retryWaiting=new Promise(resolve=>globalThis.retryBackoff=resolve);
         globalThis.secondSale=async()=>{let committed;const wait=new Promise(resolve=>committed=resolve);globalThis.secondCommitted=committed;
+          if(${holdSnapshot})console.error(JSON.stringify({kind:'snapshot-before-final-sale',replyComplete:globalThis.snapshotReady}));
           if(${holdInitialReply} && !globalThis.initialReplyComplete)throw Error('INITIAL_REPLY_PENDING');
           if(${holdRetry} && !globalThis.retryComplete)throw Error('RETRY_STILL_WAITING');
           active=put('22222222-2222-4333-8444-555555555555',1);active.catch(()=>{});await wait;};
         let stopping=false;child.kill=()=>{if(stopping)return true;stopping=true;
-          active.catch(()=>{}).then(()=>{globalThis.closedWriter=true;socket.close(()=>{});backend.closeAllConnections();backend.close(()=>{});child.emit('close',0);});return true;};
+          Promise.allSettled([active,globalThis.snapshotUpload]).then(()=>{globalThis.closedWriter=true;snapshotGate?.closeAllConnections();snapshotGate?.close(()=>{});socket.close(()=>{});backend.closeAllConnections();backend.close(()=>{});child.emit('close',0);});return true;};
         return child;
       }`,
   };
@@ -280,4 +296,40 @@ test('the smoke prints aborted reply progress in its stop and cleanup reports', 
     assert.equal(detail.code, 'ECONNRESET');
   }
   assert.doesNotMatch(result.stderr, /Synthetic Litestream phase: restore/);
+});
+
+// A held snapshot has not reached either measuring hop when the L0 inventory becomes visible.
+test('initial readiness waits for a snapshot held before HTTP admission while L0 is visible', () => {
+  const result = run({ holdSnapshot: true });
+  assert.equal(result.error, undefined, 'the startup barrier must fit the existing process deadline');
+  assert.equal(result.status, 0, result.stderr);
+  const output = JSON.parse(result.stdout);
+  assert.deepEqual(JSON.parse(result.stderr.split('\n').find(line=>line.startsWith('{')&&JSON.parse(line).kind==='snapshot-before-final-sale')),
+    {kind:'snapshot-before-final-sale',replyComplete:true});
+  assert.equal(output.restoredSales, 2);
+  assert.equal(output.injectedFailures, 1);
+  assert.equal(output.afterStop.lateAdmissions, 0);
+  assert.equal(output.observed.accounting.producer.attempts, 4);
+  assert.equal(output.observed.accounting.observer.attempts, 4);
+  assert.equal(output.replication.requestsReconciled, true);
+  assert.equal(output.observed.reconciled, true);
+  assert.equal(output.afterStop.bodiesReconciled, true);
+});
+
+// Storage visibility must not hide a successful snapshot reply still held before the measuring transport.
+test('initial readiness waits for the visible snapshot reply to finish at both measuring hops', () => {
+  const result = run({ holdSnapshot: true, holdSnapshotReply: true });
+  assert.equal(result.error, undefined, 'the reply barrier must fit the existing process deadline');
+  assert.equal(result.status, 0, result.stderr);
+  assert.deepEqual(JSON.parse(result.stderr.split('\n').find(line=>line.startsWith('{')&&JSON.parse(line).kind==='snapshot-before-final-sale')),
+    {kind:'snapshot-before-final-sale',replyComplete:true});
+  const output = JSON.parse(result.stdout);
+  assert.equal(output.restoredSales, 2);
+  assert.equal(output.injectedFailures, 1);
+  assert.equal(output.afterStop.lateAdmissions, 0);
+  assert.equal(output.observed.accounting.producer.attempts, 4);
+  assert.equal(output.observed.accounting.observer.attempts, 4);
+  assert.equal(output.replication.requestsReconciled, true);
+  assert.equal(output.observed.reconciled, true);
+  assert.equal(output.afterStop.bodiesReconciled, true);
 });

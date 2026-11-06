@@ -4192,6 +4192,34 @@ does not qualify production shutdown.
 
 ## Initial upload admitted after stop (D393)
 
+The smoke now waits for the startup snapshot, stored under level `0009`,
+before the final sale. An earlier level-zero upload can finish before that
+snapshot reaches the measuring transport. Readiness retains all forty
+half-second polls, the idle-transport check and the injected retry's completed
+reply. The stop boundary, two-second deadline and late-upload refusal remain.
+This establishes readiness for the initial snapshot; other native background
+work still relies on the existing stop refusals.
+The control socket now uses the container's temporary filesystem. On the Mac
+Docker fallback, all six genuine cases refused at control connection; an
+instrumented main control reported `ENOENT`. Moving the socket out of the
+host-shared state mount passes all six genuine cases on both the Mac and the
+Linux box. The database path and validated stop body remain the same.
+
+Run `node --test scripts/cloud-cost/litestream-smoke-commit.test.mjs` for the
+full-smoke regression. It holds the snapshot before HTTP admission while the
+earlier upload is visible. Its release timer is independent of inventory polls,
+and a paired case keeps the stored snapshot visible while holding its reply.
+Removing the snapshot barrier or the idle check fails the corresponding case.
+Removing the snapshot barrier reproduces the
+`after-stop-admission / post-stop-operation / put / initial` refusal; restoring
+it reconciles all four exchanges and restores both stand-in sales. No existing
+behavioral assertion is removed. A separate official macOS 0.5.17 run through
+the full smoke reproduces the same refusal with the old rule and restores both
+toy SQLite rows with the barrier. A stack captured while that controlled request
+is held identifies `DB.Snapshot`, called by `Store.monitorCompactionLevel`.
+This fixes startup preparation; it does not identify the historical request's
+native task or qualify production shutdown.
+
 [PR635's merge cost run](https://github.com/waitron-io/waitron-cloud/actions/runs/40634308325/job/122638015466)
 refused an initial PUT after a validated stop reply, with writer exit zero.
 A controlled macOS reproduction uses the checksum-verified official 0.5.17
@@ -4219,17 +4247,18 @@ shutdown allowance used. That single controlled ordering result does not prove
 that all native background work has drained or qualify a production stop change.
 The failed original control remains part of the evidence.
 
-The unchanged genuine PostgreSQL/SeaweedFS request-log case also passes on the
-box: both sales restore, nineteen replication exchanges and thirty-three restore
-exchanges reconcile, and no shutdown allowance is used. This ordinary successful
-run does not reproduce the historical failure or turn either probe into a repair.
+With the snapshot barrier, the genuine PostgreSQL/SeaweedFS request-log case
+passes on the box: both sales restore, nineteen replication exchanges and
+thirty-three restore exchanges reconcile, and no shutdown allowance is used.
+This confirms preparation for that workload. The historical late-admission and
+active-LIST controls above still leave production shutdown qualification open.
 
 You cannot infer first HTTP admission from the earlier SDK request log, an idle
 transfer count or a zero writer exit. Run `node --test
 scripts/cloud-cost/litestream-pre-admission-put.test.mjs` for the two real HTTP
 ordering controls. Removing the admission guard makes the late upload return
-200 instead of the required 400; restoring it passes both checks. Runtime code,
-original assertions, accounting, pins, allowances and deadlines remain unchanged.
+200 instead of the required 400; restoring it passes both checks. Original
+assertions, accounting, pins, allowances and deadlines remain unchanged.
 D530 retains the historical cause and production shutdown qualification as open.
 Do not delay production stop or admit late uploads on the strength of these probes.
 

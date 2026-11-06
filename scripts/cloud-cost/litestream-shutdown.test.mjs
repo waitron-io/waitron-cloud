@@ -68,7 +68,7 @@ function run({ reply, ack = 'valid', controlDelay = 0, exitDelay = 0, requireCon
     'node:timers/promises': `export const setTimeout=async ms=>{if(ms!==1000)await process.getBuiltinModule('timers/promises').setTimeout(ms);};`,
     'node:sqlite': `export class DatabaseSync {prepare(){return {get:()=>({integrity_check:'ok',n:globalThis.writerEnded?${finalSales}:2})};}close(){}}`,
     'node:module': `class Command{}; export const createRequire=()=>()=>({S3Client:class {
-      async send(){return {Contents:[{Key:'stream/one.ltx',Size:100}]};}destroy(){}},
+      async send(){return {Contents:[{Key:'stream/0009/0000000000000001-0000000000000001.ltx',Size:100}]};}destroy(){}},
       CreateBucketCommand:Command,ListObjectsV2Command:Command,DeleteObjectCommand:Command,DeleteBucketCommand:Command});`,
     '/code/cost-waitron-adapter.mjs': `export const openReplay=async()=>({recordSale:async()=>{
       if(globalThis.writerChild){globalThis.writerChild.send('sale');await globalThis.shutdownFixture.stored;}
