@@ -169,6 +169,31 @@ async function verifyHistory(ledger, store) {
       check(entry && digest(entry) === digest(original));
     }
   }
+  return records;
+}
+
+// Reading the bill never replaces the opening or releases an outstanding booking.
+export async function inspectBudget({ scope, now, billingMicroUsd, store }) {
+  scope = structuredClone(scope); checkedScope(scope);
+  const observed = time(now), month = now.slice(0, 7);
+  check(integer(billingMicroUsd) < cap);
+  const saved = await read(store, activeKey); check(saved); checkedActive(saved.value, scope);
+  const ledger = saved.value, records = await verifyHistory(ledger, store);
+  const current = records.get(month); check(current);
+  for (const row of ledger.completed) check(time(row.observations.observedAt) <= observed);
+  if (ledger.active) check(time(ledger.active.identity.startedAt) <= observed);
+  let bookedMicroUsd = 0, completedMicroUsd = 0;
+  const completed = new Map(ledger.completed.map(row => [row.uuid, row.observations.actualMicroUsd]));
+  for (const entry of current.entries) {
+    bookedMicroUsd += entry.upperMicroUsd;
+    completedMicroUsd += completed.get(entry.identity.uuid) ?? 0;
+  }
+  const { baselineMicroUsd, overheadMicroUsd } = current.opening;
+  check(billingMicroUsd <= baselineMicroUsd + overheadMicroUsd + bookedMicroUsd);
+  const latest = await read(store, activeKey);
+  check(latest && latest.etag === saved.etag && digest(latest.value) === digest(ledger));
+  return { month, baselineMicroUsd, overheadMicroUsd, bookedMicroUsd, completedMicroUsd,
+    billingMicroUsd, activeUuid: ledger.active?.identity.uuid ?? null };
 }
 
 async function completeBookings(ledger, store) {

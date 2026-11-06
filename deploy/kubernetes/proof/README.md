@@ -184,6 +184,16 @@ requires encrypted JSON and retains the original sweep observation. These are
 synthetic checks only; the lifecycle does not yet create or enable protection,
 initialize a live ledger or authorize a launch.
 
+Before reusing a setup, `inspectManualBudget` checks that protection and reads
+all retained ledger months through `inspectBudget`. It compares the account bill
+with the original opening plus that month's booked upper costs. A later bill
+does not become a second opening, and a completed run keeps its booking. Missing,
+changed or unexplained history refuses without replacement records or writes.
+It checks main and heartbeat age again after reading history. It reports
+estimated billing and completed costs separately; it does not settle an estimate,
+release ownership or authorize a launch. These checks use synthetic storage;
+live storage wiring, history export and the complete cost bound remain unfinished.
+
 The prerequisite workflow checks both rendered templates with the same pinned
 CloudFormation validator. Its setup tests require every retained resource
 reference to resolve and preserve the private launch and expiry configuration.

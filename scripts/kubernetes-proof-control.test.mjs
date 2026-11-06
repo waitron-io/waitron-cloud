@@ -552,3 +552,89 @@ for (const [label, changes] of [
   await assert.rejects(control.createManualAwsCli({ executable: f.executable }).call('s3api', 'get-object', { ...f.input, ...changes }), /D570 controller refused/);
   assert.equal(existsSync(f.capture), false);
 });
+
+
+async function historyFixture(t) {
+  const f = protectionFixture(t), objects = new Map(), writes = [];
+  const budget = await import('./kubernetes-proof-budget.mjs');
+  const scope = { account: '462991287391', region: 'eu-north-1', stackId: f.stackId };
+  const store = {
+    async list() { return [...objects.keys()]; },
+    async get(key) { const row = objects.get(key); return row && { body: Buffer.from(row.body), etag: row.etag }; },
+    async put(key, body, condition) {
+      const row = objects.get(key);
+      assert.ok(condition.ifNoneMatch === '*' ? !row : row?.etag === condition.ifMatch);
+      const etag = '"' + (writes.length + 1) + '"';
+      objects.set(key, { body: Buffer.from(body), etag }); writes.push(key); return { etag };
+    },
+  };
+  const components = Object.fromEntries(['compute', 'disk', 'storage', 'requests', 'transfer', 'events',
+    'lambda', 'logs', 'network', 'tax', 'contingency'].map(key => [key, { upperMicroUsd: 10000,
+      source: 'https://aws.amazon.com/pricing/', digest: 'c'.repeat(64) }]));
+  await budget.initializeLedger({ scope, now, store, evidence: { observedAt: now, account: scope.account, region: scope.region, currency: 'USD', pricesReconciled: true, billingReconciled: true,
+    protectionHealthy: true, components, openings: { '2026-11': { baselineMicroUsd: 1234568,
+      overheadMicroUsd: 200000, digest: 'd'.repeat(64) } } } });
+  function inspect(changes = {}) {
+    assert.equal(typeof control.inspectManualBudget, 'function', 'missing manual retained-history check');
+    return control.inspectManualBudget({ checkout: f.root, region: 'eu-north-1', now, aws: f.aws,
+      environment: {}, clock: () => Date.parse(now), stackId: f.stackId, store, ...changes });
+  }
+  return { ...f, store, objects, writes, inspect };
+}
+
+test('manual budget keeps the estimated bill and original opening without settling or writing history', async t => {
+  const f = await historyFixture(t), before = structuredClone([...f.objects]), writes = f.writes.length;
+  const result = await f.inspect();
+  assert.equal(result.billing.estimated, true);
+  assert.deepEqual(result.budget, { month: '2026-11', baselineMicroUsd: 1234568, overheadMicroUsd: 200000,
+    bookedMicroUsd: 0, completedMicroUsd: 0, billingMicroUsd: 1234568, activeUuid: null });
+  assert.equal(result.stackId, f.stackId); assert.equal(result.bucket, 'd570-first-bucket');
+  assert.equal(f.writes.length, writes); assert.deepEqual(structuredClone([...f.objects]), before);
+});
+
+for (const [label, mutate] of [
+  ['lost history', f => f.objects.clear()],
+  ['foreign history', f => { const key = 'd570/ledger/2026-11.json', row = f.objects.get(key);
+    const value = JSON.parse(row.body); value.scope.stackId += '-foreign'; row.body = Buffer.from(JSON.stringify(value)); }],
+  ['unexplained billing', f => { const call = f.aws.call; f.aws.call = async (...args) => {
+    const response = await call(...args); if (args[0] === 'ce') response.ResultsByTime[0].Total.UnblendedCost.Amount = '1.434569';
+    return response; }; }],
+]) test(`manual budget refuses ${label} without initializing replacement history`, async t => {
+  const f = await historyFixture(t); mutate(f); const before = structuredClone([...f.objects]);
+  await assert.rejects(f.inspect(), /budget|controller/i);
+  assert.deepEqual(structuredClone([...f.objects]), before);
+});
+
+test('manual budget does not read retained billing history before protection is healthy', async t => {
+  const f = await historyFixture(t); f.responses['events/describe-rule'].State = 'DISABLED';
+  let reads = 0; f.store.get = async () => { reads++; assert.fail('unprotected ledger read'); };
+  await assert.rejects(f.inspect(), /controller/i); assert.equal(reads, 0);
+});
+
+test('manual budget refuses a source change while waiting for the retained history', async t => {
+  const f = await historyFixture(t), prior = f.store.get;
+  f.store.get = async key => { const row = await prior(key);
+    writeFileSync(join(f.root, 'controller.txt'), 'changed during history read\n'); return row; };
+  await assert.rejects(f.inspect(), /controller/i);
+});
+
+test('manual budget refuses a heartbeat which aged out during its history reads', async t => {
+  const f = await historyFixture(t); let at = Date.parse(now); const prior = f.store.get;
+  f.store.get = async key => { const row = await prior(key); at = Date.parse(now) + 61000; return row; };
+  await assert.rejects(f.inspect({ clock: () => at }), /controller/i);
+});
+
+
+test('manual budget refuses clean main advancing while retained history is read', async t => {
+  const f = await historyFixture(t), prior = f.store.get; let changed = false;
+  f.store.get = async key => {
+    const row = await prior(key);
+    if (!changed) {
+      changed = true; writeFileSync(join(f.root, 'controller.txt'), 'new reviewed main\n');
+      f.git('add', 'controller.txt'); f.git('-c', 'commit.gpgsign=false', 'commit', '-s', '-m', 'Advance isolated remote main');
+      f.git('update-ref', 'refs/remotes/origin/main', f.git('rev-parse', 'HEAD'));
+    }
+    return row;
+  };
+  await assert.rejects(f.inspect(), /controller/i);
+});

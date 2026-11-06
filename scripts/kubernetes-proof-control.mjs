@@ -6,6 +6,7 @@ import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
 import { renderManualSetup } from '../deploy/kubernetes/proof/setup.mjs';
 import policy from '../deploy/kubernetes/proof/policy.json' with { type: 'json' };
+import { inspectBudget } from './kubernetes-proof-budget.mjs';
 
 const execute = promisify(execFile);
 const account = '462991287391', region = 'eu-north-1';
@@ -248,6 +249,19 @@ export async function inspectManualProtection(options) {
   }
   // Accepted sweep requests establish health only; separate live reads must establish cleanup.
   return { ...inspection, stackId, bucket, heartbeat };
+}
+
+export async function inspectManualBudget(options) {
+  const inspection = await inspectManualProtection(options);
+  const { now, checkout, store, clock = Date.now } = options;
+  const scope = { account, region, stackId: inspection.stackId };
+  const budget = await inspectBudget({ scope, now, billingMicroUsd: inspection.billing.microUsd, store });
+  const source = await checkedMain(checkout), observed = clock();
+  check(source.head === inspection.head && source.tree === inspection.tree
+    && Number.isSafeInteger(observed) && observed >= instant(now) && observed < Date.parse(policy.accessExpiry)
+    && iso(observed).slice(0, 10) === now.slice(0, 10)
+    && observed - Date.parse(inspection.heartbeat.startedAt) < 120_000);
+  return { ...inspection, budget };
 }
 
 if (process.argv[1] && process.argv[1] !== '-' && await realpath(process.argv[1]) === fileURLToPath(import.meta.url)) {
