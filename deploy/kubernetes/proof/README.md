@@ -148,11 +148,23 @@ reconciliation, reserve allowance or authorize a launch.
 
 The CLI adapter uses fixed service endpoints, bounded output and a 30-second
 process deadline. Cost Explorer uses its US East endpoint while the proof's
-resource region remains Stockholm. The adapter currently permits only identity
-and billing reads. The `up`, `drill`, `reconcile` and `down` entries still refuse
+resource region remains Stockholm. The adapter permits only identity, billing
+and the four setup-discovery reads. The `up`, `drill`, `reconcile` and `down`
+entries still refuse
 without making a provider call, because creation and cleanup are unfinished.
 You do not need to sign in yet. Verify the preflight without credentials with
 `node --test scripts/kubernetes-proof-control.test.mjs`.
+
+`inspectManualSetup` connects those checks to the manual renderer. It reads
+Amazon Linux's [public ARM image parameter](https://docs.aws.amazon.com/linux/al2023/ug/ec2.html),
+then checks the image's actual owner and shape. It requires the regional
+`m7g.2xlarge` response to report eight CPUs, 32 GiB and on-demand ARM support.
+It discovers the AWS-owned IPv4 S3 network list for Stockholm rather than
+accepting a pasted list. Missing, ambiguous or incomplete responses refuse.
+The controller rechecks main and the UTC date around every provider read.
+The resulting template still has no GitHub trust or launcher role. These checks
+use synthetic provider responses; no regional image, account quota, machine boot
+or resource creation has been qualified on AWS.
 
 The prerequisite workflow checks both rendered templates with the same pinned
 CloudFormation validator. Its setup tests require every retained resource

@@ -2,6 +2,8 @@ import { execFile } from 'node:child_process';
 import { realpath } from 'node:fs/promises';
 import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
+import { renderManualSetup } from '../deploy/kubernetes/proof/setup.mjs';
+import policy from '../deploy/kubernetes/proof/policy.json' with { type: 'json' };
 
 const execute = promisify(execFile);
 const account = '462991287391', region = 'eu-north-1';
@@ -18,7 +20,9 @@ function instant(value) {
 export function createManualAwsCli({ executable = 'aws' } = {}) {
   return { async call(service, operation, input) {
     check((service === 'sts' && operation === 'get-caller-identity')
-      || (service === 'ce' && operation === 'get-cost-and-usage'));
+      || (service === 'ce' && operation === 'get-cost-and-usage')
+      || (service === 'ssm' && operation === 'get-parameter')
+      || (service === 'ec2' && ['describe-images', 'describe-instance-types', 'describe-managed-prefix-lists'].includes(operation)));
     const payload = JSON.stringify(input);
     check(typeof payload === 'string' && Buffer.byteLength(payload) <= 64 * 1024);
     try {
@@ -96,6 +100,51 @@ export async function inspectManualControl({ checkout, region: requestedRegion, 
   check(JSON.stringify(await checkedMain(checkout)) === JSON.stringify(source));
   fresh();
   return { account, region, ...source, billing: billingObservation(response, period, now) };
+}
+
+export async function inspectManualSetup(options) {
+  const inspection = await inspectManualControl(options), { aws, now, checkout, clock = Date.now } = options;
+  const source = { head: inspection.head, tree: inspection.tree };
+  async function read(service, operation, input) {
+    async function unchanged() {
+      const at = clock();
+      check(Number.isSafeInteger(at) && at >= instant(now) && at < Date.parse(policy.accessExpiry)
+        && iso(at).slice(0, 10) === now.slice(0, 10));
+      check(JSON.stringify(await checkedMain(checkout)) === JSON.stringify(source));
+      const after = clock();
+      check(Number.isSafeInteger(after) && after >= at && after < Date.parse(policy.accessExpiry)
+        && iso(after).slice(0, 10) === now.slice(0, 10));
+    }
+    await unchanged();
+    const response = await aws.call(service, operation, input);
+    await unchanged();
+    return response;
+  }
+  const parameterName = '/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-arm64';
+  const parameter = (await read('ssm', 'get-parameter', { Name: parameterName, WithDecryption: false }))?.Parameter;
+  check(parameter?.Name === parameterName && parameter.Type === 'String'
+    && typeof parameter.Value === 'string' && /^ami-[a-f0-9]{17}$/.test(parameter.Value));
+  const images = await read('ec2', 'describe-images', { ImageIds: [parameter.Value], Owners: [policy.officialImageOwner] });
+  check(!images?.NextToken && Array.isArray(images?.Images) && images.Images.length === 1
+    && images.Images[0]?.ImageId === parameter.Value);
+  const input = { account, region, now, repository: { fullName: policy.repository, id: policy.repositoryId,
+    ownerId: policy.repositoryOwnerId }, image: images.Images[0] };
+  // Validate the provider image before any further discovery, using the renderer's same image contract.
+  renderManualSetup({ ...input, s3PrefixListId: 'pl-00000000' });
+  const types = await read('ec2', 'describe-instance-types', { InstanceTypes: [policy.instanceType] });
+  check(!types?.NextToken && Array.isArray(types?.InstanceTypes) && types.InstanceTypes.length === 1);
+  const machine = types.InstanceTypes[0];
+  check(machine?.InstanceType === policy.instanceType && machine.MemoryInfo?.SizeInMiB === 32768
+    && machine.VCpuInfo?.DefaultVCpus === 8 && Array.isArray(machine.ProcessorInfo?.SupportedArchitectures)
+    && machine.ProcessorInfo.SupportedArchitectures.includes('arm64')
+    && Array.isArray(machine.SupportedUsageClasses) && machine.SupportedUsageClasses.includes('on-demand'));
+  const prefixName = `com.amazonaws.${region}.s3`;
+  const prefixes = await read('ec2', 'describe-managed-prefix-lists', { Filters: [
+    { Name: 'prefix-list-name', Values: [prefixName] }, { Name: 'owner-id', Values: ['AWS'] }] });
+  check(!prefixes?.NextToken && Array.isArray(prefixes?.PrefixLists) && prefixes.PrefixLists.length === 1);
+  const prefix = prefixes.PrefixLists[0];
+  check(prefix?.OwnerId === 'AWS' && prefix.PrefixListName === prefixName && prefix.AddressFamily === 'IPv4');
+  return { ...inspection, template: renderManualSetup({ ...input, s3PrefixListId: prefix.PrefixListId }) };
 }
 
 if (process.argv[1] && process.argv[1] !== '-' && await realpath(process.argv[1]) === fileURLToPath(import.meta.url)) {

@@ -212,3 +212,119 @@ for (const command of ['up', 'drill', 'reconcile', 'down']) test(`unfinished ${c
   assert.equal(result.stdout, '');
   assert.match(result.stderr, /D570 manual lifecycle is not implemented/);
 });
+
+// Dropping regional discovery would allow a pasted image or foreign network prefix into setup.
+function setupFixture(t) {
+  const f = fixture(t);
+  const input = JSON.parse(readFileSync(new URL('../deploy/kubernetes/proof/test-fixtures/setup-input.json', import.meta.url)));
+  const parameterName = '/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-arm64';
+  const responses = {
+    'ssm/get-parameter': { Parameter: { Name: parameterName, Type: 'String', Value: input.image.ImageId, Version: 1,
+      LastModifiedDate: '2026-11-01T00:00:00Z', ARN: 'arn:aws:ssm:eu-north-1::parameter' + parameterName, DataType: 'text' } },
+    'ec2/describe-images': { Images: [input.image] },
+    'ec2/describe-instance-types': { InstanceTypes: [{ InstanceType: 'm7g.2xlarge',
+      ProcessorInfo: { SupportedArchitectures: ['arm64'] }, VCpuInfo: { DefaultVCpus: 8 }, MemoryInfo: { SizeInMiB: 32768 },
+      SupportedUsageClasses: ['on-demand', 'spot'] }] },
+    'ec2/describe-managed-prefix-lists': { PrefixLists: [{ PrefixListId: input.s3PrefixListId, AddressFamily: 'IPv4',
+      PrefixListName: 'com.amazonaws.eu-north-1.s3', OwnerId: 'AWS', State: 'create-complete', Version: 1,
+      PrefixListArn: 'arn:aws:ec2:eu-north-1:aws:prefix-list/' + input.s3PrefixListId, MaxEntries: 1, Tags: [] }] },
+  };
+  const existing = f.aws.call;
+  f.aws.call = async (service, operation, request) => {
+    const key = service + '/' + operation;
+    if (!Object.hasOwn(responses, key)) return existing(service, operation, request);
+    f.calls.push({ service, operation, input: request }); return structuredClone(responses[key]);
+  };
+  return { ...f, input, responses, parameterName };
+}
+async function discover(f, changes = {}) {
+  assert.equal(typeof control.inspectManualSetup, 'function', 'missing provider-checked manual renderer');
+  return control.inspectManualSetup({ checkout: f.root, region: 'eu-north-1', now, aws: f.aws,
+    environment: {}, clock: () => Date.parse(now), ...changes });
+}
+test('setup discovers the official regional image, machine and AWS S3 prefix before rendering privately', async t => {
+  const f = setupFixture(t), result = await discover(f);
+  assert.equal(result.head, f.head); assert.equal(result.tree, f.tree);
+  assert.equal(result.billing.microUsd, 1234568);
+  assert.equal(result.template.Parameters.ImageId.Default, 'ami-0123456789abcdef0');
+  assert.equal(result.template.Resources.LauncherRole, undefined);
+  assert.equal(result.template.Resources.OidcProvider, undefined);
+  const launch = result.template.Resources.LaunchTemplate.Properties.LaunchTemplateData;
+  assert.equal(launch.InstanceType, 'm7g.2xlarge');
+  assert.equal(launch.NetworkInterfaces[0].AssociatePublicIpAddress, false);
+  assert.equal(launch.InstanceInitiatedShutdownBehavior, 'terminate');
+  assert.deepEqual(result.template.Resources.SecurityGroup.Properties.SecurityGroupIngress, []);
+  assert.deepEqual(result.template.Resources.SecurityGroup.Properties.SecurityGroupEgress, [{ IpProtocol: 'tcp',
+    FromPort: 443, ToPort: 443, DestinationPrefixListId: 'pl-0123456789abcdef0' }]);
+  assert.deepEqual(f.calls.slice(2), [
+    { service: 'ssm', operation: 'get-parameter', input: { Name: f.parameterName, WithDecryption: false } },
+    { service: 'ec2', operation: 'describe-images', input: { ImageIds: ['ami-0123456789abcdef0'], Owners: ['137112412989'] } },
+    { service: 'ec2', operation: 'describe-instance-types', input: { InstanceTypes: ['m7g.2xlarge'] } },
+    { service: 'ec2', operation: 'describe-managed-prefix-lists', input: { Filters: [
+      { Name: 'prefix-list-name', Values: ['com.amazonaws.eu-north-1.s3'] }, { Name: 'owner-id', Values: ['AWS'] }] } },
+  ]);
+});
+for (const [label, key, mutate] of [
+  ['foreign parameter', 'ssm/get-parameter', r => r.Parameter.Name = '/other'],
+  ['secret parameter', 'ssm/get-parameter', r => r.Parameter.Type = 'SecureString'],
+  ['malformed image id', 'ssm/get-parameter', r => r.Parameter.Value = 'ami-invalid'],
+  ['mismatched image', 'ec2/describe-images', r => r.Images[0].ImageId = 'ami-fffffffffffffffff'],
+  ['foreign image owner', 'ec2/describe-images', r => r.Images[0].OwnerId = '949687825720'],
+  ['wrong image architecture', 'ec2/describe-images', r => r.Images[0].Architecture = 'x86_64'],
+  ['wrong image root', 'ec2/describe-images', r => r.Images[0].RootDeviceName = '/dev/sda1'],
+  ['duplicate image', 'ec2/describe-images', r => r.Images.push(r.Images[0])],
+  ['partial images', 'ec2/describe-images', r => r.NextToken = 'more'],
+  ['wrong machine', 'ec2/describe-instance-types', r => r.InstanceTypes[0].InstanceType = 'm7g.xlarge'],
+  ['insufficient memory', 'ec2/describe-instance-types', r => r.InstanceTypes[0].MemoryInfo.SizeInMiB = 16384],
+  ['insufficient CPUs', 'ec2/describe-instance-types', r => r.InstanceTypes[0].VCpuInfo.DefaultVCpus = 4],
+  ['wrong machine architecture', 'ec2/describe-instance-types', r => r.InstanceTypes[0].ProcessorInfo.SupportedArchitectures = ['x86_64']],
+  ['spot only', 'ec2/describe-instance-types', r => r.InstanceTypes[0].SupportedUsageClasses = ['spot']],
+  ['missing machine', 'ec2/describe-instance-types', r => r.InstanceTypes = []],
+  ['partial machine inventory', 'ec2/describe-instance-types', r => r.NextToken = 'more'],
+  ['foreign prefix owner', 'ec2/describe-managed-prefix-lists', r => r.PrefixLists[0].OwnerId = '462991287391'],
+  ['foreign prefix region', 'ec2/describe-managed-prefix-lists', r => r.PrefixLists[0].PrefixListName = 'com.amazonaws.eu-south-2.s3'],
+  ['wrong prefix family', 'ec2/describe-managed-prefix-lists', r => r.PrefixLists[0].AddressFamily = 'IPv6'],
+  ['malformed prefix', 'ec2/describe-managed-prefix-lists', r => r.PrefixLists[0].PrefixListId = 'pl-invalid'],
+  ['duplicate prefix', 'ec2/describe-managed-prefix-lists', r => r.PrefixLists.push(r.PrefixLists[0])],
+  ['partial prefix inventory', 'ec2/describe-managed-prefix-lists', r => r.NextToken = 'more'],
+]) test(`${label} cannot produce a manual setup template`, async t => {
+  const f = setupFixture(t); mutate(f.responses[key]);
+  await assert.rejects(discover(f), /D570 controller refused|Unverified official ARM image|Invalid S3 prefix identity/);
+  assert.equal(f.calls.at(-1).service + '/' + f.calls.at(-1).operation, key);
+});
+for (const operation of ['get-parameter', 'describe-images', 'describe-instance-types', 'describe-managed-prefix-lists']) {
+  test(`checkout changes during ${operation} refuse before the next setup read`, async t => {
+    const f = setupFixture(t), call = f.aws.call;
+    f.aws.call = async (service, name, input) => {
+      const response = await call(service, name, input);
+      if (name === operation) writeFileSync(join(f.root, 'controller.txt'), 'changed during discovery\n');
+      return response;
+    };
+    await assert.rejects(discover(f), /D570 controller refused/);
+    assert.equal(f.calls.at(-1).operation, operation);
+  });
+}
+
+for (const [service, operation] of [['ssm', 'get-parameter'], ['ec2', 'describe-images'],
+  ['ec2', 'describe-instance-types'], ['ec2', 'describe-managed-prefix-lists']]) {
+  test(`CLI permits only the regional read ${service}/${operation} for setup discovery`, async t => {
+    const f = fixture(t), executable = join(f.root, 'aws-read'), capture = join(f.root, 'read.json');
+    writeFileSync(executable, `#!${process.execPath}\nimport('node:fs').then(fs => { fs.writeFileSync(${JSON.stringify(capture)},
+      JSON.stringify(process.argv.slice(2))); process.stdout.write('{}'); });\n`, { mode: 0o700 });
+    assert.deepEqual(await control.createManualAwsCli({ executable }).call(service, operation, {}), {});
+    const args = JSON.parse(readFileSync(capture));
+    assert.deepEqual(args.slice(0, 6), [service, operation, '--cli-input-json', '{}', '--region', 'eu-north-1']);
+  });
+}
+for (const operation of ['get-parameter', 'describe-images', 'describe-instance-types', 'describe-managed-prefix-lists']) {
+  test(`midnight during ${operation} cannot yield a setup based on yesterday's bill`, async t => {
+    const f = setupFixture(t), call = f.aws.call; let at = Date.parse(now);
+    f.aws.call = async (service, name, input) => {
+      const response = await call(service, name, input);
+      if (name === operation) at = Date.parse('2026-11-07T00:00:00Z');
+      return response;
+    };
+    await assert.rejects(discover(f, { clock: () => at }), /D570 controller refused/);
+    assert.equal(f.calls.at(-1).operation, operation);
+  });
+}

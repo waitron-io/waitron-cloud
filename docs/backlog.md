@@ -3171,8 +3171,13 @@ implementation or production evidence.
   costs upward; unknown billing cannot become a zero baseline. Real Git fixtures
   and isolated CLI executables check changing checkouts, stale remote main,
   wrong scope, malformed bills and secret-free provider errors. These are
-  synthetic checks, with no authenticated AWS call. All four lifecycle commands
-  still refuse while creation, reservation, launch and cleanup remain unbuilt.
+  synthetic checks, with no authenticated AWS call. Manual setup discovery now
+  checks the public ARM image against EC2, the approved regional machine's
+  capacity and on-demand support, and AWS's Stockholm IPv4 S3 network list
+  before rendering. It rechecks main and date around each read; synthetic
+  missing, contradictory, ambiguous and changing-input cases refuse. No live
+  regional resource or quota claim follows from those checks. All four lifecycle
+  commands still refuse while creation, reservation, launch and cleanup remain unbuilt.
   A new self-contained guest deadline entry binds the
   original reservation to a fixed UTC timer, a boot-relative fallback and
   shutdown on reboot. Synthetic shell checks cover exact retries without
