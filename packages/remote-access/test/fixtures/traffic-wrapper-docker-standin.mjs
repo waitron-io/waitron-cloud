@@ -71,7 +71,7 @@ child.execFileSync=function(command,args,options){
 child.spawnSync=function(command,args,options){
  if(command!=='docker')return originalSpawn.call(this,command,args,options);
  const row=rows.get(args.at(-1)),count=row.name.endsWith('-counters')?5:row.name.endsWith('-collector')?13:row.name.endsWith('-gateway')?4:1;
- return {status:0,signal:null,stdout:`# tests ${count}\n# pass ${count}\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n`,stderr:''};
+ return {status:0,signal:null,stdout:`# tests ${count}\n# pass ${count}\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n${row.name.endsWith('-gateway')?'# Required cases: 1 passed\n':''}`,stderr:''};
 };
 syncBuiltinESMExports();
 process.on('exit',()=>{
