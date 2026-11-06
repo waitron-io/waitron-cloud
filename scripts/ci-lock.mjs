@@ -165,7 +165,7 @@ export function parseLock(source,path='pnpm-lock.yaml') {
   }
   for(const [key,record]of Object.entries(data.packages)) {
     keyParts(key,false);
-    fields(record,['resolution','engines','cpu','os','hasBin','peerDependencies','peerDependenciesMeta'],`packages.${key}`);
+    fields(record,['resolution','engines','cpu','os','hasBin','peerDependencies','peerDependenciesMeta','deprecated'],`packages.${key}`);
     fields(record.resolution,['integrity','tarball'],`packages.${key}.resolution`);
     string(record.resolution.integrity,`packages.${key}.resolution.integrity`);
     if(!/^sha(?:1|256|384|512)-[a-zA-Z0-9+/]+={0,2}$/.test(record.resolution.integrity))fail(`Invalid integrity ${key}`);
@@ -177,6 +177,7 @@ export function parseLock(source,path='pnpm-lock.yaml') {
     if(record.engines!==undefined){map(record.engines,`packages.${key}.engines`);for(const [engine,version]of Object.entries(record.engines))string(version,`packages.${key}.engines.${engine}`);}
     for(const field of ['cpu','os'])if(record[field]!==undefined)strings(record[field],`packages.${key}.${field}`);
     if(record.hasBin!==undefined)boolean(record.hasBin,`packages.${key}.hasBin`);
+    if(record.deprecated!==undefined)string(record.deprecated,`packages.${key}.deprecated`);
     if(record.peerDependencies!==undefined)namedStrings(record.peerDependencies,`packages.${key}.peerDependencies`);
     if(record.peerDependenciesMeta!==undefined) {
       map(record.peerDependenciesMeta,`packages.${key}.peerDependenciesMeta`);

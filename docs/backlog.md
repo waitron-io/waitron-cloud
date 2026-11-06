@@ -517,7 +517,9 @@ one message per receive, a ten-second poll and sixty-second visibility. A shared
 fifteen-second request deadline covers credentials, receive and delete; shutdown
 or close aborts pending transport work. Local stand-ins check these boundaries,
 fixed diagnostics and malformed replies, not provider permissions or encrypted
-redrive. Database acquisition, lock waits and processing now share a five-second
+redrive. CI's lock reader now retains and validates pnpm deprecation warnings;
+its literal graph counts include the new SDK dependency. Unknown fields still
+refuse parsing. Database acquisition, lock waits and processing now share a five-second
 deadline. Transaction-local PostgreSQL limits also bound a stalled commit;
 failed connections are discarded and a connection returned after expiry cannot
 start feedback work. Local checks cover cumulative statements, deferred commit,
