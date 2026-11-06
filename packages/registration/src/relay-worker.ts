@@ -10,7 +10,7 @@ import {RelayControl} from './relay-control.ts';
 import {validateAllowanceOptions,type AllowanceOptions} from './billing-allowance-rules.ts';
 import {admitMailAttempt,mailRecipientRefs,type SesHandoffConfig,type HandoffAdmission} from './mail-attempts.ts';
 import {settleSesRelayReceipt} from './relay-ses-smtp.ts';
-import {lockMailScope} from './recipient-suppression.ts';
+import {lockMailScope,advanceMailSuppressionRevision} from './recipient-suppression.ts';
 import {isValidatedSesFeedbackConfig} from './ses-feedback-config.ts';
 export interface RelayWorkerConfig {
  mode:'local-proof';grants:RelayConfig;payloadKeys:RelayKeyConfig;suppressionKeys:RelayKeyConfig;smtpPort:number;sendTimeoutMs?:number;ses?:SesHandoffConfig;
@@ -52,12 +52,20 @@ export class RelayWorker {
   if(this.#ses&&(!isValidatedSesFeedbackConfig(this.#ses.config)||!this.#ses.config.purposes.includes('venue-email')||this.#ses.config.policyRevision>2147483647))throw Error('mail_configuration_unavailable');
   await transaction(this.#pool,async c=>{
    await c.query(suppressionLock);await this.#checkSuppressionKeys(c);
-   await c.query('INSERT INTO relay_suppressions(key_id,digest) VALUES($1,$2) ON CONFLICT DO NOTHING',[this.#active,this.#digest(this.#active!,recipient)]);
+   await c.query(`INSERT INTO relay_suppressions(key_id,digest,unscoped) VALUES($1,$2,$3) ON CONFLICT(key_id,digest)
+    DO UPDATE SET unscoped=relay_suppressions.unscoped OR EXCLUDED.unscoped`,[this.#active,this.#digest(this.#active!,recipient),!this.#ses]);
    if(this.#ses){
     await lockMailScope(c,this.#ses.config.scope);
     const refs=await mailRecipientRefs(c,{...this.#ses,recipient});
-    for(const ref of refs)await c.query(`INSERT INTO mail_legacy_suppression_scopes(country,provider_account_id,region,key_id,digest,legacy_key_id,legacy_digest)
-     VALUES($1,$2,$3,$4,$5,$6,$7) ON CONFLICT DO NOTHING`,[this.#ses.config.scope.country,this.#ses.config.scope.providerAccountId,this.#ses.config.scope.region,ref.keyId,ref.digest,this.#active,this.#digest(this.#active!,recipient)]);
+    const block=(await c.query('SELECT block_id FROM relay_suppressions WHERE key_id=$1 AND digest=$2',[this.#active,this.#digest(this.#active!,recipient)])).rows[0];
+    for(const ref of refs){
+     const values=[this.#ses.config.scope.country,this.#ses.config.scope.providerAccountId,this.#ses.config.scope.region,ref.keyId,ref.digest,this.#active,this.#digest(this.#active!,recipient)];
+     await c.query(`INSERT INTO mail_legacy_suppression_scopes(country,provider_account_id,region,key_id,digest,legacy_key_id,legacy_digest)
+      VALUES($1,$2,$3,$4,$5,$6,$7) ON CONFLICT DO NOTHING`,values);
+     await c.query(`INSERT INTO mail_legacy_suppression_lifetimes(country,provider_account_id,region,key_id,digest,legacy_key_id,legacy_digest,block_id)
+      VALUES($1,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT DO NOTHING`,[...values,block.block_id]);
+    }
+    await advanceMailSuppressionRevision(c,this.#ses.config.scope);
    }
   });
  }

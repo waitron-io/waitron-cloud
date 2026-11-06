@@ -180,9 +180,14 @@ Spain's default policy has no qualified flows, so these settings cannot enable
 SES delivery today. Status remains credential-free. Production enablement still
 requires separate qualification.
 The legacy relay gate still applies across countries. Account mail uses explicit
-mapping scopes. Before adding removal, Task 7 must distinguish each block lifetime
-so an unscoped re-add cannot revive old country mappings. No removal path is
-provided here. Retained-key failures and the full stop on revoked keys still need
+mapping scopes. Internal audited removal now identifies each block lifetime;
+an unscoped decision cannot acquire removal authority from a later country mapping.
+Pre-051 local rows keep unknown origin because an old mapping cannot prove how
+the block began. You cannot clear these rows through this interface. Provider
+work requires a pending operation and reconcilable local evidence before it starts.
+Immutable intent and result rows preserve each attempt, including repeated queries.
+There is no production route or provider-removal adapter. Retained-key failures
+and the full stop on revoked keys still need
 operational and recovery qualification before production wiring.
 
 Task 3 adds `applySesFeedback`, which owns the database transaction for a parsed

@@ -559,9 +559,9 @@ retains the first 49 ledger entries and maps explicitly scoped local blocks to
 shared recipient references without inventing provider events or assigning old
 unmapped rows to a country. Unconfigured local capture retains its existing gate.
 Retained-key lock waits now receive a final authority-deadline check before commit.
-The legacy relay gate remains global across country settings. Before removal,
-Task 7 must distinguish block lifetimes so a later unscoped re-add cannot revive
-old country mappings, and refuse clearing a legacy row mapped to another scope.
+The legacy relay gate remains global across country settings. Task 7 distinguishes
+block lifetimes so a later unscoped re-add cannot revive old country mappings,
+and refuses clearing a legacy row mapped to another scope.
 Before production wiring, qualify retained-key failures that leave relay work
 queued until its original expiry and occupy capacity until the claim lease ends.
 Task 5 adds qualified SES configuration-set and opaque attempt headers to both
@@ -615,8 +615,28 @@ completion reports stopped, and cancelled queue calls add no failure code while
 earlier genuine failures remain visible. The command reads optional bounded operational
 samples and emits aggregate JSON; it does not collect provider metrics or
 qualify encryption, IAM or real dead-letter transfer. A pending pool request
-is discarded when it returns. Audited removal and production
-enablement remain future tasks. Task 8 must qualify any additional event types;
+is discarded when it returns. Task 7 adds internal manual reconciliation through
+actual operator session, CSRF and platform-permission checks. Immutable requests
+retain the actor, reason code, scope, revision and keyed prior evidence. A private,
+expiring provider observation is bound to that operation. Provider stand-ins cover
+BOUNCE and COMPLAINT removal and an independent final query outside database locks.
+Both stores clear in one transaction only while authority and evidence remain
+current. Partial provider removal, another scope's mapping, unmapped local blocks,
+new feedback or expiry during a database wait keeps suppression. Completed outcomes
+survive lost acknowledgements; pending work needs fresh evidence after restart.
+Migration 051 retains the first 50 ledger entries and adds block-lifetime mappings
+without changing historical attribution. Old feedback deduplication survives
+clearing, new blockers can apply again, and no old mail, attempt or token is revived.
+An unscoped decision stays marked for its lifetime and defeats a pending clear.
+Old local rows keep unknown origin, since earlier mappings cannot prove how they
+began; they remain blocked through this interface. Finished operations and known
+unreconcilable local evidence cannot start provider work. Every admitted provider
+attempt retains immutable intent and result rows, including the original removed
+reasons across another query or a lost acknowledgement. An unfinished intent remains
+uncertain. This internal interface starts from an existing Cloud block; provider-only
+removal is not qualified here.
+Operator permission provisioning, production provider acquisition/removal and
+enablement remain open. Task 8 must qualify any additional event types;
 `Rendering Failure` currently refuses. It must also reconcile historical Paris-only
 supplier wording and retired enablement dates before any live qualification. AWS resources,
 spending, credentials, production access and live mail remain unauthorised for this

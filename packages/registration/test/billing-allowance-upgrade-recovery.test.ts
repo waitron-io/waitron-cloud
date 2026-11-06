@@ -16,16 +16,17 @@ test('allowance exact head upgrade and recovery is qualified',{timeout:360000},a
  const scratch=await mkdtemp(join(tmpdir(),'allowance-upgrade-receipt-'));
  try{
   const head=(await exec('git',['rev-parse','HEAD'],{cwd:root})).stdout.trim(),output=join(scratch,'receipt.json');
-  await exec(process.execPath,['scripts/schema-upgrade-receipt.mjs',output,'--mail-handoff','--old','1aae8f14c05113cc2a2c71337940ff7721ad5f5b','--new',head],{cwd:root,env,timeout:330000,maxBuffer:4*1024*1024});
+  await exec(process.execPath,['scripts/schema-upgrade-receipt.mjs',output,'--mail-reconciliation','--old','1aae8f14c05113cc2a2c71337940ff7721ad5f5b','--new',head],{cwd:root,env,timeout:330000,maxBuffer:4*1024*1024});
   const value=JSON.parse(await readFile(output,'utf8'));
   const {verifySchemaUpgradeReceipt}=await import(new URL('../../../scripts/verify-schema-upgrade-receipt.mjs',import.meta.url).href);
   verifySchemaUpgradeReceipt(value);
-  assert.equal(value.schemaVersion,11);assert.equal(value.driver.head,head);assert.equal(value.driver.dirty,false);
+  assert.equal(value.schemaVersion,12);assert.equal(value.driver.head,head);assert.equal(value.driver.dirty,false);
   assert.equal(value.releases.old.head,'1aae8f14c05113cc2a2c71337940ff7721ad5f5b');assert.equal(value.releases.new.head,head);
-  assert.equal(value.releases.old.migrations,47);assert.equal(value.releases.new.migrations,50);
+  assert.equal(value.releases.old.migrations,47);assert.equal(value.releases.new.migrations,51);
   for(const field of ['oldSqlUnchanged','oldRowsPreserved','interruptedRollback','restartIdempotent','defaultOff','configRestored','reservationsRestored','spentNotReleased','trafficSourcesRestored','trafficLedgerRestored','trafficRetryStable','gapsRemainIncomplete','foreignScopeRefused','oldBackupUpgradeEmpty'])assert.equal(value.allowances[field],true,field);
   for(const field of ['emptyAfterUpgrade','oldBackupUpgradeEmpty','newBackupSchemaRestored'])assert.equal(value.sesFeedback[field],true,field);
   for(const field of ['unmappedLegacyPreserved','oldBackupUpgradeUnmapped','newBackupSchemaRestored'])assert.equal(value.mailHandoff[field],true,field);
+  for(const field of ['emptyAfterUpgrade','oldBackupUpgradeEmpty','newBackupSchemaRestored'])assert.equal(value.mailReconciliation[field],true,field);
   assert.deepEqual(value.cleanup,{containers:0,volumes:0,checkouts:0});
   console.log('ALLOWANCE_UPGRADE_RECEIPT '+JSON.stringify(value));
  }finally{await rm(scratch,{recursive:true,force:true});}

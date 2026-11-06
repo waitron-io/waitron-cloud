@@ -6,6 +6,12 @@ test('operation receipt digest ignores PostgreSQL jsonb object key ordering',()=
  assert.equal(digest({lease:{payload:'same',signature:'same'},installationId:'same'}),digest({installationId:'same',lease:{signature:'same',payload:'same'}}));
  assert.notEqual(digest({items:['first','second']}),digest({items:['second','first']}));
 });
+
+test('mail reconciliation selects the exact 47-to-51 proof without changing historical flags',()=>{
+ const pair=['--old','a'.repeat(40),'--new','b'.repeat(40)];
+ assert.deepEqual(fixture.upgradeRevisions(['--mail-reconciliation',...pair]),{oldHead:'a'.repeat(40),newHead:'b'.repeat(40),factor:false,allowances:true,sesFeedback:true,mailHandoff:true,mailReconciliation:true});
+ for(const flag of ['--mail-reconciliation','--mail-handoff','--ses-feedback','--allowances','--lifecycle'])assert.throws(()=>fixture.upgradeRevisions(['--mail-reconciliation',flag,...pair]),/revisions/);
+});
 test('upgrade revisions preserve historical defaults and accept only a complete explicit pinned pair',()=>{
  assert.equal(typeof fixture.upgradeRevisions,'function','explicit upgrade releases are unavailable');
  assert.deepEqual(fixture.upgradeRevisions([]),{oldHead:'9a56d0122bf6872a0200735a7b1e3a23ad4f825c',newHead:'eafd97ad5ac51563e91c821d4c957ef996e5d3fb',factor:false});

@@ -408,9 +408,9 @@ admission into the account TLS adapter and keeps provider receipts separate from
 RFC Message-ID. The internal standalone relay SES adapter uses the same bounded
 TLS transport; its receipt settlement never changes the relay queue outcome.
 It is not exported through the package or selected by worker configuration.
-Local-proof relay SMTP and its outcome strings retain their contract. Queue polling,
-audited removal and provider qualification remain separate implementation tasks.
-No live sender or AWS resource is enabled.
+Local-proof relay SMTP and its outcome strings retain their contract. Internal
+queue polling and audited removal are implemented below. Provider qualification
+and production wiring remain separate. No live sender or AWS resource is enabled.
 
 ## Block a recipient before transport starts
 
@@ -430,17 +430,21 @@ that send. Account retries keep their original Message-ID and receive fresh
 attempt tags; relay uncertainty still refuses automatic resend.
 
 For an explicitly scoped local worker, trusted `suppress` also records a mapping
-in `mail_legacy_suppression_scopes`. Shared lookup checks that mapping against the
+in `mail_legacy_suppression_scopes` and its current lifetime in
+`mail_legacy_suppression_lifetimes`. Shared lookup joins that lifetime to the
 still-present local block. Migration 050 leaves older local blocks unmapped because
 you cannot infer their country or provider from a keyed digest. The mapping stays
-immutable for later reconciliation. Authenticated removal and provider
-reconciliation remain a separate task; this API adds no removal authority.
+immutable for reconciliation. This writer API adds no removal authority.
 The legacy relay gate is global: an ES-scoped trusted block also refuses FR relay
 mail, while shared account-mail lookup uses only its explicit country mapping.
-Before adding removal, you must identify each block's lifetime. Otherwise deleting
-a local row and later adding the same digest without a scope revives its old
-mappings. Task 7 must prevent that revival and refuse to clear a local row with
-mappings outside the reconciled scope.
+Migration 051 gives each local block its own lifetime identity and records which
+immutable mappings belong to it. Deleting a local block and later adding the same
+digest without a scope cannot revive old country mappings. A new explicitly scoped
+block records mappings for its new lifetime. The original mapping evidence remains.
+A local decision made without a country stays marked for that lifetime, including
+when a scoped writer later touches the same row. Migration 051 treats every old
+local row as unknown-origin because old mappings cannot prove its initial scope.
+Those rows keep the global gate closed; this interface cannot clear them.
 
 Missing retained relay keys leave queued ciphertext and its original expiry intact,
 with no SMTP handoff or attempt. The failed claim occupies worker capacity until
@@ -581,3 +585,58 @@ immediately before and after commit:
 ```sh
 node scripts/test-postgres.mjs exec pnpm --dir packages/registration exec node --test --test-timeout=120000 test/ses-feedback-store.test.ts
 ```
+
+## Reconcile a manual email unblock
+
+Removing a local block while SES still refuses the destination would reopen the
+queue without repairing delivery. The internal `MailSuppressionAdmin` therefore
+keeps both stores blocked until you complete an audited operation. It has no
+production route, permission provisioner or AWS adapter. Live provider tooling
+and the `mail.suppression.unblock` permission need separate operator authority.
+
+Trusted construction supplies one validated SES scope, retained shared and local
+recipient keys, and a regional provider query/removal port. `inspect` checks your
+real session, CSRF token and platform permission, then returns the current revision.
+`request` binds that revision, your account, a short reason code and the prior
+evidence to a new operation. Audit records contain keyed references, without the
+recipient address or either credential. The revision covers the whole scope, so
+an unrelated new blocker can require you to start another operation.
+
+`reconcile` receives the destination again, verifies its original keyed references
+and queries and removes BOUNCE and COMPLAINT through the trusted port. Provider work
+runs outside database locks; the service waits at most fifteen seconds. A second query
+checks the resulting state. The returned object has private process identity,
+operation/scope/revision binding and a five-minute lifetime. Caller JSON and an
+object copied from another process cannot replace it. After a restart, obtain fresh
+evidence for a still-pending operation. A committed result remains readable by its
+original authorised operator if its acknowledgement was lost.
+The provider port must honour its abort signal. A timeout cannot confirm that an
+external operation stopped, and produces no evidence that permits a clear.
+
+`finish` takes the local suppression lock before the shared scope lock, rechecks
+your authority, the revision and all prior blockers, and commits the audit outcome
+with both store changes. Both provider reasons must be absent. Before any provider
+call, the operation must still be pending and every local block must have a known,
+matching origin. Each call has an immutable committed intent and a separate
+immutable result, so another query cannot erase the reasons previously removed.
+An intent without a result records uncertain work after a crash; it is no proof
+of provider completion. Historical audit evidence never extends permission to clear. Provider failure,
+partial removal, expired evidence, a new blocker, an unmapped local row or a mapping
+to another scope keeps the block. Evidence that expires during a database write
+rolls back that transaction. A completed blocked operation needs a new request;
+repeating it returns the recorded outcome.
+
+Clearing creates no mail or attempts and restores no erased payload or token.
+Transport and semantic feedback evidence survive removal: old duplicates stay
+duplicates, while genuinely new blocking feedback can block the destination again.
+The global legacy relay gate, retained-key refusal and separate production
+key-retirement design remain in force.
+
+```sh
+node scripts/test-postgres.mjs exec pnpm --dir packages/registration exec node --test --test-timeout=120000 test/mail-suppression-admin.test.ts test/mail-suppression-migration.test.ts test/security-audit.test.ts test/password-recovery.test.ts
+```
+
+Schema receipt version 12 adds `--mail-reconciliation` for the exact 47-to-51
+pair, preserving earlier receipt versions. It checks empty reconciliation tables
+and distinct local block identities on both backup paths. Populated two-country
+mapping upgrades and interrupted migration retries have separate database tests.

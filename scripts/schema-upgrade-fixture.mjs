@@ -40,6 +40,10 @@ export async function completionRetry(root,pool,state){
 }
 
 export function upgradeRevisions(args){
+ if(args.includes('--mail-reconciliation')){
+  if(args.filter(arg=>arg==='--mail-reconciliation').length!==1)throw Error('schema upgrade revisions invalid');
+  return {...upgradeRevisions(args.map(arg=>arg==='--mail-reconciliation'?'--mail-handoff':arg)),mailReconciliation:true};
+ }
  if(args.includes('--mail-handoff')){
   if(args.filter(arg=>arg==='--mail-handoff').length!==1)throw Error('schema upgrade revisions invalid');
   return {...upgradeRevisions(args.map(arg=>arg==='--mail-handoff'?'--ses-feedback':arg)),mailHandoff:true};
@@ -161,9 +165,17 @@ export async function emptySesFeedback(pool){
  return true;
 }
 
-export async function unmappedLegacyMail(pool,expected){
+export async function unmappedLegacyMail(pool,expected,lifetimes=false){
  assert.ok(expected.length>0,'the proof retains an existing local block');
- assert.deepEqual((await pool.query('SELECT * FROM relay_suppressions ORDER BY key_id,digest')).rows,expected);
+ assert.deepEqual((await pool.query(`SELECT ${lifetimes?'key_id,digest':'*'} FROM relay_suppressions ORDER BY key_id,digest`)).rows,expected);
  assert.deepEqual((await pool.query('SELECT * FROM mail_legacy_suppression_scopes')).rows,[]);
+ return true;
+}
+export async function emptyMailReconciliation(pool){
+ for(const table of ['mail_legacy_suppression_lifetimes','mail_unblock_requests','mail_unblock_outcomes','mail_suppression_revisions','mail_unblock_provider_attempts','mail_unblock_provider_results'])
+  assert.equal((await pool.query(`SELECT count(*) FROM ${table}`)).rows[0].count,'0',table+' starts empty');
+ const blocks=(await pool.query('SELECT block_id,unscoped FROM relay_suppressions')).rows;
+ assert.ok(blocks.length>0);for(const block of blocks){assert.match(block.block_id,/^[a-f0-9-]{36}$/);assert.equal(block.unscoped,true,'retained unmapped origin stays unscoped');}
+ assert.equal(new Set(blocks.map(b=>b.block_id)).size,blocks.length);
  return true;
 }
