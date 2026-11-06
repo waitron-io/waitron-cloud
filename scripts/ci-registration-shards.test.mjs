@@ -10,6 +10,8 @@ test('a symlinked registration command executes selected tests and refuses inval
   try {
     mkdirSync(join(root, 'scripts'));
     cpSync('scripts/ci-run-registration-shard.mjs', join(root, 'scripts/ci-run-registration-shard.mjs'));
+    cpSync(new URL('./ci-required-cases.mjs', import.meta.url), join(root, 'scripts/ci-required-cases.mjs'));
+    writeFileSync(join(root, 'scripts/ci-required-cases.json'), '{}\n');
     mkdirSync(join(root, 'packages/registration/test'), {recursive: true});
     writeFileSync(join(root, 'package.json'), '{"type":"module"}\n');
     writeFileSync(join(root, 'packages/registration/test/a.test.ts'),
@@ -34,6 +36,8 @@ test('registration runner moves the three measured slow files and executes all c
   try {
     mkdirSync(join(root, 'scripts'));
     cpSync('scripts/ci-run-registration-shard.mjs', join(root, 'scripts/ci-run-registration-shard.mjs'));
+    cpSync(new URL('./ci-required-cases.mjs', import.meta.url), join(root, 'scripts/ci-required-cases.mjs'));
+    writeFileSync(join(root, 'scripts/ci-required-cases.json'), '{}\n');
     const directory = join(root, 'packages/registration/test');
     mkdirSync(directory, {recursive: true});
     writeFileSync(join(root, 'package.json'), '{"type":"module"}\n');
@@ -67,7 +71,7 @@ test('registration runner moves the three measured slow files and executes all c
     }
     assert.deepEqual(groups.flat().sort(), files);
     assert.ok(groups[0].includes('monitoring.test.ts'));
-    assert.ok(groups[0].includes('venue-service-legacy-schema-guards.test.ts'));
+    assert.equal(groups.flat().includes('venue-service-legacy-schema-guards.test.ts'), false);
     assert.ok(groups[1].includes('support-grants.test.ts'));
     for (const shard of ['', '0', '7', '1.5', 'invalid']) {
       const result = spawnSync(process.execPath, ['scripts/ci-run-registration-shard.mjs', shard],
@@ -83,6 +87,8 @@ for (const empty of [true, false]) test(empty ? 'an empty registration shard ref
   try {
     mkdirSync(join(root, 'scripts'));
     cpSync('scripts/ci-run-registration-shard.mjs', join(root, 'scripts/ci-run-registration-shard.mjs'));
+    cpSync(new URL('./ci-required-cases.mjs', import.meta.url), join(root, 'scripts/ci-required-cases.mjs'));
+    writeFileSync(join(root, 'scripts/ci-required-cases.json'), '{}\n');
     const directory = join(root, 'packages/registration/test');
     mkdirSync(directory, {recursive: true});
     writeFileSync(join(root, 'package.json'), '{"type":"module"}\n');

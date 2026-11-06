@@ -7,7 +7,7 @@ const exec=promisify(execFile);
 
 test('allowance guards detect independent omissions',{timeout:240000},async()=>{
  const root=new URL('../../../',import.meta.url).pathname,env={...process.env};delete env.NODE_TEST_CONTEXT;delete env.NODE_OPTIONS;
- const controls=await exec(process.execPath,['--test','--test-reporter=tap','scripts/allowance-traffic-guard-probes.test.mjs'],{cwd:root,env,timeout:60000,maxBuffer:4*1024*1024});
+ const controls=await exec(process.execPath,['--test','--test-reporter=tap','scripts/allowance-traffic-guard-probes.nightly.mjs'],{cwd:root,env,timeout:60000,maxBuffer:4*1024*1024});
  assert.match(controls.stdout,/# tests 26\b/);assert.match(controls.stdout,/# pass 26\b/);
  for(const field of ['fail','cancelled','skipped','todo'])assert.match(controls.stdout,new RegExp('^# '+field+' 0$','m'));
  await requireAllowanceSchema();

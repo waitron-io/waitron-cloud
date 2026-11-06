@@ -10,8 +10,13 @@ The run calls standard CI, Cloud cost conformance, Venue service proof and
 AWS infrastructure workflows from the same revision. It runs every package partition, compiler
 and root check, all six standard receipt suites, the complete cost matrix and both
 venue proof cases, plus all four AWS guard and plan cells. It always executes the full work, even when the source tree
-has not changed since the previous successful night. The existing test commands,
-assertions and time limits are unchanged.
+has not changed since the previous successful night. The selected product assertions and time limits stay in force.
+
+A separate `nightly-mutations` job retains the two remote-wait checks, billing
+qualification and the complete allowance checks, including the rendered gateway.
+These checks deliberately remove protections in disposable copies. Ordinary pull
+requests run the underlying behavior tests with required-case receipts instead.
+The password and relay diagnostics retain their existing affected-path checks.
 
 You can start the same full run manually:
 
@@ -21,7 +26,7 @@ gh run list --workflow nightly.yml --branch main --limit 5
 ```
 
 Open the resulting run and its `nightly-summary`. It lists `standard`, `cost`, `venue` and
-`aws` separately and requires all four to succeed. A failed, cancelled, skipped,
+`aws`, plus `mutations`, separately and requires all five to succeed. A failed, cancelled, skipped,
 missing or unfinished family cannot pass. The standard workflow still checks
 its own actual job records, including every planned partition and receipt. Its
 job names have the `standard / ` prefix inside this combined run. Cost, venue

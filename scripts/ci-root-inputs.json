@@ -33,192 +33,59 @@
           "role": "metadata validation"
         },
         {
-          "reader": "apps/portal/test/forwarding-causes-omissions.test.ts",
+          "reader": "apps/portal/test/forwarding-causes-omissions.manual.ts",
           "site": "git clone:12; fixed child commands:16,37",
           "kind": "command",
           "boundary": "whole current candidate Git clone into disposable candidate; both admitted paths copied; package/guard child argv is explicit and does not expand root/local-stack globs",
           "role": "dependency preparation"
         },
         {
-          "reader": "apps/portal/test/forwarding-causes-omissions.test.ts",
+          "reader": "apps/portal/test/forwarding-causes-omissions.manual.ts",
           "site": "candidate patch:14,15",
           "kind": "command",
           "boundary": "git diff --binary HEAD and git apply of that patch into disposable candidate; complete candidate tree includes changed admitted paths",
           "role": "dependency preparation"
         },
         {
-          "reader": "packages/account-http/test/venue-service-direct-wait-guards.test.ts",
+          "reader": "packages/account-http/test/venue-service-direct-wait-guards.nightly.ts",
           "site": "git clone:15; fixed child commands:25",
           "kind": "command",
           "boundary": "whole current candidate Git clone into disposable candidate; both admitted paths copied; package/guard child argv is explicit and does not expand root/local-stack globs",
           "role": "dependency preparation"
         },
         {
-          "reader": "packages/account-http/test/venue-service-external-wait-guards.test.ts",
+          "reader": "packages/account-http/test/venue-service-external-wait-guards.nightly.ts",
           "site": "git clone:15; fixed child commands:27",
           "kind": "command",
           "boundary": "whole current candidate Git clone into disposable candidate; both admitted paths copied; package/guard child argv is explicit and does not expand root/local-stack globs",
           "role": "dependency preparation"
         },
         {
-          "reader": "packages/account-http/test/venue-service-legacy-lock-guards.test.ts",
-          "site": "git clone:15; fixed child commands:31",
-          "kind": "command",
-          "boundary": "whole current candidate Git clone into disposable candidate; both admitted paths copied; package/guard child argv is explicit and does not expand root/local-stack globs",
-          "role": "dependency preparation"
-        },
-        {
-          "reader": "packages/account-http/test/venue-service-recovery-guards.test.ts",
-          "site": "git clone:15; fixed child commands:32",
-          "kind": "command",
-          "boundary": "whole current candidate Git clone into disposable candidate; both admitted paths copied; package/guard child argv is explicit and does not expand root/local-stack globs",
-          "role": "dependency preparation"
-        },
-        {
-          "reader": "packages/account-http/test/venue-service-remote-boundary-guards.test.ts",
-          "site": "git clone:15; fixed child commands:34",
-          "kind": "command",
-          "boundary": "whole current candidate Git clone into disposable candidate; both admitted paths copied; package/guard child argv is explicit and does not expand root/local-stack globs",
-          "role": "dependency preparation"
-        },
-        {
-          "reader": "packages/account-http/test/venue-service-replacement-guards.test.ts",
-          "site": "git clone:15; fixed child commands:35",
-          "kind": "command",
-          "boundary": "whole current candidate Git clone into disposable candidate; both admitted paths copied; package/guard child argv is explicit and does not expand root/local-stack globs",
-          "role": "dependency preparation"
-        },
-        {
-          "reader": "packages/account-http/test/venue-service-report-guards.test.ts",
-          "site": "git clone:15; fixed child commands:28",
-          "kind": "command",
-          "boundary": "whole current candidate Git clone into disposable candidate; both admitted paths copied; package/guard child argv is explicit and does not expand root/local-stack globs",
-          "role": "dependency preparation"
-        },
-        {
-          "reader": "packages/account-http/test/venue-service-stream-guards.test.ts",
-          "site": "git clone:15; fixed child commands:28",
-          "kind": "command",
-          "boundary": "whole current candidate Git clone into disposable candidate; both admitted paths copied; package/guard child argv is explicit and does not expand root/local-stack globs",
-          "role": "dependency preparation"
-        },
-        {
-          "reader": "packages/account-http/test/venue-service-translation-http-guards.test.ts",
-          "site": "git clone:13; fixed child commands:22",
-          "kind": "command",
-          "boundary": "whole current candidate Git clone into disposable candidate; both admitted paths copied; package/guard child argv is explicit and does not expand root/local-stack globs",
-          "role": "dependency preparation"
-        },
-        {
-          "reader": "packages/backups/test/venue-service-capture-guards.test.ts",
-          "site": "git clone:15; fixed child commands:40",
-          "kind": "command",
-          "boundary": "whole current candidate Git clone into disposable candidate; both admitted paths copied; package/guard child argv is explicit and does not expand root/local-stack globs",
-          "role": "dependency preparation"
-        },
-        {
-          "reader": "packages/backups/test/venue-service-catalogue-guards.test.ts",
-          "site": "git clone:50; fixed child commands:55,90",
-          "kind": "command",
-          "boundary": "whole current candidate Git clone into disposable candidate; both admitted paths copied; package/guard child argv is explicit and does not expand root/local-stack globs",
-          "role": "dependency preparation"
-        },
-        {
-          "reader": "packages/backups/test/venue-service-replacement-guards.test.ts",
-          "site": "git clone:15; fixed child commands:31",
-          "kind": "command",
-          "boundary": "whole current candidate Git clone into disposable candidate; both admitted paths copied; package/guard child argv is explicit and does not expand root/local-stack globs",
-          "role": "dependency preparation"
-        },
-        {
-          "reader": "packages/backups/test/venue-service-storage-guards.test.ts",
-          "site": "git clone:15; fixed child commands:33",
-          "kind": "command",
-          "boundary": "whole current candidate Git clone into disposable candidate; both admitted paths copied; package/guard child argv is explicit and does not expand root/local-stack globs",
-          "role": "dependency preparation"
-        },
-        {
-          "reader": "packages/backups/test/venue-service-stream-guards.test.ts",
-          "site": "git clone:15; fixed child commands:38",
-          "kind": "command",
-          "boundary": "whole current candidate Git clone into disposable candidate; both admitted paths copied; package/guard child argv is explicit and does not expand root/local-stack globs",
-          "role": "dependency preparation"
-        },
-        {
-          "reader": "packages/registration/test/billing-guard-qualification.test.ts",
+          "reader": "packages/registration/test/billing-guard-qualification.nightly.ts",
           "site": "git clone:15; fixed child commands:37",
           "kind": "command",
           "boundary": "whole current candidate Git clone into disposable candidate; both admitted paths copied; package/guard child argv is explicit and does not expand root/local-stack globs",
           "role": "dependency preparation"
         },
         {
-          "reader": "packages/registration/test/venue-service-installation-guards.test.ts",
-          "site": "git clone:16; fixed child commands:35",
-          "kind": "command",
-          "boundary": "whole current candidate Git clone into disposable candidate; both admitted paths copied; package/guard child argv is explicit and does not expand root/local-stack globs",
-          "role": "dependency preparation"
-        },
-        {
-          "reader": "packages/registration/test/venue-service-legacy-schema-guards.test.ts",
-          "site": "git clone:16; fixed child commands:44",
-          "kind": "command",
-          "boundary": "whole current candidate Git clone into disposable candidate; both admitted paths copied; package/guard child argv is explicit and does not expand root/local-stack globs",
-          "role": "dependency preparation"
-        },
-        {
-          "reader": "packages/registration/test/venue-service-registration-guards.test.ts",
-          "site": "git clone:16; fixed child commands:45",
-          "kind": "command",
-          "boundary": "whole current candidate Git clone into disposable candidate; both admitted paths copied; package/guard child argv is explicit and does not expand root/local-stack globs",
-          "role": "dependency preparation"
-        },
-        {
-          "reader": "packages/registration/test/venue-service-relay-guards.test.ts",
-          "site": "git clone:13; fixed child commands:23",
-          "kind": "command",
-          "boundary": "whole current candidate Git clone into disposable candidate; both admitted paths copied; package/guard child argv is explicit and does not expand root/local-stack globs",
-          "role": "dependency preparation"
-        },
-        {
-          "reader": "packages/remote-access/test/forward-collection-guards.test.ts",
+          "reader": "packages/remote-access/test/forward-collection-guards.manual.ts",
           "site": "git clone:12; fixed child commands:13,56",
           "kind": "command",
           "boundary": "whole current candidate Git clone into disposable candidate; both admitted paths copied; package/guard child argv is explicit and does not expand root/local-stack globs",
           "role": "dependency preparation"
         },
         {
-          "reader": "packages/remote-access/test/forward-report-omissions.test.ts",
+          "reader": "packages/remote-access/test/forward-report-omissions.manual.ts",
           "site": "git clone:12; fixed child commands:16,38",
           "kind": "command",
           "boundary": "whole current candidate Git clone into disposable candidate; both admitted paths copied; package/guard child argv is explicit and does not expand root/local-stack globs",
           "role": "dependency preparation"
         },
         {
-          "reader": "packages/remote-access/test/forward-report-omissions.test.ts",
+          "reader": "packages/remote-access/test/forward-report-omissions.manual.ts",
           "site": "candidate patch:14,15",
           "kind": "command",
           "boundary": "git diff --binary HEAD and git apply of that patch into disposable candidate; complete candidate tree includes changed admitted paths",
-          "role": "dependency preparation"
-        },
-        {
-          "reader": "packages/remote-access/test/venue-service-remote-guards.test.ts",
-          "site": "git clone:15; fixed child commands:31",
-          "kind": "command",
-          "boundary": "whole current candidate Git clone into disposable candidate; both admitted paths copied; package/guard child argv is explicit and does not expand root/local-stack globs",
-          "role": "dependency preparation"
-        },
-        {
-          "reader": "packages/translation/test/venue-service-queue-guards.test.ts",
-          "site": "git clone:14; fixed child commands:24",
-          "kind": "command",
-          "boundary": "whole current candidate Git clone into disposable candidate; both admitted paths copied; package/guard child argv is explicit and does not expand root/local-stack globs",
-          "role": "dependency preparation"
-        },
-        {
-          "reader": "packages/translation/test/venue-service-translation-guards.test.ts",
-          "site": "git clone:14; fixed child commands:24",
-          "kind": "command",
-          "boundary": "whole current candidate Git clone into disposable candidate; both admitted paths copied; package/guard child argv is explicit and does not expand root/local-stack globs",
           "role": "dependency preparation"
         },
         {
@@ -447,9 +314,9 @@
         },
         {
           "reader": "scripts/ci-fixture-dependency-consumers.test.mjs",
-          "site": "clone:68; fixed package child:84-85",
+          "site": "clone/patch control and fixed manual setup children",
           "kind": "command",
-          "boundary": "Complete clone carries candidates; exact remote-access report omission test executed",
+          "boundary": "Complete clone carries candidates; exact manual fixture setup checks stop before product mutations, preserving readable setup refusals and binary patch assertions",
           "role": "dependency preparation"
         },
         {
@@ -565,192 +432,59 @@
           "role": "saved-fixture input"
         },
         {
-          "reader": "apps/portal/test/forwarding-causes-omissions.test.ts",
+          "reader": "apps/portal/test/forwarding-causes-omissions.manual.ts",
           "site": "git clone:12; fixed child commands:16,37",
           "kind": "command",
           "boundary": "whole current candidate Git clone into disposable candidate; both admitted paths copied; package/guard child argv is explicit and does not expand root/local-stack globs",
           "role": "dependency preparation"
         },
         {
-          "reader": "apps/portal/test/forwarding-causes-omissions.test.ts",
+          "reader": "apps/portal/test/forwarding-causes-omissions.manual.ts",
           "site": "candidate patch:14,15",
           "kind": "command",
           "boundary": "git diff --binary HEAD and git apply of that patch into disposable candidate; complete candidate tree includes changed admitted paths",
           "role": "dependency preparation"
         },
         {
-          "reader": "packages/account-http/test/venue-service-direct-wait-guards.test.ts",
+          "reader": "packages/account-http/test/venue-service-direct-wait-guards.nightly.ts",
           "site": "git clone:15; fixed child commands:25",
           "kind": "command",
           "boundary": "whole current candidate Git clone into disposable candidate; both admitted paths copied; package/guard child argv is explicit and does not expand root/local-stack globs",
           "role": "dependency preparation"
         },
         {
-          "reader": "packages/account-http/test/venue-service-external-wait-guards.test.ts",
+          "reader": "packages/account-http/test/venue-service-external-wait-guards.nightly.ts",
           "site": "git clone:15; fixed child commands:27",
           "kind": "command",
           "boundary": "whole current candidate Git clone into disposable candidate; both admitted paths copied; package/guard child argv is explicit and does not expand root/local-stack globs",
           "role": "dependency preparation"
         },
         {
-          "reader": "packages/account-http/test/venue-service-legacy-lock-guards.test.ts",
-          "site": "git clone:15; fixed child commands:31",
-          "kind": "command",
-          "boundary": "whole current candidate Git clone into disposable candidate; both admitted paths copied; package/guard child argv is explicit and does not expand root/local-stack globs",
-          "role": "dependency preparation"
-        },
-        {
-          "reader": "packages/account-http/test/venue-service-recovery-guards.test.ts",
-          "site": "git clone:15; fixed child commands:32",
-          "kind": "command",
-          "boundary": "whole current candidate Git clone into disposable candidate; both admitted paths copied; package/guard child argv is explicit and does not expand root/local-stack globs",
-          "role": "dependency preparation"
-        },
-        {
-          "reader": "packages/account-http/test/venue-service-remote-boundary-guards.test.ts",
-          "site": "git clone:15; fixed child commands:34",
-          "kind": "command",
-          "boundary": "whole current candidate Git clone into disposable candidate; both admitted paths copied; package/guard child argv is explicit and does not expand root/local-stack globs",
-          "role": "dependency preparation"
-        },
-        {
-          "reader": "packages/account-http/test/venue-service-replacement-guards.test.ts",
-          "site": "git clone:15; fixed child commands:35",
-          "kind": "command",
-          "boundary": "whole current candidate Git clone into disposable candidate; both admitted paths copied; package/guard child argv is explicit and does not expand root/local-stack globs",
-          "role": "dependency preparation"
-        },
-        {
-          "reader": "packages/account-http/test/venue-service-report-guards.test.ts",
-          "site": "git clone:15; fixed child commands:28",
-          "kind": "command",
-          "boundary": "whole current candidate Git clone into disposable candidate; both admitted paths copied; package/guard child argv is explicit and does not expand root/local-stack globs",
-          "role": "dependency preparation"
-        },
-        {
-          "reader": "packages/account-http/test/venue-service-stream-guards.test.ts",
-          "site": "git clone:15; fixed child commands:28",
-          "kind": "command",
-          "boundary": "whole current candidate Git clone into disposable candidate; both admitted paths copied; package/guard child argv is explicit and does not expand root/local-stack globs",
-          "role": "dependency preparation"
-        },
-        {
-          "reader": "packages/account-http/test/venue-service-translation-http-guards.test.ts",
-          "site": "git clone:13; fixed child commands:22",
-          "kind": "command",
-          "boundary": "whole current candidate Git clone into disposable candidate; both admitted paths copied; package/guard child argv is explicit and does not expand root/local-stack globs",
-          "role": "dependency preparation"
-        },
-        {
-          "reader": "packages/backups/test/venue-service-capture-guards.test.ts",
-          "site": "git clone:15; fixed child commands:40",
-          "kind": "command",
-          "boundary": "whole current candidate Git clone into disposable candidate; both admitted paths copied; package/guard child argv is explicit and does not expand root/local-stack globs",
-          "role": "dependency preparation"
-        },
-        {
-          "reader": "packages/backups/test/venue-service-catalogue-guards.test.ts",
-          "site": "git clone:50; fixed child commands:55,90",
-          "kind": "command",
-          "boundary": "whole current candidate Git clone into disposable candidate; both admitted paths copied; package/guard child argv is explicit and does not expand root/local-stack globs",
-          "role": "dependency preparation"
-        },
-        {
-          "reader": "packages/backups/test/venue-service-replacement-guards.test.ts",
-          "site": "git clone:15; fixed child commands:31",
-          "kind": "command",
-          "boundary": "whole current candidate Git clone into disposable candidate; both admitted paths copied; package/guard child argv is explicit and does not expand root/local-stack globs",
-          "role": "dependency preparation"
-        },
-        {
-          "reader": "packages/backups/test/venue-service-storage-guards.test.ts",
-          "site": "git clone:15; fixed child commands:33",
-          "kind": "command",
-          "boundary": "whole current candidate Git clone into disposable candidate; both admitted paths copied; package/guard child argv is explicit and does not expand root/local-stack globs",
-          "role": "dependency preparation"
-        },
-        {
-          "reader": "packages/backups/test/venue-service-stream-guards.test.ts",
-          "site": "git clone:15; fixed child commands:38",
-          "kind": "command",
-          "boundary": "whole current candidate Git clone into disposable candidate; both admitted paths copied; package/guard child argv is explicit and does not expand root/local-stack globs",
-          "role": "dependency preparation"
-        },
-        {
-          "reader": "packages/registration/test/billing-guard-qualification.test.ts",
+          "reader": "packages/registration/test/billing-guard-qualification.nightly.ts",
           "site": "git clone:15; fixed child commands:37",
           "kind": "command",
           "boundary": "whole current candidate Git clone into disposable candidate; both admitted paths copied; package/guard child argv is explicit and does not expand root/local-stack globs",
           "role": "dependency preparation"
         },
         {
-          "reader": "packages/registration/test/venue-service-installation-guards.test.ts",
-          "site": "git clone:16; fixed child commands:35",
-          "kind": "command",
-          "boundary": "whole current candidate Git clone into disposable candidate; both admitted paths copied; package/guard child argv is explicit and does not expand root/local-stack globs",
-          "role": "dependency preparation"
-        },
-        {
-          "reader": "packages/registration/test/venue-service-legacy-schema-guards.test.ts",
-          "site": "git clone:16; fixed child commands:44",
-          "kind": "command",
-          "boundary": "whole current candidate Git clone into disposable candidate; both admitted paths copied; package/guard child argv is explicit and does not expand root/local-stack globs",
-          "role": "dependency preparation"
-        },
-        {
-          "reader": "packages/registration/test/venue-service-registration-guards.test.ts",
-          "site": "git clone:16; fixed child commands:45",
-          "kind": "command",
-          "boundary": "whole current candidate Git clone into disposable candidate; both admitted paths copied; package/guard child argv is explicit and does not expand root/local-stack globs",
-          "role": "dependency preparation"
-        },
-        {
-          "reader": "packages/registration/test/venue-service-relay-guards.test.ts",
-          "site": "git clone:13; fixed child commands:23",
-          "kind": "command",
-          "boundary": "whole current candidate Git clone into disposable candidate; both admitted paths copied; package/guard child argv is explicit and does not expand root/local-stack globs",
-          "role": "dependency preparation"
-        },
-        {
-          "reader": "packages/remote-access/test/forward-collection-guards.test.ts",
+          "reader": "packages/remote-access/test/forward-collection-guards.manual.ts",
           "site": "git clone:12; fixed child commands:13,56",
           "kind": "command",
           "boundary": "whole current candidate Git clone into disposable candidate; both admitted paths copied; package/guard child argv is explicit and does not expand root/local-stack globs",
           "role": "dependency preparation"
         },
         {
-          "reader": "packages/remote-access/test/forward-report-omissions.test.ts",
+          "reader": "packages/remote-access/test/forward-report-omissions.manual.ts",
           "site": "git clone:12; fixed child commands:16,38",
           "kind": "command",
           "boundary": "whole current candidate Git clone into disposable candidate; both admitted paths copied; package/guard child argv is explicit and does not expand root/local-stack globs",
           "role": "dependency preparation"
         },
         {
-          "reader": "packages/remote-access/test/forward-report-omissions.test.ts",
+          "reader": "packages/remote-access/test/forward-report-omissions.manual.ts",
           "site": "candidate patch:14,15",
           "kind": "command",
           "boundary": "git diff --binary HEAD and git apply of that patch into disposable candidate; complete candidate tree includes changed admitted paths",
-          "role": "dependency preparation"
-        },
-        {
-          "reader": "packages/remote-access/test/venue-service-remote-guards.test.ts",
-          "site": "git clone:15; fixed child commands:31",
-          "kind": "command",
-          "boundary": "whole current candidate Git clone into disposable candidate; both admitted paths copied; package/guard child argv is explicit and does not expand root/local-stack globs",
-          "role": "dependency preparation"
-        },
-        {
-          "reader": "packages/translation/test/venue-service-queue-guards.test.ts",
-          "site": "git clone:14; fixed child commands:24",
-          "kind": "command",
-          "boundary": "whole current candidate Git clone into disposable candidate; both admitted paths copied; package/guard child argv is explicit and does not expand root/local-stack globs",
-          "role": "dependency preparation"
-        },
-        {
-          "reader": "packages/translation/test/venue-service-translation-guards.test.ts",
-          "site": "git clone:14; fixed child commands:24",
-          "kind": "command",
-          "boundary": "whole current candidate Git clone into disposable candidate; both admitted paths copied; package/guard child argv is explicit and does not expand root/local-stack globs",
           "role": "dependency preparation"
         },
         {
@@ -1000,9 +734,9 @@
         },
         {
           "reader": "scripts/ci-fixture-dependency-consumers.test.mjs",
-          "site": "clone:68; fixed package child:84-85",
+          "site": "clone/patch control and fixed manual setup children",
           "kind": "command",
-          "boundary": "Complete clone carries candidates; exact remote-access report omission test executed",
+          "boundary": "Complete clone carries candidates; exact manual fixture setup checks stop before product mutations, preserving readable setup refusals and binary patch assertions",
           "role": "dependency preparation"
         },
         {

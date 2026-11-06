@@ -17,5 +17,5 @@ if (process.argv[1] && process.argv[1] !== '-' && import.meta.url === pathToFile
   const selected = remoteFiles(Number(process.argv[2]), files);
   assert.ok(selected.length > 0, 'Empty remote shard');
   process.chdir(root);
-  process.execve(process.execPath, [process.execPath, '--test', '--test-timeout=30000', ...selected.map(file => `test/${file}`)], process.env);
+  process.execve(process.execPath, [process.execPath, '--test', '--test-reporter=tap', '--test-reporter-destination=stdout', '--test-reporter=../../scripts/ci-required-cases.mjs', '--test-reporter-destination=stdout', '--test-timeout=30000', ...selected.map(file => `test/${file}`)], process.env);
 }

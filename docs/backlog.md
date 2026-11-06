@@ -4679,3 +4679,19 @@ job 121387722438). The cause remains unknown and belongs to D530's investigation
 Keep the ownership assertion, deadlines, resource collection and refusal to claim
 cleanup after ownership loss. Qualify any repair with the genuine runtime fixture;
 a passing remote-guidance qualification does not establish a repair.
+
+## CI mutation checks (D591)
+
+The approved split removes recurring product-source mutation work associated
+with 30 files, retains six files for nightly checks, and keeps the password and
+relay diagnostics on their affected pull-request paths. Ordinary behavior tests
+keep their assertions. Required-case receipts must reject a missing, skipped or
+unexecuted case without copying or mutating the product. The password diagnostic
+also watches the session implementation it changes.
+
+The historical allowance failures include incomplete candidate guard lists,
+outdated schema prerequisites and a serial qualification exceeding its child
+deadline. These need separate revision-bound receipts; moving the checks to
+nightly does not repair them. Compare healthy full runs after landing before
+claiming elapsed or aggregate job-time savings. The 38-minute assessment totals
+reported test-body work, which overlaps across jobs.

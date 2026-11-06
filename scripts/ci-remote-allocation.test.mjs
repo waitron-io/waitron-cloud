@@ -35,6 +35,8 @@ test('remote shards discover every current file and a future file exactly once t
  try{
   mkdirSync(directory,{recursive:true});mkdirSync(join(root,'scripts'));
   cpSync(new URL('./ci-run-remote-shard.mjs',import.meta.url),join(root,'scripts/ci-run-remote-shard.mjs'));
+    cpSync(new URL('./ci-required-cases.mjs', import.meta.url), join(root, 'scripts/ci-required-cases.mjs'));
+    writeFileSync(join(root, 'scripts/ci-required-cases.json'), '{}\n');
   writeFileSync(join(directory,'metadata.json'),'{}\n');
   writeFileSync(join(directory,'helper.ts'),"throw Error('NON_TEST_HELPER_RAN');\n");
   writeFileSync(join(directory,'.hidden.test.ts'),"throw Error('HIDDEN_TEST_RAN');\n");
@@ -51,7 +53,7 @@ const child=spawnSync(process.execPath,process.argv.slice(8),{cwd:'packages/remo
    const result=spawnSync('sh',['-c',line],{cwd:root,env,encoding:'utf8',timeout:30000});assert.equal(result.status,0,result.stdout+result.stderr);
    const output=result.stdout,names=[...output.matchAll(/^(?:ok \d+ - |✔ )(.+?)(?: \(.*ms\))?$/gm)].map(m=>m[1]);
    assert.ok(names.length>0);assert.match(output,/^(?:# |ℹ )fail 0$/m);assert.match(output,/^(?:# |ℹ )cancelled 0$/m);assert.match(output,/^(?:# |ℹ )skipped 0$/m);
-   assert.equal(names.includes('venue-service-remote-guards.test.ts'),row.shard===4,'The long omission guard runs in the measured lighter fourth job');
+   assert.equal(names.includes('venue-service-remote-guards.test.ts'),false,'Retired mutation work is absent from every ordinary shard');
    const original=spawnSync(process.execPath,['--test','--test-timeout=30000',`--test-shard=${row.shard}/4`,'test/*.test.ts'],{cwd:join(root,'packages/remote-access'),env,encoding:'utf8',timeout:30000});
    assert.equal(original.status,0,original.stdout+original.stderr);
    const originallySelected=[...original.stdout.matchAll(/^(?:ok \d+ - |✔ )(.+?)(?: \(.*ms\))?$/gm)].map(m=>m[1]);

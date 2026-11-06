@@ -5,7 +5,7 @@
   "exports": "./src/index.ts",
   "scripts": {
     "typecheck": "tsc -p ../../tsconfig.json",
-    "test": "node --test --test-timeout=30000 test/*.test.ts quality/*.test.ts",
+    "test": "node --test --test-reporter=tap --test-reporter-destination=stdout --test-reporter=../../scripts/ci-required-cases.mjs --test-reporter-destination=stdout --test-timeout=30000 test/*.test.ts quality/*.test.ts",
     "worker": "node src/worker-cli.ts",
     "quality:test": "node --test --test-timeout=30000 quality/*.test.ts",
     "quality:score": "node quality/scorer.ts",

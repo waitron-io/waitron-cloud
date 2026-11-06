@@ -86,16 +86,7 @@ test('venue guard harness observes restoration independently',async t=>{
  assert.equal(await readFile(join(f.candidate,'gate.mjs'),'utf8'),f.original);
  assert.equal(await readFile(join(f.candidate,'runs'),'utf8'),'3');
 });
-test('venue guard CLI proves both pure omissions in an installed owned copy',async()=>{
- const root=fileURLToPath(new URL('../',import.meta.url)),file=join(root,'packages/registration/src/venue-service-rules.ts'),before=await readFile(file);
- const env={...process.env};delete env.NODE_TEST_CONTEXT;delete env.NODE_OPTIONS;delete env.TEST_DATABASE_URL;
- const result=await exec(process.execPath,['scripts/venue-service-guard-probes.mjs','--pure'],{cwd:root,env,timeout:60000});
- assert.deepEqual(JSON.parse(result.stdout),{mode:'pure',results:[
-  {guard:'translation level floor',baseline:1,detected:1,restored:1},
-  {guard:'exclusive trial end',baseline:1,detected:1,restored:1},
- ]});
- assert.deepEqual(await readFile(file),before);
-});
+
 for(const args of [[],['--unknown'],['--pure','extra'],['--database']])test('venue guard CLI refuses unsupported arguments or missing database '+args.join(' '),async()=>{
  const root=fileURLToPath(new URL('../',import.meta.url)),env={...process.env};delete env.TEST_DATABASE_URL;delete env.NODE_TEST_CONTEXT;
  await assert.rejects(exec(process.execPath,['scripts/venue-service-guard-probes.mjs',...args],{cwd:root,env}),error=>{
