@@ -34,3 +34,18 @@ test('refuses source exports or workspace runtime dependencies', () => {
   assert.throws(() => releaseManifest({ ...packed, exports: { '.': './src/index.ts' } }, source), /built/);
   assert.throws(() => releaseManifest({ ...packed, dependencies: { '@waitron/shared': 'workspace:*' } }, source), /dependencies/);
 });
+
+test('stages a reserved release number without rewriting the source version', () => {
+  const manifest = releaseManifest(packed, source, '0.2.0');
+  assert.equal(manifest.version, '0.2.0');
+  assert.deepEqual(manifest.waitronSource, source);
+  assert.equal(packed.version, '0.1.0');
+  assert.equal(source.version, '0.1.0');
+});
+
+test('refuses malformed release numbers while retaining source version validation', () => {
+  for (const value of ['', '01.2.0', '0.2', '0.2.0-beta', '0.2.0+build', null, 2]) {
+    assert.throws(() => releaseManifest(packed, source, value), /release version/);
+  }
+  assert.throws(() => releaseManifest({ ...packed, version: '0.2.0' }, source, '0.2.0'), /package version/);
+});

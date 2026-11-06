@@ -33,6 +33,34 @@ records remain in the ledger even if a registry version disappears, so its
 number is never allocated again. Later reservations receive `0.2.1`, `0.2.2`
 and successive patch numbers.
 
+## Prepare the reserved version
+
+Your source can keep version `0.1.0` while the ledger reserves release `0.2.0`.
+Pass the committed ledger snapshot to Cloud's preparation command:
+
+```sh
+node scripts/release/prepare-ui.mjs /path/to/clean-waitron /path/to/empty-output \
+  --ledger /path/to/ledger/releases.json
+```
+
+The command validates the complete ledger and uses its last, unprepared
+reservation. It requires the exact reserved source commit, source package name
+and source version, then builds `waitron-io-ui-core-0.2.0.tgz`. The staged manifest
+keeps the original version in `waitronSource`, copies both source notices and
+removes package build hooks. The output directory must be empty so a previous
+artifact cannot be mistaken for this release. The command leaves the ledger
+unchanged; record and persist the artifact identity separately before upload.
+
+Prepared, uploading and published records refuse another build through this
+entry point. Rebuilding an expired prepared artifact and proving identical
+bytes remain integration work. A valid local ledger does not establish trusted
+remote history, successful source CI or complete registry inventory. Supply
+those checks in the later orchestration before publication.
+
+Without `--ledger`, the existing workflow still uses `ui-source.json` and its
+September release number. The workflow does not use the reserved path yet.
+Neither path publishes a package.
+
 ## Persist one transition at a time
 
 Use `readLedger(checkout)` to read a local committed snapshot, then
@@ -77,7 +105,8 @@ verified remote history. This helper does not recover abandoned local locks.
 Run the state and real-Git checks without credentials or containers:
 
 ```sh
-node --test scripts/release/ui-ledger.test.mjs scripts/release/ui-ledger-git.test.mjs
+node --test scripts/release/ui-ledger.test.mjs scripts/release/ui-ledger-git.test.mjs \
+  scripts/release/prepare-ui.test.mjs scripts/release/ui-manifest.test.mjs
 ```
 
 Before publication, the remaining adapters must select trusted exact-main CI,
