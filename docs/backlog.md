@@ -130,8 +130,15 @@ sets out that change. It replaces the proposed retry, uncertain-read cap and
 maintenance-completion gate. Sales, uploads, stop, restore, SQLite and fiscal
 integrity, cleanup, request caps and deadlines remain required. An unknown figure
 stays unknown, and a run with gaps cannot replace a published cost figure.
-Implementation, the lost-write restore control and saved-failure replay remain
-open; this plan does not establish the cause of the historical failures.
+The request meter keeps independently paired billing rows when another phase or
+request class disagrees. Either unmatched hop makes its own row unknown; equal
+grand totals cannot hide different requests. A paired row also stays unknown
+when the two observations imply different billing, so matching byte counts
+cannot certify an uncertain price. Run `node --test
+scripts/cloud-cost/meter-billing-provenance.test.mjs` for these controls.
+The full nonblocking accounting path, publication refusal, lost-write restore
+control and saved-failure replay remain open. This partial meter change does not
+establish the cause of the historical failures or relax functional admission.
 
 ## Cloud backup box identity (D451)
 

@@ -120,7 +120,9 @@ export function createMeter({ phase, clock, afterStop }) {
         if (channel !== 'producer') continue;
         const billingKey = `${e.phase}:${requestClass}`;
         if (!billing.has(billingKey)) billing.set(billingKey, { phase: e.phase, requestClass, quantity: 0, status: 'measured' });
-        const b = billing.get(billingKey); const quantity = billable(e);
+        const b = billing.get(billingKey); let quantity = billable(e);
+        const witness = attempts.observer.get(e.token);
+        if (witness && billable(witness) !== quantity) quantity = null;
         if (quantity === null) { b.quantity = null; b.status = 'unknown'; gaps.push('request-billing:unknown'); }
         else if (b.quantity !== null) b.quantity += quantity;
       }
@@ -135,7 +137,17 @@ export function createMeter({ phase, clock, afterStop }) {
       if (!reconciled || incomplete) {
         if (!reconciled) gaps.push('accounting:unreconciled');
         if (incomplete) gaps.push('request-billing:unknown', 'after-stop:list-response-interrupted');
-        for (const row of billing.values()) { row.quantity = null; row.status = 'unknown'; }
+        const unknown = event => {
+          const requestClass = requestClasses[event.operation], key = `${event.phase}:${requestClass}`;
+          // Either hop can reveal an unwitnessed request in this phase and billing class.
+          billing.set(key, { phase: event.phase, requestClass, quantity: null, status: 'unknown' });
+        };
+        for (const id of new Set([...attempts.producer.keys(), ...attempts.observer.keys()])) {
+          const p = attempts.producer.get(id), o = attempts.observer.get(id);
+          if (!p || !same(p, o)) { if (p) unknown(p); if (o) unknown(o); }
+        }
+        if (incomplete) for (const row of subset.requests)
+          if (row.operation === 'list' && row.outcome === 'transport-error') unknown(row);
       }
       const aggregatedObjects = [...rows.values()].map(r => ({ ...r, bytes: 0, currentVersions: 0, noncurrentVersions: 0, deleteMarkers: 0, unfinishedMultipart: 0 }));
       for (const o of objects.values()) if (!o.deleted) {
