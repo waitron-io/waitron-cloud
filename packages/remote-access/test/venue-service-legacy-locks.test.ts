@@ -12,7 +12,7 @@ import {routeBinding,signForwardReport,type ForwardReport} from '../src/forward-
 
 const peer=()=>randomBytes(32).toString('base64');
 async function fixture(){
- const f=await venueServiceFixture();
+ const f=await venueServiceFixture(process.env.TEST_VENUE_SERVICE_TEMPLATE);
  try{
   const ordinary=new RemoteAccessStore(f.pool),legacy=new RemoteAccessStore(f.pool,'test-free-paid'),source=randomUUID(),otherCell=randomUUID();
   for(const [id,subnet] of [[source,85],[otherCell,86]] as const)await ordinary.createCell({id,country:'ES',provider:'aws',environment:'test',suffix:`enrol-${id}.example.test`,subnet,publicKey:peer(),endpoint:'gateway.example.test:51820'});
