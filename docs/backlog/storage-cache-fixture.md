@@ -541,15 +541,17 @@ See [the storage qualification boundaries](storage-cache-fixture.md#concurrent-s
 Run `node --test scripts/ci-backup-storage-spawn-refusal.test.mjs` to start a
 real store, then refuse a second process's native launch by removing its binary
 or its execute permission after extraction. Both operating-system errors must
-reach the caller unchanged, with no port retry. Cleanup removes the failed
-fixture's extracted root and port claims and closes its identity listener. The
-read-only archive and the running peer's executable stay unchanged, and the peer
-must still create a bucket after each refusal. A failed native launch emits an
-asynchronous error rather than a launch event, so startup waits for either before
-issuing readiness requests. Without this handling, the caller exits before
-cleanup. This controlled reproduction does not identify the historical failures
-above. General readiness, successful concurrent startup and cleanup under every
-filesystem refusal retain their separate qualification gates.
+reach the caller as the same original error object, with no port retry. Cleanup
+removes the failed fixture's extracted root and port claims and closes its identity
+listener. The read-only archive and the running peer's executable and port claims
+stay unchanged, and the peer must still create a bucket after each refusal. These
+launch refusals emit asynchronous errors rather than a launch event, so startup
+waits for either before issuing readiness requests. Without this handling, the
+caller exits before cleanup. The launch error handler is removed after a
+successful launch so later signal failures retain their original refusal behavior.
+This controlled reproduction does not identify the historical failures above.
+General readiness, successful concurrent startup and cleanup under every filesystem
+refusal retain their separate qualification gates.
 
 
 ## Native storage admin fallback exhaustion (D506)

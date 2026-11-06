@@ -1,14 +1,25 @@
 import assert from "node:assert/strict";
-import { execFile } from "node:child_process";
+import childProcess, { execFile } from "node:child_process";
 import { mkdtemp, mkdir, readFile, readlink, readdir, rm, unlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { syncBuiltinESMExports } from "node:module";
 import { promisify } from "node:util";
 import test from "node:test";
 import { prepareStorageTarSeed } from "./fixtures/storage-tar-seed.mjs";
 import { startBackupStorage } from "./backup-storage-fixture.mjs";
 
 const execute = promisify(execFile);
+async function claimsOwnedBy(root) {
+  const directory = join("/tmp", "waitron-cloud-storage-ports-" + process.getuid());
+  const owned = [];
+  for (const entry of await readdir(directory)) {
+    const path = join(directory, entry);
+    const owner = await readlink(path).catch(error => { if (error.code !== "ENOENT") throw error; });
+    if (owner === root) owned.push(path);
+  }
+  return owned.sort();
+}
 const probe = `
 import assert from "node:assert/strict";
 import childProcess from "node:child_process";
@@ -62,6 +73,11 @@ console.log(code + " cleanup complete");
 test("native spawn refusals clean up only the failed store and preserve a working peer", { timeout: 60000 }, async t => {
   const { seedRoot, seed, archiveName } = await prepareStorageTarSeed();
   t.after(() => rm(seedRoot, { recursive: true, force: true }));
+  const spawn = childProcess.spawn;
+  let peerChild;
+  t.mock.method(childProcess, "spawn", (...args) => { peerChild = spawn(...args); return peerChild; });
+  syncBuiltinESMExports();
+  t.after(() => { t.mock.restoreAll(); syncBuiltinESMExports(); });
   const peerDirectory = await mkdtemp(join(tmpdir(), "cloud-storage-spawn-peer-"));
   let peer;
   t.after(async () => {
@@ -80,7 +96,11 @@ test("native spawn refusals clean up only the failed store and preserve a workin
     if (previousTmpdir === undefined) delete process.env.TMPDIR;
     else process.env.TMPDIR = previousTmpdir;
   }
+  t.mock.method(peerChild._handle, "kill", () => -1, { times: 1 });
+  assert.throws(() => peerChild.kill("SIGHUP"), { code: "EPERM" }, "startup-only handling must not swallow later signal refusals");
   const peerBinary = await readFile(join(peer.root, "weed"));
+  const peerClaims = await claimsOwnedBy(peer.root);
+  assert.equal(peerClaims.length, 8, "the working peer must own its complete port allocation");
   for (const code of ["EACCES", "ENOENT"]) {
     const directory = await mkdtemp(join(tmpdir(), "cloud-storage-spawn-refusal-"));
     t.after(async () => {
@@ -105,6 +125,7 @@ test("native spawn refusals clean up only the failed store and preserve a workin
     assert.equal(stdout, code + " cleanup complete\n");
     assert.deepEqual(await readFile(join(cache, archiveName)), bytes);
     assert.deepEqual(await readFile(join(peer.root, "weed")), peerBinary);
+    assert.deepEqual(await claimsOwnedBy(peer.root), peerClaims, "failed startup must preserve every working peer port claim");
     const bucket = await peer.bucket("peer-after-" + code.toLowerCase());
     assert.equal(bucket.endpoint, peer.endpoint, "the independent native peer must still serve S3 requests");
   }
