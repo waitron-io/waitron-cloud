@@ -3456,13 +3456,17 @@ work: 27 child runs create and drop 45 separately migrated schemas.
 
 The wrapper now prepares one database from the real migrations and gives each
 fixture its own database clone. Each clone still checks every migration digest,
-uses its own schema and data, and drops only its owned database. Other fixture
+uses its own schema and data, restores schema-bound function settings after
+renaming, and drops only its owned database. Template close also reaps abandoned
+clones from its own full template identity while preserving other families. Other fixture
 callers keep the existing schema path. The real child refuses a changed migration
 digest and cleans the refused clone. All nine omissions retain their original
 before, omitted and restored assertions, along with the 180-second wrapper and
 30-second child limits. Template migration statements retain the existing eight-second
 limit. Real PostgreSQL checks verify clone isolation, migration-digest
-refusal and removal of both clones and template. The focused Debian run completes
+refusal, function resolution, removal of both clones and template, and cleanup
+after a caller exits. A scratch next migration verifies the complete manifest
+comparison without a fixed migration count. The focused Debian run completes
 the full wrapper within its unchanged deadline.
 
 ## Service-proof failure diagnostics (D530)
