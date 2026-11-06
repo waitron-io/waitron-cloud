@@ -296,27 +296,6 @@ the hold still passes in sampled runs before and after PR #599. A check that
 always detects a missing hold remains open. Stubbed Chromium checks do not qualify
 real authentication, database behavior or general cleanup bounds.
 
-## Separate-process storage extraction and failed-startup cleanup (D457)
-
-**Open.** Attribute the historical storage startup failures. Native startup and
-failed-executable cleanup now have a separate-process check: unavailable or
-non-executable child binaries reject startup after releasing the failed fixture's
-files, listener and port claims, while a working peer still serves S3 requests.
-
-See [the separate-process extraction limits](backlog/storage-cache-fixture.md#separate-process-storage-extraction-and-failed-startup-cleanup-d457).
-The earlier conformance archive stall (run 40811399202, job 123243127986) remains
-in [D311's download investigation](backlog/cost-conformance-fixtures.md#fixture-archive-download-retries-d311).
-PR #788 adds an inactivity retry for that download; it does not identify the
-upstream stall's cause. The separate
-[header-progress test scheduling repair](backlog/cost-conformance-fixtures.md#header-progress-fixture-scheduling-d530)
-retains the original assertions and controls its shortened clock independently
-of connection scheduling. The [exhausted-attempt fixture](backlog/cost-conformance-fixtures.md#exhausted-archive-attempts-and-connection-scheduling-d530)
-also controls its shortened clock after each stalled request reaches the server,
-retaining three requests and every original check. The [body-stall and shared-deadline fixtures](backlog/cost-conformance-fixtures.md#body-stall-and-total-deadline-scheduling-d530)
-now coordinate their shortened clocks with consumed body bytes and admitted
-requests, preserving the original checks and limits. A recurring npm abort-diagnostic refusal remains separate
-in [the setup investigation](backlog/ci-pnpm-setup.md).
-
 ## Worker shutdown during polling and error reporting (D459)
 
 **Open.** Qualify production shutdown, database failures, cancellation and provider
@@ -324,6 +303,21 @@ behavior beyond the local fixtures, plus explicit database pool cleanup. Native
 polling, pending schedules and late error reports have shutdown controls;
 real-command checks cover the cases named in
 [the worker shutdown detail and remaining limits](backlog/worker-scheduling.md#worker-shutdown-during-polling-and-error-reporting-d459).
+
+## Historical CI observations without a recorded recurrence
+
+Keep D126, D129, D131, D198, D262, D311, D335, D349, D457, D574 and D583,
+D152's isolation-command refusal and D507's old cache-upload stall together.
+The 31 October to 6 November retained failure-history review found no matching
+recurrence for these observations. This does not explain their causes or prove
+that they cannot recur. D152's replication failures and D507's cache-miss budget
+qualification remain separate below. A new matching failure joins its existing
+investigation, with the original assertions, limits and cleanup checks preserved.
+
+Lane J's local `receipts/d593/sweep-inventory.json` retains every original entry,
+its source revision and its investigation links. The matching failure records
+and review limits are in `receipts/d593/recurrence-review.json`. Use those records
+to find the original evidence before choosing a repair.
 
 ## How to keep this file honest
 
@@ -3429,12 +3423,6 @@ and genuine restore or recovery. Native transport and elapsed retry checks pass;
 they grant no activation or stop-proof authority.
 See [the remaining checks](backlog/backup-recovery-http.md#backup-catalogue-qualification).
 
-## Container verifier memory-refusal observation (D335)
-
-**Open.** Docker event-reporting differences remain unexplained. Native controls now
-qualify Docker-reported memory kills with exits 137 and 1 and no entry report.
-See [the boundaries and remaining work](backlog/verifier-build.md#container-verifier-memory-refusal-observation-d335).
-
 ## Monitoring shutdown fixture migration timeout (D530)
 
 **Open.** Registration shard 1 fails during migration 013 under its unchanged
@@ -3677,23 +3665,6 @@ child exits. See [the investigation and remaining work](backlog/storage-cache-fi
 The qualified current browser fixture and identity-port repair retain separate
 historical bind and reconnect investigations. See [the D499 boundaries](backlog/storage-cache-fixture.md#current-browser-and-identity-port-qualification-d499).
 
-## Diagnostic permission test lock observation (D198)
-
-The shipped fixture repair passes the six current diagnostic cases on Linux,
-including delayed revocation and the final HTTP 403 refusal. The historical
-membership-update delay remains unexplained. Capture a recurrence with separate
-submission, database and commit timings; keep the 100 ms database lock-wait limit
-and successful revocation before releasing the incident read. See [the evidence
-and capture requirements](backlog/diagnostic-permission-lock.md).
-
-## Historical dependency-cache upload cause (D507)
-
-Optional saving is bounded across all ten job definitions. The original upload
-stopped advancing for five minutes, but its log gives no cause; archive-stall
-controls and later successful runs do not explain it. **Open.** Retain save and
-runner diagnostics on recurrence before attributing the transport failure.
-See [the original job and retained boundaries](backlog/ci-cache-saving.md#historical-upload-transport-cause-d507).
-
 ## Dependency-cache miss job budgets (D507)
 
 Healthy runs cover 67 cache-consuming jobs across all ten definitions. Each fits
@@ -3811,14 +3782,6 @@ remain unexplained. Capture a diagnostic recurrence, reproduce its named stage
 and fix the proved cause while preserving every existing assertion and deadline.
 See [the investigation and retained ordering controls](backlog/portal-lost-reply-ordering.md).
 
-## Password derivation observation on Linux (D129)
-
-**Open; the historical failure remains unattributed.** Preserve the real derivation
-result barrier, password-reset refusal and existing bounds when investigating a
-recurrence. Read the [observation requirements and remaining qualification](backlog/password-derivation-observation.md);
-current Linux PostgreSQL CI qualifies the unchanged observation cases and catches
-both deliberate faults. Use the shared test box for local database checks.
-
 ## Initial services and future candidates
 
 **Open; local implementations do not approve production enablement.** Remote access
@@ -3890,24 +3853,6 @@ on-prem mirrors, fiscal filing recovery, offline log growth, local credentials,
 box image networking and the end-to-end selling proof. These cloud entries do not
 declare those core prerequisites implemented.
 
-## Translation startup failure evidence (D574)
-
-The translation launcher fixture now retains its failed command's exit status,
-signal, process error and elapsed time, plus a bounded read of its own service
-states before cleanup. Controlled failures retain the original assertions and
-deadlines. The historical bootstrap exit 255 remains unexplained; capture the
-new evidence on recurrence before choosing a repair. See the
-[startup investigation](backlog/translation-startup.md).
-
-## Linux download-supervision fixture timing (D126)
-
-The historical Linux failure phase and a separate macOS timing failure remain
-unattributed. PR315's fixture adjustment is on main; all 29 unchanged focused
-checks pass on the authorised Linux test box. A retained Linux diagnostic also
-passes all 32 contention cases with matching fixture and supervisor sources.
-Capture process and step timing if either failure recurs, preserving the existing
-outer limits and assertions. See the [fixture timing detail](backlog/linux-download-supervision.md).
-
 ## Cost conformance image acquisition (D137)
 
 The historical Docker Hub token-request timeout remains unattributed. Keep the
@@ -3944,55 +3889,6 @@ releasing the held installation. Existing security checks and deadlines remain;
 production locking is unchanged. The historical scheduling was not captured.
 See [the reproduction and qualification](backlog/installation-renewal-revocation.md).
 
-### Cost conformance setup timeout (D131)
-
-The historical setup timeout remains unexplained. Bounded installation summaries
-identify unfinished package downloads, imports and install scripts, alongside the
-existing command and archive diagnostics. Real pnpm controls prove that the outer
-setup limit stops stalled and slowly progressing response bodies and removes their
-process and scratch directory. The labelled Linux canvas slowdown remains unexplained;
-deadlines and integrity checks stay unchanged.
-See the [investigation and remaining qualification](backlog/cost-setup-timeout.md).
-Pinned source fetches now use Git's low-speed limit and one bounded transport
-retry from a fresh owned checkout; bad references still stop immediately.
-
-D212 qualification in PR #744, head
-`8cf732967538f0dc3e14111383f5c93e8b69c8e5`, reports a distinct source-install
-timeout in cost run 40941888772, job 123687227986. All 670 packages are available
-and imported; `cpu-features@0.0.10` remains in its install stage when the existing
-300-second limit expires. No package download or import is pending. Native-build
-progress now retains fixed node-gyp milestones and header/checksum HTTP status,
-without raw output or URLs. A controlled native header-body stall and a successful
-fresh build qualify this distinction; the historical Linux cause remains unknown.
-Keep the source pin, integrity checks, deadlines and original assertions.
-
-On 4 November, all 44 existing native setup and installer controls pass without
-skips. The test box is busy, so no fresh Linux or Docker setup runs. These controls
-qualify the diagnostics and cleanup; the historical timeouts and Linux transfer
-and native-build causes remain open. See the detail file for the bounded attempt.
-
-### Gateway container startup refusal (D349 qualification)
-
-The outside-request browser control in [cost run 40536958436, job
-122305238271](https://github.com/waitron-io/waitron-cloud/actions/runs/40536958436/job/122305238271)
-refused while starting its generated gateway, before the browser journey, after
-30.6 seconds. The command helper discarded the original exit and stderr; the
-cause remains unknown. The duration matches the command bound, but a timeout
-is only an inference. Retain this failure in the shared CI-failure investigation.
-Fresh qualification preserves the original outside-request, accounting, cleanup
-and deadline checks; a passing run does not establish the historical cause.
-
-At commit `bfc5e38d`, D349 qualification failed the source-fetch fixture's
-“browser preparation refuses the historical replay revision before installation”
-case in [CI run 41169033630, job
-124443297790](https://github.com/waitron-io/waitron-cloud/actions/runs/41169033630/job/124443297790).
-Reading the generated state at the then-current `conformance-source-fetch.test.mjs:60`
-threw `Unexpected end of JSON input`; 2,506 other cases in that suite passed.
-Main now has D530's interrupted-write and helper-cleanup controls. The current
-case is “browser preparation refuses the current replay revision before installation”.
-Its historical timing remains unknown; fresh current-head CI still qualifies
-this separate monitoring change. Preserve every source-revision refusal and cleanup check.
-
 ### Interrupted source-fetch fixture state (D530)
 
 **Interrupted writes reproduced and handled; historical timing remains unknown.**
@@ -4008,36 +3904,6 @@ did not capture the write boundary or explain the helper's delay; those details
 remain unknown. A separate control kills the supervisor while its helper is
 paused; fixture cleanup records that helper's PID independently and waits for
 it to exit, so a failing supervisor cannot leave the test process behind.
-
-### Healthy source-fetch fixture deadline (D583 cause 1)
-
-**First cause repaired; the isolated early-wake investigation remains open.**
-A controlled 500 ms scheduling delay reproduces the healthy-fetch retry in
-[#953's receipt job](https://github.com/waitron-io/waitron-cloud/actions/runs/42007512040/job/127179355072):
-the fixture shortened every 75-second fetch timer to 350 ms, including successful
-fetches. The fixture now accelerates a fetch only after its helper confirms the
-deliberate stall. A delayed healthy first fetch completes once, and a delayed
-healthy retry follows only the intended stalled attempt. A helper delayed before
-recording its call still enters the intended stall and receives the accelerated
-timeout; scheduling cannot move the queued hang onto an unaccelerated retry. All original assertions, source revisions, production deadlines,
-two-attempt maximum, accelerated outer limit, fixture bound and cleanup remain.
-Run `node --test scripts/cloud-cost/conformance-source-fetch.test.mjs` for these
-controls. The historical job did not measure helper scheduling, so the exact
-cause of that run's delay remains unknown. D583's separate isolated early-wake
-failure still needs diagnosis. Its isolated early-wake case now uses the existing
-stream-result reporter to retain fixed controller/worker refusal stages and the
-admitted trace before fixture cleanup. Its result-read flag observes a successful
-read of the exact worker result, including a later JSON or admission refusal;
-a failed or unrelated read cannot satisfy it, and the reader is restored after
-success or refusal. The original success assertion, both
-two-second phase checks, three restored sales, source fingerprints and owned
-cleanup remain. A forced worker refusal must still fail the case and expose only
-the admitted diagnostic; raw exception text stays private. The historical failure
-in [run 41903018206](https://github.com/waitron-io/waitron-cloud/actions/runs/41903018206/job/126834825942)
-remains unexplained. A later passing run qualifies the wrapper, not a repair;
-capture its diagnostic on recurrence before choosing a fix. A worker's early-wake
-count exit can still have an unknown refusal stage. Later phase-assertion failures
-retain their checks but do not report individual phase timings.
 
 ### Litestream LIST-response interruption (D352 qualification)
 
@@ -4059,26 +3925,6 @@ on the Linux test box (eight checks); the usage case also passed natively
 failures. D530 retains the historical failures. Fresh current-head CI qualifies this
 separate clock change; a passing retest does not establish the cause of those
 timeouts or the storage interruption. Keep every assertion and deadline.
-
-### Fixture archive download retries (D311)
-
-**Open; the upstream 504 and later HTTP 500 causes remain unknown.** D457's
-stalled successful response now gets another attempt after 30 seconds without
-headers or body progress, within the existing three attempts and shared
-120-second budget. Local HTTP controls prove recovery from stalled headers and
-partial bodies, ongoing progress, cancellation and exhausted attempts. Archive
-diagnostics retain known public response-service labels and validated request IDs
-so you can correlate a refusal without exposing signed redirect URLs or arbitrary
-headers. Keep the bounded retries, shared download budget, cancellation and
-checksum requirements; see the
-[download handling and qualification limits](backlog/cost-conformance-fixtures.md#fixture-archive-download-retries-d311).
-
-A bounded 4 November check passes all 56 local HTTP controls and downloads both
-pinned Linux x64 archives on the Mac, each on its first attempt with a verified
-checksum. The test box was occupied, so this does not qualify Linux execution or
-Docker preparation. Neither successful download explains the historical refusals
-or stall; those causes remain open.
-
 
 ### Storage startup retry notice can replace the original refusal (D530)
 
@@ -4307,19 +4153,6 @@ recurrence to establish the historical cause before changing any shutdown rule.
 checks grant no activation authority or proof that the old server has stopped.
 See [the native recovery boundaries](backlog/backup-recovery-http.md#recovery-deployment-qualification).
 
-## Cost-stack isolation command refusal (D152)
-
-**Open.** Both unchanged signal checks pass on the shared Linux test box at
-Cloud commit `846ab45d`: SIGINT in 7.62 seconds and SIGTERM in 6.47 seconds.
-This selection did not reproduce the historical missed admission or exercise
-the complete conformance group. The 53 native diagnostic checks also pass.
-Attribute a new failure from retained child evidence before changing signal
-handling. See [the diagnostic boundary and qualification limits](backlog/cost-stack-isolation.md#qualification-on-4-november-2026).
-
-Read the [isolation and deadline investigation](backlog/cost-stack-isolation.md)
-before changing the fixture guards. Historical attribution and Linux qualification
-remain limited as described there; the separate replication interruption remains open.
-
 ## Public browser and network qualification
 
 Qualify the public browser check against the supported browsers and production
@@ -4365,30 +4198,6 @@ preserves that result's scope without explaining either historical failure.
 Use the next labelled recurrence to find the cause, preserving the existing
 assertions and deadlines. See the
 [investigation and qualification limits](backlog/storage-authority-timeout.md).
-
-
-## Authenticator code format feedback (D237)
-
-### Authenticator refusal guidance
-
-Expired, consumed or superseded setup returns `setup_unavailable`; an inactive
-factor returns `factor_not_active`; passwords over 1,024 UTF-8 bytes return
-`password_too_long`. The portal explains the next step in English and Spanish,
-discards unusable setup and offers a status refresh for an inactive factor.
-Server and portal checks cover each cause, including expiry during proof checks
-and ownership refusals for stale setup from another account or session.
-Account, session, password-fingerprint,
-proof and attempt-budget refusals keep their existing acceptance rules. See the
-[authenticator guide](authenticator-app.md#call-the-api).
-
-## Clear stale connection and recovery code feedback (D249)
-
-Lane D's Litestream investigation has another observation from
-[cost run 40181699752, job 121133970845](https://github.com/waitron-io/waitron-cloud/actions/runs/40181699752/job/121133970845).
-The committed-PUT-reply shutdown check refuses at `idle` with one pending exchange
-and 20 completed exchanges; transport cleanup then reports `active-close`.
-Reproduce this refusal before attributing its cause. Keep the existing limits
-and assertions; the code-feedback fix does not resolve this investigation.
 
 
 ## Paced replay deletion recurrence (D351 qualification)
@@ -4611,17 +4420,6 @@ Cloud follow-ups, each a separate small change with tests before implementation:
 Authentication, recovery, tenant permissions and fiscal changes keep their full
 review and owner gates. This audit does not enable services or change policy.
 
-## Cost-mail reconciliation refusal observed during D262
-
-The historical mail measurement-close refusal remains unexplained. Both unchanged
-PostgreSQL/Mailpit cases pass on the Linux test box, alongside all 20 mail controls
-on Linux and macOS. These results do not identify or repair the old failure.
-The bounded 4 November check passes all 20 native controls; the busy test box
-prevents a fresh PostgreSQL/Mailpit reproduction. Use the next labelled close-error
-diagnostic to reproduce its cause while preserving measurement guards, accounting
-and deadlines. See [the investigation and qualification limits](backlog/cost-mail-reconciliation.md).
-
-
 ## Remote hostname save qualification
 
 **Open.** Qualify live DNS and certificate issuance, browser integration and deployment.
@@ -4643,18 +4441,3 @@ job 121387722438). The cause remains unknown and belongs to D530's investigation
 Keep the ownership assertion, deadlines, resource collection and refusal to claim
 cleanup after ownership loss. Qualify any repair with the genuine runtime fixture;
 a passing remote-guidance qualification does not establish a repair.
-
-## Relay control private mailbox (D578)
-
-A sibling monitoring reminder changed the shared inbox during the relay control
-test in runs 41940873278 and the earlier D75 qualification. The command test now
-uses its own loopback SMTP capture, a local server that records every message.
-Every direct, root and package command inherits that capture, and the final
-assertion requires no deliveries to any destination. The test also sends a
-competing reminder to the shared Mailpit inbox while a command runs; that
-reproduces the old comparison failure and passes with the private capture.
-Database snapshots, acknowledgements, state, authority and deadline assertions
-remain intact. Run `NODE_AUTH_TOKEN=local-fixture node scripts/test-postgres.mjs exec pnpm --dir
-packages/registration exec node --test test/relay-control-cli.test.ts` to check
-the command contract. Production delivery code and shared mail fixtures are
-unchanged; this repair does not settle other D530 failures.

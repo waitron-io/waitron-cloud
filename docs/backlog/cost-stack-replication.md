@@ -342,6 +342,13 @@ three-attempt cap, official 0.5.17 pin, restore assertions and deadlines.
 
 ### Delayed PUT shutdown investigation (D268)
 
+A committed-PUT-reply shutdown observation comes from
+[cost run 40181699752, job 121133970845](https://github.com/waitron-io/waitron-cloud/actions/runs/40181699752/job/121133970845).
+The committed-PUT-reply shutdown check refuses at `idle` with one pending exchange
+and 20 completed exchanges; transport cleanup then reports `active-close`.
+Reproduce this refusal before attributing its cause. Keep the existing limits
+and assertions.
+
 The delayed-PUT case failed on three of the 103 cost-workflow runs started on
 25 October through the initial D268 audit. All three failures were on PRs;
 40 main runs included four other failures. D266 changes tests and backlog only,
