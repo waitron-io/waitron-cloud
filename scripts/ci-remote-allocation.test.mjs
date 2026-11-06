@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {spawnSync} from 'node:child_process';
-import {mkdirSync,mkdtempSync,readFileSync,readdirSync,rmSync,writeFileSync} from 'node:fs';
+import {cpSync,mkdirSync,mkdtempSync,readFileSync,readdirSync,rmSync,writeFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {loadWorkspace,workPlan} from './ci-scope.mjs';
@@ -30,22 +30,30 @@ test('remote shards discover every current file and a future file exactly once t
  assert.equal(selected.length,4);
  const files=readdirSync(new URL('../packages/remote-access/test/',import.meta.url)).filter(f=>f.endsWith('.test.ts')).concat('zz-future-remote.test.ts').sort();
  const workflow=readFileSync(new URL('../.github/workflows/ci.yml',import.meta.url),'utf8');
- const command=workflow.match(/- if: matrix\.shards && matrix\.package != '@waitron-cloud\/registration'\n\s+run: ([^\n]+)/)?.[1];assert.ok(command,'workflow supplies the shard command');
+ const command=workflow.match(/- if: matrix\.package == '@waitron-cloud\/remote-access'\n\s+run: ([^\n]+)/)?.[1];assert.ok(command,'workflow supplies the remote shard command');
  const root=mkdtempSync(join(tmpdir(),'cloud-remote-shards-')),directory=join(root,'packages/remote-access/test');
  try{
   mkdirSync(directory,{recursive:true});mkdirSync(join(root,'scripts'));
+  cpSync(new URL('./ci-run-remote-shard.mjs',import.meta.url),join(root,'scripts/ci-run-remote-shard.mjs'));
   // The fixture replaces Docker setup while forwarding the workflow's actual Node arguments.
   writeFileSync(join(root,'scripts/test-postgres.mjs'),`import assert from 'node:assert/strict';import {spawnSync} from 'node:child_process';
 assert.deepEqual(process.argv.slice(2,8),['exec','pnpm','--filter','@waitron-cloud/remote-access','exec','node']);
 const child=spawnSync(process.execPath,process.argv.slice(8),{cwd:'packages/remote-access',stdio:'inherit'});if(child.error)throw child.error;process.exit(child.status??1);`);
-  for(const name of files)writeFileSync(join(directory,name),`import test from 'node:test';test(${JSON.stringify(name)},()=>{});\n`);
+  for(const name of files)writeFileSync(join(directory,name),`import assert from 'node:assert/strict';import test from 'node:test';test(${JSON.stringify(name)},()=>{assert.ok(process.execArgv.includes('--test-timeout=30000'));});\n`);
   const seen=[],env={...process.env};delete env.NODE_TEST_CONTEXT;
   env.NODE_TEST_REPORTER='tap';
   for(const row of selected){const line=command.replaceAll('${{ matrix.package }}',remote).replaceAll('${{ matrix.shard }}',String(row.shard)).replaceAll('${{ matrix.shards }}',String(row.shards))
     .replace("${{ matrix.package == '@waitron-cloud/portal' && '120000' || '30000' }}",'30000');
    const result=spawnSync('sh',['-c',line],{cwd:root,env,encoding:'utf8',timeout:30000});assert.equal(result.status,0,result.stdout+result.stderr);
    const output=result.stdout,names=[...output.matchAll(/^(?:ok \d+ - |✔ )(.+?)(?: \(.*ms\))?$/gm)].map(m=>m[1]);
-   assert.ok(names.length>0);assert.match(output,/^(?:# |ℹ )fail 0$/m);assert.match(output,/^(?:# |ℹ )cancelled 0$/m);assert.match(output,/^(?:# |ℹ )skipped 0$/m);seen.push(...names);}
+   assert.ok(names.length>0);assert.match(output,/^(?:# |ℹ )fail 0$/m);assert.match(output,/^(?:# |ℹ )cancelled 0$/m);assert.match(output,/^(?:# |ℹ )skipped 0$/m);
+   assert.equal(names.includes('venue-service-remote-guards.test.ts'),row.shard===4,'The long omission guard runs in the measured lighter fourth job');
+   const original=spawnSync(process.execPath,['--test','--test-timeout=30000',`--test-shard=${row.shard}/4`,'test/*.test.ts'],{cwd:join(root,'packages/remote-access'),env,encoding:'utf8',timeout:30000});
+   assert.equal(original.status,0,original.stdout+original.stderr);
+   const originallySelected=[...original.stdout.matchAll(/^(?:ok \d+ - |✔ )(.+?)(?: \(.*ms\))?$/gm)].map(m=>m[1]);
+   const unmoved=file=>file!=='venue-service-remote-guards.test.ts';
+   assert.deepEqual(names.filter(unmoved).sort(),originallySelected.filter(unmoved).sort(),'Unmoved files retain their native Node partition');
+   seen.push(...names);}
   assert.deepEqual(seen.sort(),files);
  }finally{rmSync(root,{recursive:true,force:true});}
 });

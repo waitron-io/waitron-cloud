@@ -326,9 +326,12 @@ Remote-access tests run in four independent jobs, while identity and operations
 retain their shared job. The final CI check requires all four remote shards and
 refuses a grouped remote suite or an incomplete allocation. A Node discovery
 check runs every current remote test filename and a future filename exactly once.
-All existing test files, assertions and deadlines remain. Current-head CI must
-still measure the jobs against the roughly four-minute target; no job limit is
-raised. D463's collector and remaining billing work stay on their separate branch.
+All existing test files, assertions and deadlines remain. A healthy main run
+measured 113, 263, 181 and 92 seconds, so the long omission guard now moves from
+the second job to the fourth. Every other file keeps its native Node allocation.
+[Current-head qualification](backlog/remote-ci-budget.md) must still establish
+the four-minute target. D463's collector and remaining billing work stay on their
+separate branch.
 
 ## How to keep this file honest
 
