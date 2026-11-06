@@ -3,6 +3,8 @@ on:
   pull_request:
     paths:
       - 'deploy/kubernetes/proof/**'
+      - 'scripts/kubernetes-proof-budget.mjs'
+      - 'scripts/kubernetes-proof-budget.test.mjs'
       - '.github/workflows/kubernetes-proof.yml'
   push:
     branches: [main]
@@ -29,7 +31,12 @@ jobs:
         run: |
           set -euo pipefail
           report="$RUNNER_TEMP/kubernetes-proof-units.tap"
-          node --test --test-reporter=tap --test-timeout=30000 deploy/kubernetes/proof/setup.test.mjs deploy/kubernetes/proof/expiry.test.mjs | tee "$report"
+          tests=(deploy/kubernetes/proof/setup.test.mjs deploy/kubernetes/proof/expiry.test.mjs)
+          # Run only the prerequisites supplied by the exact checked-out head.
+          if [[ -e scripts/kubernetes-proof-budget.mjs || -e scripts/kubernetes-proof-budget.test.mjs ]]; then
+            tests+=(scripts/kubernetes-proof-budget.test.mjs)
+          fi
+          node --test --test-reporter=tap --test-timeout=30000 "${tests[@]}" | tee "$report"
           grep -Eq '^# tests [1-9][0-9]*$' "$report"
           grep -Fx '# fail 0' "$report"
           grep -Fx '# cancelled 0' "$report"

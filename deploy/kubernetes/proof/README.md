@@ -127,3 +127,42 @@ These references informed the implementation; live qualification remains open.
 
 AWS documents the [original and most recent instance launch times](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/Stop_Start.html#find-initial-launch-time)
 and the volume's [creation timestamp](https://docs.aws.amazon.com/AWSEC2/latest/APIReference/API_Volume.html).
+
+## Reserve cost before the next action
+
+The reservation core in `scripts/kubernetes-proof-budget.mjs` records one active
+run and each affected UTC month through the receipt-retention deadline. Every
+write uses a create-only condition or the exact previously read S3 object version.
+A second controller cannot take ownership. An identical retry keeps the original
+head, tree, deadline and cost; it cannot extend them. Partial writes keep ownership
+and their booked cost until an exact retry completes, so cancellation grants no
+new allowance.
+
+Amounts are integer millionths of a US dollar. Every affected month books the full
+run bound, its reconciled baseline and its reserved protection overhead. A total
+of US$10 or more refuses. This deliberately leaves a margin at the approved cap.
+New higher baseline or overhead evidence refuses until a separate reconciliation
+updates the opening; the core never silently keeps a smaller old estimate.
+
+Confirmed machine termination, absent disks and interfaces, reconciled billing
+and healthy expiry protection release the active slot. They never refund its
+monthly reservation. Original identities, cost-source evidence and cleanup facts
+remain in the ledger. Missing, damaged, oversized or unrecognized history refuses;
+runtime cannot recreate it. Initialization is restricted to an empty ledger and
+can leave a protected, incomplete setup after a failed write.
+
+Run the synthetic checks without credentials:
+
+```sh
+node --test scripts/kubernetes-proof-budget.test.mjs
+```
+
+These checks exercise the reservation engine and the conditional S3 adapter with
+an isolated object-service substitute. They do not establish current prices,
+current bills, real S3 behavior or a runnable setup. Trusted price and billing
+acquisition must still build and verify the complete all-in bound, including
+setup, retained data, idle protection, taxes and delayed cleanup. The core accepts
+those reviewed inputs; a price URL and digest alone do not prove a price or an
+upper bound. The launch controller must still verify cleanup and budget evidence
+against AWS. Owner lifecycle, fixed-deadline bootstrap and live qualification
+remain open. Admission stays closed.

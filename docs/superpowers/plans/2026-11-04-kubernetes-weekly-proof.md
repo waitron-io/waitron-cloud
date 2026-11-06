@@ -115,6 +115,15 @@ sessions also stop at that boundary; actual AWS policy behavior remains unqualif
 - [ ] Reserve before uploads: 120-minute absolute proof lifetime plus 15-minute cleanup allowance, 64 GiB root, bounded payload/results and protection costs. Safety drills use at most five-minute deadlines plus that cleanup allowance under the same cap. Verify private S3 topology and any existing endpoint/network allocation cost; unresolved private/offline transfer or all-in price is a named blocker, never permission to add public access.
 - [ ] Bound payload to 16 GiB/24 hours, receipts 64 MiB/run/30 days, ledger 1 MiB/month/13 months; preserve unresolved ownership records. At most three attempts/API, 64 MiB multipart parts, 60 five-second release polls, 480 fifteen-second result polls, 5000 S3 requests/run; abort incomplete multipart within a day. One-day bounded expiry logs; no unbounded versions/cache. Hitting a bound fails, never truncates mandatory evidence into success. Keep spent reservations booked for the month; no lagging-bill refund or new run while cleanup/price/billing/protection health is uncertain.
 
+**Reservation-core prerequisite:** the conditional active/month engine and S3
+adapter now retain complete original identities, price-source evidence and cleanup
+facts. Synthetic tests cover competing controllers, exact retries, unknown cleanup,
+month and retention crossings, missing/corrupt records, post-write deadline/day
+changes and partial/lost responses. Bookings are integer millionths of USD, never
+refunded, and refuse totals at or above USD 10. Current price/billing acquisition,
+all-in bound construction, setup integration and real S3/termination qualification
+remain open; Task 3 is not complete and this core grants no live admission.
+
 ## Task 4: Prove both independent termination actors
 
 **Files:** `scripts/kubernetes-proof-control.mjs`, its `.test.mjs`; Task 1 bootstrap/deadline/expiry files. **Interfaces:** `launchReserved(reservation,aws):Promise<LaunchRecord>`; `collectOwned(record,aws):Promise<CleanupReceipt>`. Tags are `Proof=D570`, fixed Stack ID, `Run=<UUIDv4>`, absolute RFC3339 `ExpiresAt` on instance/root; ledger records exact IDs/AMI/template. ClientToken is reservation UUID, MinCount=MaxCount=1.

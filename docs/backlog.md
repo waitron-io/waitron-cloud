@@ -3225,7 +3225,15 @@ implementation or production evidence.
   [P1 country-cell plan](superpowers/plans/2026-10-22-cloud-country-cell.md)
   specifies images, repository-driven Kubernetes deployment and genuine three-node
   availability checks for sign-in, remote access and backups. Full service/fault proof
-  and the strict common verifier remain unbuilt. D570's
+  and the strict common verifier remain unbuilt. D570 now has a closed-admission
+  reservation core with conditional active/month ledgers, immutable exact retries,
+  full cross-month bookings through receipt retention, conservative no-refund
+  cleanup and retained original cost evidence. Synthetic checks cover competing
+  controllers, partial/lost writes, damaged history, stale evidence, deadline
+  expiry during writes and unknown cleanup. Official current-price/billing
+  acquisition and all-in bound construction, setup integration, bootstrap and
+  live S3/cleanup qualification remain open; these inputs grant no spending or
+  runnable owner setup. D570's
   [weekly proof plan](superpowers/plans/2026-11-04-kubernetes-weekly-proof.md) carries
   the first complete proof on one disposable on-demand ARM m7g.2xlarge in staging
   462991287391/eu-south-2, within USD 10/month; production 949687825720 is forbidden.
