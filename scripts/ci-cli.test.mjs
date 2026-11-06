@@ -134,7 +134,8 @@ test('executed planner forces a full reusable run even with an audited prose pul
     writeFileSync(event, JSON.stringify({pull_request: {base: {sha: base}, head: {sha: head}}}));
     for (const full of ['false', 'true']) {
       writeFileSync(output, '');
-      const result = spawnSync(process.execPath, ['scripts/ci-plan.mjs'], {cwd: root, encoding: 'utf8', timeout: 30_000, env: {...process.env, CI_FORCE_FULL: full, GITHUB_EVENT_PATH: event, GITHUB_OUTPUT: output, GITHUB_SHA: head, GITHUB_REF_NAME: 'main', GITHUB_REPOSITORY: repository}});
+      const result = spawnSync(process.execPath, ['scripts/ci-plan.mjs'], {cwd: root, encoding: 'utf8', timeout: 30_000, env: {...process.env, GITHUB_EVENT_NAME: 'pull_request', CI_FULL: 'false', CI_CALLED: 'false',
+        CI_WORKFLOW_INPUTS: '{}', CI_RECORD_EVIDENCE: 'false', CI_FORCE_FULL: full, GITHUB_EVENT_PATH: event, GITHUB_OUTPUT: output, GITHUB_SHA: head, GITHUB_REF_NAME: 'main', GITHUB_REPOSITORY: repository}});
       assert.equal(result.status, 0, result.stdout + result.stderr);
       const line = readFileSync(output, 'utf8').split('\n').find(line => line.startsWith('plan='));
       const selected = JSON.parse(line.slice(5));

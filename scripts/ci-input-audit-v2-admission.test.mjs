@@ -13,7 +13,8 @@ import {assertSummary} from './ci-summary.mjs';
 
 const path = name => fileURLToPath(new URL(name, import.meta.url));
 const node = (root, name, args = [], env = {}) => {
-  const childEnv = {...process.env, ...env};
+  const childEnv = {...process.env, GITHUB_EVENT_NAME: 'pull_request',
+    CI_FULL: 'false', CI_CALLED: 'false', CI_FORCE_FULL: 'false', CI_WORKFLOW_INPUTS: '{}', CI_RECORD_EVIDENCE: 'false', ...env};
   delete childEnv.NODE_TEST_CONTEXT;
   return spawnSync(process.execPath, [path(name), ...args], {cwd: root, encoding: 'utf8', timeout: 30_000, env: childEnv});
 };

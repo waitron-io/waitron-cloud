@@ -148,7 +148,8 @@ test('real planner command emits document output and reports unaudited fallbacks
     const output = join(tmpdir(), `cloud-doc-output-${head}`);
     try {
       writeFileSync(output, '');
-      const result = spawnSync(process.execPath, [resolve('scripts/ci-plan.mjs')], {cwd: root, env: {...process.env, GITHUB_EVENT_PATH: join(root, 'event.json'), GITHUB_OUTPUT: output}, encoding: 'utf8'});
+      const result = spawnSync(process.execPath, [resolve('scripts/ci-plan.mjs')], {cwd: root, env: {...process.env, GITHUB_EVENT_NAME: 'pull_request', CI_FULL: 'false', CI_CALLED: 'false',
+      CI_FORCE_FULL: 'false', CI_WORKFLOW_INPUTS: '{}', CI_RECORD_EVIDENCE: 'false', GITHUB_EVENT_PATH: join(root, 'event.json'), GITHUB_OUTPUT: output, GITHUB_SHA: head}, encoding: 'utf8'});
       return {...result, output: readFileSync(output, 'utf8')};
     } finally { rmSync(output, {force: true}); rmSync(join(root, 'event.json'), {force: true}); }
   };
@@ -202,7 +203,8 @@ test('planner command prominently warns about an unreviewed documentation audit 
     const output = join(root, 'output.txt');
     writeFileSync(output, '');
     const result = spawnSync(process.execPath, [resolve('scripts/ci-plan.mjs')], {cwd: root,
-      env: {...process.env, GITHUB_EVENT_PATH: join(root, 'event.json'), GITHUB_OUTPUT: output}, encoding: 'utf8'});
+      env: {...process.env, GITHUB_EVENT_NAME: 'pull_request', CI_FULL: 'false', CI_CALLED: 'false',
+      CI_FORCE_FULL: 'false', CI_WORKFLOW_INPUTS: '{}', CI_RECORD_EVIDENCE: 'false', GITHUB_EVENT_PATH: join(root, 'event.json'), GITHUB_OUTPUT: output, GITHUB_SHA: head}, encoding: 'utf8'});
     assert.equal(result.status, 0, result.stderr);
     assert.match(result.stdout, /::warning title=Documentation-only CI unavailable::/);
     assert.match(result.stdout, /review.*scripts\/ci-input-audit\.json.*docs\/ci-documentation-audit\.md/i);
@@ -234,7 +236,7 @@ test('proof planner skips only audited prose and keeps code, pinned documents, m
       const eventPath = join(scratch, 'event.json'), output = join(scratch, 'output');
       writeFileSync(eventPath, JSON.stringify(event)); writeFileSync(output, '');
       const result = spawnSync(process.execPath, [checker, '--plan'], {cwd: root, encoding: 'utf8',
-        env: {...process.env, GITHUB_EVENT_PATH: eventPath, GITHUB_OUTPUT: output}});
+        env: {...process.env, CI_PROOF_KIND: '', CI_FORCE_FULL: 'false', GITHUB_EVENT_PATH: eventPath, GITHUB_OUTPUT: output}});
       assert.equal(result.status, 0, result.stderr);
       assert.equal(readFileSync(output, 'utf8'), `required=${expected}\n`);
     } finally {rmSync(scratch, {recursive: true, force: true});}
@@ -299,7 +301,7 @@ test('full proof command overrides a real audited prose PR while ordinary proof 
   writeFileSync(event, JSON.stringify({pull_request: {base: {sha: base}, head: {sha: head}}}));
   for (const [flag, required] of [['false', 'false'], ['true', 'true']]) {
     writeFileSync(output, '');
-    const result = spawnSync(process.execPath, [checker, '--plan'], {cwd: root, encoding: 'utf8', env: {...process.env, CI_FORCE_FULL: flag, GITHUB_EVENT_PATH: event, GITHUB_OUTPUT: output}});
+    const result = spawnSync(process.execPath, [checker, '--plan'], {cwd: root, encoding: 'utf8', env: {...process.env, CI_PROOF_KIND: '', CI_FORCE_FULL: flag, GITHUB_EVENT_PATH: event, GITHUB_OUTPUT: output}});
     assert.equal(result.status, 0, result.stdout + result.stderr);
     assert.equal(readFileSync(output, 'utf8'), `required=${required}\n`);
   }

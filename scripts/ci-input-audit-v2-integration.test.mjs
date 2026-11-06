@@ -11,7 +11,9 @@ import {readGitBlobs} from './ci-package-revisions.mjs';
 const policy = 'scripts/ci-input-audit.json', marker = 'scripts/ci-input-audit-v2.json', records = 'scripts/ci-input-audit.d';
 function completeFixture(run) {
   const root = mkdtempSync(join(tmpdir(), 'cloud-v2-complete-'));
-  const childEnv = {...process.env}; delete childEnv.NODE_TEST_CONTEXT;
+  const childEnv = {...process.env, GITHUB_EVENT_NAME: 'pull_request',
+    CI_FULL: 'false', CI_CALLED: 'false', CI_FORCE_FULL: 'false', CI_WORKFLOW_INPUTS: '{}', CI_RECORD_EVIDENCE: 'false'};
+  delete childEnv.NODE_TEST_CONTEXT;
   let calls = 0, batches = 0;
   const git = (...args) => {
     calls++;

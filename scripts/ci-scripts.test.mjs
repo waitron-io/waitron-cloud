@@ -235,7 +235,8 @@ test('executed planner emits the script-only job and summary consumes its needs 
   const head = commit();
   put('event.json', JSON.stringify({pull_request: {base: {sha: base}, head: {sha: head}}}));
   put('output', '');
-  const result = spawnSync(process.execPath, [resolve('scripts/ci-plan.mjs')], {cwd: root, env: {...process.env, GITHUB_EVENT_PATH: join(root, 'event.json'), GITHUB_OUTPUT: join(root, 'output')}, encoding: 'utf8'});
+  const result = spawnSync(process.execPath, [resolve('scripts/ci-plan.mjs')], {cwd: root, env: {...process.env, GITHUB_EVENT_NAME: 'pull_request', CI_FULL: 'false', CI_CALLED: 'false',
+      CI_FORCE_FULL: 'false', CI_WORKFLOW_INPUTS: '{}', CI_RECORD_EVIDENCE: 'false', GITHUB_EVENT_PATH: join(root, 'event.json'), GITHUB_OUTPUT: join(root, 'output'), GITHUB_SHA: head}, encoding: 'utf8'});
   assert.equal(result.status, 0, result.stderr);
   const output = Object.fromEntries(readFileSync(join(root, 'output'), 'utf8').trim().split('\n').map(line => [line.slice(0, line.indexOf('=')), line.slice(line.indexOf('=') + 1)]));
   assert.equal(output.scripts, 'true');
