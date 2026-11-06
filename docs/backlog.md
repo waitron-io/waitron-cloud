@@ -220,6 +220,21 @@ the original observation still fails. The unread consent state masks deletion
 of the consent button's installation-pending condition on both parent and head;
 that separate coverage gap remains open. These Chromium checks use stubbed HTTP;
 backend behavior remains unqualified.
+The installation-refresh fixture keeps all eighteen reachable captures separately.
+Set `INSTALLATION_PENDING_RECEIPT_DIR` to a fresh directory when you run
+`pnpm --dir apps/portal exec node --test test/installation-pending-browser.test.ts`.
+Check the filenames independently: all 73 browser checks passed before the
+repair, while only sixteen files survived. The sixteen ordinary names stay
+unchanged; the two English light phone delayed captures add `-delayed`.
+The missing-signal case returns without a capture. Separate files preserve each
+run without promising different pixels or stable image bytes. Both recovery
+and account checks release a held refresh when handler observation refuses;
+the observation still fails and later checks can complete. Every original
+assertion, expected value, observation and deadline remains unchanged.
+The delayed and missing-handler controls cover only the English light phone
+case. The five-second outer race does not independently pin the configured
+four-second observation boundary. These Chromium checks use stubbed HTTP;
+real server authority and general cleanup bounds remain unqualified.
 See [the diagnostic qualification and open work](backlog/retrospective-reviews.md).
 
 ## Separate-process storage extraction and failed-startup cleanup (D457)
