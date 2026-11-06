@@ -193,6 +193,8 @@ def plan(request):
     qemu = ['/usr/bin/qemu-system-x86_64', '-no-user-config', '-nodefaults',
             '-machine', 'q35,accel=kvm', '-cpu', 'host', '-smp', '4', '-m', '16384',
             '-display', 'none', '-monitor', 'none', '-serial', f'file:{directory}/console.log',
+            '-fw_cfg', 'name=opt/org.seabios/sercon-port,string=0x3f8',
+            '-qmp', f'unix:{directory}/qmp.sock,server=on,wait=off',
             '-drive', f'file={directory}/disk.qcow2,format=qcow2,if=virtio',
             '-drive', f'file={directory}/seed.img,format=raw,if=virtio,readonly=on',
             '-netdev', 'user,id=net0,ipv6=off,hostfwd=tcp:127.0.0.1:22000-:22',

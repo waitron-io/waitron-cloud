@@ -3,6 +3,7 @@ import json
 import pwd
 from pathlib import Path
 import shlex
+import socket
 import subprocess
 import sys
 import tempfile
@@ -82,6 +83,21 @@ for host,port in [('10.0.2.2',22),('169.254.169.254',80),('2.29.248.230',22),('2
                     internet = self.command(*ssh, 'curl --fail --silent --show-error --max-time 15 https://deb.debian.org/debian/README')
                     self.assertEqual(internet.returncode, 0, internet.stderr)
                 finally:
+                    qmp_path = Path('/var/lib/waitron-disposable/turns') / resource / 'qmp.sock'
+                    if qmp_path.exists():
+                        with socket.socket(socket.AF_UNIX) as connection:
+                            connection.settimeout(3)
+                            connection.connect(str(qmp_path))
+                            with connection.makefile('rwb') as stream:
+                                print('QMP', stream.readline().decode().strip(), flush=True)
+                                for command in ['qmp_capabilities', 'query-status', 'query-block', 'query-cpus-fast']:
+                                    stream.write((json.dumps({'execute': command}) + '\n').encode()); stream.flush()
+                                    print('QMP', command, stream.readline().decode().strip(), flush=True)
+                    console = Path('/var/lib/waitron-disposable/turns') / resource / 'console.log'
+                    if console.is_file():
+                        with console.open('rb') as source:
+                            source.seek(max(0, console.stat().st_size - 16000))
+                            print('GUEST CONSOLE', source.read().decode(errors='replace'), flush=True)
                     destroyed = self.manager('destroy', {'resourceId': resource})
                     self.assertEqual(destroyed.returncode, 0, destroyed.stderr)
                     absent = self.manager('inspect', {'resourceId': resource})
