@@ -2653,10 +2653,13 @@ implementation or production evidence.
   browser, transport, install or backup-cleanup failures.
   **Passive audit-read clock fixture (D530).** Session creation and activity
   defaults can fall in different milliseconds. The HTTP audit-page test now
-  seeds that difference and compares activity before and after both page reads,
-  so the existing passive-read check no longer assumes equal creation defaults.
+  seeds that difference and compares activity and creation time before and after
+  both page reads, so the passive-read check no longer assumes equal defaults.
   Real PostgreSQL reproduces the old one-millisecond failure and passes the
   corrected test. Production session behavior and migrations remain unchanged.
+  Independent controls catch activity and creation-time rewrites. This test
+  still does not cover activity updates delayed by sixty seconds or changes to
+  absolute session expiry; those limits also existed in the original test.
   **Nested package authentication (D530).** All four package-test entry points
   and the grouped receipt step now pass the existing read-only package token to descendant installs. A cold
   loopback-registry control reproduces the placeholder-token 401 and loads the
