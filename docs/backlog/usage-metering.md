@@ -48,29 +48,9 @@ attributable lookup/API, report and compute units when those services exist, mea
 provider costs, then define allowances, excess-use and metering-outage policy before
 connecting any total to billing or enforcement.
 
-## Usage-read transport refusals and retry waits (D434, D436)
+## Usage deployment qualification
 
-If a usage read loses its reply, your earlier totals remain available during an
-explicit retry and after another failure. A successful read replaces them;
-permission loss or a changed account or organisation clears them. Native
-HTTP/client/controller checks cover unreadable replies, valid-looking totals
-carried by refused responses, duplicate reads and exact seconds/date retry
-boundaries through navigation. Run
-`node --test apps/portal/test/usage-transport-boundary.test.ts`.
-
-Your usage retry wait measures elapsed time, so changing your system clock
-cannot lengthen, bypass or revive it. HTTP-date waits use the response's `Date`
-when valid, otherwise your clock at receipt; past dates give no wait. The usage
-wait contributes its remaining delay to the app countdown; another panel may hold
-that countdown for longer. Native clock checks and
-English/Spanish browser checks at 390 and 1280 pixels in both themes cover these
-boundaries. Run `node --test apps/portal/test/usage-retry-clock*.test.ts`.
-The shared countdown also has dedicated English/Spanish browser checks in both
-themes at 390 and 1280 pixels: the longer of a usage wait and an alert wait stays
-visible until its own expiry. When usage is ready first, you can refresh its totals
-without clearing the remaining alert wait. Run
-`node --test apps/portal/test/usage-shared-countdown-browser.test.ts` (D444).
-Usage and alert retry waits both use elapsed time and contribute their remaining
-delay to the shared countdown. Backup catalogue waits also use elapsed time. The
-installation, diagnostic, remote, recovery and translation-consent waits now measure elapsed time too. Their request gates and shared countdown keep a live wait through clock corrections and never revive an expired wait. HTTP date waits use the server Date header when available, and reading the response body consumes the original wait. Run `node --test apps/portal/test/panel-retry-clock.test.ts apps/portal/test/panel-retry-clock-browser.test.ts` for native and bilingual browser controls. Passkey, authenticator, account-security, session/logout and email waits now measure elapsed time too (D562). Moving your clock forward cannot bypass a live wait, and moving it backward cannot extend or revive one. The shared countdown and authenticator buttons use the same remaining wait as the request gates. The one-minute session activity throttle also measures elapsed time; session expiry remains the server's timestamp. Successful email requests retain their per-address, per-operation minute-long cooldown through navigation. Account HTTP-date waits use the response Date header when available, and body-reading time consumes the original server wait. Run `node --test apps/portal/test/account-retry-clock.test.ts apps/portal/test/account-retry-clock-browser.test.ts` for native controls and English/Spanish browser checks in both themes at 390 and 1280 pixels. Server authority and production metering remain separate
-qualification gates; database suites run in CI while local Docker is unavailable.
+Qualify server authority and production metering in the selected deployment
+before you use totals for billing or enforcement. Production monitoring, provider
+cost measurement, additional metered services, allowances, excess-use rules and
+metering-outage policy remain open as described above.
