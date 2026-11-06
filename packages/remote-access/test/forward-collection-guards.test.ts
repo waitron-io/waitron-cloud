@@ -6,15 +6,12 @@ import {join} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {before,after,test} from 'node:test';
 import {createVenueServiceTemplate} from '../../registration/test/fixtures/venue-service-template.ts';
-
-const root=fileURLToPath(new URL('../../../',import.meta.url));let temporary:string,candidate:string;
-let template:Awaited<ReturnType<typeof createVenueServiceTemplate>>|undefined;
+const root=fileURLToPath(new URL('../../../',import.meta.url));let temporary:string,candidate:string,template:Awaited<ReturnType<typeof createVenueServiceTemplate>>|undefined;
 before(async()=>{
  temporary=await mkdtemp(join(tmpdir(),'forward-guard-copy-'));candidate=join(temporary,'candidate');
  execFileSync('git',['clone','--quiet','--no-hardlinks',root,candidate],{timeout:30000,stdio:'pipe',encoding:'utf8'});
  const installed=spawnSync(process.execPath,['scripts/ci-audit-fixture-dependencies.mjs',root,candidate],{cwd:candidate,timeout:120000,stdio:'pipe',encoding:'utf8'});
  assert.equal(installed.status,0,`Dependency fixture setup failed (${installed.signal??'no signal'}):\n${installed.stdout??''}${installed.stderr??''}${installed.error?.message??''}`);
- template=await createVenueServiceTemplate();
 },{timeout:150000});
 after(async()=>{try{await template?.close();}finally{if(temporary)await rm(temporary,{recursive:true,force:true});}});
 interface Fault {name:string;source:string;file:string;pattern:string;changes:[string,string][]}
@@ -55,10 +52,7 @@ const faults:Fault[]=[
 ];
 for(const fault of faults)test(`${fault.source===collector?'native':'postgres'}: deleting ${fault.name} makes its original denial fail`,{timeout:150000},async()=>{
  const path=join(candidate,fault.source),original=await readFile(path,'utf8');let altered=original;
- const env={...process.env};delete env.NODE_TEST_CONTEXT;delete env.FORCE_COLOR;
- // Only these children use forwardFixture; restore and reconciler tests keep their original database.
- delete env.TEST_FORWARD_DATABASE_TEMPLATE;
- if(fault.file===observations)env.TEST_FORWARD_DATABASE_TEMPLATE=template!.name;
+ const env={...process.env};delete env.NODE_TEST_CONTEXT;delete env.FORCE_COLOR;delete env.TEST_FORWARD_DATABASE_TEMPLATE;if(fault.file===observations)env.TEST_FORWARD_DATABASE_TEMPLATE=(template??=await createVenueServiceTemplate()).name;
  const run=()=>spawnSync(process.execPath,['--test','--test-reporter=tap','--test-timeout=30000','--test-name-pattern='+fault.pattern,fault.file],{cwd:candidate,env,encoding:'utf8',timeout:60000,maxBuffer:4*1024*1024});
  const control=run();assert.equal(control.status,0,control.stdout+control.stderr);assert.match(control.stdout,/# pass [1-9]\d*/);
  try{
