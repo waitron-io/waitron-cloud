@@ -85,9 +85,11 @@ you receive 400 `setup_unavailable`: start setup again with your password and fr
 codes. A removal or code-regeneration request for an inactive factor returns
 400 `factor_not_active`; use **Check authenticator settings** to refresh the status.
 Passwords over 1,024 UTF-8 bytes return 400 `password_too_long`, so enter your
-current account password rather than retrying the same value. For example, an
-expired `POST /authenticator/activate` returns `{"error":"setup_unavailable"}`
-without ending your session or spending a confirmation attempt.
+current account password rather than retrying the same value. For example,
+`POST /authenticator/activate` for a setup already expired when checked returns
+`{"error":"setup_unavailable"}` without ending your session or spending an attempt.
+If setup expires after confirmation starts, the attempt is retained while the
+factor change and proof use roll back.
 
 Unknown pending tokens, tokens belonging to another session or account, malformed
 input and exhausted confirmation attempts still return 400 `invalid_input`.

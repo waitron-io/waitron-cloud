@@ -523,3 +523,31 @@ test('a removed factor is distinct from invalid input and leaves the fresh sessi
   assert.deepEqual(await factor(),before);
   assert.equal((await transaction(pool,c=>resolveSession(c,a.token))).accountId,accountId);
 });
+test('setup expiry after activation writes keeps its refusal distinct while rolling back publication',async()=>{
+  const a=await authority(),pending=await store().begin(a),moment=new Date();
+  const expires=new Date(moment.getTime()+10_000);
+  await pool.query('UPDATE cloud_factor_enrolments SET expires_at=$1',[expires]);
+  await pool.query('CREATE TABLE factor_test_clock(moment timestamptz NOT NULL)');
+  await pool.query('INSERT INTO factor_test_clock VALUES($1)',[moment]);
+  await pool.query(`CREATE FUNCTION ${schema}.clock_timestamp() RETURNS timestamptz LANGUAGE SQL VOLATILE
+    AS 'SELECT moment FROM ${schema}.factor_test_clock'`);
+  const timedPool=new Pool({connectionString:process.env.TEST_DATABASE_URL,
+    options:`-c search_path=${schema},pg_catalog -c statement_timeout=10000`,application_name:schema});
+  const blocker=await pool.connect();let work:Promise<void>|undefined;
+  try{
+    await blocker.query('BEGIN');await blocker.query('LOCK TABLE cloud_factor_login_challenges IN SHARE MODE');
+    work=refused(store(keys,policy,timedPool).activate(a,pending.pendingToken,totp(pending.secret,moment.getTime())),'setup_unavailable');
+    await blocked('UPDATE cloud_factor_login_challenges');
+    await pool.query('UPDATE factor_test_clock SET moment=$1',[new Date(expires.getTime()+1)]);
+    await blocker.query('COMMIT');await work;
+    assert.equal((await factor()).secret_envelope,null);
+    assert.equal((await pool.query('SELECT count(*) FROM cloud_factor_recovery_codes')).rows[0].count,'0');
+    assert.equal((await pool.query('SELECT count(*) FROM cloud_factor_replays')).rows[0].count,'0');
+    const state=(await pool.query('SELECT attempts,consumed_at FROM cloud_factor_enrolments')).rows[0];
+    assert.equal(state.attempts,1);assert.equal(state.consumed_at,null);
+    assert.equal((await pool.query('SELECT ended_at FROM cloud_sessions')).rows[0].ended_at,null);
+  }finally{
+    await blocker.query('ROLLBACK');blocker.release();await work;await timedPool.end();
+    await pool.query(`DROP FUNCTION ${schema}.clock_timestamp()`);await pool.query('DROP TABLE factor_test_clock');
+  }
+});

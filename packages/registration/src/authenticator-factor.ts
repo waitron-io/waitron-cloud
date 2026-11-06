@@ -120,7 +120,8 @@ export class AuthenticatorFactorStore {
           context.deadline=deadline;
         }
         const value=await action(context);
-        if(await factorNow(client)>=context.deadline) throw new FactorManagementError();
+        const now=await factorNow(client);
+        if(now>=context.deadline) throw new FactorManagementError(pending&&now>=pending.expires_at?'setup_unavailable':'permission_denied');
         return value;
       } catch(error) {
         const refusal=expected(error);if(!refusal) throw error;
