@@ -302,6 +302,18 @@ both sales and passes SQLite and fiscal checks. Run the stack conformance cases
 `lostFinalWriteFailsFunctionalRestoreDespiteNonblockingAccounting` and
 `committedWriteWithCutoffReplyRestoresSuccessfully` for this controlled proof.
 The initial x86 run passes both cases; wider shared-consumer qualification remains.
+Stream checkpoints and final collection now permit settled reply loss while
+keeping unknown request and storage coverage. You can continue later owned work;
+a later successful request cannot erase an earlier accounting gap. Upload
+readiness still needs a complete successful reply, and a gap cannot hide failed
+client collection, foreign inventory, cancellation or a replaced scratch root.
+Run `node --test scripts/cloud-cost/stream-measurement.test.mjs
+scripts/cloud-cost/stream-checkpoint-diagnostics.test.mjs
+scripts/cloud-cost/replay-stream.test.mjs` for the loopback and generated-writer
+controls. The replay reaches real SQLite restore with a lost reply and still
+rejects missing sales, corruption and failed restore. These generated-writer
+checks are separate from the official-binary lost-write proof above. Worker
+admission, administration cleanup and shared mail/remote completion remain open.
 The full nonblocking accounting path, publication refusal and saved-failure
 replay remain open. These partial changes do
 not establish the historical cause or relax functional admission.

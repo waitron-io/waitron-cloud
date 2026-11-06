@@ -80,7 +80,7 @@ async function fixture(t, mode = 'normal', { holdAfterStop = false, interruptQue
   let stored, uploaded = 0, releaseUpload, heldResponse, releaseInventory, inventoryHeld, wrongInventory = false;
   const heldUpload = new Promise(resolve => { heldResponse = resolve; });
   const heldInventory = new Promise(resolve => { inventoryHeld = resolve; });
-  let interrupted; const connections = new Set();
+  let interrupted, cutoffRead = false, lostReads = 0; const connections = new Set();
   let readCompleted; const firstRead = new Promise(resolve => { readCompleted = resolve; });
   const provider = createServer((req, res) => {
     const url = new URL(req.url, 'http://local'), parts = [];
@@ -105,6 +105,7 @@ async function fixture(t, mode = 'normal', { holdAfterStop = false, interruptQue
       else if (url.searchParams.get('list-type') === '2') res.end('<ListBucketResult><IsTruncated>false</IsTruncated>'
         + (stored ? `<Contents><Key>stream.ltx</Key><Size>${stored.length + (wrongInventory ? 1 : 0)}</Size></Contents>` : '') + '</ListBucketResult>');
       else {
+        if (cutoffRead && req.method === 'GET') { cutoffRead = false; lostReads++; res.destroy(); return; }
         if (mode === 'read-before-upload' && req.method === 'GET')
           res.once('finish', () => readCompleted(performance.now()));
         res.end(stored ?? Buffer.alloc(0));
@@ -202,6 +203,7 @@ process.once('SIGTERM',()=>{
     heldInventory, releaseInventory: () => releaseInventory(), firstRead,
     interruptedUpload: () => interrupted && { afterStop: interrupted.request.headers['x-fixture-after-stop'] === 'yes',
       requestComplete: interrupted.request.complete, responseFinished: interrupted.response.writableFinished },
+    cutoffNextRead: () => { cutoffRead = true; }, lostReads: () => lostReads,
     connections: () => connections.size, connectionsClosed: () => Promise.all([...connections].map(socket => once(socket, 'close'))) };
 }
 async function open(t, f) {
@@ -511,13 +513,14 @@ test('cancellationRefusesAnInterruptedLaterUploadAndCollectsTheFastExitingWriter
 });
 
 
-// Bad accounting must refuse publication while still reporting independently completed resource cleanup.
-test('invalidTransferStillReportsCollectedOwnedResourcesWithoutQualifyingEvidence',async t=>{
+// A failed writer still refuses completion even after its interrupted accounting becomes nonblocking.
+test('failedNativeWriterStillReportsCollectedOwnedResourcesWithoutQualifyingEvidence',async t=>{
   const f=await fixture(t,'held-invalid'),run=await open(t,f);
   await f.heldUpload;f.releaseUpload();await wait(100);
   assert.equal(typeof run.closeResources,'function','resource collection must be distinct from valid measurement');
   assert.deepEqual(await run.closeResources(),{measurementValid:false});
-  await assert.rejects(run.close(),bad);
+  await run.close();
+  await assert.rejects(run.finish({expectedSales:1}),bad);
   clean(f);
 });
 
@@ -767,7 +770,7 @@ test('replayStreamOpeningRefusalSurvivesDiagnosticOutputFailure', async t => {
 
 // Collapsing these boundaries hides whether a clean native exit preceded invalid accounting or cancellation.
 for (const [fault, stage] of [
-  ['idle', 'quiesce-idle'],
+  ['idle', 'quiesce-stop-result'],
   ['stop', 'quiesce-stop-result'],
   ['cancel', 'quiesce-health'],
   ['inventory', 'quiesce-checkpoint'],
@@ -853,3 +856,45 @@ test('replayStreamForwardsCheckpointInventoryRefusalThroughWorkerAdmission', { t
   assert.deepEqual(workerFailureTrace(trace), trace);
   clean(f);
 });
+
+// An independent lost HTTP reply cannot suppress real SQLite validation or owned collection.
+for (const fault of ['none', 'sales', 'corrupt', 'integrity', 'restore', 'inventory', 'ownership'])
+  test('gappedCheckpointStillReachesRestore_' + fault, { timeout: 10000 }, async t => {
+    const f = await fixture(t, ['corrupt', 'integrity', 'restore'].includes(fault) ? fault : 'normal');
+    const trace = [], run = await open(t, { ...f, onDiagnostic: event => trace.push(event) });
+    const url = JSON.parse(readFileSync(join(f.root, 'native-stream/stream.json'), 'utf8')).dbs[0].replica.endpoint;
+    f.cutoffNextRead();
+    await assert.rejects(fetch(url + '/' + f.bucket + '/stream.ltx', { headers: {
+      'amz-sdk-invocation-id': '11111111-2222-4333-8444-000000000999', 'amz-sdk-request': 'attempt=1; max=1',
+    } }), /fetch failed/);
+    assert.equal(f.lostReads(), 1, 'discard an actual backend response independently of the writer');
+    if (fault === 'inventory') f.misreportInventory();
+    else if (fault === 'ownership') {
+      const scratch = join(f.root, 'native-stream'); renameSync(scratch, join(f.root, 'saved-stream'));
+      mkdirSync(scratch, { mode: 0o700 }); writeFileSync(join(scratch, 'sentinel'), 'keep');
+    }
+    if (fault === 'none') {
+      let result;
+      await assert.doesNotReject(async () => { result = await run.finish({ expectedSales: 1 }); },
+        'gapped checkpoint must still reach real restore');
+      assert.equal(result.stream.status, 'unknown');
+      assert.ok(result.stream.gaps.includes('accounting:request-cutoff'));
+      assert.equal(result.stream.requests.status, 'unknown');
+      assert.deepEqual(result.restored, { sales: 1, integrity: true });
+      assert.deepEqual(result.cleanup, { processes: 0, privateRoots: 0 });
+      assert.ok(trace.some(event => event.kind === 'stream' && event.stage === 'restore-sales'));
+      assert.doesNotMatch(JSON.stringify(result), /PRIVATE|synthetic|127\.0\.0\.1|11111111/);
+      assert.deepEqual(await run.closeResources(), { measurementValid: true });
+    } else {
+      await assert.rejects(run.finish({ expectedSales: fault === 'sales' ? 2 : 1 }), bad);
+      if (fault === 'ownership') {
+        assert.equal(readFileSync(join(f.root, 'native-stream/sentinel'), 'utf8'), 'keep');
+        await assert.rejects(run.closeResources(), bad); return;
+      }
+      const stage = { sales: 'restore-sales', corrupt: 'restore-integrity', integrity: 'restore-integrity',
+        restore: 'restore', inventory: 'quiesce-checkpoint' }[fault];
+      assert.ok(trace.some(event => event.kind === 'stream-refusal' && event.stage === stage), JSON.stringify(trace));
+      assert.deepEqual(await run.closeResources(), { measurementValid: false });
+    }
+    clean(f);
+  });

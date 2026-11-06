@@ -53,12 +53,11 @@ async function stopped(url) {
   }), /ECONNREFUSED|ECONNRESET|socket hang up/);
 }
 
-for (const stage of ['checkpoint-admission', 'checkpoint-inventory', 'checkpoint-accounting']) {
+for (const stage of ['checkpoint-admission', 'checkpoint-inventory']) {
   test('checkpointNamesItsRefusingOperation_' + stage, async t => {
     const trace = [], f = await fixture(t, event => trace.push(event));
     if (stage === 'checkpoint-admission') await f.session.close();
     if (stage === 'checkpoint-inventory') f.state.extra = true;
-    if (stage === 'checkpoint-accounting') { await upload(f.session.url); f.state.time = 1e308; }
     const before = f.state.requests;
     await assert.rejects(f.session.checkpoint(), bad);
     assert.deepEqual(trace, [{ kind: 'measurement-refusal', stage }]);
@@ -204,5 +203,26 @@ test('checkpointRetainsARequestAdmittedAfterIdleBeforeItClosesTheTransport', asy
     { kind: 'measurement-refusal', stage: 'checkpoint-admission' },
   ]);
   assert.deepEqual(workerFailureTrace(trace), trace);
+  await stopped(f.session.url);
+});
+
+// Safe event values can overflow an aggregate without preventing later functional collection.
+for (const time of [Number.MAX_SAFE_INTEGER, 1e308])
+  test('gappedAccountingCheckpointReportsOverflowWithoutARefusal_' + time, async t => {
+  const trace = [], f = await fixture(t, event => trace.push(event));
+  await upload(f.session.url); f.state.time = time;
+  const before = f.state.requests;
+  const checked = await f.session.checkpoint();
+  assert.equal(f.state.requests - before, 3);
+  assert.equal(checked.requests.status, 'unknown');
+  assert.ok(checked.requests.gaps.includes('accounting:overflow'));
+  assert.equal(checked.storage.status, 'unknown');
+  assert.deepEqual(checked.storage.byteSeconds, { low: null, high: null });
+  assert.equal(checked.storage.objects.bytes, 4);
+  assert.deepEqual(trace, []);
+  const result = await f.session.finish();
+  assert.equal(result.status, 'unknown');
+  assert.ok(result.gaps.includes('accounting:overflow'));
+  assert.deepEqual(result.cleanup, { listeners: 0, clients: 0 });
   await stopped(f.session.url);
 });
