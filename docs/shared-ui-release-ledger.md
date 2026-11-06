@@ -54,7 +54,9 @@ containing the exact evidence bytes you retain. Supply six trusted tools,
 executable and every supporting file you intend to trust. The adapter hashes
 their actual bytes and executable modes, resolves only internal regular-file
 links and probes versions in an owned directory with the selected tools on PATH.
-It checks the distributions again after all probes. Select a shell that reports
+It records the selected and resolved executable paths and internal link targets,
+then checks the distributions again after all probes. Version probes use owned
+empty npm and Git configuration files. Select a shell that reports
 its version; an unavailable version refuses.
 
 The returned schema-1 evidence contains the source and recipe commit, sorted
@@ -69,16 +71,22 @@ inputs, F's preparation program, the source lock and actual tools. The legacy
 
 Only the inspected F preparation and build programs are supported by policy
 version 1. Source manifests, configs and parsed imports must stay within that
-policy. Unknown build hooks, escaping imports, new install config, alternate
-locks, patches, changed workspace patterns and incomplete dependency graphs
-refuse. Git reads verify each commit, tree and blob's content identity using an
+policy. Unknown build hooks, escaping or ambiguous imports, uninspected loaders,
+tracked `node_modules`, workspace replacements for UI build tools, new install
+config, alternate locks, patches, changed workspace patterns and incomplete
+dependency graphs refuse. Config-name and path checks account for filesystem
+case aliases, and Git path decoding preserves byte-order marks. Git reads verify each commit, tree and blob's content identity using an
 owned configuration. Working files, index flags, replacement refs and inherited
 Git settings cannot supply the bytes. Neither repository is changed.
 
 The fixed bounds are 50,000 repository entries, 16 MiB per blob, 32 MiB per tree
 or serialized inventory, 512 MiB of repository data, and 16 MiB of source-check
 bytes. A tool distribution is limited to 256 MiB and 20,000 entries. Git reads
-and tool probes have 30-second limits. Tools must be trusted operator-supplied
+and tool probes have 30-second limits independent of inherited output pipes,
+followed by at most two seconds waiting for the direct child to stop. Cleanup
+always stops the recorded process group, including after its leader exits,
+and retains both operation and cleanup errors. A program that deliberately
+escapes its process group still requires true job isolation. Tools must be trusted operator-supplied
 installations on Linux or macOS; hashing their bytes does not authenticate an
 executable or account for every host library.
 

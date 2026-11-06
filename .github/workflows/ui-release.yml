@@ -56,6 +56,8 @@ jobs:
         with:
           path: ${{ steps.pnpm-store.outputs.path }}
           key: pnpm-${{ runner.os }}-${{ runner.arch }}-node26-${{ hashFiles('.release-source/pnpm-lock.yaml') }}
+      - name: Install public Cloud test dependencies
+        run: pnpm --filter waitron-cloud install --frozen-lockfile --ignore-scripts
       - run: node --test scripts/release/*.test.mjs
       - run: pnpm --dir .release-source install --frozen-lockfile
       - run: pnpm --dir .release-source --filter @waitron/ui-core exec playwright install --with-deps chromium
