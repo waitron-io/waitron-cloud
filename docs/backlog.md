@@ -512,8 +512,13 @@ Task 6 has an internal one-message queue intake seam. Local PostgreSQL checks
 require committed feedback before deletion, retain malformed and conflicting
 messages, and replay a failed acknowledgement without a second durable effect.
 A shutdown observed before processing or after commit leaves the message for replay.
-The authenticated SQS adapter, database and request time limits, health reporting,
-CLI and complete shutdown proof remain unbuilt. Audited removal and production
+Its internal SQS adapter signs requests for the validated queue and region, with
+one message per receive, a ten-second poll and sixty-second visibility. A shared
+fifteen-second request deadline covers credentials, receive and delete; shutdown
+or close aborts pending transport work. Local stand-ins check these boundaries,
+fixed diagnostics and malformed replies, not provider permissions or encrypted
+redrive. Database processing time limits, health reporting, CLI and complete
+shutdown proof remain unbuilt. Audited removal and production
 enablement remain future tasks. Task 8 must qualify any additional event types;
 `Rendering Failure` currently refuses. It must also reconcile historical Paris-only
 supplier wording and retired enablement dates before any live qualification. AWS resources,

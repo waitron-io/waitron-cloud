@@ -12,6 +12,7 @@
     "relay:control": "node src/relay-control-cli.ts"
   },
   "dependencies": {
+    "@aws-sdk/client-sqs": "3.1163.0",
     "@simplewebauthn/server": "14.0.3",
     "@waitron-cloud/identity": "workspace:*",
     "nodemailer": "^10.0.10",

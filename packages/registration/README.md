@@ -460,8 +460,10 @@ node scripts/test-postgres.mjs exec pnpm --dir packages/registration exec node -
 Feedback can arrive before an SMTP receipt or after payload erasure. Use
 `applySesFeedback(pool, config, recipientKeys, event)` to commit the provider
 binding, event and any recipient block together. The helper owns its transaction.
-Only a trusted queue consumer may supply the parsed event; that consumer remains
-a separate task. Configuration validation and parsing do not authenticate AWS.
+Only a trusted queue consumer may supply the parsed event. The internal
+`SesFeedbackWorker` commits feedback before acknowledging it; malformed input,
+conflicts and database failures leave the message for replay. Configuration
+validation and parsing do not authenticate AWS.
 
 An unknown or mismatched binding records an `ignored` receipt with `unresolved`.
 A different recipient or provider ID records `conflict` with `binding_conflict`.
@@ -489,7 +491,19 @@ cannot discard its late bounce or complaint. Other binding and key checks remain
 Key retirement and recovery need a separately approved design before production.
 The feedback design promises refusal for required keys; the current full stop also
 covers an unrelated revoked key in the same scope. That difference must be settled
-before enablement. The sending paths and queue consumer remain unconnected.
+before enablement. The sending paths and queue consumer have no production
+startup connection.
+
+For local transport qualification, `createSesFeedbackQueue` uses the pinned SQS
+SDK to sign requests for the validated queue and region. It receives one message
+with a ten-second poll and sixty-second visibility. Each receive or delete has
+a fifteen-second deadline, including credential lookup, and uses one request.
+Aborting the caller or closing the adapter cancels pending work. Errors expose
+fixed diagnostics instead of envelopes, receipt handles or provider replies.
+The local tests inject synthetic credentials and transport replies; they do not
+qualify IAM, encryption or dead-letter transfer. Database time limits, health,
+CLI supervision and the full shutdown proof remain incomplete. Neither this
+internal adapter nor the worker is exported from the package's public entry point.
 
 Run the focused PostgreSQL checks, including competing consumers and process death
 immediately before and after commit:
