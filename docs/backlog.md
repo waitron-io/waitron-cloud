@@ -3560,14 +3560,22 @@ submission, database and commit timings; keep the 100 ms database lock-wait limi
 and successful revocation before releasing the incident read. See [the evidence
 and capture requirements](backlog/diagnostic-permission-lock.md).
 
-## Dependency-cache save stalls (D507)
+## Historical dependency-cache upload cause (D507)
 
-The remaining CI, relay-counter and venue-proof jobs now restore dependencies
-separately and bound optional saving to one minute after mandatory work. Every
-existing check, matrix and job limit remains. **Open.** Attribute the historical
-upload stall and compare actual setup, test and cleanup timings before claiming
-that every job finishes within its limit.
-See [the boundaries and remaining work](backlog/ci-cache-saving.md#dependency-cache-save-stalls-d507).
+Optional saving is bounded across all ten job definitions. The original upload
+stopped advancing for five minutes, but its log gives no cause; archive-stall
+controls and later successful runs do not explain it. **Open.** Retain save and
+runner diagnostics on recurrence before attributing the transport failure.
+See [the original job and retained boundaries](backlog/ci-cache-saving.md#historical-upload-transport-cause-d507).
+
+## Dependency-cache miss job budgets (D507)
+
+Healthy runs cover 67 cache-consuming jobs across all ten definitions. Each fits
+its cap, but registration partition 1/6 takes 445 of 480 seconds with saving
+skipped, leaving less than a full save allowance. **Open.** Qualify healthy miss
+paths for the seven definitions sampled only on hits; preserve existing limits,
+matrices and checks pending a separate decision.
+See [the phase timings and remaining qualification](backlog/ci-cache-saving.md#healthy-run-timing-sample-6-november-2026).
 
 ## Audit fixture dependency preparation (D530)
 
