@@ -68,6 +68,41 @@ Without `--ledger`, the existing workflow still uses `ui-source.json` and its
 September release number. The workflow does not use the reserved path yet.
 The preparation command publishes nothing on either path.
 
+## Record and recover the exact artifact
+
+After building the reserved release, compute its fingerprints from the actual
+archive rather than assembling a record by hand:
+
+```sh
+node scripts/release/record-ui-artifact.mjs /path/to/waitron \
+  /path/to/output/waitron-io-ui-core-0.2.0.tgz \
+  --ledger /path/to/ledger/releases.json --at 2026-11-06T08:00:00.000Z \
+  > /path/to/next-ledger.json
+```
+
+The command prints the next ledger without changing the input ledger or archive.
+Pass that result to `persistLedger` below before recording an upload. It accepts
+only an active `reserved` or `prepared` release. On a prepared retry, it requires
+the same archive, raw manifest and notice fingerprints and returns the unchanged
+ledger. It never turns an uncertain upload back into a prepared release.
+
+The recorder validates the reserved release/source mapping, private GitHub
+publishing metadata, script-free manifest and presence of every built export.
+Both notices must match the reserved commit's regular Git blobs. Working-copy
+edits, inherited Git redirection and local replacement refs cannot supply those
+bytes. Tar receives a frozen in-memory copy and a restricted environment; it
+reads members to standard output without extracting files. Links, duplicate
+members and paths outside the package refuse. Archives are limited to 16 MiB
+compressed and 32 MiB expanded, with bounded tar commands.
+
+You can also call `recordReleaseArtifact` from `scripts/release/ui-artifact.mjs`
+with the ledger, archive buffer and `{notices, at}`. Supply both notice buffers
+from verified immutable source evidence. This check fingerprints the provided
+artifact; it does not prove that its compiled files came from that source.
+Fresh source builds, the reserved input/recipe/source-check hashes, trusted source
+CI and complete registry evidence remain mandatory before upload. A recovered
+archive must already exist; rebuilding an expired one remains orchestration work.
+
 ## Persist one transition at a time
 
 Use `readLedger(checkout)` to read a local committed snapshot, then
@@ -117,8 +152,8 @@ node --test scripts/release/ui-ledger.test.mjs scripts/release/ui-ledger-git.tes
 ```
 
 Before publication, the remaining adapters must select trusted exact-main CI,
-trace the complete build inputs, enumerate registry versions and verify actual
-artifact bytes and registry responses. Keep source builds separate from the
+trace the complete build inputs, enumerate registry versions, connect artifact
+recording to persistence and verify registry responses. Keep source builds separate from the
 job holding package-write credentials. The existing release workflow and
 September source pin are unchanged; this library does not qualify or authorise
 a dispatch of that workflow for `0.2.0`.

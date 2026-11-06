@@ -16,8 +16,12 @@ Git checkout preserves each transition with a signed-off commit and refuses a
 changed remote head. Local tests exercise competing writers against a real
 throwaway Git remote. Package preparation now accepts the ledger's active unprepared reservation,
 keeps source and release versions separate and refuses stale output directories.
-It leaves persistence and artifact recording to its caller. Prepared-artifact
-rebuild and byte matching remain open. The CLI validates the shape of reserved
+It leaves persistence to its caller. The artifact recorder now fingerprints the
+actual archive, raw manifest and both notices, checks immutable source notices
+and reserved publishing metadata, and requires identical prepared recovery bytes.
+It rejects links, duplicate/escaping members and missing built exports without
+extracting files. The caller must persist its emitted transition; prepared-artifact
+rebuild and workflow wiring remain open. The preparation CLI validates the shape of reserved
 evidence hashes; computing and matching input, recipe and source-check hashes
 remain required before upload. Fresh source isolation and an ordered build must
 exclude stale ignored or assume-unchanged output; clean Git status alone does
