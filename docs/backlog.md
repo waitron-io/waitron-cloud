@@ -7,38 +7,18 @@ Watcher approval and server arrival block implementation; contributor-approval r
 
 ## Keep the private shared UI release current (D579)
 
-The owner approved the [private GitHub release plan](superpowers/plans/2026-11-05-public-ui-registry.md).
-The approved publisher uses Cloud's own `GITHUB_TOKEN` on an offset 15-minute schedule,
-reconciles every qualifying merge, creates one upgrade PR per stable release,
-and checks the 24-hour publisher heartbeat and both seven-day deadlines.
-The package stays private with its existing authenticated install and image
-build paths. F/A1336 owns source and package preparation; the reviewed `0.2.0`
-release is the authorised write-permission test. A refused write stops for the
-watcher without a token fallback. The [release ledger](shared-ui-release-ledger.md)
-now reserves one release per source, retains artifact identities and requires
-matching private-registry readback before finalising an upload. Its dedicated
-Git checkout preserves each transition with a signed-off commit and refuses a
-changed remote head. Local tests exercise competing writers against a real
-throwaway Git remote. Package preparation now accepts the ledger's active unprepared reservation,
-keeps source and release versions separate and refuses stale output directories.
-It leaves persistence to its caller. The artifact recorder now fingerprints the
-actual archive, raw manifest and both notices, checks immutable source notices
-and the complete source-derived publishing manifest, and requires identical
-prepared recovery bytes. Its strict in-memory USTAR reader refuses hidden
-trailing members, unknown types, links, duplicate/case-colliding or escaping
-paths, file/child conflicts and missing built exports without extracting files. The caller must persist its emitted transition; prepared-artifact
-rebuild and workflow wiring remain open. The preparation CLI validates the shape of reserved
-evidence hashes; computing and matching input, recipe and source-check hashes
-remain required before upload. Fresh source isolation and an ordered build must
-exclude stale ignored or assume-unchanged output; clean Git status alone does
-not prove artifact provenance. Concurrent builds need distinct output directories. Source CI selection, complete registry enumeration,
-automation-branch bootstrap, workflow integration and actual upload/readback
-remain open. Preparation review, exact-head upgrade validation and fresh
-registry/image checks also remain open. Integration must recheck registry
-inventory before recording an upload and give read-only monitors verified remote
-history rather than a local snapshot. Replay supports retained history without
-repeated full-history copies; the Git command's 16 MiB output limit and abandoned
-local-lock recovery remain open. No publisher is activated by this slice. The [build-evidence implementation plan](superpowers/plans/2026-11-06-ui-build-evidence.md) defines the next adapter: immutable source and recipe inventories, matching reservation hashes before source execution, F's ordered fresh build, and exact prepared-artifact recovery. Its runtime implementation and required real-tool Linux compatibility check remain open; the plan supplies no new build or release qualification.
+The owner rejected the build-evidence plan and cancelled PR #1018 on
+6 November. Its branch is preserved; do not continue that implementation.
+The [one-page replacement proposal](superpowers/plans/2026-11-06-simple-private-ui-release.md)
+awaits owner approval. It puts token-authenticated publication on qualifying
+Waitron merges, automatic dependency update PRs in Cloud, and a seven-day
+registry lag check in Cloud CI. Lane F/A1336 owns the Waitron changes.
+
+Nothing new is built or published under this proposal. After approval, remove
+the unused ledger and artifact machinery from #978, #995 and #1001, the old
+Cloud publisher and both superseded plans, as listed in the proposal.
+The package stays private on GitHub Packages with Elastic License 2.0 and
+`LICENSE-GRANTS.md`; existing authenticated install and image paths remain.
 
 ## Shared storage-test seed downloads (D585)
 

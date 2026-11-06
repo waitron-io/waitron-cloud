@@ -1,5 +1,10 @@
 # Keep a UI release reservation through failures
 
+> Superseded on 6 November 2026. The owner rejected this approach. Do not
+> implement or dispatch it. The [replacement proposal](superpowers/plans/2026-11-06-simple-private-ui-release.md)
+> awaits approval and lists the code and documents to remove. The text below
+> records the earlier design or existing implementation.
+
 When a release build stops halfway through, you need to remember its version
 and bytes before trying again. The release ledger records those decisions so
 another run cannot allocate a new number to escape an unfinished upload.

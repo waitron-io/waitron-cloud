@@ -1,5 +1,10 @@
 # Release the shared UI package
 
+> Superseded on 6 November 2026. The owner rejected this approach. Do not
+> implement or dispatch it. The [replacement proposal](superpowers/plans/2026-11-06-simple-private-ui-release.md)
+> awaits approval and lists the code and documents to remove. The text below
+> records the earlier design or existing implementation.
+
 Cloud consumes a versioned build of Waitron's account controls. You develop the
 controls in Waitron; this repository owns their private distribution as
 `@waitron-io/ui-core` on GitHub Packages.
