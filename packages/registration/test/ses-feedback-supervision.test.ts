@@ -39,7 +39,8 @@ test('once mode polls both slots and keeps failed sampling out of public diagnos
  await assert.doesNotReject(run({...f.options,once:true,sample:()=>{throw Error('private sampling token');}}));
  assert.equal(f.closed,1);assert.equal(f.pool.ended,true);
  assert.ok(f.statuses.length>=3);assert.equal(f.statuses.at(-1)!.ready,false);
- assert.equal(f.statuses.at(-1)!.state,'stale');assert.doesNotMatch(JSON.stringify(f.statuses),/private|token/);
+ assert.ok(f.statuses.some(status=>status.state==='stale'));assert.equal(f.statuses.at(-1)!.state,'stopped');
+ assert.doesNotMatch(JSON.stringify(f.statuses),/private|token/);
 });
 
 test('once mode waits for the other slot to settle before reporting a fixed failure and closing',async()=>{

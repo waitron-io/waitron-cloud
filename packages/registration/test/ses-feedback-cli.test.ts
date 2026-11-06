@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import {test} from 'node:test';
 import {spawn,spawnSync} from 'node:child_process';
 import {setTimeout as delay} from 'node:timers/promises';
-import {mkdtempSync,writeFileSync,rmSync,openSync,writeSync,closeSync,constants} from 'node:fs';
+import {mkdtempSync,writeFileSync,rmSync,openSync,writeSync,closeSync,symlinkSync,constants} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {createServer,type Socket} from 'node:net';
@@ -68,6 +68,17 @@ test('the actual command refuses a named pipe without waiting for a writer',asyn
    env:{PATH:process.env.PATH,...f.env,CLOUD_SES_FEEDBACK_CONFIG_FILE:pipe},encoding:'utf8',timeout:1500,killSignal:'SIGKILL'});
   assert.equal(child.error,undefined);assert.equal(child.status,1);assert.equal(child.stdout,'');
   assert.equal(child.stderr,'SES feedback consumer failed; check configuration and service health\n');
+ }finally{f.close();}
+});
+
+test('a symlinked command still validates startup and arguments instead of silently exiting successfully',async()=>{
+ await cli();const f=fixture(),link=join(f.dir,'consumer.ts');try{
+  symlinkSync(new URL('../src/ses-feedback-cli.ts',import.meta.url).pathname,link);
+  for(const args of [[],['--unknown']]){
+   const child=spawnSync(process.execPath,[link,...args],{env:{PATH:process.env.PATH},encoding:'utf8',timeout:3000});
+   assert.equal(child.error,undefined);assert.equal(child.status,1);assert.equal(child.stdout,'');
+   assert.equal(child.stderr,'SES feedback consumer failed; check configuration and service health\n');
+  }
  }finally{f.close();}
 });
 

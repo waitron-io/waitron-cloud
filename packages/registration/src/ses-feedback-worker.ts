@@ -38,7 +38,7 @@ export class SesFeedbackWorker {
   const fresh=(at:number|null,limit:number)=>at!==null&&Number.isFinite(now)&&Number.isFinite(at)&&now-at>=0&&now-at<limit;
   const natural=(n:unknown):n is number=>Number.isSafeInteger(n)&&Number(n)>=0;
   let sample:OperationalSample|null=null;
-  if(input!==null&&typeof input==='object') {
+  try{if(input!==null&&typeof input==='object') {
    // Copy only data properties so a malformed collector cannot run accessors.
    const fields=Object.getOwnPropertyDescriptors(input);
    const value=(key:string)=>fields[key]?.value;
@@ -48,9 +48,9 @@ export class SesFeedbackWorker {
     &&typeof value('configurationDrift')==='boolean')sample={observedAt:value('observedAt'),
      queueAgeSeconds:value('queueAgeSeconds'),deadLetterCount:value('deadLetterCount'),
      configurationRevision:value('configurationRevision'),configurationDrift:value('configurationDrift')};
-  }
+  }}catch{}
   const failure=this.#consumers.find(c=>c.failure!==null)?.failure??null;
-  // Freshness is one maximum request/transaction/request cycle, not an alert threshold.
+  // Conservative freshness is separate from per-phase limits and future alert thresholds.
   const stale=!sample||!fresh(sample.observedAt,35000)||this.#consumers.some(c=>
    (c.poll!==null&&!fresh(c.poll,35000))||(c.phase!==null&&!fresh(c.since,c.phase==='processing'?5000:15000)));
   const stopped=this.#consumers.some(c=>c.signal?.aborted);
@@ -58,7 +58,7 @@ export class SesFeedbackWorker {
   const drift=sample&&(sample.configurationDrift||sample.configurationRevision!==revision);
   const state=stopped?'stopped':failure?'failed':stale?'stale':drift?'drift':starting?'starting':'ready';
   const polls=this.#consumers.map(c=>age(c.poll)),commits=this.#consumers.flatMap(c=>c.commit===null?[]:[age(c.commit)!]);
-  return {ready:state==='ready',state,failure,activeConsumers:this.#consumers.filter(c=>c.phase!==null).length,
+  return {observedAt:now,ready:state==='ready',state,failure,activeConsumers:this.#consumers.filter(c=>c.phase!==null).length,
    lastPollAgeMs:polls.some(p=>p===null)?null:Math.max(...polls as number[]),
    lastCommitAgeMs:commits.length?Math.min(...commits):null,
    queueAgeSeconds:sample?.queueAgeSeconds??null,deadLetterCount:sample?.deadLetterCount??null,configurationRevision:revision};
@@ -72,7 +72,7 @@ export class SesFeedbackWorker {
   const consumer=this.#consumers[index]!;consumer.signal=signal;
   this.#phase(consumer,'receiving');
   try{
-   const result=await this.#runOnce(signal,consumer);consumer.failure=null;return result;
+   const result=await this.#runOnce(signal,consumer);if(!signal.aborted)consumer.failure=null;return result;
   }finally{consumer.phase=null;}
  }
 
@@ -85,7 +85,7 @@ export class SesFeedbackWorker {
   try {
    messages=await queue.receive(signal);
    if(messages.length>1)throw Error();
-  }catch{this.#fail(consumer,'ses_feedback_receive_failed');}
+  }catch{if(signal.aborted)return false;this.#fail(consumer,'ses_feedback_receive_failed');}
   consumer.poll=this.#now();
   if(signal.aborted||messages.length===0)return false;
   const message=messages[0]!;
@@ -93,16 +93,24 @@ export class SesFeedbackWorker {
   try{event=parseSesFeedback(message.body,config);}
   catch{this.#fail(consumer,'ses_feedback_parse_failed');}
   this.#phase(consumer,'processing');
-  let result;
-  try{result=await applySesFeedback(pool,config,recipientKeys,event,sesFeedbackTransaction);}
+  let result,duplicateConflict=false;
+  try{result=await applySesFeedback(pool,config,recipientKeys,event,async(currentPool,action)=>
+   sesFeedbackTransaction(currentPool,async client=>{
+    const outcome=await action(client);
+    // Transport deduplication does not authorize acknowledging a persisted binding refusal.
+    if(outcome==='duplicate')duplicateConflict=(await client.query(`SELECT 1 FROM mail_feedback_receipts
+     WHERE country=$1 AND topic_arn=$2 AND sns_id=$3 AND content_digest=$4 AND result='conflict'`,
+    [config.scope.country,config.topicArn,event.snsId,event.contentDigest])).rowCount!>0;
+    return outcome;
+   }));}
   catch{this.#fail(consumer,'ses_feedback_processing_failed');}
-  if(result==='conflict')this.#fail(consumer,'ses_feedback_conflict');
+  if(result==='conflict'||duplicateConflict)this.#fail(consumer,'ses_feedback_conflict');
   consumer.commit=this.#now();
   // A lost acknowledgement replays committed evidence; it must never undo the commit.
   if(signal.aborted)return false;
   this.#phase(consumer,'acknowledging');
   try{await queue.delete(message.receiptHandle,signal);}
-  catch{this.#fail(consumer,'ses_feedback_acknowledgement_failed');}
+  catch{if(signal.aborted)return false;this.#fail(consumer,'ses_feedback_acknowledgement_failed');}
   return true;
  }
 }

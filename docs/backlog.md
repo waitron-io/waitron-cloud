@@ -526,10 +526,10 @@ The worker now admits at most two concurrent operations and exposes aggregate
 health from both consumer slots. Readiness requires fresh successful polls and a
 fresh trusted operational sample; a failed or overdue slot, stopped consumer,
 changed configuration revision or observed drift closes readiness. The report
-keeps commit freshness separate from acknowledgement, reports queue age and
+includes its producer timestamp, keeps commit freshness separate from acknowledgement, reports queue age and
 dead-letter count, and emits only fixed failures and aggregate fields. Its
-35-second freshness limit is the maximum request/transaction/request cycle,
-not an alert threshold. Local stand-ins and PostgreSQL checks cover these states;
+35-second freshness limit is conservative and can report stale during a long,
+otherwise valid two-slot batch. It is not an alert threshold. Local stand-ins and PostgreSQL checks cover these states;
 collecting authenticated provider samples remains unwired. The standalone
 consumer now requires explicit opt-in, qualified trusted settings and retained
 recipient keys. It stays outside normal services and uses one shared worker
@@ -538,7 +538,10 @@ five-second limit; cleanup shares the twenty-second shutdown grace. A process
 deadline remains armed until natural exit so a retained driver handle cannot
 extend shutdown. Local command tests exercise SIGINT/SIGTERM, lock waits,
 restart acknowledgement, death after commit and a provider stand-in's poison
-redrive after five receives. The command reads optional bounded operational
+redrive after five receives. Exact replays of persisted binding conflicts remain
+unacknowledged without changing the store's transport-duplicate result. One-shot
+completion reports stopped, and cancelled queue calls add no failure code while
+earlier genuine failures remain visible. The command reads optional bounded operational
 samples and emits aggregate JSON; it does not collect provider metrics or
 qualify encryption, IAM or real dead-letter transfer. A pending pool request
 is discarded when it returns. Audited removal and production

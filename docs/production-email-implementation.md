@@ -138,7 +138,7 @@ Missing or stale evidence refuses configuration; input flags cannot qualify it.
 The parser accepts only the expected notification wrapper and one-recipient
 attempt tag. It bounds the envelope, nested message and identifiers, refuses
 ambiguous recipients and duplicate JSON members, and never retrieves embedded
-URLs. A redacted complaint leaves recipient resolution to the future durable
+URLs. A redacted complaint leaves recipient resolution to the durable
 attempt lookup. Provider suppression, hard bounces and temporary outcomes stay
 separate; parsing writes no suppression or sending state. These checks validate
 structure against trusted settings. Only a separately qualified SQS connection
@@ -186,13 +186,18 @@ provided here. Retained-key failures and the full stop on revoked keys still nee
 operational and recovery qualification before production wiring.
 
 Task 3 adds `applySesFeedback`, which owns the database transaction for a parsed
-event. Only a future trusted queue consumer may call it. It binds the original
+event. Only a trusted queue consumer may call it. It binds the original
 recipient, detects repeat or conflicting observations and preserves every blocking
 reason independently of the sending state. Repeated SNS IDs retain their first
 receipt unchanged; a changed payload returns `conflict` without a new stored record.
 A missing retained key leaves work
 retryable. Local PostgreSQL process-death checks cover interruption before and
 after commit; they do not authenticate an AWS publisher or exercise a live queue.
+Task 6's standalone consumer uses qualified configuration, commits before queue
+deletion and retains exact replays of stored binding conflicts for redrive.
+Its opt-in command and bounded shutdown are described in the
+[registration guide](../packages/registration/README.md#apply-parsed-feedback-without-changing-sending-state).
+Normal services do not start it, and default policy still refuses production flows.
 
 Late feedback keeps its original recipient across later policy and configuration
 revisions when country, provider account, region, purpose and configuration set

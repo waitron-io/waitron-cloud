@@ -1,7 +1,6 @@
 import {Pool} from 'pg';
-import {openSync,readSync,closeSync,fstatSync,constants} from 'node:fs';
-import {resolve} from 'node:path';
-import {pathToFileURL} from 'node:url';
+import {openSync,readSync,closeSync,fstatSync,realpathSync,constants} from 'node:fs';
+import {fileURLToPath} from 'node:url';
 import {spainCountryPolicy} from './country-policy.ts';
 import {validateSesFeedbackConfig,type SesFeedbackPolicy} from './ses-feedback-config.ts';
 import {RelayKeys,type RelayKeyConfig} from './relay-payload.ts';
@@ -64,4 +63,8 @@ async function main() {
  if(process.exitCode===1)process.exit(1);
 }
 
-if(process.argv[1]&&import.meta.url===pathToFileURL(resolve(process.argv[1])).href)await main();
+function isCommand(){
+ try{return process.argv[1]!==undefined&&realpathSync(process.argv[1])===fileURLToPath(import.meta.url);}
+ catch{return false;}
+}
+if(isCommand())await main();

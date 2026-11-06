@@ -37,7 +37,7 @@ export async function runSesFeedbackConsumer(options:ConsumerOptions):Promise<vo
   await Promise.race([running,grace]);
  }catch{failure=expired?'ses_feedback_shutdown_failed':'ses_feedback_consumer_failed';stop.abort();}
  finally{
-  close();
+  stop.abort();close();
   try{
    // Cleanup shares any running shutdown deadline, rather than adding to it.
    await Promise.race([Promise.resolve().then(()=>options.pool.end()),grace,

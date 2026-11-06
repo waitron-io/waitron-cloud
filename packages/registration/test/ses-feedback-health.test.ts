@@ -24,7 +24,7 @@ test('health requires a successful poll from both consumer slots before reportin
   assert.equal(status(f).state,'starting');assert.equal(status(f).ready,false);
   await f.poll();assert.equal(status(f).ready,false);
   await f.poll();
-  assert.deepEqual(status(f),{ready:true,state:'ready',failure:null,activeConsumers:0,
+  assert.deepEqual(status(f),{observedAt:100000,ready:true,state:'ready',failure:null,activeConsumers:0,
    lastPollAgeMs:0,lastCommitAgeMs:null,queueAgeSeconds:0,deadLetterCount:0,configurationRevision:config().revision});
  }finally{await f.close();}
 });
@@ -78,7 +78,7 @@ test('successful activity in another slot cannot hide a receive past its request
  }finally{release();await waiting;await f.close();}
 });
 
-test('poll freshness expires at the maximum receive processing and delete cycle even with a fresh queue sample',async()=>{
+test('idle poll freshness expires at the conservative budget even with a fresh queue sample',async()=>{
  const f=fixture();try{
   await f.poll();await f.poll();f.setTime(134999);assert.equal(status(f).ready,true);
   f.setTime(135000);assert.equal(status(f).state,'stale');assert.equal(status(f).ready,false);
