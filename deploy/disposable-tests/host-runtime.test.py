@@ -1,5 +1,6 @@
 """Explicit opt-in lifecycle proof on the dedicated test host, never a CI import."""
 import json
+import base64
 import pwd
 import os
 import select
@@ -13,6 +14,28 @@ import time
 import unittest
 
 MANAGER = sys.argv.pop(1)
+
+
+def qmp_request(resource, command, arguments=None):
+    path = Path('/var/lib/waitron-disposable/turns') / resource / 'qmp.sock'
+    with socket.socket(socket.AF_UNIX) as connection:
+        connection.settimeout(3)
+        connection.connect(str(path))
+        with connection.makefile('rwb') as stream:
+            json.loads(stream.readline(65536))
+            for identity, operation, values in [('capability', 'qmp_capabilities', {}),
+                                                 ('request', command, arguments or {})]:
+                stream.write((json.dumps({'execute': operation, 'arguments': values, 'id': identity}) + '\n').encode())
+                stream.flush()
+                for _ in range(100):
+                    result = json.loads(stream.readline(65536))
+                    if result.get('id') == identity:
+                        if 'error' in result:
+                            raise ValueError(result['error'])
+                        break
+                else:
+                    raise ValueError('QMP response missing')
+            return result['return']
 
 
 class GuestLifecycle(unittest.TestCase):
@@ -64,6 +87,14 @@ class GuestLifecycle(unittest.TestCase):
                            '-o', 'ConnectTimeout=3', '-p', '22000', 'root@127.0.0.1']
                     ready = self.command(*ssh, 'cloud-init status --wait', timeout=120)
                     self.assertEqual(ready.returncode, 0, ready.stderr)
+                    serial = self.command(*ssh, "python3 -c \"open('/dev/ttyS0','wb').write(b's'*1048576+b'D592-SERIAL-END')\"")
+                    self.assertEqual(serial.returncode, 0, serial.stderr)
+                    turn = Path('/var/lib/waitron-disposable/turns') / resource
+                    self.assertLessEqual(sum(p.stat().st_size for p in turn.glob('console*')), 16384)
+                    serial_bytes = base64.b64decode(qmp_request(resource, 'ringbuf-read',
+                                                    {'device': 'serial0', 'size': 16384, 'format': 'base64'}))
+                    self.assertLessEqual(len(serial_bytes), 16384)
+                    self.assertIn(b'D592-SERIAL-END', serial_bytes)
                     if generation == 1:
                         exit3 = self.command(*ssh, 'touch /root/predecessor; exit 3')
                         self.assertEqual(exit3.returncode, 3, exit3.stderr)
