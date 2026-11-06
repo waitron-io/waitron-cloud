@@ -3178,6 +3178,13 @@ implementation or production evidence.
   missing, contradictory, ambiguous and changing-input cases refuse. No live
   regional resource or quota claim follows from those checks. All four lifecycle
   commands still refuse while creation, reservation, launch and cleanup remain unbuilt.
+  The manual protection observer now resolves the exact stack's bucket, rule
+  and expiry function, checks the enabled one-minute target and reads a fresh
+  encrypted sweep heartbeat. Bounded private CLI downloads refuse partial
+  objects and remove their own files. Synthetic cases cover foreign or partial
+  setup, stale or contradictory observations and checkout changes during reads.
+  Accepted cleanup requests remain separate from actual resource absence; no
+  live protection, ledger initialization or launch is qualified.
   A new self-contained guest deadline entry binds the
   original reservation to a fixed UTC timer, a boot-relative fallback and
   shutdown on reboot. Synthetic shell checks cover exact retries without

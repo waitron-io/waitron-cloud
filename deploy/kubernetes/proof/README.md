@@ -148,9 +148,9 @@ reconciliation, reserve allowance or authorize a launch.
 
 The CLI adapter uses fixed service endpoints, bounded output and a 30-second
 process deadline. Cost Explorer uses its US East endpoint while the proof's
-resource region remains Stockholm. The adapter permits only identity, billing
-and the four setup-discovery reads. The `up`, `drill`, `reconcile` and `down`
-entries still refuse
+resource region remains Stockholm. The adapter permits only identity, billing,
+setup discovery and reads of expiry protection. The `up`, `drill`, `reconcile`
+and `down` entries still refuse
 without making a provider call, because creation and cleanup are unfinished.
 You do not need to sign in yet. Verify the preflight without credentials with
 `node --test scripts/kubernetes-proof-control.test.mjs`.
@@ -165,6 +165,24 @@ The controller rechecks main and the UTC date around every provider read.
 The resulting template still has no GitHub trust or launcher role. These checks
 use synthetic provider responses; no regional image, account quota, machine boot
 or resource creation has been qualified on AWS.
+
+A stack name alone does not prove its expiry protection is working.
+`inspectManualProtection` resolves the bucket, rule and function from the exact
+stack's [CloudFormation resource inventory](https://docs.aws.amazon.com/cli/latest/reference/cloudformation/describe-stack-resources.html).
+It requires a completed setup, an enabled one-minute rule and exactly the
+expected function target. It then reads the sweep's own heartbeat from that
+bucket. Both the sweep and object must be less than two minutes old; foreign,
+incomplete or contradictory observations refuse. Main and the UTC day are
+checked around each read. A heartbeat records accepted cleanup requests, so you
+still need separate live observations to establish termination and absent disks.
+
+The [S3 read](https://docs.aws.amazon.com/cli/latest/reference/s3api/get-object.html)
+requests a bounded byte range with the staging account as expected bucket owner.
+The CLI writes into a private temporary directory, checks the complete returned
+range and length, and removes its own files on success or failure. The controller
+requires encrypted JSON and retains the original sweep observation. These are
+synthetic checks only; the lifecycle does not yet create or enable protection,
+initialize a live ledger or authorize a launch.
 
 The prerequisite workflow checks both rendered templates with the same pinned
 CloudFormation validator. Its setup tests require every retained resource

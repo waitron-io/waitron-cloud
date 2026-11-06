@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { mkdtempSync, writeFileSync, rmSync, readFileSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, rmSync, readFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
@@ -328,3 +328,227 @@ for (const operation of ['get-parameter', 'describe-images', 'describe-instance-
     assert.equal(f.calls.at(-1).operation, operation);
   });
 }
+
+
+// Accepting a stale or foreign heartbeat would initialize spending without this stack's expiry protection.
+function protectionFixture(t) {
+  const f = fixture(t);
+  const stackId = 'arn:aws:cloudformation:eu-north-1:462991287391:stack/d570-first/00000000-0000-4000-8000-000000000000';
+  const resources = [
+    ['Bucket', 'd570-first-bucket', 'AWS::S3::Bucket'],
+    ['ExpiryRule', 'd570-first-rule', 'AWS::Events::Rule'],
+    ['ExpiryFunction', 'd570-first-function', 'AWS::Lambda::Function'],
+  ].map(([LogicalResourceId, PhysicalResourceId, ResourceType]) => ({ StackId: stackId, StackName: 'd570-first',
+    LogicalResourceId, PhysicalResourceId, ResourceType, ResourceStatus: 'CREATE_COMPLETE', Timestamp: now }));
+  const functionArn = 'arn:aws:lambda:eu-north-1:462991287391:function:d570-first-function';
+  const health = { schema: 'd570-sweep-v1', account: '462991287391', region: 'eu-north-1', stackId,
+    startedAt: '2026-11-06T11:59:00.000Z', completedAt: '2026-11-06T11:59:01.000Z',
+    terminationRequested: [], volumeDeletionRequested: [] };
+  const responses = {
+    'cloudformation/describe-stacks': { Stacks: [{ StackId: stackId, StackName: 'd570-first', StackStatus: 'CREATE_COMPLETE' }] },
+    'cloudformation/describe-stack-resources': { StackResources: resources },
+    'events/describe-rule': { Name: 'd570-first-rule', Arn: 'arn:aws:events:eu-north-1:462991287391:rule/d570-first-rule',
+      State: 'ENABLED', ScheduleExpression: 'rate(1 minute)', EventBusName: 'default' },
+    'events/list-targets-by-rule': { Targets: [{ Id: 'D570Expiry', Arn: functionArn,
+      RetryPolicy: { MaximumEventAgeInSeconds: 60, MaximumRetryAttempts: 0 } }] },
+    's3api/get-object': { Body: Buffer.from(JSON.stringify(health)), ServerSideEncryption: 'AES256',
+      ContentType: 'application/json', LastModified: '2026-11-06T11:59:01.000Z' },
+  };
+  const prior = f.aws.call;
+  f.aws.call = async (service, operation, input) => {
+    const key = service + '/' + operation;
+    if (Object.hasOwn(responses, key)) { f.calls.push({ service, operation, input }); return responses[key]; }
+    return prior(service, operation, input);
+  };
+  const observe = (changes = {}) => {
+    assert.equal(typeof control.inspectManualProtection, 'function', 'missing independent protection observation');
+    return control.inspectManualProtection({ checkout: f.root, region: 'eu-north-1', now, aws: f.aws,
+      environment: {}, clock: () => Date.parse(now), stackId, ...changes });
+  };
+  return { ...f, responses, health, stackId, observe, resource: resources };
+}
+
+test('armed stack sweep is read from its actual bucket and retained without claiming completed cleanup', async t => {
+  const f = protectionFixture(t), result = await f.observe();
+  assert.deepEqual(result, { account: '462991287391', region: 'eu-north-1', head: f.head, tree: f.tree,
+    billing: { observedAt: now, period, microUsd: 1234568, estimated: true }, stackId: f.stackId,
+    bucket: 'd570-first-bucket', heartbeat: f.health });
+  assert.deepEqual(f.calls.slice(2), [
+    { service: 'cloudformation', operation: 'describe-stacks', input: { StackName: f.stackId } },
+    { service: 'cloudformation', operation: 'describe-stack-resources', input: { StackName: f.stackId } },
+    { service: 'events', operation: 'describe-rule', input: { Name: 'd570-first-rule', EventBusName: 'default' } },
+    { service: 'events', operation: 'list-targets-by-rule', input: { Rule: 'd570-first-rule', EventBusName: 'default', Limit: 100 } },
+    { service: 's3api', operation: 'get-object', input: { Bucket: 'd570-first-bucket', Key: 'd570/health/reaper.json',
+      ExpectedBucketOwner: '462991287391', Range: 'bytes=0-1048576' } },
+  ]);
+  assert.equal(Object.hasOwn(result, 'terminated'), false);
+});
+
+for (const [label, mutate] of [
+  ['missing stack', f => f.responses['cloudformation/describe-stacks'].Stacks = []],
+  ['duplicate stack', f => f.responses['cloudformation/describe-stacks'].Stacks.push(f.responses['cloudformation/describe-stacks'].Stacks[0])],
+  ['foreign stack response', f => f.responses['cloudformation/describe-stacks'].Stacks[0].StackId += '-foreign'],
+  ['changing stack', f => f.responses['cloudformation/describe-stacks'].Stacks[0].StackStatus = 'UPDATE_IN_PROGRESS'],
+  ['missing resource', f => f.resource.pop()],
+  ['duplicate resource', f => f.resource.push(f.resource[0])],
+  ['foreign stack', f => f.resource[0].StackId = f.stackId.replace('462991287391', '949687825720')],
+  ['wrong resource type', f => f.resource[0].ResourceType = 'AWS::EC2::Instance'],
+  ['partial setup', f => f.resource[0].ResourceStatus = 'CREATE_IN_PROGRESS'],
+  ['rollback', f => f.resource[0].ResourceStatus = 'UPDATE_ROLLBACK_COMPLETE'],
+  ['invalid bucket', f => f.resource[0].PhysicalResourceId = '../foreign'],
+  ['invalid rule', f => f.resource[1].PhysicalResourceId = 'foreign/rule'],
+  ['invalid function', f => f.resource[2].PhysicalResourceId = 'foreign:function'],
+  ['partial resource inventory', f => f.responses['cloudformation/describe-stack-resources'].NextToken = 'more'],
+  ['disabled rule', f => f.responses['events/describe-rule'].State = 'DISABLED'],
+  ['foreign rule', f => f.responses['events/describe-rule'].Arn = 'arn:aws:events:eu-north-1:949687825720:rule/d570-first-rule'],
+  ['wrong rule name', f => f.responses['events/describe-rule'].Name = 'another-rule'],
+  ['slow schedule', f => f.responses['events/describe-rule'].ScheduleExpression = 'rate(5 minutes)'],
+  ['foreign event bus', f => f.responses['events/describe-rule'].EventBusName = 'other'],
+  ['event-pattern rule', f => f.responses['events/describe-rule'].EventPattern = '{}'],
+  ['missing target', f => f.responses['events/list-targets-by-rule'].Targets = []],
+  ['extra target', f => f.responses['events/list-targets-by-rule'].Targets.push(f.responses['events/list-targets-by-rule'].Targets[0])],
+  ['foreign function', f => f.responses['events/list-targets-by-rule'].Targets[0].Arn += '-foreign'],
+  ['wrong target identity', f => f.responses['events/list-targets-by-rule'].Targets[0].Id = 'Other'],
+  ['changed target payload', f => f.responses['events/list-targets-by-rule'].Targets[0].Input = '{}'],
+  ['delayed target', f => f.responses['events/list-targets-by-rule'].Targets[0].RetryPolicy.MaximumEventAgeInSeconds = 3600],
+  ['retrying target', f => f.responses['events/list-targets-by-rule'].Targets[0].RetryPolicy.MaximumRetryAttempts = 10],
+  ['partial target inventory', f => f.responses['events/list-targets-by-rule'].NextToken = 'more'],
+]) test(`${label} cannot establish this stack's armed protection`, async t => {
+  const f = protectionFixture(t); mutate(f);
+  await assert.rejects(f.observe(), /D570 controller refused/);
+  assert.equal(f.calls.some(call => call.service === 's3api'), false);
+});
+
+for (const [label, mutate] of [
+  ['wrong health schema', h => h.schema = 'another'],
+  ['foreign health account', h => h.account = '949687825720'],
+  ['foreign health region', h => h.region = 'eu-south-2'],
+  ['foreign health stack', h => h.stackId += '-foreign'],
+  ['missing start', h => delete h.startedAt],
+  ['invalid time', h => h.startedAt = '2026-02-30T11:59:00.000Z'],
+  ['stale start', h => h.startedAt = '2026-11-06T11:58:00.000Z'],
+  ['future completion', h => h.completedAt = '2026-11-06T12:00:00.001Z'],
+  ['backwards sweep', h => h.completedAt = '2026-11-06T11:58:59.999Z'],
+  ['missing termination observations', h => delete h.terminationRequested],
+  ['unknown disk observations', h => h.volumeDeletionRequested = null],
+  ['invalid termination identity', h => h.terminationRequested = ['i-foreign']],
+  ['duplicate termination identity', h => h.terminationRequested = ['i-11111111111111111', 'i-11111111111111111']],
+  ['invalid disk identity', h => h.volumeDeletionRequested = ['vol-foreign']],
+]) test(`${label} cannot establish a fresh successful sweep`, async t => {
+  const f = protectionFixture(t); mutate(f.health);
+  if (label === 'future completion') f.responses['s3api/get-object'].LastModified = now;
+  f.responses['s3api/get-object'].Body = Buffer.from(JSON.stringify(f.health));
+  await assert.rejects(f.observe(), /D570 controller refused/);
+});
+
+for (const [label, change] of [
+  ['missing heartbeat body', r => delete r.Body],
+  ['malformed heartbeat', r => r.Body = Buffer.from('{')],
+  ['oversized heartbeat', r => r.Body = Buffer.alloc(1048577)],
+  ['unencrypted heartbeat', r => delete r.ServerSideEncryption],
+  ['wrong content type', r => r.ContentType = 'text/plain'],
+  ['future object', r => r.LastModified = '2026-11-06T12:00:00.001Z'],
+  ['stale object', r => r.LastModified = '2026-11-06T11:58:00.000Z'],
+]) test(`${label} refuses protection rather than inventing health`, async t => {
+  const f = protectionFixture(t); change(f.responses['s3api/get-object']);
+  await assert.rejects(f.observe(), /D570 controller refused/);
+});
+
+test('observed sweep requests stay requests and do not establish that the resources disappeared', async t => {
+  const f = protectionFixture(t);
+  f.health.terminationRequested = ['i-11111111111111111'];
+  f.health.volumeDeletionRequested = ['vol-11111111111111111'];
+  f.responses['s3api/get-object'].Body = Buffer.from(JSON.stringify(f.health));
+  const result = await f.observe();
+  assert.deepEqual(result.heartbeat, f.health);
+  assert.equal(Object.hasOwn(result, 'volumesAbsent'), false);
+});
+
+test('heartbeat ageing across a provider wait cannot initialize protected spending', async t => {
+  const f = protectionFixture(t); let at = Date.parse(now);
+  const prior = f.aws.call;
+  f.aws.call = async (...args) => { const result = await prior(...args); if (args[0] === 's3api') at += 61000; return result; };
+  await assert.rejects(f.observe({ clock: () => at }), /D570 controller refused/);
+});
+
+test('a checkout changed while reading the heartbeat cannot establish health', async t => {
+  const f = protectionFixture(t), prior = f.aws.call;
+  f.aws.call = async (...args) => { const result = await prior(...args);
+    if (args[0] === 's3api') writeFileSync(join(f.root, 'controller.txt'), 'changed heartbeat reader\n'); return result; };
+  await assert.rejects(f.observe(), /D570 controller refused/);
+  assert.equal(f.calls.at(-1).operation, 'get-object');
+});
+
+for (const stackId of ['d570-first', 'arn:aws:cloudformation:eu-north-1:949687825720:stack/d570/00000000-0000-4000-8000-000000000000']) {
+  test(`unbound stack identity refuses before provider access: ${stackId}`, async t => {
+    const f = protectionFixture(t);
+    await assert.rejects(f.observe({ stackId }), /D570 controller refused/);
+    assert.deepEqual(f.calls, []);
+  });
+}
+
+
+for (const [service, operation] of [['cloudformation', 'describe-stacks'], ['cloudformation', 'describe-stack-resources'], ['events', 'describe-rule'], ['events', 'list-targets-by-rule']]) {
+  test(`CLI admits only the required protection read ${service}/${operation}`, async t => {
+    const f = fixture(t), executable = join(f.root, 'aws-read'), capture = join(f.root, 'read.json');
+    writeFileSync(executable, `#!${process.execPath}\nimport('node:fs').then(fs => {
+      fs.writeFileSync(${JSON.stringify(capture)}, JSON.stringify(process.argv.slice(2)));
+      process.stdout.write('{"observed":true}'); });\n`, { mode: 0o700 });
+    assert.deepEqual(await control.createManualAwsCli({ executable }).call(service, operation, {}), { observed: true });
+    const args = JSON.parse(readFileSync(capture));
+    assert.deepEqual(args.slice(0, 6), [service, operation, '--cli-input-json', '{}', '--region', 'eu-north-1']);
+    for (const mutation of ['create-stack', 'enable-rule', 'put-targets']) await assert.rejects(
+      control.createManualAwsCli({ executable }).call(service, mutation, {}), /D570 controller refused/);
+  });
+}
+
+function heartbeatCliFixture(t, { length = 11, contentLength = length, contentRange = `bytes 0-${length - 1}/${length}`, fail = false, missing = false } = {}) {
+  const f = fixture(t), executable = join(f.root, 'aws-object'), capture = join(f.root, 'object.json');
+  writeFileSync(executable, `#!${process.execPath}\nimport('node:fs').then(fs => {
+    const args = process.argv.slice(2), path = args.at(-1);
+    fs.writeFileSync(${JSON.stringify(capture)}, JSON.stringify({ args, path, directoryMode: fs.statSync(path.slice(0, path.lastIndexOf('/'))).mode & 511,
+      fileMode: fs.statSync(path).mode & 511 }));
+    if (${fail}) { process.stderr.write('private heartbeat diagnostic'); process.exit(1); }
+    if (!${missing}) fs.writeFileSync(path, Buffer.alloc(${length}, 97));
+    process.stdout.write(JSON.stringify({ ContentLength: ${contentLength}, ContentRange: ${JSON.stringify(contentRange)},
+      ServerSideEncryption: 'AES256', ContentType: 'application/json', LastModified: '2026-11-06T11:59:01+00:00' }));
+  });\n`, { mode: 0o700 });
+  return { ...f, executable, capture, input: { Bucket: 'd570-first-bucket', Key: 'd570/health/reaper.json',
+    ExpectedBucketOwner: '462991287391', Range: 'bytes=0-1048576' } };
+}
+
+test('CLI downloads the bounded heartbeat privately and removes its own files before returning', async t => {
+  const f = heartbeatCliFixture(t), result = await control.createManualAwsCli({ executable: f.executable }).call('s3api', 'get-object', f.input);
+  assert.deepEqual(result.Body, Buffer.from('aaaaaaaaaaa'));
+  assert.equal(result.LastModified, '2026-11-06T11:59:01Z');
+  const saved = JSON.parse(readFileSync(f.capture));
+  assert.equal(saved.directoryMode, 0o700); assert.equal(saved.fileMode, 0o600);
+  assert.deepEqual(saved.args.slice(0, 6), ['s3api', 'get-object', '--cli-input-json', JSON.stringify(f.input), '--region', 'eu-north-1']);
+  assert.equal(saved.args.at(-2), '15');
+  assert.equal(existsSync(saved.path), false);
+  assert.equal(existsSync(saved.path.slice(0, saved.path.lastIndexOf('/'))), false);
+});
+
+for (const [label, options] of [
+  ['partial heartbeat range', { contentRange: 'bytes 0-10/2000000' }],
+  ['missing range', { contentRange: null }],
+  ['contradictory length', { contentLength: 12 }],
+  ['oversized body', { length: 1048577 }],
+  ['missing body', { missing: true }],
+  ['provider failure', { fail: true }],
+]) test(`CLI ${label} refuses and removes only its own download`, async t => {
+  const f = heartbeatCliFixture(t, options);
+  await assert.rejects(control.createManualAwsCli({ executable: f.executable }).call('s3api', 'get-object', f.input),
+    error => error.message === 'D570 AWS s3api/get-object failed');
+  const saved = JSON.parse(readFileSync(f.capture));
+  assert.equal(existsSync(saved.path.slice(0, saved.path.lastIndexOf('/'))), false);
+});
+
+for (const [label, changes] of [
+  ['foreign owner', { ExpectedBucketOwner: '949687825720' }], ['foreign key', { Key: 'other/key' }],
+  ['unbounded body', { Range: undefined }], ['extra S3 option', { VersionId: 'other-version' }],
+]) test(`CLI refuses ${label} before any object command`, async t => {
+  const f = heartbeatCliFixture(t);
+  await assert.rejects(control.createManualAwsCli({ executable: f.executable }).call('s3api', 'get-object', { ...f.input, ...changes }), /D570 controller refused/);
+  assert.equal(existsSync(f.capture), false);
+});
