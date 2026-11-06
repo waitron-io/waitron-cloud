@@ -28,9 +28,9 @@ def excluded(values):
     for value in values:
         lower = value.lower()
         if (lower in {'.git', '.ssh', '.aws', '.gnupg', '.npmrc', '.netrc',
-                      'node_modules', '.pnpm-store', '.yarn', 'credentials.json',
+                      'node_modules', '.pnpm-store', '.yarn', '__pycache__', 'credentials.json',
                       'credentials', 'id_rsa', 'id_ed25519'} or
-                lower.startswith('.env') or lower.endswith(('.key', '.pem', '.p12', '.pfx'))):
+                lower.startswith('.env') or lower.endswith(('.key', '.pem', '.p12', '.pfx', '.pyc'))):
             return True
     return False
 

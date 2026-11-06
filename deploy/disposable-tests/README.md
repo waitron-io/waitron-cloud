@@ -18,7 +18,7 @@ bash deploy/disposable-tests/bootstrap-host.sh --plan deploy/disposable-tests/ho
 bash deploy/disposable-tests/bootstrap-host.sh --install deploy/disposable-tests/host-packages.txt
 ```
 
-The installer requires the four named versions and verifies them after installation. It preserves an existing service-start policy, or suppresses package service starts temporarily and removes only the policy file it created. It does not configure VM networking or start a guest. The package file pins the direct prerequisites; a complete reproducible guest image remains to be built.
+The installer requires the four named versions and verifies them after installation. It preserves an existing service-start policy, or suppresses package service starts temporarily and removes only the policy file it created. It does not configure VM networking or start a guest. The package file pins the direct host prerequisites. `guest-tools.sh` pins Node, pnpm, Docker, its command-line client, Compose and Git inside each fresh guest, and records every installed Debian package. Transitive package resolution still uses Debian’s signed current indexes; a completely frozen guest package inventory remains open.
 
 If a version leaves your package mirror, stop and review a replacement pin. `--metadata` refreshes the host's signed package indexes and prints current candidates; it never rewrites the committed pins. Do not substitute candidates silently.
 
@@ -38,7 +38,7 @@ Before sending source to a guest, create an archive outside your checkout:
 python3 scripts/disposable-tests/snapshot.py create "$PWD" /tmp/cloud-source.tar
 ```
 
-The command prints the archive's SHA256 digest and source file count. It includes tracked edits and untracked, unignored files, but omits Git state, environment files, credentials and dependencies. It refuses links and reads each path through directory handles that cannot follow links. Inspect a refused path before retrying. Static `.pem` and `.key` fixtures are also excluded conservatively; a test needing one is unsupported until its credential boundary has been reviewed.
+The command prints the archive's SHA256 digest and source file count. It includes tracked edits and untracked, unignored files, but omits Git state, environment files, credentials and dependencies. It refuses links and reads each path through directory handles that cannot follow links. Python bytecode and cache directories are excluded because the guest must execute the copied source. Inspect a refused path before retrying. Static `.pem` and `.key` fixtures are also excluded conservatively; a test needing one is unsupported until its credential boundary has been reviewed.
 
 Copy the trusted extractor separately from candidate source. In the guest, verify that digest before extracting into an empty directory:
 
@@ -58,4 +58,14 @@ bash deploy/disposable-tests/ssh.sh YOUR_VERIFIED_HOST \
   < deploy/disposable-tests/host-runtime.test.py
 ```
 
-This foundation does not supply a usable test slot yet. Credential-free dependency preparation, an actual PostgreSQL command turn, controller and reboot reconciliation, enforced deadline/cancellation/disk-full drills and bounded cleanup under those failures remain activation gates. No lane helper or GitHub runner is activated.
+Prepare the reviewed private UI package on the Mac before copying source. The adapter downloads only its reviewed release, verifies its full SHA512 and refuses candidate-selected authenticated URLs:
+
+```sh
+python3 scripts/disposable-tests/private-packages.py fetch /tmp/cloud-private-packages
+```
+
+The package token stays in the Mac process. GitHub's signed blob redirect receives no authentication headers. Copy only the verified package bytes to the guest, seed its private pnpm store with `pnpm store add`, and retain that store through `npm_config_store_dir` for nested installs. Public dependencies download inside the guest; a second independent checkout installs offline from its own guest store. The opt-in `guest-tools.test.py` proof exercises both installs, the real PostgreSQL checks, command exit 3 and final VM absence.
+
+`guest-exec.py` binds its entry point to the guest's exact resource ID, executes an argument list in `/work/source`, preserves the command status and enforces an absolute deadline. Cancellation stops the owned process group with a two-second grace before forced termination. The server's independent VM deadline remains necessary if the controller disappears.
+
+This component still needs the Mac-to-host turn adapter, cancellation during copy and preparation, controller and reboot reconciliation, server-deadline and disk-full drills and bounded cleanup under those failures before supplying a usable slot. No lane helper or GitHub runner is activated.

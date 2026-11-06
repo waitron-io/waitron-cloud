@@ -50,7 +50,7 @@ test('a snapshot carries intended edits and executable modes with a reproducible
 test('snapshots exclude Git state, environment files, credentials, dependencies and ignored output', t => {
   const f = fixture(t);
   f.put('app.mjs', 'safe'); f.put('.gitignore', 'ignored-output/\n');
-  for (const name of ['.env', '.env.example', 'packages/app/.env.local', '.npmrc', '.netrc', '.ssh/id_ed25519', '.aws/config', 'credentials.json', 'nested/service.key', 'nested/client.pem', 'node_modules/package/index.js', 'packages/app/node_modules/a/index.js', '.pnpm-store/token', 'ignored-output/bundle.js']) f.put(name, 'DO-NOT-COPY');
+  for (const name of ['.env', '.env.example', 'packages/app/.env.local', '.npmrc', '.netrc', '.ssh/id_ed25519', '.aws/config', 'credentials.json', 'nested/service.key', 'nested/client.pem', 'node_modules/package/index.js', 'packages/app/node_modules/a/index.js', '.pnpm-store/token', 'ignored-output/bundle.js', 'scripts/__pycache__/adapter.cpython-313.pyc', 'scripts/__pycache__/index', 'legacy.pyc']) f.put(name, 'DO-NOT-COPY');
   const result = create(f); assert.equal(result.status, 0, result.stderr);
   const target = join(f.base, 'guest'); mkdirSync(target);
   const unpacked = invoke('extract', f.archive, digest(f.archive), target);
