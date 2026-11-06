@@ -258,8 +258,17 @@ Hidden intermediate storage time remains unknown, and acknowledged replacements
 release obsolete candidates. Run `node --test
 scripts/cloud-cost/multipart-ordinary-forwarding.test.mjs` for both storage modes,
 version ordering, candidate ownership and two real HTTP sequences. These checks
-do not prove SQLite recovery. Consecutive multipart mutations after a lost
-multipart reply still need the wider forwarding policy.
+do not prove SQLite recovery.
+Consecutive upload creation and part writes now continue after a lost reply.
+Each possible upload needs its own create request, and independent inventory
+checks every retained part. Repeated part writes preserve possible earlier sizes;
+an acknowledged replacement excludes them. An abort collects those parts while
+keeping hidden storage intervals unknown. The pending request journal and possible
+part records each have a 100,000-entry limit. Run `node --test
+scripts/cloud-cost/multipart-chains.test.mjs` for both storage modes, two actual
+HTTP replacement sequences and the memory bounds. Completion with a missing part
+identity, and further requests on an upload after an uncertain completion or abort,
+still need the wider forwarding policy. These controls do not prove SQLite recovery.
 The full nonblocking accounting path, publication refusal, lost-write
 restore control and saved-failure replay remain open. These partial changes do
 not establish the historical cause or relax functional admission.

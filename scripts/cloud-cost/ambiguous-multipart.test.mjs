@@ -209,7 +209,7 @@ test('lostVersionedCompletionRetainsPriorVersion', async t => {
   assert.equal(f.audit.snapshot().objects.noncurrentVersions, 1); anonymous(f);
 });
 
-for (const versioned of [false, true]) for (const mode of ['foreign-create', 'create-parts', 'duplicate-create', 'part-size', 'part-missing', 'part-foreign', 'abort-part-change', 'completion-missing', 'completion-size', 'completion-still-upload', 'overlap', 'repeat-finish']) test(`ambiguousMultipartRefuses_${versioned}_${mode}`, async t => {
+for (const versioned of [false, true]) for (const mode of ['foreign-create', 'create-parts', 'duplicate-create', 'part-size', 'part-missing', 'part-foreign', 'abort-part-change', 'completion-missing', 'completion-size', 'completion-still-upload', 'overlap', 'repeat-finish']) test(mode === 'overlap' ? `settledMultipartAllowsIndependentCreate_${versioned}` : `ambiguousMultipartRefuses_${versioned}_${mode}`, async t => {
   const f = await fixture(t, versioned), op = mode.includes('create') ? 'create' : mode.startsWith('completion') ? 'complete' : mode.startsWith('abort') ? 'abort' : 'part';
   if (op !== 'create') { create(f); part(f); }
   lost(f, op, 6);
@@ -224,7 +224,16 @@ for (const versioned of [false, true]) for (const mode of ['foreign-create', 'cr
   if (mode.startsWith('completion') && mode !== 'completion-still-upload') f.uploads.clear();
   if (mode === 'completion-size' || mode === 'completion-still-upload') f.objects.push({ id: 'new', bytes: mode === 'completion-size' ? 5 : 4, latest: true });
   f.time(10);
-  if (mode === 'overlap') assert.throws(() => f.audit.begin(input('create')), bad);
+  if (mode === 'overlap') {
+    let finish; assert.doesNotThrow(() => { finish = f.audit.begin(input('create')); });
+    finish({ statusCode: null, bytesOut: 0, interrupted: true });
+    await assert.doesNotReject(f.audit.verify());
+    assert.equal(f.audit.snapshot().objects.bytes, 4);
+    assert.equal(f.audit.snapshot().objects.unfinishedMultipart, 1);
+    assert.equal(f.audit.snapshot().status, 'unknown');
+    assert.deepEqual(f.audit.snapshot().gaps, ['accounting:request-cutoff']);
+    assert.equal(f.meter.diagnostics().firstInvalidation, null);
+  }
   else if (mode === 'repeat-finish') {
     // A failed callback has settled its request; it cannot be applied twice.
     const g = await fixture(t, versioned); create(g); const end = g.audit.begin(input('part')); end({ statusCode: 503, bytesOut: 4 });

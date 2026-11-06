@@ -636,22 +636,45 @@ export async function openLitestreamHistories({ client, sdk, meter, bucket, cloc
 // Independent inventory bounds an interrupted mutation without claiming a successful reply.
 // Only an active request fences ordinary work; settled uncertainty still requires inventory.
 export function nativeMultipartHistory({ bucket, now, inspect, prepareComplete, markGap, resolveReplies = false }) {
-  const uploads = new Map(); let busy = false, uncertain = null, retiredLow = 0, retiredHigh = 0;
+  const uploads = new Map(), uncertain = []; let busy = false, retiredLow = 0, retiredHigh = 0, candidates = 0;
   const retire = (part, from, by) => {
     retiredLow += part.bytes * Math.max(0, from - part.by);
     retiredHigh += part.bytes * (by - part.from);
   };
   const fields = (body, root, allowed) => deletionFields({ value: '', children: deletionXml(body, root) }, allowed);
   const cleanText = value => text(value) && value.length <= 2048 && !/[\x00-\x1f\x7f]/.test(value);
+  // A later mutation can hide the interval of an earlier part replacement. Keep
+  // every owned size until inventory, without treating a missing ETag as observed.
+  const retainPart = u => {
+    const upload = u.upload, n = u.partNumber;
+    upload.candidates ??= new Map();
+    if (!upload.candidates.has(n)) {
+      requireThat(candidates < 100000); candidates++;
+      upload.candidates.set(n, [upload.parts.get(n) ?? null]);
+    }
+    requireThat(candidates < 100000); candidates++;
+    upload.candidates.get(n).push({ bytes: u.bytes, etag: null });
+    markGap('accounting:incomplete-history');
+  };
+  const clearCandidates = (upload, n) => {
+    const selected = upload.candidates?.get(n);
+    if (selected) { candidates -= selected.length; upload.candidates.delete(n); }
+  };
   const begin = ({ operation, key, query, headers, body, time }) => {
-    requireThat(!busy && !uncertain && safeKey(key) && !/[\x00-\x1f\x7f]/.test(key) && headers
+    requireThat(!busy && uncertain.length < 100000 && safeKey(key) && !/[\x00-\x1f\x7f]/.test(key) && headers
       && !Object.hasOwn(headers, 'content-encoding') && !Object.hasOwn(headers, 'x-amz-copy-source'));
     const length = headers['content-length'] ?? '0';
     requireThat(/^(0|[1-9]\d*)$/.test(length) && count(Number(length)));
     const bytes = Number(length), uploadId = query.get('uploadId'), id = identity(key, uploadId);
     const upload = uploads.get(id); let selected, applyCompletion;
     if (operation === 'multipart-create') requireThat(bytes === 0 && uploads.size < 100000);
-    else requireThat(upload);
+    else {
+      requireThat(upload);
+      for (let i = uncertain.length - 1; i >= 0; i--) if (uncertain[i].id === id) {
+        requireThat(uncertain[i].operation === 'multipart-upload');
+        retainPart(uncertain[i]); uncertain.splice(i, 1);
+      }
+    }
     if (operation === 'multipart-upload') requireThat(bytes >= 0 && upload.parts.size < 10000);
     if (operation === 'multipart-abort') requireThat(bytes === 0);
     if (operation === 'multipart-complete') {
@@ -675,7 +698,7 @@ export function nativeMultipartHistory({ bucket, now, inspect, prepareComplete, 
       if (interrupted || statusCode >= 300) {
         requireThat(interrupted || resolveReplies === true);
         if (interrupted) markGap('accounting:request-cutoff');
-        uncertain = { operation, key, id, upload, bytes, time, partNumber: Number(query.get('partNumber')), selected, applyCompletion };
+        uncertain.push({ operation, key, id, upload, bytes, time, partNumber: Number(query.get('partNumber')), selected, applyCompletion });
         busy = false; return;
       }
       requireThat(statusCode === (operation === 'multipart-abort' ? 204 : 200));
@@ -686,6 +709,7 @@ export function nativeMultipartHistory({ bucket, now, inspect, prepareComplete, 
       } else if (operation === 'multipart-upload') {
         requireThat(cleanText(responseHeaders?.etag));
         const n = Number(query.get('partNumber')), previous = upload.parts.get(n);
+        clearCandidates(upload, n);
         if (previous) retire(previous, time, by);
         upload.parts.set(n, { bytes, etag: responseHeaders.etag, from: time, by });
       } else {
@@ -695,6 +719,7 @@ export function nativeMultipartHistory({ bucket, now, inspect, prepareComplete, 
           applyCompletion(by, responseHeaders);
         }
         for (const part of upload.parts.values()) retire(part, time, by);
+        for (const n of upload.candidates?.keys() ?? []) clearCandidates(upload, n);
         uploads.delete(id);
       }
       busy = false;
@@ -728,17 +753,20 @@ export function nativeMultipartHistory({ bucket, now, inspect, prepareComplete, 
       }
       observed.set(id, { key: entry.Key, uploadId: entry.UploadId, parts });
     }
-    if (uncertain) {
-      const u = uncertain, by = now(), found = observed.get(u.id);
-      if (u.operation === 'multipart-create') {
-        const added = [...observed].filter(([id]) => !uploads.has(id));
-        requireThat(added.length <= 1);
-        for (const [id, upload] of added) {
-          requireThat(upload.key === u.key && upload.parts.size === 0 && uploads.size < 100000);
-          uploads.set(id, { ...upload, parts: new Map() });
-        }
-      } else if (u.operation === 'multipart-upload') {
+    const creates = new Map();
+    for (const u of uncertain) if (u.operation === 'multipart-create') creates.set(u.key, (creates.get(u.key) ?? 0) + 1);
+    for (const [id, found] of observed) if (!uploads.has(id)) {
+      const remaining = creates.get(found.key) ?? 0;
+      requireThat(remaining > 0 && found.parts.size === 0 && uploads.size < 100000);
+      creates.set(found.key, remaining - 1);
+      uploads.set(id, { ...found, parts: new Map() });
+    }
+    for (const u of uncertain) {
+      const by = now(), found = observed.get(u.id);
+      if (u.operation === 'multipart-create') continue;
+      if (u.operation === 'multipart-upload') {
         requireThat(found);
+        if (u.upload.candidates?.has(u.partNumber)) { retainPart(u); continue; }
         const part = found.parts.get(u.partNumber), previous = u.upload.parts.get(u.partNumber);
         const unchanged = previous && part && previous.bytes === part.bytes && previous.etag === part.etag;
         if (!unchanged && part) {
@@ -747,13 +775,20 @@ export function nativeMultipartHistory({ bucket, now, inspect, prepareComplete, 
           u.upload.parts.set(u.partNumber, { ...part, from: u.time, by });
         } else requireThat(unchanged || !previous && !part);
       } else if (!found) {
-        if (u.operation === 'multipart-complete') {
-          u.applyCompletion.resolve(by);
-        }
+        if (u.operation === 'multipart-complete') u.applyCompletion.resolve(by);
         for (const part of u.upload.parts.values()) retire(part, u.time, by);
+        for (const n of u.upload.candidates?.keys() ?? []) clearCandidates(u.upload, n);
         uploads.delete(u.id);
       } else if (u.operation === 'multipart-complete') u.applyCompletion.absent?.();
-      uncertain = null;
+    }
+    uncertain.length = 0;
+    for (const [id, upload] of uploads) for (const [n, possible] of upload.candidates ?? []) {
+      const part = observed.get(id)?.parts.get(n);
+      requireThat(possible.some(candidate => part ? candidate && candidate.bytes === part.bytes
+        && (candidate.etag === null || candidate.etag === part.etag) : candidate === null));
+      if (part) upload.parts.set(n, { ...part, from: 0, by: now() });
+      else upload.parts.delete(n);
+      clearCandidates(upload, n);
     }
     requireThat(observed.size === uploads.size);
     for (const [id, found] of observed) {
@@ -763,7 +798,7 @@ export function nativeMultipartHistory({ bucket, now, inspect, prepareComplete, 
       }
     }
   }, snapshot: time => {
-    requireThat(!busy && !uncertain); let bytes = 0, low = retiredLow, high = retiredHigh;
+    requireThat(!busy && uncertain.length === 0 && candidates === 0); let bytes = 0, low = retiredLow, high = retiredHigh;
     for (const upload of uploads.values()) for (const part of upload.parts.values()) {
       bytes += part.bytes; low += part.bytes * (time - part.by); high += part.bytes * (time - part.from);
     }
