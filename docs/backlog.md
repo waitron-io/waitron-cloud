@@ -1627,19 +1627,16 @@ implementation or production evidence.
   40 exact reader versions for installed dependencies, runtime data, scratch and
   inert directory values. Both immutable trees check their mode, type and blob;
   changed or unknown readers retain conservative work. Quoted file references,
-  sibling imports and helper chains remain in the graph. The live fallback test
-  now supplies an explicit unknown reader and keeps every original assertion.
-  The local saved-graph measurement selects six portal package jobs and one
-  UI-smoke job. Identity still selects all nine packages; the other six backend
-  changes select eight packages. Their real import and shared-fixture cycle
-  therefore still needs 28 job groups. All six receipt suites remain selected
-  whenever these declarations qualify narrower package work. Their independent
-  inputs still need proof before omission. These are selection measurements, not
-  GitHub duration savings. A refused package graph retains all packages and
-  the independent receipt audits, even after visiting an approved reader. The
-  historical local-stack fixture supplies an explicit unknown reader and keeps
-  its original omission, package, diagnostic and type-check assertions. The
-  [reader boundaries and renewal procedure](ci-package-readers.md)
+  sibling imports and helper chains remain in the graph. The fallback fixtures
+  supply explicit unknown readers and preserve every original assertion.
+  Local saved-graph controls on the current direct-consumer implementation select
+  six portal package jobs and one UI-smoke job. Account HTTP, registration and
+  remote access still select 28 groups; backups and translation select 24,
+  identity 23 and operations seven. These are synthetic source-path selections
+  against the real graph, not hosted execution or GitHub duration savings.
+  All six independent receipts remain selected whenever these declarations
+  qualify narrower package work. A refused graph retains full package work and
+  its independent receipt audits. The [reader boundaries and renewal procedure](ci-package-readers.md)
   explain the declarations and remaining limits.
   Part 2b supplies the
   direct package selection below; part 5 still owns verified merge reuse.
@@ -1787,10 +1784,10 @@ implementation or production evidence.
   selects 28 of the full plan's 29 jobs after the sixth registration partition;
   the historical sample retains its original 27-job count. Further narrowing
   needs file-level consumer evidence.
-  The real portal-plus-prose candidate
-  still selects 28 package jobs: its saved graph refuses an unresolved directory
-  read in `scripts/ci-audit-fixture-dependencies.mjs`. Keep that conservative
-  fallback for part 2 to bound; part 1 claims no measured package-job saving.
+  Without the part-2 declarations, even a portal-only change refuses the saved
+  directory reader in `scripts/ci-audit-fixture-dependencies.mjs` and keeps full
+  package work. The local part-2 control narrows that graph to six portal jobs;
+  it does not establish a hosted time saving.
   Repeated audit reads remain: the review measured about 0.6 seconds of one
   2.9-second local plan. No duration guarantee rests on that sample.
   Adding, changing or removing an executable, configuration or other tracked input

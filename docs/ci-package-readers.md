@@ -64,10 +64,24 @@ selection measurement, not a GitHub runtime measurement.
 | identity | 9 | 28 |
 | account-http, backups, operations, registration, remote-access or translation | 8 | 28 |
 
-The backend cycle is real. Production imports and shared integration fixtures
-connect account HTTP, registration, backups, remote access, operations and
-translation. Removing those edges would skip consumers. Identity feeds that
-cycle too. These counts describe package jobs only. Type checking and root checks keep
+Those historical counts use the full dependency closure. The current
+[direct-consumer policy](ci-package-selection.md) also preserves saved source
+and helper inputs. A local replay after integration with current main uses
+synthetic source paths against both identical immutable graphs and selects:
+
+| Changed package | Selected packages | Package job groups |
+| --- | ---: | ---: |
+| portal | 1 | 6 |
+| ui-smoke | 1 | 1 |
+| account-http, registration or remote-access | 7 | 28 |
+| backups or translation | 6 | 24 |
+| identity | 5 | 23 |
+| operations | 2 | 7 |
+
+These are graph selections, not executed package checks or duration savings.
+Real imports, shared fixtures and explicitly declared generated inputs remain
+consumers; a smaller result needs evidence for removing an edge.
+These counts describe package jobs only. Type checking and root checks keep
 their existing rules. Whenever these declarations qualify narrower package
 work, all six existing receipt suites remain selected. Package precision does
 not prove that an independent receipt can be omitted. Receipt reductions need
@@ -103,7 +117,6 @@ changed-check rule. Do not remove an edge to recover an old job count.
 
 Review the combined readers again after a rebase and renew the normal
 [staged input audits](ci-documentation-audit.md). Declaration changes and all
-other executable changes still invalidate those separate inventories. D571 part
-2b will separately change dependency depth and test-file selection. Parts 3
-through 6 own root-input selection, proof workflows, merge reuse and nightly
-full work.
+other executable changes still invalidate those separate inventories. The current direct-consumer policy keeps its dependency-depth and test-file
+selection rules. Separate root-input, proof-workflow, merge-reuse and nightly
+checks retain their own evidence.

@@ -78,8 +78,14 @@ test('a real mixed portal revision narrows while a new unknown reader restores e
   git.readBlobs = ids => readGitBlobs(ids, input => execFileSync('git', ['cat-file', '--batch'], {cwd: root, input, maxBuffer: 64 * 1024 * 1024}));
   const save = () => {
     git('add', '-A');
+    const inputs = git('diff', '--cached', '--name-only').trim().split('\n').filter(path => !path.startsWith('docs/'));
+    assert.ok(inputs.length && inputs.every(path => ['apps/portal/src/app.ts', 'apps/portal/src/unreviewed-reader.mjs'].includes(path)));
+    execFileSync(process.execPath, [resolve('scripts/ci-root-review.mjs'), '--write-staged',
+      ...inputs.flatMap(path => ['--input', path]), '--reviewer', 'CI fixture',
+      '--reference', 'Controlled portal whitespace or unresolved source reader'], {cwd: root, stdio: 'pipe'});
+    git('add', 'scripts/ci-root-review.d');
     execFileSync(process.execPath, [generator, '--write-staged'], {cwd: root, stdio: 'pipe'});
-    git('add', 'scripts/ci-input-audit.json');
+    git('add', 'scripts/ci-input-audit.json', 'scripts/ci-input-audit.d');
     git('-c', 'user.name=CI fixture', '-c', 'user.email=ci@example.test', 'commit', '-sm', 'Portal selection fixture');
     return git('rev-parse', 'HEAD').trim();
   };
@@ -114,7 +120,8 @@ test('qualifying the real UI-smoke graph retains every existing receipt suite', 
   const sha = git('rev-parse', 'HEAD').trim(), workspace = loadWorkspace();
   const changed = (...args) => args[0] === 'diff' ? 'packages/ui-smoke/test.mjs\0' : git(...args);
   changed.readBlobs = git.readBlobs;
-  const selected = createPlan({pull_request: {base: {sha}, head: {sha}}}, {sha}, workspace, changed);
+  const base = git('rev-parse', 'HEAD^').trim();
+  const selected = createPlan({pull_request: {base: {sha: base}, head: {sha}}}, {sha}, workspace, changed);
   assert.deepEqual(selected.packages, [{package: '@waitron-cloud/ui-smoke', shard: 1}]);
   assert.deepEqual(selected.receipts, ['test:two-venue-milestone-receipt', 'test:backup-capacity',
     'test:public-gateway-limits', 'test:local-stack', 'test:database-recovery-receipt', 'test:cloud-cost']);
