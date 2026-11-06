@@ -22,7 +22,7 @@ const dns = {installationId: id, kind: 'staff', hostname: 'staff.cafe.example', 
 
 for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'] as const) for (const width of [390, 1280]) {
   const handlerCases = locale === 'en' && theme === 'light' && width === 390 ? ['ordinary', 'delayed', 'missing'] as const : ['ordinary'] as const;
-  for (const handler of handlerCases) test(`${locale} ${theme} ${width}: Enter in the hostname field reviews it without applying${handler === 'ordinary' ? '' : ` (${handler} handler)`}`, async t => {
+  for (const handler of handlerCases) test(handler === 'missing' ? `${locale} ${theme} ${width}: missing DNS handler observation times out` : `${locale} ${theme} ${width}: Enter in the hostname field reviews it without applying${handler === 'ordinary' ? '' : ` (${handler} handler)`}`, async t => {
     const browser = await chromium.launch({headless: true});
     let releaseDns = () => {};
     try {
@@ -80,7 +80,7 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
       if (process.env.REMOTE_ENTER_RECEIPT_DIR) {
         await mkdir(process.env.REMOTE_ENTER_RECEIPT_DIR, {recursive: true});
-        await page.screenshot({path: `${process.env.REMOTE_ENTER_RECEIPT_DIR}/${locale}-${theme}-${width}.png`, fullPage: true});
+        await page.screenshot({path: `${process.env.REMOTE_ENTER_RECEIPT_DIR}/${locale}-${theme}-${width}${handler === 'ordinary' ? '' : `-${handler}`}.png`, fullPage: true});
       }
       await Promise.all([page.waitForResponse(response => response.url().endsWith('/remote-access/dns')), input.press('Enter')]);
       await confirmation.waitFor();
