@@ -1223,9 +1223,11 @@ movement and outage behaviour against the [requirements and deliberate limits](b
 
 **Open; production enablement is not approved.** Offer address lookup and transactional
 email to open-source Waitron users with a Cloud login, without a paid subscription.
-Qualify providers, storage rights, address quality, account allowances, abuse limits
-and the joint Waitron integration against the [requirements and open work](backlog/free-services.md);
-evaluate mobile notifications separately.
+The test-box Google client prepares transient suggestions and editable drafts;
+its signed route and Waitron provider handoff remain open. Qualify providers,
+storage rights, address quality, account allowances, abuse limits and the joint
+Waitron integration against the [requirements and open work](backlog/free-services.md).
+Evaluate mobile notifications separately.
 
 ## Decisions in progress
 
