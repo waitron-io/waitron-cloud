@@ -49,7 +49,7 @@ service again; known old contact or snapshot evidence retains its age.
 
 ## Check a remote-access alert
 
-Open the Account link in the email and find the venue named in the alert.
+Open the Account link in the email and find the venue with the ID shown in the alert.
 Public website and staff access have separate check results and dates.
 
 - If a recent check failed, check the venue's internet connection. Open **Set up
