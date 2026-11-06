@@ -668,6 +668,11 @@ test('unresolved live repository readers keep every package consumer', () => {
   try {
     execFileSync('git', ['clone', '--shared', '--quiet', process.cwd(), root], {stdio: 'pipe'});
     git('config', 'user.name', 'CI test'); git('config', 'user.email', 'ci@example.test');
+    // The fallback fixture supplies an unknown reader independently of reviewed data readers.
+    writeFileSync(join(root, 'packages/identity/src/ci-unknown-reader.mjs'),
+      "import {readdirSync} from 'node:fs';\nexport const discover = directory => readdirSync(directory);\n");
+    git('add', 'packages/identity/src/ci-unknown-reader.mjs');
+    git('commit', '-sm', 'Add unresolved reader fixture');
     const base = git('rev-parse', 'HEAD').trim();
     git('commit', '--allow-empty', '-sm', 'Separate live reader fixture revisions');
     const sha = git('rev-parse', 'HEAD').trim(), workspace = loadWorkspace(root);

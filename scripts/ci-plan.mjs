@@ -48,14 +48,17 @@ export function packageWorkForPaths(paths, workspace, base, head, git, testFiles
   if (!paths.length) throw Error('Package work requires nonempty paths');
   let scope = scopeForPaths(paths, workspace, {direct: true});
   let receiptScope = scopeForPaths(paths, workspace), lockSelection;
-  let reason;
+  let reason, reviewedPackageReaders = false;
   if (paths.includes('pnpm-lock.yaml') && paths.every(path => path === 'pnpm-lock.yaml' || workspace.some(pkg => path === `${pkg.directory}/package.json`))) {
     try {lockSelection = lockPackageScope(base, head, workspace, git, paths); scope = lockSelection.scope;}
     catch { /* Unproved root or package readers retain full lockfile work. */ }
   }
   if (!lockSelection && !scope.full && scope.packages.length < workspace.length) {
     try {
-      const revisions = scopeForRevisions(paths, workspace, base, head, git, {direct: true, receiptScope: true});
+      let candidateReviewedReaders = false;
+      const revisions = scopeForRevisions(paths, workspace, base, head, git, {direct: true, receiptScope: true,
+        onReviewedReader: () => { candidateReviewedReaders = true; }});
+      reviewedPackageReaders = candidateReviewedReaders;
       scope.packages = [...new Set([...scope.packages, ...revisions.packages])].sort();
       receiptScope.packages = [...new Set([...receiptScope.packages, ...revisions.receiptPackages])].sort();
     } catch (error) {
@@ -68,12 +71,13 @@ export function packageWorkForPaths(paths, workspace, base, head, git, testFiles
   reason ??= scope.full ? `Shared, unaudited or unknown paths: full suite (${paths.join(', ')})` : `Selected ${scope.packages.join(', ')}`;
   if (paths.includes('pnpm-lock.yaml')) reason += `; ${lockSelection?.reason ?? describeLockChanges(base, head, git)}`;
   const work = workPlan(scope, workspace, undefined, receiptScope, testFilesByPackage);
-  if (lockSelection) work.receipts = [...receiptSuites];
+  if (lockSelection || reviewedPackageReaders) work.receipts = [...receiptSuites];
   else {
     const selection = receiptPlan(work.receipts, receiptScope, base, head, git);
     work.receipts = selection.receipts;
     if (selection.reason) reason += `; ${selection.reason}`;
   }
+  if (reviewedPackageReaders) reason += '; retained all receipt suites while qualifying package readers';
   return {...work, reason};
 }
 

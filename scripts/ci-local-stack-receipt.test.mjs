@@ -38,6 +38,9 @@ function fixture(run) {
     git('checkout', '--quiet', 'HEAD', '--', '.');
     git('config', 'user.name', 'CI test'); git('config', 'user.email', 'ci@example.test');
     seedReceiptDependencyInputs(root);
+    // Receipt omissions remain independent when the package graph cannot be proved.
+    writeFileSync(join(root, 'packages/registration/src/unresolved-receipt-package-reader.ts'),
+      "import {readdirSync} from 'node:fs';\nexport const discover = directory => readdirSync(directory);\n");
     if (git('status', '--porcelain').trim()) {
       git('add', '-A'); git('commit', '-s', '-qm', 'Seed audited dependency inputs');
     }

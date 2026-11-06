@@ -135,6 +135,9 @@ test('one audited committed baseline admits isolated docs and scripts while unre
   }
   for (const withManifest of [false, true]) {
     git('reset', '--hard', base);
+    // The refusal control needs an unknown source reader independently of live declarations.
+    write('packages/identity/src/audit-control-unknown-reader.mjs',
+      "import {readdirSync} from 'node:fs';\nexport const discover = directory => readdirSync(directory);\n");
     const {path: lockPath, closures, ...lock} = structuredClone(parseLock(read('pnpm-lock.yaml')));
     lock.importers['packages/ui-smoke'].devDependencies = {...lock.importers['packages/ui-smoke'].devDependencies,
       'audit-control': {specifier: '^1.0.0', version: '1.0.0'}};
