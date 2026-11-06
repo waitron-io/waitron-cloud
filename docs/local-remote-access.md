@@ -201,6 +201,25 @@ default object with async `present(name, value)` and `remove(name, value)` metho
 paths must be absolute. A missing route or certificate mapping fails only that target;
 the worker does not infer a path or reuse another cell's key.
 
+For a Route 53 zone, set `acme.dnsModule` to the absolute path of
+`packages/remote-access/src/route53-dns-env.ts`. Supply `CLOUD_DNS_ZONE_ID` and
+`CLOUD_DNS_SUFFIX` to the worker, along with the AWS SDK's normal credentials.
+For the test installation, these are zone `Z01032422MAQ3V1X559WP` and suffix
+`test.waitron.io`. Keep credentials in a private environment file on the server.
+Grant only `route53:ChangeResourceRecordSets` for TXT records matching
+`_acme-challenge.*.test.waitron.io` in that zone, plus `route53:GetChange`.
+The adapter never lists zones or changes address records. It waits up to two minutes
+for each change to reach Route 53's authoritative servers. Cleanup specifies the
+exact TXT value, so an older request cannot delete a newer challenge.
+
+Use Let's Encrypt's staging directory first, then its production directory once
+issuance works. This changes the DNS provider only: the existing CSR checks,
+reconciler and staff exchange still decide who can receive a certificate, and the
+staff exchange still refuses production installations. Each box keeps its own key.
+The trial's wildcard address points at one gateway. A move retains the database's
+existing hostname; routing that old suffix to a replacement gateway remains a
+production deployment requirement, not something the TXT writer changes.
+
 Run one scheduling and work pass, inspect redacted status, or leave the worker running:
 
 ```sh

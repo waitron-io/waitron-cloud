@@ -4441,6 +4441,13 @@ review and owner gates. This audit does not enable services or change policy.
 ## Remote hostname save qualification
 
 **Open.** Qualify live DNS and certificate issuance, browser integration and deployment.
+The Route 53 challenge adapter now plugs into the existing reconciler and staff
+exchange. It writes only challenge TXT records below its configured suffix, waits
+for propagation and deletes the exact issued value. Native checks exercise the
+real AWS client against a local HTTP boundary, including scope refusal, pending
+propagation, provider refusal and cleanup after a newer challenge. Production
+installation refusal remains in place; the test gateway and browser path still
+need their joint qualification.
 Native save and read-back checks pass; permission and retry rules remain in force.
 See [the remaining checks](backlog/remote-access-http.md#remote-hostname-save-qualification).
 
