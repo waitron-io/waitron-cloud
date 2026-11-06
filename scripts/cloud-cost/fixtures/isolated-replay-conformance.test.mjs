@@ -704,13 +704,19 @@ test('isolatedHostCompletesTheIdleObservationAfterAnEarlyTimerWake', async t => 
     };
     generatedSyncExports();
     process.on('exit',()=>{if(generatedEarlyWakes<2)process.exitCode=1;});`);
-  let result;
-  await assert.doesNotReject(async () => { result = await controller.runIsolatedReplay(f); },
-    'an early wake must resume observation until the measured minimum is covered');
+  let result, refusal;
+  const began = performance.now();
+  await withStreamResultDiagnostics(async () => {
+  await assert.doesNotReject(async () => {
+    try { result = await controller.runIsolatedReplay(f); }
+    catch (error) { refusal = error; throw error; }
+  }, 'an early wake must resume observation until the measured minimum is covered');
   assert.ok(result.admission.stream.phases.find(row => row.phase === 'startup').elapsedSeconds >= 2);
   assert.ok(result.admission.stream.phases.find(row => row.phase === 'idle').elapsedSeconds >= 2);
   assert.deepEqual(result.admission.stream.restored, { sales: 3, integrity: true });
   clean(f, before);
+  }, () => readFileSync(f.journal.path, 'utf8'), () => ({ elapsedMilliseconds: performance.now() - began,
+    changed: false, refusal, signalAborted: false }), text => t.diagnostic(text), join(f.root, 'isolated-replay/result.json'));
 });
 
 // Dropping the archive flag at either controller/worker boundary must not silently produce ordinary replay evidence.

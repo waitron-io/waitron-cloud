@@ -3655,7 +3655,20 @@ two-attempt maximum, accelerated outer limit, fixture bound and cleanup remain.
 Run `node --test scripts/cloud-cost/conformance-source-fetch.test.mjs` for these
 controls. The historical job did not measure helper scheduling, so the exact
 cause of that run's delay remains unknown. D583's separate isolated early-wake
-failure still needs diagnosis.
+failure still needs diagnosis. Its isolated early-wake case now uses the existing
+stream-result reporter to retain fixed controller/worker refusal stages and the
+admitted trace before fixture cleanup. Its result-read flag observes a successful
+read of the exact worker result, including a later JSON or admission refusal;
+a failed or unrelated read cannot satisfy it, and the reader is restored after
+success or refusal. The original success assertion, both
+two-second phase checks, three restored sales, source fingerprints and owned
+cleanup remain. A forced worker refusal must still fail the case and expose only
+the admitted diagnostic; raw exception text stays private. The historical failure
+in [run 41903018206](https://github.com/waitron-io/waitron-cloud/actions/runs/41903018206/job/126834825942)
+remains unexplained. A later passing run qualifies the wrapper, not a repair;
+capture its diagnostic on recurrence before choosing a fix. A worker's early-wake
+count exit can still have an unknown refusal stage. Later phase-assertion failures
+retain their checks but do not report individual phase timings.
 
 ### Litestream LIST-response interruption (D352 qualification)
 

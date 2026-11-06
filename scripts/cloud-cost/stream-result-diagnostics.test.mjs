@@ -1,5 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import fs, { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 const helper = await import('./fixtures/stream-result-diagnostics.mjs').catch(error => {
   if (error.code === 'ERR_MODULE_NOT_FOUND' && error.url === new URL('./fixtures/stream-result-diagnostics.mjs', import.meta.url).href) return {};
   throw error;
@@ -43,6 +46,45 @@ test('streamResultReporterDistinguishesAReadResultFromAnUnchangedResult', async 
   }) });
   assert.equal(report.resultRead, true); assert.equal(report.changed, false);
   assert.deepEqual(report.refusal, { reason: 'isolated-replay', stage: 'result', controllerStage: 'stream-admission', trace: [] });
+});
+
+// A successful read followed by a parse/admission refusal is still a read, even without a returned result.
+for (const mode of ['before-read', 'read-fails', 'invalid-json', 'admission-refuses'])
+  test('streamResultReporterObservesTheActualResultRead_' + mode, async () => {
+    const root = mkdtempSync(join(tmpdir(), 'stream-result-read-'));
+    const path = join(root, 'result.json'), originalRead = fs.readFileSync;
+    const messages = [];
+    const original = refusal();
+    try {
+      writeFileSync(path, mode === 'invalid-json' ? 'PRIVATE_INVALID_JSON' : '{}');
+      writeFileSync(join(root, 'other.json'), '{}');
+      await assert.rejects(helper.withStreamResultDiagnostics(async () => {
+        readFileSync(join(root, 'other.json'), 'utf8');
+        if (mode === 'before-read') throw original;
+        if (mode === 'read-fails') rmSync(path);
+        try { JSON.parse(readFileSync(path, 'utf8')); }
+        catch { throw original; }
+        throw original;
+      }, journal, () => ({ elapsedMilliseconds: 1, changed: false, resultRead: mode === 'before-read',
+        refusal: original, signalAborted: false }), text => messages.push(text), path), error => error === original);
+      assert.equal(fs.readFileSync, originalRead, 'restore the original filesystem reader after refusal');
+      assert.equal(messages.length, 1);
+      const report = JSON.parse(messages[0].slice('isolated-stream-result-refusal '.length));
+      assert.equal(report.resultRead, mode === 'invalid-json' || mode === 'admission-refuses');
+      assert.doesNotMatch(messages[0], /PRIVATE|result\.json|stream-result-read-/);
+    } finally { rmSync(root, { recursive: true, force: true }); }
+  });
+
+test('streamResultReporterRestoresTheReaderAfterAQuietSuccessfulRead', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'stream-result-success-'));
+  const path = join(root, 'result.json'), originalRead = fs.readFileSync;
+  const untouched = () => assert.fail('a successful result needs no failure evidence');
+  try {
+    writeFileSync(path, '{}');
+    assert.equal(await helper.withStreamResultDiagnostics(async () => readFileSync(path, 'utf8'),
+      untouched, untouched, untouched, path), '{}');
+    assert.equal(fs.readFileSync, originalRead);
+  } finally { rmSync(root, { recursive: true, force: true }); }
 });
 
 test('streamResultReporterLeavesExpectedRefusalsAndSuccessfulControlsSilent', async () => {
