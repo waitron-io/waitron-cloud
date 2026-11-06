@@ -33,11 +33,12 @@ local-lock recovery remain open. No publisher is activated by this slice.
 ## Shared storage-test seed downloads (D585)
 
 The [storage archive acquisition record](backlog/storage-cache-fixture.md#every-seaweedfs-archive-fetch-and-a-controlled-copy-proposal-d530-4)
-tracks D585: native startup and ten test seed hooks share bounded acquisition.
-Native startup retains one attempt, with a 30-second deadline covering headers
-and body. HTTP refusals close their response body immediately without replacing
-the original refusal. Conformance preparation and the Dockerfile remain separate
-follow-up paths.
+tracks D585: native startup, ten test seed hooks and conformance share bounded
+acquisition. Native startup retains one attempt, with a 30-second deadline
+covering headers and body. Conformance retains three attempts, a 120-second
+total budget and 30-second inactivity. HTTP refusals preserve each caller’s
+existing error and retry policy. The Dockerfile and full image preparation
+qualification remain open.
 
 ## Admin listener shutdown and paced replay (D581)
 
@@ -3516,8 +3517,11 @@ retained when removal also fails. The historical CI timeout has no recorded HTTP
 provider cause stays unknown. Capture a new labelled failure before attributing
 it to the registry. The historical inventory names thirteen acquisition sites. Ten storage suites
 and the seed-control suite now share supervision with native fixture startup,
-which retains one attempt and adds a 30-second deadline. Conformance and image
-build remain separate D585 slices. The owner has deferred
+which retains one attempt and adds a 30-second deadline. Conformance also uses
+that acquisition helper while retaining three attempts, a 120-second total
+budget, 30-second inactivity and its existing diagnostic and digest checks.
+Caller cancellation interrupts requests and retry pauses without replacing the
+cancellation reason. The image build remains a separate D585 slice. The owner has deferred
 the costed controlled-copy proposal; no mirror is built. See [the seed controls and limits](backlog/storage-cache-fixture.md#extraction-refusal-seed-acquisition-d530-4)
 and [the complete inventory and proposal](backlog/storage-cache-fixture.md#every-seaweedfs-archive-fetch-and-a-controlled-copy-proposal-d530-4).
 

@@ -312,27 +312,40 @@ storage checks. The shared controls also exercise permanent HTTP refusals,
 body resets, inactivity, the total budget, checksum refusal and cleanup errors.
 The original probe bodies and their assertions remain unchanged.
 
-Native startup and the seeds use `downloadStorageArchive` for supervision. Native
+Native startup, seeds and conformance use `downloadStorageArchive` for supervision. Native
 startup keeps one attempt and its original phase/error-cause contract, with one
 30-second deadline over headers and body. The seed policy keeps three temporary
 attempts, ten-second inactivity and its original total budget. Digest checking
 and cache publication stay with each caller so their existing refusal and
-cleanup rules remain distinct.
+cleanup rules remain distinct. Conformance retains three attempts, its shared
+120-second deadline, 30-second inactivity, response identity allowlist and
+`conformance_archive` records. Its caller signal interrupts headers, bodies and
+retry pauses with the original reason. A reset while discarding a permanent
+refusal body remains retryable for conformance; native and seed policies still
+stop there.
 
 | Acquisition site | Current boundary |
 | --- | --- |
 | `scripts/fixtures/storage-tar-seed.mjs` | Shared test acquisition: at most three temporary attempts within 30 seconds, ten-second inactivity, exact digest, read-only cache. |
 | `scripts/ci-backup-storage-{concurrent-extraction,concurrent-publication,extraction,issuer-bind,process-extraction,publication,readiness-diagnostics,reservation-refusals,tls-refusals,tar-refusals}.test.mjs` | Each setup uses that helper and removes its own returned seed directory. Existing setup and test deadlines remain. |
-| `scripts/fixtures/storage-archive-download.mjs` | Shared header/body supervision and caller-selected attempt policy. Native startup uses one attempt and a 30-second total deadline; seeds retain their existing retry/inactivity policy. |
+| `scripts/fixtures/storage-archive-download.mjs` | Shared header/body supervision and caller-selected attempt policy. Native startup uses one attempt and a 30-second total deadline; seeds retain three attempts, 30 seconds total and ten-second inactivity; conformance retains three attempts, 120 seconds total and 30-second inactivity. |
 | `scripts/backup-storage-fixture.mjs` | Shared supervision on a cache miss. Original header/status/body diagnostics and causes, digest validation, atomic cache publication and extraction stay with the native fixture. |
-| `scripts/cloud-cost/conformance-prepare.mjs` | Still separate: calls `downloadConformanceArchive`, with up to three attempts, a shared 120 seconds and 30-second inactivity. It extracts into its private image context. |
+| `scripts/cloud-cost/conformance-prepare.mjs` | Calls `downloadConformanceArchive` through the shared helper, retaining up to three attempts, a shared 120 seconds and 30-second inactivity. Verified bytes are written into its private image context. |
 | `deploy/local-stack/Dockerfile` | Still separate: version 4.47 and supplied architecture digest; `curl` has no own retry or deadline. Outer build limits are separate. |
 
-D585 remains open for conformance and the image build. Conformance must retain
-its 120-second budget, and the image build must work without a host Node helper.
-Native header/body controls and unchanged refusal checks qualify its bounded
-single attempt. They do not qualify those remaining paths or repair the upstream
-HTTP 504 cause. No controlled copy or provider is built.
+Run `node --test scripts/ci-storage-archive-cancellation.test.mjs` for the shared
+cancellation and caller-specific refusal policies. The existing
+`conformance-archive*.test.mjs` checks retain real HTTP retries, inactivity,
+cancellation, digest refusal and redacted response identity coverage. These
+controlled checks do not explain the historical upstream HTTP 504 replies.
+The helper can interrupt its fetch and retry pause; a custom validation or body
+hook that ignores cancellation must settle before the helper can reject it.
+The three current callers use abort-aware response operations. Arbitrary hook
+preemption is unqualified.
+
+D585 remains open for the image build, which must work without a host Node
+helper. Native header/body controls and unchanged refusal checks retain its
+bounded single attempt. No controlled copy or provider is built.
 
 The frozen `scripts/fixtures/ci-deployment-inputs.json` also contains a copy of
 the Dockerfile, materialised by `scripts/ci-dependency-fixture.mjs`; it represents
