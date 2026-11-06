@@ -638,10 +638,18 @@ attempt retains immutable intent and result rows, including the original removed
 reasons across another query or a lost acknowledgement. An unfinished intent remains
 uncertain. This internal interface starts from an existing Cloud block; provider-only
 removal is not qualified here.
-Operator permission provisioning, production provider acquisition/removal and
-enablement remain open. Task 8 must qualify any additional event types;
-`Rendering Failure` currently refuses. It must also reconcile historical Paris-only
-supplier wording and retired enablement dates before any live qualification. AWS resources,
+Task 8 adds a closed offline policy-document validator for exact SES/SNS sources,
+private Standard encrypted queues, redrive bindings and separate SMTP, consumer,
+health, operator and key-administrator identities. Synthetic refusal checks cover
+broader permissions, drift and second-country sharing; they establish no effective
+AWS access or live configuration. The [qualification guide](ses-feedback-qualification.md)
+records the normalized document profile, later supervision/schema/health/shutdown
+handoff and queue/evidence/backup/key inventory without choosing retention.
+Stockholm is the configured default; Paris remains an explicitly qualified option.
+These current rules supersede historical Paris-only and date-based enablement
+wording. Operator permission provisioning, production provider acquisition/removal
+and enablement remain open. Additional event types are not qualified;
+`Rendering Failure` still refuses. AWS resources,
 spending, credentials, production access and live mail remain unauthorised for this
 build; the owner's existing DNS setup grants none of those permissions. D101's
 legal, retention and supplier gates, C39's alert thresholds and D104's independent

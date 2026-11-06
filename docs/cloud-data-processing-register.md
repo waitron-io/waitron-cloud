@@ -86,7 +86,7 @@ private evidence under access control and reference its immutable version/digest
 | `ev-aws-backup-paris-v1` | `aws-infrastructure`; intended encrypted extra backup | Paris `eu-west-3`; Spain keys remain a dependency | Actual replication/copy services and account, complete versions/exit inventory and recoverability with Spain keys; no Spain-outage promise |
 | `ev-aws-keys-v1` | `aws-infrastructure`; intended AWS KMS, distinct from stored backups | Spain `eu-south-2`; no key replication granted | Actual key/account/region and access evidence, dependency inventory, grant cancellation, scheduled versus observed deletion; never destroy a shared key |
 | `ev-aws-gateway-metadata-v1`, `ev-cloud-audit-v1` | Intended AWS logs/telemetry and Cloud audit stores; actual services/recipients unknown | Spain venue logs stay home; telemetry, global control metadata and provider support access need distinct qualification | Log fields/sinks, processing/access countries, purpose role, justified cutoffs and deletion evidence; bucket region is insufficient |
-| `ev-ses-account-mail-v1`, `ev-ses-venue-mail-v1` | `amazon-ses`; account and venue mail are separate purposes | Selected EU exception; Paris `eu-west-3` approved for planning, account/provider qualification unresolved by D102; recipient mail systems/transit separately disclosed | D102 sender, domain, tracking-off, bounce/complaint authentication, suppression, alerts and controlled live delivery; exact entities/chain/terms and content/metadata retention |
+| `ev-ses-account-mail-v1`, `ev-ses-venue-mail-v1` | `amazon-ses`; account and venue mail are separate purposes | Selected EU exception; Stockholm `eu-north-1` configured default or Paris `eu-west-3`, both owner-accepted; exact account/provider qualification unresolved by D102; recipient mail systems/transit separately disclosed | D102 sender, domain, tracking-off, bounce/complaint authentication, suppression, alerts and controlled live delivery; exact entities/chain/terms and content/metadata retention |
 | `ev-openai-translation-v1` | `openai-api`; model memory processing, provider logs and system/abuse metadata | Exact project/model/endpoint, processing/access locations and retention approval unqualified | Separate accepted eligibility rule/examples/limits, supplier/location/terms evidence and later enabling change; `store: false` is insufficient |
 | No qualified evidence ID allocated | `anthropic-candidate`, `google-candidate`; unspecified candidate AI services | All processing, retention, support and transfer locations unknown | New selection decision and complete purpose/service evidence first; no fallback from the actual denied adapter |
 
@@ -125,3 +125,16 @@ remain open. These labels only route the work; they do not supply answers.
 Next, fill the [annexes](cloud-processing-annexes.md) with actual parties and
 reviewed evidence. Slice 3 may use these stable IDs for pure refusal decisions;
 publishing them enables no flow.
+
+
+## SES feedback evidence remains unqualified
+
+The [offline qualification guide](ses-feedback-qualification.md) inventories
+primary/dead-letter queue contents, pseudonymous attempts and suppression,
+audit/deduplication, retained keys and backup copies for both email purposes.
+Its synthetic policy validation is implementation evidence only. Keep
+`ev-ses-account-mail-v1` and `ev-ses-venue-mail-v1` unqualified until their exact
+supplier/entity/contract, access/transit/recipient boundaries and retention/deletion
+schedules are accepted. It chooses no retention duration or cleanup policy and
+grants no second-country sharing or movement of Spain venue keys. Historical
+Paris-only and calendar-based wording does not expand the current authority.

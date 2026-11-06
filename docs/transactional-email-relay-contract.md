@@ -16,8 +16,8 @@ These are source observations, not executed relay guarantees. The grant/admissio
 base `7483d6f1010663878076d00dfe7f2dcdcb5db6c7`; the inspected Waitron base is
 `0fbcde00151f47b5e300d4adad8d297f92d3bed3`. No provider terms or location claims are
 made here. The [account SMTP guide](production-email-implementation.md) describes
-the existing transport. The owner approved the [Paris SES feedback design](superpowers/specs/2026-11-01-ses-feedback-design.md)
-on 2026-11-01 for planning only; provider qualification and production relay
+the existing transport. The owner approved the [SES feedback design](superpowers/specs/2026-11-01-ses-feedback-design.md)
+on 2026-11-01 and later authorised its local code and tests; provider qualification and production relay
 enablement remain separate gates.
 
 | Boundary | Current consumer and gap |
@@ -611,3 +611,15 @@ remain uncertain; malformed optional IDs do not turn acceptance into a retry.
 These local fixtures establish no live provider qualification. Normal startup
 still exposes no production relay path, and `RelayWorkerConfig.mode` remains
 `local-proof`. A later enabling change must meet every existing relay gate.
+
+
+## Offline SES policy qualification
+
+The [offline qualification guide](ses-feedback-qualification.md) checks exact
+publisher, queue, redrive, encryption and identity documents without enabling the
+relay. Stockholm is the configured default; Stockholm and Paris are both approved
+choices subject to explicit regional qualification. Account-only evidence cannot
+qualify venue mail, and a second country on the account remains refused pending
+approved isolation/sharing. Passing synthetic checks neither adds normal relay
+routes nor composes a production grant/worker path. The consent, recovery,
+allowance, abuse, key-custody and compatibility gates above remain open.

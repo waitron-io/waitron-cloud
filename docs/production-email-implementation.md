@@ -211,3 +211,16 @@ and key refusals remain. An irreversibly revoked retained key still closes the
 whole feedback/admission scope, including attempts using unrelated keys. This
 exceeds the design's required-key refusal. Before production, you need a separately
 approved key-retirement and recovery design that settles that difference.
+
+
+## Prepare offline policies before provider qualification
+
+Use the [offline qualification guide](ses-feedback-qualification.md) to validate
+exact resource bindings, private encrypted queues and separate SMTP, consumer,
+health, operator and queue-key administration identities. The internal
+`validateSesFeedbackPolicies` check accepts a closed normalized document profile;
+it grants no runtime capability and cannot prove effective AWS access or drift.
+Stockholm remains the configured default and Paris requires its own explicit
+qualification. The guide supersedes historical Paris-only wording and dated
+enablement assumptions. Account and venue purposes still need separate evidence,
+and all provider, retention, key-recovery and independent-alert gates stay open.
