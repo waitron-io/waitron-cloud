@@ -3343,14 +3343,6 @@ implementation or production evidence.
   including unresolved verifier failures and capacity qualification.
 
 
-## Diagnostic download replies after account changes (D400)
-
-See [the client account-change boundaries](backlog/diagnostic-download-http.md#diagnostic-download-replies-after-account-changes-d400).
-The earlier PR #644 qualification timed out during source installation before
-private-replay checks began (run 40646201742, job 122675571593). D530 retains
-the unresolved cause; a passing retest does not repair it. Production permission
-checks and provider qualification remain separate.
-
 ## Backup catalogue qualification
 
 **Open.** Qualify server permissions, deployed browser integration, computer sleep
