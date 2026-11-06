@@ -7,7 +7,7 @@ import { releaseManifest } from './ui-manifest.mjs';
 import { validateLedger } from './ui-ledger.mjs';
 
 const [checkoutArg, outputArg, ...options] = process.argv.slice(2);
-assert(checkoutArg && outputArg && (options.length === 0 ||
+assert(checkoutArg && outputArg && !checkoutArg.startsWith('--') && !outputArg.startsWith('--') && (options.length === 0 ||
   (options.length === 2 && options[0] === '--ledger' && !options[1].startsWith('--'))),
   'Usage: node scripts/release/prepare-ui.mjs <Waitron checkout> <empty output directory> [--ledger <releases.json>]');
 let source;
@@ -20,7 +20,6 @@ if (options.length) {
   releaseVersion = reservation.version;
 } else {
   source = JSON.parse(await readFile(new URL('./ui-source.json', import.meta.url), 'utf8'));
-  releaseVersion = source.version;
 }
 const checkout = resolve(checkoutArg);
 const output = resolve(outputArg);
@@ -45,7 +44,7 @@ try {
   }
   await writeFile(join(staged, 'package.json'), JSON.stringify(manifest, null, 2) + '\n');
   run('npm', ['pack', '--ignore-scripts', '--pack-destination', output], staged);
-  console.log(`Prepared @waitron-io/ui-core@${releaseVersion} from ${source.commit}`);
+  console.log(`Prepared @waitron-io/ui-core@${releaseVersion ?? source.version} from ${source.commit}`);
 } finally {
   await rm(temp, { recursive: true, force: true });
 }

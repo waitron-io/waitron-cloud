@@ -49,3 +49,9 @@ test('refuses malformed release numbers while retaining source version validatio
   }
   assert.throws(() => releaseManifest({ ...packed, version: '0.2.0' }, source, '0.2.0'), /package version/);
 });
+
+test('preserves prerelease source versions on the legacy staging route', () => {
+  const manifest = releaseManifest({...packed, version: '0.1.0-rc.1'}, {...source, version: '0.1.0-rc.1'});
+  assert.equal(manifest.version, '0.1.0-rc.1');
+  assert.equal(manifest.waitronSource.version, '0.1.0-rc.1');
+});

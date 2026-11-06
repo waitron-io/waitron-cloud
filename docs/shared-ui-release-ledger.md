@@ -45,9 +45,10 @@ node scripts/release/prepare-ui.mjs /path/to/clean-waitron /path/to/empty-output
 
 The command validates the complete ledger and uses its last, unprepared
 reservation. It requires the exact reserved source commit, source package name
-and source version, then builds `waitron-io-ui-core-0.2.0.tgz`. The staged manifest
-keeps the original version in `waitronSource`, copies both source notices and
-removes package build hooks. The output directory must be empty so a previous
+and source version, then packs the built output as `waitron-io-ui-core-0.2.0.tgz`.
+The staged manifest keeps the original version in `waitronSource`, checks both
+built notices against the source copies and removes package build hooks.
+The output directory must be empty at entry so a previous
 artifact cannot be mistaken for this release. The command leaves the ledger
 unchanged; record and persist the artifact identity separately before upload.
 
@@ -55,11 +56,17 @@ Prepared, uploading and published records refuse another build through this
 entry point. Rebuilding an expired prepared artifact and proving identical
 bytes remain integration work. A valid local ledger does not establish trusted
 remote history, successful source CI or complete registry inventory. Supply
-those checks in the later orchestration before publication.
+those checks in the later orchestration before publication. That integration
+must also compute and compare the reserved input, recipe and source-check hashes;
+this entry point validates their shape only. A clean Git status does not prove
+the build output belongs to that commit: ignored or assume-unchanged files can
+remain. Fresh source isolation, an ordered build and artifact verification remain
+required before upload. Concurrent preparations must use distinct output
+directories; the initial emptiness check does not lock the directory.
 
 Without `--ledger`, the existing workflow still uses `ui-source.json` and its
 September release number. The workflow does not use the reserved path yet.
-Neither path publishes a package.
+The preparation command publishes nothing on either path.
 
 ## Persist one transition at a time
 

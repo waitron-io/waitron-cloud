@@ -1,8 +1,10 @@
 import assert from 'node:assert/strict';
 
-export function releaseManifest(packed, source, releaseVersion = source.version) {
-  assert.equal(typeof releaseVersion, 'string', 'invalid release version');
-  assert.match(releaseVersion, /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/, 'invalid release version');
+export function releaseManifest(packed, source, releaseVersion) {
+  if (releaseVersion !== undefined) {
+    assert.equal(typeof releaseVersion, 'string', 'invalid release version');
+    assert.match(releaseVersion, /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/, 'invalid release version');
+  }
   assert.equal(source.repository, 'clintongormley/waitron', 'unexpected source repository');
   assert.match(source.commit, /^[0-9a-f]{40}$/, 'source commit must be pinned');
   assert.equal(packed.name, '@waitron/ui-core', 'unexpected package name');
@@ -16,7 +18,7 @@ export function releaseManifest(packed, source, releaseVersion = source.version)
   return {
     ...manifest,
     name: '@waitron-io/ui-core',
-    version: releaseVersion,
+    version: releaseVersion === undefined ? source.version : releaseVersion,
     repository: { type: 'git', url: 'https://github.com/waitron-io/waitron-cloud.git' },
     homepage: `https://github.com/${source.repository}/tree/${source.commit}/packages/ui-core`,
     waitronSource: { ...source },
