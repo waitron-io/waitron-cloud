@@ -45,6 +45,7 @@ test('refusesBroadenedPublisherOrConsumerPolicy',async t=>{
   ['key missing source',d=>{delete (d.key.Policy.Statement[1] as any).Condition;}],
   ['key wildcard action',d=>{d.key.Policy.Statement[0]!.Action=['kms:*'];}],
   ['roles share credentials',d=>{d.identities.smtp=d.identities.consumer;}],
+  ['extra credential identity',d=>{(d.identities as any).publisher=d.identities.consumer;}],
   ['foreign operator',d=>{d.identities.operator=d.identities.operator.replace('123456789012','999999999999');}],
  ];
  for(const [name,change] of changes)await t.test(name,()=>{
@@ -119,6 +120,9 @@ test('incomplete, unknown or executable document data cannot qualify',async()=>{
  let read=false;const copy=structuredClone(documents);
  Object.defineProperty(copy,'revision',{get:()=>{read=true;return input.revision;},enumerable:true});
  assert.throws(()=>check(config,copy),{message:'Invalid SES feedback policies'});assert.equal(read,false);
+ const arrayCopy=structuredClone(documents);
+ Object.defineProperty(arrayCopy.countries,0,{get:()=>{read=true;return 'ES';},enumerable:true});
+ assert.throws(()=>check(config,arrayCopy),{message:'Invalid SES feedback policies'});assert.equal(read,false);
  const cycle:any=structuredClone(documents);cycle.cycle=cycle;
  assert.throws(()=>check(config,cycle),{message:'Invalid SES feedback policies'});
 });
