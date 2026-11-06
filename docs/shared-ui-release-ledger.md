@@ -33,6 +33,64 @@ records remain in the ledger even if a registry version disappears, so its
 number is never allocated again. Later reservations receive `0.2.1`, `0.2.2`
 and successive patch numbers.
 
+## Compute the build identities
+
+Before reserving a release, identify the committed source, Cloud recipe and
+actual tools you intend to run. A clean working directory can contain stale
+ignored output, so use `computeUiBuildEvidence` from
+`scripts/release/ui-build-inputs.mjs` with repositories as Git object stores:
+
+```js
+const evidence = await computeUiBuildEvidence({
+  sourceRepo, source, recipeRepo, recipeCommit, tools, sourceChecks,
+});
+```
+
+`source` is the existing `{repository, commit, version}` identity;
+`recipeCommit` is a full Cloud commit ID. Supply `sourceChecks` as a Buffer
+containing the exact evidence bytes you retain. Supply six trusted tools,
+`node`, `pnpm`, `npm`, `git`, `tar` and `sh`. Each tool has absolute
+`executable` and `distributionRoot` paths. The distribution contains the
+executable and every supporting file you intend to trust. The adapter hashes
+their actual bytes and executable modes, resolves only internal regular-file
+links and probes versions in an owned directory with the selected tools on PATH.
+It checks the distributions again after all probes. Select a shell that reports
+its version; an unavailable version refuses.
+
+The returned schema-1 evidence contains the source and recipe commit, sorted
+input and recipe inventories, toolchain records, and `inputsSha512`,
+`recipeSha512` and `sourceChecksSha512`. Every inventory entry records its role,
+path, Git mode, byte count and SHA-512. Fixed arrays and UTF-8 ordering make the
+hash framing independent of locale and object key order. The input identity
+covers every source file, including context outside the compiled package.
+The recipe identity covers Cloud's release programs, policy, setup and lock
+inputs, F's preparation program, the source lock and actual tools. The legacy
+`ui-source.json` is context, never the source authority for a reservation.
+
+Only the inspected F preparation and build programs are supported by policy
+version 1. Source manifests, configs and parsed imports must stay within that
+policy. Unknown build hooks, escaping imports, new install config, alternate
+locks, patches, changed workspace patterns and incomplete dependency graphs
+refuse. Git reads verify each commit, tree and blob's content identity using an
+owned configuration. Working files, index flags, replacement refs and inherited
+Git settings cannot supply the bytes. Neither repository is changed.
+
+The fixed bounds are 50,000 repository entries, 16 MiB per blob, 32 MiB per tree
+or serialized inventory, 512 MiB of repository data, and 16 MiB of source-check
+bytes. A tool distribution is limited to 256 MiB and 20,000 entries. Git reads
+and tool probes have 30-second limits. Tools must be trusted operator-supplied
+installations on Linux or macOS; hashing their bytes does not authenticate an
+executable or account for every host library.
+
+Retain the complete evidence, exact source-check bytes and recipe/tool material
+before making a reservation. The ledger stores only the digests. A matching
+source-check digest proves byte equality, not successful or trusted CI.
+Computing this evidence runs no source install, build, packing or publication
+command. Matching it against a reservation, materializing fresh source, running
+F's ordered build, rebuilding identical prepared bytes and the real-tool Linux
+compatibility check remain separate integration work. The library supplies no
+credential isolation or publisher authority.
+
 ## Prepare the reserved version
 
 Your source can keep version `0.1.0` while the ledger reserves release `0.2.0`.

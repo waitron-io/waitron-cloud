@@ -1,0 +1,128 @@
+:where([data-wt-theme-root]) {
+  --wt-space-1: 4px;
+  --wt-space-2: 8px;
+  --wt-space-3: 12px;
+  --wt-space-4: 16px;
+  --wt-space-5: 24px;
+  --wt-space-6: 32px;
+
+  --wt-radius-sm: 4px;
+  --wt-radius-md: 8px;
+  --wt-radius-lg: 16px;
+  /* A fully-rounded radius for circular chrome (status dots) and the round table-token shape. Large
+     enough to round any small element to a pill/circle; a component keeps its own square aspect if it
+     wants a true circle. */
+  --wt-radius-full: 9999px;
+
+  --wt-font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  --wt-font-family-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  /* Google's sign-in button: developers.google.com/identity/branding-guidelines */
+  --wt-font-family-google: "Google Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --wt-font-size-sm: 12px;
+  --wt-font-size-md: 14px;
+  --wt-font-size-lg: 18px;
+  --wt-font-size-xl: 22px;
+  --wt-font-weight-normal: 400;
+  --wt-font-weight-medium: 500;
+  --wt-font-weight-bold: 600;
+
+  --wt-tap-min: 44px;
+
+  --wt-google-mark-size: 20px;
+  --wt-google-mark-gap: 10px;
+  --wt-google-button-line-height: 20px;
+  --wt-google-button-font-size: 14px;
+  --wt-google-button-font-weight: 500;
+
+  --wt-field-height: 56px;
+  --wt-field-line-width: 1px;
+  --wt-field-line-width-active: 2px;
+  --wt-dropdown-row-height: 48px;
+
+  --wt-opacity-disabled: 0.5;
+  --wt-opacity-hover: 0.85;
+
+  /* How long a notice that goes by itself takes to fade out (wt-notice). */
+  --wt-duration-fade: 400ms;
+  /* How long a row takes to slide into its new place while a list is reordered by dragging (ReorderController). */
+  --wt-duration-move: 150ms;
+  --wt-duration-disclosure: 900ms;
+  /* One cycle of a pulse: slow for Overdue, Time to fire, the till bar's Waiting tab and the Ready bar's warning; fast for Forgotten, on the floor, the pass and a kitchen card. */
+  --wt-duration-pulse-slow: 2000ms;
+  --wt-duration-pulse-fast: 1000ms;
+
+  /* wt-modal's sizes: compact for a confirmation or one or two short fields, standard for an
+     ordinary editor, and --wt-modal-max-width for wide content (and an unsized modal). */
+  --wt-modal-compact-width: 28rem;
+  --wt-modal-standard-width: 42rem;
+  --wt-modal-max-width: 64rem;
+  /* wt-modal's height="medium": a fixed height for a short notice or form, at any size. */
+  --wt-modal-medium-height: 32rem;
+  --wt-dialog-max-width: min(90vw, 48rem);
+  /* How wide a field in a wt-modal may grow. Fields read --wt-field-max-width, which is none here and
+     which wt-modal sets to --wt-form-max-width on its body. */
+  --wt-form-max-width: 36rem;
+  --wt-field-max-width: none;
+
+  /* A modal's side margin and inline padding shrink on a phone so the width goes to its content.
+     Fluid rather than a breakpoint: a media query cannot read a token, and the no-hardcoded-chrome
+     guard refuses a literal breakpoint in a packages/ui primitive. */
+  --wt-modal-inline-margin: clamp(var(--wt-space-1), 5vw - var(--wt-space-4), var(--wt-space-5));
+  --wt-modal-inline-padding: clamp(var(--wt-space-3), 3vw, var(--wt-space-5));
+
+  /* One sizing value for the NAME column of a table a form owns, used in BOTH directions. It is
+     larger than --wt-tap-min either way, which is what structure.test.ts pins.
+
+     As a CAP (`max-width`): the modifier form's choices, the variants table, and the product
+     editor's attached-lists table. The name is the one cell that can be long, so capping it, with
+     `overflow-wrap: anywhere` so that a name with no space breaks too, makes it wrap and keeps the
+     controls after it (a switch, a row menu) on screen at phone width instead of pushing the row
+     into a sideways scroll.
+
+     As a FLOOR (`min-width`): the single-input cells of the options list form, which have no
+     width of their own and would otherwise shrink to the tap-target minimum and cut the value off
+     mid-word. That table accepts a sideways scroll — it has its own focusable horizontal scroller
+     so the dialog does not scroll instead.
+
+     As a FLEX BASIS: the extras list form's product picker, which is a combobox rather than a
+     table cell and sizes its open panel to its trigger.
+
+     So the uses genuinely disagree about the scroll, and whether the floor should be a token of
+     its own is an open question (docs/backlog.md, the `--wt-cell-name-max-width` entry). Grep
+     before quoting a list of consumers here: it has gone stale once already. */
+  --wt-cell-name-max-width: 140px;
+
+  /* The tallest wt-floor-plan-preview draws; a page or panel may set its own. */
+  --wt-floor-plan-preview-max-height: calc(4 * var(--wt-tap-min));
+
+  /* The narrowest box: both buttons and room for a three-digit number between them. */
+  --wt-stepper-field-width: 88px;
+  /* Below --wt-tap-min by an owner decision (A263): the number keeps the two buttons apart, and
+     24px is WCAG 2.2's level AA minimum target (2.5.8). */
+  --wt-stepper-button-width: 24px;
+
+  /* wt-slider draws its thumb at this size and insets its step marks by half of it, to sit under
+     the thumb's centre. */
+  --wt-slider-thumb-size: 16px;
+
+  /* A help-mode badge's target and the circle inside it. 24px is WCAG 2.2's level AA minimum
+     target (2.5.8). */
+  --wt-help-badge-target: 24px;
+  --wt-help-badge-size: 20px;
+
+  /* The room a price field leaves for its amount where nothing stretches it: "9999.99" at
+     --wt-font-size-md, with its 12px padding on each side. A sign drawn by `locale` widens the box
+     beyond this. */
+  --wt-price-field-width: 96px;
+  /* Room for a range placeholder such as "1000.00 – 9999.99"; the "fits the longest range
+     placeholder" cases in apps/dashboard/src/widgets/menu-prices-table.test.ts measure it. */
+  --wt-price-range-field-width: 168px;
+
+  --wt-shadow-1: 0 1px 2px rgb(0 0 0 / 0.08);
+  --wt-shadow-2: 0 8px 24px rgb(0 0 0 / 0.16);
+
+  --wt-focus-ring: 2px solid var(--wt-color-focus);
+  --wt-focus-offset: 2px;
+
+  --wt-selected-ring: 2px solid var(--wt-color-primary);
+}

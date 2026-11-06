@@ -28,8 +28,12 @@ prepared recovery bytes. Its strict in-memory USTAR reader refuses hidden
 trailing members, unknown types, links, duplicate/case-colliding or escaping
 paths, file/child conflicts and missing built exports without extracting files. The caller must persist its emitted transition; prepared-artifact
 rebuild and workflow wiring remain open. The preparation CLI validates the shape of reserved
-evidence hashes; computing and matching input, recipe and source-check hashes
-remain required before upload. Fresh source isolation and an ordered build must
+evidence hashes. The immutable evidence adapter now computes source, recipe,
+source-check and actual tool identities from verified Git objects and bounded
+file inventories. It refuses unsupported executable recipes, build/import/config
+changes and incomplete dependency graphs; ignored output, index flags, replacement
+refs and inherited Git settings cannot supply source bytes. Matching these
+computed identities against a reservation remains required before upload. Fresh source isolation and an ordered build must
 exclude stale ignored or assume-unchanged output; clean Git status alone does
 not prove artifact provenance. Concurrent builds need distinct output directories. Source CI selection, complete registry enumeration,
 automation-branch bootstrap, workflow integration and actual upload/readback
@@ -38,7 +42,7 @@ registry/image checks also remain open. Integration must recheck registry
 inventory before recording an upload and give read-only monitors verified remote
 history rather than a local snapshot. Replay supports retained history without
 repeated full-history copies; the Git command's 16 MiB output limit and abandoned
-local-lock recovery remain open. No publisher is activated by this slice. The [build-evidence implementation plan](superpowers/plans/2026-11-06-ui-build-evidence.md) defines the next adapter: immutable source and recipe inventories, matching reservation hashes before source execution, F's ordered fresh build, and exact prepared-artifact recovery. Its runtime implementation and required real-tool Linux compatibility check remain open; the plan supplies no new build or release qualification.
+local-lock recovery remain open. No publisher is activated by this slice. The [build-evidence implementation plan](superpowers/plans/2026-11-06-ui-build-evidence.md) defines the next adapter: immutable source and recipe inventories, matching reservation hashes before source execution, F's ordered fresh build, and exact prepared-artifact recovery. Task 1 now supplies the callable inventory and hashing interface with self-contained real-Git fixtures. Fresh source materialization, reservation matching, ordered build, prepared recovery and the required real-tool Linux compatibility check remain open. Inventory success supplies no build or release qualification.
 
 ## Shared storage-test seed downloads (D585)
 

@@ -1,0 +1,127 @@
+{
+  "name": "@waitron/ui-core",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint .",
+    "mutation": "stryker run",
+    "test:package": "node --test --test-timeout=180000 test/package-consumer.test.mjs",
+    "build": "node scripts/build.mjs && tsc -p tsconfig.build.json --emitDeclarationOnly",
+    "prepack": "pnpm build"
+  },
+  "devDependencies": {
+    "typescript": "^7.0.0",
+    "vite": "^8.3.5",
+    "lit": "^3.2.0",
+    "esbuild": "^0.28.2"
+  },
+  "exports": {
+    ".": "./src/index.ts",
+    "./tokens": "./src/tokens/index.ts",
+    "./components/wt-button": "./src/components/wt-button.ts",
+    "./components/wt-input": "./src/components/wt-input.ts",
+    "./components/wt-textarea": "./src/components/wt-textarea.ts",
+    "./components/wt-card": "./src/components/wt-card.ts",
+    "./components/wt-icon": "./src/components/wt-icon.ts",
+    "./components/wt-spinner": "./src/components/wt-spinner.ts",
+    "./components/wt-form-actions": "./src/components/wt-form-actions.ts",
+    "./components/wt-form-error-summary": "./src/components/wt-form-error-summary.ts",
+    "./interactive": "./src/interactive.ts",
+    "./submit-on-enter": "./src/submit-on-enter.ts",
+    "./base-styles": "./src/base-styles.ts",
+    "./field-styles": "./src/field-styles.ts",
+    "./tokens/colors.css": "./src/tokens/colors.css",
+    "./tokens/structure.css": "./src/tokens/structure.css",
+    "./unsaved-changes": "./src/unsaved-changes.ts",
+    "./theme": "./src/theme/index.ts",
+    "./theme/waitron": "./src/theme/waitron.ts"
+  },
+  "peerDependencies": {
+    "lit": "^3.2.0"
+  },
+  "license": "SEE LICENSE IN dist/LICENSE",
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "sideEffects": true,
+  "publishConfig": {
+    "exports": {
+      ".": {
+        "types": "./dist/types/index.d.ts",
+        "import": "./dist/index.js"
+      },
+      "./tokens": {
+        "types": "./dist/types/tokens/index.d.ts",
+        "import": "./dist/tokens/index.js"
+      },
+      "./components/wt-button": {
+        "types": "./dist/types/components/wt-button.d.ts",
+        "import": "./dist/components/wt-button.js"
+      },
+      "./components/wt-input": {
+        "types": "./dist/types/components/wt-input.d.ts",
+        "import": "./dist/components/wt-input.js"
+      },
+      "./components/wt-textarea": {
+        "types": "./dist/types/components/wt-textarea.d.ts",
+        "import": "./dist/components/wt-textarea.js"
+      },
+      "./components/wt-card": {
+        "types": "./dist/types/components/wt-card.d.ts",
+        "import": "./dist/components/wt-card.js"
+      },
+      "./components/wt-icon": {
+        "types": "./dist/types/components/wt-icon.d.ts",
+        "import": "./dist/components/wt-icon.js"
+      },
+      "./components/wt-spinner": {
+        "types": "./dist/types/components/wt-spinner.d.ts",
+        "import": "./dist/components/wt-spinner.js"
+      },
+      "./components/wt-form-actions": {
+        "types": "./dist/types/components/wt-form-actions.d.ts",
+        "import": "./dist/components/wt-form-actions.js"
+      },
+      "./components/wt-form-error-summary": {
+        "types": "./dist/types/components/wt-form-error-summary.d.ts",
+        "import": "./dist/components/wt-form-error-summary.js"
+      },
+      "./interactive": {
+        "types": "./dist/types/interactive.d.ts",
+        "import": "./dist/interactive.js"
+      },
+      "./submit-on-enter": {
+        "types": "./dist/types/submit-on-enter.d.ts",
+        "import": "./dist/submit-on-enter.js"
+      },
+      "./base-styles": {
+        "types": "./dist/types/base-styles.d.ts",
+        "import": "./dist/base-styles.js"
+      },
+      "./field-styles": {
+        "types": "./dist/types/field-styles.d.ts",
+        "import": "./dist/field-styles.js"
+      },
+      "./tokens/colors.css": "./dist/tokens/colors.css",
+      "./tokens/structure.css": "./dist/tokens/structure.css",
+      "./unsaved-changes": {
+        "types": "./dist/types/unsaved-changes.d.ts",
+        "import": "./dist/unsaved-changes.js"
+      },
+      "./theme": {
+        "types": "./dist/types/theme/index.d.ts",
+        "import": "./dist/theme/index.js"
+      },
+      "./theme/waitron": {
+        "types": "./dist/types/theme/waitron.d.ts",
+        "import": "./dist/theme/waitron.js"
+      }
+    }
+  }
+}

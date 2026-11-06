@@ -69,8 +69,10 @@
     "test:cloud-cost:conformance": "node scripts/test-postgres.mjs exec node scripts/cloud-cost/conformance.mjs"
   },
   "devDependencies": {
+    "@babel/parser": "8.1.0",
     "@types/node": "^24.0.0",
-    "typescript": "^7.0.2"
+    "typescript": "^7.0.2",
+    "yaml": "2.9.1"
   },
   "license": "SEE LICENSE IN LICENSE"
 }

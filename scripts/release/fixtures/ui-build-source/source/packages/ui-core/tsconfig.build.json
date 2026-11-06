@@ -1,0 +1,10 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "dist/types",
+    "types": []
+  },
+  "include": ["src/index.ts", "src/theme/index.ts", "src/theme/waitron.ts", "src/vite-env.d.ts"],
+  "exclude": ["src/**/*.test.ts"]
+}

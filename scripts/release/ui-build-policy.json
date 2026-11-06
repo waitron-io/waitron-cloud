@@ -1,0 +1,170 @@
+{
+  "schema": 1,
+  "policyVersion": 1,
+  "programs": {
+    "scripts/release/prepare-ui.mjs": "031e6f59eb80f403229d7082157a37eff15237068df16bb55cc77088210a6786c9bedebc331c9ecc01ecc78c729dc7f4793298c9297716327fb9cbb62e218ec7",
+    "packages/ui-core/scripts/build.mjs": "9b8585f537be82a0a847389dfdbf02984088b69ee0583b6483ece6a1b40d2eac85c05635ad23e53f43b71bed812cdcc26f878351319883bee0003fd8fd936479"
+  },
+  "configs": {
+    "tsconfig.base.json": {
+      "compilerOptions": {
+        "target": "ES2022",
+        "module": "ESNext",
+        "moduleResolution": "bundler",
+        "lib": [
+          "ES2022",
+          "DOM",
+          "DOM.Iterable"
+        ],
+        "strict": true,
+        "noUnusedLocals": true,
+        "noUnusedParameters": true,
+        "noFallthroughCasesInSwitch": true,
+        "noImplicitOverride": true,
+        "verbatimModuleSyntax": true,
+        "experimentalDecorators": true,
+        "useDefineForClassFields": false,
+        "skipLibCheck": true,
+        "declaration": true,
+        "isolatedModules": true
+      }
+    },
+    "packages/ui-core/tsconfig.json": {
+      "extends": "../../tsconfig.base.json",
+      "compilerOptions": {
+        "outDir": "dist",
+        "types": [
+          "vitest/globals"
+        ]
+      },
+      "include": [
+        "src"
+      ]
+    },
+    "packages/ui-core/tsconfig.build.json": {
+      "extends": "./tsconfig.json",
+      "compilerOptions": {
+        "rootDir": "src",
+        "outDir": "dist/types",
+        "types": []
+      },
+      "include": [
+        "src/index.ts",
+        "src/theme/index.ts",
+        "src/theme/waitron.ts",
+        "src/vite-env.d.ts"
+      ],
+      "exclude": [
+        "src/**/*.test.ts"
+      ]
+    }
+  },
+  "workspace": [
+    "apps/*",
+    "packages/*",
+    "bench/*"
+  ],
+  "packageBuild": "node scripts/build.mjs && tsc -p tsconfig.build.json --emitDeclarationOnly",
+  "packagePrepack": "pnpm build",
+  "commands": [
+    [
+      "pnpm",
+      "source",
+      [
+        "install",
+        "--frozen-lockfile",
+        "--ignore-scripts",
+        "--store-dir",
+        "<store>"
+      ],
+      [
+        [
+          "CI",
+          "true"
+        ],
+        [
+          "LC_ALL",
+          "C"
+        ],
+        [
+          "TZ",
+          "UTC"
+        ]
+      ]
+    ],
+    [
+      "node",
+      "source",
+      [
+        "scripts/release/prepare-ui.mjs",
+        "<source>",
+        "<output>",
+        "--release-version",
+        "<releaseVersion>",
+        "--source-commit",
+        "<sourceCommit>"
+      ],
+      [
+        [
+          "CI",
+          "true"
+        ],
+        [
+          "LC_ALL",
+          "C"
+        ],
+        [
+          "TZ",
+          "UTC"
+        ]
+      ]
+    ],
+    [
+      "pnpm",
+      "ui-package",
+      [
+        "run",
+        "build"
+      ],
+      []
+    ],
+    [
+      "pnpm",
+      "ui-package",
+      [
+        "pack",
+        "--pack-destination",
+        "<scratch>"
+      ],
+      [
+        [
+          "npm_config_ignore_scripts",
+          "true"
+        ]
+      ]
+    ],
+    [
+      "tar",
+      "source",
+      [
+        "-xzf",
+        "<sourceArchive>",
+        "--strip-components=1",
+        "-C",
+        "<staging>"
+      ],
+      []
+    ],
+    [
+      "npm",
+      "staging",
+      [
+        "pack",
+        "--ignore-scripts",
+        "--pack-destination",
+        "<scratch>"
+      ],
+      []
+    ]
+  ]
+}
