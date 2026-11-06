@@ -3525,7 +3525,12 @@ Each test process prepares it once, and each case gets a separate clone with
 every migration digest checked. The process closes its template after its cases,
 and command fixtures use their clone's connection when starting another process.
 The concurrent-fixture check covers a shared seed, separate rows, the complete
-migration list and clone removal. Existing service, permission and traffic
+migration list and clone removal. A refused first setup leaves the next case
+free to initialise its own template. A real child-process check verifies that
+its default template disappears while another template family remains.
+The traffic command reader's recorded Git object moves with its reviewed URL
+change, so the local-stack package graph can still trust that reader.
+Existing service, permission and traffic
 assertions and all proof deadlines stay unchanged. The complete Debian run of
 `node --test scripts/venue-service-proof.test.ts` retains all 360 cases across
 nine groups in about 201 seconds, compared with 289 for the unchanged baseline

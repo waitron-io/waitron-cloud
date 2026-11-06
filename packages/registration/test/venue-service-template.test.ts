@@ -10,6 +10,43 @@ import {test} from 'node:test';
 import * as fixtures from './fixtures/venue-service.ts';
 import {migrationNames} from '../src/migrate.ts';
 
+async function fixtureChild(body:string){
+ const env:NodeJS.ProcessEnv={...process.env};delete env.NODE_TEST_CONTEXT;
+ const imports=`import assert from 'node:assert/strict';import {test} from 'node:test';import {venueServiceFixture} from ${JSON.stringify(new URL('./fixtures/venue-service.ts',import.meta.url).href)};`;
+ return promisify(execFile)(process.execPath,['--input-type=module','--test-reporter=tap','-e',imports+body],{env,timeout:20000,maxBuffer:1024*1024}).catch(error=>assert.fail(error.stdout+error.stderr));
+}
+
+test('a failed default template setup does not prevent a later healthy case',async()=>{
+ const result=await fixtureChild(`
+ const connectionString=process.env.TEST_DATABASE_URL;
+ test('unavailable setup refuses',async()=>{
+  process.env.TEST_DATABASE_URL='postgres://postgres:invalid@127.0.0.1:1/cloud_test';
+  try{await assert.rejects(venueServiceFixture(),{code:'ECONNREFUSED'});}
+  finally{process.env.TEST_DATABASE_URL=connectionString;}
+ });
+ test('healthy setup succeeds',async()=>{
+  const f=await venueServiceFixture();try{assert.equal((await f.pool.query('SELECT count(*) AS n FROM venues')).rows[0].n,'5');}finally{await f.close();}
+ });`);
+ assert.match(result.stdout,/# tests 2\b/);assert.match(result.stdout,/# pass 2\b/);assert.match(result.stdout,/# fail 0\b/);
+});
+
+test('a default fixture child removes its template family and preserves another owner',async()=>{
+ const foreign=await fixtures.createVenueServiceTemplate(),admin=new Pool({connectionString:process.env.TEST_DATABASE_URL});
+ let neighbour:Awaited<ReturnType<typeof fixtures.venueServiceFixture>>|undefined;
+ try{
+  neighbour=await fixtures.venueServiceFixture(foreign.name);
+  const neighbourName=(await neighbour.pool.query('SELECT current_database() AS name')).rows[0].name as string;
+  const result=await fixtureChild(`test('owned default fixture',async()=>{
+   const f=await venueServiceFixture();try{console.log('DEFAULT_CLONE '+(await f.pool.query('SELECT current_database() AS name')).rows[0].name);}finally{await f.close();}
+  });`);
+  assert.match(result.stdout,/# tests 1\b/);assert.match(result.stdout,/# pass 1\b/);assert.match(result.stdout,/# fail 0\b/);
+  const match=/(?:^|\n)(?:# )?DEFAULT_CLONE venue_service_clone_([a-f0-9]{32})_[a-f0-9]{10}\b/.exec(result.stdout);assert.ok(match,result.stdout);
+  const template='venue_service_template_'+match[1],prefix='venue_service_clone_'+match[1]+'_';
+  assert.equal((await admin.query('SELECT datname FROM pg_database WHERE datname=$1 OR left(datname,length($2))=$2',[template,prefix])).rowCount,0);
+  assert.equal((await admin.query('SELECT datname FROM pg_database WHERE datname=ANY($1::text[])',[[foreign.name,neighbourName]])).rowCount,2);
+ }finally{await neighbour?.close();await foreign.close();await admin.end();}
+});
+
 test('default venue fixtures share a migrated template and keep concurrent cases independent',async()=>{
  const admin=new Pool({connectionString:process.env.TEST_DATABASE_URL});
  const opened:Awaited<ReturnType<typeof fixtures.venueServiceFixture>>[]=[];
