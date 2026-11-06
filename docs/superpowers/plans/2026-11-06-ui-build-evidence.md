@@ -2,7 +2,7 @@
 
 > Superseded on 6 November 2026. The owner rejected this approach. Do not
 > implement or dispatch it. The [replacement proposal](2026-11-06-simple-private-ui-release.md)
-> awaits approval and lists the code and documents to remove. The text below
+> was approved on 6 November and lists the code and documents to remove. The text below
 > records the earlier design or existing implementation.
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans inline, task by task, with test-driven development. The campaign authorises inline implementation and fresh-context review within the approved D579 scope.

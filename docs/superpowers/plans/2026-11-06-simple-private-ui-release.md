@@ -1,10 +1,10 @@
-# Proposed simple private UI release plan
+# Simple private UI release plan
 
-**Status: Proposed, awaiting owner approval.** PR1018 is cancelled and plan1008 is rejected. No implementation or publication is authorised before approval.
+**Status: Approved by the owner on 6 November 2026, with warning-only registry lookup failures.** PR1018 is cancelled and plan1008 is rejected. Build the Cloud half in small PRs: dependency updates, the lag check, then removal.
 
 ## 1. Publish current Waitron source
 
-Lane F/A1336 owns all Waitron implementation. A merge to Waitron main that changes `packages/ui-core` triggers publication of a new **private** `@waitron-io/ui-core` version to `npm.pkg.github.com`.
+Lane F/A1412 owns all Waitron implementation. A merge to Waitron main that changes `packages/ui-core` triggers publication of a new **private** `@waitron-io/ui-core` version to `npm.pkg.github.com`.
 
 Publish the current merged source, replacing the September `0.1.0` baseline. Use `0.2.<workflow run number>` as the automatic release version, with serial publishing. Assign the release version during publication without source-version commits. Waitron keeps `workspace:*` and does not consume the published package.
 
@@ -26,13 +26,13 @@ Grant Cloud Read access in the package’s Manage Actions access settings. [Depe
 
 For each installed UI package version, find the first stable version published after it by version order and publication time: use the earliest publication timestamp among stable versions newer than the installed version. Fail CI when more than seven days have elapsed from that publication.
 
-An installed version with no newer stable publication is current, regardless of its age. Missing versions, missing required publication timestamps or registry lookup errors fail CI. Use existing CI runs; add no monitoring schedule.
+An installed version with no newer stable publication is current, regardless of its age. Missing versions, missing required publication timestamps or registry lookup errors warn and pass. Fail only when a version is known to be overdue. Use existing CI runs; add no monitoring schedule.
 
-**Accepted risk:** Enforcement depends on registry availability and only happens when CI runs.
+**Accepted risk:** The seven-day limit goes unchecked during a registry outage or when version metadata is missing, and enforcement only happens when CI runs.
 
 ## 4. Remove superseded machinery and verify behavior
 
-After approval, delete obsolete Cloud files:
+Delete obsolete Cloud files after the update and lag checks are in place:
 
 - `.github/workflows/ui-release.yml` and `scripts/release/ui-source.json`.
 - PR978 `ui-ledger.mjs`, `ui-ledger-git.mjs` and their owning tests.
@@ -43,4 +43,4 @@ Retain useful ordinary package and license checks in Waitron. Update incoming li
 
 Verify qualifying versus unrelated merges, private publication and increasing versions, failed-publication behavior, authenticated update PRs, and CI cases covering current idle versions, multiple newer releases, the seven-day boundary, missing metadata and registry failures.
 
-**Awaiting owner approval.**
+Cloud’s package Read grant remains an owner setup step.

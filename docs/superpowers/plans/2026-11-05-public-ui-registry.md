@@ -2,7 +2,7 @@
 
 > Superseded on 6 November 2026. The owner rejected this approach. Do not
 > implement or dispatch it. The [replacement proposal](2026-11-06-simple-private-ui-release.md)
-> awaits approval and lists the code and documents to remove. The text below
+> was approved on 6 November and lists the code and documents to remove. The text below
 > records the earlier design or existing implementation.
 
 You need a new package version whenever Waitron main changes the shared controls, without editing source versions by hand. Cloud must test each released version against the portal and fail CI when its installed version falls seven days behind.

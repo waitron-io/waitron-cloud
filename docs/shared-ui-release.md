@@ -2,7 +2,7 @@
 
 > Superseded on 6 November 2026. The owner rejected this approach. Do not
 > implement or dispatch it. The [replacement proposal](superpowers/plans/2026-11-06-simple-private-ui-release.md)
-> awaits approval and lists the code and documents to remove. The text below
+> was approved on 6 November and lists the code and documents to remove. The text below
 > records the earlier design or existing implementation.
 
 Cloud consumes a versioned build of Waitron's account controls. You develop the

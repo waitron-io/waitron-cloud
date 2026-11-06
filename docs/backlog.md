@@ -9,12 +9,14 @@ Watcher approval and server arrival block implementation; contributor-approval r
 
 The owner rejected the build-evidence plan and cancelled PR #1018 on
 6 November. Its branch is preserved; do not continue that implementation.
-The [one-page replacement proposal](superpowers/plans/2026-11-06-simple-private-ui-release.md)
-awaits owner approval. It puts token-authenticated publication on qualifying
+The [approved one-page replacement plan](superpowers/plans/2026-11-06-simple-private-ui-release.md)
+was approved on 6 November. It puts token-authenticated publication on qualifying
 Waitron merges, automatic dependency update PRs in Cloud, and a seven-day
-registry lag check in Cloud CI. Lane F/A1336 owns the Waitron changes.
+registry lag check in Cloud CI. Unknown registry results warn and pass; only
+a version known to be overdue fails. Lane F/A1412 owns the Waitron changes.
 
-Nothing new is built or published under this proposal. After approval, remove
+The Cloud implementation remains open: dependency updates, the lag check, then
+removal in small PRs. The package Read grant is the owner’s setup step. Remove
 the unused ledger and artifact machinery from #978, #995 and #1001, the old
 Cloud publisher and both superseded plans, as listed in the proposal.
 The package stays private on GitHub Packages with Elastic License 2.0 and
