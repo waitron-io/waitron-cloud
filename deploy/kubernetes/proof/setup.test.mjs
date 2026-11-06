@@ -308,3 +308,36 @@ test('serialized Lambda requests actual termination and volume deletion before p
   assert.deepEqual(JSON.parse(JSON.stringify(result.terminationRequested)), ['i-0123456789abcdef0']);
   assert.deepEqual(JSON.parse(JSON.stringify(result.volumeDeletionRequested)), ['vol-0123456789abcdef0']);
 });
+
+test('serialized Lambda continues owned cleanup after an SDK refusal but publishes no healthy heartbeat', async () => {
+  const calls = [], failure = new Error('synthetic termination refused');
+  const stackId = 'arn:aws:cloudformation:eu-south-2:462991287391:stack/d570/00000000-0000-4000-8000-000000000000';
+  const tags = Object.entries({ Proof: 'D570', Stack: stackId, Run: '11111111-1111-4111-8111-111111111111', ExpiresAt: '2026-11-05T19:00:00Z' }).map(([Key, Value]) => ({ Key, Value }));
+  class Client {
+    async send(command) {
+      calls.push({ name: command.name, input: JSON.parse(JSON.stringify(command.input)) });
+      if (command.name === 'DescribeInstances') return { Reservations: [{ Instances: ['i-0123456789abcdef0', 'i-11111111111111111'].map(InstanceId => ({ InstanceId, State: { Name: 'running' }, Tags: tags })) }] };
+      if (command.name === 'DescribeVolumes') return { Volumes: [{ VolumeId: 'vol-0123456789abcdef0', State: 'available', Attachments: [], Tags: tags }] };
+      if (command.name === 'TerminateInstances') {
+        if (command.input.InstanceIds[0] === 'i-0123456789abcdef0') throw failure;
+        return { TerminatingInstances: [{ InstanceId: 'i-11111111111111111', CurrentState: { Name: 'shutting-down' } }] };
+      }
+      if (command.name === 'DeleteVolume' || command.name === 'PutObject') return {};
+      throw new Error('Unexpected SDK operation');
+    }
+  }
+  const command = name => class { constructor(input) { this.name = name; this.input = input; } };
+  class Clock extends Date { static now() { return Date.parse('2026-11-05T20:00:00Z'); } }
+  const exports = {};
+  vm.runInNewContext(resource(render(), 'ExpiryFunction').Code.ZipFile, { exports, Date: Clock, process: { env: { AWS_REGION: 'eu-south-2', ACCOUNT: '462991287391', STACK_ID: stackId, BUCKET: 'd570-synthetic' } }, require(name) {
+    if (name === '@aws-sdk/client-ec2') return { EC2Client: Client, ...Object.fromEntries(['DescribeInstances', 'DescribeVolumes', 'TerminateInstances', 'DeleteVolume'].map(n => [`${n}Command`, command(n)])) };
+    if (name === '@aws-sdk/client-s3') return { S3Client: Client, PutObjectCommand: command('PutObject') };
+    throw new Error('Unexpected import');
+  } });
+  await assert.rejects(exports.handler(), error => error === failure);
+  assert.deepEqual(calls.slice(2), [
+    { name: 'TerminateInstances', input: { InstanceIds: ['i-0123456789abcdef0'] } },
+    { name: 'TerminateInstances', input: { InstanceIds: ['i-11111111111111111'] } },
+    { name: 'DeleteVolume', input: { VolumeId: 'vol-0123456789abcdef0' } },
+  ]);
+});

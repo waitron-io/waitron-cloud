@@ -63,20 +63,26 @@ export async function sweepExpired({ aws, account, region, stackId, bucket, now 
   // Validate the entire snapshot before the first destructive request.
   const ownedInstances = instances.map(resource => ({ resource, owned: ownership(resource, stackId, 'instance') }));
   const ownedVolumes = volumes.map(resource => ({ resource, owned: ownership(resource, stackId, 'volume') }));
-  const terminationRequested = [], volumeDeletionRequested = [];
+  const terminationRequested = [], volumeDeletionRequested = [], failures = [];
   for (const { resource, owned } of ownedInstances) {
     if (!owned || resource.State.Name === 'terminated' || owned.expiry > started) continue;
-    const result = await aws.call('ec2', 'TerminateInstances', { InstanceIds: [owned.id] });
-    if (!Array.isArray(result?.TerminatingInstances) || result.TerminatingInstances.length !== 1
-      || result.TerminatingInstances[0].InstanceId !== owned.id
-      || !['shutting-down', 'terminated'].includes(result.TerminatingInstances[0].CurrentState?.Name)) throw new Error('Unconfirmed termination request');
-    terminationRequested.push(owned.id);
+    try {
+      const result = await aws.call('ec2', 'TerminateInstances', { InstanceIds: [owned.id] });
+      if (!Array.isArray(result?.TerminatingInstances) || result.TerminatingInstances.length !== 1
+        || result.TerminatingInstances[0].InstanceId !== owned.id
+        || !['shutting-down', 'terminated'].includes(result.TerminatingInstances[0].CurrentState?.Name)) throw new Error('Unconfirmed termination request');
+      terminationRequested.push(owned.id);
+    } catch (error) { failures.push(error); }
   }
   for (const { resource, owned } of ownedVolumes) {
     if (!owned || owned.expiry > started || resource.State !== 'available' || resource.Attachments.length !== 0) continue;
-    await aws.call('ec2', 'DeleteVolume', { VolumeId: owned.id });
-    volumeDeletionRequested.push(owned.id);
+    try {
+      await aws.call('ec2', 'DeleteVolume', { VolumeId: owned.id });
+      volumeDeletionRequested.push(owned.id);
+    } catch (error) { failures.push(error); }
   }
+  // Independent owned cleanup continues after a refusal, but partial cleanup earns no heartbeat.
+  if (failures.length) throw failures[0];
   const completed = now();
   if (!Number.isSafeInteger(completed) || completed < started || completed - started > 120_000) throw new Error('Invalid expiry clock or sweep deadline');
   const health = { schema: 'd570-sweep-v1', account, region, stackId, startedAt: new Date(started).toISOString(), completedAt: new Date(completed).toISOString(), terminationRequested, volumeDeletionRequested };
