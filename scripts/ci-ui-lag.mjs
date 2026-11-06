@@ -20,8 +20,8 @@ export function evaluateUiLag(installed, metadata, now = Date.now()) {
     const parsed = stableVersion(candidate);
     if (!parsed || !newerThan(parsed, version)) continue;
     const time = metadata.time?.[candidate];
-    const published = typeof time === 'string' ? Date.parse(time) : NaN;
-    if (!Number.isFinite(published)) { missing = true; continue; }
+    const published = typeof time === 'string' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z$/.test(time) ? Date.parse(time) : NaN;
+    if (!Number.isFinite(published) || new Date(published).toISOString().slice(0, 19) !== time.slice(0, 19)) { missing = true; continue; }
     if (!earliest || published < earliest.published) earliest = {version: candidate, published};
   }
   if (earliest && now - earliest.published > sevenDays) return {status: 'overdue', newerVersion: earliest.version, publishedAt: new Date(earliest.published).toISOString()};
@@ -30,10 +30,13 @@ export function evaluateUiLag(installed, metadata, now = Date.now()) {
 
 export async function checkUiLag({root = fileURLToPath(new URL('..', import.meta.url)), now = Date.now(),
   token = process.env.NODE_AUTH_TOKEN, fetchImpl = fetch, report = console.log} = {}) {
-  let versions, metadata;
+  // An unreadable consumer cannot hide a known overdue version in its peer.
+  const versions = consumers.map(path => {
+    try {return JSON.parse(readFileSync(join(root, path, 'package.json'), 'utf8')).dependencies?.['@waitron-io/ui-core'];}
+    catch {return undefined;}
+  });
+  let metadata;
   try {
-    // Both exact manifest pins are installed by the shared frozen lockfile in CI.
-    versions = consumers.map(path => JSON.parse(readFileSync(join(root, path, 'package.json'), 'utf8')).dependencies?.['@waitron-io/ui-core']);
     const signal = AbortSignal.timeout(15_000);
     metadata = {versions: {}, time: {}};
     // GitHub's npm metadata omits publication times; version API created_at supplies them.

@@ -61,7 +61,7 @@ test('a known overdue publication still fails when another timestamp is missing'
   assert.equal(evaluate('0.1.0', data).status, 'overdue');
 });
 
-async function run({versions = ['0.1.0', '0.2.12'], fetchImpl = async () => Response.json(apiVersions(metadata))} = {}) {
+async function run({versions = ['0.1.0', '0.2.12'], brokenManifest, fetchImpl = async () => Response.json(apiVersions(metadata))} = {}) {
   assert.equal(typeof implementation.checkUiLag, 'function', 'UI lag CI command is missing');
   const root = mkdtempSync(join(tmpdir(), 'cloud-ui-lag-'));
   const messages = [];
@@ -70,6 +70,8 @@ async function run({versions = ['0.1.0', '0.2.12'], fetchImpl = async () => Resp
       mkdirSync(join(root, path), {recursive: true});
       writeFileSync(join(root, path, 'package.json'), JSON.stringify({dependencies: {'@waitron-io/ui-core': versions[i]}}));
     }
+    if (brokenManifest === 'missing') rmSync(join(root, 'packages/ui-smoke/package.json'));
+    if (brokenManifest === 'invalid') writeFileSync(join(root, 'packages/ui-smoke/package.json'), '{');
     const code = await implementation.checkUiLag({root, now, token: 'test-package-read', fetchImpl, report: message => messages.push(message)});
     return {code, messages};
   } finally { rmSync(root, {recursive: true, force: true}); }
@@ -171,6 +173,24 @@ test('a failed later API page warns because the version inventory is incomplete'
   const first = Array.from({length: 100}, (_, i) => ({name: `0.2.${i}`, created_at: '2026-10-01T12:00:00Z'}));
   const result = await run({fetchImpl: async url => new URL(url).searchParams.get('page') === '1'
     ? Response.json(first) : new Response('unavailable', {status: 503})});
+  assert.equal(result.code, 0);
+  assert(result.messages.some(line => line.includes('::warning::')));
+});
+
+
+for (const brokenManifest of ['missing', 'invalid']) test(`${brokenManifest} smoke manifest cannot hide an overdue portal`, async () => {
+  const result = await run({brokenManifest});
+  assert.equal(result.code, 1);
+  assert(result.messages.some(line => line.includes('::error::apps/portal')));
+  assert(result.messages.some(line => line.includes('::warning::packages/ui-smoke')));
+});
+for (const timestamp of ['1', 'version 2', '2026-02-30T12:00:00Z']) test(`invalid timestamp ${timestamp} cannot invent an overdue publication`, () => {
+  const data = structuredClone(metadata); data.time['0.2.9'] = timestamp;
+  assert.equal(evaluate('0.1.0', data).status, 'unknown');
+});
+
+test('an HTTP error with a package-shaped body cannot invent a known overdue version', async () => {
+  const result = await run({fetchImpl: async () => Response.json(apiVersions(metadata), {status: 503})});
   assert.equal(result.code, 0);
   assert(result.messages.some(line => line.includes('::warning::')));
 });

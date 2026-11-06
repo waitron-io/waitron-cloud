@@ -159,3 +159,14 @@ test('nightly final gate always receives every reusable workflow result', () => 
   assert.match(nightlyJob('standard'), /job-prefix: 'standard \/ '/);
   assert.match(job('summary'), /CI_JOB_PREFIX: \$\{\{ inputs.job-prefix \}\}/);
 });
+
+
+test('the shared UI deadline is required before test selection', () => {
+  const changes = job('changes');
+  const steps = changes.split(/^      - /m).slice(1);
+  const lag = steps.findIndex(step => /run: node scripts\/ci-ui-lag\.mjs\s*$/m.test(step));
+  const plan = steps.findIndex(step => /^id: plan$/m.test(step));
+  assert(lag >= 0 && plan > lag, 'UI deadline must run before the planner');
+  assert.doesNotMatch(steps[lag], /(?:^|\n)\s*(?:if|continue-on-error):/);
+  assert.match(steps[lag], /NODE_AUTH_TOKEN: \$\{\{ secrets\.GITHUB_TOKEN \}\}/);
+});
