@@ -17,12 +17,12 @@ async function fixture(t: TestContext, options: {messages?: object[]; status?: n
   t.after(() => new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve())));
   const address = server.address(); assert.ok(address && typeof address !== 'string');
   const send = async () => {if (options.smtpFails) throw privateError;};
-  const pool = {async query() {
+  const pool = {async connect() {return {release() {}, once() {}, removeListener() {}, async query() {
     if (options.queryFails) throw privateError;
     return {rows: [{kind: 'password_reset', status: 'sent', attempts: 1, failures: 0, last_error: null, transport: null,
       email, payload: `token=${token}`, message_id: 'private-message-id', has_message_id: false},
       {kind: email, status: token, attempts: email, failures: token, last_error: privateError.message, transport: email}]};
-  }} as unknown as Parameters<typeof createMailCapture>[0]['pool'];
+  }};}} as unknown as Parameters<typeof createMailCapture>[0]['pool'];
   const capture = createMailCapture({pool, inbox: `http://127.0.0.1:${address.port}`,
     mailer: {sendVerification: send, sendPasswordReset: send, sendPasswordChanged: send, sendServiceAlert: send}});
   return capture;
@@ -84,3 +84,28 @@ test('successful capture returns the same token without diagnostic database work
   const capture = await fixture(t, {messages: [{ID: 'private-id', Subject: subject, To: [{Address: email}]}], queryFails: true});
   assert.equal(await capture.tokenFromMail(email, subject), token);
 });
+
+for (const failure of ['rejected', 'throwing', 'late-rejected'] as const) {
+  test(`mail evidence can be read again after a ${failure} connection attempt`, async () => {
+    let attempts = 0, rejectConnection: ((error: Error) => void) | undefined;
+    const pool = {connect() {
+      if (attempts++ === 0) {
+        if (failure === 'throwing') throw privateError;
+        if (failure === 'rejected') return Promise.reject(privateError);
+        return new Promise((_resolve, reject) => {rejectConnection = reject;});
+      }
+      return Promise.resolve({release() {}, once() {}, removeListener() {}, async query() {return {rows: []};}});
+    }} as unknown as Parameters<typeof createMailCapture>[0]['pool'];
+    const send = async () => {};
+    const capture = createMailCapture({pool, inbox: 'http://127.0.0.1', mailer: {
+      sendVerification: send, sendPasswordReset: send, sendPasswordChanged: send, sendServiceAlert: send,
+    }});
+    assert.equal((await capture.evidence()).outbox, 'unavailable');
+    if (failure === 'late-rejected') {
+      assert.ok(rejectConnection); rejectConnection(privateError);
+      await new Promise<void>(resolve => setImmediate(resolve));
+    }
+    assert.deepEqual((await capture.evidence()).outbox, []);
+    assert.equal(attempts, 2);
+  });
+}

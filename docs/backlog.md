@@ -3743,8 +3743,12 @@ redaction limits](backlog/mail-capture.md#portal-reset-mail-boundary-reporting).
 All monitoring and signup/recovery mail lookups now include their fixture's queue,
 worker and SMTP evidence, alongside the authenticator lookup. A one-off controlled
 check at `e31dea70` verified every call. Three concurrent Debian 13 trials passed
-all 63 checks without reproducing the mail loss. The natural missing-mail cause
-and the observer's unbounded database-connection wait remain open.
+all 63 checks without reproducing the mail loss. The evidence read now has one
+shared second for connection acquisition and its query. Real PostgreSQL controls
+cover exhausted pools, blocked outbox reads and terminated backends. Controlled
+TCP peers cover a simulated stalled handshake and abrupt connection loss. A late
+connection is returned without a query, and repeated misses keep at most one
+connection request. The natural missing-mail cause remains open.
 
 ## Account HTTP reset-mail capture
 
