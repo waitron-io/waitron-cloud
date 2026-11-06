@@ -62,8 +62,24 @@ console.log(code + " cleanup complete");
 test("native spawn refusals clean up only the failed store and preserve a working peer", { timeout: 60000 }, async t => {
   const { seedRoot, seed, archiveName } = await prepareStorageTarSeed();
   t.after(() => rm(seedRoot, { recursive: true, force: true }));
-  const peer = await startBackupStorage();
-  t.after(() => peer.stop());
+  const peerDirectory = await mkdtemp(join(tmpdir(), "cloud-storage-spawn-peer-"));
+  let peer;
+  t.after(async () => {
+    await peer?.stop();
+    await rm(peerDirectory, { recursive: true, force: true });
+  });
+  const peerCache = join(peerDirectory, "waitron-cloud-test-binaries");
+  await mkdir(peerCache);
+  await writeFile(join(peerCache, archiveName), await readFile(seed), { mode: 0o444 });
+  t.mock.method(globalThis, "fetch", () => assert.fail("the working peer must reuse the prepared pinned archive"));
+  const previousTmpdir = process.env.TMPDIR;
+  try {
+    process.env.TMPDIR = peerDirectory;
+    peer = await startBackupStorage();
+  } finally {
+    if (previousTmpdir === undefined) delete process.env.TMPDIR;
+    else process.env.TMPDIR = previousTmpdir;
+  }
   const peerBinary = await readFile(join(peer.root, "weed"));
   for (const code of ["EACCES", "ENOENT"]) {
     const directory = await mkdtemp(join(tmpdir(), "cloud-storage-spawn-refusal-"));
