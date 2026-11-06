@@ -96,6 +96,21 @@ for (const mode of ['lifetime', 'totals', 'attempted-bytes']) test(`combined ${m
   assert.throws(() => build(f), bad);
 });
 
+test('a measured receipt needs the original successful restore request as well as the functional witness', async () => {
+  const f = fixture(), meter = f.result.admission.stream.requests;
+  meter.accounting.requests = meter.accounting.requests.filter(row => row.phase !== 'restore');
+  meter.observedRequests = meter.observedRequests.filter(row => row.phase !== 'restore');
+  meter.billing = meter.billing.filter(row => row.phase !== 'restore');
+  for (const channel of ['producer', 'observer']) meter.accounting[channel] = { attempts: 4, bytesIn: 32, bytesOut: 4352 };
+  f.result.streamAccounting = summarizeStreamAccounting(f.result.admission.stream, { ...f.options.stream, expectedSales: 3 });
+  assert.throws(() => build(f), bad);
+  const { completeReplayResult } = await import('./isolated-replay.mjs');
+  const completed = completeReplayResult({ admission: f.result.admission, isolation: f.result.isolation, cleanup: f.result.cleanup }, f.options);
+  assert.equal(completed.functional, 'passed'); assert.equal(completed.receipt, null);
+  assert.equal(completed.accounting.publicationEligible, false);
+  assert.ok(completed.accounting.gaps.includes('accounting:incomplete-history'));
+});
+
 test('new local export binds every measured value to its original replay and stream', () => {
   const f = fixture(), receipt = build(f), { stream, ...replay } = f.result.admission;
   const originals = { producer: 'local-stream', sources: [

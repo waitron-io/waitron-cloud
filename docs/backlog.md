@@ -148,8 +148,8 @@ remote records before any projection discards their billing or gap fields.
 Missing source coverage, mismatched rows and unknown billing prevent measurement
 publication; malformed records, private fields and accessors still refuse.
 Run `node --test scripts/cloud-cost/accounting-policy.test.mjs` for the original
-record checks and real loopback traffic. Worker admission uses this assessment;
-direct new-export admission remains unfinished. Native put-only, unversioned,
+record checks and real loopback traffic. Worker and new-export admission use this
+assessment. Native put-only, unversioned,
 versioned and multipart storage histories
 also leave overflowing totals unknown while keeping supported object counts and
 storage-time bounds. The named overflow gap survives cleanup, so a later smaller
@@ -277,12 +277,16 @@ unknown. Multiple deferred completions for one unversioned key now keep separate
 transitions in admission order. A retained upload contributes no completed object;
 a later committed completion or ordinary mutation excludes an older current size.
 You can also continue work on the same upload after a lost completion or abort
-reply. Inventory treats repeated completions as alternatives for one object,
+reply while inventory has not confirmed that the upload closed. Once independent
+inventory confirms its absence, later part writes refuse under the existing
+unknown-upload rule, just as after an acknowledged completion. Inventory treats
+repeated completions as alternatives for one object,
 and an abort leaves completion optional. A later acknowledged part or completion
 excludes obsolete terminal requests. Hidden storage time stays unknown. The same
 multipart test command checks these choices and four actual HTTP sequences that
 preserve a lost reply followed by the backend's 404 response. These controls do
-not establish SQLite recovery; completion admission and export remain unfinished.
+not establish SQLite recovery. The separate restore controls and original-source
+export checks below cover those boundaries.
 Independent inventory still rejects unsupported sizes and missing objects. The
 same test file includes two real HTTP completions whose replies are lost, with
 both callbacks collected. Further requests on the same upload after an uncertain
@@ -363,8 +367,9 @@ scripts/cloud-cost/mail.test.mjs` for these controls. The genuine Mailpit and
 PostgreSQL service-receipt case also checks three captured messages, one real
 refusal and its retry while deliberately changing one observer reply. No
 accounting disagreement adds a queue retry. The original-record assessor
-refuses measurement eligibility; new service export and other conformance
-result consumers remain open.
+refuses measurement eligibility. Current service producers stay retired, and
+historical reconstruction stays available. The conformance result consumers use
+the closed unknown-cost result.
 The streamed-host, early timer-wake and sustained 207-sale conformance cases
 now read the closed unknown-cost result. They retain restored-sale counts,
 SQLite and fiscal validation, native-writer identity, phase timing, source
@@ -420,6 +425,9 @@ the original observations remain available. The generated archive
 journey finishes with its original observations and no receipt because billing
 and storage-history coverage remain unknown. Its real Debian control retains
 all 11 requests, the restored sale, privacy and owned cleanup.
+Your current generated stream runs also finish without a new measured receipt:
+setup and cleanup control billing stays unknown. The clean unit fixture supplies
+known billing to exercise the export contract; it does not qualify real billing.
 Historical archive and service receipt readers keep their existing contracts;
 the service reconstruction helper has no current producing command. A gapped
 result refuses each stream, service, API, browser and archive sample slot through

@@ -45,6 +45,8 @@ test('remoteApiAccountingNeverReplacesActualActionChecks_' + mode, { timeout: 10
     res.writeHead(status, { 'content-type': 'application/json' }); res.end(JSON.stringify(value));
   });
   server.on('connection', socket => { sockets.add(socket); socket.once('close', () => sockets.delete(socket)); });
+  // Completed connections must be collected by the client, without a server idle expiry.
+  server.keepAliveTimeout = 0;
   server.listen(0, '127.0.0.1'); await once(server, 'listening');
   t.after(async () => { for (const socket of sockets) socket.destroy(); await new Promise(resolve => server.close(resolve)); });
   const original = net.connect, originalServer = net.createServer;

@@ -50,11 +50,11 @@ test('unknown fields and accessors cannot disclose error content', async () => {
   assert.equal(JSON.stringify(records).includes('PRIVATE'), false);
 });
 
-async function fixture(t, handler = (req, res) => { req.resume(); res.end(); }) {
+async function fixture(t, handler = (req, res) => { req.resume(); res.end(); }, options = {}) {
   const backend = createServer(handler); backend.listen(0, '127.0.0.1'); await once(backend, 'listening');
   t.after(() => { backend.closeAllConnections(); return new Promise(resolve => backend.close(resolve)); });
   const meter = createMeter({ phase: 'workload', clock: () => 0 });
-  const transport = await stream.createLitestreamTransport({ target: `http://127.0.0.1:${backend.address().port}`, meter, phase: 'workload' });
+  const transport = await stream.createLitestreamTransport({ target: `http://127.0.0.1:${backend.address().port}`, meter, phase: 'workload', ...options });
   t.after(() => transport.close().catch(() => {}));
   return { transport, meter };
 }
@@ -92,6 +92,31 @@ test('an unfinished response reports active-close and still refuses accounting',
   assert.equal(records.at(-1).diagnostic.pending, 0);
   assert.throws(() => meter.snapshot(), /Invalid cloud cost meter/);
   await pending;
+});
+
+test('a storage deadline during a response body still fails functional collection', { timeout: 45000 }, async t => {
+  const { transport, meter } = await fixture(t, (req, res) => {
+    req.resume(); res.writeHead(200, { 'content-length': '100' }); res.write('1234567890');
+  });
+  await assert.rejects(send(transport.url, { method: 'GET', headers }));
+  for (let turn = 0; turn < 100 && transport.checkpoint().pending; turn++) await new Promise(resolve => setTimeout(resolve, 5));
+  assert.equal(transport.checkpoint().pending, 0, 'the deadline settled before collection starts');
+  await new Promise(resolve => setImmediate(resolve));
+  await assert.rejects(transport.close(), /Invalid cloud cost Litestream audit/);
+  assert.throws(() => meter.snapshot(), /Invalid cloud cost meter/);
+});
+
+test('the multipart response body limit cannot become an accounting gap', async t => {
+  const { transport, meter } = await fixture(t, (req, res) => {
+    req.resume(); const body = Buffer.alloc(1048577);
+    res.writeHead(200, { 'content-length': String(body.length) }); res.end(body);
+  }, { lifetimes: { begin: () => () => {} } });
+  await assert.rejects(send(transport.url, { method: 'POST', headers, path: '/PRIVATE_BUCKET/PRIVATE_KEY?uploads=' }));
+  for (let turn = 0; turn < 100 && transport.checkpoint().pending; turn++) await new Promise(resolve => setTimeout(resolve, 5));
+  assert.equal(transport.checkpoint().pending, 0);
+  await new Promise(resolve => setImmediate(resolve));
+  await assert.rejects(transport.close(), /Invalid cloud cost Litestream audit/);
+  assert.throws(() => meter.snapshot(), /Invalid cloud cost meter/);
 });
 
 // A completed HTTP exchange can still fail the independent lifetime or byte evidence.

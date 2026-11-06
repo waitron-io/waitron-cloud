@@ -60,7 +60,7 @@ export function createLitestreamAfterStop(options) {
   exactFields(options, ['clock']); const { clock } = options; requireThat(typeof clock === 'function');
   const attempts = new Map(), sequences = new Map();
   let invalid = false, lastTime = -1, sequence = 0, acknowledged = null, accountingCutoff = false, historyGap = false;
-  // Two controlled list admissions plus one underway upload; this is a bound, not a measured maximum.
+  // The stop subset admits at most three requests across all operation types.
   const cap = 3;
   const unlabelled = () => {};
   const event = (mark = unlabelled) => {
@@ -340,8 +340,9 @@ export function litestreamAfterStopOutput(input) {
     requireThat(Object.keys(totals[hop]).every(k => input[hop][k] === totals[hop][k])
       && nonnegative(input[hop].attempts) && (input.requestsReconciled ? input[hop].attempts === input.used : input[hop].attempts <= input.used));
   }
+  // A late hop can select a row whose other hop was already cut off before stop.
   for (const hop of ['producer', 'observer']) requireThat(input.requests
-    .filter(r => r.hop === hop && r.outcome === 'transport-error').reduce((n, r) => n + r.attempts, 0) <= input.lateSettlements);
+    .filter(r => r.hop === hop && r.outcome === 'transport-error').reduce((n, r) => n + r.attempts, 0) <= input.used);
   requireThat(overflow === observedOverflow);
   const genericCutoff = otherInterrupted || input.gaps.includes('accounting:request-cutoff');
   const expectedGaps = [...(genericCutoff ? ['accounting:request-cutoff'] : []),
@@ -458,6 +459,7 @@ const ioEvents = new Set(['request-pipeline', 'response-aborted', 'response-erro
 const transportOperations = new Set(operations);
 const requestValidationStages = new Set(['transport-state', 'copy-source', 'identity', 'operation', 'retry-sequence',
   'after-stop-admission', 'content-length', 'mutation-body', 'lifetime-begin', 'lifetime-callback']);
+// Admission labels remain a readback contract even when a current gate no longer emits them.
 const afterStopAdmissionGuards = new Set(['state', 'input', 'hop-phase', 'row-metadata', 'row-identity', 'row-cap',
   'row-operation', 'duplicate-hop', 'retry-sequence', 'observer-pairing', 'post-stop-operation', 'post-stop-ordinal',
   'clock', 'affected-cap']);
@@ -654,7 +656,7 @@ export async function createLitestreamTransport({ target, meter, phase, lifetime
       if (interrupted) {
         rememberTransfer(reason, error, ioEvent);
         // Accounting uncertainty cannot forgive an execution deadline or malformed/bounded input.
-        if (ioEvent === 'upstream-timeout' || ioEvent === 'response-headers' || bodyLimitExceeded) poison(reason, error);
+        if (upstreamTimedOut || ioEvent === 'upstream-timeout' || ioEvent === 'response-headers' || bodyLimitExceeded) poison(reason, error);
       }
       if (pending.size === 0) for (const waiter of idleWaiters) {
         idleWaiters.delete(waiter);

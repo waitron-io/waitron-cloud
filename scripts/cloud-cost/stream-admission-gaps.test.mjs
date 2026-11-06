@@ -163,10 +163,30 @@ for (const field of ['storage', 'retainedStorage']) test(`unknownWorkerStorageBo
   assert.deepEqual(result.evidence[field].byteSeconds, { low: null, high: null });
 });
 
+test('an overflowed live-byte total remains unknown after verified cleanup', () => {
+  const input = evidence();
+  for (const field of ['storage', 'retainedStorage']) {
+    input[field].status = 'unknown'; input[field].gaps = ['accounting:overflow'];
+    input[field].byteSeconds = { low: null, high: null };
+  }
+  input.storage.objects.bytes = null; input.retainedStorage.initialBytes = null;
+  const result = summarizeStreamAccounting(input, options);
+  assert.equal(result.functional, 'passed'); assert.equal(result.receipt, null);
+  assert.equal(result.accounting.publicationEligible, false);
+  assert.ok(result.accounting.gaps.includes('accounting:overflow'));
+  assert.equal(result.evidence.storage.objects.bytes, null);
+  assert.equal(result.evidence.retainedStorage.initialBytes, null);
+  assert.equal(result.evidence.cleanup.objects, 0);
+});
+
 for (const [name, change] of [
   ...['startupUpload', 'restore', 'bucketCreated', 'bucketRemoved'].map(key => [key, r => { r.functional[key] = false; }]),
   ['missing-witnesses', r => { delete r.functional; }],
   ['private-witness', r => { r.functional.key = 'PRIVATE_CANARY'; }],
+  ['administration-in-workload', r => {
+    for (const rows of [r.administration.accounting.requests, r.administration.observedRequests]) rows[0].phase = 'workload';
+    r.administration.billing.find(row => row.phase === 'setup').phase = 'workload';
+  }],
   ['missing-sale', r => { r.restored.sales = 1; }],
   ['invalid-sqlite', r => { r.restored.integrity = false; }],
   ['unsafe-inventory', r => { r.storage.objects.noncurrentVersions = 1; }],

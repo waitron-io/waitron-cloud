@@ -65,6 +65,9 @@ function originalAccounting(value) {
     { scope: 'administration', record: value.administration }, { scope: 'storage', record: value.storage },
   ] });
   const gaps = new Set(assessment.gaps);
+  // A completed restore does not fill missing request-cost observations.
+  if (![...value.requests.accounting.requests, ...value.requests.observedRequests]
+    .some(row => row.phase === 'restore' && row.operation === 'get' && row.successful > 0)) gaps.add('accounting:incomplete-history');
   for (const code of value.retainedStorage.gaps ?? []) { need(isAccountingGap(code)); gaps.add(code); }
   if (value.retainedStorage.status === 'unknown') gaps.add('accounting:incomplete-history');
   return { status: gaps.size ? 'unknown' : 'measured', gaps: [...gaps].sort(), publicationEligible: gaps.size === 0 };
@@ -103,8 +106,9 @@ export function validateStreamAdmission(value, options) {
     need((s.status === 'measured' || original && s.status === 'unknown') && s.scope === 'unversioned-object-history' && finite(s.windowSeconds)
       && s.windowSeconds > 0 && s.windowSeconds < options.windowSeconds);
     const keys = ['class', 'bytes', 'currentVersions', 'noncurrentVersions', 'deleteMarkers', 'unfinishedMultipart'];
-    exact(s.objects, keys); need(s.objects.class === 'stream' && keys.slice(1).every(k => count(s.objects[k]))
-      && s.objects.bytes > 0 && s.objects.currentVersions > 0 && s.objects.noncurrentVersions === 0
+    exact(s.objects, keys); need(s.objects.class === 'stream' && keys.slice(2).every(k => count(s.objects[k]))
+      && (count(s.objects.bytes) && s.objects.bytes > 0 || original && s.status === 'unknown' && s.objects.bytes === null)
+      && s.objects.currentVersions > 0 && s.objects.noncurrentVersions === 0
       && s.objects.deleteMarkers === 0 && s.objects.unfinishedMultipart === 0);
     const bounds = record => {
       exact(record.byteSeconds, ['low', 'high']);

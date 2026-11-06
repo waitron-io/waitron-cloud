@@ -3,6 +3,9 @@ import { randomUUID } from 'node:crypto';
 import { prepareCalculatorData, renderCalculator } from './render.mjs';
 import { calculateCosts, defaultControls } from './calculator.mjs';
 import { assessStorageRehearsal } from './rehearsal.mjs';
+import { isDeepStrictEqual } from 'node:util';
+import { validateReceipt } from './schema.mjs';
+import { projectUsage } from './projection.mjs';
 
 const fail = () => { throw Error('Invalid cloud cost publication'); };
 const root = new URL('../../', import.meta.url);
@@ -203,6 +206,14 @@ export async function generatePublicArtifacts() {
   try {
     const inputs = { prices: read('prices'), inventory: read('inventory'), samples: read('local-driver-evidence').experiments,
       settings: read('projection-settings') };
+    const { stream, services, api, browser, archive } = inputs.samples;
+    for (const [name, sample] of [['measurements', stream], ['archive-replay', archive], ['remote-owner-browser', browser],
+      ['remote-owner-public-api', api], ['service-mail-retry-fiscal-lifecycle', services[0]],
+      ['service-signup-recovery-fiscal-refusal', services[1]]]) {
+      if (!isDeepStrictEqual(read(name), sample)) fail();
+    }
+    validateReceipt(read('archive-storage'));
+    if (!isDeepStrictEqual(read('usage-projection'), projectUsage({ samples: inputs.samples, ...inputs.settings }))) fail();
     const data = prepareCalculatorData(inputs), assessment = assessStorageRehearsal({ samples: inputs.samples, ...inputs.settings });
     return { 'docs/cloud-cost-calculator.html': await renderCalculator({ data }),
       'docs/cloud-cost-model.md': renderModel({ data, inventory: inputs.inventory, assessment }),

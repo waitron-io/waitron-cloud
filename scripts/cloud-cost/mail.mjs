@@ -18,7 +18,7 @@ export async function openMailMeasurement({ target, maxAttempts = 1000, timeoutM
     requireThat(Number.isInteger(timeoutMs) && timeoutMs > 0 && timeoutMs <= 30000 && !signal?.aborted);
     requireThat(Number.isInteger(maxAttempts) && maxAttempts >= 1 && maxAttempts <= 10000);
   } catch { fail(); }
-  const sockets = new Set(), histories = new Map(), operations = [], gaps = new Set();
+  const sockets = new Set(), collected = [], histories = new Map(), operations = [], gaps = new Set();
   const producer = { attempts: 0, accepted: 0, refused: 0, retried: 0 };
   const observer = { attempts: 0, accepted: 0, refused: 0 };
   let invalid = false, invalidReason, active, closing, closed = false, admitted = 0;
@@ -38,6 +38,8 @@ export async function openMailMeasurement({ target, maxAttempts = 1000, timeoutM
     observer.attempts++;
     const upstream = connect(Number(endpoint.port), '127.0.0.1');
     for (const socket of [client, upstream]) sockets.add(socket);
+    let clientClosed, upstreamClosed;
+    collected.push(new Promise(resolve => { clientClosed = resolve; }), new Promise(resolve => { upstreamClosed = resolve; }));
     let pending = ['greeting'], data = false, uploaded = 0, multiline = null, recipients = 0;
     const lines = (reason, callback) => {
       let buffer = '';
@@ -79,8 +81,8 @@ export async function openMailMeasurement({ target, maxAttempts = 1000, timeoutM
       else requireThat(code === (command === 'greeting' ? 220 : command === 'QUIT' ? 221 : 250));
     }));
     upstream.on('error', () => poison('upstream-connection-error'));
-    client.once('close', () => { sockets.delete(client); upstream.destroy(); });
-    upstream.once('close', () => { sockets.delete(upstream); client.destroy(); finish(); });
+    client.once('close', () => { sockets.delete(client); upstream.destroy(); clientClosed(); });
+    upstream.once('close', () => { sockets.delete(upstream); client.destroy(); upstreamClosed(); finish(); });
     client.pipe(upstream); upstream.pipe(client);
   });
   server.on('error', () => poison('capture-server-error'));
@@ -140,6 +142,8 @@ export async function openMailMeasurement({ target, maxAttempts = 1000, timeoutM
     closing = (async () => {
       for (const socket of sockets) socket.destroy();
       await new Promise(resolve => server.close(resolve)); signal?.removeEventListener('abort', abort);
+      // Listener closure does not collect outgoing sockets or their final callbacks.
+      await Promise.all(collected);
       try {
         requireThat(!invalid && producer.attempts > 0 && producer.attempts === admitted && sockets.size === 0);
       } catch {

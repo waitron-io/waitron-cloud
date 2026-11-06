@@ -6,6 +6,8 @@
 
 **Architecture:** Separate functional health, accounting coverage and publication eligibility. Record accounting gaps where they arise; carry them through worker admission and cleanup without turning them into functional exceptions. Keep historical receipt readers and clean measured output unchanged.
 
+**Implementation locations:** The real lost-WRITE and committed-WRITE/cutoff controls use `lostFinalWriteFailsFunctionalRestoreDespiteNonblockingAccounting` and `committedWriteWithCutoffReplyRestoresSuccessfully` in the existing `scripts/cloud-cost/fixtures/stack-conformance.test.mjs`. The five saved-event replay is retained outside Git in Lane G's `receipts/d581/accounting-rule-20261106/final-callers-20261106/replay-natural.mjs`, with original source hashes and run/job identities. The watcher's 19:30 scope answer keeps this one-time replay outside Git and limits added tests to audit defects. The standalone wrapper filenames proposed below were therefore omitted; these are the delivered proof locations.
+
 **Stack / spec:** Node.js ESM, `node:test`, loopback HTTP, SQLite, official Litestream **0.5.17**; this document contains both spec and plan. The owner's latest 2026-11-06 ~10:25 instruction supersedes older retry and LIST-only proposals: **what rehearsal checks can fail it; what it counts cannot**.
 
 ## Trace before editing

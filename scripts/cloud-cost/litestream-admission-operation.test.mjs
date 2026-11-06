@@ -107,6 +107,7 @@ test('a later producer reports the earlier observer refusal operation without at
   assert.deepEqual(detail(records.at(-1).diagnostic), { operation: 'get', attemptClass: 'initial' });
 });
 
+// Fixed diagnostic labels remain readable independently of the current emitting gates.
 const raw = changes => ({ reason: 'request-validation', validationStage: 'after-stop-admission',
   afterStopAdmissionGuard: 'post-stop-operation', afterStopAdmissionOperation: 'put', afterStopAdmissionAttemptClass: 'retry', ...changes });
 test('close reporting publishes only fixed admission context while retaining the exact original error', async () => {
@@ -165,7 +166,7 @@ test('a refusal before the post-stop checks keeps its existing context-free audi
   assert.deepEqual(audit.checkpoint().failure, { stage: 'after-stop-admission', afterStopAdmissionGuard: 'observer-pairing' });
 });
 
-test('a fourth post-stop list retry retains its ordinal category', () => {
+test('a fourth post-stop list retry retains its affected-cap category', () => {
   const s = createLitestreamAfterStop({ clock: () => 0 }); s.admit(input({ operation: 'list' })); stop(s); fillCap(s);
   assert.throws(() => s.admit(input({ operation: 'list', ordinal: 1 })), error => {
     assert.equal(error.litestreamAfterStopAdmissionGuard, 'affected-cap');

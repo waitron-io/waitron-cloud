@@ -8,6 +8,8 @@ import { createLocalAccountMailer } from '../../packages/registration/src/local-
 import * as local from './local.mjs';
 import { assessAccounting } from './accounting-policy.mjs';
 import { perturbMailObserver } from './mail-observer-test-utils.mjs';
+import net from 'node:net';
+import { syncBuiltinESMExports } from 'node:module';
 const nodemailer = createRequire(new URL('../../packages/registration/package.json', import.meta.url))('nodemailer');
 
 const bad = /Invalid cloud cost mail measurement/;
@@ -50,6 +52,32 @@ async function open(t, f, options = {}) {
   t.after(() => run.close().catch(() => {}));
   return { run, mailer: run.wrapMailer(createLocalAccountMailer({ port: run.port })) };
 }
+
+test('mail collection waits for owned socket close notifications', async t => {
+  const f = await fixture(t), original = net.createServer, pending = []; let notified = 0;
+  net.createServer = handler => original(socket => {
+    const once = socket.once;
+    socket.once = function(event, listener) {
+      if (event !== 'close') return Reflect.apply(once, this, [event, listener]);
+      return Reflect.apply(once, this, [event, function(...args) {
+        pending.push(new Promise(resolve => setTimeout(() => {
+          Reflect.apply(listener, this, args); notified++; resolve();
+        }, 20)));
+      }]);
+    };
+    handler(socket);
+  });
+  syncBuiltinESMExports();
+  let measured;
+  try { measured = await open(t, f); }
+  finally { net.createServer = original; syncBuiltinESMExports(); }
+  t.after(async () => { await Promise.all(pending); });
+  await measured.mailer.sendPasswordChanged(message, context());
+  await measured.run.close();
+  assert.ok(notified > 0, 'owned close callbacks completed before collection returned');
+  assert.equal(f.accepted(), 1);
+  assert.equal(measured.run.snapshot().producer.accepted, 1);
+});
 
 // Counting logical messages alone loses the refused physical attempt before a worker retry.
 test('mailIndependentSmtpRefusalRetryAndAcceptedOperationsReconcile', async t => {

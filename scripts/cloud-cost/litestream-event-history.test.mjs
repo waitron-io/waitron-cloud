@@ -17,6 +17,21 @@ const event = (channel, operation = 'list', n = 1) => ({ token: `${invocation(n)
 const interruption = { reason: 'transfer-interrupted', ioEvent: 'response-pipeline', code: 'ECONNRESET',
   clientClosed: true, responseHeadersSeen: true };
 
+for (const operation of ['list', 'put', 'delete']) for (const observed of [false, true])
+test(`a pre-stop ${operation} cutoff survives an observer admitted after stop observed=${observed}`, () => {
+  const ledger = createLitestreamAfterStop({ clock: () => 0 });
+  ledger.issue(row(operation)); ledger.admit(admission('producer', operation));
+  ledger.settle({ ...event('producer', operation), outcome: 'transport-error', statusCode: null }, interruption);
+  stop(ledger); ledger.admit(admission('observer', operation));
+  if (observed) ledger.settle(event('observer', operation));
+  const snapshot = ledger.snapshot();
+  assert.equal(snapshot.used, 1); assert.equal(snapshot.lateAdmissions, 1);
+  assert.equal(snapshot.lateSettlements, Number(observed && operation !== 'list'));
+  assert.equal(snapshot.producer.attempts, 1); assert.equal(snapshot.observer.attempts, Number(observed));
+  assert.equal(snapshot.status, 'unknown');
+  assert.deepEqual(litestreamAfterStopOutput(snapshot).afterStop, snapshot);
+});
+
 // Refusing an absent hop, inventing its admission, or erasing its gap breaks these controls.
 for (const operation of ['put', 'get', 'head', 'list', 'delete', 'delete-many', 'multipart-create',
   'multipart-upload', 'multipart-complete', 'multipart-abort']) {

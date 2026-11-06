@@ -1,4 +1,4 @@
-import { request } from 'node:https';
+import { request, Agent } from 'node:https';
 import { createHash } from 'node:crypto';
 import { openRemoteMeasurement } from './remote.mjs';
 
@@ -8,7 +8,7 @@ const need = value => { if (!value) fail(); };
 // Each action opens a fresh TLS connection. This measures the named API scenario;
 // browser assets, background updates and monthly session frequency need other evidence.
 export async function measureRemoteJourneys(options) {
-  const meters = [];
+  const meters = [], agents = [];
   try {
     const keys = ['staffHostname', 'publicHostname', 'staffCa', 'publicCa', 'email', 'password'];
     need(options && Object.getPrototypeOf(options) === Object.prototype
@@ -27,13 +27,18 @@ export async function measureRemoteJourneys(options) {
       const actions = [];
       const call = async (action, path, status, { body, cookie, method = body === undefined ? 'GET' : 'POST' } = {}) => {
         const bytes = body === undefined ? undefined : Buffer.from(JSON.stringify(body));
+        const agent = new Agent({ keepAlive: true, maxSockets: 1 }); agents.push(agent);
         const reply = await new Promise((resolve, reject) => {
-          const req = request({ host: '127.0.0.1', port: meter.port, servername: host, ca, agent: false, path, method,
+          const req = request({ host: '127.0.0.1', port: meter.port, servername: host, ca, agent, path, method,
             headers: { host, origin: 'https://' + host, ...(cookie ? { cookie } : {}),
               ...(bytes ? { 'content-type': 'application/json', 'content-length': bytes.length } : {}) } }, res => {
             const chunks = []; let size = 0;
             res.on('data', chunk => { size += chunk.length; if (size > 1048576) req.destroy(); else chunks.push(chunk); });
-            res.on('error', reject); res.once('end', () => resolve({ status: res.statusCode, headers: res.headers, bytes: Buffer.concat(chunks) }));
+            const socket = res.socket;
+            res.on('error', reject); res.once('end', () => {
+              // Half-close the owned TLS connection after consuming its complete reply.
+              socket.end(); resolve({ status: res.statusCode, headers: res.headers, bytes: Buffer.concat(chunks) });
+            });
           });
           req.setTimeout(3000, () => req.destroy()); req.on('error', reject); req.end(bytes);
         });
@@ -90,5 +95,5 @@ export async function measureRemoteJourneys(options) {
     }
     return { kind: 'pinned-waitron-api-gateway', costMeasured: false, evidence };
   } catch { fail(); }
-  finally { for (const meter of meters) await meter.close().catch(() => {}); }
+  finally { for (const meter of meters) await meter.close().catch(() => {}); for (const agent of agents) agent.destroy(); }
 }
