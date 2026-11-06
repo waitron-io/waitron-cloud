@@ -117,3 +117,25 @@ import the production transport rather than its test. The receipt-selector
 fixtures reconstruct historical health-test bytes before running their checks;
 those saved bytes do not execute the current test. Future changes to those
 boundaries need another review before renewal.
+
+## Hosted acceptance
+
+You can compare the two boundaries against closed, unmerged control PRs.
+The [root-only control #985](https://github.com/waitron-io/waitron-cloud/pull/985)
+runs all four root partitions used at that revision in
+[standard CI 42126378878](https://github.com/waitron-io/waitron-cloud/actions/runs/42126378878).
+Its compiler, package and receipt jobs are deliberately skipped. That proves
+the original root-only selection; [#992](https://github.com/waitron-io/waitron-cloud/pull/992)
+later expands the required root inventory to eight partitions.
+
+The [health-only control #989](https://github.com/waitron-io/waitron-cloud/pull/989)
+runs the entire `test:local-stack` command in
+[standard CI 42142271507](https://github.com/waitron-io/waitron-cloud/actions/runs/42142271507).
+Both health checks execute once among 1,532 reported passes and 26 optional
+skips. Compiler, package and root jobs are deliberately skipped. Each control's
+separate workflow plans, complete job inventories and strict summaries were
+checked independently. The controls are closed without merging their comment
+changes; neither result establishes a time saving.
+
+The [full nightly acceptance](ci-nightly.md#verified-manual-run) separately
+checks that these narrow PR selections retain a complete full-run backstop.

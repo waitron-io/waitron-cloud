@@ -1601,9 +1601,18 @@ implementation or production evidence.
   original root, compiler, package, receipt and forced-full assertions remain.
   The first manual full-nightly at `b883ee69` also exposes nine older synthetic
   CLI assertions across seven files. They reproduce at pre-integration `7105610a`
-  when the parent event is `workflow_dispatch`; the owning fixture-context
-  follow-up (D587) remains open. Their expected selections and full-nightly checks
-  must remain unchanged.
+  when the parent event is `workflow_dispatch`. D587's landed #988 isolates those
+  fixtures, and #986 isolates the root output fixture, preserving the original
+  selections and full-nightly checks. Hosted controls
+  [#985](https://github.com/waitron-io/waitron-cloud/pull/985) and
+  [#989](https://github.com/waitron-io/waitron-cloud/pull/989) qualify root-only
+  and health-receipt-only selection respectively; both are closed without merge.
+  All four root jobs at #985's revision run while compiler, package and receipt
+  work is skipped. #989 runs the entire local-stack receipt, including both health
+  checks once, with 1,532 reported passes and 26 optional skips; compiler, package
+  and root work is skipped. Complete source contracts and strict summaries qualify
+  each workflow independently. The manual full-nightly acceptance below completes
+  part 3's full-run check. These receipts do not establish a time saving.
   Ownership review does not complete global root precision or establish a time
   saving. Unresolved package readers, including the separate #938 fix, remain
   outside this slice.
@@ -1634,8 +1643,12 @@ implementation or production evidence.
   The [merge evidence checklist](ci-merge-evidence.md) distinguishes inherited
   counts, newly executed checks and workflows excluded by their actual triggers.
   Local checks cover workflow conditions, artifact publication, complete native
-  jobs and deliberate guard omissions. Hosted equal-tree and changed-tree
-  readback, the first nightly with AWS and measured time savings remain unproved.
+  jobs and deliberate guard omissions. Hosted equal-tree readback qualifies
+  general and AWS reuse on #965 and #992's exact merges, with zero new product
+  checks in those families; #992's separate Kubernetes run executes 37 checks.
+  Different-tree #986 runs the full standard selection and its independently
+  selected AWS work, with literal-range readback. The full nightly below includes
+  AWS. Aggregate time savings remain unproved.
   The whole-branch review found ordinary-run failures around missing API evidence,
   empty ranges, oversized plans and summary checkouts. Focused controls cover their
   full-work fallbacks, bounded historical reconstruction and final summary proof.
@@ -1676,8 +1689,18 @@ implementation or production evidence.
   guards do not replace hosted execution. The copied-reader CLI fixture stages
   regenerated per-path evidence before saving its baseline; a changed-reader
   control preserves both ordinary prose-only and forced-full assertions.
-  Real PR rehearsal and exact-main full execution
-  still need their current-run receipts before a runtime coverage claim.
+  [Manual main run 42165813178](https://github.com/waitron-io/waitron-cloud/actions/runs/42165813178)
+  attempt 2 qualifies exact `9237200a`: all 77 jobs final, 21,072 reported Node
+  passes, 26 optional skips and 384 separately counted mocked OpenTofu cases.
+  All 29 package allocations, eight root partitions, compiler checks, six receipt
+  suites, 21 cost cells, both venue cases and four AWS cells execute without reuse;
+  every family and parent summary qualifies. The failed-only retry executes 14 cost
+  checks and two summaries, retaining 21,058 passes with identical logs and execution
+  times. The first attempt's recurring native LIST shutdown refusal remains on
+  D530; the passing retry is no repair. The [nightly guide](ci-nightly.md#verified-manual-run)
+  records the exact revision and limits. Scheduled delivery and comparable healthy
+  aggregate usage measurements remain open. The original 4 November baseline
+  overlaps published GitHub incidents and cannot support a savings claim.
   D571 part 2b adds
   [one-level package selection](ci-package-selection.md): a source change selects
   its package and direct consumers; changes only under its `test/` directory
@@ -2277,8 +2300,10 @@ implementation or production evidence.
   All 76 jobs across its four workflows qualify with 21,040 reported Node
   passes and 26 unchanged optional skips. Cost takes the complete fallback
   after workflow-identity lookup refusal, so it has no reusable source plan.
-  Later rebased heads still require their own CI; aggregate usage savings
-  and the full nightly acceptance remain open.
+  The final #992 head and its exact merge qualify their own CI and independent
+  general/AWS reuse readbacks; the separate merge Kubernetes run executes 37 checks.
+  The full nightly at `9237200a` also qualifies all eight root partitions.
+  Aggregate usage savings remain open.
   Each work job retains its eight-minute cap. Whole-run timing and the owner's
   five-minute work-job/about-ten-minute total goal needs measured CI evidence;
   a passing local run does not establish hosted-runner duration.
