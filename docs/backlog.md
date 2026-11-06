@@ -265,10 +265,15 @@ checks every retained part. Repeated part writes preserve possible earlier sizes
 an acknowledged replacement excludes them. An abort collects those parts while
 keeping hidden storage intervals unknown. The pending request journal and possible
 part records each have a 100,000-entry limit. Run `node --test
-scripts/cloud-cost/multipart-chains.test.mjs` for both storage modes, two actual
-HTTP replacement sequences and the memory bounds. Completion with a missing part
-identity, and further requests on an upload after an uncertain completion or abort,
-still need the wider forwarding policy. These controls do not prove SQLite recovery.
+scripts/cloud-cost/multipart-chains.test.mjs` for both storage modes, actual HTTP
+replacement and completion sequences, and the memory bounds. A completion can name
+a part whose reply was lost when compatible owned admissions support one exact
+size. The request does not prove the part committed: independent inventory must
+still find the retained parts or the completed object, with the required version
+and original order in a versioned bucket. Hidden storage time remains unknown.
+Completion with several possible sizes, and further requests on an upload after
+an uncertain completion or abort, still need the wider forwarding policy. These
+controls do not prove SQLite recovery.
 The full nonblocking accounting path, publication refusal, lost-write
 restore control and saved-failure replay remain open. These partial changes do
 not establish the historical cause or relax functional admission.

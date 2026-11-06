@@ -682,8 +682,13 @@ export function nativeMultipartHistory({ bucket, now, inspect, prepareComplete, 
       selected = []; let previous = 0;
       for (const entry of deletionXml(body, 'CompleteMultipartUpload')) {
         requireThat(entry.name === 'Part'); const f = deletionFields(entry, ['PartNumber', 'ETag']);
-        requireThat(/^[1-9]\d*$/.test(f.PartNumber)); const n = Number(f.PartNumber), part = upload.parts.get(n);
-        requireThat(n > previous && part && f.ETag === part.etag); previous = n; selected.push(part);
+        requireThat(/^[1-9]\d*$/.test(f.PartNumber) && cleanText(f.ETag)); const n = Number(f.PartNumber);
+        const possible = upload.candidates?.get(n) ?? [upload.parts.get(n)];
+        const matching = possible.filter(part => part && (part.etag === null || f.ETag === part.etag));
+        // A missing reply leaves its ETag unknown. The selected request still needs
+        // an owned part and one exact admitted size; it does not witness a commit.
+        requireThat(n > previous && matching.length > 0 && matching.every(part => part.bytes === matching[0].bytes));
+        previous = n; selected.push({ bytes: matching[0].bytes });
       }
       requireThat(selected.length > 0);
       const size = selected.reduce((n, part) => n + part.bytes, 0); requireThat(count(size));

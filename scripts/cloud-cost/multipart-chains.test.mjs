@@ -261,3 +261,134 @@ test('successful replacements release obsolete part candidate budget', async t =
   }
   f.time(10); await assert.doesNotReject(f.audit.verify()); result(f, 8, 1, true);
 });
+
+function completionInput(parts) {
+  const body = Buffer.from('<CompleteMultipartUpload>' + parts.map(([n, etag]) => `<Part><PartNumber>${n}</PartNumber><ETag>${etag}</ETag></Part>`).join('') + '</CompleteMultipartUpload>');
+  return { method: 'POST', path: path + '?uploadId=' + UploadId,
+    headers: { 'content-length': String(body.length) }, body };
+}
+function completedReply() {
+  return Buffer.from(`<CompleteMultipartUploadResult><Bucket>synthetic</Bucket><Key>${Key}</Key><ETag>final</ETag></CompleteMultipartUploadResult>`);
+}
+async function missingPart(f, shape) {
+  create(f);
+  if (shape !== 'first') part(f);
+  f.time(5); cutoff(f, 'part', { bytes: shape === 'larger' ? 6 : 4 });
+  if (shape === 'repeated') { f.time(6); cutoff(f, 'part'); }
+  f.uploads.get(UploadId).set(1, { bytes: shape === 'larger' ? 6 : 4, etag: 'lost' });
+  if (shape === 'two-parts') {
+    f.time(7); const finish = begin(f, 'part', { n: 2, bytes: 6 });
+    finish({ statusCode: 200, bytesOut: 6, responseHeaders: { etag: 'six' } });
+    f.uploads.get(UploadId).set(2, { bytes: 6, etag: 'six' });
+  }
+  return completionInput(shape === 'two-parts' ? [[1, 'lost'], [2, 'six']] : [[1, 'lost']]);
+}
+
+// The completion request can name a part whose successful reply was never observed.
+// Its size must still be uniquely supported by compatible owned part admissions.
+for (const versioned of [false, true]) for (const shape of ['first', 'same', 'larger', 'repeated', 'two-parts'])
+  for (const outcome of ['acknowledged', 'lost-committed', 'lost-retained'])
+    test(`missing part identity permits uniquely sized completion ${versioned}/${shape}/${outcome}`, async t => {
+      const f = await fixture(t, versioned), req = await missingPart(f, shape);
+      f.time(8); let finish;
+      assert.doesNotThrow(() => { finish = f.audit.begin(req); }); f.time(9);
+      assert.doesNotThrow(() => finish(outcome === 'acknowledged'
+        ? { statusCode: 200, bytesOut: req.body.length, responseBody: completedReply(), responseHeaders: { 'x-amz-version-id': 'completed' } }
+        : { statusCode: null, bytesOut: req.body.length, interrupted: true }));
+      const bytes = shape === 'two-parts' ? 10 : shape === 'larger' ? 6 : 4;
+      if (outcome !== 'lost-retained') { f.uploads.clear(); f.objects.push({ id: 'completed', bytes, latest: true }); }
+      f.time(12); await assert.doesNotReject(f.audit.verify());
+      result(f, bytes, outcome === 'lost-retained' ? 1 : 0, true);
+      const again = f.audit.begin({ method: 'GET', path, headers: {} });
+      again({ statusCode: 200, bytesOut: 0 });
+      f.time(13); await assert.doesNotReject(f.audit.verify()); result(f, bytes, outcome === 'lost-retained' ? 1 : 0, true);
+    });
+
+for (const versioned of [false, true]) for (const failure of ['wrong-object-size', 'missing-object', 'extra-object', 'missing-retained-part', 'wrong-retained-etag', 'active', 'duplicate'])
+  test(`missing part completion preserves owned evidence ${versioned}/${failure}`, async t => {
+    const f = await fixture(t, versioned), req = await missingPart(f, 'larger'); f.time(8); let finish;
+    assert.doesNotThrow(() => { finish = f.audit.begin(req); }); f.time(9);
+    if (failure === 'active') { assert.throws(() => begin(f, 'create'), bad); return; }
+    const event = { statusCode: null, bytesOut: req.body.length, interrupted: true };
+    finish(event);
+    if (failure === 'duplicate') { assert.throws(() => finish(event), bad); return; }
+    if (failure === 'missing-retained-part') f.uploads.get(UploadId).clear();
+    else if (failure === 'wrong-retained-etag') f.uploads.get(UploadId).set(1, { bytes: 4, etag: 'foreign' });
+    else {
+      f.uploads.clear();
+      if (failure !== 'missing-object') f.objects.push({ id: 'completed', bytes: failure === 'wrong-object-size' ? 4 : 6, latest: true });
+      if (failure === 'extra-object') {
+        if (versioned) f.objects.push({ id: 'foreign', bytes: 6, latest: false });
+        else f.objects.push({ id: 'duplicate', bytes: 6, latest: true });
+      }
+    }
+    f.time(12); await assert.rejects(f.audit.verify(), bad);
+    assert.throws(() => f.meter.snapshot(), /Invalid cloud cost meter/);
+  });
+
+for (const versioned of [false, true]) for (const failure of ['unknown-part', 'wrong-known-etag', 'duplicate-part', 'reverse-parts', 'empty-etag'])
+  test(`completion still rejects unsafe selected parts ${versioned}/${failure}`, async t => {
+    const f = await fixture(t, versioned); create(f); part(f);
+    if (failure === 'reverse-parts') {
+      f.time(5); const finish = begin(f, 'part', { n: 2, bytes: 6 });
+      finish({ statusCode: 200, bytesOut: 6, responseHeaders: { etag: 'six' } });
+    }
+    const parts = failure === 'unknown-part' ? [[2, 'one']] : failure === 'wrong-known-etag' ? [[1, 'wrong']]
+      : failure === 'duplicate-part' ? [[1, 'one'], [1, 'one']] : failure === 'reverse-parts' ? [[2, 'six'], [1, 'one']] : [[1, '']];
+    f.time(8); assert.throws(() => f.audit.begin(completionInput(parts)), bad);
+    assert.throws(() => f.meter.snapshot(), /Invalid cloud cost meter/);
+  });
+
+for (const versioned of [false, true]) test(`lost part reply still forwards actual HTTP completion ${versioned}`, async t => {
+  const f = await fixture(t, versioned); create(f); const received = [];
+  const backend = createServer((req, res) => {
+    const chunks = []; req.on('data', chunk => chunks.push(chunk)); req.once('end', () => {
+      const body = Buffer.concat(chunks); received.push({ method: req.method, body: body.toString() });
+      if (req.method === 'PUT') {
+        f.uploads.get(UploadId).set(1, { bytes: body.length, etag: 'lost' }); res.destroy();
+      } else {
+        f.uploads.clear(); f.objects.push({ id: 'completed', bytes: 4, latest: true });
+        res.setHeader('x-amz-version-id', 'completed'); res.end(completedReply());
+      }
+    });
+  });
+  backend.listen(0, '127.0.0.1'); await once(backend, 'listening');
+  t.after(() => { backend.closeAllConnections(); return new Promise(resolve => backend.close(resolve)); });
+  const meter = createMeter({ phase: 'workload', clock: () => 0 });
+  const front = await createLitestreamTransport({ target: `http://127.0.0.1:${backend.address().port}`, meter, phase: 'workload', lifetimes: f.audit });
+  t.after(() => front.close().catch(() => {}));
+  const send = (req, body, id) => new Promise((resolve, reject) => {
+    const caller = request(front.url + req.path, { method: req.method, headers: { ...req.headers,
+      'amz-sdk-invocation-id': `${id}-2222-4333-8444-555555555555`, 'amz-sdk-request': 'attempt=1; max=1',
+    } }, async res => {
+      try { for await (const chunk of res) void chunk; resolve(res.statusCode); }
+      catch { reject(Error('Synthetic reply cutoff')); }
+    });
+    caller.once('error', () => reject(Error('Synthetic request cutoff'))); caller.end(body);
+  });
+  f.time(3); await assert.rejects(send(input('part'), Buffer.from('four'), '11111111'), /Synthetic (request|reply) cutoff/);
+  await front.whenIdle(() => {}); f.time(5);
+  const req = completionInput([[1, 'lost']]);
+  await assert.doesNotReject(async () => { assert.equal(await send(req, req.body, '22222222'), 200); });
+  await front.whenIdle(() => {}); await assert.doesNotReject(front.close());
+  f.time(10); await assert.doesNotReject(f.audit.verify()); result(f, 4, 0, true);
+  assert.deepEqual(received, [{ method: 'PUT', body: 'four' }, { method: 'POST', body: '<CompleteMultipartUpload><Part><PartNumber>1</PartNumber><ETag>lost</ETag></Part></CompleteMultipartUpload>' }]);
+  assert.equal(meter.snapshot().accounting.producer.attempts, 2);
+  assert.equal(meter.snapshot().accounting.requests.filter(r => r.outcome === 'transport-error').reduce((n, r) => n + r.attempts, 0), 1);
+  assert.equal(meter.diagnostics().firstInvalidation, null);
+  assert.equal(front.checkpoint().pending, 0); assert.equal(front.checkpoint().connections, 0);
+});
+
+for (const versioned of [false, true]) test(`missing part identity cannot accept an empty selected ETag ${versioned}`, async t => {
+  const f = await fixture(t, versioned); await missingPart(f, 'first'); f.time(8);
+  assert.throws(() => f.audit.begin(completionInput([[1, '']])), bad);
+  assert.throws(() => f.meter.snapshot(), /Invalid cloud cost meter/);
+});
+
+for (const versioned of [false, true]) test(`missing part completion rejects an unsafe total from safe individual sizes ${versioned}`, async t => {
+  const f = await fixture(t, versioned); create(f); f.time(3);
+  cutoff(f, 'part', { bytes: Number.MAX_SAFE_INTEGER }); f.time(4);
+  begin(f, 'part', { n: 2, bytes: 1 })({ statusCode: 200, bytesOut: 1, responseHeaders: { etag: 'one-byte' } });
+  f.time(5); assert.throws(() => f.audit.begin(completionInput([[1, 'lost'], [2, 'one-byte']])), bad);
+  assert.throws(() => f.meter.snapshot(), /Invalid cloud cost meter/);
+});
