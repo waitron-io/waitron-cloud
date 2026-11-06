@@ -37,6 +37,10 @@ jobs:
             [[ -f scripts/kubernetes-proof-budget.mjs ]] || exit 1
             tests+=(scripts/kubernetes-proof-budget.test.mjs deploy/kubernetes/proof/workflow.test.mjs)
           fi
+          if [[ -e deploy/kubernetes/proof/bootstrap.mjs || -e deploy/kubernetes/proof/bootstrap.sh || -e deploy/kubernetes/proof/bootstrap.test.mjs ]]; then
+            [[ -f deploy/kubernetes/proof/bootstrap.mjs && -f deploy/kubernetes/proof/bootstrap.sh ]] || exit 1
+            tests+=(deploy/kubernetes/proof/bootstrap.test.mjs)
+          fi
           for test_file in "${tests[@]}"; do
             [[ -f "$test_file" ]] || { echo "Missing required test: $test_file"; exit 1; }
           done

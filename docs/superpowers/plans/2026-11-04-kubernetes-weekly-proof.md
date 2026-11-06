@@ -136,6 +136,17 @@ remain open; Task 3 is not complete and this core grants no live admission.
 - [ ] After access and cost reservation, trusted-main safety profiles run no candidate payload. OS drill: fix its local deadline earlier than the outer sweep expiry (both within five minutes), hang proof, lose controller and require that fixed local deadline to terminate first, with local deadline record plus EC2 instance-initiated-shutdown evidence. Independent-sweep drill: trusted drill data disables the OS timer and deliberately hangs the guest kernel after its bounded ready/fault record; lose the launch response/controller and require the sweeper role's exact-instance real TerminateInstances audit event. Record the injected guest fault and prove termination without guest cooperation; never claim a mocked hang as kernel coverage. Wrong/rescue actor fails; timestamp/volume absence or mocks alone never pass. Keep the sweep armed during every drill and exercise duplicate/retry/cancellation and unchanged foreign sentinels.
 - [ ] `collectOwned` requires terminated state, filtered owned volume/ENI lists empty and exact root `InvalidVolume.NotFound` (never AccessDenied); use bounded EC2 reads above, journal IDs automatically. Reconcile delayed usage before claiming no continuing billing. Unknown cleanup retains protection/reservation, blocks further spending and reports exact IDs/deadlines/last observations with a narrow owned termination/volume response. Finalizers never provide the only termination path; do not delete shared resources.
 
+**Fixed-deadline prerequisite:** `bootstrap.mjs` renders the bounded Bash entry
+from the original staging scope/run/head/tree/start/expiry. Its shell installs
+absolute UTC and boot-relative timers, enables poweroff on another boot, and
+checks unchanged identity/unit state on exact retry without rearming. Synthetic
+process-boundary checks cover expiry, clock rollback, interrupted installation,
+changed identity, damaged state, preserved foreign units and poweroff requests.
+This entry performs no input transfer or candidate execution and is not wired
+into setup or launch. Live ARM/systemd/reboot and termination qualification,
+verified IMDSv2 identity, offline preparation and the launch/release protocol
+remain open. The launcher deny, disabled sweep and refusing up/down stay in force.
+
 ## Task 5: Break the verifier cycle and instrument the full EC2 proof
 
 **Files:** `scripts/kubernetes-proof-payload.mjs`, its `.test.mjs`; coordinate D110 `deploy/kubernetes/{tools.lock.json,README.md,contracts/}` and `scripts/kubernetes-{check,proof,receipt}.mjs`/tests. **Interfaces:** `stagePayload(candidate,waitronExport,locks):PayloadManifest` binds clean Cloud head/tree, launcher/verifier SHA/schema, Waitron source/export hash, lock/tool hashes, ARM image index/platform/config digests and payload hash; `runPayload(manifest,stateDir):Promise<ProofReceipt>` calls P1; common `verifyReceipt(receipt,{expectedHead,expectedTree}):void` stays identical on both hosts.

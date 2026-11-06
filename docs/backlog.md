@@ -3271,9 +3271,15 @@ implementation or production evidence.
   cleanup and retained original cost evidence. Synthetic checks cover competing
   controllers, partial/lost writes, damaged history, stale evidence, deadline
   expiry during writes and unknown cleanup. Official current-price/billing
-  acquisition and all-in bound construction, setup integration, bootstrap and
+  acquisition and all-in bound construction, setup integration and
   live S3/cleanup qualification remain open; these inputs grant no spending or
-  runnable owner setup. D570's
+  runnable owner setup. A new self-contained guest deadline entry binds the
+  original reservation to a fixed UTC timer, a boot-relative fallback and
+  shutdown on reboot. Synthetic shell checks cover exact retries without
+  rearming, clock rollback, partial installation, damaged state and preserved
+  foreign unit files. It is not yet wired into a launcher: actual ARM/systemd
+  behavior, IMDSv2 identity, offline inputs and shutdown/termination remain
+  unqualified. D570's
   [weekly proof plan](superpowers/plans/2026-11-04-kubernetes-weekly-proof.md) carries
   the first complete proof on one disposable on-demand ARM m7g.2xlarge in staging
   462991287391/eu-south-2, within USD 10/month; production 949687825720 is forbidden.
