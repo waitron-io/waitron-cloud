@@ -119,6 +119,9 @@ for host,port in [('10.0.2.2',22),('169.254.169.254',80),('2.29.248.230',22),('2
                     try:
                         qmp_path = Path('/var/lib/waitron-disposable/turns') / resource / 'qmp.sock'
                         if qmp_path.exists():
+                            tail = qmp_request(resource, 'ringbuf-read',
+                                               {'device': 'serial0', 'size': 16384, 'format': 'base64'})
+                            print('GUEST RING', base64.b64decode(tail).decode(errors='replace'), flush=True)
                             with socket.socket(socket.AF_UNIX) as connection:
                                 connection.settimeout(3)
                                 connection.connect(str(qmp_path))

@@ -192,7 +192,8 @@ def plan(request):
     directory = ROOT / 'turns' / resource
     qemu = ['/usr/bin/qemu-system-x86_64', '-no-user-config', '-nodefaults',
             '-machine', 'q35,accel=kvm', '-cpu', 'host', '-smp', '4', '-m', '16384',
-            '-display', 'none', '-monitor', 'none', '-serial', f'file:{directory}/console.log',
+            '-display', 'none', '-monitor', 'none',
+            '-chardev', 'ringbuf,id=serial0,size=16384', '-serial', 'chardev:serial0',
             '-device', 'VGA',
             '-fw_cfg', 'name=opt/org.seabios/sercon-port,string=0x3f8',
             '-qmp', f'unix:{directory}/qmp.sock,server=on,wait=off',
