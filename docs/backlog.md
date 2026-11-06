@@ -351,8 +351,20 @@ scripts/cloud-cost/browser-accounting.test.mjs` for the loopback and caller
 controls. The genuine gateway and Chromium conformance files add missing-counter
 and mismatched-counter cases, retaining their original clean numeric and
 functional-refusal checks. These diagnostic snapshots cannot qualify as measured
-evidence in the original-record assessor. Other conformance result consumers and
-shared mail completion remain open.
+evidence in the original-record assessor.
+Mail delivery now keeps the mailer's result when its independent SMTP
+observations disagree or are absent. Unknown accounting retains both counts,
+per-action results and gap labels after owned collection; equal final totals
+cannot erase an earlier disagreement. Admission counts calls independently of
+capture telemetry, so losing an observation cannot reopen the attempt budget.
+Real SMTP refusals still reach the queue for retry, and protocol, identity,
+deadline, cancellation and cleanup failures still refuse. Run `node --test
+scripts/cloud-cost/mail.test.mjs` for these controls. The genuine Mailpit and
+PostgreSQL service-receipt case also checks three captured messages, one real
+refusal and its retry while deliberately changing one observer reply. No
+accounting disagreement adds a queue retry. The original-record assessor
+refuses measurement eligibility; new service export and other conformance
+result consumers remain open.
 The full nonblocking accounting path, publication refusal and saved-failure
 replay remain open. These partial changes do
 not establish the historical cause or relax functional admission.

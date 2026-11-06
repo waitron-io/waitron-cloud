@@ -14,6 +14,8 @@ import { PasswordRecoveryStore } from '../../../packages/registration/src/passwo
 import { database } from '../../../packages/account-http/test/fixtures.ts';
 import { startAccountServer } from '../../../packages/account-http/src/server.ts';
 import { openMailMeasurement } from '../mail.mjs';
+import { perturbMailObserver } from '../mail-observer-test-utils.mjs';
+import { assessAccounting } from '../accounting-policy.mjs';
 const { Pool } = createRequire(new URL('../../../packages/registration/package.json', import.meta.url))('pg');
 
 if (!process.env.TEST_DATABASE_URL || !process.env.MAILPIT_TEST_URL || !process.env.MAILPIT_TEST_SMTP_PORT)
@@ -127,4 +129,50 @@ test('signupRecoveryRetainsCapturedMailPrivacyAndOwnedCleanup', { timeout: 60000
   assert.deepEqual(mail.discrepancy, {attempts: 0, accepted: 0, refused: 0});
   assert.equal(JSON.stringify(mail).includes(email), false);
   t.diagnostic(JSON.stringify(mail));
+});
+
+// The real queue must not retry a message solely because independent SMTP counts disagree.
+test('genuineMailAccountingGapPreservesQueueDeliveryRefusalRetryAndCleanup', { timeout: 60000 }, async t => {
+  const s = await mailFixture();
+  const email = `generated-${randomUUID()}@example.test`;
+  let mailRun, smtp, mail, connections;
+  try {
+    smtp = await refusedOnceSmtp();
+    const observation = perturbMailObserver(t, Number(new URL(smtp.target).port));
+    mailRun = await openMailMeasurement({ target: smtp.target });
+    const outbox = new EmailOutbox({ activeKeyId: 'generated', keys: { generated: randomBytes(32).toString('hex') } });
+    await transaction(s.f.pool, async client => {
+      for (const locale of ['en', 'es', 'es']) await outbox.enqueue(client, 'password_changed', { email, locale });
+    });
+    const worker = new EmailWorker(s.f.pool, outbox, mailRun.wrapMailer(createLocalAccountMailer({ port: mailRun.port })));
+    assert.equal(await worker.runOnce(), true);
+    const failed = await worker.status();
+    assert.equal(failed.failures, 1); assert.equal(failed.counts.sent, 0); assert.equal(failed.counts.pending, 3);
+    assert.equal((await s.f.pool.query('SELECT count(*)::integer AS n FROM email_outbox WHERE available_at > clock_timestamp()')).rows[0].n, 1);
+    await s.f.pool.query('UPDATE email_outbox SET available_at=clock_timestamp()');
+    for (let n = 0; n < 3; n++) assert.equal(await worker.runOnce(), true);
+    assert.equal(await worker.runOnce(), false);
+    const status = await worker.status();
+    assert.deepEqual(status.counts, { pending: 0, processing: 0, sent: 3, expired: 0, cancelled: 0, failed: 0 });
+    assert.equal(status.attempts, 4); assert.equal(status.failures, 1);
+    assert.equal((await s.f.pool.query('SELECT count(*)::integer AS n FROM email_outbox WHERE payload IS NOT NULL OR key_id IS NOT NULL')).rows[0].n, 0);
+    const captured = await fetch(process.env.MAILPIT_TEST_URL + '/api/v1/messages', { signal: AbortSignal.timeout(3000) });
+    assert.equal(captured.status, 200);
+    const messages = (await captured.json()).messages.filter(message => message.To.some(to => to.Address === email));
+    assert.deepEqual(messages.map(message => message.Subject).sort(), ['Tu contraseña de Waitron Cloud ha cambiado',
+      'Tu contraseña de Waitron Cloud ha cambiado', 'Your Waitron Cloud password changed']);
+    await assert.doesNotReject(mailRun.close()); mail = mailRun.snapshot();
+    connections = smtp.connections(); assert.equal(observation.changed(), 1);
+  } finally { await collect(s, [mailRun], [smtp]); }
+  assert.equal(connections, 4);
+  assert.deepEqual(mail.producer, { attempts: 4, accepted: 3, refused: 1, retried: 1 });
+  assert.deepEqual(mail.observer, { attempts: 4, accepted: 2, refused: 2 });
+  assert.deepEqual(mail.discrepancy, { attempts: 0, accepted: -1, refused: 1 });
+  assert.equal(mail.status, 'unknown'); assert.equal(mail.reconciled, false);
+  assert.deepEqual(mail.gaps, ['accounting:meter-disagreement']);
+  assert.deepEqual(mail.billing, { quantity: null, status: 'unknown' });
+  const assessment = assessAccounting({ producer: 'service', sources: [{ scope: 'mail', record: mail }] });
+  assert.equal(assessment.publicationEligible, false); assert.ok(assessment.gaps.includes('accounting:meter-disagreement'));
+  assert.equal([email, 'payload', 'signature', '127.0.0.1'].some(value => JSON.stringify(mail).includes(value)), false);
+  t.diagnostic(JSON.stringify({ functional: 'passed', mail, assessment }));
 });
