@@ -78,6 +78,7 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
           const text = await message.innerText();
           if (scenario === 'stale') {
             assert.ok(text.includes(c.refreshStatus));
+            assert.match(text, locale === 'en' ? /Refresh status below the venue list/ : /Actualizar estado debajo de la lista de locales/);
             assert.match(text, locale === 'en' ? /does not confirm an outage/ : /no confirma una caída/);
             assert.equal(await group.getByText(c[`monitor${kind}Failed`], {exact: true}).count(), 0);
           } else {
@@ -86,6 +87,7 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
             assert.match(text, locale === 'en' ? /require operator tools/ : /requieren herramientas de operador/);
             if (scenario === 'certificate') {
               assert.ok(text.includes(c.refreshStatus));
+              assert.match(text, locale === 'en' ? /Refresh status below the venue list/ : /Actualizar estado debajo de la lista de locales/);
               assert.equal(await group.getByText(c[`monitor${kind}Healthy`], {exact: true}).isVisible(), true);
               assert.deepEqual(await group.locator('time').evaluateAll(nodes => nodes.map(node => node.getAttribute('datetime'))), [checkedAt, expiresAt]);
             }

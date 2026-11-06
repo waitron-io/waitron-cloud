@@ -18,6 +18,7 @@ for (const locale of ['en', 'es'] as const) for (const kind of ['public', 'staff
       assert.ok(mail.text.includes(base.venueId));
       if (condition === 'probe_stale') {
         assert.ok(mail.text.includes(locale === 'en' ? 'Refresh status' : 'Actualizar estado'));
+        assert.match(mail.text, locale === 'en' ? /Refresh status below the venue list/ : /Actualizar estado debajo de la lista de locales/);
         assert.match(mail.text, locale === 'en' ? /does not confirm an outage/ : /no confirma una caída/);
         assert.doesNotMatch(mail.text, locale === 'en' ? /failed its latest/ : /falló en la última/);
       } else {
@@ -31,6 +32,7 @@ for (const locale of ['en', 'es'] as const) for (const kind of ['public', 'staff
           assert.match(mail.text, locale === 'en' ? /certificate expires soon/ : /certificado .*caduca pronto/);
           assert.match(mail.text, locale === 'en' ? /Renewal and installation/ : /La renovación y la instalación/);
           assert.ok(mail.text.includes(locale === 'en' ? 'Refresh status' : 'Actualizar estado'));
+          assert.match(mail.text, locale === 'en' ? /Refresh status below the venue list/ : /Actualizar estado debajo de la lista de locales/);
           assert.doesNotMatch(mail.text, locale === 'en' ? /failed its latest/ : /falló en la última/);
         }
       }
