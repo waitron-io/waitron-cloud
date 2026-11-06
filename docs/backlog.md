@@ -1482,6 +1482,11 @@ implementation or production evidence.
   compiler jobs. Different-tree pushes derive ownership from their literal
   before/after range. Integration controls retain the bounded summary lookup,
   source recheck and original proof-selector assertions.
+  Four Kubernetes cleanup inputs have renewed root reviews: `expiry.mjs`,
+  `expiry.test.mjs`, `setup.test.mjs` and the `README.md` under
+  `deploy/kubernetes/proof/`. The guide is a reviewed root input. Their fixed
+  unit-test and generated-Lambda readers preserve the existing registered test
+  boundaries; the separate cost-input renewal remains independently owned.
   Ownership review does not complete global root precision or establish a time
   saving. Unresolved package readers, including the separate #938 fix, remain
   outside this slice.
