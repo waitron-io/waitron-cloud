@@ -50,12 +50,12 @@ test('a full pool cannot hide the missing-mail assertion or accumulate diagnosti
   assert.equal(pool.idleCount, 1, 'a late acquired client must be returned');
 });
 
-test('a stalled PostgreSQL handshake cannot hide the missing-mail assertion', async t => {
+test('a simulated stalled PostgreSQL handshake cannot hide the missing-mail assertion', async t => {
   const sockets = new Set<Socket>();
   const server = createTcpServer(socket => {sockets.add(socket); socket.once('close', () => sockets.delete(socket));});
   await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
   const address = server.address(); assert.ok(address && typeof address !== 'string');
-  const pool = new Pool({host: '127.0.0.1', port: address.port, user: 'private-user', database: 'private-db', ssl: false, max: 1});
+  const pool = new Pool({host: '127.0.0.1', port: address.port, user: 'test-user', database: 'test-db', ssl: false, max: 1});
   const c = await capture(t, pool), result = missing(c);
   try {unavailable(await within(result));}
   finally {
@@ -108,19 +108,19 @@ test('a database disconnect during evidence collection preserves the mail assert
   assert.deepEqual((await c.evidence()).outbox, []);
 });
 
-test('an unexpected socket close during the outbox read stays inside the mail diagnostic', async t => {
+for (const loss of ['close', 'reset'] as const) test(`an unexpected socket close during the outbox read stays inside the mail diagnostic: ${loss}`, async t => {
   const sockets = new Set<Socket>();
   const server = createTcpServer(socket => {
     sockets.add(socket); socket.once('close', () => sockets.delete(socket));
     // Complete PostgreSQL startup, then drop the transport for the actual query.
     socket.once('data', () => {
       socket.write(Buffer.from('5200000008000000005a0000000549', 'hex'));
-      socket.once('data', () => socket.destroy());
+      socket.once('data', () => loss === 'reset' ? socket.resetAndDestroy() : socket.destroy());
     });
   });
   await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
   const address = server.address(); assert.ok(address && typeof address !== 'string');
-  const pool = new Pool({host: '127.0.0.1', port: address.port, user: 'private-user', database: 'private-db', ssl: false, max: 1});
+  const pool = new Pool({host: '127.0.0.1', port: address.port, user: 'test-user', database: 'test-db', ssl: false, max: 1});
   const c = await capture(t, pool), result = missing(c);
   try {unavailable(await within(result));}
   finally {

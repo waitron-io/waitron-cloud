@@ -30,14 +30,17 @@ The queue evidence read now shares one second between getting a database connect
 and reading the outbox, so an exhausted pool or a stalled PostgreSQL handshake
 cannot hide the original missing-mail assertion. If the read cannot finish, you
 still get the worker, SMTP and inbox evidence with `outbox: "unavailable"`.
-Each capture keeps at most one pending connection request. The shared pool owns
+Each capture keeps at most one pending connection request. An overlapping
+evidence read also reports the outbox as unavailable without starting another
+database operation, even when the earlier read is healthy. The shared pool owns
 that request until it settles; a client obtained after the deadline is returned
 without a query. A query that fails or times out discards its connection instead
 of returning unfinished work to the pool. Existing lookups, assertions and test
 deadlines remain unchanged. These checks do not reproduce or fix the historical
 missing-mail failures.
 
-Run the real connection and lock controls with:
+Run the PostgreSQL lock and connection controls, including the simulated TCP
+handshake and transport failures, with:
 
 ```sh
 node scripts/test-postgres.mjs exec node --test --test-timeout=15000 \

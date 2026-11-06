@@ -84,3 +84,28 @@ test('successful capture returns the same token without diagnostic database work
   const capture = await fixture(t, {messages: [{ID: 'private-id', Subject: subject, To: [{Address: email}]}], queryFails: true});
   assert.equal(await capture.tokenFromMail(email, subject), token);
 });
+
+for (const failure of ['rejected', 'throwing', 'late-rejected'] as const) {
+  test(`mail evidence can be read again after a ${failure} connection attempt`, async () => {
+    let attempts = 0, rejectConnection: ((error: Error) => void) | undefined;
+    const pool = {connect() {
+      if (attempts++ === 0) {
+        if (failure === 'throwing') throw privateError;
+        if (failure === 'rejected') return Promise.reject(privateError);
+        return new Promise((_resolve, reject) => {rejectConnection = reject;});
+      }
+      return Promise.resolve({release() {}, once() {}, removeListener() {}, async query() {return {rows: []};}});
+    }} as unknown as Parameters<typeof createMailCapture>[0]['pool'];
+    const send = async () => {};
+    const capture = createMailCapture({pool, inbox: 'http://127.0.0.1', mailer: {
+      sendVerification: send, sendPasswordReset: send, sendPasswordChanged: send, sendServiceAlert: send,
+    }});
+    assert.equal((await capture.evidence()).outbox, 'unavailable');
+    if (failure === 'late-rejected') {
+      assert.ok(rejectConnection); rejectConnection(privateError);
+      await new Promise<void>(resolve => setImmediate(resolve));
+    }
+    assert.deepEqual((await capture.evidence()).outbox, []);
+    assert.equal(attempts, 2);
+  });
+}
