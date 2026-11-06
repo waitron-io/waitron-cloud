@@ -444,6 +444,7 @@ export async function openLitestreamHistories({ client, sdk, meter, bucket, cloc
     if (row.candidates) row.candidates.add(mutation.method === 'PUT' ? mutation.bytes : null);
     if (row.candidates || (mutation.method === 'PUT' ? row.current?.bytes !== mutation.bytes : row.current !== null)) row.uncertain = mutation;
   };
+  const completionStates = new WeakMap();
   const multipart = allowMultipart ? nativeMultipartHistory({ bucket, now, inspect, resolveReplies: resolveMultipartReplies,
     markGap: code => { gaps.add(code); meter.markGap(code); }, prepareComplete: (key, sizes, from) => {
     let row = rows.get(key);
@@ -455,7 +456,9 @@ export async function openLitestreamHistories({ client, sdk, meter, bucket, cloc
     // Deferred completions resolve in admission order. An uncommitted later
     // completion must not add its size to an earlier object's candidates.
     const mutation = sizes.length === 1 ? mutationFor(row, 'PUT', sizes[0], from, false) : null;
-    const completion = { order, following: new Set(sizes), advanced: false, overwritten: false };
+    const before = new Set(row.candidates ?? [row.current?.bytes ?? null]);
+    if (row.uncertain) before.add(row.uncertain.method === 'PUT' ? row.uncertain.bytes : null);
+    const completion = { order, before, following: new Set(sizes), advanced: false, overwritten: false };
     row.pendingCompletions ??= new Set();
     row.pendingCompletions.add(completion);
     const apply = by => {
@@ -469,7 +472,20 @@ export async function openLitestreamHistories({ client, sdk, meter, bucket, cloc
         row.candidates = new Set(completion.following);
       } else transition(row, mutation, by, order);
     };
-    apply.resolve = apply;
+    completionStates.set(apply, completion);
+    apply.resolve = (by, { alternatives = [], optional = false } = {}) => {
+      if (!alternatives.length && !optional) return apply(by);
+      historyGap();
+      const choices = [apply, ...alternatives].map(fn => completionStates.get(fn));
+      requireThat(choices.every(choice => choice && row.pendingCompletions.has(choice)));
+      for (const choice of choices) row.pendingCompletions.delete(choice);
+      const supported = new Set();
+      for (const choice of choices) if (!choice.overwritten) {
+        for (const bytes of choice.following) supported.add(bytes);
+        if (optional) for (const bytes of choice.before) supported.add(bytes);
+      }
+      if (supported.size) { requireThat(supported.size <= 100000); row.candidates = supported; }
+    };
     apply.absent = () => { requireThat(row.pendingCompletions.delete(completion)); };
     return apply;
   } }) : null;
@@ -668,6 +684,19 @@ export function nativeMultipartHistory({ bucket, now, inspect, prepareComplete, 
     const selected = upload.candidates?.get(n);
     if (selected) { candidates -= selected.length; upload.candidates.delete(n); }
   };
+  const discardTerminals = id => {
+    for (let i = uncertain.length - 1; i >= 0; i--) if (uncertain[i].id === id
+      && ['multipart-complete', 'multipart-abort'].includes(uncertain[i].operation)) {
+      uncertain[i].applyCompletion?.absent?.(); uncertain.splice(i, 1);
+    }
+  };
+  const resolveTerminals = (entries, by) => {
+    const completions = entries.filter(u => u.operation === 'multipart-complete');
+    if (completions.length) completions[0].applyCompletion.resolve(by, {
+      alternatives: completions.slice(1).map(u => u.applyCompletion),
+      optional: entries.some(u => u.operation === 'multipart-abort'),
+    });
+  };
   const begin = ({ operation, key, query, headers, body, time }) => {
     requireThat(!busy && uncertain.length < 100000 && safeKey(key) && !/[\x00-\x1f\x7f]/.test(key) && headers
       && !Object.hasOwn(headers, 'content-encoding') && !Object.hasOwn(headers, 'x-amz-copy-source'));
@@ -679,8 +708,9 @@ export function nativeMultipartHistory({ bucket, now, inspect, prepareComplete, 
     else {
       requireThat(upload);
       for (let i = uncertain.length - 1; i >= 0; i--) if (uncertain[i].id === id) {
-        requireThat(uncertain[i].operation === 'multipart-upload');
-        retainPart(uncertain[i]); uncertain.splice(i, 1);
+        if (uncertain[i].operation === 'multipart-upload') {
+          retainPart(uncertain[i]); uncertain.splice(i, 1);
+        } else markGap('accounting:incomplete-history');
       }
     }
     if (operation === 'multipart-upload') requireThat(bytes >= 0 && upload.parts.size < 10000);
@@ -728,6 +758,9 @@ export function nativeMultipartHistory({ bucket, now, inspect, prepareComplete, 
         uploads.set(identity(key, f.UploadId), { key, uploadId: f.UploadId, parts: new Map() });
       } else if (operation === 'multipart-upload') {
         requireThat(cleanText(responseHeaders?.etag));
+        // A successful part proves the upload survived every earlier terminal
+        // request. Earlier lost completions cannot also own a completed object.
+        discardTerminals(id);
         const n = Number(query.get('partNumber')), previous = upload.parts.get(n);
         clearCandidates(upload, n);
         if (previous) retire(previous, time, by);
@@ -736,7 +769,14 @@ export function nativeMultipartHistory({ bucket, now, inspect, prepareComplete, 
         if (operation === 'multipart-complete') {
           const f = fields(responseBody, 'CompleteMultipartUploadResult', ['Location', 'Bucket', 'Key', 'ETag']);
           requireThat(f.Bucket === bucket && f.Key === key && cleanText(f.ETag));
+          discardTerminals(id);
           applyCompletion(by, responseHeaders);
+        } else {
+          const prior = uncertain.filter(u => u.id === id);
+          if (prior.length) {
+            resolveTerminals([...prior, { operation: 'multipart-abort' }], by);
+            for (let i = uncertain.length - 1; i >= 0; i--) if (uncertain[i].id === id) uncertain.splice(i, 1);
+          }
         }
         for (const part of upload.parts.values()) retire(part, time, by);
         for (const n of upload.candidates?.keys() ?? []) clearCandidates(upload, n);
@@ -781,10 +821,26 @@ export function nativeMultipartHistory({ bucket, now, inspect, prepareComplete, 
       creates.set(found.key, remaining - 1);
       uploads.set(id, { ...found, parts: new Map() });
     }
+    const terminalGroups = new Map();
+    for (const u of uncertain) if (['multipart-complete', 'multipart-abort'].includes(u.operation)) {
+      if (!terminalGroups.has(u.id)) terminalGroups.set(u.id, []);
+      terminalGroups.get(u.id).push(u);
+    }
+    for (const [id, entries] of terminalGroups) {
+      if (observed.has(id)) for (const u of entries) u.applyCompletion?.absent?.();
+      else {
+        const by = now(), upload = entries[0].upload;
+        resolveTerminals(entries, by);
+        for (const part of upload.parts.values()) retire(part, entries[0].time, by);
+        for (const n of upload.candidates?.keys() ?? []) clearCandidates(upload, n);
+        uploads.delete(id);
+      }
+    }
     for (const u of uncertain) {
       const by = now(), found = observed.get(u.id);
       if (u.operation === 'multipart-create') continue;
       if (u.operation === 'multipart-upload') {
+        if (!found && terminalGroups.has(u.id)) continue;
         requireThat(found);
         if (u.upload.candidates?.has(u.partNumber)) { retainPart(u); continue; }
         const part = found.parts.get(u.partNumber), previous = u.upload.parts.get(u.partNumber);
@@ -794,12 +850,7 @@ export function nativeMultipartHistory({ bucket, now, inspect, prepareComplete, 
           if (previous) retire(previous, u.time, by);
           u.upload.parts.set(u.partNumber, { ...part, from: u.time, by });
         } else requireThat(unchanged || !previous && !part);
-      } else if (!found) {
-        if (u.operation === 'multipart-complete') u.applyCompletion.resolve(by);
-        for (const part of u.upload.parts.values()) retire(part, u.time, by);
-        for (const n of u.upload.candidates?.keys() ?? []) clearCandidates(u.upload, n);
-        uploads.delete(u.id);
-      } else if (u.operation === 'multipart-complete') u.applyCompletion.absent?.();
+      }
     }
     uncertain.length = 0;
     for (const [id, upload] of uploads) for (const [n, possible] of upload.candidates ?? []) {

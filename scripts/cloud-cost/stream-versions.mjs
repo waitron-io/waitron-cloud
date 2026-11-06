@@ -38,6 +38,7 @@ export async function openLitestreamVersionHistories({ client, sdk, meter, bucke
     retiredHigh += row.bytes * (by - row.from);
     row.deleted = true; row.removing = null;
   };
+  const completionStates = new WeakMap();
   const multipart = allowMultipart ? nativeMultipartHistory({ bucket, now, inspect, resolveReplies: resolveMultipartReplies,
     markGap: code => { gaps.add(code); meter.markGap(code); }, prepareComplete: (key, sizes, from) => {
     need(sequence < 100000); const order = ++sequence;
@@ -51,7 +52,13 @@ export async function openLitestreamVersionHistories({ client, sdk, meter, bucke
     };
     // The vanished upload requires a retained version. Reserve request order at
     // admission so later ordinary writes cannot become older during inventory.
-    apply.resolve = () => { unresolved.push({ key, bytes, possibleBytes, marker: false, from, order, required: true }); };
+    const candidate = { key, bytes, possibleBytes, marker: false, from, order };
+    completionStates.set(apply, candidate);
+    apply.resolve = (by, { alternatives = [], optional = false } = {}) => {
+      const choices = [candidate, ...alternatives.map(fn => completionStates.get(fn))];
+      need(choices.every(choice => choice && choice.key === key));
+      unresolved.push({ ...candidate, ...(choices.length > 1 ? { choices } : {}), required: !optional });
+    };
     return apply;
   } }) : null;
   const beginBatch = ({ headers, body }) => {
@@ -187,8 +194,10 @@ export async function openLitestreamVersionHistories({ client, sdk, meter, bucke
   const assignPossibleVersions = (found, time) => {
     const keys = new Set(unresolved.map(mutation => mutation.key));
     for (const [id, observed] of found) if (!rows.has(id)) keys.add(observed.key);
-    const compatible = (mutation, observed) => mutation.marker === observed.marker
+    const matches = (mutation, observed) => mutation.marker === observed.marker
       && (mutation.possibleBytes ? mutation.possibleBytes.includes(observed.bytes) : mutation.bytes === observed.bytes);
+    const compatible = (mutation, observed, before = Infinity) => (mutation.choices ?? [mutation])
+      .filter(choice => choice.order < before && matches(choice, observed));
     for (const key of keys) {
       const requests = unresolved.filter(mutation => mutation.key === key);
       const retained = [...found].filter(([, observed]) => observed.key === key);
@@ -197,7 +206,7 @@ export async function openLitestreamVersionHistories({ client, sdk, meter, bucke
       const latest = retained.filter(([, observed]) => observed.latest); need(latest.length === 1);
       const [latestId, latestObserved] = latest[0], knownLatest = rows.get(latestId);
       const latestOrders = knownLatest ? [knownLatest.orders.at(-1)]
-        : requests.filter(mutation => compatible(mutation, latestObserved)).map(mutation => mutation.order);
+        : requests.flatMap(mutation => compatible(mutation, latestObserved).map(choice => choice.order));
       let selected;
       // Alternative sizes share one request, so separate size groups cannot each
       // consume it. Match required completions first and keep the latest version last.
@@ -208,14 +217,15 @@ export async function openLitestreamVersionHistories({ client, sdk, meter, bucke
           if (row && id !== latestId) earlier.set(row.orders, (earlier.get(row.orders) ?? 0) + 1);
         }
         if ([...earlier].some(([orders, required]) => orders.filter(order => order < latestOrder).length < required)) continue;
-        const latestRequest = knownLatest ? null : requests.find(mutation => mutation.order === latestOrder);
+        const latestRequest = knownLatest ? null : requests.find(mutation => compatible(mutation, latestObserved)
+          .some(choice => choice.order === latestOrder));
         if (latestRequest) assigned.set(latestId, latestRequest);
         const assign = request => {
           const queue = [request], parents = new Map([[request, null]]), seen = new Set();
           for (let n = 0; n < queue.length; n++) {
             let current = queue[n];
             for (const [id, observed] of unknown) {
-              if (id === latestId || seen.has(id) || !compatible(current, observed)) continue;
+              if (id === latestId || seen.has(id) || !compatible(current, observed, latestOrder).length) continue;
               seen.add(id); const previous = assigned.get(id);
               if (previous) {
                 if (!parents.has(previous)) { parents.set(previous, { request: current, id }); queue.push(previous); }
@@ -233,11 +243,15 @@ export async function openLitestreamVersionHistories({ client, sdk, meter, bucke
         let valid = true;
         for (const request of requests.filter(mutation => mutation.required)) {
           if (request === latestRequest) continue;
-          if (request.order >= latestOrder || !assign(request)) { valid = false; break; }
+          if (!assign(request)) { valid = false; break; }
         }
         if (!valid) continue;
-        for (const request of requests.filter(mutation => !mutation.required && mutation !== latestRequest && mutation.order < latestOrder)) assign(request);
-        if (assigned.size === unknown.length) { selected = assigned; break; }
+        for (const request of requests.filter(mutation => !mutation.required && mutation !== latestRequest)) assign(request);
+        if (assigned.size === unknown.length) {
+          selected = new Map([...assigned].map(([id, request]) => [id, compatible(request, found.get(id), id === latestId ? Infinity : latestOrder)
+            .find(choice => id !== latestId || choice.order === latestOrder)]));
+          break;
+        }
       }
       need(selected);
       for (const [id, request] of selected) {
@@ -276,7 +290,7 @@ export async function openLitestreamVersionHistories({ client, sdk, meter, bucke
       }
       const time = now(), groups = new Map(), used = new Map(), orders = new Map();
       const group = row => JSON.stringify([row.key, row.bytes, row.marker]);
-      const alternatives = unresolved.some(mutation => mutation.possibleBytes);
+      const alternatives = unresolved.some(mutation => mutation.possibleBytes || mutation.choices);
       if (alternatives) assignPossibleVersions(found, time);
       for (const mutation of alternatives ? [] : unresolved) {
         const id = group(mutation); if (!groups.has(id)) groups.set(id, []); groups.get(id).push(mutation);

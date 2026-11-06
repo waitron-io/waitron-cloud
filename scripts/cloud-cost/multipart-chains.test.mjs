@@ -109,6 +109,90 @@ for (const versioned of [false, true]) for (const committed of [false, true])
     assert.deepEqual(f.audit.snapshot().byteSeconds, committed ? { low: 18, high: 44 } : { low: 18, high: 24 });
   });
 
+for (const versioned of [false, true]) for (const bytes of [null, 4, 5, 6]) for (const abort of [false, true])
+  test(`terminal chain alternative completion sizes ${versioned}/${bytes}/${abort}`, async t => {
+    const f = await fixture(t, versioned); create(f); part(f); f.time(5); cutoff(f, 'complete');
+    f.time(6); assert.doesNotThrow(() => cutoff(f, 'part', { bytes: 6 }));
+    f.time(7); assert.doesNotThrow(() => cutoff(f, 'complete'));
+    if (abort) { f.time(8); assert.doesNotThrow(() => cutoff(f, 'abort')); }
+    f.uploads.clear(); if (bytes !== null) f.objects.push({ id: 'one', bytes, latest: true });
+    f.time(10);
+    if (bytes === 5 || bytes === null && !abort) { await assert.rejects(f.audit.verify(), bad); return; }
+    await assert.doesNotReject(f.audit.verify()); result(f, bytes ?? 0, 0, true);
+  });
+
+for (const latest of ['completed', 'ordinary']) for (const bytes of [4, 6])
+  test(`terminal chain version order uses matching completion request ${latest}/${bytes}`, async t => {
+    const f = await fixture(t, true); create(f); part(f); f.time(5); cutoff(f, 'complete');
+    f.time(6); const ordinary = f.audit.begin({ method: 'PUT', path, headers: { 'content-length': '2' } });
+    ordinary({ statusCode: 200, bytesOut: 2, responseHeaders: { 'x-amz-version-id': 'ordinary' } });
+    f.time(7); cutoff(f, 'part', { bytes: 6 }); f.time(8); cutoff(f, 'complete');
+    f.uploads.clear(); f.objects.push({ id: 'completed', bytes, latest: latest === 'completed' },
+      { id: 'ordinary', bytes: 2, latest: latest === 'ordinary' });
+    f.time(10);
+    // Six bytes can only come from the later completion. Four can come from
+    // either attempt, including the one preceding the acknowledged ordinary PUT.
+    if (latest === 'ordinary' && bytes === 6) { await assert.rejects(f.audit.verify(), bad); return; }
+    await assert.doesNotReject(f.audit.verify()); result(f, bytes + 2, 0, true);
+  });
+
+for (const versioned of [false, true]) for (const bytes of [null, 2, 4, 6])
+  test(`terminal chain later ordinary outcome stays current ${versioned}/${bytes}`, async t => {
+    const f = await fixture(t, versioned); create(f); part(f); f.time(5); cutoff(f, 'complete');
+    f.time(6); cutoff(f, 'abort'); f.time(7);
+    f.audit.begin({ method: 'PUT', path, headers: { 'content-length': '2' } })({ statusCode: 200, bytesOut: 2,
+      responseHeaders: versioned ? { 'x-amz-version-id': 'ordinary' } : {} });
+    f.uploads.clear();
+    if (versioned) f.objects.push({ id: 'ordinary', bytes: 2, latest: true });
+    if (bytes !== null) f.objects.push({ id: 'completed', bytes, latest: !versioned });
+    f.time(10);
+    const valid = versioned ? bytes === null || bytes === 4 : bytes === 2;
+    if (!valid) { await assert.rejects(f.audit.verify(), bad); return; }
+    await assert.doesNotReject(f.audit.verify()); result(f, versioned ? 2 + (bytes ?? 0) : 2, 0, true);
+  });
+
+for (const versioned of [false, true]) for (const first of ['complete', 'abort'])
+  test(`terminal chain actual lost reply forwards following HTTP request ${versioned}/${first}`, async t => {
+    const f = await fixture(t, versioned), received = []; create(f); part(f);
+    const backend = createServer((req, res) => {
+      const chunks = []; req.on('data', chunk => chunks.push(chunk)); req.on('end', () => {
+        received.push({ method: req.method, body: Buffer.concat(chunks).toString() });
+        if (received.length === 1) {
+          f.uploads.clear();
+          if (first === 'complete') f.objects.push({ id: 'one', bytes: 4, latest: true });
+          res.destroy();
+        } else { res.statusCode = 404; res.end(); }
+      });
+    });
+    backend.listen(0, '127.0.0.1'); await once(backend, 'listening');
+    t.after(() => { backend.closeAllConnections(); return new Promise(resolve => backend.close(resolve)); });
+    const meter = createMeter({ phase: 'workload', clock: () => 0 });
+    const front = await createLitestreamTransport({ target: `http://127.0.0.1:${backend.address().port}`, meter, phase: 'workload', lifetimes: f.audit });
+    t.after(() => front.close().catch(() => {}));
+    const send = (op, invocation) => new Promise((resolve, reject) => {
+      const req = input(op);
+      const caller = request(front.url + req.path, { method: req.method, headers: { ...req.headers,
+        'amz-sdk-invocation-id': invocation + '-2222-4333-8444-555555555555', 'amz-sdk-request': 'attempt=1; max=1',
+      } }, async res => {
+        try { for await (const chunk of res) void chunk; resolve(res.statusCode); }
+        catch { reject(Error('Synthetic reply cutoff')); }
+      });
+      caller.once('error', () => reject(Error('Synthetic request cutoff')));
+      caller.end(req.body ?? (op === 'part' ? 'four' : undefined));
+    });
+    f.time(5); await assert.rejects(send(first, '11111111'), /Synthetic (request|reply) cutoff/);
+    await front.whenIdle(() => {}); f.time(6);
+    const next = first === 'complete' ? 'abort' : 'part';
+    assert.equal(await send(next, '22222222'), 404); await front.whenIdle(() => {});
+    await assert.doesNotReject(front.close()); f.time(10); await assert.doesNotReject(f.audit.verify());
+    result(f, first === 'complete' ? 4 : 0, 0, true);
+    assert.deepEqual(received, [{ method: first === 'complete' ? 'POST' : 'DELETE', body: first === 'complete' ? completion.toString() : '' },
+      { method: next === 'abort' ? 'DELETE' : 'PUT', body: next === 'part' ? 'four' : '' }]);
+    assert.equal(meter.snapshot().accounting.producer.attempts, 2);
+    assert.equal(meter.snapshot().accounting.requests.filter(row => row.outcome === 'transport-error').reduce((n, row) => n + row.attempts, 0), 1);
+    assert.equal(front.checkpoint().pending, 0); assert.equal(front.checkpoint().connections, 0);
+  });
+
 for (const versioned of [false, true]) for (const stored of [4, 6, 8])
   test(`repeated lost part replacements retain only admitted sizes ${versioned}/${stored}`, async t => {
     const f = await fixture(t, versioned); create(f); part(f);
@@ -699,3 +783,60 @@ for (const bytes of [4, 6, 8, null]) test(`deferred same-key retained later uplo
   if (bytes !== 4) { await assert.rejects(f.audit.verify(), bad); return; }
   await assert.doesNotReject(f.audit.verify()); result(f, 12, 1, true);
 });
+
+// A vanished upload can have completed once or been aborted. Reply loss alone
+// cannot choose between them, and retries cannot create two versions of one upload.
+for (const versioned of [false, true]) for (const first of ['complete', 'abort'])
+  for (const next of ['complete', 'abort']) for (const outcome of ['retained', 'completed', 'aborted', 'duplicate'])
+    test(`terminal chain inventory ${versioned}/${first}/${next}/${outcome}`, async t => {
+      const f = await fixture(t, versioned); create(f); part(f);
+      f.time(5); cutoff(f, first); f.time(6);
+      assert.doesNotThrow(() => cutoff(f, next));
+      if (outcome !== 'retained') f.uploads.clear();
+      if (outcome === 'completed' || outcome === 'duplicate') f.objects.push({ id: 'one', bytes: 4, latest: true });
+      if (outcome === 'duplicate') f.objects.push({ id: 'two', bytes: 4, latest: false });
+      f.time(10);
+      const allowed = outcome === 'retained'
+        || outcome === 'completed' && (first === 'complete' || next === 'complete')
+        || outcome === 'aborted' && (first === 'abort' || next === 'abort');
+      if (!allowed) { await assert.rejects(f.audit.verify(), bad); return; }
+      await assert.doesNotReject(f.audit.verify());
+      result(f, outcome === 'aborted' ? 0 : 4, Number(outcome === 'retained'), true);
+    });
+
+for (const versioned of [false, true]) for (const first of ['complete', 'abort'])
+  for (const acknowledged of [false, true]) for (const missing of [false, true])
+    test(`terminal chain following part ${versioned}/${first}/${acknowledged}/${missing}`, async t => {
+      const f = await fixture(t, versioned); create(f); part(f);
+      f.time(5); cutoff(f, first); f.time(6); let finish;
+      assert.doesNotThrow(() => { finish = begin(f, 'part', { bytes: 6 }); });
+      f.time(7); finish(acknowledged ? { statusCode: 200, bytesOut: 6, responseHeaders: { etag: 'six' } }
+        : { statusCode: null, interrupted: true, bytesOut: 6 });
+      if (missing) {
+        f.uploads.clear();
+        if (first === 'complete') f.objects.push({ id: 'one', bytes: 4, latest: true });
+      } else f.uploads.get(UploadId).set(1, { bytes: 6, etag: 'six' });
+      f.time(10);
+      if (missing && acknowledged) { await assert.rejects(f.audit.verify(), bad); return; }
+      await assert.doesNotReject(f.audit.verify());
+      result(f, missing ? first === 'complete' ? 4 : 0 : 6, Number(!missing), true);
+    });
+
+for (const versioned of [false, true]) for (const first of ['complete', 'abort'])
+  test(`terminal chain acknowledged completion cancels obsolete possibilities ${versioned}/${first}`, async t => {
+    const f = await fixture(t, versioned); create(f); part(f); f.time(5); cutoff(f, first);
+    f.time(6); let finish; assert.doesNotThrow(() => { finish = begin(f, 'complete'); });
+    f.time(7); finish({ statusCode: 200, bytesOut: completion.length, responseBody: completedReply(),
+      responseHeaders: versioned ? { 'x-amz-version-id': 'one' } : {} });
+    f.uploads.clear(); f.objects.push({ id: 'one', bytes: 4, latest: true }); f.time(10);
+    await assert.doesNotReject(f.audit.verify()); result(f, 4, 0, true);
+  });
+
+for (const versioned of [false, true]) for (const committed of [false, true])
+  test(`terminal chain acknowledged abort preserves optional earlier completion ${versioned}/${committed}`, async t => {
+    const f = await fixture(t, versioned); create(f); part(f); f.time(5); cutoff(f, 'complete');
+    f.time(6); let finish; assert.doesNotThrow(() => { finish = begin(f, 'abort'); });
+    f.time(7); finish({ statusCode: 204, bytesOut: 0 }); f.uploads.clear();
+    if (committed) f.objects.push({ id: 'one', bytes: 4, latest: true });
+    f.time(10); await assert.doesNotReject(f.audit.verify()); result(f, committed ? 4 : 0, 0, true);
+  });

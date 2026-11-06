@@ -275,6 +275,13 @@ one ambiguous completion cannot explain two versions. Hidden storage time remain
 unknown. Multiple deferred completions for one unversioned key now keep separate
 transitions in admission order. A retained upload contributes no completed object;
 a later committed completion or ordinary mutation excludes an older current size.
+You can also continue work on the same upload after a lost completion or abort
+reply. Inventory treats repeated completions as alternatives for one object,
+and an abort leaves completion optional. A later acknowledged part or completion
+excludes obsolete terminal requests. Hidden storage time stays unknown. The same
+multipart test command checks these choices and four actual HTTP sequences that
+preserve a lost reply followed by the backend's 404 response. These controls do
+not establish SQLite recovery; completion admission and export remain unfinished.
 Independent inventory still rejects unsupported sizes and missing objects. The
 same test file includes two real HTTP completions whose replies are lost, with
 both callbacks collected. Further requests on the same upload after an uncertain
