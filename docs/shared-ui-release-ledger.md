@@ -87,7 +87,8 @@ the same archive, raw manifest and notice fingerprints and returns the unchanged
 ledger. It never turns an uncertain upload back into a prepared release.
 
 The recorder validates the reserved release/source mapping, private GitHub
-publishing metadata, script-free manifest and presence of every built export.
+publishing metadata, licence declaration, external Lit peer, script-free manifest
+and presence of every built export.
 Both notices must match the reserved commit's regular Git blobs. Working-copy
 edits, inherited Git redirection and local replacement refs cannot supply those
 bytes. Tar receives a frozen in-memory copy and a restricted environment; it

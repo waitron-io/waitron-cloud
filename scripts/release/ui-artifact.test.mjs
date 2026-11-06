@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import {execFileSync, spawnSync} from 'node:child_process';
-import {createHash} from 'node:crypto';
+import {createHash, randomBytes} from 'node:crypto';
 import {mkdtemp, mkdir, readFile, writeFile, rm, chmod} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join, resolve} from 'node:path';
@@ -199,6 +199,7 @@ test('links, duplicate members and paths outside the package refuse without extr
   for (const [extra, message] of [
     [{name: 'package/dist/link.js', type: '2', link: '/etc/passwd'}, /regular files/],
     [{name: 'package/dist/link.js', type: '1', link: 'package/dist/index.js'}, /regular files/],
+    [members[1], /duplicate archive member/],
     [members[0], /duplicate archive member/],
     [{name: '../escaped', body: 'hostile'}, /invalid archive member path/],
     [{name: 'package/../escaped', body: 'hostile'}, /invalid archive member path/],
@@ -214,7 +215,14 @@ test('links, duplicate members and paths outside the package refuse without extr
 
 test('compressed and expanded archive size limits refuse before recording', async t => {
   const f = await fixture(t);
-  for (const bytes of [Buffer.alloc(16 * 1024 * 1024 + 1), gzipSync(Buffer.alloc(32 * 1024 * 1024 + 1))]) {
+  const members = [
+    {name: 'package/package.json', body: await readFile(f.manifestFile)},
+    {name: 'package/dist/index.js', body: 'export const valid = true;'},
+    {name: 'package/dist/LICENSE', body: 'LICENSE\n'},
+    {name: 'package/dist/LICENSE-GRANTS.md', body: 'LICENSE-GRANTS.md\n'},
+  ];
+  for (const body of [randomBytes(17 * 1024 * 1024), Buffer.alloc(32 * 1024 * 1024)]) {
+    const bytes = archiveMembers([...members, {name: 'package/dist/padding', body}]);
     await writeFile(f.archive, bytes);
     const result = f.record();
     assert.notEqual(result.status, 0);
@@ -248,4 +256,16 @@ test('local Git replacement refs cannot substitute notices for the reserved comm
   assert.notEqual(result.status, 0);
   assert.match(result.stderr, /notice differs/);
   assert.equal(result.stdout, '');
+});
+
+test('delivered licence metadata and the external Lit peer remain required', async t => {
+  const f = await fixture(t);
+  for (const change of [{license: 'Apache-2.0'}, {peerDependencies: {}}, {peerDependencies: {lit: ''}}]) {
+    await writeFile(f.manifestFile, JSON.stringify({...f.manifest, ...change}));
+    f.pack();
+    const result = f.record();
+    assert.notEqual(result.status, 0, JSON.stringify(change));
+    assert.match(result.stderr, /licence|Lit peer/);
+    assert.equal(result.stdout, '');
+  }
 });

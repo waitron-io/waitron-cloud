@@ -39,6 +39,8 @@ export function recordReleaseArtifact(ledger, archive, {notices, at}) {
   const manifest = JSON.parse(rawManifest.toString('utf8'));
   assert.equal(manifest.name, '@waitron-io/ui-core', 'unexpected release package name');
   assert.equal(manifest.version, reservation.version, 'release version differs from reservation');
+  assert.equal(manifest.license, 'SEE LICENSE IN dist/LICENSE', 'release licence metadata differs');
+  assert(typeof manifest.peerDependencies?.lit === 'string' && manifest.peerDependencies.lit.trim(), 'external Lit peer required');
   const expected = releaseManifest({...manifest, name: '@waitron/ui-core', version: reservation.source.version},
     reservation.source, reservation.version);
   assert.deepEqual(manifest, expected, 'release manifest differs from reserved identity or contains build hooks');
