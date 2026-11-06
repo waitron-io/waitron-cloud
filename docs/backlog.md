@@ -4090,14 +4090,17 @@ assertions and deadlines. See the
 
 ## Authenticator code format feedback (D237)
 
-### Distinguish server refusals during authenticator changes
+### Authenticator refusal guidance
 
-An expired, consumed or superseded setup, a removed factor, and an over-long
-password can all produce the same invalid-input reply. Give these causes distinct
-server codes, then map them to guidance that explains what you can do next, such
-as starting setup again. Cloud owns this follow-up across the registration,
-account HTTP and portal packages. Keep proof acceptance and account authority
-checks intact; cover each refusal with a server test and matching portal feedback.
+Expired, consumed or superseded setup returns `setup_unavailable`; an inactive
+factor returns `factor_not_active`; passwords over 1,024 UTF-8 bytes return
+`password_too_long`. The portal explains the next step in English and Spanish,
+discards unusable setup and offers a status refresh for an inactive factor.
+Server and portal checks cover each cause, including expiry during proof checks
+and ownership refusals for stale setup from another account or session.
+Account, session, password-fingerprint,
+proof and attempt-budget refusals keep their existing acceptance rules. See the
+[authenticator guide](authenticator-app.md#call-the-api).
 
 ## Clear stale connection and recovery code feedback (D249)
 

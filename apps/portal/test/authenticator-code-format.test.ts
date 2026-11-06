@@ -41,7 +41,19 @@ for(const action of actions)test(`${action}: well-formed wrong codes and outages
   const {c}=fixture(reply);await c[action]();assert.equal(c.error,reply.status===403?'credentials':action==='completeLogin'?'factorLoginUncertain':'factorChangeUncertain');assert.equal(c.requiredField,undefined);
  }
 });
-test('password-only setup keeps general feedback for server invalid_input',async()=>{
- const {c,calls}=fixture();c.status!.active=false;c.enrolment=undefined;c.password='p'.repeat(1025);c.proofCode='';
- await c.begin();assert.deepEqual(calls,[{path:'/authenticator/begin',body:{password:'p'.repeat(1025)}}]);assert.equal(c.error,'factorCheckSettings');assert.equal(c.requiredField,undefined);assert.equal(c.enrolment,undefined);
+test('password-only setup keeps general feedback for an unclassified input refusal',async()=>{
+ const {c,calls}=fixture();c.status!.active=false;c.enrolment=undefined;c.password='current password';c.proofCode='';
+ await c.begin();assert.deepEqual(calls,[{path:'/authenticator/begin',body:{password:'current password'}}]);assert.equal(c.error,'factorCheckSettings');assert.equal(c.requiredField,undefined);assert.equal(c.enrolment,undefined);
+});
+
+for(const [code,want,actions] of [
+ ['setup_unavailable','factorSetupUnavailable',['activate','cancel']],
+ ['factor_not_active','factorNotActive',['remove','regenerate']],
+ ['password_too_long','factorPasswordTooLong',['begin','activate','remove','regenerate']],
+] as const)for(const action of actions)test(`${action}: ${code} gives its own next step without replaying the write`,async()=>{
+ const {c,calls}=fixture({ok:false,status:400,code,retryAfterMs:0});
+ await c[action]();assert.equal(c.error,want);assert.equal(c.pending,false);
+ assert.equal(c.password,'');assert.equal(c.proofCode,'');assert.equal(c.confirmation,'');
+ assert.equal(calls.length,1);assert.equal(calls[0]!.path,`/authenticator/${action}`);
+ if(code==='setup_unavailable')assert.equal(c.enrolment,undefined,'A refused setup cannot be retried');
 });

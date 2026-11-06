@@ -20,7 +20,8 @@ function token(value:unknown):string {
   if(typeof value!=='string'||!TOKEN.test(value))throw new AccountHttpError(400,'invalid_input');return value;
 }
 function password(value:unknown):string {
-  if(typeof value!=='string'||!value||Buffer.byteLength(value)>1024)throw new AccountHttpError(400,'invalid_input');return value;
+  if(typeof value!=='string'||!value)throw new AccountHttpError(400,'invalid_input');
+  if(Buffer.byteLength(value)>1024)throw new AccountHttpError(400,'password_too_long');return value;
 }
 function code(value:unknown):string {
   if(typeof value!=='string'||!/^\d{6}$/.test(value))throw new AccountHttpError(400,'invalid_input');return value;
@@ -74,7 +75,7 @@ export async function authenticatorResponse(c:Context,options: Options):Promise<
     writeSessionCookies(c,options.secure);return c.json(changed);
   }catch(error){
     if(error instanceof FactorError)throw new AccountHttpError(error.code==='temporarily_unavailable'?503:401,error.code,error.code==='temporarily_unavailable'?1:undefined);
-    if(error instanceof FactorManagementError)throw new AccountHttpError(error.code==='temporarily_unavailable'?503:error.code==='invalid_input'?400:403,
+    if(error instanceof FactorManagementError)throw new AccountHttpError(error.code==='temporarily_unavailable'?503:error.code==='permission_denied'?403:400,
       error.code==='permission_denied'?'credentials_invalid':error.code,error.code==='temporarily_unavailable'?1:undefined);
     if(!completion&&action!==''&&error instanceof IdentityError)throw new AccountHttpError(403,'credentials_invalid');
     throw error;

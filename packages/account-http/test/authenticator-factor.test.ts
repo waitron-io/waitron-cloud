@@ -168,7 +168,8 @@ test('nested proofs and management bodies reject extra keys, malformed types and
     await refusal(await request('/login/factor',{challengeToken,proof:recovery(owner.codes[0]!)}),400,'invalid_input');
   const plain=await account(),headers=await signIn(plain.email);
   for(const body of [{password,token},{password,csrfToken:token},{password,proof:{kind:'totp',code:'123456',extra:1}},
-    {password:'é'.repeat(513)},{password:[]},{}])await refusal(await request('/authenticator/begin',body,{headers}),400,'invalid_input');
+    {password:[]},{}])await refusal(await request('/authenticator/begin',body,{headers}),400,'invalid_input');
+  await refusal(await request('/authenticator/begin',{password:'é'.repeat(513)},{headers}),400,'password_too_long');
   assert.equal((await request('/authenticator/begin',{password},{headers:{...headers,origin:'https://evil.test'}})).status,403);
   assert.equal((await request('/authenticator?secret=oops',undefined,{headers})).status,400);
   assert.equal((await request('/authenticator/unknown',{},{headers})).status,404);
@@ -320,4 +321,29 @@ test('factor configuration has strict independent keys and policy while bad inpu
     assert.equal(parse!({...env,CLOUD_FACTOR_POLICY:value}).policy,null);
   const invalid=parse!({...env,CLOUD_FACTOR_KEYS:'bad',CLOUD_FACTOR_POLICY:'bad'}),target=application(invalid),owner=await account();
   assert.equal((await request('/login',{email:owner.email,password},{app:target})).status,200);
+});
+
+for(const reason of ['expired','consumed','superseded'] as const)test(`HTTP ${reason} setup gives restart guidance without clearing the session`,async()=>{
+  const owner=await account(),headers=await signIn(owner.email);
+  const begun=await request('/authenticator/begin',{password},{headers});assert.equal(begun.status,200);
+  const pending=await begun.json() as {pendingToken:string;secret:string};
+  if(reason==='expired')await db.pool.query("UPDATE cloud_factor_enrolments SET created_at=clock_timestamp()-interval '2 seconds',expires_at=clock_timestamp()-interval '1 second'");
+  else if(reason==='consumed')assert.equal((await request('/authenticator/cancel',{pendingToken:pending.pendingToken},{headers})).status,204);
+  else assert.equal((await request('/authenticator/begin',{password},{headers})).status,200);
+  await refusal(await request('/authenticator/activate',{password,pendingToken:pending.pendingToken,code:totp(pending.secret)},{headers}),400,'setup_unavailable');
+  await refusal(await request('/authenticator/cancel',{pendingToken:pending.pendingToken},{headers}),400,'setup_unavailable');
+  assert.equal((await request('/session',undefined,{headers})).status,200);
+  assert.equal((await db.pool.query('SELECT sum(attempts)::integer AS n FROM cloud_factor_enrolments')).rows[0].n,0);
+});
+test('HTTP absent factor has its own refusal and does not end the session',async()=>{
+  const owner=await account(),headers=await signIn(owner.email);
+  for(const action of ['remove','regenerate'])await refusal(await request(`/authenticator/${action}`,{password},{headers}),400,'factor_not_active');
+  assert.equal((await request('/session',undefined,{headers})).status,200);
+});
+test('HTTP overlong passwords use a byte-length refusal while malformed input keeps its code',async()=>{
+  const owner=await account(),headers=await signIn(owner.email);
+  for(const value of ['x'.repeat(1025),'é'.repeat(513)])for(const action of ['begin','activate','remove','regenerate'])
+    await refusal(await request(`/authenticator/${action}`,{password:value,...(action==='activate'?{pendingToken:'A'.repeat(43),code:'123456'}:{})},{headers}),400,'password_too_long');
+  await refusal(await request('/authenticator/begin',{password:'é'.repeat(512)},{headers}),403,'credentials_invalid');
+  assert.equal((await request('/session',undefined,{headers})).status,200);
 });
