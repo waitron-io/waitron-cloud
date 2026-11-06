@@ -26,9 +26,10 @@ Its four remote jobs pass every selected test:
 | 4/4 | 92 s | 75 s |
 
 The second job exceeds the target by 23 seconds. Its nine-omission venue guard
-takes 93.337 seconds. The fourth job has room for that file, so the explicit
-remote runner assigns it there. All other files keep Node's sorted round-robin
-allocation, including newly discovered tests. The runner keeps the 30-second
+takes 93.337 seconds. To rebalance the work, the explicit remote runner assigns
+that file to the fourth job. All other files keep Node's sorted round-robin
+allocation, including newly discovered tests. Hidden files, helpers and nested
+fixture tests stay outside the native wildcard's discovery. The runner keeps the 30-second
 default and each test's existing explicit deadline. An invalid or empty
 partition fails before Node can discover unrelated tests.
 

@@ -35,6 +35,11 @@ test('remote shards discover every current file and a future file exactly once t
  try{
   mkdirSync(directory,{recursive:true});mkdirSync(join(root,'scripts'));
   cpSync(new URL('./ci-run-remote-shard.mjs',import.meta.url),join(root,'scripts/ci-run-remote-shard.mjs'));
+  writeFileSync(join(directory,'metadata.json'),'{}\n');
+  writeFileSync(join(directory,'helper.ts'),"throw Error('NON_TEST_HELPER_RAN');\n");
+  writeFileSync(join(directory,'.hidden.test.ts'),"throw Error('HIDDEN_TEST_RAN');\n");
+  mkdirSync(join(directory,'fixtures'));
+  writeFileSync(join(directory,'fixtures/unrelated.test.ts'),"throw Error('NESTED_FIXTURE_RAN');\n");
   // The fixture replaces Docker setup while forwarding the workflow's actual Node arguments.
   writeFileSync(join(root,'scripts/test-postgres.mjs'),`import assert from 'node:assert/strict';import {spawnSync} from 'node:child_process';
 assert.deepEqual(process.argv.slice(2,8),['exec','pnpm','--filter','@waitron-cloud/remote-access','exec','node']);
@@ -42,8 +47,7 @@ const child=spawnSync(process.execPath,process.argv.slice(8),{cwd:'packages/remo
   for(const name of files)writeFileSync(join(directory,name),`import assert from 'node:assert/strict';import test from 'node:test';test(${JSON.stringify(name)},()=>{assert.ok(process.execArgv.includes('--test-timeout=30000'));});\n`);
   const seen=[],env={...process.env};delete env.NODE_TEST_CONTEXT;
   env.NODE_TEST_REPORTER='tap';
-  for(const row of selected){const line=command.replaceAll('${{ matrix.package }}',remote).replaceAll('${{ matrix.shard }}',String(row.shard)).replaceAll('${{ matrix.shards }}',String(row.shards))
-    .replace("${{ matrix.package == '@waitron-cloud/portal' && '120000' || '30000' }}",'30000');
+  for(const row of selected){const line=command.replaceAll('${{ matrix.package }}',remote).replaceAll('${{ matrix.shard }}',String(row.shard));
    const result=spawnSync('sh',['-c',line],{cwd:root,env,encoding:'utf8',timeout:30000});assert.equal(result.status,0,result.stdout+result.stderr);
    const output=result.stdout,names=[...output.matchAll(/^(?:ok \d+ - |✔ )(.+?)(?: \(.*ms\))?$/gm)].map(m=>m[1]);
    assert.ok(names.length>0);assert.match(output,/^(?:# |ℹ )fail 0$/m);assert.match(output,/^(?:# |ℹ )cancelled 0$/m);assert.match(output,/^(?:# |ℹ )skipped 0$/m);
