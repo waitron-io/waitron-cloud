@@ -4,7 +4,7 @@ import {isValidatedSesFeedbackConfig,type SesFeedbackConfig} from './ses-feedbac
 import type {ParsedFeedback} from './ses-feedback-event.ts';
 import type {RelayKeyConfig} from './relay-payload.ts';
 import {transaction} from './transaction.ts';
-import {lockMailScope} from './recipient-suppression.ts';
+import {lockMailScope,advanceMailSuppressionRevision} from './recipient-suppression.ts';
 import {bindProviderId} from './mail-attempts.ts';
 import {normaliseEmail} from './account-input.ts';
 
@@ -61,6 +61,7 @@ export async function applySesFeedback(pool:Pool,config:SesFeedbackConfig,recipi
   const blocking=['hard_bounce','complaint','provider_suppressed'].includes(event.kind);
   if(blocking)for(const ref of refs)await client.query(`INSERT INTO mail_suppressions(country,provider_account_id,region,key_id,digest,reason,event_id)
    VALUES($1,$2,$3,$4,$5,$6,$7)`,[country,providerAccountId,region,ref.key_id,ref.digest,event.kind,id]);
+  if(blocking)await advanceMailSuppressionRevision(client,config.scope);
   return blocking?receipt('applied','applied'):receipt('ignored','non_blocking');
  });
 }

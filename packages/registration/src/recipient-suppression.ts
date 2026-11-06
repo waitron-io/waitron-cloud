@@ -2,6 +2,17 @@ import type {PoolClient} from 'pg';
 import type {MailScope} from './ses-feedback-config.ts';
 export interface RecipientRef {keyId:string;digest:string}
 
+export async function mailSuppressionRevision(client:PoolClient,scope:MailScope):Promise<number>{
+ const row=(await client.query('SELECT revision FROM mail_suppression_revisions WHERE country=$1 AND provider_account_id=$2 AND region=$3',
+  [scope.country,scope.providerAccountId,scope.region])).rows[0];
+ return row?.revision??0;
+}
+export async function advanceMailSuppressionRevision(client:PoolClient,scope:MailScope):Promise<void>{
+ await lockMailScope(client,scope);
+ await client.query(`INSERT INTO mail_suppression_revisions(country,provider_account_id,region,revision) VALUES($1,$2,$3,1)
+  ON CONFLICT(country,provider_account_id,region) DO UPDATE SET revision=mail_suppression_revisions.revision+1`,[scope.country,scope.providerAccountId,scope.region]);
+}
+
 /** Include the schema so disposable databases and separate deployments do not share locks. */
 export async function lockMailScope(client:PoolClient,scope:MailScope):Promise<void> {
  try{await client.query('SAVEPOINT mail_scope_transaction');}
@@ -21,8 +32,8 @@ export async function recipientIsSuppressed(client:PoolClient,scope:MailScope,re
   ON s.key_id=r.key_id AND s.digest=r.digest WHERE s.country=$1 AND s.provider_account_id=$2 AND s.region=$3 LIMIT 1`,
   [scope.country,scope.providerAccountId,scope.region,refs.map(r=>r.keyId),refs.map(r=>r.digest)]);
  if(found.rowCount!==0)return true;
- const mapped=await client.query(`SELECT 1 FROM mail_legacy_suppression_scopes s
-  JOIN relay_suppressions legacy ON legacy.key_id=s.legacy_key_id AND legacy.digest=s.legacy_digest
+ const mapped=await client.query(`SELECT 1 FROM mail_legacy_suppression_lifetimes s
+  JOIN relay_suppressions legacy ON legacy.block_id=s.block_id AND legacy.key_id=s.legacy_key_id AND legacy.digest=s.legacy_digest
   JOIN unnest($4::text[],$5::text[]) AS r(key_id,digest) ON s.key_id=r.key_id AND s.digest=r.digest
   WHERE s.country=$1 AND s.provider_account_id=$2 AND s.region=$3 LIMIT 1`,
   [scope.country,scope.providerAccountId,scope.region,refs.map(r=>r.keyId),refs.map(r=>r.digest)]);

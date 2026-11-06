@@ -17,7 +17,7 @@ test('045 upgrades to venue service authority without changing old bytes',async(
  const f=await upgrade();try{
   const before=(await f.pool.query('SELECT * FROM schema_migrations ORDER BY name')).rows;assert.equal(before.length,45);
   await Promise.all([migrate(f.pool),migrate(f.pool)]);
-  assert.equal(migrationNames.length,50);assert.equal(migrationNames.at(46),'047_data_lifecycle.sql');assert.equal(migrationNames.at(47),'048_billing_allowances_traffic.sql');assert.equal(migrationNames.at(48),'049_ses_feedback.sql');assert.equal(migrationNames.at(-1),'050_mail_legacy_suppression_scopes.sql');assert.equal(migrationNames.at(45),'046_venue_service_authority.sql');
+  assert.equal(migrationNames.length,51);assert.equal(migrationNames.at(46),'047_data_lifecycle.sql');assert.equal(migrationNames.at(47),'048_billing_allowances_traffic.sql');assert.equal(migrationNames.at(48),'049_ses_feedback.sql');assert.equal(migrationNames.at(49),'050_mail_legacy_suppression_scopes.sql');assert.equal(migrationNames.at(-1),'051_mail_suppression_reconciliation.sql');assert.equal(migrationNames.at(45),'046_venue_service_authority.sql');
   const after=(await f.pool.query('SELECT * FROM schema_migrations ORDER BY name')).rows;
   assert.deepEqual(after.slice(0,45),before);assert.equal(after.length,50);assert.equal(after[47].name,'048_billing_allowances_traffic.sql');assert.equal(after[46].name,'047_data_lifecycle.sql');assert.equal(after[45].name,'046_venue_service_authority.sql');
   assert.equal((await f.pool.query('SELECT count(*) FROM billing_service_authority')).rows[0].count,'0');
