@@ -860,7 +860,7 @@ for (const counterGap of [false, true]) test('genuineStreamMeasurementJoinsPhase
 });
 
 // Ignoring stream options, missing the final sale or early database cleanup fails here.
-test('genuinePrivateDayStreamsEverySelectedSaleAndRestoresBeforeRemovingReplayState', async t => {
+for (const counterGap of [false, true]) test('genuinePrivateDayStreamsEverySelectedSaleAndRestoresBeforeRemovingReplayState' + (counterGap ? '_counterGap' : ''), async t => {
   const f = fixture(t), plan = local.prepareIsolatedStack(f);
   const { createHash } = await import('node:crypto');
   // Expose the pinned clock definitions already in the public bundle; retain every function body.
@@ -875,6 +875,16 @@ test('genuinePrivateDayStreamsEverySelectedSaleAndRestoresBeforeRemovingReplaySt
   for (const name of readdirSync(new URL('..', import.meta.url))) if (name.endsWith('.mjs') && !name.endsWith('.test.mjs'))
     cpSync(new URL('../' + name, import.meta.url), join(harness, name));
 
+  if (counterGap) {
+    const path = join(harness, 'meter.mjs'), anchor = '  const observeAttempt = (event, interruption = null) => {';
+    const source = readFileSync(path, 'utf8');
+    assert.equal(source.split(anchor).length, 2);
+    writeFileSync(path, source.replace(anchor, `  let alteredObservation = false;
+${anchor}
+    if (!alteredObservation && event.channel === 'observer' && event.bytesIn > 0) {
+      alteredObservation = true; event = { ...event, bytesIn: event.bytesIn - 1 };
+    }`));
+  }
   cpSync(new URL('./streamed-day-smoke.mjs', import.meta.url), join(f.codeRoot, 'cost-streamed-day-smoke.mjs'));
   let stack; f.onCleanup(async () => { await stack?.close(); });
   stack = await local.startIsolatedStack({ ...f, prepared: plan });
@@ -885,9 +895,16 @@ test('genuinePrivateDayStreamsEverySelectedSaleAndRestoresBeforeRemovingReplaySt
   assert.deepEqual(proof.result.replay.counts, { expected: 3, attempted: 3, successful: 3, failed: 0 });
   assert.deepEqual(proof.result.stream?.restored, { sales: 3, integrity: true });
   assert.deepEqual(proof.result.integrity, { ok: true, issues: 0 });
-  assert.equal(proof.result.stream.stream.requests.reconciled, true);
+  assertMeterAccounting(proof.result.stream.stream.requests);
+  if (counterGap) {
+    assert.equal(proof.result.stream.stream.requests.status, 'unknown');
+    assert.equal(proof.result.stream.stream.requests.reconciled, false);
+    assert.ok(proof.result.stream.stream.requests.gaps.includes('accounting:unreconciled'));
+  }
   assert.equal(proof.result.stream.stream.storage.objects.bytes, proof.inventoryBytes); assert.ok(proof.inventoryBytes > 0);
   assert.deepEqual(proof.result.stream.native, { version: '0.5.17', writerStarts: 1, phaseRestarts: 0 });
+  assert.deepEqual(proof.result.stream.functional, { startupUpload: true, restore: true });
+  assert.deepEqual(proof.result.stream.cleanup, { processes: 0, privateRoots: 0 });
   assert.deepEqual(proof.result.stream.stream.phases.map(p => p.phase), ['startup', 'workload', 'idle', 'verification', 'restore']);
   for (const phase of ['startup', 'idle']) assert.ok(proof.result.stream.stream.phases.find(p => p.phase === phase).elapsedSeconds >= 2);
   assert.equal(proof.sourceUnchanged, true); assert.equal(proof.collected, true); assert.equal(proof.clean, true); assert.equal(proof.leaked, false);
