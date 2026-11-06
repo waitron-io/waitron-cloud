@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { summarizeStreamAccounting } from './stream-admission.mjs';
-import { validateReceipt } from './schema.mjs';
+import { validateReceipt, exportAggregate } from './schema.mjs';
 const module = await import('./local-receipt.mjs').catch(error => {
   if (error.code === 'ERR_MODULE_NOT_FOUND' && error.url === new URL('./local-receipt.mjs', import.meta.url).href) return {};
   throw error;
@@ -69,6 +69,42 @@ function build(f) {
   assert.equal(typeof module.buildLocalReceipt, 'function', 'export a closed partial local receipt');
   return module.buildLocalReceipt(f);
 }
+
+test('new local export binds every measured value to its original replay and stream', () => {
+  const f = fixture(), receipt = build(f), { stream, ...replay } = f.result.admission;
+  const originals = { producer: 'local-stream', sources: [
+    { scope: 'requests', record: stream.requests }, { scope: 'restore', record: stream.requests },
+    { scope: 'administration', record: stream.administration }, { scope: 'storage', record: stream.storage },
+  ], measurements: { replay, stream, options: f.options } };
+  assert.deepEqual(exportAggregate(receipt, originals), receipt);
+  for (const row of receipt.inputs.filter(row => row.status === 'measured')) {
+    for (const [field, value] of [['value', row.value + 1], ['unit', 'hours'],
+      ['source', 'receipt:22345678-1234-4234-8234-123456789012'], ['observedAt', '2026-10-21T00:00:00.000Z']]) {
+      const changed = structuredClone(receipt);
+      changed.inputs.find(input => input.id === row.id)[field] = value;
+      assert.throws(() => exportAggregate(changed, originals), { message: 'Invalid cloud cost evidence' }, row.id + ':' + field);
+    }
+  }
+  const changed = structuredClone(receipt), row = changed.inputs.find(input => input.id === 'archive-bytes');
+  Object.assign(row, { value: 1, status: 'measured', source: 'receipt:' + changed.runId,
+    observedAt: changed.window.endedAt, reason: null });
+  assert.throws(() => exportAggregate(changed, originals), { message: 'Invalid cloud cost evidence' });
+  for (const path of ['options', 'options.expected', 'options.originalInventory', 'options.cadence', 'options.stream']) {
+    const source = structuredClone(originals);
+    path.split('.').reduce((value, key) => value[key], source.measurements).private = 'PRIVATE_CANARY';
+    assert.throws(() => exportAggregate(receipt, source), { message: 'Invalid cloud cost evidence' }, path);
+  }
+  const source = structuredClone(originals);
+  source.measurements = structuredClone(source.measurements);
+  const meter = source.measurements.stream.requests;
+  for (const rows of [meter.accounting.requests, meter.observedRequests]) {
+    rows[0].bytesOut++; rows[0].attemptedBytesOut++;
+  }
+  meter.accounting.producer.bytesOut++; meter.accounting.observer.bytesOut++;
+  assert.throws(() => exportAggregate(receipt, source), { message: 'Invalid cloud cost evidence' });
+  const changedCadence = structuredClone(receipt); changedCadence.cadence.factor++;
+  assert.throws(() => exportAggregate(changedCadence, originals), { message: 'Invalid cloud cost evidence' });
+});
 
 // Dropping either meter or collapsing storage uncertainty changes these hand-derived quantities.
 test('localReceiptPreservesAllStreamTrafficBoundsAndKnownReplayQuantities', () => {

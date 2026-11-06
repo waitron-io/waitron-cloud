@@ -1,6 +1,8 @@
 import { validateInput } from './input.mjs';
 import { isDeepStrictEqual, types } from 'node:util';
 import { assessAccounting } from './accounting-policy.mjs';
+import { validateReplayAdmission } from './isolated-replay.mjs';
+import { summarizeStreamAccounting } from './stream-admission.mjs';
 export { validateInput } from './input.mjs';
 import { existsSync, lstatSync, readdirSync, readFileSync, realpathSync } from 'node:fs';
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
@@ -117,7 +119,9 @@ function exportData(value, ancestors = new Set(), budget = { remaining: 250000 }
 export function exportAggregate(privateResult, originals) {
   try {
     // Historical shape validation cannot recover billing or coverage discarded by a projection.
-    requireThat(assessAccounting(originals).publicationEligible);
+    exportData(originals);
+    closed(originals, ['producer', 'sources', ...(Object.hasOwn(originals, 'measurements') ? ['measurements'] : [])]);
+    requireThat(assessAccounting({ producer: originals.producer, sources: originals.sources }).publicationEligible);
     requireThat(['local-stream', 'archive'].includes(originals.producer));
     exportData(privateResult);
     const receipt = validateReceipt(privateResult);
@@ -151,6 +155,35 @@ export function exportAggregate(privateResult, originals) {
       requireThat(count(total) && receipt.accounting[channel][field] === total);
     }
     requireThat(totalsKeys.every(field => receipt.accounting.discrepancy[field] === 0));
+    requireThat(receipt.inputs.every(row => ['measured', 'unknown'].includes(row.status)));
+    if (Object.hasOwn(originals, 'measurements') || receipt.inputs.some(row => row.status === 'measured')) {
+      requireThat(originals.producer === 'local-stream');
+      closed(originals.measurements, ['replay', 'stream', 'options']);
+      const { replay, stream, options } = originals.measurements;
+      closed(options, ['expected', 'originalInventory', 'cadence', 'replayWindowSeconds', 'stream']);
+      closed(options.expected, ['sales', 'paid', 'tradingDays', 'busiest']);
+      closed(options.originalInventory, ['days', 'busiest']);
+      closed(options.cadence, ['mode', 'factor']);
+      closed(options.stream, ['startupSeconds', 'idleSeconds', 'windowSeconds']);
+      const admitted = validateReplayAdmission(replay, options);
+      const accounting = summarizeStreamAccounting(stream, { ...options.stream, expectedSales: options.expected.busiest });
+      for (const [scope, record] of [['requests', stream.requests], ['restore', stream.requests],
+        ['administration', stream.administration], ['storage', stream.storage]]) requireThat(isDeepStrictEqual(source(scope), record));
+      const values = { 'orders-per-day': [admitted.replay.counts.successful, 'count'],
+        'bill-count': [admitted.replay.counts.successful, 'count'], 'successful-sales': [admitted.replay.counts.successful, 'count'],
+        'database-bytes': [admitted.storage.copiedDatabaseBytes, 'bytes'],
+        'database-growth-bytes': [admitted.storage.freshGrowthBytes, 'bytes'],
+        'replay-seconds': [admitted.replay.timing.elapsedSeconds, 'seconds'],
+        'stream-byte-seconds-low': [accounting.storage.byteSeconds.low, 'byte-seconds'],
+        'stream-byte-seconds-high': [accounting.storage.byteSeconds.high, 'byte-seconds'],
+        'stream-storage-seconds': [accounting.storage.windowSeconds, 'seconds'] };
+      requireThat(isDeepStrictEqual(receipt.cadence, { ...admitted.replay.cadence, configuredSchedule: null, observedSchedule: null }));
+      for (const row of receipt.inputs.filter(row => row.status === 'measured')) {
+        requireThat(Object.hasOwn(values, row.id) && row.value === values[row.id][0] && row.unit === values[row.id][1]
+          && row.source === 'receipt:' + receipt.runId && row.observedAt === receipt.window.endedAt
+          && row.scope === 'venue' && row.region === 'local');
+      }
+    }
     return receipt;
   } catch { fail(); }
 }

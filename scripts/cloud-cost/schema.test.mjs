@@ -395,3 +395,11 @@ test('new export refuses an overflowed combined object lifetime instead of publi
   assert.deepEqual(validateReceipt(r), r);
   refused(() => exportAggregate(r, source));
 });
+
+test('eligible request counters cannot authorise an invented measured input', () => {
+  const r = receipt();
+  r.inputs = [input({ value: 42, status: 'measured', source: 'receipt:' + r.runId,
+    observedAt: r.window.endedAt, region: 'local', reason: null })];
+  assert.deepEqual(validateReceipt(r), r, 'historical shape remains readable');
+  refused(() => exportAggregate(r, originals()));
+});

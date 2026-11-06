@@ -919,8 +919,8 @@ ${anchor}
 
 });
 
-// Publishing is allowed only after the real archive journey and owned cleanup agree.
-test('generatedArchiveStoragePublishesACompleteAnonymousReceiptAfterCleanup', async t => {
+// Functional archive success does not establish billing or storage-history coverage.
+test('generatedArchiveStorageCompletesWithoutExportWhenBillingIsUnknown', async t => {
   const { buildArchiveStorageReceipt } = await import('../archive-storage-receipt.mjs');
   const startedAt = new Date().toISOString(), f = fixture(t), plan = local.prepareIsolatedStack(f);
   cpSync(new URL('./archive-storage-smoke.mjs', import.meta.url), join(f.codeRoot, 'cost-archive-storage-smoke.mjs'));
@@ -934,17 +934,24 @@ test('generatedArchiveStoragePublishesACompleteAnonymousReceiptAfterCleanup', as
   assert.equal(docker('network', 'ls', '-q', '--filter', `label=io.waitron.cloud-cost.owner=${f.journal.token}`), '');
   const endedAt = new Date().toISOString();
   const cloudRevision = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: new URL('../../..', import.meta.url), encoding: 'utf8' }).trim();
-  const receipt = buildArchiveStorageReceipt({ metadata: { runId: crypto.randomUUID(), cloudRevision,
+  const completed = buildArchiveStorageReceipt({ metadata: { runId: crypto.randomUUID(), cloudRevision,
     waitronRevision: 'b1b0f10952a59eb59f7358bd681a3cdc94d9b61c',
     window: { startedAt, endedAt, elapsedSeconds: (Date.parse(endedAt) - Date.parse(startedAt)) / 1000 } }, result,
     cleanup: { ownedProcesses: 0, ownedContainers: 0, ownedNetworks: 0, ownedVolumes: 0, ownedObjects: 0, residualKinds: [] } });
-  assert.equal(receipt.accounting.producer.attempts, 11);
-  assert.equal(receipt.inputs.find(row => row.id === 'archive-bytes').value, result.capturedBytes);
-  assert.equal(receipt.inputs.find(row => row.id === 'successful-sales').value, 1);
-  assert.equal(receipt.accounting.requests.find(row => row.operation === 'put').bytesOut, result.capturedBytes);
-  assert.equal(receipt.accounting.requests.find(row => row.operation === 'get').bytesIn, result.capturedBytes + 11);
-  assert.equal(/PRIVATE_SYNTHETIC_CANARY|private-part|UploadId|SYNTHETIC_PRIVATE_STATE/.test(JSON.stringify(receipt)), false);
-  if (process.env.COST_ARCHIVE_STORAGE_OUTPUT) writeFileSync(process.env.COST_ARCHIVE_STORAGE_OUTPUT, JSON.stringify(receipt, null, 2) + '\n', { mode: 0o600 });
+  assert.equal(completed.functional, 'passed');
+  assert.equal(completed.receipt, null);
+  assert.equal(completed.costMeasured, false);
+  assert.equal(completed.accounting.status, 'unknown');
+  assert.equal(completed.accounting.publicationEligible, false);
+  assert.ok(completed.accounting.gaps.includes('request-billing:unknown'));
+  assert.equal(completed.evidence.result.accounting.accounting.producer.attempts, 11);
+  assert.equal(completed.evidence.result.capturedBytes, result.capturedBytes);
+  assert.equal(completed.evidence.result.restored.sales, 1);
+  assert.equal(completed.evidence.result.accounting.accounting.requests.find(row => row.operation === 'put').bytesOut, result.capturedBytes);
+  assert.equal(completed.evidence.result.accounting.accounting.requests.find(row => row.operation === 'get').bytesIn, result.capturedBytes + 11);
+  assert.equal(/PRIVATE_SYNTHETIC_CANARY|private-part|UploadId|SYNTHETIC_PRIVATE_STATE/.test(JSON.stringify(completed)), false);
+  const { exportAggregate } = await import('../schema.mjs');
+  assert.throws(() => exportAggregate(completed), /Invalid cloud cost evidence/);
 });
 
 import { readdirSync } from 'node:fs';

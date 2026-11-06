@@ -1,5 +1,6 @@
 import {REPLAY_REVISION} from './replay-release.mjs';
-import { isDeepStrictEqual } from 'node:util';
+import { isDeepStrictEqual, types } from 'node:util';
+import { assessAccounting } from './accounting-policy.mjs';
 import { validateReceipt } from './schema.mjs';
 
 const fail = () => { throw Error('Invalid cloud cost archive storage evidence'); };
@@ -7,7 +8,6 @@ const need = value => { if (!value) fail(); };
 const equal = (value, expected) => need(isDeepStrictEqual(value, expected));
 const exact = (value, keys) => need(value && !Array.isArray(value)
   && Reflect.ownKeys(value).length === keys.length && keys.every(key => Object.hasOwn(value, key)));
-const boundary = { classification: 'anonymous-aggregate', rawIncluded: false, exportSchema: 1 };
 const cleanup = { ownedProcesses: 0, ownedContainers: 0, ownedNetworks: 0, ownedVolumes: 0, ownedObjects: 0, residualKinds: [] };
 const operations = [['setup', 'bucket-create', 's3-control', 1], ['workload', 'put', 's3-write', 1],
   ['workload', 'head', 's3-read', 1], ['workload', 'get', 's3-read', 2], ['workload', 'multipart-create', 's3-multipart', 1],
@@ -27,7 +27,7 @@ function plain(value, seen = new Set(), budget = { remaining: 10000 }) {
   if (value === null || typeof value === 'boolean') return;
   if (typeof value === 'number') { need(Number.isFinite(value)); return; }
   if (typeof value === 'string') { need(value.length <= 512); return; }
-  need(value && typeof value === 'object' && seen.size < 16 && !seen.has(value));
+  need(value && typeof value === 'object' && !types.isProxy(value) && seen.size < 16 && !seen.has(value));
   const array = Array.isArray(value), fields = Reflect.ownKeys(value);
   need(Object.getPrototypeOf(value) === (array ? Array.prototype : Object.prototype));
   if (array) need(value.length <= 100 && fields.length === value.length + 1
@@ -40,8 +40,8 @@ function plain(value, seen = new Set(), budget = { remaining: 10000 }) {
   seen.delete(value);
 }
 
-// This contract admits the generated one-sale archive journey only. Its body-byte
-// counts and request vector cannot establish production size, storage time or cost.
+// This contract admits the generated one-sale archive journey only. Unknown
+// billing and absent storage history cannot produce a new measured receipt.
 export function buildArchiveStorageReceipt(input) {
   try {
     plain(input); exact(input, ['metadata', 'result', 'cleanup']);
@@ -66,13 +66,13 @@ export function buildArchiveStorageReceipt(input) {
       && rows.head.bytesIn === 0 && rows['multipart-upload'].bytesOut === 4);
     need(m.accounting.requests.filter(row => !['bucket-create', 'put', 'multipart-upload'].includes(row.operation)).every(row => row.bytesOut === 0));
     const { runId, cloudRevision, waitronRevision, window } = input.metadata;
-    const measured = (id, value, unit) => ({ id, value, unit, status: 'measured', source: 'receipt:' + runId,
-      scope: 'venue', region: 'local', observedAt: window.endedAt, effectiveAt: null, bounds: null, reason: null });
-    return validateReceipt({ schemaVersion: 1, runId, cloudRevision, waitronRevision, kind: 'local-aggregate', dataBoundary: boundary,
+    validateReceipt({ schemaVersion: 1, runId, cloudRevision, waitronRevision, kind: 'local-aggregate',
+      dataBoundary: { classification: 'anonymous-aggregate', rawIncluded: false, exportSchema: 1 },
       window, cadence: { mode: 'original', factor: 1, coveredSeconds: window.elapsedSeconds, configuredSchedule: null, observedSchedule: null },
-      inputs: [measured('archive-bytes', r.capturedBytes, 'bytes'), measured('restore-bytes', r.downloadedBytes, 'bytes'),
-        measured('successful-sales', 1, 'count')], accounting: m.accounting,
-      checks: [{ code: 'synthetic-only', passed: true, count: 1 }, { code: 'all-sales-replayed', passed: true, count: 1 },
-        { code: 'accounting-reconciled', passed: true, count: 11 }, { code: 'cleanup-complete', passed: true, count: 0 }], cleanup });
+      inputs: [], accounting: m.accounting, checks: [], cleanup });
+    const accounting = assessAccounting({ producer: 'archive', sources: [
+      { scope: 'requests', record: m }, { scope: 'restore', record: m },
+    ] });
+    return { functional: 'passed', costMeasured: false, accounting, receipt: null, evidence: structuredClone(input) };
   } catch { fail(); }
 }

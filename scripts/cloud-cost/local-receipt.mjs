@@ -74,6 +74,6 @@ export function buildLocalReceipt(input) {
       cleanup: { ownedProcesses: 0, ownedContainers: 0, ownedNetworks: 0, ownedVolumes: 0, ownedObjects: 0, residualKinds: [] } }, { producer: 'local-stream', sources: [
         { scope: 'requests', record: stream.requests }, { scope: 'restore', record: stream.requests },
         { scope: 'administration', record: stream.administration }, { scope: 'storage', record: stream.storage },
-      ] });
+      ], measurements: { replay, stream, options } });
   } catch { fail(); }
 }

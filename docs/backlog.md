@@ -412,9 +412,21 @@ and cannot qualify merely because both transfer counters agree. Run `node --test
 scripts/cloud-cost/schema.test.mjs scripts/cloud-cost/local-receipt.test.mjs
 scripts/cloud-cost/meter.test.mjs scripts/cloud-cost/storage-meter.test.mjs` for
 these boundaries.
-The final service-reader audit, other candidate export paths and complete
-measurement/projection/publication safeguards remain open. Historical archive
-and service receipt readers keep their existing contracts. The saved-failure
+Measured local inputs also need their original replay and stream records. The
+exporter compares every supported value, unit, source, observation time and
+cadence, and refuses an unrelated or invented measurement. The generated archive
+journey finishes with its original observations and no receipt because billing
+and storage-history coverage remain unknown. Its real Debian control retains
+all 11 requests, the restored sale, privacy and owned cleanup.
+Historical archive and service receipt readers keep their existing contracts;
+the service reconstruction helper has no current producing command. A gapped
+result refuses each stream, service, API, browser and archive sample slot through
+joining, projection, calculator preparation and publication. All 15 public files
+retain their bytes in the disposable replacement attempts. Run `node --test
+scripts/cloud-cost/schema.test.mjs scripts/cloud-cost/local-receipt.test.mjs
+scripts/cloud-cost/archive-storage-receipt.test.mjs` and the
+`generatedArchiveStorage` conformance case for the producer boundaries.
+The saved-failure
 replay classifies three recorded interruptions as nonblocking and two older
 records as unknown; it proves no complete historical run. These partial changes
 do not establish every historical cause or relax functional admission.
