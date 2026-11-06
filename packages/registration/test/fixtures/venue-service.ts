@@ -4,15 +4,18 @@ import {Pool} from 'pg';
 import {migrate} from '../../src/migrate.ts';
 import {transaction} from '../../src/transaction.ts';
 import type {BillingEvent,BillingScope} from '../../src/billing-types.ts';
+import {cloneVenueServiceTemplate} from './venue-service-template.ts';
+export {createVenueServiceTemplate} from './venue-service-template.ts';
 
 export const event=():BillingEvent=>({key:randomUUID(),occurredAt:'2026-10-29T09:00:00.000Z',source:{kind:'internal'}});
-export async function venueServiceFixture(){
+export async function venueServiceFixture(template?:string){
  const schema='venue_services_'+randomUUID().replaceAll('-','');
- const admin=new Pool({connectionString:process.env.TEST_DATABASE_URL});
- const pool=new Pool({connectionString:process.env.TEST_DATABASE_URL,application_name:schema,options:`-c search_path=${schema} -c statement_timeout=8000`});
- const peer=new Pool({connectionString:process.env.TEST_DATABASE_URL,application_name:schema+'_peer',options:`-c search_path=${schema} -c statement_timeout=8000`});
+ const cloned=template===undefined?undefined:await cloneVenueServiceTemplate(template,schema),connectionString=cloned?.connectionString??process.env.TEST_DATABASE_URL;
+ const admin=new Pool({connectionString});
+ const pool=new Pool({connectionString,application_name:schema,options:`-c search_path=${schema} -c statement_timeout=8000`});
+ const peer=new Pool({connectionString,application_name:schema+'_peer',options:`-c search_path=${schema} -c statement_timeout=8000`});
  try{
-  await admin.query(`CREATE SCHEMA ${schema}`);await migrate(pool);
+  if(!cloned)await admin.query(`CREATE SCHEMA ${schema}`);await migrate(pool);
   const scope={organisationId:randomUUID(),legalBusinessId:randomUUID()};
   const other={organisationId:scope.organisationId,legalBusinessId:randomUUID()};
   const foreign={organisationId:randomUUID(),legalBusinessId:randomUUID()};
@@ -33,8 +36,8 @@ export async function venueServiceFixture(){
   for(const s of [scope,other,foreign])await store.execute(s,event(),{type:'ensure_business'});
   const today=(await pool.query("SELECT (clock_timestamp() AT TIME ZONE 'UTC')::date::text AS day")).rows[0].day;
   return {schema,admin,pool,peer,scope,other,foreign,venues,otherVenue,foreignVenue,production,api,store,today,
-   async close(){await peer.end();await pool.end();await admin.query(`DROP SCHEMA ${schema} CASCADE`);await admin.end();}};
- }catch(e){await peer.end();await pool.end();await admin.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);await admin.end();throw e;}
+   async close(){await peer.end();await pool.end();if(!cloned)await admin.query(`DROP SCHEMA ${schema} CASCADE`);await admin.end();await cloned?.close();}};
+ }catch(e){await peer.end();await pool.end();if(!cloned)await admin.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);await admin.end();await cloned?.close();throw e;}
 }
 export type Fixture=Awaited<ReturnType<typeof venueServiceFixture>>;
 export async function read(f:Fixture,id=f.venues[0]):Promise<{organisationId:string;legalBusinessId:string;venueId:string;level:string;revision:number}>{

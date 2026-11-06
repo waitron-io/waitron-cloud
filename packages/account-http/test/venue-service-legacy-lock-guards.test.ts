@@ -6,14 +6,17 @@ import {join} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {test} from 'node:test';
 import {promisify} from 'node:util';
+import {createVenueServiceTemplate} from '../../registration/test/fixtures/venue-service-template.ts';
 const exec=promisify(execFile);
 
 // Each real database control runs before omission and after exact restoration.
 test('legacy remote first-enrolment guards detect nine independent omissions',{timeout:180000},async()=>{
  const root=fileURLToPath(new URL('../../../',import.meta.url)),scratch=await mkdtemp(join(tmpdir(),'legacy-venue-guards-')),candidate=join(scratch,'candidate');
+ let template:Awaited<ReturnType<typeof createVenueServiceTemplate>>|undefined;
  try{
   await exec('git',['clone','--quiet','--no-hardlinks',root,candidate],{timeout:10000});
   await exec('pnpm',['install','--frozen-lockfile'],{cwd:candidate,timeout:20000});
+  template=await createVenueServiceTemplate();
   const cases=[
    {name:'every legacy parent lock',file:'plan-permissions',needle:'ORDER BY v.id FOR SHARE OF v',replacement:'ORDER BY v.id',pattern:'legacy remote .* waits for first enrolment',count:7,expected:'legacy remote batch must wait for first enrolment'},
    {name:'direct legacy parent capture',file:'plan-permissions',needle:'const captured=await lockLegacyRemoteScope(client,cellId,scope.installationIds);',replacement:'const captured={organisations:[],venues:[],venue_authority:true};',pattern:'legacy remote eligibility waits for first enrolment',count:1,expected:'legacy remote batch must wait for first enrolment'},
@@ -26,7 +29,7 @@ test('legacy remote first-enrolment guards detect nine independent omissions',{t
    {name:'captured scheduler venue set',file:'reconciler',needle:' AND ($4::uuid[] IS NULL OR v.id=ANY($4::uuid[]))',replacement:' AND ($4::uuid[] IS NULL OR $4::uuid[] IS NOT NULL)',pattern:'legacy remote reporting scheduler defers a new same-organisation placement',count:1,expected:"'2' !== '0'"},
   ];
   const originals=new Map<string,string>();for(const c of cases)if(!originals.has(c.file))originals.set(c.file,await readFile(join(candidate,'packages/remote-access/src/'+c.file+'.ts'),'utf8'));
-  const env={...process.env};delete env.NODE_TEST_CONTEXT;
+  const env:NodeJS.ProcessEnv={...process.env,TEST_VENUE_SERVICE_TEMPLATE:template.name};delete env.NODE_TEST_CONTEXT;
   async function run(c:typeof cases[number]){
    return exec(process.execPath,['--test','--test-reporter=tap','--test-name-pattern=^'+c.pattern+'$','test/venue-service-legacy-locks.test.ts'],{cwd:join(candidate,'packages/remote-access'),env,timeout:30000,maxBuffer:2*1024*1024})
     .then(r=>({code:0,output:r.stdout+r.stderr}),e=>({code:e.code,output:e.stdout+e.stderr}));
@@ -41,5 +44,5 @@ test('legacy remote first-enrolment guards detect nine independent omissions',{t
    const restored=await run(c);assert.equal(restored.code,0,restored.output);assert.match(restored.output,new RegExp('# pass '+c.count+'\\b'));assert.match(restored.output,/# fail 0\b/);
    console.log('VENUE_LEGACY_REMOTE_GUARD_DETECTED '+c.name);
   }
- }finally{await rm(scratch,{recursive:true,force:true});}
+ }finally{try{await template?.close();}finally{await rm(scratch,{recursive:true,force:true});}}
 });

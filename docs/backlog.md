@@ -3455,6 +3455,28 @@ Production session behaviour and landed migrations are unchanged. Activity
 updates delayed by sixty seconds and changes to absolute session expiry remain
 outside this test's coverage, as they were before this repair.
 
+## Legacy remote guard fixture runtime (D530)
+
+The [PR1006 guard job](https://github.com/waitron-io/waitron-cloud/actions/runs/42195484677/job/127817764696)
+reaches all nine omission markers but exceeds its 180-second limit. The same
+wrapper failed in run 42144232244. A Debian profile identifies repeated schema
+work: 27 child runs create and drop 45 separately migrated schemas.
+
+The wrapper now prepares one database from the real migrations and gives each
+fixture its own database clone. Each clone still checks every migration digest,
+uses its own schema and data, restores schema-bound function settings after
+renaming, and drops only its owned database. Template close also reaps abandoned
+clones from its own full template identity while preserving other families. Other fixture
+callers keep the existing schema path. The real child refuses a changed migration
+digest and cleans the refused clone. All nine omissions retain their original
+before, omitted and restored assertions, along with the 180-second wrapper and
+30-second child limits. Template migration statements retain the existing eight-second
+limit. Real PostgreSQL checks verify clone isolation, migration-digest
+refusal, function resolution, removal of both clones and template, and cleanup
+after a caller exits. A scratch next migration verifies the complete manifest
+comparison without a fixed migration count. The focused Debian run completes
+the full wrapper within its unchanged deadline.
+
 ## Service-proof failure diagnostics (D530)
 
 The [first venue-proof attempt for PR381](https://github.com/waitron-io/waitron-cloud/actions/runs/41805521835/attempts/1)
