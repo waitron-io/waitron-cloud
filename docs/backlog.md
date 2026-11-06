@@ -14,7 +14,14 @@ now reserves one release per source, retains artifact identities and requires
 matching private-registry readback before finalising an upload. Its dedicated
 Git checkout preserves each transition with a signed-off commit and refuses a
 changed remote head. Local tests exercise competing writers against a real
-throwaway Git remote. Source CI selection, complete registry enumeration,
+throwaway Git remote. Package preparation now accepts the ledger's active unprepared reservation,
+keeps source and release versions separate and refuses stale output directories.
+It leaves persistence and artifact recording to its caller. Prepared-artifact
+rebuild and byte matching remain open. The CLI validates the shape of reserved
+evidence hashes; computing and matching input, recipe and source-check hashes
+remain required before upload. Fresh source isolation and an ordered build must
+exclude stale ignored or assume-unchanged output; clean Git status alone does
+not prove artifact provenance. Concurrent builds need distinct output directories. Source CI selection, complete registry enumeration,
 automation-branch bootstrap, workflow integration and actual upload/readback
 remain open. Preparation review, exact-head upgrade validation and fresh
 registry/image checks also remain open. Integration must recheck registry
