@@ -320,8 +320,8 @@ function runtimeFixture(f) {
     [`${endpoint}/actions/runs/42/attempts/2/jobs?per_page=30&page=1`]: {total_count: f.data.jobs.length, jobs: f.data.jobs},
     [`${endpoint}/actions/runs/42/artifacts?per_page=100&page=1`]: {total_count: f.data.artifacts.length, artifacts: f.data.artifacts},
     [`${endpoint}/actions/artifacts/61/zip`]: {binary: bytes.toString('base64')},
-    [`${endpoint}/actions/runs/90/jobs?filter=latest&per_page=30`]: [{jobs: [
-      {name: 'changes', status: 'completed', conclusion: 'success'},
+    [`${endpoint}/actions/runs/90/jobs?filter=latest&per_page=30`]: [{total_count: 1, jobs: [
+      {id: 101, name: 'changes', status: 'completed', conclusion: 'success'},
     ]}],
   };
   for (const [sha, value] of Object.entries(f.data.commits)) responses[`${endpoint}/git/commits/${sha}`] = value;

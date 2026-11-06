@@ -79,9 +79,12 @@ requalification, so it can refuse before reaching the record ceiling.
 Incomplete pages, duplicate IDs and changing totals refuse that evidence.
 Numeric links must match an independently read repository ID and name; requests
 keep using the named endpoint. The ordinary strict summary also requests
-30 jobs per page, through its existing reader and bounded retry sequence. It
-checks expected job names and results rather than enforcing these list budgets
-and total-count checks. Both summary types retain their 60-second publication
+30 jobs per page, through its existing reader and bounded retry sequence. Before
+checking job names and results, it requires a stable declared total matching all
+delivered records and unique positive job IDs, including skipped and sibling
+jobs. Missing pages and contradictory lists fail immediately. Its existing
+lookup budgets remain separate from the native verification budgets above.
+Both summary types retain their 60-second publication
 deadline.
 
 A proven different tree uses the actual push range. Direct and multi-commit

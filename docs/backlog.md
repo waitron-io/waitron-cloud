@@ -1568,11 +1568,17 @@ implementation or production evidence.
   their budget earlier. Numeric aliases require an independently verified
   repository name and ID. The ordinary strict summary requests 30 records
   through its existing reader, preserving its expected-name/result checks and
-  retry bounds. Its existing total-count/unique-ID gap remains separate: a
-  fake-GitHub command reproduced acceptance of a declared 14-job list delivering
-  12 jobs, changing totals and a duplicate skipped-job ID, while a missing
-  required job still fails. The watcher needs to assign that existing reader's
-  completeness follow-up; this change does not claim those controls there.
+  retry bounds. D586 closes that reader's separately reproduced completeness
+  gap: declared totals must be stable and equal every delivered record, and
+  all job IDs must be unique positive integers before workflow-family filtering.
+  Controlled incomplete, changing, duplicated and missing-page responses refuse
+  immediately. Complete single-page and multi-page lists still pass, while
+  missing required jobs and failed results retain their original refusals.
+  A controlled nightly response also proves that a sibling job appearing
+  between pages can change the declared total and cause this refusal. Whether
+  GitHub produces that race in practice remains unverified. If it occurs,
+  investigate that saved response under this CI investigation before changing
+  the existing retry policy; D586 does not retry contradictory evidence.
   The hosted timeout's natural cause is not proved. The watcher
   has updated all six operator runbooks; runtime landing still requires fresh
   current-head CI.

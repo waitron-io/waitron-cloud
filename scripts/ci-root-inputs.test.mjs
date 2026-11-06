@@ -397,7 +397,7 @@ test('executed summary derives ownership from the event before trusting a forged
   try {
     const event = revision => writeFileSync(join(scratch, 'event.json'), JSON.stringify({pull_request: {base: {sha: base}, head: {sha: revision}}}));
     event(head);
-    writeFileSync(join(scratch, 'jobs.json'), JSON.stringify([{jobs: ['changes', 'receipts'].map(name => ({name, status: 'completed', conclusion: 'success'}))}]));
+    writeFileSync(join(scratch, 'jobs.json'), JSON.stringify([{total_count: 2, jobs: ['changes', 'receipts'].map((name, index) => ({id: index + 1, name, status: 'completed', conclusion: 'success'}))}]));
     writeFileSync(join(scratch, 'gh'), '#!/bin/sh\ncat "$ROOT_JOB_FIXTURE"\n', {mode: 0o700});
     const results = {changes: {result: 'success'}, typecheck: {result: 'skipped'}, root: {result: 'skipped'}, packages: {result: 'skipped'}, receipts: {result: 'success'}};
     const run = (value, expectedHead = head) => spawnSync(process.execPath, [fileURLToPath(new URL('./ci-summary.mjs', import.meta.url))], {

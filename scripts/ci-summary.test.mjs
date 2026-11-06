@@ -24,6 +24,127 @@ function isolatedSummaryContext(root) {
   writeFileSync(event, '{}\n');
   return {head, env: {GITHUB_EVENT_PATH: event, GITHUB_SHA: head, CI_HEAD_SHA: head, CI_JOB_PREFIX: ''}};
 }
+const jobPages = records => [{total_count: records.length, jobs: records.map((job, index) => ({id: index + 1, ...job}))}];
+
+test('ordinary reader refuses incomplete lists, changing totals and duplicate job identities', async t => {
+  const records = [...jobs, {name: 'receipts', status: 'completed', conclusion: 'skipped'},
+    {name: 'summary', status: 'in_progress', conclusion: null}].map((job, index) => ({...job, id: index + 1}));
+  const page = (items, total = records.length) => ({total_count: total, jobs: items});
+  let pages;
+  let reads = 0;
+  t.mock.method(childProcess, 'execFileSync', () => { reads++; return JSON.stringify(pages); });
+  syncBuiltinESMExports();
+  try {
+    for (const [name, invalid] of [
+      ['declared total exceeds delivered jobs', [page(records, records.length + 1)]],
+      ['delivered jobs exceed declared total', [page(records, records.length - 1)]],
+      ['total changes between pages', [page(records.slice(0, 7)), page(records.slice(7), records.length - 1)]],
+      ['skipped jobs share an identity', [page([...records, {...records.at(-2), name: 'documentation'}], records.length + 1)]],
+      ['a missing page contains only the summary', [page(records.slice(0, -1))]],
+    ]) {
+      await t.test(name, async () => {
+        pages = invalid;
+        reads = 0;
+        await assert.rejects(() => summary.waitForSummary(plan, results), /Incomplete job list|Job list total changed|Duplicate job identity/);
+        assert.equal(reads, 1, 'Contradictory evidence must refuse without another lookup');
+      });
+    }
+  } finally {
+    t.mock.restoreAll();
+    syncBuiltinESMExports();
+  }
+});
+
+test('ordinary reader refuses malformed page totals and invalid job identities', async t => {
+  let pages;
+  t.mock.method(childProcess, 'execFileSync', () => JSON.stringify(pages));
+  syncBuiltinESMExports();
+  const records = jobs.map((job, index) => ({...job, id: index + 1}));
+  try {
+    for (const total of [undefined, null, -1, 1.5, '12', Number.MAX_SAFE_INTEGER + 1]) {
+      await t.test(`invalid total ${total}`, async () => {
+        pages = [{total_count: total, jobs: records}];
+        await assert.rejects(() => summary.waitForSummary(plan, results), /Invalid job list total/);
+      });
+    }
+    for (const id of [undefined, null, 0, -1, 1.5, '1', Number.MAX_SAFE_INTEGER + 1]) {
+      await t.test(`invalid identity ${id}`, async () => {
+        pages = [{total_count: records.length, jobs: records.map((job, index) => index ? job : {...job, id})}];
+        await assert.rejects(() => summary.waitForSummary(plan, results), /Invalid job identity/);
+      });
+    }
+    for (const invalid of [[], {}, null, [null], [{total_count: 12}], [{total_count: 12, jobs: {}}]]) {
+      await t.test(`invalid page shape ${JSON.stringify(invalid)}`, async () => {
+        pages = invalid;
+        await assert.rejects(() => summary.waitForSummary(plan, results), /Invalid job list pages|Invalid job list page/);
+      });
+    }
+  } finally {
+    t.mock.restoreAll();
+    syncBuiltinESMExports();
+  }
+});
+
+test('ordinary reader accepts complete single and multiple pages before checking job results', async t => {
+  const skippedNames = [
+    ...Array.from({length: 6}, (_, i) => `package (@waitron-cloud/registration, shard ${i + 1}/6)`),
+    ...Array.from({length: 3}, (_, i) => `package (@waitron-cloud/account-http, shard ${i + 1}/3)`),
+    ...Array.from({length: 7}, (_, i) => `package (@waitron-cloud/backups, shard ${i + 1}/7)`),
+    ...Array.from({length: 4}, (_, i) => `package (@waitron-cloud/remote-access, shard ${i + 1}/4)`),
+    'package (@waitron-cloud/translation)', 'package (@waitron-cloud/ui-smoke)',
+  ];
+  const records = [...jobs, ...skippedNames.map(name => ({name, status: 'completed', conclusion: 'skipped'}))]
+    .map((job, index) => ({...job, id: index + 1}));
+  let pages;
+  t.mock.method(childProcess, 'execFileSync', () => JSON.stringify(pages));
+  syncBuiltinESMExports();
+  try {
+    for (const items of [records.slice(0, jobs.length), records]) {
+      pages = Array.from({length: Math.ceil(items.length / 30)}, (_, index) => ({total_count: items.length, jobs: items.slice(index * 30, (index + 1) * 30)}));
+      await summary.waitForSummary(plan, results);
+    }
+    pages = [{total_count: records.length, jobs: records.map((job, index) => index === 0 ? {...job, conclusion: 'failure'} : job)}];
+    await assert.rejects(() => summary.waitForSummary(plan, results), /changes did not pass/);
+  } finally {
+    t.mock.restoreAll();
+    syncBuiltinESMExports();
+  }
+});
+
+test('ordinary reader validates every page and sibling before selecting the standard workflow', async t => {
+  const records = [...jobs.map(job => ({...job, name: `standard / ${job.name}`})),
+    ...Array.from({length: 49}, (_, index) => ({name: `cost / unused ${index}`, status: 'queued', conclusion: null}))]
+    .map((job, index) => ({...job, id: index + 1}));
+  const paged = items => Array.from({length: Math.ceil(items.length / 30)}, (_, index) => ({total_count: records.length, jobs: items.slice(index * 30, (index + 1) * 30)}));
+  let pages = paged(records);
+  let reads = 0;
+  const previousPrefix = process.env.CI_JOB_PREFIX;
+  process.env.CI_JOB_PREFIX = 'standard / ';
+  t.mock.method(childProcess, 'execFileSync', () => { reads++; return JSON.stringify(pages); });
+  syncBuiltinESMExports();
+  try {
+    await summary.waitForSummary(plan, results);
+    assert.equal(reads, 1);
+    for (const [name, invalid, reason] of [
+      ['duplicate sibling identity across pages', paged(records.map((job, index) => index === records.length - 1 ? {...job, id: records[15].id} : job)), /Duplicate job identity/],
+      ['missing middle page containing only siblings', paged(records).filter((_, index) => index !== 1), /Incomplete job list/],
+      ['missing final sibling page', paged(records).slice(0, -1), /Incomplete job list/],
+      ['invalid sibling identity', paged(records.map((job, index) => index === records.length - 1 ? {...job, id: String(job.id)} : job)), /Invalid job identity/],
+    ]) {
+      await t.test(name, async () => {
+        pages = invalid;
+        reads = 0;
+        await assert.rejects(() => summary.waitForSummary(plan, results), reason);
+        assert.equal(reads, 1);
+      });
+    }
+  } finally {
+    if (previousPrefix === undefined) delete process.env.CI_JOB_PREFIX;
+    else process.env.CI_JOB_PREFIX = previousPrefix;
+    t.mock.restoreAll();
+    syncBuiltinESMExports();
+  }
+});
 test('summary accepts precisely the planned work and skips only unnecessary receipts', () => {
   assert.doesNotThrow(()=>assertSummary(plan,results,jobs));
 });
@@ -112,8 +233,8 @@ test('executed summary waits for a stale job record to publish its final result'
   try {
     const context = isolatedSummaryContext(root);
     const first = [...jobs.slice(0, -1), {...jobs.at(-1), status: 'in_progress', conclusion: null}];
-    writeFileSync(join(root, 'first.json'), JSON.stringify([{jobs: first}]));
-    writeFileSync(join(root, 'settled.json'), JSON.stringify([{jobs}]));
+    writeFileSync(join(root, 'first.json'), JSON.stringify(jobPages(first)));
+    writeFileSync(join(root, 'settled.json'), JSON.stringify(jobPages(jobs)));
     writeFileSync(join(root, 'gh'), `#!/bin/sh
 case "$*" in
   'api --paginate --slurp repos/waitron-io/waitron-cloud/actions/runs/42/jobs?filter=latest&per_page=30') ;;
@@ -235,7 +356,7 @@ test('default publication allowance caps API calls, each read and the total wait
   t.mock.method(childProcess, 'execFileSync', (command, args, options) => {
     timeouts.push(options.timeout);
     assert.ok(timeouts.length <= 30, 'Too many API reads within one minute');
-    return JSON.stringify([{jobs: unfinishedJobs()}]);
+    return JSON.stringify(jobPages(unfinishedJobs()));
   });
   syncBuiltinESMExports();
   try {
@@ -259,7 +380,7 @@ test('slow job evidence can finish after an initial timeout within the original 
     budgets.push(options.timeout);
     elapsed += Math.min(options.timeout, 11_000);
     if (options.timeout < 11_000) throw Object.assign(new Error('spawnSync gh ETIMEDOUT'), {code: 'ETIMEDOUT'});
-    return JSON.stringify([{jobs}]);
+    return JSON.stringify(jobPages(jobs));
   });
   syncBuiltinESMExports();
   try {
@@ -309,8 +430,8 @@ test('a recovered slow lookup resets the read budget and still refuses a failed 
     budgets.push(options.timeout);
     elapsed += Math.min(options.timeout, 11_000);
     if (options.timeout < 11_000) throw Object.assign(new Error('spawnSync gh ETIMEDOUT'), {code: 'ETIMEDOUT'});
-    return JSON.stringify([{jobs: budgets.length === 2 ? unfinishedJobs()
-      : [...jobs.slice(0, -1), {...jobs.at(-1), conclusion: 'failure'}]}]);
+    return JSON.stringify(jobPages(budgets.length === 2 ? unfinishedJobs()
+      : [...jobs.slice(0, -1), {...jobs.at(-1), conclusion: 'failure'}]));
   });
   syncBuiltinESMExports();
   try {
@@ -547,7 +668,7 @@ test('executed summary binds completed shard steps to the workflow run, attempt 
   const root = mkdtempSync(join(tmpdir(), 'cloud-summary-steps-'));
   try {
     const context = isolatedSummaryContext(root), {head} = context;
-    writeFileSync(join(root, 'jobs.json'), JSON.stringify([{jobs: withShard({...finishedShard(), head_sha: head})}]));
+    writeFileSync(join(root, 'jobs.json'), JSON.stringify(jobPages(withShard({...finishedShard(), head_sha: head}))));
     writeFileSync(join(root, 'gh'), '#!/bin/sh\ncat "$CI_PUBLICATION_FIXTURE/jobs.json"\n', {mode: 0o700});
     const run = spawnSync(process.execPath, [summaryProgram], {
       cwd: root, env: {...process.env, ...context.env, PATH: `${root}:${process.env.PATH}`, CI_PUBLICATION_FIXTURE: root,
@@ -700,7 +821,7 @@ test('actual nested summary command receives the prefix configured by both workf
     const prefix = {'job-prefix': value}[input];
     assert.equal(typeof prefix, 'string', 'Both workflows must deliver a prefix');
     const records = [...jobs.map(job => ({...job, name: `standard / ${job.name}`})), {name: 'cost / discover', status: 'in_progress', conclusion: null}];
-    writeFileSync(join(root, 'jobs.json'), JSON.stringify([{jobs: records}]));
+    writeFileSync(join(root, 'jobs.json'), JSON.stringify(jobPages(records)));
   writeFileSync(join(root, 'package.json'), '{"type":"module"}\n');
     writeFileSync(join(root, 'gh.cjs'), `#!${process.execPath}\nconst fs=require('node:fs');const assert=require('node:assert/strict');assert.deepEqual(process.argv.slice(2),['api','--paginate','--slurp','repos/waitron-io/waitron-cloud/actions/runs/42/jobs?filter=latest&per_page=30']);process.stdout.write(fs.readFileSync(process.env.CI_JOB_FIXTURE,'utf8'));\n`, {mode: 0o700});
     symlinkSync('gh.cjs', join(root, 'gh'));

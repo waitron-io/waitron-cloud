@@ -92,13 +92,13 @@ test('executed summary consumes needs objects and the current job API, refusing 
     writeFileSync(gh,'#!/bin/sh\n[ "$1" = api ] || exit 2\ncat "$CI_FIXTURE"\n',{mode:0o700});
     const plan={packages:[{package:'@waitron-cloud/operations',shard:1}],receipts:['test:local-stack'],typecheck:true,reuse:null};
     const results={changes:{result:'success'},typecheck:{result:'success'},root:{result:'success'},packages:{result:'success'},receipts:{result:'success'}};
-    const jobs=['changes','typecheck','root (1/8)','root (2/8)','root (3/8)','root (4/8)', 'root (5/8)', 'root (6/8)', 'root (7/8)', 'root (8/8)','package (@waitron-cloud/operations)','receipts'].map(name=>({name,status:'completed',conclusion:'success'}));
+    const jobs=['changes','typecheck','root (1/8)','root (2/8)','root (3/8)','root (4/8)', 'root (5/8)', 'root (6/8)', 'root (7/8)', 'root (8/8)','package (@waitron-cloud/operations)','receipts'].map((name,index)=>({id:index+1,name,status:'completed',conclusion:'success'}));
     const env={...process.env,PATH:`${root}:${process.env.PATH}`,CI_FIXTURE:fixture,CI_PLAN:JSON.stringify(plan),CI_RESULTS:JSON.stringify(results),GITHUB_REPOSITORY:repository,GITHUB_RUN_ID:'42',
       GITHUB_EVENT_PATH:event,GITHUB_SHA:head,CI_HEAD_SHA:head,CI_JOB_PREFIX:''};
     const run=()=>spawnSync(process.execPath,[fileURLToPath(new URL('./ci-summary.mjs',import.meta.url))],{cwd:root,env,encoding:'utf8'});
-    writeFileSync(fixture,JSON.stringify([{jobs}]));const original=run();assert.equal(original.status,0,original.stdout+original.stderr);
-    writeFileSync(fixture,JSON.stringify([{jobs:jobs.slice(0,-1)}]));const missing=run();assert.equal(missing.status,1);assert.match(missing.stderr,/Missing or duplicate job/);
-    writeFileSync(fixture,JSON.stringify([{jobs}]));
+    writeFileSync(fixture,JSON.stringify([{total_count:jobs.length,jobs}]));const original=run();assert.equal(original.status,0,original.stdout+original.stderr);
+    writeFileSync(fixture,JSON.stringify([{total_count:jobs.length-1,jobs:jobs.slice(0,-1)}]));const missing=run();assert.equal(missing.status,1);assert.match(missing.stderr,/Missing or duplicate job/);
+    writeFileSync(fixture,JSON.stringify([{total_count:jobs.length,jobs}]));
     for (const group of ['changes','typecheck','root','packages','receipts']) {
       for (const result of ['failure','cancelled','skipped','','queued','in_progress']) {
         env.CI_RESULTS=JSON.stringify({...results,[group]:{result}});
@@ -109,7 +109,7 @@ test('executed summary consumes needs objects and the current job API, refusing 
     const documentation={base:'a'.repeat(40),head:'b'.repeat(40),paths:['docs/backlog.md']};
     env.CI_PLAN=JSON.stringify({packages:[],receipts:[],typecheck:false,reuse:null,documentation});
     env.CI_RESULTS=JSON.stringify({changes:{result:'success'},documentation:{result:'success'},typecheck:{result:'skipped'},packages:{result:'skipped'},receipts:{result:'skipped'}});
-    writeFileSync(fixture,JSON.stringify([{jobs:['changes','documentation'].map(name=>({name,status:'completed',conclusion:'success'}))}]));
+    writeFileSync(fixture,JSON.stringify([{total_count:2,jobs:['changes','documentation'].map((name,index)=>({id:index+1,name,status:'completed',conclusion:'success'}))}]));
     const documentResult=run();assert.equal(documentResult.status,0);assert.match(documentResult.stdout,/Passed 1 document check/);
     writeFileSync(gh,'#!/bin/sh\nexit 1\n',{mode:0o700});assert.equal(run().status,1);
   } finally {rmSync(root,{recursive:true,force:true});}
