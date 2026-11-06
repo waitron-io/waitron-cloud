@@ -32,13 +32,14 @@ function guest(t) {
     writeFileSync(join(root, 'proc/uptime'), `${clock.uptime}.00 0.00\n`);
   }
   configure();
-  const shim = `#!${process.execPath}\nimport fs from 'node:fs';\nconst root=${JSON.stringify(root)}, s=JSON.parse(fs.readFileSync(${JSON.stringify(settings)}));const [op,...args]=process.argv.slice(2);\nif(op==='id') { console.log(s.uid??0); process.exit(0); }\nif(op==='date') { console.log(s.now); process.exit(0); }\nif(op==='systemctl') {\n fs.appendFileSync(${JSON.stringify(log)},args.join(' ')+'\\n');\n if(s.fail && args.includes(s.fail))process.exit(1);\n if(args[0]==='is-active')process.exit(fs.existsSync(root+'/armed')?0:1);\n if(args[0]==='is-enabled'){if(s.advanceOnEnabled){s.now+=s.advanceOnEnabled;fs.writeFileSync(${JSON.stringify(settings)},JSON.stringify(s));}process.exit(fs.existsSync(root+'/enabled')?0:1);}\n if(args[0]==='enable')fs.writeFileSync(root+'/enabled','yes');\n if(args[0]==='start') {fs.writeFileSync(root+'/armed','yes');if(s.advanceOnStart){s.now+=s.advanceOnStart;fs.writeFileSync(${JSON.stringify(settings)},JSON.stringify(s));}}\n process.exit(0);\n}\nif(op==='timeout') { const {spawnSync}=await import('node:child_process');const r=spawnSync(args[1],args.slice(2),{stdio:'inherit'});process.exit(r.status??1); }\nprocess.exit(2);\n`;
+  const shim = `#!${process.execPath}\nimport fs from 'node:fs';\nconst root=${JSON.stringify(root)}, s=JSON.parse(fs.readFileSync(${JSON.stringify(settings)}));const [op,...args]=process.argv.slice(2);\nif(op==='id') { console.log(s.uid??0); process.exit(0); }\nif(op==='date') { console.log(s.now); process.exit(0); }\nif(op==='rm'){if(s.failCleanup)process.exit(1);fs.rmSync(args.at(-1),{recursive:true,force:true});process.exit(0);}\nif(op==='systemctl') {\n fs.appendFileSync(${JSON.stringify(log)},args.join(' ')+'\\n');\n if(s.fail && args.includes(s.fail))process.exit(1);\n if(args[0]==='is-active')process.exit(fs.existsSync(root+'/armed')?0:1);\n if(args[0]==='is-enabled'){if(s.advanceOnEnabled){s.now+=s.advanceOnEnabled;fs.writeFileSync(${JSON.stringify(settings)},JSON.stringify(s));}process.exit(fs.existsSync(root+'/enabled')?0:1);}\n if(args[0]==='enable')fs.writeFileSync(root+'/enabled','yes');\n if(args[0]==='start') {fs.writeFileSync(root+'/armed','yes');if(s.advanceOnStart){s.now+=s.advanceOnStart;fs.writeFileSync(${JSON.stringify(settings)},JSON.stringify(s));}}\n process.exit(0);\n}\nif(op==='timeout') { const {spawnSync}=await import('node:child_process');const r=spawnSync(args[1],args.slice(2),{stdio:'inherit'});process.exit(r.status??1); }\nprocess.exit(2);\n`;
   writeFileSync(join(root, 'bin/shim.mjs'), shim, { mode: 0o755 });
   function run(value = input()) {
     let source = render(value);
     for (const path of ['/etc/systemd/system', '/var/lib/d570-deadline', '/proc/sys/kernel/random/boot_id', '/proc/uptime']) source = source.replaceAll(path, join(root, path));
     for (const executable of ['systemctl', 'date', 'id', 'timeout']) source = source.replaceAll(`/usr/bin/${executable}`, `${join(root, 'bin/shim.mjs')} ${executable}`);
-    const result = spawnSync('bash', ['-c', source], { encoding: 'utf8', timeout: 15000 });
+    source = source.replace('rm -rf -- \"$work\"', `${join(root, 'bin/shim.mjs')} rm -rf -- \"$work\"`);
+    const result = spawnSync('bash', ['-c', source], { encoding: 'utf8', timeout: 15000, env: { ...process.env, TMPDIR: root } });
     assert.ifError(result.error); return result;
   }
   return { root, configure, run, calls: () => existsSync(log) ? readFileSync(log, 'utf8') : '', read: path => readFileSync(join(root, path), 'utf8') };
@@ -52,6 +53,7 @@ test('installs a fixed UTC and boot-relative deadline before reporting ready', t
   assert.match(timer, /^OnCalendar=2026-11-06 14:15:00 UTC$/m);
   assert.match(timer, /^OnBootSec=8098s$/m);
   assert.match(timer, /^AccuracySec=1us$/m);
+  assert.match(timer, /^Unit=d570-deadline.service$/m);
   assert.ok(g.read('etc/systemd/system/d570-deadline.service').includes(`ExecStart=${join(g.root, 'bin/shim.mjs')} systemctl --no-block poweroff\n`));
   assert.match(g.read('etc/systemd/system/d570-reboot.service'), /^Before=cloud-init-local.service cloud-init.service multi-user.target$/m);
   assert.equal(g.calls(), 'daemon-reload\nenable d570-reboot.service\nstart d570-deadline.timer\nis-active --quiet d570-deadline.timer\nis-enabled --quiet d570-reboot.service\n');
@@ -157,4 +159,25 @@ for (const unit of ['d570-deadline.service', 'd570-reboot.service']) test(`${uni
   const result = spawnSync('bash', ['-c', command], { encoding: 'utf8', timeout: 5000 });
   assert.ifError(result.error); assert.equal(result.status, 0, result.stderr);
   assert.match(g.calls(), /--no-block poweroff\n$/);
+});
+
+
+test('an impossible original date cannot normalize into a short allowed lifetime', () => {
+  const value = input(); value.reservation.startedAt = '2026-02-30T12:00:00Z'; value.reservation.expiry = '2026-03-02T12:01:00Z';
+  assert.throws(() => render(value), /refused/i);
+});
+
+test('invalid boot identity refuses before installing units', t => {
+  const g = guest(t); writeFileSync(join(g.root, 'proc/sys/kernel/random/boot_id'), 'invalid\n');
+  assert.notEqual(g.run().status, 0);
+  assert.equal(existsSync(join(g.root, 'etc/systemd/system/d570-deadline.timer')), false);
+  assert.match(g.calls(), /--no-block poweroff\n/);
+});
+
+
+test('temporary-file cleanup failure cannot suppress the poweroff request', t => {
+  const g = guest(t); g.configure({ fail: 'start', failCleanup: true });
+  const result = g.run(); assert.notEqual(result.status, 0);
+  assert.doesNotMatch(result.stdout, /D570_DEADLINE_READY/);
+  assert.match(g.calls(), /--no-block poweroff\n/);
 });

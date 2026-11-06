@@ -7,11 +7,11 @@ work=''
 finish() {
   status=$?
   trap - EXIT
-  if [[ -n "$work" ]]; then rm -rf -- "$work"; fi
   if (( status != 0 )); then
     echo 'D570 deadline unavailable; poweroff requested' >&2
     /usr/bin/timeout 10 /usr/bin/systemctl --no-block poweroff || true
   fi
+  if [[ -n "$work" ]]; then rm -rf -- "$work" || true; fi
   exit "$status"
 }
 trap finish EXIT
