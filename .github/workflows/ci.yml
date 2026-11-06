@@ -50,6 +50,10 @@ jobs:
           npm_config_fetch_timeout: '15000'
           npm_config_fetch_retries: '1'
           npm_config_fetch_retry_mintimeout: '1000'
+      - name: Check shared UI version lag
+        run: node scripts/ci-ui-lag.mjs
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       # A main push reuses only independently verified identical-tree evidence.
       - id: plan
         run: node scripts/ci-plan.mjs
