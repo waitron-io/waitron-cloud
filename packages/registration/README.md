@@ -528,14 +528,40 @@ failure codes, queue age, dead-letter count and the configured revision. A commi
 remains visible when deletion fails, because the next delivery must replay that
 durable result. Drift or a different sampled revision closes readiness. No
 envelope, recipient, receipt handle or arbitrary collector field enters the
-report. CLI supervision and the full shutdown proof remain incomplete. Neither
-this internal adapter nor the worker is exported from the package's public entry
-point.
+report. Neither this internal adapter nor the worker is exported from the
+package's public entry point.
+
+The standalone `pnpm --dir packages/registration ses:feedback` command runs two
+consumer slots outside normal services; `--once` settles one batch before exiting.
+Startup requires `CLOUD_SES_FEEDBACK_CONSUMER=enabled`, `DATABASE_URL`,
+`CLOUD_SES_FEEDBACK_CONFIG_FILE`, `CLOUD_MAIL_RECIPIENT_KEYS` and
+`CLOUD_MAIL_RECIPIENT_ACTIVE_KEY_ID`. The consumer uses SQS credentials through
+the standard SDK chain, without SMTP credentials. A supplied file cannot qualify
+its own settings. Spain's default policy still refuses these flows, so this code
+does not enable production consumption.
+
+Read aggregate JSON statuses from standard output. You can supply your trusted
+collector's JSON through `CLOUD_SES_FEEDBACK_HEALTH_SAMPLE_FILE`; missing, invalid
+or stale samples cannot produce readiness. Binding and sample files must be
+regular files of at most 64 KiB. Provider metric collection, separate dead-letter
+health permissions and D104's external alert channel remain deployment work.
+The command does not read dead-letter messages or replay them.
+
+SIGINT and SIGTERM stop new receives and abort queue requests. Active database
+work may commit within its existing five-second budget, but shutdown leaves that
+message for replay. Connection establishment and pool cleanup each have a
+five-second limit, sharing the overall twenty-second shutdown grace. Normal
+shutdown drains naturally. If a broken driver retains a live handle, the process
+deadline forces a failing exit within that grace. A failed one-shot batch or
+cleanup also exits with a fixed diagnostic. Local command fixtures cover signals,
+lock waits, restart, death after commit and simulated redrive after five poison
+receives. They do not establish provider encryption, IAM or real dead-letter
+transfer.
 
 Run the local health cases and their PostgreSQL durability checks:
 
 ```sh
-node scripts/test-postgres.mjs exec pnpm --dir packages/registration exec node --test --test-timeout=120000 test/ses-feedback-health.test.ts test/ses-feedback-health-durability.test.ts
+node scripts/test-postgres.mjs exec pnpm --dir packages/registration exec node --test --test-timeout=120000 test/ses-feedback-health.test.ts test/ses-feedback-health-durability.test.ts test/ses-feedback-shutdown.test.ts test/ses-feedback-supervision.test.ts test/ses-feedback-cli.test.ts
 ```
 
 Run the focused PostgreSQL checks, including competing consumers and process death

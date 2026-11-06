@@ -9,7 +9,8 @@
     "db:migrate": "node src/migrate-cli.ts",
     "history:cleanup": "node src/history-cleanup-cli.ts",
     "usage:reconcile": "node src/usage-reconcile-cli.ts",
-    "relay:control": "node src/relay-control-cli.ts"
+    "relay:control": "node src/relay-control-cli.ts",
+    "ses:feedback": "node src/ses-feedback-cli.ts"
   },
   "dependencies": {
     "@aws-sdk/client-sqs": "3.1163.0",

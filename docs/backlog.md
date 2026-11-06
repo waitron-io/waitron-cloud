@@ -530,9 +530,17 @@ keeps commit freshness separate from acknowledgement, reports queue age and
 dead-letter count, and emits only fixed failures and aggregate fields. Its
 35-second freshness limit is the maximum request/transaction/request cycle,
 not an alert threshold. Local stand-ins and PostgreSQL checks cover these states;
-collecting authenticated provider samples remains unwired. CLI and complete
-shutdown proof remain unbuilt. The CLI must also bound new connection
-establishment and pool shutdown; a pending pool request
+collecting authenticated provider samples remains unwired. The standalone
+consumer now requires explicit opt-in, qualified trusted settings and retained
+recipient keys. It stays outside normal services and uses one shared worker
+with two consumer slots. Connection establishment and pool cleanup each have a
+five-second limit; cleanup shares the twenty-second shutdown grace. A process
+deadline remains armed until natural exit so a retained driver handle cannot
+extend shutdown. Local command tests exercise SIGINT/SIGTERM, lock waits,
+restart acknowledgement, death after commit and a provider stand-in's poison
+redrive after five receives. The command reads optional bounded operational
+samples and emits aggregate JSON; it does not collect provider metrics or
+qualify encryption, IAM or real dead-letter transfer. A pending pool request
 is discarded when it returns. Audited removal and production
 enablement remain future tasks. Task 8 must qualify any additional event types;
 `Rendering Failure` currently refuses. It must also reconcile historical Paris-only
