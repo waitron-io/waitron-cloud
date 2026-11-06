@@ -5,3 +5,7 @@ import './disposable-tests/host.test.mjs';
 import './disposable-tests/ssh.test.mjs';
 import './disposable-tests/dependencies.test.mjs';
 import './disposable-tests/guest-exec.test.mjs';
+import './disposable-tests/local.test.mjs';
+import './disposable-tests/session.test.mjs';
+import './disposable-tests/transport.test.mjs';
+import './disposable-tests/bundle.test.mjs';

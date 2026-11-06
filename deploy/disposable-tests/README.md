@@ -68,4 +68,14 @@ The package token stays in the Mac process. GitHub's signed blob redirect receiv
 
 `guest-exec.py` binds its entry point to the guest's exact resource ID, executes an argument list in `/work/source`, preserves the command status and enforces an absolute deadline. Cancellation stops the owned process group with a two-second grace before forced termination. The server's independent VM deadline remains necessary if the controller disappears.
 
-This component still needs the Mac-to-host turn adapter, cancellation during copy and preparation, controller and reboot reconciliation, server-deadline and disk-full drills and bounded cleanup under those failures before supplying a usable slot. No lane helper or GitHub runner is activated.
+To run the complete private command-path proof, first prepare the snapshot and reviewed package bytes on your Mac. Copy the trusted host recipe separately, including `session.py`, `host.py`, `guest-tools.sh`, `guest-exec.py` and the trusted `snapshot.py`. The recipe path must be an explicit directory under `/opt/waitron-disposable-`; candidate source never supplies host programs.
+
+```sh
+node scripts/disposable-tests/local-runtime.proof.mjs YOUR_VERIFIED_HOST \
+  /opt/waitron-disposable-REVIEWED_RECIPE /tmp/cloud-source.tar \
+  /tmp/cloud-private-packages/ui-core-0.1.0.tgz /tmp/cloud-proof-ledger
+```
+
+This opt-in proof runs 43 real PostgreSQL checks and deliberately returns exit 3. The controller reserves and starts a durable lease, constructs a bounded bundle, transfers it over the shared connection, prepares a fresh guest and preserves that status only after destruction and an independent absence readback. A duplicate request returns 75; a failed destruction or mismatched receipt quarantines the slot. The host checks the exact request and source digest and, when supplied, the private package integrity. It never extracts candidate source onto the host. The root entry point imports only the named owning tests, never this runtime proof.
+
+The component still needs real cancellation during copy and preparation, controller and reboot reconciliation, server-deadline, failed-boot and disk-full drills and bounded cleanup under those failures before supplying a usable slot. The controller's unit tests cover cancellation and deadlines through the transport interface; they do not prove the host stops a remote preparation after an SSH disconnect. Add host-side operation ownership and cancellation before relying on that behavior. No lane helper or GitHub runner is activated.
