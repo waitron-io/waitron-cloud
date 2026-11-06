@@ -60,13 +60,56 @@ those checks in the later orchestration before publication. That integration
 must also compute and compare the reserved input, recipe and source-check hashes;
 this entry point validates their shape only. A clean Git status does not prove
 the build output belongs to that commit: ignored or assume-unchanged files can
-remain. Fresh source isolation, an ordered build and artifact verification remain
-required before upload. Concurrent preparations must use distinct output
+remain. Fresh source isolation, an ordered build and verification of the compiled output
+remain required before upload. Concurrent preparations must use distinct output
 directories; the initial emptiness check does not lock the directory.
 
 Without `--ledger`, the existing workflow still uses `ui-source.json` and its
 September release number. The workflow does not use the reserved path yet.
 The preparation command publishes nothing on either path.
+
+## Record and recover the exact artifact
+
+After building the reserved release, compute its fingerprints from the actual
+archive rather than assembling a record by hand:
+
+```sh
+node scripts/release/record-ui-artifact.mjs /path/to/waitron \
+  /path/to/output/waitron-io-ui-core-0.2.0.tgz \
+  --ledger /path/to/ledger/releases.json --at 2026-11-06T08:00:00.000Z \
+  > /path/to/next-ledger.json
+```
+
+The command prints the next ledger without changing the input ledger or archive.
+Pass that result to `persistLedger` below before recording an upload. It accepts
+only an active `reserved` or `prepared` release. On a prepared retry, it requires
+the same archive, raw manifest and notice fingerprints and returns the unchanged
+ledger. It never turns an uncertain upload back into a prepared release.
+
+The recorder validates the reserved release/source mapping, private GitHub
+publishing metadata, licence declaration, external Lit peer, script-free manifest
+and presence of every built export. The complete manifest is derived from the
+source package, including its pnpm publishing-export override; optional runtime
+dependencies and implicit native-build files refuse.
+Both notices must match the reserved commit's regular Git blobs, whose content
+hashes are checked. Working-copy edits, inherited Git redirection and local
+replacement refs cannot supply those bytes. The source identity must name a
+commit. The recorder reads strict USTAR blocks directly in memory without
+extracting files or invoking tar. It refuses hidden data after an end marker,
+unknown member types, links, duplicate or case-colliding paths, and files with
+child members. Archives are limited to 16 MiB compressed and 32 MiB expanded.
+Other tar formats require investigation rather than automatic conversion. Git
+comes from your trusted toolchain on PATH; this command is not a sandbox for an
+untrusted executable search path.
+
+You can also call `recordReleaseArtifact` from `scripts/release/ui-artifact.mjs`
+with the ledger, archive buffer and `{sourceManifest, notices, at}`. Supply the
+original source manifest and both notice buffers from verified immutable source
+evidence. This check fingerprints the provided
+artifact; it does not prove that its compiled files came from that source.
+Fresh source builds, the reserved input/recipe/source-check hashes, trusted source
+CI and complete registry evidence remain mandatory before upload. A recovered
+archive must already exist; rebuilding an expired one remains orchestration work.
 
 ## Persist one transition at a time
 
@@ -117,8 +160,8 @@ node --test scripts/release/ui-ledger.test.mjs scripts/release/ui-ledger-git.tes
 ```
 
 Before publication, the remaining adapters must select trusted exact-main CI,
-trace the complete build inputs, enumerate registry versions and verify actual
-artifact bytes and registry responses. Keep source builds separate from the
+trace the complete build inputs, enumerate registry versions, connect artifact
+recording to persistence and verify registry responses. Keep source builds separate from the
 job holding package-write credentials. The existing release workflow and
 September source pin are unchanged; this library does not qualify or authorise
 a dispatch of that workflow for `0.2.0`.
