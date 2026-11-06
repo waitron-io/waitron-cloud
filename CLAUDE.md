@@ -19,10 +19,12 @@ it. "Nothing enforces this" means only people reading the change will catch a mi
 
 ## What makes a mistake here expensive
 
-1. **The repository is public, and nothing scans it for secrets.** Anyone can read a commit at once,
-   and it stays in Git history. GitHub's secret scanning is switched off here and no workflow scans.
-2. **`main` has no protection.** There is no branch protection and there are no rulesets, so GitHub
-   will merge a pull request with failing checks. Reading CI yourself is the only gate.
+1. **The repository is public.** Anyone can read a commit at once, and it stays in Git history.
+   GitHub's secret scanning and push protection are on (owner, 2026-11-06), but they recognise known
+   secret formats only, so a secret in any other shape goes through.
+2. **`main` protection is thin.** A ruleset requires a pull request and CI's `summary` job, and
+   refuses force pushes and deletion (owner, 2026-11-06). `summary` covers only the CI workflow, and
+   an administrator can bypass the ruleset, so reading every job yourself is still the real gate.
 3. **A provider call can spend money or reach a real person.** See the safety limits.
 4. **A migration that has run cannot be changed.** See Migrations.
 5. **This code decides who can reach a venue's data and who can recover it.** Losing a key loses the
@@ -52,7 +54,7 @@ it. "Nothing enforces this" means only people reading the change will catch a mi
   [its design](docs/superpowers/specs/2026-10-14-cloud-cost-model-design.md), which runs in an isolated
   local network and keeps raw data on the owner's machine. Nothing enforces this across the repository.
 - **No secrets in commits, pull request text or logs.** `.gitignore` covers `.env` and `.env.*`, and
-  `.env.example` is the template. Nothing checks anything else.
+  `.env.example` is the template. GitHub's scanning and push protection catch known formats only.
 - **Nothing goes to an AI provider.** `createOpenAiClient(...).respond(...)` always refuses without
   sending a request, even for harmless-looking menu text, until the owner accepts a privacy rule and
   supplier evidence ([translation README](packages/translation/README.md)). Enforced by
@@ -166,8 +168,9 @@ For the whole local stack, follow [local-deployment.md](docs/local-deployment.md
 - **Before landing, read every job of every workflow that ran on the current head.**
   `gh run view <id> --json jobs` shows them; `cancelled`, `queued` or `in_progress` is not green, and
   a skipped job needs a reason from the planner. CI's `summary` job (`scripts/ci-summary.mjs`) checks
-  that the planned jobs ran, but only for its own workflow, and nothing makes GitHub wait for it.
-  Never merge red.
+  that the planned jobs ran, but only for its own workflow; the `main` ruleset requires it. A pull
+  request need not be up to date with `main`. Never use `--admin` to get past a red check. Never merge
+  red.
 - **After merging, read the run for the exact merge commit** and follow
   [ci-merge-evidence.md](docs/ci-merge-evidence.md). A green label on `main` proves nothing by itself.
 - **A pull request that is only behind `main` is not rebased for that alone** (owner, 2026-11-01).
