@@ -4,7 +4,7 @@ Build inline with `superpowers:executing-plans` after Claude reads this plan.
 
 You need address suggestions on the owner’s paired test box. Prepare the Google
 client first; add the single signed route after its accounting boundary is agreed.
-Use existing Node, TypeScript and Hono. No new table, job, grant or portal screen.
+No new table, job, grant or portal screen.
 
 ## Authority
 
@@ -17,8 +17,7 @@ The watcher’s `~/waitron-campaign-d/questions.md`, 7 November 00:31, says:
 need no key, with address completion first.” Its 6 November 23:25 instruction says
 “the unconditional production refusal stays, plus existing consent, cap and paging.”
 The 23:25 quote concerns translation only. These notes authorise keyless preparation.
-The 16 October plan remains proposed; this trial uses the smaller account-http
-module/one signed route instead of its registration adapter and multi-route design.
+This supersedes the proposed October registration-adapter/multi-route layout only.
 
 ## Build now
 
@@ -54,25 +53,22 @@ module/one signed route instead of its registration adapter and multi-route desi
   `docs/backlog/free-services.md` and its summary in `docs/backlog.md` honestly.
   Prove critical guards by temporary omission, without permanent mutation tests.
 
-## Before the signed route or real trial
+## Before the route or real trial
 
-`docs/address-lookup-scope.md` and its linked 16 October proposed design require
-account, workflow and provider limits, durable reservations and known shared usage.
-Current `packages/account-http/src/rate-limit.ts:20,35,44` supports first-hit fixed
-windows up to one day and prunes
-expired rows. Registration’s `src/billing-allowances.ts:96,127` shares address usage by
-account only at the registered tier and releases holds only for translation.
-These are source observations, not proof that existing tables cannot be extended.
-Do not widen those meanings or put address data in installation operation records.
+- [x] Send the watcher the concrete proposal and review triage: one existing address
+allowance hold/workflow, abandoned holds kept counted during this trial, existing
+counters enforcing every scope ceiling, or full cancellation accounting instead.
+The question is in lane D’s notes at 7 November 00:45. Claude accepts building the
+client alongside it; RUNNER requires the watcher’s answer before landing.
 
-- [ ] Send the watcher the concrete existing-storage proposal and review triage
-before building: one existing address allowance hold per workflow, abandoned holds
-kept counted for this trial, existing counters for every required request bound;
-ask approval of that conservative trial debit versus full cancellation accounting. Keep provider calls disabled
-until exact limits, account authority, restart/replay behaviour and outside usage
-are covered. Proposed route is `/api/installations/address-lookup` over the existing
-signed envelope; its final body/reply and E’s provider handoff follow that decision
-and a Claude-read amendment. That amendment must cover the new path’s refusal
-checks, deliberate deployment key-drop change, applicable billing terms, accepted
-storage interpretation and public terms/privacy links; this piece waives none.
-No Waitron edits. Translation is a separate later piece.
+`packages/account-http/src/rate-limit.ts:20,35,44` has first-hit fixed windows ≤one
+day and pruning. `packages/registration/src/billing-allowances.ts:96,127` shares
+address units by account only at registered tier and releases translation holds only.
+These are source observations; extending existing storage is not proved impossible.
+No address envelopes, hashes or replies enter installation operation records.
+
+A later Claude-read amendment defines `/api/installations/address-lookup` and E’s
+provider handoff. It must enforce account authority, all scope limits, restart/replay
+and known outside usage; retain billing-terms/storage-interpretation acceptance and
+public terms/privacy links; deliberately change the deployment key drop and add
+new-path refusal checks. No gate is waived. No Waitron edits. Translation is separate.
