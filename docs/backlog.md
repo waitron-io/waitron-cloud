@@ -1482,6 +1482,10 @@ implementation or production evidence.
   compiler jobs. Different-tree pushes derive ownership from their literal
   before/after range. Integration controls retain the bounded summary lookup,
   source recheck and original proof-selector assertions.
+  The Kubernetes setup and expiry prerequisite inputs, including their pinned
+  guide, have renewed per-file root reviews after the cleanup change. Their
+  fixed unit-test and generated-Lambda readers preserve the existing registered
+  test boundaries; the separate cost-input renewal remains independently owned.
   Ownership review does not complete global root precision or establish a time
   saving. Unresolved package readers, including the separate #938 fix, remain
   outside this slice.
