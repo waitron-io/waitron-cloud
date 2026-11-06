@@ -3274,8 +3274,11 @@ implementation or production evidence.
   full cross-month bookings through receipt retention, conservative no-refund
   cleanup and retained original cost evidence. Synthetic checks cover competing
   controllers, partial/lost writes, damaged history, stale evidence, deadline
-  expiry during writes and unknown cleanup. Official current-price/billing
-  acquisition and all-in bound construction, setup integration and
+  expiry during writes and unknown cleanup. A bounded public-catalogue reader
+  now retains source-byte identity and extracts nine paid Spain EC2/gp3/ARM-Lambda/S3/log
+  rates as exact fractions, excluding shared free tiers and bounding every price
+  tier conservatively. Complete service-page reconciliation, transfer/events/network,
+  taxes, quantities, billing and all-in bound construction, setup integration and
   live S3/cleanup qualification remain open; these inputs grant no spending or
   runnable owner setup. A new self-contained guest deadline entry binds the
   original reservation to a fixed UTC timer, a boot-relative fallback and

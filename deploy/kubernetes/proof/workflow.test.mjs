@@ -26,9 +26,21 @@ for (const [label, missing, expectedTests] of [
   ['missing bootstrap test', [files[7]], null],
   ['older budget-only head', files.slice(5), 4],
 ]) test(`prerequisite workflow ${label} ${expectedTests ? 'executes its required files' : 'refuses before accepting results'}`, () => {
+  checkFiles(missing, expectedTests);
+});
+
+const priceFiles = ['deploy/kubernetes/proof/prices.mjs', 'deploy/kubernetes/proof/prices.test.mjs', 'deploy/kubernetes/proof/test-fixtures/prices.json'];
+for (const [label, missing, expectedTests] of [
+  ['complete price inputs', [], 6],
+  ['missing price module', [priceFiles[0]], null],
+  ['missing price test', [priceFiles[1]], null],
+  ['missing price fixture', [priceFiles[2]], null],
+]) test(`prerequisite workflow ${label}`, () => checkFiles(missing, expectedTests, priceFiles));
+
+function checkFiles(missing, expectedTests, extra = []) {
   const root = mkdtempSync(join(tmpdir(), 'd570-workflow-files-'));
   try {
-    for (const file of files.filter(file => !missing.includes(file))) {
+    for (const file of [...files, ...extra].filter(file => !missing.includes(file))) {
       mkdirSync(join(root, file, '..'), { recursive: true });
       writeFileSync(join(root, file), file.endsWith('.test.mjs') ? `import { test } from 'node:test'; test(${JSON.stringify(file)}, () => {});\n` : 'export const synthetic = true;\n');
     }
@@ -39,4 +51,4 @@ for (const [label, missing, expectedTests] of [
     if (expectedTests) { assert.equal(result.status, 0, result.stdout + result.stderr); assert.match(result.stdout, new RegExp(`^# tests ${expectedTests}$`, 'm')); }
     else assert.notEqual(result.status, 0, 'a missing explicitly required file must fail the workflow');
   } finally { rmSync(root, { recursive: true, force: true }); }
-});
+}

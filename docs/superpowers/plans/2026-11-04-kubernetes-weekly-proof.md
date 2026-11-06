@@ -122,9 +122,19 @@ month and retention crossings, correlated and checksummed history, terminal
 ownership changes, pre/post-write deadline/day changes and partial/lost responses.
 Known cleanup completes partial bookings before release, and exact cleanup retry
 is read-only. Every required workflow test file is checked before Node runs. Bookings are integer millionths of USD, never
-refunded, and refuse totals at or above USD 10. Current price/billing acquisition,
+refunded, and refuse totals at or above USD 10. Remaining price and billing acquisition,
 all-in bound construction, setup integration and real S3/termination qualification
 remain open; Task 3 is not complete and this core grants no live admission.
+
+**Regional price-source component:** `deploy/kubernetes/proof/prices.mjs` now
+acquires fixed public Spain catalogues, requires retained original bytes and
+digest, and extracts nine paid EC2/gp3/ARM-Lambda/S3/logging rates as exact fractions.
+Synthetic checks cover free-tier exclusion, units, complete tier ranges,
+ambiguous products, stale observations, HTTP failures and bounded waits. This is
+not complete all-in evidence: service-page reconciliation, transfer/events/network,
+taxes, bounded quantities, billing and lifecycle integration remain open. Keep
+the launch deny, disabled sweep and refusing owner lifecycle until those gates
+and the existing live qualification pass.
 
 ## Task 4: Prove both independent termination actors
 
