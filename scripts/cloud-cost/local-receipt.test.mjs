@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { summarizeStreamAccounting } from './stream-admission.mjs';
-import { exportAggregate } from './schema.mjs';
+import { validateReceipt } from './schema.mjs';
 const module = await import('./local-receipt.mjs').catch(error => {
   if (error.code === 'ERR_MODULE_NOT_FOUND' && error.url === new URL('./local-receipt.mjs', import.meta.url).href) return {};
   throw error;
@@ -12,7 +12,14 @@ const request = (phase, operation, requestClass, bytesIn, bytesOut, retryOrdinal
   successful: outcome === 'success' ? 1 : 0, failed: outcome === 'success' ? 0 : 1,
   retried: retryOrdinal > 0 ? 1 : 0, bytesIn, bytesOut, attemptedBytesIn: bytesIn, attemptedBytesOut: bytesOut,
 });
-const counters = (requests, totals) => ({ reconciled: true,
+// This complete test record supplies known billing; real bucket-control unknowns have their own refusal case.
+const counters = (requests, totals) => ({ status: 'measured', reconciled: true, gaps: [],
+  billing: [...new Set(requests.map(row => row.phase + ':' + row.requestClass))].map(key => {
+    const rows = requests.filter(row => row.phase + ':' + row.requestClass === key);
+    return { phase: rows[0].phase, requestClass: rows[0].requestClass, status: 'measured',
+      quantity: rows[0].requestClass === 's3-delete' || rows[0].requestClass === 's3-control' ? 0
+        : rows.reduce((n, row) => n + row.attempts, 0) };
+  }),
   accounting: { requests, objects: [], producer: { ...totals }, observer: { ...totals },
     discrepancy: { attempts: 0, bytesIn: 0, bytesOut: 0 } }, observedRequests: structuredClone(requests) });
 function fixture() {
@@ -20,6 +27,7 @@ function fixture() {
     originalInventory: { days: 2, busiest: 3 }, cadence: { mode: 'accelerated', factor: 100 },
     replayWindowSeconds: 10, stream: { startupSeconds: 2, idleSeconds: 2, windowSeconds: 60 } };
   const stream = {
+    functional: { startupUpload: true, restore: true, bucketCreated: true, bucketRemoved: true },
     phases: ['startup', 'workload', 'idle', 'verification', 'restore'].map(phase => ({ phase, elapsedSeconds: 2 })),
     requests: counters([
       request('startup', 'put', 's3-write', 3, 4096),
@@ -65,7 +73,7 @@ function build(f) {
 // Dropping either meter or collapsing storage uncertainty changes these hand-derived quantities.
 test('localReceiptPreservesAllStreamTrafficBoundsAndKnownReplayQuantities', () => {
   const f = fixture(), receipt = build(f), inputs = Object.fromEntries(receipt.inputs.map(row => [row.id, row]));
-  assert.deepEqual(exportAggregate(receipt), receipt);
+  assert.deepEqual(validateReceipt(receipt), receipt);
   assert.deepEqual(receipt.accounting.producer, { attempts: 9, bytesIn: 4174, bytesOut: 4352 });
   assert.deepEqual(receipt.accounting.observer, receipt.accounting.producer);
   assert.deepEqual(receipt.accounting.discrepancy, { attempts: 0, bytesIn: 0, bytesOut: 0 });
@@ -174,4 +182,19 @@ for (const field of ['expected', 'originalInventory', 'cadence', 'stream'])
 test('currentProducerRejectsHistoricalRevision',()=>{
  const input=fixture();input.metadata.waitronRevision='fbadd15785464e59747e697c11048bfbc6e4938f';
  assert.throws(()=>build(input),bad);
+});
+
+// New exports need original billing witnesses; matching transfer totals alone are insufficient.
+test('local receipt refuses unknown original billing even with equal transfer counters', () => {
+  const f = fixture();
+  f.result.admission.stream.administration.billing[0] = {
+    phase: 'setup', requestClass: 's3-control', quantity: null, status: 'unknown' };
+  assert.throws(() => build(f), bad);
+});
+test('a legacy local aggregate without original coverage remains readable but cannot be newly built', () => {
+  const f = fixture(); delete f.result.admission.stream.functional;
+  for (const scope of ['requests', 'administration']) {
+    for (const key of ['status', 'gaps', 'billing']) delete f.result.admission.stream[scope][key];
+  }
+  assert.throws(() => build(f), bad);
 });

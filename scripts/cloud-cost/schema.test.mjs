@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { randomUUID, randomBytes } from 'node:crypto';
 import { validateInput, validateReceipt, exportAggregate, assertOwnedRoot } from './schema.mjs';
+import { createMeter } from './meter.mjs';
 
 const instant = '2026-10-14T12:00:00.000Z';
 function input(overrides = {}) {
@@ -34,6 +35,10 @@ function receipt() {
     cleanup: { ownedProcesses: 0, ownedContainers: 0, ownedNetworks: 0, ownedVolumes: 0,
       ownedObjects: 0, residualKinds: [] } };
 }
+const originals = (record = createMeter({ phase: 'workload', clock: () => 0 }).snapshot()) => ({
+  producer: 'local-stream', sources: ['requests', 'restore', 'administration', 'storage'].map(scope => ({ scope,
+    record: ['requests', 'restore'].includes(scope) ? structuredClone(record) : createMeter({ phase: 'workload', clock: () => 0 }).snapshot() })),
+});
 const refused = fn => assert.throws(fn, { message: 'Invalid cloud cost evidence' });
 
 test('unknownIsNotZero', () => {
@@ -71,7 +76,7 @@ test('knownFieldsCannotCarryRawNamesPathsOrErrors', () => {
   const r = receipt(); r.checks[0].code = 'PRIVATE_SYNTHETIC_CANARY'; refused(() => exportAggregate(r));
 });
 test('validAnonymousExportIsDetached', () => {
-  const r = receipt(); const exported = exportAggregate(r);
+  const r = receipt(); const exported = exportAggregate(r, originals());
   assert.deepEqual(exported, r); assert.notEqual(exported, r);
   r.inputs[0].value = 123; assert.equal(exported.inputs[0].value, null);
 });
@@ -110,7 +115,8 @@ test('attemptsRetriesVersionsAndDiscrepancyArePreserved', () => {
   r.accounting.producer = { attempts: 1, bytesIn: 0, bytesOut: 32 };
   r.accounting.observer = { attempts: 2, bytesIn: 0, bytesOut: 32 };
   r.accounting.discrepancy = { attempts: 1, bytesIn: 0, bytesOut: 0 };
-  assert.deepEqual(exportAggregate(r), r);
+  assert.deepEqual(validateReceipt(r), r);
+  refused(() => exportAggregate(r, originals()));
   r.accounting.discrepancy.attempts = 0; refused(() => validateReceipt(r));
 });
 test('malformedAndNonfiniteEvidenceRefusedWithoutEcho', () => {
@@ -274,7 +280,118 @@ test('anonymousBulkDeletionReceiptPreservesOneRequestAndItsWireBytes', () => {
     bytesIn: 45, bytesOut: 120, attemptedBytesIn: 45, attemptedBytesOut: 120 });
   r.accounting.producer = { attempts: 1, bytesIn: 45, bytesOut: 120 };
   r.accounting.observer = { attempts: 1, bytesIn: 45, bytesOut: 120 };
-  assert.deepEqual(exportAggregate(r), r);
+  const meter = createMeter({ phase: 'cleanup', clock: () => 0 });
+  for (const channel of ['producer', 'observer']) meter.observeAttempt({ token: 'PRIVATE_BATCH', channel, phase: 'cleanup',
+    operation: 'delete-many', outcome: 'success', retryOrdinal: 0, statusCode: 200, errorCode: null, sameAccount: true,
+    bytesIn: 45, bytesOut: 120, attemptedBytesIn: 45, attemptedBytesOut: 120 });
+  const source = originals(meter.snapshot());
+  assert.deepEqual(exportAggregate(r, source), r);
   r.accounting.requests[0].Key = 'PRIVATE_CANARY';
   refused(() => exportAggregate(r));
+});
+
+// Structural readback cannot establish coverage or billing eligibility for a new export.
+test('new export requires original complete accounting rather than a receipt or summary alone', () => {
+  const r = receipt();
+  assert.deepEqual(validateReceipt(r), r);
+  refused(() => exportAggregate(r));
+  refused(() => exportAggregate(r, { status: 'measured', gaps: [], publicationEligible: true }));
+  refused(() => exportAggregate(r, { producer: 'local-stream', sources: [] }));
+  const missing = originals(); missing.sources.pop(); refused(() => exportAggregate(r, missing));
+  const duplicate = originals(); duplicate.sources.push(duplicate.sources[0]); refused(() => exportAggregate(r, duplicate));
+});
+test('original unknown billing and gaps cannot be dropped to export equal counters', () => {
+  const r = receipt();
+  for (const change of [record => record.gaps.push('accounting:request-cutoff'), record => record.status = 'unknown']) {
+    const source = originals(); change(source.sources[0].record);
+    refused(() => exportAggregate(r, source));
+  }
+  const meter = createMeter({ phase: 'setup', clock: () => 0 });
+  for (const channel of ['producer', 'observer']) meter.observeAttempt({ token: 'PRIVATE_BUCKET', channel,
+    phase: 'setup', operation: 'bucket-create', outcome: 'success', retryOrdinal: 0, statusCode: 200,
+    errorCode: null, sameAccount: true, bytesIn: 0, bytesOut: 0, attemptedBytesIn: 0, attemptedBytesOut: 0 });
+  r.accounting = meter.snapshot().accounting;
+  assert.deepEqual(validateReceipt(r), r);
+  refused(() => exportAggregate(r, originals(meter.snapshot())));
+});
+test('new export cannot relabel an accounting projection with unrelated eligible sources', () => {
+  const r = receipt();
+  r.accounting.observer.attempts = 1; r.accounting.discrepancy.attempts = 1;
+  assert.deepEqual(validateReceipt(r), r);
+  refused(() => exportAggregate(r, originals()));
+  const meter = createMeter({ phase: 'workload', clock: () => 0 });
+  for (const channel of ['producer', 'observer']) meter.observeAttempt({ token: 'PRIVATE_ROW', channel,
+    phase: 'workload', operation: 'put', outcome: 'success', retryOrdinal: 0, statusCode: 200,
+    errorCode: null, sameAccount: true, bytesIn: 0, bytesOut: 7, attemptedBytesIn: 0, attemptedBytesOut: 7 });
+  const snapshot = meter.snapshot(); r.accounting = structuredClone(snapshot.accounting);
+  r.accounting.requests[0].phase = 'idle';
+  assert.deepEqual(validateReceipt(r), r);
+  refused(() => exportAggregate(r, originals(snapshot)));
+});
+test('export refuses hostile original records without running their code or exposing their errors', () => {
+  let touched = 0;
+  const source = originals();
+  Object.defineProperty(source.sources[0], 'record', { enumerable: true, get() { touched++; throw Error('PRIVATE_CANARY'); } });
+  refused(() => exportAggregate(receipt(), source));
+  const proxy = new Proxy({}, { ownKeys() { touched++; throw Error('PRIVATE_CANARY'); } });
+  refused(() => exportAggregate(receipt(), proxy));
+  assert.equal(touched, 0);
+});
+
+test('new export refuses a missing restore row rather than trusting a scope label', () => {
+  const meter = createMeter({ phase: 'restore', clock: () => 0 });
+  for (const channel of ['producer', 'observer']) meter.observeAttempt({ token: 'PRIVATE_RESTORE', channel,
+    phase: 'restore', operation: 'get', outcome: 'success', retryOrdinal: 0, statusCode: 200,
+    errorCode: null, sameAccount: true, bytesIn: 7, bytesOut: 0, attemptedBytesIn: 7, attemptedBytesOut: 0 });
+  const r = receipt(), source = originals(meter.snapshot()); r.accounting = meter.snapshot().accounting;
+  source.sources[1].record = createMeter({ phase: 'restore', clock: () => 0 }).snapshot();
+  refused(() => exportAggregate(r, source));
+});
+test('new export inspects receipt descriptors before any nested accessor or proxy runs', () => {
+  let touched = 0;
+  for (const place of ['array', 'proxy']) {
+    const r = receipt();
+    if (place === 'array') Object.defineProperty(r.inputs, '0', { enumerable: true,
+      get() { touched++; throw Error('PRIVATE_ACCESSOR'); } });
+    else r.inputs[0] = new Proxy({}, { getOwnPropertyDescriptor() { touched++; throw Error('PRIVATE_PROXY'); } });
+    refused(() => exportAggregate(r, originals()));
+  }
+  assert.equal(touched, 0);
+});
+
+test('new export cannot omit a separate original storage meter from its projection', () => {
+  const meter = createMeter({ phase: 'workload', clock: () => 0 });
+  for (const channel of ['producer', 'observer']) meter.observeAttempt({ token: 'PRIVATE_STORAGE', channel,
+    phase: 'workload', operation: 'put', outcome: 'success', retryOrdinal: 0, statusCode: 200,
+    errorCode: null, sameAccount: true, bytesIn: 0, bytesOut: 7, attemptedBytesIn: 0, attemptedBytesOut: 7 });
+  const r = receipt(), source = originals(); source.sources[3].record = meter.snapshot();
+  refused(() => exportAggregate(r, source));
+  r.accounting = meter.snapshot().accounting;
+  assert.deepEqual(exportAggregate(r, source), r);
+});
+
+test('equal observations from separate native and administration meters are both counted', () => {
+  const meter = createMeter({ phase: 'cleanup', clock: () => 0 });
+  for (const channel of ['producer', 'observer']) meter.observeAttempt({ token: 'PRIVATE_DELETE', channel,
+    phase: 'cleanup', operation: 'delete', outcome: 'success', retryOrdinal: 0, statusCode: 200,
+    errorCode: null, sameAccount: true, bytesIn: 0, bytesOut: 7, attemptedBytesIn: 0, attemptedBytesOut: 7 });
+  const snapshot = meter.snapshot(), source = originals(snapshot), r = receipt();
+  source.sources[2].record = structuredClone(snapshot); r.accounting = structuredClone(snapshot.accounting);
+  r.accounting.requests[0].attempts = 2; r.accounting.requests[0].successful = 2;
+  r.accounting.requests[0].bytesOut = 14; r.accounting.requests[0].attemptedBytesOut = 14;
+  for (const channel of ['producer', 'observer']) r.accounting[channel] = { attempts: 2, bytesIn: 0, bytesOut: 14 };
+  assert.deepEqual(exportAggregate(r, source), r);
+  r.accounting = structuredClone(snapshot.accounting);
+  refused(() => exportAggregate(r, source));
+});
+
+test('new export refuses an overflowed combined object lifetime instead of publishing a rounded number', () => {
+  const record = createMeter({ phase: 'cleanup', clock: () => 0 }).snapshot();
+  record.accounting.objects = [{ class: 'stream', bytes: 1, byteSeconds: Number.MAX_SAFE_INTEGER,
+    currentVersions: 1, noncurrentVersions: 0, deleteMarkers: 0, unfinishedMultipart: 0 }];
+  const source = originals(record); source.sources[2].record = structuredClone(record);
+  const r = receipt(); r.accounting.objects = [{ class: 'stream', bytes: 2, byteSeconds: 2 * Number.MAX_SAFE_INTEGER,
+    currentVersions: 2, noncurrentVersions: 0, deleteMarkers: 0, unfinishedMultipart: 0 }];
+  assert.deepEqual(validateReceipt(r), r);
+  refused(() => exportAggregate(r, source));
 });

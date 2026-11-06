@@ -229,7 +229,9 @@ test('meterAccountingExportsThroughTheClosedAnonymousSchema', () => {
     window: { startedAt: '2026-10-14T12:00:00.000Z', endedAt: '2026-10-14T12:00:02.000Z', elapsedSeconds: 2 },
     cadence: { mode: 'original', factor: 1, coveredSeconds: 2, configuredSchedule: null, observedSchedule: null },
     inputs: [], accounting: result.accounting, checks: [{ code: 'accounting-reconciled', passed: result.reconciled, count: 1 }],
-    cleanup: { ownedProcesses: 0, ownedContainers: 0, ownedNetworks: 0, ownedVolumes: 0, ownedObjects: 0, residualKinds: [] } });
+    cleanup: { ownedProcesses: 0, ownedContainers: 0, ownedNetworks: 0, ownedVolumes: 0, ownedObjects: 0, residualKinds: [] } }, { producer: 'local-stream',
+      sources: ['requests', 'restore', 'administration', 'storage'].map(scope => ({ scope,
+        record: ['requests', 'restore'].includes(scope) ? result : createMeter({ phase: 'cleanup', clock: () => 0 }).snapshot() })) });
   assert.equal(receipt.accounting.objects[0].byteSeconds, 20); assert.equal(receipt.accounting.producer.bytesOut, 10);
   assert.ok(!JSON.stringify(receipt).includes('PRIVATE_SYNTHETIC_CANARY'));
 });

@@ -401,11 +401,23 @@ Unverified multipart snapshots and duplicate-part inventories still refuse.
 Run the `genuineArchiveAnd`, `genuineNativeMultipartHistories`,
 `genuineVersionedNativeMultipart` and `genuineStreamMeasurement` cases in
 `stack-conformance.test.mjs` to check both ordinary and gapped observations.
-The remaining streamed-day and service readers still need their final audit;
-historical archive and service receipt readers keep their existing contracts.
-The full nonblocking accounting path, publication refusal and saved-failure
-replay remain open. These partial changes do
-not establish the historical cause or relax functional admission.
+You now need original accounting records for a new `exportAggregate` call.
+The exporter checks required coverage and billing before comparing the emitted
+request rows, object rows and both counters with those records. Missing restore
+rows, omitted storage traffic, unknown billing and private accessors refuse.
+Historical `validateReceipt` readback still preserves discrepancies and unknowns.
+The local receipt producer supplies its original records; its clean fixture keeps
+all existing measured quantities. Real bucket-control billing remains unknown
+and cannot qualify merely because both transfer counters agree. Run `node --test
+scripts/cloud-cost/schema.test.mjs scripts/cloud-cost/local-receipt.test.mjs
+scripts/cloud-cost/meter.test.mjs scripts/cloud-cost/storage-meter.test.mjs` for
+these boundaries.
+The final service-reader audit, other candidate export paths and complete
+measurement/projection/publication safeguards remain open. Historical archive
+and service receipt readers keep their existing contracts. The saved-failure
+replay classifies three recorded interruptions as nonblocking and two older
+records as unknown; it proves no complete historical run. These partial changes
+do not establish every historical cause or relax functional admission.
 
 ## Cloud backup box identity (D451)
 

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { createServer, request } from 'node:http';
 import { once } from 'node:events';
 import * as metering from './meter.mjs';
-import { exportAggregate } from './schema.mjs';
+import { exportAggregate, validateReceipt } from './schema.mjs';
 
 // A wrong method/subresource branch can price a multipart or bucket operation as an ordinary write.
 test('storageOperationsDistinguishObjectsMultipartAndBucketControlWithoutRetainingPaths', () => {
@@ -94,7 +94,10 @@ test('bucketControlAccountingUsesTheClosedAnonymousExport', () => {
     inputs: [], accounting: result.accounting, checks: [{ code: 'accounting-reconciled', passed: true, count: 4 }],
     cleanup: { ownedProcesses: 0, ownedContainers: 0, ownedNetworks: 0, ownedVolumes: 0, ownedObjects: 0, residualKinds: [] } };
   let exported;
-  assert.doesNotThrow(() => { exported = exportAggregate(receipt); }, 'include bucket controls without publishing private metadata');
+  assert.doesNotThrow(() => { exported = validateReceipt(receipt); }, 'historical controls remain readable without private metadata');
+  assert.throws(() => exportAggregate(receipt, { producer: 'archive',
+    sources: ['requests', 'restore', 'administration', 'storage'].map(scope => ({ scope, record: result })) }),
+    { message: 'Invalid cloud cost evidence' });
   assert.equal(exported.accounting.producer.attempts, 4);
   assert.equal(JSON.stringify(exported).includes('PRIVATE_SYNTHETIC_CANARY'), false);
   receipt.accounting.requests[0].path = 'PRIVATE_SYNTHETIC_CANARY';

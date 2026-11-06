@@ -1,4 +1,6 @@
 import { validateInput } from './input.mjs';
+import { isDeepStrictEqual, types } from 'node:util';
+import { assessAccounting } from './accounting-policy.mjs';
 export { validateInput } from './input.mjs';
 import { existsSync, lstatSync, readdirSync, readFileSync, realpathSync } from 'node:fs';
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
@@ -99,9 +101,58 @@ function receiptUnchecked(receipt) {
 export function validateReceipt(receipt) {
   try { return receiptUnchecked(receipt); } catch { fail(); }
 }
-export function exportAggregate(privateResult) {
-  // Reject instead of dropping unrecognised data so new producer fields cannot leak silently.
-  return validateReceipt(privateResult);
+function exportData(value, ancestors = new Set(), budget = { remaining: 250000 }) {
+  requireThat(--budget.remaining >= 0);
+  if (value === null || ['string', 'number', 'boolean'].includes(typeof value)) return;
+  requireThat(value && typeof value === 'object' && !types.isProxy(value) && ancestors.size < 12 && !ancestors.has(value));
+  requireThat([Object.prototype, Array.prototype, null].includes(Object.getPrototypeOf(value)));
+  ancestors.add(value);
+  for (const key of Reflect.ownKeys(value)) {
+    const descriptor = Object.getOwnPropertyDescriptor(value, key);
+    requireThat(Object.hasOwn(descriptor, 'value'));
+    exportData(descriptor.value, ancestors, budget);
+  }
+  ancestors.delete(value);
+}
+export function exportAggregate(privateResult, originals) {
+  try {
+    // Historical shape validation cannot recover billing or coverage discarded by a projection.
+    requireThat(assessAccounting(originals).publicationEligible);
+    requireThat(['local-stream', 'archive'].includes(originals.producer));
+    exportData(privateResult);
+    const receipt = validateReceipt(privateResult);
+    const source = scope => originals.sources.find(source => source.scope === scope).record;
+    const native = source('requests').accounting, administration = source('administration').accounting;
+    requireThat(native && administration);
+    const identity = row => JSON.stringify([row.phase, row.operation, row.requestClass, row.outcome, row.retryOrdinal]);
+    const restored = source('restore').accounting;
+    requireThat(restored && (isDeepStrictEqual(restored, native)
+      || isDeepStrictEqual(restored.requests, native.requests.filter(row => row.phase === 'restore'))));
+    // Equal quantities in separate meters still describe separate admitted work.
+    const meters = [native, administration, source('storage').accounting].filter(Boolean);
+    const requests = new Map(), objects = new Map();
+    const add = (map, key, row, numeric) => {
+      if (!map.has(key)) map.set(key, { ...row });
+      else for (const field of numeric) {
+        const total = map.get(key)[field] + row[field];
+        requireThat(field === 'byteSeconds' ? finite(total) && total <= Number.MAX_SAFE_INTEGER : count(total));
+        map.get(key)[field] = total;
+      }
+    };
+    for (const meter of meters) {
+      for (const row of meter.requests) add(requests, identity(row), row, requestKeys.slice(5));
+      for (const row of meter.objects) add(objects, row.class, row, objectKeys.slice(1));
+    }
+    const sorted = (rows, key) => [...rows].sort((a, b) => key(a).localeCompare(key(b)));
+    requireThat(isDeepStrictEqual(sorted(receipt.accounting.requests, identity), sorted(requests.values(), identity))
+      && isDeepStrictEqual(sorted(receipt.accounting.objects, row => row.class), sorted(objects.values(), row => row.class)));
+    for (const field of totalsKeys) for (const channel of ['producer', 'observer']) {
+      const total = meters.reduce((total, meter) => total + meter[channel][field], 0);
+      requireThat(count(total) && receipt.accounting[channel][field] === total);
+    }
+    requireThat(totalsKeys.every(field => receipt.accounting.discrepancy[field] === 0));
+    return receipt;
+  } catch { fail(); }
 }
 
 const within = (parent, child) => child === parent || (relative(parent, child) !== '..'
