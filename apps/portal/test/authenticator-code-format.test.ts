@@ -41,9 +41,9 @@ for(const action of actions)test(`${action}: well-formed wrong codes and outages
   const {c}=fixture(reply);await c[action]();assert.equal(c.error,reply.status===403?'credentials':action==='completeLogin'?'factorLoginUncertain':'factorChangeUncertain');assert.equal(c.requiredField,undefined);
  }
 });
-test('password-only setup keeps general feedback for server invalid_input',async()=>{
- const {c,calls}=fixture();c.status!.active=false;c.enrolment=undefined;c.password='p'.repeat(1025);c.proofCode='';
- await c.begin();assert.deepEqual(calls,[{path:'/authenticator/begin',body:{password:'p'.repeat(1025)}}]);assert.equal(c.error,'factorCheckSettings');assert.equal(c.requiredField,undefined);assert.equal(c.enrolment,undefined);
+test('password-only setup keeps general feedback for an unclassified input refusal',async()=>{
+ const {c,calls}=fixture();c.status!.active=false;c.enrolment=undefined;c.password='current password';c.proofCode='';
+ await c.begin();assert.deepEqual(calls,[{path:'/authenticator/begin',body:{password:'current password'}}]);assert.equal(c.error,'factorCheckSettings');assert.equal(c.requiredField,undefined);assert.equal(c.enrolment,undefined);
 });
 
 for(const [code,want,actions] of [

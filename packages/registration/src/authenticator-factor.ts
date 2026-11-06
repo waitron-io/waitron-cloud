@@ -116,7 +116,7 @@ export class AuthenticatorFactorStore {
         await resolveSession(client,a.token,{csrfToken:a.csrfToken,touch:false});
         if(context.factor.secret_envelope) {
           const deadline=await consumeFactorProof(client,context.factor,this.#keys,a.proof!,context.deadline);
-          if(!deadline) throw new FactorManagementError();
+          if(!deadline) throw new FactorManagementError(pending&&await factorNow(client)>=pending.expires_at?'setup_unavailable':'permission_denied');
           context.deadline=deadline;
         }
         const value=await action(context);
@@ -172,7 +172,7 @@ export class AuthenticatorFactorStore {
       const envelope=this.#encrypt(secret,c.accountId,version);
       const deadline=await consumeFactorProof(c.client,{account_id:c.accountId,version,secret_generation:pending.id,secret_envelope:envelope},
         this.#keys,{kind:'totp',code},c.deadline);
-      if(!deadline) throw new FactorManagementError();c.deadline=deadline;
+      if(!deadline) throw new FactorManagementError(await factorNow(c.client)>=pending.expires_at?'setup_unavailable':'permission_denied');c.deadline=deadline;
       await this.#lockSessions(c,a);
       await c.client.query('UPDATE cloud_authenticator_factors SET version=$2,secret_generation=$3,secret_envelope=$4 WHERE account_id=$1',[c.accountId,version,pending.id,envelope]);
       const recoveryCodes=await this.#codes(c,pending.id,version);

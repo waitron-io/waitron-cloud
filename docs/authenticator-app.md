@@ -88,8 +88,9 @@ Passwords over 1,024 UTF-8 bytes return 400 `password_too_long`, so enter your
 current account password rather than retrying the same value. For example,
 `POST /authenticator/activate` for a setup already expired when checked returns
 `{"error":"setup_unavailable"}` without ending your session or spending an attempt.
-If setup expires after confirmation starts, the attempt is retained while the
-factor change and proof use roll back.
+If setup expires after confirmation starts, including while either proof is
+checked, you receive the same restart guidance. The attempt is retained while
+the factor change and proof use roll back.
 
 Unknown pending tokens, tokens belonging to another session or account, malformed
 input and exhausted confirmation attempts still return 400 `invalid_input`.
