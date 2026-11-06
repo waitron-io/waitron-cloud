@@ -125,6 +125,12 @@ for (const tracker of [false, true]) {
       ...(tracker ? { lifetimes: { begin: () => event => { if (event.interrupted) throw Error('PRIVATE lifetime payload'); } } } : {}) });
     t.after(() => front.close().catch(() => {}));
     await send(front.url, { headers }).catch(() => {});
+    if (!tracker) {
+      await front.whenIdle(() => {});
+      assert.equal(meter.snapshot().status, 'unknown');
+      assert.ok(meter.snapshot().gaps.includes('accounting:request-cutoff'));
+      assert.throws(() => front.setPhase('PRIVATE'), /Invalid cloud cost Litestream audit/);
+    }
     const records = [];
     await assert.rejects(observe('replication-transport', () => front.close(), records));
     assert.equal(records.at(-1).diagnostic.reason, 'upstream-error');
@@ -139,6 +145,10 @@ test('an upstream response reset is never attributed to the client parser', asyn
     setImmediate(() => res.destroy());
   });
   await send(transport.url, { headers }).catch(() => {});
+  await transport.whenIdle(() => {});
+  assert.equal(meter.snapshot().status, 'unknown');
+  assert.ok(meter.snapshot().gaps.includes('accounting:request-cutoff'));
+  assert.throws(() => transport.setPhase('PRIVATE'), /Invalid cloud cost Litestream audit/);
   const records = [];
   await assert.rejects(observe('restore-transport', () => transport.close(), records));
   assert.equal(records.at(-1).diagnostic.reason, 'upstream-response-interrupted');

@@ -143,7 +143,7 @@ export async function openLitestreamVersionHistories({ client, sdk, meter, bucke
     const settleLifetime = strictRead ? undefined : afterStop?.beginLifetime({ headers, operation, versioned: true });
     const token = {}; pending.add(token);
     return guarded(({ statusCode, bytesOut, interrupted = false, responseHeaders }) => {
-      if (settleLifetime) ({ statusCode, responseHeaders } = settleLifetime({ statusCode, bytesOut, interrupted, responseHeaders }));
+      if (settleLifetime) ({ statusCode, responseHeaders, interrupted } = settleLifetime({ statusCode, bytesOut, interrupted, responseHeaders }));
       need(pending.has(token) && typeof interrupted === 'boolean' && count(bytesOut)
         && (interrupted && statusCode === null || Number.isInteger(statusCode) && statusCode >= 200 && statusCode <= 599));
       if (interrupted) { gaps.add('accounting:request-cutoff'); meter.markGap('accounting:request-cutoff'); }
@@ -151,7 +151,7 @@ export async function openLitestreamVersionHistories({ client, sdk, meter, bucke
       if (mutation) {
         const expectedBytes = operation === 'put' ? mutation.bytes : 0;
         need(interrupted ? bytesOut <= expectedBytes : bytesOut === expectedBytes);
-        if (statusCode !== null && statusCode < 300 && (!interrupted || settleLifetime)) {
+        if (statusCode !== null && statusCode < 300 && !interrupted) {
           need(responseHeaders && typeof responseHeaders === 'object');
           const returned = responseHeaders['x-amz-version-id'], marker = responseHeaders['x-amz-delete-marker'];
           if (mutation.row) {

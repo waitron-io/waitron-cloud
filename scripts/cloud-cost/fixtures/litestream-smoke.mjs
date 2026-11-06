@@ -21,7 +21,7 @@ async function smoke() {
   const { config, initial } = JSON.parse(readFileSync('/state/replay-config.json', 'utf8'));
   const replay = await openReplay({ codeRoot: '/code', stateRoot, config, initial });
   const database = stateRoot + '/venue/venue.db', output = stateRoot + '/restored.db';
-  const children = new Set(); let injectedFailures = 0, failedUploadInvocation, retryAcknowledged = false;
+  const children = new Set(), refusedUploads = new Set(); let injectedFailures = 0, failedUploadInvocation, retryAcknowledged = false;
   const afterStop = createLitestreamAfterStop({ clock: () => performance.now() / 1000 });
   // Host-shared state mounts need not expose a Unix listener to both processes.
   const controlSocket = '/tmp/synthetic-litestream-' + process.pid + '.sock';
@@ -32,6 +32,12 @@ async function smoke() {
       injectedFailures++; req.resume(); req.on('end', () => { res.writeHead(503, { 'content-length': '0' }); res.end(); }); return;
     }
     const upstream = request('http://127.0.0.1:8333', { method: req.method, path: req.url, headers: req.headers }, incoming => {
+      // A final explicit upload refusal is a working failure, independent of cost reconciliation.
+      if (req.method === 'PUT') {
+        const invocation = req.headers['amz-sdk-invocation-id'];
+        if (incoming.statusCode >= 300) refusedUploads.add(invocation);
+        else refusedUploads.delete(invocation);
+      }
       if (req.method === 'PUT' && incoming.statusCode >= 200 && incoming.statusCode < 300) {
         incoming.once('end', () => {
           try {
@@ -198,6 +204,7 @@ async function smoke() {
         ...(replication.transport?.checkpoint ? { diagnostic: replication.transport.checkpoint() } : {}) })); } catch {}
       throw error;
     } finally { clearTimeout(drainTimer); control?.destroy(); }
+    if (refusedUploads.size) fail();
     stage = 'restore'; let restoredSales = 0, integrity;
     for (let n = 0; n < 12; n++) {
       rmSync(output, { force: true });

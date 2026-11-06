@@ -205,8 +205,8 @@ for (const responseHeadersSeen of [false, true]) test(`upstream resets retain cl
   assert.equal(JSON.stringify(records).includes('PRIVATE_CANARY'), false);
 });
 
-// Accepting arbitrary cancellations, or accepting them before acknowledgement, would hide real failures.
-for (const stopped of [false, true]) test(`only the known post-acknowledgement list interruption can settle: stopped=${stopped}`, async t => {
+// A cutoff keeps its actual outcome in every phase; acknowledgement only selects the bounded stop subset.
+for (const stopped of [false, true]) test(`optional stop ledger collects the actual list interruption: stopped=${stopped}`, async t => {
   const stream = await import('./litestream.mjs');
   const afterStop = stream.createLitestreamAfterStop({ clock: () => 0 });
   const audit = stream.createLitestreamRequestAudit({ phase: 'workload', afterStop });
@@ -240,23 +240,17 @@ for (const stopped of [false, true]) test(`only the known post-acknowledgement l
     body: Buffer.from('{"status":"stopped","path":"/owned/PRIVATE_CANARY.db","txid":0}') });
   caller.destroy(); await closed; await destinationClosed; release(); await finished;
   audit.end();
-  if (!stopped) {
-    await assert.rejects(transport.close(), /Invalid cloud cost Litestream audit/);
-    assert.throws(() => meter.snapshot(), /Invalid cloud cost meter/);
-    // A subsequent valid acknowledgement cannot retrospectively forgive the interruption.
-    assert.throws(() => afterStop.acknowledgeStop({ statusCode: 200, ownedPath: '/owned/PRIVATE_CANARY.db',
-      body: Buffer.from('{"status":"stopped","path":"/owned/PRIVATE_CANARY.db","txid":0}') }), /Invalid cloud cost Litestream audit/);
-  } else {
+  {
     await transport.close();
     const subset = afterStop.snapshot(), all = meter.snapshot();
-    assert.equal(subset.used, 1); assert.equal(subset.lateAdmissions, 0); assert.equal(subset.lateSettlements, 1);
-    assert.deepEqual(subset.producer, { attempts: 1, bytesIn: 0, bytesOut: 0 });
-    assert.deepEqual(subset.observer, { attempts: 1, bytesIn: 8, bytesOut: 0 });
-    assert.equal(subset.requests.find(r => r.hop === 'producer').outcome, 'transport-error');
-    assert.equal(subset.requestsReconciled, true); assert.equal(subset.bodiesReconciled, false);
-    assert.ok(subset.gaps.includes('after-stop:list-response-interrupted'));
+    assert.equal(subset.used, stopped ? 1 : 0); assert.equal(subset.lateAdmissions, 0); assert.equal(subset.lateSettlements, stopped ? 1 : 0);
+    assert.deepEqual(subset.producer, { attempts: stopped ? 1 : 0, bytesIn: 0, bytesOut: 0 });
+    assert.deepEqual(subset.observer, { attempts: stopped ? 1 : 0, bytesIn: stopped ? 8 : 0, bytesOut: 0 });
+    if (stopped) assert.equal(subset.requests.find(r => r.hop === 'producer').outcome, 'transport-error');
+    assert.equal(subset.requestsReconciled, true); assert.equal(subset.bodiesReconciled, !stopped);
+    assert.ok(subset.gaps.includes(stopped ? 'after-stop:list-response-interrupted' : 'accounting:request-cutoff'));
     assert.equal(all.status, 'unknown'); assert.equal(all.reconciled, false);
-    assert.ok(all.gaps.includes('after-stop:list-response-interrupted'));
+    assert.ok(all.gaps.includes(stopped ? 'after-stop:list-response-interrupted' : 'accounting:request-cutoff'));
     assert.deepEqual(all.accounting.discrepancy, { attempts: 0, bytesIn: 8, bytesOut: 0 });
     assert.equal(all.billing[0].status, 'unknown'); assert.equal(all.billing[0].quantity, null);
     assert.equal(JSON.stringify(subset).includes('PRIVATE_CANARY'), false);

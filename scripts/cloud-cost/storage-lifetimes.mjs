@@ -304,14 +304,14 @@ export async function openLitestreamLifetimes({ client, sdk, meter, bucket, cloc
     const settleLifetime = strictRead ? undefined : afterStop?.beginLifetime({ headers, operation, versioned: false });
     const token = {}; pending.add(token);
     return guarded(({ statusCode, bytesOut, interrupted = false, responseHeaders }) => {
-      if (settleLifetime) ({ statusCode } = settleLifetime({ statusCode, bytesOut, interrupted, responseHeaders }));
+      if (settleLifetime) ({ statusCode, interrupted } = settleLifetime({ statusCode, bytesOut, interrupted, responseHeaders }));
       requireThat(pending.has(token) && typeof interrupted === 'boolean' && count(bytesOut)
         && (interrupted && statusCode === null || Number.isInteger(statusCode) && statusCode >= 200 && statusCode <= 599));
       if (interrupted) { gaps.add('accounting:request-cutoff'); meter.markGap('accounting:request-cutoff'); }
       const time = now();
       if (row) {
         requireThat(interrupted ? bytesOut <= bytes : bytesOut === bytes);
-        if (statusCode !== null && statusCode < 300 && (!interrupted || settleLifetime)) row.by ??= time;
+        if (statusCode !== null && statusCode < 300 && !interrupted) row.by ??= time;
         row.pending = false;
       }
       pending.delete(token);
@@ -500,14 +500,14 @@ export async function openLitestreamHistories({ client, sdk, meter, bucket, cloc
     const settleLifetime = strictRead ? undefined : afterStop?.beginLifetime({ headers, operation, versioned: false });
     const token = {}; pending.add(token);
     return guarded(({ statusCode, bytesOut, interrupted = false, responseHeaders }) => {
-      if (settleLifetime) ({ statusCode } = settleLifetime({ statusCode, bytesOut, interrupted, responseHeaders }));
+      if (settleLifetime) ({ statusCode, interrupted } = settleLifetime({ statusCode, bytesOut, interrupted, responseHeaders }));
       requireThat(pending.has(token) && typeof interrupted === 'boolean' && count(bytesOut)
         && (interrupted && statusCode === null || Number.isInteger(statusCode) && statusCode >= 200 && statusCode <= 599));
       if (interrupted) { gaps.add('accounting:request-cutoff'); meter.markGap('accounting:request-cutoff'); }
       const time = now();
       if (mutation) {
         requireThat(interrupted ? bytesOut <= mutation.bytes : bytesOut === mutation.bytes);
-        if (statusCode !== null && statusCode < 300 && (!interrupted || settleLifetime)) transition(row, mutation, time);
+        if (statusCode !== null && statusCode < 300 && !interrupted) transition(row, mutation, time);
         else if (mutation.method === 'PUT' ? row.current?.bytes !== mutation.bytes : row.current !== null) row.uncertain = mutation;
         row.active = false;
       }

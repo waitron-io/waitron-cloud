@@ -9,7 +9,9 @@ function run(scenario) {
     '/code/meter.mjs': `import {createMeter as create} from ${JSON.stringify(base + 'meter.mjs')};
       export * from ${JSON.stringify(base + 'meter.mjs')};
       globalThis.refused=new Promise(resolve=>{globalThis.refuse=resolve;});
-      export const createMeter=options=>{const meter=create(options);return {...meter,invalidate(){meter.invalidate();globalThis.refuse();}};};`,
+      export const createMeter=options=>{const meter=create(options);return {...meter,invalidate(){meter.invalidate();globalThis.refuse();},observeAttempt(event,...args){
+        try{return meter.observeAttempt(event,...args);}finally{if(event.channel==='producer'&&event.outcome==='transport-error')globalThis.refuse();}
+      }};};`,
     '/code/litestream.mjs': `export * from ${JSON.stringify(base + 'litestream.mjs')};`,
     'node:http': `const http=process.getBuiltinModule('node:http');let servers=0;
       export const request=http.request;
@@ -110,7 +112,7 @@ test('excess LISTs truncate evidence while leaving the held request and refusal 
 });
 
 
-test('a real pre-acknowledgement initial LIST interruption stays refused and identifies its producer outcome', () => {
+test('a real writer failure retains the pre-acknowledgement initial LIST cutoff and its producer outcome', () => {
   const result=run('initial-interrupted-before-ack');
   assert.equal(result.error,undefined);assert.equal(result.status,1);assert.equal(result.stdout,'');
   assert.doesNotMatch(result.stderr,/PRIVATE_CANARY|11111111|synthetic|\.ltx|\/tmp\//);

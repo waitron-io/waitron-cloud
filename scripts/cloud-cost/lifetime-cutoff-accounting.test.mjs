@@ -8,6 +8,7 @@ import { openLitestreamVersionHistories } from './stream-versions.mjs';
 import { createMeter, createMeteringProxy, correlatedStorageAttempt, instrumentStorageClient } from './meter.mjs';
 import { assessAccounting } from './accounting-policy.mjs';
 import { createLitestreamTransport } from './litestream.mjs';
+import { lifetimeExchange } from './litestream-lifetime-test-utils.mjs';
 
 const require = createRequire(new URL('../../packages/backups/package.json', import.meta.url));
 const sdk = require('@aws-sdk/client-s3');
@@ -21,6 +22,25 @@ const models = [
 const input = operation => ({ method: { put: 'PUT', get: 'GET', head: 'HEAD', list: 'GET', delete: 'DELETE' }[operation],
   path: operation === 'list' ? '/synthetic?list-type=2' : path,
   headers: operation === 'put' ? { 'content-length': '4' } : {} });
+
+for (const [name, open] of models) for (const stopped of [false, true]) {
+  test(`${name} optional ledger never invents a commit time for an unwitnessed cutoff PUT, stopped=${stopped}`, async t => {
+    const f = await fixture(t, name === 'versioned'); f.time(2);
+    const e = await lifetimeExchange(t, { open: afterStop => open({ ...f.args, afterStop }),
+      input: input('put'), versionId: name === 'versioned' ? 'v1' : null,
+      stopped, witness: false, commit: () => f.stored(true) });
+    await e.transport.close(); f.time(5); await e.lifetimes.verify(); f.time(10);
+    const result = e.lifetimes.snapshot();
+    assert.equal(result.status, 'unknown');
+    assert.deepEqual(result.gaps, ['accounting:request-cutoff']);
+    assert.equal(result.objects.bytes, 4);
+    assert.deepEqual(result.byteSeconds, { low: 20, high: 32 });
+    assert.equal(e.meter.snapshot().accounting.requests[0].outcome, 'transport-error');
+    assert.equal(e.transport.checkpoint().pending, 0);
+    assert.equal(e.transport.checkpoint().connections, 0);
+    assert.doesNotMatch(JSON.stringify(result), /PRIVATE|11111111/);
+  });
+}
 
 // Real inventory resolves presence; a cut-off HTTP reply never invents a commit time.
 for (const [name, open] of models) for (const statusCode of [null, 200, 503]) {

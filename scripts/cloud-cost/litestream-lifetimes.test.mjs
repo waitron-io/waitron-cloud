@@ -240,9 +240,9 @@ test('streamStorageIntegratesEachObjectWindowAndReadsEveryInventoryPage', async 
   assert.deepEqual(audit.snapshot().byteSeconds, { low: 36, high: 44 });
 });
 
-// A known interrupted list can retire its pending token only after the validated runtime boundary.
+// Cutoff collection is independent of stop timing; foreign inventory still refuses.
 import { lifetimeExchange, assertIncompleteList } from './litestream-lifetime-test-utils.mjs';
-for (const stopped of [false, true]) test(`put-only lifetimes retain narrow interrupted-list settlement: stopped=${stopped}`, async t => {
+for (const stopped of [false, true]) test(`put-only lifetimes collect interrupted-list accounting: stopped=${stopped}`, async t => {
   const f = await fixture(t);
   const e = await lifetimeExchange(t, { open: afterStop => storage.openLitestreamLifetimes({ ...f.args, afterStop }),
     input: { method: 'GET', path: '/synthetic?list-type=2', headers: {} }, stopped });
@@ -253,8 +253,12 @@ for (const stopped of [false, true]) test(`put-only lifetimes retain narrow inte
     assert.throws(() => e.afterStop.snapshot(), /Invalid cloud cost Litestream audit/);
   }
   else {
-    await assert.rejects(e.transport.close(), /Invalid cloud cost Litestream audit/);
-    await assert.rejects(e.lifetimes.verify(), bad); assert.throws(() => e.meter.snapshot());
+    await e.transport.close(); await e.lifetimes.verify();
+    assert.equal(e.lifetimes.snapshot().objects.bytes, 0);
+    assert.equal(e.lifetimes.snapshot().status, 'unknown');
+    assert.ok(e.lifetimes.snapshot().gaps.includes('accounting:request-cutoff'));
+    assert.equal(e.meter.snapshot().status, 'unknown');
+    assert.equal(e.afterStop.snapshot().used, 0);
   }
 });
 for (const interrupted of [false, true]) test(`put-only lifetimes require a real committed prior PUT after stop: interrupted=${interrupted}`, async t => {
@@ -270,9 +274,9 @@ for (const interrupted of [false, true]) test(`put-only lifetimes require a real
   assert.equal(e.meter.snapshot().status, interrupted ? 'unknown' : 'measured');
 });
 
-// An inventory containing the bytes must never substitute for an independently witnessed commit.
+// Inventory can bound a missing reply; it cannot turn malformed commit metadata into a valid witness.
 for (const mode of ['missing-witness', 'incomplete-body', 'partial-body', 'failed-backend', 'unknown-token', 'unknown-field']) {
-  test(`put-only after-stop refuses uncertain commit evidence: ${mode}`, async t => {
+  test(`put-only after-stop bounds a missing witness and refuses malformed commit evidence: ${mode}`, async t => {
     const f = await fixture(t);
     const run = () => lifetimeExchange(t, { open: afterStop => storage.openLitestreamLifetimes({ ...f.args, afterStop }),
       input: put(), commit: () => f.rows.set(key, 4), witness: mode !== 'missing-witness', statusCode: mode === 'failed-backend' ? 503 : 200,
@@ -281,8 +285,11 @@ for (const mode of ['missing-witness', 'incomplete-body', 'partial-body', 'faile
         : mode === 'unknown-token' ? { ...event, token: event.token.replace('11111111', '22222222') }
         : mode === 'unknown-field' ? { ...event, privateCanary: 'PRIVATE_CANARY' } : event });
     if (mode === 'missing-witness') {
-      const e = await run(); await assert.rejects(e.transport.close(), /Invalid cloud cost Litestream audit/);
-      await assert.rejects(e.lifetimes.verify(), bad); assert.throws(() => e.afterStop.snapshot());
+      const e = await run(); await e.transport.close(); await e.lifetimes.verify();
+      assert.equal(e.lifetimes.snapshot().objects.bytes, 4);
+      assert.equal(e.lifetimes.snapshot().status, 'unknown');
+      assert.ok(e.lifetimes.snapshot().gaps.includes('accounting:request-cutoff'));
+      assert.equal(e.afterStop.snapshot().status, 'unknown');
     } else await assert.rejects(run(), /Invalid cloud cost Litestream audit/);
   });
 }

@@ -59,7 +59,7 @@ const nonnegative = value => Number.isSafeInteger(value) && value >= 0;
 export function createLitestreamAfterStop(options) {
   exactFields(options, ['clock']); const { clock } = options; requireThat(typeof clock === 'function');
   const attempts = new Map(), sequences = new Map();
-  let invalid = false, lastTime = -1, sequence = 0, acknowledged = null;
+  let invalid = false, lastTime = -1, sequence = 0, acknowledged = null, accountingCutoff = false;
   // Two controlled list admissions plus one underway upload; this is a bound, not a measured maximum.
   const cap = 3;
   const unlabelled = () => {};
@@ -181,10 +181,9 @@ export function createLitestreamAfterStop(options) {
         requireThat(responseHeaders?.['x-amz-delete-marker'] === undefined || responseHeaders['x-amz-delete-marker'] === 'false');
         requireThat(responseHeaders?.['x-amz-version-id'] === undefined || responseHeaders['x-amz-version-id'] === version);
         // Normalize storage history only. Both HTTP counters retain the actual client outcome and bytes.
-        return { statusCode: row.commit.statusCode, responseHeaders: version === null ? {} : { 'x-amz-version-id': version } };
+        return { statusCode: row.commit.statusCode, responseHeaders: version === null ? {} : { 'x-amz-version-id': version }, interrupted: false };
       }
-      requireThat(!interrupted || row.operation === 'list' && row.lateSettlement);
-      return { statusCode, responseHeaders };
+      return { statusCode, responseHeaders, interrupted };
     });
   });
   const settle = guarded((input, interruption = null) => {
@@ -207,21 +206,25 @@ export function createLitestreamAfterStop(options) {
     requireThat([true, false, null].includes(input.sameAccount));
     const interrupted = input.outcome === 'transport-error';
     if (interrupted) {
-      exactFields(interruption, ['reason', 'ioEvent', 'code', 'clientClosed', 'responseHeadersSeen']);
-      requireThat(acknowledged && hop === 'producer' && ['list', 'put'].includes(row.operation) && row.admissions.observer
-        && interruption.reason === 'transfer-interrupted' && interruption.ioEvent === 'response-pipeline'
-        && interruption.code === 'ERR_STREAM_UNABLE_TO_PIPE' && interruption.clientClosed === true
-        && interruption.responseHeadersSeen === true && input.statusCode >= 200 && input.statusCode < 300);
-      row.lateSettlement = true; affect(row);
+      requireThat(row.admissions.observer);
+      if (hop === 'producer' || interruption !== null) {
+        exactFields(interruption, ['reason', 'ioEvent', 'code', 'clientClosed', 'responseHeadersSeen']);
+        requireThat(closeReasons.has(interruption.reason) && ioEvents.has(interruption.ioEvent)
+          && (interruption.code === null || networkErrors.has(interruption.code))
+          && typeof interruption.clientClosed === 'boolean' && typeof interruption.responseHeadersSeen === 'boolean');
+      }
+      accountingCutoff = true;
+      if (acknowledged) { row.lateSettlement = true; affect(row); }
     } else requireThat(interruption === null);
     if (acknowledged && input.operation !== 'list') {
-      requireThat(input.operation === 'put' && row.ordinal === 0 && row.commit
-        && Object.values(row.admissions).length === 2
-        && Object.values(row.admissions).every(a => a.sequence < acknowledged.sequence)
-        && input.bytesOut === row.commit.bytesOut && input.attemptedBytesOut === row.commit.expectedBytesOut
-        && input.statusCode === row.commit.statusCode && (interrupted || input.outcome === 'success'));
-      requireThat(![...attempts.values()].some(other => other !== row && other.latePut));
-      row.latePut = true; row.lateSettlement = true; affect(row);
+      row.lateSettlement = true; affect(row);
+      if (input.operation === 'put' && row.commit) {
+        requireThat(Object.values(row.admissions).length === 2
+          && Object.values(row.admissions).every(a => a.sequence < acknowledged.sequence)
+          && input.bytesOut === row.commit.bytesOut && input.attemptedBytesOut === row.commit.expectedBytesOut
+          && input.statusCode === row.commit.statusCode && (interrupted || input.outcome === 'success'));
+        row.latePut = true;
+      }
     }
     row.settlements[hop] = { ...structuredClone(input), ...event() };
     return interrupted;
@@ -231,8 +234,11 @@ export function createLitestreamAfterStop(options) {
     for (const row of attempts.values()) requireThat(row.issued && row.admissions.producer && row.admissions.observer
       && row.settlements.producer && row.settlements.observer);
     const selected = [...attempts.values()].filter(row => row.affected);
-    const incompleteList = selected.some(row => row.operation === 'list' && row.lateSettlement);
-    const incompletePut = selected.some(row => row.latePut && Object.values(row.settlements).some(s => s.outcome === 'transport-error'));
+    const cutoff = row => Object.values(row.settlements).some(s => s.outcome === 'transport-error');
+    const incompleteList = selected.some(row => row.operation === 'list' && cutoff(row));
+    const incompletePut = selected.some(row => row.operation === 'put' && cutoff(row));
+    const otherCutoff = accountingCutoff && (!incompleteList && !incompletePut
+      || [...attempts.values()].some(row => cutoff(row) && (!row.affected || !['list', 'put'].includes(row.operation))));
     const total = () => ({ attempts: 0, bytesIn: 0, bytesOut: 0 });
     const producer = total(), observer = total(), requests = new Map(); let bodiesReconciled = true;
     for (const row of selected) {
@@ -251,8 +257,9 @@ export function createLitestreamAfterStop(options) {
       && [...requests.values()].every(row => ['attempts', 'bytesIn', 'bytesOut', 'attemptedBytesIn', 'attemptedBytesOut'].every(key => nonnegative(row[key]))));
     return { cap, used: selected.length, lateAdmissions: selected.filter(r => r.lateAdmission).length,
       lateSettlements: selected.filter(r => r.lateSettlement).length, requests: [...requests.values()], producer, observer,
-      requestsReconciled: true, bodiesReconciled, status: bodiesReconciled ? 'measured' : 'unknown',
-      gaps: [...(incompleteList ? ['after-stop:list-response-interrupted'] : []),
+      requestsReconciled: true, bodiesReconciled, status: bodiesReconciled && !accountingCutoff ? 'measured' : 'unknown',
+      gaps: [...(otherCutoff ? ['accounting:request-cutoff'] : []),
+        ...(incompleteList ? ['after-stop:list-response-interrupted'] : []),
         ...(incompletePut ? ['after-stop:put-response-interrupted'] : []),
         ...(!bodiesReconciled ? ['after-stop:body-bytes-unpaired'] : [])] };
   });
@@ -266,35 +273,28 @@ export function litestreamAfterStopOutput(input) {
   requireThat(input.cap === 3 && nonnegative(input.used) && input.used <= 3
     && ['lateAdmissions', 'lateSettlements'].every(k => nonnegative(input[k]) && input[k] <= input.used)
     && input.used <= input.lateAdmissions + input.lateSettlements && input.requestsReconciled === true
-    && typeof input.bodiesReconciled === 'boolean' && input.status === (input.bodiesReconciled ? 'measured' : 'unknown')
-    && Array.isArray(input.requests) && input.requests.length <= 6 && Array.isArray(input.gaps));
+    && typeof input.bodiesReconciled === 'boolean' && ['measured', 'unknown'].includes(input.status)
+    && Array.isArray(input.requests) && input.requests.length <= 6 && Array.isArray(input.gaps)
+    && (input.used > 0 || input.bodiesReconciled));
   const totals = { producer: { attempts: 0, bytesIn: 0, bytesOut: 0 }, observer: { attempts: 0, bytesIn: 0, bytesOut: 0 } };
-  const keys = new Set(); let listInterrupted = false, putInterrupted = false, putAttempts = 0, interruptedLists = 0, listAttempts = 0;
+  const keys = new Set(); let listInterrupted = false, putInterrupted = false, otherInterrupted = false;
   for (const r of input.requests) {
     exactFields(r, ['hop', 'phase', 'operation', 'retryOrdinal', 'outcome', 'attempts', 'bytesIn', 'bytesOut', 'attemptedBytesIn', 'attemptedBytesOut']);
-    requireThat(['producer', 'observer'].includes(r.hop) && phases.includes(r.phase) && ['list', 'put'].includes(r.operation)
-      && r.retryOrdinal === 0 && ['success', 'transport-error'].includes(r.outcome)
+    requireThat(['producer', 'observer'].includes(r.hop) && phases.includes(r.phase) && operations.includes(r.operation)
+      && nonnegative(r.retryOrdinal) && ['success', 'client-error', 'server-error', 'transport-error'].includes(r.outcome)
       && ['attempts', 'bytesIn', 'bytesOut', 'attemptedBytesIn', 'attemptedBytesOut'].every(k => nonnegative(r[k]))
-      && r.attempts > 0 && r.bytesIn <= r.attemptedBytesIn && r.bytesOut <= r.attemptedBytesOut
-      && (r.outcome !== 'transport-error' || r.hop === 'producer'));
+      && r.attempts > 0 && r.bytesIn <= r.attemptedBytesIn && r.bytesOut <= r.attemptedBytesOut);
     const key = [r.hop, r.phase, r.operation, r.retryOrdinal, r.outcome].join(':');
     requireThat(!keys.has(key)); keys.add(key);
     for (const k of ['attempts', 'bytesIn', 'bytesOut']) totals[r.hop][k] += r[k];
-    if (r.hop === 'producer' && r.operation === 'put') putAttempts += r.attempts;
-    if (r.hop === 'producer' && r.operation === 'list') {
-      listAttempts += r.attempts;
-      if (r.outcome === 'transport-error') interruptedLists += r.attempts;
-    }
     listInterrupted ||= r.operation === 'list' && r.outcome === 'transport-error';
     putInterrupted ||= r.operation === 'put' && r.outcome === 'transport-error';
+    otherInterrupted ||= !['list', 'put'].includes(r.operation) && r.outcome === 'transport-error';
   }
-  requireThat(putAttempts <= 1 && input.lateAdmissions <= listAttempts
-    && input.lateSettlements === putAttempts + interruptedLists
-    && (input.used > 0 || input.bodiesReconciled));
   for (const r of input.requests.filter(r => r.hop === 'producer')) {
-    const paired = input.requests.filter(o => o.hop === 'observer' && o.phase === r.phase && o.operation === r.operation)
+    const paired = input.requests.filter(o => o.hop === 'observer' && o.phase === r.phase && o.operation === r.operation && o.retryOrdinal === r.retryOrdinal)
       .reduce((n, o) => n + o.attempts, 0);
-    const issued = input.requests.filter(o => o.hop === 'producer' && o.phase === r.phase && o.operation === r.operation)
+    const issued = input.requests.filter(o => o.hop === 'producer' && o.phase === r.phase && o.operation === r.operation && o.retryOrdinal === r.retryOrdinal)
       .reduce((n, o) => n + o.attempts, 0);
     requireThat(paired === issued);
   }
@@ -303,20 +303,25 @@ export function litestreamAfterStopOutput(input) {
     requireThat(Object.keys(totals[hop]).every(k => nonnegative(totals[hop][k]) && input[hop][k] === totals[hop][k])
       && input[hop].attempts === input.used);
   }
-  const expectedGaps = [...(listInterrupted ? ['after-stop:list-response-interrupted'] : []),
+  for (const hop of ['producer', 'observer']) requireThat(input.requests
+    .filter(r => r.hop === hop && r.outcome === 'transport-error').reduce((n, r) => n + r.attempts, 0) <= input.lateSettlements);
+  const genericCutoff = otherInterrupted || input.gaps.includes('accounting:request-cutoff');
+  const expectedGaps = [...(genericCutoff ? ['accounting:request-cutoff'] : []),
+    ...(listInterrupted ? ['after-stop:list-response-interrupted'] : []),
     ...(putInterrupted ? ['after-stop:put-response-interrupted'] : []),
     ...(!input.bodiesReconciled ? ['after-stop:body-bytes-unpaired'] : [])];
   requireThat(new Set(input.gaps).size === input.gaps.length && input.gaps.length === expectedGaps.length
     && input.gaps.every(g => expectedGaps.includes(g)));
+  requireThat(input.status === (input.bodiesReconciled && expectedGaps.length === 0 ? 'measured' : 'unknown'));
   if (input.bodiesReconciled) {
-    requireThat(!listInterrupted && !putInterrupted);
+    requireThat(!listInterrupted && !putInterrupted && !otherInterrupted);
     for (const r of input.requests.filter(r => r.hop === 'producer')) {
-      const observer = input.requests.find(o => o.hop === 'observer' && o.phase === r.phase && o.operation === r.operation && o.outcome === r.outcome);
+      const observer = input.requests.find(o => o.hop === 'observer' && o.phase === r.phase && o.operation === r.operation && o.retryOrdinal === r.retryOrdinal && o.outcome === r.outcome);
       requireThat(observer && ['attempts', 'bytesIn', 'bytesOut', 'attemptedBytesIn', 'attemptedBytesOut'].every(k => observer[k] === r[k]));
     }
   }
   const afterStop = structuredClone(input);
-  return { afterStop, ...(afterStop.used ? { costAccuracy: { status: 'incomplete', reason: 'after-stop',
+  return { afterStop, ...(afterStop.used || afterStop.status === 'unknown' ? { costAccuracy: { status: 'incomplete', reason: 'after-stop',
     message: 'Cost may be a few requests short after stop.' } } : {}) };
 }
 
@@ -651,7 +656,7 @@ export async function createLitestreamTransport({ target, meter, phase, lifetime
     // Attribute body EOF only to its admitted request; a later incomplete header must still refuse.
     const { operation, ...context } = (networkErrors.has(own(error, 'code')) || bodyCutoff) && current ? current : {};
     remember('client-error', error, 'client-error', operation, { forwardingTransfers: active?.size ?? 0, ...context });
-    if (!networkErrors.has(own(error, 'code')) && !bodyCutoff) poison('client-error', error, 'client-error');
+    if (!current || !networkErrors.has(own(error, 'code')) && !bodyCutoff) poison('client-error', error, 'client-error');
     socket.destroy();
   });
   server.on('connection', socket => {

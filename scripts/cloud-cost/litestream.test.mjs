@@ -186,13 +186,20 @@ for (const action of ['backwards-clock', 'duplicate-issue', 'duplicate-admission
     assert.throws(() => session.snapshot(), /Invalid cloud cost Litestream audit/);
   });
 
-// The exception is a closed signature, not permission to ignore arbitrary I/O failure.
+// Network categories stay closed; a different valid cutoff signature is still accounting uncertainty.
 for (const [label, change] of [['event', { ioEvent: 'response-aborted' }], ['code', { code: 'ECONNRESET' }],
   ['reason', { reason: 'upstream-error' }], ['client open', { clientClosed: false }], ['no headers', { responseHeadersSeen: false }],
-  ['extra key', { private: 'PRIVATE_CANARY' }]]) test(`after-stop interrupted list refuses unrelated ${label}`, () => {
+  ['extra key', { private: 'PRIVATE_CANARY' }]]) test(`after-stop interrupted list collects valid ${label} and refuses private metadata`, () => {
     const session = afterStopSession(); startAttempt(session); session.acknowledgeStop(ack());
-    assert.throws(() => session.settle(settled('producer', { outcome: 'transport-error' }), { ...knownInterruption(), ...change }), /Invalid cloud cost Litestream audit/);
-    assert.throws(() => session.snapshot(), /Invalid cloud cost Litestream audit/);
+    const finish = () => session.settle(settled('producer', { outcome: 'transport-error' }), { ...knownInterruption(), ...change });
+    if (label === 'extra key') {
+      assert.throws(finish, /Invalid cloud cost Litestream audit/);
+      assert.throws(() => session.snapshot(), /Invalid cloud cost Litestream audit/);
+    } else {
+      assert.equal(finish(), true); session.settle(settled('observer'));
+      assert.equal(session.snapshot().status, 'unknown');
+      assert.ok(session.snapshot().gaps.includes('after-stop:list-response-interrupted'));
+    }
   });
 
 // Buffering SDK logs cannot backdate a real storage admission; identities must still pair by completion.
@@ -247,7 +254,7 @@ test('late admission and interrupted settlement count the same SDK attempt only 
   assert.equal(result.bodiesReconciled, false, 'equal fragments still do not prove a complete response');
 });
 
-for (const invalid of ['missing storage admission', 'observer interruption', 'changed settlement phase'])
+for (const invalid of ['missing storage admission', 'changed settlement phase'])
   test(`after-stop settlement refuses ${invalid} immediately`, () => {
     const session = afterStopSession(); session.issue(issued()); session.admit(admitted('producer'));
     if (invalid !== 'missing storage admission') session.admit(admitted('observer'));
@@ -299,7 +306,7 @@ test('ordinary successful retry can retain backend evidence before stop without 
   assert.equal(s.snapshot().used, 0); assert.equal(s.snapshot().status, 'measured');
 });
 for (const mode of ['second-upload', 'retry', 'uncommitted', 'partial-settlement', 'pre-ack-interruption', 'wrong-signature']) {
-  test(`prior PUT completion remains bounded: ${mode}`, () => {
+  test(`prior PUT completion retains accounting while malformed commit bytes refuse: ${mode}`, () => {
     const s = afterStopSession(); startAttempt(s, 'put');
     if (mode === 'retry') {
       for (const hop of ['producer', 'observer']) s.settle(putSettlement(hop, { outcome: 'server-error', statusCode: 503 }));
@@ -324,8 +331,18 @@ for (const mode of ['second-upload', 'retry', 'uncommitted', 'partial-settlement
         ...(interrupted ? { outcome: 'transport-error' } : {}) }), interrupted
         ? { ...knownInterruption(), ...(mode === 'wrong-signature' ? { code: 'ECONNRESET' } : {}) } : null);
     };
-    assert.throws(run, /Invalid cloud cost Litestream audit/);
-    assert.throws(() => s.snapshot(), /Invalid cloud cost Litestream audit/);
+    if (mode === 'partial-settlement') {
+      assert.throws(run, /Invalid cloud cost Litestream audit/);
+      assert.throws(() => s.snapshot(), /Invalid cloud cost Litestream audit/);
+    } else {
+      assert.doesNotThrow(run);
+      if (mode === 'second-upload') s.settle(putSettlement('observer', { token: id.replace('11111111', '22222222') + ':1' }));
+      else s.settle(putSettlement('observer', { ordinal }));
+      const result = s.snapshot();
+      assert.equal(result.used, mode === 'pre-ack-interruption' ? 0 : mode === 'second-upload' ? 2 : 1);
+      assert.equal(result.status, ['pre-ack-interruption', 'wrong-signature'].includes(mode) ? 'unknown' : 'measured');
+      assert.equal(result.gaps.length > 0, ['pre-ack-interruption', 'wrong-signature'].includes(mode));
+    }
   });
 }
 

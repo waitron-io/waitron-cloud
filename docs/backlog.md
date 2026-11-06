@@ -192,8 +192,21 @@ scripts/cloud-cost/stream-versions.test.mjs
 scripts/cloud-cost/ambiguous-multipart.test.mjs
 scripts/cloud-cost/native-multipart.test.mjs` for the bounds and real lost-reply
 controls. These controls check retained storage and owned HTTP collection; they
-do not prove SQLite recovery. Optional stop-ledger interruption handling and
-missing-history reconciliation still need the wider policy.
+do not prove SQLite recovery.
+The optional shutdown ledger now collects cut-off replies on either HTTP hop,
+before or after the stop, for every admitted storage operation. Its anonymous
+output keeps the actual observations and an unknown accounting label. The
+three-request stop bound, malformed-event refusals and explicit commit checks
+remain. Explicit upload refusals and socket errors without an active request
+also remain working failures. A ledger's presence does not prove a write
+committed: without a real commit witness, inventory supplies the earliest
+confirmed time. Run `node --test
+scripts/cloud-cost/stop-cutoff-accounting.test.mjs
+scripts/cloud-cost/lifetime-cutoff-accounting.test.mjs` for the cutoff, storage
+bounds and malformed-input controls. The retry diagnostic waits for collection;
+a separate invalid control still reports the original attempt and refuses.
+Missing-history reconciliation, accounting-dependent forwarding admission and
+aggregate overflow in the shutdown subset still need the wider policy.
 The full nonblocking accounting path, publication refusal, lost-write
 restore control and saved-failure replay remain open. These partial changes do
 not establish the historical cause or relax functional admission.
