@@ -3,6 +3,8 @@
 import base64
 from contextlib import contextmanager
 import hashlib
+import fcntl
+import stat
 import ipaddress
 import json
 import os
@@ -45,18 +47,22 @@ def locked():
     if os.geteuid() != 0 or not Path('/dev/kvm').is_char_device():
         raise ValueError('Dedicated root KVM host required')
     directory(ROOT, 0o755)
-    lock = ROOT / 'lock'
+    if (ROOT/'lock').exists():
+        raise BlockingIOError('Legacy host operation needs reconciliation')
+    fd = os.open(ROOT/'operation.lock', os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
     try:
-        lock.mkdir(mode=0o700)
-    except FileExistsError:
-        raise BlockingIOError('Host operation already running or needs reconciliation')
-    try:
+        info = os.fstat(fd)
+        if not stat.S_ISREG(info.st_mode) or info.st_uid != 0 or info.st_mode & 0o077:
+            raise ValueError('Unsafe host operation lock')
+        # Kernel ownership survives neither process death nor reboot. Durable
+        # active/history records still require verified cleanup before reuse.
+        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
         directory(ROOT / 'base', 0o755)
         directory(ROOT / 'turns', 0o755)
         directory(ROOT / 'history')
         yield
     finally:
-        lock.rmdir()
+        os.close(fd)
 
 
 def write_json(path, data):

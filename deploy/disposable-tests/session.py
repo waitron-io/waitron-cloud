@@ -13,12 +13,14 @@ import sys
 import tarfile
 import time
 import host
+import operations
 from host import resource_id
 
 MAX_BUNDLE = 577 * 1024 * 1024
 LIMITS = {'request.json': 65536, 'source.tar': 512 * 1024 * 1024}
 PACKAGE_SHA512 = base64.b64decode('MzgeKuubpLe6LPEL1M6hZgWDuNSBeyQNVGnzw/J29UwKeZ/6nTKD8k/H1nrSMeOx95C/3f34eNYQtbMM8P+2ng==')
 CONTROL = host.ROOT/'control'
+OPERATIONS = host.ROOT/'operations'
 RECIPE = Path(__file__).resolve().parent
 
 
@@ -187,11 +189,21 @@ def execute(resource):
 def inspect(resource):
     observed = host.observation(resource)
     observed['controlPresent'] = (CONTROL/resource).exists()
-    observed['absent'] = observed['absent'] and not observed['controlPresent']
+    operation = host.service_state(resource+'-operation')
+    observed['operationPresent'] = not operation['absent']
+    observed['absent'] = observed['absent'] and not observed['controlPresent'] and operation['absent']
     return observed
 
 
 def destroy(resource):
+    # Closure precedes stop: even a delayed service start must refuse this generation.
+    operations.fence(OPERATIONS, resource)
+    for suffix in ('transfer-expiry', 'expiry'):
+        stop_timer(resource, suffix)
+    if not host.service_state(resource+'-operation')['absent']:
+        host.run('systemctl', 'stop', resource+'-operation.service', timeout=15)
+    if not host.service_state(resource+'-operation')['absent']:
+        raise ValueError('Owned operation still present; slot quarantined')
     observed = host.destroy(resource)
     if not observed['absent']:
         raise ValueError('Owned VM cleanup remains uncertain')
@@ -202,24 +214,94 @@ def destroy(resource):
     return inspect(resource)
 
 
+def stop_timer(resource, suffix):
+    unit = resource+'-'+suffix+'.timer'
+    host.run('systemctl', 'stop', unit, check=False, timeout=10)
+    result = host.run('systemctl', 'show', unit, '--property=ActiveState', timeout=10)
+    if result.stdout.strip() != 'ActiveState=inactive':
+        raise ValueError('Owned deadline timer did not stop')
+
+
+def arm_expiry(resource, deadline, suffix):
+    if (OPERATIONS/resource/'closed').exists():
+        raise ValueError('This resource generation is closed')
+    now = int(time.time()*1000)
+    if type(deadline) is not int or not now < deadline <= now+3300000:
+        raise ValueError('Invalid server cleanup deadline')
+    # The longer turn timer is installed before the short transfer timer stops.
+    # A controller/worker death during the handoff therefore retains a watchdog.
+    host.write_json(operations.directory(OPERATIONS, resource)/(suffix+'.json'),
+                    {'resourceId': resource, 'deadline': deadline,
+                     'bootId': Path('/proc/sys/kernel/random/boot_id').read_text().strip()})
+    host.run('systemd-run', '--quiet', '--collect', '--unit='+resource+'-'+suffix,
+             '--on-calendar=@'+str((deadline+999)//1000), '--timer-property=AccuracySec=1s',
+             '--timer-property=RandomizedDelaySec=0', '--property=Type=exec',
+             '--property=RuntimeMaxSec=115', '--property=TimeoutStopSec=5',
+             '--property=KillMode=control-group',
+             sys.executable, '-B', str(RECIPE/'session.py'), '_cleanup', resource)
+
+
+def stage(mode, resource):
+    if mode == 'transfer':
+        arm_expiry(resource, int(time.time()*1000)+120000, 'transfer-expiry')
+        request = receive(CONTROL, resource, sys.stdin.buffer)
+        arm_expiry(resource, request['deadline'], 'expiry')
+        stop_timer(resource, 'transfer-expiry')
+        print(json.dumps(request))
+    elif mode == 'prepare':
+        prepare(resource)
+    elif mode == 'execute':
+        return execute(resource)
+    else:
+        raise ValueError('Unknown owned stage')
+    return 0
+
+
+def supervise(mode, resource):
+    now = int(time.time()*1000)
+    if mode == 'transfer':
+        deadline = now+120000
+    else:
+        request = request_identity(json.loads((turn_directory(resource)/'request.json').read_text()), resource)
+        deadline = request['deadline']
+    # The service owns all host children independently of the SSH channel. systemd
+    # binds the unit to this unique resource generation and kills the whole group.
+    argv = ['systemd-run', '--quiet', '--wait', '--pipe', '--collect', '--service-type=exec',
+            '--unit='+resource+'-operation', '--property=KillMode=control-group',
+            '--property=TimeoutStopSec=5', '--property=SendSIGKILL=yes',
+            '--property=RuntimeMaxSec='+str(max(1, (deadline-now)//1000)),
+            sys.executable, '-B', str(RECIPE/'session.py'), '_worker', mode, resource]
+    return subprocess.run(argv).returncode
+
+
 def main():
     if os.geteuid() != 0 or not Path('/dev/kvm').is_char_device():
         raise ValueError('Dedicated root KVM host required')
     if len(sys.argv) == 2 and sys.argv[1] == 'health':
         print(json.dumps({'healthy': not (host.ROOT/'active.json').exists()}))
         return 0
+    if len(sys.argv) == 3 and sys.argv[1] == '_cleanup':
+        resource = resource_id(sys.argv[2])
+        print(json.dumps(destroy(resource)))
+        return 0
+    if len(sys.argv) == 4 and sys.argv[1] == '_worker':
+        mode, resource = sys.argv[2:]
+        with operations.owned(OPERATIONS, resource):
+            return stage(mode, resource)
     if len(sys.argv) != 3:
         raise ValueError('Usage: session.py transfer|prepare|execute|inspect|destroy RESOURCE')
     mode, resource = sys.argv[1:]
     resource_id(resource)
-    if mode == 'transfer':
-        print(json.dumps(receive(CONTROL, resource, sys.stdin.buffer)))
-    elif mode == 'prepare':
-        prepare(resource)
-    elif mode == 'execute':
-        return execute(resource)
-    elif mode in ('inspect', 'destroy'):
-        print(json.dumps((inspect if mode == 'inspect' else destroy)(resource)))
+    if mode in ('transfer', 'prepare', 'execute'):
+        return supervise(mode, resource)
+    elif mode == 'destroy':
+        argv = ['systemd-run', '--quiet', '--wait', '--pipe', '--collect', '--service-type=exec',
+                '--unit='+resource+'-cleanup', '--property=KillMode=control-group',
+                '--property=TimeoutStopSec=5', '--property=RuntimeMaxSec=115',
+                sys.executable, '-B', str(RECIPE/'session.py'), '_cleanup', resource]
+        return subprocess.run(argv).returncode
+    elif mode == 'inspect':
+        print(json.dumps(inspect(resource)))
     else:
         raise ValueError('Unknown turn operation')
     return 0
@@ -232,6 +314,9 @@ if __name__ == '__main__':
         signal.signal(signum, interrupted)
     try:
         sys.exit(main())
+    except BlockingIOError as error:
+        print(str(error), file=sys.stderr)
+        sys.exit(75)
     except KeyboardInterrupt:
         sys.exit(143)
     except (TimeoutError, subprocess.TimeoutExpired) as error:

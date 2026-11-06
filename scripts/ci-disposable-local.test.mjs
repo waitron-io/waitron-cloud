@@ -9,3 +9,4 @@ import './disposable-tests/local.test.mjs';
 import './disposable-tests/session.test.mjs';
 import './disposable-tests/transport.test.mjs';
 import './disposable-tests/bundle.test.mjs';
+import './disposable-tests/manual.test.mjs';

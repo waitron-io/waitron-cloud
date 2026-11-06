@@ -61,8 +61,17 @@ export async function runProcess(command, argv, {input, inputPath, signal, captu
     const kill = sig => {
       if (child.pid) try { process.kill(-child.pid, sig); } catch (error) { if (error.code !== 'ESRCH') failure ??= error; }
     };
+    const closePipes = () => {
+      child.stdin.destroy();
+      child.stdout.destroy();
+      child.stderr.destroy();
+    };
     const stop = error => {
       failure ??= error;
+      if (child.exitCode !== null || child.signalCode !== null) {
+        closePipes();
+        return;
+      }
       if (!timer) {
         kill('SIGTERM');
         timer = setTimeout(() => kill('SIGKILL'), 2000);
@@ -73,7 +82,15 @@ export async function runProcess(command, argv, {input, inputPath, signal, captu
     // Subscribe before rechecking: cancellation may arrive just after spawn.
     if (signal?.aborted) abort();
     child.on('error', error => { failure ??= error; });
-    child.on('exit', () => kill('SIGKILL'));
+    child.on('exit', () => {
+      kill('SIGKILL');
+      // A shared SSH master may retain the channel's pipe descriptors after
+      // this client exits. Cancellation must return so a fresh channel can
+      // stop the remote operation; successful output still drains normally.
+      if (failure) {
+        closePipes();
+      }
+    });
     child.stdout.on('data', data => {
       if (capture) {
         bytes += data.length;

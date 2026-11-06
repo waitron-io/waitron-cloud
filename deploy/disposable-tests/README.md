@@ -9,7 +9,7 @@ bash deploy/disposable-tests/ssh.sh YOUR_VERIFIED_HOST 'true'
 bash deploy/disposable-tests/ssh.sh --check YOUR_VERIFIED_HOST
 ```
 
-The second command reports the existing master process. Repeated commands must report the same process. The controller owns that process; a lane must not close a connection another process started. No lane may use a test slot before its activation gates below pass.
+The second command reports the existing master process. Repeated commands must report the same process. The controller owns that process; a lane must not close a connection another process started. The watcher’s 6 November 18:23 instruction authorizes deliberate manual Cloud jobs while the remaining recovery drills proceed. Automatic lane routing and GitHub runners remain closed.
 
 From the copied repository recipe on that host, inspect the pinned package set, then install it:
 
@@ -68,7 +68,7 @@ The package token stays in the Mac process. GitHub's signed blob redirect receiv
 
 `guest-exec.py` binds its entry point to the guest's exact resource ID, executes an argument list in `/work/source`, preserves the command status and enforces an absolute deadline. Cancellation stops the owned process group with a two-second grace before forced termination. The server's independent VM deadline remains necessary if the controller disappears.
 
-To run the complete private command-path proof, first prepare the snapshot and reviewed package bytes on your Mac. Copy the trusted host recipe separately, including `session.py`, `host.py`, `guest-tools.sh`, `guest-exec.py` and the trusted `snapshot.py`. The recipe path must be an explicit directory under `/opt/waitron-disposable-`; candidate source never supplies host programs.
+To run the complete private command-path proof, first prepare the snapshot and reviewed package bytes on your Mac. Copy the trusted host recipe separately, including `session.py`, `operations.py`, `host.py`, `guest-tools.sh`, `guest-exec.py` and the trusted `snapshot.py`. The recipe path must be an explicit directory under `/opt/waitron-disposable-`; candidate source never supplies host programs.
 
 ```sh
 node scripts/disposable-tests/local-runtime.proof.mjs YOUR_VERIFIED_HOST \
@@ -78,4 +78,31 @@ node scripts/disposable-tests/local-runtime.proof.mjs YOUR_VERIFIED_HOST \
 
 This opt-in proof runs 43 real PostgreSQL checks and deliberately returns exit 3. The controller reserves and starts a durable lease, constructs a bounded bundle, transfers it over the shared connection, prepares a fresh guest and preserves that status only after destruction and an independent absence readback. A duplicate request returns 75; a failed destruction or mismatched receipt quarantines the slot. The host checks the exact request and source digest and, when supplied, the private package integrity. It never extracts candidate source onto the host. The root entry point imports only the named owning tests, never this runtime proof.
 
-The component still needs real cancellation during copy and preparation, controller and reboot reconciliation, server-deadline, failed-boot and disk-full drills and bounded cleanup under those failures before supplying a usable slot. The controller's unit tests cover cancellation and deadlines through the transport interface; they do not prove the host stops a remote preparation after an SSH disconnect. Add host-side operation ownership and cancellation before relying on that behavior. No lane helper or GitHub runner is activated.
+Stopping your SSH client does not prove that its remote command stopped. Each host stage therefore runs in a systemd service named for its unique resource generation. Destruction first records that the generation is closed, stops its timers and entire operation service, and checks absence before removing the guest. A delayed stage cannot reopen that generation. Kernel-held locks serialize host changes and release automatically when their owner dies; the persistent `operation.lock` file is not itself a live lock. Durable active records still require verified cleanup before reuse.
+
+The server installs a two-minute transfer watchdog before reading input. After validating the complete bundle, it installs the absolute turn-deadline watchdog before stopping the transfer watchdog, so interruption cannot leave a gap between them. Destruction runs independently of the SSH channel with a 115-second service limit and a five-second termination grace. An unfinished cleanup still quarantines the Mac lease. These transient watchdogs do not survive a host reboot; startup reconciliation remains required before activation.
+
+Run the opt-in Mac cancellation proof with the same source and package inputs as the PostgreSQL proof:
+
+```sh
+node scripts/disposable-tests/cancellation-runtime.proof.mjs YOUR_VERIFIED_HOST \
+  /opt/waitron-disposable-REVIEWED_RECIPE /tmp/cloud-source.tar \
+  /tmp/cloud-private-packages/ui-core-0.1.0.tgz /tmp/cloud-cancel-ledger
+```
+
+The proof waits for an actual guest command to start, cancels its SSH channel and requires status 143, a free ledger slot and an independent absence readback. A shared SSH master can retain output pipes after its client exits; failed transport closes its own handles so cleanup can use a fresh channel without stopping that master. Dedicated-host tests also cancel during transfer and package installation and verify autonomous cleanup of an abandoned transfer at its deadline.
+
+Controller-death recovery with a running guest, automatic Mac/host startup reconciliation, actual reboot, active-guest deadline, failed-boot and small throwaway-filesystem disk-full drills remain open, as does the frozen transitive package inventory. The provisional helper below is for deliberate manual Cloud work. Automatic routing and GitHub runners remain closed.
+
+
+For one manual Cloud job, use the shared helper from the Mac. It runs frozen controller bytes, verifies the checkout belongs to Cloud, then snapshots that checkout into a fresh guest:
+
+```sh
+~/waitron-campaign-shared/disposable-test-run.sh I "$PWD" \
+  node scripts/test-postgres.mjs exec pnpm --dir packages/registration exec \
+  node --test test/monitoring.test.ts
+```
+
+You receive the command’s exit status after independent cleanup verification. A second lane gets 75 immediately, before source copying or package downloads. The helper prints its manual mode, host generation and source digest. It accepts literal arguments; keep shell interpretation explicit inside your guest command when you need it. The Mac downloads only reviewed private package bytes; its package token stays on the Mac.
+
+This first helper has one slot and no automatic crash or reboot recovery. A dead Mac owner leaves its manual lock closed; a failed or uncertain destruction leaves the recorded lease occupied. Do not erase a lock or free a lease because it is old. Read the exact resource from the private ledger, use the trusted host recipe to destroy and independently inspect it, then reconcile that same lease before reopening admission. Startup reconciliation, active-guest deadline/reboot/failed-boot/disk-full drills and frozen transitive packages remain on D592. Current guest tools have direct version pins but still resolve transitives from current signed Debian indexes. This manual release makes no measured capacity or unattended-service claim.
