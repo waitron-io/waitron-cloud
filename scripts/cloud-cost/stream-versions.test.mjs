@@ -365,6 +365,40 @@ const deleted = (k, v, marker) => `<Deleted><Key>${k}</Key>${v === undefined ? '
 const failedDelete = k => `<Error><Key>${k}</Key><Code>AccessDenied</Code><Message>PRIVATE_ERROR_CANARY</Message></Error>`;
 const openBulk = f => storage.openLitestreamVersionHistories({ ...f.args, allowBulkDeletes: true });
 
+for (const removeVersion of [false, true]) for (const committed of [false, true]) for (const statusCode of [null, 200, 503]) {
+  test(`versioned batch cutoff retains independent bounds ${removeVersion}/${committed}/${statusCode}`, async t => {
+    const f = await fixture(t), audit = await openBulk(f);
+    success(f, audit, put(4), 1, 2, 'first'); f.add('first', 4);
+    const body = batchBody([[key, removeVersion ? 'first' : undefined]]);
+    f.time(4); const finish = audit.begin(batchInput(body)); f.time(5);
+    assert.doesNotThrow(() => finish({ statusCode, bytesOut: body.length - 1, interrupted: true,
+      responseBody: Buffer.from('<DeleteResult>PRIVATE_PARTIAL') }));
+    if (committed) { if (removeVersion) f.remove('first'); else f.add('marker', Buffer.byteLength(key), true); }
+    f.time(8); await audit.verify(); f.time(10);
+    const result = audit.snapshot(), size = Buffer.byteLength(key);
+    assert.equal(result.status, 'unknown'); assert.deepEqual(result.gaps, ['accounting:request-cutoff']);
+    assert.equal(result.objects.bytes, committed ? removeVersion ? 0 : 4 + size : 4);
+    assert.equal(result.objects.deleteMarkers, committed && !removeVersion ? 1 : 0);
+    assert.deepEqual(result.byteSeconds, committed ? removeVersion ? { low: 8, high: 28 }
+      : { low: 32 + size * 2, high: 36 + size * 6 } : { low: 32, high: 36 });
+    assert.ok(f.meter.snapshot().gaps.includes('accounting:request-cutoff'));
+    await audit.verify(); assert.deepEqual(audit.snapshot().gaps, ['accounting:request-cutoff']);
+    assert.doesNotMatch(JSON.stringify(audit.snapshot()), /PRIVATE|CANARY|first|marker/);
+  });
+}
+
+for (const event of [
+  { statusCode: null, bytesOut: 0, interrupted: false },
+  { statusCode: 600, bytesOut: 0, interrupted: true },
+  { statusCode: 200, bytesOut: -1, interrupted: true },
+  { statusCode: 200, bytesOut: Number.MAX_SAFE_INTEGER, interrupted: true },
+  { statusCode: 200, bytesOut: 0, interrupted: 'true' },
+]) test(`versioned batch malformed cutoff still refuses ${JSON.stringify(event)}`, async t => {
+  const f = await fixture(t), audit = await openBulk(f), body = batchBody([[key]]);
+  assert.throws(() => audit.begin(batchInput(body))(event), bad);
+  assert.throws(() => f.meter.snapshot(), /Invalid cloud cost meter/);
+});
+
 // Counting one batch must preserve failed entries and the storage retained before each deletion.
 test('nativeVersionBatchesRetainMixedResultsAndDeletedVersionByteTime', async t => {
   const f = await fixture(t), audit = await openBulk(f);
@@ -537,15 +571,22 @@ test('nativeVersionBatchTransportAcceptsActualSignedSdkControlRequests', async t
   assert.equal(history.snapshot().objects.bytes, 0);
 });
 
-for (const mode of ['twice', 'pending', 'clock', 'interrupt', 'status', 'wrong-success-status']) test(`nativeVersionBatchCompletionRemainsBoundedAndSingleUse_${mode}`, async t => {
+for (const mode of ['twice', 'pending', 'clock', 'interrupt', 'status', 'wrong-success-status']) test(mode === 'interrupt'
+  ? 'nativeVersionBatchRetainsUnknownInterruptedCompletion' : `nativeVersionBatchCompletionRemainsBoundedAndSingleUse_${mode}`, async t => {
   const f = await fixture(t), audit = await openBulk(f), body = batchBody([[key]]);
   f.time(2); const finish = audit.begin(batchInput(body));
   const event = { statusCode: 200, bytesOut: body.length, responseBody: batchResult([failedDelete(key)]) };
+  if (mode === 'interrupt') {
+    finish({ ...event, interrupted: true }); await audit.verify();
+    assert.equal(audit.snapshot().status, 'unknown');
+    assert.deepEqual(audit.snapshot().gaps, ['accounting:request-cutoff']);
+    assert.equal(audit.snapshot().objects.bytes, 0);
+    assert.ok(f.meter.snapshot().gaps.includes('accounting:request-cutoff')); return;
+  }
   if (mode === 'pending') await assert.rejects(audit.verify(), bad);
   else if (mode === 'twice') { finish(event); assert.throws(() => finish(event), bad); }
   else {
     if (mode === 'clock') f.time(1);
-    if (mode === 'interrupt') event.interrupted = true;
     if (mode === 'status') event.statusCode = 99;
     if (mode === 'wrong-success-status') event.statusCode = 204;
     assert.throws(() => finish(event), bad);

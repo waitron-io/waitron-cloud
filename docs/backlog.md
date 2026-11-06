@@ -180,8 +180,20 @@ to refuse mutations. Malformed completions, duplicate settlement, foreign
 inventory and invalid clocks still refuse. Run `node --test
 scripts/cloud-cost/lifetime-cutoff-accounting.test.mjs` for original-event and
 real interrupted-HTTP controls. These controls do not establish actual SQLite
-recovery or resolve missing history. Stop-ledger, bulk and multipart interruption
-handling still need the wider policy.
+recovery or resolve missing history.
+Batch deletion and multipart lifetime trackers also collect cut-off replies as
+unknown accounting. Independent inventories determine retained objects, versions,
+markers and parts without treating a partial reply as a successful mutation.
+Multipart cutoffs use this policy even when full-reply resolution is disabled.
+The unknown label survives later verification; malformed complete replies, unsafe
+selections, foreign inventory and overlapping mutations still refuse. Run
+`node --test scripts/cloud-cost/native-unversioned-batches.test.mjs
+scripts/cloud-cost/stream-versions.test.mjs
+scripts/cloud-cost/ambiguous-multipart.test.mjs
+scripts/cloud-cost/native-multipart.test.mjs` for the bounds and real lost-reply
+controls. These controls check retained storage and owned HTTP collection; they
+do not prove SQLite recovery. Optional stop-ledger interruption handling and
+missing-history reconciliation still need the wider policy.
 The full nonblocking accounting path, publication refusal, lost-write
 restore control and saved-failure replay remain open. These partial changes do
 not establish the historical cause or relax functional admission.

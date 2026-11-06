@@ -38,7 +38,8 @@ export async function openLitestreamVersionHistories({ client, sdk, meter, bucke
     retiredHigh += row.bytes * (by - row.from);
     row.deleted = true; row.removing = null;
   };
-  const multipart = allowMultipart ? nativeMultipartHistory({ bucket, now, inspect, resolveReplies: resolveMultipartReplies, complete: (key, bytes, from, by, headers) => {
+  const multipart = allowMultipart ? nativeMultipartHistory({ bucket, now, inspect, resolveReplies: resolveMultipartReplies,
+    markGap: code => { gaps.add(code); meter.markGap(code); }, complete: (key, bytes, from, by, headers) => {
     const version = headers?.['x-amz-version-id'], marker = headers?.['x-amz-delete-marker'];
     need(text(version) && version !== 'null' && !rows.has(identity(key, version))
       && (marker === undefined || marker === 'false') && rows.size < 100000 && sequence < 100000);
@@ -66,9 +67,12 @@ export async function openLitestreamVersionHistories({ client, sdk, meter, bucke
     verified = false;
     const token = {}; pending.add(token);
     return guarded(({ statusCode, bytesOut, interrupted = false, responseBody }) => {
-      need(pending.has(token) && !interrupted && Number.isInteger(statusCode) && statusCode >= 200 && statusCode <= 599 && bytesOut === body.length);
+      need(pending.has(token) && typeof interrupted === 'boolean' && count(bytesOut)
+        && (interrupted && statusCode === null || Number.isInteger(statusCode) && statusCode >= 200 && statusCode <= 599)
+        && (interrupted ? bytesOut <= body.length : bytesOut === body.length));
+      if (interrupted) { gaps.add('accounting:request-cutoff'); meter.markGap('accounting:request-cutoff'); }
       const time = now(), results = new Map();
-      if (statusCode < 300) {
+      if (!interrupted && statusCode < 300) {
         need(statusCode === 200);
         for (const entry of deletionXml(responseBody, 'DeleteResult')) {
           need(entry.name === 'Deleted' || entry.name === 'Error');

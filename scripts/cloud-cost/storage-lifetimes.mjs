@@ -409,7 +409,8 @@ export async function openLitestreamHistories({ client, sdk, meter, bucket, cloc
     if (mutation.method === 'PUT' && !row.current) row.current = { bytes: mutation.bytes, from: mutation.from, by };
     row.uncertain = null;
   };
-  const multipart = allowMultipart ? nativeMultipartHistory({ bucket, now, inspect, resolveReplies: resolveMultipartReplies, complete: (key, bytes, from, by) => {
+  const multipart = allowMultipart ? nativeMultipartHistory({ bucket, now, inspect, resolveReplies: resolveMultipartReplies,
+    markGap: code => { gaps.add(code); meter.markGap(code); }, complete: (key, bytes, from, by) => {
     let row = rows.get(key);
     requireThat(!row?.active && !row?.uncertain);
     if (!row) { requireThat(rows.size < 100000); row = { current: null, uncertain: null, active: false }; rows.set(key, row); }
@@ -436,10 +437,12 @@ export async function openLitestreamHistories({ client, sdk, meter, bucket, cloc
     for (const { row } of selected.values()) row.active = true;
     verified = false; const token = {}; pending.add(token);
     return guarded(({ statusCode, bytesOut, interrupted = false, responseBody }) => {
-      requireThat(pending.has(token) && !interrupted && Number.isInteger(statusCode) && statusCode >= 200 && statusCode <= 599
-        && bytesOut === body.length);
+      requireThat(pending.has(token) && typeof interrupted === 'boolean' && count(bytesOut)
+        && (interrupted && statusCode === null || Number.isInteger(statusCode) && statusCode >= 200 && statusCode <= 599)
+        && (interrupted ? bytesOut <= body.length : bytesOut === body.length));
+      if (interrupted) { gaps.add('accounting:request-cutoff'); meter.markGap('accounting:request-cutoff'); }
       const time = now(), results = new Map();
-      if (statusCode < 300) {
+      if (!interrupted && statusCode < 300) {
         requireThat(statusCode === 200);
         for (const entry of deletionXml(responseBody, 'DeleteResult')) {
           requireThat(entry.name === 'Deleted' || entry.name === 'Error');
@@ -576,9 +579,9 @@ export async function openLitestreamHistories({ client, sdk, meter, bucket, cloc
   return { begin, verify, snapshot, ...(afterStop ? { afterStop, strictReads } : {}) };
 }
 
-// A full-body failed reply may have committed. The opt-in resolver blocks further requests
-// until independent inventories bound that one possible mutation; transport failures stay refused.
-export function nativeMultipartHistory({ bucket, now, inspect, complete, resolveReplies = false }) {
+// Independent inventory bounds an interrupted mutation without claiming a successful reply.
+// Unresolved mutation state still fences further storage operations until verification.
+export function nativeMultipartHistory({ bucket, now, inspect, complete, markGap, resolveReplies = false }) {
   const uploads = new Map(); let busy = false, uncertain = null, retiredLow = 0, retiredHigh = 0;
   const retire = (part, from, by) => {
     retiredLow += part.bytes * Math.max(0, from - part.by);
@@ -609,10 +612,13 @@ export function nativeMultipartHistory({ bucket, now, inspect, complete, resolve
     }
     busy = true;
     return ({ statusCode, bytesOut, interrupted = false, responseBody, responseHeaders }) => {
-      requireThat(busy && !interrupted && bytesOut === bytes && Number.isInteger(statusCode) && statusCode >= 200 && statusCode <= 599);
+      requireThat(busy && typeof interrupted === 'boolean' && count(bytesOut)
+        && (interrupted ? bytesOut <= bytes : bytesOut === bytes)
+        && (interrupted && statusCode === null || Number.isInteger(statusCode) && statusCode >= 200 && statusCode <= 599));
       const by = now();
-      if (statusCode >= 300) {
-        requireThat(resolveReplies === true);
+      if (interrupted || statusCode >= 300) {
+        requireThat(interrupted || resolveReplies === true);
+        if (interrupted) markGap('accounting:request-cutoff');
         uncertain = { operation, key, id, upload, bytes, time, partNumber: Number(query.get('partNumber')), selected };
         busy = false; return;
       }
