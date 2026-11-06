@@ -21,6 +21,7 @@ export async function openWorkerStorage(args) {
   const { sdk, signal } = args, directory = join(args.root, 'local-storage');
   let identity, child, done, proxy, client, meter, created = false, stopping = false, exited = false, bad = false, disposal, evidence;
   let retained, retainedInvalid = false, last = -Infinity;
+  let bucketCreated = false, bucketRemoved = false;
   let stage = 'storage-health', reported = false;
   const refused = (operation = stage) => {
     if (reported) return;
@@ -134,13 +135,14 @@ export async function openWorkerStorage(args) {
         await send(new sdk.DeleteBucketCommand({ Bucket: bucket }));
       }
       need(!await bucketPresent() && !(await bucketInventory()).some(b => b.Name === bucket));
+      bucketRemoved = true;
       stage = 'bucket-ownership';
       record({ kind: 'storage-bucket', state: 'removed', bucket }); created = false;
     });
     let counters;
     await attempt(async () => { if (meter) {
       stage = 'accounting';
-      const value = meter.snapshot(); counters = streamCounters(value);
+      const value = meter.snapshot(); counters = value;
       if (retained) {
         stage = 'retained-accounting';
         need(!retainedInvalid && retained.deleted === retained.objects);
@@ -172,7 +174,8 @@ export async function openWorkerStorage(args) {
       record({ kind: 'storage-root', state: 'cleanup-intent', path: directory }); rmSync(directory, { recursive: true });
       need(!existsSync(directory)); record({ kind: 'storage-root', state: 'removed', path: directory });
     });
-    if (failures.length || retainedInvalid) fail(); return counters;
+    if (failures.length || retainedInvalid) fail();
+    return counters && { ...counters, functional: { bucketCreated, bucketRemoved } };
   })().catch(error => { refused(); throw error; });
   try {
     assertOwnedRoot(args); healthy();
@@ -201,6 +204,7 @@ export async function openWorkerStorage(args) {
     need(ready); healthy();
     record({ kind: 'storage-bucket', state: 'intent', bucket }); created = true;
     await send(new sdk.CreateBucketCommand({ Bucket: bucket }));
+    bucketCreated = true;
     need((await listObjects()).length === 0 && (await uploads()).length === 0);
     healthy();
     record({ kind: 'storage-bucket', state: 'ready', bucket });

@@ -367,6 +367,41 @@ async function streamedFixture(t) {
   return f;
 }
 
+test('gappedWorkerCompletesRealReplayAndRetainsOriginalUnknownBilling', async t => {
+  const f = await streamedFixture(t), before = fingerprint(f.database);
+  let result;
+  await assert.doesNotReject(async () => { result = await controller.runIsolatedReplay(f); },
+    'unknown accounting must not refuse a completed real rehearsal');
+  assert.equal(result.functional, 'passed');
+  assert.equal(result.costMeasured, false);
+  assert.equal(result.receipt, null);
+  assert.equal(result.accounting.status, 'unknown');
+  assert.equal(result.accounting.publicationEligible, false);
+  assert.ok(result.accounting.gaps.includes('request-billing:unknown'));
+  const { admission, isolation, cleanup } = result.evidence, stream = admission.stream;
+  assert.deepEqual(admission.replay.counts, { expected: 3, attempted: 3, successful: 3, failed: 0 });
+  assert.deepEqual(admission.integrity, { ok: true, issues: 0 });
+  assert.deepEqual(stream.restored, { sales: 3, integrity: true });
+  assert.deepEqual(stream.native, { version: '0.5.17', writerStarts: 1, phaseRestarts: 0 });
+  assert.deepEqual(stream.functional, { startupUpload: true, restore: true, bucketCreated: true, bucketRemoved: true });
+  assert.deepEqual(isolation, { blockedConnections: 3, blockedDns: 2, localControl: true });
+  assert.deepEqual(cleanup, { workerContainers: 0, networks: 0, privateCopies: 0 });
+  assert.deepEqual(stream.cleanup, { processes: 0, privateRoots: 0, listeners: 0, clients: 0, buckets: 0, objects: 0, multipartUploads: 0 });
+  for (const key of ['requests', 'administration']) {
+    assert.ok(Array.isArray(stream[key].gaps));
+    assert.ok(Array.isArray(stream[key].billing));
+    assert.ok(stream[key].accounting.producer.attempts > 0);
+    assert.ok(stream[key].observedRequests.length > 0);
+  }
+  assert.ok(stream.administration.billing.some(row => row.status === 'unknown' && row.quantity === null));
+  assert.ok(stream.storage.objects.bytes > 0);
+  assert.equal(stream.retainedStorage.initialBytes, stream.storage.objects.bytes);
+  assert.equal(stream.retainedStorage.deletedObjects, stream.storage.objects.currentVersions);
+  assert.equal(stream.retainedStorage.remainingBytes, 0); assert.equal(stream.retainedStorage.remainingObjects, 0);
+  assert.equal(/PRIVATE_|2026-|\/state|taxId|locationId|synthetic-|127\.0\.0\.1/.test(JSON.stringify(result)), false);
+  clean(f, before);
+});
+
 test('isolatedHostRefusesUnsafeStreamSettingsBeforeSourceCopyOrResourceCreation', async t => {
   const original = await streamedFixture(t), before = fingerprint(original.database);
   for (const change of [f => { f.stream.target = 'https://PRIVATE_CANARY'; },

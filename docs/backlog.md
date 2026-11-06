@@ -320,8 +320,18 @@ whose retained byte-time total overflows return unknown bounds with a named gap.
 Actual delete, inventory, ownership and collection failures still refuse. Run
 `node --test scripts/cloud-cost/worker-storage-accounting.test.mjs` and the
 `worker-storage-conformance.test.mjs` matrix for the generated and real-storage
-controls. The original clean counter projection remains unchanged. The closed
-worker/host result admission and shared mail/remote completion remain open.
+controls. The original clean counter projection remains unchanged.
+Worker admission now carries original request, billing and storage observations
+through an explicit unknown-cost result. Separate completed-upload, SQLite
+restore and bucket-removal witnesses keep functional checks independent of the
+cost rows. The host still checks fiscal integrity, isolation and zero owned
+leftovers before returning that result; it includes no receipt. Nested getters
+and proxies refuse before their code runs. Run `node --test
+scripts/cloud-cost/stream-admission-gaps.test.mjs` for the boundary controls.
+The real Debian x86 `gappedWorkerCompletesRealReplayAndRetainsOriginalUnknownBilling`
+case restores three generated sales with fiscal verification and owned cleanup,
+retaining unknown administration billing. The local receipt stage, other
+conformance result consumers and shared mail/remote completion remain open.
 The full nonblocking accounting path, publication refusal and saved-failure
 replay remain open. These partial changes do
 not establish the historical cause or relax functional admission.

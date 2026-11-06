@@ -1,3 +1,6 @@
+import { types } from 'node:util';
+import { assessAccounting, isAccountingGap } from './accounting-policy.mjs';
+
 const fail = () => { throw Error('Invalid cloud cost stream admission'); };
 const need = value => { if (!value) fail(); };
 const exact = (value, keys) => need(value && Object.getPrototypeOf(value) === Object.prototype
@@ -41,43 +44,87 @@ function counters(value) {
   for (const row of a.requests) need(rowKeys.every(k => observed.get(identity(row))?.[k] === row[k]));
 }
 
+function data(value, ancestors = new Set(), budget = { remaining: 250000 }) {
+  need(--budget.remaining >= 0);
+  if (value === null || ['string', 'number', 'boolean'].includes(typeof value)) return;
+  need(value && typeof value === 'object' && !types.isProxy(value) && !ancestors.has(value) && ancestors.size < 12);
+  need(Object.getPrototypeOf(value) === (Array.isArray(value) ? Array.prototype : Object.prototype));
+  if (Array.isArray(value)) array(value);
+  ancestors.add(value);
+  for (const key of Reflect.ownKeys(value)) {
+    need(typeof key === 'string');
+    const descriptor = Object.getOwnPropertyDescriptor(value, key); need(Object.hasOwn(descriptor, 'value'));
+    data(descriptor.value, ancestors, budget);
+  }
+  ancestors.delete(value);
+}
+
+function originalAccounting(value) {
+  const assessment = assessAccounting({ producer: 'local-stream', sources: [
+    { scope: 'requests', record: value.requests }, { scope: 'restore', record: value.requests },
+    { scope: 'administration', record: value.administration }, { scope: 'storage', record: value.storage },
+  ] });
+  const gaps = new Set(assessment.gaps);
+  for (const code of value.retainedStorage.gaps ?? []) { need(isAccountingGap(code)); gaps.add(code); }
+  if (value.retainedStorage.status === 'unknown') gaps.add('accounting:incomplete-history');
+  return { status: gaps.size ? 'unknown' : 'measured', gaps: [...gaps].sort(), publicationEligible: gaps.size === 0 };
+}
+
 // Validate before returning worker aggregates to the host; no private identifiers cross this boundary.
 // This checks a partial stream experiment, not a complete venue cost receipt.
 export function validateStreamAdmission(value, options) {
   try {
-    exact(value, ['phases', 'requests', 'administration', 'storage', 'retainedStorage', 'native', 'restored', 'cleanup']);
+    data(value);
+    const original = Object.hasOwn(value, 'functional');
+    exact(value, ['phases', 'requests', 'administration', 'storage', 'retainedStorage', 'native', 'restored', 'cleanup',
+      ...(original ? ['functional'] : [])]);
     const order = ['startup', 'workload', 'idle', 'verification', 'restore'];
     array(value.phases); need(value.phases.length === order.length);
     value.phases.forEach((p, i) => { exact(p, ['phase', 'elapsedSeconds']); need(p.phase === order[i] && finite(p.elapsedSeconds)); });
     need(value.phases[0].elapsedSeconds >= options.startupSeconds && value.phases[2].elapsedSeconds >= options.idleSeconds
       && value.phases.reduce((n, p) => n + p.elapsedSeconds, 0) < options.windowSeconds);
-    counters(value.requests); counters(value.administration);
+    if (original) {
+      exact(value.functional, ['startupUpload', 'restore', 'bucketCreated', 'bucketRemoved']);
+      need(Object.values(value.functional).every(value => value === true));
+      originalAccounting(value);
+      need(value.requests.accounting.objects.length === 0 && value.administration.accounting.objects.length === 0);
+    } else { counters(value.requests); counters(value.administration); }
     const nativeRequests = value.requests.accounting.requests, adminRequests = value.administration.accounting.requests;
     const successful = (rows, phase, operation) => rows.filter(r => r.phase === phase && r.operation === operation).reduce((n, r) => n + r.successful, 0);
-    need(successful(nativeRequests, 'startup', 'put') > 0 && successful(nativeRequests, 'restore', 'get') > 0
+    if (!original) need(successful(nativeRequests, 'startup', 'put') > 0 && successful(nativeRequests, 'restore', 'get') > 0
       && successful(adminRequests, 'setup', 'bucket-create') === 1 && successful(adminRequests, 'cleanup', 'bucket-delete') === 1
       && adminRequests.every(r => ['setup', 'cleanup'].includes(r.phase)));
+    need([...adminRequests, ...value.administration.observedRequests].every(r => ['setup', 'cleanup'].includes(r.phase)));
     exact(value.native, ['version', 'writerStarts', 'phaseRestarts']);
     need(value.native.version === '0.5.17' && value.native.writerStarts === 1 && value.native.phaseRestarts === 0);
     exact(value.restored, ['sales', 'integrity']); need(value.restored.sales === options.expectedSales && value.restored.integrity === true);
-    const s = value.storage; exact(s, ['status', 'scope', 'windowSeconds', 'objects', 'byteSeconds']);
-    need(s.status === 'measured' && s.scope === 'unversioned-object-history' && finite(s.windowSeconds)
+    const s = value.storage; exact(s, ['status', 'scope', 'windowSeconds', 'objects', 'byteSeconds',
+      ...(original && Object.hasOwn(s, 'gaps') ? ['gaps'] : [])]);
+    need((s.status === 'measured' || original && s.status === 'unknown') && s.scope === 'unversioned-object-history' && finite(s.windowSeconds)
       && s.windowSeconds > 0 && s.windowSeconds < options.windowSeconds);
     const keys = ['class', 'bytes', 'currentVersions', 'noncurrentVersions', 'deleteMarkers', 'unfinishedMultipart'];
     exact(s.objects, keys); need(s.objects.class === 'stream' && keys.slice(1).every(k => count(s.objects[k]))
       && s.objects.bytes > 0 && s.objects.currentVersions > 0 && s.objects.noncurrentVersions === 0
       && s.objects.deleteMarkers === 0 && s.objects.unfinishedMultipart === 0);
-    exact(s.byteSeconds, ['low', 'high']); need(finite(s.byteSeconds.low) && finite(s.byteSeconds.high) && s.byteSeconds.high >= s.byteSeconds.low);
+    const bounds = record => {
+      exact(record.byteSeconds, ['low', 'high']);
+      const { low, high } = record.byteSeconds;
+      need((finite(low) && low <= Number.MAX_SAFE_INTEGER || original && record.status === 'unknown' && low === null)
+        && (finite(high) && high <= Number.MAX_SAFE_INTEGER || original && record.status === 'unknown' && high === null)
+        && (low === null || high === null || high >= low));
+    };
+    bounds(s);
     const tail = value.retainedStorage;
-    exact(tail, ['status', 'scope', 'windowSeconds', 'initialBytes', 'deletedObjects', 'remainingBytes', 'remainingObjects', 'byteSeconds']);
-    need(tail.status === 'measured' && tail.scope === 'unversioned-cleanup-tail'
+    exact(tail, ['status', 'scope', 'windowSeconds', 'initialBytes', 'deletedObjects', 'remainingBytes', 'remainingObjects', 'byteSeconds',
+      ...(original && Object.hasOwn(tail, 'gaps') ? ['gaps'] : [])]);
+    if (original && Object.hasOwn(tail, 'gaps')) { array(tail.gaps); need(tail.gaps.every(isAccountingGap)); }
+    need((tail.status === 'measured' || original && tail.status === 'unknown') && tail.scope === 'unversioned-cleanup-tail'
       && finite(tail.windowSeconds) && tail.windowSeconds > 0
       && value.phases.reduce((n, p) => n + p.elapsedSeconds, 0) + tail.windowSeconds < options.windowSeconds
       && tail.initialBytes === s.objects.bytes && tail.deletedObjects === s.objects.currentVersions
       && tail.remainingBytes === 0 && tail.remainingObjects === 0);
-    exact(tail.byteSeconds, ['low', 'high']);
-    need(finite(tail.byteSeconds.low) && finite(tail.byteSeconds.high)
-      && tail.byteSeconds.high >= tail.byteSeconds.low && tail.byteSeconds.high <= tail.initialBytes * tail.windowSeconds);
+    bounds(tail);
+    need(tail.byteSeconds.high === null || tail.byteSeconds.high <= tail.initialBytes * tail.windowSeconds);
     const cleanup = ['processes', 'privateRoots', 'listeners', 'clients', 'buckets', 'objects', 'multipartUploads'];
     exact(value.cleanup, cleanup); need(cleanup.every(k => value.cleanup[k] === 0));
     return structuredClone(value);
@@ -101,6 +148,10 @@ export function validateStreamSettings(value, budget) {
 // Keep uncertain storage lifetimes as bounds rather than inventing an exact byte-second value.
 export function summarizeStreamAccounting(value, options) {
   const admitted = validateStreamAdmission(value, options);
+  if (Object.hasOwn(admitted, 'functional')) {
+    const accounting = originalAccounting(admitted);
+    if (!accounting.publicationEligible) return { functional: 'passed', costMeasured: false, accounting, receipt: null, evidence: admitted };
+  }
   const meters = [admitted.requests.accounting, admitted.administration.accounting];
   const requests = new Map();
   for (const meter of meters) for (const row of meter.requests) {

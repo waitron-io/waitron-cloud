@@ -4,6 +4,32 @@ import { spawnSync } from 'node:child_process';
 import { createMeter } from './meter.mjs';
 import { streamCounters } from './worker-storage.mjs';
 
+test('workerStorageRetainsCleanOriginalBillingBeforeTheWorkerChoosesItsResultVariant', () => {
+  const result = spawnSync(process.execPath, [new URL('./fixtures/worker-storage-diagnostic-probe.mjs', import.meta.url).pathname,
+    'measured:success', 'finish'], { encoding: 'utf8', timeout: 10000 });
+  assert.equal(result.status, 0, result.stderr);
+  const output = JSON.parse(result.stdout);
+  assert.equal(output.message, null);
+  assert.equal(output.evidence.status, 'measured');
+  assert.deepEqual(output.evidence.gaps, []);
+  assert.deepEqual(output.evidence.billing, [{ phase: 'setup', requestClass: 's3-write', quantity: 1, status: 'measured' }]);
+  assert.equal(output.evidence.reconciled, true);
+  assert.equal(output.collected, true);
+});
+
+test('workerStorageReportsBucketWitnessesAfterIndependentCleanupDespiteMeterDisagreement', () => {
+  const result = spawnSync(process.execPath, [new URL('./fixtures/worker-storage-diagnostic-probe.mjs', import.meta.url).pathname,
+    'gap:success', 'finish'], { encoding: 'utf8', timeout: 10000 });
+  assert.equal(result.status, 0, result.stderr);
+  const output = JSON.parse(result.stdout);
+  assert.equal(output.message, null);
+  assert.deepEqual(output.evidence.functional, { bucketCreated: true, bucketRemoved: true });
+  assert.equal(output.evidence.reconciled, false);
+  assert.equal(output.bucketRemoved, true);
+  assert.equal(output.collected, true);
+  assert.equal(output.rootRetained, false);
+});
+
 test('cleanStreamCountersKeepTheirOriginalProjectionAndDetachedValues', () => {
   const meter = createMeter({ phase: 'setup', clock: () => 0 });
   for (const channel of ['producer', 'observer']) meter.observeAttempt({ token: 'synthetic:0', channel,

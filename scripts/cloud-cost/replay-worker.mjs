@@ -11,6 +11,20 @@ let stage = 'configuration';
 let storageStage;
 const trace = [];
 const onDiagnostic = event => { trace.push(event); if (trace.length > 32) trace.shift(); };
+
+export function workerStreamEvidence(native, finished) {
+  const { retainedStorage, functional, ...originalAdministration } = finished;
+  const requests = streamCounters(native.stream.requests);
+  const administration = streamCounters(originalAdministration);
+  const original = Object.hasOwn(requests, 'status') || Object.hasOwn(administration, 'status')
+    || native.stream.storage.status === 'unknown' || retainedStorage?.status === 'unknown';
+  // Functional witnesses come from completed I/O and verified collection, independently of cost rows.
+  return structuredClone({ phases: native.stream.phases, requests: original ? native.stream.requests : requests,
+    administration: original ? originalAdministration : administration,
+    retainedStorage, storage: native.stream.storage, native: native.native, restored: native.restored,
+    ...(original ? { functional: { ...native.functional, ...functional } } : {}),
+    cleanup: { ...native.cleanup, listeners: 0, clients: 0, buckets: 0, objects: 0, multipartUploads: 0 } });
+}
 function recordFailure() {
   // The first refusal remains available after later cleanup; no raw exception is persisted.
   try { writeFileSync('/state/worker-failure.json', JSON.stringify({ schemaVersion: 1, stage }), { mode: 0o600, flag: 'wx' }); }
@@ -55,10 +69,7 @@ async function run() {
       storageStage = 'storage-finish';
       const finished = await storage.finish({ retained });
       storageStage = 'storage-finish-result';
-      const { retainedStorage, ...administration } = finished;
-      result.stream = { phases: native.stream.phases, requests: streamCounters(native.stream.requests),
-        administration, retainedStorage, storage: native.stream.storage, native: native.native, restored: native.restored,
-        cleanup: { ...native.cleanup, listeners: 0, clients: 0, buckets: 0, objects: 0, multipartUploads: 0 } };
+      result.stream = workerStreamEvidence(native, finished);
     }
     stage = 'result';
     writeFileSync('/state/worker-trace.json', JSON.stringify(workerFailureTrace(trace)), { mode: 0o600, flag: 'wx' });

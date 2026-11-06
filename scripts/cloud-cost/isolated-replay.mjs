@@ -3,6 +3,7 @@ import { readFileSync, writeFileSync, lstatSync, realpathSync, mkdirSync, rmSync
 import { join, relative, isAbsolute } from 'node:path';
 import { randomUUID, createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
+import { types } from 'node:util';
 import { assertOwnedRoot } from './schema.mjs';
 import { recordOwnedResource as record } from './owned-journal.mjs';
 import { validateStreamSettings, validateStreamAdmission, summarizeStreamAccounting } from './stream-admission.mjs';
@@ -17,7 +18,7 @@ const inside = (root, path) => isAbsolute(path) && relative(root, path) !== ''
 const count = value => Number.isSafeInteger(value) && value >= 0;
 const finite = value => typeof value === 'number' && Number.isFinite(value) && value >= 0;
 const exact = (value, keys) => {
-  need(value && Object.getPrototypeOf(value) === Object.prototype);
+  need(value && !types.isProxy(value) && Object.getPrototypeOf(value) === Object.prototype);
   const found = Reflect.ownKeys(value);
   need(found.length === keys.length && found.every(k => keys.includes(k) && !Object.getOwnPropertyDescriptor(value, k).get));
 };
@@ -61,6 +62,31 @@ export function validateReplayAdmission(value, options) {
       need(a.restored.ok === true && a.restored.issues === 0 && a.restored.sales === n);
     }
     return structuredClone(value);
+  } catch { fail(); }
+}
+
+// Accounting uncertainty may finish only after the replay, isolation and owned cleanup all qualify.
+export function completeReplayResult(value, options) {
+  try {
+    exact(value, ['admission', 'isolation', 'cleanup']);
+    exact(value.isolation, ['blockedConnections', 'blockedDns', 'localControl']);
+    need(value.isolation.blockedConnections === 3 && value.isolation.blockedDns === 2 && value.isolation.localControl === true);
+    exact(value.cleanup, ['workerContainers', 'networks', 'privateCopies']);
+    need(Object.values(value.cleanup).every(n => n === 0));
+    let admission, streamAccounting;
+    if (options.stream) {
+      exact(value.admission, ['complete', 'source', 'replay', 'integrity', 'storage', 'cleanup', 'stream',
+        ...(options.archive ? ['archive'] : [])]);
+      const { stream, ...replay } = value.admission;
+      admission = { ...validateReplayAdmission(replay, options),
+        stream: validateStreamAdmission(stream, { ...options.stream, expectedSales: options.expected.busiest }) };
+      streamAccounting = summarizeStreamAccounting(admission.stream, { ...options.stream, expectedSales: options.expected.busiest });
+    } else admission = validateReplayAdmission(value.admission, options);
+    const evidence = structuredClone({ admission, isolation: value.isolation, cleanup: value.cleanup });
+    if (streamAccounting?.functional === 'passed') return { functional: 'passed', costMeasured: false,
+      accounting: streamAccounting.accounting, receipt: null, evidence };
+    return { costMeasured: false, admission: evidence.admission,
+      ...(options.stream ? { streamAccounting } : {}), isolation: evidence.isolation, cleanup: evidence.cleanup };
   } catch { fail(); }
 }
 
@@ -253,9 +279,8 @@ export async function runIsolatedReplay(input) {
       if (attempts.length) fail();
     }
   }
-  return { costMeasured: false, admission,
-    ...(args.stream ? { streamAccounting: summarizeStreamAccounting(admission.stream,
-      { ...args.stream, expectedSales: args.expected.busiest }) } : {}),
+  return completeReplayResult({ admission,
     isolation: { blockedConnections: isolation.blockedConnections,
-    blockedDns: isolation.blockedDns, localControl: isolation.localControl }, cleanup: { workerContainers: 0, networks: 0, privateCopies: 0 } };
+    blockedDns: isolation.blockedDns, localControl: isolation.localControl },
+    cleanup: { workerContainers: 0, networks: 0, privateCopies: 0 } }, args);
 }

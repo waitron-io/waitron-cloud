@@ -19,6 +19,14 @@ const module = await import('./replay-stream.mjs').catch(error => {
 });
 const bad = { message: 'Invalid cloud cost replay stream' };
 
+test('replayStreamReportsFunctionalWitnessesFromCompletedUploadAndSQLiteRestore', { timeout: 10000 }, async t => {
+  const f = await fixture(t), run = await open(t, f);
+  const result = await run.finish({ expectedSales: 1 });
+  assert.deepEqual(result.functional, { startupUpload: true, restore: true });
+  assert.deepEqual(result.restored, { sales: 1, integrity: true });
+  clean(f);
+});
+
 // Signalling a writer with a settled keep-alive socket can reset the audited listener.
 test('replay retires settled storage sockets before signalling the writer', { timeout: 10000 }, async t => {
   const f = await fixture(t, 'reset-on-stop'), run = await open(t, f);

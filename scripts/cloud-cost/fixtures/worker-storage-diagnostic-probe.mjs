@@ -5,8 +5,8 @@ import { mkdtempSync, realpathSync, mkdirSync, writeFileSync, readFileSync, exis
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-const mode = process.argv[2], gapped = mode.startsWith('gap:'), billing = mode.startsWith('billing:');
-const fault = gapped || billing ? mode.split(':')[1] : mode, action = process.argv[3] ?? 'finish', records = [];
+const mode = process.argv[2], gapped = mode.startsWith('gap:'), billing = mode.startsWith('billing:'), measured = mode.startsWith('measured:');
+const fault = gapped || billing || measured ? mode.split(':')[1] : mode, action = process.argv[3] ?? 'finish', records = [];
 const { createMeter: realMeter } = await import('../meter.mjs');
 const original = realMeter({ phase: 'setup', clock: () => 0 });
 for (const channel of (gapped ? ['producer'] : ['producer', 'observer'])) original.observeAttempt({
@@ -36,7 +36,7 @@ globalThis.storageProbe = {
   createMeter: () => ({ snapshot: () => {
     if (fault === 'accounting') refuse();
     accountingDone = true;
-    return gapped || billing ? original.snapshot() : { reconciled: true, accounting: {}, observedRequests: [] };
+    return gapped || billing || measured ? original.snapshot() : { reconciled: true, accounting: {}, observedRequests: [] };
   } }),
   createMeteringProxy: async () => ({ url: 'http://127.0.0.1:9999', close: async () => {
     proxyClosed++;
@@ -117,7 +117,7 @@ try {
   await storage.close().catch(() => {});
   await new Promise(resolve => setImmediate(resolve));
   const entries = JSON.parse(readFileSync(journal.path, 'utf8')).localResources ?? [];
-  console.log(JSON.stringify({ ...(gapped || billing || fault === 'retained-overflow' ? { evidence } : {}), message, records, collected, proxyClosed, clientCount, destroyed, cleanupRequests,
+  console.log(JSON.stringify({ ...(gapped || billing || measured || fault === 'retained-overflow' ? { evidence } : {}), message, records, collected, proxyClosed, clientCount, destroyed, cleanupRequests,
     bucketRemoved: entries.some(e => e.kind === 'storage-bucket' && e.state === 'removed'),
     bucketCleanupIntents: entries.filter(e => e.kind === 'storage-bucket' && e.state === 'cleanup-intent').length, rootRetained: existsSync(join(root, 'local-storage')) }));
 } finally { rmSync(parent, { recursive: true, force: true }); }
