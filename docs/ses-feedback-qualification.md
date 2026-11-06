@@ -52,8 +52,8 @@ Invalid SES feedback policies
 
 The example's `123456789012` account, `mail.example.test` identity and roles are
 synthetic. Its five-receive poison-message setting is a fixture value, not an
-approved production threshold. The validator accepts the provider's integer range
-of 1–1000 without choosing a value or a retention duration.
+approved production threshold. The offline profile accepts integers from 1–1000
+without choosing a production value or a retention duration.
 
 The bundle contains these separately checked parts:
 
@@ -85,8 +85,10 @@ live inventory and test access with the actual identities before accepting it.
 
 The permission shapes follow AWS's
 [SES event destination policy](https://docs.aws.amazon.com/ses/latest/dg/event-publishing-add-event-destination-sns.html),
-[encrypted queue policy guidance](https://docs.aws.amazon.com/AWSSimpleQueueService/latest/SQSDeveloperGuide/sqs-least-privilege-policy.html)
-and [queue key management](https://docs.aws.amazon.com/AWSSimpleQueueService/latest/SQSDeveloperGuide/sqs-key-management.html).
+[encrypted queue policy guidance](https://docs.aws.amazon.com/AWSSimpleQueueService/latest/SQSDeveloperGuide/sqs-least-privilege-policy.html),
+[queue key management](https://docs.aws.amazon.com/AWSSimpleQueueService/latest/SQSDeveloperGuide/sqs-key-management.html),
+[key-policy elements](https://docs.aws.amazon.com/kms/latest/developerguide/key-policy-overview.html)
+and [redrive attributes](https://docs.aws.amazon.com/AWSSimpleQueueService/latest/APIReference/API_SetQueueAttributes.html).
 These sources were checked on 6 November 2026. Recheck effective service conditions,
 key use during redrive and the complete access graph during live qualification.
 

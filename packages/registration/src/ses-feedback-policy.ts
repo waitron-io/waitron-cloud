@@ -11,11 +11,21 @@ function data(value:unknown,depth=0,budget={remaining:2000}):unknown {
  if(typeof value==='number')return Number.isFinite(value)?value:refuse();
  if(typeof value!=='object')return refuse();
  if(Array.isArray(value)) {
-  if(value.length>128)return refuse();
+  if(value.length>128||Object.getPrototypeOf(value)!==Array.prototype)return refuse();
  }else if(Object.getPrototypeOf(value)!==Object.prototype&&Object.getPrototypeOf(value)!==null)return refuse();
  const descriptors=Object.getOwnPropertyDescriptors(value);
  if(Reflect.ownKeys(value).some(k=>typeof k!=='string')||Object.values(descriptors).some(d=>d.get||d.set))return refuse();
- if(Array.isArray(value))return value.map(item=>data(item,depth+1,budget));
+ if(Array.isArray(value)) {
+  const length=descriptors.length!.value as number;
+  if(Object.keys(descriptors).length!==length+1)return refuse();
+  const copy:unknown[]=[];
+  for(let index=0;index<length;index++) {
+   const descriptor=descriptors[String(index)];
+   if(!descriptor)return refuse();
+   copy.push(data(descriptor.value,depth+1,budget));
+  }
+  return copy;
+ }
  return Object.fromEntries(Object.entries(descriptors).map(([key,d])=>[key,data(d.value,depth+1,budget)]));
 }
 function object(value:unknown):Record<string,unknown> {

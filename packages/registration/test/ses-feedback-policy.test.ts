@@ -162,3 +162,15 @@ test('self-consistent resource documents still require a regional key, separate 
   check(validateSesFeedbackConfig(policy,input),documents);
  }
 });
+
+test('array methods and custom prototypes cannot execute while validating documents',async()=>{
+ const check=await validate();
+ for(const inherited of [false,true]) {
+  const {policy,input,documents}=feedbackPolicyFixture();let executed=false;
+  const map=()=>{executed=true;return ['ES'];};
+  if(inherited)Object.setPrototypeOf(documents.countries,{map});
+  else Object.defineProperty(documents.countries,'map',{value:map});
+  assert.throws(()=>check(validateSesFeedbackConfig(policy,input),documents),{message:'Invalid SES feedback policies'});
+  assert.equal(executed,false);
+ }
+});
