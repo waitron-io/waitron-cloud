@@ -17,7 +17,7 @@ test('SSH cancellation stops owned remote work before the Mac ledger grants reus
       return super.remote(mode, lease, {...options, onOutput: data => {
         process.stdout.write(data);
         output = (output + data.toString()).slice(-65536);
-        if (mode === 'execute' && output.includes('SSH-COMMAND-READY')) {
+        if (mode === 'execute-v2' && output.includes('SSH-COMMAND-READY')) {
           ready = true;
           cancellation.abort();
         }

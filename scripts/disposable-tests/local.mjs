@@ -3,10 +3,11 @@ import assert from 'node:assert/strict';
 // A transport settles only after its owned subprocess has stopped. Cleanup must
 // never race a cancelled transfer or preparation that can still create resources.
 export async function runLocal({leases, transport, request, durationMs = 3300000, signal}) {
+  if (signal?.aborted) return {code:143,reason:'cancelled-before-admission'};
   const admission = AbortSignal.timeout(8000);
   let healthy;
   try { healthy = await transport.healthy({signal: signal ? AbortSignal.any([signal, admission]) : admission}); }
-  catch { return {code: 75, reason: 'host-unavailable'}; }
+  catch { return signal?.aborted ? {code: 143, reason: 'cancelled-before-admission'} : {code: 75, reason: 'host-unavailable'}; }
   if (signal?.aborted) return {code: 143, reason: 'cancelled-before-admission'};
   const reserved = leases.reserveLocal(request, {healthy, durationMs});
   if (reserved.code !== 0) return reserved;

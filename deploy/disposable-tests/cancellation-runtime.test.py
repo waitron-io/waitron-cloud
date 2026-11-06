@@ -125,7 +125,7 @@ class Cancellation(unittest.TestCase):
         if stage=='execute':
             prepared=self.call('prepare',resource)
             self.assertEqual(prepared.returncode,0,prepared.stdout+prepared.stderr)
-        child=subprocess.Popen(['python3','-B',str(RECIPE/'session.py'),stage,resource],
+        child=subprocess.Popen(['python3','-B',str(RECIPE/'session.py'),('execute-v2' if stage=='execute' else stage),resource],
                                stdout=subprocess.PIPE,stderr=subprocess.STDOUT)
         selector=selectors.DefaultSelector()
         selector.register(child.stdout,selectors.EVENT_READ)
@@ -148,7 +148,7 @@ class Cancellation(unittest.TestCase):
             try:child.wait(timeout=10)
             except subprocess.TimeoutExpired:self.fail('Cleanup returned with a live '+stage+' process')
             self.assertLess(time.monotonic()-before,120)
-            for delayed in ('prepare','execute'):
+            for delayed in ('prepare','execute-v2'):
                 refused=self.call(delayed,resource)
                 self.assertNotEqual(refused.returncode,0,'Closed turn resumed '+delayed)
             self.assertTrue(json.loads(self.call('inspect',resource).stdout)['absent'])

@@ -99,3 +99,34 @@ catch(error) {console.log(error.message);}`;
   assert.match(result.stdout, /output.*limit/i);
   assert.ok(Buffer.byteLength(result.stderr) <= 64*1024*1024);
 });
+
+test('trusted subprocesses never inherit the candidate checkout as their working directory', async t => {
+  const {spawnSync} = await import('node:child_process');
+  const {writeFileSync, existsSync} = await import('node:fs');
+  const directory = mkdtempSync(join(tmpdir(), 'disposable-cwd-'));
+  t.after(() => rmSync(directory, {recursive: true, force: true}));
+  const marker = join(directory, 'planted');
+  writeFileSync(join(directory, 'pathlib.py'), `open(${JSON.stringify(marker)},'w').write('candidate ran on Mac')\n`);
+  const program = `import {runProcess} from ${JSON.stringify(new URL('./transport.mjs', import.meta.url).href)};await runProcess('python3',['-c','import pathlib'],{capture:true});`;
+  const result = spawnSync(process.execPath, ['--input-type=module', '-e', program], {cwd: directory, env: {...process.env, PYTHONPATH: ''}, encoding: 'utf8', timeout: 5000});
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(existsSync(marker), false, 'A trusted subprocess loaded candidate code from its cwd');
+});
+
+test('a closed workstation error pipe cannot crash transport before it settles', async () => {
+  const {spawn} = await import('node:child_process');
+  const {once} = await import('node:events');
+  const program = `import {runProcess} from ${JSON.stringify(new URL('./transport.mjs', import.meta.url).href)};
+console.log('READY');await new Promise(resolve=>process.stdin.once('data',resolve));
+await runProcess(process.execPath,['-e',"process.stderr.write('child-error');process.exit(3)"]);console.log('SETTLED');`;
+  const child = spawn(process.execPath,['--input-type=module','-e',program],{stdio:['pipe','pipe','pipe']});
+  const closed=once(child,'close');
+  let output='';child.stdout.on('data',data=>output+=data.toString());
+  try {
+    await Promise.race([once(child.stdout,'data'),closed.then(()=>assert.fail('Controller ended before stream readiness'))]);
+    child.stderr.destroy();child.stdin.end('go');
+    const [code]=await closed;
+    assert.equal(code,0,'A closed log pipe crashed the controller');
+    assert.match(output,/SETTLED/);
+  } finally {if(child.exitCode===null && child.signalCode===null)child.kill('SIGKILL');}
+});

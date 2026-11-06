@@ -29,8 +29,10 @@ def excluded(values):
         lower = value.lower()
         if (lower in {'.git', '.ssh', '.aws', '.gnupg', '.npmrc', '.netrc',
                       'node_modules', '.pnpm-store', '.yarn', '__pycache__', 'credentials.json',
-                      'credentials', 'id_rsa', 'id_ed25519'} or
-                lower.startswith('.env') or lower.endswith(('.key', '.pem', '.p12', '.pfx', '.pyc'))):
+                      'credentials', 'id_rsa', 'id_ed25519', 'id_dsa', 'id_ecdsa',
+                      '.config', '.docker', '.kube', '.local-stack', '.terraform',
+                      '.git-credentials', '.pgpass', '.pypirc', '.vault-token', 'service-account.json'} or
+                lower.startswith(('.env', '.dev.vars')) or lower.endswith(('.key', '.pem', '.p12', '.pfx', '.pyc', '.tfvars', '.tfvars.json', '.tfstate', '.tfstate.backup'))):
             return True
     return False
 
@@ -58,12 +60,12 @@ def create(root_name, output_name):
     output = Path(output_name).absolute()
     if Path(root_name).is_symlink() or output.resolve().is_relative_to(root):
         raise ValueError('Unsafe snapshot root or output inside checkout')
-    top = subprocess.check_output(['git', '-C', str(root), 'rev-parse', '--show-toplevel'],
+    top = subprocess.check_output(['git', '-c', 'core.fsmonitor=false', '-C', str(root), 'rev-parse', '--show-toplevel'],
                                   timeout=10).decode().strip()
     if Path(top).resolve() != root:
         raise ValueError('Snapshot must name the Git checkout root')
-    names = subprocess.check_output(['git', '-C', str(root), 'ls-files', '-z',
-                                     '--cached', '--others', '--exclude-standard'], timeout=10)
+    names = subprocess.check_output(['git', '-c', 'core.fsmonitor=false', '-C', str(root), 'ls-files', '-z',
+                                     '--cached'], timeout=10)
     selected = sorted(set(n.decode('utf-8') for n in names.split(b'\0') if n))
     if len(selected) > MAX_FILES:
         raise ValueError('Snapshot file count exceeds limit')

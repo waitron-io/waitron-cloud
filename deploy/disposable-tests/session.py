@@ -8,6 +8,8 @@ from pathlib import Path
 import shutil
 import shlex
 import signal
+import secrets
+import selectors
 import subprocess
 import sys
 import tarfile
@@ -24,8 +26,8 @@ OPERATIONS = host.ROOT/'operations'
 RECIPE = Path(__file__).resolve().parent
 
 
-def request_identity(value, resource):
-    now = int(time.time()*1000)
+def request_identity(value, resource, now=None):
+    now = int(time.time()*1000) if now is None else now
     if not isinstance(value, dict) or set(value) != {'resourceId', 'snapshot', 'argv', 'deadline'}:
         raise ValueError('Unknown or missing turn request field')
     argv = value['argv']
@@ -74,7 +76,18 @@ def receive(root, resource, stream):
                     os.fsync(output.fileno())
         if not set(LIMITS) <= seen:
             raise ValueError('Missing transfer member')
-        request = request_identity(json.loads((target/'request.json').read_text()), resource)
+        raw_request = json.loads((target/'request.json').read_text())
+        now = int(time.time()*1000)
+        candidate = raw_request
+        if (isinstance(raw_request, dict) and type(raw_request.get('deadline')) is int and
+                now < raw_request['deadline'] <= now+3300000+5000):
+            candidate = {**raw_request, 'deadline': min(raw_request['deadline'], now+3300000)}
+        request = request_identity(candidate, resource, now=now)
+        if request != raw_request:
+            normalized = target/'request-normalized.json'
+            host.write_json(normalized, request)
+            os.replace(normalized, target/'request.json')
+            operations.sync_directory(target)
         with (target/'source.tar').open('rb') as source:
             if hashlib.file_digest(source, 'sha256').hexdigest() != request['snapshot']:
                 raise ValueError('Snapshot digest mismatch')
@@ -98,7 +111,26 @@ def command(argv, deadline, stdin=None, capture=False, check=True):
                              stderr=subprocess.DEVNULL if capture else None,
                              start_new_session=True)
     try:
-        output, _ = child.communicate(timeout=remaining)
+        if capture:
+            output = bytearray()
+            with selectors.DefaultSelector() as reader:
+                reader.register(child.stdout, selectors.EVENT_READ)
+                while True:
+                    remaining = (deadline-int(time.time()*1000))/1000
+                    if remaining <= 0:
+                        raise TimeoutError('Absolute turn deadline exceeded')
+                    if not reader.select(min(remaining, .2)):
+                        continue
+                    data = os.read(child.stdout.fileno(), min(65536, 4097-len(output)))
+                    if not data:
+                        break
+                    output.extend(data)
+                    if len(output) > 4096:
+                        raise ValueError('Host capture output byte limit exceeded')
+            child.wait(timeout=max(.001, (deadline-int(time.time()*1000))/1000))
+            output = bytes(output)
+        else:
+            output, _ = child.communicate(timeout=remaining)
         if check and child.returncode:
             raise ValueError(f'Turn stage failed with status {child.returncode}')
         return child.returncode, output
@@ -116,6 +148,8 @@ def command(argv, deadline, stdin=None, capture=False, check=True):
         except ProcessLookupError:
             pass
         child.wait()
+        if child.stdout is not None:
+            child.stdout.close()
 
 
 def turn_directory(resource):
@@ -176,14 +210,35 @@ def execute(resource):
     request = request_identity(json.loads((directory/'request.json').read_text()), resource)
     if not (directory/'prepared').is_file() or not host.observation(resource)['running']:
         raise ValueError('The exact turn must be prepared and running')
+    if request['deadline']-10000 <= int(time.time()*1000):
+        raise ValueError('Insufficient command completion readback budget')
     with (directory/'command.json').open('x') as output:
-        json.dump({'argv': request['argv'], 'deadline': request['deadline']}, output)
+        nonce = secrets.token_hex(16)
+        json.dump({'argv': request['argv'], 'deadline': request['deadline']-10000, 'nonce': nonce}, output)
     with (directory/'command.json').open('rb') as source:
         code, _ = command([*guest_ssh(directory),
                            'env CI=true npm_config_store_dir=/work/pnpm-store npm_config_prefer_offline=true '
                            'python3 /opt/waitron-disposable/guest-exec.py '+shlex.quote(resource)],
                           request['deadline'], stdin=source, check=False)
-    return code if code >= 0 else 128-code
+    if code != 0:
+        raise ValueError('Execution channel did not confirm guest completion')
+    _, raw = command([*guest_ssh(directory), 'cat /run/waitron-disposable/result.json'],
+                      request['deadline'], capture=True)
+    receipt = json.loads(raw)
+    if (not isinstance(receipt, dict) or set(receipt) != {'resourceId', 'nonce', 'code'} or
+            receipt['resourceId'] != resource or receipt['nonce'] != nonce or
+            type(receipt['code']) is not int or not 0 <= receipt['code'] <= 255):
+        raise ValueError('Invalid or replayed guest completion nonce')
+    host.write_json(directory/'result.json', {'resourceId': resource, 'code': receipt['code']})
+    return 0
+
+
+def result(resource):
+    receipt = json.loads((turn_directory(resource)/'result.json').read_text())
+    if (not isinstance(receipt, dict) or set(receipt) != {'resourceId', 'code'} or
+            receipt['resourceId'] != resource or type(receipt['code']) is not int or not 0 <= receipt['code'] <= 255):
+        raise ValueError('Invalid trusted host completion')
+    return receipt
 
 
 def inspect(resource):
@@ -247,10 +302,10 @@ def stage(mode, resource):
         request = receive(CONTROL, resource, sys.stdin.buffer)
         arm_expiry(resource, request['deadline'], 'expiry')
         stop_timer(resource, 'transfer-expiry')
-        print(json.dumps(request))
+        print(json.dumps({'received': True, 'resourceId': resource, 'snapshot': request['snapshot']}))
     elif mode == 'prepare':
         prepare(resource)
-    elif mode == 'execute':
+    elif mode == 'execute-v2':
         return execute(resource)
     else:
         raise ValueError('Unknown owned stage')
@@ -289,10 +344,10 @@ def main():
         with operations.owned(OPERATIONS, resource):
             return stage(mode, resource)
     if len(sys.argv) != 3:
-        raise ValueError('Usage: session.py transfer|prepare|execute|inspect|destroy RESOURCE')
+        raise ValueError('Usage: session.py transfer|prepare|execute-v2|result|inspect|destroy RESOURCE')
     mode, resource = sys.argv[1:]
     resource_id(resource)
-    if mode in ('transfer', 'prepare', 'execute'):
+    if mode in ('transfer', 'prepare', 'execute-v2'):
         return supervise(mode, resource)
     elif mode == 'destroy':
         argv = ['systemd-run', '--quiet', '--wait', '--pipe', '--collect', '--service-type=exec',
@@ -302,6 +357,8 @@ def main():
         return subprocess.run(argv).returncode
     elif mode == 'inspect':
         print(json.dumps(inspect(resource)))
+    elif mode == 'result':
+        print(json.dumps(result(resource)))
     else:
         raise ValueError('Unknown turn operation')
     return 0

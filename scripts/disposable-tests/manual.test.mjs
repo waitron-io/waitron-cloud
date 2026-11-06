@@ -53,10 +53,20 @@ test('the manual CLI refuses another repository before source preparation or sta
   execFileSync('git', ['init', '-q', foreign]);
   const config = join(directory, 'config.json');
   const state = join(directory, 'untouched-state');
-  writeFileSync(config, JSON.stringify({version: 1, mode: 'manual-one-slot', host: 'unreachable.invalid',
+  writeFileSync(config, JSON.stringify({version: 2, mode: 'manual-one-slot', host: 'unreachable.invalid',
     hostGeneration: 'test', recipe: '/opt/waitron-disposable-test', repository: join(approved, '.git'), state}));
   const result = spawnSync(process.execPath, [new URL('./manual.mjs', import.meta.url).pathname, config, 'I', foreign, '--', 'node', '-e', 'process.exit(99)'], {encoding: 'utf8', timeout: 5000});
   assert.equal(result.status, 125);
   assert.match(result.stderr, /only the configured Cloud repository/);
   assert.equal(existsSync(state), false);
+});
+
+test('a symlink CLI path cannot silently pass without invoking the manual controller', async t => {
+  const {directory} = await controller(t);
+  const {spawnSync} = await import('node:child_process');
+  const alias = join(directory, 'manual-alias.mjs');
+  symlinkSync(new URL('./manual.mjs', import.meta.url).pathname, alias);
+  const result = spawnSync(process.execPath, [alias], {encoding: 'utf8', timeout: 5000});
+  assert.equal(result.status, 125, 'The CLI must execute and refuse missing arguments through a symlink too');
+  assert.match(result.stderr, /Usage: manual/);
 });

@@ -97,4 +97,21 @@ class Transfer(unittest.TestCase):
         self.assertFalse((self.root/resource2).exists())
 
 
+    def test_only_receive_tolerates_skew_and_persists_one_strict_server_deadline(self):
+        from unittest.mock import patch
+        now=2000000000000
+        raw={**self.request,'deadline':now+3301500}
+        with patch.object(session.time,'time',return_value=now/1000):
+            with self.assertRaises(ValueError):session.request_identity(raw,self.resource)
+            try:result=session.receive(self.root,self.resource,self.archive(request=raw))
+            except ValueError as error:self.fail('A bounded skew request was refused instead of clamped: '+str(error))
+            self.assertEqual(result['deadline'],now+3300000)
+            self.assertEqual(json.loads((self.root/self.resource/'request.json').read_text()),result)
+            self.assertEqual(session.request_identity(result,self.resource),result)
+        resource2='dt-transfer-0-3'
+        with patch.object(session.time,'time',return_value=now/1000):
+            with self.assertRaises(ValueError):session.receive(self.root,resource2,self.archive(request={**raw,'resourceId':resource2,'deadline':now+3305001}))
+            self.assertFalse((self.root/resource2).exists())
+
+
 unittest.main(verbosity=2)

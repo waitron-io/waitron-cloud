@@ -98,3 +98,20 @@ test('preparation cannot outlive the lease deadline', async t => {
   assert.equal(result.cleanup, 'absent');
   assert.ok(performance.now() - started < 1500);
 });
+
+test('cancellation during admission is143 even when the health reader throws', async t => {
+  const cancellation = new AbortController();
+  const f = await fixture(t, {healthy: async () => {cancellation.abort(); throw new Error('reader cancelled');}});
+  const result = await f.runLocal({...f, signal: cancellation.signal});
+  assert.equal(result.code, 143);
+  assert.equal(f.leases.inspect().slots[0].state, 'free');
+});
+
+test('an already cancelled admission never contacts the host', async t => {
+  let contacted=false;
+  const f=await fixture(t,{healthy:async()=>{contacted=true;return true;}});
+  const result=await f.runLocal({...f,signal:AbortSignal.abort()});
+  assert.equal(result.code,143);
+  assert.equal(contacted,false);
+  assert.equal(f.leases.inspect().slots[0].state,'free');
+});

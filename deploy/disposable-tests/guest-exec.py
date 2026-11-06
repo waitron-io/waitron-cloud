@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """Run candidate commands only inside the disposable guest."""
 import os
+import json
+import re
+from pathlib import Path
 import signal
 import subprocess
 import time
@@ -54,6 +57,21 @@ def execute(request, directory):
             signal.signal(sig, handler)
 
 
+def complete(request, directory, resource, output):
+    if (not isinstance(request, dict) or set(request) != {'argv', 'deadline', 'nonce'} or
+            not isinstance(request['nonce'], str) or not re.fullmatch(r'[a-f0-9]{32}', request['nonce'])):
+        raise ValueError('Invalid command completion nonce')
+    code = execute({'argv': request['argv'], 'deadline': request['deadline']}, directory)
+    receipt = {'resourceId': resource, 'nonce': request['nonce'], 'code': code}
+    output = Path(output)
+    output.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    with output.open('x') as target:
+        json.dump(receipt, target)
+        target.flush()
+        os.fsync(target.fileno())
+    return receipt
+
+
 if __name__ == '__main__':
     import json
     from pathlib import Path
@@ -68,7 +86,8 @@ if __name__ == '__main__':
         raw = sys.stdin.buffer.read(5*1024*1024+1)
         if len(raw) > 5*1024*1024:
             raise ValueError('Command request byte limit exceeded')
-        sys.exit(execute(json.loads(raw), '/work/source'))
+        complete(json.loads(raw), '/work/source', sys.argv[1], '/run/waitron-disposable/result.json')
+        sys.exit(0)
     except (ValueError, OSError, subprocess.SubprocessError) as error:
         print(str(error), file=sys.stderr)
         sys.exit(125)

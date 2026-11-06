@@ -19,7 +19,7 @@ test('all host commands reuse the common private socket and keep strict key veri
     const result = spawnSync('bash', [script, '2.29.248.230', command], {env: f.env, encoding: 'utf8'});
     assert.equal(result.status, 0, result.stderr);
     const args = JSON.parse(readFileSync(f.capture));
-    for (const option of ['ControlMaster=auto', 'ControlPersist=600', 'StrictHostKeyChecking=yes', 'BatchMode=yes', 'ConnectTimeout=8']) assert.ok(args.includes(option), option);
+    for (const option of ['ControlMaster=auto', 'ControlPersist=600', 'StrictHostKeyChecking=yes', 'BatchMode=yes', 'ConnectTimeout=8', 'ForwardAgent=no', 'ForwardX11=no', 'ClearAllForwardings=yes']) assert.ok(args.includes(option), option);
     assert.ok(args.includes(`ControlPath=${f.cache}/wt-ssh/%C`));
     assert.deepEqual(args.slice(-2), ['root@2.29.248.230', command]);
     assert.equal(statSync(join(f.cache, 'wt-ssh')).mode & 0o777, 0o700);
@@ -47,4 +47,14 @@ test('a shared writable directory cannot host the controller socket', t => {
   const result = spawnSync('bash', [script, '2.29.248.230', 'true'], {env: f.env, encoding: 'utf8'});
   assert.notEqual(result.status, 0); assert.match(result.stderr, /private/i);
   assert.equal(existsSync(f.capture), false);
+});
+
+test('candidate Python modules cannot execute while the trusted SSH wrapper prepares its socket', t => {
+  const f = fixture(t);
+  const planted = join(f.base, 'planted');
+  writeFileSync(join(f.base, 'pathlib.py'), `open(${JSON.stringify(planted)},'w').write('candidate ran on Mac')\nraise RuntimeError('planted module')\n`);
+  const result = spawnSync('bash', [script, '2.29.248.230', 'true'], {cwd: f.base, env: {...f.env, PYTHONPATH: f.base}, encoding: 'utf8'});
+  assert.equal(existsSync(planted), false, 'Candidate code ran before any guest existed');
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(existsSync(f.capture), true);
 });

@@ -22,7 +22,10 @@ class LocalTurn(unittest.TestCase):
             # A no-op stage must fail before candidate execution, not appear ready.
             self.assertTrue((Path('/var/lib/waitron-disposable/control')/RESOURCE/'request.json').is_file())
             self.assertEqual(self.operation('prepare', timeout=600), 0)
-            self.assertEqual(self.operation('execute', timeout=180), 3)
+            self.assertEqual(self.operation('execute-v2', timeout=180), 0)
+            completed = subprocess.run(['python3','-B',str(RECIPE/'session.py'),'result',RESOURCE],capture_output=True,text=True,timeout=30)
+            self.assertEqual(completed.returncode,0,completed.stderr)
+            self.assertEqual(json.loads(completed.stdout),{'resourceId':RESOURCE,'code':3})
         finally:
             self.assertEqual(self.operation('destroy', timeout=120), 0)
             observed = subprocess.run(['python3', '-B', str(RECIPE/'session.py'), 'inspect', RESOURCE],

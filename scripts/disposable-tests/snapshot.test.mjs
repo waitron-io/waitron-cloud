@@ -22,6 +22,7 @@ function fixture(t) {
   };
   return {base, root, put, archive: join(base, 'source.tar')};
 }
+function stage(f, ...names) { assert.equal(spawnSync('git', ['-C', f.root, 'add', '--force', '--', ...names]).status, 0); }
 function create(f) { return invoke('create', f.root, f.archive); }
 function digest(path) { return createHash('sha256').update(readFileSync(path)).digest('hex'); }
 
@@ -33,6 +34,7 @@ test('a snapshot carries intended edits and executable modes with a reproducible
   f.put('app.mjs', 'export const value = 2;\n');
   f.put('scripts/run.sh', '#!/bin/sh\nexit 3\n');
   chmodSync(join(f.root, 'scripts/run.sh'), 0o755);
+  stage(f, 'scripts/run.sh');
   const result = create(f);
   assert.equal(result.status, 0, result.stderr);
   assert.equal(JSON.parse(result.stdout).sha256, digest(f.archive));
@@ -50,7 +52,9 @@ test('a snapshot carries intended edits and executable modes with a reproducible
 test('snapshots exclude Git state, environment files, credentials, dependencies and ignored output', t => {
   const f = fixture(t);
   f.put('app.mjs', 'safe'); f.put('.gitignore', 'ignored-output/\n');
-  for (const name of ['.env', '.env.example', 'packages/app/.env.local', '.npmrc', '.netrc', '.ssh/id_ed25519', '.aws/config', 'credentials.json', 'nested/service.key', 'nested/client.pem', 'node_modules/package/index.js', 'packages/app/node_modules/a/index.js', '.pnpm-store/token', 'ignored-output/bundle.js', 'scripts/__pycache__/adapter.cpython-313.pyc', 'scripts/__pycache__/index', 'legacy.pyc']) f.put(name, 'DO-NOT-COPY');
+  const excludedPaths = ['.env', '.env.example', 'packages/app/.env.local', '.npmrc', '.netrc', '.ssh/id_ed25519', '.aws/config', 'credentials.json', 'nested/service.key', 'nested/client.pem', 'node_modules/package/index.js', 'packages/app/node_modules/a/index.js', '.pnpm-store/token', 'ignored-output/bundle.js', 'scripts/__pycache__/adapter.cpython-313.pyc', 'scripts/__pycache__/index', 'legacy.pyc'];
+  for (const name of excludedPaths) f.put(name, 'DO-NOT-COPY');
+  stage(f, 'app.mjs', '.gitignore', ...excludedPaths.filter(name => !name.startsWith('ignored-output/')));
   const result = create(f); assert.equal(result.status, 0, result.stderr);
   const target = join(f.base, 'guest'); mkdirSync(target);
   const unpacked = invoke('extract', f.archive, digest(f.archive), target);
@@ -64,6 +68,7 @@ test('a source symlink cannot read outside the checkout or follow a directory es
     const f = fixture(t); const outside = join(f.base, 'outside'); mkdirSync(outside);
     writeFileSync(join(outside, 'private'), 'NEVER-COPY');
     symlinkSync(directory ? outside : join(outside, 'private'), join(f.root, 'linked'));
+    stage(f, 'linked');
     const result = create(f);
     assert.notEqual(result.status, 0);
     assert.match(result.stderr, /symlink|regular file/i);
@@ -72,7 +77,7 @@ test('a source symlink cannot read outside the checkout or follow a directory es
 });
 
 test('archive verification refuses a changed digest before writing any guest file', t => {
-  const f = fixture(t); f.put('app.mjs', 'safe');
+  const f = fixture(t); f.put('app.mjs', 'safe'); stage(f, 'app.mjs');
   assert.equal(create(f).status, 0);
   const target = join(f.base, 'guest'); mkdirSync(target);
   const result = invoke('extract', f.archive, '0'.repeat(64), target);
@@ -84,6 +89,7 @@ test('a hard link cannot copy an outside credential under an innocent source fil
   const f = fixture(t);
   writeFileSync(join(f.base, 'outside-credential'), 'NEVER-COPY');
   linkSync(join(f.base, 'outside-credential'), join(f.root, 'app.mjs'));
+  stage(f, 'app.mjs');
   const result = create(f);
   assert.notEqual(result.status, 0);
   assert.match(result.stderr, /hard link/i);
@@ -91,7 +97,7 @@ test('a hard link cannot copy an outside credential under an innocent source fil
 });
 
 test('an existing snapshot or nonempty destination is preserved rather than overwritten', t => {
-  const f = fixture(t); f.put('app.mjs', 'safe');
+  const f = fixture(t); f.put('app.mjs', 'safe'); stage(f, 'app.mjs');
   assert.equal(create(f).status, 0);
   const before = readFileSync(f.archive);
   f.put('app.mjs', 'changed');
@@ -122,4 +128,41 @@ with tarfile.open(sys.argv[1], 'w') as out:
     assert.match(result.stderr, /unsafe|duplicate|regular|excluded/i, kind);
     assert.deepEqual(readdirSync(target), [], kind);
   }
+});
+
+test('candidate ignore edits cannot expose untracked local state under arbitrary filenames', t => {
+  const f = fixture(t);
+  f.put('app.mjs', 'tracked-source');
+  f.put('.gitignore', 'private-only/\n');
+  assert.equal(spawnSync('git', ['-C', f.root, 'add', 'app.mjs', '.gitignore']).status, 0);
+  f.put('private-only/ordinary-name', 'LOCAL-SECRET-MUST-STAY');
+  f.put('untracked-new-source.mjs', 'UNSTAGED-MUST-NOT-BE-SELECTED');
+  f.put('.gitignore', '');
+  const result = create(f);
+  assert.equal(result.status, 0, result.stderr);
+  const target = join(f.base, 'guest'); mkdirSync(target);
+  assert.equal(invoke('extract', f.archive, digest(f.archive), target).status, 0);
+  assert.deepEqual(readdirSync(target).sort(), ['.gitignore', 'app.mjs']);
+  assert.equal(readFileSync(f.archive).includes(Buffer.from('LOCAL-SECRET-MUST-STAY')), false);
+});
+
+test('recognized credential and local-state paths remain excluded even when tracked', t => {
+  const f = fixture(t);
+  f.put('app.mjs', 'safe-source');
+  for (const name of ['.config/gh/hosts.yml', '.dev.vars', '.docker/config.json', '.git-credentials', '.kube/config', '.pgpass', '.pypirc', '.vault-token', 'id_dsa', 'id_ecdsa', 'service-account.json', 'terraform.tfvars', '.local-stack/admin-secret']) f.put(name, 'NEVER-SEND-CREDENTIAL');
+  assert.equal(spawnSync('git', ['-C', f.root, 'add', '--force', '.']).status, 0);
+  const result = create(f); assert.equal(result.status, 0, result.stderr);
+  assert.equal(readFileSync(f.archive).includes(Buffer.from('NEVER-SEND-CREDENTIAL')), false);
+});
+
+test('checkout filesystem-monitor configuration cannot execute during source enumeration', t => {
+  const f = fixture(t);
+  f.put('app.mjs', 'safe-source');
+  assert.equal(spawnSync('git', ['-C', f.root, 'add', 'app.mjs']).status, 0);
+  const marker = join(f.base, 'monitor-ran');
+  const hook = join(f.base, 'monitor.sh');
+  writeFileSync(hook, '#!/bin/sh\nprintf ran > '+JSON.stringify(marker)+'\nprintf "\\0"\n', {mode: 0o755});
+  assert.equal(spawnSync('git', ['-C', f.root, 'config', 'core.fsmonitor', hook]).status, 0);
+  const result = create(f); assert.equal(result.status, 0, result.stderr);
+  assert.equal(readdirSync(f.base).includes('monitor-ran'), false, 'A checkout-configured program executed on the Mac');
 });

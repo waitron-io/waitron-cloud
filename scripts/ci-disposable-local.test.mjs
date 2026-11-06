@@ -10,3 +10,6 @@ import './disposable-tests/session.test.mjs';
 import './disposable-tests/transport.test.mjs';
 import './disposable-tests/bundle.test.mjs';
 import './disposable-tests/manual.test.mjs';
+import './disposable-tests/status.test.mjs';
+import './disposable-tests/recovery.test.mjs';
+import './disposable-tests/manual-pipeline.test.mjs';
