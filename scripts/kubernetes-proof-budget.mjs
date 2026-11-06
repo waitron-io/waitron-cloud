@@ -125,6 +125,33 @@ function checkedObservations(observations, uuid, now) {
   integer(observations.actualMicroUsd);
 }
 
+async function completeBookings(ledger, store) {
+  const active = ledger.active, { identity, months } = active, scope = ledger.scope;
+  const entry = booking(active), heads = { ...ledger.monthHeads };
+  for (const month of months) {
+    const saved = await read(store, monthKey(month));
+    const value = saved?.value ?? { schema: 'd570-month-v1', scope, month, opening: active.evidence.openings[month], entries: [] };
+    checkedMonth(value, scope, month);
+    const retained = value.entries.find(e => e.identity.uuid === identity.uuid);
+    if (retained) {
+      check(digest(retained) === digest(entry));
+      if (active.state === 'reserved') check(digest(value) === ledger.monthHeads[month]);
+      else {
+        const before = { ...value, entries: value.entries.filter(e => e.identity.uuid !== identity.uuid) };
+        check(ledger.monthHeads[month] ? digest(before) === ledger.monthHeads[month]
+          : before.entries.length === 0 && digest(before.opening) === digest(active.evidence.openings[month]));
+      }
+    } else {
+      check(active.state === 'preparing');
+      check(ledger.monthHeads[month] ? saved && digest(value) === ledger.monthHeads[month] : !saved);
+      value.entries.push(entry); checkedMonth(value, scope, month);
+      await write(store, monthKey(month), value, saved?.etag);
+    }
+    heads[month] = digest(value);
+  }
+  return heads;
+}
+
 // Initialization is a setup operation. Runtime never recreates lost history.
 export async function initializeLedger({ scope, now, evidence, store }) {
   scope = structuredClone(scope); evidence = structuredClone(evidence); checkedScope(scope);
@@ -166,28 +193,7 @@ export async function reserveRun({ scope, identity, evidence, now, store, clock 
     ledger.active = desired;
     row.etag = await write(store, activeKey, ledger, row.etag);
   }
-  const active = ledger.active, entry = booking(active), heads = { ...ledger.monthHeads };
-  for (const month of months) {
-    const saved = await read(store, monthKey(month));
-    const value = saved?.value ?? { schema: 'd570-month-v1', scope, month, opening: active.evidence.openings[month], entries: [] };
-    checkedMonth(value, scope, month);
-    const retained = value.entries.find(e => e.identity.uuid === identity.uuid);
-    if (retained) {
-      check(digest(retained) === digest(entry));
-      if (active.state === 'reserved') check(digest(value) === ledger.monthHeads[month]);
-      else {
-        const before = { ...value, entries: value.entries.filter(e => e.identity.uuid !== identity.uuid) };
-        check(ledger.monthHeads[month] ? digest(before) === ledger.monthHeads[month]
-          : before.entries.length === 0 && digest(before.opening) === digest(active.evidence.openings[month]));
-      }
-    } else {
-      check(active.state === 'preparing');
-      check(ledger.monthHeads[month] ? saved && digest(value) === ledger.monthHeads[month] : !saved);
-      value.entries.push(entry); checkedMonth(value, scope, month);
-      await write(store, monthKey(month), value, saved?.etag);
-    }
-    heads[month] = digest(value);
-  }
+  const active = ledger.active, heads = await completeBookings(ledger, store);
   if (active.state === 'preparing') {
     ledger.monthHeads = heads; active.state = 'reserved';
     await write(store, activeKey, ledger, row.etag);
@@ -204,8 +210,9 @@ export async function reconcileRun({ scope, uuid, observations, now, store }) {
   checkedObservations(observations, uuid, time(now));
   const saved = await read(store, activeKey); check(saved); checkedActive(saved.value, scope);
   const ledger = saved.value, active = ledger.active;
-  check(active?.state === 'reserved' && active.identity.uuid === uuid && time(observations.observedAt) >= time(active.identity.startedAt)
+  check(active && ['preparing', 'reserved'].includes(active.state) && active.identity.uuid === uuid && time(observations.observedAt) >= time(active.identity.startedAt)
     && integer(observations.actualMicroUsd) <= active.upperMicroUsd);
+  if (active.state === 'preparing') ledger.monthHeads = await completeBookings(ledger, store);
   for (const [month, hash] of Object.entries(ledger.monthHeads)) {
     const record = await read(store, monthKey(month)); check(record); checkedMonth(record.value, scope, month); check(digest(record.value) === hash);
   }

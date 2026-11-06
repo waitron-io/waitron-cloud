@@ -145,7 +145,9 @@ New higher baseline or overhead evidence refuses until a separate reconciliation
 updates the opening; the core never silently keeps a smaller old estimate.
 
 Confirmed machine termination, absent disks and interfaces, reconciled billing
-and healthy expiry protection release the active slot. They never refund its
+and healthy expiry protection release the active slot. A confirmed cleanup of a
+partial reservation first completes every original monthly booking, even after
+the reservation deadline. They never refund its
 monthly reservation. Original identities, cost-source evidence and cleanup facts
 remain in the ledger. Missing, damaged, oversized or unrecognized history refuses;
 runtime cannot recreate it. Initialization is restricted to an empty ledger and

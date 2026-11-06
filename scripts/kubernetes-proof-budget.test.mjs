@@ -342,3 +342,22 @@ test('a syntactically valid ledger over one MiB refuses before any new write', a
   previous.body = Buffer.concat([previous.body, Buffer.alloc(1024 * 1024, 32)]);
   await assert.rejects(reserve(store), /budget/i); assert.equal(store.writes.length, 3);
 });
+
+test('confirmed no-resource cleanup recovers a partial reservation after its deadline', async () => {
+  const store = await fresh(); let fail = true;
+  store.beforePut = key => { if (fail && key === 'd570/ledger/2026-12.json') { fail = false; throw new Error('lost controller'); } };
+  await assert.rejects(reserve(store), /lost controller/);
+  await assert.doesNotReject(reconcile(store));
+  assert.equal(store.body('d570/ledger/active.json').active, null);
+  for (const month of ['2026-11', '2026-12']) assert.equal(store.body(`d570/ledger/${month}.json`).entries.length, 1);
+});
+
+for (const field of ['terminated', 'volumesAbsent', 'interfacesAbsent', 'billingReconciled', 'protectionHealthy']) {
+  test(`partial cleanup with unknown ${field} still preserves active ownership`, async () => {
+    const store = await fresh(); let fail = true;
+    store.beforePut = key => { if (fail && key === 'd570/ledger/2026-12.json') { fail = false; throw new Error('lost controller'); } };
+    await assert.rejects(reserve(store), /lost controller/); const before = clone([...store.objects]);
+    await assert.rejects(reconcile(store, confirmed({ [field]: false })), /budget/i);
+    assert.deepEqual(clone([...store.objects]), before);
+  });
+}
