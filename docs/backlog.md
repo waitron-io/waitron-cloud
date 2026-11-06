@@ -517,8 +517,14 @@ one message per receive, a ten-second poll and sixty-second visibility. A shared
 fifteen-second request deadline covers credentials, receive and delete; shutdown
 or close aborts pending transport work. Local stand-ins check these boundaries,
 fixed diagnostics and malformed replies, not provider permissions or encrypted
-redrive. Database processing time limits, health reporting, CLI and complete
-shutdown proof remain unbuilt. Audited removal and production
+redrive. Database acquisition, lock waits and processing now share a five-second
+deadline. Transaction-local PostgreSQL limits also bound a stalled commit;
+failed connections are discarded and a connection returned after expiry cannot
+start feedback work. Local checks cover cumulative statements, deferred commit,
+disconnection and safe replay without premature deletion or partial writes.
+Health reporting, CLI and complete shutdown proof remain unbuilt. The CLI must
+also bound new connection establishment and pool shutdown; a pending pool request
+is discarded when it returns. Audited removal and production
 enablement remain future tasks. Task 8 must qualify any additional event types;
 `Rendering Failure` currently refuses. It must also reconcile historical Paris-only
 supplier wording and retired enablement dates before any live qualification. AWS resources,
