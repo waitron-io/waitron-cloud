@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
-import {mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, symlinkSync, chmodSync, readdirSync} from 'node:fs';
+import {mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, symlinkSync, linkSync, chmodSync, readdirSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {spawnSync} from 'node:child_process';
@@ -78,6 +78,16 @@ test('archive verification refuses a changed digest before writing any guest fil
   const result = invoke('extract', f.archive, '0'.repeat(64), target);
   assert.notEqual(result.status, 0); assert.match(result.stderr, /digest/i);
   assert.deepEqual(readdirSync(target), []);
+});
+
+test('a hard link cannot copy an outside credential under an innocent source filename', t => {
+  const f = fixture(t);
+  writeFileSync(join(f.base, 'outside-credential'), 'NEVER-COPY');
+  linkSync(join(f.base, 'outside-credential'), join(f.root, 'app.mjs'));
+  const result = create(f);
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /hard link/i);
+  assert.equal(readdirSync(f.base).includes('source.tar'), false);
 });
 
 test('an existing snapshot or nonempty destination is preserved rather than overwritten', t => {

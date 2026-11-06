@@ -88,6 +88,8 @@ def create(root_name, output_name):
                     before = os.fstat(source.fileno())
                     if not stat.S_ISREG(before.st_mode):
                         raise ValueError('Snapshot requires a regular file, never a symlink')
+                    if before.st_nlink != 1:
+                        raise ValueError('Snapshot refuses hard links to files outside its boundary')
                     size += before.st_size
                     if before.st_size > MAX_FILE_BYTES or size > MAX_BYTES:
                         raise ValueError('Snapshot byte limit exceeded')
