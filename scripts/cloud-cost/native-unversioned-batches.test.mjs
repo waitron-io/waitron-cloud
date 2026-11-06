@@ -213,11 +213,22 @@ for (const mode of ['missing', 'duplicate', 'foreign', 'version', 'marker', 'cod
   });
 }
 
-// Batches and single mutations share key admission; an unobserved PUT cannot be replaced by a delete.
-for (const mode of ['batch-put', 'put-batch', 'batch-batch', 'ambiguous-put']) test(`unversionedNativeBatchRejectsOverlappingMutation_${mode}`, async t => {
+// Batches and single mutations share active-key admission; missing history alone cannot block the next operation.
+for (const mode of ['batch-put', 'put-batch', 'batch-batch', 'ambiguous-put']) test(mode === 'ambiguous-put' ? 'unversionedNativeBatchForwardsAfterUncertainPutWithUnknownInterval' : `unversionedNativeBatchRejectsOverlappingMutation_${mode}`, async t => {
   const f = await fixture(t); const batch = inputFor(bodyFor([key])), single = { method: 'PUT', path: '/synthetic/' + encodeURIComponent(key), headers: { 'content-length': '4' } };
   const finish = f.audit.begin(mode === 'put-batch' || mode === 'ambiguous-put' ? single : batch);
-  if (mode === 'ambiguous-put') finish({ statusCode: 503, bytesOut: 4 });
+  if (mode === 'ambiguous-put') {
+    finish({ statusCode: 503, bytesOut: 4 });
+    const body = bodyFor([key]); let next;
+    assert.doesNotThrow(() => { next = f.audit.begin(inputFor(body)); });
+    next({ statusCode: 200, bytesOut: body.length, responseBody: resultFor([deleted(key)]) });
+    await f.audit.verify();
+    assert.equal(f.audit.snapshot().objects.bytes, 0);
+    assert.equal(f.audit.snapshot().status, 'unknown');
+    assert.deepEqual(f.audit.snapshot().byteSeconds, { low: null, high: null });
+    assert.deepEqual(f.audit.snapshot().gaps, ['accounting:incomplete-history']);
+    assert.equal(f.meter.diagnostics().firstInvalidation, null); return;
+  }
   assert.throws(() => f.audit.begin(mode === 'batch-put' ? single : batch), bad);
   assert.throws(() => f.meter.snapshot(), /Invalid cloud cost meter/);
 });

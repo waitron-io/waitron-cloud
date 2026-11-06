@@ -167,9 +167,9 @@ for (const mutation of ['create', 'replace', 'delete']) {
   });
 }
 
-// Resolving a failed mutation by an unrelated next mutation would hide which size existed in between.
+// A missing intermediate size cannot become a measured interval; malformed and active work still refuses.
 for (const mode of ['overlap', 'ambiguous', 'twice', 'clock', 'short', 'interrupt', 'null', 'status']) {
-  test(mode === 'interrupt' ? 'streamHistoryRetainsUnknownInterruptedTransition' : `streamHistoryPoisonsUnprovableTransition_${mode}`, async t => {
+  test(mode === 'interrupt' ? 'streamHistoryRetainsUnknownInterruptedTransition' : mode === 'ambiguous' ? 'streamHistoryForwardsAfterAmbiguityWithUnknownInterval' : `streamHistoryPoisonsUnprovableTransition_${mode}`, async t => {
     const f = await fixture(t), audit = await open(f);
     success(f, audit, put(4), 1, 2, 4);
     f.time(4); const finish = audit.begin(del());
@@ -189,7 +189,15 @@ for (const mode of ['overlap', 'ambiguous', 'twice', 'clock', 'short', 'interrup
     else if (mode === 'status') assert.throws(() => finish({ statusCode: 99, bytesOut: 0 }), bad);
     else {
       finish({ statusCode: mode === 'ambiguous' ? 503 : 204, bytesOut: 0 });
-      if (mode === 'ambiguous') assert.throws(() => audit.begin(put(6)), bad);
+      if (mode === 'ambiguous') {
+        const next = audit.begin(put(6)); f.time(5); next({ statusCode: 200, bytesOut: 6 }); f.rows.set(key, 6);
+        f.time(6); await audit.verify();
+        assert.equal(audit.snapshot().status, 'unknown');
+        assert.deepEqual(audit.snapshot().gaps, ['accounting:incomplete-history']);
+        assert.deepEqual(audit.snapshot().byteSeconds, { low: null, high: null });
+        assert.equal(audit.snapshot().objects.bytes, 6);
+        assert.equal(f.meter.diagnostics().firstInvalidation, null); return;
+      }
       else assert.throws(() => finish({ statusCode: 204, bytesOut: 0 }), bad);
     }
     assert.throws(() => audit.snapshot(), bad); assert.throws(() => f.meter.snapshot(), /Invalid cloud cost meter/);

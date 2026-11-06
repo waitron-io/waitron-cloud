@@ -239,7 +239,17 @@ clock, version, duplicate-completion and contradictory-response checks remain.
 Run `node --test scripts/cloud-cost/litestream-lifetime-history.test.mjs` for
 missing-callback controls and twelve real HTTP exchanges with independent
 storage inventories. These exchanges do not prove SQLite recovery.
-Forwarding after an uncertain mutation still needs the wider policy.
+Unversioned single and batch mutations now forward after an earlier uncertain
+write or deletion. Inventory must still match a previously admitted possible
+size; a later successful operation excludes stale sizes. When a different
+operation hides an intermediate retained interval, the gap remains and the
+storage-time total stays `null`, even after clean cleanup. The private candidate
+set is bounded at 100,000 distinct possible sizes per key; active overlaps,
+malformed replies, duplicate completions and foreign inventory still refuse.
+Run `node --test scripts/cloud-cost/uncertain-forwarding.test.mjs` for candidate
+ownership, the memory bound and six real HTTP sequences. These controls do not
+prove SQLite recovery. Multipart uncertainty and completion still need the
+wider forwarding policy in both storage modes.
 The full nonblocking accounting path, publication refusal, lost-write
 restore control and saved-failure replay remain open. These partial changes do
 not establish the historical cause or relax functional admission.

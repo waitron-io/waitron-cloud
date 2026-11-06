@@ -22,6 +22,7 @@ export function storageHistorySnapshot(record, meter, gaps) {
   requireThat(record.byteSeconds.high >= record.byteSeconds.low);
   const objects = { ...record.objects, bytes: bounded(record.objects.bytes) };
   const byteSeconds = { low: bounded(record.byteSeconds.low), high: bounded(record.byteSeconds.high) };
+  if (gaps.has('accounting:incomplete-history')) byteSeconds.low = byteSeconds.high = null;
   return { status: gaps.size ? 'unknown' : 'measured', ...record, objects, byteSeconds,
     ...(gaps.size ? { gaps: [...gaps] } : {}) };
 }
@@ -408,6 +409,23 @@ export async function openLitestreamHistories({ client, sdk, meter, bucket, cloc
     }
     if (mutation.method === 'PUT' && !row.current) row.current = { bytes: mutation.bytes, from: mutation.from, by };
     row.uncertain = null;
+    row.candidates = null;
+  };
+  // A later different mutation can erase an intermediate retained interval. Keep every
+  // possible owned size until inventory, but do not assign byte-time totals to that history.
+  const mutationFor = (row, method, bytes, time) => {
+    if (row.uncertain && (row.uncertain.method !== method || row.uncertain.bytes !== bytes)) {
+      gaps.add('accounting:incomplete-history'); meter.markGap('accounting:incomplete-history');
+      row.candidates ??= new Set([row.current?.bytes ?? null,
+        row.uncertain.method === 'PUT' ? row.uncertain.bytes : null]);
+    }
+    const candidate = method === 'PUT' ? bytes : null;
+    requireThat(!row.candidates || row.candidates.has(candidate) || row.candidates.size < 100000);
+    return { method, bytes, from: row.uncertain && !row.candidates ? row.uncertain.from : time };
+  };
+  const uncertainMutation = (row, mutation) => {
+    if (row.candidates) row.candidates.add(mutation.method === 'PUT' ? mutation.bytes : null);
+    if (row.candidates || (mutation.method === 'PUT' ? row.current?.bytes !== mutation.bytes : row.current !== null)) row.uncertain = mutation;
   };
   const multipart = allowMultipart ? nativeMultipartHistory({ bucket, now, inspect, resolveReplies: resolveMultipartReplies,
     markGap: code => { gaps.add(code); meter.markGap(code); }, complete: (key, bytes, from, by) => {
@@ -429,9 +447,9 @@ export async function openLitestreamHistories({ client, sdk, meter, bucket, cloc
       requireThat(text(key) && Buffer.byteLength(key) <= 1024 && !/[\\\x00-\x1f\x7f]/.test(key)
         && !key.split('/').some(s => s === '.' || s === '..') && !selected.has(key));
       let row = rows.get(key);
-      requireThat(!row?.active && (!row?.uncertain || row.uncertain.method === 'DELETE'));
+      requireThat(!row?.active);
       if (!row) { requireThat(rows.size < 100000); row = { current: null, uncertain: null, active: false }; rows.set(key, row); }
-      selected.set(key, { row, mutation: { method: 'DELETE', bytes: 0, from: row.uncertain?.from ?? time } });
+      selected.set(key, { row, mutation: mutationFor(row, 'DELETE', 0, time) });
     }
     requireThat(selected.size > 0 && selected.size <= 1000);
     for (const { row } of selected.values()) row.active = true;
@@ -455,7 +473,7 @@ export async function openLitestreamHistories({ client, sdk, meter, bucket, cloc
       }
       for (const [key, { row, mutation }] of selected) {
         if (results.get(key) === true) transition(row, mutation, time);
-        else if (row.current) row.uncertain = mutation;
+        else uncertainMutation(row, mutation);
         row.active = false;
       }
       pending.delete(token);
@@ -493,8 +511,8 @@ export async function openLitestreamHistories({ client, sdk, meter, bucket, cloc
       requireThat(count(bytes));
       row = rows.get(key);
       if (!row) { requireThat(rows.size < 100000); row = { current: null, uncertain: null, active: false }; rows.set(key, row); }
-      requireThat(!row.active && (!row.uncertain || row.uncertain.method === method && row.uncertain.bytes === bytes));
-      mutation = { method, bytes, from: row.uncertain?.from ?? time };
+      requireThat(!row.active);
+      mutation = mutationFor(row, method, bytes, time);
       row.active = true; verified = false;
     }
     const settleLifetime = strictRead ? undefined : afterStop?.beginLifetime({ headers, operation, versioned: false });
@@ -508,7 +526,7 @@ export async function openLitestreamHistories({ client, sdk, meter, bucket, cloc
       if (mutation) {
         requireThat(interrupted ? bytesOut <= mutation.bytes : bytesOut === mutation.bytes);
         if (statusCode !== null && statusCode < 300 && !interrupted) transition(row, mutation, time);
-        else if (mutation.method === 'PUT' ? row.current?.bytes !== mutation.bytes : row.current !== null) row.uncertain = mutation;
+        else uncertainMutation(row, mutation);
         row.active = false;
       }
       pending.delete(token);
@@ -546,7 +564,12 @@ export async function openLitestreamHistories({ client, sdk, meter, bucket, cloc
       requireThat([...found.keys()].every(key => rows.has(key)));
       for (const [key, row] of rows) {
         const bytes = found.get(key), uncertain = row.uncertain;
-        if (uncertain) {
+        if (row.candidates) {
+          requireThat(row.candidates.has(bytes ?? null));
+          // Inventory witnesses the current size, not which earlier request committed.
+          row.current = bytes === undefined ? null : { bytes, from: start, by: time };
+          row.candidates = null; row.uncertain = null;
+        } else if (uncertain) {
           if (uncertain.method === 'PUT' ? bytes === uncertain.bytes : bytes === undefined) transition(row, uncertain, time);
           else {
             requireThat(row.current ? bytes === row.current.bytes : bytes === undefined);
