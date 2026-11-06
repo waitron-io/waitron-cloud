@@ -1,14 +1,20 @@
 import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
 import {Pool} from 'pg';
+import {after} from 'node:test';
 import {migrate} from '../../src/migrate.ts';
 import {transaction} from '../../src/transaction.ts';
 import type {BillingEvent,BillingScope} from '../../src/billing-types.ts';
-import {cloneVenueServiceTemplate} from './venue-service-template.ts';
+import {cloneVenueServiceTemplate,createVenueServiceTemplate} from './venue-service-template.ts';
 export {createVenueServiceTemplate} from './venue-service-template.ts';
+
+let defaultTemplate:ReturnType<typeof createVenueServiceTemplate>|undefined;
+after(async()=>{if(defaultTemplate)await(await defaultTemplate).close();});
 
 export const event=():BillingEvent=>({key:randomUUID(),occurredAt:'2026-10-29T09:00:00.000Z',source:{kind:'internal'}});
 export async function venueServiceFixture(template?:string){
+ // Each case clones the same immutable migrations, never another case's rows.
+ if(template===undefined)template=(await(defaultTemplate??=createVenueServiceTemplate())).name;
  const schema='venue_services_'+randomUUID().replaceAll('-','');
  const cloned=template===undefined?undefined:await cloneVenueServiceTemplate(template,schema),connectionString=cloned?.connectionString??process.env.TEST_DATABASE_URL;
  const admin=new Pool({connectionString});

@@ -48,7 +48,7 @@ async function fixture(){
 }
 async function command(f:Awaited<ReturnType<typeof fixture>>){
  const config=join(f.root,'config.json');await writeFile(config,JSON.stringify({socket:f.socket,mappings:[f.mapping]}),{mode:0o600});
- const url=new URL(process.env.TEST_DATABASE_URL!);url.searchParams.set('options','-c search_path='+f.schema);const application='lifetime-cli-'+randomUUID();url.searchParams.set('application_name',application);
+ const url=new URL(f.pool.options.connectionString!);url.searchParams.set('options','-c search_path='+f.schema);const application='lifetime-cli-'+randomUUID();url.searchParams.set('application_name',application);
  const child=spawn(process.execPath,[fileURLToPath(new URL('../src/traffic-lifetime-cli.ts',import.meta.url)),config],{env:cliEnvironment({DATABASE_URL:url.toString()}),stdio:['ignore','pipe','pipe']});
  let stdout='',stderr='';child.stdout.on('data',b=>stdout+=b);child.stderr.on('data',b=>stderr+=b);
  const exited=new Promise<{code:number|null;signal:NodeJS.Signals|null}>(r=>child.once('exit',(code,signal)=>r({code,signal}))),timer=setTimeout(()=>child.kill('SIGKILL'),20000);

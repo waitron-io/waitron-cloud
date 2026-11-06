@@ -100,7 +100,7 @@ test('collector replay and subsequent report commit in sequence without losing a
 async function commandFixture(f:Awaited<ReturnType<typeof fixture>>){
  const root=await realpath(await mkdtemp(join(tmpdir(),'traffic-command-db-'))),config=join(root,'config.json');
  const schema=(await f.pool.query('SELECT current_schema() AS name')).rows[0].name;
- const url=new URL(process.env.TEST_DATABASE_URL!);url.searchParams.set('options','-c search_path='+schema);
+ const url=new URL(f.pool.options.connectionString!);url.searchParams.set('options','-c search_path='+schema);
  const application='traffic-cli-'+randomUUID();url.searchParams.set('application_name',application);
  const env=cliEnvironment({DATABASE_URL:url.toString()}),command=fileURLToPath(new URL('../src/traffic-cli.ts',import.meta.url));
  await writeFile(config,JSON.stringify({mappings:[f.mapping]}),{mode:0o600});

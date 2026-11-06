@@ -10,6 +10,27 @@ import {test} from 'node:test';
 import * as fixtures from './fixtures/venue-service.ts';
 import {migrationNames} from '../src/migrate.ts';
 
+test('default venue fixtures share a migrated template and keep concurrent cases independent',async()=>{
+ const admin=new Pool({connectionString:process.env.TEST_DATABASE_URL});
+ const opened:Awaited<ReturnType<typeof fixtures.venueServiceFixture>>[]=[];
+ try{
+  await Promise.all([0,1].map(async()=>{opened.push(await fixtures.venueServiceFixture());}));
+  const names:string[]=[];
+  for(const f of opened){
+   const name=(await f.pool.query('SELECT current_database() AS name')).rows[0].name as string;
+   names.push(name);
+   assert.match(name,/^venue_service_clone_[a-f0-9]{32}_[a-f0-9]{10}$/);
+   assert.deepEqual((await f.pool.query('SELECT name FROM schema_migrations ORDER BY name')).rows.map(r=>r.name),[...migrationNames].sort());
+  }
+  assert.notEqual(names[0],names[1]);
+  assert.equal(names[0]!.slice(0,-10),names[1]!.slice(0,-10),'concurrent cases reuse one migrated seed');
+  const marker=randomUUID();await opened[0]!.pool.query('INSERT INTO organisations(id) VALUES($1)',[marker]);
+  assert.equal((await opened[1]!.pool.query('SELECT id FROM organisations WHERE id=$1',[marker])).rowCount,0);
+  while(opened.length)await opened.pop()!.close();
+  assert.equal((await admin.query('SELECT datname FROM pg_database WHERE datname=ANY($1::text[])',[names])).rowCount,0);
+ }finally{while(opened.length)await opened.pop()!.close();await admin.end();}
+});
+
 test('template-backed venue fixtures isolate data and keep every migration',async()=>{
  assert.equal(typeof fixtures.createVenueServiceTemplate,'function','the guard wrapper needs an owned migrated template');
  const template=await fixtures.createVenueServiceTemplate();

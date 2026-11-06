@@ -3520,6 +3520,15 @@ refusal. The existing receipt checks, case counts, cleanup and time limits
 remain unchanged. Historical causes and signal delivery through the parent's
 330-second cutoff remain unqualified.
 
+Repeated venue schema setup now uses the existing migrated database template.
+Each test process prepares it once, and each case gets a separate clone with
+every migration digest checked. The process closes its template after its cases,
+and command fixtures use their clone's connection when starting another process.
+The concurrent-fixture check covers a shared seed, separate rows, the complete
+migration list and clone removal. Existing service, permission and traffic
+assertions and all proof deadlines stay unchanged. Hosted cutoff qualification
+remains open until the current candidate completes its venue proof.
+
 ## Bound verifier test failure cleanup (D530)
 
 [The D462 backup job](https://github.com/waitron-io/waitron-cloud/actions/runs/41311315472/job/124862280459)
