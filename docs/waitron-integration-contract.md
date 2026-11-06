@@ -330,6 +330,8 @@ retains its operation UUID and exact body bytes on a lost reply. Status uses a
 fresh operation UUID to read that submission. A changed submit intent uses a new
 UUID and the current predecessor request ID. Compare installation, request,
 hostname, configuration revision and SHA-256 of CSR PEM bytes before installation.
+If you lose the request ID, use [status discovery](#staff-certificate-exchange-version-1)
+with `requestId:null` to recover that predecessor, including stale requests.
 There is no historical request-ID ledger or new `failed` wire state. Pending
 includes work parked after eight issuer failures; operator status distinguishes it.
 
@@ -858,8 +860,34 @@ state is `ready`:
 }
 ```
 
-Every read checks the stored installation key, lease binding, revocation, placement,
-hostname and configuration revision again. Another installation cannot read this
+If the appliance has lost its request ID, sign `{"version":1,"requestId":null}`
+with a fresh operation ID on the same status action. Discovery returns the current
+assigned hostname and configuration revision, plus the stored request, if any:
+
+```json
+{
+  "version": 1,
+  "installationId": "00000000-0000-4000-8000-000000000002",
+  "hostname": "staff-v-00000000-0000-4000-8000-000000000001.example.test",
+  "revision": 3,
+  "request": {
+    "requestId": "00000000-0000-4000-8000-000000000003",
+    "hostname": "staff-v-00000000-0000-4000-8000-000000000001.example.test",
+    "revision": 2,
+    "csrDigest": "<SHA-256 hex of the stored PEM bytes>"
+  }
+}
+```
+
+With no stored request, `request` is `null`. Discovery includes a stale request's
+original hostname and revision so you can name its exact predecessor when
+submitting a replacement. It returns no CSR or certificate and creates no work.
+A status read with a known UUID still requires a current matching request before
+returning its state or chain.
+
+Every read checks the stored installation key, lease binding, revocation and
+placement again. Known-ID reads and submissions also check the request hostname
+and configuration revision. Another installation cannot read this
 request even if it knows its ID. Invalid action-body fields are HTTP 400. Malformed or oversized signed envelopes,
 bodies beyond the existing 4096-character signed-body limit, and invalid proofs or
 leases are 401. If the envelope is too large, reduce it; renewing a lease cannot fix
@@ -878,8 +906,8 @@ hostname, key and validity before publication. Issuance does not mean the applia
 has installed or reloaded the chain.
 
 The Cloud exchange and optional database staff reconciler mode are implemented.
-The Waitron dependency is an adapter that persists pending request IDs, signs these
-two actions, renews its lease, polls with backoff, discards replies after local
+The Waitron dependency is an adapter that discovers or retains pending request IDs,
+signs these two actions, renews its lease, polls with backoff, discards replies after local
 configuration/revocation/key changes, invokes the install command and reloads TLS.
 Its process scheduling and crash recovery are not supplied by this Cloud change.
 The local proof calls the existing Waitron commands explicitly.

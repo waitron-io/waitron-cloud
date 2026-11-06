@@ -55,7 +55,13 @@ export class StaffCertificateExchange {
      current=await readStaffRequest(client,row.id);
     }
    }else{
-    if(!object(body,['version','requestId'])||body.version!==1||!isUuid(body.requestId))fail('invalid_input');
+    if(!object(body,['version','requestId'])||body.version!==1||(body.requestId!==null&&!isUuid(body.requestId)))fail('invalid_input');
+    if(body.requestId===null){
+     // Recovery needs the stored predecessor even after its configuration becomes stale.
+     return {version:1,installationId:row.id,hostname:row.hostname,revision:row.configuration_revision,
+      request:current?{requestId:current.request_id,hostname:current.hostname,revision:current.revision,
+       csrDigest:createHash('sha256').update(current.csr).digest('hex')}:null};
+    }
     if(current?.request_id!==body.requestId)fail('conflict');
    }
    if(!current||current.revision!==row.configuration_revision||current.hostname!==row.hostname)fail('conflict');
