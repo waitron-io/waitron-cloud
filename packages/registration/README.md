@@ -501,8 +501,13 @@ a fifteen-second deadline, including credential lookup, and uses one request.
 Aborting the caller or closing the adapter cancels pending work. Errors expose
 fixed diagnostics instead of envelopes, receipt handles or provider replies.
 The local tests inject synthetic credentials and transport replies; they do not
-qualify IAM, encryption or dead-letter transfer. Database time limits, health,
-CLI supervision and the full shutdown proof remain incomplete. Neither this
+qualify IAM, encryption or dead-letter transfer. The worker shares a five-second
+budget across database acquisition, lock waits and transaction work, including
+commit. Failed connections are discarded; a client acquired after expiry cannot
+process feedback. Transaction-local limits also stop stalled server work without
+changing later borrowers' settings. A timed-out pool request is discarded when
+it returns; CLI connection and pool shutdown limits still need implementation.
+Health, CLI supervision and the full shutdown proof remain incomplete. Neither this
 internal adapter nor the worker is exported from the package's public entry point.
 
 Run the focused PostgreSQL checks, including competing consumers and process death
