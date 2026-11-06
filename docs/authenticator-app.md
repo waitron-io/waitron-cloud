@@ -80,8 +80,19 @@ Recovery codes may also use four groups of eight characters separated by hyphens
 
 Challenges are not session credentials and expire after the supplied lifetime. Invalid
 login proof returns 401 `credentials_invalid`; invalid management authority returns
-403 with the same code. Invalid pending state returns 400 `invalid_input`, and unavailable
-factor configuration returns 503 `temporarily_unavailable`. Responses disable caching.
+403 with the same code. If setup has expired, been cancelled or been replaced,
+you receive 400 `setup_unavailable`: start setup again with your password and fresh
+codes. A removal or code-regeneration request for an inactive factor returns
+400 `factor_not_active`; use **Check authenticator settings** to refresh the status.
+Passwords over 1,024 UTF-8 bytes return 400 `password_too_long`, so enter your
+current account password rather than retrying the same value. For example, an
+expired `POST /authenticator/activate` returns `{"error":"setup_unavailable"}`
+without ending your session or spending a confirmation attempt.
+
+Unknown pending tokens, tokens belonging to another session or account, malformed
+input and exhausted confirmation attempts still return 400 `invalid_input`.
+Unavailable factor configuration returns 503 `temporarily_unavailable`. Responses
+disable caching.
 
 ## Rotate and recover encryption keys
 

@@ -155,10 +155,10 @@ test('pending tokens are bound to their session and superseded or cancelled with
   const a=await authority(),other=await authority(),s=store();const first=await s.begin(a);
   await refused(s.activate(other,first.pendingToken,totp(first.secret)),'invalid_input');
   await refused(s.cancel(other.token,other.csrfToken,first.pendingToken),'invalid_input');
-  const second=await s.begin(a);await refused(s.activate(a,first.pendingToken,totp(first.secret)),'invalid_input');
+  const second=await s.begin(a);await refused(s.activate(a,first.pendingToken,totp(first.secret)),'setup_unavailable');
   await refused(s.cancel(a.token,'A'.repeat(43),second.pendingToken));
   await s.cancel(a.token,a.csrfToken,second.pendingToken);
-  await refused(s.activate(a,second.pendingToken,totp(second.secret)),'invalid_input');
+  await refused(s.activate(a,second.pendingToken,totp(second.secret)),'setup_unavailable');
   assert.equal((await factor()).secret_envelope,null);assert.ok((await pool.query('SELECT consumed_at FROM cloud_factor_enrolments')).rows.every(r=>r.consumed_at));
 });
 test('regeneration changes the authority version and recovery codes but preserves the secret generation and replay history', async () => {
@@ -293,7 +293,7 @@ test('expiry behind a pending-row lock refuses activation before spending its bu
   const a=await authority(),pending=await store().begin(a),blocker=await pool.connect();let work:Promise<void>|undefined;
   try {
     await blocker.query('BEGIN');await blocker.query("UPDATE cloud_factor_enrolments SET expires_at=clock_timestamp()+interval '500 milliseconds'");
-    work=refused(store().activate(a,pending.pendingToken,totp(pending.secret)),'invalid_input');await blocked('cloud_factor_enrolments');
+    work=refused(store().activate(a,pending.pendingToken,totp(pending.secret)),'setup_unavailable');await blocked('cloud_factor_enrolments');
     const {setTimeout:delay}=await import('node:timers/promises');await delay(550);await blocker.query('COMMIT');await work;
     assert.equal((await pool.query('SELECT attempts FROM cloud_factor_enrolments')).rows[0].attempts,0);assert.equal((await factor()).secret_envelope,null);
   } finally {await blocker.query('ROLLBACK');blocker.release();await work;}
@@ -411,7 +411,7 @@ test('pending password fingerprint and factor version changes refuse activation 
   await refused(store().activate(a,pending.pendingToken,totp(pending.secret)),'invalid_input');
   assert.equal((await pool.query('SELECT attempts FROM cloud_factor_enrolments')).rows[0].attempts,0);
   await pool.query('UPDATE cloud_factor_enrolments SET password_fingerprint=$1,base_version=1',[original]);
-  await refused(store().activate(a,pending.pendingToken,totp(pending.secret)),'invalid_input');
+  await refused(store().activate(a,pending.pendingToken,totp(pending.secret)),'setup_unavailable');
   assert.equal((await pool.query('SELECT attempts FROM cloud_factor_enrolments')).rows[0].attempts,0);assert.equal((await factor()).secret_envelope,null);
 });
 test('cross-account pending tokens cannot spend the other account attempt or publish a factor',async()=>{
@@ -499,4 +499,27 @@ for(const waitAt of ['session lock','management write'] as const) test(`a TOTP w
     await blocker.query('ROLLBACK');blocker.release();await work?.catch(()=>{});await timedPool.end();
     await pool.query(`DROP FUNCTION ${schema}.clock_timestamp()`);await pool.query('DROP TABLE factor_test_clock');
   }
+});
+
+for(const reason of ['expired','consumed','superseded'] as const)test(`${reason} setup tells its owner to start again without spending proof or attempts`,async()=>{
+  const a=await authority(),s=store(),pending=await s.begin(a);
+  if(reason==='expired')await pool.query("UPDATE cloud_factor_enrolments SET created_at=clock_timestamp()-interval '2 seconds',expires_at=clock_timestamp()-interval '1 second'");
+  else if(reason==='consumed')await s.cancel(a.token,a.csrfToken,pending.pendingToken);
+  else await s.begin(a);
+  const before=(await pool.query('SELECT * FROM cloud_factor_enrolments ORDER BY id')).rows;
+  await refused(s.activate(a,pending.pendingToken,totp(pending.secret)),'setup_unavailable');
+  await refused(s.cancel(a.token,a.csrfToken,pending.pendingToken),'setup_unavailable');
+  assert.deepEqual((await pool.query('SELECT * FROM cloud_factor_enrolments ORDER BY id')).rows,before);
+  assert.equal((await factor()).secret_envelope,null);
+  assert.equal((await pool.query('SELECT count(*) FROM cloud_factor_replays')).rows[0].count,'0');
+  assert.equal((await transaction(pool,c=>resolveSession(c,a.token))).accountId,accountId);
+});
+test('a removed factor is distinct from invalid input and leaves the fresh session intact',async()=>{
+  await active();await seedCode('B'.repeat(32));
+  await store().remove({...await authority(),proof:recovery('B'.repeat(32))});
+  const a=await authority(),before=await factor();
+  await refused(store().remove(a),'factor_not_active');
+  await refused(store().regenerate(a),'factor_not_active');
+  assert.deepEqual(await factor(),before);
+  assert.equal((await transaction(pool,c=>resolveSession(c,a.token))).accountId,accountId);
 });

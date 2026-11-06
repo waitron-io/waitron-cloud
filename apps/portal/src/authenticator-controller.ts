@@ -27,7 +27,12 @@ export class AuthenticatorController {
   }
   #managementFailure(result:Extract<ApiResult<unknown>,{ok:false}>,change=false){
     this.#failure(result,change);
-    if(result.status===400&&result.code==='invalid_input')this.error='factorCheckSettings';
+    if(result.status===400){
+      if(result.code==='invalid_input')this.error='factorCheckSettings';
+      if(result.code==='setup_unavailable'){this.error='factorSetupUnavailable';this.enrolment=undefined;}
+      if(result.code==='factor_not_active')this.error='factorNotActive';
+      if(result.code==='password_too_long')this.error='factorPasswordTooLong';
+    }
   }
   #start(){if(this.pending||this.waiting)return undefined;this.pending=true;this.error=undefined;this.requiredField=undefined;this.#changed();return this.#generation;}
   #required(error:'requiredPassword'|'factorCodeRequired'|'factorCodeInvalid'|'factorConfirmationInvalid',field:NonNullable<AuthenticatorController['requiredField']>){if(!this.pending&&!this.waiting){this.error=error;this.requiredField=field;this.#changed();}return false as const;}

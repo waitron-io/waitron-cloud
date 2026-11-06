@@ -156,3 +156,15 @@ for (const operation of ['load', 'begin', 'cancel'] as const) for (const format 
     assert.equal(f.replies.length, 0);
   });
 }
+
+for(const [code,want,actions] of [
+ ['setup_unavailable','factorSetupUnavailable',['activate','cancel']],
+ ['factor_not_active','factorNotActive',['remove','regenerate']],
+ ['password_too_long','factorPasswordTooLong',['begin','activate','remove','regenerate']],
+] as const)for(const action of actions)test(`real HTTP client preserves ${code} for ${action} guidance`,async t=>{
+ const {controller:c,replies,requests}=fixture(t);c.status=active;c.enrolment=enrolment;authority(c);
+ replies.push({status:400,body:{error:code}});
+ await c[action]();assert.equal(c.error,want);assert.equal(c.pending,false);assert.equal(requests.length,1);
+ assert.equal(requests[0]!.url,`/api/account/authenticator/${action}`);cleared(c);
+ if(code==='setup_unavailable')assert.equal(c.enrolment,undefined);
+});

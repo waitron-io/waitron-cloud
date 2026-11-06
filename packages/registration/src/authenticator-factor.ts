@@ -9,7 +9,7 @@ import {transaction} from './transaction.ts';
 export interface FactorAuthority {token: string; csrfToken: string; password: string; proof?: FactorProof}
 export interface FactorManagementPolicy {pendingLifetimeMs: number; enrolmentAttempts: number}
 export class FactorManagementError extends Error {
-  readonly code: 'permission_denied' | 'invalid_input' | 'temporarily_unavailable';
+  readonly code: 'permission_denied' | 'invalid_input' | 'setup_unavailable' | 'factor_not_active' | 'temporarily_unavailable';
   constructor(code: FactorManagementError['code'] = 'permission_denied') {super(code); this.name='FactorManagementError'; this.code=code;}
 }
 interface Context {
@@ -103,9 +103,10 @@ export class AuthenticatorFactorStore {
         if(typeof pendingToken!=='string' || !TOKEN.test(pendingToken)) return new FactorManagementError('invalid_input');
         pending=(await client.query('SELECT * FROM cloud_factor_enrolments WHERE token_hash=$1 FOR UPDATE',[factorDigest(pendingToken)])).rows[0];
         if(!pending || pending.account_id!==context.accountId || pending.session_id!==context.sessionId
-          || pending.password_fingerprint!==context.fingerprint || pending.base_version!==context.factor.version
-          || pending.consumed_at || pending.expires_at<=await factorNow(client) || pending.attempts>=pending.attempt_limit)
-          return new FactorManagementError('invalid_input');
+          || pending.password_fingerprint!==context.fingerprint) return new FactorManagementError('invalid_input');
+        if(pending.base_version!==context.factor.version || pending.consumed_at || pending.expires_at<=await factorNow(client))
+          return new FactorManagementError('setup_unavailable');
+        if(pending.attempts>=pending.attempt_limit) return new FactorManagementError('invalid_input');
         context.deadline=new Date(Math.min(context.deadline.getTime(),pending.expires_at.getTime()));
         await client.query('UPDATE cloud_factor_enrolments SET attempts=attempts+1 WHERE token_hash=$1',[factorDigest(pendingToken)]);
       }
@@ -179,7 +180,7 @@ export class AuthenticatorFactorStore {
   }
   async regenerate(a:FactorAuthority):Promise<{status:'changed';active:true;recoveryCodes:string[]}> {
     return this.#run(a,async c=>{
-      if(!c.factor.secret_envelope) throw new FactorManagementError('invalid_input');
+      if(!c.factor.secret_envelope) throw new FactorManagementError('factor_not_active');
       const secret=decryptFactorSecret(c.factor.secret_envelope,this.#keys!,{accountId:c.accountId,version:c.factor.version,purpose:'active'});
       if(!secret) throw new FactorManagementError('temporarily_unavailable');
       const version=c.factor.version+1,envelope=this.#encrypt(secret,c.accountId,version);
@@ -191,7 +192,7 @@ export class AuthenticatorFactorStore {
   }
   async remove(a:FactorAuthority):Promise<{status:'changed';active:false}> {
     return this.#run(a,async c=>{
-      if(!c.factor.secret_envelope) throw new FactorManagementError('invalid_input');
+      if(!c.factor.secret_envelope) throw new FactorManagementError('factor_not_active');
       await this.#lockSessions(c,a);
       await c.client.query('UPDATE cloud_authenticator_factors SET version=version+1,secret_envelope=NULL,secret_generation=NULL WHERE account_id=$1',[c.accountId]);
       await c.client.query('UPDATE cloud_factor_recovery_codes SET consumed_at=clock_timestamp() WHERE account_id=$1 AND consumed_at IS NULL',[c.accountId]);
@@ -204,11 +205,11 @@ export class AuthenticatorFactorStore {
         const session=await this.#session(client,token,csrfToken);
         if(typeof pendingToken!=='string' || !TOKEN.test(pendingToken)) throw new FactorManagementError('invalid_input');
         const pending:Pending=(await client.query('SELECT * FROM cloud_factor_enrolments WHERE token_hash=$1 FOR UPDATE',[factorDigest(pendingToken)])).rows[0];
-        if(!pending || pending.account_id!==session.accountId || pending.session_id!==session.sessionId || pending.consumed_at
-          || pending.expires_at<=await factorNow(client)) throw new FactorManagementError('invalid_input');
+        if(!pending || pending.account_id!==session.accountId || pending.session_id!==session.sessionId) throw new FactorManagementError('invalid_input');
+        if(pending.consumed_at || pending.expires_at<=await factorNow(client)) throw new FactorManagementError('setup_unavailable');
         await client.query('UPDATE cloud_factor_enrolments SET consumed_at=clock_timestamp() WHERE token_hash=$1',[factorDigest(pendingToken)]);
         await resolveSession(client,token,{csrfToken,touch:false});
-        if(await factorNow(client)>=pending.expires_at) throw new FactorManagementError('invalid_input');
+        if(await factorNow(client)>=pending.expires_at) throw new FactorManagementError('setup_unavailable');
       });
     } catch(error) {throw expected(error)??error;}
   }

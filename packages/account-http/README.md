@@ -222,7 +222,7 @@ All responses disable caching and referrer forwarding, and set `nosniff`. Errors
 
 | Status | Code | Meaning |
 | --- | --- | --- |
-| 400 | `invalid_input`, `link_unavailable`, `password_compromised` | Invalid shape, ambiguous cookies, unusable completion token or a password present in the configured corpus |
+| 400 | `invalid_input`, `link_unavailable`, `password_compromised`, `setup_unavailable`, `factor_not_active`, `password_too_long` | Invalid shape, ambiguous cookies, unusable completion token, a password present in the configured corpus, or a refused authenticator change as described in the [authenticator guide](../../docs/authenticator-app.md#call-the-api) |
 | 401 | `credentials_invalid`, `unauthenticated`, `session_expired` | Login failed, no usable session, or a previously live session reached its deadline |
 | 403 | `forbidden`, `credentials_invalid` | Wrong origin/host, missing/incorrect CSRF, or refused authenticator management authority |
 | 404 / 405 | `not_found` / `method_not_allowed` | Unknown path or wrong method |
