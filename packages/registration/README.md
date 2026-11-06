@@ -507,8 +507,36 @@ commit. Failed connections are discarded; a client acquired after expiry cannot
 process feedback. Transaction-local limits also stop stalled server work without
 changing later borrowers' settings. A timed-out pool request is discarded when
 it returns; CLI connection and pool shutdown limits still need implementation.
-Health, CLI supervision and the full shutdown proof remain incomplete. Neither this
-internal adapter nor the worker is exported from the package's public entry point.
+The worker admits at most two concurrent operations. You can inspect
+`worker.status(sample)` using a trusted operational sample with `observedAt`
+(Unix milliseconds), `queueAgeSeconds`, `deadLetterCount`,
+`configurationRevision` and `configurationDrift`. The sample must come from your
+operational collector, never from a feedback envelope. Provider collection is
+not wired yet; without a fresh sample the report cannot say `ready`.
+
+Readiness requires successful polls from both slots. A failed slot stays failed
+until that slot succeeds; progress in the other slot cannot hide it. A receive
+or delete older than fifteen seconds, processing older than five seconds, or
+an aborted consumer closes readiness. Polls and samples expire after 35 seconds,
+the longest receive/processing/delete cycle. Future samples and backwards
+activity timestamps also refuse readiness. These are local freshness budgets;
+queue-age and rate alert thresholds remain D103's separate decision. A large
+queue age or dead-letter count is reported without selecting an alert threshold.
+
+The report includes aggregate poll and commit ages, active consumers, fixed
+failure codes, queue age, dead-letter count and the configured revision. A commit
+remains visible when deletion fails, because the next delivery must replay that
+durable result. Drift or a different sampled revision closes readiness. No
+envelope, recipient, receipt handle or arbitrary collector field enters the
+report. CLI supervision and the full shutdown proof remain incomplete. Neither
+this internal adapter nor the worker is exported from the package's public entry
+point.
+
+Run the local health cases and their PostgreSQL durability checks:
+
+```sh
+node scripts/test-postgres.mjs exec pnpm --dir packages/registration exec node --test --test-timeout=120000 test/ses-feedback-health.test.ts test/ses-feedback-health-durability.test.ts
+```
 
 Run the focused PostgreSQL checks, including competing consumers and process death
 immediately before and after commit:

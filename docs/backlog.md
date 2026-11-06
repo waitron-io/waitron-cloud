@@ -522,8 +522,17 @@ deadline. Transaction-local PostgreSQL limits also bound a stalled commit;
 failed connections are discarded and a connection returned after expiry cannot
 start feedback work. Local checks cover cumulative statements, deferred commit,
 disconnection and safe replay without premature deletion or partial writes.
-Health reporting, CLI and complete shutdown proof remain unbuilt. The CLI must
-also bound new connection establishment and pool shutdown; a pending pool request
+The worker now admits at most two concurrent operations and exposes aggregate
+health from both consumer slots. Readiness requires fresh successful polls and a
+fresh trusted operational sample; a failed or overdue slot, stopped consumer,
+changed configuration revision or observed drift closes readiness. The report
+keeps commit freshness separate from acknowledgement, reports queue age and
+dead-letter count, and emits only fixed failures and aggregate fields. Its
+35-second freshness limit is the maximum request/transaction/request cycle,
+not an alert threshold. Local stand-ins and PostgreSQL checks cover these states;
+collecting authenticated provider samples remains unwired. CLI and complete
+shutdown proof remain unbuilt. The CLI must also bound new connection
+establishment and pool shutdown; a pending pool request
 is discarded when it returns. Audited removal and production
 enablement remain future tasks. Task 8 must qualify any additional event types;
 `Rendering Failure` currently refuses. It must also reconcile historical Paris-only
