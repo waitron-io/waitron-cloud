@@ -321,12 +321,11 @@ Remaining work:
   The worker checks consent once after leasing. Withdrawal after that check does not cancel
   a job already in flight; it prevents new submits and subsequent leases. A resumed
   job without consent withholds previously saved batches and keeps cost already spent,
-  as the contract now states. Consent listing now reads all owned venues and their current
-  consent in at most two database queries. A real PostgreSQL check with 32 venues
-  reproduces the former 33 reads and verifies two after batching, with unchanged
-  ordered results and current-owner, enabled-account, verified-email, version and
-  withdrawal rules. This is a query-count measurement, not deployment-scale latency
-  or capacity evidence; qualify those separately before launch.
+  as the contract now states. Consent listing reads your owned venues and current
+  consent in one database statement, preserving ordering and current-owner,
+  enabled-account, verified-email, version and withdrawal rules. Query-count checks
+  with 32 venues do not establish deployment-scale latency or capacity; qualify
+  those separately before launch.
   Append migrations at the then-current next numbers without editing landed migrations.
   Task 8 retains two defensive checks whose independent role in normal worker runs is not
   proved: refusing an already-saved batch write, and refusing finish before all batch entries
