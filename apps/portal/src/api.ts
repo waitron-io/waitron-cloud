@@ -38,9 +38,10 @@ function validResult(path: string, value: unknown, status: number): boolean {
   if(path==='/installations/revoke') return validInstallation(data);
   const account = typeof data.accountId === 'string' && data.accountId.length > 0;
   if (path === '/session' || path === '/session/activity') return account && typeof data.expiresAt === 'string' && Number.isFinite(Date.parse(data.expiresAt));
-  if (path === '/signup/complete') return account && typeof data.organisationId === 'string' && typeof data.legalBusinessId === 'string';
-  if (path.endsWith('/request')) return data.status === 'accepted';
-  return path === '/password-reset/complete' && data.status === 'completed';
+  if (path === '/signup/complete') return status === 201 && ['accountId', 'organisationId', 'legalBusinessId']
+    .every(field => typeof data[field] === 'string' && data[field].trim().length > 0);
+  if (path === '/signup/request' || path === '/password-reset/request') return status === 202 && data.status === 'accepted';
+  return path === '/password-reset/complete' && status === 200 && data.status === 'completed';
 }
 export async function accountRequest<T>(path: string, body?: Record<string, unknown>): Promise<ApiResult<T>> {
   const headers: Record<string, string> = {};
@@ -68,7 +69,7 @@ export async function accountRequest<T>(path: string, body?: Record<string, unkn
       if(response.status===409)codes.push('approval_required','conflict','target_not_fresh','recovery_active');
       if(response.status===403)codes.push('local_integration_only');
     }
-    const code = value && typeof value === 'object' && 'error' in value && typeof value.error === 'string' && codes.includes(value.error)
+    const code = !response.ok && value && typeof value === 'object' && 'error' in value && typeof value.error === 'string' && codes.includes(value.error)
       ? value.error : 'unexpected_response';
     return {ok: false, status: response.ok ? 503 : response.status, code, retryAfterMs: elapsedRetry ? Math.max(0, retryAfterMs - (performance.now() - receivedAt)) : retryAfterMs};
   } catch { return {ok: false, status: 0, code: 'network_error', retryAfterMs: 0}; }
