@@ -10,7 +10,7 @@ Publish the current merged source, replacing the September `0.1.0` baseline. Use
 
 The owner supplies a classic PAT with `write:packages` and actual authority over the `waitron-io` package, stored as the Waitron Actions secret `UI_PACKAGES_WRITE_TOKEN`, exposed only to publication. [GitHub requires the token’s package permissions as well as its scope](https://docs.github.com/en/packages/learn-github-packages/about-permissions-for-github-packages).
 
-Keep ordinary source package checks, built exports, Elastic License 2.0 and `LICENSE-GRANTS.md`. A failed publication remains a failed workflow; the next qualifying merge publishes a new version. Add no scheduled publisher, Cloud polling, catch-up, ledger, input fingerprints, reservations or recovery.
+Keep ordinary source package checks, built exports, Elastic License 2.0 and `LICENSE-GRANTS.md`. The published manifest records the full Waitron source commit as `waitronSource.commit`. A failed publication remains a failed workflow; the next qualifying merge publishes a new version. Add no scheduled publisher, Cloud polling, catch-up, ledger, input fingerprints, reservations or recovery.
 
 **Accepted risk:** Token theft or expiry can compromise or interrupt publication, and a failed publish may be missed until the next qualifying merge.
 
@@ -18,7 +18,7 @@ Keep ordinary source package checks, built exports, Elastic License 2.0 and `LIC
 
 Configure daily authenticated Dependabot updates for `apps/portal`, `packages/ui-smoke` and the lockfile. Updates open PRs that run normal CI and require review, with no automerge.
 
-Grant Cloud Read access in the package’s Manage Actions access settings. [Dependabot can use that grant](https://docs.github.com/en/code-security/concepts/supply-chain-security/automatic-dependabot-access-to-github-registries) without another registry token. Existing Cloud `.npmrc`, `NODE_AUTH_TOKEN` and BuildKit credentials remain.
+Cloud already has package access through Manage Actions access (owner readback, 6 November). [Dependabot can use that grant](https://docs.github.com/en/code-security/concepts/supply-chain-security/automatic-dependabot-access-to-github-registries) without another registry token. Existing Cloud `.npmrc`, `NODE_AUTH_TOKEN` and BuildKit credentials remain. Before merging an update, the reviewer renews ordinary root/docs records and updates smoke-test version/source expectations from the verified release, retaining the assertions and browser checks.
 
 **Accepted risk:** Daily checks may combine releases into one update, and a published version may be incompatible with the portal.
 
@@ -36,11 +36,9 @@ Delete obsolete Cloud files after the update and lag checks are in place:
 
 - `.github/workflows/ui-release.yml` and `scripts/release/ui-source.json`.
 - PR978 `ui-ledger.mjs`, `ui-ledger-git.mjs` and their owning tests.
-- PR995 ledger-only preparation paths in `prepare-ui.mjs` and `ui-manifest.mjs`, plus owning tests, once F replaces preparation.
+- PR995 `prepare-ui.mjs`, `ui-manifest.mjs` and their tests, once F replaces preparation.
 - PR1001 `record-ui-artifact.mjs`, `ui-artifact.mjs` and owning tests.
 
-Retain useful ordinary package and license checks in Waitron. Update incoming links before deleting `docs/shared-ui-release-ledger.md` and superseded plans `2026-11-05-public-ui-registry.md` and `2026-11-06-ui-build-evidence.md`. Renew ordinary root/docs records during code removal.
+Retain useful ordinary package and license checks in Waitron. Update incoming links before deleting `docs/shared-ui-release-ledger.md` and superseded plans `2026-11-05-public-ui-registry.md` and `2026-11-06-ui-build-evidence.md`. Update tests that read the deleted workflow and the remaining install guide in `docs/shared-ui-release.md`. Renew ordinary root/docs records during code removal.
 
 Verify qualifying versus unrelated merges, private publication and increasing versions, failed-publication behavior, authenticated update PRs, and CI cases covering current idle versions, multiple newer releases, the seven-day boundary, missing metadata and registry failures.
-
-Cloud’s package Read grant remains an owner setup step.
