@@ -201,7 +201,7 @@ Build on your Mac using your existing package-read token as a BuildKit secret. T
 ```sh
 docker build --platform linux/amd64 \
   --secret id=npm_token,env=NODE_AUTH_TOKEN \
-  --build-arg SEAWEED_AMD64_SHA256=31fb804858885f9e7e18b6d3b1da09e824baac3e6a55b5a62c3c4c77e6ed6d7d \
+  --build-arg SEAWEED_AMD64_SHA256=31fb804858885f9e7f18b6d3b1da09e824baac3e6a55b5a62c3c4c77e6ed6d7d \
   -f deploy/local-stack/Dockerfile \
   --tag waitron-cloud-test:reviewed .
 ```

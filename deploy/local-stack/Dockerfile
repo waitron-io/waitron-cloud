@@ -13,7 +13,8 @@ RUN apk add --no-cache ca-certificates curl docker-cli haproxy iproute2 iptables
       arm64) archive=linux_arm64.tar.gz; digest="$SEAWEED_ARM64_SHA256" ;; \
       *) echo "Unsupported local-stack architecture: $TARGETARCH" >&2; exit 1 ;; \
     esac \
- && node /tmp/storage-archive-download.mjs "https://github.com/seaweedfs/seaweedfs/releases/download/${SEAWEED_VERSION}/${archive}" /tmp/weed.tgz \
+ && test -n "$digest" \
+ && node --use-env-proxy /tmp/storage-archive-download.mjs "https://github.com/seaweedfs/seaweedfs/releases/download/${SEAWEED_VERSION}/${archive}" /tmp/weed.tgz \
  && echo "$digest  /tmp/weed.tgz" | sha256sum -c - \
  && tar -xzf /tmp/weed.tgz -C /usr/local/bin weed \
  && rm /tmp/weed.tgz /tmp/storage-archive-download.mjs \

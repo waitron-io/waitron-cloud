@@ -70,7 +70,7 @@ export async function downloadStorageArchive(url, {
 
 if (import.meta.main) {
   try {
-    assert.equal(process.argv.length, 4, "Usage: storage-archive-download.mjs <url> <output>");
+    assert.ok(process.argv.length === 4, "Usage: storage-archive-download.mjs <url> <output>");
     const bytes = await downloadStorageArchive(process.argv[2], {
       report({ event, phase, status, bytesReceived, attempt }) {
         console.error(JSON.stringify({ event, phase, status, bytesReceived, attempt }));
@@ -78,7 +78,10 @@ if (import.meta.main) {
     });
     await writeFile(process.argv[3], bytes);
   } catch (error) {
-    console.error(JSON.stringify({ event: "failed", name: error.name, code: error.cause?.code ?? error.code }));
+    let message = String(error.message ?? error.name);
+    if (process.argv[2]) message = message.replaceAll(process.argv[2], "<archive URL>");
+    console.error(JSON.stringify({ event: "failed", name: error.name, code: error.cause?.code ?? error.code,
+      message: message.slice(0, 240) }));
     process.exitCode = 1;
   }
 }

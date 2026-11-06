@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
 import { createServer } from "node:http";
-import { copyFile, mkdtemp, readFile, readdir, rm } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import { copyFile, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -31,7 +32,7 @@ function run(f, preload = "") {
 }
 
 function records(result) {
-  return result.stderr.trim().split("\n").map(line => JSON.parse(line));
+  return result.stderr.trim().split("\n").filter(Boolean).map(line => JSON.parse(line));
 }
 
 // Removing the command entry point leaves a successful exit without an archive.
@@ -91,7 +92,9 @@ const timeout = AbortSignal.timeout.bind(AbortSignal);
 AbortSignal.timeout = ms => { if (ms !== 30000) throw Error("unexpected budget"); return timeout(500); };
 `), error => {
       assert.equal(error.code, 1, "the command itself must reject before the outer test timeout");
-      assert.deepEqual(records(error).at(-1), { event: "failed", name: phase === "retry pause" ? "AbortError" : "TimeoutError", code: 23 });
+      const failure = records(error).at(-1);
+      assert.deepEqual({ event: failure.event, name: failure.name, code: failure.code },
+        { event: "failed", name: phase === "retry pause" ? "AbortError" : "TimeoutError", code: 23 });
       return true;
     });
     assert.equal(requests, 1);
@@ -116,4 +119,93 @@ globalThis.setTimeout = (fn, ms, ...args) => timeout(fn, ms === 10000 ? 100 : ms
   });
   assert.equal(requests, 3);
   assert.deepEqual(await readdir(f.root), ["download.mjs"]);
+});
+
+test("a refused command reports its usage without hiding the assertion message", async t => {
+  const f = await fixture(t, (_request, response) => response.end());
+  await assert.rejects(execute(process.execPath, [f.command], { cwd: f.root }), error => {
+    assert.equal(error.code, 1);
+    assert.equal(records(error).at(-1).message, "Usage: storage-archive-download.mjs <url> <output>");
+    return true;
+  });
+});
+
+test("a malformed archive URL is redacted from the failure message", async t => {
+  const f = await fixture(t, (_request, response) => response.end());
+  f.url = "not a URL with private-user:private-password";
+  await assert.rejects(run(f), error => {
+    const message = records(error).at(-1).message;
+    assert.equal(typeof message, "string");
+    assert.ok(message.includes("<archive URL>"));
+    assert.ok(!error.stderr.includes("private-password"));
+    return error.code === 1;
+  });
+});
+
+test("a filesystem refusal retains a bounded diagnostic message", async t => {
+  const f = await fixture(t, (_request, response) => response.end("archive"));
+  f.output = join(f.root, "x".repeat(500));
+  await assert.rejects(run(f), error => {
+    const failure = records(error).at(-1);
+    assert.equal(failure.code, "ENAMETOOLONG");
+    assert.equal(typeof failure.message, "string");
+    assert.ok(failure.message.length > 0 && failure.message.length <= 240);
+    return error.code === 1;
+  });
+});
+
+async function imageFixture(t, proxy = false) {
+  let bytes;
+  const requests = [];
+  const f = await fixture(t, (request, response) => { requests.push(request.url); response.end(bytes); });
+  await mkdir(join(f.root, "source"));
+  await mkdir(join(f.root, "bin"));
+  await writeFile(join(f.root, "source/weed"), "controlled extracted binary\n");
+  await execute("tar", ["-czf", join(f.root, "input.tgz"), "-C", join(f.root, "source"), "weed"]);
+  bytes = await readFile(join(f.root, "input.tgz"));
+  const dockerfile = await readFile(new URL("../deploy/local-stack/Dockerfile", import.meta.url), "utf8");
+  // Run the actual acquisition chain with private paths and local HTTP bytes;
+  // package installation remains covered by the real image build.
+  const chain = /esac \\\n([\s\S]*?) \\\n && npm install/.exec(dockerfile);
+  assert.ok(chain, "the image must expose its acquisition/checksum/extraction chain");
+  const url = proxy ? "http://archive.invalid/weed.tgz" : f.url;
+  const shell = chain[1].replace(/^\s*&&\s*/, "")
+    .replaceAll("/tmp/storage-archive-download.mjs", "./download.mjs")
+    .replaceAll("/tmp/weed.tgz", "./weed.tgz")
+    .replaceAll("/usr/local/bin", "./bin")
+    .replace("https://github.com/seaweedfs/seaweedfs/releases/download/${SEAWEED_VERSION}/${archive}", url);
+  const env = { ...process.env, digest: createHash("sha256").update(bytes).digest("hex"),
+    HTTP_PROXY: proxy ? new URL(f.url).origin : "", http_proxy: proxy ? new URL(f.url).origin : "",
+    HTTPS_PROXY: "", https_proxy: "", ALL_PROXY: "", all_proxy: "", NO_PROXY: "", no_proxy: "",
+    NODE_USE_ENV_PROXY: "0" };
+  return { ...f, requests, execute: (overrides = {}) => execute("/bin/sh", ["-c", shell], {
+    cwd: f.root, env: { ...env, ...overrides }, timeout: 5000,
+  }) };
+}
+
+test("the Dockerfile acquisition chain reports stages, extracts verified bytes and removes its inputs", async t => {
+  const f = await imageFixture(t);
+  const result = await f.execute();
+  assert.equal(await readFile(join(f.root, "bin/weed"), "utf8"), "controlled extracted binary\n");
+  assert.ok(records(result).some(record => record.event === "headers" && record.status === 200));
+  assert.ok(!(await readdir(f.root)).some(name => name === "weed.tgz" || name === "download.mjs"));
+});
+
+test("the Dockerfile acquisition chain refuses an incorrect checksum before extracting", async t => {
+  const f = await imageFixture(t);
+  await assert.rejects(f.execute({ digest: "0".repeat(64) }), error => error.code === 1);
+  assert.deepEqual(await readdir(join(f.root, "bin")), []);
+});
+
+test("the Dockerfile acquisition chain refuses a missing checksum before extracting", async t => {
+  const f = await imageFixture(t);
+  await assert.rejects(f.execute({ digest: "" }), error => error.code === 1);
+  assert.deepEqual(await readdir(join(f.root, "bin")), []);
+});
+
+test("the Dockerfile acquisition preserves inherited HTTP proxy configuration", async t => {
+  const f = await imageFixture(t, true);
+  await assert.doesNotReject(f.execute());
+  assert.deepEqual(f.requests, ["http://archive.invalid/weed.tgz"]);
+  assert.equal(await readFile(join(f.root, "bin/weed"), "utf8"), "controlled extracted binary\n");
 });
