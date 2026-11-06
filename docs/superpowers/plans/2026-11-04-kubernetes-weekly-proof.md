@@ -107,13 +107,24 @@ sessions also stop at that boundary; actual AWS policy behavior remains unqualif
 
 ## Task 3: Reserve all cost durably before billable actions
 
-**Files:** `scripts/kubernetes-proof-budget.mjs`, its `.test.mjs`, `deploy/kubernetes/proof/contracts/weekly-proof-v1.schema.json`. **Interfaces:** `reserveRun(identity,prices,ledgerStore):Promise<Reservation>` persists `{uuid,head,tree,upperUsd,expiry,state,instanceId}` before launch; `reconcileRun(uuid,observations):Promise<void>` never clears an unknown outcome.
+**Files:** `scripts/kubernetes-proof-budget.mjs`, its `.test.mjs`, `deploy/kubernetes/proof/contracts/weekly-proof-v1.schema.json`. **Interfaces:** `reserveRun({scope,identity,evidence,now,store,clock}):Promise<Reservation>` returns `{uuid,head,tree,startedAt,expiry,liabilityUntil,upperMicroUsd,months,evidenceHash}` only after complete conditional bookings. `reconcileRun({scope,uuid,observations,now,store}):Promise<void>` never clears an unknown outcome. Amounts are integer USD millionths; the future launch controller separately journals the instance ID and launch state.
 
 - [ ] TDD: `two_cas_writers_one_launch`, `cancel_keeps_reservation`, `duplicate_uuid_no_second_charge`, `price_or_bill_unknown_refuses`, `month_crossing_reserves_both`, `ten_dollars_refuses`, `cleanup_unknown_blocks_all`. Run `node --test scripts/kubernetes-proof-budget.test.mjs` RED, implement conditional create/update (`If-None-Match`/`If-Match`), GREEN; remove each guard independently and require the original refusal to fail.
 - [ ] Setup reserves its own bounded costs before creating billable resources and seeds the allocation/baseline. Runtime first conditionally acquires `d570/ledger/active.json`, then `YYYY-MM.json`; bucket policy forbids unconditional writes. Missing/corrupt/unrecognized records refuse. Conditional month initialization uses the approved baseline plus persistent overhead and carried reservations, without recurring owner setup; unknown prior usage refuses. Acquire crossing months in UTC order and reserve the full bound in both; partial acquisition stays booked and blocks launch. Active ownership survives cancellation/month changes, never timeout-clears; GitHub concurrency is convenience only.
 - [ ] Require same-day official regional On-Demand Linux ARM, EBS gp3, S3 storage/requests/transfer, EventBridge/Lambda/log prices, URLs/UTC and reconciled spend baseline. Include taxes if applicable, lifecycle-delay contingency, all retained storage/versions and fixed idle protection cost. Unknown price, lagging unexplained billing or missing allowance refuses; alerts are not the cap. Count setup/drills/retries/failures, deployment/branch runs and five-Monday months within USD 10, refusing extra firings rather than guaranteeing every trigger fits.
 - [ ] Reserve before uploads: 120-minute absolute proof lifetime plus 15-minute cleanup allowance, 64 GiB root, bounded payload/results and protection costs. Safety drills use at most five-minute deadlines plus that cleanup allowance under the same cap. Verify private S3 topology and any existing endpoint/network allocation cost; unresolved private/offline transfer or all-in price is a named blocker, never permission to add public access.
 - [ ] Bound payload to 16 GiB/24 hours, receipts 64 MiB/run/30 days, ledger 1 MiB/month/13 months; preserve unresolved ownership records. At most three attempts/API, 64 MiB multipart parts, 60 five-second release polls, 480 fifteen-second result polls, 5000 S3 requests/run; abort incomplete multipart within a day. One-day bounded expiry logs; no unbounded versions/cache. Hitting a bound fails, never truncates mandatory evidence into success. Keep spent reservations booked for the month; no lagging-bill refund or new run while cleanup/price/billing/protection health is uncertain.
+
+**Reservation-core prerequisite:** the conditional active/month engine and S3
+adapter now retain complete original identities, price-source evidence and cleanup
+facts. Synthetic tests cover competing controllers, exact retries, unknown cleanup,
+month and retention crossings, correlated and checksummed history, terminal
+ownership changes, pre/post-write deadline/day changes and partial/lost responses.
+Known cleanup completes partial bookings before release, and exact cleanup retry
+is read-only. Every required workflow test file is checked before Node runs. Bookings are integer millionths of USD, never
+refunded, and refuse totals at or above USD 10. Current price/billing acquisition,
+all-in bound construction, setup integration and real S3/termination qualification
+remain open; Task 3 is not complete and this core grants no live admission.
 
 ## Task 4: Prove both independent termination actors
 
