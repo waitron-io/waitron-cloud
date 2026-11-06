@@ -42,6 +42,14 @@ status, while independently owned resources can still be cleaned. Foreign
 resources remain untouched. Volume deletion requires a valid run tag, available
 state and no attachments.
 
+Terminating an instance can also delete its disks. Before that request, the sweep
+reads every disk marked for deletion in its block mappings, including the root.
+Each disk must match the same stack, proof, original run and expiry, with one
+confirmed attachment to that instance and device. Missing or contradictory disk
+records withhold termination and healthy status while independent cleanup
+continues. These are read-time checks; live qualification must also verify that
+runtime roles cannot change tags or attachments between the read and termination.
+
 A valid future `ExpiresAt` cannot extend a resource beyond its original lifetime.
 The sweep checks it against the earlier of the approved access expiry and 135
 minutes after the original instance launch or volume creation. For an instance,
@@ -49,8 +57,11 @@ the primary network interface's attachment time supplies the original launch;
 `LaunchTime` is only its most recent start. A restart therefore grants no extra
 time. An excessive future expiry triggers owned cleanup and withholds healthy
 status. A missing or malformed expiry grants no grace. Missing or contradictory
-service times trigger owned instance termination but do not authorize volume
-deletion; the sweep reports the error after attempting independent cleanup. Each inventory is bounded to
+service times trigger owned instance termination only after those disk checks, and do
+not authorize direct volume deletion; the sweep reports the error after attempting independent cleanup.
+The observation clock is refreshed after both inventories so a resource created
+during a read is not treated as being from the future. A backwards or invalid
+clock prevents a healthy result. Each inventory is bounded to
 20 pages of at most 100 resources, and repeated tokens or duplicate IDs fail.
 
 A successful heartbeat at `d570/health/reaper.json` records accepted termination
@@ -100,7 +111,11 @@ closure, and fixed local-deadline bootstrap. Complete the real OIDC refusal and
 both termination drills with exact actor and cleanup evidence. Preserve protection
 and ownership records through partial setup or uncertain cleanup. Do not remove
 the explicit launch deny, enable the rule or ask the owner to apply this template
-until those dependencies are reviewed and their required gates pass. The full P1
+until those dependencies are reviewed and their required gates pass. The live
+drills must capture the SDK's actual pending/shutting-down/terminated shapes,
+original interface time versus latest launch time, clock differences and disk
+attachment state. A shutting-down row with missing origin still withholds health;
+only an observed terminated row needs no surviving interface. The full P1
 service/fault proof remains separate; see the
 [implementation plan](../../../docs/superpowers/plans/2026-11-04-kubernetes-weekly-proof.md).
 

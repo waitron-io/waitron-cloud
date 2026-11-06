@@ -19,7 +19,30 @@ function ownership(resource, stackId, kind) {
   if (!(kind === 'instance' ? /^i-[0-9a-f]{17}$/ : /^vol-[0-9a-f]{17}$/).test(id)) throw new Error('Invalid resource identity');
   if (kind === 'instance' && !['pending', 'running', 'stopping', 'stopped', 'shutting-down', 'terminated'].includes(resource.State?.Name)) throw new Error('Invalid instance inventory');
   if (kind === 'volume' && (!Array.isArray(resource.Attachments) || !['creating', 'available', 'in-use', 'deleting', 'deleted', 'error'].includes(resource.State))) throw new Error('Invalid volume inventory');
-  return { id, expiry: timestamp(tags.ExpiresAt), validRun: RUN.test(tags.Run) };
+  return { id, expiry: timestamp(tags.ExpiresAt), expiryTag: tags.ExpiresAt, run: tags.Run, validRun: RUN.test(tags.Run) };
+}
+
+async function checkTerminationVolumes(aws, resource, owned, stackId) {
+  const mappings = resource.BlockDeviceMappings;
+  if (!Array.isArray(mappings) || !mappings.length || mappings.length > 64
+    || typeof resource.RootDeviceName !== 'string' || !resource.RootDeviceName
+    || mappings.some(m => typeof m?.DeviceName !== 'string' || !m.DeviceName
+      || !/^vol-[0-9a-f]{17}$/.test(m.Ebs?.VolumeId) || typeof m.Ebs?.DeleteOnTermination !== 'boolean')
+    || new Set(mappings.map(m => m.DeviceName)).size !== mappings.length
+    || new Set(mappings.map(m => m.Ebs.VolumeId)).size !== mappings.length
+    || !mappings.some(m => m.DeviceName === resource.RootDeviceName && m.Ebs.DeleteOnTermination)) throw new Error(`Invalid termination disk mapping: ${owned.id}`);
+  const deleted = mappings.filter(m => m.Ebs.DeleteOnTermination);
+  const result = await aws.call('ec2', 'DescribeVolumes', { VolumeIds: deleted.map(m => m.Ebs.VolumeId) });
+  if (!Array.isArray(result?.Volumes) || result.Volumes.length !== deleted.length || result.NextToken !== undefined) throw new Error('Invalid termination disk inventory');
+  // EC2 can delete disks on termination without a DeleteVolume request from this sweep.
+  for (const mapping of deleted) {
+    const volume = result.Volumes.find(v => v.VolumeId === mapping.Ebs.VolumeId);
+    const disk = ownership(volume, stackId, 'volume');
+    if (!disk || disk.run !== owned.run || disk.expiryTag !== owned.expiryTag) throw new Error('Uncertain termination disk ownership or expiry');
+    if (volume.State !== 'in-use' || volume.Attachments.length !== 1
+      || volume.Attachments[0]?.InstanceId !== owned.id || volume.Attachments[0]?.Device !== mapping.DeviceName
+      || volume.Attachments[0]?.State !== 'attached') throw new Error('Uncertain termination disk attachment');
+  }
 }
 
 function serviceTime(value) {
@@ -88,6 +111,10 @@ export async function sweepExpired({ aws, account, region, stackId, bucket, acce
   if (!Number.isSafeInteger(started) || started <= 0 || !Number.isFinite(new Date(started).getTime())) throw new Error('Invalid expiry clock');
   const instances = await inventory(aws, 'DescribeInstances', stackId);
   const volumes = await inventory(aws, 'DescribeVolumes', stackId);
+  // A resource may be created while its inventory request is in flight.
+  const observed = now();
+  if (!Number.isSafeInteger(observed) || !Number.isFinite(new Date(observed).getTime())
+    || observed < started || observed - started > 120_000) throw new Error('Invalid expiry clock or sweep deadline');
   // Structural ambiguity in either inventory blocks every destructive request.
   const ownedInstances = instances.map(resource => ({ resource, owned: ownership(resource, stackId, 'instance') }));
   const ownedVolumes = volumes.map(resource => ({ resource, owned: ownership(resource, stackId, 'volume') }));
@@ -96,13 +123,14 @@ export async function sweepExpired({ aws, account, region, stackId, bucket, acce
     if (!owned) return false;
     if (!owned.validRun) { failures.push(new Error(`Invalid run ownership: ${owned.id}`)); return false; }
     if (kind === 'instance' && resource.State.Name === 'terminated') return false;
-    const timing = cleanupTime(resource, owned, kind, started, timestamp(accessExpiry));
+    const timing = cleanupTime(resource, owned, kind, observed, timestamp(accessExpiry));
     if (timing.error) failures.push(timing.error);
     return timing.due;
   };
   for (const { resource, owned } of ownedInstances) {
     if (!due(resource, owned, 'instance')) continue;
     try {
+      await checkTerminationVolumes(aws, resource, owned, stackId);
       const result = await aws.call('ec2', 'TerminateInstances', { InstanceIds: [owned.id] });
       if (!Array.isArray(result?.TerminatingInstances) || result.TerminatingInstances.length !== 1
         || result.TerminatingInstances[0].InstanceId !== owned.id
@@ -120,7 +148,7 @@ export async function sweepExpired({ aws, account, region, stackId, bucket, acce
   // Independent owned cleanup continues after a refusal, but partial cleanup earns no heartbeat.
   if (failures.length) throw failures[0];
   const completed = now();
-  if (!Number.isSafeInteger(completed) || completed < started || completed - started > 120_000) throw new Error('Invalid expiry clock or sweep deadline');
+  if (!Number.isSafeInteger(completed) || completed < observed || completed - started > 120_000) throw new Error('Invalid expiry clock or sweep deadline');
   const health = { schema: 'd570-sweep-v1', account, region, stackId, startedAt: new Date(started).toISOString(), completedAt: new Date(completed).toISOString(), terminationRequested, volumeDeletionRequested };
   await aws.call('s3', 'PutObject', { Bucket: bucket, Key: 'd570/health/reaper.json', Body: JSON.stringify(health), ContentType: 'application/json', ServerSideEncryption: 'AES256' });
   return health;

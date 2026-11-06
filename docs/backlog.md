@@ -3231,8 +3231,10 @@ implementation or production evidence.
   untouched without starving independently owned cleanup or publishing health.
   Original service times cap future expiry at 135 minutes and the approved access
   deadline; restart times cannot extend it. Missing or contradictory service times
-  request owned instance termination, retain uncertain volumes and withhold health.
-  Engine and rendered-Lambda checks exercise these guards; live EC2 time/ownership
+  request owned instance termination only after deletion-on-termination disks match
+  exact stack/run/expiry/attachment ownership; uncertain disks withhold termination
+  while independent cleanup continues. An observation clock refreshed after the
+  inventories preserves resources created during those reads. Engine and rendered-Lambda checks exercise these guards; live EC2 time/ownership
   and termination evidence remain open. That workflow selects proof/workflow PR
   changes and runs on every main push, so unrelated older PR heads need no absent
   proof files. Launches remain explicitly denied, the sweep rule disabled and CLI

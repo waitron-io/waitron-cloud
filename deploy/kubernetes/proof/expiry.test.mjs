@@ -10,17 +10,29 @@ const stackId = 'arn:aws:cloudformation:eu-south-2:462991287391:stack/d570/00000
 const run = '11111111-1111-4111-8111-111111111111';
 const tags = (extra = {}) => Object.entries({ Proof: 'D570', Stack: stackId, Run: run, ExpiresAt: '2026-11-05T19:59:59Z', ...extra }).map(([Key, Value]) => ({ Key, Value }));
 const origin = '2026-11-05T19:00:00Z';
-const instance = (extra = {}) => ({ LaunchTime: origin, NetworkInterfaces: [{ Attachment: { DeviceIndex: 0, AttachTime: origin } }], InstanceId: 'i-0123456789abcdef0', State: { Name: 'running' }, Tags: tags(), ...extra });
+const rootId = id => `vol-${'89abcdef01234567'[parseInt(id[2], 16)]}${id.slice(3)}`;
+const instance = (extra = {}) => {
+  const id = extra.InstanceId ?? 'i-0123456789abcdef0';
+  return { RootDeviceName: '/dev/xvda', BlockDeviceMappings: [{ DeviceName: '/dev/xvda', Ebs: { VolumeId: rootId(id), DeleteOnTermination: true } }],
+    LaunchTime: origin, NetworkInterfaces: [{ Attachment: { DeviceIndex: 0, AttachTime: origin } }], InstanceId: id, State: { Name: 'running' }, Tags: tags(), ...extra };
+};
 const volume = (extra = {}) => ({ CreateTime: origin, VolumeId: 'vol-0123456789abcdef0', State: 'available', Attachments: [], Tags: tags(), ...extra });
-function fixture({ instances = [], volumes = [], fail, pages, volumePages, respond } = {}) {
-  const calls = [];
+function fixture({ instances = [], volumes = [], fail, pages, volumePages, respond, rootVolumes } = {}) {
+  const calls = [], seen = new Map();
   const aws = {
     async call(service, operation, input) {
       calls.push({ service, operation, input: structuredClone(input) });
       const response = respond?.(operation, input);
       if (response !== undefined) return response;
       if (operation === fail) throw new Error('synthetic AWS unavailable');
-      if (operation === 'DescribeInstances') return pages?.(input) ?? { Reservations: [{ Instances: structuredClone(instances) }] };
+      if (operation === 'DescribeInstances') {
+        const result = pages?.(input) ?? { Reservations: [{ Instances: structuredClone(instances) }] };
+        for (const row of result?.Reservations?.flatMap(r => r.Instances ?? []) ?? []) seen.set(row.InstanceId, row);
+        return result;
+      }
+      if (operation === 'DescribeVolumes' && input.VolumeIds) return { Volumes: rootVolumes ?? [...seen.values()].flatMap(row =>
+        (row.BlockDeviceMappings ?? []).filter(m => input.VolumeIds.includes(m.Ebs?.VolumeId)).map(m => ({ VolumeId: m.Ebs.VolumeId, State: 'in-use',
+          Attachments: [{ InstanceId: row.InstanceId, Device: m.DeviceName, State: 'attached' }], Tags: structuredClone(row.Tags) }))) };
       if (operation === 'DescribeVolumes') return volumePages?.(input) ?? { Volumes: structuredClone(volumes) };
       if (operation === 'TerminateInstances') return { TerminatingInstances: input.InstanceIds.map(InstanceId => ({ InstanceId, CurrentState: { Name: 'shutting-down' } })) };
       if (operation === 'DeleteVolume' || operation === 'PutObject') return {};
@@ -361,9 +373,179 @@ test('missing, future or contradictory volume time never authorizes deletion or 
 });
 
 test('missing or invalid approved access expiry refuses before making an AWS call', async () => {
-  for (const accessExpiry of [undefined, '', 'tomorrow', '2027-02-30T00:00:00Z', 1790000000000]) {
+  for (const accessExpiry of [undefined, '', 'tomorrow', '2027-02-30T00:00:00Z', '1970-01-01T00:00:00Z', 1790000000000]) {
     const f = fixture({ instances: [instance()], volumes: [volume()] });
     await assert.rejects(sweep({ ...f.options, accessExpiry }), /scope|expiry/);
     assert.deepEqual(f.calls, []);
   }
+});
+
+test('an owned instance and volume created during inventory are judged at the fresh observation time', async () => {
+  let clock = Date.parse(now);
+  const began = '2026-11-05T20:00:01Z';
+  const f = fixture({ instances: [instance({ LaunchTime: began, NetworkInterfaces: [{ Attachment: { DeviceIndex: 0, AttachTime: began } }], Tags: tags({ ExpiresAt: '2026-11-05T20:10:00Z' }) })],
+    volumes: [volume({ CreateTime: began, Tags: tags({ ExpiresAt: '2026-11-05T20:10:00Z' }) })],
+    respond(operation) { if (operation === 'DescribeInstances') clock += 2000; } });
+  const pending = sweep({ ...f.options, now: () => clock });
+  await assert.doesNotReject(pending);
+  const health = await pending;
+  assert.deepEqual(mutations(f).map(c => c.operation), ['PutObject']);
+  assert.deepEqual(health.terminationRequested, []);
+  assert.deepEqual(health.volumeDeletionRequested, []);
+  assert.equal(health.startedAt, '2026-11-05T20:00:00.000Z');
+  assert.equal(health.completedAt, '2026-11-05T20:00:02.000Z');
+});
+
+test('an invalid post-inventory clock refuses before any cleanup request', async () => {
+  for (const observed of [NaN, Infinity, Date.parse(now) + 0.5, Date.parse(now) - 1, Date.parse(now) + 120001]) {
+    const f = fixture({ instances: [instance()], volumes: [volume()] });
+    let reads = 0;
+    await assert.rejects(sweep({ ...f.options, now: () => reads++ === 0 ? Date.parse(now) : observed }), /clock|deadline/);
+    assert.deepEqual(mutations(f), []);
+  }
+});
+
+test('a clock that goes backwards after the inventory observation cannot publish health', async () => {
+  const readings = [Date.parse(now), Date.parse(now) + 2000, Date.parse(now) + 1000];
+  const f = fixture();
+  await assert.rejects(sweep({ ...f.options, now: () => readings.shift() }), /clock/);
+  assert.deepEqual(mutations(f), []);
+});
+
+test('a future expiry one millisecond beyond 135 minutes is refused for both resource kinds', async () => {
+  const f = fixture({ instances: [instance({ Tags: tags({ ExpiresAt: '2026-11-05T21:15:00.001Z' }) })],
+    volumes: [volume({ Tags: tags({ ExpiresAt: '2026-11-05T21:15:00.001Z' }) })] });
+  await assert.rejects(sweep(f.options), /lifetime/);
+  assert.deepEqual(mutations(f).map(c => c.operation), ['TerminateInstances', 'DeleteVolume']);
+});
+
+test('missing instance origin cannot gain grace from a future expiry tag', async () => {
+  for (const extra of [{ NetworkInterfaces: undefined }, { LaunchTime: undefined }]) {
+    const f = fixture({ instances: [instance({ ...extra, Tags: tags({ ExpiresAt: '2026-11-05T20:01:00Z' }) })] });
+    await assert.rejects(sweep(f.options), /origin/);
+    assert.deepEqual(mutations(f).map(c => c.operation), ['TerminateInstances']);
+  }
+});
+
+test('an instance expiry before its original launch terminates but never publishes health', async () => {
+  const f = fixture({ instances: [instance({ Tags: tags({ ExpiresAt: '2026-11-05T18:59:59.999Z' }) })] });
+  await assert.rejects(sweep(f.options), /Contradictory instance lifetime/);
+  assert.deepEqual(mutations(f).map(c => c.operation), ['TerminateInstances']);
+});
+
+test('a volume created after the observation cannot become healthy through a later future expiry', async () => {
+  const f = fixture({ instances: [instance()], volumes: [volume({ CreateTime: '2026-11-05T20:00:01Z', Tags: tags({ ExpiresAt: '2026-11-05T20:10:00Z' }) })] });
+  await assert.rejects(sweep(f.options), /Invalid volume origin/);
+  assert.deepEqual(mutations(f).map(c => c.operation), ['TerminateInstances']);
+});
+
+test('terminated instances need no surviving network interface to leave the sweep healthy', async () => {
+  const f = fixture({ instances: [instance({ State: { Name: 'terminated' }, NetworkInterfaces: undefined, LaunchTime: undefined })] });
+  const pending = sweep(f.options);
+  await assert.doesNotReject(pending);
+  assert.deepEqual((await pending).terminationRequested, []);
+  assert.deepEqual(mutations(f).map(c => c.operation), ['PutObject']);
+});
+
+test('device zero on another network card cannot replace the original primary interface', async () => {
+  const f = fixture({ instances: [instance({ NetworkInterfaces: [
+    { Attachment: { DeviceIndex: 0, NetworkCardIndex: 1, AttachTime: '2026-11-05T17:00:00Z' } },
+    { Attachment: { DeviceIndex: 0, NetworkCardIndex: 0, AttachTime: origin } },
+  ], Tags: tags({ ExpiresAt: '2026-11-05T20:01:00Z' }) })] });
+  const pending = sweep(f.options);
+  await assert.doesNotReject(pending);
+  assert.deepEqual((await pending).terminationRequested, []);
+  assert.deepEqual(mutations(f).map(c => c.operation), ['PutObject']);
+});
+
+test('zero service origin cannot authorize deletion of an owned volume', async () => {
+  const f = fixture({ instances: [instance()], volumes: [volume({ CreateTime: new Date(0) })] });
+  await assert.rejects(sweep(f.options), /Invalid volume origin/);
+  assert.deepEqual(mutations(f).map(c => c.operation), ['TerminateInstances']);
+});
+
+test('shutting-down instances with missing origin still withhold health until termination is observed', async () => {
+  const f = fixture({ instances: [instance({ State: { Name: 'shutting-down' }, NetworkInterfaces: undefined, Tags: tags({ ExpiresAt: '2026-11-05T20:01:00Z' }) })] });
+  await assert.rejects(sweep(f.options), /origin/);
+  assert.deepEqual(mutations(f).map(c => c.operation), ['TerminateInstances']);
+});
+
+test('terminating an instance cannot indirectly delete a root disk with uncertain run ownership', async () => {
+  for (const Tags of [tags({ Run: 'unknown' }), tags({ Run: '22222222-2222-4222-8222-222222222222' }), tags({ Proof: 'OTHER' }), tags({ Stack: `${stackId}-foreign` }), tags({ ExpiresAt: '2026-11-05T19:59:58Z' }), [...tags(), { Key: 'Run', Value: run }]]) {
+    const f = fixture({ instances: [instance()], volumes: [volume()], rootVolumes: [{ VolumeId: 'vol-8123456789abcdef0', State: 'in-use', Attachments: [{ InstanceId: 'i-0123456789abcdef0', Device: '/dev/xvda', State: 'attached' }], Tags }] });
+    await assert.rejects(sweep(f.options), /ownership|expiry/);
+    assert.deepEqual(mutations(f).map(c => c.operation), ['DeleteVolume']);
+  }
+});
+
+test('termination requires exact complete root inventory and attachment before any destructive instance request', async () => {
+  const root = { VolumeId: 'vol-8123456789abcdef0', State: 'in-use', Tags: tags(), Attachments: [{ InstanceId: 'i-0123456789abcdef0', Device: '/dev/xvda', State: 'attached' }] };
+  for (const rootVolumes of [[], [root, root], [{ ...root, VolumeId: 'vol-fffffffffffffffff' }], [{ ...root, State: 'available', Attachments: [] }], [{ ...root, State: 'available' }], [{ ...root, Attachments: [...root.Attachments, ...root.Attachments] }],
+    [{ ...root, Attachments: [{ ...root.Attachments[0], State: 'detaching' }] }],
+    [{ ...root, Attachments: [{ InstanceId: 'i-11111111111111111', Device: '/dev/xvda', State: 'attached' }] }],
+    [{ ...root, Attachments: [{ InstanceId: 'i-0123456789abcdef0', Device: '/dev/other', State: 'attached' }] }]]) {
+    const f = fixture({ instances: [instance()], volumes: [volume()], rootVolumes });
+    await assert.rejects(sweep(f.options), /ownership|inventory|attachment/);
+    assert.deepEqual(mutations(f).map(c => c.operation), ['DeleteVolume']);
+  }
+});
+
+test('missing or ambiguous instance disk mappings refuse termination while independent cleanup continues', async () => {
+  for (const extra of [{ BlockDeviceMappings: undefined }, { BlockDeviceMappings: [] }, { RootDeviceName: undefined },
+    { BlockDeviceMappings: [{ DeviceName: '/dev/xvda', Ebs: { VolumeId: 'vol-8123456789abcdef0' } }] },
+    { BlockDeviceMappings: [{ DeviceName: '/dev/xvda', Ebs: { VolumeId: 'vol-8123456789abcdef0', DeleteOnTermination: false } }] },
+    { BlockDeviceMappings: [{ DeviceName: '/dev/xvda', Ebs: { VolumeId: 'vol-8123456789abcdef0', DeleteOnTermination: true } }, { DeviceName: '/dev/xvda', Ebs: { VolumeId: 'vol-8123456789abcdef0', DeleteOnTermination: true } }] },
+    { BlockDeviceMappings: [{ DeviceName: '/dev/xvda', Ebs: { VolumeId: 'vol-8123456789abcdef0', DeleteOnTermination: true } }, { DeviceName: '/dev/xvda', Ebs: { VolumeId: 'vol-91111111111111111', DeleteOnTermination: true } }] },
+    { BlockDeviceMappings: [{ DeviceName: '/dev/xvda', Ebs: { VolumeId: 'vol-8123456789abcdef0', DeleteOnTermination: true } }, { DeviceName: '/dev/sdb', Ebs: { VolumeId: 'vol-8123456789abcdef0', DeleteOnTermination: true } }] },
+    { BlockDeviceMappings: [{ DeviceName: '/dev/xvda', Ebs: { VolumeId: 'vol-8123456789abcdef0', DeleteOnTermination: true } }, { DeviceName: '/dev/sdb', Ebs: { VolumeId: 'vol-91111111111111111' } }] },
+    { BlockDeviceMappings: Array.from({ length: 65 }, (_, i) => ({ DeviceName: i ? `/dev/sd${i}` : '/dev/xvda', Ebs: { VolumeId: `vol-${i.toString(16).padStart(17, '0')}`, DeleteOnTermination: true } })) }]) {
+    const f = fixture({ instances: [instance(extra)], volumes: [volume()] });
+    await assert.rejects(sweep(f.options), /mapping/);
+    assert.deepEqual(mutations(f).map(c => c.operation), ['DeleteVolume']);
+  }
+});
+
+test('the root read names only the disks marked for deletion and matches the original run and expiry', async () => {
+  const f = fixture({ instances: [instance()] });
+  const result = await sweep(f.options);
+  assert.deepEqual(result.terminationRequested, ['i-0123456789abcdef0']);
+  assert.deepEqual(f.calls.filter(c => c.operation === 'DescribeVolumes').map(c => c.input), [
+    { Filters: [{ Name: 'tag:Proof', Values: ['D570'] }, { Name: 'tag:Stack', Values: [stackId] }], MaxResults: 100 },
+    { VolumeIds: ['vol-8123456789abcdef0'] },
+  ]);
+});
+
+test('one uncertain root disk does not starve another instance with independently owned disks', async () => {
+  const f = fixture({ instances: [instance(), instance({ InstanceId: 'i-11111111111111111' })], respond(operation, input) {
+    if (operation !== 'DescribeVolumes' || !input.VolumeIds) return;
+    const first = input.VolumeIds[0] === 'vol-8123456789abcdef0';
+    return { Volumes: [{ VolumeId: input.VolumeIds[0], State: 'in-use', Tags: tags(first ? { Proof: 'OTHER' } : {}),
+      Attachments: [{ InstanceId: first ? 'i-0123456789abcdef0' : 'i-11111111111111111', Device: '/dev/xvda', State: 'attached' }] }] };
+  } });
+  await assert.rejects(sweep(f.options), /ownership/);
+  assert.deepEqual(mutations(f), [{ service: 'ec2', operation: 'TerminateInstances', input: { InstanceIds: ['i-11111111111111111'] } }]);
+});
+
+test('every disk marked for deletion needs its own ownership read even when the root is valid', async () => {
+  const mappings = [{ DeviceName: '/dev/xvda', Ebs: { VolumeId: 'vol-8123456789abcdef0', DeleteOnTermination: true } },
+    { DeviceName: '/dev/sdb', Ebs: { VolumeId: 'vol-91111111111111111', DeleteOnTermination: true } }];
+  const f = fixture({ instances: [instance({ BlockDeviceMappings: mappings })], rootVolumes: [
+    { VolumeId: 'vol-8123456789abcdef0', State: 'in-use', Tags: tags(), Attachments: [{ InstanceId: 'i-0123456789abcdef0', Device: '/dev/xvda', State: 'attached' }] },
+    { VolumeId: 'vol-91111111111111111', State: 'in-use', Tags: tags({ Run: 'unknown' }), Attachments: [{ InstanceId: 'i-0123456789abcdef0', Device: '/dev/sdb', State: 'attached' }] },
+  ] });
+  await assert.rejects(sweep(f.options), /ownership/);
+  assert.deepEqual(f.calls.at(-1).input, { VolumeIds: ['vol-8123456789abcdef0', 'vol-91111111111111111'] });
+  assert.deepEqual(mutations(f), []);
+});
+
+test('a paginated or failed exact disk read cannot authorize termination', async () => {
+  for (const response of [{}, { Volumes: null }, { Volumes: [{ VolumeId: 'vol-8123456789abcdef0', State: 'in-use', Tags: tags(), Attachments: [{ InstanceId: 'i-0123456789abcdef0', Device: '/dev/xvda', State: 'attached' }] }], NextToken: 'more' }]) {
+    const f = fixture({ instances: [instance()], volumes: [volume()], respond(operation, input) { if (operation === 'DescribeVolumes' && input.VolumeIds) return response; } });
+    await assert.rejects(sweep(f.options), /inventory/);
+    assert.deepEqual(mutations(f).map(c => c.operation), ['DeleteVolume']);
+  }
+  const failure = new Error('root inventory unavailable');
+  const f = fixture({ instances: [instance()], volumes: [volume()], respond(operation, input) { if (operation === 'DescribeVolumes' && input.VolumeIds) throw failure; } });
+  await assert.rejects(sweep(f.options), error => error === failure);
+  assert.deepEqual(mutations(f).map(c => c.operation), ['DeleteVolume']);
 });
