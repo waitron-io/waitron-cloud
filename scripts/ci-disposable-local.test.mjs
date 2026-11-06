@@ -1,0 +1,15 @@
+import './disposable-tests/leases.test.mjs';
+import './disposable-tests/bootstrap.test.mjs';
+import './disposable-tests/snapshot.test.mjs';
+import './disposable-tests/host.test.mjs';
+import './disposable-tests/ssh.test.mjs';
+import './disposable-tests/dependencies.test.mjs';
+import './disposable-tests/guest-exec.test.mjs';
+import './disposable-tests/local.test.mjs';
+import './disposable-tests/session.test.mjs';
+import './disposable-tests/transport.test.mjs';
+import './disposable-tests/bundle.test.mjs';
+import './disposable-tests/manual.test.mjs';
+import './disposable-tests/status.test.mjs';
+import './disposable-tests/recovery.test.mjs';
+import './disposable-tests/manual-pipeline.test.mjs';
