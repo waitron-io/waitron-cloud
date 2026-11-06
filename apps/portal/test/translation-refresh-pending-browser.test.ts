@@ -38,7 +38,7 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
    assert.equal(await group.getByRole('button',{name:locale==='en'?'Refresh translation status':'Actualizar estado de traducción',exact:true}).count(),1);
    assert.equal(await list.getByRole('button',{name:c.refreshStatus,exact:true}).count(),1);
   });
-  await t.test('translation retry is disabled throughout a held installation refresh',async()=>{
+  await t.test(handler==='missing'?'missing installation handler signal refuses within the observation budget':'translation retry is disabled throughout a held installation refresh',async()=>{
    gate=new Promise<void>(resolve=>{release=resolve;});let handlerEntered=false;entered=()=>{handlerEntered=true;};
    await list.locator(':scope > wt-button').getByRole('button',{name:c.refreshStatus,exact:true}).click();
    const waitForHandler=()=>t.waitFor(()=>{assert.equal(handlerEntered,true,'the installation refresh route handler must enter');},{timeout:4000});
@@ -49,11 +49,11 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
     }finally{clearTimeout(timer);release();gate=undefined;entered=undefined;}
     return;
    }
-   await waitForHandler();
    try{
+    await waitForHandler();
     assert.equal(await group.getByRole('button',{name:c.translationConsentAgree,exact:true}).isDisabled(),true);
     assert.equal(await refresh.isDisabled(),true);
-    if(process.env.TRANSLATION_REFRESH_RECEIPT_DIR){await mkdir(process.env.TRANSLATION_REFRESH_RECEIPT_DIR,{recursive:true});await page.screenshot({path:`${process.env.TRANSLATION_REFRESH_RECEIPT_DIR}/${locale}-${theme}-${width}-pending.png`,fullPage:true});}
+    if(process.env.TRANSLATION_REFRESH_RECEIPT_DIR){await mkdir(process.env.TRANSLATION_REFRESH_RECEIPT_DIR,{recursive:true});await page.screenshot({path:`${process.env.TRANSLATION_REFRESH_RECEIPT_DIR}/${locale}-${theme}-${width}-pending${handler==='normal'?'':`-${handler}`}.png`,fullPage:true});}
    }finally{release();gate=undefined;entered=undefined;}
    await page.waitForFunction(()=>!(window as any).app.installations.pending);
   });
@@ -61,7 +61,7 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
    await refresh.click({trial:true});assert.equal(await refresh.isEnabled(),true);
    assert.equal(await group.getByRole('button',{name:c.translationConsentAgree,exact:true}).isDisabled(),true);
    assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
-   if(process.env.TRANSLATION_REFRESH_RECEIPT_DIR){await mkdir(process.env.TRANSLATION_REFRESH_RECEIPT_DIR,{recursive:true});await page.screenshot({path:`${process.env.TRANSLATION_REFRESH_RECEIPT_DIR}/${locale}-${theme}-${width}-ready.png`,fullPage:true});}
+   if(process.env.TRANSLATION_REFRESH_RECEIPT_DIR){await mkdir(process.env.TRANSLATION_REFRESH_RECEIPT_DIR,{recursive:true});await page.screenshot({path:`${process.env.TRANSLATION_REFRESH_RECEIPT_DIR}/${locale}-${theme}-${width}-ready${handler==='normal'?'':`-${handler}`}.png`,fullPage:true});}
    status=200;await refresh.click();await page.waitForFunction(()=>{const app=(window as any).app;return app.translationConsent.loaded&&!app.translationConsent.pending&&!app.installations.pending;});
    assert.equal(await group.getByRole('button',{name:locale==='en'?'Refresh translation status':'Actualizar estado de traducción',exact:true}).count(),0);
    await group.getByRole('button',{name:c.translationConsentAgree,exact:true}).click({trial:true});
