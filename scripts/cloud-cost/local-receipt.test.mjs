@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { summarizeStreamAccounting } from './stream-admission.mjs';
+import { summarizeStreamAccounting, validateStreamAdmission } from './stream-admission.mjs';
 import { validateReceipt, exportAggregate } from './schema.mjs';
 const module = await import('./local-receipt.mjs').catch(error => {
   if (error.code === 'ERR_MODULE_NOT_FOUND' && error.url === new URL('./local-receipt.mjs', import.meta.url).href) return {};
@@ -69,6 +69,32 @@ function build(f) {
   assert.equal(typeof module.buildLocalReceipt, 'function', 'export a closed partial local receipt');
   return module.buildLocalReceipt(f);
 }
+
+for (const mode of ['lifetime', 'totals', 'attempted-bytes']) test(`combined ${mode} overflow stays unknown without failing functional replay`, async () => {
+  const f = fixture(), stream = f.result.admission.stream;
+  if (mode === 'lifetime') stream.storage.byteSeconds = { low: Number.MAX_SAFE_INTEGER - 4095, high: Number.MAX_SAFE_INTEGER - 4095 };
+  else if (mode === 'totals') {
+    const native = stream.requests, admin = stream.administration;
+    for (const rows of [native.accounting.requests, native.observedRequests]) rows[0].bytesOut = rows[0].attemptedBytesOut = Number.MAX_SAFE_INTEGER - 256;
+    native.accounting.producer.bytesOut = native.accounting.observer.bytesOut = Number.MAX_SAFE_INTEGER;
+    for (const rows of [admin.accounting.requests, admin.observedRequests]) rows[0].bytesOut = rows[0].attemptedBytesOut = 1;
+    admin.accounting.producer.bytesOut = admin.accounting.observer.bytesOut = 1;
+  } else {
+    for (const rows of [stream.requests.accounting.requests, stream.requests.observedRequests]) {
+      const row = rows.find(row => row.operation === 'list'); row.phase = 'cleanup'; row.attemptedBytesIn = Number.MAX_SAFE_INTEGER;
+    }
+    stream.requests.billing.find(row => row.requestClass === 's3-list').phase = 'cleanup';
+  }
+  assert.doesNotThrow(() => validateStreamAdmission(stream, { ...f.options.stream, expectedSales: 3 }), 'each original record remains valid');
+  const { completeReplayResult } = await import('./isolated-replay.mjs');
+  const result = completeReplayResult({ admission: f.result.admission, isolation: f.result.isolation, cleanup: f.result.cleanup }, f.options);
+  assert.equal(result.functional, 'passed'); assert.equal(result.costMeasured, false); assert.equal(result.receipt, null);
+  assert.equal(result.accounting.status, 'unknown'); assert.equal(result.accounting.publicationEligible, false);
+  assert.ok(result.accounting.gaps.includes('accounting:overflow'));
+  assert.deepEqual(result.evidence.admission, f.result.admission);
+  f.result.streamAccounting = summarizeStreamAccounting(stream, { ...f.options.stream, expectedSales: 3 });
+  assert.throws(() => build(f), bad);
+});
 
 test('new local export binds every measured value to its original replay and stream', () => {
   const f = fixture(), receipt = build(f), { stream, ...replay } = f.result.admission;

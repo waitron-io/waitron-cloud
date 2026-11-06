@@ -148,28 +148,41 @@ export function validateStreamSettings(value, budget) {
 // Keep uncertain storage lifetimes as bounds rather than inventing an exact byte-second value.
 export function summarizeStreamAccounting(value, options) {
   const admitted = validateStreamAdmission(value, options);
-  if (Object.hasOwn(admitted, 'functional')) {
+  const original = Object.hasOwn(admitted, 'functional');
+  if (original) {
     const accounting = originalAccounting(admitted);
     if (!accounting.publicationEligible) return { functional: 'passed', costMeasured: false, accounting, receipt: null, evidence: admitted };
   }
+  let overflow = false;
+  const combinedCount = (left, right) => {
+    const total = left + right;
+    if (original && !count(total)) { overflow = true; return null; }
+    need(count(total)); return total;
+  };
   const meters = [admitted.requests.accounting, admitted.administration.accounting];
   const requests = new Map();
   for (const meter of meters) for (const row of meter.requests) {
     const key = identity(row), existing = requests.get(key);
     if (!existing) requests.set(key, { ...row });
     else for (const k of numbers.slice(1)) {
-      existing[k] += row[k]; need(count(existing[k]));
+      existing[k] = combinedCount(existing[k], row[k]);
     }
   }
   const total = channel => Object.fromEntries(totals.map(k => {
-    const n = meters[0][channel][k] + meters[1][channel][k]; need(count(n)); return [k, n];
+    return [k, combinedCount(meters[0][channel][k], meters[1][channel][k])];
   }));
   const producer = total('producer'), observer = total('observer');
   const { storage, retainedStorage: tail } = admitted;
+  const byteSeconds = { low: storage.byteSeconds.low + tail.byteSeconds.low, high: storage.byteSeconds.high + tail.byteSeconds.high };
+  // Valid independent meters can still exceed the safe range when combined.
+  if (original && (overflow || Object.values(byteSeconds).some(value => !finite(value) || value > Number.MAX_SAFE_INTEGER))) {
+    return { functional: 'passed', costMeasured: false,
+      accounting: { status: 'unknown', gaps: ['accounting:overflow'], publicationEligible: false }, receipt: null, evidence: admitted };
+  }
   return { requests: [...requests.values()], producer, observer,
     discrepancy: Object.fromEntries(totals.map(k => [k, observer[k] - producer[k]])),
     storage: { status: 'measured', scope: 'unversioned-stream-and-cleanup',
       windowSeconds: storage.windowSeconds + tail.windowSeconds,
       remainingBytes: tail.remainingBytes, remainingObjects: tail.remainingObjects,
-      byteSeconds: { low: storage.byteSeconds.low + tail.byteSeconds.low, high: storage.byteSeconds.high + tail.byteSeconds.high } } };
+      byteSeconds } };
 }

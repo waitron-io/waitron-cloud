@@ -414,7 +414,9 @@ scripts/cloud-cost/meter.test.mjs scripts/cloud-cost/storage-meter.test.mjs` for
 these boundaries.
 Measured local inputs also need their original replay and stream records. The
 exporter compares every supported value, unit, source, observation time and
-cadence, and refuses an unrelated or invented measurement. The generated archive
+cadence, and refuses an unrelated or invented measurement. Individually valid
+meters that overflow when combined finish with unknown accounting and no receipt;
+the original observations remain available. The generated archive
 journey finishes with its original observations and no receipt because billing
 and storage-history coverage remain unknown. Its real Debian control retains
 all 11 requests, the restored sale, privacy and owned cleanup.
