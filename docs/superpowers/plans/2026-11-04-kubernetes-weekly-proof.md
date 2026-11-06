@@ -48,7 +48,7 @@ The unprivileged `.github/workflows/kubernetes-proof.yml` runs those checks and
 CloudFormation validation. Launches remain explicitly denied, the rule is disabled,
 and CLI `up`/`down` refuse. This does not complete Task 1: the owner lifecycle,
 conditional cost reservation, current prices/billing, environment protection,
-deadline bootstrap and live qualification remain unbuilt or unrun. Do not apply
+deadline-entry integration and live qualification remain unfinished. Do not apply
 this prerequisite template. Task 6 permits this independently tested setup/control
 prerequisite to finish without a full live P1 proof.
 
@@ -77,7 +77,7 @@ changes between disk reads and termination; these synthetic checks are not an
 atomic provider transaction. Launcher grants retain the absolute access expiry so existing
 sessions also stop at that boundary; actual AWS policy behavior remains unqualified.
 
-**Files after the answer:** `deploy/kubernetes/proof/{setup.yaml,setup.mjs,setup.test.mjs,README.md,bootstrap.sh,deadline.service,deadline.timer,expiry.mjs,expiry.test.mjs,policy.json}`. `setup.yaml` is the sole owner-run CloudFormation template; the thin entry is `node deploy/kubernetes/proof/setup.mjs up` or the same entry with `down`. **Interfaces:** `up():StackOutputs`; `down():CleanupReceipt`; all runtime IDs, immutable AMI/template versions and role/network/bucket identities come automatically from stack outputs, never pasted owner IDs.
+**Files after the answer:** `deploy/kubernetes/proof/{setup.yaml,setup.mjs,setup.test.mjs,README.md,bootstrap.sh,bootstrap.mjs,bootstrap.test.mjs,expiry.mjs,expiry.test.mjs,policy.json}`. `setup.yaml` is the sole owner-run CloudFormation template; the thin entry is `node deploy/kubernetes/proof/setup.mjs up` or the same entry with `down`. **Interfaces:** `up():StackOutputs`; `down():CleanupReceipt`; all runtime IDs, immutable AMI/template versions and role/network/bucket identities come automatically from stack outputs, never pasted owner IDs.
 
 - [x] Prepare this **single access request**, after independent review: “For D570, will you approve one reviewed removable setup template, run once in one sitting using temporary staging sign-in, with the same entry removing it, solely for account 462991287391/eu-south-2, one on-demand ARM m7g.2xlarge, no inbound internet and at most USD 5/month, and confirm the access expiry, monthly allocation/baseline and temporary repository-configuration authority? It creates the infrastructure and GitHub protection automatically, safely reuses shared OIDC and limits runtime to temporary scoped GitHub OIDC access. We recommend ephemeral read-only access for locked @waitron-io/ui-core and request a committed digest-bound Waitron export of initial v1 candidate 00496fcd182a5c2c9189cc3faf0f8f22d3baf8ac, with producer/client/verifier interfaces and full-journey compatibility still to qualify, through the approved short-lived input mechanism. No secrets/tokens in chat or files, personal token, root/long-lived key or production access.”
 - [x] Record that single answer before template/AWS-action build or spending. Missing package/export or repository-configuration authority is an explicit gap, never permission to fabricate proof, broaden credentials or ask you to hand-build parts. The plan/request is not access or an existing template.
@@ -135,6 +135,17 @@ remain open; Task 3 is not complete and this core grants no live admission.
 - [ ] Trusted launch data fixes the original absolute expiry. Bootstrap arms systemd before S3/package/candidate work, reads only IMDSv2 launch data (no profile/credential source), checks clock/deadline and powers off on failure. Keep inline user data within EC2's 16 KiB limit; offline tool bytes belong in the verified S3 bundle. Use `systemctl poweroff`, actual `InstanceInitiatedShutdownBehavior=terminate`, root `DeleteOnTermination=true`; halt/stop is insufficient. Reboot/retry cannot extend expiry. Publish create-only release only after verified ready/deadline record, read-back of the live instance's shutdown-to-terminate setting, successful prior termination-drill evidence and fresh sweeper health; observe actual shutdown during cleanup. Reconcile exact ClientToken/tags/IDs on retry; unresolved outcomes retain the UUID/reservation and protection.
 - [ ] After access and cost reservation, trusted-main safety profiles run no candidate payload. OS drill: fix its local deadline earlier than the outer sweep expiry (both within five minutes), hang proof, lose controller and require that fixed local deadline to terminate first, with local deadline record plus EC2 instance-initiated-shutdown evidence. Independent-sweep drill: trusted drill data disables the OS timer and deliberately hangs the guest kernel after its bounded ready/fault record; lose the launch response/controller and require the sweeper role's exact-instance real TerminateInstances audit event. Record the injected guest fault and prove termination without guest cooperation; never claim a mocked hang as kernel coverage. Wrong/rescue actor fails; timestamp/volume absence or mocks alone never pass. Keep the sweep armed during every drill and exercise duplicate/retry/cancellation and unchanged foreign sentinels.
 - [ ] `collectOwned` requires terminated state, filtered owned volume/ENI lists empty and exact root `InvalidVolume.NotFound` (never AccessDenied); use bounded EC2 reads above, journal IDs automatically. Reconcile delayed usage before claiming no continuing billing. Unknown cleanup retains protection/reservation, blocks further spending and reports exact IDs/deadlines/last observations with a narrow owned termination/volume response. Finalizers never provide the only termination path; do not delete shared resources.
+
+**Fixed-deadline prerequisite:** `bootstrap.mjs` renders the bounded Bash entry
+from the original staging scope/run/head/tree/start/expiry. Its shell installs
+absolute UTC and boot-relative timers, enables poweroff on another boot, and
+checks unchanged identity/unit state on exact retry without rearming. Synthetic
+process-boundary checks cover expiry, clock rollback, interrupted installation,
+changed identity, damaged state, preserved foreign units and poweroff requests.
+This entry performs no input transfer or candidate execution and is not wired
+into setup or launch. Live ARM/systemd/reboot and termination qualification,
+verified IMDSv2 identity, offline preparation and the launch/release protocol
+remain open. The launcher deny, disabled sweep and refusing up/down stay in force.
 
 ## Task 5: Break the verifier cycle and instrument the full EC2 proof
 
