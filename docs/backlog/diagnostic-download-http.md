@@ -9,10 +9,13 @@ the existing permissions and waits. Server redaction, genuine browser file
 downloads and production-network behaviour remain unqualified; the native
 HTTP client and controller tests cannot establish them.
 
-## Diagnostic download replies after account changes (D400)
+Run `node --test apps/portal/test/diagnostic-account-fencing.test.ts` to check
+that delayed replies leave your current download alone after you change accounts,
+return to the original account or sign out. [PR #644](https://github.com/waitron-io/waitron-cloud/pull/644)
+delivered this native controller coverage.
 
-Native controller checks hold diagnostic replies while you change accounts,
-return to the original account or sign out. Old documents, malformed replies,
-refusals and rate limits cannot save a file, end a newer download or change its
-selection, feedback or wait. Current downloads still finish, selecting the same
-account keeps pending work, and an existing server wait remains in force.
+PR #644's earlier qualification stopped during source installation before any
+private-replay check began (run `40646201742`, job `122675571593`). D530 retains
+[that unresolved installation cause](cost-setup-timeout.md#source-installation-stops-at-669-of-670-packages).
+Passing native checks or a later hosted run do not repair it. Production
+permission checks and provider qualification remain separate.
