@@ -47,8 +47,11 @@ tracks D585: native startup, ten test seed hooks and conformance share bounded
 acquisition. Native startup retains one attempt, with a 30-second deadline
 covering headers and body. Conformance retains three attempts, a 120-second
 total budget and 30-second inactivity. HTTP refusals preserve each caller’s
-existing error and retry policy. The Dockerfile and full image preparation
-qualification remain open.
+existing error and retry policy. The Dockerfile now invokes the shared command
+inside its existing Node image, with three temporary attempts inside 30 seconds
+and ten-second inactivity. Architecture digests and extraction remain required.
+The `storage-tools` build target isolates that boundary for checks; full
+application image preparation qualification remains open.
 
 ## Admin listener shutdown and paced replay (D581)
 
@@ -3648,7 +3651,10 @@ which retains one attempt and adds a 30-second deadline. Conformance also uses
 that acquisition helper while retaining three attempts, a 120-second total
 budget, 30-second inactivity and its existing diagnostic and digest checks.
 Caller cancellation interrupts requests and retry pauses without replacing the
-cancellation reason. The image build remains a separate D585 slice. The owner has deferred
+cancellation reason. The image now runs the same acquisition helper before its
+architecture checksum and extraction, using three temporary attempts within
+30 seconds and ten-second inactivity. Full application image preparation
+qualification remains open. The owner has deferred
 the costed controlled-copy proposal; no mirror is built. See [the seed controls and limits](backlog/storage-cache-fixture.md#extraction-refusal-seed-acquisition-d530-4)
 and [the complete inventory and proposal](backlog/storage-cache-fixture.md#every-seaweedfs-archive-fetch-and-a-controlled-copy-proposal-d530-4).
 

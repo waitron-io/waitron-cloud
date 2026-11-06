@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { setTimeout as delay } from "node:timers/promises";
+import { writeFile } from "node:fs/promises";
 
 async function checkStatus(response) {
   if (!response.ok) await response.body?.cancel();
@@ -64,5 +65,23 @@ export async function downloadStorageArchive(url, {
       clearTimeout(idleTimer);
       emit("settled");
     }
+  }
+}
+
+if (import.meta.main) {
+  try {
+    assert.ok(process.argv.length === 4, "Usage: storage-archive-download.mjs <url> <output>");
+    const bytes = await downloadStorageArchive(process.argv[2], {
+      report({ event, phase, status, bytesReceived, attempt }) {
+        console.error(JSON.stringify({ event, phase, status, bytesReceived, attempt }));
+      },
+    });
+    await writeFile(process.argv[3], bytes);
+  } catch (error) {
+    let message = String(error.message ?? error.name);
+    if (process.argv[2]) message = message.replaceAll(process.argv[2], "<archive URL>");
+    console.error(JSON.stringify({ event: "failed", name: error.name, code: error.cause?.code ?? error.code,
+      message: message.slice(0, 240) }));
+    process.exitCode = 1;
   }
 }
