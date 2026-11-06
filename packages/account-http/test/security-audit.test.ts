@@ -30,6 +30,8 @@ function call(body:unknown,credentials=session,headers:Record<string,string>={},
  return app.request(origin+'/api/account/security-audit/read',{method,headers:{origin,'content-type':'application/json',cookie:'__Host-cloud_session='+credentials.token,'x-csrf-token':credentials.csrfToken,...headers},body:method==='POST'?JSON.stringify(body):undefined},{incoming:{socket:{remoteAddress:'192.0.2.44'}}} as HttpBindings);
 }
 test('owner receives a passive tenant-scoped page with no request secrets',async()=>{
+ // Creation defaults need not share a millisecond; passive reads must preserve both timestamps.
+ const sessionBefore=(await db.pool.query("WITH moment AS MATERIALIZED (SELECT clock_timestamp()-interval '30 seconds' AS now) UPDATE cloud_sessions SET created_at=moment.now-interval '1 millisecond',last_seen_at=moment.now FROM moment WHERE account_id=$1 RETURNING created_at,last_seen_at",[owner])).rows[0];
  const second=(await transaction(db.pool,client=>recordSecurityAuditEvent(client,{organisationId:organisation,venueId:venue,type:'installation.credentials_renewed',actorKind:'installation',actorId:randomUUID(),subjectKind:'installation',subjectId:randomUUID(),sourceId:randomUUID()}))).id;
  const firstResponse=await call({organisationId:organisation,limit:1});assert.equal(firstResponse.status,200,await firstResponse.clone().text());
  const first=await firstResponse.json() as {version:number;events:{id:string;organisationId:string}[];nextCursor:string|null};
@@ -38,7 +40,9 @@ test('owner receives a passive tenant-scoped page with no request secrets',async
  const last=await secondResponse.json() as typeof first;assert.equal(last.events.length,1);assert.equal(last.nextCursor,null);assert.equal(last.events[0]?.organisationId,organisation);
  assert.deepEqual(new Set([...first.events,...last.events].map(event=>event.id)),new Set([auditEventId,second]));
  const encoded=JSON.stringify([first,last]);for(const value of [session.token,session.csrfToken,foreignOrganisation])assert.equal(encoded.includes(value),false);
- assert.equal((await db.pool.query('SELECT last_seen_at FROM cloud_sessions WHERE account_id=$1',[owner])).rows[0].last_seen_at.getTime(),(await db.pool.query('SELECT created_at FROM cloud_sessions WHERE account_id=$1',[owner])).rows[0].created_at.getTime());
+ const sessionAfter=(await db.pool.query('SELECT created_at,last_seen_at FROM cloud_sessions WHERE account_id=$1',[owner])).rows[0];
+ assert.equal(sessionAfter.last_seen_at.getTime(),sessionBefore.last_seen_at.getTime());
+ assert.equal(sessionAfter.created_at.getTime(),sessionBefore.created_at.getTime());
 });
 test('route requires exact method, origin, session, CSRF, input and current ownership',async()=>{
  assert.equal((await call({organisationId:organisation},session,{},'GET')).status,405);
