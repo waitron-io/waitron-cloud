@@ -3663,7 +3663,10 @@ which retains one attempt and adds a 30-second deadline. Conformance also uses
 that acquisition helper while retaining three attempts, a 120-second total
 budget, 30-second inactivity and its existing diagnostic and digest checks.
 Caller cancellation interrupts requests and retry pauses without replacing the
-cancellation reason. The image build remains a separate D585 slice. The owner has deferred
+cancellation reason. The image now runs the same acquisition helper before its
+architecture checksum and extraction, using three temporary attempts within
+30 seconds and ten-second inactivity. Full application image preparation
+qualification remains open. The owner has deferred
 the costed controlled-copy proposal; no mirror is built. See [the seed controls and limits](backlog/storage-cache-fixture.md#extraction-refusal-seed-acquisition-d530-4)
 and [the complete inventory and proposal](backlog/storage-cache-fixture.md#every-seaweedfs-archive-fetch-and-a-controlled-copy-proposal-d530-4).
 
