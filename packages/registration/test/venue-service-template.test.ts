@@ -10,6 +10,64 @@ import {test} from 'node:test';
 import * as fixtures from './fixtures/venue-service.ts';
 import {migrationNames} from '../src/migrate.ts';
 
+async function fixtureChild(body:string){
+ const env:NodeJS.ProcessEnv={...process.env};delete env.NODE_TEST_CONTEXT;
+ const imports=`import assert from 'node:assert/strict';import {test} from 'node:test';import {venueServiceFixture} from ${JSON.stringify(new URL('./fixtures/venue-service.ts',import.meta.url).href)};`;
+ return promisify(execFile)(process.execPath,['--input-type=module','--test-reporter=tap','-e',imports+body],{env,timeout:20000,maxBuffer:1024*1024}).catch(error=>assert.fail(error.stdout+error.stderr));
+}
+
+test('a failed default template setup does not prevent a later healthy case',async()=>{
+ const result=await fixtureChild(`
+ const connectionString=process.env.TEST_DATABASE_URL;
+ test('unavailable setup refuses',async()=>{
+  process.env.TEST_DATABASE_URL='postgres://postgres:invalid@127.0.0.1:1/cloud_test';
+  try{await assert.rejects(venueServiceFixture(),{code:'ECONNREFUSED'});}
+  finally{process.env.TEST_DATABASE_URL=connectionString;}
+ });
+ test('healthy setup succeeds',async()=>{
+  const f=await venueServiceFixture();try{assert.equal((await f.pool.query('SELECT count(*) AS n FROM venues')).rows[0].n,'5');}finally{await f.close();}
+ });`);
+ assert.match(result.stdout,/# tests 2\b/);assert.match(result.stdout,/# pass 2\b/);assert.match(result.stdout,/# fail 0\b/);
+});
+
+test('a default fixture child removes its template family and preserves another owner',async()=>{
+ const foreign=await fixtures.createVenueServiceTemplate(),admin=new Pool({connectionString:process.env.TEST_DATABASE_URL});
+ let neighbour:Awaited<ReturnType<typeof fixtures.venueServiceFixture>>|undefined;
+ try{
+  neighbour=await fixtures.venueServiceFixture(foreign.name);
+  const neighbourName=(await neighbour.pool.query('SELECT current_database() AS name')).rows[0].name as string;
+  const result=await fixtureChild(`test('owned default fixture',async()=>{
+   const f=await venueServiceFixture();try{console.log('DEFAULT_CLONE '+(await f.pool.query('SELECT current_database() AS name')).rows[0].name);}finally{await f.close();}
+  });`);
+  assert.match(result.stdout,/# tests 1\b/);assert.match(result.stdout,/# pass 1\b/);assert.match(result.stdout,/# fail 0\b/);
+  const match=/(?:^|\n)(?:# )?DEFAULT_CLONE venue_service_clone_([a-f0-9]{32})_[a-f0-9]{10}\b/.exec(result.stdout);assert.ok(match,result.stdout);
+  const template='venue_service_template_'+match[1],prefix='venue_service_clone_'+match[1]+'_';
+  assert.equal((await admin.query('SELECT datname FROM pg_database WHERE datname=$1 OR left(datname,length($2))=$2',[template,prefix])).rowCount,0);
+  assert.equal((await admin.query('SELECT datname FROM pg_database WHERE datname=ANY($1::text[])',[[foreign.name,neighbourName]])).rowCount,2);
+ }finally{await neighbour?.close();await foreign.close();await admin.end();}
+});
+
+test('default venue fixtures share a migrated template and keep concurrent cases independent',async()=>{
+ const admin=new Pool({connectionString:process.env.TEST_DATABASE_URL});
+ const opened:Awaited<ReturnType<typeof fixtures.venueServiceFixture>>[]=[];
+ try{
+  await Promise.all([0,1].map(async()=>{opened.push(await fixtures.venueServiceFixture());}));
+  const names:string[]=[];
+  for(const f of opened){
+   const name=(await f.pool.query('SELECT current_database() AS name')).rows[0].name as string;
+   names.push(name);
+   assert.match(name,/^venue_service_clone_[a-f0-9]{32}_[a-f0-9]{10}$/);
+   assert.deepEqual((await f.pool.query('SELECT name FROM schema_migrations ORDER BY name')).rows.map(r=>r.name),[...migrationNames].sort());
+  }
+  assert.notEqual(names[0],names[1]);
+  assert.equal(names[0]!.slice(0,-10),names[1]!.slice(0,-10),'concurrent cases reuse one migrated seed');
+  const marker=randomUUID();await opened[0]!.pool.query('INSERT INTO organisations(id) VALUES($1)',[marker]);
+  assert.equal((await opened[1]!.pool.query('SELECT id FROM organisations WHERE id=$1',[marker])).rowCount,0);
+  while(opened.length)await opened.pop()!.close();
+  assert.equal((await admin.query('SELECT datname FROM pg_database WHERE datname=ANY($1::text[])',[names])).rowCount,0);
+ }finally{while(opened.length)await opened.pop()!.close();await admin.end();}
+});
+
 test('template-backed venue fixtures isolate data and keep every migration',async()=>{
  assert.equal(typeof fixtures.createVenueServiceTemplate,'function','the guard wrapper needs an owned migrated template');
  const template=await fixtures.createVenueServiceTemplate();

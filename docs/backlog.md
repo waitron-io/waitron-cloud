@@ -3523,6 +3523,26 @@ refusal. The existing receipt checks, case counts, cleanup and time limits
 remain unchanged. Historical causes and signal delivery through the parent's
 330-second cutoff remain unqualified.
 
+Repeated venue schema setup now uses the existing migrated database template.
+Each test process prepares it once, and each case gets a separate clone with
+every migration digest checked. The process closes its template after its cases,
+and command fixtures use their clone's connection when starting another process.
+The concurrent-fixture check covers a shared seed, separate rows, the complete
+migration list and clone removal. A refused first setup leaves the next case
+free to initialise its own template. A real child-process check verifies that
+its default template disappears while another template family remains.
+The traffic command reader's recorded Git object moves with its reviewed URL
+change, so the local-stack package graph can still trust that reader.
+Existing service, permission and traffic
+assertions and all proof deadlines stay unchanged. The complete Debian run of
+`node --test scripts/venue-service-proof.test.ts` retains all 360 cases across
+nine groups in about 201 seconds, compared with 289 for the unchanged baseline
+on the same box, within the same 330-second child limit. The Mac proof also
+passes, separately from that x86 comparison. A controlled 1.5-CPU Debian
+run still reaches that limit after 326 cases, compared with 94 before this change.
+That constraint remains unqualified, and the historical hosted slowdown remains
+unexplained.
+
 ## Bound verifier test failure cleanup (D530)
 
 [The D462 backup job](https://github.com/waitron-io/waitron-cloud/actions/runs/41311315472/job/124862280459)

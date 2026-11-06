@@ -13,7 +13,7 @@ async function database(template?:string){
  const close=async()=>{
   if(!created)return;
   if(!template){
-   // Callers have exited; reap their abandoned clones using the full owner identity.
+   // The full template ID limits abandoned-clone cleanup to this owner's family.
    const children=await admin.query('SELECT datname FROM pg_database WHERE datname ~ $1 ORDER BY datname',['^venue_service_clone_'+name.slice(-32)+'_[a-f0-9]{10}$']);
    for(const {datname} of children.rows)await admin.query(`DROP DATABASE "${datname}"`);
   }
