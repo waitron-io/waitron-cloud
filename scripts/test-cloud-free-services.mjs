@@ -15,6 +15,16 @@ const suites = [
   {id: 'deployment-gates', cwd: '.', files: ['deploy/test-cloud/runtime.test.mjs', 'deploy/test-cloud/deployment.test.mjs']},
 ];
 const suiteIds = suites.map(suite => suite.id);
+const failureTypes = ['testCodeFailure','testTimeoutFailure','cancelledByParent','subtestsFailed','hookFailed','testAborted','uncaughtException','unhandledRejection'];
+const failureCodes = ['ERR_ASSERTION','ERR_TEST_FAILURE','ERR_MODULE_NOT_FOUND','ERR_UNKNOWN_FILE_EXTENSION','ECONNREFUSED','ECONNRESET','ETIMEDOUT','EPIPE','ENOENT','ENOSPC','23505','40P01','40001','53300','57P01'];
+function failureCode(error) {
+  let code = 'unknown';
+  for (let depth=0; depth<4 && error && typeof error==='object'; depth++) {
+    if (failureCodes.includes(error.code)) code=error.code;
+    error=error.cause;
+  }
+  return code;
+}
 function proofConcurrency(){
   const value=process.env.CLOUD_SERVICE_PROOF_CONCURRENCY;
   assert.ok(value===undefined||value==='1'||value==='2','Invalid proof concurrency');
@@ -35,6 +45,25 @@ const venueSuites = [
 function keys(value, names) {
   assert.ok(value && typeof value === 'object' && !Array.isArray(value), 'Invalid proof object');
   assert.deepEqual(Object.keys(value).sort(), [...names].sort(), 'Unexpected proof fields');
+}
+export function parseServiceProofFailure(line) {
+  if (!line.startsWith('SERVICE_PROOF_FAILURE ') || line.length>1024) return;
+  try {
+    const value=JSON.parse(line.slice('SERVICE_PROOF_FAILURE '.length));
+    if(value.kind==='truncated'){
+      keys(value,['kind','limit']);assert.equal(value.limit,16);return value;
+    }
+    const fields=value.kind==='case'?['line','failureType','code']:value.kind==='output'?['stream']:null;
+    assert.ok(fields);keys(value,['kind','suite','fileIndex',...fields]);
+    const suite=[...suites,...venueSuites].find(suite=>suite.id===value.suite);
+    assert.ok(suite&&Number.isSafeInteger(value.fileIndex)&&value.fileIndex>=0&&value.fileIndex<suite.files.length);
+    if(value.kind==='case'){
+      assert.ok(Number.isSafeInteger(value.line)&&value.line>=0);
+      assert.ok([...failureTypes,'unknown'].includes(value.failureType));
+      assert.ok([...failureCodes,'unknown'].includes(value.code));
+    }else assert.ok(['stdout','stderr'].includes(value.stream));
+    return value;
+  }catch{return;}
 }
 export function validateFreeServiceReceipt(value) {
   keys(value, ['version', 'kind', 'cloudHead', 'cloudTree', 'scope', 'relay', 'translation', 'deployedTranslation', 'waitronRelay', 'waitronTranslation', 'suites']);
@@ -103,9 +132,20 @@ export async function summariseServiceMatrix(events,selected){
   const summaries=new Map();
   const started=performance.now(),timings=process.env.CLOUD_SERVICE_PROOF_TIMINGS==='1';
   const positions=new Map(selected.flatMap(suite=>suite.files.map((file,fileIndex)=>[resolve(file),{suite:suite.id,fileIndex}])));
+  let failures=0;
+  function report(value){
+    if(failures<16)process.stderr.write('SERVICE_PROOF_FAILURE '+JSON.stringify(value)+'\n');
+    else if(failures===16)process.stderr.write('SERVICE_PROOF_FAILURE {"kind":"truncated","limit":16}\n');
+    failures++;
+  }
   async function* observed(){
     for await(const event of events){
       const data=event.data,position=typeof data?.file==='string'?positions.get(resolve(data.file)):undefined;
+      if(event.type==='test:fail'&&position){
+        const error=data.details?.error;
+        report({kind:'case',...position,line:Number.isSafeInteger(data.line)&&data.line>0?data.line:0,failureType:failureTypes.includes(error?.failureType)?error.failureType:'unknown',code:failureCode(error)});
+      }
+      if((event.type==='test:stdout'||event.type==='test:stderr')&&position)report({kind:'output',...position,stream:event.type==='test:stdout'?'stdout':'stderr'});
       const duration=event.type==='test:complete'?data?.details?.duration_ms:data?.duration_ms;
       if(timings&&position&&Number.isFinite(duration)&&duration>=0){
         const base={...position,durationMs:duration,elapsedMs:performance.now()-started};
@@ -164,7 +204,8 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
       const stop = () => controller.abort();
       process.once('SIGTERM', stop); process.once('SIGINT', stop);
       try {
-        process.stdout.write(JSON.stringify(await summariseTestRun(run({files: suite.files, concurrency: proofConcurrency(), timeout: 120000, execArgv: [], signal: controller.signal}), suite.files)) + '\n');
+        const [{id: _id,...summary}]=await summariseServiceMatrix(run({files: suite.files, concurrency: proofConcurrency(), timeout: 120000, execArgv: [], signal: controller.signal}), [suite]);
+        process.stdout.write(JSON.stringify(summary) + '\n');
       } finally {controller.abort(); process.removeListener('SIGTERM', stop); process.removeListener('SIGINT', stop);}
     }
   } catch {process.stderr.write('Free-service proof failed\n'); process.exitCode = 1;}
