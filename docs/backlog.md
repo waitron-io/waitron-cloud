@@ -127,6 +127,17 @@ still need qualification. No runtime implementation, acceptance guard, existing
 check or deadline changes. Next, reproduce this boundary in the real smoke
 without assuming that a temporary idle transport means maintenance is finished.
 
+
+The owner changed the acceptance rule on 6 November: functional rehearsal checks
+still fail, while cost-accounting problems are reported with named gaps in every
+mode. The [accounting-gap plan](superpowers/plans/2026-11-06-cost-accounting-gaps.md)
+sets out that change. It replaces the proposed retry, uncertain-read cap and
+maintenance-completion gate. Sales, uploads, stop, restore, SQLite and fiscal
+integrity, cleanup, request caps and deadlines remain required. An unknown figure
+stays unknown, and a run with gaps cannot replace a published cost figure.
+Implementation, the lost-write restore control and saved-failure replay remain
+open; this plan does not establish the cause of the historical failures.
+
 ## Cloud backup box identity (D451)
 
 Cloud's backup verifier reads `WAITRON_NODE_ID`, and generated replay state writes
@@ -329,6 +340,12 @@ raised. D463's collector and remaining billing work stay on their separate branc
   Never remove a recorded decision with finished work.
 
 ## Decisions and deliberate limits
+
+- Cost accounting estimates do not block development (owner, 2026-11-06).
+  Rehearsals still enforce functional checks, cleanup, request caps and deadlines.
+  Cut-off requests, meter disagreements, unreconciled totals and unknown billing
+  are reported as gaps in every mode. Unknown figures stay unknown and are never
+  exported as measured; a run with gaps cannot replace published cost figures.
 
 - Email resend waits belong to each address and operation (owner, 2026-10-25).
   Correcting an address allows an immediate send; returning to it keeps its wait.
