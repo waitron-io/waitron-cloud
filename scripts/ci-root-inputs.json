@@ -195,9 +195,9 @@
         },
         {
           "reader": "scripts/ci-input-audit.mjs",
-          "site": "readInputAudit/fingerprintInputMode/projectInputMode/auditInputMode:105-225",
+          "site": "readInputAudit/fingerprintInputMode/projectInputMode/auditInputMode/currentRecord",
           "kind": "inventory",
-          "boundary": "Complete immutable input identities and per-path records; candidate JavaScript never evaluated",
+          "boundary": "Current and named historical immutable Git inventories and canonical record hashes; candidate JavaScript never evaluated",
           "role": "metadata validation"
         },
         {
@@ -594,9 +594,9 @@
         },
         {
           "reader": "scripts/ci-input-audit.mjs",
-          "site": "readInputAudit/fingerprintInputMode/projectInputMode/auditInputMode:105-225",
+          "site": "readInputAudit/fingerprintInputMode/projectInputMode/auditInputMode/currentRecord",
           "kind": "inventory",
-          "boundary": "Complete immutable input identities and per-path records; candidate JavaScript never evaluated",
+          "boundary": "Current and named historical immutable Git inventories and canonical record hashes; candidate JavaScript never evaluated",
           "role": "metadata validation"
         },
         {
@@ -786,6 +786,13 @@
           "site": "treeInventory/assertReviewedInputs:55-104",
           "kind": "inventory",
           "boundary": "complete immutable Git tree names/modes/object IDs; executable bytes under scripts exclude .test files; candidate test modules are never imported or executed",
+          "role": "metadata validation"
+        },
+        {
+          "reader": "scripts/ci-required-cases-routes.test.mjs",
+          "site": "trackedFiles and root package scripts inventory",
+          "kind": "inventory",
+          "boundary": "Expands the checked-in root test:local-stack command to filenames only; does not read or execute admitted test content",
           "role": "metadata validation"
         }
       ]

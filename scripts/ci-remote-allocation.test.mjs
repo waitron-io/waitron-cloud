@@ -57,8 +57,7 @@ const child=spawnSync(process.execPath,process.argv.slice(8),{cwd:'packages/remo
    const original=spawnSync(process.execPath,['--test','--test-timeout=30000',`--test-shard=${row.shard}/4`,'test/*.test.ts'],{cwd:join(root,'packages/remote-access'),env,encoding:'utf8',timeout:30000});
    assert.equal(original.status,0,original.stdout+original.stderr);
    const originallySelected=[...original.stdout.matchAll(/^(?:ok \d+ - |✔ )(.+?)(?: \(.*ms\))?$/gm)].map(m=>m[1]);
-   const unmoved=file=>file!=='venue-service-remote-guards.test.ts';
-   assert.deepEqual(names.filter(unmoved).sort(),originallySelected.filter(unmoved).sort(),'Unmoved files retain their native Node partition');
+   assert.deepEqual([...names].sort(),originallySelected.sort(),'Every ordinary file retains its native Node partition');
    seen.push(...names);}
   assert.deepEqual(seen.sort(),files);
  }finally{rmSync(root,{recursive:true,force:true});}

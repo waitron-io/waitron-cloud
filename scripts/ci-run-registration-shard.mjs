@@ -3,12 +3,9 @@ import {readdirSync, realpathSync} from 'node:fs';
 import {dirname, resolve} from 'node:path';
 import {fileURLToPath, pathToFileURL} from 'node:url';
 
-// These database-heavy files leave the two slow groups; unlisted files retain
-// Node's sorted round-robin allocation, including newly discovered files.
 const destinations = new Map([
   ['monitoring.test.ts', 1],
   ['support-grants.test.ts', 2],
-  ['venue-service-legacy-schema-guards.test.ts', 1],
 ]);
 
 export function registrationFiles(shard, files) {

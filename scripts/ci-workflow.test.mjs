@@ -9,6 +9,40 @@ import {loadWorkspace, scopeForPaths, workPlan, receiptSuites} from './ci-scope.
 // This guard reads workflow text; real Actions must separately prove its wiring.
 const workflow=readFileSync(new URL('../.github/workflows/ci.yml',import.meta.url),'utf8');
 const job=name=>workflow.match(new RegExp(`^  ${name}:\\n([\\s\\S]*?)(?=^  [\\w-]+:|$(?![\\s\\S]))`,'m'))?.[1]??'';
+test('root fixtures can clone the reviewed main reference from an exact detached checkout', () => {
+  const directory = mkdtempSync(join(tmpdir(), 'cloud-ci-main-reference-'));
+  const run = (cwd, command, args) => spawnSync(command, args, {cwd, encoding: 'utf8'});
+  const git = (...args) => {
+    const result = run(directory, 'git', args);
+    assert.equal(result.status, 0, result.stderr);
+    return result.stdout.trim();
+  };
+  try {
+    git('init', '-b', 'main');
+    git('config', 'user.name', 'Cloud fixture');
+    git('config', 'user.email', 'fixture@example.invalid');
+    writeFileSync(join(directory, 'README.md'), 'fixture\n');
+    git('add', 'README.md');
+    git('commit', '-s', '-m', 'Create fixture');
+    const head = git('rev-parse', 'HEAD');
+    const tree = git('rev-parse', 'HEAD^{tree}');
+    git('update-ref', 'refs/remotes/origin/main', head);
+    git('checkout', '--detach', head);
+    git('branch', '-D', 'main');
+    const command = job('root').match(/- name: Expose main to nested test fixtures\n\s+run: (.+)/)?.[1] ?? ':';
+    const setup = run(directory, 'sh', ['-c', command]);
+    assert.equal(setup.status, 0, setup.stderr);
+    git('clone', '--shared', directory, join(directory, 'child'));
+    const reference = run(join(directory, 'child'), 'git', ['rev-parse', '--verify', 'origin/main']);
+    assert.equal(reference.status, 0, 'Nested fixtures need the main reference that authenticates removed inputs');
+    assert.equal(reference.stdout.trim(), head);
+    assert.equal(git('rev-parse', 'HEAD'), head);
+    assert.equal(git('rev-parse', 'HEAD^{tree}'), tree);
+    assert.notEqual(run(directory, 'git', ['symbolic-ref', '-q', 'HEAD']).status, 0, 'The tested checkout stays detached');
+  } finally {
+    rmSync(directory, {recursive: true, force: true});
+  }
+});
 test('main merges keep independent runs while superseded pull request runs cancel',()=>{
   assert.match(workflow,/group: ci-\$\{\{ inputs.full && 'nightly-' \|\| '' \}\}\$\{\{ github.event_name == 'pull_request' && github.ref \|\| github.run_id \}\}/);
   assert.match(workflow,/cancel-in-progress: \$\{\{ !inputs.full && github.event_name == 'pull_request' \}\}/);
@@ -42,7 +76,7 @@ test('slow packages run every file shard with their original test deadlines',()=
   assert.match(packages,/if: matrix.package == '@waitron-cloud\/portal'\n\s+run: pnpm --filter \$\{\{ matrix.package \}\} build/);
   assert.match(packages,/if: matrix.package == '@waitron-cloud\/registration'\n\s+run: node scripts\/test-postgres.mjs exec pnpm --filter \$\{\{ matrix.package \}\} exec node \.\.\/\.\.\/scripts\/ci-run-registration-shard.mjs \$\{\{ matrix.shard \}\}/);
   assert.match(packages,/if: matrix.package == '@waitron-cloud\/remote-access'\n\s+run: node scripts\/test-postgres.mjs exec pnpm --filter \$\{\{ matrix.package \}\} exec node \.\.\/\.\.\/scripts\/ci-run-remote-shard.mjs \$\{\{ matrix.shard \}\}/);
-  assert.match(packages,/if: matrix.shards && matrix.package != '@waitron-cloud\/registration' && matrix.package != '@waitron-cloud\/remote-access'\n\s+run: node scripts\/test-postgres.mjs exec pnpm --filter \$\{\{ matrix.package \}\} exec node --test --test-timeout=\$\{\{ matrix.package == '@waitron-cloud\/portal' && '120000' \|\| '30000' \}\} --test-shard=\$\{\{ matrix.shard \}\}\/\$\{\{ matrix.shards \}\} "test\/\*\.test\.ts"/);
+  assert.match(packages,/if: matrix.shards && matrix.package != '@waitron-cloud\/registration' && matrix.package != '@waitron-cloud\/remote-access'\n\s+run: node scripts\/test-postgres.mjs exec pnpm --filter \$\{\{ matrix.package \}\} exec node --test --test-reporter=tap --test-reporter-destination=stdout --test-reporter=\.\.\/\.\.\/scripts\/ci-required-cases\.mjs --test-reporter-destination=stdout --test-timeout=\$\{\{ matrix.package == '@waitron-cloud\/portal' && '120000' \|\| '30000' \}\} --test-shard=\$\{\{ matrix.shard \}\}\/\$\{\{ matrix.shards \}\} "test\/\*\.test\.ts"/);
 });
 test('work jobs stop within eight minutes and planner/summary within two',()=>{
   for (const name of ['root','typecheck','receipts','packages']) assert.match(job(name),/^    timeout-minutes: 8$/m);
@@ -153,10 +187,10 @@ test('nightly contract keeps a daily trigger and all four full reusable families
     assert.match(called, /cancel-in-progress: \$\{\{ !inputs.full && github.event_name == 'pull_request' \}\}/);
   }
 });
-test('nightly final gate always receives every reusable workflow result', () => {
+test('nightly final gate always receives every workflow and mutation result', () => {
   const final = nightlyJob('summary');
   assert.match(final, /if: \$\{\{ always\(\) \}\}/);
-  assert.match(final, /needs: \[standard, cost, venue, aws\]/);
+  assert.match(final, /needs: \[standard, cost, venue, aws, mutations\]/);
   assert.match(final, /CI_NIGHTLY_RESULTS: \$\{\{ toJSON\(needs\) \}\}/);
   assert.match(final, /run: node scripts\/ci-nightly-summary\.mjs/);
   assert.match(nightlyJob('standard'), /job-prefix: 'standard \/ '/);
@@ -197,4 +231,21 @@ for (const [scenario, script, status, output] of [
   } finally {
     rmSync(directory, {recursive: true, force: true});
   }
+});
+
+// Each wrapper carries its entire approved set; the allowance wrapper includes its helper.
+test('nightly mutation job runs all four approved wrappers and the allowance helper', () => {
+  const mutations = nightlyJob('mutations');
+  const command = mutations.match(/run: (node scripts\/test-postgres\.mjs exec node --test[^\n]+)/)?.[1];
+  assert.ok(command, 'Nightly must execute the mutation wrappers through PostgreSQL');
+  assert.deepEqual(command.split(' ').filter(argument => argument.endsWith('.nightly.ts')), [
+    'packages/account-http/test/venue-service-direct-wait-guards.nightly.ts',
+    'packages/account-http/test/venue-service-external-wait-guards.nightly.ts',
+    'packages/registration/test/billing-allowance-guards.nightly.ts',
+    'packages/registration/test/billing-guard-qualification.nightly.ts',
+  ]);
+  assert.match(command, /--test-concurrency=1/);
+  const allowance = readFileSync(new URL('../packages/registration/test/billing-allowance-guards.nightly.ts', import.meta.url), 'utf8');
+  assert.match(allowance, /scripts\/allowance-traffic-guard-probes\.nightly\.mjs/);
+  assert.match(allowance, /scripts\/allowance-traffic-guard-probes\.mjs/);
 });

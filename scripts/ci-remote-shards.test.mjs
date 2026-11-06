@@ -1,3 +1,4 @@
+import {remoteFiles} from './ci-run-remote-shard.mjs';
 import assert from 'node:assert/strict';
 import {spawnSync} from 'node:child_process';
 import {cpSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync} from 'node:fs';
@@ -58,4 +59,9 @@ test('the remote runner becomes the test process through a symlink and propagate
     assert.equal(failed.status, 1, failed.stdout + failed.stderr);
     assert.match(failed.stdout + failed.stderr, /CONTROLLED_REMOTE_FAILURE/);
   });
+});
+
+test('ordinary remote files without an active pin follow the native partition', () => {
+  assert.deepEqual(remoteFiles(2, ['a.test.ts', 'venue-service-remote-guards.test.ts']),
+    ['venue-service-remote-guards.test.ts']);
 });

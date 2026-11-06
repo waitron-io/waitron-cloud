@@ -105,6 +105,8 @@ test('the actual single-suite CLI reports a failing case and still exits without
   try {
     for(const path of ['scripts','deploy/test-cloud'])mkdirSync(join(directory,path),{recursive:true});
     copyFileSync(new URL('./test-cloud-free-services.mjs',import.meta.url),join(directory,'scripts/test-cloud-free-services.mjs'));
+    copyFileSync(new URL('./ci-required-cases.mjs',import.meta.url),join(directory,'scripts/ci-required-cases.mjs'));
+    writeFileSync(join(directory,'scripts/ci-required-cases.json'),'{}\n');
     for(const path of ['deploy/test-cloud/venue-service-runtime.test.mjs','scripts/venue-service-cli.test.mjs','deploy/test-cloud/venue-service-startup.test.mjs'])writeFileSync(join(directory,path),"import {test} from 'node:test';test('private-name',()=>{});\n");
     writeFileSync(join(directory,'deploy/test-cloud/venue-service-runtime.test.mjs'),"import {test} from 'node:test';import assert from 'node:assert/strict';\ntest('private-name',()=>assert.equal('private-actual','private-expected'));\n");
     const env={...process.env};delete env.NODE_TEST_CONTEXT;delete env.NODE_OPTIONS;
@@ -141,6 +143,8 @@ test('the full proof identifies a post-run checkout refusal without printing its
       'packages/registration/test/venue-service-relay.test.ts','packages/registration/test/venue-service-rules.test.ts'];
     for(const path of files){mkdirSync(join(directory,path,'..'),{recursive:true});writeFileSync(join(directory,path),"import {test} from 'node:test';test('private-name',()=>{});\n");}
     copyFileSync(new URL('./test-cloud-free-services.mjs',import.meta.url),join(directory,'scripts/test-cloud-free-services.mjs'));
+    copyFileSync(new URL('./ci-required-cases.mjs',import.meta.url),join(directory,'scripts/ci-required-cases.mjs'));
+    writeFileSync(join(directory,'scripts/ci-required-cases.json'),'{}\n');
     writeFileSync(join(directory,files[0]),"import {test} from 'node:test';import {writeFileSync} from 'node:fs';test('private-name',()=>writeFileSync('private-stray-file','private-value'));\n");
     for(const args of [['init','-q'],['add','.'],['-c','user.name=Service proof fixture','-c','user.email=fixture@example.invalid','commit','-s','-qm','Create dirty-proof fixture']]){
       const result=spawnSync('git',args,{cwd:directory,encoding:'utf8'});assert.equal(result.status,0,result.stderr);

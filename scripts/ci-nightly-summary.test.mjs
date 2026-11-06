@@ -14,7 +14,7 @@ function run(results) {
   } finally {rmSync(root, {recursive: true, force: true});}
 }
 const green = {standard: {result: 'success'}, cost: {result: 'success'}, venue: {result: 'success'}, aws: {result: 'success'}, mutations: {result: 'success'}};
-test('nightly final result requires all five independent workflows and publishes their outcomes', () => {
+test('nightly final result requires all four workflows and the mutation job and publishes their outcomes', () => {
   const result = run(green);
   assert.equal(result.status, 0, result.stdout + result.stderr);
   for (const family of ['standard', 'cost', 'venue', 'aws', 'mutations']) assert.ok(result.report.includes(`| ${family} | success |`));

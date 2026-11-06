@@ -4689,9 +4689,11 @@ keep their assertions. Required-case receipts must reject a missing, skipped or
 unexecuted case without copying or mutating the product. The password diagnostic
 also watches the session implementation it changes.
 
-The historical allowance failures include incomplete candidate guard lists,
-outdated schema prerequisites and a serial qualification exceeding its child
-deadline. These need separate revision-bound receipts; moving the checks to
-nightly does not repair them. Compare healthy full runs after landing before
-claiming elapsed or aggregate job-time savings. The 38-minute assessment totals
-reported test-body work, which overlaps across jobs.
+The eight historical allowance failures occurred on unfinished PR #858 revisions:
+four incomplete guard lists, three missing schema prerequisites and one serial
+qualification exceeding its child deadline. The delivered PR filled the list and
+schema prerequisites and split the serial qualification; the full current nightly
+set passes on Debian. Moving those checks to nightly gets no credit for that
+earlier repair. Compare healthy full runs after landing before claiming elapsed
+or aggregate job-time savings. The 38-minute assessment totals reported test-body
+work, which overlaps across jobs.

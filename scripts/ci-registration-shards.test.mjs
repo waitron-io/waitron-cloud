@@ -31,7 +31,7 @@ test('a symlinked registration command executes selected tests and refuses inval
   } finally {rmSync(root, {recursive: true, force: true});}
 });
 
-test('registration runner moves the three measured slow files and executes all current and future files exactly once', () => {
+test('registration runner moves the two configured files and executes all current and future files exactly once', () => {
   const root = mkdtempSync(join(tmpdir(), 'cloud-registration-balanced-'));
   try {
     mkdirSync(join(root, 'scripts'));
@@ -64,9 +64,9 @@ test('registration runner moves the three measured slow files and executes all c
         ...files.map(file => `test/${file}`)], {cwd: join(root, 'packages/registration'), env, encoding: 'utf8', timeout: 30_000});
       assert.equal(original.status, 0, original.stderr + original.stdout);
       const originallySelected = [...original.stdout.matchAll(/D576_FILE ([\w.-]+\.test\.ts)/g)].map(match => match[1]);
-      const unmoved = file => !['monitoring.test.ts', 'support-grants.test.ts', 'venue-service-legacy-schema-guards.test.ts'].includes(file);
+      const unmoved = file => !['monitoring.test.ts', 'support-grants.test.ts'].includes(file);
       assert.deepEqual(selected.filter(unmoved).sort(), originallySelected.filter(unmoved).sort(),
-        'Files outside the three measured moves must keep Node\'s original partition');
+        'Files outside the two configured moves must keep Node\'s original partition');
       groups.push(selected);
     }
     assert.deepEqual(groups.flat().sort(), files);

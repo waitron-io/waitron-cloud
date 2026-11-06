@@ -331,10 +331,10 @@ checks still apply. Translation holds the requested items when queuing a job and
 spends them under its current worker lease before a provider call; its separate
 money safety cap remains in force. These adapters do not enable production billing.
 
-To check that the allowance guards prevent their intended failures, run:
+The full allowance guard set runs nightly. To check it directly, run:
 
 ```sh
-node scripts/test-postgres.mjs exec pnpm --dir packages/registration exec node --test --test-timeout=240000 test/billing-allowance-guards.test.ts
+node scripts/test-postgres.mjs exec pnpm --dir packages/registration exec node --test --test-timeout=240000 test/billing-allowance-guards.nightly.ts
 ```
 
 The wrapper checks two trial rules and fourteen service, traffic and ownership
