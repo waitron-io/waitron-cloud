@@ -443,12 +443,12 @@ export async function openLitestreamHistories({ client, sdk, meter, bucket, cloc
     if (row.candidates || (mutation.method === 'PUT' ? row.current?.bytes !== mutation.bytes : row.current !== null)) row.uncertain = mutation;
   };
   const multipart = allowMultipart ? nativeMultipartHistory({ bucket, now, inspect, resolveReplies: resolveMultipartReplies,
-    markGap: code => { gaps.add(code); meter.markGap(code); }, prepareComplete: (key, bytes, from) => {
+    markGap: code => { gaps.add(code); meter.markGap(code); }, prepareComplete: (key, sizes, from) => {
     let row = rows.get(key);
     requireThat(!row?.active);
     if (!row) { requireThat(rows.size < 100000); row = { current: null, uncertain: null, active: false }; rows.set(key, row); }
-    const mutation = mutationFor(row, 'PUT', bytes, from);
-    const completion = { following: new Set([bytes]), advanced: false, overwritten: false };
+    const mutation = sizes.length === 1 ? mutationFor(row, 'PUT', sizes[0], from) : null;
+    const completion = { following: new Set(sizes), advanced: false, overwritten: false };
     row.pendingCompletion = completion;
     const apply = by => {
       requireThat(row.pendingCompletion === completion && !row.active);
@@ -456,7 +456,7 @@ export async function openLitestreamHistories({ client, sdk, meter, bucket, cloc
       // Inventory can witness the completed upload after later work. It cannot
       // replace a newer acknowledged object or date an invisible intermediate interval.
       if (completion.overwritten) { historyGap(); return; }
-      if (completion.advanced) {
+      if (completion.advanced || !mutation) {
         historyGap();
         row.candidates = new Set(completion.following);
       } else transition(row, mutation, by);
@@ -685,14 +685,21 @@ export function nativeMultipartHistory({ bucket, now, inspect, prepareComplete, 
         requireThat(/^[1-9]\d*$/.test(f.PartNumber) && cleanText(f.ETag)); const n = Number(f.PartNumber);
         const possible = upload.candidates?.get(n) ?? [upload.parts.get(n)];
         const matching = possible.filter(part => part && (part.etag === null || f.ETag === part.etag));
-        // A missing reply leaves its ETag unknown. The selected request still needs
-        // an owned part and one exact admitted size; it does not witness a commit.
-        requireThat(n > previous && matching.length > 0 && matching.every(part => part.bytes === matching[0].bytes));
-        previous = n; selected.push({ bytes: matching[0].bytes });
+        // A missing reply leaves its ETag unknown. Inventory must select an exact
+        // sum of owned part sizes, rather than an arbitrary value inside a range.
+        requireThat(n > previous && matching.length > 0);
+        previous = n; selected.push(new Set(matching.map(part => part.bytes)));
       }
       requireThat(selected.length > 0);
-      const size = selected.reduce((n, part) => n + part.bytes, 0); requireThat(count(size));
-      applyCompletion = prepareComplete(key, size, time);
+      let sizes = new Set([0]);
+      for (const part of selected) {
+        const next = new Set();
+        for (const size of sizes) for (const bytes of part) {
+          requireThat(count(size + bytes)); next.add(size + bytes); requireThat(next.size <= 100000);
+        }
+        sizes = next;
+      }
+      applyCompletion = prepareComplete(key, [...sizes], time);
     }
     busy = true;
     return ({ statusCode, bytesOut, interrupted = false, responseBody, responseHeaders }) => {

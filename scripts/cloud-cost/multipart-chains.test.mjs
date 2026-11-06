@@ -392,3 +392,175 @@ for (const versioned of [false, true]) test(`missing part completion rejects an 
   f.time(5); assert.throws(() => f.audit.begin(completionInput([[1, 'lost'], [2, 'one-byte']])), bad);
   assert.throws(() => f.meter.snapshot(), /Invalid cloud cost meter/);
 });
+
+
+async function ambiguousCompletion(f, { secondPart = false, id = UploadId, from = 1 } = {}) {
+  createAt(f, id, from);
+  f.time(from + 2); cutoff(f, 'part', { id, bytes: 4 });
+  f.time(from + 3); cutoff(f, 'part', { id, bytes: 8 });
+  f.uploads.get(id).set(1, { bytes: 8, etag: 'lost' });
+  if (secondPart) {
+    f.time(from + 4); cutoff(f, 'part', { id, n: 2, bytes: 6 });
+    f.time(from + 5); cutoff(f, 'part', { id, n: 2, bytes: 10 });
+    f.uploads.get(id).set(2, { bytes: 10, etag: 'second' });
+  }
+  const req = completionInput(secondPart ? [[1, 'lost'], [2, 'second']] : [[1, 'lost']]);
+  req.path = req.path.replace(UploadId, id);
+  return req;
+}
+function finishCompletion(f, req, outcome, version = 'completed') {
+  const finish = f.audit.begin(req);
+  finish(outcome === 'acknowledged'
+    ? { statusCode: 200, bytesOut: req.body.length, responseBody: completedReply(), responseHeaders: { 'x-amz-version-id': version } }
+    : { statusCode: null, bytesOut: req.body.length, interrupted: true });
+}
+
+// Choosing the first candidate rejects another admitted size; choosing a range admits unowned sizes.
+for (const versioned of [false, true]) for (const outcome of ['acknowledged', 'lost-committed', 'lost-retained'])
+  for (const bytes of [4, 8]) test(`ambiguous completion preserves exact owned sizes ${versioned}/${outcome}/${bytes}`, async t => {
+    const f = await fixture(t, versioned), req = await ambiguousCompletion(f);
+    f.time(8); assert.doesNotThrow(() => finishCompletion(f, req, outcome));
+    if (outcome === 'lost-retained') f.uploads.get(UploadId).set(1, { bytes, etag: 'lost' });
+    else { f.uploads.clear(); f.objects.push({ id: 'completed', bytes, latest: true }); }
+    f.time(12); await assert.doesNotReject(f.audit.verify()); result(f, bytes, outcome === 'lost-retained' ? 1 : 0, true);
+    f.time(13); await assert.doesNotReject(f.audit.verify()); result(f, bytes, outcome === 'lost-retained' ? 1 : 0, true);
+  });
+
+for (const versioned of [false, true]) for (const bytes of [10, 14, 18])
+  test(`ambiguous selected parts retain exact sums ${versioned}/${bytes}`, async t => {
+    const f = await fixture(t, versioned), req = await ambiguousCompletion(f, { secondPart: true });
+    f.time(8); assert.doesNotThrow(() => finishCompletion(f, req, 'lost-committed'));
+    f.uploads.clear(); f.objects.push({ id: 'completed', bytes, latest: true });
+    f.time(12); await assert.doesNotReject(f.audit.verify()); result(f, bytes, 0, true);
+  });
+
+for (const versioned of [false, true]) for (const outcome of ['acknowledged', 'lost-committed'])
+  for (const failure of ['intermediate-size', 'missing-object', 'extra-object'])
+    test(`ambiguous completion refuses unowned object evidence ${versioned}/${outcome}/${failure}`, async t => {
+      const f = await fixture(t, versioned), req = await ambiguousCompletion(f);
+      f.time(8); assert.doesNotThrow(() => finishCompletion(f, req, outcome)); f.uploads.clear();
+      if (failure !== 'missing-object') f.objects.push({ id: 'completed', bytes: failure === 'intermediate-size' ? 6 : 4, latest: true });
+      if (failure === 'extra-object') f.objects.push({ id: 'extra', bytes: 8, latest: false });
+      f.time(12); await assert.rejects(f.audit.verify(), bad);
+      assert.throws(() => f.meter.snapshot(), /Invalid cloud cost meter/);
+    });
+
+for (const versioned of [false, true]) for (const bytes of [11, 12, 13, 15, 16, 17])
+  test(`ambiguous part sums reject unsupported totals ${versioned}/${bytes}`, async t => {
+    const f = await fixture(t, versioned), req = await ambiguousCompletion(f, { secondPart: true });
+    f.time(8); assert.doesNotThrow(() => finishCompletion(f, req, 'lost-committed'));
+    f.uploads.clear(); f.objects.push({ id: 'completed', bytes, latest: true });
+    f.time(12); await assert.rejects(f.audit.verify(), bad);
+  });
+
+// An uncertain completion has to consume one distinct version-producing request.
+for (const latest of ['completed', 'ordinary']) for (const bytes of [4, 8])
+  test(`ambiguous completion retains admission order beside acknowledged writes ${latest}/${bytes}`, async t => {
+    const f = await fixture(t, true), req = await ambiguousCompletion(f);
+    f.time(8); assert.doesNotThrow(() => finishCompletion(f, req, 'lost-committed'));
+    f.uploads.clear(); f.time(9);
+    f.audit.begin({ method: 'PUT', path, headers: { 'content-length': '4' } })({ statusCode: 200, bytesOut: 4, responseHeaders: { 'x-amz-version-id': 'ordinary' } });
+    f.objects.push({ id: 'completed', bytes, latest: latest === 'completed' }, { id: 'ordinary', bytes: 4, latest: latest === 'ordinary' });
+    f.time(12);
+    if (latest === 'completed') await assert.rejects(f.audit.verify(), bad);
+    else { await assert.doesNotReject(f.audit.verify()); result(f, bytes + 4, 0, true); }
+  });
+
+for (const excess of [false, true]) for (const reverse of [false, true])
+  test(`ambiguous completion cannot borrow an ordinary request twice ${excess}/${reverse}`, async t => {
+    const f = await fixture(t, true), req = await ambiguousCompletion(f);
+    f.time(8); assert.doesNotThrow(() => finishCompletion(f, req, 'lost-committed'));
+    f.uploads.clear(); f.time(9);
+    f.audit.begin({ method: 'PUT', path, headers: { 'content-length': '4' } })({ statusCode: null, bytesOut: 4, interrupted: true });
+    f.objects.push({ id: 'completed', bytes: 8, latest: false }, { id: 'ordinary', bytes: 4, latest: true });
+    if (excess) f.objects.push({ id: 'extra', bytes: 4, latest: false });
+    if (reverse) f.objects.reverse();
+    f.time(12);
+    if (excess) await assert.rejects(f.audit.verify(), bad);
+    else { await assert.doesNotReject(f.audit.verify()); result(f, 12, 0, true); }
+  });
+
+for (const missing of [false, true]) for (const reverse of [false, true])
+  test(`each vanished ambiguous upload requires its own version ${missing}/${reverse}`, async t => {
+    const f = await fixture(t, true), first = await ambiguousCompletion(f);
+    f.time(6); assert.doesNotThrow(() => finishCompletion(f, first, 'lost-committed')); f.uploads.clear();
+    const second = await ambiguousCompletion(f, { id: 'PRIVATE_SECOND', from: 7 });
+    f.time(12); assert.doesNotThrow(() => finishCompletion(f, second, 'lost-committed')); f.uploads.clear();
+    f.objects.push({ id: 'second', bytes: 4, latest: true });
+    if (!missing) f.objects.push({ id: 'first', bytes: 8, latest: false });
+    if (reverse) f.objects.reverse();
+    f.time(15);
+    if (missing) await assert.rejects(f.audit.verify(), bad);
+    else { await assert.doesNotReject(f.audit.verify()); result(f, 12, 0, true); }
+  });
+
+
+for (const reverse of [false, true]) test(`ambiguous version assignment preserves a narrower ordinary witness ${reverse}`, async t => {
+  const f = await fixture(t, true), req = await ambiguousCompletion(f);
+  f.time(6); assert.doesNotThrow(() => finishCompletion(f, req, 'lost-committed')); f.uploads.clear();
+  f.time(7); f.audit.begin({ method: 'PUT', path, headers: { 'content-length': '4' } })({ statusCode: null, bytesOut: 4, interrupted: true });
+  f.time(8); f.audit.begin({ method: 'PUT', path, headers: { 'content-length': '2' } })({ statusCode: 200, bytesOut: 2, responseHeaders: { 'x-amz-version-id': 'latest' } });
+  f.objects.push({ id: 'ordinary', bytes: 4, latest: false }, { id: 'completed', bytes: 8, latest: false }, { id: 'latest', bytes: 2, latest: true });
+  if (reverse) f.objects.reverse();
+  f.time(12); await assert.doesNotReject(f.audit.verify()); result(f, 14, 0, true);
+});
+
+
+for (const versioned of [false, true]) test(`two actual lost part replies still forward HTTP completion ${versioned}`, async t => {
+  const f = await fixture(t, versioned); create(f); const received = [];
+  const backend = createServer((req, res) => {
+    const chunks = []; req.on('data', chunk => chunks.push(chunk)); req.once('end', () => {
+      const body = Buffer.concat(chunks); received.push({ method: req.method, body: body.toString() });
+      if (req.method === 'PUT') {
+        f.uploads.get(UploadId).set(1, { bytes: body.length, etag: 'lost' }); res.destroy();
+      } else {
+        assert.equal(body.toString(), completionInput([[1, 'lost']]).body.toString());
+        const bytes = f.uploads.get(UploadId).get(1).bytes;
+        f.uploads.clear(); f.objects.push({ id: 'completed', bytes, latest: true });
+        res.setHeader('x-amz-version-id', 'completed'); res.end(completedReply());
+      }
+    });
+  });
+  backend.listen(0, '127.0.0.1'); await once(backend, 'listening');
+  t.after(() => { backend.closeAllConnections(); return new Promise(resolve => backend.close(resolve)); });
+  const meter = createMeter({ phase: 'workload', clock: () => 0 });
+  const front = await createLitestreamTransport({ target: `http://127.0.0.1:${backend.address().port}`, meter, phase: 'workload', lifetimes: f.audit });
+  t.after(() => front.close().catch(() => {}));
+  const send = (req, body, id) => new Promise((resolve, reject) => {
+    const caller = request(front.url + req.path, { method: req.method, headers: { ...req.headers,
+      'amz-sdk-invocation-id': `${id}-2222-4333-8444-555555555555`, 'amz-sdk-request': 'attempt=1; max=1',
+    } }, async res => {
+      try { for await (const chunk of res) void chunk; resolve(res.statusCode); }
+      catch { reject(Error('Synthetic reply cutoff')); }
+    });
+    caller.once('error', () => reject(Error('Synthetic request cutoff'))); caller.end(body);
+  });
+  for (const [time, body, id] of [[3, 'four', '11111111'], [5, 'eight888', '22222222']]) {
+    f.time(time); await assert.rejects(send(input('part', body.length), Buffer.from(body), id), /Synthetic (request|reply) cutoff/);
+    await front.whenIdle(() => {});
+  }
+  f.time(7); const req = completionInput([[1, 'lost']]);
+  await assert.doesNotReject(async () => { assert.equal(await send(req, req.body, '33333333'), 200); });
+  await front.whenIdle(() => {}); await assert.doesNotReject(front.close());
+  f.time(10); await assert.doesNotReject(f.audit.verify()); result(f, 8, 0, true);
+  assert.deepEqual(received, [{ method: 'PUT', body: 'four' }, { method: 'PUT', body: 'eight888' }, { method: 'POST', body: req.body.toString() }]);
+  assert.equal(meter.snapshot().accounting.producer.attempts, 3);
+  assert.equal(meter.snapshot().accounting.requests.filter(r => r.outcome === 'transport-error').reduce((n, r) => n + r.attempts, 0), 2);
+  assert.equal(meter.diagnostics().firstInvalidation, null);
+  assert.equal(front.checkpoint().pending, 0); assert.equal(front.checkpoint().connections, 0);
+});
+
+
+for (const distinct of [false, true]) test(`completion candidate budget counts distinct sums ${distinct}`, async t => {
+  const f = await fixture(t, false); create(f);
+  for (let n = 1; n <= 17; n++) {
+    f.time(n + 2); cutoff(f, 'part', { n, bytes: 0 });
+    cutoff(f, 'part', { n, bytes: distinct ? 2 ** (n - 1) : 1 });
+  }
+  const req = completionInput(Array.from({ length: 17 }, (_, n) => [n + 1, 'lost']));
+  f.time(20);
+  if (distinct) { assert.throws(() => f.audit.begin(req), bad); return; }
+  assert.doesNotThrow(() => finishCompletion(f, req, 'lost-committed'));
+  f.uploads.clear(); f.objects.push({ id: 'completed', bytes: 9, latest: true });
+  f.time(22); await assert.doesNotReject(f.audit.verify()); result(f, 9, 0, true);
+});

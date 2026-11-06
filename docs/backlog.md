@@ -267,13 +267,14 @@ keeping hidden storage intervals unknown. The pending request journal and possib
 part records each have a 100,000-entry limit. Run `node --test
 scripts/cloud-cost/multipart-chains.test.mjs` for both storage modes, actual HTTP
 replacement and completion sequences, and the memory bounds. A completion can name
-a part whose reply was lost when compatible owned admissions support one exact
-size. The request does not prove the part committed: independent inventory must
-still find the retained parts or the completed object, with the required version
-and original order in a versioned bucket. Hidden storage time remains unknown.
-Completion with several possible sizes, and further requests on an upload after
-an uncertain completion or abort, still need the wider forwarding policy. These
-controls do not prove SQLite recovery.
+a part whose reply was lost, including when several admitted sizes remain possible.
+Independent inventory must find an exact sum of owned part sizes; a value merely
+between those sums refuses. Distinct sums share the 100,000-entry history scale.
+A retained version also needs its own request and the original admission order;
+one ambiguous completion cannot explain two versions. Hidden storage time remains
+unknown. Further requests on an upload after an uncertain completion or abort,
+and multiple deferred completions for one unversioned key, still need the wider
+forwarding policy. These controls do not prove SQLite recovery.
 The full nonblocking accounting path, publication refusal, lost-write
 restore control and saved-failure replay remain open. These partial changes do
 not establish the historical cause or relax functional admission.
