@@ -23,7 +23,8 @@ async function smoke() {
   const database = stateRoot + '/venue/venue.db', output = stateRoot + '/restored.db';
   const children = new Set(); let injectedFailures = 0, failedUploadInvocation, retryAcknowledged = false;
   const afterStop = createLitestreamAfterStop({ clock: () => performance.now() / 1000 });
-  const controlSocket = stateRoot + '/control.sock';
+  // Host-shared state mounts need not expose a Unix listener to both processes.
+  const controlSocket = '/tmp/synthetic-litestream-' + process.pid + '.sock';
   const fault = createServer((req, res) => {
     let requestBytes = 0; req.on('data', bytes => { requestBytes += bytes.length; });
     if (req.method === 'PUT' && injectedFailures === 0) {
