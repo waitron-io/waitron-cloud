@@ -10,8 +10,28 @@ inbox subjects and synthetic recipients. Bodies, reset tokens, message IDs and
 raw errors stay out. The fixture reuses Account HTTP's bounded mail observer and
 keeps the original single lookup, recipient match, assertions and deadlines.
 Capture a recurrence with this evidence before changing delivery or inbox capture.
-Local PostgreSQL and SMTP reproduction waits for Docker to return; controlled
-HTTP and database stubs verify the reporting independently.
+Controlled HTTP and database checks verify the reporting independently.
+All four monitoring lookups and five signup/recovery lookups now pass their own
+fixture's evidence callback, as the authenticator lookup already does. This
+includes the [Spanish monitoring check-recovered mail miss on PR959](https://github.com/waitron-io/waitron-cloud/actions/runs/42096811129/job/127489056104).
+Previously those callers reported inbox metadata alone. A one-off controlled empty-inbox check at commit `e31dea70` executed all ten
+lookup expressions: the nine unwired callers first failed for missing queue
+evidence, then all ten reported queue, worker and SMTP evidence.
+The original helper checks still cover redaction, successful reads and unavailable
+diagnostics. Three Debian 13 trials ran the four real browser, account recovery,
+monitoring and venue-mail files concurrently at reviewed commit `de4b42d8`.
+All 21 checks passed in each trial, 63 total, without reproducing the missing
+delivery. Capture a natural
+recurrence with the callback before choosing a delivery fix; a shared cause with
+the [venue signup/reset receipt](../../deploy/test-cloud/venue-service-basic.test.mjs)
+is unproved. That receipt separately found a queued message not marked sent.
+
+The observer's one-second query timeout starts after it obtains a database
+connection. A full pool or a stalled connection handshake can leave the missing-mail
+assertion waiting until the test timeout. Controlled real-`pg` connection probes
+confirmed that limitation during review; the observer is unchanged here. Keep this
+under D530's diagnostic follow-up: bound the connection wait without changing the
+original lookup, assertion or test deadline, and prove it with held connections.
 
 ## Account HTTP reset-mail capture
 
