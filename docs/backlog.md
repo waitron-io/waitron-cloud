@@ -293,12 +293,6 @@ polling, pending schedules and late error reports have shutdown controls;
 real-command checks cover the cases named in
 [the worker shutdown detail and remaining limits](backlog/worker-scheduling.md#worker-shutdown-during-polling-and-error-reporting-d459).
 
-## Translation consent during account changes (D392)
-
-**Open.** Qualify provider behavior and database authority; preserving an existing
-warning or retry deadline still needs a separate controller check.
-See [the boundaries and remaining work](backlog/translation.md#translation-consent-during-account-changes-d392).
-
 ## Remote-access CI budget (D463 prerequisite)
 
 Remote-access tests run in four independent jobs, while identity and operations

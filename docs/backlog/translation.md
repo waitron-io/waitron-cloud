@@ -321,12 +321,11 @@ Remaining work:
   The worker checks consent once after leasing. Withdrawal after that check does not cancel
   a job already in flight; it prevents new submits and subsequent leases. A resumed
   job without consent withholds previously saved batches and keeps cost already spent,
-  as the contract now states. Consent listing now reads all owned venues and their current
-  consent in at most two database queries. A real PostgreSQL check with 32 venues
-  reproduces the former 33 reads and verifies two after batching, with unchanged
-  ordered results and current-owner, enabled-account, verified-email, version and
-  withdrawal rules. This is a query-count measurement, not deployment-scale latency
-  or capacity evidence; qualify those separately before launch.
+  as the contract now states. Consent listing reads your owned venues and current
+  consent in one database statement, preserving ordering and current-owner,
+  enabled-account, verified-email, version and withdrawal rules. Query-count checks
+  with 32 venues do not establish deployment-scale latency or capacity; qualify
+  those separately before launch.
   Append migrations at the then-current next numbers without editing landed migrations.
   Task 8 retains two defensive checks whose independent role in normal worker runs is not
   proved: refusing an already-saved batch write, and refusing finish before all batch entries
@@ -480,13 +479,19 @@ checks keep real provider activation and wider release qualification open.
 
 ## Translation consent during account changes (D392)
 
-**Open.** Qualify provider behavior and database authority separately from the
-browser controller. Late reads, agreements and withdrawals cannot change current
-choices or release a pending read after an account change, including signing back
-into the original account. They cannot add a warning or retry wait for that account.
-Preserving an existing warning or retry deadline still needs a separate check.
-The [remote-browser reconnect investigation](../backlog.md#platform-work-to-scope) retains the
-earlier reconnect/takings qualification failures; a clean qualification does not
+When you change accounts, late consent reads, agreements and withdrawals cannot
+replace your current choices or release a pending read, even if you sign back into
+the original account. Native HTTP-response checks also preserve an existing write
+warning and its venue, or the exact retry deadline, when an old reply arrives.
+
+Listing reads your current ownership and the recorded consent in one PostgreSQL
+snapshot. It cannot combine access you had before an account change with consent
+recorded after ownership, account status or email verification changed. Existing
+owner, session, origin and browser-token checks still govern writes. The consent
+lookup stays bound to each owned venue instead of scanning unrelated consent
+rows. This is a row-read bound, not deployment-scale latency or capacity evidence.
+Real providers and the broader release gates above remain unqualified. The [remote-browser reconnect investigation](../backlog.md#platform-work-to-scope)
+retains its separate reconnect and takings failures; these consent checks do not
 establish their cause.
 
 ## Translation-consent HTTP retry deadlines (D430)
