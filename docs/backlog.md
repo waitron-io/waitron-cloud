@@ -3526,8 +3526,12 @@ every migration digest checked. The process closes its template after its cases,
 and command fixtures use their clone's connection when starting another process.
 The concurrent-fixture check covers a shared seed, separate rows, the complete
 migration list and clone removal. Existing service, permission and traffic
-assertions and all proof deadlines stay unchanged. Hosted cutoff qualification
-remains open until the current candidate completes its venue proof.
+assertions and all proof deadlines stay unchanged. The complete Mac run of
+`node --test scripts/venue-service-proof.test.ts` retains all 360 cases across
+nine groups within the same 330-second child limit. A controlled 1.5-CPU Debian
+run still reaches that limit after 326 cases, compared with 94 before this change.
+That constraint remains unqualified, and the historical hosted slowdown remains
+unexplained; the Mac result is not an x86 timing comparison.
 
 ## Bound verifier test failure cleanup (D530)
 
