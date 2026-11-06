@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import {execFileSync, spawnSync} from 'node:child_process';
 import {createHash, randomBytes} from 'node:crypto';
-import {mkdtemp, mkdir, readFile, writeFile, rm, chmod} from 'node:fs/promises';
+import {mkdtemp, mkdir, readFile, writeFile, rm, chmod, symlink} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join, resolve} from 'node:path';
 import {test} from 'node:test';
@@ -268,4 +268,40 @@ test('delivered licence metadata and the external Lit peer remain required', asy
     assert.match(result.stderr, /licence|Lit peer/);
     assert.equal(result.stdout, '');
   }
+});
+
+test('a nested checkout cannot use a different regular file to disguise a source notice symlink', async t => {
+  const f = await fixture(t), nested = join(f.checkout, 'nested');
+  await rm(join(f.checkout, 'LICENSE'));
+  await symlink('LICENSE-GRANTS.md', join(f.checkout, 'LICENSE'));
+  await mkdir(join(nested, 'packages/ui-core'), {recursive: true});
+  await writeFile(join(nested, 'packages/ui-core/package.json'), '{}');
+  await writeFile(join(nested, 'LICENSE'), 'decoy');
+  await writeFile(join(nested, 'LICENSE-GRANTS.md'), 'decoy');
+  run(f.checkout, 'git', ['add', '.']);
+  run(f.checkout, 'git', ['commit', '-s', '-m', 'Create nested source-mode decoys']);
+  const commit = run(f.checkout, 'git', ['rev-parse', 'HEAD']);
+  f.ledger.events[0].source.commit = commit;
+  await writeFile(f.ledgerFile, JSON.stringify(f.ledger));
+  f.manifest.waitronSource.commit = commit;
+  f.manifest.homepage = `https://github.com/clintongormley/waitron/tree/${commit}/packages/ui-core`;
+  await writeFile(f.manifestFile, JSON.stringify(f.manifest));
+  await writeFile(join(f.staged, 'package/dist/LICENSE'), 'LICENSE-GRANTS.md');
+  f.pack();
+  const result = spawnSync(process.execPath, [script, nested, f.archive, '--ledger', f.ledgerFile, '--at', at], {
+    cwd: f.root, env, encoding: 'utf8', timeout: 30000});
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /regular immutable blob/);
+  assert.equal(result.stdout, '');
+});
+
+test('a named pipe archive refuses promptly rather than waiting for a writer', async t => {
+  const f = await fixture(t);
+  await rm(f.archive);
+  run(f.root, 'mkfifo', [f.archive]);
+  const result = spawnSync(process.execPath, [script, f.checkout, f.archive, '--ledger', f.ledgerFile, '--at', at], {
+    cwd: f.root, env, encoding: 'utf8', timeout: 5000});
+  assert.equal(result.status, 1, String(result.error));
+  assert.match(result.stderr, /regular file/);
+  assert.equal(result.stdout, '');
 });

@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import {execFileSync} from 'node:child_process';
 import {open, readFile} from 'node:fs/promises';
+import {constants} from 'node:fs';
 import {resolve} from 'node:path';
 import {validateLedger} from './ui-ledger.mjs';
 import {recordReleaseArtifact} from './ui-artifact.mjs';
@@ -16,8 +17,9 @@ try {
   const env = {...Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith('GIT_'))),
     GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1', GIT_TERMINAL_PROMPT: '0', GIT_NO_REPLACE_OBJECTS: '1'};
   const git = args => execFileSync('git', args, {cwd: resolve(checkoutArg), env, timeout: 30000, maxBuffer: 1024 * 1024});
+  // Mode checks and blob reads must both address paths from the repository root.
   const blob = path => {
-    assert.match(git(['ls-tree', reservation.source.commit, '--', path]).toString('utf8'), /^100644 blob [a-f0-9]{40}\t/,
+    assert.match(git(['ls-tree', '--full-tree', reservation.source.commit, '--', path]).toString('utf8'), /^100644 blob [a-f0-9]{40}\t/,
       `source input must be a regular immutable blob: ${path}`);
     return git(['show', `${reservation.source.commit}:${path}`]);
   };
@@ -25,7 +27,8 @@ try {
   assert.equal(sourceManifest.name, '@waitron/ui-core', 'unexpected source package name');
   assert.equal(sourceManifest.version, reservation.source.version, 'source package version differs');
   const notices = Object.fromEntries(['LICENSE', 'LICENSE-GRANTS.md'].map(name => [name, blob(name)]));
-  const file = await open(resolve(archiveArg), 'r');
+  // A pipe must reach the regular-file check without waiting for a writer.
+  const file = await open(resolve(archiveArg), constants.O_RDONLY | constants.O_NONBLOCK);
   let archive;
   try {
     const stat = await file.stat();
