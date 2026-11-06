@@ -83,3 +83,24 @@ for (const [name, mutate] of [
   const result = evidence({ mode: name === 'hidden overflow' ? 'overflow' : 'paired' }); mutate(result);
   assert.throws(() => assertSmokeAccounting(result));
 });
+
+function storageEvidence() {
+  const result = evidence({ mode: 'paired' });
+  result.lifetimes = { status: 'unknown', scope: 'unversioned-object-history', windowSeconds: 10,
+    objects: { class: 'stream', bytes: 16, currentVersions: 1, noncurrentVersions: 0, deleteMarkers: 0, unfinishedMultipart: 0 },
+    byteSeconds: { low: null, high: null }, gaps: ['accounting:incomplete-history'] };
+  return result;
+}
+
+test('native smoke retains unknown storage time while functional restore is checked separately', () => {
+  assertSmokeAccounting(storageEvidence());
+});
+for (const [name, mutate] of [
+  ['false measured storage', r => r.lifetimes.status = 'measured'],
+  ['hidden storage time gap', r => delete r.lifetimes.gaps],
+  ['negative storage time', r => r.lifetimes.byteSeconds.low = -1],
+  ['private storage field', r => r.lifetimes.path = 'PRIVATE_CANARY'],
+]) test(`native smoke refuses ${name}`, () => {
+  const result = storageEvidence(); mutate(result);
+  assert.throws(() => assertSmokeAccounting(result));
+});

@@ -207,6 +207,15 @@ function assertSmokeMeter(proof) {
 export function assertSmokeAccounting(result) {
   assert.ok(result.observed, 'the native smoke retains its original meter');
   assert.ok(result.replication, 'the native smoke retains its original request audit');
+  if (result.lifetimes) {
+    const proof = result.lifetimes;
+    assessAccounting({ producer: 'local-stream', sources: [{ scope: 'storage', record: proof }] });
+    const incomplete = proof.objects.bytes === null || Object.values(proof.byteSeconds).includes(null);
+    if (incomplete || proof.gaps?.length) {
+      assert.equal(proof.status, 'unknown');
+      assert.ok(proof.gaps?.length > 0, 'unknown storage must retain its original accounting gaps');
+    }
+  }
   const subset = result.afterStop;
   const output = litestreamAfterStopOutput(subset);
   assert.deepEqual(result.costAccuracy, output.costAccuracy);

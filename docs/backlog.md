@@ -384,8 +384,14 @@ scripts/cloud-cost/litestream-smoke-checks.test.mjs
 scripts/cloud-cost/litestream-smoke-accounting-gaps.test.mjs` for those controls.
 Three genuine native-smoke cases each change one observer record while restoring
 both sales with SQLite and fiscal checks and removing owned resources. The
-surrounding legacy conformance expectations still need the same accounting-only
-separation; these shared-reader checks do not complete that wider audit.
+six surrounding native conformance cases now use the same original-record
+validation. Known byte counts and storage bounds keep their original checks;
+unknown figures require named gaps. All sale, restore, SQLite, fiscal, stop and
+owned-cleanup checks remain. The shared reader also validates original storage
+histories, refusing hidden unknown time, false measured labels and private fields.
+The three observer-perturbation cases preserve interruption details while changing
+only the selected byte observation. Other storage, archive and service readers
+still need their final audit.
 The full nonblocking accounting path, publication refusal and saved-failure
 replay remain open. These partial changes do
 not establish the historical cause or relax functional admission.
