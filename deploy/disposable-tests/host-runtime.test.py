@@ -1,6 +1,8 @@
 """Explicit opt-in lifecycle proof on the dedicated test host, never a CI import."""
 import json
 import pwd
+import os
+import select
 from pathlib import Path
 import shlex
 import socket
@@ -107,4 +109,44 @@ for host,port in [('10.0.2.2',22),('169.254.169.254',80),('2.29.248.230',22),('2
                         self.assertTrue(json.loads(absent.stdout)['absent'])
 
 
-unittest.main(verbosity=2)
+def network_path_probe():
+    # Record only SYN metadata from the controller's public address, never payloads.
+    source_ip = '2.47.236.171'
+    capture = socket.socket(socket.AF_PACKET, socket.SOCK_RAW, socket.htons(0x0800))
+    try:
+        with socket.create_server(('0.0.0.0', 22022)) as listener:
+            capture.setblocking(False)
+            listener.setblocking(False)
+            end = time.monotonic() + 60
+            print(json.dumps({'ready': True, 'pid': os.getpid(), 'source': source_ip,
+                              'listener': 22022, 'durationSeconds': 60}), flush=True)
+            syns = 0
+            while time.monotonic() < end:
+                ready, _, _ = select.select([capture, listener], [], [], 0.5)
+                if listener in ready:
+                    connection, address = listener.accept()
+                    with connection:
+                        connection.settimeout(1)
+                        connection.sendall(b'disposable-network-probe\n')
+                    print(json.dumps({'otherPortAccepted': address, 'at': time.time()}), flush=True)
+                if capture in ready:
+                    packet = capture.recv(65535)
+                    if len(packet) < 54 or packet[23] != 6 or socket.inet_ntoa(packet[26:30]) != source_ip:
+                        continue
+                    tcp = 14 + (packet[14] & 15) * 4
+                    if len(packet) < tcp + 20:
+                        continue
+                    port = int.from_bytes(packet[tcp + 2:tcp + 4], 'big')
+                    if port == 22 and packet[tcp + 13] & 0x12 == 0x02:
+                        syns += 1
+                        print(json.dumps({'sshSyn': syns, 'sourcePort': int.from_bytes(packet[tcp:tcp + 2], 'big'),
+                                          'at': time.time()}), flush=True)
+            print(json.dumps({'complete': True, 'sshSyns': syns, 'listenerClosed': True}), flush=True)
+    finally:
+        capture.close()
+
+
+if sys.argv[1:] == ['--network-path']:
+    network_path_probe()
+else:
+    unittest.main(verbosity=2)
