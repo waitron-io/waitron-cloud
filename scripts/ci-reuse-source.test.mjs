@@ -884,7 +884,7 @@ test('full readback preserves an invalid range and still requires every native c
 });
 
 
-test('source qualification and reused main readback require every page of a legitimate 39-job source', () => {
+test('source qualification and reused main readback require every page of a legitimate 43-job source', () => {
   const directory = mkdtempSync(join(tmpdir(), 'cloud-reuse-paginated-'));
   try {
     execFileSync('git', ['clone', '--shared', '--quiet', root, directory], {stdio: 'pipe'});
@@ -930,13 +930,13 @@ test('source qualification and reused main readback require every page of a legi
       'receipts', ...rows.map(row => `package (${row.package}${row.shards ? `, shard ${row.shard}/${row.shards}` : ''})`)];
     const sourceJobs = [...required, 'scripts', 'documentation'].map((name, i) => ({id: i + 1, name, run_id: 42,
       run_attempt: 2, head_sha: originalHead, status: 'completed', conclusion: required.includes(name) ? 'success' : 'skipped'}));
-    assert.equal(sourceJobs.length, 39);
+    assert.equal(sourceJobs.length, 43);
     const f = fixture({root: directory, base: originalBase, head: originalHead, merge: squash, execution: originalExecution,
       tree: originalTree, jobs: sourceJobs, bytes: content, artifact: metadata});
     const pagesRead = [];
     f.api.listAttemptJobs = (_id, _attempt, number) => {
       pagesRead.push(number);
-      return {items: f.data.jobs.slice((number - 1) * 30, number * 30), total_count: 39,
+      return {items: f.data.jobs.slice((number - 1) * 30, number * 30), total_count: 43,
         nextPage: number === 1 ? 2 : null, terminal: number !== 1};
     };
     const qualify = () => findReuse(f.context, {api: f.api, git: variantGit, now: f.now}, workflow);
@@ -963,7 +963,7 @@ test('source qualification and reused main readback require every page of a legi
     const readback = () => readbackDecision(decision, {api: f.api, git: variantGit, now: f.now});
     const observed = readback();
     assert.equal(observed.mode, 'reused');
-    assert.equal(observed.inherited.succeeded.length, 37);
+    assert.equal(observed.inherited.succeeded.length, 41);
     assert.equal(observed.inherited.skipped.length, 2);
     assert.equal(observed.newlyExecutedProductChecks, 0);
     f.data.jobs[31].conclusion = 'failure';
