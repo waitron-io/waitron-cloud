@@ -23,7 +23,7 @@ remain open in separate PRs.
 Dependency PR review must renew ordinary records and update the smoke test’s
 version/source expectations without removing assertions. Remove
 the unused ledger and artifact machinery from #978, #995 and #1001, the old
-Cloud publisher and both superseded plans, as listed in the proposal.
+Cloud publisher and both superseded plans, as listed in the approved plan.
 The package stays private on GitHub Packages with Elastic License 2.0 and
 `LICENSE-GRANTS.md`; existing authenticated install and image paths remain.
 
