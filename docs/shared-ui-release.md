@@ -1,9 +1,42 @@
 # Release the shared UI package
 
-> Superseded on 6 November 2026. The owner rejected this approach. Do not
-> implement or dispatch it. The [replacement proposal](superpowers/plans/2026-11-06-simple-private-ui-release.md)
-> was approved on 6 November and lists the code and documents to remove. The text below
-> records the earlier design or existing implementation.
+> The earlier Cloud publication workflow below was superseded on 6 November
+> 2026. Do not implement or dispatch it. The [approved replacement plan](superpowers/plans/2026-11-06-simple-private-ui-release.md)
+> lists the old code and documents to remove. Automatic dependency updates,
+> local installation and consumer verification below remain current.
+
+## Review automatic dependency updates
+
+Cloud's [Dependabot configuration](../.github/dependabot.yml) checks
+`@waitron-io/ui-core` every day at 06:00 UTC, including weekends. The root
+pnpm workspace contains `apps/portal`, `packages/ui-smoke` and their shared
+lockfile, so one update can keep both consumers on the same release.
+
+Dependabot uses Cloud's existing package access grant through Manage Actions
+access. [GitHub supplies registry authentication from that grant](https://docs.github.com/en/code-security/concepts/supply-chain-security/automatic-dependabot-access-to-github-registries).
+You do not need another registry token. Normal Cloud installs still use the
+existing authenticated setup below. Image builds still pass `NODE_AUTH_TOKEN`
+as the BuildKit `npm_token` secret; follow the existing
+[local image build instructions](local-deployment.md).
+
+Expect an unedited version-update PR to fail CI because its smoke-test
+expectations and input review records still describe the previous release.
+Before merging:
+
+1. Verify the published version and its `waitronSource.commit`.
+2. Confirm that `apps/portal/package.json`, `packages/ui-smoke/package.json`
+   and both lockfile entries use the same release. The smoke test checks only
+   its own package's pin.
+3. Update the smoke test's version and source expectations while retaining
+   its assertions and browser checks.
+4. Renew the ordinary [root](ci-root-input-ownership.md) and
+   [documentation](ci-documentation-audit.md) records for the reviewed changes.
+5. Push the reviewed changes and wait for normal CI on that final commit.
+
+The configuration does not merge PRs automatically. A real authenticated
+update run has not yet been qualified.
+
+## Earlier Cloud publication workflow
 
 Cloud consumes a versioned build of Waitron's account controls. You develop the
 controls in Waitron; this repository owns their private distribution as
@@ -78,8 +111,9 @@ It does not need your personal credential.
 
 ## Verify the consumer
 
-Cloud pins `@waitron-io/ui-core@0.1.0` and Lit `3.3.3` in `packages/ui-smoke` and the
-workspace lockfile. Install from that lockfile, then run:
+Cloud pins `@waitron-io/ui-core@0.1.0` and Lit `3.3.3` in `apps/portal`,
+`packages/ui-smoke` and the workspace lockfile. Install from that lockfile,
+then run:
 
 ```sh
 pnpm --filter @waitron-cloud/ui-smoke exec playwright install chromium
@@ -98,8 +132,10 @@ from Waitron `0a93f4d3557b669661ac8f589aad866e2cd9653f`. GitHub's package API co
 private visibility and the Cloud repository association. Local installation used the
 GitHub CLI token helper. CI must install with its own temporary package-read token.
 
-To upgrade, release a new source version, update the dependency and lockfile together,
-update the fixture's expected version/source, and rerun the browser and type checks.
+Use the [automatic update review steps](#review-automatic-dependency-updates)
+when Dependabot opens an upgrade PR. If you prepare an update manually, keep
+both consumers and the lockfile on the same verified release and follow those
+same review steps.
 
 References: [GitHub's npm registry](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-npm-registry),
 [package access](https://docs.github.com/en/packages/learn-github-packages/configuring-a-packages-access-control-and-visibility),

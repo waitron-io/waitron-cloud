@@ -7,7 +7,7 @@ async function fixture(run:(page:Page)=>Promise<void>) {
  const browser=await chromium.launch({headless:true});
  try {
   const page=await browser.newPage();page.setDefaultTimeout(500);
-  await page.clock.install({time:new Date('2030-01-01T12:00:00Z')});
+  await page.clock.setFixedTime(new Date('2030-01-01T12:00:00Z'));
   await page.route('https://portal.test/account',route=>route.fulfill({contentType:'text/html',body:`<h1>Your account</h1><script>
    fetch('/api/account/session?token=private-query',{headers:{Authorization:'private-header'}}).then(async response=>{
     await response.text();throw new Error('private-browser-error');
