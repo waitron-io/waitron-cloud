@@ -330,7 +330,14 @@ and proxies refuse before their code runs. Run `node --test
 scripts/cloud-cost/stream-admission-gaps.test.mjs` for the boundary controls.
 The real Debian x86 `gappedWorkerCompletesRealReplayAndRetainsOriginalUnknownBilling`
 case restores three generated sales with fiscal verification and owned cleanup,
-retaining unknown administration billing. The local receipt stage, other
+retaining unknown administration billing. You can also finish the local
+`stream-receipt` stage without a receipt when original accounting is unknown.
+The stage preserves both meters and their supported rows after real replay,
+SQLite verification, fiscal checks, isolation and cleanup. Clock disagreement
+still refuses before the result returns. Run the `gappedLocalStageCompletesWithoutReceipt`
+and `localCommandRetainsUnknownBillingAndMeasuredRowsAfterOwnedCleanup` cases,
+plus `localReceiptRefusesClockJump`, in the same real-worker conformance file.
+Clean measured receipt assertions remain in `local-receipt.test.mjs`. Other
 conformance result consumers and shared mail/remote completion remain open.
 The full nonblocking accounting path, publication refusal and saved-failure
 replay remain open. These partial changes do

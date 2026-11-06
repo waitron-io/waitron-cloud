@@ -367,6 +367,43 @@ async function streamedFixture(t) {
   return f;
 }
 
+for (const stage of ['stream-replay', 'stream-receipt']) test('gappedLocalStageCompletesWithoutReceipt_' + stage, async t => {
+  const f = await streamedFixture(t), before = fingerprint(f.database), command = localCommand(f);
+  const value = JSON.parse(readFileSync(command[3], 'utf8'));
+  value.stage = stage; value.stream = f.stream; writeFileSync(command[3], JSON.stringify(value));
+  const child = spawnSync(process.execPath, command, { env: { PATH: process.env.PATH, LANG: 'C', TZ: 'UTC' },
+    timeout: 150000, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+  assert.equal(child.status, 0, 'complete the actual replay despite unknown cost, without invoking the measured receipt builder');
+  assert.equal(child.stderr, '');
+  const output = JSON.parse(child.stdout);
+  assert.deepEqual(Object.keys(output).sort(), ['accounting', 'costMeasured', 'evidence', 'functional', 'receipt', 'stage']);
+  assert.equal(output.stage, stage); assert.equal(output.functional, 'passed');
+  assert.equal(output.costMeasured, false); assert.equal(output.receipt, null);
+  assert.equal(output.accounting.status, 'unknown'); assert.equal(output.accounting.publicationEligible, false);
+  assert.ok(output.accounting.gaps.includes('request-billing:unknown'));
+  const { admission, isolation, cleanup } = output.evidence, stream = admission.stream;
+  assert.deepEqual(admission.replay.counts, { expected: 3, attempted: 3, successful: 3, failed: 0 });
+  assert.deepEqual(admission.integrity, { ok: true, issues: 0 });
+  assert.deepEqual(stream.restored, { sales: 3, integrity: true });
+  assert.deepEqual(stream.native, { version: '0.5.17', writerStarts: 1, phaseRestarts: 0 });
+  assert.deepEqual(stream.functional, { startupUpload: true, restore: true, bucketCreated: true, bucketRemoved: true });
+  assert.deepEqual(isolation, { blockedConnections: 3, blockedDns: 2, localControl: true });
+  assert.deepEqual(cleanup, { workerContainers: 0, networks: 0, privateCopies: 0 });
+  assert.deepEqual(stream.cleanup, { processes: 0, privateRoots: 0, listeners: 0, clients: 0, buckets: 0, objects: 0, multipartUploads: 0 });
+  for (const key of ['requests', 'administration']) {
+    assert.ok(Array.isArray(stream[key].gaps)); assert.ok(Array.isArray(stream[key].billing));
+    assert.ok(stream[key].accounting.producer.attempts > 0);
+    assert.ok(stream[key].observedRequests.length > 0);
+  }
+  assert.ok(stream.administration.billing.some(row => row.status === 'unknown' && row.quantity === null));
+  assert.ok(stream.storage.objects.bytes > 0);
+  assert.equal(stream.retainedStorage.initialBytes, stream.storage.objects.bytes);
+  assert.equal(stream.retainedStorage.deletedObjects, stream.storage.objects.currentVersions);
+  assert.equal(stream.retainedStorage.remainingBytes, 0); assert.equal(stream.retainedStorage.remainingObjects, 0);
+  assert.equal(/PRIVATE_|2026-|\/state|taxId|locationId|sha256:|ownership|journal/.test(child.stdout), false);
+  assert.equal(readFileSync(command[3], 'utf8'), JSON.stringify(value)); clean(f, before);
+});
+
 test('gappedWorkerCompletesRealReplayAndRetainsOriginalUnknownBilling', async t => {
   const f = await streamedFixture(t), before = fingerprint(f.database);
   let result;
@@ -596,36 +633,44 @@ test('localStreamCommandExportsCombinedRequestTotalsAndBothLifetimeBounds', asyn
   clean(f, before);
 });
 
-// The receipt stage must run the writer and cleanup before publishing a closed, explicitly partial export.
-test('localCommandPublishesClosedStreamReceiptAfterOwnedCleanup', async t => {
+// Original bucket-inspection billing is unknown even when the two transfer meters agree.
+test('localCommandRetainsUnknownBillingAndMeasuredRowsAfterOwnedCleanup', async t => {
   const f = await streamedFixture(t), before = fingerprint(f.database), command = localCommand(f);
   const value = JSON.parse(readFileSync(command[3], 'utf8'));
   value.stage = 'stream-receipt'; value.stream = f.stream; writeFileSync(command[3], JSON.stringify(value));
-  const startedBefore = Date.now();
   const child = spawnSync(process.execPath, command, { env: { PATH: process.env.PATH, LANG: 'C', TZ: 'UTC' },
     timeout: 150000, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
   assert.equal(child.status, 0, 'admit the explicit receipt stage and complete its experiment');
   assert.equal(child.stderr, '');
   const output = JSON.parse(child.stdout);
-  assert.deepEqual(Object.keys(output).sort(), ['costMeasured', 'receipt', 'stage']);
+  assert.deepEqual(Object.keys(output).sort(), ['accounting', 'costMeasured', 'evidence', 'functional', 'receipt', 'stage']);
   assert.equal(output.stage, 'stream-receipt'); assert.equal(output.costMeasured, false);
-  const { exportAggregate } = await import('../schema.mjs');
-  assert.deepEqual(exportAggregate(output.receipt), output.receipt);
-  const r = output.receipt, inputs = Object.fromEntries(r.inputs.map(row => [row.id, row]));
-  assert.equal(r.cloudRevision, execFileSync('git', ['rev-parse', 'HEAD'], { cwd: new URL('../../..', import.meta.url), encoding: 'utf8' }).trim());
-  assert.equal(r.waitronRevision, 'b1b0f10952a59eb59f7358bd681a3cdc94d9b61c');
-  assert.ok(Date.parse(r.window.startedAt) >= startedBefore);
-  assert.ok(Date.parse(r.window.endedAt) <= Date.now());
-  assert.ok(r.window.elapsedSeconds >= 4);
-  assert.equal(inputs['successful-sales'].value, 3); assert.equal(inputs['database-bytes'].status, 'measured');
-  for (const id of ['archive-bytes', 'remote-session-bytes-out', 'email-operations', 'fiscal-operations']) {
-    assert.equal(inputs[id].value, null); assert.equal(inputs[id].status, 'unknown');
-  }
-  assert.ok(inputs['stream-byte-seconds-low'].value > 0);
-  assert.ok(inputs['stream-byte-seconds-high'].value >= inputs['stream-byte-seconds-low'].value);
+  assert.equal(output.functional, 'passed'); assert.equal(output.receipt, null);
+  assert.equal(output.accounting.status, 'unknown'); assert.equal(output.accounting.publicationEligible, false);
+  assert.ok(output.accounting.gaps.includes('request-billing:unknown'));
+  const { admission, isolation, cleanup } = output.evidence, stream = admission.stream;
+  assert.equal(admission.replay.counts.successful, 3); assert.ok(admission.storage.copiedDatabaseBytes > 0);
+  assert.deepEqual(admission.integrity, { ok: true, issues: 0 });
+  assert.deepEqual(stream.restored, { sales: 3, integrity: true });
+  assert.ok(stream.phases.reduce((n, row) => n + row.elapsedSeconds, 0) >= 4);
+  assert.ok(stream.storage.byteSeconds.low > 0);
+  assert.ok(stream.storage.byteSeconds.high >= stream.storage.byteSeconds.low);
+  assert.ok(stream.retainedStorage.byteSeconds.low > 0);
+  assert.ok(stream.retainedStorage.byteSeconds.high >= stream.retainedStorage.byteSeconds.low);
+  assert.equal(stream.retainedStorage.remainingBytes, 0); assert.equal(stream.retainedStorage.remainingObjects, 0);
+  const meters = [stream.requests.accounting, stream.administration.accounting];
   for (const phase of ['startup', 'restore', 'observer', 'setup', 'cleanup'])
-    assert.ok(r.accounting.requests.some(row => row.phase === phase && row.attempts > 0), phase);
-  assert.deepEqual(r.accounting.discrepancy, { attempts: 0, bytesIn: 0, bytesOut: 0 });
+    assert.ok(meters.some(meter => meter.requests.some(row => row.phase === phase && row.attempts > 0)), phase);
+  for (const meter of meters) {
+    assert.deepEqual(meter.discrepancy, { attempts: 0, bytesIn: 0, bytesOut: 0 });
+    assert.deepEqual(meter.producer, meter.observer);
+    for (const key of ['attempts', 'bytesIn', 'bytesOut'])
+      assert.equal(meter.requests.reduce((n, row) => n + row[key], 0), meter.producer[key]);
+  }
+  assert.ok(stream.administration.billing.some(row => row.status === 'unknown' && row.quantity === null));
+  assert.deepEqual(isolation, { blockedConnections: 3, blockedDns: 2, localControl: true });
+  assert.deepEqual(cleanup, { workerContainers: 0, networks: 0, privateCopies: 0 });
+  assert.deepEqual(stream.cleanup, { processes: 0, privateRoots: 0, listeners: 0, clients: 0, buckets: 0, objects: 0, multipartUploads: 0 });
   assert.equal(/PRIVATE_|2026-01-|\/state|taxId|locationId|sha256:|ownership|journal/.test(child.stdout), false);
   assert.equal(readFileSync(command[3], 'utf8'), JSON.stringify(value)); clean(f, before);
 });
