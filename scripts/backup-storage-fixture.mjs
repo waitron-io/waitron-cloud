@@ -405,6 +405,15 @@ async function startBackupStorageAttempt(options) {
       env: { PATH: process.env.PATH, HOME: root, TMPDIR: root },
       stdio: ["ignore", log.fd, log.fd],
     });
+    // An asynchronous launch refusal emits an error instead of a spawn event.
+    // Handle only launch errors so later process-control failures stay visible.
+    await new Promise((resolve, reject) => {
+      child.once("error", reject);
+      child.once("spawn", () => {
+        child.removeListener("error", reject);
+        resolve();
+      });
+    });
     const agent = () => new Agent({ ca });
     adminClient = new S3Client({
       endpoint,

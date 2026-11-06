@@ -293,7 +293,10 @@ real authentication, database behavior or general cleanup bounds.
 
 ## Separate-process storage extraction and failed-startup cleanup (D457)
 
-**Open.** Real store startup and historical failure causes remain open.
+**Open.** Attribute the historical storage startup failures. Native startup and
+failed-executable cleanup now have a separate-process check: unavailable or
+non-executable child binaries reject startup after releasing the failed fixture's
+files, listener and port claims, while a working peer still serves S3 requests.
 
 See [the separate-process extraction limits](backlog/storage-cache-fixture.md#separate-process-storage-extraction-and-failed-startup-cleanup-d457).
 The earlier conformance archive stall (run 40811399202, job 123243127986) remains
