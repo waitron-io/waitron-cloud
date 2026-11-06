@@ -277,6 +277,63 @@ test('genuineLitestreamRequestLogsIndependentlyMatchReplicationRetryAndRestore',
   assert.equal(docker('network', 'ls', '-q', '--filter', `label=io.waitron.cloud-cost.owner=${f.journal.token}`), '');
 });
 
+// Independent functional witnesses still pass when one real observer loses accounting precision.
+for (const [scope, phase, operation] of [['replication', 'workload', 'list'], ['restore', 'restore', 'get'],
+  ['administration', 'observer', 'list']]) {
+  test(`genuineNativeSmokeKeepsFunctionalChecksWith${scope}AccountingGap`, async t => {
+    const f = fixture(t), plan = local.prepareIsolatedStack(f);
+    cpSync(prepared.litestreamBinary, join(f.codeRoot, 'litestream'));
+    cpSync(new URL('../litestream.mjs', import.meta.url), join(f.codeRoot, 'litestream.mjs'));
+    let source = readFileSync(new URL('./litestream-smoke.mjs', import.meta.url), 'utf8');
+    const importAnchor = 'import { createMeter, createMeteringProxy';
+    const resultAnchor = 'const result = { version, injectedFailures, restoredSales, integrity };';
+    assert.equal(source.split(importAnchor).length, 2); assert.equal(source.split(resultAnchor).length, 2);
+    source = source.replace(importAnchor, 'import { createMeter as originalCreateMeter, createMeteringProxy')
+      .replace(resultAnchor, 'const result = { version, injectedFailures, restoredSales, integrity, accountingPerturbations };');
+    // Only one observer record changes; real forwarding, producer events and writer bytes stay intact.
+    const perturbation = `
+      let accountingPerturbations = 0;
+      function createMeter(options) {
+        const meter = originalCreateMeter(options), original = meter.observeAttempt;
+        meter.observeAttempt = event => {
+          if (!accountingPerturbations && event.channel === 'observer' && event.phase === ${JSON.stringify(phase)}
+            && event.operation === ${JSON.stringify(operation)} && event.bytesIn > 0) {
+            accountingPerturbations++;
+            return original({ ...event, bytesIn: event.bytesIn - 1 });
+          }
+          return original(event);
+        };
+        return meter;
+      }`;
+    const entryAnchor = 'async function smoke() {';
+    assert.equal(source.split(entryAnchor).length, 2);
+    source = source.replace(entryAnchor, perturbation + '\n' + entryAnchor);
+    writeFileSync(join(f.codeRoot, 'cost-litestream-smoke.mjs'), source);
+    let stack;
+    f.onCleanup(async () => { await stack?.close(); });
+    stack = await local.startIsolatedStack({ ...f, prepared: plan });
+    const s3 = stack.containerIds.find(id => docker('inspect', '--format', '{{index .Config.Labels "io.waitron.cloud-cost.role"}}', id) === 's3');
+    const result = JSON.parse(execFileSync('docker', ['exec', s3, 'node', '/code/cost-litestream-smoke.mjs'],
+      { encoding: 'utf8', env: { PATH: process.env.PATH }, timeout: 95000, stdio: ['ignore', 'pipe', 'pipe'] }));
+    assert.equal(result.accountingPerturbations, 1);
+    assertSmokeAccounting(result);
+    const proof = scope === 'replication' ? result.observed : scope === 'restore' ? result.transport.restore : result.administration;
+    assert.equal(proof.status, 'unknown'); assert.equal(proof.reconciled, false);
+    assert.ok(proof.gaps.includes('accounting:unreconciled'));
+    assert.equal(proof.accounting.discrepancy.bytesIn, -1);
+    assert.equal(proof.billing.find(row => row.phase === phase && row.requestClass === (operation === 'get' ? 's3-read' : 's3-list')).quantity, null);
+    assert.equal(result.version, '0.5.17'); assert.equal(result.injectedFailures, 1);
+    assert.equal(result.restoredSales, 2); assert.equal(result.integrity, 'ok');
+    assert.deepEqual(result.sales, { attempted: 2, successful: 2, failed: 0 });
+    assert.deepEqual(result.fiscal, { ok: true, issues: 0 });
+    assert.equal(result.cleanedObjects, true); assert.equal(result.leaked, false);
+    t.diagnostic(JSON.stringify({ scope, proof, restoredSales: result.restoredSales, cleanedObjects: result.cleanedObjects }));
+    await stack.close();
+    assert.equal(docker('ps', '-aq', '--filter', `label=io.waitron.cloud-cost.owner=${f.journal.token}`), '');
+    assert.equal(docker('network', 'ls', '-q', '--filter', `label=io.waitron.cloud-cost.owner=${f.journal.token}`), '');
+  });
+}
+
 // A second independent counter must qualify actual body transfers, including the binary's failed upload and retry.
 test('genuineLitestreamTransportBodyBytesAgreeWithSeparateStorageObserver', async t => {
   const f = fixture(t), plan = local.prepareIsolatedStack(f);

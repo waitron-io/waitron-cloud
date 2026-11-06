@@ -376,6 +376,16 @@ and `isolatedHostCompletesTheIdleObservationAfterAnEarlyTimerWake` cases in
 `isolated-replay-conformance.test.mjs`, and the complete
 `paced-replay-conformance.test.mjs` case. Mail tests wait for the backend peer's
 bounded close event before asserting zero sockets, retaining that cleanup check.
+The shared native-smoke reader now accepts accounting gaps outside the after-stop
+subset and validates original restore and administration meters too. It keeps
+paired rows and actual totals intact, rejects false measured labels and hidden
+billing uncertainty, and retains the three-request stop bound. Run `node --test
+scripts/cloud-cost/litestream-smoke-checks.test.mjs
+scripts/cloud-cost/litestream-smoke-accounting-gaps.test.mjs` for those controls.
+Three genuine native-smoke cases each change one observer record while restoring
+both sales with SQLite and fiscal checks and removing owned resources. The
+surrounding legacy conformance expectations still need the same accounting-only
+separation; these shared-reader checks do not complete that wider audit.
 The full nonblocking accounting path, publication refusal and saved-failure
 replay remain open. These partial changes do
 not establish the historical cause or relax functional admission.

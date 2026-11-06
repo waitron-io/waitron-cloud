@@ -1,6 +1,8 @@
 // Shared assertions for the native smoke's independently counted storage traffic.
 import assert from 'node:assert/strict';
+import { isDeepStrictEqual } from 'node:util';
 import { litestreamAfterStopOutput } from './litestream.mjs';
+import { assessAccounting } from './accounting-policy.mjs';
 
 export function delayLitestreamPutReplies(source) {
   const forwarding = "res.writeHead(incoming.statusCode, incoming.headers); incoming.on('error', () => res.destroy()); incoming.pipe(res);";
@@ -170,48 +172,73 @@ export function prepareLitestreamWriteLoss(source, { loseStoredWrites }) {
   return source;
 }
 
+// Validate original meter records before allowing accounting uncertainty in a native journey.
+function assertSmokeMeter(proof) {
+  assessAccounting({ producer: 'local-stream', sources: [{ scope: 'requests', record: proof }] });
+  const identity = row => [row.phase, row.operation, row.retryOrdinal, row.outcome].join(':');
+  const sorted = rows => [...rows].sort((a, b) => identity(a).localeCompare(identity(b)));
+  const overflow = [...Object.values(proof.accounting.producer), ...Object.values(proof.accounting.observer),
+    ...proof.accounting.requests.flatMap(Object.values), ...proof.observedRequests.flatMap(Object.values),
+    ...proof.accounting.objects.map(row => row.bytes)].includes(null);
+  const unknownStorage = proof.accounting.objects.some(row => row.byteSeconds === null);
+  if (overflow) assert.ok(proof.gaps.includes('accounting:overflow'));
+  if (unknownStorage) assert.ok(proof.gaps.includes('accounting:incomplete-history') || proof.gaps.includes('accounting:overflow'));
+  if (overflow || unknownStorage) assert.equal(proof.status, 'unknown');
+  if (proof.reconciled) assert.deepEqual(sorted(proof.accounting.requests), sorted(proof.observedRequests));
+  else {
+    assert.equal(proof.status, 'unknown');
+    assert.ok(proof.gaps.includes('accounting:unreconciled'));
+  }
+  if (proof.gaps.some(gap => gap !== 'request-billing:unknown')) assert.equal(proof.status, 'unknown');
+  for (const row of [...proof.accounting.requests, ...proof.observedRequests]) {
+    const other = (proof.accounting.requests.includes(row) ? proof.observedRequests : proof.accounting.requests)
+      .find(candidate => identity(candidate) === identity(row));
+    if (row.outcome === 'transport-error' || !other || !isDeepStrictEqual(row, other)) {
+      assert.equal(proof.status, 'unknown');
+      assert.ok(proof.gaps.length > 0);
+      const billing = proof.billing.find(candidate => candidate.phase === row.phase && candidate.requestClass === row.requestClass);
+      assert.ok(billing, 'every uncertain request class retains its billing uncertainty');
+      assert.equal(billing.status, 'unknown'); assert.equal(billing.quantity, null);
+    }
+  }
+  return proof;
+}
+
 export function assertSmokeAccounting(result) {
+  assert.ok(result.observed, 'the native smoke retains its original meter');
+  assert.ok(result.replication, 'the native smoke retains its original request audit');
   const subset = result.afterStop;
   const output = litestreamAfterStopOutput(subset);
   assert.deepEqual(result.costAccuracy, output.costAccuracy);
-  assert.equal(result.replication.requestsReconciled, true);
-  const fields = ['attempts', 'bytesIn', 'bytesOut'];
-  const rowFields = [...fields, 'attemptedBytesIn', 'attemptedBytesOut'];
-  const residual = (rows, hop) => {
-    const grouped = new Map();
-    for (const [source, sign] of [[rows, 1], [subset.requests.filter(r => r.hop === hop), -1]]) {
-      for (const row of source) {
-        const key = [row.phase, row.operation, row.retryOrdinal, row.outcome].join(':');
-        const total = grouped.get(key) ?? Object.fromEntries(rowFields.map(k => [k, 0]));
-        for (const k of rowFields) total[k] += sign * row[k];
-        grouped.set(key, total);
+  const fields = ['attempts', 'bytesIn', 'bytesOut', 'attemptedBytesIn', 'attemptedBytesOut'];
+  // The after-stop ledger is a subset, never an explanation for all accounting gaps.
+  const containsSubset = (proof, rows, hop) => {
+    for (const selected of subset.requests.filter(row => row.hop === hop)) {
+      const row = rows.find(row => ['phase', 'operation', 'retryOrdinal', 'outcome'].every(key => row[key] === selected[key]));
+      assert.ok(row, 'after-stop observations must exist in the original full meter');
+      for (const key of fields) {
+        if (row[key] === null || selected[key] === null) assert.ok(proof.gaps.includes('accounting:overflow'));
+        else assert.ok(Number.isSafeInteger(row[key] - selected[key]) && row[key] >= selected[key]);
       }
     }
-    for (const [key, total] of grouped) {
-      for (const n of Object.values(total)) assert.ok(Number.isSafeInteger(n) && n >= 0);
-      if (rowFields.every(k => total[k] === 0)) grouped.delete(key);
-    }
-    return grouped;
   };
-  for (const proof of [result.observed, result.transport?.replication].filter(Boolean)) {
-    assert.equal(proof.reconciled, subset.bodiesReconciled);
-    assert.equal(proof.accounting.producer.attempts, result.replication.producerAttempts);
-    assert.equal(proof.accounting.observer.attempts, result.replication.producerAttempts);
-    for (const [hop, rows] of [['producer', proof.accounting.requests], ['observer', proof.observedRequests]]) {
-      for (const k of fields) assert.equal(proof.accounting[hop][k], rows.reduce((n, r) => n + r[k], 0));
+  for (const [name, proof] of [['replication', result.observed], ['replication', result.transport?.replication],
+    ['restore', result.transport?.restore], ['administration', result.administration]]) {
+    if (!proof) continue;
+    assertSmokeMeter(proof);
+    const audit = result[name];
+    if (name !== 'administration' && audit) {
+      if (audit.requestsReconciled) {
+        assert.equal(proof.accounting.producer.attempts, audit.producerAttempts);
+        assert.equal(proof.accounting.observer.attempts, audit.observerAttempts ?? audit.producerAttempts);
+      } else {
+        assert.equal(audit.status, 'unknown');
+        assert.ok(audit.gaps.includes('litestream:requests-unreconciled'));
+      }
     }
-    for (const k of fields) {
-      const difference = proof.accounting.observer[k] - proof.accounting.producer[k];
-      assert.equal(difference, subset.observer[k] - subset.producer[k]);
-      assert.equal(proof.accounting.discrepancy[k], difference);
-    }
-    assert.deepEqual(residual(proof.accounting.requests, 'producer'), residual(proof.observedRequests, 'observer'),
-      'ordinary traffic outside the after-stop subset must still match in both counters');
-    if (!subset.bodiesReconciled) {
-      assert.equal(proof.status, 'unknown');
-      assert.ok(proof.gaps.includes('accounting:unreconciled'));
-      assert.ok(proof.billing.length > 0);
-      for (const row of proof.billing) { assert.equal(row.status, 'unknown'); assert.equal(row.quantity, null); }
+    if (name === 'replication') {
+      containsSubset(proof, proof.accounting.requests, 'producer'); containsSubset(proof, proof.observedRequests, 'observer');
+      if (subset.status === 'unknown') assert.equal(proof.status, 'unknown');
     }
   }
 }
