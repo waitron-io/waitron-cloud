@@ -510,9 +510,12 @@ test('localCommandRunsOnlyTheExplicitStreamStageAndPrintsClosedEvidence', async 
     timeout: 150000, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
   assert.equal(result.status, 0); assert.equal(result.stderr, '');
   const output = JSON.parse(result.stdout); assert.equal(output.stage, 'stream-replay'); assert.equal(output.costMeasured, false);
-  assert.deepEqual(output.admission.stream.restored, { sales: 3, integrity: true });
-  assert.ok(output.admission.stream.requests.accounting.producer.bytesOut > 0);
-  assert.ok(output.admission.stream.administration.accounting.requests.some(r => r.phase === 'cleanup'));
+  assert.equal(output.functional, 'passed'); assert.equal(output.receipt, null);
+  assert.equal(output.accounting.status, 'unknown'); assert.equal(output.accounting.publicationEligible, false);
+  assert.ok(output.accounting.gaps.includes('request-billing:unknown'));
+  assert.deepEqual(output.evidence.admission.stream.restored, { sales: 3, integrity: true });
+  assert.ok(output.evidence.admission.stream.requests.accounting.producer.bytesOut > 0);
+  assert.ok(output.evidence.admission.stream.administration.accounting.requests.some(r => r.phase === 'cleanup'));
   assert.equal(/PRIVATE_|2026-|\/state|taxId|locationId|sha256:|ownership|journal/.test(result.stdout), false);
   assert.equal(readFileSync(command[3], 'utf8'), JSON.stringify(value)); clean(f, before);
 });
@@ -617,28 +620,33 @@ test('isolatedHostRefusesChangedRetainedStorageFromTheActualWorker', async t => 
   assert.equal(changed, true, 'read the changed storage total at the actual host boundary'); clean(f, before);
 });
 
-// Returning either meter alone undercounts the real local command, including its cleanup.
-test('localStreamCommandExportsCombinedRequestTotalsAndBothLifetimeBounds', async t => {
+// Unknown billing retains both original meters and lifetime bounds without publishing a combined measurement.
+test('localStreamCommandRetainsBothOriginalMetersAndLifetimeBoundsWhenCostIsUnknown', async t => {
   const f = await streamedFixture(t), before = fingerprint(f.database), command = localCommand(f);
   const value = JSON.parse(readFileSync(command[3], 'utf8'));
   value.stage = 'stream-replay'; value.stream = f.stream; writeFileSync(command[3], JSON.stringify(value));
   const child = spawnSync(process.execPath, command, { env: { PATH: process.env.PATH, LANG: 'C', TZ: 'UTC' },
     timeout: 150000, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
   assert.equal(child.status, 0); assert.equal(child.stderr, '');
-  const output = JSON.parse(child.stdout), combined = output.streamAccounting, stream = output.admission.stream;
+  const output = JSON.parse(child.stdout), stream = output.evidence.admission.stream;
   assert.equal(output.costMeasured, false);
-  assert.ok(combined, 'publish native, observer, setup and cleanup accounting together');
-  for (const k of ['attempts', 'bytesIn', 'bytesOut']) {
-    assert.equal(combined.producer[k], stream.requests.accounting.producer[k] + stream.administration.accounting.producer[k]);
-    assert.equal(combined.observer[k], combined.producer[k]);
-    assert.equal(combined.discrepancy[k], 0);
-    assert.equal(combined.requests.reduce((n, row) => n + row[k], 0), combined.producer[k]);
+  assert.equal(output.functional, 'passed'); assert.equal(output.receipt, null);
+  assert.equal(output.accounting.status, 'unknown'); assert.equal(output.accounting.publicationEligible, false);
+  assert.ok(output.accounting.gaps.includes('request-billing:unknown'));
+  assert.equal(Object.hasOwn(output, 'streamAccounting'), false);
+  const meters = [stream.requests.accounting, stream.administration.accounting];
+  for (const meter of meters) for (const k of ['attempts', 'bytesIn', 'bytesOut']) {
+    assert.equal(meter.observer[k], meter.producer[k]);
+    assert.equal(meter.discrepancy[k], 0);
+    assert.equal(meter.requests.reduce((n, row) => n + row[k], 0), meter.producer[k]);
   }
   for (const phase of ['startup', 'restore', 'observer', 'setup', 'cleanup'])
-    assert.ok(combined.requests.some(row => row.phase === phase && row.attempts > 0), 'retain phase ' + phase);
-  assert.equal(combined.storage.byteSeconds.low, stream.storage.byteSeconds.low + stream.retainedStorage.byteSeconds.low);
-  assert.equal(combined.storage.byteSeconds.high, stream.storage.byteSeconds.high + stream.retainedStorage.byteSeconds.high);
-  assert.equal(combined.storage.remainingBytes, 0); assert.equal(combined.storage.remainingObjects, 0);
+    assert.ok(meters.some(meter => meter.requests.some(row => row.phase === phase && row.attempts > 0)), 'retain phase ' + phase);
+  for (const storage of [stream.storage, stream.retainedStorage]) {
+    assert.ok(storage.byteSeconds.low > 0);
+    assert.ok(storage.byteSeconds.high >= storage.byteSeconds.low);
+  }
+  assert.equal(stream.retainedStorage.remainingBytes, 0); assert.equal(stream.retainedStorage.remainingObjects, 0);
   assert.equal(/PRIVATE_|2026-|\/state|taxId|locationId|sha256:|ownership|journal/.test(child.stdout), false);
   clean(f, before);
 });
