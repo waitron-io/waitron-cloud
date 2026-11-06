@@ -82,7 +82,8 @@ export async function measureRemoteJourneys(options) {
         await call('public-management-refused', '/management-api/staff', 404, { cookie });
       }
       await meter.close(); const snapshot = meter.snapshot();
-      need(snapshot.producer.connections === requests && snapshot.producer.bytesToGateway > requestBodyBytes
+      need(snapshot.producer.connections === requests);
+      if (snapshot.status === 'measured') need(snapshot.producer.bytesToGateway > requestBodyBytes
         && snapshot.producer.bytesFromGateway > responseBodyBytes);
       evidence.push({ audience, scenario: audience === 'staff' ? 'owner-management-api' : 'public-availability-api',
         requests, requestBodyBytes, responseBodyBytes, actions, snapshot });

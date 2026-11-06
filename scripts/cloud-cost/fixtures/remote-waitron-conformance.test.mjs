@@ -10,6 +10,7 @@ import { generateKeyPairSync, randomBytes, randomUUID, createHash } from 'node:c
 import {waitForGatewayReady} from '../remote-readiness.mjs';
 import * as journey from '../local.mjs';
 import { signManifest } from '../../../packages/remote-access/src/manifest.ts';
+import { assessAccounting } from '../accounting-policy.mjs';
 
 const environment = { PATH: process.env.PATH, LANG: 'C', TZ: 'UTC' };
 const run = (command, args) => {
@@ -36,7 +37,7 @@ const wire = id => {
 };
 const difference = (before, after) => ({ received: after.received - before.received, sent: after.sent - before.sent });
 
-for (const fault of ['none', 'missing-person', 'invalid-device-profiles', 'empty-device-profiles', 'retired-canvas-id', 'invalid-themes', 'missing-in-use', 'false-availability', 'missing-cookie', 'anonymous-status', 'extra-config'])
+for (const fault of ['none', 'missing-person', 'invalid-device-profiles', 'empty-device-profiles', 'retired-canvas-id', 'invalid-themes', 'missing-in-use', 'false-availability', 'missing-cookie', 'anonymous-status', 'extra-config', 'missing-counter', 'mismatched-counter'])
 test('pinnedWaitronOwnerReadsReconnectAndLogoutThroughTheGateway_' + fault, { timeout: 120000 }, async t => {
   assert.equal(typeof journey.measureRemoteJourneys, 'function', 'measure genuine owner and public routes');
   const fixture = JSON.parse(readFileSync(process.env.COST_OWNER_FIXTURE, 'utf8'));
@@ -45,6 +46,7 @@ test('pinnedWaitronOwnerReadsReconnectAndLogoutThroughTheGateway_' + fault, { ti
   const root = realpathSync(mkdtempSync(join(tmpdir(), 'cloud-cost-owner-'))), owner = randomUUID();
   const label = 'io.waitron.cloud-cost.remote-owner=' + owner, network = 'cost-remote-' + owner;
   const containers = []; let networkId, readyPeer;
+  const accountingFault = ['missing-counter', 'mismatched-counter'].includes(fault);
   const secret = (path, value) => writeFileSync(join(root, path), value, { mode: 0o600 });
   const journal = entries => secret('ownership.json', JSON.stringify({ owner, containers, networkId, entries }));
   const start = args => {
@@ -61,6 +63,14 @@ test('pinnedWaitronOwnerReadsReconnectAndLogoutThroughTheGateway_' + fault, { ti
     mkdirSync(join(root, 'state'), { mode: 0o700 }); mkdirSync(join(root, 'measure'), { mode: 0o700 });
     cpSync(new URL('../remote.mjs', import.meta.url), join(root, 'measure/remote.mjs'));
     cpSync(new URL('./remote-waitron-smoke.mjs', import.meta.url), join(root, 'measure/remote-waitron-smoke.mjs'));
+    if (accountingFault) secret('measure/remote-waitron-smoke.mjs', `
+import net from 'node:net'; import {syncBuiltinESMExports} from 'node:module';
+const originalServer = net.createServer, written = Object.getOwnPropertyDescriptor(net.Socket.prototype, 'bytesWritten').get;
+net.createServer = (options, handle) => originalServer(options, socket => {
+  Object.defineProperty(socket, 'bytesWritten', {get() {return ${fault === 'missing-counter' ? 'undefined' : 'written.call(this) + 1'};}});
+  handle(socket);
+}); syncBuiltinESMExports();
+` + readFileSync(new URL('./remote-waitron-smoke.mjs', import.meta.url), 'utf8'));
     cpSync(new URL('../remote-journey.mjs', import.meta.url), join(root, 'measure/remote-journey.mjs'));
     cpSync(new URL('../remote-readiness.mjs', import.meta.url), join(root, 'measure/remote-readiness.mjs'));
     mkdirSync(join(root, 'peer'), { mode: 0o700 });
@@ -129,7 +139,7 @@ test('pinnedWaitronOwnerReadsReconnectAndLogoutThroughTheGateway_' + fault, { ti
     assert.equal(JSON.parse(docker('inspect', gateway))[0].Mounts.some(m => m.Source.endsWith('staff.key') || m.Source.endsWith('/peer')), false);
     const nodeVersion = docker('exec', peer, 'node', '-p', 'process.version');
     const gatewayBefore = wire(gateway), peerBefore = wire(peer);
-    if (fault !== 'none') {
+    if (fault !== 'none' && !accountingFault) {
       assert.throws(() => docker('exec', gateway, 'node', '/measure/remote-waitron-smoke.mjs', fault === 'extra-config' ? 'extra-config' : 'measure'),
         error => error.journeyRefused === true, 'bad evidence must refuse without publishing a partial sample');
       return;
@@ -147,7 +157,14 @@ test('pinnedWaitronOwnerReadsReconnectAndLogoutThroughTheGateway_' + fault, { ti
       assert.equal(entry.actions.reduce((n,a) => n + a.requestBodyBytes, 0), entry.requestBodyBytes);
       assert.equal(entry.actions.reduce((n,a) => n + a.responseBodyBytes, 0), entry.responseBodyBytes);
       assert.equal(entry.actions.length, entry.requests);
-      assert.deepEqual(entry.snapshot.producer, entry.snapshot.observer);
+      if (accountingFault) {
+        assert.equal(entry.snapshot.status, 'unknown');
+        assert.equal(entry.snapshot.reconciled, false);
+        assert.equal(assessAccounting({ producer: 'remote', sources: [{ scope: 'remote', record: entry.snapshot }] }).publicationEligible, false);
+        assert.ok(entry.snapshot.observer.bytesFromGateway > entry.responseBodyBytes);
+        assert.equal(entry.snapshot.producer.bytesFromGateway, fault === 'missing-counter' ? null
+          : entry.snapshot.observer.bytesFromGateway + entry.requests);
+      } else assert.deepEqual(entry.snapshot.producer, entry.snapshot.observer);
       assert.equal(entry.snapshot.producer.connections, entry.requests);
     }
     for (const value of ['owner@example.test', 'Generated local password', 'Generated owner', staffHost, publicHost])

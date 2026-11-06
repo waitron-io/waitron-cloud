@@ -148,8 +148,9 @@ remote records before any projection discards their billing or gap fields.
 Missing source coverage, mismatched rows and unknown billing prevent measurement
 publication; malformed records, private fields and accessors still refuse.
 Run `node --test scripts/cloud-cost/accounting-policy.test.mjs` for the original
-record checks and real loopback traffic. Runtime callers do not yet use this
-assessment. Native put-only, unversioned, versioned and multipart storage histories
+record checks and real loopback traffic. Worker admission uses this assessment;
+direct new-export admission remains unfinished. Native put-only, unversioned,
+versioned and multipart storage histories
 also leave overflowing totals unknown while keeping supported object counts and
 storage-time bounds. The named overflow gap survives cleanup, so a later smaller
 total cannot erase missing accounting. Clock failures and foreign inventory still
@@ -337,8 +338,21 @@ SQLite verification, fiscal checks, isolation and cleanup. Clock disagreement
 still refuses before the result returns. Run the `gappedLocalStageCompletesWithoutReceipt`
 and `localCommandRetainsUnknownBillingAndMeasuredRowsAfterOwnedCleanup` cases,
 plus `localReceiptRefusesClockJump`, in the same real-worker conformance file.
-Clean measured receipt assertions remain in `local-receipt.test.mjs`. Other
-conformance result consumers and shared mail/remote completion remain open.
+Clean measured receipt assertions remain in `local-receipt.test.mjs`.
+Remote relay counters now keep missing observations, disagreements and aggregate
+overflow as unknown cost after successful forwarding and owned collection.
+An earlier disagreement survives equal final totals. Independent activity and
+completed socket lifecycles still enforce nonempty exchanges, traffic limits,
+deadlines and actual transport failures. API and browser journeys keep their
+action checks when those cost counts are missing. Run `node --test
+scripts/cloud-cost/remote-accounting.test.mjs
+scripts/cloud-cost/remote-journey-accounting.test.mjs
+scripts/cloud-cost/browser-accounting.test.mjs` for the loopback and caller
+controls. The genuine gateway and Chromium conformance files add missing-counter
+and mismatched-counter cases, retaining their original clean numeric and
+functional-refusal checks. These diagnostic snapshots cannot qualify as measured
+evidence in the original-record assessor. Other conformance result consumers and
+shared mail completion remain open.
 The full nonblocking accounting path, publication refusal and saved-failure
 replay remain open. These partial changes do
 not establish the historical cause or relax functional admission.

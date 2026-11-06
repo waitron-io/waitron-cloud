@@ -24,7 +24,15 @@ export async function openRemoteMeasurement(options) {
       need(Number.isSafeInteger(value) && value > 0 && value <= limit);
     need(signal === undefined || (signal instanceof AbortSignal && !signal.aborted));
   } catch { fail(); }
-  const sockets = new Set(), settled = [], producer = totals(), observer = totals();
+  const sockets = new Set(), settled = [], producer = totals(), observer = totals(), gaps = new Set();
+  const add = (record, key, value) => {
+    if (value === undefined || value === null) { gaps.add('accounting:incomplete-total'); record[key] = null; return; }
+    need(Number.isSafeInteger(value) && value >= 0);
+    if (record[key] === null) return;
+    const total = record[key] + value;
+    if (Number.isSafeInteger(total)) record[key] = total;
+    else { record[key] = null; gaps.add('accounting:overflow'); }
+  };
   let invalid = false, closing, closed = false, connections = 0, transferred = 0, timer, failure = 'none';
   const poison = reason => {
     // The first refusal explains the lost measurement; destruction can emit later errors.
@@ -37,6 +45,7 @@ export async function openRemoteMeasurement(options) {
     if (invalid || closing || ++connections > maxConnections) { client.destroy(); poison('admission-refused'); return; }
     const upstream = connect({ host: '127.0.0.1', port: Number(endpoint.port), allowHalfOpen: true });
     let remaining = 2, connected = false;
+    const received = new Set();
     upstream.once('connect', () => { connected = true; });
     for (const [side, socket] of [['client', client], ['upstream', upstream]]) {
       sockets.add(socket);
@@ -48,15 +57,23 @@ export async function openRemoteMeasurement(options) {
         poison('socket-' + side + '-' + kind);
       });
       socket.setTimeout(timeoutMs, () => poison('timeout-' + side));
-      socket.on('data', bytes => { transferred += bytes.length; if (transferred > maxBytes) poison('byte-limit'); });
+      socket.on('data', bytes => {
+        if (bytes.length > 0) received.add(side);
+        transferred += bytes.length; if (transferred > maxBytes) poison('byte-limit');
+      });
       socket.once('close', () => {
         sockets.delete(socket);
         if (!invalid && (!socket.readableEnded || !socket.writableFinished)) poison('incomplete-' + side);
         if (--remaining !== 0 || invalid) return;
-        if (!connected || client.bytesRead === 0 || upstream.bytesRead === 0) { poison('empty-exchange'); return; }
-        producer.connections++; producer.bytesToGateway += client.bytesRead; producer.bytesFromGateway += client.bytesWritten;
-        observer.connections++; observer.bytesToGateway += upstream.bytesWritten; observer.bytesFromGateway += upstream.bytesRead;
-        if (!isDeepStrictEqual(producer, observer)) poison('counter-mismatch');
+        // EOF, forwarding activity and caps establish transport completion independently
+        // of the socket counters used for cost evidence.
+        if (!connected || received.size !== 2) { poison('empty-exchange'); return; }
+        try {
+          producer.connections++; observer.connections++;
+          add(producer, 'bytesToGateway', client.bytesRead); add(producer, 'bytesFromGateway', client.bytesWritten);
+          add(observer, 'bytesToGateway', upstream.bytesWritten); add(observer, 'bytesFromGateway', upstream.bytesRead);
+          if (!isDeepStrictEqual(producer, observer)) gaps.add('accounting:meter-disagreement');
+        } catch { poison('final-accounting'); }
       });
       settled.push(new Promise(resolve => socket.once('close', resolve)));
     }
@@ -72,7 +89,7 @@ export async function openRemoteMeasurement(options) {
       clearTimeout(timer); signal?.removeEventListener('abort', abort);
       try {
         need(!invalid && producer.connections > 0 && producer.connections === connections
-          && sockets.size === 0 && isDeepStrictEqual(producer, observer));
+          && sockets.size === 0);
         closed = true;
       } catch { invalid = true; if (failure === 'none') failure = 'final-accounting'; fail(); }
     })();
@@ -89,8 +106,12 @@ export async function openRemoteMeasurement(options) {
   const port = server.address().port;
   const snapshot = () => {
     need(closed && !invalid);
-    return structuredClone({ scope: 'gateway-tcp-stream', audience, status: 'measured', reconciled: true,
-      producer, observer, discrepancy: totals(), excludedOverhead: ['ip', 'tcp', 'wireguard'] });
+    const reconciled = gaps.size === 0 && isDeepStrictEqual(producer, observer);
+    const discrepancy = Object.fromEntries(Object.keys(producer).map(key => [key,
+      producer[key] === null || observer[key] === null ? null : observer[key] - producer[key]]));
+    return structuredClone({ scope: 'gateway-tcp-stream', audience, status: reconciled ? 'measured' : 'unknown', reconciled,
+      producer, observer, discrepancy, excludedOverhead: ['ip', 'tcp', 'wireguard'],
+      ...(gaps.size ? { gaps: [...gaps].sort() } : {}) });
   };
   return { port, close, snapshot, failure: () => failure };
 }

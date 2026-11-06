@@ -179,7 +179,8 @@ export async function measureRemoteBrowser(options) {
       && result.pageErrors === 0 && result.outsideRequests === 0);
     phase = 'snapshot';
     await meter.close(); result.snapshot = meter.snapshot();
-    need(result.snapshot.producer.bytesFromGateway > result.completedResponseBodyBytes && result.completedResponseBodyBytes > 0);
+    need(result.completedResponseBodyBytes > 0);
+    if (result.snapshot.status === 'measured') need(result.snapshot.producer.bytesFromGateway > result.completedResponseBodyBytes);
     return result;
   } catch (cause) {
     const error = Error('Invalid cloud cost browser journey');
