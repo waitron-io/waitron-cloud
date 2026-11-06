@@ -107,7 +107,7 @@ changes retain complete proof work.
 
 The root workflow discovers the partition-contract test through the immediate
 `scripts/ci-*.test.mjs` wildcard. That test reads the workflow and executes its
-extracted command against six generated files in its own temporary directory.
+extracted command against ten generated files in its own temporary directory.
 The selected owners remain all eight root partitions.
 
 The health test imports `operations-health.mjs` and creates temporary loopback
