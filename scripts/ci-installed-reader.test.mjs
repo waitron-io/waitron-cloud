@@ -118,14 +118,31 @@ test('a real mixed portal revision narrows while a new unknown reader restores e
 
 
 test('qualifying the real UI-smoke graph retains every existing receipt suite', {timeout: 60_000}, () => {
-  const git = (...args) => execFileSync('git', args, {encoding: 'utf8', maxBuffer: 64 * 1024 * 1024});
-  git.readBlobs = readGitBlobs;
-  const sha = git('rev-parse', 'HEAD').trim(), workspace = loadWorkspace();
-  const changed = (...args) => args[0] === 'diff' ? 'packages/ui-smoke/test.mjs\0' : git(...args);
-  changed.readBlobs = git.readBlobs;
-  const base = git('rev-parse', 'HEAD^').trim();
-  const selected = createPlan({pull_request: {base: {sha: base}, head: {sha}}}, {sha}, workspace, changed);
-  assert.deepEqual(selected.packages, [{package: '@waitron-cloud/ui-smoke', shard: 1}]);
-  assert.deepEqual(selected.receipts, ['test:two-venue-milestone-receipt', 'test:backup-capacity',
-    'test:public-gateway-limits', 'test:local-stack', 'test:database-recovery-receipt', 'test:cloud-cost']);
+  const root = mkdtempSync(join(tmpdir(), 'cloud-real-ui-smoke-plan-'));
+  const git = (...args) => {
+    const binary = typeof args.at(-1) === 'object' && args.pop().binary;
+    return execFileSync('git', ['-c', 'maintenance.auto=false', ...args],
+      {cwd: root, encoding: binary ? undefined : 'utf8', maxBuffer: 64 * 1024 * 1024, stdio: ['ignore', 'pipe', 'pipe']});
+  };
+  git.readBlobs = ids => readGitBlobs(ids, input => execFileSync('git', ['cat-file', '--batch'],
+    {cwd: root, input, maxBuffer: 64 * 1024 * 1024}));
+  try {
+    execFileSync('git', ['clone', '--shared', '--quiet', process.cwd(), root], {stdio: 'pipe'});
+    const base = git('rev-parse', 'HEAD').trim();
+    const path = 'packages/ui-smoke/test.mjs';
+    writeFileSync(join(root, path), readFileSync(join(root, path), 'utf8') + '\n');
+    git('add', path);
+    execFileSync(process.execPath, [resolve('scripts/ci-root-review.mjs'), '--write-staged',
+      '--input', path, '--reviewer', 'CI fixture', '--reference', 'Controlled UI-smoke whitespace'],
+    {cwd: root, stdio: 'pipe'});
+    git('add', 'scripts/ci-root-review.d');
+    execFileSync(process.execPath, [resolve('scripts/ci-input-audit.mjs'), '--write-staged'], {cwd: root, stdio: 'pipe'});
+    git('add', 'scripts/ci-input-audit.d/docs');
+    git('-c', 'user.name=CI fixture', '-c', 'user.email=ci@example.test', 'commit', '-sm', 'UI-smoke selection fixture');
+    const sha = git('rev-parse', 'HEAD').trim(), workspace = loadWorkspace(root);
+    const selected = createPlan({pull_request: {base: {sha: base}, head: {sha}}}, {sha}, workspace, git);
+    assert.deepEqual(selected.packages, [{package: '@waitron-cloud/ui-smoke', shard: 1}], selected.reason);
+    assert.deepEqual(selected.receipts, ['test:backup-capacity', 'test:cloud-cost',
+      'test:database-recovery-receipt', 'test:local-stack', 'test:public-gateway-limits', 'test:two-venue-milestone-receipt']);
+  } finally {rmSync(root, {recursive: true, force: true});}
 });

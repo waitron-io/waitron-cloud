@@ -3869,6 +3869,12 @@ run still reaches that limit after 326 cases, compared with 94 before this chang
 That constraint remains unqualified, and the historical hosted slowdown remains
 unexplained.
 
+The UI-smoke package-selection check now creates a real isolated change from
+the current reviewed tree. Its exact one-package and six-receipt expectations
+no longer depend on the checkout's parent having the same reviewed readers.
+The merge of PR1034 exposed that accidental dependency when its parent still
+held an older traffic-command reader; the planner correctly kept full work.
+
 ## Bound verifier test failure cleanup (D530)
 
 [The D462 backup job](https://github.com/waitron-io/waitron-cloud/actions/runs/41311315472/job/124862280459)
