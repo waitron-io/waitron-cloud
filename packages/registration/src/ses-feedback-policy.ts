@@ -13,8 +13,10 @@ function data(value:unknown,depth=0,budget={remaining:2000}):unknown {
  if(Array.isArray(value)) {
   if(value.length>128||Object.getPrototypeOf(value)!==Array.prototype)return refuse();
  }else if(Object.getPrototypeOf(value)!==Object.prototype&&Object.getPrototypeOf(value)!==null)return refuse();
+ const keys=Reflect.ownKeys(value);
+ if(keys.length>129||keys.some(k=>typeof k!=='string'))return refuse();
  const descriptors=Object.getOwnPropertyDescriptors(value);
- if(Reflect.ownKeys(value).some(k=>typeof k!=='string')||Object.values(descriptors).some(d=>d.get||d.set))return refuse();
+ if(Object.values(descriptors).some(d=>d.get||d.set))return refuse();
  if(Array.isArray(value)) {
   const length=descriptors.length!.value as number;
   if(Object.keys(descriptors).length!==length+1)return refuse();
@@ -40,7 +42,7 @@ function canonical(value:unknown):string {
  return JSON.stringify(value);
 }
 const policy=(...Statement:unknown[])=>({Version:'2012-10-17',Statement});
-const allow=(Action:string[],Resource:string,Principal?:unknown,Condition?:unknown)=>({Effect:'Allow',Action,Resource,
+const allow=(Action:string[],Resource:string|readonly string[],Principal?:unknown,Condition?:unknown)=>({Effect:'Allow',Action,Resource,
  ...(Principal===undefined?{}:{Principal}),...(Condition===undefined?{}:{Condition})});
 
 /** Validate a closed offline AWS-document subset, never effective IAM or live drift.
@@ -51,11 +53,17 @@ export function validateSesFeedbackPolicies(config:SesFeedbackConfig,documents:u
  if(!isValidatedSesFeedbackConfig(config))return refuse();
  const d=object(data(documents)),identities=object(d.identities),key=object(d.key),queue=object(d.queue);
  const {providerAccountId:account,region,country}=config.scope;
- const rolePrefix=`arn:aws:iam::${account}:role/`;
  const roles=['smtp','consumer','health','operator','keyAdministrator'];
- if(roles.some(name=>typeof identities[name]!=='string'
-  ||!new RegExp('^'+rolePrefix+'[A-Za-z0-9+=,.@_/-]{1,128}$').test(identities[name] as string))
-  ||new Set(roles.map(name=>identities[name])).size!==roles.length)return refuse();
+ const names:string[]=[];
+ for(const name of roles) {
+  const kind=name==='smtp'?'user':'role',prefix=`arn:aws:iam::${account}:${kind}/`,arn=identities[name];
+  if(typeof arn!=='string'||!arn.startsWith(prefix)||!/^[A-Za-z0-9+=,.@_-]+(?:\/[A-Za-z0-9+=,.@_-]+)*$/.test(arn.slice(prefix.length))
+   ||arn.slice(prefix.length).length>128)return refuse();
+  names.push(kind+':'+arn.split('/').at(-1)!.toLowerCase());
+ }
+ // IAM names are unique within each identity type and account, regardless of path
+ // or letter case. A differently spelled ARN is not evidence of a second identity.
+ if(new Set(names).size!==roles.length)return refuse();
  const keyPrefix=`arn:aws:kms:${region}:${account}:key/`;
  if(typeof key.Arn!=='string'||!key.Arn.startsWith(keyPrefix)
   ||!/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/.test(key.Arn.slice(keyPrefix.length)))return refuse();
@@ -78,7 +86,7 @@ export function validateSesFeedbackPolicies(config:SesFeedbackConfig,documents:u
   consumerPolicy:policy(allow(['sqs:ReceiveMessage','sqs:DeleteMessage','sqs:GetQueueAttributes'],config.queueArn),
    allow(['kms:Decrypt'],key.Arn)),
   healthPolicy:policy(allow(['sqs:GetQueueAttributes'],config.dlqArn)),
-  smtpPolicy:policy(allow(['ses:SendRawEmail'],config.identityArn)),
+  smtpPolicy:policy(allow(['ses:SendRawEmail'],[config.identityArn,config.configurationSetArn])),
   key:{Arn:key.Arn,KeyState:'Enabled',KeyManager:'CUSTOMER',KeySpec:'SYMMETRIC_DEFAULT',KeyUsage:'ENCRYPT_DECRYPT',
    // In a KMS key policy, '*' denotes only the key carrying that policy. Identity
    // policies above must instead name its full ARN, never a wildcard or alias.

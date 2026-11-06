@@ -37,7 +37,10 @@ test('refusesBroadenedPublisherOrConsumerPolicy',async t=>{
   ['health decrypt',d=>{d.healthPolicy.Statement.push({Effect:'Allow',Action:['kms:Decrypt'],Resource:d.key.Arn});}],
   ['health reads primary instead',d=>{d.healthPolicy.Statement[0]!.Resource=d.queue.QueueArn;}],
   ['SMTP administers suppression',d=>{d.smtpPolicy.Statement[0]!.Action.push('ses:DeleteSuppressedDestination');}],
-  ['SMTP uses different identity',d=>{d.smtpPolicy.Statement[0]!.Resource+='-other';}],
+  ['SMTP uses different identity',d=>{d.smtpPolicy.Statement[0]!.Resource[0]+='-other';}],
+  ['SMTP missing configuration set',d=>{d.smtpPolicy.Statement[0]!.Resource.pop();}],
+  ['SMTP wrong configuration set',d=>{d.smtpPolicy.Statement[0]!.Resource[1]+='-other';}],
+  ['SMTP uses role credentials',d=>{d.identities.smtp='arn:aws:iam::123456789012:role/mail-smtp';}],
   ['consumer decrypts different key',d=>{d.consumerPolicy.Statement[1]!.Resource+='-other';}],
   ['key public decrypt',d=>{(d.key.Policy.Statement[2]!.Principal as any)='*';}],
   ['key extra decrypt action',d=>{d.key.Policy.Statement[2]!.Action.push('kms:GenerateDataKey');}],
@@ -134,7 +137,9 @@ test('productionRelayRemainsUnavailable',async()=>{
  const {spainCountryPolicy}=await import('../src/country-policy.ts');
  assert.throws(()=>new RelayMessages({} as any,{} as any,'https://cloud.example.test',{mode:'production'} as any),
   {message:'relay_unavailable'});
- assert.throws(()=>validateSesFeedbackConfig(spainCountryPolicy,input),{message:'Invalid SES feedback configuration'});
+ const aligned={...input,policyRevision:1,flows:input.flows.map(flow=>({...flow,policyRevision:1}))};
+ assert.doesNotThrow(()=>validateSesFeedbackConfig({...policy,revision:1},aligned));
+ assert.throws(()=>validateSesFeedbackConfig(spainCountryPolicy,aligned),{message:'Invalid SES feedback configuration'});
 });
 
 test('self-consistent resource documents still require a regional key, separate roles and bounded redrive',async t=>{
@@ -173,4 +178,60 @@ test('array methods and custom prototypes cannot execute while validating docume
   assert.throws(()=>check(validateSesFeedbackConfig(policy,input),documents),{message:'Invalid SES feedback policies'});
   assert.equal(executed,false);
  }
+});
+
+test('SMTP uses a distinct IAM user and service roles cannot alias through case or path',async()=>{
+ const check=await validate();
+ const {policy,input,documents}=feedbackPolicyFixture();
+ documents.identities.smtp='arn:aws:iam::123456789012:user/mail-smtp';
+ assert.doesNotThrow(()=>check(validateSesFeedbackConfig(policy,input),documents));
+ for(const health of ['arn:aws:iam::123456789012:role/Feedback-Consumer','arn:aws:iam::123456789012:role/service/feedback-consumer']) {
+  const f=feedbackPolicyFixture();f.documents.identities.health=health;
+  assert.throws(()=>check(validateSesFeedbackConfig(f.policy,f.input),f.documents),{message:'Invalid SES feedback policies'});
+ }
+});
+
+test('oversized objects refuse before reading their member descriptors',async()=>{
+ const check=await validate();const {policy,input}=feedbackPolicyFixture();let reads=0;
+ const huge=new Proxy({}, {ownKeys:()=>Array.from({length:130},(_,i)=>String(i)),
+  getOwnPropertyDescriptor:()=>{reads++;return {value:null,configurable:true,enumerable:true,writable:true};}});
+ assert.throws(()=>check(validateSesFeedbackConfig(policy,input),huge),{message:'Invalid SES feedback policies'});
+ assert.equal(reads,0);
+});
+
+test('string, array, depth and node bounds stop traversal before later document members',async t=>{
+ const check=await validate();
+ const cases:[string,()=>unknown][]=[
+  ['string',()=> 'x'.repeat(4097)],['array',()=>Array(129).fill(null)],
+  ['depth',()=>{let value:unknown=null;for(let n=0;n<18;n++)value={child:value};return value;}],
+  ['nodes',()=>Array.from({length:16},()=>Array(128).fill(null))],
+ ];
+ for(const [name,first] of cases)await t.test(name,()=>{
+  const {policy,input,documents}=feedbackPolicyFixture();let reads=0;
+  const later=new Proxy({}, {ownKeys:()=>{reads++;return [];}});
+  assert.throws(()=>check(validateSesFeedbackConfig(policy,input),{first:first(),later,...documents}),{message:'Invalid SES feedback policies'});
+  assert.equal(reads,0);
+ });
+});
+
+test('SMTP send permission names both the exact identity and configuration set',async()=>{
+ const check=await validate();const {policy,input,documents}=feedbackPolicyFixture();
+ (documents.smtpPolicy.Statement[0] as any).Resource=[input.identityArn,input.configurationSetArn];
+ assert.doesNotThrow(()=>check(validateSesFeedbackConfig(policy,input),documents));
+});
+
+test('array wrappers cannot hide a country, publisher, extra field or sparse grant',async t=>{
+ const check=await validate();
+ const cases:[string,(d:Documents)=>void][]=[
+  ['proxy map',d=>{d.countries=new Proxy(['ES','FR'],{get:(target,key,receiver)=>key==='map'?()=>['ES']:Reflect.get(target,key,receiver)});}],
+  ['array species',d=>{d.countries=['ES','FR'];Object.defineProperty(d.countries,'constructor',{value:{[Symbol.species]:function(){return ['ES'];}}});}],
+  ['hidden public publisher',d=>{const original=structuredClone(d.topic.Policy.Statement);d.topic.Policy.Statement[0]!.Principal='*' as any;
+   Object.defineProperty(d.topic.Policy.Statement,'map',{value:()=>original});}],
+  ['extra grant property',d=>{(d.dlq.Policy.Statement as any).publisher='public';}],
+  ['sparse grant',d=>{d.dlq.Policy.Statement=Array(1);}],
+ ];
+ for(const [name,change] of cases)await t.test(name,()=>{
+  const {policy,input,documents}=feedbackPolicyFixture();change(documents);
+  assert.throws(()=>check(validateSesFeedbackConfig(policy,input),documents),{message:'Invalid SES feedback policies'});
+ });
 });

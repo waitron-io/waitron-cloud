@@ -84,15 +84,17 @@ messages cannot be replayed after their encrypted payload has been erased.
 ## Before enabling live delivery
 
 The owner approved the [feedback and suppression design](superpowers/specs/2026-11-01-ses-feedback-design.md)
-on 2026-11-01, including Paris and private queue intake for authenticated bounce and
+on 2026-11-01, including private queue intake for authenticated bounce and
 complaint events. It binds feedback before sending, keeps provider IDs separate from
 the original Message-ID and blocks future handoffs without replaying accepted mail.
 The [implementation plan](superpowers/plans/2026-11-02-ses-feedback-implementation.md)
 covers the local build and separate provider qualification. D565 authorises code
 and synthetic tests only. Task 1 validates configuration and event envelopes.
 Tasks 2 and 3 retain recipient bindings and apply parsed feedback atomically.
-Trusted queue intake and production wiring for suppression checks remain
-unimplemented. Account/provider qualification is still required in the selected region.
+Tasks 4–7 add scoped handoff checks, bounded private queue intake and internal
+manual reconciliation. Task 8 adds offline document validation and its deployment
+handoff. Production wiring, provider permissions and live qualification remain
+separate gates in the selected region.
 
 D102 must qualify and configure the selected SES account/region and verified sender
 domain. Confirm the processing/storage locations, retention, subcontractors and suppression rules for the
@@ -104,8 +106,8 @@ prove delivery, permanent bounce and complaint handling.
 The plan separates local intake tests from live setup. Build authority permits
 no AWS resources, credentials, production-access request or live mail. Production authentication,
 suppression reconciliation, alerts, secret provisioning and live delivery proof need
-the qualified account/provider. Hands-on account, sender/domain and live testing
-wait for the owner on 3 November.
+the qualified account/provider. Obtain separate owner authority for each hands-on
+account, sender/domain or live-testing action; a date grants no authority.
 The transport implementation does not pretend those operational pieces are deployed.
 There is no automatic cross-country or provider fallback. D102 must qualify the
 selected EU SES path before enabling it. The public portal routes are still a

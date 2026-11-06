@@ -51,7 +51,8 @@ Invalid SES feedback policies
 ```
 
 The example's `123456789012` account, `mail.example.test` identity and roles are
-synthetic. Its five-receive poison-message setting is a fixture value, not an
+synthetic. The SMTP identity is an IAM user; the other four identities are roles.
+Its five-receive poison-message setting is a fixture value, not an
 approved production threshold. The offline profile accepts integers from 1–1000
 without choosing a production value or a retention duration.
 
@@ -67,7 +68,7 @@ The bundle contains these separately checked parts:
 | Dead-letter queue (DLQ) | Standard, same encrypted queue key, no direct publisher grant, and only the exact primary queue may use it as a DLQ. No automatic replay or message-move permission. |
 | Consumer identity policy | Receive, delete and read attributes on the primary queue; decrypt its exact key. No publish, purge, policy changes, SES administration or DLQ message access. |
 | Health identity policy | Read only DLQ attributes for counts, with no message or key access. Authenticated primary-age and drift collection still needs qualification. |
-| SMTP identity policy | Send raw mail only for the exact SES identity. It shares no identity with the consumer, health reader, operator or key administrator. |
+| SMTP identity policy | A dedicated IAM user sends raw mail only for the exact SES identity and configuration set. It shares no identity with the consumer, health reader, operator or key administrator. |
 | Queue key and its policy | Exact same-account/region customer-managed symmetric enabled key. SNS data-key/decrypt use is source-bound; the consumer gets decrypt only; a separate administrator gets the enumerated management operations. |
 
 Only a KMS key policy uses `Resource: "*"`: in that context it means the key
@@ -77,11 +78,23 @@ that authority and subsequent changes belong in effective-permission and drift
 qualification. The bundle identifies a separate reconciliation operator but grants
 it no provider-removal permissions. Provider-only removal stays owner-only.
 
+[SES SMTP credentials](https://docs.aws.amazon.com/ses/latest/dg/smtp-credentials.html)
+come from an IAM user, and temporary credentials are unsupported for this SMTP
+path. Service roles remain distinct after comparing their names without case or
+path differences, following [IAM name uniqueness](https://docs.aws.amazon.com/IAM/latest/APIReference/API_CreateRole.html).
+The send policy names both the sending identity and its configuration set, as in
+AWS's [configuration-set permission example](https://docs.aws.amazon.com/ses/latest/dg/eb-policies.html).
+Recheck effective SMTP authorization with the exact header/configuration-set
+binding during live qualification; the offline profile does not prove it.
+
 The limited profile rejects extra grants; it cannot discover another attached
 identity policy, role trust, permission boundary, session policy, service-control
 policy, endpoint policy or extra subscription. Nor can it authenticate an export.
 A passing result returns `undefined`, never an enablement token. Collect the full
 live inventory and test access with the actual identities before accepting it.
+The empty DLQ grant list denotes no supplied resource-policy grants; the deployment
+export must establish whether AWS represents that state by an absent policy or an
+empty statement list. It must not discard a real grant while normalizing exports.
 
 The permission shapes follow AWS's
 [SES event destination policy](https://docs.aws.amazon.com/ses/latest/dg/event-publishing-add-event-destination-sns.html),

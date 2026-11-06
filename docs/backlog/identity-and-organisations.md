@@ -3,9 +3,11 @@
 ## Decisions and deliberate limits
 
 The owner selected Amazon SES in an EU region on 2026-10-21, an explicit email
-exception to Spain home storage. D102 selects Paris or Frankfurt and qualifies the
-account, entities, processing/access locations, retention and tracking controls;
-configure the sender and prove live delivery. This selection does not prove setup
+exception to Spain home storage. The owner accepts Stockholm (`eu-north-1`), the
+configured default, or Paris (`eu-west-3`). D102 still qualifies the exact account,
+entities, processing/access locations, retention and tracking controls. D565
+authorises local feedback code/tests and [offline policy validation](../ses-feedback-qualification.md);
+provider resources, credentials and live delivery need separate owner authority. This selection does not prove setup
 or delivery, and does not move venue databases, logs or keys out of Spain.
 
 ## Requirements and remaining work

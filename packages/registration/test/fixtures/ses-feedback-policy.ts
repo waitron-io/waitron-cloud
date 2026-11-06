@@ -5,7 +5,7 @@ export function feedbackPolicyFixture(region='eu-north-1',purposes=['cloud-accou
  const {policy,input}=feedbackFixture(region,purposes);
  const role=(name:string)=>`arn:aws:iam::123456789012:role/${name}`;
  const keyArn=`arn:aws:kms:${region}:123456789012:key/11111111-2222-4333-8444-555555555555`;
- const identities={smtp:role('mail-smtp'),consumer:role('feedback-consumer'),health:role('feedback-health'),
+ const identities={smtp:'arn:aws:iam::123456789012:user/mail-smtp',consumer:role('feedback-consumer'),health:role('feedback-health'),
   operator:role('feedback-operator'),keyAdministrator:role('feedback-key-admin')};
  const documents={version:1,revision:input.revision,countries:['ES'],
   configurationSet:{Arn:input.configurationSetArn,Enabled:true,TopicArn:input.topicArn,
@@ -34,7 +34,7 @@ export function feedbackPolicyFixture(region='eu-north-1',purposes=['cloud-accou
    {Effect:'Allow',Action:['sqs:GetQueueAttributes'],Resource:input.dlqArn},
   ]},
   smtpPolicy:{Version:'2012-10-17',Statement:[
-   {Effect:'Allow',Action:['ses:SendRawEmail'],Resource:input.identityArn},
+   {Effect:'Allow',Action:['ses:SendRawEmail'],Resource:[input.identityArn,input.configurationSetArn]},
   ]},
   key:{Arn:keyArn,KeyState:'Enabled',KeyManager:'CUSTOMER',KeySpec:'SYMMETRIC_DEFAULT',KeyUsage:'ENCRYPT_DECRYPT',
    Policy:{Version:'2012-10-17',Statement:[
