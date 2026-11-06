@@ -228,7 +228,7 @@ test('array wrappers cannot hide a country, publisher, extra field or sparse gra
   ['hidden public publisher',d=>{const original=structuredClone(d.topic.Policy.Statement);d.topic.Policy.Statement[0]!.Principal='*' as any;
    Object.defineProperty(d.topic.Policy.Statement,'map',{value:()=>original});}],
   ['extra grant property',d=>{(d.dlq.Policy.Statement as any).publisher='public';}],
-  ['sparse grant',d=>{d.dlq.Policy.Statement=Array(1);}],
+  ['sparse grant',d=>{(d.dlq.Policy as {Statement:unknown[]}).Statement=Array(1);}],
  ];
  for(const [name,change] of cases)await t.test(name,()=>{
   const {policy,input,documents}=feedbackPolicyFixture();change(documents);
