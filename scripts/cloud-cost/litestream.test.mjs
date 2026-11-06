@@ -161,7 +161,7 @@ test('after-stop boundary is one-way and cannot be moved or configured to forgiv
 // Equal timestamps use event order; a backwards clock or changed phase must refuse evidence.
 for (const action of ['backwards-clock', 'duplicate-issue', 'duplicate-admission', 'duplicate-settlement', 'unknown-hop',
   'missing-producer', 'missing-issue', 'wrong-operation', 'wrong-phase', 'ordinal-reset', 'private-field', 'unknown-outcome', 'invalid-status'])
-  test(`after-stop correlation ${action === 'missing-issue' ? 'retains unknown accounting for' : 'cannot accept'} ${action}`, () => {
+  test(`after-stop correlation ${['missing-issue', 'missing-producer'].includes(action) ? 'retains unknown accounting for' : 'cannot accept'} ${action}`, () => {
     let now = 1; const session = afterStopSession(() => now);
     if (action !== 'missing-issue') session.issue(issued());
     const run = () => {
@@ -182,8 +182,8 @@ for (const action of ['backwards-clock', 'duplicate-issue', 'duplicate-admission
       if (action === 'duplicate-settlement') return session.settle(settled('producer'));
       return session.snapshot();
     };
-    if (action === 'missing-issue') {
-      const snapshot = run();
+    if (['missing-issue', 'missing-producer'].includes(action)) {
+      run(); const snapshot = session.snapshot();
       assert.equal(snapshot.status, 'unknown');
       assert.equal(snapshot.requestsReconciled, false);
       assert.deepEqual(snapshot.gaps, ['accounting:incomplete-history']);
@@ -262,25 +262,35 @@ test('late admission and interrupted settlement count the same SDK attempt only 
 });
 
 for (const invalid of ['missing storage admission', 'changed settlement phase'])
-  test(`after-stop settlement refuses ${invalid} immediately`, () => {
+  test(`after-stop settlement ${invalid === 'missing storage admission' ? 'retains unknown' : 'refuses'} ${invalid} immediately`, () => {
     const session = afterStopSession(); session.issue(issued()); session.admit(admitted('producer'));
     if (invalid !== 'missing storage admission') session.admit(admitted('observer'));
     session.acknowledgeStop(ack());
     const input = invalid === 'changed settlement phase' ? settled('producer', { phase: 'idle' })
-      : settled(invalid === 'observer interruption' ? 'observer' : 'producer', { outcome: 'transport-error' });
-    assert.throws(() => session.settle(input, invalid === 'changed settlement phase' ? null : knownInterruption()), /Invalid cloud cost Litestream audit/);
-    assert.throws(() => session.snapshot(), /Invalid cloud cost Litestream audit/);
+      : settled('producer', { outcome: 'transport-error' });
+    if (invalid === 'missing storage admission') {
+      assert.equal(session.settle(input, knownInterruption()), true);
+      const snapshot = session.snapshot();
+      assert.equal(snapshot.status, 'unknown'); assert.equal(snapshot.requestsReconciled, false);
+      assert.ok(snapshot.gaps.includes('accounting:incomplete-history'));
+      assert.equal(snapshot.used, 1); assert.equal(snapshot.producer.attempts, 1);
+      assert.equal(snapshot.observer.attempts, 0);
+    } else {
+      assert.throws(() => session.settle(input), /Invalid cloud cost Litestream audit/);
+      assert.throws(() => session.snapshot(), /Invalid cloud cost Litestream audit/);
+    }
   });
 
 test('changing phases cannot reset the one session allowance', () => {
   const session = afterStopSession(); session.acknowledgeStop(ack());
   for (const [index, phase] of ['startup', 'workload', 'idle', 'verification'].entries()) {
     const invocation = `${String(index + 1).padStart(8, '0')}-2222-4333-8444-555555555555`, token = invocation + ':1';
-    session.issue({ ...issued(), invocation }); session.admit({ ...admitted('producer'), invocation, phase });
+    session.issue({ ...issued(), invocation });
     if (index === 3) {
-      assert.throws(() => session.admit({ ...admitted('observer'), invocation, phase }), /Invalid cloud cost Litestream audit/);
+      assert.throws(() => session.admit({ ...admitted('producer'), invocation, phase }), /Invalid cloud cost Litestream audit/);
       assert.throws(() => session.snapshot(), /Invalid cloud cost Litestream audit/);
     } else {
+      session.admit({ ...admitted('producer'), invocation, phase });
       session.admit({ ...admitted('observer'), invocation, phase });
       for (const channel of ['producer', 'observer']) session.settle({ ...settled(channel), token, phase });
     }
@@ -410,10 +420,10 @@ for (const listCount of [2, 3]) test(`late committed PUT and lists share the dis
   for (const hop of ['producer', 'observer']) s.settle(putSettlement(hop));
   for (let n = 0; n < listCount; n++) {
     const invocation = `${String(n + 2).padStart(8, '0')}-2222-4333-8444-555555555555`;
-    s.issue({ ...issued(), invocation }); s.admit({ ...admitted('producer'), invocation });
-    const admit = () => s.admit({ ...admitted('observer'), invocation });
-    if (n === 2) { assert.throws(admit, /Invalid cloud cost Litestream audit/); return; }
-    admit(); for (const hop of ['producer', 'observer']) s.settle({ ...settled(hop), token: `${invocation}:1` });
+    s.issue({ ...issued(), invocation });
+    if (n === 2) { assert.throws(() => s.admit({ ...admitted('producer'), invocation }), /Invalid cloud cost Litestream audit/); return; }
+    s.admit({ ...admitted('producer'), invocation }); s.admit({ ...admitted('observer'), invocation });
+    for (const hop of ['producer', 'observer']) s.settle({ ...settled(hop), token: `${invocation}:1` });
   }
   assert.equal(s.snapshot().used, 3); assert.equal(s.snapshot().lateAdmissions, 2); assert.equal(s.snapshot().lateSettlements, 1);
   assert.equal(s.snapshot().bodiesReconciled, true);

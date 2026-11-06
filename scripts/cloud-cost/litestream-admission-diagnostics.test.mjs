@@ -22,7 +22,7 @@ for (const [guard, setup, input] of [
   ['row-operation', s => s.issue(row({ operation: 'put' })), admission()],
   ['duplicate-hop', s => s.admit(admission()), admission()],
   ['retry-sequence', () => {}, admission({ ordinal: 1 })],
-  ['observer-pairing', () => {}, admission({ hop: 'observer' })],
+  ['observer-pairing', s => s.admit(admission({ hop: 'observer' })), admission({ phase: 'idle' })],
   ['observer-pairing', s => s.admit(admission()), admission({ hop: 'observer', phase: 'idle' })],
   ['post-stop-operation', stop, admission({ operation: 'put' })],
   ['post-stop-ordinal', s => { s.admit(admission()); stop(s); }, admission({ ordinal: 1 })],
@@ -32,8 +32,7 @@ for (const [guard, setup, input] of [
       s.admit(admission({ invocation: invocation(n) }));
       s.admit(admission({ invocation: invocation(n), hop: 'observer' }));
     }
-    s.admit(admission({ invocation: invocation(4) }));
-  }, admission({ invocation: invocation(4), hop: 'observer' })],
+  }, admission({ invocation: invocation(4) })],
   ['row-cap', s => { for (let n = 1; n <= 100000; n++) s.issue(row({ invocation: invocation(n) })); },
     admission({ invocation: invocation(100001) })],
 ]) test(`admission refusal names ${guard} and retains the first cause after poisoning`, () => {
@@ -88,6 +87,7 @@ test('the independent observer audit retains its first admission guard without r
   const input = { operation: 'list', headers: {
     'amz-sdk-invocation-id': invocation(1), 'amz-sdk-request': 'attempt=1; max=3', authorization: 'PRIVATE_CANARY',
   } };
+  afterStop.admit(admission({ phase: 'idle' }));
   assert.throws(() => audit.observe(input), bad);
   assert.equal(audit.checkpoint().failure.afterStopAdmissionGuard, 'observer-pairing');
   assert.throws(() => audit.observe(input), bad);
@@ -206,6 +206,7 @@ test('the transport drops an unknown admission category without evaluating acces
 
 test('the shared tracker reports its first observer refusal when a later producer is already poisoned', async t => {
   const s = createLitestreamAfterStop({ clock: () => 0 });
+  s.admit(admission({ phase: 'idle' }));
   assert.throws(() => s.admit(admission({ hop: 'observer' })), bad);
   const f = await httpFixture(t, s);
   assert.equal(await f.send('PUT'), 400); assert.equal(f.forwarded(), 0);

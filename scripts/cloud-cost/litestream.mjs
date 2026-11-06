@@ -117,13 +117,15 @@ export function createLitestreamAfterStop(options) {
     const row = rowFor(input, mark); mark('duplicate-hop'); requireThat(!row.admissions[input.hop]);
     next(input.hop, input, mark);
     mark('observer-pairing');
-    if (input.hop === 'observer') requireThat(row.admissions.producer && row.admissions.producer.phase === input.phase);
+    requireThat(Object.values(row.admissions).every(a => a.phase === input.phase)
+      && Object.values(row.settlements).every(e => e.phase === input.phase));
+    if (input.hop === 'observer' && !row.admissions.producer) historyGap = true;
     if (acknowledged) {
       mark('post-stop-operation', row); requireThat(input.operation === 'list');
       mark('post-stop-ordinal'); requireThat(input.ordinal === 0);
     }
     row.admissions[input.hop] = { ...event(mark), phase: input.phase };
-    if (acknowledged && input.hop === 'observer') { row.lateAdmission = true; affect(row, mark); }
+    if (acknowledged) { row.lateAdmission = true; affect(row, mark); }
   });
   let firstAdmissionFailure;
   const admit = input => {
@@ -193,7 +195,14 @@ export function createLitestreamAfterStop(options) {
     const match = /^(.+):([1-9]\d*)$/.exec(input.token); requireThat(match);
     const row = rowFor({ invocation: match[1], ordinal: Number(match[2]) - 1, operation: input.operation });
     const hop = input.channel, admission = row.admissions[hop];
-    requireThat(admission && !row.settlements[hop] && input.phase === admission.phase && input.retryOrdinal === row.ordinal);
+    requireThat(!row.settlements[hop] && phases.includes(input.phase) && input.retryOrdinal === row.ordinal
+      && Object.values(row.admissions).every(a => a.phase === input.phase)
+      && Object.values(row.settlements).every(e => e.phase === input.phase));
+    // An absent telemetry callback cannot supply an admission or prevent bounded collection.
+    if (!admission) {
+      historyGap = true;
+      if (acknowledged) { row.lateSettlement = true; affect(row); }
+    }
     requireThat(['producer', 'observer'].includes(hop) && ['success', 'client-error', 'server-error', 'transport-error'].includes(input.outcome));
     requireThat(['bytesIn', 'bytesOut', 'attemptedBytesIn', 'attemptedBytesOut'].every(key => nonnegative(input[key]))
       && input.bytesIn <= input.attemptedBytesIn && input.bytesOut <= input.attemptedBytesOut);
@@ -206,7 +215,7 @@ export function createLitestreamAfterStop(options) {
     requireThat([true, false, null].includes(input.sameAccount));
     const interrupted = input.outcome === 'transport-error';
     if (interrupted) {
-      requireThat(row.admissions.observer);
+      if (!row.admissions.observer) historyGap = true;
       if (hop === 'producer' || interruption !== null) {
         exactFields(interruption, ['reason', 'ioEvent', 'code', 'clientClosed', 'responseHeadersSeen']);
         requireThat(closeReasons.has(interruption.reason) && ioEvents.has(interruption.ioEvent)

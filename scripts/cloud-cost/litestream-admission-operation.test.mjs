@@ -153,6 +153,7 @@ test('admission context readers skip getters and contain descriptor traps', asyn
 
 test('a refusal before the post-stop checks keeps its existing context-free audit shape', () => {
   const s = createLitestreamAfterStop({ clock: () => 0 });
+  s.admit(input({ operation: 'list', phase: 'idle' }));
   const audit = createLitestreamRequestAudit({ phase: 'workload', afterStop: s });
   assert.throws(() => audit.observe({ operation: 'list', headers: {
     'amz-sdk-invocation-id': invocation, 'amz-sdk-request': 'attempt=1; max=3',
@@ -207,7 +208,7 @@ test('close context skips accessor output and contains descriptor traps without 
 for (const guard of ['duplicate-hop', 'observer-pairing']) {
   test(`an earlier ${guard} refusal stays context-free even after stop`, () => {
     const s = createLitestreamAfterStop({ clock: () => 0 });
-    if (guard === 'duplicate-hop') s.admit(input({ operation: 'list' }));
+    s.admit(input({ operation: 'list', phase: guard === 'duplicate-hop' ? 'workload' : 'idle' }));
     stop(s);
     const call = input({ operation: 'list', hop: guard === 'duplicate-hop' ? 'producer' : 'observer' });
     for (let n = 0; n < 2; n++) assert.throws(() => s.admit(call), error => {
@@ -230,8 +231,7 @@ for (const guard of ['clock', 'affected-cap']) {
         s.admit(input({ operation: 'list', invocation, hop: 'observer' }));
       }
       const invocation = '00000004-2222-4333-8444-555555555555';
-      s.admit(input({ operation: 'list', invocation }));
-      call = input({ operation: 'list', invocation, hop: 'observer' });
+      call = input({ operation: 'list', invocation });
     }
     for (const attempt of [call, input({ operation: 'get' })]) assert.throws(() => s.admit(attempt), error => {
       assert.deepEqual({ ...error }, { litestreamAfterStopAdmissionGuard: guard,

@@ -289,7 +289,10 @@ for (const count of [3, 4]) test(`after-stop lists share one cap across both ind
     assert.equal(result.code, n <= 3 ? 200 : 400);
   }
   if (count === 4) {
-    assert.throws(() => audit.end(), /Invalid cloud cost Litestream audit/);
+    audit.end();
+    assert.equal(audit.snapshot().requestsReconciled, false);
+    assert.equal(audit.snapshot().producerAttempts, 4);
+    assert.equal(audit.snapshot().observerAttempts, 3);
     await assert.rejects(front.close(), /Invalid cloud cost Litestream audit/);
     assert.throws(() => afterStop.snapshot(), /Invalid cloud cost Litestream audit/);
     assert.throws(() => meter.snapshot(), /Invalid cloud cost meter/);

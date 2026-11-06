@@ -213,6 +213,16 @@ scripts/cloud-cost/litestream-history-accounting.test.mjs` for missing-record,
 late-collection, numeric-boundary and malformed-output controls. These ledger
 controls do not prove actual SQLite recovery. Accounting-dependent forwarding
 admission still needs the wider policy.
+When an admission callback is missing, the shutdown ledger now collects valid
+settlements without inventing the missing event. An observer arriving first
+also leaves a persistent history gap. Either admitted hop, or a settlement with
+no admission record, consumes the same three-request stop allowance, so missing
+telemetry cannot hide a fourth request. Conflicting phases, duplicate events,
+malformed inputs and invalid clocks still refuse. Run `node --test
+scripts/cloud-cost/litestream-event-history.test.mjs` for all ten storage
+operations and six real HTTP controls. These controls prove forwarding and
+collection, not SQLite recovery. Late operation/retry policy and future mutation
+forwarding still need implementation.
 The full nonblocking accounting path, publication refusal, lost-write
 restore control and saved-failure replay remain open. These partial changes do
 not establish the historical cause or relax functional admission.
