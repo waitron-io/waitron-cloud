@@ -30,6 +30,8 @@ test('template-backed venue fixtures isolate data and keep every migration',asyn
   assert.equal((await second.pool.query('SELECT count(*) AS n FROM venues')).rows[0].n,'5');
   await second.close();second=undefined;
   assert.equal((await admin.query('SELECT datname FROM pg_database WHERE datname=ANY($1::text[])',[databases])).rowCount,0);
+  await template.close();
+  assert.equal((await admin.query('SELECT datname FROM pg_database WHERE datname=$1',[template.name])).rowCount,0);
  }finally{await first?.close();await second?.close();await template.close();await admin.end();}
 });
 
