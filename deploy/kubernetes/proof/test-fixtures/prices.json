@@ -1,0 +1,570 @@
+{
+  "AmazonEC2": {
+    "formatVersion": "v1.0",
+    "offerCode": "AmazonEC2",
+    "version": "20261105162628",
+    "publicationDate": "2026-11-05T16:26:28Z",
+    "products": {
+      "VPXWXCPWXEEGM4CW": {
+        "sku": "VPXWXCPWXEEGM4CW",
+        "productFamily": "Compute Instance",
+        "attributes": {
+          "servicecode": "AmazonEC2",
+          "location": "Europe (Spain)",
+          "locationType": "AWS Region",
+          "instanceType": "m7g.2xlarge",
+          "currentGeneration": "Yes",
+          "instanceFamily": "General purpose",
+          "vcpu": "8",
+          "physicalProcessor": "AWS Graviton3 Processor",
+          "clockSpeed": "2.5 GHz",
+          "memory": "32 GiB",
+          "storage": "EBS only",
+          "networkPerformance": "Up to 15 Gigabit",
+          "processorArchitecture": "64-bit",
+          "tenancy": "Shared",
+          "operatingSystem": "Linux",
+          "licenseModel": "No License required",
+          "usagetype": "EUS2-BoxUsage:m7g.2xlarge",
+          "operation": "RunInstances",
+          "availabilityzone": "NA",
+          "capacitystatus": "Used",
+          "classicnetworkingsupport": "false",
+          "dedicatedEbsThroughput": "Up to 10000 Mbps",
+          "dedicatedEbsThroughputDescription": "2500 Mbps",
+          "ecu": "NA",
+          "enhancedNetworkingSupported": "Yes",
+          "gpuMemory": "NA",
+          "instanceFamilyCategory": "General Purpose",
+          "intelAvxAvailable": "No",
+          "intelAvx2Available": "No",
+          "intelTurboAvailable": "No",
+          "marketoption": "OnDemand",
+          "normalizationSizeFactor": "16",
+          "preInstalledSw": "NA",
+          "regionCode": "eu-south-2",
+          "servicename": "Amazon Elastic Compute Cloud",
+          "vpcnetworkingsupport": "true"
+        }
+      },
+      "4STH5FTTSDG422F5": {
+        "sku": "4STH5FTTSDG422F5",
+        "productFamily": "Storage",
+        "attributes": {
+          "servicecode": "AmazonEC2",
+          "location": "Europe (Spain)",
+          "locationType": "AWS Region",
+          "storageMedia": "SSD-backed",
+          "volumeType": "General Purpose",
+          "maxVolumeSize": "64 TiB",
+          "maxIopsvolume": "80000",
+          "maxThroughputvolume": "2000 MiB/s",
+          "usagetype": "EUS2-EBS:VolumeUsage.gp3",
+          "operation": "",
+          "regionCode": "eu-south-2",
+          "servicename": "Amazon Elastic Compute Cloud",
+          "volumeApiName": "gp3"
+        }
+      }
+    },
+    "terms": {
+      "OnDemand": {
+        "VPXWXCPWXEEGM4CW": {
+          "VPXWXCPWXEEGM4CW.JRTCKXETXF": {
+            "offerTermCode": "JRTCKXETXF",
+            "sku": "VPXWXCPWXEEGM4CW",
+            "effectiveDate": "2026-11-01T00:00:00Z",
+            "priceDimensions": {
+              "VPXWXCPWXEEGM4CW.JRTCKXETXF.6YS6EN2CT7": {
+                "rateCode": "VPXWXCPWXEEGM4CW.JRTCKXETXF.6YS6EN2CT7",
+                "description": "$0.3636 per On Demand Linux m7g.2xlarge Instance Hour",
+                "beginRange": "0",
+                "endRange": "Inf",
+                "unit": "Hrs",
+                "pricePerUnit": {
+                  "USD": "0.3636000000"
+                },
+                "appliesTo": []
+              }
+            },
+            "termAttributes": {}
+          }
+        },
+        "4STH5FTTSDG422F5": {
+          "4STH5FTTSDG422F5.JRTCKXETXF": {
+            "offerTermCode": "JRTCKXETXF",
+            "sku": "4STH5FTTSDG422F5",
+            "effectiveDate": "2026-11-01T00:00:00Z",
+            "priceDimensions": {
+              "4STH5FTTSDG422F5.JRTCKXETXF.6YS6EN2CT7": {
+                "rateCode": "4STH5FTTSDG422F5.JRTCKXETXF.6YS6EN2CT7",
+                "description": "$0.088 per GB-month of General Purpose (gp3) provisioned storage - Europe (Spain)",
+                "beginRange": "0",
+                "endRange": "Inf",
+                "unit": "GB-Mo",
+                "pricePerUnit": {
+                  "USD": "0.0880000000"
+                },
+                "appliesTo": []
+              }
+            },
+            "termAttributes": {}
+          }
+        }
+      }
+    }
+  },
+  "AWSLambda": {
+    "formatVersion": "v1.0",
+    "offerCode": "AWSLambda",
+    "version": "20261030234255",
+    "publicationDate": "2026-10-30T23:42:55Z",
+    "products": {
+      "ZQVCC2M69R4S79XS": {
+        "sku": "ZQVCC2M69R4S79XS",
+        "productFamily": "Serverless",
+        "attributes": {
+          "servicecode": "AWSLambda",
+          "location": "Any",
+          "locationType": "AWS Region",
+          "group": "AWS-Lambda-Requests",
+          "groupDescription": "Invocation call for a Lambda function",
+          "usagetype": "Global-Request",
+          "operation": "",
+          "regionCode": "",
+          "servicename": "AWS Lambda"
+        }
+      },
+      "NCR6U4F9R96E94YR": {
+        "sku": "NCR6U4F9R96E94YR",
+        "productFamily": "Serverless",
+        "attributes": {
+          "servicecode": "AWSLambda",
+          "location": "Europe (Spain)",
+          "locationType": "AWS Region",
+          "group": "AWS-Lambda-Requests",
+          "groupDescription": "Invocation call for a Lambda function",
+          "usagetype": "EUS2-Request",
+          "operation": "",
+          "regionCode": "eu-south-2",
+          "servicename": "AWS Lambda"
+        }
+      },
+      "JUEJEGS4CE8UUZEP": {
+        "sku": "JUEJEGS4CE8UUZEP",
+        "productFamily": "Serverless",
+        "attributes": {
+          "servicecode": "AWSLambda",
+          "location": "Europe (Spain)",
+          "locationType": "AWS Region",
+          "group": "AWS-Lambda-Duration",
+          "groupDescription": "Invocation duration weighted by memory assigned to function, measured in GB-s",
+          "usagetype": "EUS2-Lambda-GB-Second",
+          "operation": "",
+          "regionCode": "eu-south-2",
+          "servicename": "AWS Lambda"
+        }
+      }
+    },
+    "terms": {
+      "OnDemand": {
+        "ZQVCC2M69R4S79XS": {
+          "ZQVCC2M69R4S79XS.A429C66SYZ": {
+            "offerTermCode": "A429C66SYZ",
+            "sku": "ZQVCC2M69R4S79XS",
+            "effectiveDate": "2026-10-01T00:00:00Z",
+            "priceDimensions": {
+              "ZQVCC2M69R4S79XS.A429C66SYZ.SB2VSFF4TP": {
+                "rateCode": "ZQVCC2M69R4S79XS.A429C66SYZ.SB2VSFF4TP",
+                "description": "AWS Lambda - Requests Free Tier - 1,000,000 Requests",
+                "beginRange": "0",
+                "endRange": "1000000",
+                "unit": "Request",
+                "pricePerUnit": {
+                  "USD": "0.0000000000"
+                },
+                "appliesTo": [
+                  "8FY96CH95ZA8NU5C",
+                  "VXJTSR9CJSBFXG5K",
+                  "KY96C7U4EB95UXGK",
+                  "F9T53VWVKRT6G32X",
+                  "EXZWANHF3J8G524N",
+                  "B22EKFMS5UB7E4DB",
+                  "XM5KDGVKY9KYJWCG",
+                  "89U8ZQR2ZV45HXWY",
+                  "VPGUBFQ4KNZKMKGJ",
+                  "4JWH9XJEQW57HPK7",
+                  "D9Z54P78JUX2Y552",
+                  "DMJPKNDPVRPMG2E7",
+                  "P4EV9BBTWDQ35DG2",
+                  "476SBHCHQKEMB5CF",
+                  "75D867BXR9WJ9F77",
+                  "EMZ8YZDPGWMDYZNK",
+                  "E7YK4NJVGVSYK2HH",
+                  "XPFR3MTP3RW5GRTN",
+                  "R3N9VPKCMSVAJDEH",
+                  "YV5CBXWN5ARWJ7V9",
+                  "NCR6U4F9R96E94YR",
+                  "PV7EVKE5W5DV9HR7",
+                  "2PJ77N2RZDFUWCYT",
+                  "ZWHFK83WS2P4WZR6",
+                  "BVPQ9WHBE3SM65K7",
+                  "FPS5FM45229RTFBT",
+                  "5JXCX35TH2MPMFMW",
+                  "B5V2RNHAWGVJBZD3",
+                  "G87G4VHC8MFGZYZU",
+                  "ED4MANDMTGZ4Z9QF",
+                  "3NMC4MZ2CDC4MT62",
+                  "RN53C25R9GDX9T49",
+                  "68H82NC62DFBNEVM",
+                  "XJDGEW4KCCD2P5TG",
+                  "92KS5FMQEEJ39ACN",
+                  "NFXH9EUGP7BUPE4A",
+                  "GU2ZS9HVP6QTQ7KE",
+                  "FMKMXUNY35KEUAM3",
+                  "CKZQ3D25MV9ET243",
+                  "YY4C5XTAZNQPB6J6",
+                  "K4KA7GJPQTT3ZJ5A",
+                  "V5T5H5YEU5SUN3C2",
+                  "4KD96CKPZF9FJUJ9",
+                  "VUQUVJRYRZKGXHKX",
+                  "EQE7YY7WBWZFB46G",
+                  "7TZ969MZND3Z6HD7",
+                  "BBNA8X4S2N3SMD7K",
+                  "6GFK8TZW8U8G9MUB",
+                  "UVYYDZQ83GKQ2K6C",
+                  "W5998MSDP4P5N43C",
+                  "K9DMCWXXQT7TQSWX",
+                  "AA4Q79463N2JQHZA",
+                  "KERWZD8CJ22SEZWT",
+                  "ZW6UHD4Q6EPUCZWU",
+                  "RYFSQRRXQ4R9CK7A",
+                  "NDYBVXT3KB548Z2A",
+                  "UH8TQNRPPRZ9TJ4V",
+                  "RKMA4PX3K8H4VAP4",
+                  "DV2YFXRNHNJFTDP3",
+                  "3T9634R2MFT46X4K",
+                  "EE6A5VEB3PCF9VKU",
+                  "HPTUCREBP3C88BAZ",
+                  "GVB4MJBFXA3BX4M6",
+                  "36D3E7396ZKUSWWW",
+                  "D4TPQYY66DKTZWX9",
+                  "R2QWMZCXCNAMHHT9",
+                  "BNQXHCKJQCQXPHE8",
+                  "K7BX6567RJ67A2KE",
+                  "MN74ND7YYK8MBEC6",
+                  "6SKZPR8753NAAQ4W",
+                  "T34KQWJP89CNB5GZ",
+                  "3BE8DYKG4FYSZGDW",
+                  "DJNVRSYVP8QY93QP",
+                  "GRP2QG4WUGQFGJ6T",
+                  "574VQJ288VE2ZGMU",
+                  "ZEA64MMVK5QRB5TC"
+                ]
+              }
+            },
+            "termAttributes": {
+              "Restriction": "Limited SKU Usage"
+            }
+          }
+        },
+        "NCR6U4F9R96E94YR": {
+          "NCR6U4F9R96E94YR.JRTCKXETXF": {
+            "offerTermCode": "JRTCKXETXF",
+            "sku": "NCR6U4F9R96E94YR",
+            "effectiveDate": "2026-10-01T00:00:00Z",
+            "priceDimensions": {
+              "NCR6U4F9R96E94YR.JRTCKXETXF.6YS6EN2CT7": {
+                "rateCode": "NCR6U4F9R96E94YR.JRTCKXETXF.6YS6EN2CT7",
+                "description": "USD2.0E-7 per Requests for Request in Europe (Spain)",
+                "beginRange": "0",
+                "endRange": "Inf",
+                "unit": "Requests",
+                "pricePerUnit": {
+                  "USD": "0.0000002000"
+                },
+                "appliesTo": []
+              }
+            },
+            "termAttributes": {}
+          }
+        },
+        "JUEJEGS4CE8UUZEP": {
+          "JUEJEGS4CE8UUZEP.JRTCKXETXF": {
+            "offerTermCode": "JRTCKXETXF",
+            "sku": "JUEJEGS4CE8UUZEP",
+            "effectiveDate": "2026-10-01T00:00:00Z",
+            "priceDimensions": {
+              "JUEJEGS4CE8UUZEP.JRTCKXETXF.CUKFZ388N3": {
+                "rateCode": "JUEJEGS4CE8UUZEP.JRTCKXETXF.CUKFZ388N3",
+                "description": "USD1.66667E-5 per Second for Lambda-GB-Second in Europe (Spain)",
+                "beginRange": "0",
+                "endRange": "6000000000",
+                "unit": "Lambda-GB-Second",
+                "pricePerUnit": {
+                  "USD": "0.0000166667"
+                },
+                "appliesTo": []
+              },
+              "JUEJEGS4CE8UUZEP.JRTCKXETXF.QZE2SB4KVB": {
+                "rateCode": "JUEJEGS4CE8UUZEP.JRTCKXETXF.QZE2SB4KVB",
+                "description": "USD1.5E-5 per Second for Lambda-GB-Second in Europe (Spain)",
+                "beginRange": "6000000000",
+                "endRange": "15000000000",
+                "unit": "Lambda-GB-Second",
+                "pricePerUnit": {
+                  "USD": "0.0000150000"
+                },
+                "appliesTo": []
+              },
+              "JUEJEGS4CE8UUZEP.JRTCKXETXF.V7R92EXG27": {
+                "rateCode": "JUEJEGS4CE8UUZEP.JRTCKXETXF.V7R92EXG27",
+                "description": "USD1.33334E-5 per Second for Lambda-GB-Second in Europe (Spain)",
+                "beginRange": "15000000000",
+                "endRange": "Inf",
+                "unit": "Lambda-GB-Second",
+                "pricePerUnit": {
+                  "USD": "0.0000133334"
+                },
+                "appliesTo": []
+              }
+            },
+            "termAttributes": {}
+          }
+        }
+      }
+    }
+  },
+  "AmazonS3": {
+    "formatVersion": "v1.0",
+    "offerCode": "AmazonS3",
+    "version": "20261104174445",
+    "publicationDate": "2026-11-04T17:44:45Z",
+    "products": {
+      "J4G6TDWKTHGQ4EUR": {
+        "sku": "J4G6TDWKTHGQ4EUR",
+        "productFamily": "Storage",
+        "attributes": {
+          "servicecode": "AmazonS3",
+          "location": "Europe (Spain)",
+          "locationType": "AWS Region",
+          "availability": "99.99%",
+          "storageClass": "General Purpose",
+          "volumeType": "Standard",
+          "usagetype": "EUS2-TimedStorage-ByteHrs",
+          "operation": "",
+          "durability": "99.999999999%",
+          "regionCode": "eu-south-2",
+          "servicename": "Amazon Simple Storage Service"
+        }
+      },
+      "WZ38K7WCHNBSJUXZ": {
+        "sku": "WZ38K7WCHNBSJUXZ",
+        "productFamily": "API Request",
+        "attributes": {
+          "servicecode": "AmazonS3",
+          "location": "Europe (Spain)",
+          "locationType": "AWS Region",
+          "group": "S3-API-Tier2",
+          "groupDescription": "GET and all other requests",
+          "usagetype": "EUS2-Requests-Tier2",
+          "operation": "",
+          "regionCode": "eu-south-2",
+          "servicename": "Amazon Simple Storage Service"
+        }
+      },
+      "MJ7ZMNPX5NN9Q6PV": {
+        "sku": "MJ7ZMNPX5NN9Q6PV",
+        "productFamily": "API Request",
+        "attributes": {
+          "servicecode": "AmazonS3",
+          "location": "Europe (Spain)",
+          "locationType": "AWS Region",
+          "group": "S3-API-Tier1",
+          "groupDescription": "PUT/COPY/POST or LIST requests",
+          "usagetype": "EUS2-Requests-Tier1",
+          "operation": "",
+          "regionCode": "eu-south-2",
+          "servicename": "Amazon Simple Storage Service"
+        }
+      }
+    },
+    "terms": {
+      "OnDemand": {
+        "J4G6TDWKTHGQ4EUR": {
+          "J4G6TDWKTHGQ4EUR.JRTCKXETXF": {
+            "offerTermCode": "JRTCKXETXF",
+            "sku": "J4G6TDWKTHGQ4EUR",
+            "effectiveDate": "2026-10-01T00:00:00Z",
+            "priceDimensions": {
+              "J4G6TDWKTHGQ4EUR.JRTCKXETXF.PGHJ3S3EYE": {
+                "rateCode": "J4G6TDWKTHGQ4EUR.JRTCKXETXF.PGHJ3S3EYE",
+                "description": "$0.023 per GB - first 50 TB / month of storage used in Spain",
+                "beginRange": "0",
+                "endRange": "51200",
+                "unit": "GB-Mo",
+                "pricePerUnit": {
+                  "USD": "0.0230000000"
+                },
+                "appliesTo": []
+              },
+              "J4G6TDWKTHGQ4EUR.JRTCKXETXF.D42MF2PVJS": {
+                "rateCode": "J4G6TDWKTHGQ4EUR.JRTCKXETXF.D42MF2PVJS",
+                "description": "$0.022 per GB - next 450 TB / month of storage used in Spain",
+                "beginRange": "51200",
+                "endRange": "512000",
+                "unit": "GB-Mo",
+                "pricePerUnit": {
+                  "USD": "0.0220000000"
+                },
+                "appliesTo": []
+              },
+              "J4G6TDWKTHGQ4EUR.JRTCKXETXF.PXJDJ3YRG3": {
+                "rateCode": "J4G6TDWKTHGQ4EUR.JRTCKXETXF.PXJDJ3YRG3",
+                "description": "$0.021 per GB - storage used / month over 500 TB in Spain",
+                "beginRange": "512000",
+                "endRange": "Inf",
+                "unit": "GB-Mo",
+                "pricePerUnit": {
+                  "USD": "0.0210000000"
+                },
+                "appliesTo": []
+              }
+            },
+            "termAttributes": {}
+          }
+        },
+        "WZ38K7WCHNBSJUXZ": {
+          "WZ38K7WCHNBSJUXZ.JRTCKXETXF": {
+            "offerTermCode": "JRTCKXETXF",
+            "sku": "WZ38K7WCHNBSJUXZ",
+            "effectiveDate": "2026-10-01T00:00:00Z",
+            "priceDimensions": {
+              "WZ38K7WCHNBSJUXZ.JRTCKXETXF.6YS6EN2CT7": {
+                "rateCode": "WZ38K7WCHNBSJUXZ.JRTCKXETXF.6YS6EN2CT7",
+                "description": "$0.004 per 10,000 GET and all other requests in Spain",
+                "beginRange": "0",
+                "endRange": "Inf",
+                "unit": "Requests",
+                "pricePerUnit": {
+                  "USD": "0.0000004000"
+                },
+                "appliesTo": []
+              }
+            },
+            "termAttributes": {}
+          }
+        },
+        "MJ7ZMNPX5NN9Q6PV": {
+          "MJ7ZMNPX5NN9Q6PV.JRTCKXETXF": {
+            "offerTermCode": "JRTCKXETXF",
+            "sku": "MJ7ZMNPX5NN9Q6PV",
+            "effectiveDate": "2026-10-01T00:00:00Z",
+            "priceDimensions": {
+              "MJ7ZMNPX5NN9Q6PV.JRTCKXETXF.6YS6EN2CT7": {
+                "rateCode": "MJ7ZMNPX5NN9Q6PV.JRTCKXETXF.6YS6EN2CT7",
+                "description": "$0.0053 per 1,000 PUT, COPY, POST, or LIST requests in Spain",
+                "beginRange": "0",
+                "endRange": "Inf",
+                "unit": "Requests",
+                "pricePerUnit": {
+                  "USD": "0.0000053000"
+                },
+                "appliesTo": []
+              }
+            },
+            "termAttributes": {}
+          }
+        }
+      }
+    }
+  },
+  "AmazonCloudWatch": {
+    "formatVersion": "v1.0",
+    "offerCode": "AmazonCloudWatch",
+    "version": "20261104213532",
+    "publicationDate": "2026-11-04T21:35:32Z",
+    "products": {
+      "HQTF3SN9EXAENXWB": {
+        "sku": "HQTF3SN9EXAENXWB",
+        "productFamily": "Storage Snapshot",
+        "attributes": {
+          "servicecode": "AmazonCloudWatch",
+          "location": "Europe (Spain)",
+          "locationType": "AWS Region",
+          "storageMedia": "Amazon S3",
+          "group": "Amazon CloudWatch Standard Storage pricing current",
+          "groupDescription": "Amazon CloudWatch Logs Storage Current version",
+          "usagetype": "EUS2-TimedStorage-ByteHrs",
+          "operation": "",
+          "regionCode": "eu-south-2",
+          "servicename": "AmazonCloudWatch",
+          "version": "Current"
+        }
+      },
+      "RB6JKDQ5NE5HFZP4": {
+        "sku": "RB6JKDQ5NE5HFZP4",
+        "productFamily": "Data Payload",
+        "attributes": {
+          "servicecode": "AmazonCloudWatch",
+          "location": "Europe (Spain)",
+          "locationType": "AWS Region",
+          "group": "Ingested Logs",
+          "groupDescription": "Existing system, application, and custom log files",
+          "usagetype": "EUS2-DataProcessing-Bytes",
+          "operation": "PutLogEvents",
+          "logsDestination": "Amazon CloudWatch Logs",
+          "regionCode": "eu-south-2",
+          "servicename": "AmazonCloudWatch",
+          "version": "Current"
+        }
+      }
+    },
+    "terms": {
+      "OnDemand": {
+        "HQTF3SN9EXAENXWB": {
+          "HQTF3SN9EXAENXWB.JRTCKXETXF": {
+            "offerTermCode": "JRTCKXETXF",
+            "sku": "HQTF3SN9EXAENXWB",
+            "effectiveDate": "2026-11-01T00:00:00Z",
+            "priceDimensions": {
+              "HQTF3SN9EXAENXWB.JRTCKXETXF.6YS6EN2CT7": {
+                "rateCode": "HQTF3SN9EXAENXWB.JRTCKXETXF.6YS6EN2CT7",
+                "description": "$0.03 per GB-mo of log storage - Europe (Spain)",
+                "beginRange": "0",
+                "endRange": "Inf",
+                "unit": "GB-Mo",
+                "pricePerUnit": {
+                  "USD": "0.0300000000"
+                },
+                "appliesTo": []
+              }
+            },
+            "termAttributes": {}
+          }
+        },
+        "RB6JKDQ5NE5HFZP4": {
+          "RB6JKDQ5NE5HFZP4.JRTCKXETXF": {
+            "offerTermCode": "JRTCKXETXF",
+            "sku": "RB6JKDQ5NE5HFZP4",
+            "effectiveDate": "2026-11-01T00:00:00Z",
+            "priceDimensions": {
+              "RB6JKDQ5NE5HFZP4.JRTCKXETXF.6YS6EN2CT7": {
+                "rateCode": "RB6JKDQ5NE5HFZP4.JRTCKXETXF.6YS6EN2CT7",
+                "description": "$0.57 per GB custom log data ingested in Standard log class - Europe (Spain)",
+                "beginRange": "0",
+                "endRange": "Inf",
+                "unit": "GB",
+                "pricePerUnit": {
+                  "USD": "0.5700000000"
+                },
+                "appliesTo": []
+              }
+            },
+            "termAttributes": {}
+          }
+        }
+      }
+    }
+  }
+}

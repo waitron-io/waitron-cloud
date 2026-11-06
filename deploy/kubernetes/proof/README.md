@@ -179,6 +179,33 @@ and source digests detect corruption and disagreement; they do not authenticate
 provider facts. An exact repeated cleanup acknowledgement preserves the saved
 facts and performs no further writes.
 
+## Read the paid regional prices
+
+You cannot reserve a cost from a historical quote or a shared free allowance.
+`acquirePriceCatalogue` in `prices.mjs` reads the fixed public AWS regional
+catalogue for EC2, Lambda, S3 or CloudWatch. You supply a `retain` callback that
+saves the original bytes and their SHA-256 digest before the reader returns.
+It requests no AWS session. HTTP requests refuse redirects and accept only AWS's
+JSON or octet-stream content types, followed by strict JSON decoding;
+one 30-second deadline bounds the request, body reads and retention wait.
+The decoded body is limited to 256 MiB. EC2's Spain catalogue was about 251 MiB
+on 6 November, so a future larger catalogue will refuse until reviewed.
+
+The reader requires the fixed Spain products, unrestricted paid USD terms,
+the expected units and complete price tiers. It retains the highest tier rate as
+an exact fraction, avoiding a floating-point rounding discount. It excludes
+global free-tier entries and refuses missing or ambiguous products. Observation
+must be on the same UTC day; the catalogue publication may be older.
+
+Run `node --test deploy/kubernetes/proof/prices.test.mjs` for synthetic checks.
+The reduced public-catalogue fixture supplies nine paid rates plus a global
+free-tier distractor. It is test data, not a complete retained price source.
+Fresh public-catalogue retrieval alone does not reconcile the service pricing
+pages or your bill. Transfer, EventBridge, network, tax, contingency, request
+quantities, retained data and idle protection still need the complete all-in
+calculation and billing evidence. The lifecycle does not yet call this reader;
+setup and admission remain closed.
+
 ## Fix the guest deadline before preparing inputs
 
 A proof machine must retain its original shutdown time after a retry.

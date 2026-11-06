@@ -126,6 +126,16 @@ refunded, and refuse totals at or above USD 10. Current price/billing acquisitio
 all-in bound construction, setup integration and real S3/termination qualification
 remain open; Task 3 is not complete and this core grants no live admission.
 
+**Regional price-source component:** `deploy/kubernetes/proof/prices.mjs` now
+acquires fixed public Spain catalogues, requires retained original bytes and
+digest, and extracts nine paid EC2/gp3/Lambda/S3/logging rates as exact fractions.
+Synthetic checks cover free-tier exclusion, units, complete tier ranges,
+ambiguous products, stale observations, HTTP failures and bounded waits. This is
+not complete all-in evidence: service-page reconciliation, transfer/events/network,
+taxes, bounded quantities, billing and lifecycle integration remain open. Keep
+the launch deny, disabled sweep and refusing owner lifecycle until those gates
+and the existing live qualification pass.
+
 ## Task 4: Prove both independent termination actors
 
 **Files:** `scripts/kubernetes-proof-control.mjs`, its `.test.mjs`; Task 1 bootstrap/deadline/expiry files. **Interfaces:** `launchReserved(reservation,aws):Promise<LaunchRecord>`; `collectOwned(record,aws):Promise<CleanupReceipt>`. Tags are `Proof=D570`, fixed Stack ID, `Run=<UUIDv4>`, absolute RFC3339 `ExpiresAt` on instance/root; ledger records exact IDs/AMI/template. ClientToken is reservation UUID, MinCount=MaxCount=1.
