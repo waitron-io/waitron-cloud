@@ -205,9 +205,8 @@ own configuration. If it looks wrong, say so rather than working around it.
 
 **Never add `AGENTS.md`, `AGENTS.override.md` or `.codex/` to this repository.** Codex reads
 `CLAUDE.md` only when no `AGENTS.md` is there, so one such file silently hides everything here. A
-Codex hook refuses writing `AGENTS.md` at the repository root. It is weaker than this rule: tested
-2026-11-06, it let `AGENTS.override.md` and `.codex/` through, and no check in this repository looks
-for any of them.
+Codex hook refuses writing `AGENTS.md` or `AGENTS.override.md` at the repository root. It is weaker
+than this rule: it lets `.codex/` through, and no check in this repository looks for any of them.
 
 Add a rule when a defect could recur or a trap costs real time, in the shape used above. Check it
 against the repository first. A count goes stale, so describe the property instead. Delete rules that
