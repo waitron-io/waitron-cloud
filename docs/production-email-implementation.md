@@ -63,7 +63,8 @@ no path, credentials, query or fragment. It supplies the signup and reset links;
 configure it only after the corresponding public routes exist. Port 465 uses TLS
 from the start of the connection. A STARTTLS-only port such as 587 is unsupported.
 Certificate trust uses Node's certificate store; custom deployments can add a trusted
-CA through `NODE_EXTRA_CA_CERTS`. The adapter always verifies the relay certificate.
+CA through `NODE_EXTRA_CA_CERTS`. The adapter always verifies the relay certificate and completes authentication
+before sending message data; a trusted certificate alone is not enough.
 
 Run `pnpm mail:worker` continuously or `pnpm mail:worker --once` for one due message.
 `pnpm mail:status` reads queue counts using only `DATABASE_URL`. Provider failures
@@ -152,8 +153,32 @@ through optional trusted SES settings for synthetic scoped handoffs. Each worker
 holds its current authority through the suppression decision and commits the
 attempt before transport starts. Explicitly scoped trusted local blocks also
 receive an immutable legacy-to-scope mapping; older unmapped blocks keep their
-local gate without a guessed country. SMTP metadata and provider receipts remain
-Task 5, and production wiring still needs separate enablement.
+local gate without a guessed country. Task 5 passes that committed admission to
+the TLS adapter. It adds only `X-SES-CONFIGURATION-SET` and an opaque
+`waitron-attempt` message tag. Recipient addresses, message bodies and tokens are
+never tags. The original RFC Message-ID stays stable across account retries;
+each retry has a fresh admitted tag. The bounded `250 Ok` acceptance ID is stored
+separately on its original attempt. Optional malformed metadata is discarded.
+Early feedback and receipts share first-observation binding; conflicts emit the
+fixed `Email provider receipt conflict` diagnostic without resending accepted mail.
+Queue settlement precedes optional provider binding, so a binding database failure
+cannot make an accepted account message eligible again. A stale receipt may enrich
+its original attempt but cannot finish a replacement claim.
+
+For SES, select `CLOUD_MAIL_PROVIDER=ses` with `CLOUD_MAIL_TRANSPORT=smtp` and supply
+`CLOUD_SES_FEEDBACK_CONFIG_FILE`, `CLOUD_MAIL_RECIPIENT_KEYS` and
+`CLOUD_MAIL_RECIPIENT_ACTIVE_KEY_ID`. The file holds the validator's resource
+bindings, not policy or credentials, and must be a regular file of at most 64 KiB.
+Named pipes refuse without waiting for a writer.
+The trusted policy independently qualifies every purpose and SMTP/resource
+binding. The sender must match its qualified SES identity; production uses its
+exact regional host and port 465. Only local TLS fixtures may inject a loopback
+port and test CA. Recognised public and VPC SES endpoints refuse generic SMTP
+selection. Use the qualified SES setting for any private alias you maintain.
+Generic SMTP fixtures and local Mailpit keep their existing modes.
+Spain's default policy has no qualified flows, so these settings cannot enable
+SES delivery today. Status remains credential-free. Production enablement still
+requires separate qualification.
 The legacy relay gate still applies across countries. Account mail uses explicit
 mapping scopes. Before adding removal, Task 7 must distinguish each block lifetime
 so an unscoped re-add cannot revive old country mappings. No removal path is

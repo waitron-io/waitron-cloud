@@ -6,6 +6,8 @@ import nodemailer from 'nodemailer';
 import { EmailDeliveryError, type EmailDeliveryContext, type EmailDeliveryReceipt } from './email-delivery.ts';
 import { normaliseEmail, type AccountEmail, type AccountNotification } from './account-input.ts';
 import { accountMail, type AccountMailKind } from './account-mail.ts';
+import {sesSmtpHeaders,sesProviderReceipt} from './ses-smtp-metadata.ts';
+import {isValidatedSesFeedbackConfig,type SesFeedbackConfig,type MailPurpose} from './ses-feedback-config.ts';
 
 export interface SmtpAccountMailConfig {
   host: string; port?: number; user: string; password: string; from: string;
@@ -14,8 +16,9 @@ export interface SmtpAccountMailConfig {
 const hostname = (value: string) => typeof value === 'string' && value.length <= 253
   && value.split('.').every(label => /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?$/.test(label));
 
-/** Explicit TLS relay configuration. A custom CA adds trust; it never disables certificate validation. */
-export function createSmtpAccountMailer(config: SmtpAccountMailConfig, trust: {ca?: string | Buffer} = {}) {
+/** Explicit TLS relay configuration. A custom CA never disables certificate validation. */
+export function createSmtpDelivery(config:SmtpAccountMailConfig,trust:{ca?:string|Buffer}={},ses?:SesFeedbackConfig,
+ purpose:MailPurpose='cloud-account-email',failure:(error:unknown)=>Error=classify){
   let origin: URL;
   const port = config.port ?? 465;
   const timeout = config.timeoutMs ?? 15000;
@@ -28,25 +31,30 @@ export function createSmtpAccountMailer(config: SmtpAccountMailConfig, trust: {c
       || origin.protocol !== 'https:' || origin.username || origin.password || origin.pathname !== '/' || origin.search || origin.hash
       || !hostname(origin.hostname) || !origin.hostname.includes('.') || isIP(origin.hostname)
       || origin.hostname.endsWith('.localhost') || origin.hostname.endsWith('.local')) throw new Error();
+    if(ses){
+      const identity=ses.identityArn.split('identity/')[1];
+      const loopback=trust.ca&&(config.host==='127.0.0.1'||config.host==='::1');
+      if(!isValidatedSesFeedbackConfig(ses)||!ses.purposes.includes(purpose)
+        ||(!loopback&&(config.host!==ses.smtpHost||port!==465))
+        ||(identity!==config.from&&identity!==config.from.split('@')[1]))throw new Error();
+    }else if(/(?:^|\.)email-smtp(?:-fips)?\.[a-z0-9-]+\.(?:vpce\.)?(?:amazonaws\.com(?:\.cn)?|api\.aws)$/i.test(config.host))throw new Error();
   } catch { throw new Error('Invalid production mail configuration'); }
   // Capture configuration so a caller cannot change the destination or credential during a send.
   const {host, user, password, from} = config;
   const ca = Buffer.isBuffer(trust.ca) ? Buffer.from(trust.ca) : trust.ca;
-  const domain = from.split('@')[1]!;
-  const send = async (kind: AccountMailKind, message: AccountEmail | AccountNotification | ServiceAlert, context?: EmailDeliveryContext): Promise<EmailDeliveryReceipt> => {
-    if (!message || typeof message.email !== 'string' || normaliseEmail(message.email) !== message.email
-      || (kind !== 'password_changed' && kind !== 'service_alert' && (!('token' in message) || !/^[A-Za-z0-9_-]{43}$/.test(message.token) || !Number.isFinite(Date.parse(message.expiresAt))))) throw new EmailDeliveryError('delivery_rejected');
-    const deliveryId = context?.deliveryId ?? randomUUID();
-    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(deliveryId)) throw new EmailDeliveryError('delivery_rejected');
-    const signal = context?.signal;
-    if (signal?.aborted) throw new EmailDeliveryError('delivery_timeout');
+  return async (recipient:string,render:()=>{subject:string;text:string},messageId:string,context?:EmailDeliveryContext):Promise<EmailDeliveryReceipt>=>{
+    if(normaliseEmail(recipient)!==recipient)throw new EmailDeliveryError('delivery_rejected');
+    const headers=ses?sesSmtpHeaders(ses,context?.ses):undefined;
+    if(!ses&&context?.ses)throw new EmailDeliveryError('delivery_configuration');
+    const signal=context?.signal;
+    if(signal?.aborted)throw failure(new EmailDeliveryError('delivery_timeout'));
     let socket: TLSSocket | undefined;
     let timer: ReturnType<typeof setTimeout> | undefined;
     let cancelled = false;
     let rejectAbort!: (error: EmailDeliveryError) => void;
     const abortPromise = new Promise<never>((_, reject) => {rejectAbort = reject;});
     const abort = () => {cancelled = true; socket?.destroy(); rejectAbort(new EmailDeliveryError('delivery_timeout'));};
-    const transport = nodemailer.createTransport({host, port, secure: true, auth: {user, pass: password},
+    const transport = nodemailer.createTransport({host, port, secure: true, forceAuth:true, auth: {user, pass: password},
       logger: false, debug: false, transactionLog: false, disableFileAccess: true, disableUrlAccess: true,
       connectionTimeout: timeout, greetingTimeout: timeout, socketTimeout: timeout,
       getSocket(_options, callback) {
@@ -64,20 +72,32 @@ export function createSmtpAccountMailer(config: SmtpAccountMailConfig, trust: {c
     try {
       signal?.addEventListener('abort', abort, {once: true});
       timer = setTimeout(abort, timeout);
-      const rendered = accountMail(origin, kind, message);
-      const messageId = `<${deliveryId}@${domain}>`;
+      const rendered=render();
       const result = await Promise.race([abortPromise, transport.sendMail({from: {name: 'Waitron Cloud', address: from},
-        to: {address: message.email, name: ''}, subject: rendered.subject, text: rendered.text, messageId})]);
+        to: {address: recipient, name: ''}, subject: rendered.subject, text: rendered.text, messageId,headers})]);
       if (result.rejected.length || result.accepted.length !== 1) throw new EmailDeliveryError('delivery_rejected');
-      return {transport: 'smtp', messageId};
+      const providerReceipt=ses?sesProviderReceipt(result.response):undefined;
+      return {transport: 'smtp', messageId,...(providerReceipt?{providerReceipt}:{})};
     } catch (error) {
-      if (cancelled) throw new EmailDeliveryError('delivery_timeout');
-      throw classify(error);
+      throw failure(cancelled?new EmailDeliveryError('delivery_timeout'):error);
     } finally {
       clearTimeout(timer); signal?.removeEventListener('abort', abort);
       socket?.destroy(); transport.close();
     }
   };
+}
+
+/** Fixed account templates and stable original IDs share the bounded TLS transport. */
+export function createSmtpAccountMailer(config:SmtpAccountMailConfig,trust:{ca?:string|Buffer}={},ses?:SesFeedbackConfig){
+ const deliver=createSmtpDelivery(config,trust,ses);
+ const origin=new URL(config.portalOrigin),domain=config.from.split('@')[1]!;
+ const send=async(kind:AccountMailKind,message:AccountEmail|AccountNotification|ServiceAlert,context?:EmailDeliveryContext)=>{
+  if(!message||typeof message.email!=='string'||normaliseEmail(message.email)!==message.email
+   ||(kind!=='password_changed'&&kind!=='service_alert'&&(!('token' in message)||!/^[A-Za-z0-9_-]{43}$/.test(message.token)||!Number.isFinite(Date.parse(message.expiresAt)))))throw new EmailDeliveryError('delivery_rejected');
+  const deliveryId=context?.deliveryId??randomUUID();
+  if(!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(deliveryId))throw new EmailDeliveryError('delivery_rejected');
+  return deliver(message.email,()=>accountMail(origin,kind,message),`<${deliveryId}@${domain}>`,context);
+ };
   return {
     sendVerification: (message: AccountEmail, context?: EmailDeliveryContext) => send('verification', message, context),
     sendPasswordReset: (message: AccountEmail, context?: EmailDeliveryContext) => send('password_reset', message, context),

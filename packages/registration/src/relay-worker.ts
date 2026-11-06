@@ -8,7 +8,8 @@ import {localRelaySmtp,relayTemplate,type RelayContent,type RelayDelivery} from 
 import {transaction} from './transaction.ts';
 import {RelayControl} from './relay-control.ts';
 import {validateAllowanceOptions,type AllowanceOptions} from './billing-allowance-rules.ts';
-import {admitMailAttempt,mailRecipientRefs,type SesHandoffConfig} from './mail-attempts.ts';
+import {admitMailAttempt,mailRecipientRefs,type SesHandoffConfig,type HandoffAdmission} from './mail-attempts.ts';
+import {settleSesRelayReceipt} from './relay-ses-smtp.ts';
 import {lockMailScope} from './recipient-suppression.ts';
 import {isValidatedSesFeedbackConfig} from './ses-feedback-config.ts';
 export interface RelayWorkerConfig {
@@ -87,8 +88,9 @@ export class RelayWorker {
     WHERE installation_id=$1 AND message_id=$2 RETURNING *`,[...key(row),randomUUID()])).rows[0]!;
   });
   if(claimed===undefined)return false;if(claimed===null)return true;
-  const content=await this.#handoff(claimed);
-  if(!content)return true;
+  const handoff=await this.#handoff(claimed);
+  if(!handoff)return true;
+  const {content,admission}=handoff;
   const controller=new AbortController();let timer:ReturnType<typeof setTimeout>|undefined;
   let result:RelayDelivery;
   try{
@@ -97,13 +99,14 @@ export class RelayWorker {
   }catch{result='uncertain';}
   finally{clearTimeout(timer);controller.abort();}
   // Database failure leaves durable sending for conservative recovery; never retry SMTP here.
-  await this.#settle(claimed,result);return true;
+  await this.#settle(claimed,result);
+  await settleSesRelayReceipt(this.#pool,admission,{outcome:result});return true;
  }
  async #terminal(c:PoolClient,row:Row,state:Terminal,reason:string|null){
   await c.query(`UPDATE relay_messages SET state=$3,reason=$4,payload=NULL,claim_id=NULL,lease_until=NULL,status_revision=status_revision+1
    WHERE installation_id=$1 AND message_id=$2`,[...key(row),state,reason]);
  }
- async #handoff(claim:Row):Promise<RelayContent|undefined>{
+ async #handoff(claim:Row):Promise<{content:RelayContent;admission?:HandoffAdmission}|undefined>{
   return transaction(this.#pool,async c=>{
    const control=await new RelayControl(this.#pool).lock(c);
    await lockMessage(c,claim);
@@ -152,8 +155,9 @@ export class RelayWorker {
    const changed=await c.query(`UPDATE relay_messages SET state='sending',attempts=attempts+1,status_revision=status_revision+1
     WHERE installation_id=$1 AND message_id=$2 AND claim_id=$3 AND lease_until>clock_timestamp() AND expires_at>clock_timestamp()`,[...key(row),claim.claim_id]);
    if(!changed.rowCount)return;
+   let admission:HandoffAdmission|undefined;
    if(this.#ses){
-    try{await admitMailAttempt(c,{...this.#ses,recipient:content.recipient,claim:{purpose:'venue-email',installationId:row.installation_id,messageId:row.message_id,claimId:claim.claim_id,attempt:row.attempts+1}});}
+    try{admission=await admitMailAttempt(c,{...this.#ses,recipient:content.recipient,claim:{purpose:'venue-email',installationId:row.installation_id,messageId:row.message_id,claimId:claim.claim_id,attempt:row.attempts+1}});}
     catch(error){
      if(!(error instanceof Error)||error.message!=='mail_recipient_suppressed')throw error;
      await c.query('ROLLBACK TO SAVEPOINT relay_mail_admission');await this.#terminal(c,row,'failed','refused');return;
@@ -164,7 +168,7 @@ export class RelayWorker {
      AND i.lease_expires_at>clock_timestamp()`,[row.grant_id])).rowCount;
     if(!stillLive){await c.query('ROLLBACK TO SAVEPOINT relay_mail_admission');await this.#terminal(c,row,'cancelled','cancelled');return;}
    }
-   return content;
+   return {content,admission};
   });
  }
  async #settle(claim:Row,result:RelayDelivery){

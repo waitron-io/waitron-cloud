@@ -1,6 +1,6 @@
 import { Pool } from 'pg';
 import { EmailOutbox, EmailWorker, emailDeliveryStatus } from './email-outbox.ts';
-import { configuredAccountMailer } from './configured-mailer.ts';
+import { configuredAccountMailer,configuredSesHandoff } from './configured-mailer.ts';
 import {runWorkerLoop} from './worker-loop.ts';
 
 let pool: Pool | undefined;
@@ -19,7 +19,8 @@ try {
   else {
     if (!process.env.CLOUD_EMAIL_KEYS || !process.env.CLOUD_EMAIL_ACTIVE_KEY_ID) throw new Error();
     const outbox = new EmailOutbox({activeKeyId: process.env.CLOUD_EMAIL_ACTIVE_KEY_ID, keys: JSON.parse(process.env.CLOUD_EMAIL_KEYS)});
-    const worker = new EmailWorker(pool, outbox, configuredAccountMailer());
+    const ses=configuredSesHandoff();
+    const worker = new EmailWorker(pool, outbox, configuredAccountMailer(ses),{ses});
     if (args[0] === '--once') { await worker.runOnce(); console.log(JSON.stringify(await worker.status())); }
     else await runWorkerLoop({signal:stop.signal,concurrency:workerConcurrency,scheduleIntervalMs:60000,pollIntervalMs:1000,runOnce:()=>worker.runOnce()});
   }

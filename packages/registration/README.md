@@ -403,7 +403,12 @@ node scripts/test-postgres.mjs exec pnpm --dir packages/registration exec node -
 The store accepts policy revisions through 2147483647, matching its SQL column;
 larger qualified revisions refuse with a fixed configuration diagnostic.
 
-These checks qualify local storage and locking. SMTP metadata, queue polling,
+These checks qualify local storage and locking. Task 5 also carries committed
+admission into the account TLS adapter and keeps provider receipts separate from
+RFC Message-ID. The internal standalone relay SES adapter uses the same bounded
+TLS transport; its receipt settlement never changes the relay queue outcome.
+It is not exported through the package or selected by worker configuration.
+Local-proof relay SMTP and its outcome strings retain their contract. Queue polling,
 audited removal and provider qualification remain separate implementation tasks.
 No live sender or AWS resource is enabled.
 
