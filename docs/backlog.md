@@ -231,8 +231,15 @@ scripts/cloud-cost/litestream-transport.test.mjs
 scripts/cloud-cost/litestream-pre-admission-put.test.mjs` for ledger, real
 forwarding, cap and commit controls. The writer-running stop-acknowledgement
 boundary remains covered independently of permission to admit a late PUT.
-Lifetime callbacks with missing producer records and forwarding after an
-uncertain mutation still need the wider policy.
+Lifetime callbacks now collect when producer or admission records are missing.
+A real storage response can still bound a committed object, but it cannot
+invent a request event or confirm a different request's lifetime. Missing and
+unfinished history stays unknown after later callbacks. The same stop cap,
+clock, version, duplicate-completion and contradictory-response checks remain.
+Run `node --test scripts/cloud-cost/litestream-lifetime-history.test.mjs` for
+missing-callback controls and twelve real HTTP exchanges with independent
+storage inventories. These exchanges do not prove SQLite recovery.
+Forwarding after an uncertain mutation still needs the wider policy.
 The full nonblocking accounting path, publication refusal, lost-write
 restore control and saved-failure replay remain open. These partial changes do
 not establish the historical cause or relax functional admission.

@@ -143,38 +143,50 @@ export function createLitestreamAfterStop(options) {
       throw error;
     }
   };
-  const attemptForToken = token => {
+  const attemptForToken = (token, name) => {
     requireThat(typeof token === 'string');
     const match = /^(.+):([1-9]\d*)$/.exec(token); requireThat(match);
     identity(match[1], `attempt=${match[2]}; max=${match[2]}`);
-    const row = attempts.get(token); requireThat(row); return row;
+    return rowFor({ invocation: match[1], ordinal: Number(match[2]) - 1, operation: name });
   };
   // Only the real storage response supplies this witness; finishing a request body is not a commit.
   const commit = guarded(input => {
     exactFields(input, ['token', 'statusCode', 'bytesOut', 'expectedBytesOut', 'requestComplete', 'versionId', 'deleteMarker']);
-    const row = attemptForToken(input.token);
-    requireThat(row.operation === 'put' && !row.commit && row.admissions.producer && row.admissions.observer
+    const row = attemptForToken(input.token, 'put');
+    requireThat(!row.commit
       && (input.deleteMarker === null || input.deleteMarker === 'false')
       && input.requestComplete === true && nonnegative(input.bytesOut) && input.bytesOut === input.expectedBytesOut
       && Number.isInteger(input.statusCode) && input.statusCode >= 200 && input.statusCode < 300
       && (input.versionId === null || typeof input.versionId === 'string' && input.versionId.length > 0
         && input.versionId.length <= 1024 && !/[\x00-\x1f\x7f]/.test(input.versionId)));
+    if (!row.admissions.producer || !row.admissions.observer) historyGap = true;
     row.commit = { ...structuredClone(input), ...event() };
+    if (acknowledged) { row.lateSettlement = true; affect(row); }
   });
   const beginLifetime = guarded(input => {
     exactFields(input, ['headers', 'operation', 'versioned']);
     requireThat(typeof input.versioned === 'boolean');
     const id = identity(input.headers?.['amz-sdk-invocation-id'], input.headers?.['amz-sdk-request']);
-    const row = attempts.get(id.key);
-    requireThat(row && row.operation === input.operation && row.admissions.producer && !row.lifetime);
+    const row = rowFor({ invocation: id.invocation, ordinal: id.ordinal, operation: input.operation });
+    requireThat(!row.lifetime); event();
+    if (!row.admissions.producer) historyGap = true;
+    if (acknowledged) { row.lateAdmission = true; affect(row); }
     row.lifetime = { versioned: input.versioned, completed: false };
     return guarded(({ statusCode, bytesOut, interrupted, responseHeaders }) => {
       const producer = row.settlements.producer;
-      requireThat(!row.lifetime.completed && producer && producer.statusCode === statusCode && producer.bytesOut === bytesOut
+      requireThat(!row.lifetime.completed && nonnegative(bytesOut) && typeof interrupted === 'boolean'
+        && (interrupted && statusCode === null || Number.isInteger(statusCode) && statusCode >= 200 && statusCode <= 599));
+      if (producer) requireThat(producer.statusCode === statusCode && producer.bytesOut === bytesOut
         && interrupted === (producer.outcome === 'transport-error'));
+      else historyGap = true;
+      event();
       row.lifetime.completed = true;
-      if (row.latePut) {
-        requireThat(row.commit && bytesOut === row.commit.bytesOut);
+      // A delayed producer callback must agree with the original, unnormalised completion.
+      row.lifetime.observation = { statusCode, bytesOut, interrupted };
+      if (interrupted) accountingCutoff = true;
+      if (acknowledged && !producer) { row.lateSettlement = true; affect(row); }
+      if (acknowledged && row.operation === 'put' && row.commit) {
+        requireThat(bytesOut === row.commit.bytesOut && (statusCode === null || statusCode === row.commit.statusCode));
         const version = row.commit.versionId;
         requireThat(row.lifetime.versioned ? typeof version === 'string' && version !== 'null' : version === null || version === 'null');
         requireThat(responseHeaders?.['x-amz-delete-marker'] === undefined || responseHeaders['x-amz-delete-marker'] === 'false');
@@ -211,6 +223,9 @@ export function createLitestreamAfterStop(options) {
       'ExpiredToken', 'AuthorizationHeaderMalformed', 'InvalidRange', 'unknown'].includes(input.errorCode));
     requireThat([true, false, null].includes(input.sameAccount));
     const interrupted = input.outcome === 'transport-error';
+    const lifetime = row.lifetime?.observation;
+    if (hop === 'producer' && lifetime) requireThat(lifetime.statusCode === input.statusCode
+      && lifetime.bytesOut === input.bytesOut && lifetime.interrupted === interrupted);
     if (interrupted) {
       if (!row.admissions.observer) historyGap = true;
       if (hop === 'producer' || interruption !== null) {
@@ -225,10 +240,8 @@ export function createLitestreamAfterStop(options) {
     if (acknowledged && input.operation !== 'list') {
       row.lateSettlement = true; affect(row);
       if (input.operation === 'put' && row.commit) {
-        requireThat(Object.values(row.admissions).length === 2
-          && input.bytesOut === row.commit.bytesOut && input.attemptedBytesOut === row.commit.expectedBytesOut
+        requireThat(input.bytesOut === row.commit.bytesOut && input.attemptedBytesOut === row.commit.expectedBytesOut
           && input.statusCode === row.commit.statusCode && (interrupted || input.outcome === 'success'));
-        row.latePut = true;
       }
     }
     row.settlements[hop] = { ...structuredClone(input), ...event() };
@@ -239,7 +252,7 @@ export function createLitestreamAfterStop(options) {
     const requestsReconciled = [...attempts.values()].every(row => row.issued && row.admissions.producer && row.admissions.observer
       && row.settlements.producer && row.settlements.observer);
     // Finalised missing telemetry stays unknown even if a later callback arrives.
-    historyGap ||= !requestsReconciled;
+    historyGap ||= !requestsReconciled || [...attempts.values()].some(row => row.lifetime && !row.lifetime.completed);
     let overflow = false;
     const add = (a, b) => {
       if (a === null || !nonnegative(a + b)) { overflow = true; return null; }

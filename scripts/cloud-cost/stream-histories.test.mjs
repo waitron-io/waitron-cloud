@@ -357,7 +357,7 @@ for (const interrupted of [false, true]) test(`unversioned histories retain a wi
   assert.deepEqual(e.lifetimes.snapshot().byteSeconds, { low: 40, high: 40 });
 });
 
-test('unversioned history reader requires its own producer settlement', async t => {
+test('unversioned history reader collects missing producer telemetry as unknown', async t => {
   const { createLitestreamAfterStop } = await import('./litestream.mjs');
   const f = await fixture(t), afterStop = createLitestreamAfterStop({ clock: () => 0 });
   const invocation = '11111111-2222-4333-8444-555555555555';
@@ -365,7 +365,12 @@ test('unversioned history reader requires its own producer settlement', async t 
   const reader = await storage.openLitestreamHistories({ ...f.args, afterStop });
   const finish = reader.begin({ method: 'GET', path: '/synthetic?list-type=2',
     headers: { 'amz-sdk-invocation-id': invocation, 'amz-sdk-request': 'attempt=1; max=3' } });
-  assert.throws(() => finish({ statusCode: 200, bytesOut: 0 }), bad);
+  assert.doesNotThrow(() => finish({ statusCode: 200, bytesOut: 0 }));
+  await reader.verify(); assert.equal(reader.snapshot().objects.bytes, 0);
+  const result = afterStop.snapshot();
+  assert.equal(result.status, 'unknown'); assert.equal(result.requestsReconciled, false);
+  assert.deepEqual(result.gaps, ['accounting:incomplete-history']);
+  assert.equal(result.producer.attempts, 0);
 });
 
 // Final restore uses the same history, with ordinary strict read completion after replication stops.

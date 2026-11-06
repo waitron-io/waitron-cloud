@@ -384,7 +384,6 @@ for (const [label, change] of [
   ['unsafe byte count', { bytesOut: Number.MAX_SAFE_INTEGER + 1, expectedBytesOut: Number.MAX_SAFE_INTEGER + 1 }],
   ['negative byte count', { bytesOut: -1, expectedBytesOut: -1 }], ['failed status', { statusCode: 503 }],
   ['fractional status', { statusCode: 200.5 }], ['null status', { statusCode: null }],
-  ['unknown identity', { token: '22222222-2222-4333-8444-555555555555:1' }],
   ['malformed identity', { token: 'PRIVATE_CANARY' }], ['empty version', { versionId: '' }],
   ['private control character', { versionId: 'PRIVATE\nCANARY' }], ['oversized version', { versionId: 'x'.repeat(1025) }],
   ['delete marker', { deleteMarker: 'true' }], ['unexpected marker', { deleteMarker: false }],
@@ -394,19 +393,47 @@ for (const [label, change] of [
   assert.throws(() => s.commit(putCommit(change)), /Invalid cloud cost Litestream audit/);
   assert.throws(() => s.snapshot(), /Invalid cloud cost Litestream audit/);
 });
-for (const mode of ['missing-observer', 'wrong-operation', 'duplicate']) test(`commit witnesses cannot invent or replace an upload: ${mode}`, () => {
+test('a commit with missing observer telemetry retains unknown history without inventing the observer', () => {
+  const s = afterStopSession(); s.issue(issued(0, 'put')); s.admit(admitted('producer', 0, 'put'));
+  assert.doesNotThrow(() => s.commit(putCommit()));
+  assert.equal(s.snapshot().status, 'unknown'); assert.equal(s.snapshot().requestsReconciled, false);
+  assert.deepEqual(s.snapshot().gaps, ['accounting:incomplete-history']);
+  assert.equal(s.snapshot().observer.attempts, 0);
+});
+test('a commit for an otherwise unobserved identity stays unknown and cannot confirm another lifetime', () => {
+  const s = afterStopSession(); startAttempt(s, 'put');
+  const finish = s.beginLifetime({ headers: headers(), operation: 'put', versioned: true });
+  assert.doesNotThrow(() => s.commit(putCommit({ token: '22222222-2222-4333-8444-555555555555:1' })));
+  s.acknowledgeStop(ack());
+  s.settle(putSettlement('producer', { outcome: 'transport-error' }), knownInterruption());
+  assert.deepEqual(finish({ statusCode: 200, bytesOut: 4, interrupted: true, responseHeaders: {} }),
+    { statusCode: 200, interrupted: true, responseHeaders: {} });
+  assert.equal(s.snapshot().status, 'unknown'); assert.ok(s.snapshot().gaps.includes('accounting:incomplete-history'));
+  assert.equal(s.snapshot().requestsReconciled, false);
+});
+for (const mode of ['wrong-operation', 'duplicate']) test(`commit witnesses cannot invent or replace an upload: ${mode}`, () => {
   const s = afterStopSession(), operation = mode === 'wrong-operation' ? 'list' : 'put';
   s.issue(issued(0, operation)); s.admit(admitted('producer', 0, operation));
   if (mode !== 'missing-observer') s.admit(admitted('observer', 0, operation));
   if (mode === 'duplicate') s.commit(putCommit());
   assert.throws(() => s.commit(putCommit()), /Invalid cloud cost Litestream audit/);
 });
-for (const mode of ['twice', 'unsettled', 'wrong-bytes', 'wrong-status', 'wrong-interruption', 'wrong-version', 'unexpected-version']) {
+test('lifetime completion with missing producer settlement keeps unknown history and real version evidence', () => {
+  const s = afterStopSession(); startAttempt(s, 'put');
+  const finish = s.beginLifetime({ headers: headers(), operation: 'put', versioned: true });
+  s.commit(putCommit({ versionId: 'COMMIT_PRIVATE_CANARY' })); s.acknowledgeStop(ack());
+  assert.deepEqual(finish({ statusCode: 200, bytesOut: 4, interrupted: false,
+    responseHeaders: { 'x-amz-version-id': 'COMMIT_PRIVATE_CANARY' } }),
+  { statusCode: 200, interrupted: false, responseHeaders: { 'x-amz-version-id': 'COMMIT_PRIVATE_CANARY' } });
+  assert.equal(s.snapshot().status, 'unknown'); assert.equal(s.snapshot().producer.attempts, 0);
+  assert.equal(s.snapshot().requestsReconciled, false); assert.ok(s.snapshot().gaps.includes('accounting:incomplete-history'));
+});
+for (const mode of ['twice', 'wrong-bytes', 'wrong-status', 'wrong-interruption', 'wrong-version', 'unexpected-version']) {
   test(`lifetime completion stays paired to its own producer and version: ${mode}`, () => {
     const s = afterStopSession(); startAttempt(s, 'put');
     const finish = s.beginLifetime({ headers: headers(), operation: 'put', versioned: mode !== 'unexpected-version' });
     s.commit(putCommit({ versionId: 'COMMIT_PRIVATE_CANARY' })); s.acknowledgeStop(ack());
-    if (mode !== 'unsettled') s.settle(putSettlement('producer'));
+    s.settle(putSettlement('producer'));
     const event = { statusCode: mode === 'wrong-status' ? 201 : 200, bytesOut: mode === 'wrong-bytes' ? 3 : 4,
       interrupted: mode === 'wrong-interruption', responseHeaders: { 'x-amz-version-id': mode === 'wrong-version' ? 'OTHER_PRIVATE_CANARY' : 'COMMIT_PRIVATE_CANARY' } };
     if (mode === 'twice') finish(event);

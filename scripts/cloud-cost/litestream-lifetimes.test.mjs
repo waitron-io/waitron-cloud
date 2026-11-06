@@ -284,12 +284,13 @@ for (const mode of ['missing-witness', 'incomplete-body', 'partial-body', 'faile
         : mode === 'partial-body' ? { ...event, bytesOut: 3 }
         : mode === 'unknown-token' ? { ...event, token: event.token.replace('11111111', '22222222') }
         : mode === 'unknown-field' ? { ...event, privateCanary: 'PRIVATE_CANARY' } : event });
-    if (mode === 'missing-witness') {
+    if (mode === 'missing-witness' || mode === 'unknown-token') {
       const e = await run(); await e.transport.close(); await e.lifetimes.verify();
       assert.equal(e.lifetimes.snapshot().objects.bytes, 4);
       assert.equal(e.lifetimes.snapshot().status, 'unknown');
       assert.ok(e.lifetimes.snapshot().gaps.includes('accounting:request-cutoff'));
       assert.equal(e.afterStop.snapshot().status, 'unknown');
+      if (mode === 'unknown-token') assert.ok(e.afterStop.snapshot().gaps.includes('accounting:incomplete-history'));
     } else await assert.rejects(run(), /Invalid cloud cost Litestream audit/);
   });
 }
@@ -304,14 +305,19 @@ test('transport refuses a lifetime reader from another stop-accounting session b
     phase: 'workload', meter: createMeter({ phase: 'workload', clock: () => 0, afterStop }) }); }, /Invalid cloud cost Litestream audit/);
 });
 
-test('put-only reader cannot settle a bound lifetime before its producer counter', async t => {
+test('put-only reader collects a bound lifetime with missing producer telemetry as unknown', async t => {
   const { createLitestreamAfterStop } = await import('./litestream.mjs');
   const f = await fixture(t), afterStop = createLitestreamAfterStop({ clock: () => 0 });
   const invocation = headers['amz-sdk-invocation-id'];
   afterStop.admit({ invocation, ordinal: 0, operation: 'list', hop: 'producer', phase: 'workload' });
   const reader = await storage.openLitestreamLifetimes({ ...f.args, afterStop });
   const finish = reader.begin({ method: 'GET', path: '/synthetic?list-type=2', headers });
-  assert.throws(() => finish({ statusCode: 200, bytesOut: 0 }), bad);
+  assert.doesNotThrow(() => finish({ statusCode: 200, bytesOut: 0 }));
+  await reader.verify(); assert.equal(reader.snapshot().objects.bytes, 0);
+  const result = afterStop.snapshot();
+  assert.equal(result.status, 'unknown'); assert.equal(result.requestsReconciled, false);
+  assert.deepEqual(result.gaps, ['accounting:incomplete-history']);
+  assert.equal(result.producer.attempts, 0);
 });
 
 // Final restore uses the same history, with ordinary strict read completion after replication stops.
