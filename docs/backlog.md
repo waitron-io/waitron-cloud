@@ -143,9 +143,15 @@ billing rows and other storage classes
 remain available. Run `node --test
 scripts/cloud-cost/meter-accounting-gaps.test.mjs` for the numeric boundaries and
 fatal-error controls. The isolated stack copies the shared gap-label helper.
-The full nonblocking accounting path, publication refusal, lost-write restore
-control and saved-failure replay remain open. This partial meter change does not
-establish the cause of the historical failures or relax functional admission.
+The accounting assessor now reads original request, lifetime, mail, fiscal and
+remote records before any projection discards their billing or gap fields.
+Missing source coverage, mismatched rows and unknown billing prevent measurement
+publication; malformed records, private fields and accessors still refuse.
+Run `node --test scripts/cloud-cost/accounting-policy.test.mjs` for the original
+record checks and real loopback traffic. Runtime callers do not yet use this
+assessment. The full nonblocking accounting path, publication refusal, lost-write
+restore control and saved-failure replay remain open. These partial changes do
+not establish the historical cause or relax functional admission.
 
 ## Cloud backup box identity (D451)
 
