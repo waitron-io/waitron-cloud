@@ -54,3 +54,32 @@ on main pushes. Other valid pushes select checks from their actual changed range
 uncertain evidence retains full work. Cost and venue do not trigger on main pushes.
 Read the [merge evidence checklist](ci-merge-evidence.md) before interpreting a
 skipped job. The nightly run always executes full work and never grants reuse.
+
+## Verified manual run
+
+The [6 November manual run 42165813178](https://github.com/waitron-io/waitron-cloud/actions/runs/42165813178),
+attempt 2, qualifies the full backstop at commit
+`9237200a0023a3b19c76b9447717f36ddcb430f1`, tree
+`8ccc8207d7d2e07fb96d808582bda2da3171e339`. Its 77 final jobs include
+75 successes and two deliberate skips. Every checkout, full plan, family
+summary and the parent summary was checked. It runs all 29 package allocations,
+eight root partitions, compiler checks, six receipt suites, 21 cost cells, both
+venue cases and four AWS cells, with reuse disabled.
+
+The result reports 21,072 Node passes and 26 optional skips, plus 384 mocked
+OpenTofu cases counted separately. Attempt 1 fails the native stream LIST
+shutdown check in `stack-conformance.test.mjs`. Its counters agree on attempts
+and bytes but disagree on outcomes after an interrupted response. D530 retains
+that recurring failure and its unresolved cause. The failed-only retry runs
+14 cost checks and two summaries; 21,058 reported passes retain their original
+execution times and byte-identical logs. The passing retry qualifies this
+revision's acceptance and does not establish a LIST repair.
+
+You still need a scheduled run to verify schedule delivery. The 03:17 UTC run
+did not appear that morning; the qualified run was dispatched manually at
+05:00 UTC. This receipt also leaves aggregate usage savings open: the original
+4 November measurement window overlaps published
+[Git Operations](https://www.githubstatus.com/incidents/smtdswd1h2w4) and
+[Actions](https://www.githubstatus.com/incidents/xr3myzj7ms51) incidents. Compare
+busy periods that avoid relevant incidents, have no failed HTTP 5xx downloads
+and keep every checkout step under about ten seconds before judging savings.
