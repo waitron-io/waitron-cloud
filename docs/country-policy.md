@@ -66,3 +66,15 @@ This SQL-free slice does not bind placements, jobs or credentials to durable
 policy revisions. Those checks belong to later D101 slices. The production AI
 adapter still refuses every call even when a test country policy allows its
 destination. The separate input-eligibility and supplier gates remain open.
+
+
+## Keep SES account sharing separate from offline policy checks
+
+The [SES offline qualification guide](ses-feedback-qualification.md) pairs trusted
+purpose/resource bindings with a limited AWS policy-document profile. Stockholm
+is the configured default; either Stockholm or Paris requires explicit regional
+qualification. The profile admits only the configuration's single country and
+rejects caller assertions of approved sharing. A second country needs a separately
+reviewed isolation/sharing design because provider suppression is regional across
+the account. A passing offline check cannot add a qualified country flow, move
+Spain venue keys, or grant production mail authority.

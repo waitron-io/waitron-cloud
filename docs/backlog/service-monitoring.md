@@ -94,8 +94,9 @@ Pages Free with Direct Upload and a directly usable public `pages.dev` fallback
 outside Waitron's AWS. This is a documented procedure and host proposal only:
 phone provider/independent delivery-failure handling, account/page setup, supplier
 metadata review and live outage/coverage-gap proof remain open. Hands-on setup
-waits for the owner's return on 3 November; ask before any paid service. D102's
-SES feedback, suppression, alerts and live qualification remain open.
+needs separate owner authority, including any paid service. D102 has local SES
+feedback/suppression code and [offline policy validation](../ses-feedback-qualification.md);
+effective provider permissions, independent alerts and live qualification remain open.
 Optional quiet periods and one still-open reminder are implemented with both timings
 disabled by default. Each incident opening captures its original recipients and fixed
 database deadlines. The portal remains immediate; brief incidents recover silently.

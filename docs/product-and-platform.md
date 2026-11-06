@@ -605,7 +605,7 @@ operation or automatic failover across providers is a separate, unresolved requi
 | --- | --- | --- |
 | Object storage | S3 | Cloud Storage |
 | Compute | EC2, with the workload packaging still to choose | Compute Engine, with the same workload packaging goal |
-| Administrative email | Amazon SES in Paris, approved for planning; account/provider qualification required | An approved email provider through the same email interface |
+| Administrative email | Amazon SES in Stockholm by default or Paris, both owner-accepted; local feedback code/tests authorised, account/provider qualification required | An approved email provider through the same email interface |
 | Mobile notifications | SNS with the selected mobile delivery service | FCM or another delivery service appropriate to the client |
 | Jobs, secrets and monitoring | Choose services against required behaviour | Choose services against the same required behaviour |
 
@@ -625,11 +625,13 @@ browser push, SMS or several of these.
 Provider service coverage must be checked country by country. For example, the
 [SES endpoint list](https://docs.aws.amazon.com/general/latest/gr/ses.html) checked on
 2026-09-27 does not list Spain. The owner selected SES as an email-processing
-exception and approved the [Paris feedback design](superpowers/specs/2026-11-01-ses-feedback-design.md)
+exception and approved the [feedback design](superpowers/specs/2026-11-01-ses-feedback-design.md)
 on 2026-11-01. The [production email adapter](production-email-implementation.md)
 uses authenticated TLS SMTP independently of compute. Follow the
 [implementation plan](superpowers/plans/2026-11-02-ses-feedback-implementation.md)
-only after separate build authority. Acumbamail is no longer a candidate. SES
+under D565's local code/test authority. Stockholm (`eu-north-1`) is the configured
+default, with Paris (`eu-west-3`) also accepted. The [offline qualification guide](ses-feedback-qualification.md)
+keeps live provider work separate. Acumbamail is no longer a candidate. SES
 account, supplier, retention, tracking and live qualification remain open; the
 region choice does not locate recipients' mail systems or transit. No deployment
 or legal qualification follows from these documentation decisions.
