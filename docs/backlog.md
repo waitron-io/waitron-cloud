@@ -365,6 +365,17 @@ refusal and its retry while deliberately changing one observer reply. No
 accounting disagreement adds a queue retry. The original-record assessor
 refuses measurement eligibility; new service export and other conformance
 result consumers remain open.
+The streamed-host, early timer-wake and sustained 207-sale conformance cases
+now read the closed unknown-cost result. They retain restored-sale counts,
+SQLite and fiscal validation, native-writer identity, phase timing, source
+preservation and owned cleanup. The sustained case checks both original meter
+discrepancies separately instead of relying on the former combined projection;
+unknown administration billing remains unknown. Run the two
+`isolatedHostStreamsTheCompleteGeneratedDayAndCollectsStorageBeforeReturning`
+and `isolatedHostCompletesTheIdleObservationAfterAnEarlyTimerWake` cases in
+`isolated-replay-conformance.test.mjs`, and the complete
+`paced-replay-conformance.test.mjs` case. Mail tests wait for the backend peer's
+bounded close event before asserting zero sockets, retaining that cleanup check.
 The full nonblocking accounting path, publication refusal and saved-failure
 replay remain open. These partial changes do
 not establish the historical cause or relax functional admission.

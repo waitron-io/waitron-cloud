@@ -332,8 +332,17 @@ test('isolatedHostStreamsTheCompleteGeneratedDayAndCollectsStorageBeforeReturnin
   cpSync(stack.litestreamBinary, join(f.codeRoot, 'litestream'));
   const binarySha256 = createHash('sha256').update(readFileSync(join(f.codeRoot, 'litestream'))).digest('hex');
   f.stream = { binarySha256, copyImage, startupSeconds: 2, idleSeconds: 2, windowSeconds: 60 };
-  const result = await controller.runIsolatedReplay(f);
-  assert.equal(result.costMeasured, false);
+  const completed = await controller.runIsolatedReplay(f);
+  assert.deepEqual(Object.keys(completed).sort(), ['accounting', 'costMeasured', 'evidence', 'functional', 'receipt']);
+  assert.equal(completed.functional, 'passed'); assert.equal(completed.costMeasured, false); assert.equal(completed.receipt, null);
+  assert.equal(completed.accounting.status, 'unknown'); assert.equal(completed.accounting.publicationEligible, false);
+  assert.ok(completed.accounting.gaps.includes('request-billing:unknown'));
+  const result = completed.evidence;
+  assert.deepEqual(result.admission.replay.counts, { expected: 3, attempted: 3, successful: 3, failed: 0 });
+  assert.deepEqual(result.admission.integrity, { ok: true, issues: 0 });
+  assert.deepEqual(result.isolation, { blockedConnections: 3, blockedDns: 2, localControl: true });
+  assert.deepEqual(result.cleanup, { workerContainers: 0, networks: 0, privateCopies: 0 });
+  assert.deepEqual(result.admission.stream.functional, { startupUpload: true, restore: true, bucketCreated: true, bucketRemoved: true });
   assert.deepEqual(result.admission.stream?.restored, { sales: 3, integrity: true });
   assert.deepEqual(result.admission.stream.native, { version: '0.5.17', writerStarts: 1, phaseRestarts: 0 });
   assert.ok(result.admission.stream.storage.objects.bytes > 0);
@@ -352,9 +361,10 @@ test('isolatedHostStreamsTheCompleteGeneratedDayAndCollectsStorageBeforeReturnin
   assert.equal(admin.find(r => r.operation === 'bucket-create').successful, 1);
   assert.equal(admin.find(r => r.operation === 'bucket-delete').successful, 1);
   assert.ok(admin.filter(r => r.operation === 'delete').reduce((n, r) => n + r.successful, 0) > 0);
+  assert.ok(result.admission.stream.administration.billing.some(row => row.status === 'unknown' && row.quantity === null));
   assert.deepEqual(result.admission.stream.cleanup,
     { processes: 0, privateRoots: 0, listeners: 0, clients: 0, buckets: 0, objects: 0, multipartUploads: 0 });
-  assert.equal(/PRIVATE_|2026-|\/state|taxId|locationId|synthetic-|127\.0\.0\.1/.test(JSON.stringify(result)), false);
+  assert.equal(/PRIVATE_|2026-|\/state|taxId|locationId|synthetic-|127\.0\.0\.1/.test(JSON.stringify(completed)), false);
   clean(f, before);
 });
 
@@ -791,9 +801,15 @@ test('isolatedHostCompletesTheIdleObservationAfterAnEarlyTimerWake', async t => 
     try { result = await controller.runIsolatedReplay(f); }
     catch (error) { refusal = error; throw error; }
   }, 'an early wake must resume observation until the measured minimum is covered');
-  assert.ok(result.admission.stream.phases.find(row => row.phase === 'startup').elapsedSeconds >= 2);
-  assert.ok(result.admission.stream.phases.find(row => row.phase === 'idle').elapsedSeconds >= 2);
-  assert.deepEqual(result.admission.stream.restored, { sales: 3, integrity: true });
+  assert.equal(result.functional, 'passed'); assert.equal(result.costMeasured, false); assert.equal(result.receipt, null);
+  assert.equal(result.accounting.status, 'unknown'); assert.equal(result.accounting.publicationEligible, false);
+  assert.ok(result.accounting.gaps.includes('request-billing:unknown'));
+  assert.deepEqual(result.evidence.admission.integrity, { ok: true, issues: 0 });
+  assert.deepEqual(result.evidence.isolation, { blockedConnections: 3, blockedDns: 2, localControl: true });
+  assert.deepEqual(result.evidence.cleanup, { workerContainers: 0, networks: 0, privateCopies: 0 });
+  assert.ok(result.evidence.admission.stream.phases.find(row => row.phase === 'startup').elapsedSeconds >= 2);
+  assert.ok(result.evidence.admission.stream.phases.find(row => row.phase === 'idle').elapsedSeconds >= 2);
+  assert.deepEqual(result.evidence.admission.stream.restored, { sales: 3, integrity: true });
   clean(f, before);
   }, () => readFileSync(f.journal.path, 'utf8'), () => ({ elapsedMilliseconds: performance.now() - began,
     changed: false, refusal, signalAborted: false }), text => t.diagnostic(text), join(f.root, 'isolated-replay/result.json'));

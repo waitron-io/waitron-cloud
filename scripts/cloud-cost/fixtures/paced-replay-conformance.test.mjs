@@ -60,18 +60,33 @@ test('pacedReplayRestoresEverySaleWithValidStructureAfterSustainedWrites', async
   let locationId;
   try { locationId = db.prepare('SELECT id FROM locations').get().id; } finally { db.close(); }
   const before = fingerprint(database);
-  const result = await withReplayDiagnostics(() => runIsolatedReplay({ source, root, journal, codeRoot, database, locationId, config, initial,
+  const completed = await withReplayDiagnostics(() => runIsolatedReplay({ source, root, journal, codeRoot, database, locationId, config, initial,
     expected: { sales: 208, paid: 208, tradingDays: 2, busiest: 207 },
     originalInventory: { timeZone: 'Europe/Madrid', days: 2, busiest: 207 },
     cadence: { mode: 'accelerated', factor: 100 }, replayWindowSeconds: 120, windowSeconds: 200, image: stack.image,
     stream: { binarySha256: createHash('sha256').update(readFileSync(join(codeRoot, 'litestream'))).digest('hex'),
       copyImage: docker(['image', 'inspect', 'node:26.11.1-slim', '--format', '{{.Id}}']),
       startupSeconds: 2, idleSeconds: 2, windowSeconds: 150 } }), text => t.diagnostic(text));
+  assert.deepEqual(Object.keys(completed).sort(), ['accounting', 'costMeasured', 'evidence', 'functional', 'receipt']);
+  assert.equal(completed.functional, 'passed'); assert.equal(completed.costMeasured, false); assert.equal(completed.receipt, null);
+  assert.equal(completed.accounting.status, 'unknown'); assert.equal(completed.accounting.publicationEligible, false);
+  assert.ok(completed.accounting.gaps.includes('request-billing:unknown'));
+  const result = completed.evidence;
+  assert.deepEqual(result.admission.integrity, { ok: true, issues: 0 });
+  assert.deepEqual(result.isolation, { blockedConnections: 3, blockedDns: 2, localControl: true });
+  assert.deepEqual(result.admission.stream.functional, { startupUpload: true, restore: true, bucketCreated: true, bucketRemoved: true });
   assert.deepEqual(result.admission.replay.counts, { expected: 207, attempted: 207, successful: 207, failed: 0 });
   assert.ok(result.admission.replay.timing.elapsedSeconds >= 61.8);
   assert.deepEqual(result.admission.stream.restored, { sales: 207, integrity: true });
   assert.deepEqual(result.admission.stream.native, { version: '0.5.17', writerStarts: 1, phaseRestarts: 0 });
-  assert.deepEqual(result.streamAccounting.discrepancy, { attempts: 0, bytesIn: 0, bytesOut: 0 });
+  for (const scope of ['requests', 'administration']) {
+    const original = result.admission.stream[scope];
+    assert.equal(original.reconciled, true);
+    assert.deepEqual(original.accounting.discrepancy, { attempts: 0, bytesIn: 0, bytesOut: 0 });
+    assert.deepEqual(original.accounting.producer, original.accounting.observer);
+    assert.ok(original.accounting.producer.attempts > 0);
+  }
+  assert.ok(result.admission.stream.administration.billing.some(row => row.status === 'unknown' && row.quantity === null));
   assert.deepEqual(result.cleanup, { workerContainers: 0, networks: 0, privateCopies: 0 });
   assert.deepEqual(fingerprint(database), before);
   assert.equal(existsSync(join(root, 'isolated-replay')), false);

@@ -359,6 +359,7 @@ test('mailAccountingMismatchPreservesActualDeliveryOutcomeAndLaterRetry', async 
   assert.equal(await mailer.sendPasswordChanged(message, identity).catch(() => 'refused'), 'completed');
   await assert.doesNotReject(run.close());
   const snapshot = run.snapshot();
+  await f.settled();
   assert.equal(f.accepted(), 2); assert.equal(f.sockets.size, 0);
   assert.equal(snapshot.status, 'unknown'); assert.equal(snapshot.reconciled, false);
   assert.deepEqual(snapshot.gaps, ['accounting:meter-disagreement']);
@@ -391,6 +392,7 @@ test('mailBalancedFinalTotalsRetainEarlierOutcomeDisagreement', async t => {
   await assert.rejects(mailer.sendPasswordChanged(message, context()), /Captured email delivery refused/);
   assert.equal(await mailer.sendPasswordChanged(message, context()).catch(() => 'refused'), 'caller-accepted');
   await assert.doesNotReject(run.close());
+  await f.settled();
   assert.equal(f.accepted(), 1); assert.equal(f.calls(), 2); assert.equal(f.sockets.size, 0);
   assert.deepEqual(run.snapshot().producer, { attempts: 2, accepted: 1, refused: 1, retried: 0 });
   assert.deepEqual(run.snapshot().observer, { attempts: 2, accepted: 1, refused: 1 });
