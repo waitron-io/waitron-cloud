@@ -312,8 +312,16 @@ scripts/cloud-cost/stream-checkpoint-diagnostics.test.mjs
 scripts/cloud-cost/replay-stream.test.mjs` for the loopback and generated-writer
 controls. The replay reaches real SQLite restore with a lost reply and still
 rejects missing sales, corruption and failed restore. These generated-writer
-checks are separate from the official-binary lost-write proof above. Worker
-admission, administration cleanup and shared mail/remote completion remain open.
+checks are separate from the official-binary lost-write proof above.
+Administration cleanup now finishes with original unknown request or billing
+evidence when owned resources are independently collected. Equal grand totals
+cannot erase a disagreement between the meters. Safe individual observations
+whose retained byte-time total overflows return unknown bounds with a named gap.
+Actual delete, inventory, ownership and collection failures still refuse. Run
+`node --test scripts/cloud-cost/worker-storage-accounting.test.mjs` and the
+`worker-storage-conformance.test.mjs` matrix for the generated and real-storage
+controls. The original clean counter projection remains unchanged. The closed
+worker/host result admission and shared mail/remote completion remain open.
 The full nonblocking accounting path, publication refusal and saved-failure
 replay remain open. These partial changes do
 not establish the historical cause or relax functional admission.

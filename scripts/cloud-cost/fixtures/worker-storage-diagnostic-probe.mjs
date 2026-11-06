@@ -5,7 +5,15 @@ import { mkdtempSync, realpathSync, mkdirSync, writeFileSync, readFileSync, exis
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-const fault = process.argv[2], action = process.argv[3] ?? 'finish', records = [];
+const mode = process.argv[2], gapped = mode.startsWith('gap:'), billing = mode.startsWith('billing:');
+const fault = gapped || billing ? mode.split(':')[1] : mode, action = process.argv[3] ?? 'finish', records = [];
+const { createMeter: realMeter } = await import('../meter.mjs');
+const original = realMeter({ phase: 'setup', clock: () => 0 });
+for (const channel of (gapped ? ['producer'] : ['producer', 'observer'])) original.observeAttempt({
+  token: 'synthetic:0', channel, phase: 'setup', operation: billing ? 'bucket-inspect' : 'put',
+  retryOrdinal: 0, outcome: 'success', statusCode: 200, errorCode: null, sameAccount: null,
+  bytesIn: 0, bytesOut: 4, attemptedBytesIn: 0, attemptedBytesOut: 4,
+});
 const parent = realpathSync(mkdtempSync(join(tmpdir(), 'storage-diagnostic-')));
 const source = join(parent, 'source'), root = join(parent, 'owned');
 mkdirSync(source, { mode: 0o700 }); mkdirSync(root, { mode: 0o700 });
@@ -28,7 +36,7 @@ globalThis.storageProbe = {
   createMeter: () => ({ snapshot: () => {
     if (fault === 'accounting') refuse();
     accountingDone = true;
-    return { reconciled: true, accounting: {}, observedRequests: [] };
+    return gapped || billing ? original.snapshot() : { reconciled: true, accounting: {}, observedRequests: [] };
   } }),
   createMeteringProxy: async () => ({ url: 'http://127.0.0.1:9999', close: async () => {
     proxyClosed++;
@@ -70,7 +78,7 @@ sdk.S3Client = class {
     }
     if (name === 'ListBucketsCommand') return { Buckets: [] };
     if (name === 'DeleteObjectCommand') { deleted = true; return {}; }
-    if (name === 'ListObjectsV2Command') return { Contents: cleanup && fault === 'delete-object' && !deleted
+    if (name === 'ListObjectsV2Command') return { Contents: cleanup && ['delete-object', 'retained-overflow'].includes(fault) && !deleted
       ? [{ Key: 'stream/PRIVATE_OBJECT', Size: 4 }] : [], IsTruncated: false };
     if (name === 'ListMultipartUploadsCommand') return { Uploads: cleanup && fault === 'abort-upload'
       ? [{ Key: 'stream/PRIVATE_UPLOAD', UploadId: 'PRIVATE_ID' }] : [], IsTruncated: false };
@@ -89,7 +97,8 @@ try {
   const { openWorkerStorage } = await import('../worker-storage.mjs');
   const controller = new AbortController();
   const storage = await openWorkerStorage({ source, root, journal, sdk, signal: controller.signal,
-    clock: () => fault === 'retained-accounting' && accountingDone ? NaN : 12, onDiagnostic: event => {
+    clock: () => fault === 'retained-accounting' && accountingDone ? NaN
+      : fault === 'retained-overflow' && deleted ? 3000000000000000 : 12, onDiagnostic: event => {
     if (fault === 'reporter') refuse();
     if (fault === 'async-reporter') return Promise.reject(Error('PRIVATE_ASYNC_REPORTER'));
     records.push(event);
@@ -97,17 +106,18 @@ try {
   cleanup = true;
   if (fault === 'storage-health') controller.abort();
   if (fault === 'bucket-ownership') writeFileSync(journal.path, '{}', { mode: 0o600 });
-  let message = null;
+  let message = null, evidence;
   const closing = (fault === 'concurrent' || action === 'concurrent') ? storage.close().catch(() => {}) : undefined;
-  try { if (fault === 'close-only' || action === 'close') await storage.close(); else await storage.finish(fault === 'finish-input' ? { private: 'PRIVATE_CANARY' }
+  try { if (fault === 'close-only' || action === 'close') await storage.close(); else evidence = await storage.finish(fault === 'finish-input' ? { private: 'PRIVATE_CANARY' }
     : fault === 'retained-inventory' ? { retained: { since: 0, bytes: 4, objects: 1 } }
+    : fault === 'retained-overflow' ? { retained: { since: 10, bytes: 4, objects: 1 } }
     : fault === 'retained-accounting' ? { retained: { since: 0, bytes: 0, objects: 0 } } : {}); }
   catch (error) { message = error.message; }
   await closing;
   await storage.close().catch(() => {});
   await new Promise(resolve => setImmediate(resolve));
   const entries = JSON.parse(readFileSync(journal.path, 'utf8')).localResources ?? [];
-  console.log(JSON.stringify({ message, records, collected, proxyClosed, clientCount, destroyed, cleanupRequests,
+  console.log(JSON.stringify({ ...(gapped || billing || fault === 'retained-overflow' ? { evidence } : {}), message, records, collected, proxyClosed, clientCount, destroyed, cleanupRequests,
     bucketRemoved: entries.some(e => e.kind === 'storage-bucket' && e.state === 'removed'),
     bucketCleanupIntents: entries.filter(e => e.kind === 'storage-bucket' && e.state === 'cleanup-intent').length, rootRetained: existsSync(join(root, 'local-storage')) }));
 } finally { rmSync(parent, { recursive: true, force: true }); }

@@ -8,7 +8,12 @@ import { assertOwnedRoot } from './schema.mjs';
 
 const fail = () => { throw Error('Invalid cloud cost worker storage'); };
 const need = value => { if (!value) fail(); };
-export const streamCounters = ({ reconciled, accounting, observedRequests }) => ({ reconciled, accounting, observedRequests });
+export const streamCounters = value => {
+  const { reconciled, accounting, observedRequests } = value;
+  // Equal transfer totals do not establish billing; retain original evidence before projection.
+  return structuredClone(value.status === 'unknown' || value.gaps?.length || value.billing?.some(row => row.status === 'unknown')
+    ? value : { reconciled, accounting, observedRequests });
+};
 
 // Only the isolated worker may start this local backend. Its bucket and directory are fresh.
 // No host port, provider endpoint or caller-selected deletion target is admitted here.
@@ -135,16 +140,18 @@ export async function openWorkerStorage(args) {
     let counters;
     await attempt(async () => { if (meter) {
       stage = 'accounting';
-      const value = meter.snapshot(); need(value.reconciled); counters = streamCounters(value);
+      const value = meter.snapshot(); counters = streamCounters(value);
       if (retained) {
         stage = 'retained-accounting';
         need(!retainedInvalid && retained.deleted === retained.objects);
         const windowSeconds = now() - retained.since;
-        need(Number.isFinite(retained.high) && retained.high >= retained.low && retained.low >= 0
+        const overflow = !Number.isFinite(retained.high) || retained.high > Number.MAX_SAFE_INTEGER;
+        if (!overflow) need(retained.high >= retained.low && retained.low >= 0
           && retained.high <= retained.bytes * windowSeconds);
-        counters.retainedStorage = { status: 'measured', scope: 'unversioned-cleanup-tail', windowSeconds,
+        counters.retainedStorage = { status: overflow ? 'unknown' : 'measured', scope: 'unversioned-cleanup-tail',
+          ...(overflow ? { gaps: ['accounting:overflow'] } : {}), windowSeconds,
           initialBytes: retained.bytes, deletedObjects: retained.deleted, remainingBytes: 0, remainingObjects: 0,
-          byteSeconds: { low: retained.low, high: retained.high } };
+          byteSeconds: overflow ? { low: null, high: null } : { low: retained.low, high: retained.high } };
       }
     } });
     await attempt(async () => { stage = 'client-close'; client?.destroy(); });
