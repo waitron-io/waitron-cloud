@@ -3352,6 +3352,15 @@ retrying the inspection or replacing its error. A shared cause is unproved.
 See [the evidence and remaining investigation](backlog/verifier-build.md#bound-verifier-fixture-build-timeout-d312).
 Keep every verifier assertion and the existing build and job limits.
 
+PR #994 also records a separate diagnostic-fixture failure in
+[general CI run 42161904817, job 127709403709](https://github.com/waitron-io/waitron-cloud/actions/runs/42161904817/job/127709403709).
+The oversized-daemon inspection case reads an incomplete generated state file
+at `ci-test-postgres.test.mjs:146`. The test, launcher and diagnostic source are
+unchanged from its base and import no SDK. Twenty unchanged native comparisons
+and one Linux comparison pass; they do not establish the historical cause.
+Investigate the fixture writer and its termination boundary under D530, retaining
+every diagnostic, refusal, cleanup and deadline assertion.
+
 
 ## Relay reservation admission timestamp (D530)
 
