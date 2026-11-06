@@ -2,7 +2,7 @@
 
 You currently share one test-box lock across lanes. Replace that bottleneck with several isolated, disposable test slots, then use the same machinery for Cloud's ordinary GitHub Actions work. Bring Waitron later, after a separate inventory and approval.
 
-**Status:** proposal for watcher review, 6 November 2026. This authoring task permits documentation only. You have supplied an AX102 specification, not an address or a working machine: Ryzen 9 7950X3D, 16 physical cores, 128 GB RAM, two 1.92 TB NVMe drives, Debian 13. Treat these as owner-supplied facts, not measured capacity. Do not build until the watcher approves this plan and the server arrives. The bridge and permanent host, expected about a week apart, use the same recipe.
+**Status:** watcher-approved on 6 November 2026. The owner supplied and verified access to the bridge and authorized slice 1 the same day. Local slot ownership and pinned host prerequisites are implemented; a usable isolated slot, measured capacity, reboot recovery and all CI activation gates remain unqualified. The bridge and permanent host, expected about a week apart, use the same recipe.
 
 **Source status:** linked official GitHub references were freshly read on 6 November 2026. Repository receipts below are source inspection, not executed workflow or server evidence.
 

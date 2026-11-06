@@ -2,8 +2,8 @@
 
 ## Disposable test slots and repository runners (D592)
 
-The [design](superpowers/specs/2026-11-06-disposable-test-server-design.md) and [implementation plan](superpowers/plans/2026-11-06-disposable-test-server.md) propose isolated one-job VMs, a Mac controller and later JIT runners and a repeatable bridge-to-permanent AX102 migration for Cloud first, Waitron later.
-Watcher approval and server arrival block implementation; contributor-approval readback, public-repository scheduling risk, measured capacity and visible outage/hosted-rollback drills remain open. Local slots arrive first; the server uses its pinned SSH host key and reboots unattended. D570's narrow EC2 proof and Lane H D591's selection work stay separate.
+The [design](superpowers/specs/2026-11-06-disposable-test-server-design.md) and [implementation plan](superpowers/plans/2026-11-06-disposable-test-server.md) specify isolated one-job VMs, a Mac controller and later JIT runners and a repeatable bridge-to-permanent AX102 migration for Cloud first, Waitron later.
+The owner approved slice 1 on the bridge. Local ownership and pinned prerequisite setup are implemented; a useful isolated slot, private Docker, bounded cleanup, reboot recovery and measured capacity remain open. Contributor-approval readback, public-repository scheduling risk and outage/hosted-rollback drills gate later CI activation. D570's narrow EC2 proof and Lane H D591's selection work stay separate.
 
 ## Keep the private shared UI release current (D579)
 
