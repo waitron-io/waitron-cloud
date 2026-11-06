@@ -3157,9 +3157,12 @@ implementation or production evidence.
   cleanup and retained original cost evidence. Synthetic checks cover competing
   controllers, partial/lost writes, damaged history, stale evidence, deadline
   expiry during writes and unknown cleanup. A bounded public-catalogue reader
-  now retains source-byte identity and extracts nine paid Spain EC2/gp3/ARM-Lambda/S3/log
+  now retains source-byte identity and extracts nine paid Stockholm EC2/gp3/ARM-Lambda/S3/log
   rates as exact fractions, excluding shared free tiers and bounding every price
-  tier conservatively. Complete service-page reconciliation, transfer/events/network,
+  tier conservatively. The fixed reader and scope checks use eu-north-1; the
+  reviewed 320 MiB ceiling admits its current 270,696,312-byte EC2 catalogue
+  without changing the 30-second deadline. Real public retrieval qualifies all
+  four catalogues; it does not authenticate an account or reconcile billing. Complete service-page reconciliation, transfer/events/network,
   taxes, quantities, billing and all-in bound construction, setup integration and
   live S3/cleanup qualification remain open; these inputs grant no spending or
   runnable owner setup. A new self-contained guest deadline entry binds the
@@ -3174,13 +3177,14 @@ implementation or production evidence.
   unqualified. D570's
   [weekly proof plan](superpowers/plans/2026-11-04-kubernetes-weekly-proof.md) carries
   the first complete proof on one disposable on-demand ARM m7g.2xlarge in staging
-  462991287391/eu-south-2, within USD 10/month; production 949687825720 is forbidden.
+  462991287391/eu-north-1, within USD 10/month; production 949687825720 is forbidden.
   The owner approved temporary setup/repository/input access through
   2027-02-28T23:59:00Z with an initial USD 0 baseline. The private setup template,
   identity-checked renderer and bounded expiry engine now have synthetic checks
   and an unprivileged CI gate. The first manual renderer also omits GitHub trust
   and the launcher role while preserving private networking and closed ordinary
-  admission. Its tests and rendered-template validation do not grant a runnable
+  admission. Image validation also requires an Amazon Linux 2023 ARM name and
+  the template's /dev/xvda root device. Its tests and rendered-template validation do not grant a runnable
   lifecycle or prove live termination. The engine and rendered Lambda now attempt later
   eligible cleanup after a mutation or termination-response failure. If those calls
   finish, the first error is rethrown without publishing healthy status; a stalled

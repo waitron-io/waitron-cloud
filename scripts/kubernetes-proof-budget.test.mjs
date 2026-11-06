@@ -8,7 +8,7 @@ const budget = await import(target.href).catch(error => {
   throw error;
 });
 const now = '2026-11-06T12:00:00Z';
-const scope = { account: '462991287391', region: 'eu-south-2', stackId: 'arn:aws:cloudformation:eu-south-2:462991287391:stack/d570/00000000-0000-4000-8000-000000000000' };
+const scope = { account: '462991287391', region: 'eu-north-1', stackId: 'arn:aws:cloudformation:eu-north-1:462991287391:stack/d570/00000000-0000-4000-8000-000000000000' };
 const uuid = '11111111-1111-4111-8111-111111111111';
 const other = '22222222-2222-4222-8222-222222222222';
 const categories = ['compute', 'disk', 'storage', 'requests', 'transfer', 'events', 'lambda', 'logs', 'network', 'tax', 'contingency'];
@@ -16,7 +16,7 @@ const identity = (changes = {}) => ({ uuid, head: 'a'.repeat(40), tree: 'b'.repe
 const evidence = (changes = {}) => ({ observedAt: now, account: scope.account, region: scope.region,
   currency: 'USD', pricesReconciled: true, billingReconciled: true, protectionHealthy: true,
   components: Object.fromEntries(categories.map(key => [key, { upperMicroUsd: key === 'compute' ? 900000 : 10000,
-    source: 'https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonEC2/current/eu-south-2/index.json', digest: 'c'.repeat(64) }])),
+    source: 'https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonEC2/current/eu-north-1/index.json', digest: 'c'.repeat(64) }])),
   openings: { '2026-11': { baselineMicroUsd: 0, overheadMicroUsd: 200000, digest: 'd'.repeat(64) },
     '2026-12': { baselineMicroUsd: 0, overheadMicroUsd: 200000, digest: 'e'.repeat(64) } }, ...changes });
 const confirmed = (changes = {}) => ({ uuid, observedAt: '2026-11-06T14:20:00Z', terminated: true, volumesAbsent: true,

@@ -15,7 +15,7 @@ function shortDeadline() {
   const original = globalThis.setTimeout;
   return mock.method(globalThis, 'setTimeout', (fn, ms, ...args) => original(fn, ms === 30000 ? 5 : ms, ...args));
 }
-const source = service => `https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/${service}/current/eu-south-2/index.json`;
+const source = service => `https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/${service}/current/eu-north-1/index.json`;
 const body = service => Buffer.from(JSON.stringify(fixtures[service]));
 const hash = bytes => createHash('sha256').update(bytes).digest('hex');
 function read(service = 'AmazonEC2', doc = fixtures[service], changes = {}) {
@@ -27,10 +27,10 @@ const firstTerm = doc => Object.values(Object.values(doc.terms.OnDemand)[0])[0];
 const firstDimension = doc => Object.values(firstTerm(doc).priceDimensions)[0];
 
 for (const [service, expected] of [
-  ['AmazonEC2', { compute: ['Hrs', '3636000000'], disk: ['GB-Mo', '880000000'] }],
+  ['AmazonEC2', { compute: ['Hrs', '3468000000'], disk: ['GB-Mo', '836000000'] }],
   ['AWSLambda', { lambdaDuration: ['Lambda-GB-Second', '133334'], lambdaRequests: ['Requests', '2000'] }],
-  ['AmazonS3', { storage: ['GB-Mo', '230000000'], put: ['Requests', '53000'], get: ['Requests', '4000'] }],
-  ['AmazonCloudWatch', { logIngest: ['GB', '5700000000'], logStorage: ['GB-Mo', '300000000'] }],
+  ['AmazonS3', { storage: ['GB-Mo', '230000000'], put: ['Requests', '50000'], get: ['Requests', '4000'] }],
+  ['AmazonCloudWatch', { logIngest: ['GB', '5400000000'], logStorage: ['GB-Mo', '280000000'] }],
 ]) test(`${service} retains exact regional public rates and source-byte identity`, () => {
   const result = read(service);
   assert.equal(result.source, source(service));
@@ -51,7 +51,7 @@ for (const [service, expected] of [
 
 test('all Lambda tiers are considered and a later higher rate cannot hide behind tier zero', () => {
   const doc = structuredClone(fixtures.AWSLambda);
-  const sku = Object.keys(doc.products).find(s => doc.products[s].attributes.usagetype === 'EUS2-Lambda-GB-Second-ARM');
+  const sku = Object.keys(doc.products).find(s => doc.products[s].attributes.usagetype === 'EUN1-Lambda-GB-Second-ARM');
   const term = Object.values(doc.terms.OnDemand[sku])[0];
   Object.values(term.priceDimensions).at(-1).pricePerUnit.USD = '0.0000200000';
   assert.equal(read('AWSLambda', doc).rates.lambdaDuration.usdNumerator, '200000');
@@ -106,14 +106,14 @@ test('an observation from yesterday refuses even when its catalogue was already 
 });
 
 for (const [service, usage, field, wrong] of [
-  ['AmazonEC2', 'EUS2-BoxUsage:m7g.2xlarge', 'servicecode', 'Other'],
-  ['AmazonEC2', 'EUS2-BoxUsage:m7g.2xlarge', 'preInstalledSw', 'SQL Web'],
-  ['AmazonEC2', 'EUS2-BoxUsage:m7g.2xlarge', 'capacitystatus', 'UnusedCapacityReservation'],
-  ['AmazonEC2', 'EUS2-BoxUsage:m7g.2xlarge', 'operation', 'RunInstances:0002'],
-  ['AmazonEC2', 'EUS2-EBS:VolumeUsage.gp3', 'volumeApiName', 'gp2'],
-  ['AmazonS3', 'EUS2-TimedStorage-ByteHrs', 'storageClass', 'Infrequent Access'],
-  ['AmazonS3', 'EUS2-TimedStorage-ByteHrs', 'volumeType', 'Standard - Infrequent Access'],
-  ['AWSLambda', 'EUS2-Lambda-GB-Second-ARM', 'group', 'AWS-Lambda-Duration'],
+  ['AmazonEC2', 'EUN1-BoxUsage:m7g.2xlarge', 'servicecode', 'Other'],
+  ['AmazonEC2', 'EUN1-BoxUsage:m7g.2xlarge', 'preInstalledSw', 'SQL Web'],
+  ['AmazonEC2', 'EUN1-BoxUsage:m7g.2xlarge', 'capacitystatus', 'UnusedCapacityReservation'],
+  ['AmazonEC2', 'EUN1-BoxUsage:m7g.2xlarge', 'operation', 'RunInstances:0002'],
+  ['AmazonEC2', 'EUN1-EBS:VolumeUsage.gp3', 'volumeApiName', 'gp2'],
+  ['AmazonS3', 'EUN1-TimedStorage-ByteHrs', 'storageClass', 'Infrequent Access'],
+  ['AmazonS3', 'EUN1-TimedStorage-ByteHrs', 'volumeType', 'Standard - Infrequent Access'],
+  ['AWSLambda', 'EUN1-Lambda-GB-Second-ARM', 'group', 'AWS-Lambda-Duration'],
 ]) test(`a different ${service} ${field} cannot substitute for the approved product`, () => {
   const doc = structuredClone(fixtures[service]);
   Object.values(doc.products).find(p => p.attributes.usagetype === usage).attributes[field] = wrong;
@@ -122,14 +122,14 @@ for (const [service, usage, field, wrong] of [
 
 for (const duplicate of ['"USD":"9.9999999999","USD":"0.0000000001"', '"USD":"9.9999999999","U\\u0053D":"0.0000000001"']) {
   test(`duplicate decoded currency keys cannot hide a higher price: ${duplicate}`, () => {
-    const bytes = Buffer.from(body('AmazonEC2').toString().replace('"USD":"0.3636000000"', duplicate));
+    const bytes = Buffer.from(body('AmazonEC2').toString().replace('"USD":"0.3468000000"', duplicate));
     assert.throws(() => read('AmazonEC2', fixtures.AmazonEC2, { body: bytes }), /price/i);
   });
 }
 test('braces, commas and escaped quotes inside a description are ordinary string content', () => {
   const doc = structuredClone(fixtures.AmazonEC2);
   firstDimension(doc).description = 'A string: {"USD":"one","USD":"two"}, [not keys]';
-  assert.equal(read('AmazonEC2', doc).rates.compute.usdNumerator, '3636000000');
+  assert.equal(read('AmazonEC2', doc).rates.compute.usdNumerator, '3468000000');
 });
 test('invalid UTF-8 cannot silently change catalogue text', () => {
   const doc = structuredClone(fixtures.AmazonEC2); firstDimension(doc).description = 'invalid-byte-marker';
@@ -181,7 +181,7 @@ test('acquisition fixes the official URL, refuses redirects and retains original
 
 test('the official octet-stream content type still requires a valid regional JSON catalogue', async () => {
   const t = transport({ fetch: async () => new Response(body('AmazonEC2'), { headers: { 'content-type': 'application/octet-stream' } }) });
-  assert.equal((await acquire(t.options)).rates.compute.usdNumerator, '3636000000');
+  assert.equal((await acquire(t.options)).rates.compute.usdNumerator, '3468000000');
   const bad = transport({ fetch: async () => new Response('<html>', { headers: { 'content-type': 'application/octet-stream' } }) });
   await assert.rejects(acquire(bad.options), /price/i);
   assert.equal(bad.retained.length, 0);
@@ -195,8 +195,15 @@ test('decoded gzip bytes use the decoded size rather than the compressed content
   const t = transport({ fetch: async () => new Response(body('AmazonEC2'), { headers: {
     'content-type': 'application/json', 'content-encoding': 'gzip', 'content-length': '123',
   } }) });
-  assert.equal((await acquire(t.options)).rates.compute.usdNumerator, '3636000000');
+  assert.equal((await acquire(t.options)).rates.compute.usdNumerator, '3468000000');
 });
+test('the measured Stockholm response length fits while decoded price checks remain required', async () => {
+  const t = transport({ fetch: async () => new Response(body('AmazonEC2'), { headers: {
+    'content-type': 'application/json', 'content-encoding': 'gzip', 'content-length': '270696312',
+  } }) });
+  assert.equal((await acquire(t.options)).rates.compute.usdNumerator, '3468000000');
+});
+
 for (const [field, value] of [['url', 'https://example.com/catalogue.json'], ['redirected', true]]) {
   test(`an unexpected response ${field} refuses even with valid JSON bytes`, async () => {
     const response = new Response(body('AmazonEC2'), { headers: { 'content-type': 'application/json' } });
@@ -211,7 +218,7 @@ for (const [label, response] of [
   ['redirect response', () => new Response('{}', { status: 302 })],
   ['HTML response', () => new Response('<html>', { headers: { 'content-type': 'text/html' } })],
   ['JSON bytes with unsupported content type', () => new Response(body('AmazonEC2'), { headers: { 'content-type': 'text/plain' } })],
-  ['oversized declared response', () => new Response('{}', { headers: { 'content-type': 'application/json', 'content-length': String(256 * 1024 * 1024 + 1) } })],
+  ['oversized declared response', () => new Response('{}', { headers: { 'content-type': 'application/json', 'content-length': String(320 * 1024 * 1024 + 1) } })],
   ['truncated response', () => new Response(body('AmazonEC2'), { headers: { 'content-type': 'application/json', 'content-length': '9999999' } })],
 ]) test(`${label} cancels the owned body and retains no evidence`, async () => {
   const r = response(), t = transport({ fetch: async () => r });
@@ -290,8 +297,8 @@ for (const mode of ['idle-process', 'rejected-cancellation']) test(`${mode} exit
 });
 
 for (const [label, mutate] of [
-  ['overlapping tiers', d => { const sku = Object.keys(d.products).find(s => d.products[s].attributes.usagetype === 'EUS2-Lambda-GB-Second-ARM'); const term = Object.values(d.terms.OnDemand[sku])[0]; Object.values(term.priceDimensions)[1].beginRange = '1'; }],
-  ['gap between tiers', d => { const sku = Object.keys(d.products).find(s => d.products[s].attributes.usagetype === 'EUS2-Lambda-GB-Second-ARM'); const term = Object.values(d.terms.OnDemand[sku])[0]; Object.values(term.priceDimensions)[1].beginRange = '7500000001'; }],
+  ['overlapping tiers', d => { const sku = Object.keys(d.products).find(s => d.products[s].attributes.usagetype === 'EUN1-Lambda-GB-Second-ARM'); const term = Object.values(d.terms.OnDemand[sku])[0]; Object.values(term.priceDimensions)[1].beginRange = '1'; }],
+  ['gap between tiers', d => { const sku = Object.keys(d.products).find(s => d.products[s].attributes.usagetype === 'EUN1-Lambda-GB-Second-ARM'); const term = Object.values(d.terms.OnDemand[sku])[0]; Object.values(term.priceDimensions)[1].beginRange = '7500000001'; }],
 ]) test(`${label} refuses the whole catalogue`, () => {
   const d = structuredClone(fixtures.AWSLambda); mutate(d);
   assert.throws(() => read('AWSLambda', d), /price/i);
@@ -301,11 +308,11 @@ test('an undeclared oversized chunk is refused before copying and cancels its re
   let cancelled = 0, released = 0, copied = false;
   const original = Buffer.from;
   const copy = mock.method(Buffer, 'from', (input, ...args) => {
-    if (input instanceof Uint8Array && input.byteLength > 256 * 1024 * 1024) { copied = true; throw Error('oversized copy'); }
+    if (input instanceof Uint8Array && input.byteLength > 320 * 1024 * 1024) { copied = true; throw Error('oversized copy'); }
     return original(input, ...args);
   });
   const t = transport({ fetch: async () => ({ status: 200, headers: new Headers({ 'content-type': 'application/json' }), body: { getReader: () => ({
-    read: async () => ({ done: false, value: Buffer.allocUnsafe(256 * 1024 * 1024 + 1) }),
+    read: async () => ({ done: false, value: Buffer.allocUnsafe(320 * 1024 * 1024 + 1) }),
     cancel: async () => { cancelled++; }, releaseLock: () => { released++; },
   }) } }) });
   try {
@@ -328,7 +335,7 @@ test('the exported reader refuses oversized bytes before decoding them', () => {
   let decoded = false;
   const probe = mock.method(TextDecoder.prototype, 'decode', () => { decoded = true; throw Error('unexpected decode'); });
   try {
-    assert.throws(() => read('AmazonEC2', fixtures.AmazonEC2, { body: Buffer.allocUnsafe(256 * 1024 * 1024 + 1) }), /price/i);
+    assert.throws(() => read('AmazonEC2', fixtures.AmazonEC2, { body: Buffer.allocUnsafe(320 * 1024 * 1024 + 1) }), /price/i);
     assert.equal(decoded, false);
   } finally { probe.mock.restore(); }
 });

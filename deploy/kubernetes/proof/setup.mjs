@@ -14,7 +14,9 @@ export function renderSetup({ account, region, repository, oidcProviderArn, imag
   if (oidcProviderArn !== null && oidcProviderArn !== `arn:aws:iam::${policy.account}:oidc-provider/token.actions.githubusercontent.com`) throw new Error('Foreign OIDC identity refused');
   if (!image || !/^ami-[0-9a-f]{17}$/.test(image.ImageId) || image.OwnerId !== policy.officialImageOwner
     || image.Architecture !== 'arm64' || image.State !== 'available' || image.Public !== true
-    || image.RootDeviceType !== 'ebs' || image.VirtualizationType !== 'hvm') throw new Error('Unverified official ARM image');
+    || image.RootDeviceType !== 'ebs' || image.VirtualizationType !== 'hvm'
+    || typeof image.Name !== 'string' || !/^al2023-ami-2023\.\d+\.\d{8}\.\d+-kernel-\d+\.\d+-arm64$/.test(image.Name)
+    || image.RootDeviceName !== '/dev/xvda') throw new Error('Unverified official ARM image');
   if (typeof s3PrefixListId !== 'string' || !/^pl-[0-9a-f]{8,17}$/.test(s3PrefixListId)) throw new Error('Invalid S3 prefix identity');
   const subject = `repo:${repository.fullName}:environment:${policy.environment}`;
   const substitutions = {

@@ -31,8 +31,8 @@ function canonical(value) {
 const digest = value => createHash('sha256').update(canonical(value)).digest('hex');
 function checkedScope(scope) {
   keys(scope, ['account', 'region', 'stackId']);
-  check(scope.account === '462991287391' && scope.region === 'eu-south-2' && typeof scope.stackId === 'string'
-    && /^arn:aws:cloudformation:eu-south-2:462991287391:stack\/d570[-a-z0-9]*\/[a-f0-9-]{36}$/.test(scope.stackId));
+  check(scope.account === '462991287391' && scope.region === 'eu-north-1' && typeof scope.stackId === 'string'
+    && /^arn:aws:cloudformation:eu-north-1:462991287391:stack\/d570[-a-z0-9]*\/[a-f0-9-]{36}$/.test(scope.stackId));
 }
 function opening(value) {
   keys(value, ['baselineMicroUsd', 'overheadMicroUsd', 'digest']);

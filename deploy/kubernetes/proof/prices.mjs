@@ -1,23 +1,23 @@
 import { createHash } from 'node:crypto';
 
-const region = 'eu-south-2', maxBytes = 256 * 1024 * 1024;
+const region = 'eu-north-1', maxBytes = 320 * 1024 * 1024;
 const definitions = {
   AmazonEC2: {
-    compute: ['Hrs', { usagetype: 'EUS2-BoxUsage:m7g.2xlarge', instanceType: 'm7g.2xlarge', tenancy: 'Shared', operatingSystem: 'Linux', preInstalledSw: 'NA', capacitystatus: 'Used', operation: 'RunInstances' }],
-    disk: ['GB-Mo', { usagetype: 'EUS2-EBS:VolumeUsage.gp3', volumeApiName: 'gp3', operation: '' }],
+    compute: ['Hrs', { usagetype: 'EUN1-BoxUsage:m7g.2xlarge', instanceType: 'm7g.2xlarge', tenancy: 'Shared', operatingSystem: 'Linux', preInstalledSw: 'NA', capacitystatus: 'Used', operation: 'RunInstances' }],
+    disk: ['GB-Mo', { usagetype: 'EUN1-EBS:VolumeUsage.gp3', volumeApiName: 'gp3', operation: '' }],
   },
   AWSLambda: {
-    lambdaDuration: ['Lambda-GB-Second', { usagetype: 'EUS2-Lambda-GB-Second-ARM', group: 'AWS-Lambda-Duration-ARM' }],
-    lambdaRequests: ['Requests', { usagetype: 'EUS2-Request-ARM', group: 'AWS-Lambda-Requests-ARM' }],
+    lambdaDuration: ['Lambda-GB-Second', { usagetype: 'EUN1-Lambda-GB-Second-ARM', group: 'AWS-Lambda-Duration-ARM' }],
+    lambdaRequests: ['Requests', { usagetype: 'EUN1-Request-ARM', group: 'AWS-Lambda-Requests-ARM' }],
   },
   AmazonS3: {
-    storage: ['GB-Mo', { usagetype: 'EUS2-TimedStorage-ByteHrs', storageClass: 'General Purpose', volumeType: 'Standard' }],
-    put: ['Requests', { usagetype: 'EUS2-Requests-Tier1', group: 'S3-API-Tier1', operation: '' }],
-    get: ['Requests', { usagetype: 'EUS2-Requests-Tier2', group: 'S3-API-Tier2', operation: '' }],
+    storage: ['GB-Mo', { usagetype: 'EUN1-TimedStorage-ByteHrs', storageClass: 'General Purpose', volumeType: 'Standard' }],
+    put: ['Requests', { usagetype: 'EUN1-Requests-Tier1', group: 'S3-API-Tier1', operation: '' }],
+    get: ['Requests', { usagetype: 'EUN1-Requests-Tier2', group: 'S3-API-Tier2', operation: '' }],
   },
   AmazonCloudWatch: {
-    logIngest: ['GB', { usagetype: 'EUS2-DataProcessing-Bytes', operation: 'PutLogEvents' }],
-    logStorage: ['GB-Mo', { usagetype: 'EUS2-TimedStorage-ByteHrs', operation: '' }],
+    logIngest: ['GB', { usagetype: 'EUN1-DataProcessing-Bytes', operation: 'PutLogEvents' }],
+    logStorage: ['GB-Mo', { usagetype: 'EUN1-TimedStorage-ByteHrs', operation: '' }],
   },
 };
 const check = condition => { if (!condition) throw new Error('D570 price evidence refused'); };

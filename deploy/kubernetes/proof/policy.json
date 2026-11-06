@@ -2,7 +2,7 @@
   "schema": "d570-setup-v1",
   "account": "462991287391",
   "forbiddenAccount": "949687825720",
-  "region": "eu-south-2",
+  "region": "eu-north-1",
   "repository": "waitron-io/waitron-cloud",
   "environment": "kubernetes-proof-staging",
   "accessExpiry": "2027-02-28T23:59:00Z",

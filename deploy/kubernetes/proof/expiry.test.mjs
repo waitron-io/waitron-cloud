@@ -6,7 +6,7 @@ const module = await import('./expiry.mjs').catch(error => {
   return {};
 });
 const now = '2026-11-05T20:00:00.000Z';
-const stackId = 'arn:aws:cloudformation:eu-south-2:462991287391:stack/d570/00000000-0000-4000-8000-000000000000';
+const stackId = 'arn:aws:cloudformation:eu-north-1:462991287391:stack/d570/00000000-0000-4000-8000-000000000000';
 const run = '11111111-1111-4111-8111-111111111111';
 const tags = (extra = {}) => Object.entries({ Proof: 'D570', Stack: stackId, Run: run, ExpiresAt: '2026-11-05T19:59:59Z', ...extra }).map(([Key, Value]) => ({ Key, Value }));
 const origin = '2026-11-05T19:00:00Z';
@@ -39,7 +39,7 @@ function fixture({ instances = [], volumes = [], fail, pages, volumePages, respo
       throw new Error(`Unexpected ${service}.${operation}`);
     },
   };
-  return { calls, options: { aws, account: '462991287391', region: 'eu-south-2', stackId, bucket: 'd570-synthetic', accessExpiry: '2027-02-28T23:59:00Z', now: () => Date.parse(now) } };
+  return { calls, options: { aws, account: '462991287391', region: 'eu-north-1', stackId, bucket: 'd570-synthetic', accessExpiry: '2027-02-28T23:59:00Z', now: () => Date.parse(now) } };
 }
 async function sweep(options) {
   assert.equal(typeof module.sweepExpired, 'function', 'bounded expiry sweeper is missing');
@@ -119,7 +119,7 @@ test('malformed owned identity or run ownership withholds healthy sweep and perf
 test('wrong account, region, stack or clock cannot make any AWS call', async () => {
   for (const override of [
     { account: '949687825720' }, { region: 'eu-west-1' }, { stackId: stackId.replace('462991287391', '949687825720') },
-    { stackId: stackId.replace('eu-south-2', 'eu-west-1') }, { stackId: '' }, { now: () => NaN },
+    { stackId: stackId.replace('eu-north-1', 'eu-west-1') }, { stackId: '' }, { now: () => NaN },
     { bucket: '' }, { now: () => 0 }, { now: () => -1 }, { now: () => 1.5 }, { now: () => 9e15 },
   ]) {
     const f = fixture({ instances: [instance()] });

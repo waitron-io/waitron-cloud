@@ -7,7 +7,7 @@ template. Both `node deploy/kubernetes/proof/setup.mjs up` and `down` refuse
 execution. Machine launches have an explicit deny and the sweep rule is disabled.
 
 The owner authorised D570's setup build for staging account `462991287391`, region
-`eu-south-2`, one on-demand ARM `m7g.2xlarge`, with an all-in US$10 monthly cap and
+`eu-north-1`, one on-demand ARM `m7g.2xlarge`, with an all-in US$10 monthly cap and
 an initial US$0 baseline. Temporary access expires at `2027-02-28T23:59:00Z`.
 Weekly retention was approved through that expiry. Production account
 `949687825720` remains forbidden. These approval values in `policy.json` are inputs
@@ -205,10 +205,10 @@ The owned timer keeps the process alive until the operation settles. Rejected
 cancellation and late responses cannot escape the caller's error handling.
 Synchronous JSON processing cannot be interrupted, but elapsed-time readback
 refuses evidence if that work exceeds the deadline.
-The decoded body is limited to 256 MiB. EC2's Spain catalogue was about 251 MiB
-on 6 November, so a future larger catalogue will refuse until reviewed.
+The decoded body is limited to 320 MiB. Stockholm's EC2 catalogue was
+270,696,312 bytes on 6 November. Larger bodies refuse until reviewed.
 
-The reader requires the fixed Spain products, including ARM Lambda matching the
+The reader requires the fixed Stockholm products, including ARM Lambda matching the
 template, unrestricted paid USD terms,
 the expected units and complete price tiers. It retains the highest tier rate as
 an exact fraction, avoiding a floating-point rounding discount. It excludes
