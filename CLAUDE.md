@@ -22,9 +22,11 @@ it. "Nothing enforces this" means only people reading the change will catch a mi
 1. **The repository is public.** Anyone can read a commit at once, and it stays in Git history.
    GitHub's secret scanning and push protection are on (owner, 2026-11-06), but they recognise known
    secret formats only, so a secret in any other shape goes through.
-2. **`main` protection is thin.** A ruleset requires a pull request and CI's `summary` job, and
-   refuses force pushes and deletion (owner, 2026-11-06). `summary` covers only the CI workflow, and
-   an administrator can bypass the ruleset, so reading every job yourself is still the real gate.
+2. **`main` protection is thin.** A ruleset requires a pull request and a check named `summary`, and
+   refuses force pushes and deletion (owner, 2026-11-06). Four workflows have a job of that name, and
+   #1036 stayed blocked until the fourth passed, but `summary` says nothing about a workflow that did
+   not run, and an administrator can bypass the ruleset, so reading every job yourself is still the
+   real gate.
 3. **A provider call can spend money or reach a real person.** See the safety limits.
 4. **A migration that has run cannot be changed.** See Migrations.
 5. **This code decides who can reach a venue's data and who can recover it.** Losing a key loses the
