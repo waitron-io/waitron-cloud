@@ -11,6 +11,7 @@
     "forward:collect": "node src/forward-report-cli.ts"
   },
   "dependencies": {
+    "@aws-sdk/client-route-53": "3.1163.0",
     "@waitron-cloud/registration": "workspace:*",
     "acme-client": "5.4.0",
     "node-forge": "1.4.0",

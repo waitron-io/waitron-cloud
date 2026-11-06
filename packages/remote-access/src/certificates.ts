@@ -21,7 +21,7 @@ export async function verifyDelegation(custom:string,assigned:string,resolve:typ
  try{for(const record of dnsInstructions(custom,assigned)){const values=await resolve(record.name);if(values.length!==1||values[0]!.replace(/\.$/,'').toLowerCase()!==record.value)throw Error();}}
  catch{throw new Error('dns_not_verified');}
 }
-export interface DnsChallengeProvider {present:(name:string,value:string)=>Promise<void>;remove:(name:string,value:string)=>Promise<void>}
+export interface DnsChallengeProvider {present:(name:string,value:string,signal?:AbortSignal)=>Promise<void>;remove:(name:string,value:string,signal?:AbortSignal)=>Promise<void>}
 export async function issueCertificate(options:{directoryUrl:string;accountKey:Buffer;email:string;hostname:string;csr:string;dnsName:string;dns:DnsChallengeProvider;signal?:AbortSignal}):Promise<string>{
  options.signal?.throwIfAborted();
  validateCsr(options.csr,options.hostname);
@@ -31,7 +31,7 @@ export async function issueCertificate(options:{directoryUrl:string;accountKey:B
  const certificate=await client.auto({csr:options.csr,email:options.email,termsOfServiceAgreed:true,challengePriority:['dns-01'],
   // The ACME server performs DNS validation. Local Pebble uses its isolated resolver.
   skipChallengeVerification:true,
-  challengeCreateFn:async(authz,challenge,value)=>{options.signal?.throwIfAborted();if(authz.identifier.value!==options.hostname||challenge.type!=='dns-01')throw new Error('unexpected_challenge');await options.dns.present(options.dnsName,value);options.signal?.throwIfAborted();},
+  challengeCreateFn:async(authz,challenge,value)=>{options.signal?.throwIfAborted();if(authz.identifier.value!==options.hostname||challenge.type!=='dns-01')throw new Error('unexpected_challenge');await options.dns.present(options.dnsName,value,options.signal);options.signal?.throwIfAborted();},
   challengeRemoveFn:async(authz,challenge,value)=>{if(authz.identifier.value!==options.hostname||challenge.type!=='dns-01')throw new Error('unexpected_challenge');await options.dns.remove(options.dnsName,value);options.signal?.throwIfAborted();},
  });
  options.signal?.throwIfAborted();return certificate;

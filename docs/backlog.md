@@ -1972,8 +1972,8 @@ implementation or production evidence.
   command and deadline stays unchanged; production color handling is unchanged.
   Local PostgreSQL suites are unavailable while Docker is down until 3 November;
   GitHub CI qualifies the original database-backed journeys.
-  The parser's current-lock inventory check still pins 215 package/snapshot
-  records and the original importer counts. A new dependency record needs an
+  The parser's current-lock inventory check retains independently reviewed literal
+  package, snapshot and importer counts. A new dependency record needs an
   explicitly reviewed inventory update. The disposable
   [dependency-only control #164](https://github.com/waitron-io/waitron-cloud/pull/164)
   replaces the portal's resolved axe-core version with unchanged inventory counts
@@ -4469,6 +4469,18 @@ review and owner gates. This audit does not enable services or change policy.
 ## Remote hostname save qualification
 
 **Open.** Qualify live DNS and certificate issuance, browser integration and deployment.
+The Route 53 challenge adapter now plugs into the existing reconciler and staff
+exchange. It writes only challenge TXT records below its configured suffix, waits
+for propagation and deletes the exact issued value. Native checks exercise the
+real AWS client against a local HTTP boundary, including scope refusal, pending
+propagation, provider refusal and cleanup after a newer challenge. Production
+installation refusal remains in place. The single-suffix trial has completed
+staging and real issuance, trusted browser password sign-in from outside the home
+network, and automatic app and tunnel restart. Reboot, renewal, revocation,
+offline sales and connected-machine isolation still need joint qualification.
+Cross-suffix moves also need qualification here: the retained staff hostname and
+the destination-derived challenge name currently differ. Keep that production
+renewal and routing gate open; the single-suffix test does not discharge it.
 Native save and read-back checks pass; permission and retry rules remain in force.
 See [the remaining checks](backlog/remote-access-http.md#remote-hostname-save-qualification).
 

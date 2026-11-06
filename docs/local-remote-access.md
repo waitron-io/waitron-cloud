@@ -204,6 +204,37 @@ default object with async `present(name, value)` and `remove(name, value)` metho
 paths must be absolute. A missing route or certificate mapping fails only that target;
 the worker does not infer a path or reuse another cell's key.
 
+For a Route 53 zone, set `acme.dnsModule` to the absolute path of
+`packages/remote-access/src/route53-dns-env.ts`. Supply `CLOUD_DNS_ZONE_ID` and
+`CLOUD_DNS_SUFFIX` to the worker, along with the AWS SDK's normal credentials.
+For the test installation, these are zone `Z01032422MAQ3V1X559WP` and suffix
+`test.waitron.io`. Keep credentials in a private environment file on the server.
+Grant only `route53:ChangeResourceRecordSets` for TXT records matching
+`_acme-challenge.*.test.waitron.io` in that zone, plus `route53:GetChange`.
+The adapter never lists zones or changes address records. Publication, including
+propagation and AWS retries, has a 75-second budget inside the worker's existing
+120-second claim. Cleanup has a separate ten-second request budget and does not
+wait for deletion to propagate. This leaves time for ACME instead of spending a
+second propagation window before publishing the certificate. A hung request is
+aborted; a refused propagation read fails immediately. Shutdown interrupts DNS
+publication, while cleanup still gets its bounded attempt.
+Cleanup specifies the exact TXT value, protecting a different newer value. It
+cannot distinguish overlapping attempts with the same value or prevent a late
+write. A cleanup failure prints `remote.dns_cleanup_failed` without the name or
+value; issuance can still succeed because the ACME library suppresses cleanup
+errors. A lost reply leaves cleanup uncertain, and a later issue replaces that TXT.
+
+Use Let's Encrypt's staging directory first, then its production directory once
+issuance works. This changes the DNS provider only: the existing CSR checks,
+reconciler and staff exchange still decide who can receive a certificate, and the
+staff exchange still refuses production installations. Each box keeps its own key.
+The trial's wildcard address points at one gateway. A move retains the database's
+existing hostname, but certificate authorization currently derives its challenge
+name from the destination cell's suffix. A cross-suffix move can therefore write
+the wrong challenge or be refused by this adapter. That renewal path and routing
+the old hostname remain unqualified before production. The single-suffix trial
+does not exercise that move.
+
 Run one scheduling and work pass, inspect redacted status, or leave the worker running:
 
 ```sh
