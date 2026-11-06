@@ -165,8 +165,14 @@ export function exportAggregate(privateResult, originals) {
       closed(options.originalInventory, ['days', 'busiest']);
       closed(options.cadence, ['mode', 'factor']);
       closed(options.stream, ['startupSeconds', 'idleSeconds', 'windowSeconds']);
+      requireThat(finite(options.replayWindowSeconds) && options.replayWindowSeconds > 0 && options.replayWindowSeconds <= 3600
+        && Object.values(options.stream).every(value => finite(value) && value > 0)
+        && options.stream.startupSeconds <= 300 && options.stream.idleSeconds <= 3600 && options.stream.windowSeconds <= 7200
+        && options.stream.startupSeconds + options.stream.idleSeconds + options.replayWindowSeconds < options.stream.windowSeconds);
       const admitted = validateReplayAdmission(replay, options);
       const accounting = summarizeStreamAccounting(stream, { ...options.stream, expectedSales: options.expected.busiest });
+      requireThat(receipt.window.elapsedSeconds >= accounting.storage.windowSeconds
+        && receipt.window.elapsedSeconds >= stream.phases.reduce((total, phase) => total + phase.elapsedSeconds, 0) + stream.retainedStorage.windowSeconds);
       for (const [scope, record] of [['requests', stream.requests], ['restore', stream.requests],
         ['administration', stream.administration], ['storage', stream.storage]]) requireThat(isDeepStrictEqual(source(scope), record));
       const values = { 'orders-per-day': [admitted.replay.counts.successful, 'count'],

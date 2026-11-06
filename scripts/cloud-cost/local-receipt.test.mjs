@@ -104,6 +104,16 @@ test('new local export binds every measured value to its original replay and str
   assert.throws(() => exportAggregate(receipt, source), { message: 'Invalid cloud cost evidence' });
   const changedCadence = structuredClone(receipt); changedCadence.cadence.factor++;
   assert.throws(() => exportAggregate(changedCadence, originals), { message: 'Invalid cloud cost evidence' });
+  for (const change of [options => { options.replayWindowSeconds = Infinity; },
+    options => { options.stream.startupSeconds = -1; }, options => { options.stream.idleSeconds = 3601; },
+    options => { options.stream.windowSeconds = 8000; }, options => { options.replayWindowSeconds = 59; }]) {
+    const source = structuredClone(originals); change(source.measurements.options);
+    assert.throws(() => exportAggregate(receipt, source), { message: 'Invalid cloud cost evidence' });
+  }
+  const shortWindow = structuredClone(receipt);
+  shortWindow.window.endedAt = '2026-10-21T00:00:02.000Z'; shortWindow.window.elapsedSeconds = 2;
+  for (const row of shortWindow.inputs.filter(row => row.status === 'measured')) row.observedAt = shortWindow.window.endedAt;
+  assert.throws(() => exportAggregate(shortWindow, originals), { message: 'Invalid cloud cost evidence' });
 });
 
 // Dropping either meter or collapsing storage uncertainty changes these hand-derived quantities.
