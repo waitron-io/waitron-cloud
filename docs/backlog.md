@@ -430,7 +430,7 @@ scripts/cloud-cost/archive-storage-receipt.test.mjs` and the
 `generatedArchiveStorage` conformance case for the producer boundaries.
 The saved-failure
 replay classifies three recorded interruptions as nonblocking and two older
-records as unknown; it proves no complete historical run. These partial changes
+records as unknown; it proves no complete historical run. These results
 do not establish every historical cause or relax functional admission.
 
 ## Cloud backup box identity (D451)
