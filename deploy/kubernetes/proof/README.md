@@ -34,12 +34,23 @@ so an already issued session cannot extend that deadline. Its intended launch
 permissions remain denied pending the missing safety gates;
 unit checks and CloudFormation validation do not qualify IAM behavior on AWS.
 
-The sweep selects `Proof=D570` and the exact CloudFormation stack ARN. It checks
-the entire bounded inventory before requesting termination or deletion. A valid
-UUIDv4 `Run` tag is required; ambiguous or missing ownership stops the sweep.
-Expired instances, including ones with a missing or invalid `ExpiresAt`, receive
-termination requests. Future and foreign resources are left alone. Volume deletion
-also requires available state and no attachments. Each inventory is bounded to
+The sweep selects `Proof=D570` and the exact CloudFormation stack ARN. It validates
+both bounded inventories before requesting termination or deletion. Structural
+ambiguity, such as repeated tags or invalid resource IDs, stops all mutations. A
+malformed UUIDv4 `Run` tag leaves that resource untouched and withholds healthy
+status, while independently owned resources can still be cleaned. Foreign
+resources remain untouched. Volume deletion requires a valid run tag, available
+state and no attachments.
+
+A valid future `ExpiresAt` cannot extend a resource beyond its original lifetime.
+The sweep checks it against the earlier of the approved access expiry and 135
+minutes after the original instance launch or volume creation. For an instance,
+the primary network interface's attachment time supplies the original launch;
+`LaunchTime` is only its most recent start. A restart therefore grants no extra
+time. An excessive future expiry triggers owned cleanup and withholds healthy
+status. A missing or malformed expiry grants no grace. Missing or contradictory
+service times trigger owned instance termination but do not authorize volume
+deletion; the sweep reports the error after attempting independent cleanup. Each inventory is bounded to
 20 pages of at most 100 resources, and repeated tokens or duplicate IDs fail.
 
 A successful heartbeat at `d570/health/reaper.json` records accepted termination
@@ -72,18 +83,10 @@ a live AWS termination actor. The fixture uses made-up AMI and prefix-list IDs;
 it is test input, not a discovered or qualified machine image.
 
 
-Two named expiry gates must be resolved before enabling the sweep:
-
-- **Whole-snapshot cleanup starvation:** one malformed run tag, even on a
-  terminated row or an unattached volume, currently stops all mutations. Mutation
-  failures now allow later eligible cleanup attempts, with synthetic checks for
-  the engine and rendered Lambda. Malformed-inventory isolation still needs a
-  per-resource strategy that cannot delete a foreign volume.
-- **Unbounded future expiry:** a syntactically valid future tag currently has no
-  independent lifetime bound. Prove a cap against immutable EC2 launch time,
-  the reserved 120-minute proof plus 15-minute cleanup window and the approved
-  access expiry. Define missing, malformed and contradictory time evidence for
-  instances and volumes; none may produce a false healthy result.
+The engine and rendered-Lambda checks exercise malformed-run isolation and both
+independent lifetime caps, including missing times, restart times and the exact
+expiry boundary. These are synthetic results. Actual EC2 time and ownership
+semantics and both termination actors still need the bounded live drills.
 
 Also qualify the launch statement's required network-interface resources, condition
 keys for each EC2 resource type, the regional official image owner and the account's
@@ -106,3 +109,6 @@ The template follows AWS's [conditional S3 write policy](https://docs.aws.amazon
 [Lambda runtime contract](https://docs.aws.amazon.com/lambda/latest/dg/lambda-runtimes.html)
 and [CloudWatch log ARN shape](https://docs.aws.amazon.com/AWSCloudFormation/latest/TemplateReference/aws-resource-logs-loggroup.html).
 These references informed the implementation; live qualification remains open.
+
+AWS documents the [original and most recent instance launch times](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/Stop_Start.html#find-initial-launch-time)
+and the volume's [creation timestamp](https://docs.aws.amazon.com/AWSEC2/latest/APIReference/API_Volume.html).

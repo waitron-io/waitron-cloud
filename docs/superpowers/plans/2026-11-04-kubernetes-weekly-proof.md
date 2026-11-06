@@ -52,20 +52,22 @@ deadline bootstrap and live qualification remain unbuilt or unrun. Do not apply
 this prerequisite template. Task 6 permits this independently tested setup/control
 prerequisite to finish without a full live P1 proof.
 
-**Named pre-activation gates from the prerequisite review:** a malformed `Run`
-currently stops the whole sweep; resolve this starvation without weakening
-foreign-volume ownership assertions. Mutation and termination-response failures
-now allow later eligible cleanup attempts and, if those calls finish, rethrow the
-first failure without publishing health. A stalled call can still delay later
-attempts and error reporting; real SDK request timeouts remain unqualified. Synthetic engine and rendered-Lambda checks cover this behavior;
-complete-inventory ownership validation is unchanged.
-A valid far-future `ExpiresAt` currently has no independent cap; prove immutable
-launch-time plus the reserved 135-minute window and approved access-expiry bounds,
-with explicit missing/contradictory time handling for instances and volumes.
-Do not enable the rule or lift the launch deny before these gates, live EC2
-resource/condition semantics, regional AMI ownership and Lambda quota checks pass.
-Launcher grants now each carry the absolute access expiry so existing sessions
-also stop at that boundary; actual AWS policy behavior remains unqualified.
+**Named pre-activation gates from the prerequisite review:** synthetic engine and
+rendered-Lambda checks now isolate malformed `Run` rows without deleting them or
+publishing health, while independently owned resources still receive cleanup.
+Structural ambiguity still blocks every mutation. An instance's sole primary
+interface attachment time supplies its original launch, checked against the latest
+`LaunchTime`; volume time comes from `CreateTime`. Valid future expiry is bounded
+by that origin plus 135 minutes and the approved absolute access expiry. Excessive
+expiry requests owned cleanup and withholds health. Missing/contradictory service
+times request owned instance termination, retain uncertain volumes and withhold
+health. These checks do not qualify actual EC2 field semantics or termination.
+Mutation and response failures still permit later eligible attempts, then rethrow
+without health. A stalled call can still delay later attempts; real SDK request
+timeouts remain unqualified. Do not enable the rule or lift the launch deny before
+live EC2 resource/condition/time semantics, regional AMI ownership and Lambda
+quota checks pass. Launcher grants retain the absolute access expiry so existing
+sessions also stop at that boundary; actual AWS policy behavior remains unqualified.
 
 **Files after the answer:** `deploy/kubernetes/proof/{setup.yaml,setup.mjs,setup.test.mjs,README.md,bootstrap.sh,deadline.service,deadline.timer,expiry.mjs,expiry.test.mjs,policy.json}`. `setup.yaml` is the sole owner-run CloudFormation template; the thin entry is `node deploy/kubernetes/proof/setup.mjs up` or the same entry with `down`. **Interfaces:** `up():StackOutputs`; `down():CleanupReceipt`; all runtime IDs, immutable AMI/template versions and role/network/bucket identities come automatically from stack outputs, never pasted owner IDs.
 

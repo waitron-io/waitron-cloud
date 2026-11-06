@@ -9,8 +9,9 @@ const now = '2026-11-05T20:00:00.000Z';
 const stackId = 'arn:aws:cloudformation:eu-south-2:462991287391:stack/d570/00000000-0000-4000-8000-000000000000';
 const run = '11111111-1111-4111-8111-111111111111';
 const tags = (extra = {}) => Object.entries({ Proof: 'D570', Stack: stackId, Run: run, ExpiresAt: '2026-11-05T19:59:59Z', ...extra }).map(([Key, Value]) => ({ Key, Value }));
-const instance = (extra = {}) => ({ InstanceId: 'i-0123456789abcdef0', State: { Name: 'running' }, Tags: tags(), ...extra });
-const volume = (extra = {}) => ({ VolumeId: 'vol-0123456789abcdef0', State: 'available', Attachments: [], Tags: tags(), ...extra });
+const origin = '2026-11-05T19:00:00Z';
+const instance = (extra = {}) => ({ LaunchTime: origin, NetworkInterfaces: [{ Attachment: { DeviceIndex: 0, AttachTime: origin } }], InstanceId: 'i-0123456789abcdef0', State: { Name: 'running' }, Tags: tags(), ...extra });
+const volume = (extra = {}) => ({ CreateTime: origin, VolumeId: 'vol-0123456789abcdef0', State: 'available', Attachments: [], Tags: tags(), ...extra });
 function fixture({ instances = [], volumes = [], fail, pages, volumePages, respond } = {}) {
   const calls = [];
   const aws = {
@@ -26,7 +27,7 @@ function fixture({ instances = [], volumes = [], fail, pages, volumePages, respo
       throw new Error(`Unexpected ${service}.${operation}`);
     },
   };
-  return { calls, options: { aws, account: '462991287391', region: 'eu-south-2', stackId, bucket: 'd570-synthetic', now: () => Date.parse(now) } };
+  return { calls, options: { aws, account: '462991287391', region: 'eu-south-2', stackId, bucket: 'd570-synthetic', accessExpiry: '2027-02-28T23:59:00Z', now: () => Date.parse(now) } };
 }
 async function sweep(options) {
   assert.equal(typeof module.sweepExpired, 'function', 'bounded expiry sweeper is missing');
@@ -147,10 +148,10 @@ test('pagination includes lost-response orphans and refuses repeated tokens or o
   }
 });
 
-test('a malformed volume snapshot prevents an earlier valid instance from being terminated', async () => {
+test('a malformed volume run stays untouched without starving an independently owned instance', async () => {
   const f = fixture({ instances: [instance()], volumes: [volume({ Tags: tags({ Run: 'unknown' }) })] });
   await assert.rejects(sweep(f.options), /ownership/);
-  assert.deepEqual(mutations(f), []);
+  assert.deepEqual(mutations(f), [{ service: 'ec2', operation: 'TerminateInstances', input: { InstanceIds: ['i-0123456789abcdef0'] } }]);
 });
 
 test('unconfirmed termination responses withhold health while independent volume cleanup continues', async () => {
@@ -261,4 +262,108 @@ test('a falsy cleanup rejection still withholds health after later cleanup attem
   });
   await assert.rejects(sweep(f.options), error => error === undefined);
   assert.deepEqual(mutations(f).map(c => c.operation), ['TerminateInstances', 'DeleteVolume']);
+});
+
+test('malformed run rows do not starve later owned cleanup or earn a healthy heartbeat', async () => {
+  for (const State of [{ Name: 'running' }, { Name: 'terminated' }]) {
+    const f = fixture({ instances: [instance({ State, Tags: tags({ Run: 'unknown' }) }), instance({ InstanceId: 'i-11111111111111111' })],
+      volumes: [volume({ Tags: tags({ Run: '' }) }), volume({ VolumeId: 'vol-11111111111111111' }), volume({ VolumeId: 'vol-22222222222222222', Tags: tags({ Proof: 'OTHER' }) })] });
+    await assert.rejects(sweep(f.options), /ownership/);
+    assert.deepEqual(mutations(f), [
+      { service: 'ec2', operation: 'TerminateInstances', input: { InstanceIds: ['i-11111111111111111'] } },
+      { service: 'ec2', operation: 'DeleteVolume', input: { VolumeId: 'vol-11111111111111111' } },
+    ]);
+  }
+});
+
+test('structural inventory ambiguity still stops every mutation across otherwise eligible rows', async () => {
+  for (const bad of [volume({ Tags: [...tags(), { Key: 'Stack', Value: 'other' }] }), volume({ Attachments: null }), volume({ VolumeId: 'vol-unsafe' })]) {
+    const f = fixture({ instances: [instance()], volumes: [bad] });
+    await assert.rejects(sweep(f.options), /ownership|inventory|identity/);
+    assert.deepEqual(mutations(f), []);
+  }
+});
+
+test('future expiry beyond the original 135-minute window cannot extend either resource lifetime', async () => {
+  const started = '2026-11-05T17:00:00Z';
+  const f = fixture({ instances: [instance({ LaunchTime: started, NetworkInterfaces: [{ Attachment: { DeviceIndex: 0, AttachTime: started } }], Tags: tags({ ExpiresAt: '2026-11-05T20:01:00Z' }) })],
+    volumes: [volume({ CreateTime: started, Tags: tags({ ExpiresAt: '2026-11-05T20:01:00Z' }) })] });
+  await assert.rejects(sweep(f.options), /lifetime/);
+  assert.deepEqual(mutations(f), [
+    { service: 'ec2', operation: 'TerminateInstances', input: { InstanceIds: ['i-0123456789abcdef0'] } },
+    { service: 'ec2', operation: 'DeleteVolume', input: { VolumeId: 'vol-0123456789abcdef0' } },
+  ]);
+});
+
+test('a restart cannot replace the primary interface origin with the latest LaunchTime', async () => {
+  const f = fixture({ instances: [instance({ LaunchTime: new Date('2026-11-05T19:59:00Z'),
+    NetworkInterfaces: [{ Attachment: { DeviceIndex: 1, AttachTime: new Date('2026-11-05T19:59:00Z') } }, { Attachment: { DeviceIndex: 0, AttachTime: new Date('2026-11-05T17:00:00Z') } }],
+    Tags: tags({ ExpiresAt: '2026-11-05T20:01:00Z' }) })] });
+  await assert.rejects(sweep(f.options), /lifetime/);
+  assert.deepEqual(mutations(f).map(c => c.operation), ['TerminateInstances']);
+});
+
+test('the exact original lifetime boundary survives before expiry and cleans both resources at expiry', async () => {
+  for (const atBoundary of [false, true]) {
+    const began = new Date('2026-11-05T17:45:00Z');
+    const f = fixture({ instances: [instance({ LaunchTime: began, NetworkInterfaces: [{ Attachment: { DeviceIndex: 0, AttachTime: began } }], Tags: tags({ ExpiresAt: '2026-11-05T20:00:00Z' }) })],
+      volumes: [volume({ CreateTime: began, Tags: tags({ ExpiresAt: '2026-11-05T20:00:00Z' }) })] });
+    const result = await sweep({ ...f.options, now: () => Date.parse(atBoundary ? now : '2026-11-05T19:59:59.999Z') });
+    assert.deepEqual(result.terminationRequested, atBoundary ? ['i-0123456789abcdef0'] : []);
+    assert.deepEqual(result.volumeDeletionRequested, atBoundary ? ['vol-0123456789abcdef0'] : []);
+    assert.equal(mutations(f).at(-1).operation, 'PutObject');
+  }
+});
+
+test('absolute access expiry caps a shorter lifetime and cleanup remains possible at that deadline', async () => {
+  const began = '2027-02-28T23:00:00Z';
+  for (const expiry of ['2027-02-28T23:59:00Z', '2027-02-28T23:59:00.001Z']) {
+    const f = fixture({ instances: [instance({ LaunchTime: began, NetworkInterfaces: [{ Attachment: { DeviceIndex: 0, AttachTime: began } }], Tags: tags({ ExpiresAt: expiry }) })],
+      volumes: [volume({ CreateTime: began, Tags: tags({ ExpiresAt: expiry }) })] });
+    const options = { ...f.options, now: () => Date.parse('2027-02-28T23:59:00Z') };
+    if (expiry.endsWith('.001Z')) {
+      await assert.rejects(sweep(options), /lifetime/);
+      assert.deepEqual(mutations(f).map(c => c.operation), ['TerminateInstances', 'DeleteVolume']);
+    } else {
+      const result = await sweep(options);
+      assert.equal(result.terminationRequested.length, 1);
+      assert.equal(result.volumeDeletionRequested.length, 1);
+    }
+  }
+});
+
+test('missing or contradictory instance origin triggers owned termination and withholds health', async () => {
+  for (const extra of [
+    { NetworkInterfaces: undefined }, { NetworkInterfaces: [] },
+    { NetworkInterfaces: [{ Attachment: { DeviceIndex: 1, AttachTime: origin } }] },
+    { NetworkInterfaces: [{ Attachment: { DeviceIndex: 0, AttachTime: origin } }, { Attachment: { DeviceIndex: 0, AttachTime: origin } }] },
+    { NetworkInterfaces: [{ Attachment: { DeviceIndex: 0, AttachTime: 'tomorrow' } }] },
+    { LaunchTime: undefined }, { LaunchTime: new Date(NaN) }, { LaunchTime: '2026-11-05T18:59:59Z' },
+    { LaunchTime: '2026-11-05T20:00:00.001Z' },
+    { LaunchTime: '2026-11-05T20:02:00Z', NetworkInterfaces: [{ Attachment: { DeviceIndex: 0, AttachTime: '2026-11-05T20:01:00Z' } }] },
+  ]) {
+    const f = fixture({ instances: [instance(extra)], volumes: [volume()] });
+    await assert.rejects(sweep(f.options), /origin/);
+    assert.deepEqual(mutations(f).map(c => c.operation), ['TerminateInstances', 'DeleteVolume']);
+  }
+});
+
+test('missing, future or contradictory volume time never authorizes deletion or health but siblings still clean', async () => {
+  for (const extra of [{ CreateTime: undefined }, { CreateTime: new Date(NaN) }, { CreateTime: 'tomorrow' },
+    { CreateTime: '2026-11-05T20:00:00.001Z' }, { CreateTime: '2026-11-05T19:59:59.001Z' }]) {
+    const f = fixture({ instances: [instance()], volumes: [volume(extra), volume({ VolumeId: 'vol-11111111111111111' })] });
+    await assert.rejects(sweep(f.options), /origin|lifetime/);
+    assert.deepEqual(mutations(f), [
+      { service: 'ec2', operation: 'TerminateInstances', input: { InstanceIds: ['i-0123456789abcdef0'] } },
+      { service: 'ec2', operation: 'DeleteVolume', input: { VolumeId: 'vol-11111111111111111' } },
+    ]);
+  }
+});
+
+test('missing or invalid approved access expiry refuses before making an AWS call', async () => {
+  for (const accessExpiry of [undefined, '', 'tomorrow', '2027-02-30T00:00:00Z', 1790000000000]) {
+    const f = fixture({ instances: [instance()], volumes: [volume()] });
+    await assert.rejects(sweep({ ...f.options, accessExpiry }), /scope|expiry/);
+    assert.deepEqual(f.calls, []);
+  }
 });

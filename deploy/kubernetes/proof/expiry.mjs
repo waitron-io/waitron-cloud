@@ -15,12 +15,39 @@ function ownership(resource, stackId, kind) {
   const tags = Object.fromEntries(entries);
   if (new Set(entries.map(([key]) => key)).size !== entries.length) throw new Error('Ambiguous ownership tags');
   if (tags.Proof !== 'D570' || tags.Stack !== stackId) return null;
-  if (!RUN.test(tags.Run)) throw new Error('Invalid run ownership');
   const id = resource[kind === 'instance' ? 'InstanceId' : 'VolumeId'];
   if (!(kind === 'instance' ? /^i-[0-9a-f]{17}$/ : /^vol-[0-9a-f]{17}$/).test(id)) throw new Error('Invalid resource identity');
   if (kind === 'instance' && !['pending', 'running', 'stopping', 'stopped', 'shutting-down', 'terminated'].includes(resource.State?.Name)) throw new Error('Invalid instance inventory');
   if (kind === 'volume' && (!Array.isArray(resource.Attachments) || !['creating', 'available', 'in-use', 'deleting', 'deleted', 'error'].includes(resource.State))) throw new Error('Invalid volume inventory');
-  return { id, expiry: timestamp(tags.ExpiresAt) };
+  return { id, expiry: timestamp(tags.ExpiresAt), validRun: RUN.test(tags.Run) };
+}
+
+function serviceTime(value) {
+  if (typeof value === 'string') return timestamp(value);
+  try { return Date.prototype.getTime.call(value); } catch { return NaN; }
+}
+
+function cleanupTime(resource, owned, kind, started, accessExpiry) {
+  let origin;
+  if (kind === 'instance') {
+    // LaunchTime changes on restart; the primary interface retains the original launch time.
+    const primary = Array.isArray(resource.NetworkInterfaces) ? resource.NetworkInterfaces.filter(nic =>
+      nic?.Attachment?.DeviceIndex === 0 && (nic.Attachment.NetworkCardIndex ?? 0) === 0) : [];
+    origin = primary.length === 1 ? serviceTime(primary[0].Attachment.AttachTime) : NaN;
+    const latest = serviceTime(resource.LaunchTime);
+    if (!Number.isFinite(latest) || latest < origin || latest > started) origin = NaN;
+  } else origin = serviceTime(resource.CreateTime);
+  if (!Number.isFinite(origin) || origin <= 0 || origin > started) {
+    return { due: kind === 'instance', error: new Error(`Invalid ${kind} origin: ${owned.id}`) };
+  }
+  if (owned.expiry < origin) {
+    return { due: kind === 'instance', error: new Error(`Contradictory ${kind} lifetime: ${owned.id}`) };
+  }
+  // An invalid tag grants no grace; independent service times bound even a valid future tag.
+  if (owned.expiry > Math.min(origin + 135 * 60_000, accessExpiry)) {
+    return { due: true, error: new Error(`Excessive ${kind} lifetime: ${owned.id}`) };
+  }
+  return { due: !(owned.expiry > started) };
 }
 
 async function inventory(aws, operation, stackId) {
@@ -52,20 +79,29 @@ async function inventory(aws, operation, stackId) {
 }
 
 // A heartbeat means this bounded sweep completed, not that EC2 finished cleanup.
-export async function sweepExpired({ aws, account, region, stackId, bucket, now = Date.now }) {
+export async function sweepExpired({ aws, account, region, stackId, bucket, accessExpiry, now = Date.now }) {
   if (account !== ACCOUNT || region !== REGION || typeof stackId !== 'string'
     || !/^arn:aws:cloudformation:eu-south-2:462991287391:stack\/[A-Za-z][A-Za-z0-9-]*\/[0-9a-f-]{36}$/.test(stackId)
-    || typeof bucket !== 'string' || !/^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$/.test(bucket)) throw new Error('Invalid expiry scope');
+    || typeof bucket !== 'string' || !/^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$/.test(bucket)
+    || !Number.isFinite(timestamp(accessExpiry)) || timestamp(accessExpiry) <= 0) throw new Error('Invalid expiry scope');
   const started = now();
   if (!Number.isSafeInteger(started) || started <= 0 || !Number.isFinite(new Date(started).getTime())) throw new Error('Invalid expiry clock');
   const instances = await inventory(aws, 'DescribeInstances', stackId);
   const volumes = await inventory(aws, 'DescribeVolumes', stackId);
-  // Validate the entire snapshot before the first destructive request.
+  // Structural ambiguity in either inventory blocks every destructive request.
   const ownedInstances = instances.map(resource => ({ resource, owned: ownership(resource, stackId, 'instance') }));
   const ownedVolumes = volumes.map(resource => ({ resource, owned: ownership(resource, stackId, 'volume') }));
   const terminationRequested = [], volumeDeletionRequested = [], failures = [];
+  const due = (resource, owned, kind) => {
+    if (!owned) return false;
+    if (!owned.validRun) { failures.push(new Error(`Invalid run ownership: ${owned.id}`)); return false; }
+    if (kind === 'instance' && resource.State.Name === 'terminated') return false;
+    const timing = cleanupTime(resource, owned, kind, started, timestamp(accessExpiry));
+    if (timing.error) failures.push(timing.error);
+    return timing.due;
+  };
   for (const { resource, owned } of ownedInstances) {
-    if (!owned || resource.State.Name === 'terminated' || owned.expiry > started) continue;
+    if (!due(resource, owned, 'instance')) continue;
     try {
       const result = await aws.call('ec2', 'TerminateInstances', { InstanceIds: [owned.id] });
       if (!Array.isArray(result?.TerminatingInstances) || result.TerminatingInstances.length !== 1
@@ -75,7 +111,7 @@ export async function sweepExpired({ aws, account, region, stackId, bucket, now 
     } catch (error) { failures.push(error); }
   }
   for (const { resource, owned } of ownedVolumes) {
-    if (!owned || owned.expiry > started || resource.State !== 'available' || resource.Attachments.length !== 0) continue;
+    if (!due(resource, owned, 'volume') || resource.State !== 'available' || resource.Attachments.length !== 0) continue;
     try {
       await aws.call('ec2', 'DeleteVolume', { VolumeId: owned.id });
       volumeDeletionRequested.push(owned.id);
