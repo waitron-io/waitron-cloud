@@ -443,8 +443,10 @@ test('executed planner publishes every root-only receipt-only mixed and forced-f
       renew(paths); docs(); const head = commit();
       const event = join(scratch, 'event.json'), output = join(scratch, 'output');
       writeFileSync(event, JSON.stringify({pull_request: {base: {sha: base}, head: {sha: head}}})); writeFileSync(output, '');
+      const callerEnv = {...process.env, GITHUB_EVENT_NAME: 'workflow_dispatch', CI_FULL: 'true', CI_CALLED: 'true', CI_WORKFLOW_INPUTS: '{"full":true}'};
       const result = spawnSync(process.execPath, [fileURLToPath(new URL('./ci-plan.mjs', import.meta.url))],
-        {cwd: root, encoding: 'utf8', timeout: 30_000, env: {...process.env, GITHUB_EVENT_PATH: event, GITHUB_OUTPUT: output,
+        {cwd: root, encoding: 'utf8', timeout: 30_000, env: {...callerEnv, GITHUB_EVENT_PATH: event, GITHUB_OUTPUT: output,
+          GITHUB_EVENT_NAME: 'pull_request', CI_FULL: 'false', CI_CALLED: 'false', CI_WORKFLOW_INPUTS: '{}',
           GITHUB_SHA: head, CI_FORCE_FULL: String(full)}});
       assert.equal(result.status, 0, result.stdout + result.stderr);
       const rows = readFileSync(output, 'utf8').trim().split('\n').map(line => [line.slice(0, line.indexOf('=')), line.slice(line.indexOf('=') + 1)]);
