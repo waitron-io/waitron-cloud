@@ -82,10 +82,12 @@ role, data subjects, access, location, recipients and approved cutoff. This is a
 service inventory, not a replacement field map. Minimal security retention remains a
 lawyer question in section 10; a useful log is not automatically a billing record.
 
-[A980 Q57](https://github.com/clintongormley/waitron/blob/96a1129e385447e9b9a6dc545673009953a2c551/docs/superpowers/specs/2026-10-22-a980-data-protection-design.md#9-questions-for-the-privacy-specialist)
-already asks the role for encrypted relay traffic and bug reports used to fix the
-software. Use that question and its answer for both halves; encryption alone does not
-settle the role. Do not open a duplicate question or promise those flows are exempt.
+[Adviser confirmation P8](https://github.com/clintongormley/waitron/blob/2a4443a2ba01676e51fdb119a82d224f9d1cece7/docs/compliance/2026-11-06-adviser-questions.md#for-the-privacy-specialist)
+proposes a controller role for product repair and Cloud-own security records, and
+a processor role for venue support and the replacement remote transport. A951
+retires the old relay and its Q57 question. Reuse P8 for both halves and ask once;
+legal confirmation remains open. The 6 November English list replaces the
+5 November Spanish batch. Encryption alone does not settle a role or exempt a flow.
 
 ## 3. Complete the processing agreement before offering it
 
@@ -328,7 +330,7 @@ escalate failed notice attempts without waiting for the next scheduled update. S
 guide; D104's single-owner on-call path handles failed delivery/contact attempts.
 Do not expose identifiers or payloads on the public status page. The C39 monitoring policy sets measured
 alert thresholds later. Reuse reviewed customer diagnostics before asking for logs;
-A980 O9 masking and Q57 role resolution also apply at Cloud intake and onward sharing.
+A980 O9 masking and P8 role confirmation also apply at Cloud intake and onward sharing.
 
 ## 8. Prove the boundaries before enablement
 
@@ -364,7 +366,7 @@ open. Local build authority now covers slices 1–5, without spending, deploymen
 1. Complete the Article 28 agreement and annexes for the actual entities/services. Does the instructed 90-day recovery period, with earlier verified return/delete choice, satisfy the intended contract? Resolve any mandatory retention/blocking exceptions without changing immutable fiscal ledgers.
 2. Which minimal Cloud billing evidence must remain, for what justified period? Can any support/security log or legal hold survive exit, on what authority, with what access, notice, review and final deletion? No period is assumed here.
 3. Approve the supplier authorisation/objection process and actual AWS/SES/AI entity, access-location and transfer evidence. What additional safeguards or refusal of a supplier are required? Regional storage and standard terms alone do not answer this.
-4. Confirm the proposed normal/emergency support instructions, single-on-call evidence and audit access, and the purpose-specific roles for Cloud's own account/security records. Use **A980 Q57** for relay/bug-report roles rather than duplicating it.
+4. Confirm the proposed normal/emergency support instructions, single-on-call evidence and audit access, and the purpose-specific roles for Cloud's own account/security records. Reuse **adviser confirmation P8** for replacement remote transport, product repair, venue support and Cloud-own security roles; ask once.
 5. Does any shared-backup expiry conflict with the promised deletion deadline? Agree an honest contract and measurable all-copy process before launch, including limited deletion evidence, KMS waiting periods and key dependencies.
 
 6. What concrete input-eligibility rule can uphold the no-personal-data AI instruction?

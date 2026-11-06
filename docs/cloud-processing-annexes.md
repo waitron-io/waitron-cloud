@@ -65,7 +65,9 @@ key custody or all-copy erasure.
 
 Keep payloads, raw logs, keys and personal identifiers out of public status/audit
 output. A980 O9 requires manager review and manual send for typed report text;
-reuse Q57 for the repair/relay role question. Cloud has no 72-hour incident-notice
+reuse [adviser confirmation P8](https://github.com/clintongormley/waitron/blob/2a4443a2ba01676e51fdb119a82d224f9d1cece7/docs/compliance/2026-11-06-adviser-questions.md#for-the-privacy-specialist)
+for product repair, venue support, replacement remote transport and Cloud-own
+security records. Cloud has no 72-hour incident-notice
 grace period. The draft uses D101's existing incident instruction and
 [D104 runbook](incident-response.md), without making a new legal conclusion.
 
@@ -118,7 +120,7 @@ portable export, all-copy purge and real-provider key completion remain unbuilt.
 
 All [six lawyer questions](cloud-data-processing-register.md#keep-every-legal-decision-open-until-answered)
 remain open: agreement/exit instructions; billing and exceptional holds; supplier
-authorisation/transfers; support/roles including Q57; shared copies/KMS waiting;
+authorisation/transfers; support/roles including P8 confirmation; shared copies/KMS waiting;
 and AI eligibility. Actual parties, selected order, approvers, contacts, supplier
 evidence and audit arrangements remain unfilled. Legal review must settle these
 fields and the applicable terms; this document is documentary acceptance of a
