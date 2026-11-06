@@ -1,5 +1,6 @@
 """Explicit opt-in lifecycle proof on the dedicated test host, never a CI import."""
 import json
+import pwd
 from pathlib import Path
 import shlex
 import subprocess
@@ -25,6 +26,9 @@ class GuestLifecycle(unittest.TestCase):
         # A missing VM adapter, shared disk, reachable host or uncertain cleanup fails this proof.
         prepared = self.manager('prepare-image')
         self.assertEqual(prepared.returncode, 0, prepared.stderr)
+        account = pwd.getpwnam('dt-slot-0')
+        self.assertEqual(account.pw_uid, 62000)
+        self.assertEqual(account.pw_shell, '/usr/sbin/nologin')
         with tempfile.TemporaryDirectory(prefix='disposable-runtime-') as temporary:
             key = Path(temporary) / 'key'
             generated = self.command('ssh-keygen', '-q', '-t', 'ed25519', '-N', '', '-f', str(key))

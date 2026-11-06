@@ -85,6 +85,15 @@ def image_verified():
 
 def prepare_image():
     with locked():
+        try:
+            pwd.getpwuid(62000)
+        except KeyError:
+            # systemd resolves service credentials through the account database,
+            # even when User= is numeric. This account cannot log in or own keys.
+            run('useradd', '--system', '--uid', '62000', '--gid', 'kvm',
+                '--no-create-home', '--home-dir', '/nonexistent',
+                '--shell', '/usr/sbin/nologin', 'dt-slot-0')
+        guest_account()
         if not IMAGE.exists():
             fd, temporary = tempfile.mkstemp(prefix='image-', dir=ROOT / 'base')
             os.close(fd)
@@ -103,6 +112,13 @@ def prepare_image():
                 os.unlink(temporary)
         image_verified()
         return {'image': str(IMAGE), 'sha512': IMAGE_SHA512, 'url': IMAGE_URL}
+
+
+def guest_account():
+    account = pwd.getpwuid(62000)
+    if (account.pw_name != 'dt-slot-0' or account.pw_dir != '/nonexistent' or
+            account.pw_shell != '/usr/sbin/nologin'):
+        raise ValueError('Reserved guest UID belongs to an unexpected host account')
 
 
 def table_name(resource):
@@ -202,12 +218,7 @@ def create(request):
         if active.exists() or (ROOT / 'history' / (resource + '.json')).exists():
             raise BlockingIOError('A slot is occupied or this resource ID is already retired')
         image_verified()
-        try:
-            pwd.getpwuid(62000)
-        except KeyError:
-            pass
-        else:
-            raise ValueError('Reserved guest UID belongs to an existing host account')
+        guest_account()
         if not observation(resource)['absent']:
             raise ValueError('Resource already exists without a matching active record')
         policy = network_policy(resource)
