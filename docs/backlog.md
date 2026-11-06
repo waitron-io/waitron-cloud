@@ -3165,7 +3165,15 @@ implementation or production evidence.
   four catalogues; it does not authenticate an account or reconcile billing. Complete service-page reconciliation, transfer/events/network,
   taxes, quantities, billing and all-in bound construction, setup integration and
   live S3/cleanup qualification remain open; these inputs grant no spending or
-  runnable owner setup. A new self-contained guest deadline entry binds the
+  runnable owner setup. The manual controller preflight now checks a clean exact
+  remote main, temporary staging identity, Stockholm and the current monthly
+  bill before any resource action. It preserves AWS's estimate flag and rounds
+  costs upward; unknown billing cannot become a zero baseline. Real Git fixtures
+  and isolated CLI executables check changing checkouts, stale remote main,
+  wrong scope, malformed bills and secret-free provider errors. These are
+  synthetic checks, with no authenticated AWS call. All four lifecycle commands
+  still refuse while creation, reservation, launch and cleanup remain unbuilt.
+  A new self-contained guest deadline entry binds the
   original reservation to a fixed UTC timer, a boot-relative fallback and
   shutdown on reboot. Synthetic shell checks cover exact retries without
   rearming, clock rollback, partial installation, damaged state and preserved

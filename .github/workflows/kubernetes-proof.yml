@@ -5,6 +5,8 @@ on:
       - 'deploy/kubernetes/proof/**'
       - 'scripts/kubernetes-proof-budget.mjs'
       - 'scripts/kubernetes-proof-budget.test.mjs'
+      - 'scripts/kubernetes-proof-control.mjs'
+      - 'scripts/kubernetes-proof-control.test.mjs'
       - '.github/workflows/kubernetes-proof.yml'
   push:
     branches: [main]
@@ -44,6 +46,10 @@ jobs:
           if [[ -e deploy/kubernetes/proof/prices.mjs || -e deploy/kubernetes/proof/prices.test.mjs || -e deploy/kubernetes/proof/test-fixtures/prices.json ]]; then
             [[ -f deploy/kubernetes/proof/prices.mjs && -f deploy/kubernetes/proof/test-fixtures/prices.json ]] || exit 1
             tests+=(deploy/kubernetes/proof/prices.test.mjs)
+          fi
+          if [[ -e scripts/kubernetes-proof-control.mjs || -e scripts/kubernetes-proof-control.test.mjs ]]; then
+            [[ -f scripts/kubernetes-proof-control.mjs ]] || exit 1
+            tests+=(scripts/kubernetes-proof-control.test.mjs)
           fi
           for test_file in "${tests[@]}"; do
             [[ -f "$test_file" ]] || { echo "Missing required test: $test_file"; exit 1; }

@@ -37,6 +37,13 @@ for (const [label, missing, expectedTests] of [
   ['missing price fixture', [priceFiles[2]], null],
 ]) test(`prerequisite workflow ${label}`, () => checkFiles(missing, expectedTests, priceFiles));
 
+const controlFiles = ['scripts/kubernetes-proof-control.mjs', 'scripts/kubernetes-proof-control.test.mjs'];
+for (const [label, missing, expectedTests] of [
+  ['complete manual controller', [], 6],
+  ['missing controller module', [controlFiles[0]], null],
+  ['missing controller test', [controlFiles[1]], null],
+]) test(`prerequisite workflow ${label}`, () => checkFiles(missing, expectedTests, controlFiles));
+
 function checkFiles(missing, expectedTests, extra = []) {
   const root = mkdtempSync(join(tmpdir(), 'd570-workflow-files-'));
   try {

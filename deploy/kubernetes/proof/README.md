@@ -137,6 +137,23 @@ admission stays closed, and the independent sweep starts disabled until the
 lifecycle observes its actual health. The renderer does not apply the template or
 launch a machine; the owner lifecycle and live qualification are still unfinished.
 
+Before any manual action, you need a clean Cloud `main` checkout matching both
+recorded and freshly read remote main. The new control preflight checks that
+identity before reading the temporary staging session and current account bill.
+It rechecks the checkout and UTC date around provider waits. A GitHub job,
+foreign repository, account or region, root identity, permanent IAM user, stale
+checkout or incomplete bill refuses. Billing observations round upward to whole
+millionths of a dollar and retain AWS's estimated flag; they do not establish
+reconciliation, reserve allowance or authorize a launch.
+
+The CLI adapter uses fixed service endpoints, bounded output and a 30-second
+process deadline. Cost Explorer uses its US East endpoint while the proof's
+resource region remains Stockholm. The adapter currently permits only identity
+and billing reads. The `up`, `drill`, `reconcile` and `down` entries still refuse
+without making a provider call, because creation and cleanup are unfinished.
+You do not need to sign in yet. Verify the preflight without credentials with
+`node --test scripts/kubernetes-proof-control.test.mjs`.
+
 The prerequisite workflow checks both rendered templates with the same pinned
 CloudFormation validator. Its setup tests require every retained resource
 reference to resolve and preserve the private launch and expiry configuration.
