@@ -1,0 +1,126 @@
+# Disposable test server design (D592)
+
+You currently share one test-box lock across lanes. Replace that bottleneck with several isolated, disposable test slots, then use the same machinery for Cloud's ordinary GitHub Actions work. Bring Waitron later, after a separate inventory and approval.
+
+**Status:** proposal for watcher review, 6 November 2026. This authoring task permits documentation only. You have supplied an AX102 specification, not an address or a working machine: Ryzen 9 7950X3D, 16 physical cores, 128 GB RAM, two 1.92 TB NVMe drives, Debian 13. Treat these as owner-supplied facts, not measured capacity. Do not build until the watcher approves this plan and the server arrives. The bridge and permanent host, expected about a week apart, use the same recipe.
+
+**Source status:** linked official GitHub references were freshly read on 6 November 2026. Repository receipts below are source inspection, not executed workflow or server evidence.
+
+## Proposed choices and approval gates
+
+- Use KVM/QEMU full virtual machines, or VMs, each with its own kernel, filesystem and Docker daemon. Allocate one fresh VM to one CI job or one bounded local command turn; destroy it afterwards. A container alone is insufficient isolation for hostile Docker work.
+- Run one controller on the Mac for admission, GitHub credentials, lease records and outage handling. The test box is not a dependency. A lease is a time-limited, uniquely owned reservation for a slot. Use repository-level just-in-time, or JIT, runners: GitHub registers each to accept at most one job. Deregistration does not erase its VM.
+- Choose visible failure and explicit hosted retry, rather than automatic fallback or a hosted dispatch gateway. Preserve native job identities and summaries. Do not introduce `pull_request_target`.
+- Before activation, the owner sets approval for **ALL external contributors**, and you record current settings plus an unapproved returning-contributor refusal drill. This setting has **not** been verified. Workflow approval is not proof that candidate code is harmless. See [the exact repository policy choices](https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/enabling-features-for-your-repository/managing-github-actions-settings-for-a-repository#controlling-changes-from-forks-to-workflows-in-public-repositories) and [GitHub's approval procedure](https://docs.github.com/en/actions/how-tos/manage-workflow-runs/approve-runs-from-forks).
+- The watcher reviews the plan before building, then brings the accepted public-repository risk and the ALL-contributor setting to the owner. Use the existing Mac controller and a pinned ordinary SSH host key; measure capacity and prove the activation gates before moving CI. No new subscription, provisioning or spending follows from this proposal.
+
+## Trust boundary, including what GitHub cannot promise
+
+Your off-server controller runs only a reviewed, pinned main revision. It never imports candidate scripts, restores candidate artifacts as programs, runs package lifecycle hooks or executes candidate workflow expressions. Admission reconstructs the permitted job inventory using trusted-main policy and bounded data reads of immutable candidate Git objects. Treat candidate planner output as untrusted data; disagreement with the existing selection contract refuses enrollment and keeps the hosted path.
+
+Allow only the configured Cloud numeric repository ID, workflow ID/path and reviewed workflow definition digest, event, head/tree, run ID, attempt, concrete matrix job ID/name and policy revision. Start with main pushes and explicitly approved same-repository PR heads. External PR execution requires the owner setting and per-head review gate above. Changes to workflow/control definitions stay hosted until reviewed main contains the new policy. Never authorize by actor name, a user-supplied label, webhook payload alone or candidate-provided environment variables.
+
+Verify webhook signatures, deduplicate delivery IDs and independently query GitHub's current run/attempt/jobs. Poll as well as consuming events so missing webhooks cannot leave jobs unnoticed. Reject foreign repositories, unknown jobs, superseded heads, stale attempts, replayed reservations and unauthorized reruns before minting JIT configuration. An intentional rerun needs fresh admission, job IDs and leases. Give each expected job a distinct routing label derived unambiguously from repository/run/attempt/logical job/matrix row, and bind it in the ledger to the concrete GitHub job ID and returned runner ID. Prove label syntax and expression evaluation in the canary. Observe assignment using GitHub job records; a mismatch cancels the affected runs, retires that runner and quarantines its VM. It never becomes successful evidence for the intended job.
+
+**Supported boundary:** the broker controls which requests create runners; repository registration limits which repository can schedule them; VM isolation protects the host and other slots. Repository-level JIT configuration has no documented job-ID binding. A malicious workflow in the same public repository can target any matching repository runner, including broad labels. Labels route work; they are not an authorization boundary. Comparing assignment after dispatch cannot guarantee that foreign job code has not already started. Do not describe a runner hook or a random label as a proven pre-execution security barrier.
+
+You therefore accept a specific residual risk only after review: an approved malicious workflow may steal a slot, run once, consume its resources and read or exfiltrate that guest's transient credentials and inputs before detection. Approval mistakes, compromised maintainers, hypervisor escapes and broker compromise remain risks. The broker rejects foreign-job requests, but cannot enforce exact-only GitHub scheduling. If exact-only execution is required, this repository-runner design is unsuitable; keep those jobs hosted. [GitHub warns against public self-hosted runners and describes the limited one-job JIT guarantee](https://docs.github.com/en/actions/reference/security/secure-use#hardening-for-self-hosted-runners).
+
+## Unattended operation and credentials
+
+The server runs day and night and returns unattended after a reboot. Keep its ordinary SSH host private key on disk and pin the fingerprint on the Mac. A changed fingerprint refuses connection until the watcher verifies the replacement independently; never disable host verification. Start the narrow VM manager automatically with systemd and the Mac controller with launchd. After reboot, inventory owned resources, terminate interrupted guests rather than resuming candidate processes, and reconcile current work before admitting another turn. There is no manual enrollment lifetime.
+
+Keep long-lived GitHub, package and provider credentials off the server. One narrowly installed GitHub App on the Mac serves registration, cancellation and the mode switch: repository Administration/write for JIT, Actions/write for cancellation, Variables/write for routing, and necessary read permissions. Its key and token minting stay on the Mac. [GitHub documents repository JIT registration and its Administration/write permission](https://docs.github.com/en/rest/actions/self-hosted-runners#create-configuration-for-a-just-in-time-runner-for-a-repository). No second App or test-box credential is proposed.
+
+The privileged VM manager accepts bounded create/inspect/stop/destroy operations for controller-generated resource IDs over the authenticated SSH channel. It never checks out a candidate. Each guest owns its Docker socket, disk, ports and package store; no host socket, host mount or shared writable cache is exposed. Deny guest access to management/private networks and neighboring guests over IPv4, IPv6 and DNS, while preserving each guest's own test networks. Quarantine uncertain cleanup; never prune shared state. A base image contains no candidate output or credentials.
+
+Ordinary CI keeps `contents: read`, adding package/evidence read access only where needed, with checkout credential persistence disabled. Short-lived per-job runner and dependency credentials exist only in the disposable guest and are removed with it; candidate code can still exfiltrate its own transient inputs. Local snapshots include intended uncommitted source but exclude `.git`, `.env*`, credentials and dependencies, and reject path escapes. Local dependency reads use a scoped temporary token or an authenticated Mac download adapter, never a copied workstation token. Prove the adapter with real nested installs before using it.
+
+## Local slots first, then CI supervision
+
+A lease is a time-limited reservation owned by one generation. The local-first ledger needs only lane/turn, snapshot and command digests, host/slot generation, owned VM/disk/network IDs, deadlines and cleanup state. Atomic ownership changes prevent duplicate allocation or an old turn releasing a successor's slot. Expiry requests destruction; only observed absence frees capacity. Add repository/workflow/run/attempt/job and runner IDs when the CI slices begin, rather than delaying local slots for GitHub admission.
+
+Use these proposed bounds and prove them before activation:
+
+| Stage | Bound and failure |
+| --- | --- |
+| Local admission | Within 10 seconds; busy/down returns 75 without a waiting queue. |
+| Local execution | At most 55 minutes; preserve the command's stricter deadlines and original exit status when cleanup succeeds. |
+| Guest cleanup | Stop within 30 seconds, then verify owned disk/network removal within 120 seconds total. Unknown absence quarantines that slot. |
+| CI queue while Mac controller is up | At most 15 minutes from job creation, including boot <=120 seconds and online-to-start <=60 seconds. Expiry requests cancellation of the affected run. |
+| CI execution | Preserve every existing job and child timeout. |
+| Supervision while Mac is up | Poll every 15 seconds. After 60 seconds of server health loss, stop server admission and request cancellation within 15 seconds; allow 30 seconds before force-cancel and require terminal readback within 120 seconds of detection while GitHub responds. |
+
+The controller supervises its own process through launchd and reconciles current GitHub state on restart. If the entire Mac is down, no independent cancellation service remains: queued jobs can wait up to [GitHub's 24-hour queue limit](https://docs.github.com/en/actions/reference/runners/self-hosted-runners), and the controller reconciles current attempts when the Mac returns. State this limit plainly; the lanes also run on that Mac. A GitHub API outage likewise removes the terminal-state guarantee. Server-local absolute guest deadlines still stop owned work when the Mac disappears. No standby, mirrored ledger or separate watchdog credential is required.
+
+Cancellation uses GitHub's run-ID API, not an atomic attempt-specific operation. Recheck the current attempt, discard stale cancellation intents and serialize supported reruns through the controller. A manual rerun racing a cancellation may itself be cancelled; prove and record this limit rather than claiming the read eliminates it. A server outage produces cancelled or unexecuted work, not a fabricated successful summary. Cloud has no GitHub-enforced branch protection: its driver enumerates every actual current-head job, refuses missing/cancelled/unfinished/failed required work, and retains the shared landing lock. Rehearse that actual refusal before CI cutover.
+
+Use one measured local-plus-CI capacity budget. Local lanes and CI runs receive turns round-robin, one slot per owner before extra slots. Local busy replies do not hold queue places; cap pending CI requests at 32. Unknown cleanup counts against capacity. Do not size CI or delay the first local slot to solve every future fairness case.
+
+## A mode switch the watcher and lanes can use
+
+The proposed CLI below runs on the Mac and is available to the watcher and campaign lanes, without waking the owner. These are implementation interfaces, not commands executed by this proposal. The controller writes `~/waitron-campaign-shared/test-capacity.json` atomically with mode, generation, time, reason and health; every local helper reads it before admission and prints the mode/generation. Each lane also sees changes through `control.mjs status`. A hosted-mode local call returns 75 so the lane can use its existing box/Mac fallback.
+
+1. Run `node scripts/disposable-tests/control.mjs mode hosted --reason server-unreachable`. It first stops new server admission, then sets repository variable `DISPOSABLE_TESTS_MODE=hosted` through the single App and publishes the shared mode receipt. The corresponding GitHub CLI operation is `gh variable set DISPOSABLE_TESTS_MODE --body hosted --repo waitron-io/waitron-cloud`. A failed update reports disagreement and keeps server admission closed.
+2. Run `node scripts/disposable-tests/control.mjs status` and read back both the local mode generation and GitHub variable. Missing/invalid variables select hosted in reviewed workflow code. The switch affects new jobs; it cannot relabel queued server jobs.
+3. Run `node scripts/disposable-tests/control.mjs recover --mode hosted`. It lists only affected current run/attempt/head IDs, cancels and verifies terminal state, fences old leases, then requests a fresh hosted attempt for each same candidate. It records each retry and verifies its actual hosted runner, exact checkout and ordinary summaries. Uncertain cancellation or routing stops that recovery visibly. Canary proof that fresh attempts evaluate the new mode is a precondition of enabling server CI.
+4. After repairs, prove a clean disposable local turn and CI canary, then run `node scripts/disposable-tests/control.mjs mode server --reason qualified-recovery`. Read back the new shared generation. Until both receipts agree, retain hosted work.
+
+No workflow or variable is changed in this docs-only PR. The watcher reviews the routing implementation before activation. Keep test selection, job names and evidence contracts identical across modes.
+
+## Exact job inventory and proposed placement
+
+The inventory below was inspected at `dbbc755706fc90198bd9bc753a32f0b27105bd03`. All executing jobs at that revision use `ubuntu-latest`; reusable nightly calls have no runner of their own. “Move” means eligibility after the gates, not a change in this task. Start with `typecheck`, then one package row, then other ordinary CI work. Keep sibling proof and diagnostic moves outside this plan.
+
+| Workflow and exact job IDs / matrix | Proposed placement and existing minutes | Receipt |
+| --- | --- | --- |
+| `ci.yml`: `changes`, `documentation`, `scripts`, `summary` | Stay hosted, 2 each; they keep selection/evidence visible. Existing candidate-reading planners are not privileged admission. | `ci.yml:24`, `:79`, `:96`, `:384` |
+| `ci.yml`: `root` shards 1–8, `typecheck`, `receipts`, `packages` selected matrix | Move in stages, 8 each. Keep names, eight root partitions, selected receipts and all package partitions. | `ci.yml:115`, `:181`, `:234`, `:296` |
+| `cloud-cost.yml`: `discover`, `conformance` named `cost (file, group)`, `summary` | Stay hosted, 2/8/2; matrix remains exactly `conformanceMatrix()`. | `cloud-cost.yml:22`, `:67`, `:127`; `scripts/ci-evidence.mjs:100` |
+| `venue-services-proof.yml`: `changes`, `service-receipts` legacy/venue, `summary` | Stay hosted, 2/8/2, both independent receipts. | `venue-services-proof.yml:22`, `:66`, `:137` |
+| `aws-infrastructure.yml`: `changes`, `verify` guards-1/guards-2/guards-3/suites, `summary` | Stay hosted, 2/30/2. | `aws-infrastructure.yml:23`, `:67`, `:127` |
+| `download-supervision-diagnostic.yml`: `changes`, `linux-contention`, `summary` | Stay hosted, 2/4/2. | `download-supervision-diagnostic.yml:21`, `:65`, `:116` |
+| `browser-reconnect-diagnostic.yml`: `socket-observation` application/application-one-cpu | Stay hosted, 12; preserve diagnostic workload meaning. | `browser-reconnect-diagnostic.yml:13` |
+| `password-derivation-diagnostic.yml`: `linux-observation`; `relay-counter-diagnostic.yml`: `linux-counter-rollover` | Stay hosted, 6 and 8 respectively. | First file `:11`; second `:15` |
+| `ui-release.yml`: `build`, `publish` | Stay hosted, 10/5; publishing has `packages: write`. | `ui-release.yml:14`, `:81` |
+| `kubernetes-proof.yml`: `setup-controls` | Stay hosted, 5. D570's narrow disposable EC2 full-proof path remains separate. | `kubernetes-proof.yml:17`; `2026-11-04-kubernetes-weekly-proof.md:5` |
+| `nightly.yml`: calls `standard`, `cost`, `venue`, `aws`; `summary` named `nightly-summary` | Calls inherit the placements above and retain full work/prefixes; parent summary stays hosted, 2. | `nightly.yml:21`, `:26`, `:31`, `:36`, `:41` |
+
+Workflow receipts above are under `.github/workflows/`. Current ordinary package allocation has registration 6, account-http 3, backups 7, portal 6 and remote-access 4 shards; identity plus operations share a row when both are selected; translation and ui-smoke remain individual rows. Selection can produce a smaller matrix. Do not hard-code an inferred full job count: retain discovery and the immutable selected plan (`scripts/ci-scope.mjs:152`, `scripts/ci-package-groups.mjs:3`).
+
+## Consumer audit before changing a guard
+
+These are inspected source contracts, not runtime verification. Re-read at implementation head and trace imports, scans, generated fixtures, child commands and hooks before changing gating or evidence fields. Preserve Lane H D591's independent selection/mutation assessment and every existing behavioral assertion.
+
+`rg -n 'runs-on|ubuntu-latest' scripts/ci-*.test.mjs` returns no matches at the planning revision. Those tests do not currently assert the runner label directly; their job-block, command, deadline and evidence assertions still apply. Add placement checks without replacing those behavioral checks.
+
+| Consumer | Inspected boundary to preserve |
+| --- | --- |
+| `scripts/ci-workflow.test.mjs:7`, `:29`, `:43`, `:54`, `:69`, `:133` | Workflow text, shard commands, deadlines, needs, head checkout, nightly full calls. |
+| `scripts/ci-root-shards.test.mjs:10`; `scripts/ci-reuse-workflow.test.mjs:5` | Extract real job blocks; execute extracted root commands and interpret workflow gates. Moving work into a wrapper can break these consumers. |
+| `scripts/ci-cache-location.test.mjs:8`; `scripts/ci-pnpm-setup.test.mjs:10`; `scripts/ci-nested-install-auth.test.mjs:13` | Cache step consumers across ten job families, bootstrap network budgets, four package entry points and one receipt entry point with cold nested authentication. |
+| `scripts/ci-download.test.mjs:10`; `scripts/ci-download-diagnostics.test.mjs:41` | Extract and execute workflow shell/Python; preserve browser/download budgets and diagnostic commands as well as runner placement. |
+| `scripts/ci-registration-shards.test.mjs:43`; `scripts/ci-portal-partition.test.mjs:31`; `scripts/ci-backup-partition.test.mjs:41` | File coverage, original 30-second/120-second test limits and failure propagation. |
+| `scripts/ci-workflow-plan.mjs:8`, `:15`; `scripts/ci-evidence.mjs:53`, `:159` | Native selection, exact names including skipped placeholders, complete job inventory, same run/attempt/head and expected conclusions. |
+| `scripts/ci-native-summary.mjs:12`, `:39`; `scripts/ci-native-summary.test.mjs:65`, `:78`; `scripts/ci-nightly-summary.test.mjs:17` | Prefixes, duplicate/missing jobs, publication deadline and all four nightly families. Keep ordinary `ci-summary.mjs` contracts too. |
+| `docs/ci-root-input-ownership.md:29`; `docs/ci-documentation-audit.md:58`; `docs/ci-proof-selection.md:57` | Review complete reader chains, renew root then documentation records, and retain conservative full work. See also package, lockfile, nightly and merge-evidence docs. |
+| `package.json:9`, `:44`; Git configuration | Node >=26, pnpm 9.15.0, existing commands. `git config --get core.hooksPath` returned unset; `git rev-parse --git-path hooks` resolved to `/Users/clintongormley/workspace/repos/waitron-cloud/.git/hooks`; listing showed sample hooks only. Recheck execution checkout; never bypass a hook. |
+| Read-only `~/waitron-campaign-shared/test-box-run.sh:14`, `:23`, `:29`, `:33`, `:35`; `test-box.md:16`, `:38`, `:40` | Down/busy 75, age-based single lock, unconditional release, persistent snapshot, workstation token; retain useful exit behavior without these shared-state hazards. Keep current box/Mac fallback rules until replacement qualifies. |
+
+Search of `scripts/ci-*.test.mjs` for `runs-on|ubuntu-latest|self-hosted` found no literal matches. Other guards above still consume workflow blocks and execution semantics. That search establishes neither dynamic compatibility nor an actual Actions pass. No tests ran during this documentation task.
+
+## Measure before sizing or expanding
+
+[GitHub's public standard Ubuntu reference](https://docs.github.com/en/actions/reference/runners/github-hosted-runners#standard-github-hosted-runners-for-public-repositories) lists 4 CPUs, 16 GB RAM and 14 GB SSD. Sixteen physical cores do not equal sixteen such runners. Verify delivered topology, virtualization, usable disk after the chosen layout and sustained thermals first; the two drive labels do not establish usable capacity.
+
+Proposed initial benchmark profile: one VM, 4 vCPUs, CPU quota 4 CPU-seconds/second, 16 GiB RAM and 64 GiB maximum private disk. Reserve at least four physical cores including their sibling threads, 16 GiB host RAM and 20% usable disk for management/image/cleanup headroom. Pin guests away from reserved cores, do not count SMT threads as extra physical cores, and never overcommit RAM. Admit only if combined local+CI CPU quotas, memory, maximum disk allocations, images and quarantined resources fit the measured budget. Disk and I/O pressure can reduce capacity before CPU does.
+
+Compare the exact same selected job, head/tree, commands, image/tool/dependency versions and test inventory on hosted and rented paths. Run at least three cold and three warm-cache trials at one slot, then two and three concurrent slots, including mixed local/CI work and a bulky Docker/browser workload. Warm means a fresh guest with an isolated copy of a verified dependency cache, never a reused job VM. Record wall/queue/boot/cleanup times, CPU time/throttling, peak resident memory (RSS), host available memory, I/O latency/throughput/pressure, disk high-water/free space, network bytes/download failures, test/pass/skip counts and every effective cap.
+
+Gate each increase on zero missing assertions or additional skips, no changed child deadlines/concurrency/workload, no resource collisions, no host reserve breach or out-of-memory kill, cleanup <=120 seconds and queue <=15 minutes. Proposed performance gate: median execution no slower than hosted and no trial slower than 1.25 times its comparable hosted maximum or the existing job deadline. Keep failures in the sample. Also measure the complete selected/full/nightly queue with proposed caps before broad rollout: short individual jobs do not establish sufficient throughput for all partitions. If a gate fails, retain the lower count or hosted execution; do not loosen tests to fit. Production slot count remains unknown until measured and watcher-approved.
+
+## Bridge, permanent host and rollback
+
+Create one versioned, independently runnable image/controller recipe with explicit host parameters and pinned tool/image inputs. A second clean host must reproduce it from pinned inputs without copying a configured machine, credentials, writable caches or active disks. Keep broker state off-server. Rehearse bridge-to-permanent migration as a separate script: stop bridge admission, snapshot the pending identity inventory, drain bounded active jobs or cancel exact runs and record explicit retries, verify all old guests/runners absent, enroll the new host generation and resume pending work against current GitHub state. Never migrate an active VM, lease ownership or test process. Every pending job gets a terminal result or a freshly admitted retry; unknown cleanup blocks reuse of that old host.
+
+Use the mode-switch steps above for server-off rollback. Drain bounded active turns and reconcile old run attempts before moving the bridge to the permanent host. Reproduce the pinned recipe on a clean machine, verify its new SSH fingerprint independently, then change the Mac's configured host and generation. Never copy active guests, writable caches or credentials. Keep pending identities on the Mac and account for every one with a terminal result or freshly admitted retry. Verify only owned resources are absent before retiring the old host; unknown cleanup remains quarantined.
