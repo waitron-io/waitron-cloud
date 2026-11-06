@@ -4367,30 +4367,6 @@ assertions and deadlines. See the
 [investigation and qualification limits](backlog/storage-authority-timeout.md).
 
 
-## Authenticator code format feedback (D237)
-
-### Authenticator refusal guidance
-
-Expired, consumed or superseded setup returns `setup_unavailable`; an inactive
-factor returns `factor_not_active`; passwords over 1,024 UTF-8 bytes return
-`password_too_long`. The portal explains the next step in English and Spanish,
-discards unusable setup and offers a status refresh for an inactive factor.
-Server and portal checks cover each cause, including expiry during proof checks
-and ownership refusals for stale setup from another account or session.
-Account, session, password-fingerprint,
-proof and attempt-budget refusals keep their existing acceptance rules. See the
-[authenticator guide](authenticator-app.md#call-the-api).
-
-## Clear stale connection and recovery code feedback (D249)
-
-Lane D's Litestream investigation has another observation from
-[cost run 40181699752, job 121133970845](https://github.com/waitron-io/waitron-cloud/actions/runs/40181699752/job/121133970845).
-The committed-PUT-reply shutdown check refuses at `idle` with one pending exchange
-and 20 completed exchanges; transport cleanup then reports `active-close`.
-Reproduce this refusal before attributing its cause. Keep the existing limits
-and assertions; the code-feedback fix does not resolve this investigation.
-
-
 ## Paced replay deletion recurrence (D351 qualification)
 
 [Cost run 40541558126, job 122321994540](https://github.com/waitron-io/waitron-cloud/actions/runs/40541558126/job/122321994540)
@@ -4643,18 +4619,3 @@ job 121387722438). The cause remains unknown and belongs to D530's investigation
 Keep the ownership assertion, deadlines, resource collection and refusal to claim
 cleanup after ownership loss. Qualify any repair with the genuine runtime fixture;
 a passing remote-guidance qualification does not establish a repair.
-
-## Relay control private mailbox (D578)
-
-A sibling monitoring reminder changed the shared inbox during the relay control
-test in runs 41940873278 and the earlier D75 qualification. The command test now
-uses its own loopback SMTP capture, a local server that records every message.
-Every direct, root and package command inherits that capture, and the final
-assertion requires no deliveries to any destination. The test also sends a
-competing reminder to the shared Mailpit inbox while a command runs; that
-reproduces the old comparison failure and passes with the private capture.
-Database snapshots, acknowledgements, state, authority and deadline assertions
-remain intact. Run `NODE_AUTH_TOKEN=local-fixture node scripts/test-postgres.mjs exec pnpm --dir
-packages/registration exec node --test test/relay-control-cli.test.ts` to check
-the command contract. Production delivery code and shared mail fixtures are
-unchanged; this repair does not settle other D530 failures.
