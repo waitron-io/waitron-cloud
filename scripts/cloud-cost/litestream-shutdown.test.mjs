@@ -226,9 +226,17 @@ test('after-stop output cannot pair different operations under equal request tot
   const input = incompleteLedger();input.requests[1].operation = 'put';
   assert.throws(() => stream.litestreamAfterStopOutput(input), /Invalid cloud cost Litestream audit/);
 });
-test('an interrupted list must retain its late-settlement count', () => {
-  const input = incompleteLedger();input.lateSettlements = 0;input.lateAdmissions = 1;
+test('an interrupted list must retain a late admission or settlement', () => {
+  const input = incompleteLedger();input.lateSettlements = 0;input.lateAdmissions = 0;
   assert.throws(() => stream.litestreamAfterStopOutput(input), /Invalid cloud cost Litestream audit/);
+});
+test('a list interrupted before stop retains zero late settlements after a late observer admission', () => {
+  const input = incompleteLedger();input.lateSettlements = 0;input.lateAdmissions = 1;
+  const output = stream.litestreamAfterStopOutput(input);
+  assert.deepEqual(output.afterStop, input);
+  assert.equal(output.afterStop.lateSettlements, 0);
+  assert.equal(output.afterStop.lateAdmissions, 1);
+  assert.equal(output.costAccuracy.status, 'incomplete');
 });
 
 // A dead writer cannot leave its separately hosted control request waiting for the stop timeout.
