@@ -405,6 +405,12 @@ async function startBackupStorageAttempt(options) {
       env: { PATH: process.env.PATH, HOME: root, TMPDIR: root },
       stdio: ["ignore", log.fd, log.fd],
     });
+    // A failed exec emits an error instead of a spawn event. Route that refusal
+    // through owned cleanup before attempting any readiness requests.
+    await new Promise((resolve, reject) => {
+      child.once("error", reject);
+      child.once("spawn", resolve);
+    });
     const agent = () => new Agent({ ca });
     adminClient = new S3Client({
       endpoint,

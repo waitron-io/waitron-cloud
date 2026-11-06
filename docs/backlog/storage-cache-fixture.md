@@ -538,6 +538,19 @@ The probes pause before listeners and store startup. An unexpected refusal retry
 is caught by the existing 30-second test deadline; prompt refusal is unproved.
 See [the storage qualification boundaries](storage-cache-fixture.md#concurrent-storage-extraction-and-failed-startup-cleanup-d454).
 
+Run `node --test scripts/ci-backup-storage-spawn-refusal.test.mjs` to start a
+real store, then refuse a second process's native launch by removing its binary
+or its execute permission after extraction. Both operating-system errors must
+reach the caller unchanged, with no port retry. Cleanup removes the failed
+fixture's extracted root and port claims and closes its identity listener. The
+read-only archive and the running peer's executable stay unchanged, and the peer
+must still create a bucket after each refusal. A failed native launch emits an
+asynchronous error rather than a launch event, so startup waits for either before
+issuing readiness requests. Without this handling, the caller exits before
+cleanup. This controlled reproduction does not identify the historical failures
+above. General readiness, successful concurrent startup and cleanup under every
+filesystem refusal retain their separate qualification gates.
+
 
 ## Native storage admin fallback exhaustion (D506)
 
