@@ -20,7 +20,7 @@ for (const handler of ['normal', 'delayed', 'missing'] as const) {
   if (setupDelay && (locale !== 'en' || theme !== 'light' || width !== 390)) continue;
   if (handler !== 'normal' && setupDelay) continue;
   if (handler === 'missing' && (locale !== 'en' || theme !== 'light' || width !== 390 || failure !== '503')) continue;
-  test(`${path} ${locale} ${theme} ${width} ${failure}${setupDelay ? ' with delayed clock setup' : ''}${handler === 'normal' ? '' : ` with ${handler} handler`}: retry appears only after the session check fails`, async t => {
+  test(`${path} ${locale} ${theme} ${width} ${failure}${setupDelay ? ' with delayed clock setup' : ''}${handler === 'normal' ? '' : handler === 'missing' ? ' with missing handler signal' : ' with delayed handler'}: ${handler === 'missing' ? 'missing session-handler signal fails within the outer wait' : 'retry appears only after the session check fails'}`, async t => {
     const browser = await chromium.launch({headless: true});
     try {
       const page = await browser.newPage({locale, colorScheme: theme, viewport: {width, height: 900}});
@@ -75,7 +75,7 @@ for (const handler of ['normal', 'delayed', 'missing'] as const) {
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
       if (process.env.SESSION_CHECKING_RECEIPT_DIR && failure === '503') {
         await mkdir(process.env.SESSION_CHECKING_RECEIPT_DIR, {recursive: true});
-        await page.screenshot({path: `${process.env.SESSION_CHECKING_RECEIPT_DIR}/${path.slice(1)}-${locale}-${theme}-${width}.png`, fullPage: true});
+        await page.screenshot({path: `${process.env.SESSION_CHECKING_RECEIPT_DIR}/${path.slice(1)}-${locale}-${theme}-${width}${setupDelay ? '-clock-delayed' : handler === 'delayed' ? '-delayed' : ''}.png`, fullPage: true});
       }
       if (failure === '503') await held.fulfill({status: 503, headers: {'Retry-After': '2'}, json: {error: 'temporarily_unavailable'}});
       else await held.abort('failed');

@@ -181,6 +181,19 @@ three-second observation boundary. Real recovery authority, other engines, behav
 under load and general cleanup bounds remain unqualified. One historical ordinary missing-signal
 sample exits after 3.6 seconds; its parent needs stopping at 150 seconds after the
 120-second test timeout. These samples do not establish a general cleanup limit.
+The session-check retry fixture keeps all 34 ordinary, delayed-handler and
+delayed-clock captures under separate names. Collect them with
+`SESSION_CHECKING_RECEIPT_DIR` set to a fresh directory when you run
+`pnpm --dir apps/portal exec node --test test/session-checking-retry-browser.test.ts`.
+Check the filenames independently: all 70 browser cases passed before the repair
+while only sixteen capture files survived. The sixteen ordinary names stay the
+same; delayed handlers add `-delayed`, and delayed clocks add `-clock-delayed`.
+Separate files retain each run without promising different pixels or stable image
+bytes. Every original session, protected-field, retry, cooldown, clock and deadline
+assertion remains unchanged. The two missing-signal titles name their timeout;
+the controls return before retry checks, and their four-second race does not independently pin the
+configured three-second observation boundary. These are Chromium fixtures with
+stubbed HTTP; real authentication and behavior under load remain unqualified.
 See [the diagnostic qualification and open work](backlog/retrospective-reviews.md).
 
 ## Separate-process storage extraction and failed-startup cleanup (D457)
