@@ -71,8 +71,8 @@ test('the real immutable portal graph selects six package jobs while retaining b
   }
 });
 
-test('a real mixed portal revision narrows while a new unknown reader restores every package', {timeout: 60_000}, () => {
-  const root = mkdtempSync(join(tmpdir(), 'cloud-real-portal-plan-'));
+function reviewedRevisionFixture(paths, reference, run) {
+  const root = mkdtempSync(join(tmpdir(), 'cloud-real-package-plan-'));
   const generator = resolve('scripts/ci-input-audit.mjs');
   const git = (...args) => {
     const binary = typeof args.at(-1) === 'object' && args.pop().binary;
@@ -82,19 +82,25 @@ test('a real mixed portal revision narrows while a new unknown reader restores e
   const save = () => {
     git('add', '-A');
     const inputs = git('diff', '--cached', '--name-only').trim().split('\n').filter(path => !path.startsWith('docs/'));
-    assert.ok(inputs.length && inputs.every(path => ['apps/portal/src/app.ts', 'apps/portal/src/unreviewed-reader.mjs'].includes(path)));
+    assert.ok(inputs.length && inputs.every(path => paths.includes(path)));
     execFileSync(process.execPath, [resolve('scripts/ci-root-review.mjs'), '--write-staged',
       ...inputs.flatMap(path => ['--input', path]), '--reviewer', 'CI fixture',
-      '--reference', 'Controlled portal whitespace or unresolved source reader'], {cwd: root, stdio: 'pipe'});
+      '--reference', reference], {cwd: root, stdio: 'pipe'});
     git('add', 'scripts/ci-root-review.d');
     execFileSync(process.execPath, [generator, '--write-staged'], {cwd: root, stdio: 'pipe'});
     git('add', 'scripts/ci-input-audit.json', 'scripts/ci-input-audit.d');
-    git('-c', 'user.name=CI fixture', '-c', 'user.email=ci@example.test', 'commit', '-sm', 'Portal selection fixture');
+    git('-c', 'user.name=CI fixture', '-c', 'user.email=ci@example.test', 'commit', '-sm', 'Package selection fixture');
     return git('rev-parse', 'HEAD').trim();
   };
   try {
     execFileSync('git', ['clone', '--shared', '--quiet', process.cwd(), root], {stdio: 'pipe'});
-    const base = git('rev-parse', 'HEAD').trim();
+    run({root, git, save, base: git('rev-parse', 'HEAD').trim()});
+  } finally {rmSync(root, {recursive: true, force: true});}
+}
+
+test('a real mixed portal revision narrows while a new unknown reader restores every package', {timeout: 60_000}, () =>
+  reviewedRevisionFixture(['apps/portal/src/app.ts', 'apps/portal/src/unreviewed-reader.mjs'],
+    'Controlled portal whitespace or unresolved source reader', ({root, git, save, base}) => {
     for (const path of ['apps/portal/src/app.ts', 'docs/backlog.md']) {
       const target = join(root, path);
       writeFileSync(target, readFileSync(target, 'utf8') + '\n');
@@ -113,36 +119,15 @@ test('a real mixed portal revision narrows while a new unknown reader restores e
       ['@waitron-cloud/account-http', '@waitron-cloud/backups', '@waitron-cloud/identity', '@waitron-cloud/operations',
         '@waitron-cloud/portal', '@waitron-cloud/registration', '@waitron-cloud/remote-access', '@waitron-cloud/translation', '@waitron-cloud/ui-smoke']);
     assert.match(unknown.reason, /Unresolved directory input at apps\/portal\/src\/unreviewed-reader.mjs/);
-  } finally {rmSync(root, {recursive: true, force: true});}
-});
+  }));
 
-
-test('qualifying the real UI-smoke graph retains every existing receipt suite', {timeout: 60_000}, () => {
-  const root = mkdtempSync(join(tmpdir(), 'cloud-real-ui-smoke-plan-'));
-  const git = (...args) => {
-    const binary = typeof args.at(-1) === 'object' && args.pop().binary;
-    return execFileSync('git', ['-c', 'maintenance.auto=false', ...args],
-      {cwd: root, encoding: binary ? undefined : 'utf8', maxBuffer: 64 * 1024 * 1024, stdio: ['ignore', 'pipe', 'pipe']});
-  };
-  git.readBlobs = ids => readGitBlobs(ids, input => execFileSync('git', ['cat-file', '--batch'],
-    {cwd: root, input, maxBuffer: 64 * 1024 * 1024}));
-  try {
-    execFileSync('git', ['clone', '--shared', '--quiet', process.cwd(), root], {stdio: 'pipe'});
-    const base = git('rev-parse', 'HEAD').trim();
+test('qualifying the real UI-smoke graph retains every existing receipt suite', {timeout: 60_000}, () =>
+  reviewedRevisionFixture(['packages/ui-smoke/test.mjs'], 'Controlled UI-smoke whitespace', ({root, git, save, base}) => {
     const path = 'packages/ui-smoke/test.mjs';
     writeFileSync(join(root, path), readFileSync(join(root, path), 'utf8') + '\n');
-    git('add', path);
-    execFileSync(process.execPath, [resolve('scripts/ci-root-review.mjs'), '--write-staged',
-      '--input', path, '--reviewer', 'CI fixture', '--reference', 'Controlled UI-smoke whitespace'],
-    {cwd: root, stdio: 'pipe'});
-    git('add', 'scripts/ci-root-review.d');
-    execFileSync(process.execPath, [resolve('scripts/ci-input-audit.mjs'), '--write-staged'], {cwd: root, stdio: 'pipe'});
-    git('add', 'scripts/ci-input-audit.d/docs');
-    git('-c', 'user.name=CI fixture', '-c', 'user.email=ci@example.test', 'commit', '-sm', 'UI-smoke selection fixture');
-    const sha = git('rev-parse', 'HEAD').trim(), workspace = loadWorkspace(root);
+    const sha = save(), workspace = loadWorkspace(root);
     const selected = createPlan({pull_request: {base: {sha: base}, head: {sha}}}, {sha}, workspace, git);
     assert.deepEqual(selected.packages, [{package: '@waitron-cloud/ui-smoke', shard: 1}], selected.reason);
     assert.deepEqual(selected.receipts, ['test:backup-capacity', 'test:cloud-cost',
       'test:database-recovery-receipt', 'test:local-stack', 'test:public-gateway-limits', 'test:two-venue-milestone-receipt']);
-  } finally {rmSync(root, {recursive: true, force: true});}
-});
+  }));

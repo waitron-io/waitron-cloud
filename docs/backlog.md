@@ -3873,7 +3873,8 @@ The UI-smoke package-selection check now creates a real isolated change from
 the current reviewed tree. Its exact one-package and six-receipt expectations
 no longer depend on the checkout's parent having the same reviewed readers.
 The merge of PR1034 exposed that accidental dependency when its parent still
-held an older traffic-command reader; the planner correctly kept full work.
+held an older `packages/remote-access/test/traffic-collector-store.test.ts`
+reader; the planner correctly kept full work.
 
 ## Bound verifier test failure cleanup (D530)
 
