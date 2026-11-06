@@ -13,7 +13,7 @@
       "sites": [
         {
           "reader": ".github/workflows/ci.yml",
-          "site": "root job run:171",
+          "site": "root job: execute scripts/ci-*.test.mjs",
           "kind": "command",
           "boundary": "scripts/ci-*.test.mjs, immediate scripts directory, all eight partitions",
           "role": "execution"

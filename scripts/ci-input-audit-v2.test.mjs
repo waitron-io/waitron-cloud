@@ -203,3 +203,42 @@ test('a removal refuses an independently reviewed tree outside its ancestry', ()
   commit();
   assert.throws(() => audit('docs'), /Invalid audit tombstone/);
 }));
+
+for (const fault of ['none', 'stale projection', 'invalid dependencies', 'symlink']) {
+  test(`a lock removal checks its historical manifest: ${fault}`, () => fixture(({root, git, put, commit, base}) => {
+    if (fault === 'stale projection') put(manifestPath, JSON.stringify({...manifest, license: 'MIT'}));
+    if (fault === 'invalid dependencies') put(manifestPath, JSON.stringify({...manifest, dependencies: {adapter: 42}}));
+    if (fault === 'symlink') {
+      unlinkSync(join(root, manifestPath));
+      // Parseable link bytes isolate the file-mode check from JSON validation.
+      symlinkSync(JSON.stringify(manifest), join(root, manifestPath));
+    }
+    const previousRevision = fault === 'none' ? base : commit();
+    unlinkSync(join(root, manifestPath));
+    put(recordPath('lock', manifestPath), canonical({version: 2, mode: 'lock', path: manifestPath, state: 'absent', previousRevision}));
+    const head = commit();
+    const audit = () => auditInputMode('lock', head, git, []);
+    if (fault === 'none') assert.doesNotThrow(audit);
+    else assert.throws(audit, /Invalid audit tombstone/);
+  }));
+}
+
+for (const input of ['policy', 'descriptor', 'record']) for (const kind of ['executable', 'symlink']) {
+  test(`a removal refuses a historical ${kind} ${input}`, () => fixture(({root, put, commit, audit}) => {
+    const source = 'packages/stock/src/index.mjs', record = recordPath('docs', source);
+    const path = input === 'policy' ? policy : input === 'descriptor' ? marker : record;
+    const original = readFileSync(join(root, path), 'utf8');
+    if (kind === 'executable') chmodSync(join(root, path), 0o755);
+    else {
+      unlinkSync(join(root, path));
+      // Identical blob bytes must not make a non-regular metadata entry authoritative.
+      symlinkSync(original, join(root, path));
+    }
+    const previousRevision = commit();
+    unlinkSync(join(root, path)); put(path, original);
+    unlinkSync(join(root, source));
+    put(record, canonical({version: 2, mode: 'docs', path: source, state: 'absent', previousRevision}));
+    commit();
+    assert.throws(() => audit('docs'), /Invalid audit tombstone/);
+  }));
+}
