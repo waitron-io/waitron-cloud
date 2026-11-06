@@ -17,7 +17,7 @@ const receipts = workflow.match(/^  receipts:\n([\s\S]*?)(?=^  [\w-]+:)/m)[1];
 const receiptSteps = receipts.split(/^      - /m).filter(step => /run: node scripts\/ci-run-receipts.mjs/.test(step));
 
 // Removing authentication from any test entry point must break a cold descendant install.
-test('all package test entry points are exercised', () => assert.equal(steps.length, 4));
+test('all package test entry points are exercised', () => assert.equal(steps.length, 5));
 test('the receipt test entry point is exercised', () => assert.equal(receiptSteps.length, 1));
 for (const step of [...steps, ...receiptSteps]) {
   const command = step.match(/run: (.+)/)[1];

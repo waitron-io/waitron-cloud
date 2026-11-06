@@ -320,16 +320,6 @@ polling, pending schedules and late error reports have shutdown controls;
 real-command checks cover the cases named in
 [the worker shutdown detail and remaining limits](backlog/worker-scheduling.md#worker-shutdown-during-polling-and-error-reporting-d459).
 
-## Remote-access CI budget (D463 prerequisite)
-
-Remote-access tests run in four independent jobs, while identity and operations
-retain their shared job. The final CI check requires all four remote shards and
-refuses a grouped remote suite or an incomplete allocation. A Node discovery
-check runs every current remote test filename and a future filename exactly once.
-All existing test files, assertions and deadlines remain. Current-head CI must
-still measure the jobs against the roughly four-minute target; no job limit is
-raised. D463's collector and remaining billing work stay on their separate branch.
-
 ## How to keep this file honest
 
 - Delete finished entries after checking main, the named pull requests and the code.
@@ -2721,7 +2711,7 @@ implementation or production evidence.
   Independent controls catch activity and creation-time rewrites. This test
   still does not cover activity updates delayed by sixty seconds or changes to
   absolute session expiry; those limits also existed in the original test.
-  **Nested package authentication (D530).** All four package-test entry points
+  **Nested package authentication (D530).** All five package-test entry points
   and the grouped receipt step now pass the existing read-only package token to descendant installs. A cold
   loopback-registry control reproduces the placeholder-token 401 and loads the
   installed package with each workflow binding. See the
