@@ -204,8 +204,12 @@ adds `-missing`. Separate files preserve each run without promising different
 pixels or stable image bytes. Every original behavioral assertion and deadline
 remains unchanged. The missing-signal subtest names its observation refusal;
 it returns before the pending-state assertions. Its five-second outer race does
-not independently pin the configured four-second observation boundary. These
-Chromium checks use stubbed HTTP; backend behavior remains unqualified.
+not independently pin the configured four-second observation boundary. A refused
+observation releases the held gate, so the later read checks can complete while
+the original observation still fails. The unread consent state masks deletion
+of the consent button's installation-pending condition on both parent and head;
+that separate coverage gap remains open. These Chromium checks use stubbed HTTP;
+backend behavior remains unqualified.
 See [the diagnostic qualification and open work](backlog/retrospective-reviews.md).
 
 ## Separate-process storage extraction and failed-startup cleanup (D457)

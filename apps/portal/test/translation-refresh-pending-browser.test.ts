@@ -49,8 +49,8 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
     }finally{clearTimeout(timer);release();gate=undefined;entered=undefined;}
     return;
    }
-   await waitForHandler();
    try{
+    await waitForHandler();
     assert.equal(await group.getByRole('button',{name:c.translationConsentAgree,exact:true}).isDisabled(),true);
     assert.equal(await refresh.isDisabled(),true);
     if(process.env.TRANSLATION_REFRESH_RECEIPT_DIR){await mkdir(process.env.TRANSLATION_REFRESH_RECEIPT_DIR,{recursive:true});await page.screenshot({path:`${process.env.TRANSLATION_REFRESH_RECEIPT_DIR}/${locale}-${theme}-${width}-pending${handler==='normal'?'':`-${handler}`}.png`,fullPage:true});}
