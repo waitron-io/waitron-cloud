@@ -1,5 +1,7 @@
 # A951 fixed-box Cloud tunnel implementation plan
 
+> **Parked by the owner on 6 November 2026.** D582-S reuses the existing gateway and certificate exchange; do not execute this protocol plan.
+
 > **For agentic workers:** Use `superpowers:executing-plans` inline, following the owner's routine implementation preference. Read `superpowers:test-driven-development` before writing code or tests. Track the checkbox tasks below; this publication executes none of them.
 
 **Goal:** Build Cloud's half of one fixed-box, opt-in test STAFF certificate and tunnel fixture, keeping every unqualified path CLOSED.

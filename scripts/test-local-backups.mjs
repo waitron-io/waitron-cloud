@@ -4,9 +4,9 @@ import { request as httpsRequest } from "node:https";
 import { createWriteStream } from "node:fs";
 import { spawn, execFileSync } from "node:child_process";
 import { createRequire } from "node:module";
-import { mkdtemp, readFile, writeFile, rm, realpath, chmod, stat } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, writeFile, rm, realpath, chmod, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import {
   generateKeyPairSync,
   createHash,
@@ -86,8 +86,10 @@ const record = (value) => {
   console.log("PASS:", value);
 };
 async function root() {
-  const dir = await mkdtemp(join(tmpdir(), "cloud-integration-backup-"));
-  roots.push(dir);
+  const scratch = await mkdtemp(join(tmpdir(), "cloud-integration-backup-"));
+  roots.push(scratch);
+  const dir = join(scratch, "state");
+  await mkdir(dir);
   return dir;
 }
 async function exists(path) {
@@ -320,12 +322,13 @@ async function stop(server) {
   }
 }
 async function worker(dir, command, input) {
+  const scratch = await realpath(dirname(dir));
   const child = spawn(
     process.execPath,
     [
       "--permission",
       "--allow-fs-read=*",
-      "--allow-fs-write=" + (await realpath(dir)),
+      "--allow-fs-write=" + scratch,
       "--allow-worker",
       "--allow-child-process",
       "--allow-addons",
@@ -335,7 +338,7 @@ async function worker(dir, command, input) {
     ],
     {
       cwd: join(waitron, "apps/server"),
-      env: { ...process.env, TSX_DISABLE_CACHE: "1", CLOUD_TEST_ROOT: dir },
+      env: { ...process.env, TMPDIR: scratch, TMP: scratch, TEMP: scratch, TSX_DISABLE_CACHE: "1", CLOUD_TEST_ROOT: dir },
       stdio: ["pipe", "pipe", "pipe"],
     },
   );

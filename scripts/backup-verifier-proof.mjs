@@ -3,7 +3,7 @@ import {deflateSync,inflateSync} from 'node:zlib';
 import {spawn,execFileSync} from 'node:child_process';
 import {randomBytes,randomUUID} from 'node:crypto';
 import {createRequire} from 'node:module';
-import {mkdtemp,readFile,realpath,rm,writeFile} from 'node:fs/promises';
+import {mkdtemp,mkdir,readFile,realpath,rm,writeFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {setTimeout as delay} from 'node:timers/promises';
@@ -24,7 +24,8 @@ assert.equal(imageInfo.Config.Labels['cloud.waitron-revision'],execFileSync('git
 const verify=await createContainerWaitronVerifier({image,owner}),checks=[];
 try{
  for(let venue=0;venue<2;venue++){
-  const root=await mkdtemp(join(tmpdir(),'cloud-integration-backup-container-'));roots.push(root);
+  const temporary=await mkdtemp(join(tmpdir(),'cloud-integration-backup-container-'));roots.push(temporary);
+  const scratch=await realpath(temporary),root=join(temporary,'state');await mkdir(root);
   const server=spawn(process.execPath,['--import',require.resolve('tsx'),join(checkout,'apps/server/scripts/cloud-integration-fixture.ts')],{cwd:join(checkout,'apps/server'),env:{...process.env,CLOUD_TEST_ROOT:root,CLOUD_TEST_ORIGIN:'http://127.0.0.1:9',CLOUD_TEST_BACKUP_STATE:'1'},stdio:['ignore','pipe','pipe','ipc']});
   let logs='';for(const stream of [server.stdout,server.stderr])stream.on('data',chunk=>{logs=(logs+chunk).slice(-16000);});
   const done=new Promise(resolve=>server.once('close',resolve));children.push({server,done});
@@ -32,7 +33,7 @@ try{
   while(Date.now()<deadline){try{await readFile(join(root,'ready.json'));ready=true;break;}catch{}if(server.exitCode!==null)break;await delay(100);}
   assert(ready,'fixture server did not start: '+logs);
   const recoveryKey=randomBytes(32).toString('base64url');
-  const capture=spawn(process.execPath,['--permission','--allow-fs-read=*','--allow-fs-write='+await realpath(root),'--allow-worker','--allow-child-process','--allow-addons','--import',require.resolve('tsx'),join(checkout,'apps/server/scripts/cloud-backup-fixture.ts')],{cwd:join(checkout,'apps/server'),env:{TMPDIR:process.env.TMPDIR,TSX_DISABLE_CACHE:'1',CLOUD_TEST_ROOT:root},stdio:['pipe','pipe','pipe']});
+  const capture=spawn(process.execPath,['--permission','--allow-fs-read=*','--allow-fs-write='+scratch,'--allow-worker','--allow-child-process','--allow-addons','--import',require.resolve('tsx'),join(checkout,'apps/server/scripts/cloud-backup-fixture.ts')],{cwd:join(checkout,'apps/server'),env:{TMPDIR:scratch,TMP:scratch,TEMP:scratch,TSX_DISABLE_CACHE:'1',CLOUD_TEST_ROOT:root},stdio:['pipe','pipe','pipe']});
   let output='',errors='';capture.stdout.on('data',c=>output+=c);capture.stderr.on('data',c=>errors+=c);
   capture.stdin.end(JSON.stringify({command:'capture',recoveryKey}));const timer=setTimeout(()=>capture.kill('SIGKILL'),30000);
   const code=await new Promise(resolve=>capture.once('close',resolve));clearTimeout(timer);assert.equal(code,0,errors);
