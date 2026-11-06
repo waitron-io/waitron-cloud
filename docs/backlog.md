@@ -47,8 +47,11 @@ tracks D585: native startup, ten test seed hooks and conformance share bounded
 acquisition. Native startup retains one attempt, with a 30-second deadline
 covering headers and body. Conformance retains three attempts, a 120-second
 total budget and 30-second inactivity. HTTP refusals preserve each caller’s
-existing error and retry policy. The Dockerfile and full image preparation
-qualification remain open.
+existing error and retry policy. The Dockerfile now invokes the shared command
+inside its existing Node image, with three temporary attempts inside 30 seconds
+and ten-second inactivity. Architecture digests and extraction remain required.
+The `storage-tools` build target isolates that boundary for checks; full
+application image preparation qualification remains open.
 
 ## Admin listener shutdown and paced replay (D581)
 

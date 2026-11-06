@@ -331,7 +331,7 @@ stop there.
 | `scripts/fixtures/storage-archive-download.mjs` | Shared header/body supervision and caller-selected attempt policy. Native startup uses one attempt and a 30-second total deadline; seeds retain three attempts, 30 seconds total and ten-second inactivity; conformance retains three attempts, 120 seconds total and 30-second inactivity. |
 | `scripts/backup-storage-fixture.mjs` | Shared supervision on a cache miss. Original header/status/body diagnostics and causes, digest validation, atomic cache publication and extraction stay with the native fixture. |
 | `scripts/cloud-cost/conformance-prepare.mjs` | Calls `downloadConformanceArchive` through the shared helper, retaining up to three attempts, a shared 120 seconds and 30-second inactivity. Verified bytes are written into its private image context. |
-| `deploy/local-stack/Dockerfile` | Still separate: version 4.47 and supplied architecture digest; `curl` has no own retry or deadline. Outer build limits are separate. |
+| `deploy/local-stack/Dockerfile` | The `storage-tools` stage copies and runs the shared Node command inside the image: at most three temporary attempts within 30 seconds, ten-second inactivity and stage records. Version 4.47, the supplied architecture digest and extraction remain mandatory. |
 
 Run `node --test scripts/ci-storage-archive-cancellation.test.mjs` for the shared
 cancellation and caller-specific refusal policies. The existing
@@ -343,9 +343,17 @@ hook that ignores cancellation must settle before the helper can reject it.
 The three current callers use abort-aware response operations. Arbitrary hook
 preemption is unqualified.
 
-D585 remains open for the image build, which must work without a host Node
-helper. Native header/body controls and unchanged refusal checks retain its
-bounded single attempt. No controlled copy or provider is built.
+The image downloads inside its existing Node image, so you need no host Node
+helper or workspace dependencies for acquisition. Run `node --test
+scripts/ci-storage-image-download.test.mjs` for isolated command checks against
+real local HTTP responses: temporary and permanent refusals, stalled headers
+and bodies, inactivity, the shared retry budget and failed-output absence.
+Build `deploy/local-stack/Dockerfile` with `--target storage-tools` and the
+existing architecture digests to check acquisition, checksum verification and
+extraction without the later authenticated application install. Full application
+image preparation remains a separate qualification. Native header/body controls
+and unchanged refusal checks retain its bounded single attempt. No controlled
+copy or provider is built.
 
 The frozen `scripts/fixtures/ci-deployment-inputs.json` also contains a copy of
 the Dockerfile, materialised by `scripts/ci-dependency-fixture.mjs`; it represents
