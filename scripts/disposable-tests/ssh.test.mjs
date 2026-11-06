@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
-import {mkdtempSync, mkdirSync, writeFileSync, readFileSync, statSync, existsSync, rmSync, symlinkSync} from 'node:fs';
+import {mkdtempSync, mkdirSync, writeFileSync, readFileSync, statSync, existsSync, rmSync, symlinkSync, chmodSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {spawnSync} from 'node:child_process';
@@ -35,9 +35,16 @@ test('an invalid host cannot inject SSH options or commands', t => {
 });
 test('a linked or shared writable socket directory refuses before SSH', t => {
   const f = fixture(t); mkdirSync(f.cache);
-  const outside = join(f.base, 'outside'); mkdirSync(outside);
+  const outside = join(f.base, 'outside'); mkdirSync(outside, {mode: 0o700});
   symlinkSync(outside, join(f.cache, 'wt-ssh'));
   const result = spawnSync('bash', [script, '2.29.248.230', 'true'], {env: f.env, encoding: 'utf8'});
   assert.notEqual(result.status, 0); assert.match(result.stderr, /private|linked/i);
+  assert.equal(existsSync(f.capture), false);
+});
+test('a shared writable directory cannot host the controller socket', t => {
+  const f = fixture(t); mkdirSync(f.cache);
+  const directory = join(f.cache, 'wt-ssh'); mkdirSync(directory); chmodSync(directory, 0o777);
+  const result = spawnSync('bash', [script, '2.29.248.230', 'true'], {env: f.env, encoding: 'utf8'});
+  assert.notEqual(result.status, 0); assert.match(result.stderr, /private/i);
   assert.equal(existsSync(f.capture), false);
 });
