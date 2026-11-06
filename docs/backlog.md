@@ -1490,7 +1490,7 @@ implementation or production evidence.
   Part 3 implements the [reviewed root-input design](superpowers/specs/2026-11-05-ci-root-input-ownership-design.md)
   with [separate records and an explicit renewal procedure](ci-root-input-ownership.md).
   Its complete initial input review admits the root-partition contract test to
-  all four root jobs and the local health test to the entire `test:local-stack`
+  all eight root jobs and the local health test to the entire `test:local-stack`
   receipt command. Their union composes with existing package selection without
   dropping mandatory receipts. The capacity verifier test remains unregistered:
   a root selector fixture copies its live bytes, so receipt-only work would miss
@@ -2163,14 +2163,23 @@ implementation or production evidence.
   The preceding green head took a similar amount of time. No assertion failure
   or platform cause was established. The unchanged local baseline passed all
   1,336 checks in 392.259 seconds with two file workers.
-  Root checks now run in four separate jobs, using Node's round-robin file
+  Root checks now run in eight separate jobs, using Node's round-robin file
   partitions and two file workers per job. They retain the original selectors,
   every case and every individual deadline; the compiler runs independently.
-  The existing planner decision selects both the compiler and all four root
+  The existing planner decision selects both the compiler and all eight root
   jobs. The summary requires each root job exactly once, completed and successful,
   plus the successful matrix result. Missing, repeated, cancelled, skipped or
   unfinished work cannot establish success. Controlled workflow execution covers
   a future matching file, both additional selectors and failing checks.
+  D571 root runtime: healthy general runs before and after root ownership
+  activation show the slowest root job growing from 347 to 425 seconds.
+  PR984 adds a root test file that moves the seed wrapper into the same
+  four-way partition as indirect-reader and lock-selection fixtures; its
+  partition reaches the unchanged limit. Eight partitions divide that work
+  while preserving both file workers, every selector and every deadline.
+  Source evidence and the final summary require all eight jobs exactly once;
+  older four-job evidence cannot qualify. Hosted timing and exact-head CI
+  qualification remain required; no time saving is established locally.
   Each work job retains its eight-minute cap. Whole-run timing and the owner's
   five-minute work-job/about-ten-minute total goal needs measured CI evidence;
   a passing local run does not establish hosted-runner duration.

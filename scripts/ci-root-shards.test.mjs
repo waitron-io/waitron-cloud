@@ -12,7 +12,7 @@ const rootJob = workflow.match(/^  root:\n([\s\S]*?)(?=^  [\w-]+:)/m)?.[1] ?? ''
 const plan = {packages: [{package: '@waitron-cloud/operations', shard: 1}], receipts: [], typecheck: true};
 const results = {changes: 'success', root: 'success', typecheck: 'success', packages: 'success', receipts: 'skipped'};
 const jobs = ['changes', 'typecheck', 'package (@waitron-cloud/operations)',
-  'root (1/4)', 'root (2/4)', 'root (3/4)', 'root (4/4)']
+  'root (1/8)', 'root (2/8)', 'root (3/8)', 'root (4/8)', 'root (5/8)', 'root (6/8)', 'root (7/8)', 'root (8/8)']
   .map(name => ({name, status: 'completed', conclusion: 'success'}));
 
 test('workflow root partitions execute every discovered check once and propagate failures', () => {
@@ -24,6 +24,7 @@ test('workflow root partitions execute every discovered check once and propagate
   try {
     mkdirSync(join(root, 'scripts'));
     const files = ['ci-a.test.mjs', 'ci-b.test.mjs', 'ci-new-reader.test.mjs', 'ci-z.test.mjs',
+      'ci-c.test.mjs', 'ci-d.test.mjs', 'ci-e.test.mjs', 'ci-f.test.mjs',
       'identity-upstream.test.mjs', 'verify-gateway-reconnection-receipt.test.mjs'];
     for (const file of files) writeFileSync(join(root, 'scripts', file),
       `import test from 'node:test'; test(${JSON.stringify(file)}, () => {});\n`);
@@ -43,7 +44,7 @@ test('workflow root partitions execute every discovered check once and propagate
   } finally {rmSync(root, {recursive: true, force: true});}
 });
 
-test('summary requires all four root partitions even when the compiler and package jobs pass', () => {
+test('summary requires all eight root partitions even when the compiler and package jobs pass', () => {
   const title = rootJob.match(/^    name: (.+)$/m)?.[1];
   assert.ok(title, 'Every root partition needs an explicit job name');
   const namedJobs = jobs.map(job => job.name.startsWith('root (')
@@ -51,7 +52,7 @@ test('summary requires all four root partitions even when the compiler and packa
     : job);
   assert.doesNotThrow(() => assertSummary(plan, results, namedJobs));
   assert.doesNotThrow(() => assertSummary(plan, results, jobs));
-  for (const name of ['root (1/4)', 'root (2/4)', 'root (3/4)', 'root (4/4)']) {
+  for (const name of ['root (1/8)', 'root (2/8)', 'root (3/8)', 'root (4/8)', 'root (5/8)', 'root (6/8)', 'root (7/8)', 'root (8/8)']) {
     const other = jobs.filter(job => job.name !== name);
     assert.throws(() => assertSummary(plan, results, other));
     const original = jobs.find(job => job.name === name);
@@ -63,6 +64,9 @@ test('summary requires all four root partitions even when the compiler and packa
       assert.throws(() => assertSummary(plan, results, [...other, {...original, status}]));
     }
   }
+  const legacy = jobs.filter(job => !job.name.startsWith('root (') || /^root \([1-4]\//.test(job.name))
+    .map(job => ({...job, name: job.name.replace('/8)', '/4)')}));
+  assert.throws(() => assertSummary(plan, results, legacy));
   for (const root of ['failure', 'cancelled', 'skipped', undefined]) {
     assert.throws(() => assertSummary(plan, {...results, root}, jobs));
   }

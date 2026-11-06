@@ -41,7 +41,7 @@ test('real squash merges run full on main for equal trees and advanced main with
       ];
       assert.deepEqual([...plan.packages].sort((a,b)=>a.package.localeCompare(b.package)||a.shard-b.shard),
         [...expectedPackages].sort((a,b)=>a.package.localeCompare(b.package)||a.shard-b.shard));
-      const expectedJobs = ['changes','typecheck','root (1/4)','root (2/4)','root (3/4)','root (4/4)','receipts', ...expectedPackages.map(row=>`package (${row.package}${row.shards ? `, shard ${row.shard}/${row.shards}` : ''})`)];
+      const expectedJobs = ['changes','typecheck','root (1/8)','root (2/8)','root (3/8)','root (4/8)', 'root (5/8)', 'root (6/8)', 'root (7/8)', 'root (8/8)','receipts', ...expectedPackages.map(row=>`package (${row.package}${row.shards ? `, shard ${row.shard}/${row.shards}` : ''})`)];
       const jobs = expectedJobs.map(name=>({name,status:'completed',conclusion:'success'}));
       const results = {changes:'success',typecheck:'success',root:'success',receipts:'success',packages:'success',documentation:'skipped',scripts:'skipped'};
       assert.doesNotThrow(()=>assertSummary(plan,results,jobs));
@@ -92,7 +92,7 @@ test('executed summary consumes needs objects and the current job API, refusing 
     writeFileSync(gh,'#!/bin/sh\n[ "$1" = api ] || exit 2\ncat "$CI_FIXTURE"\n',{mode:0o700});
     const plan={packages:[{package:'@waitron-cloud/operations',shard:1}],receipts:['test:local-stack'],typecheck:true,reuse:null};
     const results={changes:{result:'success'},typecheck:{result:'success'},root:{result:'success'},packages:{result:'success'},receipts:{result:'success'}};
-    const jobs=['changes','typecheck','root (1/4)','root (2/4)','root (3/4)','root (4/4)','package (@waitron-cloud/operations)','receipts'].map(name=>({name,status:'completed',conclusion:'success'}));
+    const jobs=['changes','typecheck','root (1/8)','root (2/8)','root (3/8)','root (4/8)', 'root (5/8)', 'root (6/8)', 'root (7/8)', 'root (8/8)','package (@waitron-cloud/operations)','receipts'].map(name=>({name,status:'completed',conclusion:'success'}));
     const env={...process.env,PATH:`${root}:${process.env.PATH}`,CI_FIXTURE:fixture,CI_PLAN:JSON.stringify(plan),CI_RESULTS:JSON.stringify(results),GITHUB_REPOSITORY:repository,GITHUB_RUN_ID:'42',
       GITHUB_EVENT_PATH:event,GITHUB_SHA:head,CI_HEAD_SHA:head,CI_JOB_PREFIX:''};
     const run=()=>spawnSync(process.execPath,[fileURLToPath(new URL('./ci-summary.mjs',import.meta.url))],{cwd:root,env,encoding:'utf8'});

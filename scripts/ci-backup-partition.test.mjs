@@ -11,7 +11,7 @@ test('summary requires all seven backup jobs and refuses previous allocations', 
   const results = {changes: 'success', typecheck: 'success', root: 'success', packages: 'success', receipts: 'skipped'};
   const rows = [1, 2, 3, 4, 5, 6, 7].map(shard => ({package: '@waitron-cloud/backups', shard, shards: 7}));
   const summarize = packages => assertSummary({packages, receipts: [], typecheck: true}, results,
-    ['changes', 'typecheck', 'root (1/4)', 'root (2/4)', 'root (3/4)', 'root (4/4)',
+    ['changes', 'typecheck', 'root (1/8)', 'root (2/8)', 'root (3/8)', 'root (4/8)', 'root (5/8)', 'root (6/8)', 'root (7/8)', 'root (8/8)',
       ...packages.map(row => `package (${row.package}, shard ${row.shard}/${row.shards})`)]
       .map(name => ({name, status: 'completed', conclusion: 'success'})));
   assert.doesNotThrow(() => summarize(rows));

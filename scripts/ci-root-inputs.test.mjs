@@ -214,7 +214,7 @@ test('independent reconstruction refuses missing markers owners and forged range
     {...plan, rootInputs: {...plan.rootInputs, head: base}}, {...plan, typecheck: true}, {...plan, scripts: {base, head, paths: []}},
   ]) assert.throws(() => api.assertRootInputWork(forged, context), /root|Root|owner|work|compiler/i);
   const results = {changes: 'success', root: 'success', typecheck: 'skipped', packages: 'skipped', receipts: 'success'};
-  const jobs = ['changes', 'root (1/4)', 'root (2/4)', 'root (3/4)', 'root (4/4)', 'receipts']
+  const jobs = ['changes', 'root (1/8)', 'root (2/8)', 'root (3/8)', 'root (4/8)', 'root (5/8)', 'root (6/8)', 'root (7/8)', 'root (8/8)', 'receipts']
     .map(name => ({name, status: 'completed', conclusion: 'success'}));
   assert.doesNotThrow(() => assertSummary(plan, results, jobs, context));
   assert.throws(() => assertSummary(plan, results, jobs), /trusted|verification|context/i);
@@ -249,7 +249,7 @@ for (const [label, path, source] of [
   write('package.json', {scripts: Object.fromEntries(receipts.map(name => [name, 'node --version']))});
   renew(['packages/control/package.json', 'scripts/ci-another.test.mjs', 'package.json']); docs(); const base = commit();
   const full = {packages: [{package: '@waitron-cloud/identity', shard: 1}], receipts, typecheck: true, reuse: null};
-  const jobs = ['changes', 'typecheck', 'root (1/4)', 'root (2/4)', 'root (3/4)', 'root (4/4)',
+  const jobs = ['changes', 'typecheck', 'root (1/8)', 'root (2/8)', 'root (3/8)', 'root (4/8)', 'root (5/8)', 'root (6/8)', 'root (7/8)', 'root (8/8)',
     'package (@waitron-cloud/identity)', 'receipts'].map(name => ({name, status: 'completed', conclusion: 'success'}));
   const results = {changes: 'success', typecheck: 'success', root: 'success', packages: 'success', receipts: 'success'};
   {
@@ -339,7 +339,7 @@ test('trusted root and receipt summaries reject every incomplete required job', 
         : mode === 'receipt' ? ['local-health-test'] : ['local-health-test', 'root-partition-contract']}};
     const results = {changes: 'success', typecheck: 'skipped', packages: 'skipped', root: root ? 'success' : 'skipped',
       receipts: receipts ? 'success' : 'skipped'};
-    const names = ['changes', ...(root ? ['root (1/4)', 'root (2/4)', 'root (3/4)', 'root (4/4)'] : []), ...(receipts ? ['receipts'] : [])];
+    const names = ['changes', ...(root ? ['root (1/8)', 'root (2/8)', 'root (3/8)', 'root (4/8)', 'root (5/8)', 'root (6/8)', 'root (7/8)', 'root (8/8)'] : []), ...(receipts ? ['receipts'] : [])];
     const jobs = names.map(name => ({name, status: 'completed', conclusion: 'success'}));
     const skipped = {name: 'typecheck', status: 'completed', conclusion: 'skipped'};
     const self = {name: 'summary', status: 'in_progress', conclusion: null};

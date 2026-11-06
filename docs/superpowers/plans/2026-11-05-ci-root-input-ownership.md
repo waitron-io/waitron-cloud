@@ -162,6 +162,6 @@ If K has landed, extract its current package behavior rather than resurrecting t
   regain exact-head green before landing. Verify the signed-off squash tree and update main through normal procedure. Keep this docs-only milestone
   separate from that later code landing.
 - [ ] Complete H12 by reading every job and log for the exact merge SHA, with actual plan, checkout SHAs, counts and explicit skips. Independently
-  inspect the next qualifying nightly full run: all packages, four root jobs, compiler, six receipts, complete cost/venue matrices and nightly
+  inspect the next qualifying nightly full run: all packages, eight root jobs, compiler, six receipts, complete cost/venue matrices and nightly
   summary. Main's unchanged full run does not prove a narrow PR ran correctly; the narrow PR does not qualify the nightly. Report any unqualified case
   plainly, then handle #938 as separate work.

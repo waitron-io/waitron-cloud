@@ -18,7 +18,7 @@ test('summary policy contains exactly the real workspace packages, including no 
 });
 
 function summarize(packages) {
-  const jobs = ['changes', 'typecheck', 'root (1/4)', 'root (2/4)', 'root (3/4)', 'root (4/4)', ...packages.map(row => `package (${row.package}${row.shards ? `, shard ${row.shard}/${row.shards}` : ''})`)]
+  const jobs = ['changes', 'typecheck', 'root (1/8)', 'root (2/8)', 'root (3/8)', 'root (4/8)', 'root (5/8)', 'root (6/8)', 'root (7/8)', 'root (8/8)', ...packages.map(row => `package (${row.package}${row.shards ? `, shard ${row.shard}/${row.shards}` : ''})`)]
     .map(name => ({name, status: 'completed', conclusion: 'success'}));
   return assertSummary({packages, receipts: [], typecheck: true}, results, jobs);
 }

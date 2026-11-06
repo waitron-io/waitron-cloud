@@ -11,7 +11,7 @@ import {reuseProof} from './fixtures/ci-evidence.mjs';
 import * as summary from './ci-summary.mjs';
 const plan = {packages:[1,2,3,4,5,6].map(shard=>({package:'@waitron-cloud/portal',shard,shards:6})),receipts:[],typecheck:true,reuse:null};
 const results = {changes:'success',typecheck:'success',root:'success',receipts:'skipped',packages:'success'};
-const jobs = ['changes','typecheck','root (1/4)','root (2/4)','root (3/4)','root (4/4)', ...[1,2,3,4,5,6].map(i=>`package (@waitron-cloud/portal, shard ${i}/6)`)].map(name=>({name,status:'completed',conclusion:'success'}));
+const jobs = ['changes','typecheck','root (1/8)','root (2/8)','root (3/8)','root (4/8)', 'root (5/8)', 'root (6/8)', 'root (7/8)', 'root (8/8)', ...[1,2,3,4,5,6].map(i=>`package (@waitron-cloud/portal, shard ${i}/6)`)].map(name=>({name,status:'completed',conclusion:'success'}));
 const summaryProgram = fileURLToPath(new URL('./ci-summary.mjs', import.meta.url));
 function isolatedSummaryContext(root) {
   const git = (...args) => childProcess.execFileSync('git', ['-c', 'maintenance.auto=false', ...args], {cwd: root, encoding: 'utf8', stdio: 'pipe'}).trim();
@@ -97,7 +97,7 @@ test('summary rejects unknown skipped identities duplicate placeholders and dupl
 });
 
 test('summary accepts the exact skipped matrix names reported by hosted Actions', () => {
-  for (const name of ['root (${{ matrix.shard }}/4)',
+  for (const name of ['root (${{ matrix.shard }}/8)',
     "package (${{ matrix.package }}${{ ((matrix.shards && format(', shard {0}/{1}', matrix.shard, matrix.shards)) || '') }})"]) {
     const placeholder = {name, status: 'completed', conclusion: 'skipped'};
     assert.doesNotThrow(() => assertSummary(plan, results, [...jobs, placeholder]));

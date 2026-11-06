@@ -97,7 +97,7 @@ test('summary validates grouped members and requires the successful exact group 
   const group = row(members);
   const plan = {packages: [group], receipts: [], typecheck: true};
   const results = {changes: 'success', typecheck: 'success', root: 'success', packages: 'success', receipts: 'skipped'};
-  const jobs = ['changes', 'typecheck', 'root (1/4)', 'root (2/4)', 'root (3/4)', 'root (4/4)', `package (${group.package})`].map(name => ({name, status: 'completed', conclusion: 'success'}));
+  const jobs = ['changes', 'typecheck', 'root (1/8)', 'root (2/8)', 'root (3/8)', 'root (4/8)', 'root (5/8)', 'root (6/8)', 'root (7/8)', 'root (8/8)', `package (${group.package})`].map(name => ({name, status: 'completed', conclusion: 'success'}));
   assert.doesNotThrow(() => assertSummary(plan, results, jobs));
   for (const forged of invalid.filter(value => value !== null && value.package !== members[0])) {
     const altered = jobs.map(item => item.name.startsWith('package (') ? {...item, name: `package (${forged.package})`} : item);
@@ -114,6 +114,6 @@ test('summary validates grouped members and requires the successful exact group 
 test('summary rejects a package scheduled both whole and in a shard', () => {
   const plan = {packages: [{package: '@waitron-cloud/portal', shard: 1}, {package: '@waitron-cloud/portal', shard: 1, shards: 6}], receipts: [], typecheck: true};
   const results = {changes: 'success', typecheck: 'success', root: 'success', packages: 'success', receipts: 'skipped'};
-  const jobs = ['changes', 'typecheck', 'root (1/4)', 'root (2/4)', 'root (3/4)', 'root (4/4)', 'package (@waitron-cloud/portal)', 'package (@waitron-cloud/portal, shard 1/6)'].map(name => ({name, status: 'completed', conclusion: 'success'}));
+  const jobs = ['changes', 'typecheck', 'root (1/8)', 'root (2/8)', 'root (3/8)', 'root (4/8)', 'root (5/8)', 'root (6/8)', 'root (7/8)', 'root (8/8)', 'package (@waitron-cloud/portal)', 'package (@waitron-cloud/portal, shard 1/6)'].map(name => ({name, status: 'completed', conclusion: 'success'}));
   assert.throws(() => assertSummary(plan, results, jobs), /Duplicate package execution/);
 });

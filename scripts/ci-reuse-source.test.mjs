@@ -65,7 +65,7 @@ before(() => {
       head: {sha: head, ref: 'feature', repositoryId: 123, repository}, mergeBase: base, sha: execution},
     checkout: {sha: head, tree}, workflow: {id: 17, path: workflow, ref: `${repository}/${workflow}@refs/pull/51/merge`, sha: execution, executionSha: execution},
     runId: 42, attempt: 2, selection: selected});
-  const required = ['changes', 'summary', 'typecheck', 'root (1/4)', 'root (2/4)', 'root (3/4)', 'root (4/4)', 'package (@waitron-cloud/operations)', 'receipts'];
+  const required = ['changes', 'summary', 'typecheck', 'root (1/8)', 'root (2/8)', 'root (3/8)', 'root (4/8)', 'root (5/8)', 'root (6/8)', 'root (7/8)', 'root (8/8)', 'package (@waitron-cloud/operations)', 'receipts'];
   jobs = [...required, 'documentation', 'scripts'].map((name, index) => ({id: index + 1, name, run_id: 42, run_attempt: 2, head_sha: head,
     status: 'completed', conclusion: required.includes(name) ? 'success' : 'skipped'}));
   bytes = archive(source);
@@ -182,8 +182,8 @@ for (const kind of ['docs', 'scoped']) {
       }
       const selection = selectPlan({base: originalBase, head: originalHead}, loadWorkspaceAtRevision(originalHead, variantGit), variantGit);
       const required = kind === 'docs' ? ['changes', 'documentation', 'summary']
-        : ['changes', 'summary', 'typecheck', 'root (1/4)', 'root (2/4)', 'root (3/4)', 'root (4/4)', 'package (@waitron-cloud/operations)', 'receipts'];
-      const skipped = kind === 'docs' ? ['scripts', 'typecheck', 'root (${{ matrix.shard }}/4)',
+        : ['changes', 'summary', 'typecheck', 'root (1/8)', 'root (2/8)', 'root (3/8)', 'root (4/8)', 'root (5/8)', 'root (6/8)', 'root (7/8)', 'root (8/8)', 'package (@waitron-cloud/operations)', 'receipts'];
+      const skipped = kind === 'docs' ? ['scripts', 'typecheck', 'root (${{ matrix.shard }}/8)',
         "package (${{ matrix.package }}${{ ((matrix.shards && format(', shard {0}/{1}', matrix.shard, matrix.shards)) || '') }})", 'receipts'] : ['scripts', 'documentation'];
       if (kind === 'docs') {
         assert.deepEqual(selection.documentation, {base: originalBase, head: originalHead, paths: ['docs/guide.md']});
@@ -389,7 +389,7 @@ test('operator readback binds the local decision to its main artifact, final job
     const decisionBytes = archive(decision), endpoint = `repos/${repository}`;
     runtime.responses[`${endpoint}/actions/runs/90`].status = 'completed';
     runtime.responses[`${endpoint}/actions/runs/90`].conclusion = 'success';
-    const unused = ['scripts', 'documentation', 'typecheck', 'root (${{ matrix.shard }}/4)',
+    const unused = ['scripts', 'documentation', 'typecheck', 'root (${{ matrix.shard }}/8)',
       "package (${{ matrix.package }}${{ ((matrix.shards && format(', shard {0}/{1}', matrix.shard, matrix.shards)) || '') }})", 'receipts'];
     const currentJobs = ['changes', 'summary', ...unused].map((name, i) => ({id: i + 100, run_id: 90, run_attempt: 1,
       head_sha: merge, name, status: 'completed', conclusion: unused.includes(name) ? 'skipped' : 'success'}));
@@ -566,7 +566,7 @@ for (const mode of ['selected', 'full']) {
       const refused = readback(omitted);
       assert.equal(refused.status, 1, refused.stdout + refused.stderr);
       assert.match(refused.stderr, /[Rr]ecomputed|[Ff]ull decision/);
-      currentJobs.splice(currentJobs.findIndex(job => job.name === 'root (3/4)'), 1);
+      currentJobs.splice(currentJobs.findIndex(job => job.name === 'root (3/8)'), 1);
       assert.equal(readback(decision).status, 1, 'Current executed work still needs every partition');
     } finally {rmSync(runtime.directory, {recursive: true, force: true});}
   });
@@ -818,7 +818,7 @@ function mainReadbackFixture() {
   const metadata = {id: 62, name: 'ci-decision-v1-ci-90-1', expired: false, size_in_bytes: content.length,
     digest: 'sha256:' + createHash('sha256').update(content).digest('hex'),
     workflow_run: {id: 90, head_sha: merge, repository_id: 123, head_repository_id: 123}};
-  const skipped = ['scripts', 'documentation', 'typecheck', 'root (${{ matrix.shard }}/4)',
+  const skipped = ['scripts', 'documentation', 'typecheck', 'root (${{ matrix.shard }}/8)',
     "package (${{ matrix.package }}${{ ((matrix.shards && format(', shard {0}/{1}', matrix.shard, matrix.shards)) || '') }})", 'receipts'];
   const mainJobs = ['changes', 'summary', ...skipped].map((name, i) => ({id: i + 100, name, run_id: 90, run_attempt: 1,
     head_sha: merge, status: 'completed', conclusion: skipped.includes(name) ? 'skipped' : 'success'}));
@@ -926,7 +926,7 @@ test('source qualification and reused main readback require every page of a legi
     const content = archive(createPlanEvidence(record));
     const metadata = {...artifact, size_in_bytes: content.length, digest: 'sha256:' + createHash('sha256').update(content).digest('hex'),
       workflow_run: {...artifact.workflow_run, head_sha: originalHead}};
-    const required = ['changes', 'summary', 'typecheck', 'root (1/4)', 'root (2/4)', 'root (3/4)', 'root (4/4)',
+    const required = ['changes', 'summary', 'typecheck', 'root (1/8)', 'root (2/8)', 'root (3/8)', 'root (4/8)', 'root (5/8)', 'root (6/8)', 'root (7/8)', 'root (8/8)',
       'receipts', ...rows.map(row => `package (${row.package}${row.shards ? `, shard ${row.shard}/${row.shards}` : ''})`)];
     const sourceJobs = [...required, 'scripts', 'documentation'].map((name, i) => ({id: i + 1, name, run_id: 42,
       run_attempt: 2, head_sha: originalHead, status: 'completed', conclusion: required.includes(name) ? 'success' : 'skipped'}));
@@ -950,7 +950,7 @@ test('source qualification and reused main readback require every page of a legi
     const hosted = {id: 62, name: 'ci-decision-v1-ci-90-1', expired: false, size_in_bytes: decisionBytes.length,
       digest: 'sha256:' + createHash('sha256').update(decisionBytes).digest('hex'),
       workflow_run: {id: 90, head_sha: squash, repository_id: 123, head_repository_id: 123}};
-    const skipped = ['scripts', 'documentation', 'typecheck', 'root (${{ matrix.shard }}/4)',
+    const skipped = ['scripts', 'documentation', 'typecheck', 'root (${{ matrix.shard }}/8)',
       "package (${{ matrix.package }}${{ ((matrix.shards && format(', shard {0}/{1}', matrix.shard, matrix.shards)) || '') }})", 'receipts'];
     const mainJobs = ['changes', 'summary', ...skipped].map((name, i) => ({id: i + 100, name, run_id: 90, run_attempt: 1,
       head_sha: squash, status: 'completed', conclusion: skipped.includes(name) ? 'skipped' : 'success'}));

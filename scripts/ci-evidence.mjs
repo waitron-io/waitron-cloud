@@ -82,7 +82,7 @@ export function expectedJobContract(workflowPath, selection) {
     add(Boolean(selection.scripts), ['scripts']);
     add(Boolean(selection.documentation), ['documentation']);
     add(selection.typecheck, ['typecheck']);
-    add(selection.rootInputs ? selection.rootTests : selection.typecheck, ['root (1/4)', 'root (2/4)', 'root (3/4)', 'root (4/4)'], ['root (${{ matrix.shard }}/4)']);
+    add(selection.rootInputs ? selection.rootTests : selection.typecheck, ['root (1/8)', 'root (2/8)', 'root (3/8)', 'root (4/8)', 'root (5/8)', 'root (6/8)', 'root (7/8)', 'root (8/8)'], ['root (${{ matrix.shard }}/8)']);
     add(selection.packages.length > 0, selection.packages.map(row => `package (${row.package}${row.shards ? `, shard ${row.shard}/${row.shards}` : ''})`), [packagePlaceholder]);
     add(selection.receipts.length > 0, ['receipts']);
   } else {

@@ -97,7 +97,7 @@ for (const key of ['ci', 'aws-infrastructure']) {
     const f = fixture(t), planned = f.run(key, {push: true, down: true});
     assert.equal(planned.status, 0, planned.stdout + planned.stderr);
     assert.equal(planned.outputs.mode, 'full'); assert.equal(planned.outputs.decision_artifact, undefined);
-    const names = key === 'ci' ? ['changes', 'typecheck', 'root (1/4)', 'root (2/4)', 'root (3/4)', 'root (4/4)',
+    const names = key === 'ci' ? ['changes', 'typecheck', 'root (1/8)', 'root (2/8)', 'root (3/8)', 'root (4/8)', 'root (5/8)', 'root (6/8)', 'root (7/8)', 'root (8/8)',
       'package (@waitron-cloud/operations)', 'receipts', 'summary', 'scripts', 'documentation']
       : ['changes', 'verify (guards-1)', 'verify (guards-2)', 'verify (guards-3)', 'verify (suites)', 'summary'];
     const jobs = names.map((name, i) => ({id: i + 1, name, run_id: 42, run_attempt: 1, head_sha: f.head,
