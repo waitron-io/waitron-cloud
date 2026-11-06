@@ -3827,6 +3827,9 @@ The source is [Waitron's backlog at `830cf71fe854`](https://github.com/clintongo
 Its section titled "The cloud primary" mixed cloud services with core SQLite work.
 The [ownership map](documentation-ownership.md) records what remains in Waitron.
 
+- **Waitron location removal (A1301).** Include the existing `venue.location`
+  samples in both cost-test backend fixtures and the browser backend's
+  `provisioned.locationId` route inputs in the Cloud integration work.
 - **Cloud provisioning and trial onboarding.** Own the service that creates a
   customer's resources and supplies configuration and credentials to Waitron, plus
   the hosted trial entry path. The local integration contract is mapped and proved;
