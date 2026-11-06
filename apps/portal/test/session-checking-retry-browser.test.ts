@@ -75,7 +75,7 @@ for (const handler of ['normal', 'delayed', 'missing'] as const) {
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
       if (process.env.SESSION_CHECKING_RECEIPT_DIR && failure === '503') {
         await mkdir(process.env.SESSION_CHECKING_RECEIPT_DIR, {recursive: true});
-        await page.screenshot({path: `${process.env.SESSION_CHECKING_RECEIPT_DIR}/${path.slice(1)}-${locale}-${theme}-${width}.png`, fullPage: true});
+        await page.screenshot({path: `${process.env.SESSION_CHECKING_RECEIPT_DIR}/${path.slice(1)}-${locale}-${theme}-${width}${setupDelay ? '-clock-delayed' : handler === 'delayed' ? '-delayed' : ''}.png`, fullPage: true});
       }
       if (failure === '503') await held.fulfill({status: 503, headers: {'Retry-After': '2'}, json: {error: 'temporarily_unavailable'}});
       else await held.abort('failed');
