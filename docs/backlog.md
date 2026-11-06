@@ -3235,13 +3235,19 @@ implementation or production evidence.
   and an unprivileged CI gate. The engine and rendered Lambda now attempt later
   eligible cleanup after a mutation or termination-response failure. If those calls
   finish, the first error is rethrown without publishing healthy status; a stalled
-  call can still delay later attempts and error reporting. Complete-inventory ownership
-  validation stays in force; malformed-inventory isolation and an independent
-  maximum lifetime remain open before activation. That workflow selects
-  proof/workflow PR changes and runs on every main push, so unrelated older PR heads need no absent proof
-  files. Launches remain explicitly denied, the sweep rule
-  disabled and CLI up/down closed. Pre-activation gates now explicitly include
-  whole-snapshot cleanup starvation and an independent cap on future expiry tags. The complete removable setup you run in one
+  call can still delay later attempts and error reporting. Structural inventory
+  validation still precedes mutations. Malformed run tags now leave their resources
+  untouched without starving independently owned cleanup or publishing health.
+  Original service times cap future expiry at 135 minutes and the approved access
+  deadline; restart times cannot extend it. Missing or contradictory service times
+  request owned instance termination only after deletion-on-termination disks match
+  exact stack/run/expiry/attachment ownership; uncertain disks withhold termination
+  while independent cleanup continues. An observation clock refreshed after the
+  inventories preserves resources created during those reads. Engine and rendered-Lambda checks exercise these guards; live EC2 time/ownership
+  and termination evidence remain open. That workflow selects proof/workflow PR
+  changes and runs on every main push, so unrelated older PR heads need no absent
+  proof files. Launches remain explicitly denied, the sweep rule disabled and CLI
+  up/down closed. The complete removable setup you run in one
   sitting, with automatic resource setup and removal, remains unfinished. No prior
   full Mac proof or recurring Mac probe
   is required; the supported Mac path and every capacity floor remain unchanged.

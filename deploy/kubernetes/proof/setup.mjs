@@ -28,6 +28,7 @@ export function renderSetup({ account, region, repository, oidcProviderArn, imag
   });
   template.Parameters.ImageId.Default = image.ImageId;
   template.Parameters.ImageId.AllowedValues = [image.ImageId];
+  template.Resources.ExpiryFunction.Properties.Environment.Variables.ACCESS_EXPIRY = policy.accessExpiry;
   template.Resources.ExpiryFunction.Properties.Code.ZipFile = lambdaSource();
   return template;
 }
@@ -39,7 +40,7 @@ const s3sdk = require('@aws-sdk/client-s3');
 const ec2 = new ec2sdk.EC2Client({ region: process.env.AWS_REGION, maxAttempts: 3 });
 const s3 = new s3sdk.S3Client({ region: process.env.AWS_REGION, maxAttempts: 3 });
 const operations = { DescribeInstances: ec2sdk.DescribeInstancesCommand, DescribeVolumes: ec2sdk.DescribeVolumesCommand, TerminateInstances: ec2sdk.TerminateInstancesCommand, DeleteVolume: ec2sdk.DeleteVolumeCommand, PutObject: s3sdk.PutObjectCommand };
-exports.handler = async () => sweepExpired({ account: process.env.ACCOUNT, region: process.env.AWS_REGION, stackId: process.env.STACK_ID, bucket: process.env.BUCKET, aws: { call: (service, operation, input) => (service === 'ec2' ? ec2 : s3).send(new operations[operation](input)) } });\n`;
+exports.handler = async () => sweepExpired({ account: process.env.ACCOUNT, region: process.env.AWS_REGION, stackId: process.env.STACK_ID, bucket: process.env.BUCKET, accessExpiry: process.env.ACCESS_EXPIRY, aws: { call: (service, operation, input) => (service === 'ec2' ? ec2 : s3).send(new operations[operation](input)) } });\n`;
 }
 
 if (process.argv[1] && realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url))) {

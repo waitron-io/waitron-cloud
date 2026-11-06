@@ -18,6 +18,18 @@ function render(input = inputs()) {
 const resource = (t, name) => t.Resources[name].Properties;
 const statements = (t, name) => resource(t, name).Policies.flatMap(p => p.PolicyDocument.Statement);
 
+function withRootMappings(client, result) {
+  client.rootDisks = new Map();
+  for (const row of result.Reservations.flatMap(r => r.Instances)) {
+    row.RootDeviceName = '/dev/xvda';
+    const id = `vol-${'89abcdef01234567'[parseInt(row.InstanceId[2], 16)]}${row.InstanceId.slice(3)}`;
+    row.BlockDeviceMappings = [{ DeviceName: '/dev/xvda', Ebs: { VolumeId: id, DeleteOnTermination: true } }];
+    client.rootDisks.set(id, { VolumeId: id, State: 'in-use', Tags: structuredClone(row.Tags), Attachments: [{ InstanceId: row.InstanceId, Device: '/dev/xvda', State: 'attached' }] });
+  }
+  return result;
+}
+
+
 test('one template generates private network, storage, two roles and disabled independent expiry', () => {
   const t = render();
   assert.deepEqual(Object.values(t.Resources).map(r => r.Type).sort(), [
@@ -170,7 +182,7 @@ test('serialized Lambda runs the actual expiry engine with explicit SDK operatio
   }
   const command = name => class { constructor(input) { this.name = name; this.input = input; } };
   const exports = {};
-  vm.runInNewContext(source, { exports, process: { env: { AWS_REGION: 'eu-south-2', ACCOUNT: '462991287391', STACK_ID: 'arn:aws:cloudformation:eu-south-2:462991287391:stack/d570/00000000-0000-4000-8000-000000000000', BUCKET: 'd570-synthetic' } }, require(name) {
+  vm.runInNewContext(source, { exports, process: { env: { AWS_REGION: 'eu-south-2', ACCOUNT: '462991287391', STACK_ID: 'arn:aws:cloudformation:eu-south-2:462991287391:stack/d570/00000000-0000-4000-8000-000000000000', BUCKET: 'd570-synthetic', ACCESS_EXPIRY: resource(render(), 'ExpiryFunction').Environment.Variables.ACCESS_EXPIRY } }, require(name) {
     if (name === '@aws-sdk/client-ec2') return { EC2Client: Client, ...Object.fromEntries(['DescribeInstances', 'DescribeVolumes', 'TerminateInstances', 'DeleteVolume'].map(n => [`${n}Command`, command(`${n}Command`)])) };
     if (name === '@aws-sdk/client-s3') return { S3Client: Client, PutObjectCommand: command('PutObjectCommand') };
     throw new Error(`Unexpected import: ${name}`);
@@ -210,7 +222,7 @@ test('expiry role, environment and invocation target retain separate ownership b
   const fn = resource(t, 'ExpiryFunction');
   assert.deepEqual(fn.Role, { 'Fn::GetAtt': ['ExpiryRole', 'Arn'] });
   assert.equal(fn.ReservedConcurrentExecutions, 1);
-  assert.deepEqual(fn.Environment.Variables, { ACCOUNT: '462991287391', STACK_ID: { Ref: 'AWS::StackId' }, BUCKET: { Ref: 'Bucket' } });
+  assert.deepEqual(fn.Environment.Variables, { ACCOUNT: '462991287391', STACK_ID: { Ref: 'AWS::StackId' }, BUCKET: { Ref: 'Bucket' }, ACCESS_EXPIRY: '2027-02-28T23:59:00Z' });
   assert.deepEqual(resource(t, 'ExpiryRule').Targets, [{ Id: 'D570Expiry', Arn: { 'Fn::GetAtt': ['ExpiryFunction', 'Arn'] }, RetryPolicy: { MaximumEventAgeInSeconds: 60, MaximumRetryAttempts: 0 } }]);
   assert.deepEqual(resource(t, 'ExpiryPermission').FunctionName, { Ref: 'ExpiryFunction' });
   assert.equal(resource(t, 'ExpiryPermission').Principal, 'events.amazonaws.com');
@@ -284,8 +296,9 @@ test('serialized Lambda requests actual termination and volume deletion before p
     constructor(options) { assert.equal(options.region, 'eu-south-2'); assert.equal(options.maxAttempts, 3); }
     async send(command) {
       calls.push(command);
-      if (command.name === 'DescribeInstances') return { Reservations: [{ Instances: [{ InstanceId: 'i-0123456789abcdef0', State: { Name: 'running' }, Tags: tags }] }] };
-      if (command.name === 'DescribeVolumes') return { Volumes: [{ VolumeId: 'vol-0123456789abcdef0', State: 'available', Attachments: [], Tags: tags }] };
+      if (command.name === 'DescribeInstances') return withRootMappings(this, { Reservations: [{ Instances: [{ InstanceId: 'i-0123456789abcdef0', State: { Name: 'running' }, LaunchTime: new Date('2026-11-05T18:00:00Z'), NetworkInterfaces: [{ Attachment: { DeviceIndex: 0, AttachTime: new Date('2026-11-05T18:00:00Z') } }], Tags: tags }] }] });
+      if (command.name === 'DescribeVolumes' && command.input.VolumeIds) return { Volumes: command.input.VolumeIds.map(id => this.rootDisks.get(id)) };
+      if (command.name === 'DescribeVolumes') return { Volumes: [{ VolumeId: 'vol-0123456789abcdef0', State: 'available', CreateTime: new Date('2026-11-05T18:00:00Z'), Attachments: [], Tags: tags }] };
       if (command.name === 'TerminateInstances') {
         assert.deepEqual(JSON.parse(JSON.stringify(command.input)), { InstanceIds: ['i-0123456789abcdef0'] });
         return { TerminatingInstances: [{ InstanceId: 'i-0123456789abcdef0', CurrentState: { Name: 'shutting-down' } }] };
@@ -298,13 +311,13 @@ test('serialized Lambda requests actual termination and volume deletion before p
   const command = name => class { constructor(input) { this.name = name; this.input = input; } };
   class Clock extends Date { static now() { return Date.parse('2026-11-05T20:00:00Z'); } }
   const exports = {};
-  vm.runInNewContext(resource(render(), 'ExpiryFunction').Code.ZipFile, { exports, Date: Clock, process: { env: { AWS_REGION: 'eu-south-2', ACCOUNT: '462991287391', STACK_ID: stackId, BUCKET: 'd570-synthetic' } }, require(name) {
+  vm.runInNewContext(resource(render(), 'ExpiryFunction').Code.ZipFile, { exports, Date: Clock, process: { env: { AWS_REGION: 'eu-south-2', ACCOUNT: '462991287391', STACK_ID: stackId, BUCKET: 'd570-synthetic', ACCESS_EXPIRY: resource(render(), 'ExpiryFunction').Environment.Variables.ACCESS_EXPIRY } }, require(name) {
     if (name === '@aws-sdk/client-ec2') return { EC2Client: Client, ...Object.fromEntries(['DescribeInstances', 'DescribeVolumes', 'TerminateInstances', 'DeleteVolume'].map(n => [`${n}Command`, command(n)])) };
     if (name === '@aws-sdk/client-s3') return { S3Client: Client, PutObjectCommand: command('PutObject') };
     throw new Error('Unexpected import');
   } });
   const result = await exports.handler();
-  assert.deepEqual(calls.map(c => c.name), ['DescribeInstances', 'DescribeVolumes', 'TerminateInstances', 'DeleteVolume', 'PutObject']);
+  assert.deepEqual(calls.map(c => c.name), ['DescribeInstances', 'DescribeVolumes', 'DescribeVolumes', 'TerminateInstances', 'DeleteVolume', 'PutObject']);
   assert.deepEqual(JSON.parse(JSON.stringify(result.terminationRequested)), ['i-0123456789abcdef0']);
   assert.deepEqual(JSON.parse(JSON.stringify(result.volumeDeletionRequested)), ['vol-0123456789abcdef0']);
 });
@@ -316,8 +329,9 @@ test('serialized Lambda continues owned cleanup after an SDK refusal but publish
   class Client {
     async send(command) {
       calls.push({ name: command.name, input: JSON.parse(JSON.stringify(command.input)) });
-      if (command.name === 'DescribeInstances') return { Reservations: [{ Instances: ['i-0123456789abcdef0', 'i-11111111111111111'].map(InstanceId => ({ InstanceId, State: { Name: 'running' }, Tags: tags })) }] };
-      if (command.name === 'DescribeVolumes') return { Volumes: [{ VolumeId: 'vol-0123456789abcdef0', State: 'available', Attachments: [], Tags: tags }] };
+      if (command.name === 'DescribeInstances') return withRootMappings(this, { Reservations: [{ Instances: ['i-0123456789abcdef0', 'i-11111111111111111'].map(InstanceId => ({ InstanceId, State: { Name: 'running' }, LaunchTime: new Date('2026-11-05T18:00:00Z'), NetworkInterfaces: [{ Attachment: { DeviceIndex: 0, AttachTime: new Date('2026-11-05T18:00:00Z') } }], Tags: tags })) }] });
+      if (command.name === 'DescribeVolumes' && command.input.VolumeIds) return { Volumes: command.input.VolumeIds.map(id => this.rootDisks.get(id)) };
+      if (command.name === 'DescribeVolumes') return { Volumes: [{ VolumeId: 'vol-0123456789abcdef0', State: 'available', CreateTime: new Date('2026-11-05T18:00:00Z'), Attachments: [], Tags: tags }] };
       if (command.name === 'TerminateInstances') {
         if (command.input.InstanceIds[0] === 'i-0123456789abcdef0') throw failure;
         return { TerminatingInstances: [{ InstanceId: 'i-11111111111111111', CurrentState: { Name: 'shutting-down' } }] };
@@ -329,15 +343,108 @@ test('serialized Lambda continues owned cleanup after an SDK refusal but publish
   const command = name => class { constructor(input) { this.name = name; this.input = input; } };
   class Clock extends Date { static now() { return Date.parse('2026-11-05T20:00:00Z'); } }
   const exports = {};
-  vm.runInNewContext(resource(render(), 'ExpiryFunction').Code.ZipFile, { exports, Date: Clock, process: { env: { AWS_REGION: 'eu-south-2', ACCOUNT: '462991287391', STACK_ID: stackId, BUCKET: 'd570-synthetic' } }, require(name) {
+  vm.runInNewContext(resource(render(), 'ExpiryFunction').Code.ZipFile, { exports, Date: Clock, process: { env: { AWS_REGION: 'eu-south-2', ACCOUNT: '462991287391', STACK_ID: stackId, BUCKET: 'd570-synthetic', ACCESS_EXPIRY: resource(render(), 'ExpiryFunction').Environment.Variables.ACCESS_EXPIRY } }, require(name) {
     if (name === '@aws-sdk/client-ec2') return { EC2Client: Client, ...Object.fromEntries(['DescribeInstances', 'DescribeVolumes', 'TerminateInstances', 'DeleteVolume'].map(n => [`${n}Command`, command(n)])) };
     if (name === '@aws-sdk/client-s3') return { S3Client: Client, PutObjectCommand: command('PutObject') };
     throw new Error('Unexpected import');
   } });
   await assert.rejects(exports.handler(), error => error === failure);
   assert.deepEqual(calls.slice(2), [
+    { name: 'DescribeVolumes', input: { VolumeIds: ['vol-8123456789abcdef0'] } },
     { name: 'TerminateInstances', input: { InstanceIds: ['i-0123456789abcdef0'] } },
+    { name: 'DescribeVolumes', input: { VolumeIds: ['vol-91111111111111111'] } },
     { name: 'TerminateInstances', input: { InstanceIds: ['i-11111111111111111'] } },
     { name: 'DeleteVolume', input: { VolumeId: 'vol-0123456789abcdef0' } },
+  ]);
+});
+
+function renderedSweepFixture({ instances, volumes, instant = '2026-11-05T20:00:00Z', afterReadMs = 0, rootVolumes }) {
+  let clock = Date.parse(instant);
+  const calls = [], stackId = 'arn:aws:cloudformation:eu-south-2:462991287391:stack/d570/00000000-0000-4000-8000-000000000000';
+  class Client {
+    async send(command) {
+      calls.push({ name: command.name, input: JSON.parse(JSON.stringify(command.input)) });
+      if (command.name === 'DescribeInstances') { clock += afterReadMs; return withRootMappings(this, { Reservations: [{ Instances: structuredClone(instances) }] }); }
+      if (command.name === 'DescribeVolumes' && command.input.VolumeIds) return { Volumes: rootVolumes ?? command.input.VolumeIds.map(id => this.rootDisks.get(id)) };
+      if (command.name === 'DescribeVolumes') return { Volumes: volumes };
+      if (command.name === 'TerminateInstances') return { TerminatingInstances: command.input.InstanceIds.map(InstanceId => ({ InstanceId, CurrentState: { Name: 'shutting-down' } })) };
+      if (command.name === 'DeleteVolume' || command.name === 'PutObject') return {};
+      throw new Error('Unexpected SDK operation');
+    }
+  }
+  const command = name => class { constructor(input) { this.name = name; this.input = input; } };
+  class Clock extends Date { static now() { return clock; } }
+  const exports = {}, fn = resource(render(), 'ExpiryFunction');
+  vm.runInNewContext(fn.Code.ZipFile, { exports, Date: Clock, process: { env: { AWS_REGION: 'eu-south-2', ACCOUNT: '462991287391', STACK_ID: stackId, BUCKET: 'd570-synthetic', ACCESS_EXPIRY: fn.Environment.Variables.ACCESS_EXPIRY } }, require(name) {
+    if (name === '@aws-sdk/client-ec2') return { EC2Client: Client, ...Object.fromEntries(['DescribeInstances', 'DescribeVolumes', 'TerminateInstances', 'DeleteVolume'].map(n => [`${n}Command`, command(n)])) };
+    if (name === '@aws-sdk/client-s3') return { S3Client: Client, PutObjectCommand: command('PutObject') };
+    throw new Error('Unexpected import');
+  } });
+  return { calls, handler: exports.handler };
+}
+
+test('rendered Lambda isolates malformed run ownership and preserves independent cleanup', async () => {
+  const stack = 'arn:aws:cloudformation:eu-south-2:462991287391:stack/d570/00000000-0000-4000-8000-000000000000';
+  const tags = (run, proof = 'D570') => Object.entries({ Proof: proof, Stack: stack, Run: run, ExpiresAt: '2026-11-05T19:59:59Z' }).map(([Key, Value]) => ({ Key, Value }));
+  const owned = '11111111-1111-4111-8111-111111111111', began = new Date('2026-11-05T19:00:00Z');
+  const f = renderedSweepFixture({ instances: [
+    { InstanceId: 'i-0123456789abcdef0', State: { Name: 'running' }, Tags: tags('unknown') },
+    { InstanceId: 'i-11111111111111111', State: { Name: 'running' }, LaunchTime: began, NetworkInterfaces: [{ Attachment: { DeviceIndex: 0, AttachTime: began } }], Tags: tags(owned) },
+  ], volumes: [
+    { VolumeId: 'vol-0123456789abcdef0', State: 'available', Attachments: [], CreateTime: began, Tags: tags('unknown') },
+    { VolumeId: 'vol-11111111111111111', State: 'available', Attachments: [], CreateTime: began, Tags: tags(owned) },
+    { VolumeId: 'vol-22222222222222222', State: 'available', Attachments: [], CreateTime: began, Tags: tags(owned, 'FOREIGN') },
+  ] });
+  await assert.rejects(f.handler(), /ownership/);
+  assert.deepEqual(f.calls.slice(2), [
+    { name: 'DescribeVolumes', input: { VolumeIds: ['vol-91111111111111111'] } },
+    { name: 'TerminateInstances', input: { InstanceIds: ['i-11111111111111111'] } },
+    { name: 'DeleteVolume', input: { VolumeId: 'vol-11111111111111111' } },
+  ]);
+});
+
+test('rendered Lambda enforces both original lifetime and configured access expiry without a heartbeat', async () => {
+  const stack = 'arn:aws:cloudformation:eu-south-2:462991287391:stack/d570/00000000-0000-4000-8000-000000000000';
+  for (const scenario of [
+    { initial: '2026-11-05T19:00:00Z', latest: '2026-11-05T19:00:00Z', expiry: '2026-11-05T21:15:00.001Z', instant: '2026-11-05T20:00:00Z' },
+    { initial: '2026-11-05T17:00:00Z', latest: '2026-11-05T19:59:00Z', expiry: '2026-11-05T20:01:00Z', instant: '2026-11-05T20:00:00Z' },
+    { initial: '2027-02-28T23:00:00Z', latest: '2027-02-28T23:00:00Z', expiry: '2027-02-28T23:59:00.001Z', instant: '2027-02-28T23:59:00Z' },
+  ]) {
+    const tags = Object.entries({ Proof: 'D570', Stack: stack, Run: '11111111-1111-4111-8111-111111111111', ExpiresAt: scenario.expiry }).map(([Key, Value]) => ({ Key, Value }));
+    const f = renderedSweepFixture({ instant: scenario.instant,
+      instances: [{ InstanceId: 'i-0123456789abcdef0', State: { Name: 'running' }, Tags: tags, LaunchTime: new Date(scenario.latest), NetworkInterfaces: [{ Attachment: { DeviceIndex: 0, AttachTime: new Date(scenario.initial) } }] }],
+      volumes: [{ VolumeId: 'vol-0123456789abcdef0', State: 'available', Attachments: [], Tags: tags, CreateTime: new Date(scenario.initial) }] });
+    await assert.rejects(f.handler(), /lifetime/);
+    assert.deepEqual(f.calls.slice(2).map(c => c.name), ['DescribeVolumes', 'TerminateInstances', 'DeleteVolume']);
+  }
+});
+
+test('rendered Lambda preserves a healthy resource created while its inventory request is in flight', async () => {
+  const stack = 'arn:aws:cloudformation:eu-south-2:462991287391:stack/d570/00000000-0000-4000-8000-000000000000';
+  const began = new Date('2026-11-05T20:00:01Z');
+  const tags = Object.entries({ Proof: 'D570', Stack: stack, Run: '11111111-1111-4111-8111-111111111111', ExpiresAt: '2026-11-05T20:10:00Z' }).map(([Key, Value]) => ({ Key, Value }));
+  const f = renderedSweepFixture({ afterReadMs: 2000,
+    instances: [{ InstanceId: 'i-0123456789abcdef0', State: { Name: 'running' }, Tags: tags, LaunchTime: began, NetworkInterfaces: [{ Attachment: { DeviceIndex: 0, AttachTime: began } }] }],
+    volumes: [{ VolumeId: 'vol-0123456789abcdef0', State: 'available', Attachments: [], Tags: tags, CreateTime: began }] });
+  const pending = f.handler();
+  await assert.doesNotReject(pending);
+  const result = await pending;
+  assert.deepEqual(f.calls.map(c => c.name), ['DescribeInstances', 'DescribeVolumes', 'PutObject']);
+  assert.equal(result.completedAt, '2026-11-05T20:00:02.000Z');
+});
+
+test('rendered Lambda withholds termination when its root disk has uncertain ownership', async () => {
+  const stack = 'arn:aws:cloudformation:eu-south-2:462991287391:stack/d570/00000000-0000-4000-8000-000000000000';
+  const tags = run => Object.entries({ Proof: 'D570', Stack: stack, Run: run, ExpiresAt: '2026-11-05T19:59:59Z' }).map(([Key, Value]) => ({ Key, Value }));
+  const owned = tags('11111111-1111-4111-8111-111111111111'), began = new Date('2026-11-05T19:00:00Z');
+  const f = renderedSweepFixture({
+    instances: [{ InstanceId: 'i-0123456789abcdef0', State: { Name: 'running' }, Tags: owned, LaunchTime: began, NetworkInterfaces: [{ Attachment: { DeviceIndex: 0, AttachTime: began } }] }],
+    volumes: [{ VolumeId: 'vol-11111111111111111', State: 'available', Attachments: [], Tags: owned, CreateTime: began }],
+    rootVolumes: [{ VolumeId: 'vol-8123456789abcdef0', State: 'in-use', Tags: tags('unknown'), Attachments: [{ InstanceId: 'i-0123456789abcdef0', Device: '/dev/xvda', State: 'attached' }] }],
+  });
+  await assert.rejects(f.handler(), /ownership/);
+  assert.deepEqual(f.calls.slice(2), [
+    { name: 'DescribeVolumes', input: { VolumeIds: ['vol-8123456789abcdef0'] } },
+    { name: 'DeleteVolume', input: { VolumeId: 'vol-11111111111111111' } },
   ]);
 });

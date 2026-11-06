@@ -52,20 +52,30 @@ deadline bootstrap and live qualification remain unbuilt or unrun. Do not apply
 this prerequisite template. Task 6 permits this independently tested setup/control
 prerequisite to finish without a full live P1 proof.
 
-**Named pre-activation gates from the prerequisite review:** a malformed `Run`
-currently stops the whole sweep; resolve this starvation without weakening
-foreign-volume ownership assertions. Mutation and termination-response failures
-now allow later eligible cleanup attempts and, if those calls finish, rethrow the
-first failure without publishing health. A stalled call can still delay later
-attempts and error reporting; real SDK request timeouts remain unqualified. Synthetic engine and rendered-Lambda checks cover this behavior;
-complete-inventory ownership validation is unchanged.
-A valid far-future `ExpiresAt` currently has no independent cap; prove immutable
-launch-time plus the reserved 135-minute window and approved access-expiry bounds,
-with explicit missing/contradictory time handling for instances and volumes.
-Do not enable the rule or lift the launch deny before these gates, live EC2
-resource/condition semantics, regional AMI ownership and Lambda quota checks pass.
-Launcher grants now each carry the absolute access expiry so existing sessions
-also stop at that boundary; actual AWS policy behavior remains unqualified.
+**Named pre-activation gates from the prerequisite review:** synthetic engine and
+rendered-Lambda checks now isolate malformed `Run` rows without deleting them or
+publishing health, while independently owned resources still receive cleanup.
+Structural ambiguity still blocks every mutation. An instance's sole primary
+interface attachment time supplies its original launch, checked against the latest
+`LaunchTime`; volume time comes from `CreateTime`. Valid future expiry is bounded
+by that origin plus 135 minutes and the approved absolute access expiry. Excessive
+expiry requests owned cleanup and withholds health. Missing/contradictory service
+times request owned instance termination only after exact disk ownership checks,
+retain uncertain volumes and withhold health. Those checks read each disk marked
+for deletion, require the same stack/proof/original run/expiry and exact attached
+instance/device, and withhold termination if any disk cannot qualify. An inventory
+observation clock is refreshed before judging future timestamps. These checks do not qualify actual EC2 field semantics or termination.
+Mutation and response failures still permit later eligible attempts, then rethrow
+without health. A stalled call can still delay later attempts; real SDK request
+timeouts remain unqualified. Do not enable the rule or lift the launch deny before
+live EC2 resource/condition/time/disk semantics, regional AMI ownership and Lambda
+quota checks pass. Capture actual SDK pending/shutting-down/terminated shapes,
+interface versus latest launch ordering, inter-service clock differences and
+attachment states; incomplete origin on a shutting-down row still withholds
+health until termination is observed. Qualify runtime denial of tag/attachment
+changes between disk reads and termination; these synthetic checks are not an
+atomic provider transaction. Launcher grants retain the absolute access expiry so existing
+sessions also stop at that boundary; actual AWS policy behavior remains unqualified.
 
 **Files after the answer:** `deploy/kubernetes/proof/{setup.yaml,setup.mjs,setup.test.mjs,README.md,bootstrap.sh,deadline.service,deadline.timer,expiry.mjs,expiry.test.mjs,policy.json}`. `setup.yaml` is the sole owner-run CloudFormation template; the thin entry is `node deploy/kubernetes/proof/setup.mjs up` or the same entry with `down`. **Interfaces:** `up():StackOutputs`; `down():CleanupReceipt`; all runtime IDs, immutable AMI/template versions and role/network/bucket identities come automatically from stack outputs, never pasted owner IDs.
 
@@ -110,7 +120,7 @@ also stop at that boundary; actual AWS policy behavior remains unqualified.
 **Files:** `scripts/kubernetes-proof-control.mjs`, its `.test.mjs`; Task 1 bootstrap/deadline/expiry files. **Interfaces:** `launchReserved(reservation,aws):Promise<LaunchRecord>`; `collectOwned(record,aws):Promise<CleanupReceipt>`. Tags are `Proof=D570`, fixed Stack ID, `Run=<UUIDv4>`, absolute RFC3339 `ExpiresAt` on instance/root; ledger records exact IDs/AMI/template. ClientToken is reservation UUID, MinCount=MaxCount=1.
 
 - [ ] TDD: `crash_after_each_api`, `lost_launch_response_same_client_token`, `cancel_keeps_deadlines`, `stale_sweeper_blocks_release`, `foreign_tags_untouched`, `duplicate_cannot_extend_expiry`. Run `node --test scripts/kubernetes-proof-control.test.mjs` RED, implement bounded state transitions, GREEN; delete each guard separately and require its original assertion to fail.
-- [ ] Before launch require the template's one-minute sweeper armed, a fresh (<2-minute) independently written successful-sweep heartbeat and no unresolved stack-owned Proof=D570 resources. Sweep all such instances/volumes, without a Run filter, so lost-response orphans cannot hide. Expired or missing/malformed-expiry proof instances terminate; volume deletion needs proven run ownership and no attachment. Record observations and reserve the possible 15-minute cleanup delay.
+- [ ] Before launch require the template's one-minute sweeper armed, a fresh (<2-minute) independently written successful-sweep heartbeat and no unresolved stack-owned Proof=D570 resources. Sweep all such instances/volumes, without a Run filter, so lost-response orphans cannot hide. Expired or missing/malformed-expiry proof instances with a valid original Run receive termination only after every deletion-on-termination disk passes exact ownership/attachment checks. Malformed Run rows remain untouched, withhold health and do not starve independent cleanup; structural ambiguity still blocks all mutation. Direct volume deletion needs proven run ownership and no attachment. Record observations and reserve the possible 15-minute cleanup delay.
 - [ ] Trusted launch data fixes the original absolute expiry. Bootstrap arms systemd before S3/package/candidate work, reads only IMDSv2 launch data (no profile/credential source), checks clock/deadline and powers off on failure. Keep inline user data within EC2's 16 KiB limit; offline tool bytes belong in the verified S3 bundle. Use `systemctl poweroff`, actual `InstanceInitiatedShutdownBehavior=terminate`, root `DeleteOnTermination=true`; halt/stop is insufficient. Reboot/retry cannot extend expiry. Publish create-only release only after verified ready/deadline record, read-back of the live instance's shutdown-to-terminate setting, successful prior termination-drill evidence and fresh sweeper health; observe actual shutdown during cleanup. Reconcile exact ClientToken/tags/IDs on retry; unresolved outcomes retain the UUID/reservation and protection.
 - [ ] After access and cost reservation, trusted-main safety profiles run no candidate payload. OS drill: fix its local deadline earlier than the outer sweep expiry (both within five minutes), hang proof, lose controller and require that fixed local deadline to terminate first, with local deadline record plus EC2 instance-initiated-shutdown evidence. Independent-sweep drill: trusted drill data disables the OS timer and deliberately hangs the guest kernel after its bounded ready/fault record; lose the launch response/controller and require the sweeper role's exact-instance real TerminateInstances audit event. Record the injected guest fault and prove termination without guest cooperation; never claim a mocked hang as kernel coverage. Wrong/rescue actor fails; timestamp/volume absence or mocks alone never pass. Keep the sweep armed during every drill and exercise duplicate/retry/cancellation and unchanged foreign sentinels.
 - [ ] `collectOwned` requires terminated state, filtered owned volume/ENI lists empty and exact root `InvalidVolume.NotFound` (never AccessDenied); use bounded EC2 reads above, journal IDs automatically. Reconcile delayed usage before claiming no continuing billing. Unknown cleanup retains protection/reservation, blocks further spending and reports exact IDs/deadlines/last observations with a narrow owned termination/volume response. Finalizers never provide the only termination path; do not delete shared resources.
