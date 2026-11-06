@@ -11,7 +11,7 @@ export function remoteFiles(shard, files) {
     (file === 'venue-service-remote-guards.test.ts' ? 4 : index % 4 + 1) === shard);
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(realpathSync(process.argv[1])).href) {
+if (process.argv[1] && process.argv[1] !== '-' && import.meta.url === pathToFileURL(realpathSync(process.argv[1])).href) {
   const root = resolve(dirname(fileURLToPath(import.meta.url)), '../packages/remote-access');
   const files = readdirSync(resolve(root, 'test')).filter(file => !file.startsWith('.') && file.endsWith('.test.ts'));
   const selected = remoteFiles(Number(process.argv[2]), files);

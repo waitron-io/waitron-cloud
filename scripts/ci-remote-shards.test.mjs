@@ -21,6 +21,16 @@ function fixture(run) {
   } finally {rmSync(root, {recursive: true, force: true});}
 }
 
+test('remote allocation can be imported from an explicit standard-input program', () => {
+  const env = {...process.env}; delete env.NODE_TEST_CONTEXT;
+  const result = spawnSync(process.execPath, ['--input-type=module', '-'], {
+    input: "import {remoteFiles} from './scripts/ci-run-remote-shard.mjs';console.log(JSON.stringify(remoteFiles(1,['a.test.ts','b.test.ts'])));",
+    env, encoding: 'utf8', timeout: 10_000,
+  });
+  assert.equal(result.status, 0, result.stderr + result.stdout);
+  assert.deepEqual(JSON.parse(result.stdout), ['a.test.ts']);
+});
+
 test('invalid and empty remote partitions refuse without discovering unrelated tests', () => {
   fixture(({root, execute}) => {
     writeFileSync(join(root, 'packages/remote-access/unrelated.test.ts'),
