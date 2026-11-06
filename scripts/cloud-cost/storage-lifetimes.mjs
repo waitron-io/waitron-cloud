@@ -305,18 +305,20 @@ export async function openLitestreamLifetimes({ client, sdk, meter, bucket, cloc
     const token = {}; pending.add(token);
     return guarded(({ statusCode, bytesOut, interrupted = false, responseHeaders }) => {
       if (settleLifetime) ({ statusCode } = settleLifetime({ statusCode, bytesOut, interrupted, responseHeaders }));
-      requireThat(pending.has(token) && (!interrupted || settleLifetime) && Number.isInteger(statusCode) && statusCode >= 200 && statusCode <= 599);
+      requireThat(pending.has(token) && typeof interrupted === 'boolean' && count(bytesOut)
+        && (interrupted && statusCode === null || Number.isInteger(statusCode) && statusCode >= 200 && statusCode <= 599));
+      if (interrupted) { gaps.add('accounting:request-cutoff'); meter.markGap('accounting:request-cutoff'); }
       const time = now();
       if (row) {
-        requireThat(bytesOut === bytes);
-        if (statusCode < 300) row.by ??= time;
+        requireThat(interrupted ? bytesOut <= bytes : bytesOut === bytes);
+        if (statusCode !== null && statusCode < 300 && (!interrupted || settleLifetime)) row.by ??= time;
         row.pending = false;
       }
       pending.delete(token);
     });
   };
   const begin = guarded(input => beginOperation(input, false));
-  // Final restore shares inventory and pending-token guards, with no replication shutdown allowance.
+  // Restore shares inventory and pending-token guards; its read-only view cannot mutate storage.
   const strictReads = { begin: guarded(input => {
     requireThat(['get', 'head', 'list'].includes(classifyStorageOperation(input)));
     return beginOperation(input, true);
@@ -496,11 +498,13 @@ export async function openLitestreamHistories({ client, sdk, meter, bucket, cloc
     const token = {}; pending.add(token);
     return guarded(({ statusCode, bytesOut, interrupted = false, responseHeaders }) => {
       if (settleLifetime) ({ statusCode } = settleLifetime({ statusCode, bytesOut, interrupted, responseHeaders }));
-      requireThat(pending.has(token) && (!interrupted || settleLifetime) && Number.isInteger(statusCode) && statusCode >= 200 && statusCode <= 599);
+      requireThat(pending.has(token) && typeof interrupted === 'boolean' && count(bytesOut)
+        && (interrupted && statusCode === null || Number.isInteger(statusCode) && statusCode >= 200 && statusCode <= 599));
+      if (interrupted) { gaps.add('accounting:request-cutoff'); meter.markGap('accounting:request-cutoff'); }
       const time = now();
       if (mutation) {
-        requireThat(bytesOut === mutation.bytes);
-        if (statusCode < 300) transition(row, mutation, time);
+        requireThat(interrupted ? bytesOut <= mutation.bytes : bytesOut === mutation.bytes);
+        if (statusCode !== null && statusCode < 300 && (!interrupted || settleLifetime)) transition(row, mutation, time);
         else if (mutation.method === 'PUT' ? row.current?.bytes !== mutation.bytes : row.current !== null) row.uncertain = mutation;
         row.active = false;
       }
@@ -508,7 +512,7 @@ export async function openLitestreamHistories({ client, sdk, meter, bucket, cloc
     });
   };
   const begin = guarded(input => beginOperation(input, false));
-  // Final restore shares inventory and pending-token guards, with no replication shutdown allowance.
+  // Restore shares inventory and pending-token guards; its read-only view cannot mutate storage.
   const strictReads = { begin: guarded(input => {
     requireThat(['get', 'head', 'list'].includes(classifyStorageOperation(input)));
     return beginOperation(input, true);

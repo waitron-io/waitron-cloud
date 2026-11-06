@@ -171,7 +171,17 @@ requests remain strict, including an incomplete next header while an earlier
 response is active. Run `node --test
 scripts/cloud-cost/request-cutoff-accounting.test.mjs
 scripts/cloud-cost/litestream-transfer-accounting.test.mjs` for these controls.
-Stop-ledger and lifetime interruption handling still need the wider policy.
+Ordinary put-only, unversioned and versioned lifetime trackers now collect
+cut-off reads, writes and deletes as unknown accounting. A missing HTTP reply
+never supplies a commit time; independent inventory bounds retained bytes.
+The gap survives later inventories and prevents measurement eligibility.
+Their read-only restore views keep the same accounting policy while continuing
+to refuse mutations. Malformed completions, duplicate settlement, foreign
+inventory and invalid clocks still refuse. Run `node --test
+scripts/cloud-cost/lifetime-cutoff-accounting.test.mjs` for original-event and
+real interrupted-HTTP controls. These controls do not establish actual SQLite
+recovery or resolve missing history. Stop-ledger, bulk and multipart interruption
+handling still need the wider policy.
 The full nonblocking accounting path, publication refusal, lost-write
 restore control and saved-failure replay remain open. These partial changes do
 not establish the historical cause or relax functional admission.

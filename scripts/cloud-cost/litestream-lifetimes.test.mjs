@@ -120,7 +120,7 @@ test('streamFailedUploadPresenceIsBoundedByIndependentInventoryAndAbsenceResetsI
   f.time(10); assert.deepEqual(audit.snapshot().byteSeconds, { low: 12, high: 24 });
 });
 
-// Unpaired mutations, unsupported histories and ambiguous transfer completion cannot earn a storage receipt.
+// Unsupported mutations and malformed completion cannot earn storage evidence.
 test('streamStorageRefusesUnsupportedMutationsAndPoisonsEvidence', async t => {
   for (const input of [
     { ...put(), method: 'DELETE' }, { ...put(), method: 'POST', path: path + '?uploads' },
@@ -137,7 +137,15 @@ test('streamStorageRefusesUnsupportedMutationsAndPoisonsEvidence', async t => {
   for (const completion of [{ statusCode: 200, bytesOut: 3 }, { statusCode: null, bytesOut: 4, interrupted: true }, { statusCode: 200, bytesOut: 4, interrupted: true },
     { statusCode: 99, bytesOut: 4 }]) {
     const f = await fixture(t), audit = await open(f), finish = audit.begin(put());
-    assert.throws(() => finish(completion), bad); assert.throws(() => audit.snapshot(), bad);
+    if (completion.interrupted) {
+      finish(completion); await audit.verify();
+      assert.equal(audit.snapshot().status, 'unknown');
+      assert.deepEqual(audit.snapshot().gaps, ['accounting:request-cutoff']);
+      assert.equal(audit.snapshot().objects.bytes, 0);
+      assert.deepEqual(audit.snapshot().byteSeconds, { low: 0, high: 0 });
+    } else {
+      assert.throws(() => finish(completion), bad); assert.throws(() => audit.snapshot(), bad);
+    }
   }
 });
 
@@ -316,11 +324,15 @@ for (const method of ['PUT', 'DELETE', 'POST']) test(`the strict restore view re
   assert.throws(() => reader.strictReads.begin({ method, path, headers: {'content-length':'4'} }), bad);
   await assert.rejects(reader.verify(), bad);assert.throws(() => afterStop.snapshot());
 });
-test('an interrupted final restore read still poisons the shared history', async t => {
+test('an interrupted final restore read leaves an accounting gap without invalidating shared history', async t => {
   const { createLitestreamAfterStop } = await import('./litestream.mjs');
   const f = await fixture(t), afterStop = createLitestreamAfterStop({ clock: () => 0 });
   const reader = await storage.openLitestreamLifetimes({ ...f.args, afterStop });
   const finish = reader.strictReads.begin({ method: 'GET', path, headers: {} });
-  assert.throws(() => finish({ statusCode: 200, bytesOut: 0, interrupted: true, responseHeaders: {} }), bad);
-  await assert.rejects(reader.verify(), bad);assert.throws(() => afterStop.snapshot());
+  finish({ statusCode: 200, bytesOut: 0, interrupted: true, responseHeaders: {} });
+  await reader.verify();
+  assert.equal(reader.snapshot().status, 'unknown');
+  assert.deepEqual(reader.snapshot().gaps, ['accounting:request-cutoff']);
+  assert.ok(f.meter.snapshot().gaps.includes('accounting:request-cutoff'));
+  assert.equal(afterStop.snapshot().used, 0);
 });

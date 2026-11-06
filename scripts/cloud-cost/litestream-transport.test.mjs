@@ -158,6 +158,8 @@ test('litestreamTransportInterruptedResponsesAndConnectionFailuresKeepUnknownEvi
     const meter = createMeter({ phase: 'workload', clock: () => 0 });
     const front = await transport(t, target, meter);
     await assert.rejects(send(front.url, { headers: headers(), body: 'hello' }), /Synthetic (response interrupted|request failed)/);
+    // Client failure can arrive before the forwarding pipeline retires its admitted work.
+    await front.whenIdle(() => {});
     await front.close();
     assert.equal(meter.snapshot().status, 'unknown');
     assert.ok(meter.snapshot().gaps.includes('accounting:request-cutoff'));

@@ -140,11 +140,14 @@ export async function openLitestreamVersionHistories({ client, sdk, meter, bucke
     const token = {}; pending.add(token);
     return guarded(({ statusCode, bytesOut, interrupted = false, responseHeaders }) => {
       if (settleLifetime) ({ statusCode, responseHeaders } = settleLifetime({ statusCode, bytesOut, interrupted, responseHeaders }));
-      need(pending.has(token) && (!interrupted || settleLifetime) && Number.isInteger(statusCode) && statusCode >= 200 && statusCode <= 599);
+      need(pending.has(token) && typeof interrupted === 'boolean' && count(bytesOut)
+        && (interrupted && statusCode === null || Number.isInteger(statusCode) && statusCode >= 200 && statusCode <= 599));
+      if (interrupted) { gaps.add('accounting:request-cutoff'); meter.markGap('accounting:request-cutoff'); }
       const time = now();
       if (mutation) {
-        need(bytesOut === (operation === 'put' ? mutation.bytes : 0));
-        if (statusCode < 300) {
+        const expectedBytes = operation === 'put' ? mutation.bytes : 0;
+        need(interrupted ? bytesOut <= expectedBytes : bytesOut === expectedBytes);
+        if (statusCode !== null && statusCode < 300 && (!interrupted || settleLifetime)) {
           need(responseHeaders && typeof responseHeaders === 'object');
           const returned = responseHeaders['x-amz-version-id'], marker = responseHeaders['x-amz-delete-marker'];
           if (mutation.row) {
@@ -164,7 +167,7 @@ export async function openLitestreamVersionHistories({ client, sdk, meter, bucke
     });
   };
   const begin = guarded(input => beginOperation(input, false));
-  // Final restore shares inventory and pending-token guards, with no replication shutdown allowance.
+  // Restore shares inventory and pending-token guards; its read-only view cannot mutate storage.
   const strictReads = { begin: guarded(input => {
     need(['get', 'head', 'list'].includes(classifyStorageOperation(input)));
     return beginOperation(input, true);

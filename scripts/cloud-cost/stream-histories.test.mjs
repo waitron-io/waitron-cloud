@@ -169,14 +169,22 @@ for (const mutation of ['create', 'replace', 'delete']) {
 
 // Resolving a failed mutation by an unrelated next mutation would hide which size existed in between.
 for (const mode of ['overlap', 'ambiguous', 'twice', 'clock', 'short', 'interrupt', 'null', 'status']) {
-  test(`streamHistoryPoisonsUnprovableTransition_${mode}`, async t => {
+  test(mode === 'interrupt' ? 'streamHistoryRetainsUnknownInterruptedTransition' : `streamHistoryPoisonsUnprovableTransition_${mode}`, async t => {
     const f = await fixture(t), audit = await open(f);
     success(f, audit, put(4), 1, 2, 4);
     f.time(4); const finish = audit.begin(del());
     if (mode === 'overlap') assert.throws(() => audit.begin(put(6)), bad);
     else if (mode === 'clock') { f.time(3); assert.throws(() => finish({ statusCode: 204, bytesOut: 0 }), bad); }
     else if (mode === 'short') assert.throws(() => finish({ statusCode: 204, bytesOut: 1 }), bad);
-    else if (mode === 'interrupt') assert.throws(() => finish({ statusCode: 204, bytesOut: 0, interrupted: true }), bad);
+    else if (mode === 'interrupt') {
+      finish({ statusCode: 204, bytesOut: 0, interrupted: true });
+      await audit.verify();
+      assert.equal(audit.snapshot().status, 'unknown');
+      assert.deepEqual(audit.snapshot().gaps, ['accounting:request-cutoff']);
+      assert.equal(audit.snapshot().objects.bytes, 4);
+      assert.ok(f.meter.snapshot().gaps.includes('accounting:request-cutoff'));
+      return;
+    }
     else if (mode === 'null') assert.throws(() => finish({ statusCode: null, bytesOut: 0 }), bad);
     else if (mode === 'status') assert.throws(() => finish({ statusCode: 99, bytesOut: 0 }), bad);
     else {
@@ -377,11 +385,15 @@ for (const method of ['PUT', 'DELETE', 'POST']) test(`the strict restore view re
   assert.throws(() => reader.strictReads.begin({ method, path, headers: {'content-length':'4'} }), bad);
   await assert.rejects(reader.verify(), bad);assert.throws(() => afterStop.snapshot());
 });
-test('an interrupted final restore read still poisons the shared history', async t => {
+test('an interrupted final restore read leaves an accounting gap without invalidating shared history', async t => {
   const { createLitestreamAfterStop } = await import('./litestream.mjs');
   const f = await fixture(t), afterStop = createLitestreamAfterStop({ clock: () => 0 });
   const reader = await storage.openLitestreamHistories({ ...f.args, afterStop });
   const finish = reader.strictReads.begin({ method: 'GET', path, headers: {} });
-  assert.throws(() => finish({ statusCode: 200, bytesOut: 0, interrupted: true, responseHeaders: {} }), bad);
-  await assert.rejects(reader.verify(), bad);assert.throws(() => afterStop.snapshot());
+  finish({ statusCode: 200, bytesOut: 0, interrupted: true, responseHeaders: {} });
+  await reader.verify();
+  assert.equal(reader.snapshot().status, 'unknown');
+  assert.deepEqual(reader.snapshot().gaps, ['accounting:request-cutoff']);
+  assert.ok(f.meter.snapshot().gaps.includes('accounting:request-cutoff'));
+  assert.equal(afterStop.snapshot().used, 0);
 });
