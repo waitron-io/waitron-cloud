@@ -48,7 +48,7 @@ The unprivileged `.github/workflows/kubernetes-proof.yml` runs those checks and
 CloudFormation validation. Launches remain explicitly denied, the rule is disabled,
 and CLI `up`/`down` refuse. This does not complete Task 1: the owner lifecycle,
 conditional cost reservation, current prices/billing, environment protection,
-deadline bootstrap and live qualification remain unbuilt or unrun. Do not apply
+deadline-entry integration and live qualification remain unfinished. Do not apply
 this prerequisite template. Task 6 permits this independently tested setup/control
 prerequisite to finish without a full live P1 proof.
 
@@ -77,7 +77,7 @@ changes between disk reads and termination; these synthetic checks are not an
 atomic provider transaction. Launcher grants retain the absolute access expiry so existing
 sessions also stop at that boundary; actual AWS policy behavior remains unqualified.
 
-**Files after the answer:** `deploy/kubernetes/proof/{setup.yaml,setup.mjs,setup.test.mjs,README.md,bootstrap.sh,deadline.service,deadline.timer,expiry.mjs,expiry.test.mjs,policy.json}`. `setup.yaml` is the sole owner-run CloudFormation template; the thin entry is `node deploy/kubernetes/proof/setup.mjs up` or the same entry with `down`. **Interfaces:** `up():StackOutputs`; `down():CleanupReceipt`; all runtime IDs, immutable AMI/template versions and role/network/bucket identities come automatically from stack outputs, never pasted owner IDs.
+**Files after the answer:** `deploy/kubernetes/proof/{setup.yaml,setup.mjs,setup.test.mjs,README.md,bootstrap.sh,bootstrap.mjs,bootstrap.test.mjs,expiry.mjs,expiry.test.mjs,policy.json}`. `setup.yaml` is the sole owner-run CloudFormation template; the thin entry is `node deploy/kubernetes/proof/setup.mjs up` or the same entry with `down`. **Interfaces:** `up():StackOutputs`; `down():CleanupReceipt`; all runtime IDs, immutable AMI/template versions and role/network/bucket identities come automatically from stack outputs, never pasted owner IDs.
 
 - [x] Prepare this **single access request**, after independent review: “For D570, will you approve one reviewed removable setup template, run once in one sitting using temporary staging sign-in, with the same entry removing it, solely for account 462991287391/eu-south-2, one on-demand ARM m7g.2xlarge, no inbound internet and at most USD 5/month, and confirm the access expiry, monthly allocation/baseline and temporary repository-configuration authority? It creates the infrastructure and GitHub protection automatically, safely reuses shared OIDC and limits runtime to temporary scoped GitHub OIDC access. We recommend ephemeral read-only access for locked @waitron-io/ui-core and request a committed digest-bound Waitron export of initial v1 candidate 00496fcd182a5c2c9189cc3faf0f8f22d3baf8ac, with producer/client/verifier interfaces and full-journey compatibility still to qualify, through the approved short-lived input mechanism. No secrets/tokens in chat or files, personal token, root/long-lived key or production access.”
 - [x] Record that single answer before template/AWS-action build or spending. Missing package/export or repository-configuration authority is an explicit gap, never permission to fabricate proof, broaden credentials or ask you to hand-build parts. The plan/request is not access or an existing template.

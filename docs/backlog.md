@@ -3277,7 +3277,10 @@ implementation or production evidence.
   original reservation to a fixed UTC timer, a boot-relative fallback and
   shutdown on reboot. Synthetic shell checks cover exact retries without
   rearming, clock rollback, partial installation, damaged state and preserved
-  foreign unit files. It is not yet wired into a launcher: actual ARM/systemd
+  foreign unit files. Signals and failed diagnostics now request poweroff; clock
+  checksums and systemd loader checks reject changed deadlines and foreign
+  overrides. Debian checks verify unit syntax and isolated persistent enablement.
+  It is not yet wired into a launcher: actual ARM/systemd
   behavior, IMDSv2 identity, offline inputs and shutdown/termination remain
   unqualified. D570's
   [weekly proof plan](superpowers/plans/2026-11-04-kubernetes-weekly-proof.md) carries

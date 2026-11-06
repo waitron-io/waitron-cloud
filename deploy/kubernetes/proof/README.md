@@ -107,7 +107,7 @@ claim. The launcher deny and disabled rule remain mandatory until they are resol
 Before the owner can run setup, implement the one-entry `up`/`down` lifecycle,
 conditional all-in setup/runtime reservations, official current prices and billing
 reconciliation, protected main-only GitHub environment, immutable ARM/offline input
-closure, and fixed local-deadline bootstrap. Complete the real OIDC refusal and
+closure, and integration of the fixed local-deadline entry. Complete the real OIDC refusal and
 both termination drills with exact actor and cleanup evidence. Preserve protection
 and ownership records through partial setup or uncertain cleanup. Do not remove
 the explicit launch deny, enable the rule or ask the owner to apply this template
@@ -168,7 +168,7 @@ acquisition must still build and verify the complete all-in bound, including
 setup, retained data, idle protection, taxes and delayed cleanup. The core accepts
 those reviewed inputs; a price URL and digest alone do not prove a price or an
 upper bound. The launch controller must still verify cleanup and budget evidence
-against AWS. Owner lifecycle, fixed-deadline bootstrap and live qualification
+against AWS. Owner lifecycle, deadline-entry integration and live qualification
 remain open. Admission stays closed.
 
 The returned reservation is a ledger receipt, rather than a lasting machine-launch
@@ -191,12 +191,18 @@ using this entry; the current setup still refuses execution.
 
 The entry installs a UTC systemd timer and a second trigger measured from boot,
 so moving the wall clock backwards cannot extend the first boot's interval.
-The boot trigger is rounded down and fires two seconds early. An enabled
+The boot trigger is rounded down with a two-second margin. Uptime is read before
+the wall clock, so a pause between them can shorten the interval without extending it. An enabled
 reboot service requests poweroff before cloud-init on a later boot.
-An exact retry checks the original boot, identity, clock, saved unit checksums
+An exact retry checks the original boot, identity, clock and unit checksums
 and active protection without restarting a timer. Missing or damaged state,
 a changed reservation, an elapsed deadline or a failed installation withholds
-the ready record and requests poweroff. Existing named system units are preserved.
+the ready record and requests poweroff. Existing named system units and override directories are preserved; their presence refuses setup.
+These include unit-specific, shared service/timer and prefix overrides in the
+standard [unit load paths](https://www.freedesktop.org/software/systemd/man/latest/systemd.unit.html).
+The reboot service must report persistent [enablement](https://www.freedesktop.org/software/systemd/man/latest/systemctl.html), not a static or transient state.
+Interrupt, hangup and terminate signals request poweroff. Diagnostic and temporary-file
+cleanup failures cannot suppress that request.
 
 These are synthetic shell and command-boundary checks. The tests project only
 OS paths and executable boundaries into an isolated directory; they do not run
