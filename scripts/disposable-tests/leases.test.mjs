@@ -152,3 +152,15 @@ test('an unreadable or incomplete occupied ledger refuses admission', async t =>
   assert.throws(() => leases.reserveLocal(request('turn-2')), /invalid.*lease/i);
   assert.throws(() => leases.inspect(), /invalid.*lease/i);
 });
+
+for (const turn of [undefined, null, 12]) {
+  test(`a missing or non-string turn cannot become a durable request ID: ${String(turn)}`, async t => {
+    const {leases} = await setup(t);
+    assert.throws(() => leases.reserveLocal({...request(), turn}), /invalid.*request/i);
+    assert.equal(leases.inspect().slots[0].state, 'free');
+  });
+}
+
+test('a missing host generation cannot allocate an unnamed host', async t => {
+  await assert.rejects(setup(t, {hostGeneration: undefined}), /invalid.*configuration/i);
+});

@@ -7,8 +7,9 @@ const maxDuration = 55 * 60 * 1000;
 const word = /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$/;
 const digest = value => createHash('sha256').update(JSON.stringify(value)).digest('hex');
 function requestIdentity(request) {
-  assert.ok(request && /^[A-K]$/.test(request.lane) && word.test(request.turn) &&
-    /^[a-f0-9]{64}$/.test(request.snapshot) && Array.isArray(request.argv) &&
+  assert.ok(request && typeof request.lane === 'string' && /^[A-K]$/.test(request.lane) &&
+    typeof request.turn === 'string' && word.test(request.turn) &&
+    typeof request.snapshot === 'string' && /^[a-f0-9]{64}$/.test(request.snapshot) && Array.isArray(request.argv) &&
     request.argv.length > 0 && request.argv.length <= 256 &&
     request.argv.every(v => typeof v === 'string' && v.length <= 16384 && !v.includes('\0')) &&
     request.argv[0].length > 0, 'Invalid local request');
@@ -19,7 +20,7 @@ function requestIdentity(request) {
 // recovery must inspect owned guests before clearing the lock or freeing capacity.
 export class LocalLeases {
   constructor(directory, {hostGeneration, slots, now = Date.now}) {
-    assert.ok(word.test(hostGeneration) && Number.isSafeInteger(slots) && slots >= 1 && slots <= 16, 'Invalid host configuration');
+    assert.ok(typeof hostGeneration === 'string' && word.test(hostGeneration) && Number.isSafeInteger(slots) && slots >= 1 && slots <= 16, 'Invalid host configuration');
     this.directory = resolve(directory);
     this.hostGeneration = hostGeneration;
     this.capacity = slots;
