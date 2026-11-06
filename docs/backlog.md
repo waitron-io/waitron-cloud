@@ -3460,7 +3460,8 @@ uses its own schema and data, and drops only its owned database. Other fixture
 callers keep the existing schema path. The real child refuses a changed migration
 digest and cleans the refused clone. All nine omissions retain their original
 before, omitted and restored assertions, along with the 180-second wrapper and
-30-second child limits. Real PostgreSQL checks verify clone isolation, migration-digest
+30-second child limits. Template migration statements retain the existing eight-second
+limit. Real PostgreSQL checks verify clone isolation, migration-digest
 refusal and removal of both clones and template. The focused Debian run completes
 the full wrapper within its unchanged deadline.
 

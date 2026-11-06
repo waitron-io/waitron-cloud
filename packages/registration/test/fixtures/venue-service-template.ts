@@ -22,7 +22,7 @@ async function database(template?:string){
 
 // The template has no open connections when children clone its real migration state.
 export async function createVenueServiceTemplate(){
- const owned=await database(),pool=new Pool({connectionString:owned.connectionString,options:`-c search_path=${seedSchema}`});
+ const owned=await database(),pool=new Pool({connectionString:owned.connectionString,options:`-c search_path=${seedSchema} -c statement_timeout=8000`});
  try{
   await pool.query(`CREATE SCHEMA ${seedSchema}`);await migrate(pool);await pool.end();return owned;
  }catch(error){await pool.end();await owned.close();throw error;}
