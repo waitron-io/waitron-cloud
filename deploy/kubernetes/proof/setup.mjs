@@ -33,6 +33,17 @@ export function renderSetup({ account, region, repository, oidcProviderArn, imag
   return template;
 }
 
+export function renderManualSetup(input) {
+  const template = renderSetup({ ...input, oidcProviderArn: null });
+  // Trusted owner-run drills need no web identity that a repository workflow could assume.
+  delete template.Resources.LauncherRole;
+  delete template.Resources.OidcProvider;
+  delete template.Conditions.CreateOidc;
+  delete template.Parameters.ExistingOidcProviderArn;
+  for (const name of ['LauncherRoleArn', 'RepositoryId', 'RepositoryOwnerId', 'Subject']) delete template.Outputs[name];
+  return template;
+}
+
 function lambdaSource() {
   const engine = load('./expiry.mjs').replace('export async function sweepExpired', 'async function sweepExpired');
   return `${engine}\nconst ec2sdk = require('@aws-sdk/client-ec2');
@@ -43,7 +54,7 @@ const operations = { DescribeInstances: ec2sdk.DescribeInstancesCommand, Describ
 exports.handler = async () => sweepExpired({ account: process.env.ACCOUNT, region: process.env.AWS_REGION, stackId: process.env.STACK_ID, bucket: process.env.BUCKET, accessExpiry: process.env.ACCESS_EXPIRY, aws: { call: (service, operation, input) => (service === 'ec2' ? ec2 : s3).send(new operations[operation](input)) } });\n`;
 }
 
-if (process.argv[1] && realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url))) {
+if (process.argv[1] && process.argv[1] !== '-' && realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url))) {
   console.error('D570 owner-run lifecycle is not implemented. Do not apply this prerequisite template; budget, bootstrap, repository protection and live safety qualification remain open.');
   process.exitCode = 1;
 }

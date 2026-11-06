@@ -63,10 +63,16 @@ jobs:
           const input = JSON.parse(readFileSync('deploy/kubernetes/proof/test-fixtures/setup-input.json'));
           console.log(JSON.stringify(renderSetup(input), null, 2));
           JS
+          node --input-type=module > "$RUNNER_TEMP/d570-manual-rendered.json" <<'JS'
+          import { readFileSync } from 'node:fs';
+          import { renderManualSetup } from './deploy/kubernetes/proof/setup.mjs';
+          const input = JSON.parse(readFileSync('deploy/kubernetes/proof/test-fixtures/setup-input.json'));
+          console.log(JSON.stringify(renderManualSetup(input), null, 2));
+          JS
       - name: Validate source and rendered CloudFormation without applying either
         shell: bash
         run: |
           set -euo pipefail
           python3 -m venv "$RUNNER_TEMP/d570-cfn-lint"
           "$RUNNER_TEMP/d570-cfn-lint/bin/pip" install 'cfn-lint==1.59.0'
-          "$RUNNER_TEMP/d570-cfn-lint/bin/cfn-lint" deploy/kubernetes/proof/setup.yaml "$RUNNER_TEMP/d570-rendered.json"
+          "$RUNNER_TEMP/d570-cfn-lint/bin/cfn-lint" deploy/kubernetes/proof/setup.yaml "$RUNNER_TEMP/d570-rendered.json" "$RUNNER_TEMP/d570-manual-rendered.json"

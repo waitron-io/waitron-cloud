@@ -128,6 +128,19 @@ These references informed the implementation; live qualification remains open.
 AWS documents the [original and most recent instance launch times](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/Stop_Start.html#find-initial-launch-time)
 and the volume's [creation timestamp](https://docs.aws.amazon.com/AWSEC2/latest/APIReference/API_Volume.html).
 
+## Prepare the first manual setup
+
+For the first payload-free drills, `renderManualSetup` compiles the private setup
+without a GitHub identity provider or launcher role. The owner approved using the
+same temporary staging sign-in for those two drills on 6 November. Ordinary launch
+admission stays closed, and the independent sweep starts disabled until the
+lifecycle observes its actual health. The renderer does not apply the template or
+launch a machine; the owner lifecycle and live qualification are still unfinished.
+
+The prerequisite workflow checks both rendered templates with the same pinned
+CloudFormation validator. Its setup tests require every retained resource
+reference to resolve and preserve the private launch and expiry configuration.
+
 ## Reserve cost before the next action
 
 The reservation core in `scripts/kubernetes-proof-budget.mjs` records one active

@@ -3178,7 +3178,10 @@ implementation or production evidence.
   The owner approved temporary setup/repository/input access through
   2027-02-28T23:59:00Z with an initial USD 0 baseline. The private setup template,
   identity-checked renderer and bounded expiry engine now have synthetic checks
-  and an unprivileged CI gate. The engine and rendered Lambda now attempt later
+  and an unprivileged CI gate. The first manual renderer also omits GitHub trust
+  and the launcher role while preserving private networking and closed ordinary
+  admission. Its tests and rendered-template validation do not grant a runnable
+  lifecycle or prove live termination. The engine and rendered Lambda now attempt later
   eligible cleanup after a mutation or termination-response failure. If those calls
   finish, the first error is rethrown without publishing healthy status; a stalled
   call can still delay later attempts and error reporting. Structural inventory

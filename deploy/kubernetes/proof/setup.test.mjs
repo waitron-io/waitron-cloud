@@ -448,3 +448,64 @@ test('rendered Lambda withholds termination when its root disk has uncertain own
     { name: 'DeleteVolume', input: { VolumeId: 'vol-11111111111111111' } },
   ]);
 });
+
+function renderManual(input = inputs()) {
+  assert.equal(typeof module.renderManualSetup, 'function', 'compile the owner-run setup without GitHub access');
+  return module.renderManualSetup(input);
+}
+
+test('setup can be imported by an explicit stdin module without entering its command', () => {
+  const result = spawnSync(process.execPath, ['--input-type=module', '-'], {
+    input: `import ${JSON.stringify(new URL('./setup.mjs', import.meta.url).href)}; process.stdout.write('imported');`,
+    encoding: 'utf8', env: { PATH: '/nonexistent' },
+  });
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(result.stdout, 'imported');
+  assert.equal(result.stderr, '');
+});
+
+test('manual setup creates no GitHub trust or launcher and has no dangling references', () => {
+  const template = renderManual();
+  assert.equal(template.Resources.OidcProvider, undefined);
+  assert.equal(template.Resources.LauncherRole, undefined);
+  assert.equal(template.Parameters.ExistingOidcProviderArn, undefined);
+  assert.equal(template.Conditions.CreateOidc, undefined);
+  assert.deepEqual(Object.keys(template.Outputs).sort(), [
+    'StackId', 'Bucket', 'VpcId', 'SubnetId', 'SecurityGroupId', 'LaunchTemplateId',
+    'LaunchTemplateVersion', 'ImageId', 'ExpiryRoleArn', 'ExpiryRuleArn', 'AccessExpiry',
+    'MonthlyCapUsd', 'Admission',
+  ].sort());
+  const walk = value => {
+    if (!value || typeof value !== 'object') return;
+    if (Object.hasOwn(value, 'Ref')) assert.ok(value.Ref.startsWith('AWS::') || Object.hasOwn(template.Resources, value.Ref)
+      || Object.hasOwn(template.Parameters, value.Ref), value.Ref);
+    if (Object.hasOwn(value, 'Fn::GetAtt')) assert.ok(Object.hasOwn(template.Resources, value['Fn::GetAtt'][0]));
+    if (Object.hasOwn(value, 'Condition') && typeof value.Condition === 'string')
+      assert.ok(Object.hasOwn(template.Conditions, value.Condition));
+    for (const child of Object.values(value)) walk(child);
+  };
+  walk(template);
+  assert.equal(JSON.stringify(template).includes('token.actions.githubusercontent.com'), false);
+  assert.equal(Object.values(template.Resources).filter(value => value.Type === 'AWS::IAM::Role').length, 1);
+});
+
+test('manual setup retains closed ordinary admission and the existing private launch and expiry resources', () => {
+  const manual = renderManual(), ordinary = module.renderSetup(inputs());
+  assert.equal(manual.Outputs.Admission.Value, 'CLOSED');
+  assert.equal(manual.Resources.ExpiryRule.Properties.State, 'DISABLED');
+  assert.equal(manual.Resources.LaunchTemplate.Properties.LaunchTemplateData.InstanceInitiatedShutdownBehavior, 'terminate');
+  for (const [name, resource] of Object.entries(ordinary.Resources)) {
+    if (name !== 'LauncherRole' && name !== 'OidcProvider') assert.deepEqual(manual.Resources[name], resource, name);
+  }
+  assert.deepEqual(ordinary.Resources.LauncherRole.Properties.Policies[0].PolicyDocument.Statement
+    .find(value => value.Sid === 'UnqualifiedLaunch'),
+  { Sid: 'UnqualifiedLaunch', Effect: 'Deny', Action: 'ec2:RunInstances', Resource: '*' });
+});
+
+test('manual setup still refuses a foreign account, region or image and expired authority', () => {
+  for (const change of [
+    { account: '949687825720' }, { region: 'eu-west-1' },
+    { image: { ...inputs().image, OwnerId: '000000000000' } },
+    { now: '2027-02-28T23:59:00Z' },
+  ]) assert.throws(() => renderManual({ ...inputs(), ...change }), /scope|image|authority/i);
+});
