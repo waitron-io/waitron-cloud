@@ -161,7 +161,7 @@ test('after-stop boundary is one-way and cannot be moved or configured to forgiv
 // Equal timestamps use event order; a backwards clock or changed phase must refuse evidence.
 for (const action of ['backwards-clock', 'duplicate-issue', 'duplicate-admission', 'duplicate-settlement', 'unknown-hop',
   'missing-producer', 'missing-issue', 'wrong-operation', 'wrong-phase', 'ordinal-reset', 'private-field', 'unknown-outcome', 'invalid-status'])
-  test(`after-stop correlation cannot accept ${action}`, () => {
+  test(`after-stop correlation ${action === 'missing-issue' ? 'retains unknown accounting for' : 'cannot accept'} ${action}`, () => {
     let now = 1; const session = afterStopSession(() => now);
     if (action !== 'missing-issue') session.issue(issued());
     const run = () => {
@@ -182,8 +182,15 @@ for (const action of ['backwards-clock', 'duplicate-issue', 'duplicate-admission
       if (action === 'duplicate-settlement') return session.settle(settled('producer'));
       return session.snapshot();
     };
-    assert.throws(run, /Invalid cloud cost Litestream audit/);
-    assert.throws(() => session.snapshot(), /Invalid cloud cost Litestream audit/);
+    if (action === 'missing-issue') {
+      const snapshot = run();
+      assert.equal(snapshot.status, 'unknown');
+      assert.equal(snapshot.requestsReconciled, false);
+      assert.deepEqual(snapshot.gaps, ['accounting:incomplete-history']);
+    } else {
+      assert.throws(run, /Invalid cloud cost Litestream audit/);
+      assert.throws(() => session.snapshot(), /Invalid cloud cost Litestream audit/);
+    }
   });
 
 // Network categories stay closed; a different valid cutoff signature is still accounting uncertainty.
@@ -280,7 +287,7 @@ test('changing phases cannot reset the one session allowance', () => {
   }
 });
 
-test('after-stop aggregate refuses byte totals that no longer fit a safe integer', () => {
+test('after-stop aggregate keeps overflowing byte totals unknown with supported counts', () => {
   const session = afterStopSession(); session.acknowledgeStop(ack());
   for (let n = 1; n <= 2; n++) {
     const invocation = `${String(n).padStart(8, '0')}-2222-4333-8444-555555555555`, token = invocation + ':1';
@@ -289,7 +296,13 @@ test('after-stop aggregate refuses byte totals that no longer fit a safe integer
     for (const channel of ['producer', 'observer']) session.settle({ ...settled(channel, {
       bytesIn: Number.MAX_SAFE_INTEGER, attemptedBytesIn: Number.MAX_SAFE_INTEGER }), token });
   }
-  assert.throws(() => session.snapshot(), /Invalid cloud cost Litestream audit/);
+  const snapshot = session.snapshot();
+  assert.equal(snapshot.status, 'unknown');
+  assert.deepEqual(snapshot.gaps, ['accounting:overflow']);
+  assert.deepEqual(snapshot.producer, { attempts: 2, bytesIn: null, bytesOut: 0 });
+  assert.deepEqual(snapshot.observer, { attempts: 2, bytesIn: null, bytesOut: 0 });
+  assert.equal(snapshot.requestsReconciled, true);
+  assert.equal(snapshot.bodiesReconciled, true);
 });
 
 const putCommit = (changes = {}) => ({ token: `${id}:1`, statusCode: 200, bytesOut: 4, expectedBytesOut: 4,

@@ -389,8 +389,13 @@ test('after-stop accounting never reconciles missing SDK issuance from equal byt
   await send(front.url, { method: 'GET', path: '/bucket?list-type=2', headers: headers() });
   audit.end(); await front.close();
   assert.equal(audit.snapshot().requestsReconciled, false);
-  assert.throws(() => meter.snapshot(), /Invalid cloud cost meter/);
-  assert.throws(() => afterStop.snapshot(), /Invalid cloud cost Litestream audit/);
+  assert.equal(meter.snapshot().status, 'unknown');
+  assert.ok(meter.snapshot().gaps.includes('accounting:incomplete-history'));
+  assert.equal(afterStop.snapshot().status, 'unknown');
+  assert.equal(afterStop.snapshot().requestsReconciled, false);
+  assert.deepEqual(afterStop.snapshot().gaps, ['accounting:incomplete-history']);
+  assert.equal(meter.snapshot().accounting.producer.attempts, 1);
+  assert.equal(meter.snapshot().accounting.observer.attempts, 1);
 });
 
 // A phase change during active I/O must poison both the optional ledger and ordinary evidence.

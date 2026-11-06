@@ -146,6 +146,7 @@ export function createMeter({ phase, clock, afterStop }) {
         else if (b.quantity !== null) b.quantity += quantity;
       }
       guard = 'after-stop'; const subset = afterStop?.snapshot();
+      for (const gap of subset?.gaps ?? []) gaps.add(gap);
       guard = 'aggregation';
       const incomplete = subset?.gaps.includes('after-stop:list-response-interrupted') === true;
       const discrepancy = Object.fromEntries(Object.keys(producer).map(k => [k,
@@ -174,7 +175,7 @@ export function createMeter({ phase, clock, afterStop }) {
         const r = aggregatedObjects.find(r => r.class === o.class); r.bytes = addQuantity(r.bytes, o.bytes, gaps);
         r[{ current: 'currentVersions', noncurrent: 'noncurrentVersions', marker: 'deleteMarkers', multipart: 'unfinishedMultipart' }[o.state]]++;
       }
-      return { status: reconciled && !incomplete && accountingGaps.size === 0 && !gaps.has('accounting:overflow') ? 'measured' : 'unknown',
+      return { status: reconciled && !incomplete && subset?.status !== 'unknown' && accountingGaps.size === 0 && !gaps.has('accounting:overflow') ? 'measured' : 'unknown',
         reconciled, gaps: [...gaps], billing: [...billing.values()],
         observedRequests: [...observedRequests.values()],
         accounting: { requests: [...requests.values()], objects: aggregatedObjects, producer, observer, discrepancy } };

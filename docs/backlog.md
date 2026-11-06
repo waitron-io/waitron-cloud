@@ -205,8 +205,14 @@ scripts/cloud-cost/stop-cutoff-accounting.test.mjs
 scripts/cloud-cost/lifetime-cutoff-accounting.test.mjs` for the cutoff, storage
 bounds and malformed-input controls. The retry diagnostic waits for collection;
 a separate invalid control still reports the original attempt and refuses.
-Missing-history reconciliation, accounting-dependent forwarding admission and
-aggregate overflow in the shutdown subset still need the wider policy.
+Missing shutdown issuance, admission or settlement records now keep an explicit
+unknown history gap through collection and the original meter. The shutdown
+subset retains actual observed counts, while overflowing grouped or combined
+byte totals become `null`; safe boundary values stay exact. Run `node --test
+scripts/cloud-cost/litestream-history-accounting.test.mjs` for missing-record,
+late-collection, numeric-boundary and malformed-output controls. These ledger
+controls do not prove actual SQLite recovery. Accounting-dependent forwarding
+admission still needs the wider policy.
 The full nonblocking accounting path, publication refusal, lost-write
 restore control and saved-failure replay remain open. These partial changes do
 not establish the historical cause or relax functional admission.
