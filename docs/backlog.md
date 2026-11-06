@@ -373,15 +373,10 @@ See [the native pairing boundaries](backlog/venue-connection-http.md#pairing-dep
 delivery.
 See [the native alert boundaries](backlog/alert-preference-http.md#alert-preference-deployment-qualification).
 
-## Translation-consent HTTP retry deadlines (D430)
+## Translation-consent deployment qualification
 
-Translation-consent waits survive account and clock changes. See [the HTTP retry
-boundaries](backlog/translation.md#translation-consent-http-retry-deadlines-d430).
-
-Server authority, browser integration and translation release checks remain
-separate qualification gates. The historical genuine-browser reconnect refusal
-(run 40746396664, job 123021488076) remains under D201/D530 investigation; a
-passing qualification does not establish its cause or repair it.
+**Open.** Qualify server authority, deployed browser integration and translation
+release checks. See [the remaining consent qualifications](backlog/translation.md#translation-consent-deployment-qualification).
 
 ## Signup and password-reset HTTP acknowledgements (D423)
 

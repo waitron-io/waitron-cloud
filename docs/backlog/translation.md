@@ -494,15 +494,12 @@ Real providers and the broader release gates above remain unqualified. The [remo
 retains its separate reconnect and takings failures; these consent checks do not
 establish their cause.
 
-## Translation-consent HTTP retry deadlines (D430)
+## Translation-consent deployment qualification
 
-Switching accounts keeps the server's translation-consent retry wait, so another
-account cannot bypass it. Run `node --test apps/portal/test/translation-consent-retry-boundary.test.ts`
-to check seconds and HTTP-date waits for reads, agreement and withdrawal through
-the request client and controller with native HTTP responses. Requests resume
-only at the deadline and after an explicit retry; native timer expiry sends no
-request itself. A backward clock change during a later refusal with no new wait
-cannot shorten an earlier deadline.
+Qualify server authority, deployed browser integration and translation release
+checks before activation. The historical genuine-browser reconnect refusal
+(run 40746396664, job 123021488076) remains under D201/D530 investigation;
+a passing qualification does not establish its cause or repair it.
 
 ## Retention cadence and additional HTTP boundaries
 
