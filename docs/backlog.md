@@ -4448,6 +4448,9 @@ real AWS client against a local HTTP boundary, including scope refusal, pending
 propagation, provider refusal and cleanup after a newer challenge. Production
 installation refusal remains in place; the test gateway and browser path still
 need their joint qualification.
+Cross-suffix moves also need qualification here: the retained staff hostname and
+the destination-derived challenge name currently differ. Keep that production
+renewal and routing gate open; the single-suffix test does not discharge it.
 Native save and read-back checks pass; permission and retry rules remain in force.
 See [the remaining checks](backlog/remote-access-http.md#remote-hostname-save-qualification).
 
