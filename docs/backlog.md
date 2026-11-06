@@ -15,8 +15,11 @@ Waitron merges, automatic dependency update PRs in Cloud, and a seven-day
 registry lag check in Cloud CI. Unknown registry results warn and pass; only
 a version known to be overdue fails. Lane F/A1412 owns the Waitron changes.
 
-The Cloud implementation remains open: dependency updates, the lag check, then
-removal in small PRs. The owner confirmed existing package access on 6 November.
+Cloud's Dependabot configuration checks the shared UI package every day, including
+weekends, from the pnpm workspace root. It covers both consumers and the shared
+lockfile, using the existing package access grant confirmed on 6 November.
+A real authenticated update run remains unproved. The lag check and removal
+remain open in separate PRs.
 Dependency PR review must renew ordinary records and update the smoke test’s
 version/source expectations without removing assertions. Remove
 the unused ledger and artifact machinery from #978, #995 and #1001, the old

@@ -1,9 +1,31 @@
 # Release the shared UI package
 
-> Superseded on 6 November 2026. The owner rejected this approach. Do not
-> implement or dispatch it. The [replacement proposal](superpowers/plans/2026-11-06-simple-private-ui-release.md)
-> was approved on 6 November and lists the code and documents to remove. The text below
-> records the earlier design or existing implementation.
+> The earlier Cloud publication workflow below was superseded on 6 November
+> 2026. Do not implement or dispatch it. The [approved replacement plan](superpowers/plans/2026-11-06-simple-private-ui-release.md)
+> lists the old code and documents to remove. Automatic dependency updates and
+> the local installation instructions remain current.
+
+## Review automatic dependency updates
+
+Cloud's [Dependabot configuration](../.github/dependabot.yml) checks
+`@waitron-io/ui-core` every day at 06:00 UTC, including weekends. The root
+pnpm workspace contains `apps/portal`, `packages/ui-smoke` and their shared
+lockfile, so one update can keep both consumers on the same release.
+
+Dependabot uses Cloud's existing package access grant through Manage Actions
+access. [GitHub supplies registry authentication from that grant](https://docs.github.com/en/code-security/concepts/supply-chain-security/automatic-dependabot-access-to-github-registries).
+You do not need another registry token. Normal Cloud installs still use the
+existing authenticated setup below.
+
+Review each update PR and let its normal CI finish before merging. Verify the
+published version and its `waitronSource.commit`, then update the smoke test's
+version and source expectations while retaining its assertions and browser
+checks. Renew the ordinary [root](ci-root-input-ownership.md) and
+[documentation](ci-documentation-audit.md) records for the reviewed changes.
+The configuration does not merge PRs automatically. A real authenticated
+update run has not yet been qualified.
+
+## Earlier Cloud publication workflow
 
 Cloud consumes a versioned build of Waitron's account controls. You develop the
 controls in Waitron; this repository owns their private distribution as
