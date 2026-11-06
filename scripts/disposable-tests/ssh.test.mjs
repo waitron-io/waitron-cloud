@@ -20,9 +20,9 @@ test('all host commands reuse the common private socket and keep strict key veri
     assert.equal(result.status, 0, result.stderr);
     const args = JSON.parse(readFileSync(f.capture));
     for (const option of ['ControlMaster=auto', 'ControlPersist=600', 'StrictHostKeyChecking=yes', 'BatchMode=yes', 'ConnectTimeout=8']) assert.ok(args.includes(option), option);
-    assert.ok(args.includes(`ControlPath=${f.cache}/waitron-test-server/%C`));
+    assert.ok(args.includes(`ControlPath=${f.cache}/wt-ssh/%C`));
     assert.deepEqual(args.slice(-2), ['root@2.29.248.230', command]);
-    assert.equal(statSync(join(f.cache, 'waitron-test-server')).mode & 0o777, 0o700);
+    assert.equal(statSync(join(f.cache, 'wt-ssh')).mode & 0o777, 0o700);
   }
 });
 test('an invalid host cannot inject SSH options or commands', t => {
@@ -36,7 +36,7 @@ test('an invalid host cannot inject SSH options or commands', t => {
 test('a linked or shared writable socket directory refuses before SSH', t => {
   const f = fixture(t); mkdirSync(f.cache);
   const outside = join(f.base, 'outside'); mkdirSync(outside);
-  symlinkSync(outside, join(f.cache, 'waitron-test-server'));
+  symlinkSync(outside, join(f.cache, 'wt-ssh'));
   const result = spawnSync('bash', [script, '2.29.248.230', 'true'], {env: f.env, encoding: 'utf8'});
   assert.notEqual(result.status, 0); assert.match(result.stderr, /private|linked/i);
   assert.equal(existsSync(f.capture), false);

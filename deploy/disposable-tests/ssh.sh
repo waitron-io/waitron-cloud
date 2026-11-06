@@ -6,7 +6,7 @@ host=${1:-}
 [[ "$host" =~ ^[a-zA-Z0-9][a-zA-Z0-9.:-]*$ ]] || { echo 'Invalid test host' >&2; exit 2; }
 shift
 if test "$mode" = command && test "$#" -lt 1; then echo 'A remote command is required' >&2; exit 2; fi
-connection_directory=$(python3 - "${XDG_CACHE_HOME:-$HOME/.cache}/waitron-test-server" <<'PY'
+connection_directory=$(python3 - "${XDG_CACHE_HOME:-$HOME/.cache}/wt-ssh" <<'PY'
 import os,stat,sys
 from pathlib import Path
 p=Path(sys.argv[1])
