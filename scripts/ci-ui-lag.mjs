@@ -34,12 +34,23 @@ export async function checkUiLag({root = fileURLToPath(new URL('..', import.meta
   try {
     // Both exact manifest pins are installed by the shared frozen lockfile in CI.
     versions = consumers.map(path => JSON.parse(readFileSync(join(root, path, 'package.json'), 'utf8')).dependencies?.['@waitron-io/ui-core']);
-    const response = await fetchImpl('https://npm.pkg.github.com/@waitron-io%2Fui-core', {
-      headers: {Accept: 'application/json', ...(token ? {Authorization: `Bearer ${token}`} : {})},
-      signal: AbortSignal.timeout(15_000), redirect: 'error',
-    });
-    if (!response.ok) throw new Error('Registry lookup failed');
-    metadata = await response.json();
+    const signal = AbortSignal.timeout(15_000);
+    metadata = {versions: {}, time: {}};
+    // GitHub's npm metadata omits publication times; version API created_at supplies them.
+    for (let page = 1; ; page++) {
+      const response = await fetchImpl(`https://api.github.com/orgs/waitron-io/packages/npm/ui-core/versions?per_page=100&page=${page}`, {
+        headers: {Accept: 'application/vnd.github+json', ...(token ? {Authorization: `Bearer ${token}`} : {})},
+        signal, redirect: 'error',
+      });
+      if (!response.ok) throw new Error('Registry lookup failed');
+      const versions = await response.json();
+      if (!Array.isArray(versions)) throw new Error('Invalid version metadata');
+      for (const version of versions) {
+        metadata.versions[version.name] = {};
+        metadata.time[version.name] = version.created_at;
+      }
+      if (versions.length < 100) break;
+    }
   } catch {
     report('::warning::Shared UI version lag is unchecked: registry or version metadata is unavailable.');
     return 0;

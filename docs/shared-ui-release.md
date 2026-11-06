@@ -41,7 +41,8 @@ CI install remains unproved.
 ## Keep Cloud within seven days of a release
 
 Every normal CI run checks both consumers' exact package pins against the
-private registry before selecting tests. You can run the same check locally
+GitHub package versions API before selecting tests. Its version creation dates
+supply publication times, which [GitHub omits from npm metadata](https://github.blog/changelog/2021-03-05-packages-time-has-been-dropped-from-npm-package-metadata-responses/). You can run the same check locally
 with an existing package-read token in `NODE_AUTH_TOKEN`:
 
 ```sh
