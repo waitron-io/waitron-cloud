@@ -37,7 +37,7 @@ identify checks, never commands supplied by a registry.
 
 | Entry ID | Exact changed input | Inspected boundary and intended owners |
 | --- | --- | --- |
-| `root-partition-contract` | `scripts/ci-root-shards.test.mjs` | Imports `ci-summary.mjs`, reads `ci.yml` at line 9, executes extracted root commands against generated temporary tests. The root wildcard consumes it. Select all four existing root jobs. |
+| `root-partition-contract` | `scripts/ci-root-shards.test.mjs` | Imports `ci-summary.mjs`, reads `ci.yml` at line 9, executes extracted root commands against generated temporary tests. The root wildcard consumes it. Select all eight current root jobs. |
 | `capacity-verifier-test` | `scripts/verify-backup-capacity-receipt.test.mjs` | Imports the transfer verifier at line 3 and constructs receipt data in memory. The root manifest's three-file capacity command consumes it. Select whole `test:backup-capacity`. |
 | `local-health-test` | `deploy/local-stack/operations-health.test.mjs` | Imports `operations-health.mjs` at line 4 and uses temporary loopback HTTP servers. Root `test:local-stack` discovers it through `deploy/local-stack/*.test.mjs`. Select that whole receipt. |
 
@@ -135,9 +135,9 @@ ownership and package work's `typecheck`. They have no `scripts` or `documentati
 
 | New plan | Package/compiler/root/receipt behavior |
 | --- | --- |
-| Script-only contract edit | Zero packages, compiler false, `rootTests:true`, four complete root jobs, zero receipts |
+| Script-only contract edit | Zero packages, compiler false, `rootTests:true`, eight complete root jobs, zero receipts |
 | Receipt-only | Zero packages, compiler/root false, one or more whole allowlisted receipts |
-| Package plus registered root input | Existing package plan, compiler and four root jobs, union its audited receipts with mandatory root-owned receipts |
+| Package plus registered root input | Existing package plan, compiler and eight root jobs, union its audited receipts with mandatory root-owned receipts |
 | Several registered inputs | Union all owners once; require at least one executed check |
 
 Do not call `workPlan` with an empty package scope. Do not run receipt omission audits after adding mandatory root receipts: they cannot remove an
@@ -149,7 +149,7 @@ policy/descriptor and valid retained metadata. Only these two record namespaces 
 Audited regular prose may accompany real root/package work without widening it. Evidence/prose alone cannot produce empty success. Leave legacy mixed
 selection and cost/venue evidence rules unchanged.
 
-Execution uses the existing four root argv sequences and fixed receipt suite IDs. Never accept shell strings, provider commands, deployment commands
+Execution uses the existing eight root argv sequences and fixed receipt suite IDs. Never accept shell strings, provider commands, deployment commands
 or proof generators from JSON. Validate the exact head checkout and clean tracked tree before root-owned execution and summary, including receipt-only
 work. Expand and verify nonempty complete root file inventories before `node --test`; never invoke a bare runner or pass an empty expansion. Retain
 root TAP/concurrency/partition semantics, package builds and deadlines, fixture ownership, browser retry bounds, receipt commands and every behavioral
@@ -185,7 +185,7 @@ root inventories and documentation authorities independently qualify against the
 activation, stale/forged/removed record, unexplained reader, nonregular entry or unknown path retains full proofs. Evaluate every nonmetadata changed
 path under the existing cost/venue rules. A real proof input mixed with valid record renewal still selects its proof. This prevents routine record
 renewal from adding proof matrices to unrelated package PRs without exempting any proof program or fixture. Do not change main-push policy, separate proof triggers
-or their existing real-input rules. Forced full/nightly bypass every shortcut and execute all packages, compiler, four root partitions, six receipts
+or their existing real-input rules. Forced full/nightly bypass every shortcut and execute all packages, compiler, eight root partitions, six receipts
 and the separate complete proof matrices.
 
 ## Hand-checked examples and qualification limits
@@ -198,10 +198,10 @@ three smaller standard plans alone cannot establish an overall saving. Bootstrap
 
 | Change | Concrete intended checks | Fallback control |
 | --- | --- | --- |
-| `scripts/ci-root-shards.test.mjs` | Four `root (N/4)` jobs with the complete existing root inventory; no compiler/packages/receipts | Its workflow read and synthetic child runner must be recorded; stale review or omitted partition refuses |
+| `scripts/ci-root-shards.test.mjs` | Eight `root (N/8)` jobs with the complete existing root inventory; no compiler/packages/receipts | Its workflow read and synthetic child runner must be recorded; stale review or omitted partition refuses |
 | `scripts/verify-backup-capacity-receipt.test.mjs` | `receipts` runs `pnpm test:backup-capacity`, including fixture, transfer and capacity tests | Follow its transfer-verifier import and saved receipt-fixture consumers; unexplained live caller takes full |
 | `deploy/local-stack/operations-health.test.mjs` | `receipts` runs the unchanged entire `pnpm test:local-stack` command | Its health-module import and wildcard directory owner are explicit; unregistered sibling additions take full |
-| `apps/portal/src/app.ts` plus that health test | Existing portal/package-revision selection, compiler and four root jobs, plus `test:local-stack` regardless of omission audits | Current unresolved package readers may retain all package jobs; no one-package promise |
+| `apps/portal/src/app.ts` plus that health test | Existing portal/package-revision selection, compiler and eight root jobs, plus `test:local-stack` regardless of omission audits | Current unresolved package readers may retain all package jobs; no one-package promise |
 | `.github/workflows/ci.yml`, `scripts/test-postgres.mjs` or `pnpm-lock.yaml` plus a registered test | Full standard work; lock mixed with that test cannot use the existing lock-only shortcut | Shared input wins over every narrow owner |
 
 Reverse-call searches and inspection cannot certify these entries on a future tree. Implementation must finish each site's review before activating

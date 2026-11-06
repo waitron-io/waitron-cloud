@@ -8,7 +8,7 @@ The registry in `scripts/ci-root-inputs.json` admits two tests:
 
 | Changed input | Required checks |
 | --- | --- |
-| `scripts/ci-root-shards.test.mjs` | All four existing root partitions |
+| `scripts/ci-root-shards.test.mjs` | All eight root partitions |
 | `deploy/local-stack/operations-health.test.mjs` | The entire `test:local-stack` receipt command |
 
 Package changes still select their package work and compiler checks. When you
@@ -107,8 +107,8 @@ changes retain complete proof work.
 
 The root workflow discovers the partition-contract test through the immediate
 `scripts/ci-*.test.mjs` wildcard. That test reads the workflow and executes its
-extracted command against six generated files in its own temporary directory.
-The selected owners remain all four root partitions.
+extracted command against ten generated files in its own temporary directory.
+The selected owners remain all eight root partitions.
 
 The health test imports `operations-health.mjs` and creates temporary loopback
 HTTP servers. Its owner is the complete root `test:local-stack` command, whose

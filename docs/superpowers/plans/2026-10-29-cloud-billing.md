@@ -1085,8 +1085,8 @@ than editing them. No fiscal consumer edits or reserved CI changes are required 
 
 The registration glob must execute all three C5 files, including the proof wrapper;
 inspect package output and the sanitized receipt. Read the
-`changes` plan and every selected job. Require root shards `root (1/4)` through
-`root (4/4)`, `typecheck`, selected package shards (including registration/translation),
+`changes` plan and every selected job. Require root shards `root (1/8)` through
+`root (8/8)`, `typecheck`, selected package shards (including registration/translation),
 selected `receipts`, and `summary`, plus any selected documentation/scripts job.
 Do not infer a full proof from `test:local-stack`: its existing schema tests primarily
 validate fixtures/verifiers; the new package wrapper must execute the actual 44→45 run.
@@ -1470,7 +1470,7 @@ the generic root glob does not discover this harness filename.
   dependencies, triages findings, uses normal hooks and requalifies any changed
   head. Require every selected job final on the exact PR SHA in CI and the
   cloud-cost workflow: inspect changes/selection, documentation/scripts, all
-  four root shards, typecheck, selected package shards including registration
+  eight root shards, typecheck, selected package shards including registration
   and account-http, receipts and strict summary. Audit any justified skip/reuse;
   a green summary alone is insufficient. Do not repeat the full external review
   only for a rebase. Under the driver's own shared landing lock, recheck current

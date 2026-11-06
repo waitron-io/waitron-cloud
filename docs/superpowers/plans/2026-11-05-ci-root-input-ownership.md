@@ -75,7 +75,7 @@ If K has landed, extract its current package behavior rather than resurrecting t
 
 ### Task 2: Compose nonempty root, receipt and package work
 
-- [ ] Add failing cases `root contract has four jobs without compiler`, `receipt without packages is work`, `mandatory receipt survives omission
+- [ ] Add failing cases `root contract has eight jobs without compiler`, `receipt without packages is work`, `mandatory receipt survives omission
   audit`, `package plus root is union`, `several root entries deduplicate`, `shared or unknown input wins`, and `prose or evidence alone cannot empty
   the plan`. Assert concrete packages/shards, receipt IDs, booleans and complete root markers.
 - [ ] Add legacy compatibility controls for docs-only, identity, gateway, lock, ordinary packages and full work. Exclusive scripts still reject
@@ -104,7 +104,7 @@ If K has landed, extract its current package behavior rather than resurrecting t
   checkout or dirty tracked source before execution, and reject missing/deleted tests before spawn. Provide forged `CI_PLAN` argv/shell/provider text
   and assert no unallowlisted process starts. Execute safe synthetic subprocesses to prove nonzero exits propagate; do not launch deployment/proof
   generators.
-- [ ] Add executed workflow-condition and root-inventory controls. Every complete root file appears once across four partitions; empty expansion
+- [ ] Add executed workflow-condition and root-inventory controls. Every complete root file appears once across eight partitions; empty expansion
   refuses. Keep the existing `ci-root-shards` failure-propagation assertions and runner flags, not a replacement test that mirrors new implementation.
   Keep receipt allowlist and concurrency/failure handling.
 - [ ] Run `node --test scripts/ci-root-inputs.test.mjs scripts/ci-summary.test.mjs scripts/ci-root-shards.test.mjs scripts/ci-workflow.test.mjs
@@ -162,6 +162,6 @@ If K has landed, extract its current package behavior rather than resurrecting t
   regain exact-head green before landing. Verify the signed-off squash tree and update main through normal procedure. Keep this docs-only milestone
   separate from that later code landing.
 - [ ] Complete H12 by reading every job and log for the exact merge SHA, with actual plan, checkout SHAs, counts and explicit skips. Independently
-  inspect the next qualifying nightly full run: all packages, four root jobs, compiler, six receipts, complete cost/venue matrices and nightly
+  inspect the next qualifying nightly full run: all packages, eight root jobs, compiler, six receipts, complete cost/venue matrices and nightly
   summary. Main's unchanged full run does not prove a narrow PR ran correctly; the narrow PR does not qualify the nightly. Report any unqualified case
   plainly, then handle #938 as separate work.

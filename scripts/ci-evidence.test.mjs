@@ -14,7 +14,7 @@ const evidence = await import('./ci-evidence.mjs').catch(error => {
 });
 
 const ci = '.github/workflows/ci.yml';
-const rootSkip = 'root (${{ matrix.shard }}/4)';
+const rootSkip = 'root (${{ matrix.shard }}/8)';
 const packageSkip = "package (${{ matrix.package }}${{ ((matrix.shards && format(', shard {0}/{1}', matrix.shard, matrix.shards)) || '') }})";
 const sha = digit => digit.repeat(40);
 const selected = {packages: [{package: '@waitron-cloud/operations', shard: 1}], receipts: [], typecheck: true, reuse: null};
@@ -24,7 +24,7 @@ const source = () => ({version: 1, repository: 'waitron-io/waitron-cloud', repos
   checkout: {sha: sha('b'), tree: sha('c')},
   workflow: {id: 17, path: ci, ref: 'waitron-io/waitron-cloud/.github/workflows/ci.yml@refs/pull/51/merge', sha: sha('d'), executionSha: sha('d')},
   runId: 42, attempt: 2, selection: structuredClone(selected)});
-const expectedSelected = ['changes', 'typecheck', 'root (1/4)', 'root (2/4)', 'root (3/4)', 'root (4/4)', 'package (@waitron-cloud/operations)', 'summary'];
+const expectedSelected = ['changes', 'typecheck', 'root (1/8)', 'root (2/8)', 'root (3/8)', 'root (4/8)', 'root (5/8)', 'root (6/8)', 'root (7/8)', 'root (8/8)', 'package (@waitron-cloud/operations)', 'summary'];
 
 test('contracts require exact scoped jobs and all unselected placeholders', () => {
   assert.equal(typeof evidence.expectedJobContract, 'function', 'Missing complete job contracts');
@@ -38,7 +38,7 @@ test('contracts require exact scoped jobs and all unselected placeholders', () =
     {...selected, documentation: {base: sha('a'), head: sha('b'), paths: ['README.md']}},
     {...selected, receipts: ['test:local-stack', 'test:local-stack']}]) assert.throws(() => evidence.expectedJobContract(ci, bad));
   const portal = {...selected, packages: [1, 2, 3, 4, 5, 6].map(shard => ({package: '@waitron-cloud/portal', shard, shards: 6})), receipts: ['test:local-stack']};
-  assert.deepEqual(evidence.expectedJobContract(ci, portal), {required: expectedSelected.slice(0, 6).concat(
+  assert.deepEqual(evidence.expectedJobContract(ci, portal), {required: expectedSelected.slice(0, 10).concat(
     [1, 2, 3, 4, 5, 6].map(i => `package (@waitron-cloud/portal, shard ${i}/6)`), ['receipts', 'summary']), skipped: ['scripts', 'documentation']});
 });
 
@@ -269,7 +269,7 @@ test('reviewed root owners publish independent root and receipt job contracts', 
   const marker = {version: 1, base: sha('a'), head: sha('b'), paths: ['scripts/ci-root-shards.test.mjs'], entryIds: ['root-partition-contract']};
   const root = {packages: [], receipts: [], typecheck: false, reuse: null, rootInputs: marker, rootTests: true};
   assert.deepEqual(evidence.expectedJobContract(ci, root), {
-    required: ['changes', 'root (1/4)', 'root (2/4)', 'root (3/4)', 'root (4/4)', 'summary'],
+    required: ['changes', 'root (1/8)', 'root (2/8)', 'root (3/8)', 'root (4/8)', 'root (5/8)', 'root (6/8)', 'root (7/8)', 'root (8/8)', 'summary'],
     skipped: ['scripts', 'documentation', 'typecheck', packageSkip, 'receipts'],
   });
   const receipt = {...root, rootTests: false, receipts: ['test:local-stack']};

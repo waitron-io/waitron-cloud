@@ -15,14 +15,14 @@
           "reader": ".github/workflows/ci.yml",
           "site": "root job run:171",
           "kind": "command",
-          "boundary": "scripts/ci-*.test.mjs, immediate scripts directory, all four partitions",
+          "boundary": "scripts/ci-*.test.mjs, immediate scripts directory, all eight partitions",
           "role": "execution"
         },
         {
           "reader": "scripts/ci-root-shards.test.mjs",
           "site": "imports:7, workflow:9, generated checks:19-47",
           "kind": "command",
-          "boundary": "ci-summary import; reads ci.yml; generates six temporary files and executes extracted root command only in its temporary cwd",
+          "boundary": "ci-summary import; reads ci.yml; generates ten temporary files and executes extracted root command only in its temporary cwd",
           "role": "execution"
         },
         {
@@ -456,7 +456,7 @@
           "reader": "scripts/ci-root-shards.test.mjs",
           "site": "workflow read:9; generated files and child:19-47",
           "kind": "command",
-          "boundary": "Read current ci.yml then run extracted root command only in a mkdtemp containing six generated tests, excluding live target bytes",
+          "boundary": "Read current ci.yml then run extracted root command only in a mkdtemp containing ten generated tests, excluding live target bytes",
           "role": "execution"
         },
         {

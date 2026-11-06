@@ -19,7 +19,7 @@ test('planner allocates four independent remote jobs without repeating a grouped
 });
 test('remote summary requires all four jobs even when an omitted shard plan is self consistent',()=>{
  const results={changes:'success',typecheck:'success',root:'success',packages:'success',receipts:'skipped'};
- function summarize(packages){const jobs=['changes','typecheck',...['1','2','3','4'].map(n=>`root (${n}/4)`),...packages.map(r=>`package (${r.package}, shard ${r.shard}/${r.shards})`)].map(name=>({name,status:'completed',conclusion:'success'}));
+ function summarize(packages){const jobs=['changes','typecheck',...['1','2','3','4','5','6','7','8'].map(n=>`root (${n}/8)`),...packages.map(r=>`package (${r.package}, shard ${r.shard}/${r.shards})`)].map(name=>({name,status:'completed',conclusion:'success'}));
   return assertSummary({packages,receipts:[],typecheck:true},results,jobs);}
  assert.doesNotThrow(()=>summarize(rows));
  for(let i=0;i<4;i++)assert.throws(()=>summarize(rows.filter((_,n)=>n!==i)),/Incomplete package allocation/);

@@ -115,13 +115,13 @@ jobs:
   root:
     needs: changes
     if: needs.changes.outputs.root_tests == 'true'
-    name: root (${{ matrix.shard }}/4)
+    name: root (${{ matrix.shard }}/8)
     runs-on: ubuntu-latest
     timeout-minutes: 8
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4]
+        shard: [1, 2, 3, 4, 5, 6, 7, 8]
     steps:
       - uses: actions/checkout@v5
         with:
@@ -168,7 +168,7 @@ jobs:
         run: node scripts/ci-root-inputs.mjs --check
         env:
           CI_PLAN: ${{ needs.changes.outputs.plan }}
-      - run: node --test --test-reporter=tap --test-concurrency=2 --test-shard=${{ matrix.shard }}/4 scripts/ci-*.test.mjs scripts/identity-upstream.test.mjs scripts/verify-gateway-reconnection-receipt.test.mjs
+      - run: node --test --test-reporter=tap --test-concurrency=2 --test-shard=${{ matrix.shard }}/8 scripts/ci-*.test.mjs scripts/identity-upstream.test.mjs scripts/verify-gateway-reconnection-receipt.test.mjs
       # Keep optional saving last so final runner cleanup collects its child processes.
       - name: Save pnpm dependency cache
         if: success() && steps.pnpm-cache.outputs.cache-hit != 'true'

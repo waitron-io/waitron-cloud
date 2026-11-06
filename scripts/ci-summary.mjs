@@ -77,7 +77,7 @@ function expectedSummaryJobs(plan, results, rootVerification) {
   }
   const rootTests = plan.rootInputs ? plan.rootTests : plan.typecheck;
   if (plan.typecheck) expected.push('typecheck');
-  if (rootTests) expected.push('root (1/4)', 'root (2/4)', 'root (3/4)', 'root (4/4)');
+  if (rootTests) expected.push('root (1/8)', 'root (2/8)', 'root (3/8)', 'root (4/8)', 'root (5/8)', 'root (6/8)', 'root (7/8)', 'root (8/8)');
   if (rootTests || results.root !== undefined) {
     assert.equal(results.root, rootTests ? 'success' : 'skipped', 'root did not match its plan');
   }
@@ -95,9 +95,9 @@ function expectedSummaryJobs(plan, results, rootVerification) {
 }
 
 function assertSummaryJobs(expected, jobs, waiting = null) {
-  const known = new Set(['changes', 'typecheck', 'root (1/4)', 'root (2/4)', 'root (3/4)', 'root (4/4)',
+  const known = new Set(['changes', 'typecheck', 'root (1/8)', 'root (2/8)', 'root (3/8)', 'root (4/8)', 'root (5/8)', 'root (6/8)', 'root (7/8)', 'root (8/8)',
     'receipts', 'scripts', 'documentation', 'summary',
-    'root (${{ matrix.shard }}/4)',
+    'root (${{ matrix.shard }}/8)',
     "package (${{ matrix.package }}${{ ((matrix.shards && format(', shard {0}/{1}', matrix.shard, matrix.shards)) || '') }})",
     'package (@waitron-cloud/identity + @waitron-cloud/operations)',
     ...Object.entries(packageShards).flatMap(([name, count]) => Array.from({length: count}, (_, index) =>
