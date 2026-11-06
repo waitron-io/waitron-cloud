@@ -149,8 +149,8 @@ test('litestreamTransportSnapshotsRequireNonemptyCompletedTransfers', async t =>
   assert.deepEqual(front.snapshot().accounting.producer, { attempts: 1, bytesIn: 2, bytesOut: 5 });
 });
 
-// An omitted failure guard would allow a truncated download or refused connection to qualify an empty run.
-test('litestreamTransportInterruptedResponsesAndConnectionFailuresPoisonEvidence', async t => {
+// Actual transfer failures stay visible while their partial cost evidence remains unknown.
+test('litestreamTransportInterruptedResponsesAndConnectionFailuresKeepUnknownEvidence', async t => {
   const truncated = await server(t, (req, res) => { req.resume(); req.on('end', () => {
     res.writeHead(200, { 'content-length': 50 }); res.write('short'); setImmediate(() => res.destroy());
   }); });
@@ -158,8 +158,9 @@ test('litestreamTransportInterruptedResponsesAndConnectionFailuresPoisonEvidence
     const meter = createMeter({ phase: 'workload', clock: () => 0 });
     const front = await transport(t, target, meter);
     await assert.rejects(send(front.url, { headers: headers(), body: 'hello' }), /Synthetic (response interrupted|request failed)/);
-    await assert.rejects(front.close(), /Invalid cloud cost Litestream audit/);
-    assert.throws(() => meter.snapshot(), /Invalid cloud cost meter/);
+    await front.close();
+    assert.equal(meter.snapshot().status, 'unknown');
+    assert.ok(meter.snapshot().gaps.includes('accounting:request-cutoff'));
   }
 });
 
@@ -225,7 +226,7 @@ test('litestreamTransportPendingSecondRequestCannotHideBehindAnEarlierSuccess', 
 });
 
 // A late provider response after client cancellation must refuse evidence without crashing its worker.
-test('litestreamTransportLateResponseAfterClientCloseRefusesWithoutAnUncaughtException', async () => {
+test('litestreamTransportLateResponseAfterClientCloseRetainsUnknownCostWithoutAnUncaughtException', async () => {
   const { spawn } = await import('node:child_process');
   const code = `
     import {createServer,request} from 'node:http';import {once} from 'node:events';
@@ -244,7 +245,8 @@ test('litestreamTransportLateResponseAfterClientCloseRefusesWithoutAnUncaughtExc
     await new Promise(resolve=>setTimeout(resolve,150));
     let refused=false;try{await front.close();}catch{refused=true;}
     provider.closeAllConnections();await new Promise(resolve=>provider.close(resolve));
-    if(!refused)process.exitCode=7;
+    if(refused)process.exitCode=7;
+    else if(meter.snapshot().status!=='unknown'||!meter.snapshot().gaps.includes('accounting:request-cutoff'))process.exitCode=8;
   `;
   const child = spawn(process.execPath, ['--input-type=module', '-e', code], { stdio: ['ignore', 'pipe', 'pipe'] });
   const output = []; child.stdout.on('data', b => output.push(b)); child.stderr.on('data', b => output.push(b));

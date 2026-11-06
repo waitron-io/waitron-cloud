@@ -559,6 +559,7 @@ export async function createLitestreamTransport({ target, meter, phase, lifetime
       if (id) pending.delete(id.key); source.resume(); destination.writeHead(400); destination.end(); return;
     }
     let bytesOut = 0, bytesIn = 0, expectedIn = 0, statusCode = null, responseHeaders, upstreamResponse, sent = false, received = false, settled = false;
+    let bodyLimitExceeded = false;
     const admittedAt = performance.now();
     transfers.set(id.key, () => ({ operation: name, phase: requestPhase, retryOrdinal: id.ordinal,
       elapsedMs: Math.max(0, Math.round(performance.now() - admittedAt)), bytesOut, expectedOut, bytesIn, expectedIn,
@@ -577,7 +578,7 @@ export async function createLitestreamTransport({ target, meter, phase, lifetime
     socketTransfers.get(clientSocket).set(id.key, () => ({ operation: name, idleActionsAtAdmission,
       attempt: { producerAttempt, retryOrdinal: id.ordinal, phase: requestPhase },
       clientClosed: destination.destroyed, responseHeadersSeen: statusCode !== null,
-      bytesIn, expectedIn, bytesOut, expectedOut }));
+      bytesIn, expectedIn, bytesOut, expectedOut, requestComplete: source.complete }));
     const responseChunks = lifetimes && ['delete-many', 'multipart-create', 'multipart-complete'].includes(name) ? [] : null;
     const finish = (interrupted, reason = 'transfer-interrupted', error, ioEvent) => {
       if (settled || !interrupted && (!sent || !received)) return;
@@ -593,7 +594,7 @@ export async function createLitestreamTransport({ target, meter, phase, lifetime
           attemptedBytesIn: Math.max(bytesIn, expectedIn), attemptedBytesOut: Math.max(bytesOut, expectedOut) },
         interrupted ? { reason, ioEvent, code: own(error, 'code') ?? null,
           clientClosed: destination.destroyed, responseHeadersSeen: statusCode !== null } : null);
-        acceptedInterruption = afterStop !== undefined && accepted === true;
+        acceptedInterruption = afterStop === undefined || accepted === true;
         completing = 'lifetime-completion';
         completeLifetime?.({ statusCode, bytesOut, interrupted, responseHeaders,
           responseBody: responseChunks ? Buffer.concat(responseChunks) : undefined });
@@ -602,6 +603,11 @@ export async function createLitestreamTransport({ target, meter, phase, lifetime
         poison(completing);
       }
       if (interrupted && !acceptedInterruption) { rememberTransfer(reason, error, ioEvent); poison(reason, error); }
+      if (interrupted) {
+        rememberTransfer(reason, error, ioEvent);
+        // Accounting uncertainty cannot forgive an execution deadline or malformed/bounded input.
+        if (ioEvent === 'upstream-timeout' || ioEvent === 'response-headers' || bodyLimitExceeded) poison(reason, error);
+      }
       if (pending.size === 0) for (const waiter of idleWaiters) {
         idleWaiters.delete(waiter);
         try { requireThat(!invalid && !closing); waiter.resolve(runIdleAction(waiter.action)); }
@@ -619,7 +625,7 @@ export async function createLitestreamTransport({ target, meter, phase, lifetime
       const counter = new Transform({ transform(chunk, encoding, next) {
         bytesIn += chunk.length;
         if (responseChunks) {
-          if (bytesIn > 1048576) { next(Error('Invalid cloud cost Litestream audit')); return; }
+          if (bytesIn > 1048576) { bodyLimitExceeded = true; next(Error('Invalid cloud cost Litestream audit')); return; }
           responseChunks.push(chunk);
         }
         next(null, chunk);
@@ -639,10 +645,14 @@ export async function createLitestreamTransport({ target, meter, phase, lifetime
   });
   server.on('clientError', (error, socket) => {
     const active = socketTransfers.get(socket);
-    // Parser errors can belong to the next message; only network errors can name a sole forwarding request.
-    const { operation, ...context } = networkErrors.has(own(error, 'code')) && active?.size === 1 ? active.values().next().value() : {};
+    const current = active?.size === 1 ? active.values().next().value() : undefined;
+    // EOF during an admitted body is a cutoff; EOF in a later header is malformed input.
+    const bodyCutoff = own(error, 'code') === 'HPE_INVALID_EOF_STATE' && current?.requestComplete === false;
+    // Attribute body EOF only to its admitted request; a later incomplete header must still refuse.
+    const { operation, ...context } = (networkErrors.has(own(error, 'code')) || bodyCutoff) && current ? current : {};
     remember('client-error', error, 'client-error', operation, { forwardingTransfers: active?.size ?? 0, ...context });
-    poison('client-error', error, 'client-error'); socket.destroy();
+    if (!networkErrors.has(own(error, 'code')) && !bodyCutoff) poison('client-error', error, 'client-error');
+    socket.destroy();
   });
   server.on('connection', socket => {
     clients.add(socket); socket.once('close', () => clients.delete(socket));

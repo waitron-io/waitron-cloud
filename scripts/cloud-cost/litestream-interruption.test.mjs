@@ -7,7 +7,7 @@ import { createLitestreamTransport, withLitestreamCloseDiagnostics } from './lit
 
 const headers = { 'amz-sdk-invocation-id': '11111111-2222-4333-8444-555555555555', 'amz-sdk-request': 'attempt=1; max=3' };
 
-// Losing the first I/O event must not turn a refused transfer into an unexplained close.
+// A cutoff retains its first I/O event without turning cost uncertainty into failed cleanup.
 for (const side of ['request', 'response']) test(`interrupted ${side} identifies its first event without exposing the request`, async t => {
   let entered;
   const active = new Promise(resolve => { entered = resolve; });
@@ -18,10 +18,10 @@ for (const side of ['request', 'response']) test(`interrupted ${side} identifies
   backend.listen(0, '127.0.0.1'); await once(backend, 'listening');
   t.after(() => { backend.closeAllConnections(); return new Promise(resolve => backend.close(resolve)); });
   const meter = createMeter({ phase: 'workload', clock: () => 0 });
-  let invalidated;
-  const refused = new Promise(resolve => { invalidated = resolve; });
+  let observed;
+  const settled = new Promise(resolve => { observed = resolve; });
   const transport = await createLitestreamTransport({ target: `http://127.0.0.1:${backend.address().port}`,
-    meter: { observeAttempt: meter.observeAttempt, invalidate: () => { meter.invalidate(); invalidated(); } }, phase: 'workload' });
+    meter: { ...meter, observeAttempt: (...args) => { try { return meter.observeAttempt(...args); } finally { observed(); } } }, phase: 'workload' });
   t.after(() => transport.close().catch(() => {}));
   const client = request(transport.url + '/PRIVATE_CANARY/key', { method: 'PUT', headers: { ...headers, 'content-length': 100 } });
   const ended = new Promise(resolve => {
@@ -32,13 +32,15 @@ for (const side of ['request', 'response']) test(`interrupted ${side} identifies
   await active;
   if (side === 'request') client.destroy(); else backend.closeAllConnections();
   await ended;
-  await refused;
+  await settled;
   const records = [];
-  await assert.rejects(withLitestreamCloseDiagnostics({ stage: 'replication-transport', close: () => transport.close(), report: line => records.push(JSON.parse(line)) }));
-  assert.equal(records.at(-1).diagnostic.ioEvent, side === 'request' ? 'client-error' : 'response-aborted');
-  if (side === 'response') assert.equal(records.at(-1).diagnostic.operation, 'put');
+  await assert.doesNotReject(withLitestreamCloseDiagnostics({ stage: 'replication-transport', close: () => transport.close(), report: line => records.push(JSON.parse(line)) }));
+  assert.equal(records.at(-1).status, 'fulfilled');
+  assert.equal(transport.checkpoint().ioEvent, side === 'request' ? 'client-error' : 'response-aborted');
+  if (side === 'response') assert.equal(transport.checkpoint().operation, 'put');
   assert.equal(JSON.stringify(records).includes('PRIVATE_CANARY'), false);
-  assert.throws(() => meter.snapshot(), /Invalid cloud cost meter/);
+  assert.equal(meter.snapshot().status, 'unknown');
+  assert.ok(meter.snapshot().gaps.includes('accounting:request-cutoff'));
 });
 
 test('forged interruption details and accessors cannot publish private content', async () => {
@@ -93,12 +95,12 @@ test('a response with unauditable body length identifies header validation and r
   assert.throws(() => meter.snapshot(), /Invalid cloud cost meter/);
 });
 
-// A closed client can disappear before upstream headers arrive; preserve the ordering as well as refusal.
+// A closed client can disappear before upstream headers arrive; preserve its actual ordering.
 for (const timing of ['before', 'immediate', 'waited']) test(`a cancelled list retains its pipe error and idle ordering: ${timing}`, async t => {
   const afterIdle = timing !== 'before';
-  let arrived, reply, invalidated;
+  let arrived, reply, observed;
   const admitted = new Promise(resolve => { arrived = resolve; });
-  const refused = new Promise(resolve => { invalidated = resolve; });
+  const settled = new Promise(resolve => { observed = resolve; });
   let firstArrived, firstReply;
   const firstAdmitted = new Promise(resolve => { firstArrived = resolve; });
   const backend = createServer((req, res) => {
@@ -111,7 +113,7 @@ for (const timing of ['before', 'immediate', 'waited']) test(`a cancelled list r
   t.after(() => { backend.closeAllConnections(); return new Promise(resolve => backend.close(resolve)); });
   const meter = createMeter({ phase: 'workload', clock: () => 0 });
   const transport = await createLitestreamTransport({ target: `http://127.0.0.1:${backend.address().port}`,
-    meter: { observeAttempt: meter.observeAttempt, invalidate: () => { meter.invalidate(); invalidated(); } }, phase: 'workload' });
+    meter: { observeAttempt: (event, ...args) => { try { return meter.observeAttempt(event, ...args); } finally { if (event.outcome === 'transport-error') observed(); } }, invalidate: meter.invalidate }, phase: 'workload' });
   t.after(() => transport.close().catch(() => {}));
   let clientClosed;
   const destinationClosed = new Promise(resolve => { clientClosed = resolve; });
@@ -128,7 +130,7 @@ for (const timing of ['before', 'immediate', 'waited']) test(`a cancelled list r
     // Observe both ends of the client connection closing before releasing the upstream reply.
     client.destroy(); await closed;
     await destinationClosed;
-    reply(); await refused;
+    reply(); await settled;
   };
   if (timing === 'waited') {
     const first = new Promise((resolve, reject) => {
@@ -139,15 +141,18 @@ for (const timing of ['before', 'immediate', 'waited']) test(`a cancelled list r
     await firstAdmitted; const action = transport.whenIdle(cancel); firstReply(); await first; await action;
   } else if (afterIdle) await transport.whenIdle(cancel); else await cancel();
   const records = [];
-  await assert.rejects(withLitestreamCloseDiagnostics({ stage: 'replication-transport', close: () => transport.close(),
-    report: line => records.push(JSON.parse(line)) }));
-  assert.deepEqual(records.at(-1).diagnostic, {
+  await withLitestreamCloseDiagnostics({ stage: 'replication-transport', close: () => transport.close(),
+    report: line => records.push(JSON.parse(line)) });
+  assert.equal(records.at(-1).status, 'fulfilled');
+  const { attempt, ...diagnostic } = transport.checkpoint();
+  assert.deepEqual(diagnostic, {
     reason: 'transfer-interrupted', pending: 0, completed: timing === 'waited' ? 2 : 1, connections: 0,
     code: 'ERR_STREAM_UNABLE_TO_PIPE', ioEvent: 'response-pipeline', operation: 'list',
     idleActionsAtAdmission: afterIdle ? 1 : 0,
     clientClosed: true, responseHeadersSeen: true,
   });
-  assert.throws(() => meter.snapshot(), /Invalid cloud cost meter/);
+  assert.equal(meter.snapshot().status, 'unknown');
+  assert.ok(meter.snapshot().gaps.includes('accounting:request-cutoff'));
   assert.equal(JSON.stringify(records).includes('PRIVATE_CANARY'), false);
 });
 
@@ -164,7 +169,8 @@ test('hostile idle-ordering fields cannot escape the closed diagnostic categorie
 });
 
 for (const responseHeadersSeen of [false, true]) test(`upstream resets retain client state with response headers=${responseHeadersSeen}`, async t => {
-  let reset;
+  let reset, observed;
+  const settled = new Promise(resolve => { observed = resolve; });
   const backend = createServer((req, res) => {
     req.resume(); req.on('end', () => {
       if (!responseHeadersSeen) { res.destroy(); return; }
@@ -174,7 +180,8 @@ for (const responseHeadersSeen of [false, true]) test(`upstream resets retain cl
   backend.listen(0, '127.0.0.1'); await once(backend, 'listening');
   t.after(() => { backend.closeAllConnections(); return new Promise(resolve => backend.close(resolve)); });
   const meter = createMeter({ phase: 'workload', clock: () => 0 });
-  const transport = await createLitestreamTransport({ target: `http://127.0.0.1:${backend.address().port}`, meter, phase: 'workload' });
+  const transport = await createLitestreamTransport({ target: `http://127.0.0.1:${backend.address().port}`,
+    meter: { ...meter, observeAttempt: (...args) => { try { return meter.observeAttempt(...args); } finally { observed(); } } }, phase: 'workload' });
   t.after(() => transport.close().catch(() => {}));
   await new Promise(resolve => {
     const client = request(transport.url + '/PRIVATE_CANARY/key', { headers }, res => {
@@ -182,16 +189,19 @@ for (const responseHeadersSeen of [false, true]) test(`upstream resets retain cl
     });
     client.on('error', resolve); client.end();
   });
+  await settled;
   const records = [];
-  await assert.rejects(withLitestreamCloseDiagnostics({ stage: 'replication-transport', close: () => transport.close(),
-    report: line => records.push(JSON.parse(line)) }));
-  const detail = records.at(-1).diagnostic;
+  await withLitestreamCloseDiagnostics({ stage: 'replication-transport', close: () => transport.close(),
+    report: line => records.push(JSON.parse(line)) });
+  assert.equal(records.at(-1).status, 'fulfilled');
+  const detail = transport.checkpoint();
   assert.equal(detail.reason, responseHeadersSeen ? 'upstream-response-interrupted' : 'upstream-error');
   assert.equal(detail.ioEvent, responseHeadersSeen ? 'response-aborted' : 'upstream-error');
   assert.equal(detail.code, 'ECONNRESET'); assert.equal(detail.operation, 'get');
   assert.equal(detail.idleActionsAtAdmission, 0);
   assert.equal(detail.clientClosed, false); assert.equal(detail.responseHeadersSeen, responseHeadersSeen);
-  assert.throws(() => meter.snapshot(), /Invalid cloud cost meter/);
+  assert.equal(meter.snapshot().status, 'unknown');
+  assert.ok(meter.snapshot().gaps.includes('accounting:request-cutoff'));
   assert.equal(JSON.stringify(records).includes('PRIVATE_CANARY'), false);
 });
 
@@ -253,7 +263,7 @@ for (const stopped of [false, true]) test(`only the known post-acknowledgement l
   }
 });
 
-test('ordinary transport never accepts an interruption because a counter callback returns true', async t => {
+test('a callback return value cannot upgrade ordinary cutoff accounting to measured', async t => {
   let arrived, release, settled, clientClosed;
   const active = new Promise(resolve => { arrived = resolve; });
   const observed = new Promise(resolve => { settled = resolve; });
@@ -275,6 +285,7 @@ test('ordinary transport never accepts an interruption because a counter callbac
   const client = request(transport.url + '/PRIVATE_CANARY?list-type=2', { headers });
   client.on('error', () => {}); const closed = new Promise(resolve => client.once('close', resolve)); client.end();
   await active; client.destroy(); await closed; await destinationClosed; release(); await observed;
-  await assert.rejects(transport.close(), /Invalid cloud cost Litestream audit/);
-  assert.throws(() => meter.snapshot(), /Invalid cloud cost meter/);
+  await transport.close();
+  assert.equal(meter.snapshot().status, 'unknown');
+  assert.ok(meter.snapshot().gaps.includes('accounting:request-cutoff'));
 });

@@ -83,6 +83,10 @@ function requestRows(rows, gaps) {
     need((row.bytesIn === null || row.attemptedBytesIn === null || row.bytesIn <= row.attemptedBytesIn)
       && (row.bytesOut === null || row.attemptedBytesOut === null || row.bytesOut <= row.attemptedBytesOut));
     const key = identity(row); need(!groups.has(key)); groups.set(key, row);
+    // Reconstruct uncertainty from the original outcome, even if summary labels were removed.
+    if (row.outcome === 'transport-error') {
+      gaps.add('accounting:request-cutoff'); gaps.add('request-billing:unknown');
+    }
   }
   return groups;
 }

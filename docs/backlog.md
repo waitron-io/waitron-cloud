@@ -160,6 +160,18 @@ scripts/cloud-cost/stream-versions.test.mjs
 scripts/cloud-cost/native-multipart.test.mjs` for the range and cleanup controls.
 These boundary tests use admitted sizes and independent loopback inventories;
 they do not upload giant objects or establish the lost-write restore proof.
+Matching partial request observations now stay unknown, with a named cutoff and
+unknown billing for the affected row. Independently supported rows keep their
+quantities. The assessor also derives that gap from original request outcomes
+when summary labels are missing. A forwarding transport without the optional
+stop ledger can collect a cutoff and continue later work; the caller still sees
+the transfer failure. Its first-event diagnostics remain available at the
+checkpoint. Deadlines, response limits, active-close refusal and malformed
+requests remain strict, including an incomplete next header while an earlier
+response is active. Run `node --test
+scripts/cloud-cost/request-cutoff-accounting.test.mjs
+scripts/cloud-cost/litestream-transfer-accounting.test.mjs` for these controls.
+Stop-ledger and lifetime interruption handling still need the wider policy.
 The full nonblocking accounting path, publication refusal, lost-write
 restore control and saved-failure replay remain open. These partial changes do
 not establish the historical cause or relax functional admission.

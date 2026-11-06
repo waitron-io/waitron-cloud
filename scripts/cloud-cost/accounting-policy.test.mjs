@@ -223,7 +223,7 @@ test('real unmatched meter events keep both diagnostic ledgers and forbid public
     bytesIn: 0, bytesOut: 3, attemptedBytesIn: 0, attemptedBytesOut: 11 });
   input.sources[0].record = meter.snapshot();
   assert.deepEqual(assess(input), { status: 'unknown',
-    gaps: ['accounting:meter-disagreement', 'accounting:unreconciled', 'request-billing:unknown'], publicationEligible: false });
+    gaps: ['accounting:meter-disagreement', 'accounting:request-cutoff', 'accounting:unreconciled', 'request-billing:unknown'], publicationEligible: false });
   assert.equal(input.sources[0].record.accounting.producer.attempts, 1);
   assert.equal(input.sources[0].record.accounting.observer.attempts, 0);
 });

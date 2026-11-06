@@ -36,6 +36,8 @@ function validateAttempt(e) {
   return structuredClone(e);
 }
 function billable(e) {
+  // A matching partial transfer does not independently witness complete request billing.
+  if (e.outcome === 'transport-error') return null;
   const requestClass = requestClasses[e.operation];
   if (requestClass === 's3-control') return null;
   if (requestClass === 's3-delete') return 0;
@@ -85,6 +87,7 @@ export function createMeter({ phase, clock, afterStop }) {
       const e = validateAttempt(event);
       requireThat(!attempts[e.channel].has(e.token)); advance(); attempts[e.channel].set(e.token, e);
       const acceptedInterruption = afterStop?.settle(e, interruption) ?? false;
+      if (e.outcome === 'transport-error') markGap('accounting:request-cutoff');
       if (e.channel === 'observer') pending.delete(e.token);
       return acceptedInterruption;
     } catch { invalidate('observe-attempt'); fail(); }

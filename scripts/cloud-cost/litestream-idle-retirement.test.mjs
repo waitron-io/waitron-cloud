@@ -119,22 +119,24 @@ test('retirement rechecks a later socket whose request finished before the old p
   assert.equal(called, true); assert.equal(f.front.checkpoint().reason, undefined);
 });
 
-// A later request on the half-closed connection must remain refused even if storage received it.
-test('a request reusing a half-closed socket refuses before any stop signal', { timeout: 5000 }, async t => {
+// A cutoff on a retired connection cannot prevent the owned collection and stop action.
+test('a request reusing a half-closed socket keeps unknown accounting before the stop action', { timeout: 5000 }, async t => {
   const f = await fixture(t), reply = once(f.client, 'data');
   f.client.allowHalfOpen = true;
   f.client.write(request); await reply; await f.front.whenIdle(() => {});
   const halfClosed = once(f.client, 'end');
   let called = false;
-  const rejected = assert.rejects(f.front.whenIdle(() => { called = true; }, { retireConnections: true }), /Invalid cloud cost Litestream audit/);
+  const draining = f.front.whenIdle(() => { called = true; }, { retireConnections: true });
   await halfClosed; f.hold();
   f.client.write(request.replace('11111111-2222-4333-8444-555555555555', 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee'));
   await f.heldRequest; f.release(); f.client.end();
-  await rejected;
-  assert.equal(called, false); assert.equal(f.front.checkpoint().completed, 2);
+  await draining;
+  assert.equal(called, true); assert.equal(f.front.checkpoint().completed, 2);
   assert.equal(f.front.checkpoint().reason, 'transfer-interrupted');
   assert.equal(f.front.checkpoint().idleActionsAtAdmission, 2, 'idle callbacks include the drain before the stop action');
-  await assert.rejects(f.front.close(), /Invalid cloud cost Litestream audit/);
+  await f.front.close();
+  assert.equal(f.meter.snapshot().status, 'unknown');
+  assert.ok(f.meter.snapshot().gaps.includes('accounting:request-cutoff'));
 });
 
 // A partial next message must still reach the parser's refusal after the graceful half-close.
@@ -154,15 +156,17 @@ test('retirement refuses an unfinished next request without running the stop act
   await assert.rejects(f.front.close(), /Invalid cloud cost Litestream audit/);
 });
 
-// Retirement cannot turn an interrupted active reply into accepted accounting.
-test('retirement still refuses an active request reset without running the stop action', { timeout: 5000 }, async t => {
+// Retirement can collect a reset active reply, but cannot promote its accounting to measured.
+test('retirement collects an active request reset before running the stop action with unknown cost', { timeout: 5000 }, async t => {
   const f = await fixture(t, true);
   f.client.write(request); await f.received;
   let called = false;
-  const rejected = assert.rejects(f.front.whenIdle(() => { called = true; }, { retireConnections: true }), /Invalid cloud cost Litestream audit/);
+  const draining = f.front.whenIdle(() => { called = true; }, { retireConnections: true });
   f.client.resetAndDestroy(); f.release();
-  await rejected; assert.equal(called, false);
-  await assert.rejects(f.front.close(), /Invalid cloud cost Litestream audit/);
+  await assert.doesNotReject(draining); assert.equal(called, true);
+  await assert.doesNotReject(f.front.close());
+  assert.equal(f.meter.snapshot().status, 'unknown');
+  assert.ok(f.meter.snapshot().gaps.includes('accounting:request-cutoff'));
 });
 
 for (const value of [1, 'true', null]) test(`an invalid retirement choice ${JSON.stringify(value)} cannot close a socket or run an action`, async t => {
