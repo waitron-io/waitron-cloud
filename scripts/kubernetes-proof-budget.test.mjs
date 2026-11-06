@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { test } from 'node:test';
 
 const target = new URL('./kubernetes-proof-budget.mjs', import.meta.url);
@@ -173,13 +174,13 @@ test('missing active history never auto-initializes and initialization refuses e
 for (const [label, id] of [
   ['long lifetime', identity({ expiry: '2026-11-06T14:15:01Z' })],
   ['short retention', identity({ liabilityUntil: '2026-12-06T14:14:59Z' })],
-  ['expired authority', identity({ startedAt: '2027-03-01T00:00:00Z', expiry: '2027-03-01T01:00:00Z', liabilityUntil: '2027-03-31T01:00:00Z' })],
+  ['future start beyond authority', identity({ startedAt: '2027-03-01T00:00:00Z', expiry: '2027-03-01T01:00:00Z', liabilityUntil: '2027-03-31T01:00:00Z' })],
   ['malformed UUID', identity({ uuid: 'not-a-uuid' })], ['future start', identity({ startedAt: '2026-11-06T12:00:01Z' })],
 ]) test(`${label} cannot produce a reservation`, async () => {
   const store = await fresh(); await assert.rejects(reserve(store, id), /budget/i);
 });
 
-test('reconciliation cannot release a different UUID or accept an unexplained cost overrun', async () => {
+test('reconciliation refuses inconsistent observations and unexplained cost overruns', async () => {
   for (const change of [{ uuid: other }, { actualMicroUsd: 1000001 }, { observedAt: '2026-11-06T11:59:59Z' }]) {
     const store = await fresh(); await reserve(store);
     await assert.rejects(reconcile(store, confirmed(change)), /budget/i);
@@ -219,7 +220,7 @@ test('S3 adapter conditionally persists ledger bytes and reads them through a fr
   assert.equal(typeof budget.createS3LedgerStore, 'function', 'missing conditional S3 adapter');
   const backend = memoryStore(), calls = [];
   const aws = { async call(operation, input) {
-    calls.push({ operation, input }); assert.equal(input.Bucket, 'd570-synthetic');
+    calls.push({ operation, input }); assert.equal(input.Bucket, 'd570-synthetic'); assert.equal(input.ExpectedBucketOwner, '462991287391');
     if (operation === 'ListObjectsV2') return { Contents: [...backend.objects.keys()].map(Key => ({ Key })), IsTruncated: false };
     if (operation === 'GetObject') {
       const row = await backend.get(input.Key);
@@ -361,3 +362,185 @@ for (const field of ['terminated', 'volumesAbsent', 'interfacesAbsent', 'billing
     assert.deepEqual(clone([...store.objects]), before);
   });
 }
+
+for (const during of ['active-read', 'month-read']) test(`a retry loses admission when cleanup completes during its ${during}`, async () => {
+  const store = await fresh(); await reserve(store); const get = store.get; let once = true;
+  store.get = async key => {
+    const old = await get(key);
+    if (once && key === (during === 'active-read' ? 'd570/ledger/active.json' : 'd570/ledger/2026-11.json')) {
+      once = false; await reconcile(store); await reserve(store, identity({ uuid: other }));
+    }
+    return old;
+  };
+  await assert.rejects(reserve(store), /budget/i);
+  assert.equal(store.body('d570/ledger/active.json').active.identity.uuid, other);
+});
+
+test('cleanup argument and observations cannot together replace the current owner UUID', async () => {
+  const store = await fresh(); await reserve(store);
+  await assert.rejects(budget.reconcileRun({ scope, uuid: other, observations: confirmed({ uuid: other }), now: confirmed().observedAt, store }), /budget/i);
+  assert.equal(store.body('d570/ledger/active.json').active.identity.uuid, uuid);
+});
+
+for (const during of ['active-read', 'month-read']) test(`a completed retry cannot return admission from unchanged booked months during ${during}`, async () => {
+  const store = await fresh(); await reserve(store); const get = store.get; let once = true;
+  store.get = async key => {
+    const old = await get(key);
+    if (once && key === (during === 'active-read' ? 'd570/ledger/active.json' : 'd570/ledger/2026-11.json')) { once = false; await reconcile(store); }
+    return old;
+  };
+  await assert.rejects(reserve(store), /budget/i);
+  assert.equal(store.body('d570/ledger/active.json').active, null);
+});
+
+for (const [label, change] of [
+  ['completion evidence hash', row => row.completed[0].evidenceHash = 'f'.repeat(64)],
+  ['completion identity hash', row => row.completed[0].identityHash = 'f'.repeat(64)],
+  ['completion cost', row => row.completed[0].observations.actualMicroUsd = 1],
+  ['completion observation time', row => row.completed[0].observations.observedAt = '2026-11-06T14:21:00Z'],
+  ['lost completion', row => row.completed = []],
+]) test(`damaged ${label} cannot admit another run`, async () => {
+  const store = await fresh(); await reserve(store); await reconcile(store);
+  store.damage('d570/ledger/active.json', change);
+  await assert.rejects(reserve(store, identity({ uuid: other })), /budget/i);
+});
+
+test('cleanup cannot permanently record a damaged active identity', async () => {
+  const store = await fresh(); await reserve(store);
+  store.damage('d570/ledger/active.json', row => row.active.identity.head = 'f'.repeat(40));
+  await assert.rejects(reconcile(store), /budget/i);
+});
+
+function resealActive(store, change) {
+  const value = store.body('d570/ledger/active.json'); delete value.integrity; change(value);
+  const sort = item => Array.isArray(item) ? item.map(sort) : item && typeof item === 'object'
+    ? Object.fromEntries(Object.keys(item).sort().map(key => [key, sort(item[key])])) : item;
+  value.integrity = createHash('sha256').update(JSON.stringify(sort(value))).digest('hex');
+  store.objects.get('d570/ledger/active.json').body = Buffer.from(JSON.stringify(value));
+}
+
+for (const [label, change] of [
+  ['completed identity relation', row => row.completed[0].identityHash = 'f'.repeat(64)],
+  ['completed evidence relation', row => row.completed[0].evidenceHash = 'f'.repeat(64)],
+  ['orphaned monthly booking', row => row.completed = []],
+]) test(`even a checksum-valid ${label} must correlate to monthly history`, async () => {
+  const store = await fresh(); await reserve(store); await reconcile(store);
+  resealActive(store, change);
+  await assert.rejects(reserve(store, identity({ uuid: other })), /budget/i);
+});
+
+test('checksum-valid active identity must still match its original bookings during cleanup', async () => {
+  const store = await fresh(); await reserve(store);
+  resealActive(store, row => row.active.identity.head = 'f'.repeat(40));
+  await assert.rejects(reconcile(store), /budget/i);
+});
+
+for (const partial of [false, true]) test(`${partial ? 'partial' : 'reserved'} retry requires every remembered month, including unrelated months`, async () => {
+  const proof = evidence(); proof.openings['2027-01'] = { baselineMicroUsd: 0, overheadMicroUsd: 200000, digest: 'f'.repeat(64) };
+  const store = await fresh({ evidence: proof });
+  if (partial) {
+    let fail = true; store.beforePut = key => { if (fail && key === 'd570/ledger/2026-12.json') { fail = false; throw new Error('lost controller'); } };
+    await assert.rejects(reserve(store), /lost controller/);
+  } else await reserve(store);
+  store.objects.delete('d570/ledger/2027-01.json');
+  await assert.rejects(reserve(store), /budget/i);
+});
+
+for (const change of [{ account: '949687825720' }, { region: 'us-east-1' }]) test(`the observed scope refuses ${JSON.stringify(change)} before any setup write`, async () => {
+  const store = memoryStore(), actual = { ...scope, ...change }, proof = evidence({ account: actual.account, region: actual.region });
+  await assert.rejects(budget.initializeLedger({ scope: actual, evidence: proof, now, store }), /budget/i); assert.equal(store.objects.size, 0);
+});
+
+for (const failureAt of ['2026-11', '2026-12']) test(`partial retry after ${failureAt} failure cannot lose an earlier completed booking`, async () => {
+  const store = await fresh(); await reserve(store); await reconcile(store); let fail = true;
+  store.beforePut = key => { if (fail && key === `d570/ledger/${failureAt}.json`) { fail = false; throw new Error('lost controller'); } };
+  await assert.rejects(reserve(store, identity({ uuid: other })), /lost controller/);
+  store.damage('d570/ledger/2026-11.json', row => row.entries = row.entries.filter(entry => entry.identity.uuid !== uuid));
+  await assert.rejects(reserve(store, identity({ uuid: other })), /budget/i);
+});
+
+test('cleanup refuses a validly shaped lost booking and a checksum-valid future schema', async () => {
+  for (const change of [s => s.damage('d570/ledger/2026-11.json', row => row.entries = []), s => resealActive(s, row => row.schema = 'future')]) {
+    const store = await fresh(); await reserve(store); change(store);
+    await assert.rejects(reconcile(store), /budget/i);
+  }
+});
+
+test('future cleanup observations cannot release a currently owned reservation', async () => {
+  const store = await fresh(); await reserve(store);
+  await assert.rejects(budget.reconcileRun({ scope, uuid, observations: confirmed(), now: '2026-11-06T14:19:59Z', store }), /budget/i);
+  assert.equal(store.body('d570/ledger/active.json').active.identity.uuid, uuid);
+});
+
+test('an impossible calendar time refuses even when normalized dates would fit the lifetime', async () => {
+  const at = '2026-11-06T00:30:00Z', proof = evidence({ observedAt: at }); const store = await fresh({ now: at, evidence: proof });
+  await assert.rejects(reserve(store, identity({ startedAt: '2026-11-05T24:00:00Z', expiry: '2026-11-06T01:00:00Z', liabilityUntil: '2026-12-06T01:00:00Z' }), proof, at), /budget/i);
+});
+
+test('receipt liability beyond 31 days refuses independently of the run lifetime', async () => {
+  const store = await fresh(); await assert.rejects(reserve(store, identity({ liabilityUntil: '2026-12-07T14:15:01Z' })), /budget/i);
+});
+
+test('the first booking in an unseen month is create-only and contains the full charge', async () => {
+  const initial = evidence(); delete initial.openings['2026-12']; const store = await fresh({ evidence: initial });
+  await reserve(store); const writes = store.writes.filter(w => w.key === 'd570/ledger/2026-12.json');
+  assert.equal(writes.length, 1); assert.deepEqual(writes[0].condition, { ifNoneMatch: '*' });
+  assert.equal(writes[0].body.entries[0].upperMicroUsd, 1000000);
+});
+
+test('a new month at the cap refuses without taking partial active ownership', async () => {
+  const initial = evidence(); delete initial.openings['2026-12']; const store = await fresh({ evidence: initial });
+  const proof = evidence(); proof.openings['2026-12'].baselineMicroUsd = 8800000;
+  await assert.rejects(reserve(store, identity(), proof), /budget/i); assert.equal(store.body('d570/ledger/active.json').active, null);
+});
+
+test('three UTC months each retain the full charge through the final liability boundary', async () => {
+  const at = '2026-11-30T23:00:00Z', proof = evidence({ observedAt: at }); proof.openings['2027-01'] = { ...proof.openings['2026-12'] };
+  const initial = clone(proof); delete initial.openings['2026-12']; delete initial.openings['2027-01'];
+  const store = await fresh({ now: at, evidence: initial });
+  const result = await reserve(store, identity({ startedAt: at, expiry: '2026-12-01T01:00:00Z', liabilityUntil: '2027-01-01T01:00:00Z' }), proof, at);
+  assert.deepEqual(result.months, ['2026-11', '2026-12', '2027-01']);
+  for (const month of result.months) assert.equal(store.body(`d570/ledger/${month}.json`).entries[0].upperMicroUsd, 1000000);
+});
+
+test('a stale initial clock refuses before any reservation write', async () => {
+  const store = await fresh(), writes = store.writes.length;
+  await assert.rejects(budget.reserveRun({ scope, identity: identity(), evidence: evidence(), now, store, clock: () => Date.parse('2026-11-06T14:15:00Z') }), /budget/i);
+  assert.equal(store.writes.length, writes);
+});
+
+test('a fourteenth remembered month refuses before taking active ownership', async () => {
+  const proof = evidence({ openings: {} });
+  for (let index = 0; index < 13; index++) {
+    const date = new Date(Date.UTC(2025, 9 + index, 1));
+    proof.openings[date.toISOString().slice(0, 7)] = { baselineMicroUsd: 0, overheadMicroUsd: 200000, digest: 'd'.repeat(64) };
+  }
+  const store = await fresh({ evidence: proof }), writes = store.writes.length;
+  await assert.rejects(reserve(store), /budget/i); assert.equal(store.writes.length, writes);
+});
+
+test('an exact cleanup retry after a lost successful response is acknowledged without writes', async () => {
+  const store = await fresh(); await reserve(store); await reconcile(store); const before = clone([...store.objects]);
+  await assert.doesNotReject(reconcile(store)); assert.deepEqual(clone([...store.objects]), before);
+});
+
+test('S3 absence requires the documented not-found status and writes retain their prefix boundary', async () => {
+  const error = Object.assign(new Error('uncertain'), { name: 'NoSuchKey', $metadata: { httpStatusCode: 500 } });
+  const missing = budget.createS3LedgerStore({ bucket: 'd570-synthetic', aws: { call: async () => { throw error; } } });
+  await assert.rejects(missing.get('d570/ledger/active.json'), e => e === error);
+  let calls = 0; const store = budget.createS3LedgerStore({ bucket: 'd570-synthetic', aws: { call: async () => { calls++; return { ETag: '"etag"' }; } } });
+  await assert.rejects(store.put('d570/payload/foreign', Buffer.from('{}'), { ifNoneMatch: '*' }), /budget/i); assert.equal(calls, 0);
+});
+
+test('S3 stream overflow stops consumption before reading the remainder', async () => {
+  let chunks = 0;
+  const store = budget.createS3LedgerStore({ bucket: 'd570-synthetic', aws: { call: async () => ({ ContentLength: 1024 * 1024, ETag: '"etag"', Body: (async function* () { for (let index = 0; index < 64; index++) { chunks++; yield Buffer.alloc(256 * 1024); } })() }) } });
+  await assert.rejects(store.get('d570/ledger/active.json'), /budget/i); assert.equal(chunks, 5);
+});
+
+test('refused S3 response headers close the owned response stream', async () => {
+  let closed = false;
+  const body = { destroy() { closed = true; }, async *[Symbol.asyncIterator]() { yield Buffer.from('{}'); } };
+  const store = budget.createS3LedgerStore({ bucket: 'd570-synthetic', aws: { call: async () => ({ ContentLength: 1024 * 1024 + 1, ETag: '"etag"', Body: body }) } });
+  await assert.rejects(store.get('d570/ledger/active.json'), /budget/i); assert.equal(closed, true);
+});

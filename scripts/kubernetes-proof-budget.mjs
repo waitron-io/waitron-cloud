@@ -7,7 +7,7 @@ const uuidPattern = /^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-
 const hashPattern = /^[a-f0-9]{64}$/, shaPattern = /^[a-f0-9]{40}$/;
 const accessExpiry = Date.parse('2027-02-28T23:59:00Z');
 const monthKey = month => `d570/ledger/${month}.json`;
-const refuse = () => { throw new Error('D570 budget refused; retain ownership and bookings'); };
+const refuse = () => { throw new Error('D570 budget refused'); };
 const check = condition => { if (!condition) refuse(); };
 const matches = (pattern, value) => typeof value === 'string' && pattern.test(value);
 const plain = value => value && Object.getPrototypeOf(value) === Object.prototype;
@@ -73,10 +73,17 @@ async function read(store, key) {
   check(result.body instanceof Uint8Array && result.body.byteLength > 0 && result.body.byteLength <= limit
     && typeof result.etag === 'string' && result.etag.length > 0 && result.etag.length <= 256);
   let value; try { value = JSON.parse(Buffer.from(result.body).toString('utf8')); } catch { refuse(); }
-  check(plain(value)); return { value, etag: result.etag };
+  check(plain(value));
+  if (key === activeKey) {
+    const { integrity, ...payload } = value;
+    check(matches(hashPattern, integrity) && digest(payload) === integrity);
+    value = payload;
+  }
+  return { value, etag: result.etag };
 }
 async function write(store, key, value, etag) {
-  const body = Buffer.from(canonical(value)); check(body.byteLength <= limit);
+  const serial = key === activeKey ? { ...value, integrity: digest(value) } : value;
+  const body = Buffer.from(canonical(serial)); check(body.byteLength <= limit);
   const result = await store.put(key, body, etag ? { ifMatch: etag } : { ifNoneMatch: '*' });
   check(typeof result?.etag === 'string' && result.etag.length > 0 && result.etag.length <= 256);
   return result.etag;
@@ -125,6 +132,45 @@ function checkedObservations(observations, uuid, now) {
   integer(observations.actualMicroUsd);
 }
 
+async function verifyHistory(ledger, store) {
+  const active = ledger.active, completed = new Map(ledger.completed.map(row => [row.uuid, row]));
+  const months = [...new Set([...Object.keys(ledger.monthHeads), ...(active?.months ?? [])])];
+  const inventory = await store.list();
+  check(Array.isArray(inventory) && new Set(inventory).size === inventory.length && inventory.includes(activeKey)
+    && inventory.every(key => key === activeKey || months.some(month => monthKey(month) === key)));
+  const records = new Map(), originals = new Map();
+  for (const month of months) {
+    const saved = await read(store, monthKey(month)), previous = ledger.monthHeads[month];
+    if (!saved) { check(!previous && active?.state === 'preparing' && active.months.includes(month)); continue; }
+    checkedMonth(saved.value, ledger.scope, month); records.set(month, saved.value);
+    const own = saved.value.entries.find(entry => entry.identity.uuid === active?.identity.uuid);
+    if (previous && digest(saved.value) !== previous) {
+      check(active?.state === 'preparing' && active.months.includes(month) && own && digest(own) === digest(booking(active)));
+      const before = { ...saved.value, entries: saved.value.entries.filter(entry => entry !== own) };
+      check(digest(before) === previous);
+    } else if (!previous) {
+      check(active?.state === 'preparing' && active.months.includes(month) && saved.value.entries.length === 1 && own
+        && digest(saved.value.opening) === digest(active.evidence.openings[month]));
+    }
+    for (const entry of saved.value.entries) {
+      const id = entry.identity.uuid, prior = originals.get(id); check(!prior || digest(prior) === digest(entry)); originals.set(id, entry);
+      if (id === active?.identity.uuid) check(digest(entry) === digest(booking(active)));
+      else {
+        const owner = completed.get(id);
+        check(owner && owner.identityHash === digest(entry.identity) && owner.evidenceHash === entry.evidenceHash
+          && owner.observations.actualMicroUsd <= entry.upperMicroUsd && time(owner.observations.observedAt) >= time(entry.identity.startedAt));
+      }
+    }
+  }
+  for (const id of [...completed.keys(), ...(active?.state === 'reserved' ? [active.identity.uuid] : [])]) {
+    const original = originals.get(id); check(original);
+    for (const month of checkedIdentity(original.identity, time(original.identity.startedAt))) {
+      const entry = records.get(month)?.entries.find(row => row.identity.uuid === id);
+      check(entry && digest(entry) === digest(original));
+    }
+  }
+}
+
 async function completeBookings(ledger, store) {
   const active = ledger.active, { identity, months } = active, scope = ledger.scope;
   const entry = booking(active), heads = { ...ledger.monthHeads };
@@ -168,10 +214,13 @@ export async function initializeLedger({ scope, now, evidence, store }) {
 export async function reserveRun({ scope, identity, evidence, now, store, clock = Date.now }) {
   scope = structuredClone(scope); identity = structuredClone(identity); evidence = structuredClone(evidence);
   checkedScope(scope); const instant = time(now); check(instant < accessExpiry);
-  const upperMicroUsd = priceEvidence(evidence, scope, instant), months = checkedIdentity(identity, instant);
+  const initialObservation = clock(); check(Number.isSafeInteger(initialObservation) && initialObservation >= instant);
+  const upperMicroUsd = priceEvidence(evidence, scope, initialObservation), months = checkedIdentity(identity, initialObservation);
   for (const month of months) opening(evidence.openings[month]);
   const row = await read(store, activeKey); check(row); checkedActive(row.value, scope);
   const ledger = row.value;
+  check(new Set([...Object.keys(ledger.monthHeads), ...months]).size <= 13);
+  await verifyHistory(ledger, store);
   const desired = { identity, upperMicroUsd, evidenceHash: digest(evidence), months,
     evidence, state: 'preparing' };
   if (ledger.active) check(digest({ ...ledger.active, state: 'preparing' }) === digest(desired));
@@ -196,8 +245,11 @@ export async function reserveRun({ scope, identity, evidence, now, store, clock 
   const active = ledger.active, heads = await completeBookings(ledger, store);
   if (active.state === 'preparing') {
     ledger.monthHeads = heads; active.state = 'reserved';
-    await write(store, activeKey, ledger, row.etag);
+    row.etag = await write(store, activeKey, ledger, row.etag);
   }
+  const current = await read(store, activeKey);
+  check(current && current.etag === row.etag && current.value.active?.state === 'reserved'
+    && digest(current.value.active.identity) === digest(identity));
   const observed = clock();
   check(Number.isSafeInteger(observed) && observed >= instant);
   checkedIdentity(identity, observed); priceEvidence(evidence, scope, observed);
@@ -210,6 +262,9 @@ export async function reconcileRun({ scope, uuid, observations, now, store }) {
   checkedObservations(observations, uuid, time(now));
   const saved = await read(store, activeKey); check(saved); checkedActive(saved.value, scope);
   const ledger = saved.value, active = ledger.active;
+  await verifyHistory(ledger, store);
+  const prior = ledger.completed.find(row => row.uuid === uuid);
+  if (prior) { check(digest(prior.observations) === digest(observations)); return; }
   check(active && ['preparing', 'reserved'].includes(active.state) && active.identity.uuid === uuid && time(observations.observedAt) >= time(active.identity.startedAt)
     && integer(observations.actualMicroUsd) <= active.upperMicroUsd);
   if (active.state === 'preparing') ledger.monthHeads = await completeBookings(ledger, store);
@@ -243,13 +298,16 @@ export function createS3LedgerStore({ bucket, aws }) {
       validKey(key); let result;
       try { result = await call('GetObject', { Key: key }); }
       catch (error) { if (error.name === 'NoSuchKey' && error.$metadata?.httpStatusCode === 404) return null; throw error; }
-      validEtag(result?.ETag); check(Number.isSafeInteger(result.ContentLength) && result.ContentLength > 0 && result.ContentLength <= limit);
-      const parts = []; let size = 0;
-      const stream = result.Body instanceof Uint8Array ? [result.Body] : result.Body;
-      check(stream && (stream[Symbol.asyncIterator] || stream[Symbol.iterator]));
-      for await (const part of stream) { check(part instanceof Uint8Array); size += part.byteLength; check(size <= limit); parts.push(Buffer.from(part)); }
-      check(size === result.ContentLength);
-      return { body: Buffer.concat(parts), etag: result.ETag };
+      let complete = false;
+      try {
+        validEtag(result?.ETag); check(Number.isSafeInteger(result.ContentLength) && result.ContentLength > 0 && result.ContentLength <= limit);
+        const parts = []; let size = 0;
+        const stream = result.Body instanceof Uint8Array ? [result.Body] : result.Body;
+        check(stream && (stream[Symbol.asyncIterator] || stream[Symbol.iterator]));
+        for await (const part of stream) { check(part instanceof Uint8Array); size += part.byteLength; check(size <= limit); parts.push(Buffer.from(part)); }
+        check(size === result.ContentLength);
+        complete = true; return { body: Buffer.concat(parts), etag: result.ETag };
+      } finally { if (!complete && typeof result?.Body?.destroy === 'function') result.Body.destroy(); }
     },
     async put(key, body, condition) {
       validKey(key); check(body instanceof Uint8Array && body.byteLength > 0 && body.byteLength <= limit && plain(condition));

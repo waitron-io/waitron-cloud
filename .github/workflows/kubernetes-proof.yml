@@ -33,9 +33,13 @@ jobs:
           report="$RUNNER_TEMP/kubernetes-proof-units.tap"
           tests=(deploy/kubernetes/proof/setup.test.mjs deploy/kubernetes/proof/expiry.test.mjs)
           # Run only the prerequisites supplied by the exact checked-out head.
-          if [[ -e scripts/kubernetes-proof-budget.mjs || -e scripts/kubernetes-proof-budget.test.mjs ]]; then
-            tests+=(scripts/kubernetes-proof-budget.test.mjs)
+          if [[ -e scripts/kubernetes-proof-budget.mjs || -e scripts/kubernetes-proof-budget.test.mjs || -e deploy/kubernetes/proof/workflow.test.mjs ]]; then
+            [[ -f scripts/kubernetes-proof-budget.mjs ]] || exit 1
+            tests+=(scripts/kubernetes-proof-budget.test.mjs deploy/kubernetes/proof/workflow.test.mjs)
           fi
+          for test_file in "${tests[@]}"; do
+            [[ -f "$test_file" ]] || { echo "Missing required test: $test_file"; exit 1; }
+          done
           node --test --test-reporter=tap --test-timeout=30000 "${tests[@]}" | tee "$report"
           grep -Eq '^# tests [1-9][0-9]*$' "$report"
           grep -Fx '# fail 0' "$report"

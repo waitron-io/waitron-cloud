@@ -132,7 +132,7 @@ and the volume's [creation timestamp](https://docs.aws.amazon.com/AWSEC2/latest/
 
 The reservation core in `scripts/kubernetes-proof-budget.mjs` records one active
 run and each affected UTC month through the receipt-retention deadline. Every
-write uses a create-only condition or the exact previously read S3 object version.
+write uses a create-only condition or the exact previously read S3 entity tag (ETag).
 A second controller cannot take ownership. An identical retry keeps the original
 head, tree, deadline and cost; it cannot extend them. Partial writes keep ownership
 and their booked cost until an exact retry completes, so cancellation grants no
@@ -149,7 +149,9 @@ and healthy expiry protection release the active slot. A confirmed cleanup of a
 partial reservation first completes every original monthly booking, even after
 the reservation deadline. They never refund its
 monthly reservation. Original identities, cost-source evidence and cleanup facts
-remain in the ledger. Missing, damaged, oversized or unrecognized history refuses;
+remain in the ledger. The active record carries a corruption checksum, and every
+completion and active identity must correlate to its complete monthly bookings.
+Every retry checks all remembered months. Missing, damaged, oversized or unrecognized history refuses;
 runtime cannot recreate it. Initialization is restricted to an empty ledger and
 can leave a protected, incomplete setup after a failed write.
 
@@ -168,3 +170,11 @@ those reviewed inputs; a price URL and digest alone do not prove a price or an
 upper bound. The launch controller must still verify cleanup and budget evidence
 against AWS. Owner lifecycle, fixed-deadline bootstrap and live qualification
 remain open. Admission stays closed.
+
+The returned reservation is a ledger receipt, rather than a lasting machine-launch
+permission. A final read requires unchanged active ownership after the ledger's
+waits. The future launch controller still needs the current-owner and launch/cleanup
+protocol; an S3 read does not make an EC2 action atomic with the ledger. Checksums
+and source digests detect corruption and disagreement; they do not authenticate
+provider facts. An exact repeated cleanup acknowledgement preserves the saved
+facts and performs no further writes.
