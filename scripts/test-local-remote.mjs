@@ -53,8 +53,9 @@ async function captureClient(dir,command,input){
  let output='',error='';child.stdout.on('data',value=>output+=value);child.stderr.on('data',value=>error=(error+value).slice(-16000));child.stdin.end(JSON.stringify({command,...input}));const timer=setTimeout(()=>child.kill('SIGKILL'),45000);
  try{const code=await new Promise(resolve=>child.once('exit',resolve));assert.equal(code,0,'Waitron capture client failed: '+error);return JSON.parse(output.trim().split('\n').at(-1));}finally{clearTimeout(timer);}
 }
-async function backupWorker(dir,input){
- const child=spawn(process.execPath,['--permission','--allow-fs-read=*','--allow-fs-write='+(await realpath(dir)),'--allow-worker','--allow-child-process','--allow-addons','--import',require.resolve('tsx'),join(waitron,'apps/server/scripts/cloud-backup-fixture.ts')],{cwd:join(waitron,'apps/server'),env:{...process.env,TSX_DISABLE_CACHE:'1',CLOUD_TEST_ROOT:dir},stdio:['pipe','pipe','pipe']});
+async function backupWorker({root:dir,scratch},input){
+ scratch=await realpath(scratch);
+ const child=spawn(process.execPath,['--permission','--allow-fs-read=*','--allow-fs-write='+scratch,'--allow-worker','--allow-child-process','--allow-addons','--import',require.resolve('tsx'),join(waitron,'apps/server/scripts/cloud-backup-fixture.ts')],{cwd:join(waitron,'apps/server'),env:{...process.env,TMPDIR:scratch,TMP:scratch,TEMP:scratch,TSX_DISABLE_CACHE:'1',CLOUD_TEST_ROOT:dir},stdio:['pipe','pipe','pipe']});
  let output='',error='';child.stdout.on('data',value=>output+=value);child.stderr.on('data',value=>error=(error+value).slice(-16000));child.stdin.end(JSON.stringify({command:'capture',...input}));const timer=setTimeout(()=>child.kill('SIGKILL'),30000);
  try{const code=await new Promise(resolve=>child.once('exit',resolve));assert.equal(code,0,'Waitron backup worker failed: '+error);return JSON.parse(output.trim().split('\n').at(-1));}finally{clearTimeout(timer);}
 }
@@ -96,7 +97,7 @@ async function solve(host,transport=remote){
 async function captureVenue(venue){
  await stop(venue.server);
  try{
-  const id=randomUUID(),grant=await captureClient(venue.root,'reserve',{id}),captured=await backupWorker(venue.root,{recoveryKey:grant.recoveryKey}),bytes=await readFile(join(venue.root,'captured.backup.enc'));
+  const id=randomUUID(),grant=await captureClient(venue.root,'reserve',{id}),captured=await backupWorker(venue,{recoveryKey:grant.recoveryKey}),bytes=await readFile(join(venue.root,'captured.backup.enc'));
   await captureClient(venue.root,'upload',{grant,ca:s3.ca});
   const point=await captureClient(venue.root,'publish',{id,metadata:{...backupReceipt(bytes),capturedAt:captured.manifest.createdAt,retention:'daily',sourceNodeId:captured.sourceNodeId,modules:captured.manifest.modules}});
   assert.equal(point.installationId,venue.placement.installationId);assert.equal(point.venueId,venue.placement.venueId);
@@ -122,7 +123,8 @@ try{
  const accountKeyFile=join(root,'account.key');await secret(accountKeyFile,await acmeCrypto.createPrivateKey());
  const venues=[];
  for(let n=0;n<2;n++){
-  const venueRoot=await mkdtemp(join(tmpdir(),'cloud-integration-backup-'));roots.push(venueRoot);let server=await launch(venueRoot);
+  const scratch=await mkdtemp(join(tmpdir(),'cloud-integration-backup-'));roots.push(scratch);
+  const venueRoot=join(scratch,'state');await mkdir(venueRoot);let server=await launch(venueRoot);
   const context=await f.browser.newContext({ignoreHTTPSErrors:true});const post=async(path,data={})=>{const result=await context.request.post(server.origin+path,{headers:{origin:server.origin},data});assert.equal(result.status(),200,await result.text());return result.json();};
   await post('/management-api/session',{email:'owner@example.test',password:'Local integration password'});
   const pairing=await post('/management-api/cloud/start');
@@ -139,7 +141,7 @@ try{
   const publicCsrFile=join(root,`public-${n}.csr`);await secret(publicCsrFile,publicCsr);
   const publicCertificate=await acme.issue({operator:{databaseUrl:databaseUrl.toString(),installationId:placement.installationId,kind:'public'},hostname:placement.publicHostname,csrFile:publicCsrFile,accountKeyFile,output:join(root,`public-${n}.crt`)});
   const publicMaterial=Buffer.concat([publicKey,Buffer.from(publicCertificate)]);await secret(join(input,'public-certs',`venue-${n}.pem`),publicMaterial);await secret(join(targetInput,'public-certs',`venue-${n}.pem`),publicMaterial);
-  venues.push({root:venueRoot,server,key,placement,certificate,location});await context.close();
+  venues.push({root:venueRoot,scratch,server,key,placement,certificate,location});await context.close();
  }
  checks.push('two real SQLite Waitron servers paired through authenticated manager APIs');
  await secret(join(input,'issuer.pem'),issuer.publicKey.export({type:'spki',format:'pem'}));await secret(join(input,'wireguard.key'),gatewayKey.privateKey);await secret(join(input,'bot.key'),randomBytes(32));await secret(join(input,'venue-ca.pem'),acme.certificateRoot);
