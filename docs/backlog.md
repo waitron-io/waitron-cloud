@@ -487,7 +487,12 @@ and slices 4/5 taking an actually available migration slot. Slices 6–12 remain
 unauthorised. Slice 2 publishes the [purpose/supplier register](cloud-data-processing-register.md)
 and [five draft agreement annexes](cloud-processing-annexes.md): stable IDs,
 separate Cloud-own purposes, explicitly unqualified supplier evidence and all six
-open lawyer questions. These are unsigned drafting records, not legal or provider
+open lawyer questions. The register, annexes, design and roadmap reuse
+[adviser confirmation P8](https://github.com/clintongormley/waitron/blob/2a4443a2ba01676e51fdb119a82d224f9d1cece7/docs/compliance/2026-11-06-adviser-questions.md#for-the-privacy-specialist)
+for product repair, venue support, replacement remote transport and Cloud-own
+security roles. The old relay question Q57 is retired; use the 6 November English
+list, which replaces the 5 November Spanish batch. P8 is still awaiting legal
+confirmation. These are unsigned drafting records, not legal or provider
 qualification. Slice 3 adds the SQL-free [country decision function](country-policy.md):
 exact qualified destination matching, positive policy revisions and evidence-only results.
 The production Spain default has no qualified flows. Slice 4 adds the disabled
