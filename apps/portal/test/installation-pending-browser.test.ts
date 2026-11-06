@@ -27,7 +27,7 @@ async function disabled(page: Page, labels: string[]) {
 
 for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'] as const) for (const width of [390, 1280]) {
   const handlers = locale === 'en' && theme === 'light' && width === 390 ? ['ordinary', 'delayed', 'missing'] as const : ['ordinary'] as const;
-  for (const handler of handlers) test(`${locale} ${theme} ${width}: venue actions wait for installation refresh${handler === 'ordinary' ? '' : ` (${handler} handler)`}`, async t => {
+  for (const handler of handlers) test(`${locale} ${theme} ${width}: ${handler === 'missing' ? 'missing installation handler signal refuses within the observation budget' : `venue actions wait for installation refresh${handler === 'ordinary' ? '' : ' (delayed handler)'}`}`, async t => {
   const browser = await chromium.launch({headless: true});
   try {
     const page = await browser.newPage({locale, colorScheme: theme, viewport: {width, height: 900}}); page.setDefaultTimeout(4000);
@@ -81,7 +81,7 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
     const screenshot = async (name: string) => {
       if (process.env.INSTALLATION_PENDING_RECEIPT_DIR) {
         await mkdir(process.env.INSTALLATION_PENDING_RECEIPT_DIR, {recursive: true});
-        await page.screenshot({path: `${process.env.INSTALLATION_PENDING_RECEIPT_DIR}/${locale}-${theme}-${width}-${name}.png`, fullPage: true});
+        await page.screenshot({path: `${process.env.INSTALLATION_PENDING_RECEIPT_DIR}/${locale}-${theme}-${width}-${name}${handler === 'ordinary' ? '' : `-${handler}`}.png`, fullPage: true});
       }
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
     };
@@ -103,8 +103,8 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
       assert.equal(await approve.isEnabled(), true);
       const start = calls.length;
       refreshed = result === 'removed' ? installations.slice(0, 1) : installations; refreshFails = result === 'failed';
-      await holdRefresh();
       try {
+        await holdRefresh();
         const waiting = await approve.isDisabled();
         // A native click exercises the disabled control without Playwright's retry wait.
         await approve.evaluate(button => (button as HTMLButtonElement).click());
@@ -147,8 +147,8 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
       assert.equal(await article.getByRole('button', {name: c.translationConsentAgree, exact: true}).isEnabled(), true);
       const start = calls.length;
       refreshed = result === 'removed' ? installations.slice(0, 1) : installations;
-      await holdRefresh();
       try {
+        await holdRefresh();
         await disabled(page, [c.stopAccess, c.diagnosticDownload, c.translationConsentAgree]);
         if (expanded) {
           await disabled(page, [c.latestSnapshots, c.olderSnapshots, c.remoteReview, c.remoteUseAssigned, c.remoteConfirm]);
