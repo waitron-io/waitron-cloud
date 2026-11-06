@@ -33,7 +33,7 @@ registry/image checks also remain open. Integration must recheck registry
 inventory before recording an upload and give read-only monitors verified remote
 history rather than a local snapshot. Replay supports retained history without
 repeated full-history copies; the Git command's 16 MiB output limit and abandoned
-local-lock recovery remain open. No publisher is activated by this slice.
+local-lock recovery remain open. No publisher is activated by this slice. The [build-evidence implementation plan](superpowers/plans/2026-11-06-ui-build-evidence.md) defines the next adapter: immutable source and recipe inventories, matching reservation hashes before source execution, F's ordered fresh build, and exact prepared-artifact recovery. Its runtime implementation and required real-tool Linux compatibility check remain open; the plan supplies no new build or release qualification.
 
 ## Shared storage-test seed downloads (D585)
 
