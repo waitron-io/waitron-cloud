@@ -21,4 +21,20 @@ Run the ownership and prerequisite planning checks locally:
 node --test scripts/disposable-tests/leases.test.mjs scripts/disposable-tests/bootstrap.test.mjs
 ```
 
-This foundation does not supply a usable test slot yet. The VM adapter, source transfer, dependency access, network isolation, absolute guest deadlines, reboot reconciliation and bounded destruction must qualify before you move a lane's work here. No GitHub runner is enrolled.
+Before sending source to a guest, create an archive outside your checkout:
+
+```sh
+python3 scripts/disposable-tests/snapshot.py create "$PWD" /tmp/cloud-source.tar
+```
+
+The command prints the archive's SHA256 digest and source file count. It includes tracked edits and untracked, unignored files, but omits Git state, environment files, credentials and dependencies. It refuses links and reads each path through directory handles that cannot follow links. Inspect a refused path before retrying. Static `.pem` and `.key` fixtures are also excluded conservatively; a test needing one is unsupported until its credential boundary has been reviewed.
+
+Copy the trusted extractor separately from candidate source. In the guest, verify that digest before extracting into an empty directory:
+
+```sh
+python3 /opt/waitron-disposable/snapshot.py extract /tmp/cloud-source.tar SHA256 /work/source
+```
+
+All archive members are checked before extraction. A changed digest, escaping path, link, duplicate or file/directory conflict refuses the archive. Nothing is extracted on the host.
+
+This foundation does not supply a usable test slot yet. The VM adapter, dependency access, network isolation, absolute guest deadlines, reboot reconciliation and bounded destruction must qualify before you move a lane's work here. No GitHub runner is enrolled.
