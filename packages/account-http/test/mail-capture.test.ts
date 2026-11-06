@@ -17,12 +17,12 @@ async function fixture(t: TestContext, options: {messages?: object[]; status?: n
   t.after(() => new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve())));
   const address = server.address(); assert.ok(address && typeof address !== 'string');
   const send = async () => {if (options.smtpFails) throw privateError;};
-  const pool = {async query() {
+  const pool = {async connect() {return {release() {}, async query() {
     if (options.queryFails) throw privateError;
     return {rows: [{kind: 'password_reset', status: 'sent', attempts: 1, failures: 0, last_error: null, transport: null,
       email, payload: `token=${token}`, message_id: 'private-message-id', has_message_id: false},
       {kind: email, status: token, attempts: email, failures: token, last_error: privateError.message, transport: email}]};
-  }} as unknown as Parameters<typeof createMailCapture>[0]['pool'];
+  }};}} as unknown as Parameters<typeof createMailCapture>[0]['pool'];
   const capture = createMailCapture({pool, inbox: `http://127.0.0.1:${address.port}`,
     mailer: {sendVerification: send, sendPasswordReset: send, sendPasswordChanged: send, sendServiceAlert: send}});
   return capture;

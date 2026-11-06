@@ -7,7 +7,7 @@ type Event = {kind?: string; result: string; ms: number};
 const allowed = (value: unknown, values: readonly string[]) => typeof value === 'string' && values.includes(value) ? value : 'other';
 const count = (value: unknown) => Number.isSafeInteger(value) && Number(value) >= 0 ? value : null;
 
-export function createMailCapture(options: {pool: Pick<Pool, 'query'>; inbox: string; mailer: Mailer}) {
+export function createMailCapture(options: {pool: Pick<Pool, 'connect'>; inbox: string; mailer: Mailer}) {
   const workerEvents: Event[] = [], smtpEvents: Event[] = [];
   const record = (events: Event[], result: string, started: number, kind?: string) => {
     events.push({...(kind ? {kind} : {}), result, ms: Math.round(performance.now() - started)});
@@ -22,12 +22,38 @@ export function createMailCapture(options: {pool: Pick<Pool, 'query'>; inbox: st
       } catch (error) {record(smtpEvents, 'rejected', started, kind); throw error;}
     }) as Mailer[T];
   }
+  let reading = false;
+  async function readOutbox() {
+    // A timed-out acquisition still belongs to the shared pool; never queue another behind it.
+    if (reading) throw new Error('Mail evidence unavailable');
+    reading = true;
+    const deadline = performance.now() + 1000;
+    let expired = false, timer: ReturnType<typeof setTimeout> | undefined;
+    const read = (async () => {
+      try {
+        const client = await options.pool.connect();
+        const remaining = Math.ceil(deadline - performance.now());
+        // Return a late client without issuing a stale diagnostic query.
+        if (expired || remaining <= 0) {client.release(); throw new Error('Mail evidence unavailable');}
+        let failed = false;
+        try {
+          const query = {text: `SELECT kind, status, attempts, failures, last_error, transport,
+            message_id IS NOT NULL AS has_message_id FROM email_outbox ORDER BY created_at, id LIMIT 20`, query_timeout: remaining};
+          return await client.query<Record<string, unknown>>(query);
+        } catch (error) {failed = true; throw error;}
+        finally {client.release(failed);}
+      } finally {reading = false;}
+    })();
+    try {
+      return await Promise.race([read, new Promise<never>((_resolve, reject) => {
+        timer = setTimeout(() => {expired = true; reject(new Error('Mail evidence unavailable'));}, 1000);
+      })]);
+    } finally {clearTimeout(timer);}
+  }
   async function evidence(boundary: object = {}) {
     let outbox: unknown = 'unavailable';
     try {
-      const query = {text: `SELECT kind, status, attempts, failures, last_error, transport,
-        message_id IS NOT NULL AS has_message_id FROM email_outbox ORDER BY created_at, id LIMIT 20`, query_timeout: 1000};
-      const {rows} = await options.pool.query<Record<string, unknown>>(query);
+      const {rows} = await readOutbox();
       // Allow only known states and counts; no row IDs, payloads, recipients or raw errors.
       outbox = rows.map(row => ({
         kind: allowed(row.kind, ['verification', 'password_reset', 'password_changed', 'service_alert']),

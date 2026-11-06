@@ -26,12 +26,23 @@ recurrence with the callback before choosing a delivery fix; a shared cause with
 the [venue signup/reset receipt](../../deploy/test-cloud/venue-service-basic.test.mjs)
 is unproved. That receipt separately found a queued message not marked sent.
 
-The observer's one-second query timeout starts after it obtains a database
-connection. A full pool or a stalled connection handshake can leave the missing-mail
-assertion waiting until the test timeout. Controlled real-`pg` connection probes
-confirmed that limitation during review; the observer is unchanged here. Keep this
-under D530's diagnostic follow-up: bound the connection wait without changing the
-original lookup, assertion or test deadline, and prove it with held connections.
+The queue evidence read now shares one second between getting a database connection
+and reading the outbox, so an exhausted pool or a stalled PostgreSQL handshake
+cannot hide the original missing-mail assertion. If the read cannot finish, you
+still get the worker, SMTP and inbox evidence with `outbox: "unavailable"`.
+Each capture keeps at most one pending connection request. The shared pool owns
+that request until it settles; a client obtained after the deadline is returned
+without a query. A query that fails or times out discards its connection instead
+of returning unfinished work to the pool. Existing lookups, assertions and test
+deadlines remain unchanged. These checks do not reproduce or fix the historical
+missing-mail failures.
+
+Run the real connection and lock controls with:
+
+```sh
+node scripts/test-postgres.mjs exec node --test --test-timeout=15000 \
+  packages/account-http/test/mail-capture-connection.test.ts
+```
 
 ## Account HTTP reset-mail capture
 
