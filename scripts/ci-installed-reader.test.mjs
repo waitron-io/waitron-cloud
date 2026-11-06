@@ -104,8 +104,8 @@ test('a real mixed portal revision narrows while a new unknown reader restores e
     const selected = plan(head);
     assert.deepEqual(selected.packages.map(row => row.package), Array(6).fill('@waitron-cloud/portal'), selected.reason);
     assert.equal(selected.typecheck, true);
-    assert.deepEqual(selected.receipts, ['test:two-venue-milestone-receipt', 'test:backup-capacity',
-      'test:public-gateway-limits', 'test:local-stack', 'test:database-recovery-receipt', 'test:cloud-cost']);
+    assert.deepEqual(selected.receipts, ['test:backup-capacity', 'test:cloud-cost',
+      'test:database-recovery-receipt', 'test:local-stack', 'test:public-gateway-limits', 'test:two-venue-milestone-receipt']);
     writeFileSync(join(root, 'apps/portal/src/unreviewed-reader.mjs'),
       "import {readdirSync} from 'node:fs';\nexport const discover = directory => readdirSync(directory);\n");
     const unknown = plan(save());
