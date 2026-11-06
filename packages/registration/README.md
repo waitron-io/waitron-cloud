@@ -599,12 +599,14 @@ an unrelated new blocker can require you to start another operation.
 
 `reconcile` receives the destination again, verifies its original keyed references
 and queries and removes BOUNCE and COMPLAINT through the trusted port. Provider work
-runs outside database locks and takes at most fifteen seconds. A second query
+runs outside database locks; the service waits at most fifteen seconds. A second query
 checks the resulting state. The returned object has private process identity,
 operation/scope/revision binding and a five-minute lifetime. Caller JSON and an
 object copied from another process cannot replace it. After a restart, obtain fresh
 evidence for a still-pending operation. A committed result remains readable by its
 original authorised operator if its acknowledgement was lost.
+The provider port must honour its abort signal. A timeout cannot confirm that an
+external operation stopped, and produces no evidence that permits a clear.
 
 `finish` takes the local suppression lock before the shared scope lock, rechecks
 your authority, the revision and all prior blockers, and commits the audit outcome

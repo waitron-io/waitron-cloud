@@ -91,6 +91,7 @@ test('session expiry during a real scope lock wait rolls back removal',async()=>
   let waiting=false;const until=performance.now()+3000;
   do{waiting=(await f.pool.query("SELECT 1 FROM pg_stat_activity WHERE application_name=$1 AND $2=ANY(pg_blocking_pids(pid))",[f.schema,blocker])).rowCount!==0;if(!waiting)await setImmediate();}while(!waiting&&performance.now()<until);
   assert.equal(waiting,true,'the actual finisher waits on the held scope lock');
+  await assert.doesNotReject(f.pool.query('SELECT event_id FROM mail_suppressions FOR UPDATE NOWAIT'),'the initial scope wait precedes every suppression write');
   while(!(await held.query('SELECT clock_timestamp()>=absolute_expires_at AS expired FROM cloud_sessions WHERE account_id=$1',[operator.id])).rows[0].expired)await setImmediate();
   await held.query('ROLLBACK');await assert.rejects(pending,/session_expired/);
   assert.equal((await f.pool.query('SELECT count(*) FROM mail_suppressions')).rows[0].count,'1');assert.equal((await f.pool.query('SELECT count(*) FROM mail_unblock_outcomes')).rows[0].count,'0');
@@ -121,6 +122,56 @@ test('provider observation expiry during a suppression row wait rolls back the c
   await assert.rejects(pending,/mail_provider_observation_expired/);
   assert.equal((await f.pool.query('SELECT count(*) FROM mail_suppressions')).rows[0].count,'1');assert.equal((await f.pool.query('SELECT count(*) FROM mail_unblock_outcomes')).rows[0].count,'0');
  }finally{await held.query('ROLLBACK');await pending?.catch(()=>{});held.release();await f.close();}
+});
+
+test('a new blocker elsewhere in the scope invalidates an otherwise unchanged destination snapshot',async()=>{
+ const f=await relayFixture();try{
+  await sharedBlock(f);const operator=await actor(f),admin=service(f),op=await request(f,admin,operator);
+  const observation=await admin.reconcile(operator,op.operationId,'owner@example.test',new AbortController().signal);
+  await new RelayWorker(f.pool,{...f.config,ses:{config:config(),recipientKeys:keys}}).suppress('another@example.test');
+  assert.equal(await admin.finish(operator,op.operationId,observation),'blocked');
+  assert.equal((await f.pool.query('SELECT count(*) FROM mail_suppressions')).rows[0].count,'1');
+ }finally{await f.close();}
+});
+
+test('an unscoped replacement of a mapped local lifetime invalidates provider evidence without changing the scope revision',async()=>{
+ const f=await relayFixture();try{
+  await sharedBlock(f);const operator=await actor(f),admin=service(f),worker=new RelayWorker(f.pool,{...f.config,ses:{config:config(),recipientKeys:keys}});
+  await worker.suppress('owner@example.test');const op=await request(f,admin,operator),before=await admin.inspect(operator,config().scope,'owner@example.test');
+  const observation=await admin.reconcile(operator,op.operationId,'owner@example.test',new AbortController().signal);
+  await f.pool.query('DELETE FROM relay_suppressions');await new RelayWorker(f.pool,f.config).suppress('owner@example.test');
+  assert.equal((await admin.inspect(operator,config().scope,'owner@example.test')).revision,before.revision);
+  assert.equal(await admin.finish(operator,op.operationId,observation),'blocked');
+  assert.equal((await f.pool.query('SELECT count(*) FROM relay_suppressions')).rows[0].count,'1');
+  assert.equal((await f.pool.query('SELECT diagnostic FROM mail_unblock_outcomes WHERE operation_id=$1',[op.operationId])).rows[0].diagnostic,'evidence_changed');
+ }finally{await f.close();}
+});
+
+test('manual removal waits for the local legacy lock before taking the shared scope lock',async()=>{
+ const f=await relayFixture(),held=await f.pool.connect(),probe=await f.pool.connect();let pending:Promise<unknown>|undefined;
+ try{
+  await sharedBlock(f);const operator=await actor(f),admin=service(f),op=await request(f,admin,operator);
+  const observation=await admin.reconcile(operator,op.operationId,'owner@example.test',new AbortController().signal);
+  await held.query('BEGIN');await held.query("SELECT pg_advisory_xact_lock(hashtextextended(current_schema()||':relay-suppression',0))");const blocker=(await held.query('SELECT pg_backend_pid() AS pid')).rows[0].pid;
+  pending=admin.finish(operator,op.operationId,observation);void pending.catch(()=>{});
+  let waiting=false;const until=performance.now()+3000;
+  do{waiting=(await f.pool.query('SELECT 1 FROM pg_stat_activity WHERE application_name=$1 AND $2=ANY(pg_blocking_pids(pid))',[f.schema,blocker])).rowCount!==0;if(!waiting)await setImmediate();}while(!waiting&&performance.now()<until);
+  assert.equal(waiting,true,'the actual finisher waits on the local suppression lock');
+  await probe.query('BEGIN');const scope=config().scope;
+  const available=(await probe.query('SELECT pg_try_advisory_xact_lock(hashtext(current_schema()),hashtext($1)) AS available',[JSON.stringify(['waitron-mail-scope-v1',scope.country,scope.providerAccountId,scope.region])])).rows[0].available;
+  assert.equal(available,true,'the waiting finisher has not taken the scope lock first');
+  await probe.query('ROLLBACK');await held.query('ROLLBACK');assert.equal(await pending,'cleared');
+ }finally{await probe.query('ROLLBACK');await held.query('ROLLBACK');await pending?.catch(()=>{});probe.release();held.release();await f.close();}
+});
+
+test('a retained shared key revoked during provider work refuses removal without committing an outcome',async()=>{
+ const f=await relayFixture();try{
+  await sharedBlock(f);const operator=await actor(f),admin=service(f),op=await request(f,admin,operator);
+  const observation=await admin.reconcile(operator,op.operationId,'owner@example.test',new AbortController().signal);
+  await f.pool.query('UPDATE mail_recipient_key_versions SET revoked=true');
+  await assert.rejects(admin.finish(operator,op.operationId,observation),/mail_keys_unavailable/);
+  assert.equal((await f.pool.query('SELECT count(*) FROM mail_suppressions')).rows[0].count,'1');assert.equal((await f.pool.query('SELECT count(*) FROM mail_unblock_outcomes')).rows[0].count,'0');
+ }finally{await f.close();}
 });
 
 test('mapped legacy and shared blockers clear together without resurrecting old queues, attempts or feedback',async()=>{
@@ -183,10 +234,10 @@ test('a pending manual operation requires actual operator authority and keeps it
   await new RelayWorker(f.pool,{...f.config,ses:{config:config(),recipientKeys:keys}}).suppress('owner@example.test');
   const admin=new adminModule.MailSuppressionAdmin!(f.pool,{ses:{config:config(),recipientKeys:keys},legacyKeys:f.config.suppressionKeys,
    provider:{async query(){return [];},async remove(){}}});
-  for(const invalid of [{sessionToken:'bad',csrfToken:'bad'},ordinary,{...operator,csrfToken:'bad'}])
-   await assert.rejects(admin.request(invalid,config().scope,'owner@example.test',0,'address_verified'));
-  assert.equal((await f.pool.query('SELECT count(*) FROM mail_unblock_requests')).rows[0].count,'0');
   const state=await admin.inspect(operator,config().scope,'owner@example.test');assert.equal(state.blocked,true);
+  for(const invalid of [{sessionToken:'bad',csrfToken:'bad'},ordinary,{...operator,csrfToken:'bad'}])
+   await assert.rejects(admin.request(invalid,config().scope,'owner@example.test',state.revision,'address_verified'));
+  assert.equal((await f.pool.query('SELECT count(*) FROM mail_unblock_requests')).rows[0].count,'0');
   await assert.rejects(admin.request(operator,config('eu-west-3').scope,'owner@example.test',state.revision,'address_verified'),/mail_scope_unavailable/);
   await assert.rejects(admin.request(operator,config().scope,'owner@example.test',state.revision+1,'address_verified'),/mail_revision_conflict/);
   await assert.rejects(admin.request(operator,config().scope,'owner@example.test',state.revision,'owner@example.test'),/mail_reason_invalid/);
