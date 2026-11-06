@@ -4446,8 +4446,10 @@ exchange. It writes only challenge TXT records below its configured suffix, wait
 for propagation and deletes the exact issued value. Native checks exercise the
 real AWS client against a local HTTP boundary, including scope refusal, pending
 propagation, provider refusal and cleanup after a newer challenge. Production
-installation refusal remains in place; the test gateway and browser path still
-need their joint qualification.
+installation refusal remains in place. The single-suffix trial has completed
+staging and real issuance, trusted browser password sign-in from outside the home
+network, and automatic app and tunnel restart. Reboot, renewal, revocation,
+offline sales and connected-machine isolation still need joint qualification.
 Cross-suffix moves also need qualification here: the retained staff hostname and
 the destination-derived challenge name currently differ. Keep that production
 renewal and routing gate open; the single-suffix test does not discharge it.
