@@ -20,7 +20,7 @@ for (const handler of ['normal', 'delayed', 'missing'] as const) {
   if (setupDelay && (locale !== 'en' || theme !== 'light' || width !== 390)) continue;
   if (handler !== 'normal' && setupDelay) continue;
   if (handler === 'missing' && (locale !== 'en' || theme !== 'light' || width !== 390 || failure !== '503')) continue;
-  test(`${path} ${locale} ${theme} ${width} ${failure}${setupDelay ? ' with delayed clock setup' : ''}${handler === 'normal' ? '' : ` with ${handler} handler`}: retry appears only after the session check fails`, async t => {
+  test(`${path} ${locale} ${theme} ${width} ${failure}${setupDelay ? ' with delayed clock setup' : ''}${handler === 'normal' ? '' : handler === 'missing' ? ' with missing handler signal' : ' with delayed handler'}: ${handler === 'missing' ? 'missing session-handler signal fails within the outer wait' : 'retry appears only after the session check fails'}`, async t => {
     const browser = await chromium.launch({headless: true});
     try {
       const page = await browser.newPage({locale, colorScheme: theme, viewport: {width, height: 900}});

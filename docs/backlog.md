@@ -190,8 +190,8 @@ while only sixteen capture files survived. The sixteen ordinary names stay the
 same; delayed handlers add `-delayed`, and delayed clocks add `-clock-delayed`.
 Separate files retain each run without promising different pixels or stable image
 bytes. Every original session, protected-field, retry, cooldown, clock and deadline
-assertion remains unchanged. The two missing-signal controls return before the
-retry behavior checks, and their four-second race does not independently pin the
+assertion remains unchanged. The two missing-signal titles name their timeout;
+the controls return before retry checks, and their four-second race does not independently pin the
 configured three-second observation boundary. These are Chromium fixtures with
 stubbed HTTP; real authentication and behavior under load remain unqualified.
 See [the diagnostic qualification and open work](backlog/retrospective-reviews.md).
