@@ -60,8 +60,8 @@ those checks in the later orchestration before publication. That integration
 must also compute and compare the reserved input, recipe and source-check hashes;
 this entry point validates their shape only. A clean Git status does not prove
 the build output belongs to that commit: ignored or assume-unchanged files can
-remain. Fresh source isolation, an ordered build and artifact verification remain
-required before upload. Concurrent preparations must use distinct output
+remain. Fresh source isolation, an ordered build and verification of the compiled output
+remain required before upload. Concurrent preparations must use distinct output
 directories; the initial emptiness check does not lock the directory.
 
 Without `--ledger`, the existing workflow still uses `ui-source.json` and its
@@ -88,17 +88,24 @@ ledger. It never turns an uncertain upload back into a prepared release.
 
 The recorder validates the reserved release/source mapping, private GitHub
 publishing metadata, licence declaration, external Lit peer, script-free manifest
-and presence of every built export.
-Both notices must match the reserved commit's regular Git blobs. Working-copy
-edits, inherited Git redirection and local replacement refs cannot supply those
-bytes. Tar receives a frozen in-memory copy and a restricted environment; it
-reads members to standard output without extracting files. Links, duplicate
-members and paths outside the package refuse. Archives are limited to 16 MiB
-compressed and 32 MiB expanded, with bounded tar commands.
+and presence of every built export. The complete manifest is derived from the
+source package, including its pnpm publishing-export override; optional runtime
+dependencies and implicit native-build files refuse.
+Both notices must match the reserved commit's regular Git blobs, whose content
+hashes are checked. Working-copy edits, inherited Git redirection and local
+replacement refs cannot supply those bytes. The source identity must name a
+commit. The recorder reads strict USTAR blocks directly in memory without
+extracting files or invoking tar. It refuses hidden data after an end marker,
+unknown member types, links, duplicate or case-colliding paths, and files with
+child members. Archives are limited to 16 MiB compressed and 32 MiB expanded.
+Other tar formats require investigation rather than automatic conversion. Git
+comes from your trusted toolchain on PATH; this command is not a sandbox for an
+untrusted executable search path.
 
 You can also call `recordReleaseArtifact` from `scripts/release/ui-artifact.mjs`
-with the ledger, archive buffer and `{notices, at}`. Supply both notice buffers
-from verified immutable source evidence. This check fingerprints the provided
+with the ledger, archive buffer and `{sourceManifest, notices, at}`. Supply the
+original source manifest and both notice buffers from verified immutable source
+evidence. This check fingerprints the provided
 artifact; it does not prove that its compiled files came from that source.
 Fresh source builds, the reserved input/recipe/source-check hashes, trusted source
 CI and complete registry evidence remain mandatory before upload. A recovered

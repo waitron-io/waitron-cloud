@@ -5,7 +5,7 @@ import {mkdtemp, mkdir, readFile, writeFile, rm, chmod, symlink} from 'node:fs/p
 import {tmpdir} from 'node:os';
 import {join, resolve} from 'node:path';
 import {test} from 'node:test';
-import {gzipSync} from 'node:zlib';
+import {gzipSync, gunzipSync, deflateSync} from 'node:zlib';
 import {reserveRelease, appendReleaseEvent} from './ui-ledger.mjs';
 
 const script = resolve('scripts/release/record-ui-artifact.mjs');
@@ -24,7 +24,8 @@ async function fixture(t) {
     await writeFile(join(checkout, notice), notice + '\n');
     await writeFile(join(staged, 'package/dist', notice), notice + '\n');
   }
-  await writeFile(join(checkout, 'packages/ui-core/package.json'), JSON.stringify({name: '@waitron/ui-core', version: '0.1.0'}));
+  await writeFile(join(checkout, 'packages/ui-core/package.json'), JSON.stringify({name: '@waitron/ui-core', version: '0.1.0', private: true, type: 'module',
+    exports: {'.': {import: './dist/index.js'}}, license: 'SEE LICENSE IN dist/LICENSE', peerDependencies: {lit: '^3.2.0'}}));
   run(checkout, 'git', ['init']);
   run(checkout, 'git', ['config', 'user.name', 'Artifact test']);
   run(checkout, 'git', ['config', 'user.email', 'artifact@example.invalid']);
@@ -44,7 +45,7 @@ async function fixture(t) {
   const ledgerFile = join(root, 'releases.json');
   await writeFile(ledgerFile, JSON.stringify(ledger));
   const archive = join(root, 'release.tgz');
-  const pack = () => run(staged, 'tar', ['-czf', archive, 'package']);
+  const pack = () => run(staged, 'tar', ['--format=ustar', '-czf', archive, 'package']);
   pack();
   const record = (...extra) => spawnSync(process.execPath, [script, checkout, archive, '--ledger', ledgerFile, '--at', at, ...extra], {
     cwd: root, env, encoding: 'utf8', timeout: 30000});
@@ -304,4 +305,242 @@ test('a named pipe archive refuses promptly rather than waiting for a writer', a
   assert.equal(result.status, 1, String(result.error));
   assert.match(result.stderr, /regular file/);
   assert.equal(result.stdout, '');
+});
+
+async function membersFor(f) {
+  return [
+    {name: 'package/package.json', body: await readFile(f.manifestFile)},
+    {name: 'package/dist/index.js', body: 'export const valid = true;'},
+    {name: 'package/dist/LICENSE', body: 'LICENSE\n'},
+    {name: 'package/dist/LICENSE-GRANTS.md', body: 'LICENSE-GRANTS.md\n'},
+  ];
+}
+
+test('a single zero block cannot conceal a second install manifest or other members', async t => {
+  const f = await fixture(t), clean = gunzipSync(archiveMembers(await membersFor(f)));
+  for (const hidden of [
+    {name: 'package/package.json', body: JSON.stringify({...f.manifest, scripts: {postinstall: 'exit 1'}})},
+    {name: 'package/dist/hidden', type: '2', link: '/etc/passwd'},
+    {name: '../escaped', body: 'hidden'},
+  ]) {
+    const tail = gunzipSync(archiveMembers([hidden]));
+    await writeFile(f.archive, gzipSync(Buffer.concat([clean.subarray(0, -1024), Buffer.alloc(512), tail])));
+    const result = f.record();
+    assert.notEqual(result.status, 0, hidden.name);
+    assert.equal(result.stdout, '');
+  }
+});
+
+test('trailing spaces and unknown or sparse tar types cannot stand in for a built export', async t => {
+  const f = await fixture(t), members = await membersFor(f);
+  for (const extra of [
+    {name: 'package/dist/index.js ', body: 'export const valid = true;'},
+    {name: 'package/dist/index.js', type: 'Z', body: 'export const valid = true;'},
+    {name: 'package/dist/index.js', type: 'S', body: 'export const valid = true;'},
+  ]) {
+    await writeFile(f.archive, archiveMembers([...members.filter(m => m.name !== 'package/dist/index.js'), extra]));
+    const result = f.record();
+    assert.notEqual(result.status, 0, JSON.stringify(extra));
+    assert.equal(result.stdout, '');
+  }
+});
+
+test('a manifest or notice cannot be split between a regular file and a child member', async t => {
+  const f = await fixture(t), members = await membersFor(f);
+  for (const name of ['package/package.json', 'package/dist/LICENSE']) {
+    const original = members.find(m => m.name === name), bytes = Buffer.from(original.body), half = Math.floor(bytes.length / 2);
+    await writeFile(f.archive, archiveMembers([...members.filter(m => m.name !== name),
+      {name, body: bytes.subarray(0, half)}, {name: name + '/x', body: bytes.subarray(half)}]));
+    const result = f.record();
+    assert.notEqual(result.status, 0, name);
+    assert.equal(result.stdout, '');
+  }
+});
+
+test('case collisions and implicit native-build files refuse before recording', async t => {
+  const f = await fixture(t), members = await membersFor(f);
+  for (const extra of [
+    {name: 'package/PACKAGE.JSON', body: JSON.stringify({...f.manifest, scripts: {postinstall: 'exit 1'}})},
+    {name: 'package/binding.gyp', body: '{}'},
+  ]) {
+    await writeFile(f.archive, archiveMembers([...members, extra]));
+    const result = f.record();
+    assert.notEqual(result.status, 0, extra.name);
+    assert.equal(result.stdout, '');
+  }
+});
+
+test('the complete staged manifest must match its immutable source rather than itself', async t => {
+  const f = await fixture(t);
+  await writeFile(join(f.staged, 'package/dist/other.js'), 'export const other = true;');
+  for (const change of [
+    {optionalDependencies: {unexpected: '1.0.0'}}, {bin: './dist/index.js'}, {main: './elsewhere.js'},
+    {peerDependencies: {lit: '^9.0.0'}}, {gypfile: true}, {overrides: {lit: '^9.0.0'}},
+    {exports: {'.': {import: './dist/other.js'}}},
+  ]) {
+    await writeFile(f.manifestFile, JSON.stringify({...f.manifest, ...change})); f.pack();
+    const result = f.record();
+    assert.notEqual(result.status, 0, JSON.stringify(change));
+    assert.equal(result.stdout, '');
+  }
+});
+
+async function replaceSourceIdentity(f, commit) {
+  f.ledger.events[0].source.commit = commit;
+  await writeFile(f.ledgerFile, JSON.stringify(f.ledger));
+  f.manifest.waitronSource.commit = commit;
+  f.manifest.homepage = `https://github.com/clintongormley/waitron/tree/${commit}/packages/ui-core`;
+  await writeFile(f.manifestFile, JSON.stringify(f.manifest)); f.pack();
+}
+
+test('a source identity must name an actual commit rather than a tree or annotated tag', async t => {
+  const f = await fixture(t), tree = run(f.checkout, 'git', ['rev-parse', 'HEAD^{tree}']);
+  run(f.checkout, 'git', ['tag', '-a', 'source-tag', '-m', 'Create tag fixture']);
+  const tag = run(f.checkout, 'git', ['rev-parse', 'source-tag']);
+  for (const identity of [tree, tag]) {
+    await replaceSourceIdentity(f, identity);
+    const result = f.record();
+    assert.notEqual(result.status, 0, identity);
+    assert.equal(result.stdout, '');
+  }
+});
+
+test('rewritten loose Git blobs cannot change immutable notice evidence', async t => {
+  const f = await fixture(t), blob = run(f.checkout, 'git', ['rev-parse', 'HEAD:LICENSE']);
+  const bytes = Buffer.from('altered\n');
+  await chmod(join(f.checkout, '.git/objects', blob.slice(0, 2), blob.slice(2)), 0o644);
+  await writeFile(join(f.checkout, '.git/objects', blob.slice(0, 2), blob.slice(2)),
+    deflateSync(Buffer.concat([Buffer.from(`blob ${bytes.length}\0`), bytes])));
+  await writeFile(join(f.staged, 'package/dist/LICENSE'), bytes); f.pack();
+  const result = f.record();
+  assert.notEqual(result.status, 0);
+  assert.equal(result.stdout, '');
+});
+
+test('rewritten Git trees cannot redirect a valid commit to different valid blobs', async t => {
+  const f = await fixture(t), tree = run(f.checkout, 'git', ['rev-parse', 'HEAD^{tree}']);
+  const bytes = Buffer.from('altered\n');
+  const blob = execFileSync('git', ['hash-object', '-w', '--stdin'], {cwd: f.checkout, env, input: bytes, encoding: 'utf8'}).trim();
+  const raw = execFileSync('git', ['cat-file', 'tree', tree], {cwd: f.checkout, env});
+  const offset = raw.indexOf(Buffer.from('LICENSE\0')) + Buffer.byteLength('LICENSE\0');
+  assert(offset > 8); Buffer.from(blob, 'hex').copy(raw, offset);
+  await chmod(join(f.checkout, '.git/objects', tree.slice(0, 2), tree.slice(2)), 0o644);
+  await writeFile(join(f.checkout, '.git/objects', tree.slice(0, 2), tree.slice(2)),
+    deflateSync(Buffer.concat([Buffer.from(`tree ${raw.length}\0`), raw])));
+  await writeFile(join(f.staged, 'package/dist/LICENSE'), bytes); f.pack();
+  const result = f.record();
+  assert.notEqual(result.status, 0);
+  assert.equal(result.stdout, '');
+});
+
+test('pnpm publishing exports are derived from the immutable source override', async t => {
+  const f = await fixture(t), file = join(f.checkout, 'packages/ui-core/package.json');
+  const sourceManifest = JSON.parse(await readFile(file, 'utf8'));
+  sourceManifest.exports = {'.': './src/index.ts'};
+  sourceManifest.publishConfig = {exports: {'.': {import: './dist/index.js'}}};
+  await writeFile(file, JSON.stringify(sourceManifest));
+  run(f.checkout, 'git', ['add', '.']);
+  run(f.checkout, 'git', ['commit', '-s', '-m', 'Declare separate workspace and publishing exports']);
+  await replaceSourceIdentity(f, run(f.checkout, 'git', ['rev-parse', 'HEAD']));
+  const result = f.record();
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(JSON.parse(result.stdout).events.at(-1).type, 'prepared');
+});
+
+test('ambient Git redirection cannot move source reads into another repository', async t => {
+  const f = await fixture(t);
+  const result = spawnSync(process.execPath, [script, f.checkout, f.archive, '--ledger', f.ledgerFile, '--at', at], {
+    cwd: f.root, env: {...env, GIT_DIR: join(f.root, 'missing.git'), GIT_WORK_TREE: join(f.root, 'missing'),
+      GIT_OBJECT_DIRECTORY: join(f.root, 'missing-objects'), GIT_CONFIG_COUNT: '1',
+      GIT_CONFIG_KEY_0: 'include.path', GIT_CONFIG_VALUE_0: join(f.root, 'missing-config')}, encoding: 'utf8', timeout: 30000});
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(JSON.parse(result.stdout).events.at(-1).type, 'prepared');
+});
+
+test('optional runtime dependencies refuse even when they also appear in the immutable source', async t => {
+  const f = await fixture(t), file = join(f.checkout, 'packages/ui-core/package.json');
+  const sourceManifest = JSON.parse(await readFile(file, 'utf8'));
+  sourceManifest.optionalDependencies = {unexpected: '1.0.0'};
+  await writeFile(file, JSON.stringify(sourceManifest));
+  run(f.checkout, 'git', ['add', '.']);
+  run(f.checkout, 'git', ['commit', '-s', '-m', 'Add unsupported optional runtime dependency']);
+  f.manifest.optionalDependencies = sourceManifest.optionalDependencies;
+  await replaceSourceIdentity(f, run(f.checkout, 'git', ['rev-parse', 'HEAD']));
+  const result = f.record();
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /runtime dependencies/);
+  assert.equal(result.stdout, '');
+});
+
+function resealHeader(raw) {
+  raw.fill(32, 148, 156);
+  const checksum = [...raw.subarray(0, 512)].reduce((sum, value) => sum + value, 0);
+  raw.write(checksum.toString(8).padStart(6, '0') + '\0 ', 148);
+}
+
+test('high-bit numeric fields cannot be mistaken for ordinary octal file sizes', async t => {
+  const f = await fixture(t), raw = gunzipSync(archiveMembers(await membersFor(f)));
+  raw[124] |= 128; resealHeader(raw);
+  await writeFile(f.archive, gzipSync(raw));
+  const result = f.record();
+  assert.notEqual(result.status, 0);
+  assert.equal(result.stdout, '');
+});
+
+test('header corruption, unsupported formats, nonzero padding and partial blocks refuse', async t => {
+  const f = await fixture(t), members = await membersFor(f), original = gunzipSync(archiveMembers(members));
+  for (const change of ['checksum', 'format', 'padding', 'framing']) {
+    let raw = Buffer.from(original);
+    if (change === 'checksum') raw[148] = raw[148] === 48 ? 49 : 48;
+    if (change === 'format') {raw.write('ustar  \0', 257); resealHeader(raw);}
+    if (change === 'padding') raw[512 + Buffer.byteLength(members[0].body)] = 1;
+    if (change === 'framing') raw = Buffer.concat([raw, Buffer.alloc(1)]);
+    await writeFile(f.archive, gzipSync(raw));
+    const result = f.record();
+    assert.notEqual(result.status, 0, change);
+    assert.equal(result.stdout, '');
+  }
+});
+
+test('a regular file cannot be the parent of unrelated additional members', async t => {
+  const f = await fixture(t), members = await membersFor(f);
+  await writeFile(f.archive, archiveMembers([...members,
+    {name: 'package/dist/parent', body: 'file'}, {name: 'package/dist/parent/child', body: 'child'}]));
+  const result = f.record();
+  assert.notEqual(result.status, 0);
+  assert.equal(result.stdout, '');
+});
+
+test('source metadata cannot authorise build hooks, a different licence or removal of the Lit peer', async t => {
+  for (const change of [{license: 'Apache-2.0'}, {peerDependencies: {}}, {gypfile: true}, {bin: './dist/index.js'}]) {
+    await t.test(JSON.stringify(change), async t => {
+      const f = await fixture(t), file = join(f.checkout, 'packages/ui-core/package.json');
+      const sourceManifest = JSON.parse(await readFile(file, 'utf8'));
+      await writeFile(file, JSON.stringify({...sourceManifest, ...change}));
+      run(f.checkout, 'git', ['add', '.']);
+      run(f.checkout, 'git', ['commit', '-s', '-m', 'Create unsupported source metadata']);
+      Object.assign(f.manifest, change);
+      await replaceSourceIdentity(f, run(f.checkout, 'git', ['rev-parse', 'HEAD']));
+      const result = f.record();
+      assert.notEqual(result.status, 0);
+      assert.equal(result.stdout, '');
+    });
+  }
+});
+
+test('archive metadata cannot mask a wrong source package name or version', async t => {
+  for (const change of [{name: '@elsewhere/ui-core'}, {version: '0.9.0'}]) {
+    await t.test(JSON.stringify(change), async t => {
+      const f = await fixture(t), file = join(f.checkout, 'packages/ui-core/package.json');
+      const sourceManifest = JSON.parse(await readFile(file, 'utf8'));
+      await writeFile(file, JSON.stringify({...sourceManifest, ...change}));
+      run(f.checkout, 'git', ['add', '.']);
+      run(f.checkout, 'git', ['commit', '-s', '-m', 'Create mismatched source identity']);
+      await replaceSourceIdentity(f, run(f.checkout, 'git', ['rev-parse', 'HEAD']));
+      const result = f.record();
+      assert.notEqual(result.status, 0);
+      assert.match(result.stderr, /source package name|source package version/);
+      assert.equal(result.stdout, '');
+    });
+  }
 });
