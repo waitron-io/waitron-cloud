@@ -267,6 +267,14 @@ Capture retention also remains unqualified in the sibling fixtures
 and `public-challenge-script-fallback-browser.test.ts`. This review did not run
 those siblings; the filename pattern alone does not establish a lost capture.
 
+The passkey-refusal fixture preserves every original assertion and deadline.
+All six journeys run in English and Spanish, light and dark, at both widths;
+the missing-handler control runs once in English, light mode, at 390 pixels.
+The held reply lets pending-state checks run before completion, but deleting
+the hold still passes in sampled runs before and after PR #599. A check that
+always detects a missing hold remains open. Stubbed Chromium checks do not qualify
+real authentication, database behavior or general cleanup bounds.
+
 ## Separate-process storage extraction and failed-startup cleanup (D457)
 
 **Open.** Real store startup and historical failure causes remain open.
@@ -4268,10 +4276,10 @@ Cloud follow-ups, each a separate small change with tests before implementation:
   uncertain-write reconciliation remain available. Native and stubbed-browser
   checks cover the path; database and HTTP qualification runs in CI. The browser
   checks wait until the list handler counts the refresh before asserting its count,
-  while still holding the reply. A missing handler count now refuses within the
-  existing four-second page wait budget, with a controlled bypass case that proves
-  the bound. All original journeys and assertions remain; concurrent background
-  list reads remain unqualified.
+  while holding the reply. The handler-count wait has a separate four-second
+  timeout. Its bypass control requires refusal before a separate five-second timer
+  finishes; it does not pin the exact four-second setting. All original journeys
+  and assertions remain; concurrent background list reads remain unqualified.
   Generic passkey failures now give neutral English/Spanish feedback with the
   existing password sign-in as an alternative. Browser checks exercise a refused
   prompt and unavailable options, a second refused passkey attempt, a rejected
