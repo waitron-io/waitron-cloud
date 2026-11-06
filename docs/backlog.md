@@ -194,6 +194,18 @@ assertion remains unchanged. The two missing-signal titles name their timeout;
 the controls return before retry checks, and their four-second race does not independently pin the
 configured three-second observation boundary. These are Chromium fixtures with
 stubbed HTTP; real authentication and behavior under load remain unqualified.
+The translation-refresh fixture also retains all 33 reachable captures separately.
+Set `TRANSLATION_REFRESH_RECEIPT_DIR` to a fresh directory when you run
+`pnpm --dir apps/portal exec node --test test/translation-refresh-pending-browser.test.ts`.
+Check the filenames independently: all 68 browser checks passed before the repair,
+but only sixteen files survived. The sixteen ordinary names stay unchanged;
+delayed captures add `-delayed`, and the reachable missing-signal ready capture
+adds `-missing`. Separate files preserve each run without promising different
+pixels or stable image bytes. Every original behavioral assertion and deadline
+remains unchanged. The missing-signal subtest names its observation refusal;
+it returns before the pending-state assertions. Its five-second outer race does
+not independently pin the configured four-second observation boundary. These
+Chromium checks use stubbed HTTP; backend behavior remains unqualified.
 See [the diagnostic qualification and open work](backlog/retrospective-reviews.md).
 
 ## Separate-process storage extraction and failed-startup cleanup (D457)
