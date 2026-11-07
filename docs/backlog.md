@@ -3290,11 +3290,13 @@ implementation or production evidence.
   monitoring and additional service units remain open; define costs, allowances and
   outage policy before using totals for billing. See [scope and remaining work](backlog/usage-metering.md).
 - **Data lifecycle.** Local backup capture, retention, verification and recovery are
-  implemented; paused-parent verifier checks retain diagnostic-input ordering. Production
-  custody, provider qualification, isolation and lifecycle
-  policies remain open. See [the complete requirements and deliberate limits](backlog/data-lifecycle.md),
-  including unresolved verifier failures, compatibility with newer Waitron releases
-  and capacity qualification.
+  implemented; paused-parent verifier checks retain diagnostic-input ordering. On local Linux,
+  `node --test scripts/test-cloud-paid-stream.test.mjs` passes with the pinned ec91 and
+  explicitly selected 3ff92a10 Waitron images; the latter also passes
+  `scripts/test-cloud-paid-continuous-recovery.test.mjs`. Production custody, release
+  qualification, provider isolation, capacity and lifecycle policies remain open. See
+  [the complete requirements and deliberate limits](backlog/data-lifecycle.md), including
+  unresolved verifier failures.
 
 
 ## Backup catalogue qualification
