@@ -1,9 +1,9 @@
 # Release the shared UI package
 
-> The earlier Cloud publication workflow below was superseded on 6 November
-> 2026. Do not implement or dispatch it. The [approved replacement plan](superpowers/plans/2026-11-06-simple-private-ui-release.md)
-> lists the old code and documents to remove. Automatic dependency updates,
-> local installation and consumer verification below remain current.
+Cloud installs the private `@waitron-io/ui-core` package from GitHub Packages.
+You develop and publish it from Waitron. The
+[approved release plan](superpowers/plans/2026-11-06-simple-private-ui-release.md)
+keeps publication there and dependency updates here.
 
 ## Review automatic dependency updates
 
@@ -66,45 +66,17 @@ printed that notice and completed planning. Its [temporary PR](https://github.co
 was closed without merging; the remaining general and AWS jobs were stopped
 after that compatibility check, so it does not prove complete CI.
 
-## Earlier Cloud publication workflow
+## Publish from Waitron
 
-Cloud consumes a versioned build of Waitron's account controls. You develop the
-controls in Waitron; this repository owns their private distribution as
-`@waitron-io/ui-core` on GitHub Packages.
+Waitron owns [release preparation](https://github.com/clintongormley/waitron/blob/main/docs/developers/shared-ui-preparation.md).
+Its [publisher PR](https://github.com/clintongormley/waitron/pull/2526) adds
+private publication on merges that change `packages/ui-core`, using
+`0.2.<workflow run number>` and recording the merged source commit in
+`waitronSource.commit`. The PR is not merged yet; the first hosted publication
+and a resulting Cloud update PR remain unproved.
 
-The [approved release plan](superpowers/plans/2026-11-05-public-ui-registry.md)
-replaces manual version selection with one private release per qualifying
-Waitron merge. Its [reservation ledger](shared-ui-release-ledger.md) is available,
-but workflow integration, the reviewed `0.2.0` upload and registry qualification
-remain open. The workflow below still builds its September `0.1.0` pin. Do not
-dispatch it as a `0.2.0` write test; that release needs the plan's reviewed
-preparation and upload gates first.
-
-## Choose and publish a version
-
-Update `scripts/release/ui-source.json` with a full Waitron commit and the version
-in that commit's `packages/ui-core/package.json`. Choose a commit whose Waitron CI
-has passed. Review and land that change before releasing.
-
-The **Shared UI release** workflow builds that exact source and runs Waitron's
-independent tarball browser test. It preserves the built files and notices, changes
-the package name to the organisation scope, removes development/build hooks and
-records the original repository, commit and version in `waitronSource`. The package's
-GitHub repository link points here so Cloud owns its access permissions; its homepage
-points to the actual source in Waitron.
-
-Pull requests build the candidate without publishing it. Once the workflow is on
-main, publish with:
-
-```sh
-gh workflow run ui-release.yml --ref main --repo waitron-io/waitron-cloud
-```
-
-Only the publish job receives package-write permission. It publishes the tested
-artifact with restricted access using its temporary `GITHUB_TOKEN`. GitHub creates
-new packages as private. Check the package visibility and Cloud's installation before
-calling the release complete. An existing version cannot be overwritten; choose a
-new version in Waitron for subsequent releases.
+The package keeps Elastic License 2.0 and `LICENSE-GRANTS.md`. Cloud keeps its
+existing package access and authenticated install and image build paths.
 
 ## Install locally
 

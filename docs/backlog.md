@@ -7,13 +7,10 @@ The owner approved slice 1 on the bridge. Local ownership, pinned base/prerequis
 
 ## Keep the private shared UI release current (D579)
 
-The owner rejected the build-evidence plan and cancelled PR #1018 on
-6 November. Its branch is preserved; do not continue that implementation.
-The [approved one-page replacement plan](superpowers/plans/2026-11-06-simple-private-ui-release.md)
-was approved on 6 November. It puts token-authenticated publication on qualifying
-Waitron merges, automatic dependency update PRs in Cloud, and a seven-day
-registry lag check in Cloud CI. Unknown registry results warn and pass; only
-a version known to be overdue fails. Lane F/A1412 owns the Waitron changes.
+The [approved replacement plan](superpowers/plans/2026-11-06-simple-private-ui-release.md)
+puts publication on qualifying Waitron merges, automatic dependency update PRs
+in Cloud, and a seven-day registry lag check in Cloud CI. Lane F/A1412 owns
+the Waitron publisher. Its first hosted publication remains unproved.
 
 Cloud's Dependabot configuration checks the shared UI package every day, including
 weekends, from the pnpm workspace root. It covers both consumers and the shared
@@ -25,11 +22,8 @@ Normal CI checks both exact pins against the earliest known newer stable
 publication and fails only after seven days. Registry failures and missing
 metadata warn and pass; later releases do not restart the deadline. Focused
 checks cover version order, the boundary, both consumers and unknown results.
-Removal of the superseded Cloud publisher remains open in its own PR.
 Dependency PR review must check actual readers and update the smoke test’s
-version/source expectations without removing assertions. Remove
-the unused ledger and artifact machinery from #978, #995 and #1001, the old
-Cloud publisher and both superseded plans, as listed in the approved plan.
+version/source expectations without removing assertions.
 The package stays private on GitHub Packages with Elastic License 2.0 and
 `LICENSE-GRANTS.md`; existing authenticated install and image paths remain.
 
