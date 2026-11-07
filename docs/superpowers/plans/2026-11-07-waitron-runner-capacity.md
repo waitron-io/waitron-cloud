@@ -13,6 +13,8 @@ Follow the [design](../specs/2026-11-06-disposable-test-server-design.md) and [e
 - [ ] Extend existing controller/lease/transport modules: short locked ledger updates; slot ownership before reservation through cleanup; recover only unowned slots. Put existing CI intent/temporary directories per slot. Turn identity becomes `ci-RUN-ATTEMPT-JOB`; serialize run-level fallback. Keep the ledger maximum; budget selects capacity.
 - [ ] Extend existing host/session/startup/guest consumers: validate slots, port `22000+slot`, UID `62000+slot`, reserved accounts and existing active record per slot. Preserve tombstones, independent absence, quarantine and runner-removal retries. Drain before coupled publication/new bootstrap; enable several slots only with matching host support.
 
+- [ ] Preserve manual Cloud use after main’s shared UI update: the actual 0.2.1 tarball currently fails host transfer. Select the single approved release from the captured source lockfile, send the existing `ui.tgz` field, and accept only the two already-reviewed digests. Retain legacy source and corruption checks; authentication origins stay fixed.
+
 ### Prove and measure
 
 - [ ] TDD portable/real-process collision, stale-release, neighbor-survival, death/reboot cases; retain one-slot checks. Run `node --test scripts/ci-disposable-local.test.mjs`; read counts and update README/backlog. No permanent mutation tests.
