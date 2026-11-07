@@ -143,7 +143,10 @@ def command(argv, deadline, stdin=None, capture=False, check=True):
     remaining = (deadline-int(time.time()*1000))/1000
     if remaining <= 0:
         raise TimeoutError('Absolute turn deadline exceeded')
-    child = subprocess.Popen(argv, stdin=stdin or subprocess.DEVNULL,
+    memory_input=stdin.getvalue() if isinstance(stdin,io.BytesIO) else None
+    if memory_input is not None and (capture or len(memory_input)>65536):
+        raise ValueError('Invalid memory-only command input')
+    child = subprocess.Popen(argv, stdin=subprocess.PIPE if memory_input is not None else stdin or subprocess.DEVNULL,
                              stdout=subprocess.PIPE if capture else None,
                              stderr=subprocess.DEVNULL if capture else None,
                              start_new_session=True)
@@ -167,7 +170,7 @@ def command(argv, deadline, stdin=None, capture=False, check=True):
             child.wait(timeout=max(.001, (deadline-int(time.time()*1000))/1000))
             output = bytes(output)
         else:
-            output, _ = child.communicate(timeout=remaining)
+            output, _ = child.communicate(input=memory_input,timeout=remaining)
         if check and child.returncode:
             raise ValueError(f'Turn stage failed with status {child.returncode}')
         return child.returncode, output

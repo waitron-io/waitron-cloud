@@ -65,4 +65,9 @@ class CISession(unittest.TestCase):
    with self.assertRaises(ValueError):session.execute(self.resource,io.BytesIO(b'{"jitconfig":"synthetic"}'))
   self.assertFalse(any('--ci' in argv[-1] for argv in calls))
   self.assertFalse((directory/'result.json').exists())
+ def test_memory_only_credential_channel_reaches_a_real_subprocess_without_a_file_descriptor(self):
+  marker=self.root/'received'
+  code,_=session.command([sys.executable,'-c',"import sys,pathlib;pathlib.Path(sys.argv[1]).write_bytes(sys.stdin.buffer.read())",str(marker)],
+                         int(time.time()*1000)+5000,stdin=io.BytesIO(b'synthetic-memory-input'))
+  self.assertEqual(code,0);self.assertEqual(marker.read_bytes(),b'synthetic-memory-input')
 unittest.main(verbosity=2)
