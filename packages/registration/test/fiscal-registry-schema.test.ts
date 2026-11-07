@@ -92,6 +92,7 @@ test('populated release37 upgrades concurrently without changing any old row or 
       'mail_unblock_requests', 'mail_unblock_outcomes',
       'mail_unblock_provider_attempts', 'mail_unblock_provider_results',
       'installation_error_reports',
+      'country_policy_versions', 'country_policy_heads', 'venue_country_bindings', 'venue_country_binding_heads',
     ]) {
       assert.deepEqual(after[name], [], name);
       delete after[name];

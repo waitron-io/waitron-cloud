@@ -520,7 +520,10 @@ enabled. Resubscription still needs a future retained-data check and activation
 adapter. Slice 5 has a source-based
 [implementation plan](superpowers/plans/2026-11-04-cloud-country-flow-enforcement.md)
 for durable country bindings, late-grant reconciliation and separate account/venue
-mail purposes. Placement/credential enforcement remains unbuilt; production
+mail purposes. The reduced first task adds internal stored-policy admission
+([guide](country-policy.md#check-a-stored-venue-binding-inside-a-transaction));
+`flow-authority.test.ts` checks synthetic destinations and lock waits against
+PostgreSQL. Product adapters do not call it yet. Placement/credential enforcement remains unbuilt; production
 assignment, provider retirement, destructive-retention coordination and mail retry
 semantics remain explicit gates. The retention and mail worker integrations stop
 until their existing behavioral guarantees have a compatible design. The

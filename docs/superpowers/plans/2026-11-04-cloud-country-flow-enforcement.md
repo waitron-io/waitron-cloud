@@ -59,6 +59,8 @@ Paths in the following rows are repository-relative. Braces enumerate individual
 
 ## T1: Durable policy snapshots and intrinsic admission
 
+**D606 supersession:** [2026-11-07 T1 amendment](2026-11-07-country-flow-t1-amendment.md) supersedes T1 for D606. T2–T6 remain explicitly unbuilt and require their own later reconciliation before implementation.
+
 **Depends on:** slices 2–4; driver-resolved migration slot. **Landable result:** durable deny-by-default decisions, without any enabled adapter.
 
 **Files:** create `packages/registration/src/flow-authority.ts`, `test/{flow-authority,country-flow-migration}.test.ts`; extend `src/{country-policy,index,migrate}.ts`, `test/{country-policy,schema-compatibility}.test.ts`; add one newly allocated SQL migration. Add `test/fixtures/country-flow.ts`. Subsequent tasks use registration's normal root export.
