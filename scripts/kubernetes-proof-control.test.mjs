@@ -2579,6 +2579,33 @@ for (const latency of [0, 1000]) test(`owner command drill records the original 
   await assert.rejects(run());
   assert.equal(f.calls.filter(row => row.operation === 'run-instances').length, 1);
   assert.equal(JSON.parse(f.objects.get('d570/ledger/active.json').body).active.identity.uuid, f.uuid);
+  if (latency === 0) {
+    const originalCleanup = readFileSync(join(base, 'cleanup.json')), afterDrill = f.aws.call;
+    let deleted = false, healthPresent = true;
+    f.p.responses['cloudformation/describe-stacks'].Stacks[0].Tags = [{ Key: 'Proof', Value: 'D570' }];
+    f.p.responses['cloudformation/describe-stacks'].Stacks[0].CreationTime = now;
+    f.aws.call = async (service, operation, input) => {
+      if (service === 'ce' && input.GroupBy) return { GroupDefinitions: input.GroupBy,
+        ResultsByTime: [{ TimePeriod: input.TimePeriod, Estimated: true, Groups: [], Total: {} }] };
+      if (operation === 'disable-rule') { f.p.responses['events/describe-rule'].State = 'DISABLED'; return {}; }
+      if (operation === 'list-objects-v2' && input.Prefix === 'd570/') return { IsTruncated: false,
+        Contents: [...f.objects.keys(), ...(healthPresent ? ['d570/health/reaper.json'] : [])].map(Key => ({ Key })) };
+      if (operation === 'delete-objects') {
+        for (const row of input.Delete.Objects) { f.objects.delete(row.Key); if (row.Key === 'd570/health/reaper.json') healthPresent = false; }
+        return { Deleted: structuredClone(input.Delete.Objects) };
+      }
+      if (operation === 'delete-stack') { assert.equal(f.objects.size, 0); assert.equal(healthPresent, false); deleted = true; return {}; }
+      if (operation === 'describe-stacks' && deleted) return { Stacks: [{ StackId: f.setup.stackId, StackStatus: 'DELETE_COMPLETE' }] };
+      return afterDrill(service, operation, input);
+    };
+    const command = name => ownerCommand(f, [name, base], { clock: () => current, sleep: async ms => { current += ms; } });
+    await assert.rejects(command('drill'), { message: 'D570 controller refused: ec2 launch' });
+    assert.equal((await command('reconcile')).costReport.accountCostMicroUsd, 0);
+    assert.equal((await command('down')).deleted, true);
+    assert.equal(readFileSync(join(base, 'cleanup.json')).equals(originalCleanup), true);
+    assert.equal(existsSync(join(base, 'retry')), false);
+    assert.equal(f.calls.filter(row => row.operation === 'run-instances').length, 1);
+  }
 });
 
 test('owner command shows the actual opening and fixed reservation headroom before a cap refusal', async t => {
@@ -2887,10 +2914,10 @@ test('failed owner setup can clean down and retry up in the same folder without 
   assert.equal(retry.stackId, f.p.stackId); assert.notEqual(retry.stackId, f.originalId);
   assert.equal(readFileSync(join(f.parent, 'setup', 'setup.json')).equals(f.original), true);
   assert.equal(readFileSync(join(f.parent, 'history', 'setup.json')).equals(f.original), true);
-  const released = JSON.parse(readFileSync(join(f.parent, 'cleanup.json')));
+  const released = JSON.parse(readFileSync(join(f.parent, 'setup-removal.json')));
   assert.equal(released.stackId, f.originalId); assert.equal(released.releasedAt, now);
   assert.equal(released.reason, 'failed setup removed without a run');
-  assert.equal(statSync(join(f.parent, 'cleanup.json')).mode & 0o777, 0o600);
+  assert.equal(statSync(join(f.parent, 'setup-removal.json')).mode & 0o777, 0o600);
   assert.equal(retry.directory, join(realpathSync(f.parent), 'retry', 'setup'));
   assert.equal(existsSync(join(f.parent, 'retry', 'initialized.json')), true);
   assert.equal(f.calls.some(c => c.operation === 'run-instances'), false);
@@ -2918,13 +2945,13 @@ for (const loss of ['lost delete reply', 'deletion timeout', 'release write fail
       return result;
     };
     await assert.rejects(ownerCommand(f, ['down', f.parent]), /synthetic|stack deletion pending/);
-    const pending = JSON.parse(readFileSync(join(f.parent, 'cleanup.json')));
+    const pending = JSON.parse(readFileSync(join(f.parent, 'setup-removal.json')));
     assert.equal(pending.stackId, f.originalId); assert.equal(pending.releasedAt, null);
     await assert.rejects(ownerCommand(f, ['up', f.parent]), /D570 controller refused: booking/);
     assert.equal(existsSync(join(f.parent, 'retry')), false);
     interrupted = false; writeMock?.mock.restore();
     assert.equal((await ownerCommand(f, ['down', f.parent])).deleted, true);
-    const released = JSON.parse(readFileSync(join(f.parent, 'cleanup.json')));
+    const released = JSON.parse(readFileSync(join(f.parent, 'setup-removal.json')));
     assert.equal(released.stackId, f.originalId); assert.equal(released.releasedAt, now);
     assert.equal(f.deletions(), 1);
     assert.equal(readFileSync(join(f.parent, 'setup', 'setup.json')).equals(f.original), true);
@@ -2950,7 +2977,7 @@ test('failed setup down names an unfinished rollback without deleting or releasi
   await assert.rejects(ownerCommand(f, ['down', f.parent]), {
     message: 'D570 controller refused: stack cleanup status ROLLBACK_IN_PROGRESS; wait for rollback to finish',
   });
-  assert.equal(f.deletions(), 0); assert.equal(existsSync(join(f.parent, 'cleanup.json')), false);
+  assert.equal(f.deletions(), 0); assert.equal(existsSync(join(f.parent, 'setup-removal.json')), false);
 });
 
 test('failed setup with any retained monthly ledger never releases its booking for retry', async t => {
@@ -2960,11 +2987,11 @@ test('failed setup with any retained monthly ledger never releases its booking f
   mkdirSync(join(f.parent, 'setup'), { mode: 0o700 });
   writeFileSync(join(f.parent, 'setup', 'setup.json'), original, { mode: 0o600 });
   assert.equal((await ownerCommand(f, ['down', f.parent])).deleted, true);
-  assert.equal(JSON.parse(readFileSync(join(f.parent, 'cleanup.json'))).releasedAt, null);
+  assert.equal(JSON.parse(readFileSync(join(f.parent, 'setup-removal.json'))).releasedAt, null);
   await assert.rejects(ownerCommand(f, ['up', f.parent]), /D570 controller refused: booking/);
   assert.equal(existsSync(join(f.parent, 'retry')), false);
   assert.equal(readFileSync(join(f.setup.directory, 'setup.json')).equals(original), true);
-  const path = join(f.parent, 'cleanup.json'), altered = JSON.parse(readFileSync(path));
+  const path = join(f.parent, 'setup-removal.json'), altered = JSON.parse(readFileSync(path));
   altered.eligible = true; altered.releasedAt = now; altered.reason = 'failed setup removed without a run';
   writeFileSync(path, JSON.stringify(altered));
   await assert.rejects(ownerCommand(f, ['up', f.parent]), /D570 controller refused: private history/);
@@ -2977,7 +3004,7 @@ for (const change of ['changed booking', 'public cleanup']) test(`failed setup r
   if (change === 'changed booking') {
     const path = join(f.parent, 'setup', 'setup.json'), booking = JSON.parse(readFileSync(path));
     booking.head = 'b'.repeat(40); writeFileSync(path, JSON.stringify(booking));
-  } else chmodSync(join(f.parent, 'cleanup.json'), 0o644);
+  } else chmodSync(join(f.parent, 'setup-removal.json'), 0o644);
   await assert.rejects(ownerCommand(f, ['up', f.parent]), /D570 controller refused: private history/);
   assert.equal(existsSync(join(f.parent, 'retry')), false);
   assert.deepEqual(f.counts(), { creates: 1, enables: 0 });
@@ -2987,13 +3014,13 @@ test('cleanup refuses an incomplete saved setup before reading or writing cleanu
   const f = await removalFixture(t); f.calls.length = 0;
   await assert.rejects(f.remove({ setup: {} }), /D570 controller refused: ec2 cleanup/);
   assert.equal(f.calls.some(c => c.service === 'cloudformation'), false);
-  assert.equal(existsSync(join(f.parent, 'cleanup.json')), false);
+  assert.equal(existsSync(join(f.parent, 'setup-removal.json')), false);
 });
 
 test('failed setup release remains readable when the real clock includes milliseconds', async t => {
   const f = await failedOwnerSetupFixture(t);
   await ownerCommand(f, ['down', f.parent], { clock: () => Date.parse(now) + 123 });
-  assert.equal(JSON.parse(readFileSync(join(f.parent, 'cleanup.json'))).releasedAt, now);
+  assert.equal(JSON.parse(readFileSync(join(f.parent, 'setup-removal.json'))).releasedAt, now);
   assert.equal((await ownerCommand(f, ['up', f.parent])).directory, join(realpathSync(f.parent), 'retry', 'setup'));
 });
 
@@ -3014,4 +3041,74 @@ for (const amount of ['0.686509', '0.686510']) test(`failed setup retry refuses 
   assert.deepEqual(f.counts(), { creates: 1, enables: 0 });
   assert.equal(existsSync(join(f.parent, 'retry', 'setup')), false);
   assert.equal(readFileSync(join(f.parent, 'setup', 'setup.json')).equals(f.original), true);
+});
+
+test('resumed removal refuses a different valid stack returned for its retained exact id', async t => {
+  const f = await failedOwnerSetupFixture(t), prior = f.aws.call;
+  f.aws.call = async (...args) => {
+    const response = await prior(...args);
+    if (args[1] === 'delete-stack') throw new Error('synthetic lost deletion reply');
+    return response;
+  };
+  await assert.rejects(ownerCommand(f, ['down', f.parent]), /synthetic lost deletion reply/);
+  f.aws.call = async (...args) => {
+    const response = await prior(...args);
+    if (args[1] === 'describe-stacks') response.Stacks[0].StackId = f.originalId.slice(0, -1) + '2';
+    return response;
+  };
+  await assert.rejects(ownerCommand(f, ['down', f.parent]), /D570 controller refused: ec2 cleanup/);
+  assert.equal(JSON.parse(readFileSync(join(f.parent, 'setup-removal.json'))).releasedAt, null);
+  assert.equal(f.deletions(), 1);
+});
+
+test('released retry refuses a changed retained history even when booking fields still match', async t => {
+  const f = await failedOwnerSetupFixture(t); await ownerCommand(f, ['down', f.parent]);
+  const path = join(f.parent, 'history', 'setup.json'), value = JSON.parse(readFileSync(path));
+  value.syntheticMarker = 'changed export'; writeFileSync(path, JSON.stringify(value));
+  await assert.rejects(ownerCommand(f, ['up', f.parent]), /D570 controller refused: private history/);
+  assert.equal(existsSync(join(f.parent, 'retry')), false);
+  assert.deepEqual(f.counts(), { creates: 1, enables: 0 });
+});
+
+for (const kind of ['foreign event', 'earliest event', 'truncated events']) test(`failed stack diagnoses ${kind} without borrowing another failure`, async t => {
+  const f = await creationFixture(t), prior = f.aws.call;
+  f.aws.call = async (...args) => {
+    if (args[1] === 'describe-stack-events') {
+      const known = { StackId: kind === 'foreign event' ? f.p.stackId.slice(0, -1) + '2' : f.p.stackId,
+        LogicalResourceId: 'ExpiryFunction', ResourceStatus: 'CREATE_FAILED',
+        ResourceStatusReason: 'Specified ReservedConcurrentExecutions decreases UnreservedConcurrentExecution below its minimum value' };
+      return kind === 'truncated events' ? { StackEvents: [], NextToken: 'synthetic-private-next-token' }
+        : { StackEvents: [...(kind === 'earliest event' ? [{ ...known, LogicalResourceId: 'Bucket', ResourceStatusReason: 'synthetic later failure' }] : []), known] };
+    }
+    const response = await prior(...args);
+    if (args[1] === 'describe-stacks') response.Stacks[0].StackStatus = 'ROLLBACK_COMPLETE';
+    return response;
+  };
+  let failure;
+  await assert.rejects(f.create(), error => { failure = error; return /stack status ROLLBACK_COMPLETE/.test(error.message); });
+  if (kind === 'foreign event') assert.equal(failure.message.includes('ExpiryFunction'), false);
+  if (kind === 'earliest event') {
+    assert.ok(failure.message.includes('ExpiryFunction: Lambda reserved concurrency exceeds account allowance'));
+    assert.equal(failure.message.includes('Bucket'), false);
+  }
+  if (kind === 'truncated events') {
+    assert.match(failure.message, /failure events truncated/);
+    assert.equal(failure.message.includes('synthetic-private-next-token'), false);
+  }
+  assert.equal(existsSync(join(f.parent, 'setup-failure.json')), false);
+});
+
+test('pending failed removal refuses new initialization evidence before requesting stack deletion', async t => {
+  const f = await failedOwnerSetupFixture(t), prior = f.aws.call;
+  f.aws.call = async (...args) => {
+    if (args[1] === 'delete-stack') throw new Error('synthetic deletion not sent');
+    return prior(...args);
+  };
+  await assert.rejects(ownerCommand(f, ['down', f.parent]), /synthetic deletion not sent/);
+  writeFileSync(join(f.parent, 'initialized.json'), JSON.stringify({ ...JSON.parse(f.original),
+    directory: join(realpathSync(f.parent), 'setup') }), { mode: 0o600 });
+  f.aws.call = prior;
+  await assert.rejects(ownerCommand(f, ['down', f.parent]), /D570 controller refused: booking/);
+  assert.equal(f.deletions(), 0);
+  assert.equal(JSON.parse(readFileSync(join(f.parent, 'setup-removal.json'))).releasedAt, null);
 });

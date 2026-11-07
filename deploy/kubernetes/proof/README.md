@@ -133,7 +133,7 @@ strictly below US$10; account billing can lag actual consumption.
 The controller keeps the first attempt intact and selects a `retry/` child
 automatically. Always pass the original folder. A later failed attempt needs its
 own successful `down` before another retry. A completed drill cannot be restarted.
-The private `cleanup.json` retains the exact stack ID before deletion, so repeat
+The private `setup-removal.json` retains the exact stack ID before deletion, so repeat
 `down` after a lost reply or interrupted release write. Pending deletion never
 permits another `up`. A missing or uncertain exact stack response refuses release.
 The connected local check is
@@ -142,7 +142,9 @@ The connected local check is
 A setup refusal names the failed check and the returned stack status. Recognized
 failure reasons appear on screen; other bounded provider text stays in the
 owner-only `setup-failure.json` beside that attempt's setup folder. Read the path
-shown in the refusal locally and keep its contents out of public logs.
+shown in the refusal locally and keep its contents out of public logs. If the
+first event page is truncated, the refusal says so; any printed reason comes
+from that page.
 
 ## What remains to qualify
 

@@ -554,6 +554,10 @@ export async function createManualFirstSetup(options) {
     try {
       const events = await call('cloudformation', 'describe-stack-events', { StackName: stackId });
       if (!Array.isArray(events?.StackEvents) || events.StackEvents.length > 1000) throw new Error('invalid events');
+      if (events.NextToken !== undefined && events.NextToken !== null) {
+        if (typeof events.NextToken !== 'string' || !events.NextToken || events.NextToken.length > 1024) throw new Error('invalid event page');
+        reason += '; failure events truncated';
+      }
       const event = events.StackEvents.filter(row => row?.StackId === stackId
         && Object.hasOwn(booking.template.Resources, row.LogicalResourceId)
         && row.ResourceStatus === 'CREATE_FAILED' && typeof row.ResourceStatusReason === 'string'
@@ -1147,7 +1151,7 @@ async function replacePrivateJson(path, value) {
 }
 
 async function readCleanup(base) {
-  const path = join(base, 'cleanup.json');
+  const path = join(base, 'setup-removal.json');
   if (!await exists(path)) return null;
   const record = await privateJson(path), booking = await privateJson(join(base, 'setup', 'setup.json'));
   check(record?.schema === 'd570-cleanup-v1' && record.account === account && record.region === region
@@ -1174,7 +1178,7 @@ export async function removeManualFirstSetup(options) {
   check(setup?.account === account && setup.region === region && /^[a-f0-9]{40}$/.test(setup.head)
     && /^[a-f0-9]{40}$/.test(setup.tree) && setup.template?.Resources
     && typeof setup.directory === 'string' && setup.directory === resolve(setup.directory));
-  const base = dirname(setup.directory), cleanupPath = join(base, 'cleanup.json'), priorCleanup = await readCleanup(base);
+  const base = dirname(setup.directory), cleanupPath = join(base, 'setup-removal.json'), priorCleanup = await readCleanup(base);
   async function call(service, operation, input) {
     async function unchanged() {
       const source = await checkedMain(checkout), at = clock();
