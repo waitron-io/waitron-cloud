@@ -180,7 +180,6 @@ and its [Cloud implementation plan](superpowers/plans/2026-10-21-cloud-backup-ve
 own this remaining qualification. The [compatibility plan](superpowers/plans/2026-11-01-replay-allocation-compatibility.md)
 records the bounded fixture and route amendments. No fiscal implementation,
 immutable row, historical result or deployment authority changes here.
-The current-image full journey remains unqualified: its plan helper was killed (exit 137, no stderr), then a targeted run met readiness 503; Lane H local receipts are `~/waitron-campaign-h/receipts/d598/plan-diagnostic-current-linux.log` and `~/waitron-campaign-h/receipts/d598/plan-memory-current-linux.log`.
 
 ## Retrospective review qualification (D535)
 
