@@ -2,10 +2,11 @@ import assert from 'node:assert/strict';
 import {createHmac,generateKeyPairSync,randomUUID} from 'node:crypto';
 import {test} from 'node:test';
 import {setTimeout as delay} from 'node:timers/promises';
-import type {Pool} from 'pg';
+import type {Pool,PoolClient} from 'pg';
 import type {HttpBindings} from '@hono/node-server';
 import {AllowanceConfigStore,BillingStore,createLeaseIssuer,reserveAllowance,transaction} from '@waitron-cloud/registration';
 import {AccountRateLimiter} from '../src/rate-limit.ts';
+import {AddressLookupMachine} from '../src/address-lookup.ts';
 import {connectedVenue,database} from '../../translation/test/fixtures.ts';
 import {createAccountApp} from '../src/app.ts';
 import {startAccountServer} from '../src/server.ts';
@@ -201,4 +202,52 @@ test('the real account listener receives the injected trial through its existing
   });
   assert.equal(response.status,200,response.body);assert.deepEqual(JSON.parse(response.body).candidates,[{text:'Calle de Prueba 12, Madrid'}]);assert.equal(f.calls.length,1);
  }finally{await running?.close();await f.db.close();}
+});
+
+function admissionMachine(f:Awaited<ReturnType<typeof fixture>>,control:(sql:string,client:PoolClient)=>Date|void){
+ const pool={connect:async()=>{
+  const client=await f.db.pool.connect();
+  return new Proxy(client,{get(target,key){
+   if(key==='query')return (sql:string,...args:unknown[])=>{
+    const now=control(sql,target);if(now)return Promise.resolve({rows:[{now}]});
+    return Reflect.apply(target.query,target,[sql,...args]);
+   };
+   const value=Reflect.get(target,key);return typeof value==='function'?value.bind(target):value;
+  }});
+ }} as Pool;
+ return new AddressLookupMachine(pool,f.issuer,origin,f.db.rateKey,f.options.addressLookup);
+}
+const addressRows=(pool:Pool)=>pool.query("SELECT state,attempted_at FROM billing_allowance_reservations WHERE service='address_lookup'").then(r=>r.rows);
+const counters=(pool:Pool)=>pool.query('SELECT key,attempts,expires_at FROM account_rate_limits ORDER BY key').then(r=>r.rows);
+test('workflow expiry during admission rolls back suggestions and validation spending',async()=>{
+ const f=await fixture();try{
+  for(const kind of ['suggest','validate'] as const){
+   const workflowId=randomUUID(),t=Date.now();
+   await transaction(f.db.pool,client=>reserveAllowance(client,{accountId:f.v.accountId,venueId:f.v.venueId,installationId:f.v.installationId,
+    service:'address_lookup',operationId:workflowId,units:1n,binding:JSON.stringify({version:1,createdAt:new Date(t-100000).toISOString(),expiresAt:new Date(t+100).toISOString()})}));
+   const before=await counters(f.db.pool);let reads=0;
+   const machine=admissionMachine(f,sql=>{if(sql==='SELECT clock_timestamp() AS now')return new Date(++reads===(kind==='suggest'?3:4)?t+200:t);});
+   const body=kind==='suggest'?suggestion(workflowId):{version:1,kind,workflowId,selectedText:'PRIVATE-QUERY'};
+   await assert.rejects(()=>machine.execute(f.v.proof('address-lookup',body,randomUUID(),f.v.lease)),{status:410});
+   assert.equal(f.calls.length,0);assert.deepEqual(await counters(f.db.pool),before);
+   assert.ok((await addressRows(f.db.pool)).every(row=>row.state==='held'&&row.attempted_at===null));
+  }
+ }finally{await f.db.close();}
+});
+test('crossing the UTC date during admission rolls back the hold and counters',async()=>{
+ const f=await fixture();try{
+  const before=await counters(f.db.pool),today=new Date();today.setUTCHours(23,59,59,900);const t=today.getTime();let reads=0;
+  const machine=admissionMachine(f,sql=>{if(sql==='SELECT clock_timestamp() AS now')return new Date(++reads===3?t+200:t);});
+  const lease=f.issuer.issue({origin,leaseId:randomUUID(),installationId:f.v.installationId,venueId:f.v.venueId,environment:'test',publicKey:f.v.installationKey,issuedAt:t,expiresAt:t+3600000});
+  await assert.rejects(()=>machine.execute(f.v.proof('address-lookup',suggestion(),randomUUID(),lease,undefined,t)),{status:503});
+  assert.equal(f.calls.length,0);assert.deepEqual(await addressRows(f.db.pool),[]);assert.deepEqual(await counters(f.db.pool),before);
+ }finally{await f.db.close();}
+});
+test('connection loss during admission commits no hold or counters and sends nothing',async()=>{
+ const f=await fixture();try{
+  const before=await counters(f.db.pool);let reads=0;
+  const machine=admissionMachine(f,(sql,client)=>{if(sql==='SELECT clock_timestamp() AS now'&&++reads===3)client.emit('error',new Error('controlled connection loss'));});
+  await assert.rejects(()=>machine.execute(f.v.proof('address-lookup',suggestion(),randomUUID(),f.v.lease)),{code:'unavailable',dispatched:false});
+  assert.equal(f.calls.length,0);assert.deepEqual(await addressRows(f.db.pool),[]);assert.deepEqual(await counters(f.db.pool),before);
+ }finally{await f.db.close();}
 });
