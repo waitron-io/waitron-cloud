@@ -61,6 +61,7 @@ async function view(client:PoolClient,id:string,servicesVersion:1|2=1):Promise<I
   // JSON dates give durable operation results the same shape as freshly read results.
   return JSON.parse(JSON.stringify({...rows[0],services:services.rows}));
 }
+export {view as installationView};
 async function installationPlan(client:PoolClient,venueId:string,mode:PlanMode) {
   try{
     if(mode==='test-venue-levels')return (await readVenuePermissions(client,venueId,mode)).level;

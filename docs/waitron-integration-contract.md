@@ -310,6 +310,55 @@ policy, no real admission and no customer routes. This is not another owner buil
 question. Resolve technical contract amendments between the named owners; escalate
 only a concrete product or security choice left to the owner.
 
+#### Test-box tunnel key submission
+
+To connect without an operator copying your tunnel key, persist its private half
+on the box, then submit the public half over your signed Cloud connection.
+`POST /api/installations/tunnel-provision` takes `{payload,signature}` using
+the existing `waitron-cloud-machine-v1` encoding below, action `tunnel-provision`,
+a fresh operation UUID and a live control lease. Its signed body is exactly
+`JSON.stringify({peerPublicKey})`, with a canonical 32-byte WireGuard base64 key
+and no other fields. The installation signing key and tunnel key stay separate.
+
+The route is disabled by default. You enable it through the account app/server
+option `tunnelProvision:{installationId,cellId}` and the existing lease issuer;
+the configured cell and destination port 443 are selected by Cloud. Only that
+installation in a test venue can call it. The chosen plan mode still applies;
+`existing` mode admits this configured test box without a paid-plan check. Lane D
+enables these options separately in the approved rented-server trial after merge.
+There is no CLI switch or production activation in this change.
+
+HTTP 200 returns the existing version-1 `InstallationView` directly, including
+its three services and no new lease. Read `services` for `remote_access`:
+its `configuration` is `{version:1,...Placement}`, with the peer address,
+gateway public key and endpoint, staff/public hostnames, cell and port.
+Use the existing signed configuration read to refresh it. A 200 reply records
+`provisioning`; it does not mean the tunnel works or that the next gateway
+manifest export has happened. See `packages/account-http/test/tunnel-provision.test.ts`
+for the exact reply exercised through PostgreSQL and the native HTTP listener.
+
+If you lose the reply, retry with a fresh proof and your persisted peer key.
+The same key, cell and port keep the allocation and revision, except when the
+existing paid-mode setup restoration advances it. A changed key is a terminal
+409 `placement_conflict`; this action does not rotate keys. This unreplaced
+one-box trial accepts that provisioning during a prepared replacement can make
+replacement completion conflict. It adds no replacement guard or protocol.
+The joint appliance G5 contract and its admission stay closed.
+
+The method, browser-Origin refusal, 16,384-byte/5-second JSON read and shared
+120-per-IP, 60-per-installation-IP and 30-per-authenticated-installation minute
+limits follow the existing machine routes. Failures return `{error:code}`:
+
+| HTTP | Code and cause |
+| --- | --- |
+| 400 / 408 / 413 / 415 | `invalid_input`: malformed body, read timeout, size or content type. |
+| 401 | `invalid_proof`: signature, action, proof time, changed key or foreign/expired/untrusted lease. |
+| 403 | `permission_denied`: foreign installation, production, changed venue/environment or withdrawn plan permission; `revoked` also covers supersession; `forbidden` rejects any browser Origin. |
+| 405 | `method_not_allowed`. |
+| 409 | `placement_conflict`: changed placement or a peer key already claimed. |
+| 429 | `rate_limited`, with `Retry-After`. |
+| 503 | `temporarily_unavailable`, with `Retry-After: 1`: disabled route, unavailable installation/cell, full cell or infrastructure failure. |
+
 #### Existing staff-v1 compatibility facts
 
 Use the existing [staff certificate exchange](#staff-certificate-exchange-version-1)

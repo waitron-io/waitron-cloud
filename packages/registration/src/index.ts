@@ -284,7 +284,7 @@ export type { AccountLocale, AccountNotification } from './account-input.ts';
 export {PairingStore,type PairingView} from './pairing.ts';
 export {PairingError,verifyPairingProof,pairingPayload,type PairingClaims} from './pairing-proof.ts';
 
-export {InstallationStore,type InstallationView,type DesiredService} from './installations.ts';
+export {InstallationStore,installationView,type InstallationView,type DesiredService} from './installations.ts';
 export {InstallationError,createLeaseIssuer,createLeaseTrust,readMachineClaims,encodeMachine,verifyMachine,verifyLease,type MachineAction,type SignedEnvelope,type LeaseIssuer} from './installation-proof.ts';
 
 export {MonitorWorker,suppressAlertEpisode,monitorStatus} from './monitoring.ts';
