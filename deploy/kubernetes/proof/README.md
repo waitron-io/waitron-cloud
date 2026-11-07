@@ -19,7 +19,9 @@ checkout, a GitHub job, the wrong account or region, root and permanent IAM-user
 identities. Each command checks remote main at entry and before state-changing
 AWS calls; local source and clean-checkout checks surround every provider call.
 It checks the official ARM image and the approved machine's capacity
-before creating anything. You can read the command shape without signing in:
+before creating anything. If a command refuses, its message names the validation
+step, for example `D570 controller refused: ce billing shape`. Keep the private files
+for removal and report the named step; do not edit the files to bypass it. You can read the command shape without signing in:
 
 ```sh
 node scripts/kubernetes-proof-control.mjs --help

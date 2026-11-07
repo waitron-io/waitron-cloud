@@ -14,8 +14,79 @@ const control = await import(target.href).catch(error => {
 const now = '2026-11-06T12:00:00Z';
 const period = { Start: '2026-11-01', End: '2026-11-07' };
 const identity = { Account: '462991287391', Arn: 'arn:aws:sts::462991287391:assumed-role/OwnerSetup/session', UserId: 'AROAEXAMPLE:session' };
-const bill = () => ({ GroupDefinitions: [], ResultsByTime: [{ TimePeriod: { ...period }, Estimated: true, Groups: [],
+const bill = () => ({ ResultsByTime: [{ TimePeriod: { ...period }, Estimated: true, Groups: [],
   Total: { UnblendedCost: { Amount: '1.23456701', Unit: 'USD' } } }] });
+
+test('GroupDefinitions may be absent in the ungrouped AWS billing response', async t => {
+  const f = fixture(t), response = bill();
+  delete response.GroupDefinitions;
+  f.aws.call = async service => service === 'sts' ? identity : response;
+  const result = await inspect(f);
+  assert.deepEqual(result.billing, { observedAt: now, period, microUsd: 1234568, estimated: true });
+});
+
+test('GroupDefinitions also accepts an explicit empty ungrouped array', async t => {
+  const f = fixture(t), response = bill(); response.GroupDefinitions = [];
+  f.aws.call = async service => service === 'sts' ? identity : response;
+  assert.deepEqual((await inspect(f)).billing, { observedAt: now, period, microUsd: 1234568, estimated: true });
+});
+
+for (const value of [null, {}, '', [{ Type: 'DIMENSION', Key: 'SERVICE' }]]) {
+  test(`GroupDefinitions refuses a present invalid value ${JSON.stringify(value)}`, async t => {
+    const f = fixture(t), response = bill(); response.GroupDefinitions = value;
+    f.aws.call = async service => service === 'sts' ? identity : response;
+    await assert.rejects(inspect(f), /D570 controller refused: ce billing shape/);
+  });
+}
+
+test('AWS response accepts an omitted default event bus under its exact default-rule ARN', async t => {
+  const f = protectionFixture(t);
+  delete f.responses['events/describe-rule'].EventBusName;
+  assert.equal((await f.observe()).bucket, 'd570-first-bucket');
+});
+
+test('AWS response accepts the documented nested attachment without an InstanceId', async t => {
+  const f = await readyGuestFixture(t), before = structuredClone([...f.objects]);
+  delete f.instance.NetworkInterfaces[0].Attachment.InstanceId;
+  assert.equal((await f.observe()).instanceId, f.instanceId);
+  assert.deepEqual(structuredClone([...f.objects]), before);
+});
+
+test('AWS response rejects an explicitly conflicting attachment instance', async t => {
+  const f = await readyGuestFixture(t);
+  f.instance.NetworkInterfaces[0].Attachment.InstanceId = 'i-11111111111111111';
+  await assert.rejects(f.observe(), { message: 'D570 controller refused: ec2 observation' });
+});
+
+test('safe refusal identifies a missing AWS client as control input', async t => {
+  const f = fixture(t);
+  await assert.rejects(inspect(f, { aws: {} }), { message: 'D570 controller refused: control input' });
+  assert.deepEqual(f.calls, []);
+});
+
+const identityReads = ['sts/get-caller-identity'];
+const billingReads = [...identityReads, 'ce/get-cost-and-usage'];
+const parameterReads = [...billingReads, 'ssm/get-parameter'];
+const imageReads = [...parameterReads, 'ec2/describe-images'];
+const capacityReads = [...imageReads, 'ec2/describe-instance-types'];
+for (const [label, prepare, run, reason, expectedReads] of [
+  ['billing', t => { const f = fixture(t); f.aws.call = async service => service === 'sts' ? identity : {}; return f; }, inspect, 'ce billing shape', billingReads],
+  ['identity', t => { const f = fixture(t); f.aws.call = async () => ({}); return f; }, inspect, 'sts identity', identityReads],
+  ['checkout', t => { const f = fixture(t); writeFileSync(join(f.root, 'controller.txt'), 'changed\n'); return f; }, inspect, 'checkout', []],
+  ['parameter', t => { const f = setupFixture(t); delete f.responses['ssm/get-parameter'].Parameter; return f; }, discover, 'ssm parameter', parameterReads],
+  ['image', t => { const f = setupFixture(t); f.responses['ec2/describe-images'].Images[0].Architecture = 'x86_64'; return f; }, discover, 'ec2 image', imageReads],
+  ['prefix', t => { const f = setupFixture(t); f.responses['ec2/describe-managed-prefix-lists'].PrefixLists[0].PrefixListId = 'invalid'; return f; }, discover, 'ec2 prefix', [...capacityReads, 'ec2/describe-managed-prefix-lists']],
+  ['event rule', t => { const f = protectionFixture(t); f.responses['events/describe-rule'].EventBusName = null; return f; }, f => f.observe(), 'events rule', [...billingReads, 'cloudformation/describe-stacks', 'cloudformation/describe-stack-resources', 'events/describe-rule']],
+]) test(`safe refusal names the ${label} validator before further provider work`, async t => {
+  const f = prepare(t), prior = f.aws.call, reads = [];
+  f.aws.call = async (service, operation, input) => {
+    reads.push(`${service}/${operation}`);
+    return prior(service, operation, input);
+  };
+  await assert.rejects(run(f), { message: `D570 controller refused: ${reason}` });
+  assert.deepEqual(reads, expectedReads);
+  assert.equal(f.calls.some(row => ['create-stack', 'run-instances', 'put-object'].includes(row.operation)), false);
+});
 function fixture(t) {
   const root = mkdtempSync(join(tmpdir(), 'd570-control-'));
   t.after(() => rmSync(root, { recursive: true, force: true }));
@@ -349,7 +420,7 @@ function protectionFixture(t) {
     'cloudformation/describe-stacks': { Stacks: [{ StackId: stackId, StackName: 'd570-first', StackStatus: 'CREATE_COMPLETE' }] },
     'cloudformation/describe-stack-resources': { StackResources: resources },
     'events/describe-rule': { Name: 'd570-first-rule', Arn: 'arn:aws:events:eu-north-1:462991287391:rule/d570-first-rule',
-      State: 'ENABLED', ScheduleExpression: 'rate(1 minute)', EventBusName: 'default' },
+      State: 'ENABLED', ScheduleExpression: 'rate(1 minute)' },
     'events/list-targets-by-rule': { Targets: [{ Id: 'D570Expiry', Arn: functionArn,
       RetryPolicy: { MaximumEventAgeInSeconds: 60, MaximumRetryAttempts: 0 } }] },
     's3api/get-object': { Body: Buffer.from(JSON.stringify(health)), ServerSideEncryption: 'AES256',
@@ -1531,7 +1602,7 @@ async function readyGuestFixture(t) {
     BlockDeviceMappings: [{ DeviceName: '/dev/xvda', Ebs: { VolumeId: volumeId, DeleteOnTermination: true, Status: 'attached' } }],
     NetworkInterfaces: [{ NetworkInterfaceId: interfaceId, OwnerId: '462991287391', SubnetId: f.ids.Subnet,
       Status: 'in-use', Groups: [{ GroupId: f.ids.SecurityGroup }],
-      Attachment: { InstanceId: f.instanceId, DeviceIndex: 0, Status: 'attached', DeleteOnTermination: true } }],
+      Attachment: { DeviceIndex: 0, Status: 'attached', DeleteOnTermination: true } }],
   };
   const instances = { Reservations: [{ OwnerId: '462991287391', Instances: [instance] }] };
   const shutdown = { InstanceId: f.instanceId, InstanceInitiatedShutdownBehavior: { Value: 'terminate' } };
@@ -1842,7 +1913,7 @@ async function billingFixture(t) {
     if (service === 'ce') {
       f.calls.push({ service, operation, input });
       if (input.GroupBy) return structuredClone(response);
-      return { GroupDefinitions: [], ResultsByTime: [{ TimePeriod: input.TimePeriod, Estimated: response.ResultsByTime.at(-1)?.Estimated ?? true, Groups: [],
+      return { ResultsByTime: [{ TimePeriod: input.TimePeriod, Estimated: response.ResultsByTime.at(-1)?.Estimated ?? true, Groups: [],
         Total: { UnblendedCost: { Amount: '0.0123456789', Unit: 'USD' } } }] };
     }
     return previous(service, operation, input);
@@ -2107,7 +2178,7 @@ async function explainedOpeningFixture(t) {
       f.calls.push({ service, operation, input });
       if (input.GroupBy) return { GroupDefinitions: input.GroupBy, ResultsByTime: [{ TimePeriod: input.TimePeriod,
         Estimated: true, Groups: structuredClone(groups), Total: {} }] };
-      return { GroupDefinitions: [], ResultsByTime: [{ TimePeriod: input.TimePeriod, Estimated: true, Groups: [],
+      return { ResultsByTime: [{ TimePeriod: input.TimePeriod, Estimated: true, Groups: [],
         Total: { UnblendedCost: { Amount: '0.01', Unit: 'USD' } } }] };
     }
     if (operation === 'create-stack') {
@@ -2132,6 +2203,25 @@ test('explained opening starts the first setup and retains the actual list befor
     usageType: 'EUN1-TimedStorage-ByteHrs', microUsd: 10000, maxMicroUsd: 10000,
     reason: 'Existing synthetic staging backup' }]);
   assert.equal(f.calls.filter(row => row.operation === 'create-stack').length, 1);
+});
+
+for (const [label, definitions] of [
+  ['missing', undefined], ['null', null], ['empty', []],
+  ['wrong dimension', [{ Type: 'DIMENSION', Key: 'SERVICE' }, { Type: 'DIMENSION', Key: 'REGION' }]],
+  ['reversed dimensions', [{ Type: 'DIMENSION', Key: 'USAGE_TYPE' }, { Type: 'DIMENSION', Key: 'SERVICE' }]],
+]) test(`explained opening refuses ${label} grouping before booking`, async t => {
+  const f = await explainedOpeningFixture(t), prior = f.aws.call;
+  f.aws.call = async (service, operation, input) => {
+    const response = await prior(service, operation, input);
+    if (service === 'ce' && input.GroupBy) {
+      if (definitions === undefined) delete response.GroupDefinitions;
+      else response.GroupDefinitions = structuredClone(definitions);
+    }
+    return response;
+  };
+  await assert.rejects(f.create({ explanations: f.explanations }), /D570 controller refused: ce grouped shape/);
+  assert.equal(existsSync(join(f.options.directory, 'setup.json')), false);
+  assert.equal(f.calls.some(row => ['create-stack', 'put-object', 'run-instances'].includes(row.operation)), false);
 });
 
 for (const [label, change] of [
@@ -2399,14 +2489,14 @@ test('owner command down consumes the saved setup and retains history before rem
 for (const pending of ['instance', 'console']) test(`owner readiness distinguishes a pending ${pending} from a safety refusal`, async t => {
   const f = await readyGuestFixture(t);
   if (pending === 'instance') f.instance.State.Name = 'pending'; else f.consoleOutput.Output = '';
-  await assert.rejects(f.observe(), error => error.message === 'D570 controller refused' && error.code === 'D570_NOT_READY');
+  await assert.rejects(f.observe(), error => error.message === 'D570 controller refused: readiness pending' && error.code === 'D570_NOT_READY');
 });
 
 for (const pending of ['volume', 'interface']) test(`owner cleanup distinguishes a remaining captured ${pending} without releasing its booking`, async t => {
   const f = await guestCleanupFixture(t), before = structuredClone([...f.objects]);
   if (pending === 'volume') f.volumes.Volumes.push({ VolumeId: f.volumeId });
   else f.interfaces.NetworkInterfaces.push({ NetworkInterfaceId: f.interfaceId, SubnetId: f.ids.Subnet, OwnerId: '462991287391' });
-  await assert.rejects(f.cleanup(), error => error.message === 'D570 controller refused' && error.code === 'D570_CLEANUP_PENDING');
+  await assert.rejects(f.cleanup(), error => error.message === 'D570 controller refused: cleanup pending' && error.code === 'D570_CLEANUP_PENDING');
   assert.deepEqual(structuredClone([...f.objects]), before);
 });
 
@@ -2421,7 +2511,7 @@ for (const latency of [0, 1000]) test(`owner command drill records the original 
     BlockDeviceMappings: [{ DeviceName: '/dev/xvda', Ebs: { VolumeId: 'vol-0123456789abcdef0', DeleteOnTermination: true, Status: 'attached' } }],
     NetworkInterfaces: [{ NetworkInterfaceId: 'eni-0123456789abcdef0', OwnerId: '462991287391', SubnetId: f.ids.Subnet,
       Status: 'in-use', Groups: [{ GroupId: f.ids.SecurityGroup }],
-      Attachment: { InstanceId: f.instanceId, DeviceIndex: 0, Status: 'attached', DeleteOnTermination: true } }],
+      Attachment: { DeviceIndex: 0, Status: 'attached', DeleteOnTermination: true } }],
   };
   f.aws.call = async (service, operation, input) => {
     providerCalls++;

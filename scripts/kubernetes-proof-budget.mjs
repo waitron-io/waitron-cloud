@@ -7,7 +7,7 @@ const uuidPattern = /^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-
 const hashPattern = /^[a-f0-9]{64}$/, shaPattern = /^[a-f0-9]{40}$/;
 const accessExpiry = Date.parse('2027-02-28T23:59:00Z');
 const monthKey = month => `d570/ledger/${month}.json`;
-const refuse = () => { throw new Error('D570 budget refused'); };
+const refuse = () => { throw new Error('D570 budget refused: s3 ledger'); };
 const check = condition => { if (!condition) refuse(); };
 const matches = (pattern, value) => typeof value === 'string' && pattern.test(value);
 const plain = value => value && Object.getPrototypeOf(value) === Object.prototype;

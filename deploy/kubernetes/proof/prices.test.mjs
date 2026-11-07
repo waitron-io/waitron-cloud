@@ -26,6 +26,10 @@ const firstProduct = doc => Object.values(doc.products)[0];
 const firstTerm = doc => Object.values(Object.values(doc.terms.OnDemand)[0])[0];
 const firstDimension = doc => Object.values(firstTerm(doc).priceDimensions)[0];
 
+test('safe refusal names the price file validator', () => {
+  assert.throws(() => read('AmazonEC2', {}), { message: 'D570 price evidence refused: price file' });
+});
+
 for (const [service, expected] of [
   ['AmazonEC2', { compute: ['Hrs', '3468000000'], disk: ['GB-Mo', '836000000'] }],
   ['AWSLambda', { lambdaDuration: ['Lambda-GB-Second', '133334'], lambdaRequests: ['Requests', '2000'] }],

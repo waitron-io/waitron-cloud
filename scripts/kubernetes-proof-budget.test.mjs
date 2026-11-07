@@ -23,6 +23,11 @@ const confirmed = (changes = {}) => ({ uuid, observedAt: '2026-11-06T14:20:00Z',
   interfacesAbsent: true, billingReconciled: true, protectionHealthy: true, actualMicroUsd: 500000, ...changes });
 const clone = value => structuredClone(value);
 
+test('safe refusal names the S3 ledger validator', async () => {
+  const store = budget.createS3LedgerStore({ bucket: 'd570-synthetic-bucket', aws: { call: async () => ({}) } });
+  await assert.rejects(store.list(), { message: 'D570 budget refused: s3 ledger' });
+});
+
 // This is the external conditional-object boundary. Persisted bytes survive a
 // new budget module call; a conflicting writer receives the S3 precondition error.
 function memoryStore() {
