@@ -1222,3 +1222,113 @@ test('creation CLI recognizes only a missing heartbeat and never confuses denial
   await assert.rejects(denied.cli.call('s3api', 'get-object', { ...denied.input, Key: 'd570/health/reaper.json', Range: 'bytes=0-1048576' }),
     error => error.message === 'D570 AWS s3api/get-object failed' && error.name !== 'NoSuchKey');
 });
+
+
+async function initializationFixture(t) {
+  const f = await creationFixture(t), previous = f.aws.call;
+  const objects = new Map(), writes = [];
+  f.aws.call = async (service, operation, input) => {
+    if (service !== 's3api' || input.Key === 'd570/health/reaper.json') return previous(service, operation, input);
+    f.calls.push({ service, operation, input });
+    assert.equal(input.Bucket, 'd570-first-bucket');
+    assert.equal(input.ExpectedBucketOwner, '462991287391');
+    if (operation === 'list-objects-v2') return { IsTruncated: false, Contents: [...objects.keys()].map(Key => ({ Key })) };
+    if (operation === 'get-object') {
+      const row = objects.get(input.Key);
+      if (!row) throw Object.assign(new Error('absent'), { name: 'NoSuchKey', $metadata: { httpStatusCode: 404 } });
+      return { Body: row.body, ETag: row.etag, ContentLength: row.body.length };
+    }
+    assert.equal(operation, 'put-object');
+    assert.equal(f.calls.some(row => row.operation === 'get-object' && row.input.Key === 'd570/health/reaper.json'), true);
+    assert.equal(input.IfNoneMatch, '*'); assert.equal(objects.has(input.Key), false);
+    const etag = '"' + (writes.length + 1) + '"';
+    objects.set(input.Key, { body: Buffer.from(input.Body), etag }); writes.push(input.Key); return { ETag: etag };
+  };
+  const initialize = changes => {
+    assert.equal(typeof control.initializeManualFirstSetup, 'function', 'missing first setup ledger initialization');
+    return control.initializeManualFirstSetup({ ...f.options, ...changes });
+  };
+  return { ...f, objects, writes, initialize };
+}
+
+test('first ledger keeps the original opening when the bill rises during stack creation', async t => {
+  const f = await initializationFixture(t), previous = f.aws.call; let bills = 0;
+  f.aws.call = async (...args) => {
+    const response = await previous(...args);
+    if (args[0] === 'ce' && ++bills > 1) response.ResultsByTime[0].Total.UnblendedCost.Amount = '0.01';
+    return response;
+  };
+  const result = await f.initialize();
+  const current = JSON.parse(f.objects.get('d570/ledger/2026-11.json').body);
+  assert.equal(current.opening.baselineMicroUsd, 0);
+  assert.equal(current.opening.overheadMicroUsd, 9006805);
+  assert.equal(result.billing.microUsd, 10000); assert.equal(result.billing.estimated, true);
+  assert.equal(result.openingBilling.microUsd, 0); assert.equal(result.openingBilling.estimated, true);
+  assert.equal(result.runEvidence.components.compute.upperMicroUsd, 115600);
+  assert.equal(result.runEvidence.components.disk.upperMicroUsd, 191086);
+  assert.equal(Object.values(result.runEvidence.components).reduce((sum, row) => sum + row.upperMicroUsd, 0), 306686);
+  assert.deepEqual(f.writes, ['d570/ledger/2026-11.json', 'd570/ledger/2026-12.json', 'd570/ledger/active.json']);
+  assert.deepEqual(current.entries, []);
+  assert.equal(result.budget.bookedMicroUsd, 0); assert.equal(result.budget.activeUuid, null);
+  const active = JSON.parse(f.objects.get('d570/ledger/active.json').body);
+  assert.equal(active.active, null); assert.deepEqual(active.completed, []);
+  assert.equal(f.calls.some(row => ['run-instances', 'delete-stack'].includes(row.operation)), false);
+  const saved = JSON.parse(readFileSync(join(f.options.directory, 'setup.json')));
+  assert.equal(saved.billing.microUsd, 0); assert.equal(saved.upperMicroUsd, 9313491);
+  await assert.rejects(f.initialize()); assert.deepEqual(f.counts(), { creates: 1, enables: 1 });
+});
+
+test('first drill reservation fits the original bound without counting setup protection twice', async t => {
+  const f = await initializationFixture(t), result = await f.initialize();
+  const budget = await import('./kubernetes-proof-budget.mjs');
+  const store = control.createManualLedgerStore({ bucket: result.bucket, aws: f.aws });
+  // The conditional overwrite below exercises the real reservation core after setup's create-only writes.
+  const setupCall = f.aws.call;
+  f.aws.call = async (service, operation, input) => {
+    if (operation !== 'put-object') return setupCall(service, operation, input);
+    const prior = f.objects.get(input.Key); assert.ok(prior); assert.equal(input.IfMatch, prior.etag);
+    const etag = '"updated-' + f.writes.length + '"';
+    f.objects.set(input.Key, { body: Buffer.from(input.Body), etag }); f.writes.push(input.Key); return { ETag: etag };
+  };
+  const identity = { uuid: '00000000-0000-4000-8000-000000000001', head: result.head, tree: result.tree,
+    startedAt: now, expiry: '2026-11-06T12:05:00Z', liabilityUntil: '2026-12-07T12:05:00Z' };
+  const reserved = await budget.reserveRun({ scope: { account: result.account, region: result.region, stackId: result.stackId },
+    now, clock: () => Date.parse(now), identity, evidence: result.runEvidence, store });
+  assert.equal(reserved.upperMicroUsd, 306686);
+  for (const month of ['2026-11', '2026-12']) {
+    const row = JSON.parse(f.objects.get('d570/ledger/' + month + '.json').body);
+    assert.equal(row.opening.baselineMicroUsd + row.opening.overheadMicroUsd + row.entries[0].upperMicroUsd, 9313491);
+    assert.equal(row.entries.length, 1);
+  }
+});
+
+for (const stage of ['unhealthy protection', 'existing history', 'partial write', 'changed source', 'stale heartbeat']) {
+  test(`first ledger refuses ${stage} and never replaces retained cost or launches`, async t => {
+    const f = await initializationFixture(t), previous = f.aws.call;
+    if (stage === 'existing history') f.objects.set('d570/ledger/2026-11.json', { body: Buffer.from('preserve'), etag: '"old"' });
+    f.aws.call = async (...args) => {
+      if (stage === 'partial write' && args[1] === 'put-object' && args[2].Key.endsWith('active.json')) throw new Error('synthetic storage refusal');
+      const response = await previous(...args);
+      if (stage === 'unhealthy protection' && args[1] === 'describe-rule') response.State = 'DISABLED';
+      if (args[1] === 'list-objects-v2') {
+        if (stage === 'changed source') {
+          writeFileSync(join(f.root, 'controller.txt'), 'new clean main during initialization');
+          f.git('add', 'controller.txt'); f.git('commit', '-s', '-m', 'Advance isolated main during storage wait');
+          f.git('update-ref', 'refs/remotes/origin/main', f.git('rev-parse', 'HEAD'));
+        }
+        if (stage === 'stale heartbeat') f.options.clock = () => Date.parse(now) + 120000;
+      }
+      return response;
+    };
+    // Clock changes are observed through the closure after the storage wait.
+    const clock = () => f.options.clock();
+    await assert.rejects(f.initialize({ clock }), /controller refused|budget refused|synthetic storage refusal/);
+    assert.equal(f.calls.some(row => row.operation === 'run-instances'), false);
+    const saved = JSON.parse(readFileSync(join(f.options.directory, 'setup.json')));
+    assert.equal(saved.upperMicroUsd, 9313491);
+    if (stage === 'existing history') assert.equal(f.objects.get('d570/ledger/2026-11.json').body.toString(), 'preserve');
+    if (stage === 'changed source' || stage === 'stale heartbeat' || stage === 'unhealthy protection') assert.equal(f.writes.length, 0);
+    if (stage === 'partial write') assert.deepEqual(f.writes, ['d570/ledger/2026-11.json', 'd570/ledger/2026-12.json']);
+    await assert.rejects(f.initialize({ clock })); assert.deepEqual(f.counts(), { creates: 1, enables: 1 });
+  });
+}

@@ -7,8 +7,9 @@ template. Both `node deploy/kubernetes/proof/setup.mjs up` and `down` refuse
 execution. Machine launches have an explicit deny and the sweep rule is disabled.
 
 The owner authorised D570's setup build for staging account `462991287391`, region
-`eu-north-1`, one on-demand ARM `m7g.2xlarge`, with an all-in US$10 monthly cap and
-an initial US$0 baseline. Temporary access expires at `2027-02-28T23:59:00Z`.
+`eu-north-1`, one on-demand ARM `m7g.2xlarge`, with an all-in US$10 monthly cap. The policy
+records an initial US$0 baseline; it is not an observation of the account bill.
+Temporary access expires at `2027-02-28T23:59:00Z`.
 Weekly retention was approved through that expiry. Production account
 `949687825720` remains forbidden. These approval values in `policy.json` are inputs
 to future budget enforcement; recording them does not reserve funds or establish
@@ -207,7 +208,7 @@ to check the booking and refusal at the exact US$10 boundary.
 
 These quantity and allowance ceilings are assumptions for the whole-branch
 review and live qualification. Recording them does not prove cleanup completes
-within a day, bound actual logs or reconcile the bill. Prior-history import and
+within a day, bound actual logs or reconcile the bill. A second setup and
 the owner lifecycle remain unfinished, and the lifecycle entries still refuse,
 so you do not need to sign in yet.
 AWS documents [binary storage units](https://aws.amazon.com/s3/pricing/)
@@ -230,12 +231,14 @@ Streaming reads use explicit CLI arguments because AWS CLI does not support
 The CLI writes into a private temporary directory, checks the complete returned
 range and length, and removes its own files on success or failure. The controller
 requires encrypted JSON and retains the original sweep observation. These are
-synthetic checks only. The owner commands still refuse because retained ledger
-initialization, the guest drill and removal remain unfinished.
+synthetic checks only. The owner commands still refuse because the guest drill,
+billed reconciliation and removal remain unfinished.
 
 You must retain the booking before asking CloudFormation to create anything.
 `createManualFirstSetup` connects the first booking to the fixed `d570-first`
-stack and refuses a nonzero opening until prior-history import exists. It waits
+stack and currently refuses a nonzero opening. Before the first sitting, you
+need an explained list of existing account costs that fits beside the reserved
+setup bound. A second setup remains outside this first-run build. Creation waits
 for the exact staging stack to complete, checks its one-minute rule and target,
 enables that rule, and requires the sweep's own fresh heartbeat. Waiting is
 bounded, and a failure leaves the private booking and protection in place rather
@@ -244,6 +247,22 @@ successful output from `enable-rule`. Run
 `node --test --test-name-pattern='^(manual creation|creation CLI)' scripts/kubernetes-proof-control.test.mjs`
 for the local creation and refusal checks. Their responses are synthetic; no
 stack creation, protection activation or paid operation has been qualified on AWS.
+
+`initializeManualFirstSetup` connects creation to the existing ledger core.
+It keeps the bill observed before creation as the opening, even when a later
+bill has risen. Setup owns protection and the fixed allowances; only compute
+and disk are reserved again for the first drill. The original private booking
+still retains the full bound. Each month through the first drill's 31-day
+retention gets its opening before the active record is created, using S3's
+create-only writes. Existing history refuses rather than being replaced.
+Source and heartbeat checks surround storage waits; failed writes leave the
+booking, partial ledger and protection in place for removal. There is no separate
+setup-recovery path in this first build. The owner commands still refuse.
+
+Run `node --test --test-name-pattern='first ledger|first drill reservation' scripts/kubernetes-proof-control.test.mjs`
+for synthetic checks of the opening, total reservation and failed initialization.
+The opening comparison preserves an estimate; it does not establish final billed
+cost or qualify storage on AWS.
 
 Before reusing a setup, `inspectManualBudget` checks that protection and reads
 all retained ledger months through `inspectBudget`. It compares the account bill

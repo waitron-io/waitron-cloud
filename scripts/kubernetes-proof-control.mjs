@@ -8,7 +8,7 @@ import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
 import { renderManualSetup } from '../deploy/kubernetes/proof/setup.mjs';
 import policy from '../deploy/kubernetes/proof/policy.json' with { type: 'json' };
-import { inspectBudget, createS3LedgerStore } from './kubernetes-proof-budget.mjs';
+import { inspectBudget, initializeLedger, createS3LedgerStore } from './kubernetes-proof-budget.mjs';
 import { calculateManualCost } from '../deploy/kubernetes/proof/prices.mjs';
 
 const execute = promisify(execFile);
@@ -431,13 +431,53 @@ export async function createManualFirstSetup(options) {
       const protection = await inspectManualProtection({ ...options, stackId });
       await unchanged();
       check(protection.billing.microUsd <= booking.upperMicroUsd);
-      return { ...booking, ...protection };
+      return { ...booking, ...protection, openingBilling: booking.billing };
     } catch (error) {
       if (error.name !== 'NoSuchKey' || error.$metadata?.httpStatusCode !== 404) throw error;
       check(attempt < 7);
       await sleep(15000);
     }
   }
+}
+
+export async function initializeManualFirstSetup(options) {
+  const setup = await createManualFirstSetup(options);
+  const { checkout, now, clock = Date.now } = options;
+  async function unchanged() {
+    const before = clock(), source = await checkedMain(checkout), after = clock();
+    check(source.head === setup.head && source.tree === setup.tree
+      && Number.isSafeInteger(before) && Number.isSafeInteger(after) && before >= instant(now) && after >= before
+      && after < Date.parse(policy.accessExpiry) && iso(after).slice(0, 10) === now.slice(0, 10)
+      && after - Date.parse(setup.heartbeat.startedAt) < 120_000);
+  }
+  const aws = { async call(...args) {
+    await unchanged();
+    const result = await options.aws.call(...args);
+    await unchanged();
+    return result;
+  } };
+  const store = createManualLedgerStore({ bucket: setup.bucket, aws });
+  const scope = { account, region, stackId: setup.stackId };
+  // The setup booking already owns protection and fixed allowances; only machine and disk are booked per drill.
+  const components = Object.fromEntries(Object.entries(setup.cost.components).map(([name, row]) => [name,
+    { ...row, upperMicroUsd: ['compute', 'disk'].includes(name) ? row.upperMicroUsd : 0 }]));
+  const runMicroUsd = components.compute.upperMicroUsd + components.disk.upperMicroUsd;
+  const opening = { baselineMicroUsd: setup.openingBilling.microUsd, overheadMicroUsd: setup.upperMicroUsd - runMicroUsd,
+    digest: createHash('sha256').update(JSON.stringify({ billing: setup.openingBilling, cost: setup.cost })).digest('hex') };
+  const openings = {}, cursor = new Date(instant(now));
+  const until = instant(now) + 31 * 86400_000 + 300_000;
+  cursor.setUTCDate(1); cursor.setUTCHours(0, 0, 0, 0);
+  while (cursor.getTime() <= until) {
+    openings[cursor.toISOString().slice(0, 7)] = { ...opening };
+    cursor.setUTCMonth(cursor.getUTCMonth() + 1);
+  }
+  // This reconciles the first opening to its retained booking, never the eventual final bill.
+  const runEvidence = { observedAt: now, account, region, currency: 'USD', pricesReconciled: true,
+    billingReconciled: true, protectionHealthy: true, components, openings };
+  await initializeLedger({ scope, now, evidence: runEvidence, store });
+  const budget = await inspectBudget({ scope, now, billingMicroUsd: setup.billing.microUsd, store });
+  await unchanged();
+  return { ...setup, runEvidence, budget };
 }
 
 if (process.argv[1] && process.argv[1] !== '-' && await realpath(process.argv[1]) === fileURLToPath(import.meta.url)) {

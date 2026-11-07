@@ -3163,7 +3163,7 @@ implementation or production evidence.
   reviewed 320 MiB ceiling admits its current 270,696,312-byte EC2 catalogue
   without changing the 30-second deadline. Real public retrieval qualifies all
   four catalogues; it does not authenticate an account or reconcile billing. Qualification
-  of first-machine quantity and fixed-cost assumptions, billing reconciliation, retained-ledger initialization and setup recovery,
+  of first-machine quantity and fixed-cost assumptions, the explained opening account costs, billing reconciliation,
   real S3 behavior and live cleanup remain open; these inputs grant no spending or
   runnable owner setup. The manual controller preflight now checks a clean exact
   remote main, temporary staging identity, Stockholm and the current monthly
@@ -3177,7 +3177,7 @@ implementation or production evidence.
   before rendering. It rechecks main and date around each read; synthetic
   missing, contradictory, ambiguous and changing-input cases refuse. No live
   regional resource or quota claim follows from those checks. All four lifecycle
-  commands still refuse while retained-ledger initialization, launch and cleanup remain unbuilt.
+  commands still refuse while launch, billed reconciliation and cleanup remain unbuilt.
   The manual protection observer now resolves the exact stack's bucket, rule
   and expiry function, checks the enabled one-minute target and reads a fresh
   encrypted sweep heartbeat. Bounded private CLI downloads refuse partial
@@ -3199,7 +3199,7 @@ implementation or production evidence.
   the first complete proof on one disposable on-demand ARM m7g.2xlarge in staging
   462991287391/eu-north-1, within USD 10/month; production 949687825720 is forbidden.
   The owner approved temporary setup/repository/input access through
-  2027-02-28T23:59:00Z with an initial USD 0 baseline. The private setup template,
+  2027-02-28T23:59:00Z; the existing account costs must be explained within the cap. The private setup template,
   identity-checked renderer and bounded expiry engine now have synthetic checks
   and an unprivileged CI gate. The first manual renderer also omits GitHub trust
   and the launcher role while preserving private networking and closed ordinary
