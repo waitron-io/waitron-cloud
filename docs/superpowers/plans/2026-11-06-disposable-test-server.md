@@ -15,6 +15,19 @@ The estimates below start when the server address and access arrive, and assume 
 - [ ] Implement the minimal full-VM adapter with private Docker and per-turn disk/store. Preserve the real command's assertions, timeout and status after successful cleanup; cap a turn at 55 minutes. Start server management with systemd and the Mac controller with launchd. Pin the normal SSH host fingerprint on the Mac. Reboot the server and prove automatic recovery without console enrollment or replaying interrupted candidate processes.
 - [ ] Run the named owning test files explicitly with `node --test scripts/disposable-tests/leases.test.mjs scripts/disposable-tests/host.test.mjs scripts/disposable-tests/local.test.mjs`, then a real bounded PostgreSQL/Docker turn, cancellation and clean-next-guest check. Qualify temporary dependency access without copying a long-lived package token. Record exact snapshot/command/counts and cleanup. This delivers one usable local slot without any GitHub App or runner registration.
 
+### Mac ownership amendment: WATCHER 7 November 07:02 A
+
+The driver obtains Claude review of this committed amendment before implementation.
+
+- [ ] Update `deploy/disposable-tests/mac-controller.py` and `scripts/disposable-tests/{manual,owners,leases}.mjs`: require one nonblocking OS `flock` across every entry point, including direct `manual.mjs` calls. Node retains it after launcher death. An unlocked hand-opened descriptor cannot authorize work.
+- [ ] Remove PID/boot identity bookkeeping as owner authority. Drain the frozen helper before publication/switching; only while holding the kernel lock clear orphan `manual.lock`, `recovery.lock` and `ledger/lock`, including missing/invalid `owner.json`. A genuinely held lock returns 75 and preserves its guest.
+- [ ] Preserve durable leases, generation fencing, original command/assertions/status and independent exact-guest absence before release. Missing/corrupt committed ledger stays closed; distinguish intentional fresh bootstrap.
+- [ ] Ordinary occupied/unavailable admission returns 75 within 10 seconds. Move recovery to startup/background within existing 120-second cleanup; never foreground-wait 120 seconds.
+- [ ] Keep controller temporary files in an exclusively owned private state subtree; remove interrupted leftovers under the lock without touching global/other-lane paths. Retain named-variable stripping, no broader allowlist, and safe working directory.
+- [ ] Failing-first behavioral tests cover launcher death, forged descriptors, orphan gates, prompt75, damaged ledgers, bootstrap, private cleanup and no replay: run `node --test scripts/disposable-tests/{mac-recovery,manual-pipeline,manual,recovery,leases}.test.mjs`, then existing aggregate `node --test scripts/ci-disposable-local.test.mjs`. Replace old PID/boot/owner-schema checks with actual kernel-lock ownership checks; guest-absence/generation/deadline and unrelated checks remain at least as strict.
+
+Keep publication/reboot/capacity/CI gates. Add no record, ledger, protocol, deadline, approval step or permanent mutation test.
+
 ## 2. Several measured local slots: following 1–2 days
 
 **Files:** extend the same local budget/host tests; add `scripts/disposable-tests/benchmark.mjs` and its owning test. Keep GitHub admission out of this slice.
