@@ -3144,6 +3144,8 @@ implementation or production evidence.
   services, usage accounting, trials, failed payment and cancellation. Item 3 of
   [launch platform work](#launch-platform-work-in-priority-order); designed in
   [the billing design](superpowers/specs/2026-10-29-cloud-billing-design.md).
+  The [first account-page plan](superpowers/plans/2026-11-07-billing-account-pages-first-piece.md)
+  covers choosing the existing Connected trial; its build and payment-method pages remain open.
 - **Venue and node registration.** The agreed Waitron signup and connection journey is
   implemented locally. Planned handover, diagnostics, retention, key provisioning
   and rotation, deployment qualification and production activation remain open;

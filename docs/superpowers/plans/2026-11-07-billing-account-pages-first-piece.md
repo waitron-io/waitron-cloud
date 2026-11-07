@@ -13,11 +13,12 @@ remain open. No migration, new billing state, ledger, permission or trial rule.
 
 - [ ] **Store:** `packages/registration/src/billing-store.ts` adds
   `executeOn(client:PoolClient,scope:BillingScope,event:BillingEvent,command:BillingCommand):Promise<BillingReceipt>`
-  and `transitionOn` for `PermissionCommand`. Share existing input validation,
-  enrol whitelist/internal-source checks and locked apply path; retain the
-  transaction-owning wrappers. SAVEPOINT/RELEASE rejects use outside a transaction
-  (25P01); rethrow other errors. Document account→credential→membership→parent
-  lock order. Export only missing client-aware read helpers through `index.ts`.
+  and `transitionOn` for `PermissionCommand`. Share validation and private applyOn(client,…) logic, including enrol/internal-source
+  checks. Existing wrappers validate before borrowing a connection. New On methods
+  validate, run billing-trial-usage.ts’s SAVEPOINT/RELEASE guard (25P01 maps to
+  invalid_billing_input; rethrow others), then applyOn. Preserve enrol semantics.
+  Export readBillingPrice, readBillingVenue, readVenueHistory and effectiveVenueLevel;
+  mayStartTrial already exists.
 
 - [ ] **HTTP:** create `packages/account-http/src/billing-account.ts`; wire
   `app.ts`, `server.ts`, `config.ts` and `server-cli.ts`. Optional
@@ -26,22 +27,27 @@ remain open. No migration, new billing state, ledger, permission or trial rule.
   `test-venue-levels` mode. Reuse consent’s origin/CSRF, bounded bodies, cookies,
   rate limits, verified credentials and owner-membership locks.
   `POST /api/account/billing/read {}` returns
-  `{price:BillingPriceVersion|null,taxExclusive:true,venues:[{venueId,level,trial:TrialView|null,canStartTrial:boolean}]}`;
+  `{price:BillingPriceVersion|null,venues:[{venueId,level,trial:TrialView|null,canStartTrial:boolean}]}`;
   `/start-trial {venueId}` returns that view. Derive organisation/business from
   owned venues, including multiple businesses and no installation.
 
-- [ ] **Reads and writes:** read route is strictly read-only: use billing venue,
+- [ ] **Reads and writes:** read route is no writes in one ordinary transaction (not BEGIN READ ONLY): use billing venue,
   history, eligibility and effective-level helpers with the database’s UTC date;
   never call mutating `readVenuePermissions` or `ensure_business`. Missing prices
   make only price display unavailable; they never block a free trial.
-  Start inside existing `transaction`: authorize/lock owner, `executeOn(ensure_business)`,
+  Read venue→organisation/business without locking. Inside existing transaction, lock
+  account→session→credential→is_owner membership only; never pre-lock venue/business
+  parents as consent does. executeOn(ensure_business) takes parent locks,
   then `transitionOn(start_trial,level:'connected')`; reuse the store’s venue
   binding/test checks. Generate a fresh random internal event key per command.
   Read `clock_timestamp()` immediately before transition; derive `on` and
   `occurredAt` from that same reading. Final session recheck covers expiry during
   waits; held locks serialize revocation/owner removal. Any refusal leaves the
   transaction and rolls everything back; refresh in a separate read transaction.
-  Map IdentityError, BillingError and existing plain permission_denied refusals.
+  Use identical touch:false/CSRF proof for the final resolveSession. Map scope-not-found
+  to the same forbidden answer as non-owner; map IdentityError, BillingError and
+  existing plain permission_denied. canStartTrial is exactly test-environment
+  plus mayStartTrial, with no extra level/price gate.
   Never write anchor, connectedFrom, paid level/period, charge or payment method.
 
 - [ ] **Portal:** create `apps/portal/src/billing-{types,controller,screen}.ts`;
@@ -59,6 +65,6 @@ remain open. No migration, new billing state, ledger, permission or trial rule.
   assertion. Run named database tests via approved box’s `scripts/test-postgres.mjs`,
   build portal, inspect English/Spanish × light/dark ×390/1280, keyboard/axe/overflow,
   and typecheck; CI owns full suites. Update only own billing backlog lines and
-  stale guides, including the design’s approved-status header. Claude reads this
+  stale guides, including the design header’s approval citation to docs/backlog.md:733. Claude reads this
   plan before build and executes one whole-branch review before finish/land;
   inspect every current-head job. Cards get their own later plan.
