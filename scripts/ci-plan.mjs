@@ -13,10 +13,9 @@ import {scopeForRevisions, readGitBlobs} from './ci-package-revisions.mjs';
 import {assertRootInputWork, rootInputPlan} from './ci-root-inputs.mjs';
 import {describeLockChanges} from './ci-lock.mjs';
 import {lockPackageScope} from './ci-lock-selection.mjs';
-import {inertCIRecord, unreadMarkdown} from './ci-input-audit.mjs';
+import {unreadMarkdown} from './ci-input-audit.mjs';
 
 function mixedCodePaths(paths, base, head, git) {
-  paths = paths.filter(path => !inertCIRecord(path));
   const prose = paths.filter(unreadMarkdown);
   if (!prose.length || prose.length === paths.length) return paths;
   try {
@@ -68,13 +67,12 @@ function buildRevisionPlan(range, workspace, git, testFilesByPackage) {
     const {base, head} = range;
     const paths = git('diff', '--name-only', '--no-renames', '-z', base, head).split('\0');
     if (paths.pop() !== '' || !paths.length) throw Error('Incomplete or empty NUL path inventory');
-    if (paths.every(inertCIRecord)) return full('Only retired CI records changed: full suite');
     try {
       const documentation = documentationPlan(paths, base, head, git);
       if (documentation) return {packages: [], receipts: [], typecheck: false, reuse: null, documentation, reason: `Regular prose: ${paths.join(', ')}`};
     } catch { /* Unclassified saved prose keeps the full fallback. */ }
     try {
-      const scripts = scriptPlan(paths.filter(path => !inertCIRecord(path)), base, head, git);
+      const scripts = scriptPlan(paths, base, head, git);
       if (scripts) return {packages: [], receipts: [], typecheck: false, reuse: null, scripts, reason: `Owned root script: ${paths.join(', ')}`};
     } catch { /* Missing or nonregular script targets keep the full fallback. */ }
     const root = rootInputPlan(paths, base, head, git);
@@ -85,8 +83,7 @@ function buildRevisionPlan(range, workspace, git, testFilesByPackage) {
       return {...work, receipts: [...new Set([...work.receipts, ...root.receipts])].sort(), reuse: null,
         rootInputs: root.rootInputs, rootTests: root.rootTests || work.typecheck};
     }
-    const productPaths = paths.filter(path => !inertCIRecord(path));
-    if (productPaths.includes('pnpm-lock.yaml') && !productPaths.every(path => path === 'pnpm-lock.yaml' || workspace.some(pkg => path === `${pkg.directory}/package.json`))) {
+    if (paths.includes('pnpm-lock.yaml') && !paths.every(path => path === 'pnpm-lock.yaml' || workspace.some(pkg => path === `${pkg.directory}/package.json`))) {
       return full(`Shared or unknown paths: full suite (${paths.join(', ')}); ${describeLockChanges(base, head, git)}`);
     }
     return {...packageWorkForPaths(mixedCodePaths(paths, base, head, git), workspace, base, head, git, testFilesByPackage), reuse: null};

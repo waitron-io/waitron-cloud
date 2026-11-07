@@ -1,1 +1,0 @@
-{"version":1,"path":"scripts/disposable-tests/ssh.test.mjs","state":"present","mode":"100644","type":"blob","objectId":"93d8c47c1cece404af0e2dc8b6cd2558315fb2ce","registryObjectId":"57d2bb746310618826a8c56273cb95c6af7ab870","reviewer":"Codex","reference":"D592 SSH guard: root imports the owning test; the SSH fixture only captures arguments and creates no prose reader"}

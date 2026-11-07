@@ -1,21 +1,12 @@
 import assert from 'node:assert/strict';
 import {execFileSync} from 'node:child_process';
-import {createHash} from 'node:crypto';
 import {mkdtempSync, mkdirSync, writeFileSync, rmSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import test from 'node:test';
 import {createPlan} from './ci-plan.mjs';
 
-const policy = 'scripts/ci-input-audit.json';
-const completeAudit = values => ({
-  version: 1,
-  docsInputSha256: '1'.repeat(64), identityInputSha256: '2'.repeat(64),
-  gatewayInputSha256: '3'.repeat(64), lockInputSha256: '4'.repeat(64),
-  manifests: {}, ...values,
-});
 const dependencyFields = ['dependencies', 'devDependencies', 'optionalDependencies', 'peerDependencies'];
-const hash = text => createHash('sha256').update(text).digest('hex');
 
 function fixture(run) {
   const root = mkdtempSync(join(tmpdir(), 'cloud-manifest-lock-'));
@@ -30,15 +21,7 @@ function fixture(run) {
     for (const [directory, manifest] of Object.entries(manifests)) write(`${directory}/package.json`, JSON.stringify(manifest) + '\n');
     write('pnpm-lock.yaml', Object.entries(lock).map(([key, value]) => `${key}: ${JSON.stringify(value)}\n`).join(''));
   };
-  const audit = () => {
-    git('add', '.');
-    const entries = git('ls-files', '--stage', '-z').split('\0').filter(Boolean).map(entry => entry.replace(/ 0\t/, '\t').replace(/^([0-7]+) /, '$1 blob '));
-    const projected = Object.fromEntries(Object.entries(manifests).map(([directory, manifest]) => [
-      `${directory}/package.json`, hash(JSON.stringify(Object.fromEntries(Object.entries(manifest).filter(([key]) => !dependencyFields.includes(key)).sort(([a], [b]) => a.localeCompare(b, 'en'))))),
-    ]));
-    const inputs = entries.filter(entry => !['pnpm-lock.yaml', policy, ...Object.keys(projected)].includes(entry.split('\t')[1]));
-    write(policy, JSON.stringify(completeAudit({lockInputSha256: hash(inputs.map(entry => entry + '\0').join('')), manifests: projected})) + '\n');
-  };
+
   const add = (directory = 'packages/catalogue', kind = 'dependencies', name = 'adapter') => {
     manifests[directory][kind] = {...manifests[directory][kind], [name]: '^1.0.0'};
     const lockKind = kind === 'peerDependencies' ? 'dependencies' : kind;
@@ -55,8 +38,8 @@ function fixture(run) {
     write('packages/page/test/reader.mjs', "import '../../../scripts/page-fixture.mjs';\n");
     write('scripts/page-fixture.mjs', "export const catalogue = '../packages/catalogue/src/index.ts';\n");
     write('packages/catalogue/src/index.ts', 'export const price = 1;\n');
-    save(); audit();
-    run({git, write, commit, lock, manifests, save, audit, add, plan});
+    save();
+    run({git, write, commit, lock, manifests, save, add, plan});
   } finally {rmSync(root, {recursive: true, force: true});}
 }
 
@@ -75,11 +58,11 @@ test('manifest and resolved dependency additions select the importer and saved h
   });
 });
 
-test('dependency removal retains former consumers from both manifests', () => fixture(({manifests, lock, save, audit, add, commit, plan}) => {
+test('dependency removal retains former consumers from both manifests', () => fixture(({manifests, lock, save, add, commit, plan}) => {
   add('packages/catalogue');
   manifests['packages/unrelated'].dependencies = {catalogue: 'workspace:*'};
   lock.importers['packages/unrelated'].dependencies = {catalogue: {specifier: 'workspace:*', version: 'link:../catalogue'}};
-  save(); audit(); const base = commit();
+  save(); const base = commit();
   delete manifests['packages/catalogue'].dependencies;
   delete manifests['packages/unrelated'].dependencies;
   lock.importers['packages/catalogue'] = {}; lock.importers['packages/unrelated'] = {}; lock.packages = {}; lock.snapshots = {};
@@ -110,18 +93,10 @@ test('scripts, package metadata, root inputs and unrelated paths cannot bypass t
   });
 });
 
-test('real manifest refusals survive independently of retired projection records', () => fixture(({git, commit, add, save, plan}) => {
+test('nonregular and unavailable saved manifests retain full work', () => fixture(({git, commit, add, save, plan}) => {
   const base = commit(); add(); save(); const head = commit();
-  for (const sha of [base, head]) for (const fault of ['digest', 'missing', 'extra', 'version', 'symlink', 'blob']) {
+  for (const sha of [base, head]) for (const fault of ['symlink', 'blob']) {
     const read = (...args) => {
-      if (args[0] === 'show' && args[1] === `${sha}:${policy}`) {
-        const audit = JSON.parse(git(...args));
-        if (fault === 'digest') audit.manifests['packages/catalogue/package.json'] = '0'.repeat(64);
-        if (fault === 'missing') delete audit.manifests['packages/catalogue/package.json'];
-        if (fault === 'extra') audit.manifests['packages/unknown/package.json'] = '0'.repeat(64);
-        if (fault === 'version') audit.version = 3;
-        return JSON.stringify(audit);
-      }
       if (fault === 'symlink' && args[0] === 'ls-tree' && args.includes(sha)) return git(...args).replace(/100644(?= blob [a-f0-9]+\tpackages\/catalogue\/package.json)/, '120000');
       if (fault === 'blob' && args[0] === 'show' && args[1] === `${sha}:packages/catalogue/package.json`) throw Error('Missing manifest');
       return git(...args);

@@ -22,8 +22,8 @@ empty work and incomplete job results. Large markers retain full work.
 
 ## Review the actual readers
 
-You do not renew root records. The old JSON registry, review records and their
-history no longer grant or refuse work. The [documentation guide](ci-documentation-audit.md)
+Root ownership comes from the two-row constant, not generated records. The old
+JSON registry, records and writers have been removed. The [documentation guide](ci-documentation-audit.md)
 explains this accepted trade-off. When a reader changes, trace imports, copied
 files, scans and child commands and update its ownership tests in the same PR.
 Ordinary review now supplies that pause.

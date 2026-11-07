@@ -139,7 +139,7 @@ For the whole local stack, follow [local-deployment.md](docs/local-deployment.md
   says nothing about what was not selected.
 - **The nightly run at 03:17 UTC runs everything** ([ci-nightly.md](docs/ci-nightly.md)). Start one with
   `gh workflow run nightly.yml --ref main`.
-- **Review changed code's actual readers and test owners; do not renew generated CI review records.**
+- **Review changed code's actual readers and test owners.**
   Follow [ci-root-input-ownership.md](docs/ci-root-input-ownership.md) and
   [ci-documentation-audit.md](docs/ci-documentation-audit.md). The selectors keep known owners and
   full work for unknown inputs; the summary requires every selected job. Review of new readers is manual.

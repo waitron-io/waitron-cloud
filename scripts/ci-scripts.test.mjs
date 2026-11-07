@@ -1,6 +1,5 @@
 import assert from 'node:assert/strict';
 import {execFileSync, spawnSync} from 'node:child_process';
-import {createHash} from 'node:crypto';
 import {chmodSync, mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync, unlinkSync, symlinkSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join, resolve} from 'node:path';
@@ -12,13 +11,7 @@ import {assertSummary} from './ci-summary.mjs';
 const workspace = loadWorkspace();
 const helper = 'scripts/identity-upstream.mjs';
 const checks = 'scripts/identity-upstream.test.mjs';
-const policy = 'scripts/ci-input-audit.json';
-const completeAudit = values => ({
-  version: 1,
-  docsInputSha256: '1'.repeat(64), identityInputSha256: '2'.repeat(64),
-  gatewayInputSha256: '3'.repeat(64), lockInputSha256: '4'.repeat(64),
-  manifests: {}, ...values,
-});
+
 const runner = resolve('scripts/ci-scripts.mjs');
 
 function fixture(run) {
@@ -32,11 +25,6 @@ function fixture(run) {
     put(checks, 'import assert from "node:assert/strict"; import {result} from "./identity-upstream.mjs"; assert.equal(result, 1);\n');
     put('scripts/consumer.mjs', 'console.log("unrelated");\n');
     put('docs/backlog.md', '# Backlog\n');
-    const initial = commit();
-    // Independent fixture certificate: exactly these two other files are pinned.
-    const rows = git('ls-tree', '-rz', '--full-tree', initial).split('\0').filter(row =>
-      ['docs/backlog.md', 'scripts/consumer.mjs'].includes(row.split('\t')[1]));
-    put(policy, JSON.stringify(completeAudit({identityInputSha256: createHash('sha256').update(rows.map(row => row + '\0').join('')).digest('hex')})) + '\n');
     const base = commit();
     const plan = (head, old = base, gitOverride = git) => createPlan({pull_request: {base: {sha: old}, head: {sha: head}}}, {sha: head}, workspace, gitOverride, () => {throw Error('no API');});
     const execute = selected => {
@@ -89,18 +77,6 @@ test('mixed paths, missing checks, symbolic links and executable modes cannot ea
     if (change === 'executable') {git('add', '-A'); git('update-index', '--chmod=+x', helper); git('commit', '-sm', 'Executable input');}
     const head = change === 'executable' ? git('rev-parse', 'HEAD').trim() : commit();
     assert.equal(plan(head).packages.length, 29, change);
-  });
-});
-
-test('retired certificate states do not suppress the owning script check', () => {
-  for (const change of ['missing', 'malformed', 'stale', 'version']) fixture(({root, put, commit, plan}) => {
-    if (change === 'missing') unlinkSync(join(root, policy));
-    else put(policy, change === 'malformed' ? '{' : JSON.stringify(completeAudit({version: change === 'version' ? 2 : 1, identityInputSha256: '0'.repeat(64)})));
-    const old = commit();
-    put(helper, 'export const result = 1; // edited\n');
-    const selected = plan(commit(), old);
-    assert.equal(selected.packages.length, 0, change);
-    assert.match(selected.reason, /identity-upstream.mjs/);
   });
 });
 
@@ -162,37 +138,13 @@ test('summary requires the root script job and rejects missing, duplicate, unfin
 test('old-only stale evidence and forged incomplete inventories cannot omit consumers', () => fixture(({git, put, commit, plan, base}) => {
   put('scripts/consumer.mjs', 'readFileSync("scripts/identity-upstream.mjs");\n');
   const stale = commit();
-  const rows = git('ls-tree', '-rz', '--full-tree', stale).split('\0').filter(row => ['docs/backlog.md', 'scripts/consumer.mjs'].includes(row.split('\t')[1]));
-  put(policy, JSON.stringify(completeAudit({identityInputSha256: createHash('sha256').update(rows.map(row => row + '\0').join('')).digest('hex')})) + '\n');
-  const certified = commit();
   put(helper, 'export const result = 1; // change\n');
   const head = commit();
-  assert.equal(plan(head, certified).packages.length, 0, 'new audit is valid');
-  assert.equal(plan(head, stale).packages.length, 0, 'retired records have no authority');
+  assert.equal(plan(head, stale).packages.length, 0, 'the actual range retains its owning script check');
   for (const transform of [text => text.replace(/[^\0]*\tscripts\/identity-upstream.test.mjs\0/, ''), text => text + 'malformed\0']) {
-    assert.equal(plan(head, certified, (...args) => args[0] === 'ls-tree' ? transform(git(...args)) : git(...args)).packages.length, 29);
+    assert.equal(plan(head, stale, (...args) => args[0] === 'ls-tree' ? transform(git(...args)) : git(...args)).packages.length, 29);
   }
   assert.equal(plan(head, base).packages.length, 29, 'mixed diff');
-}));
-
-test('unreadable or corrupted retired records do not affect script selection', () => fixture(({git, put, commit, plan, base}) => {
-  put(helper, 'export const result = 1; // edited\n');
-  const head = commit();
-  for (const sha of [base, head]) {
-    for (const failure of ['missing', 'version', 'digest']) {
-      const read = (...args) => {
-        if (args[0] === 'show' && args[1] === `${sha}:${policy}`) {
-          if (failure === 'missing') throw Error('Object unavailable');
-          const audit = JSON.parse(git(...args));
-          if (failure === 'version') audit.version = 2;
-          else audit.identityInputSha256 = '0'.repeat(64);
-          return JSON.stringify(audit);
-        }
-        return git(...args);
-      };
-      assert.equal(plan(head, base, read).packages.length, 0, `${sha}: ${failure}`);
-    }
-  }
 }));
 
 test('missing or nonregular base helpers cannot hide behind a restored regular head', () => {
@@ -211,7 +163,7 @@ test('missing or nonregular base helpers cannot hide behind a restored regular h
   });
 });
 
-test('the executed runner checks real script work independently of retired certificates', () => fixture(({put, commit, plan, execute}) => {
+test('the executed runner checks real script work', () => fixture(({put, commit, plan, execute}) => {
   put('scripts/consumer.mjs', 'readFileSync("scripts/identity-upstream.mjs");\n');
   const base = commit();
   put(helper, 'export const result = 1; // edited\n');
@@ -226,9 +178,6 @@ test('executed planner emits the script-only job and summary consumes its needs 
   put('package.json', JSON.stringify({name: 'fixture', private: true}));
   put('pnpm-workspace.yaml', 'packages:\n  - packages/*\n');
   for (const name of ['one', 'two']) put(`packages/${name}/package.json`, JSON.stringify({name, scripts: {test: 'node --test'}}));
-  const initial = commit();
-  const rows = git('ls-tree', '-rz', '--full-tree', initial).split('\0').filter(row => row && ![helper, checks, policy].includes(row.split('\t')[1]));
-  put(policy, JSON.stringify(completeAudit({identityInputSha256: createHash('sha256').update(rows.map(row => row + '\0').join('')).digest('hex')})) + '\n');
   const base = commit();
   put(helper, 'export const result = 1; // edited\n');
   const head = commit();

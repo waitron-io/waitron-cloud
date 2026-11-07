@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import {execFileSync} from 'node:child_process';
 import {readFileSync, readdirSync, lstatSync} from 'node:fs';
 import {pathToFileURL} from 'node:url';
-import {readInputInventory, inertCIRecord, unreadMarkdown} from './ci-input-audit.mjs';
+import {readInputInventory, unreadMarkdown} from './ci-input-audit.mjs';
 import {receiptSuites} from './ci-scope.mjs';
 import {packageMembers} from './ci-package-groups.mjs';
 import {readGitBlobs} from './ci-package-revisions.mjs';
@@ -77,7 +77,6 @@ export function rootInputPlan(paths, base, head, git) {
     for (const path of paths) {
       const entry = inputs.get(path);
       if (entry) {selected.set(entry.id, entry); continue;}
-      if (inertCIRecord(path)) continue;
       if (unreadMarkdown(path) && trees.every(tree => {
         const row = tree.entries.find(e => e.path === path);
         return !row || row.mode === '100644' && row.type === 'blob';

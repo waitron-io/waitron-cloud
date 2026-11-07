@@ -29,10 +29,6 @@ export function copyReceiptFixtureInput(path, target) {
 }
 
 export function seedReceiptDependencyInputs(root) {
-  // Saved receipt certificates describe the historical v1 tree. Live v2 volume
-  // belongs to the complete-candidate controls, not this fixed historical input.
-  rmSync(join(root, 'scripts/ci-input-audit-v2.json'), {force: true});
-  rmSync(join(root, 'scripts/ci-input-audit.d'), {recursive: true, force: true});
   // Positive omissions require the saved audited workspace's exact membership.
   for (const parent of ['apps', 'packages']) {
     for (const entry of readdirSync(join(root, parent), {withFileTypes: true})) {

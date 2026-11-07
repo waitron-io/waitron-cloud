@@ -1,11 +1,10 @@
 import assert from 'node:assert/strict';
-import {execFileSync, spawnSync} from 'node:child_process';
-import {writeFileSync, readFileSync, rmSync, mkdtempSync, unlinkSync} from 'node:fs';
-import {tmpdir} from 'node:os';
+import {spawnSync} from 'node:child_process';
+import {writeFileSync, readFileSync} from 'node:fs';
 import {join} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import test from 'node:test';
-import {fixture, recordPath} from './ci-input-audit-v2-fixture.mjs';
+import {selectionFixture as fixture} from './fixtures/ci-selection.mjs';
 import {createPlan} from './ci-plan.mjs';
 import {documentationPlan, checkDocumentation} from './ci-docs.mjs';
 import {scriptPlan} from './ci-scripts.mjs';
@@ -27,7 +26,7 @@ function consumerFixture(run) {
     const {root, git, put, commit} = context;
     put('packages/other/package.json', '{"name":"other","scripts":{"test":"node --test"}}\n');
     put('packages/other/src/index.mjs', 'export const value = 1;\n');
-    git('add', '-A'); ok(node(root, './ci-input-audit.mjs', ['--write-staged', '--mode', 'all']));
+    git('add', '-A');
     const base = commit();
     const plan = head => createPlan(event(base, head), {sha: head}, workspace, git, () => {throw Error('No network');});
     const cliPlan = head => {
@@ -41,7 +40,7 @@ function consumerFixture(run) {
   });
 }
 
-test('v2 preserves isolated document and root-script plans through actual CLI adapters', () => consumerFixture(({root, git, put, commit, base, plan, cliPlan}) => {
+test('isolated document and root-script plans stay narrow through actual CLI adapters', () => consumerFixture(({root, git, put, commit, base, plan, cliPlan}) => {
   put('README.md', '# Revised prose\n'); const head = commit();
   for (const selected of [plan(head), cliPlan(head)]) {
     assert.deepEqual(selected.packages, []); assert.equal(selected.typecheck, false); assert.ok(selected.documentation);
@@ -56,38 +55,36 @@ test('v2 preserves isolated document and root-script plans through actual CLI ad
   }
 }));
 
-test('v2 stale docs fail the required gate while retaining full work', () => consumerFixture(({root, put, commit, cliPlan}) => {
+test('an unknown reader retains full work and both proofs', () => consumerFixture(({root, put, commit, cliPlan}) => {
   put('scripts/new-reader.mjs', 'export const reader = true;\n'); const head = commit();
   const selected = cliPlan(head); assert.equal(selected.packages.length, 2); assert.equal(selected.typecheck, true);
-  assert.ok(selected.receipts.length > 0); bad(node(root, './ci-input-audit.mjs', ['--check-mode', 'docs', head]));
+  assert.ok(selected.receipts.length > 0);
   const output = join(root, 'proof-output'); writeFileSync(output, '');
   ok(node(root, './ci-docs.mjs', ['--plan'], {GITHUB_OUTPUT: output, GITHUB_EVENT_PATH: join(root, '.git', 'event.json')}));
   assert.equal(readFileSync(output, 'utf8'), 'required=true\n');
 }));
 
-test('v2 mixed evidence does not widen actual package ownership', () => consumerFixture(({root, git, put, commit, base, plan}) => {
+test('mixed prose selects actual package ownership', () => consumerFixture(({root, git, put, commit, base, plan}) => {
   put('packages/stock/src/index.mjs', 'export const value = 2;\n'); put('docs/backlog.md', '# Backlog change\n'); git('add', '-A');
-  ok(node(root, './ci-input-audit.mjs', ['--write-staged'])); const docsOnlyRenewal = commit();
-  assert.deepEqual(plan(docsOnlyRenewal).packages.map(row => row.package), ['stock'], 'Retired peer state does not widen the saved package graph');
-  ok(node(root, './ci-input-audit.mjs', ['--write-staged', '--mode', 'all'])); const head = commit();
+  const head = commit();
   assert.deepEqual(plan(head).packages.map(row => row.package), ['stock']);
-  ok(node(root, './ci-input-audit.mjs', ['--check-mode', 'docs', head]));
   assert.notEqual(head, base);
 }));
 
-test('retired base state does not prevent later prose selection', () => consumerFixture(({root, git, put, commit, plan}) => {
-  put('packages/stock/src/index.mjs', 'export const value = 2;\n'); const stale = commit();
-  git('add', '-A'); ok(node(root, './ci-input-audit.mjs', ['--write-staged', '--mode', 'all'])); const renewed = commit();
-  put('README.md', '# Prose child\n'); const head = commit();
-  assert.ok(documentationPlan(['README.md'], stale, head, git));
-  const proseOnly = documentationPlan(['README.md'], renewed, head, git); assert.ok(proseOnly);
+test('a merged main tree admits later prose and retains the no-event full fallback', () => consumerFixture(({git, put, commit, base}) => {
+  git('checkout', '-b', 'reader-change', base); put('scripts/first-reader.mjs', 'export const first = true;\n'); const first = commit();
+  git('checkout', 'main'); put('scripts/second-reader.mjs', 'export const second = true;\n'); commit();
+  git('merge', '--no-ff', '--no-edit', '--signoff', first); const merged = git('rev-parse', 'HEAD').trim();
+  put('README.md', '# Prose child on merged main\n'); const head = commit();
+  const proseOnly = documentationPlan(['README.md'], merged, head, git); assert.ok(proseOnly);
   assert.equal(checkDocumentation({documentation: proseOnly}, git), 1);
-  bad(node(root, './ci-input-audit.mjs', ['--check', head])); ok(node(root, './ci-input-audit.mjs', ['--check-mode', 'docs', head]));
+  const selected = createPlan(event(merged, head), {sha: head}, workspace, git, () => {throw Error('No API');});
+  assert.ok(selected.documentation); assert.equal(selected.typecheck, false);
   const main = createPlan({}, {sha: head}, workspace, git, () => {throw Error('No API');});
   assert.equal(main.packages.length, 2); assert.equal(main.typecheck, true);
 }));
 
-test('v2 owning script behavior still fails with valid audit evidence', () => consumerFixture(({root, git, put, commit, base, cliPlan}) => {
+test('the owning script still rejects invalid behavior and syntax', () => consumerFixture(({root, git, put, commit, base, cliPlan}) => {
   put('scripts/identity-upstream.test.mjs', "import assert from 'node:assert/strict';\nassert.fail('owning behavior failed');\n");
   const head = commit(); const selected = cliPlan(head); assert.ok(selected.scripts);
   const result = node(root, './ci-scripts.mjs', [], {CI_PLAN: JSON.stringify(selected)});
@@ -97,53 +94,14 @@ test('v2 owning script behavior still fails with valid audit evidence', () => co
   assert.ok(scriptPlan(['scripts/identity-upstream.mjs'], base, invalid, git));
 }));
 
-test('v2 refuses shallow history and accepts the unchanged revision after full fetch', () => consumerFixture(({root, git, base}) => {
-  const clone = mkdtempSync(join(tmpdir(), 'cloud-v2-shallow-'));
-  try {
-    execFileSync('git', ['clone', '--quiet', '--depth=1', `file://${root}`, clone], {stdio: 'pipe'});
-    bad(node(clone, './ci-input-audit.mjs', ['--check-mode', 'docs', base]));
-    const result = node(clone, './ci-input-audit.mjs', ['--check-mode', 'docs', base]); assert.match(result.stderr, /complete history/);
-    execFileSync('git', ['-C', clone, 'fetch', '--unshallow'], {stdio: 'pipe'});
-    ok(node(clone, './ci-input-audit.mjs', ['--check-mode', 'docs', base]));
-  } finally {rmSync(clone, {recursive: true, force: true});}
-}));
-
-test('v2 lock selection retains types and every receipt with both immutable lock audits', () => consumerFixture(({root, git, put, commit}) => {
+test('lock selection retains types and every receipt from both saved revisions', () => consumerFixture(({root, git, put, commit}) => {
   const lock = {lockfileVersion: '9.0', settings: {autoInstallPeers: true, excludeLinksFromLockfile: false},
     importers: {'.': {}, 'packages/stock': {dependencies: {adapter: {specifier: '^1', version: '1.0.0'}}}, 'packages/other': {}},
     packages: {'adapter@1.0.0': {resolution: {integrity: 'sha512-YQ=='}}}, snapshots: {'adapter@1.0.0': {}}};
   const save = () => put('pnpm-lock.yaml', Object.entries(lock).map(([key, value]) => `${key}: ${JSON.stringify(value)}\n`).join(''));
-  save(); git('add', '-A'); ok(node(root, './ci-input-audit.mjs', ['--write-staged', '--mode', 'all'])); const base = commit();
+  save(); git('add', '-A'); const base = commit();
   lock.packages['adapter@1.0.0'].resolution.integrity = 'sha512-Yw=='; save(); const head = commit();
   const selected = createPlan(event(base, head), {sha: head}, workspace, git, () => {throw Error('No API');});
   assert.deepEqual(selected.packages.map(row => row.package), ['stock']); assert.equal(selected.typecheck, true);
   assert.equal(selected.receipts.length, 6); assert.match(selected.reason, /saved package selection/);
-}));
-
-test('both historical record versions leave real range selection authoritative', () => consumerFixture(({root, git, put, commit}) => {
-  git('checkout', '--orphan', 'historical-v1');
-  rmSync(join(root, 'scripts/ci-input-audit.d'), {recursive: true}); unlinkSync(join(root, 'scripts/ci-input-audit-v2.json'));
-  const staleV1 = commit(); put('README.md', '# Changed prose\n'); git('add', '-A');
-  ok(node(root, './ci-input-audit.mjs', ['--init-v2-staged'])); const freshV2 = commit();
-  ok(node(root, './ci-input-audit.mjs', ['--check-mode', 'docs', freshV2]));
-  for (const [base, head] of [[staleV1, freshV2], [freshV2, staleV1]]) {
-    assert.ok(documentationPlan(['README.md'], base, head, git));
-    const selected = createPlan(event(base, head), {sha: head}, workspace, git, () => {throw Error('No API');});
-    assert.equal(selected.packages.length, head === freshV2 ? 0 : 2);
-    assert.equal(selected.typecheck, head !== freshV2);
-  }
-}));
-
-test('v2 shallow refusal cannot hide record deletion behind unrelated children and a merge', () => consumerFixture(({root, git, put, commit, base}) => {
-  git('rm', 'packages/stock/src/index.mjs', recordPath('docs', 'packages/stock/src/index.mjs'));
-  commit(); put('README.md', '# Unrelated child after deletion\n'); const deleted = commit();
-  git('checkout', '-b', 'side-before-merge', base); put('docs/backlog.md', '# Independent side\n'); commit();
-  git('merge', '--no-ff', '--no-edit', '--signoff', deleted); const head = git('rev-parse', 'HEAD').trim();
-  const clone = mkdtempSync(join(tmpdir(), 'cloud-v2-hidden-deletion-'));
-  try {
-    execFileSync('git', ['clone', '--quiet', '--depth=1', `file://${root}`, clone], {stdio: 'pipe'});
-    const shallow = node(clone, './ci-input-audit.mjs', ['--check-mode', 'docs', head]); bad(shallow); assert.match(shallow.stderr, /complete history/);
-    execFileSync('git', ['-C', clone, 'fetch', '--unshallow'], {stdio: 'pipe'});
-    const complete = node(clone, './ci-input-audit.mjs', ['--check-mode', 'docs', head]); bad(complete); assert.match(complete.stderr, /retained/);
-  } finally {rmSync(clone, {recursive: true, force: true});}
 }));

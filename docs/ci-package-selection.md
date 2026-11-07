@@ -43,8 +43,8 @@ These are package-job counts, not total jobs, test counts or measured durations.
 | Package-selection projection, excluding prose and audit metadata | 410 | 338 |
 
 The complete planner saved no jobs in this historical sample. At that revision,
-audit and reader refusals retained full work. Generated review records are now
-[retired](ci-documentation-audit.md#review-readers-instead-of-renewing-records).
+audit and reader refusals retained full work. Generated review records and their writers have been
+[removed](ci-documentation-audit.md#review-readers-instead-of-renewing-records).
 The projection isolated package selection; it did not prove exemptions or a CI saving. Only four projected
 diffs change: #943, 28 to 5; #939, 28 to 1; #930, 28 to 27; and #918, 28 to 7.
 The other 46 retain their projected counts. D571's reader-boundary and shared-path

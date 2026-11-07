@@ -39,8 +39,7 @@ before(() => {
   const real = (...args) => execFileSync('git', ['-c', 'maintenance.auto=false', ...args], {cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe']});
   const put = (path, text) => {mkdirSync(join(root, path, '..'), {recursive: true}); writeFileSync(join(root, path), text);};
   real('init', '-b', 'main'); real('config', 'user.name', 'CI test'); real('config', 'user.email', 'ci@example.test');
-  cpSync(new URL('./', import.meta.url), join(root, 'scripts'), {recursive: true,
-    filter: path => !['ci-input-audit.d', 'ci-root-review.d', 'ci-root-inputs.json'].some(name => String(path).includes(name))});
+  cpSync(new URL('./', import.meta.url), join(root, 'scripts'), {recursive: true});
   cpSync(new URL('../.github', import.meta.url), join(root, '.github'), {recursive: true});
   cpSync(new URL('../package.json', import.meta.url), join(root, 'package.json'));
   cpSync(new URL('../pnpm-lock.yaml', import.meta.url), join(root, 'pnpm-lock.yaml'));
@@ -165,8 +164,6 @@ for (const kind of ['docs', 'scoped']) {
       variantGit.readBlobs = ids => readGitBlobs(ids, input => execFileSync('git', ['cat-file', '--batch'], {cwd: directory, input}));
       variantGit('config', 'user.name', 'CI source test'); variantGit('config', 'user.email', 'ci@example.test');
       variantGit('checkout', '--detach', base);
-      execFileSync(process.execPath, ['scripts/ci-input-audit.mjs', '--write-staged'], {cwd: directory, stdio: 'pipe'});
-      variantGit('add', '.'); variantGit('commit', '-qsm', 'Audited source baseline');
       const originalBase = variantGit('rev-parse', 'HEAD').trim();
       const path = kind === 'docs' ? 'docs/guide.md' : 'packages/operations/test/scoped.test.ts';
       mkdirSync(join(directory, path, '..'), {recursive: true});
@@ -659,7 +656,7 @@ test('expired, forged, duplicate or unavailable artifacts and all failed reads r
 });
 
 test('historical selector and native directory inventories must match the running reviewed code', () => {
-  for (const path of ['scripts/ci-plan.mjs', 'scripts/ci-input-audit-records.mjs', 'scripts/cloud-cost/conformance.mjs', 'package.json', 'pnpm-lock.yaml']) {
+  for (const path of ['scripts/ci-plan.mjs', 'scripts/ci-input-audit.mjs', 'scripts/cloud-cost/conformance.mjs', 'package.json', 'pnpm-lock.yaml']) {
     const f = fixture();
     const changed = (...args) => {
       let result = git(...args);
@@ -750,7 +747,6 @@ test('fresh main checkout fetches exact PR proof objects without changing HEAD',
     assert.equal(freshGit('rev-parse', `${execution}^{commit}`).trim(), execution);
   } finally {rmSync(directory, {recursive: true, force: true});}
 });
-
 
 function sourceWithRecord(record) {
   const f = fixture(), forged = archive(createPlanEvidence(record));
@@ -882,7 +878,6 @@ test('full readback preserves an invalid range and still requires every native c
   currentJobs = currentJobs.filter(job => job.name !== 'verify (guards-3)');
   assert.throws(() => readbackDecision(decision, {api: f.api, git, now: f.now}), /Incomplete main job inventory/);
 });
-
 
 test('source qualification and reused main readback require every page of a legitimate 43-job source', () => {
   const directory = mkdtempSync(join(tmpdir(), 'cloud-reuse-paginated-'));

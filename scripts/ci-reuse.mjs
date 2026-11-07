@@ -71,7 +71,7 @@ export function assertReviewedInputs(head, git) {
     for (const entry of readdirSync(new URL(`../${path}/`, import.meta.url), {withFileTypes: true})) {
       const child = `${path}/${entry.name}`;
       if (entry.isDirectory()) {
-        if (!['node_modules', '.git', 'ci-input-audit.d'].includes(entry.name)) walk(child);
+        if (!['node_modules', '.git'].includes(entry.name)) walk(child);
       } else if (executable(child)) {
         assert.ok(entry.isFile(), `Nonregular reviewed executable: ${child}`);
         const bytes = readFileSync(new URL(`../${child}`, import.meta.url));

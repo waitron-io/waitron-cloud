@@ -1,5 +1,4 @@
 import assert from 'node:assert/strict';
-import {createHash} from 'node:crypto';
 import {execFileSync, spawnSync} from 'node:child_process';
 import {appendFileSync, cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
@@ -7,11 +6,8 @@ import {join} from 'node:path';
 import test from 'node:test';
 import {parseLock} from './ci-lock.mjs';
 
-const policyPath = 'scripts/ci-input-audit.json';
-const manifestPaths = ['apps/portal/package.json', ...['account-http', 'backups',  'identity',
-  'operations', 'registration', 'remote-access', 'translation', 'ui-smoke'].map(name => `packages/${name}/package.json`)];
+const unknownPath = 'scripts/unknown.json';
 const receipts = ['test:two-venue-milestone-receipt', 'test:backup-capacity', 'test:public-gateway-limits', 'test:local-stack', 'test:database-recovery-receipt', 'test:cloud-cost'];
-const hash = value => createHash('sha256').update(value).digest('hex');
 
 function completeFixture(run) {
   const root = mkdtempSync(join(tmpdir(), 'cloud-all-audits-'));
@@ -22,82 +18,19 @@ function completeFixture(run) {
     {cwd: root, env: {...process.env, GITHUB_EVENT_NAME: 'pull_request',
       CI_FULL: 'false', CI_CALLED: 'false', CI_FORCE_FULL: 'false', CI_WORKFLOW_INPUTS: '{}', CI_RECORD_EVIDENCE: 'false', ...env}, encoding: 'utf8', timeout: 60_000});
   const commit = () => {git('add', '-A'); git('commit', '--allow-empty', '-s', '-qm', 'Save complete audit control'); return git('rev-parse', 'HEAD').trim();};
-  const renew = () => {
-    git('add', '-A');
-    const result = node('scripts/ci-input-audit.mjs', ['--write-staged']);
-    assert.equal(result.status, 0, result.stdout + result.stderr);
-    const content = read(policyPath);
-    git('add', '--', policyPath);
-    assert.equal(node('scripts/ci-input-audit.mjs', ['--write-staged']).status, 0);
-    assert.equal(read(policyPath), content);
-    assert.equal(git('diff', '--', policyPath), '');
-    const head = commit();
-    const check = node('scripts/ci-input-audit.mjs', ['--check', head]);
-    assert.equal(check.status, 0, check.stdout + check.stderr);
-    return head;
-  };
   try {
     execFileSync('git', ['clone', '--shared', '--quiet', process.cwd(), root], {stdio: 'pipe'});
     cpSync('scripts', join(root, 'scripts'), {recursive: true});
     git('config', 'user.name', 'CI test'); git('config', 'user.email', 'ci@example.test');
-    git('checkout', '--orphan', 'historical-v1');
-    // Historical assertions must exercise the v1 policy even after live v2 activation.
-    rmSync(join(root, 'scripts/ci-input-audit-v2.json'), {force: true});
-    rmSync(join(root, 'scripts/ci-input-audit.d'), {recursive: true, force: true});
-    git('add', '-A'); git('commit', '-s', '-qm', 'Isolate historical v1 fixture ancestry');
-    git('config', 'user.name', 'CI test'); git('config', 'user.email', 'ci@example.test');
-    run({root, git, read, write, node, commit, renew});
+    run({root, git, read, write, node, commit});
   } finally {rmSync(root, {recursive: true, force: true});}
 }
 
-test('complete candidate audits independently pin all ten current manifests and preserve historical evidence', () => completeFixture(({git, read, write, node, commit, renew}) => {
-  const historical = read('scripts/fixtures/ci-historical-manifests.json');
-  const saved = ['dependency', 'execution', 'schema', 'deployment'].map(name => [`scripts/fixtures/ci-${name}-inputs.json`, read(`scripts/fixtures/ci-${name}-inputs.json`)]);
-  const base = renew();
-  let alreadyCurrent;
-  assert.doesNotThrow(() => {alreadyCurrent = renew();}, 'An already current clean audit must still qualify a real committed control');
-  assert.notEqual(alreadyCurrent, base);
-  assert.equal(git('rev-parse', `${base}^{tree}`), git('rev-parse', `${alreadyCurrent}^{tree}`));
-  const policy = JSON.parse(read(policyPath));
-  assert.deepEqual(Object.keys(policy.manifests).sort(), [...manifestPaths].sort());
-  const expected = {};
-  for (const path of manifestPaths) {
-    const manifest = JSON.parse(git('show', `${base}:${path}`));
-    assert.equal(manifest.license, 'SEE LICENSE IN LICENSE');
-    for (const field of ['dependencies', 'devDependencies', 'optionalDependencies', 'peerDependencies']) delete manifest[field];
-    expected[path] = hash(JSON.stringify(Object.fromEntries(Object.entries(manifest).sort(([a], [b]) => a.localeCompare(b, 'en')))));
-  }
-  assert.deepEqual(policy.manifests, expected);
-  const old = JSON.parse(historical).manifests;
-  const missing = {...policy.manifests}; delete missing['packages/translation/package.json'];
-  for (const manifests of [missing, {...policy.manifests, 'packages/absent/package.json': 'a'.repeat(64)}, old,
-    {...policy.manifests, 'packages/identity/package.json': old['packages/identity/package.json']}]) {
-    git('reset', '--hard', base);
-    write(policyPath, {...policy, manifests});
-    const invalid = commit();
-    const checked = node('scripts/ci-input-audit.mjs', ['--check', invalid]);
-    assert.notEqual(checked.status, 0);
-    assert.match(checked.stdout, /docs: current\nidentity: current\ngateway: current/);
-    assert.match(checked.stderr, /Manifest readers changed since audit/);
-  }
-  for (const change of [{license: 'Changed licence'}, {scripts: {test: 'node --test different.test.mjs'}}, {description: 'Changed nondependency metadata'}]) {
-    git('reset', '--hard', base);
-    const path = 'packages/translation/package.json';
-    write(path, {...JSON.parse(read(path)), ...change});
-    assert.notEqual(node('scripts/ci-input-audit.mjs', ['--check', commit()]).status, 0);
-    const changed = renew();
-    assert.notEqual(JSON.parse(read(policyPath)).manifests[path], policy.manifests[path]);
-    assert.equal(node('scripts/ci-input-audit.mjs', ['--check', changed]).status, 0);
-  }
-  assert.equal(read('scripts/fixtures/ci-historical-manifests.json'), historical);
-  for (const [path, content] of saved) assert.equal(read(path), content);
-}));
-
-test('one audited committed baseline admits isolated docs and scripts while unresolved lock readers stay full', () => completeFixture(({root, git, read, write, node, commit, renew}) => {
+test('one committed baseline admits isolated docs and scripts while unresolved lock readers stay full', () => completeFixture(({root, git, read, write, node, commit}) => {
   rmSync(join(root, 'docs/ci-lockfile-audit.md'), {force: true});
   write('docs/audit-control-prose.md', 'Independent fixture prose.\n');
   write('docs/audit-control-deleted-prose.md', 'Independent deletion fixture.\n');
-  const base = renew();
+  const base = commit();
   const plan = head => {
     const scratch = mkdtempSync(join(tmpdir(), 'cloud-audit-plan-'));
     try {
@@ -160,10 +93,10 @@ test('one audited committed baseline admits isolated docs and scripts while unre
     ['docs/audit-control-prose.md', 'scripts/identity-upstream.mjs'],
     ['scripts/identity-upstream.mjs', 'scripts/verify-gateway-reconnection-receipt.mjs'],
     ['docs/audit-control-prose.md', 'pnpm-lock.yaml'], ['unmapped-input'], ['scripts/new-reader.mjs'],
-    ['scripts/ci-input-audit.mjs'], ['scripts/ci-plan.mjs'], [policyPath],
+    ['scripts/ci-input-audit.mjs'], ['scripts/ci-plan.mjs'], [unknownPath],
   ]) {
     git('reset', '--hard', base);
-    for (const path of paths) appendFileSync(join(root, path), path === policyPath ? ' ' : '\n// Mixed input\n');
+    for (const path of paths) appendFileSync(join(root, path), path === unknownPath ? ' ' : '\n// Mixed input\n');
     const {selected} = plan(commit());
     assert.equal(selected.packages.length, 29, paths.join(','));
     assert.equal(selected.typecheck, true); assert.deepEqual(selected.receipts, receipts);
@@ -171,7 +104,7 @@ test('one audited committed baseline admits isolated docs and scripts while unre
   }
 }));
 
-test('a changed published translation vector retains its real package check after audit renewal', () => completeFixture(({root, git, read, write, node, commit, renew}) => {
+test('a changed published translation vector retains its real package check', () => completeFixture(({root, git, read, write, node, commit}) => {
   const contractPath = 'docs/waitron-integration-contract.md';
   const original = read(contractPath);
   const start = original.indexOf('```json\n', original.indexOf('### Shared test vectors')) + 8;
@@ -187,7 +120,7 @@ test('a changed published translation vector retains its real package check afte
   const originalCheck = checkVector();
   assert.equal(originalCheck.status, 0, originalCheck.stdout + originalCheck.stderr);
   assert.match(originalCheck.stdout, /# pass 1\b/);
-  const base = renew();
+  const base = commit();
   vectors.issuerKeyId = 'controlled-mismatch';
   write(contractPath, original.slice(0, start) + JSON.stringify(vectors, null, 2) + original.slice(end));
   const head = commit();

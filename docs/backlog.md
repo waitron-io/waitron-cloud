@@ -1586,9 +1586,7 @@ implementation or production evidence.
   receipt inputs can select their actual checks. Regular prose uses its formatting job when it is regular in both saved trees;
   package Markdown, consumed documents, receipt data and unknown inputs keep
   their owning work. Review actual readers with the [CI guide](ci-documentation-audit.md).
-  Generated review records are inert; their deletion waits for a successful
-  scheduled nightly after disconnection and an ordinary later narrowing PR.
-  the parked `feat/precise-ci-selection` branch remains untouched. D69 ended in
+  The parked `feat/precise-ci-selection` branch remains untouched. D69 ended in
   #262 with full work for unresolved directory readers; its unmerged replacement
   is reference material, not the current implementation. D571 part 2 declares
   40 exact reader versions for installed dependencies, runtime data, scratch and

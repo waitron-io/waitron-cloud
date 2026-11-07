@@ -96,5 +96,12 @@ ran on main `ef230096fbc9073e4c20109dc214038491864966`, attempt 1. All 77 jobs
 finished: 75 successful exact checkouts and two planned skips. Independent readback
 checked all five summaries, 21,348 Node passes, 26 optional skips and 384 mocked
 OpenTofu cases. Its one expected failing child is covered by its passing cleanup
-control. This qualifies that earlier code; record deletion still requires a
-scheduled success after the disconnection PR lands.
+control. This qualifies that earlier code and verifies schedule delivery.
+
+The [7 November full manual run](https://github.com/waitron-io/waitron-cloud/actions/runs/42350915402)
+ran after record disconnection on main `9b81ee6b4c3a0e355f60f5160870ba0af6be0266`,
+attempt 1. All 78 jobs finished: 76 successful exact checkouts, two planned skips,
+23,108 Node passes, 26 optional skips and 384 mocked OpenTofu cases. All five
+summaries passed; the expected failing child had its passing cleanup control.
+Alongside the later ordinary narrowing PR [#1057](https://github.com/waitron-io/waitron-cloud/pull/1057),
+this meets the owner's prerequisites for removing the inert records.

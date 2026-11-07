@@ -14,8 +14,7 @@ import {proofInputPlanRange} from './ci-proof-inputs.mjs';
 const rootTest = 'scripts/ci-root-shards.test.mjs';
 const healthTest = 'deploy/local-stack/operations-health.test.mjs';
 const workspace = [{name: '@waitron-cloud/identity', directory: 'packages/identity', scripts: {test: 'node --test test/*.test.mjs'}, sources: []}];
-const metadata = ['scripts/ci-input-audit.json', 'scripts/ci-input-audit-v2.json',
-  'scripts/ci-root-inputs.json', 'scripts/ci-input-audit.d/docs/invalid.json', 'scripts/ci-root-review.d/invalid.json'];
+const unknownJSON = 'scripts/unknown.json';
 function fixture(run) {
   const root = mkdtempSync(join(tmpdir(), 'cloud-ci-record-retirement-'));
   const git = (...args) => {
@@ -39,11 +38,8 @@ function fixture(run) {
   } finally {rmSync(root, {recursive: true, force: true});}
 }
 
-// Reintroducing renewal into any live selector must refuse these deliberately invalid records.
-for (const location of ['base', 'head', 'both']) test(`prose selection ignores malformed records in ${location}`, () => fixture(({git, put, commit}) => {
-  if (location !== 'head') for (const path of metadata) put(path, '{not a record\n');
-  const base = commit();
-  if (location !== 'base') for (const path of metadata) put(path, 'not JSON\n');
+test('prose selection reads the changed range without inspecting unchanged JSON', () => fixture(({git, put, commit}) => {
+  put(unknownJSON, 'not JSON\n'); const base = commit();
   put('docs/guide.md', '# Updated guide\n'); const head = commit();
   const selected = createPlan({pull_request: {base: {sha: base}, head: {sha: head}}}, {sha: head}, workspace, git);
   assert.deepEqual(selected.packages, []); assert.deepEqual(selected.receipts, []);
@@ -52,10 +48,10 @@ for (const location of ['base', 'head', 'both']) test(`prose selection ignores m
   for (const kind of ['cost', 'venue']) assert.equal(proofInputPlanRange(kind, {base, head}, git).required, false);
 }));
 
-test('both root owners select their real checks without activation or renewal', () => fixture(({git, put, commit, paths}) => {
+test('both root owners select their real checks', () => fixture(({git, put, commit, paths}) => {
   const base = commit();
   put(rootTest, 'export const value = 2;\n'); put(healthTest, 'export const value = 2;\n');
-  for (const path of metadata) put(path, 'ignored\n'); const head = commit();
+  const head = commit();
   const plan = rootInputPlan(paths(base, head), base, head, git);
   assert.equal(plan.full, undefined); assert.equal(plan.rootTests, true);
   assert.deepEqual(plan.receipts, ['test:local-stack']);
@@ -88,32 +84,27 @@ test('script-only selection needs regular saved targets but no record files', ()
     {base, head, paths: ['scripts/identity-upstream.mjs']});
 }));
 
-test('nonrecord files in either retired folder retain full work and both proofs', () => {
-  for (const folder of ['scripts/ci-input-audit.d', 'scripts/ci-root-review.d']) {
-    for (const name of ['loader.mjs', 'new-check.test.mjs', '.gitattributes']) fixture(({git, put, commit}) => {
-      const base = commit();
-      put(`${folder}/${name}`, name === '.gitattributes' ? '* -text\n' : 'export const value = 2;\n');
-      put('docs/guide.md', '# Updated\n'); const head = commit();
-      const selected = createPlan({pull_request: {base: {sha: base}, head: {sha: head}}}, {sha: head}, workspace, git);
-      assert.deepEqual(selected.packages, [{package: '@waitron-cloud/identity', shard: 1}], `${folder}/${name}`);
-      assert.equal(selected.typecheck, true); assert.equal(selected.documentation, undefined);
-      assert.equal(selected.receipts.length, 6);
-      for (const kind of ['cost', 'venue']) assert.equal(proofInputPlanRange(kind, {base, head}, git).required, true);
-    });
-  }
-});
+for (const target of ['docs/guide.md', 'scripts/identity-upstream.mjs', rootTest]) {
+  test(`unknown JSON alongside ${target} retains full work and both proofs`, () => fixture(({git, put, commit, paths}) => {
+    const base = commit(); put(unknownJSON, 'not JSON\n');
+    put(target, target.endsWith('.md') ? '# Updated\n' : 'export const value = 2;\n'); const head = commit();
+    const selected = createPlan({pull_request: {base: {sha: base}, head: {sha: head}}}, {sha: head}, workspace, git);
+    assert.deepEqual(selected.packages, [{package: '@waitron-cloud/identity', shard: 1}]);
+    assert.equal(selected.typecheck, true); assert.equal(selected.documentation, undefined); assert.equal(selected.scripts, undefined);
+    assert.equal(selected.receipts.length, 6);
+    for (const kind of ['cost', 'venue']) assert.equal(proofInputPlanRange(kind, {base, head}, git).required, true);
+    if (target.endsWith('.md')) assert.throws(() => checkDocumentation({documentation: {base, head, paths: [target]}}, git), /omits changed inputs/);
+    if (target === 'scripts/identity-upstream.mjs') assert.throws(() => checkScripts({packages: [], receipts: [], typecheck: false, scripts: {base, head, paths: [target]}}, git), /omits changed inputs/);
+    if (target === rootTest) assert.equal(rootInputPlan(paths(base, head), base, head, git).full, true);
+  }));
+}
 
-test('the script verifier executes its actual owners alongside changed retired JSON', () => fixture(({root, git, put, commit}) => {
+test('the script verifier executes its actual owners', () => fixture(({root, git, put, commit}) => {
   put('scripts/identity-upstream.test.mjs', "import assert from 'node:assert/strict'; import {value} from './identity-upstream.mjs'; assert.equal(value, 2);\n");
-  const base = commit(); put('scripts/identity-upstream.mjs', 'export const value = 2;\n');
-  for (const path of metadata) put(path, 'not JSON\n');
-  const head = commit();
+  const base = commit(); put('scripts/identity-upstream.mjs', 'export const value = 2;\n'); const head = commit();
   const selected = createPlan({pull_request: {base: {sha: base}, head: {sha: head}}}, {sha: head}, workspace, git);
   const commands = [];
-  checkScripts(selected, git, args => {
-    commands.push(args);
-    execFileSync(process.execPath, args, {cwd: root, stdio: 'pipe'});
-  });
+  checkScripts(selected, git, args => {commands.push(args); execFileSync(process.execPath, args, {cwd: root, stdio: 'pipe'});});
   assert.deepEqual(commands, [['--check', 'scripts/identity-upstream.mjs'],
     ['--check', 'scripts/identity-upstream.test.mjs'], ['--test', 'scripts/identity-upstream.test.mjs']]);
 }));
@@ -137,13 +128,13 @@ test('real non-UTF-8 and backslash Git paths refuse inventory narrowing', () => 
   });
 });
 
-test('record-only changes explain why complete work remains selected', () => fixture(({git, put, commit}) => {
+test('unknown JSON alone retains complete work', () => fixture(({git, put, commit}) => {
   const base = commit();
-  for (const path of metadata) put(path, 'not JSON\n');
+  put(unknownJSON, 'not JSON\n');
   const head = commit();
   const selected = createPlan({pull_request: {base: {sha: base}, head: {sha: head}}}, {sha: head}, workspace, git);
   assert.equal(selected.typecheck, true); assert.equal(selected.packages.length, 1); assert.equal(selected.receipts.length, 6);
-  assert.equal(selected.reason, 'Only retired CI records changed: full suite');
+  for (const kind of ['cost', 'venue']) assert.equal(proofInputPlanRange(kind, {base, head}, git).required, true);
 }));
 
 test('unmarked full work refuses wrong checkouts and dirty tracked bytes without activation', () => fixture(({root, put, commit}) => {

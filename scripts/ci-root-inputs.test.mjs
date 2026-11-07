@@ -1,12 +1,11 @@
 import assert from 'node:assert/strict';
-import {readFileSync, rmSync, mkdtempSync, writeFileSync} from 'node:fs';
+import {readFileSync, rmSync, mkdtempSync, writeFileSync, chmodSync, symlinkSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {spawnSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
 import test from 'node:test';
-import {rootReviewFixture} from './ci-root-review-fixture.mjs';
-import {rootRecordFilename} from './ci-root-review.mjs';
+import {rootSelectionFixture} from './fixtures/ci-selection.mjs';
 import {receiptSuites} from './ci-scope.mjs';
 import {createPlan, selectPlan} from './ci-plan.mjs';
 import {assertSummary} from './ci-summary.mjs';
@@ -18,13 +17,11 @@ const api = await import('./ci-root-inputs.mjs').catch(error => {
 });
 const rootPath = 'scripts/ci-root-shards.test.mjs';
 const receiptPath = 'deploy/local-stack/operations-health.test.mjs';
-const registryPath = 'scripts/ci-root-inputs.json';
-const recordRoot = 'scripts/ci-root-review.d/';
 
 function fixture(run) {
   assert.equal(typeof api.rootInputPlan, 'function', 'Root input owners need a two-tree mapper');
-  rootReviewFixture(context => {
-    const {git, write, renew, commit} = context;
+  rootSelectionFixture(context => {
+    const {git, write, commit} = context;
     for (const path of ['scripts/identity-upstream.mjs', 'scripts/identity-upstream.test.mjs',
       'scripts/verify-gateway-reconnection-receipt.mjs', 'scripts/verify-gateway-reconnection-receipt.test.mjs']) write(path, 'historical peer\n');
     write('pnpm-lock.yaml', 'lockfileVersion: 9\n');
@@ -32,38 +29,29 @@ function fixture(run) {
     write('packages/control/package.json', {name: '@waitron-cloud/control', scripts: {test: 'node --test test/*.test.mjs'}});
     write('packages/control/src/index.mjs', 'export const value = 1;\n');
     write('package.json', {scripts: {'test:backup-capacity': `node --test ${receiptPath}`, 'test:local-stack': 'node --test deploy/local-stack/*.test.mjs'}});
-    git('add', '-A');
-    const paths = git('ls-tree', '-rz', '--full-tree', git('write-tree').trim()).split('\0').filter(Boolean)
-      .map(row => row.split('\t')[1]).filter(path => !path.startsWith(recordRoot) && path !== 'scripts/ci-input-audit.json' && !path.endsWith('.md'));
-    const audit = args => spawnSync(process.execPath, [fileURLToPath(new URL('./ci-input-audit.mjs', import.meta.url)), ...args],
-      {cwd: context.root, encoding: 'utf8', timeout: 30_000});
-    renew(paths); git('add', '-A'); let result = audit(['--init-v2-staged']); assert.equal(result.status, 0, result.stdout + result.stderr);
     const base = commit();
-    const docs = () => {
-      git('add', '-A'); result = audit(['--write-staged', '--mode', 'docs']); assert.equal(result.status, 0, result.stdout + result.stderr);
-    };
     const changedPaths = head => git('diff', '--name-only', '--no-renames', '-z', base, head).split('\0').filter(Boolean);
     const plan = head => api.rootInputPlan(changedPaths(head), base, head, git);
-    run({...context, docs, base, changedPaths, plan});
+    run({...context, base, changedPaths, plan});
   });
 }
 
-test('two saved trees return exact root owners without review records', () => fixture(({git, write, renew, docs, commit, base, changedPaths, plan}) => {
-  write(rootPath, 'changed root test\n'); renew([rootPath]); docs(); const head = commit();
+test('two saved trees return exact root owners', () => fixture(({git, write, commit, base, changedPaths, plan}) => {
+  write(rootPath, 'changed root test\n'); const head = commit();
   assert.deepEqual(plan(head), {rootInputs: {version: 1, base, head, paths: changedPaths(head), entryIds: ['root-partition-contract']},
     rootTests: true, receipts: [], packagePaths: []});
-  write(rootPath, 'stale head\n'); docs(); const stale = commit();
+  write(rootPath, 'stale head\n'); const stale = commit();
   assert.equal(plan(stale).rootTests, true);
-  renew([rootPath]); docs(); const current = commit();
-  assert.equal(api.rootInputPlan(git('diff', '--name-only', '--no-renames', '-z', stale, current).split('\0').filter(Boolean), stale, current, git), null, 'renewal alone cannot create root work');
+  const current = commit();
+  assert.equal(api.rootInputPlan(git('diff', '--name-only', '--no-renames', '-z', stale, current).split('\0').filter(Boolean), stale, current, git), null, 'An unchanged tree cannot create root work');
   assert.match(api.rootInputPlan(changedPaths(current), stale, current, git).reason, /paths differ from immutable revisions/);
 }));
 
-test('receipt-only and mixed registered inputs deduplicate exact owners without package work', () => fixture(({write, renew, docs, commit, plan}) => {
+test('receipt-only and mixed registered inputs deduplicate exact owners without package work', () => fixture(({write, commit, plan}) => {
   const health = 'deploy/local-stack/operations-health.test.mjs';
-  write(receiptPath, 'new capacity check\n'); renew([receiptPath]); docs();
+  write(receiptPath, 'new capacity check\n');
   assert.deepEqual(plan(commit()).receipts, ['test:local-stack']);
-  write(health, 'new health check\n'); write(rootPath, 'new root check\n'); renew([health, rootPath]); docs();
+  write(health, 'new health check\n'); write(rootPath, 'new root check\n');
   const result = plan(commit());
   assert.equal(result.rootTests, true);
   assert.deepEqual(result.receipts, ['test:local-stack']);
@@ -71,24 +59,20 @@ test('receipt-only and mixed registered inputs deduplicate exact owners without 
   assert.deepEqual(result.packagePaths, []);
 }));
 
-test('changing the root ownership policy retains full work', () => fixture(({root, git, write, renew, docs, commit, plan}) => {
-  const registry = JSON.parse(readFileSync(join(root, registryPath))); registry.entries[0].sites[0].site = 'reviewed replacement:2';
-  write(registryPath, registry); write(rootPath, 'root change\n'); write('scripts/ci-root-inputs.mjs', 'changed ownership constant\n'); git('add', '-A');
-  const paths = git('ls-tree', '-rz', '--full-tree', git('write-tree').trim()).split('\0').filter(Boolean).map(row => row.split('\t')[1])
-    .filter(path => !path.startsWith(recordRoot) && !path.startsWith('scripts/ci-input-audit.d/') &&
-      path !== 'scripts/ci-input-audit-v2.json' && path !== 'scripts/ci-input-audit.json' && !path.endsWith('.md'));
-  renew(paths); docs(); const result = plan(commit());
+test('changing the root ownership policy retains full work', () => fixture(({root, git, write, commit, plan}) => {
+  write(rootPath, 'root change\n'); write('scripts/ci-root-inputs.mjs', 'changed ownership constant\n');
+  const result = plan(commit());
   assert.equal(result.full, true); assert.match(result.reason, /ownership policy changed/);
 }));
 
-test('new readers and directory members retain full root work', () => fixture(({write, renew, docs, commit, plan}) => {
-  write(rootPath, 'changed check\n'); renew([rootPath]);
-  write('scripts/another-reader.mjs', "readFileSync('scripts/ci-root-shards.test.mjs');\n"); docs();
+test('new readers and directory members retain full root work', () => fixture(({write, commit, plan}) => {
+  write(rootPath, 'changed check\n');
+  write('scripts/another-reader.mjs', "readFileSync('scripts/ci-root-shards.test.mjs');\n");
   const result = plan(commit()); assert.equal(result.full, true); assert.match(result.reason, /Shared or unknown root input: scripts\/another-reader.mjs/);
 }));
 
-test('missing bootstrap and a stale base still inspect both saved inventories', () => fixture(({git, write, docs, commit, base, changedPaths}) => {
-  write(rootPath, 'stale check\n'); docs(); const head = commit();
+test('missing bootstrap and a stale base still inspect both saved inventories', () => fixture(({git, write, commit, base, changedPaths}) => {
+  write(rootPath, 'stale check\n'); const head = commit();
   const seen = new Set();
   const observe = (...args) => {if (args[0] === 'ls-tree') seen.add(args[3]); return git(...args);}; observe.readBlobs = git.readBlobs;
   const result = api.rootInputPlan(changedPaths(head), head, base, observe);
@@ -96,43 +80,42 @@ test('missing bootstrap and a stale base still inspect both saved inventories', 
   assert.ok(seen.has(base) && seen.has(head), 'Both immutable trees must be inspected on review refusal');
 }));
 
-test('registered work plus prose and package inputs preserves exact immutable package membership', () => fixture(({write, renew, docs, commit, plan}) => {
+test('registered work plus prose and package inputs preserves exact immutable package membership', () => fixture(({write, commit, plan}) => {
   const path = 'packages/control/src/index.mjs';
   write(rootPath, 'root change\n'); write(path, 'package change\n'); write('docs/explanation.md', 'new prose\n');
-  renew([rootPath, path]); docs(); const result = plan(commit());
+  const result = plan(commit());
   assert.deepEqual(result.packagePaths, [path]); assert.equal(result.rootTests, true);
 }));
 
-test('shared unknown and deleted inputs win over registered ownership', () => fixture(({root, git, write, renew, docs, commit, base, plan}) => {
+test('shared unknown and deleted inputs win over registered ownership', () => fixture(({root, git, write, commit, base, plan}) => {
   for (const path of ['pnpm-lock.yaml', '.github/workflows/ci.yml', 'scripts/unknown.mjs', 'packages/unknown/src/read.mjs']) {
     git('reset', '--hard', base); git('clean', '-fdq');
-    write(rootPath, 'root change\n'); write(path, 'unknown change\n'); renew([rootPath, path]); docs();
+    write(rootPath, 'root change\n'); write(path, 'unknown change\n');
     const result = plan(commit()); assert.equal(result.full, true, path); assert.match(result.reason, /Shared or unknown root input/);
   }
-  git('reset', '--hard', base); git('clean', '-fdq'); rmSync(join(root, rootPath)); docs();
+  git('reset', '--hard', base); git('clean', '-fdq'); rmSync(join(root, rootPath));
   const result = plan(commit()); assert.equal(result.full, true); assert.match(result.reason, /Missing regular root owner target/);
 }));
 
-test('evidence alone cannot create empty work and ordinary unregistered paths retain the existing route', () => fixture(({write, renew, docs, commit, plan, base, git}) => {
-  renew([rootPath], 'another reviewer', 'review/again'); docs();
-  assert.equal(plan(commit()), null);
+test('empty changes do not create root work and unregistered paths keep their existing route', () => fixture(({base, git}) => {
+  assert.equal(api.rootInputPlan([], base, base, git), null);
   assert.equal(api.rootInputPlan(['scripts/unknown.mjs'], base, base, git), null);
 }));
 
-test('an unreviewed long path produces a bounded refusal diagnostic', () => fixture(({write, renew, docs, commit, plan}) => {
-  write(rootPath, 'root change\n'); renew([rootPath]);
-  write('scripts/' + ('x'.repeat(150) + '/').repeat(5) + 'reader.mjs', 'new reader\n'); docs();
+test('an unreviewed long path produces a bounded refusal diagnostic', () => fixture(({write, commit, plan}) => {
+  write(rootPath, 'root change\n');
+  write('scripts/' + ('x'.repeat(150) + '/').repeat(5) + 'reader.mjs', 'new reader\n');
   const result = plan(commit()); assert.equal(result.full, true);
   assert.match(result.reason, /Shared or unknown root input/); assert.ok(result.reason.length <= 512, 'Refusals must not serialize an unbounded inventory');
 }));
 
-test('checkout attributes at every package depth retain full work after review renewal', () => fixture(({git, write, renew, docs, commit, base, changedPaths, plan}) => {
+test('checkout attributes at every package depth retain full work', () => fixture(({git, write, commit, base, changedPaths, plan}) => {
   const workspace = [{name: '@waitron-cloud/control', directory: 'packages/control', scripts: {test: 'node --test test/*.test.mjs'}}];
   for (const withRoot of [false, true]) for (const path of ['packages/control/.gitattributes', 'packages/control/src/.gitattributes']) {
     git('reset', '--hard', base); git('clean', '-fdq');
     if (withRoot) write(rootPath, 'changed root test\n');
     write(path, '*.mjs filter=checkout-control\n');
-    renew(withRoot ? [rootPath, path] : [path]); docs(); const head = commit();
+    const head = commit();
     const mapped = plan(head);
     assert.equal(mapped.full, true, `${path} must not inherit package ownership`);
     assert.match(mapped.reason, /Checkout attributes require full root work/);
@@ -150,14 +133,14 @@ test('checkout attributes at every package depth retain full work after review r
   }
 }));
 
-test('changed package test commands remain full after explicit root review renewal', () => fixture(({write, renew, docs, commit, plan}) => {
+test('changed package test commands remain full', () => fixture(({write, commit, plan}) => {
   write(rootPath, 'root change\n');
   write('packages/control/package.json', {name: '@waitron-cloud/control', scripts: {test: 'node --test a-different-test.mjs'}});
-  renew([rootPath, 'packages/control/package.json']); docs();
+
   const result = plan(commit()); assert.equal(result.full, true); assert.match(result.reason, /test commands changed/);
 }));
 
-test('planner composes root-only receipt-only and mixed owners as nonempty work', () => fixture(({git, write, renew, docs, commit, base}) => {
+test('planner composes root-only receipt-only and mixed owners as nonempty work', () => fixture(({git, write, commit, base}) => {
   const workspace = [{name: '@waitron-cloud/control', directory: 'packages/control', scripts: {test: 'node --test test/*.test.mjs'}, sources: []}];
   const health = 'deploy/local-stack/operations-health.test.mjs', packagePath = 'packages/control/src/index.mjs';
   for (const [paths, want] of [
@@ -169,7 +152,7 @@ test('planner composes root-only receipt-only and mixed owners as nonempty work'
   ]) {
     git('reset', '--hard', base);
     for (const path of paths) write(path, 'reviewed change\n');
-    renew(paths); docs(); const head = commit();
+    const head = commit();
     const plan = createPlan({pull_request: {base: {sha: base}, head: {sha: head}}}, {}, workspace, git);
     assert.equal(plan.packages.length, want.packages, paths.join(', '));
     assert.equal(plan.typecheck, want.typecheck); assert.equal(plan.rootTests, want.rootTests);
@@ -184,34 +167,28 @@ test('planner composes root-only receipt-only and mixed owners as nonempty work'
   }
 }));
 
-test('root ownership never narrows shared inputs forced runs or evidence-only changes', () => fixture(({root, git, write, renew, docs, commit, base}) => {
+test('root ownership never narrows shared inputs forced runs or evidence-only changes', () => fixture(({root, git, write, commit, base}) => {
   const workspace = [{name: '@waitron-cloud/control', directory: 'packages/control', scripts: {test: 'node --test test/*.test.mjs'}, sources: []}];
-  const peer = git('ls-tree', '-r', '--name-only', base, '--', 'scripts/ci-input-audit.d/identity/').trim().split('\n')[0];
+  const peer = 'scripts/unknown.json';
   for (const path of ['pnpm-lock.yaml', '.github/workflows/ci.yml', 'scripts/unregistered.mjs', peer, null]) {
     git('reset', '--hard', base); git('clean', '-fdq');
     if (path) {
       write(rootPath, 'changed root check\n');
-      write(path, path === peer ? {...JSON.parse(readFileSync(join(root, peer))), objectId: '0'.repeat(40)} : 'shared change\n');
-      renew([rootPath, ...(path === peer ? [] : [path])]);
+      write(path, 'shared change\n');
+
     }
-    else renew([rootPath], 'second reviewer', 'review/provenance');
-    docs(); const head = commit(), event = {pull_request: {base: {sha: base}, head: {sha: head}}};
+    const head = commit(), event = {pull_request: {base: {sha: base}, head: {sha: head}}};
     for (const [input, context] of [[event, {}], [event, {full: true}], [{}, {}]]) {
       const plan = createPlan(input, context, workspace, git);
-      if (path === peer && input === event && context.full !== true) {
-        assert.equal(plan.packages.length, 0); assert.equal(plan.typecheck, false); assert.deepEqual(plan.receipts, []);
-        assert.equal(plan.rootTests, true); assert.deepEqual(plan.rootInputs.entryIds, ['root-partition-contract']);
-      } else {
-        assert.equal(plan.packages.length, 1); assert.equal(plan.typecheck, true); assert.equal(plan.receipts.length, 6);
-        assert.equal(plan.rootInputs, undefined); assert.equal(plan.rootTests, undefined);
-      }
+      assert.equal(plan.packages.length, 1); assert.equal(plan.typecheck, true); assert.equal(plan.receipts.length, 6);
+      assert.equal(plan.rootInputs, undefined); assert.equal(plan.rootTests, undefined);
     }
   }
 }));
 
-test('independent reconstruction refuses missing markers owners and forged ranges', () => fixture(({git, write, renew, docs, commit, base, changedPaths}) => {
+test('independent reconstruction refuses missing markers owners and forged ranges', () => fixture(({git, write, commit, base, changedPaths}) => {
   assert.equal(typeof api.assertRootInputWork, 'function', 'Summary must independently reconstruct required owners');
-  write(rootPath, 'changed root\n'); write(receiptPath, 'changed capacity\n'); renew([rootPath, receiptPath]); docs();
+  write(rootPath, 'changed root\n'); write(receiptPath, 'changed capacity\n');
   const head = commit(), context = {base, head, git};
   const plan = {packages: [], receipts: ['test:local-stack'], typecheck: false, reuse: null, rootTests: true,
     rootInputs: {version: 1, base, head, paths: changedPaths(head), entryIds: ['local-health-test', 'root-partition-contract']}};
@@ -233,14 +210,14 @@ test('independent reconstruction refuses missing markers owners and forged range
   }
 }));
 
-test('retired head records do not gate full or legacy work after metadata removal', () => fixture(({root, git, write, docs, commit, base}) => {
-  assert.equal(typeof api.assertRootInputWork, 'function', 'Full work cannot bypass mandatory head review');
-  write('scripts/reader.mjs', 'unreviewed change\n'); docs(); const stale = commit();
+test('unregistered changes do not invent root ownership', () => fixture(({root, git, write, commit, base}) => {
+  assert.equal(typeof api.assertRootInputWork, 'function', 'Root work requires independent reconstruction');
+  write('scripts/reader.mjs', 'unreviewed change\n'); const stale = commit();
   for (const plan of [
     {packages: [], receipts: [], typecheck: false, documentation: {base, head: stale, paths: ['docs/explanation.md']}},
     {packages: [{package: '@waitron-cloud/control', shard: 1}], receipts: [], typecheck: true},
   ]) assert.doesNotThrow(() => api.assertRootInputWork(plan, {base, head: stale, git}));
-  rmSync(join(root, registryPath)); rmSync(join(root, recordRoot), {recursive: true}); docs(); const removed = commit();
+  write('scripts/another-reader.mjs', 'export const value = 1;\n'); const removed = commit();
   assert.doesNotThrow(() => api.assertRootInputWork({packages: [], receipts: [], typecheck: true}, {base, head: removed, git}));
 }));
 
@@ -249,19 +226,19 @@ for (const [label, path, source] of [
   ['workspace pattern', 'pnpm-workspace.yaml', "packages:\n  - 'packages/*'\n  - 'apps/*'\n  - 'tools/*'\n"],
   ['unowned app directory', 'apps/placeholder/notes.txt', 'workspace notes\n'],
   ['package directory file', 'packages/notes.txt', 'package notes\n'],
-]) test(`shared workspace changes retain executable full work and every receipt owner: ${label}`, () => fixture(({root, git, write, renew, docs, commit}) => {
+]) test(`shared workspace changes retain executable full work and every receipt owner: ${label}`, () => fixture(({root, git, write, commit}) => {
   const receipts = ['test:two-venue-milestone-receipt', 'test:backup-capacity', 'test:public-gateway-limits',
     'test:local-stack', 'test:database-recovery-receipt', 'test:cloud-cost'];
   write('packages/control/package.json', {name: '@waitron-cloud/identity', scripts: {test: 'node --test test/*.test.mjs'}});
   write('scripts/ci-another.test.mjs', 'another root check\n');
   write('package.json', {scripts: Object.fromEntries(receipts.map(name => [name, 'node --version']))});
-  renew(['packages/control/package.json', 'scripts/ci-another.test.mjs', 'package.json']); docs(); const base = commit();
+  const base = commit();
   const full = {packages: [{package: '@waitron-cloud/identity', shard: 1}], receipts, typecheck: true, reuse: null};
   const jobs = ['changes', 'typecheck', 'root (1/8)', 'root (2/8)', 'root (3/8)', 'root (4/8)', 'root (5/8)', 'root (6/8)', 'root (7/8)', 'root (8/8)',
     'package (@waitron-cloud/identity)', 'receipts'].map(name => ({name, status: 'completed', conclusion: 'success'}));
   const results = {changes: 'success', typecheck: 'success', root: 'success', packages: 'success', receipts: 'success'};
   {
-    write(path, source); write(rootPath, 'changed root owner\n'); renew([path, rootPath]); docs(); const head = commit();
+    write(path, source); write(rootPath, 'changed root owner\n'); const head = commit();
     const context = {base, head, git};
     assert.equal(api.rootInputPlan(git('diff', '--name-only', '--no-renames', '-z', base, head).split('\0').filter(Boolean), base, head, git).full, true);
     assert.doesNotThrow(() => assertSummary(full, results, jobs, context), path);
@@ -274,10 +251,10 @@ for (const [label, path, source] of [
   }
 }));
 
-test('large reviewed package changes retain a bounded full plan instead of overflowing a step environment', () => fixture(({git, write, renew, docs, commit, base}) => {
-  const paths = Array.from({length: 400}, (_, i) => `packages/control/src/${'long-'.repeat(25)}${i}.mjs`);
+test('large reviewed package changes retain a bounded full plan instead of overflowing a step environment', () => fixture(({git, write, commit, base}) => {
+  const paths = Array.from({length: 500}, (_, i) => `packages/control/src/${'long-'.repeat(25)}${i}.mjs`);
   for (const path of paths) write(path, 'export const value = 1;\n');
-  write(rootPath, 'changed root owner\n'); renew([...paths, rootPath]); docs(); const head = commit();
+  write(rootPath, 'changed root owner\n'); const head = commit();
   const workspace = [{name: '@waitron-cloud/control', directory: 'packages/control', scripts: {test: 'node --test test/*.test.mjs'}}];
   const plan = createPlan({pull_request: {base: {sha: base}, head: {sha: head}}}, {}, workspace, git);
   assert.ok(Buffer.byteLength(JSON.stringify(plan), 'utf8') < 120_000, 'The complete executable plan must fit one Linux environment value');
@@ -291,10 +268,10 @@ test('large reviewed package changes retain a bounded full plan instead of overf
   assert.equal(launched.status, 0, launched.error?.message ?? launched.stderr);
 }));
 
-test('configured root and receipt preflights verify the event plan before running tests', () => fixture(({root, git, write, renew, docs, commit, base, changedPaths}) => {
+test('configured root and receipt preflights verify the event plan before running tests', () => fixture(({root, git, write, commit, base, changedPaths}) => {
   const workflow = readFileSync(new URL('../.github/workflows/ci.yml', import.meta.url), 'utf8');
   const health = 'deploy/local-stack/operations-health.test.mjs';
-  write(health, 'changed health check\n'); renew([health]); docs(); const head = commit();
+  write(health, 'changed health check\n'); const head = commit();
   const plan = {packages: [], receipts: ['test:local-stack'], typecheck: false, rootTests: false, reuse: null,
     rootInputs: {version: 1, base, head, paths: changedPaths(head), entryIds: ['local-health-test']}};
   write('event.json', JSON.stringify({pull_request: {base: {sha: base}, head: {sha: head}}}));
@@ -314,33 +291,26 @@ test('configured root and receipt preflights verify the event plan before runnin
   }
 }));
 
-test('removal evidence must survive a squash onto the trusted pull request base', () => fixture(({root, git, write, renew, docs, commit, base, plan}) => {
+test('full root work accepts unregistered deletion before and after a squash', () => fixture(({root, git, write, commit, base, plan}) => {
   git('checkout', '-b', 'unlanded-removal');
   const changed = 'packages/control/src/index.mjs';
-  write(changed, 'export const value = 2;\n'); renew([changed]); docs(); const unlanded = commit();
-  const removed = 'scripts/reader.mjs', recordPath = rootRecordFilename(removed);
-  const record = JSON.parse(readFileSync(join(root, recordPath), 'utf8'));
-  rmSync(join(root, removed));
-  const removal = previousRevision => write(recordPath, {version: 1, path: removed, state: 'absent', previousRevision,
-    registryObjectId: record.registryObjectId, reviewer: 'Removal control', reference: 'review/squash-retention'});
-  removal(unlanded); docs(); const head = commit();
+  write(changed, 'export const value = 2;\n'); commit();
+  const removed = 'scripts/reader.mjs';
+  rmSync(join(root, removed)); const head = commit();
   const full = {packages: [{package: '@waitron-cloud/control', shard: 1}], receipts: [...receiptSuites], typecheck: true, reuse: null};
   assert.doesNotThrow(() => api.assertRootInputWork(full, {base, head, git}));
   assert.equal(plan(head), null);
-  removal(base); docs(); const repaired = commit();
-  assert.doesNotThrow(() => api.assertRootInputWork(full, {base, head: repaired, git}));
   git('checkout', 'main'); git('merge', '--squash', 'unlanded-removal'); const squash = commit();
-  assert.throws(() => git('merge-base', '--is-ancestor', unlanded, squash));
-  assert.doesNotThrow(() => api.assertRootInputWork(full, {head: squash, git}));
+  assert.doesNotThrow(() => api.assertRootInputWork(full, {base, head: squash, git}));
 }));
 
-test('trusted root and receipt summaries reject every incomplete required job', () => fixture(({git, write, renew, docs, commit, base, changedPaths}) => {
+test('trusted root and receipt summaries reject every incomplete required job', () => fixture(({git, write, commit, base, changedPaths}) => {
   const health = 'deploy/local-stack/operations-health.test.mjs';
   for (const mode of ['root', 'receipt', 'mixed']) {
     git('reset', '--hard', base); git('clean', '-fdq');
     const paths = mode === 'root' ? [rootPath] : mode === 'receipt' ? [health] : [rootPath, health];
     for (const path of paths) write(path, `changed ${mode} check\n`);
-    renew(paths); docs(); const head = commit(), verification = {base, head, git};
+    const head = commit(), verification = {base, head, git};
     const root = mode !== 'receipt', receipts = mode !== 'root';
     const plan = {packages: [], receipts: receipts ? ['test:local-stack'] : [], typecheck: false, reuse: null, rootTests: root,
       rootInputs: {version: 1, base, head, paths: changedPaths(head), entryIds: mode === 'root' ? ['root-partition-contract']
@@ -378,9 +348,9 @@ test('trusted root and receipt summaries reject every incomplete required job', 
   }
 }));
 
-test('execution preflight rejects a different checkout dirty tracked bytes and forged command metadata', () => fixture(({root, git, write, renew, docs, commit, base, changedPaths}) => {
+test('execution preflight rejects a different checkout dirty tracked bytes and forged command metadata', () => fixture(({root, git, write, commit, base, changedPaths}) => {
   const program = fileURLToPath(new URL('./ci-root-inputs.mjs', import.meta.url));
-  write(receiptPath, 'changed capacity\n'); renew([receiptPath]); docs(); const head = commit();
+  write(receiptPath, 'changed capacity\n'); const head = commit();
   const plan = {packages: [], receipts: ['test:local-stack'], typecheck: false, rootTests: false, reuse: null,
     rootInputs: {version: 1, base, head, paths: changedPaths(head), entryIds: ['local-health-test']}};
   const eventPath = join(root, 'event.json');
@@ -397,8 +367,8 @@ test('execution preflight rejects a different checkout dirty tracked bytes and f
   result = run(plan); assert.notEqual(result.status, 0); assert.match(result.stderr, /exact head checkout/);
 }));
 
-test('executed summary derives ownership from the event before trusting a forged plan or job API', () => fixture(({root, git, write, renew, docs, commit, base, changedPaths}) => {
-  write(receiptPath, 'changed capacity\n'); renew([receiptPath]); docs(); const head = commit();
+test('executed summary derives ownership from the event before trusting a forged plan or job API', () => fixture(({root, git, write, commit, base, changedPaths}) => {
+  write(receiptPath, 'changed capacity\n'); const head = commit();
   const plan = {packages: [], receipts: ['test:local-stack'], typecheck: false, rootTests: false, reuse: null,
     rootInputs: {version: 1, base, head, paths: changedPaths(head), entryIds: ['local-health-test']}};
   const scratch = mkdtempSync(join(tmpdir(), 'cloud-root-summary-event-'));
@@ -415,14 +385,14 @@ test('executed summary derives ownership from the event before trusting a forged
     let result = run(plan); assert.equal(result.status, 0, result.stdout + result.stderr);
     const forged = {...plan}; delete forged.rootInputs; delete forged.rootTests;
     result = run(forged); assert.notEqual(result.status, 0); assert.match(result.stderr, /Root refusal requires full work/);
-    write('scripts/reader.mjs', 'unreviewed reader\n'); docs(); const stale = commit(); event(stale);
+    write('scripts/reader.mjs', 'unreviewed reader\n'); const stale = commit(); event(stale);
     result = run(forged, stale); assert.notEqual(result.status, 0); assert.match(result.stderr, /Root refusal requires full work/);
   } finally {rmSync(scratch, {recursive: true, force: true});}
 }));
 
-test('root execution preflight refuses missing required files and extra undiscovered tests', () => fixture(({root, git, write, renew, docs, commit}) => {
-  write('scripts/ci-another.test.mjs', 'another check\n'); renew(['scripts/ci-another.test.mjs']); docs(); const base = commit();
-  write(rootPath, 'changed root\n'); renew([rootPath]); docs(); const head = commit();
+test('root execution preflight refuses missing required files and extra undiscovered tests', () => fixture(({root, git, write, commit}) => {
+  write('scripts/ci-another.test.mjs', 'another check\n'); const base = commit();
+  write(rootPath, 'changed root\n'); const head = commit();
   const plan = {packages: [], receipts: [], typecheck: false, rootTests: true, reuse: null,
     rootInputs: {version: 1, base, head, paths: git('diff', '--name-only', '--no-renames', '-z', base, head).split('\0').filter(Boolean), entryIds: ['root-partition-contract']}};
   write('event.json', JSON.stringify({pull_request: {base: {sha: base}, head: {sha: head}}}));
@@ -436,7 +406,7 @@ test('root execution preflight refuses missing required files and extra undiscov
   result = run(); assert.notEqual(result.status, 0); assert.match(result.stderr, /dirty|checkout|inventory/i);
 }));
 
-test('executed planner publishes every root-only receipt-only mixed and forced-full gate', () => fixture(({root, git, write, renew, docs, commit, base}) => {
+test('executed planner publishes every root-only receipt-only mixed and forced-full gate', () => fixture(({root, git, write, commit, base}) => {
   const health = 'deploy/local-stack/operations-health.test.mjs', packagePath = 'packages/control/src/index.mjs';
   const scratch = mkdtempSync(join(tmpdir(), 'cloud-root-output-'));
   try {
@@ -448,7 +418,7 @@ test('executed planner publishes every root-only receipt-only mixed and forced-f
     ]) {
       git('reset', '--hard', base);
       for (const path of paths) write(path, 'reviewed output control\n');
-      renew(paths); docs(); const head = commit();
+      const head = commit();
       const event = join(scratch, 'event.json'), output = join(scratch, 'output');
       writeFileSync(event, JSON.stringify({pull_request: {base: {sha: base}, head: {sha: head}}})); writeFileSync(output, '');
       const callerEnv = {...process.env, GITHUB_EVENT_NAME: 'workflow_dispatch', CI_FULL: 'true', CI_CALLED: 'true', CI_WORKFLOW_INPUTS: '{"full":true}'};
@@ -473,11 +443,11 @@ test('executed planner publishes every root-only receipt-only mixed and forced-f
   } finally {rmSync(scratch, {recursive: true, force: true});}
 }));
 
-test('receipt-only preflight refuses a missing head command instead of accepting an empty check', () => fixture(({root, git, write, renew, docs, commit}) => {
+test('receipt-only preflight refuses a missing head command instead of accepting an empty check', () => fixture(({root, git, write, commit}) => {
   const health = 'deploy/local-stack/operations-health.test.mjs';
   write('package.json', {scripts: {'test:backup-capacity': `node --test ${receiptPath}`}});
-  renew(['package.json']); docs(); const base = commit();
-  write(health, 'changed health check\n'); renew([health]); docs(); const head = commit();
+  const base = commit();
+  write(health, 'changed health check\n'); const head = commit();
   const plan = {packages: [], receipts: ['test:local-stack'], typecheck: false, rootTests: false, reuse: null,
     rootInputs: {version: 1, base, head, paths: git('diff', '--name-only', '--no-renames', '-z', base, head).split('\0').filter(Boolean),
       entryIds: ['local-health-test']}};
@@ -489,22 +459,20 @@ test('receipt-only preflight refuses a missing head command instead of accepting
   assert.match(result.stderr, /Missing root receipt command: test:local-stack/);
 }));
 
-
-test('source reconstruction selects package work independently of retired reviews', () => fixture(({git, write, renew, docs, commit, base}) => {
+test('source reconstruction selects saved package work', () => fixture(({git, write, commit, base}) => {
   const path = 'packages/control/src/index.mjs';
   const workspace = [{name: '@waitron-cloud/control', directory: 'packages/control', scripts: {test: 'node --test test/*.test.mjs'}, sources: []}];
-  write(path, 'export const changed = true;\n'); docs(); const stale = commit();
+  write(path, 'export const changed = true;\n'); const stale = commit();
   const snapshot = head => ({revision: head, packages: workspace, testFilesByPackage: {'@waitron-cloud/control': []}});
   assert.equal(selectPlan({base, head: stale}, snapshot(stale), git).packages.length, 1);
-  renew([path]); docs(); const current = commit();
+  const current = commit();
   const selected = selectPlan({base, head: current}, snapshot(current), git);
   assert.equal(selected.typecheck, true);
   assert.equal(selected.packages.length, 1);
 }));
 
-
-test('main root preflight derives the literal push range and refuses a forced narrow plan', () => fixture(({root, git, write, renew, docs, commit, base, changedPaths}) => {
-  write(receiptPath, 'changed capacity check\n'); renew([receiptPath]); docs(); const head = commit();
+test('main root preflight derives the literal push range and refuses a forced narrow plan', () => fixture(({root, git, write, commit, base, changedPaths}) => {
+  write(receiptPath, 'changed capacity check\n'); const head = commit();
   const plan = {packages: [], receipts: ['test:local-stack'], typecheck: false, rootTests: false, reuse: null,
     rootInputs: {version: 1, base, head, paths: changedPaths(head), entryIds: ['local-health-test']}};
   const event = join(root, '.git', 'root-push.json');
@@ -522,14 +490,43 @@ test('main root preflight derives the literal push range and refuses a forced na
   }
 }));
 
-
-test('reuse retains proof validation independently of retired head reviews', () => fixture(({git, write, renew, docs, commit, base}) => {
-  write(rootPath, 'reviewed root change\n'); renew([rootPath]); docs(); const head = commit();
+test('reuse requires valid source proof', () => fixture(({git, write, commit, base}) => {
+  write(rootPath, 'reviewed root change\n'); const head = commit();
   const reused = {packages: [], receipts: [], typecheck: false, reuse: reuseProof()};
   assert.doesNotThrow(() => api.assertRootInputWork(reused, {base, head, git}));
   for (const bad of [{...reused, rootTests: false}, {...reused, reuse: {sha: head, runId: 42}}]) {
     assert.throws(() => api.assertRootInputWork(bad, {base, head, git}));
   }
-  write(rootPath, 'unreviewed root change\n'); docs(); const stale = commit();
+  write(rootPath, 'unreviewed root change\n'); const stale = commit();
   assert.doesNotThrow(() => api.assertRootInputWork(reused, {base, head: stale, git}));
+}));
+
+for (const side of ['base', 'head']) for (const kind of ['executable', 'link']) {
+  test(`root refuses nonregular prose in the ${side} tree: ${kind}`, () => fixture(({root, git, write, commit, base: initial}) => {
+    const path = 'docs/explanation.md', absolute = join(root, path);
+    if (kind === 'executable') chmodSync(absolute, 0o755);
+    else {rmSync(absolute); symlinkSync('../package.json', absolute);}
+    const base = side === 'base' ? commit() : initial;
+    if (side === 'base') {
+      if (kind === 'link') rmSync(absolute);
+      write(path, '# Regular prose again\n'); chmodSync(absolute, 0o644);
+    }
+    write(rootPath, 'changed root owner\n'); const head = commit();
+    const paths = git('diff', '--name-only', '--no-renames', '-z', base, head).split('\0').filter(Boolean);
+    const selected = api.rootInputPlan(paths, base, head, git);
+    assert.equal(selected.full, true);
+    assert.match(selected.reason, /Shared or unknown root input: docs\/explanation\.md/);
+  }));
+}
+
+test('full root fallback requires every package owner', () => fixture(({git, write, commit}) => {
+  write('packages/second/package.json', {name: '@waitron-cloud/second', scripts: {test: 'node --test test/*.test.mjs'}});
+  write('packages/second/src/index.mjs', 'export const value = 1;\n'); const base = commit();
+  write(rootPath, 'changed root owner\n'); write('scripts/unknown.mjs', 'export const value = 2;\n'); const head = commit();
+  const full = {packages: [{package: '@waitron-cloud/control', shard: 1}, {package: '@waitron-cloud/second', shard: 1}],
+    receipts: [...receiptSuites], typecheck: true, reuse: null};
+  assert.doesNotThrow(() => api.assertRootInputWork(full, {base, head, git}));
+  for (const packages of [[], [full.packages[0]], [full.packages[1]], [...full.packages, {package: '@waitron-cloud/unknown', shard: 1}]]) {
+    assert.throws(() => api.assertRootInputWork({...full, packages}, {base, head, git}), /Root fallback requires every package owner/);
+  }
 }));

@@ -1,6 +1,5 @@
 import assert from 'node:assert/strict';
 import {execFileSync, spawnSync} from 'node:child_process';
-import {createHash} from 'node:crypto';
 import {mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, unlinkSync, symlinkSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join, resolve} from 'node:path';
@@ -11,13 +10,7 @@ import {assertSummary} from './ci-summary.mjs';
 
 const workspace = loadWorkspace();
 const checker = resolve('scripts/ci-docs.mjs');
-const policy = 'scripts/ci-input-audit.json';
-const completeAudit = values => ({
-  version: 1,
-  docsInputSha256: '1'.repeat(64), identityInputSha256: '2'.repeat(64),
-  gatewayInputSha256: '3'.repeat(64), lockInputSha256: '4'.repeat(64),
-  manifests: {}, ...values,
-});
+
 function fixture(run) {
   const root = mkdtempSync(join(tmpdir(), 'cloud-docs-ci-'));
   const git = (...args) => execFileSync('git', ['-c', 'maintenance.auto=false', ...args], {cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe']});
@@ -28,11 +21,6 @@ function fixture(run) {
     put('scripts/reader.mjs', 'console.log("no document inputs");\n');
     put('docs/backlog.md', '# Backlog\n');
     put('README.md', '# Cloud\n');
-    const initial = commit();
-    // The fixture record has one input. Its digest does not use planner helpers.
-    const entry = git('ls-tree', '-rz', '--full-tree', initial).split('\0').find(row => row.endsWith('\tscripts/reader.mjs'));
-    const docsInputSha256 = createHash('sha256').update(`${entry}\0`).digest('hex');
-    put(policy, JSON.stringify(completeAudit({docsInputSha256})) + '\n');
     const base = commit();
     const plan = (head, old = base) => createPlan({pull_request: {base: {sha: old}, head: {sha: head}}}, {sha: head}, workspace, git, () => {throw Error('no API');});
     run({root, git, put, commit, base, plan});
@@ -67,15 +55,11 @@ test('a changed reader keeps mixed work full while later prose uses ordinary rev
   assert.equal(plan(head, base).packages.length, 29);
 }));
 
-test('earlier code and retired record states do not invalidate later prose', () => {
-  for (const change of ['changed', 'removed', 'missing', 'malformed', 'stale']) fixture(({root, put, commit, plan}) => {
+test('earlier source changes do not invalidate a later prose-only range', () => {
+  for (const change of ['changed', 'removed']) fixture(({root, put, commit, plan}) => {
     if (change === 'changed') put('scripts/reader.mjs', 'readFileSync("docs/backlog.md");\n');
     if (change === 'removed') unlinkSync(join(root, 'scripts/reader.mjs'));
-    if (change === 'missing') unlinkSync(join(root, policy));
-    if (change === 'malformed') put(policy, '{');
-    if (change === 'stale') put(policy, JSON.stringify(completeAudit({docsInputSha256: '0'.repeat(64)})) + '\n');
-    const changed = commit();
-    put('docs/backlog.md', '# Updated\n');
+    const changed = commit(); put('docs/backlog.md', '# Updated\n');
     assert.equal(plan(commit(), changed).packages.length, 0, change);
   });
 });
@@ -137,10 +121,6 @@ test('real planner command emits document output and reports unknown-input fallb
   put('package.json', JSON.stringify({name: 'fixture', private: true}));
   put('pnpm-workspace.yaml', "packages:\n  - 'packages/*'\n");
   for (const name of ['one', 'two']) put(`packages/${name}/package.json`, JSON.stringify({name, scripts: {test: 'node --test'}}));
-  const inputs = ['package.json', 'pnpm-workspace.yaml', 'packages/one/package.json', 'packages/two/package.json', 'scripts/reader.mjs'];
-  const tree = commit();
-  const rows = git('ls-tree', '-rz', '--full-tree', tree).split('\0').filter(row => inputs.includes(row.split('\t')[1]));
-  put(policy, JSON.stringify(completeAudit({docsInputSha256: createHash('sha256').update(rows.map(row => row + '\0').join('')).digest('hex')})) + '\n');
   let base = commit();
   const run = (head, old = base) => {
     put('event.json', JSON.stringify({pull_request: {base: {sha: old}, head: {sha: head}}}));
@@ -158,7 +138,7 @@ test('real planner command emits document output and reports unknown-input fallb
   assert.doesNotMatch(result.stdout, /::warning/);
   assert.match(result.output, /\ndocumentation=true\n/);
   assert.match(result.output, /\npackages=false\n/);
-  unlinkSync(join(root, policy)); base = commit();
+  base = git('rev-parse', 'HEAD').trim();
   put('docs/backlog.md', '# Another change\n');
   result = run(commit());
   assert.equal(result.status, 0);
@@ -190,7 +170,7 @@ test('strict summary requires the selected document job and refuses malformed em
   assert.throws(() => assertSummary({...plan, packages: [{package: 'one', shard: 1}]}, {...results, packages: 'success'}, [...jobs, {name: 'package (one)', status: 'completed', conclusion: 'success'}]));
 });
 
-test('planner command selects actual inputs without demanding record renewal', () => {
+test('planner command selects actual inputs', () => {
   for (const path of ['docs/backlog.md', 'packages/one/change.txt', 'scripts/new-reader.mjs']) fixture(({root, git, put, commit}) => {
     put('package.json', JSON.stringify({name: 'fixture', private: true}));
     put('pnpm-workspace.yaml', "packages:\n  - 'packages/*'\n");
@@ -217,10 +197,9 @@ test('planner command selects actual inputs without demanding record renewal', (
   });
 });
 
-
-test('the retired audit command refuses instead of claiming renewal is needed', () => fixture(({root, base}) => {
+test('document checker rejects unsupported command flags', () => fixture(({root, base}) => {
   for (const revision of [base, 'main']) {
-    const result = spawnSync(process.execPath, [checker, '--audit', revision], {cwd: root, encoding: 'utf8'});
+    const result = spawnSync(process.execPath, [checker, '--unsupported', revision], {cwd: root, encoding: 'utf8'});
     assert.equal(result.status, 1); assert.match(result.stderr, /Usage: ci-docs.mjs/);
   }
 }));
@@ -255,13 +234,7 @@ test('proof planner skips only ordinary prose and keeps code, pinned documents, 
   git('reset', '--hard', base);
   const pinned = 'docs/waitron-integration-contract.md';
   put(pinned, '# Published contract input\n');
-  const tree = commit();
-  const inputs = git('ls-tree', '-rz', '--full-tree', tree).split('\0')
-    .filter(row => ['scripts/reader.mjs', pinned].includes(row.split('\t')[1]));
-  put(policy, JSON.stringify(completeAudit({docsInputSha256: createHash('sha256')
-    .update(inputs.map(row => row + '\0').join('')).digest('hex')})) + '\n');
   const pinnedBase = commit();
-  assert.equal(spawnSync(process.execPath, [checker, '--audit', pinnedBase], {cwd: root, stdio: 'pipe'}).status, 1);
   git('mv', pinned, 'docs/moved-contract.md');
   run(pr(commit(), pinnedBase), true);
 
