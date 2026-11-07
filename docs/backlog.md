@@ -1917,32 +1917,6 @@ implementation or production evidence.
   explain the declarations and remaining limits.
   Part 2b supplies the
   direct package selection below; part 5 still owns verified merge reuse.
-  Part 3 implements the [reviewed root-input design](superpowers/specs/2026-11-05-ci-root-input-ownership-design.md)
-  with [separate records and an explicit renewal procedure](ci-root-input-ownership.md).
-  Its input review admits the root-partition contract test to
-  all eight root jobs and the local health test to the entire `test:local-stack`
-  receipt command. Their union composes with existing package selection without
-  dropping mandatory receipts. The capacity verifier test remains unregistered:
-  a root selector fixture copies its live bytes, so receipt-only work would miss
-  that proved consumer. Every other unknown root input retains full work.
-  Once activated, mandatory summary independently verifies complete head review
-  even for full and legacy plans. Missing or stale records and complete metadata
-  removal fail; stale base evidence refuses narrowing. Removal anchors must
-  already exist in the trusted PR base so they survive a squash. Valid record
-  renewal preserves each separate proof decision only after both saved root reviews and
-  documentation authorities qualify. Real proof inputs and forced full/nightly
-  work remain selected. Bootstrap and registry changes themselves run full.
-  The merged-tree review also remains mandatory when main reuses a verified
-  PR run. Independent source reconstruction rejects stale root reviews, and
-  source evidence records root-only and receipt-only work without selecting
-  compiler jobs. Different-tree pushes derive ownership from their literal
-  before/after range. Integration controls retain the bounded summary lookup,
-  source recheck and original proof-selector assertions.
-  Four Kubernetes cleanup inputs have renewed root reviews: `expiry.mjs`,
-  `expiry.test.mjs`, `setup.test.mjs` and the `README.md` under
-  `deploy/kubernetes/proof/`. The guide is a reviewed root input. Their fixed
-  unit-test and generated-Lambda readers preserve the existing registered test
-  boundaries; the separate cost-input renewal remains independently owned.
   The executable output fixture gives its synthetic PR an explicit event and
   call inputs, including when its parent is a full nightly invocation. Its
   original root, compiler, package, receipt and forced-full assertions remain.
@@ -2032,9 +2006,7 @@ implementation or production evidence.
   within the nested family, refusing malformed job names before filtering.
   Configuration guards protect the full inputs, concurrency and final
   dependencies; an executed CLI control checks the configured prefix. These
-  guards do not replace hosted execution. The copied-reader CLI fixture stages
-  regenerated per-path evidence before saving its baseline; a changed-reader
-  control preserves both ordinary prose-only and forced-full assertions.
+  guards do not replace hosted execution.
   [Manual main run 42165813178](https://github.com/waitron-io/waitron-cloud/actions/runs/42165813178)
   attempt 2 qualifies exact `9237200a`: all 77 jobs final, 21,072 reported Node
   passes, 26 optional skips and 384 separately counted mocked OpenTofu cases.
@@ -2044,7 +2016,7 @@ implementation or production evidence.
   checks and two summaries, retaining 21,058 passes with identical logs and execution
   times. The first attempt's recurring native LIST shutdown refusal remains on
   D530; the passing retry is no repair. The [nightly guide](ci-nightly.md#verified-manual-run)
-  records the exact revision and limits. Scheduled delivery and comparable healthy
+  records the exact revision and limits. Comparable healthy
   aggregate usage measurements remain open. The original 4 November baseline
   overlaps published GitHub incidents and cannot support a savings claim.
   D571 part 2b adds
@@ -2072,47 +2044,9 @@ implementation or production evidence.
   certificate and exact metadata assertions. Production validation independently
   discovers all ten current manifests, including translation and licence metadata.
   Saved dependency, execution, schema and deployment inputs are unchanged.
-  Focused reader, fixture and renewal tests cover malformed policy fields, real
-  file modes, symbolic links, submodules, missing manifests, staged/unstaged drift
-  and committed-only checking. Complete committed-tree controls qualify all four
-  inventories together, execute isolated document/script checks, and select the
-  isolated lock importer with every receipt and compiler check retained. Mixed,
-  unknown and changed-reader controls retain full work. The explicit generator
-  never stages its output or follows a live policy link. Wider path selection,
-  remaining receipt-audit renewal and job-duration work stay open. The planner
-  now runs Git directly without the unused API callback or historical tree-fetch
-  wrapper. Its public function signature stays compatible; existing CLI checks
-  retain full main runs, exact output fields and zero PR API calls. Generation
-  is a repository-root command. A real temporary Git repository reproduces a
-  subfolder invocation overwriting a nested lookalike policy. Generation now
-  requires a working tree and an empty current-directory prefix before reading
-  staged inputs or writing output, including refusal inside Git's metadata directory.
-  Regressions preserve both policies, staged inputs and the working tree on refusal;
-  normal root generation still succeeds. Read-only
-  checking of a committed audit remains available from subfolders.
-  Generation also refuses when the live `scripts` directory is itself a symbolic
-  link, before opening its output. A real temporary Git repository reproduces an outside
-  policy overwrite through that directory link. The refusal preserves the outside
-  files, staged inputs and working tree; ordinary root generation still succeeds.
-  Committed checking reads saved Git blobs and remains read-only through the same
-  linked directory. This checks the directory before writing; it does not protect
-  against another process replacing the directory during generation.
-  Generation also refuses a live policy with multiple hard links before writing.
-  A real temporary Git repository reproduces the earlier overwrite of an outside
-  alias; the regression preserves both names' contents, staged inputs and working
-  tree on refusal. Ordinary generation still succeeds, and committed checking
-  remains read-only with a hard-linked, dirty live policy. These checks inspect
-  the output before writing; concurrent replacement remains outside this guarantee.
-  An independent subprocess check corrupts only the generated audit digest after
-  valid staged inputs have passed. The final validation refuses that output without
-  changing the existing policy, staged inputs or working tree. Removing that final
-  validation in a disposable copy makes the check fail; healthy generation passes.
-  Input-schema and admission guards retain their existing coverage.
-  Mixed changes also retain the existing fallback. The script job verifies the
-  exact checkout and changed paths, and the summary requires its successful result.
-  The identity audit covers that helper's only executable consumer, its own spawned test;
-  the source-map default still takes the existing full route. Other root scripts,
-  configuration and their real controls remain open. The immutable package graph
+  Other root scripts and shared configuration still retain full work. Wider
+  selection and job-duration qualification remain open.
+  The immutable package graph
   also follows quoted references through shared JavaScript and TypeScript helpers
   outside package directories, including helper chains and cycles. It retains
   readers from both saved revisions, resolves directory index helpers and maps

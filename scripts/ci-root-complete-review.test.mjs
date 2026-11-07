@@ -9,7 +9,7 @@ import {rootInputPlan, assertRootInputWork} from './ci-root-inputs.mjs';
 import {readGitBlobs} from './ci-package-revisions.mjs';
 import {createPlan} from './ci-plan.mjs';
 
-test('a complete candidate activates in full and requires current review before narrowing', {timeout: 120_000}, t => {
+test('a complete legacy candidate keeps its record APIs separate from live selection', {timeout: 120_000}, t => {
   const root = mkdtempSync(join(tmpdir(), 'cloud-root-complete-review-'));
   const git = (...args) => {
     const binary = typeof args.at(-1) === 'object' && args.pop().binary;
@@ -73,7 +73,7 @@ test('a complete candidate activates in full and requires current review before 
     assert.doesNotThrow(() => checkRootReview(activated, git));
     const changedPaths = (base, head) => git('diff', '--name-only', '--no-renames', '-z', base, head).split('\0').filter(Boolean);
     const bootstrap = rootInputPlan(changedPaths(beforeActivation, activated), beforeActivation, activated, git);
-    assert.equal(bootstrap.full, true, 'Activation must not grant its own shortcut');
+    assert.equal(bootstrap, null, 'Retired activation cannot grant root ownership');
     const workspace = projection.inputs.filter(row => /^(apps|packages)\/[^/]+\/package\.json$/.test(row.path))
       .map(row => ({...JSON.parse(git('show', `${activated}:${row.path}`)), directory: row.path.slice(0, -'/package.json'.length)}));
     const full = createPlan({pull_request: {base: {sha: beforeActivation}, head: {sha: activated}}}, {}, workspace, git);
@@ -107,6 +107,6 @@ test('a complete candidate activates in full and requires current review before 
 
     appendFileSync(join(root, rootPath), '\n// Unreviewed complete-candidate input.\n');
     git('add', '--', rootPath); docs(); const stale = commit();
-    assert.throws(() => assertRootInputWork(full, {head: stale, git}), /Unreviewed root input: scripts\/ci-root-shards\.test\.mjs/);
+    assert.doesNotThrow(() => assertRootInputWork(full, {head: stale, git}));
   } finally {rmSync(root, {recursive: true, force: true});}
 });

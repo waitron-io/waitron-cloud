@@ -80,7 +80,7 @@ function buildRevisionPlan(range, workspace, git, testFilesByPackage) {
     if (root?.full) return full(root.reason);
     if (root) {
       const work = root.packagePaths.length ? packageWorkForPaths(root.packagePaths, workspace, base, head, git, testFilesByPackage)
-        : {packages: [], receipts: [], typecheck: false, reason: 'Reviewed root inputs'};
+        : {packages: [], receipts: [], typecheck: false, reason: 'Known root owners'};
       return {...work, receipts: [...new Set([...work.receipts, ...root.receipts])].sort(), reuse: null,
         rootInputs: root.rootInputs, rootTests: root.rootTests || work.typecheck};
     }

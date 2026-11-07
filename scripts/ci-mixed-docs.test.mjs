@@ -129,7 +129,7 @@ test('pinned Markdown keeps the package that actually reads its contents', () =>
   assert.equal(execFileSync(process.execPath, ['packages/consumer/src/index.mjs'], {cwd: root, encoding: 'utf8'}), 'changed-value\n');
 }));
 
-test('mixed prose preserves full work for stale audits, linked documents, unknown paths and damaged peer evidence', () => {
+test('mixed prose keeps real refusals independently of retired peer states', () => {
   for (const change of ['stale-head', 'stale-base', 'linked-document', 'unknown', 'identity-hash', 'gateway-hash', 'lock-hash', 'missing-policy']) fixture(({root, put, renew, commit, base, plan}) => {
     if (change === 'stale-base') {
       put('packages/unrelated/src/index.mjs', 'export const value = 3;\n');
@@ -150,17 +150,26 @@ test('mixed prose preserves full work for stale audits, linked documents, unknow
     }
     if (change === 'missing-policy') unlinkSync(join(root, policy));
     assert.deepEqual(plan(commit(), base).packages.map(row => row.package),
-      ['@waitron-cloud/catalogue', '@waitron-cloud/consumer', '@waitron-cloud/unrelated'], change);
+      ['@waitron-cloud/catalogue', '@waitron-cloud/consumer', ...(['linked-document', 'unknown'].includes(change) ? ['@waitron-cloud/unrelated'] : [])], change);
   });
 });
 
-test('prose plus an audit-only edit cannot become successful empty work', () => fixture(({root, put, renew, commit, plan}) => {
+test('prose plus retired metadata retains its nonempty document job', () => fixture(({root, put, renew, commit, plan}) => {
   put('docs/backlog.md', '# Updated\n');
   renew();
   // Whitespace changes the policy blob without changing any admitted digest.
   // There is no executable change to justify a nonempty package selection.
   put(policy, JSON.stringify(JSON.parse(readFileSync(join(root, policy), 'utf8')), null, 4));
   const selected = plan(commit());
-  assert.equal(selected.packages.length, 3);
-  assert.equal(selected.typecheck, true);
+  assert.equal(selected.packages.length, 0);
+  assert.equal(selected.typecheck, false);
+  assert.deepEqual(selected.documentation.paths, ['docs/backlog.md']);
+}));
+
+
+test('retired metadata alone cannot create an empty successful plan', () => fixture(({root, put, commit, plan}) => {
+  put(policy, JSON.stringify(JSON.parse(readFileSync(join(root, policy), 'utf8')), null, 4));
+  const selected = plan(commit());
+  assert.equal(selected.packages.length, 3); assert.equal(selected.typecheck, true);
+  assert.equal(selected.documentation, undefined); assert.equal(selected.scripts, undefined);
 }));

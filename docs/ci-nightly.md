@@ -83,3 +83,13 @@ did not appear that morning; the qualified run was dispatched manually at
 [Actions](https://www.githubstatus.com/incidents/xr3myzj7ms51) incidents. Compare
 busy periods that avoid relevant incidents, have no failed HTTP 5xx downloads
 and keep every checkout step under about ten seconds before judging savings.
+
+## Verified scheduled run
+
+The [6 November scheduled run](https://github.com/waitron-io/waitron-cloud/actions/runs/42206360042)
+ran on main `ef230096fbc9073e4c20109dc214038491864966`, attempt 1. All 77 jobs
+finished: 75 successful exact checkouts and two planned skips. Independent readback
+checked all five summaries, 21,348 Node passes, 26 optional skips and 384 mocked
+OpenTofu cases. Its one expected failing child is covered by its passing cleanup
+control. This qualifies that earlier code; record deletion still requires a
+scheduled success after the disconnection PR lands.

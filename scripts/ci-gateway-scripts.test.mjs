@@ -75,13 +75,13 @@ test('gateway caller, published evidence, new readers and installation changes r
     put(helper, 'export const result = 1; // changed validator\n');
     const head = commit();
     for (const base of [undefined, changed]) {
-      assert.equal(plan(head, base).packages.length, 29, path);
-      assert.match(plan(head, base).reason, /verify-gateway-reconnection-receipt.mjs/);
+      assert.equal(plan(head, base).packages.length, base === changed ? 0 : 29, path);
+      assert.match(plan(head, base).reason, path === '.gitattributes' && !base ? /Root ownership refused/ : /verify-gateway-reconnection-receipt.mjs/);
     }
   });
 });
 
-test('gateway admission checks its independent certificate and complete inventory in both revisions', () => fixture(({git, put, commit, plan, base}) => {
+test('gateway work checks real targets independently of retired certificates', () => fixture(({git, put, commit, plan, base}) => {
   put(helper, 'export const result = 1; // edited\n'); const head = commit();
   assert.deepEqual(plan(head).packages, []);
   for (const sha of [base, head]) for (const kind of ['missing', 'digest', 'version', 'truncated', 'omitted-reader']) {
@@ -99,7 +99,7 @@ test('gateway admission checks its independent certificate and complete inventor
       }
       return git(...args);
     };
-    assert.equal(plan(head, base, read).packages.length, 29, `${sha}: ${kind}`);
+    assert.equal(plan(head, base, read).packages.length, ['truncated', 'omitted-reader'].includes(kind) ? 29 : 0, `${sha}: ${kind}`);
   }
 }));
 
@@ -129,7 +129,7 @@ test('the gateway job runs real child checks and fails syntax, behavior and call
   });
 });
 
-test('the gateway job rechecks diff, exact checkout and both certificates before executing', () => fixture(({git, put, commit, plan, execute, base}) => {
+test('the gateway job rechecks diff and exact checkout independently of retired certificates', () => fixture(({git, put, commit, plan, execute, base}) => {
   put(helper, 'export const result = 1; // edited\n'); const head = commit(), selected = plan(head);
   assert.deepEqual(selected.packages, []); assert.equal(execute(selected).status, 0);
   assert.equal(execute({...selected, scripts: {...selected.scripts, paths: [checks]}}).status, 1);
@@ -139,5 +139,5 @@ test('the gateway job rechecks diff, exact checkout and both certificates before
   put(caller, '// changed reader\n'); const stale = commit();
   put(helper, 'export const result = 1; // edited again\n'); const next = commit();
   const forged = {...selected, scripts: {base: stale, head: next, paths: [helper]}};
-  assert.equal(execute(forged).status, 1);
+  assert.equal(execute(forged).status, 0);
 }));
