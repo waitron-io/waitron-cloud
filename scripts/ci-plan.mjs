@@ -6,42 +6,23 @@ import {bindRuntimeWorkflow, evidenceInvocation, publishRuntimePlan, reuseContex
 import {appendFileSync, readFileSync} from 'node:fs';
 import {pathToFileURL} from 'node:url';
 import {loadWorkspace, scopeForPaths, workPlan, receiptSuites} from './ci-scope.mjs';
-import {auditDocumentation, documentationPlan} from './ci-docs.mjs';
+import {documentationPlan} from './ci-docs.mjs';
 import {receiptPlan} from './ci-receipts.mjs';
 import {scriptPlan} from './ci-scripts.mjs';
 import {scopeForRevisions, readGitBlobs} from './ci-package-revisions.mjs';
 import {assertRootInputWork, rootInputPlan} from './ci-root-inputs.mjs';
 import {describeLockChanges} from './ci-lock.mjs';
 import {lockPackageScope} from './ci-lock-selection.mjs';
-import {auditInputMode, auditAllInputModes, readInputAudit, unreadMarkdown} from './ci-input-audit.mjs';
+import {inertCIRecord, unreadMarkdown} from './ci-input-audit.mjs';
 
 function mixedCodePaths(paths, base, head, git) {
+  paths = paths.filter(path => !inertCIRecord(path));
   const prose = paths.filter(unreadMarkdown);
   if (!prose.length || prose.length === paths.length) return paths;
-  const policyPath = 'scripts/ci-input-audit.json';
-  const evidenceChanged = paths.some(path => path === policyPath || path === 'scripts/ci-input-audit-v2.json' || path.startsWith('scripts/ci-input-audit.d/'));
   try {
     documentationPlan(prose, base, head, git);
-    for (const revision of [base, head]) {
-      const {entries, policy} = readInputAudit(revision, git);
-      // A prose path must be regular in every tree where it exists.
-      for (const path of prose) {
-        const entry = entries.find(entry => entry.path === path);
-        if (entry && (entry.mode !== '100644' || entry.type !== 'blob')) throw Error('Non-regular Markdown');
-      }
-      // Prose-only base commits keep the document audit current while changing
-      // peer inventories. The renewed head must prove every policy mode.
-      if (evidenceChanged && revision === head) {
-        if (policy.version === 2) auditAllInputModes(revision, git);
-        else for (const mode of ['docs', 'identity', 'gateway', 'lock']) {
-          auditInputMode(mode, revision, git, Object.keys(policy.manifests));
-        }
-      }
-    }
-    return paths.filter(path => !prose.includes(path) && path !== policyPath && path !== 'scripts/ci-input-audit-v2.json' && !path.startsWith('scripts/ci-input-audit.d/'));
-  } catch {
-    return paths;
-  }
+    return paths.filter(path => !prose.includes(path));
+  } catch { return paths; }
 }
 
 export function packageWorkForPaths(paths, workspace, base, head, git, testFilesByPackage) {
@@ -68,7 +49,7 @@ export function packageWorkForPaths(paths, workspace, base, head, git, testFiles
       reason = `Unverified package revisions: ${error.message}: full package suite (${paths.join(', ')})`;
     }
   }
-  reason ??= scope.full ? `Shared, unaudited or unknown paths: full suite (${paths.join(', ')})` : `Selected ${scope.packages.join(', ')}`;
+  reason ??= scope.full ? `Shared or unknown paths: full suite (${paths.join(', ')})` : `Selected ${scope.packages.join(', ')}`;
   if (paths.includes('pnpm-lock.yaml')) reason += `; ${lockSelection?.reason ?? describeLockChanges(base, head, git)}`;
   const work = workPlan(scope, workspace, undefined, receiptScope, testFilesByPackage);
   if (lockSelection || reviewedPackageReaders) work.receipts = [...receiptSuites];
@@ -87,24 +68,26 @@ function buildRevisionPlan(range, workspace, git, testFilesByPackage) {
     const {base, head} = range;
     const paths = git('diff', '--name-only', '--no-renames', '-z', base, head).split('\0');
     if (paths.pop() !== '' || !paths.length) throw Error('Incomplete or empty NUL path inventory');
+    if (paths.every(inertCIRecord)) return full('Only retired CI records changed: full suite');
     try {
       const documentation = documentationPlan(paths, base, head, git);
-      if (documentation) return {packages: [], receipts: [], typecheck: false, reuse: null, documentation, reason: `Audited unread Markdown: ${paths.join(', ')}`};
-    } catch { /* Missing or stale audit evidence keeps the existing full fallback. */ }
+      if (documentation) return {packages: [], receipts: [], typecheck: false, reuse: null, documentation, reason: `Regular prose: ${paths.join(', ')}`};
+    } catch { /* Unclassified saved prose keeps the full fallback. */ }
     try {
-      const scripts = scriptPlan(paths, base, head, git);
-      if (scripts) return {packages: [], receipts: [], typecheck: false, reuse: null, scripts, reason: `Audited root script: ${paths.join(', ')}`};
-    } catch { /* Missing or stale reader evidence keeps the existing full fallback. */ }
+      const scripts = scriptPlan(paths.filter(path => !inertCIRecord(path)), base, head, git);
+      if (scripts) return {packages: [], receipts: [], typecheck: false, reuse: null, scripts, reason: `Owned root script: ${paths.join(', ')}`};
+    } catch { /* Missing or nonregular script targets keep the full fallback. */ }
     const root = rootInputPlan(paths, base, head, git);
     if (root?.full) return full(root.reason);
     if (root) {
       const work = root.packagePaths.length ? packageWorkForPaths(root.packagePaths, workspace, base, head, git, testFilesByPackage)
-        : {packages: [], receipts: [], typecheck: false, reason: 'Reviewed root inputs'};
+        : {packages: [], receipts: [], typecheck: false, reason: 'Known root owners'};
       return {...work, receipts: [...new Set([...work.receipts, ...root.receipts])].sort(), reuse: null,
         rootInputs: root.rootInputs, rootTests: root.rootTests || work.typecheck};
     }
-    if (paths.includes('pnpm-lock.yaml') && !paths.every(path => path === 'pnpm-lock.yaml' || workspace.some(pkg => path === `${pkg.directory}/package.json`))) {
-      return full(`Shared, unaudited or unknown paths: full suite (${paths.join(', ')}); ${describeLockChanges(base, head, git)}`);
+    const productPaths = paths.filter(path => !inertCIRecord(path));
+    if (productPaths.includes('pnpm-lock.yaml') && !productPaths.every(path => path === 'pnpm-lock.yaml' || workspace.some(pkg => path === `${pkg.directory}/package.json`))) {
+      return full(`Shared or unknown paths: full suite (${paths.join(', ')}); ${describeLockChanges(base, head, git)}`);
     }
     return {...packageWorkForPaths(mixedCodePaths(paths, base, head, git), workspace, base, head, git, testFilesByPackage), reuse: null};
   } catch {
@@ -157,12 +140,6 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
     return execFileSync('git', args, {encoding: binary ? undefined : 'utf8', timeout: 30_000, maxBuffer: 64 * 1024 * 1024, stdio: ['ignore', 'pipe', 'pipe']});
   };
   git.readBlobs = readGitBlobs;
-  // Warn on every plan, including paths that never enter the document selector.
-  // Audit renewal requires explicit reader review; warnings never bypass admission checks.
-  try { auditDocumentation(git('rev-parse', 'HEAD').trim(), git); }
-  catch {
-    console.log('::warning title=Documentation-only CI unavailable::Review changed executable inputs, then renew documentation evidence (scripts/ci-input-audit.json in v1; docs records in v2) with --write-staged using docs/ci-documentation-audit.md. V2 peer records may remain stale and retain full work. Docs-only changes retain full CI, and the required root/script freshness check fails until reviewed and renewed.');
-  }
   let record = process.env.CI_RECORD_EVIDENCE === 'true' && evidenceInvocation(context);
   const dependencies = (record || context.eventName === 'push') && context.repository === 'waitron-io/waitron-cloud'
     ? runtimeReuseDependencies(context) : {};

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import {execFileSync} from 'node:child_process';
 import {createHash} from 'node:crypto';
-import {mkdtempSync, mkdirSync, writeFileSync, rmSync} from 'node:fs';
+import {chmodSync, mkdtempSync, mkdirSync, writeFileSync, rmSync, unlinkSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import test from 'node:test';
@@ -63,7 +63,42 @@ function assertSelected(plan, names = ['catalogue', 'page']) {
   assert.equal(plan.reuse, null);
 }
 
-test('audited lock-only changes select resolved importers and saved helper consumers despite a dirty worktree', () => fixture(({lock, save, commit, plan}) => {
+test('reordered nested export conditions retain full lock work', () => fixture(({lock, save, write, commit, plan}) => {
+  const manifest = {name: 'catalogue', directory: 'packages/catalogue', scripts: {test: 'node --test'},
+    exports: {'.': {node: './src/index.ts', default: './src/fallback.ts'}}};
+  write('packages/catalogue/package.json', JSON.stringify(manifest)); const base = commit();
+  lock.packages['leaf@1.0.0'].resolution.integrity = 'sha512-Y2hhbmdlZA=='; save();
+  write('packages/catalogue/package.json', JSON.stringify({exports: manifest.exports, scripts: manifest.scripts,
+    directory: manifest.directory, name: manifest.name}));
+  assertSelected(plan(base, commit()));
+  manifest.exports['.'] = {default: './src/fallback.ts', node: './src/index.ts'};
+  write('packages/catalogue/package.json', JSON.stringify(manifest));
+  assertSelected(plan(base, commit()), ['catalogue', 'page', 'unrelated']);
+}));
+
+test('executable manifests in either saved tree retain full lock work', () => {
+  for (const side of ['base', 'head']) fixture(({git, lock, save, commit, plan}) => {
+    const manifest = join(git('rev-parse', '--show-toplevel').trim(), 'packages/catalogue/package.json');
+    if (side === 'base') chmodSync(manifest, 0o755);
+    const base = commit(); lock.packages['leaf@1.0.0'].resolution.integrity = 'sha512-Y2hhbmdlZA=='; save();
+    chmodSync(manifest, side === 'head' ? 0o755 : 0o644);
+    assertSelected(plan(base, commit()), ['catalogue', 'page', 'unrelated']);
+  });
+});
+
+test('saved package discovery refuses unlisted and missing manifests in either tree', () => {
+  for (const side of ['base', 'head']) for (const fault of ['unlisted', 'missing']) fixture(({git, lock, save, write, commit, plan}) => {
+    const change = () => fault === 'unlisted'
+      ? write('packages/surprise/package.json', JSON.stringify({name: 'surprise', scripts: {test: 'node --test'}}))
+      : unlinkSync(join(git('rev-parse', '--show-toplevel').trim(), 'packages/unrelated/package.json'));
+    if (side === 'base') change();
+    const base = commit(); lock.packages['leaf@1.0.0'].resolution.integrity = 'sha512-Y2hhbmdlZA=='; save();
+    if (side === 'head') change();
+    assertSelected(plan(base, commit()), ['catalogue', 'page', 'unrelated']);
+  });
+});
+
+test('saved lock-only changes select resolved importers and saved helper consumers despite a dirty worktree', () => fixture(({lock, save, commit, plan}) => {
   const base = commit();
   lock.packages['leaf@1.0.0'].resolution.integrity = 'sha512-Y2hhbmdlZA=='; save();
   const head = commit();
@@ -71,7 +106,7 @@ test('audited lock-only changes select resolved importers and saved helper consu
   const result = plan(base, head);
   assertSelected(result);
   assert.match(result.reason, /pnpm-lock.yaml.*packages\/catalogue/);
-  assert.match(result.reason, /audited.*package|package.*audit/i);
+  assert.match(result.reason, /saved.*package|package.*saved/i);
 }));
 
 test('removing an indirect resolution still runs its former importer and readers', () => fixture(({lock, save, commit, plan}) => {
@@ -105,7 +140,7 @@ test('a new resolved version can select one isolated package without a manifest 
   assertSelected(plan(base, commit()), ['unrelated']);
 }));
 
-test('stale, missing or malformed reader audit in either tree retains the full suite', () => fixture(({lock, save, commit, plan, git, write, audit}) => {
+test('saved lock refusals remain independent of retired reader records', () => fixture(({lock, save, commit, plan, git, write, audit}) => {
   const base = commit();
   lock.packages['leaf@1.0.0'].resolution.integrity = 'sha512-Y2hhbmdlZA=='; save();
   const head = commit();
@@ -123,7 +158,7 @@ test('stale, missing or malformed reader audit in either tree retains the full s
       }
       return git(...args);
     };
-    assertSelected(plan(base, head, read), ['catalogue', 'page', 'unrelated']);
+    assertSelected(plan(base, head, read), ['lock-symlink', 'inventory'].includes(fault) ? ['catalogue', 'page', 'unrelated'] : ['catalogue', 'page']);
   }
   // A certificate for the new reader alone cannot qualify the old revision.
   write('scripts/new-reader.mjs', "export const lock = '../pnpm-lock.yaml';\n");
@@ -151,7 +186,7 @@ test('root, unknown or removed importers and no-op locks remain full even with v
     write('pnpm-lock.yaml', '# Lock change\n' + Object.entries(lock).map(([key, value]) => `${key}: ${JSON.stringify(value)}\n`).join(''));
     const result = plan(base, commit());
     assertSelected(result, ['catalogue', 'page', 'unrelated']);
-    assert.doesNotMatch(result.reason, /audited package selection/);
+    assert.doesNotMatch(result.reason, /saved package selection/);
   });
 });
 
@@ -1434,7 +1469,7 @@ for (const name of readdirSync(${argument})) {
       {cwd: git('rev-parse', '--show-toplevel').trim(), encoding: 'utf8'}), 'unresolved lock helper loaded\n');
     const result = plan(base, head);
     assertSelected(result, uncertain ? ['catalogue', 'page', 'unrelated'] : ['catalogue', 'page']);
-    assert.match(result.reason, uncertain ? /full suite retained/ : /audited package selection/);
+    assert.match(result.reason, uncertain ? /full suite retained/ : /saved package selection/);
   }));
 });
 
@@ -1465,3 +1500,11 @@ test('audited locks retain all packages for the executed same-name reviewer prob
     assert.match(result.reason, /full suite retained/);
   }));
 });
+
+for (const saved of ['base', 'head', 'both']) test(`lock dependency selection ignores retired records in ${saved}`, () => fixture(({lock, save, write, commit, plan}) => {
+  if (saved !== 'head') write(policy, 'not JSON\n');
+  const base = commit();
+  lock.packages['leaf@1.0.0'].resolution.integrity = 'sha512-Y2hhbmdlZA=='; save();
+  if (saved !== 'base') write(policy, '{retired\n');
+  assertSelected(plan(base, commit()), ['catalogue', 'page']);
+}));

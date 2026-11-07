@@ -8,7 +8,7 @@ its own backlog. [documentation-ownership.md](docs/documentation-ownership.md) g
 by topic, and the [integration contract](docs/waitron-integration-contract.md) covers what passes
 between the two.
 
-**No Cloud service is deployed.** Everything proved so far was proved locally
+**No production Cloud service is deployed.** Everything proved so far was proved locally
 ([launch-evidence.md](docs/launch-evidence.md)).
 
 Waitron's own `CLAUDE.md` does not apply here, and neither do its commands: this repository has no
@@ -93,8 +93,8 @@ it. "Nothing enforces this" means only people reading the change will catch a mi
   It gets its own entry only if a person would notice it, it could cost money or a filing, or it
   breaks a written rule.
 - **Shared screen controls come from Waitron** as the private package `@waitron-io/ui-core`. A
-  Dependabot pull request for it is expected to fail until you update the smoke test and renew the
-  review records ([shared-ui-release.md](docs/shared-ui-release.md)).
+  Dependabot pull request for it is expected to fail until you update the smoke test
+  ([shared-ui-release.md](docs/shared-ui-release.md)).
 
 ## Running things
 
@@ -136,10 +136,10 @@ For the whole local stack, follow [local-deployment.md](docs/local-deployment.md
   says nothing about what was not selected.
 - **The nightly run at 03:17 UTC runs everything** ([ci-nightly.md](docs/ci-nightly.md)). Start one with
   `gh workflow run nightly.yml --ref main`.
-- **A change to anything but prose must carry renewed review records, or CI fails.** Follow
-  [ci-root-input-ownership.md](docs/ci-root-input-ownership.md), then
-  [ci-documentation-audit.md](docs/ci-documentation-audit.md). Enforced by `scripts/ci-root-review.mjs`
-  and `scripts/ci-docs.mjs --audit`.
+- **Review changed code's actual readers and test owners; do not renew generated CI review records.**
+  Follow [ci-root-input-ownership.md](docs/ci-root-input-ownership.md) and
+  [ci-documentation-audit.md](docs/ci-documentation-audit.md). The selectors keep known owners and
+  full work for unknown inputs; the summary requires every selected job. Review of new readers is manual.
 - **Prose means ordinary Markdown at the repository root or under `docs/`.** A prose-only pull request
   runs just `changes`, `documentation` and `summary`. A README inside a package, `docs/receipts/`,
   `docs/waitron-integration-contract.md` and `docs/cloud-cost-model.md` are not prose.

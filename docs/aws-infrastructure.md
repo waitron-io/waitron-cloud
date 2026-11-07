@@ -1025,10 +1025,10 @@ database and VPC destinations, the exact infrastructure signal set and the
 external budget reference. These are mocked plans; live log delivery and
 production retention remain unqualified.
 
-## Documentation-reader audit
+## Review file readers
 
-Before pushing an infrastructure change, review its file readers and renew the
-[staged input inventories](ci-documentation-audit.md#review-before-renewal).
+Before pushing an infrastructure change, review its file readers and their
+[CI ownership](ci-documentation-audit.md#review-readers-instead-of-renewing-records).
 The source checker copies HCL and provider locks; its runner reads that copy and
 generated suite JSON. The tools build copies six named inputs, and the handoff
 reader consumes its JSON schema and selected output. The infrastructure tests

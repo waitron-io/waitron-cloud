@@ -37,6 +37,7 @@ async function fixture(t) {
   await writeFile(join(cloud, "deploy/backup-verifier/target.json"),
     JSON.stringify({ runtime: { revision }, digest: "a".repeat(64) }));
   // Capture the actual context passed to the build command without contacting Docker.
+  await writeFile(join(bin, "package.json"), '{"type":"commonjs"}');
   const command = join(bin, "docker");
   await writeFile(command, `#!${process.execPath}
 const fs = require("node:fs");

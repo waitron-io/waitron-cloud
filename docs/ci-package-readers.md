@@ -115,8 +115,8 @@ own root checks. If a new genuine consumer changes the measured graph, preserve
 that consumer and resolve the changed acceptance check through the campaign's
 changed-check rule. Do not remove an edge to recover an old job count.
 
-Review the combined readers again after a rebase and renew the normal
-[staged input audits](ci-documentation-audit.md). Declaration changes and all
-other executable changes still invalidate those separate inventories. The current direct-consumer policy keeps its dependency-depth and test-file
+Review the combined readers again after a rebase. [Ordinary reader review](ci-documentation-audit.md)
+replaces generated review records. The directory declarations above retain their
+separate checks. The current direct-consumer policy keeps its dependency-depth and test-file
 selection rules. Separate root-input, proof-workflow, merge-reuse and nightly
 checks retain their own evidence.

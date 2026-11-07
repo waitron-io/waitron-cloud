@@ -1,6 +1,5 @@
 import assert from 'node:assert/strict';
-import {auditInputMode, readInputAudit} from './ci-input-audit.mjs';
-import {checkRootReview, rootReviewProjection, rootReviewActivated, rootRecordRoot, rootRegistryPath} from './ci-root-review.mjs';
+import {inertCIRecord} from './ci-input-audit.mjs';
 
 const revision = /^[a-f0-9]{40}$/;
 const backend = /^packages\/(account-http|backups|identity|operations|registration|remote-access|translation)\//;
@@ -39,7 +38,7 @@ function consumes(kind, path) {
   if (path.startsWith('packages/') && !backend.test(path) && !path.startsWith('packages/ui-smoke/')) return true;
   if (path.startsWith('apps/') && !path.startsWith('apps/portal/')) return true;
   if (/^(apps|packages|docs|deploy)\//.test(path) || path.startsWith('.github/workflows/')) return false;
-  // Root configuration, script changes and new top-level areas retain proof work until reviewed.
+  // Root configuration, scripts and new top-level areas have no proof omission rule.
   return true;
 }
 
@@ -68,36 +67,7 @@ export function proofInputPlanRange(kind, {base, head}, git) {
     assert.ok(paths.length > 0, 'Empty proof diff');
     assert.ok(paths.every(path => path && !/[\\\n\r]/.test(path) &&
       !path.split('/').some(part => ['', '.', '..'].includes(part))), 'Unclassified proof path');
-    const policyPath = 'scripts/ci-input-audit.json';
-    const auditPath = path => path === policyPath || path === 'scripts/ci-input-audit-v2.json' ||
-      path.startsWith('scripts/ci-input-audit.d/');
-    if (paths.some(auditPath)) {
-      const {policy} = readInputAudit(head, git);
-      if (policy.version === 2) auditInputMode('docs', head, git);
-      else for (const mode of ['docs', 'identity', 'gateway', 'lock']) {
-        auditInputMode(mode, head, git, Object.keys(policy.manifests));
-      }
-    }
-    const rootMetadata = path => path.startsWith(rootRecordRoot);
-    if (paths.some(rootMetadata)) {
-      // Metadata can omit only its own bytes. Both saved authorities must
-      // qualify before the existing rules classify every remaining input.
-      const reviewed = [base, head].map((saved, index) => {
-        try {
-          assert.ok(rootReviewActivated(saved, git), 'Root proof metadata requires prior activation');
-          checkRootReview(saved, git, index ? base : undefined);
-          return {...rootReviewProjection(saved, git), entries: readInputAudit(saved, git).entries};
-        } catch (error) {return {error};}
-      });
-      for (const tree of reviewed) if (tree.error) throw tree.error;
-      assert.equal(reviewed[0].registryObjectId, reviewed[1].registryObjectId, 'Root proof registry changed');
-      for (const path of [rootRegistryPath, 'scripts/ci-root-review.mjs', 'scripts/ci-root-inputs.mjs',
-        'scripts/ci-input-audit.json', 'scripts/ci-input-audit-v2.json']) {
-        assert.equal(reviewed[0].entries.find(input => input.path === path)?.objectId,
-          reviewed[1].entries.find(input => input.path === path)?.objectId, `Root proof policy changed: ${path}`);
-      }
-    }
-    const inputs = paths.filter(path => !auditPath(path) && !rootMetadata(path) && consumes(kind, path));
+    const inputs = paths.filter(path => !inertCIRecord(path) && consumes(kind, path));
     return {required: inputs.length > 0, reason: inputs.length
       ? `Selected ${kind} proof inputs: ${inputs.join(', ')}`
       : `No ${kind} proof inputs changed across ${paths.length} paths`};

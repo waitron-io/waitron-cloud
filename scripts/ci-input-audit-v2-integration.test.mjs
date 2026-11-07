@@ -47,7 +47,7 @@ test('complete v2 candidate checks real record volume with bounded batched reads
   assert.ok(counts().calls - before.calls < 100, `Audit spawned ${counts().calls - before.calls} Git readers`);
   assert.ok(performance.now() - started < 60_000, 'Audit must fit existing CI budgets');
   ok(node('scripts/ci-input-audit.mjs', ['--check', base]));
-  ok(node('scripts/ci-docs.mjs', ['--audit', base]));
+  ok(node('scripts/ci-input-audit.mjs', ['--check-mode', 'docs', base]));
   ok(node('scripts/ci-input-audit.mjs', ['--write-staged', '--mode', 'all']));
   assert.equal(git('diff', '--', records, marker, policy), '');
   assert.equal(readFileSync(join(root, policy), 'utf8'), frozen);
@@ -66,22 +66,20 @@ test('complete v2 candidate qualifies immutable prose while dirty code cannot in
   assert.notEqual(node('scripts/ci-input-audit.mjs', ['--check', head]).status, 0, 'Peer prose inventories must stay stale');
 }));
 
-test('both configured workflow freshness gates refuse the real stale v2 head', {timeout: 120_000}, () => completeFixture(({root, git, commit}) => {
-  appendFileSync(join(root, 'scripts/ci-docs.mjs'), '\n// Stale-reader workflow control.\n'); commit();
+test('the configured root preflight accepts full actual work despite stale legacy records', {timeout: 120_000}, () => completeFixture(({root, git, node, ok, commit, base}) => {
+  appendFileSync(join(root, 'scripts/ci-docs.mjs'), '\n// Changed reader fixture.\n'); const head = commit();
+  const event = join(root, '.git', 'event.json'), output = join(root, '.git', 'plan-output');
+  writeFileSync(event, JSON.stringify({pull_request: {base: {sha: base}, head: {sha: head}}})); writeFileSync(output, '');
+  ok(node('scripts/ci-plan.mjs', [], {GITHUB_EVENT_PATH: event, GITHUB_OUTPUT: output, GITHUB_SHA: head}));
+  const plan = JSON.parse(readFileSync(output, 'utf8').split('\n').find(line => line.startsWith('plan=')).slice(5));
+  assert.equal(plan.packages.length, 29); assert.equal(plan.receipts.length, 6); assert.equal(plan.typecheck, true);
   const workflow = readFileSync(new URL('../.github/workflows/ci.yml', import.meta.url), 'utf8');
-  for (const job of ['root', 'scripts']) {
-    const body = workflow.split(`\n  ${job}:\n`)[1]?.split(/\n  [\w-]+:\n/)[0] ?? '';
-    const gates = body.split('\n').flatMap(line => {
-      const match = /^\s*(?:- )?run: (.+ci-docs\.mjs --audit .+)$/.exec(line);
-      return match ? [match[1]] : [];
-    });
-    // Execute the configured command against the same committed stale input.
-    // A missing gate becomes a successful no-op and must fail this control.
-    const env = {...process.env}; delete env.NODE_TEST_CONTEXT;
-    const result = spawnSync('/bin/sh', ['-c', gates.length ? gates.join('\n') : 'true'], {cwd: root, env, encoding: 'utf8', timeout: 30_000});
-    assert.notEqual(result.status, 0, `${job} must reject stale documentation evidence`);
-    assert.match(result.stderr, /Unreviewed audit input/, `${job} must run the actual immutable freshness check`);
-  }
+  const rootJob = workflow.split('\n  root:\n')[1].split(/\n  [\w-]+:\n/)[0];
+  const command = /run: (node scripts\/ci-root-inputs.mjs --check)/.exec(rootJob)?.[1];
+  assert.ok(command, 'The real root preflight must remain configured');
+  const result = spawnSync(process.execPath, command.split(' ').slice(1), {cwd: root, encoding: 'utf8', timeout: 30_000,
+    env: {...process.env, CI_PLAN: JSON.stringify(plan), GITHUB_EVENT_PATH: event, GITHUB_SHA: head, CI_HEAD_SHA: head}});
+  assert.equal(result.status, 0, result.stdout + result.stderr);
 }));
 
 test('the complete v2 migration publishes its full plan within the job output budget', {timeout: 120_000}, () => completeFixture(({root, git, node, ok, commit}) => {

@@ -20,13 +20,14 @@ again for every changed test file.
 The planner checks both saved Git revisions. Removing an import, changing an
 export or editing a local checkout cannot erase a consumer from either revision.
 Missing or invalid saved-tree evidence retains conservative work. Unknown paths and shared
-configuration still select the full suite. Audited lockfile selection keeps its
+configuration still select the full suite. Lockfile selection keeps its
 existing rule of following every dependency level.
 
 This changes package selection only. Receipts use the original dependency scope
 from both revisions, so a narrower package list cannot omit them. Compiler checks
-and all deadlines stay in force. Main pushes still run the full suite;
-verified merge reuse and the nightly full run are separate D571 changes.
+and all deadlines stay in force. Main pushes use their literal saved push range.
+Verified merge reuse checks the exact merged tree and source evidence;
+the [scheduled nightly](ci-nightly.md) runs the full suite.
 
 ## What the measurement establishes
 
@@ -41,9 +42,10 @@ These are package-job counts, not total jobs, test counts or measured durations.
 | Complete planner, preserving every audit refusal | 980 | 980 |
 | Package-selection projection, excluding prose and audit metadata | 410 | 338 |
 
-The complete planner saves no jobs in this sample. Existing audit and reader
-refusals retain full work. The projection isolates this change's potential effect;
-it does not prove those exemptions or claim a CI saving. Only four projected
+The complete planner saved no jobs in this historical sample. At that revision,
+audit and reader refusals retained full work. Generated review records are now
+[retired](ci-documentation-audit.md#review-readers-instead-of-renewing-records).
+The projection isolated package selection; it did not prove exemptions or a CI saving. Only four projected
 diffs change: #943, 28 to 5; #939, 28 to 1; #930, 28 to 27; and #918, 28 to 7.
 The other 46 retain their projected counts. D571's reader-boundary and shared-path
 work must establish the remaining exemptions independently.

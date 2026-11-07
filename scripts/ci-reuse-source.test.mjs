@@ -12,7 +12,7 @@ import {loadWorkspaceAtRevision} from './ci-workspace-snapshot.mjs';
 import {waitForSummary} from './ci-summary.mjs';
 import {createPlanEvidence} from './ci-evidence.mjs';
 import {readGitBlobs} from './ci-package-revisions.mjs';
-import {auditDocumentation} from './ci-docs.mjs';
+import {readDocumentation} from './ci-docs.mjs';
 import {conformanceMatrix} from './cloud-cost/conformance.mjs';
 import {createDecisionEvidence, readbackDecision} from './ci-decision.mjs';
 
@@ -22,7 +22,7 @@ let root, git, base, head, merge, execution, tree, source, jobs, artifact, bytes
 const page = items => ({items, total_count: items.length, nextPage: null, terminal: true});
 const selected = {packages: [{package: '@waitron-cloud/operations', shard: 1}],
   receipts: ['test:two-venue-milestone-receipt', 'test:backup-capacity', 'test:public-gateway-limits', 'test:local-stack', 'test:database-recovery-receipt', 'test:cloud-cost'],
-  typecheck: true, reuse: null, reason: 'Shared, unaudited or unknown paths: full suite (unknown-input)'};
+  typecheck: true, reuse: null, reason: 'Shared or unknown paths: full suite (unknown-input)'};
 
 function archive(value) {
   const content = Buffer.from(JSON.stringify(value)), name = Buffer.from('plan.json');
@@ -177,8 +177,8 @@ for (const kind of ['docs', 'scoped']) {
       const squash = variantGit('commit-tree', originalTree, '-p', originalBase, '-m', 'Squash').trim();
       variantGit('checkout', '--detach', squash);
       if (kind === 'docs') {
-        auditDocumentation(originalBase, variantGit);
-        auditDocumentation(originalHead, variantGit);
+        readDocumentation(originalBase, variantGit);
+        readDocumentation(originalHead, variantGit);
       }
       const selection = selectPlan({base: originalBase, head: originalHead}, loadWorkspaceAtRevision(originalHead, variantGit), variantGit);
       const required = kind === 'docs' ? ['changes', 'documentation', 'summary']

@@ -26,7 +26,7 @@ publication and fails only after seven days. Registry failures and missing
 metadata warn and pass; later releases do not restart the deadline. Focused
 checks cover version order, the boundary, both consumers and unknown results.
 Removal of the superseded Cloud publisher remains open in its own PR.
-Dependency PR review must renew ordinary records and update the smoke test’s
+Dependency PR review must check actual readers and update the smoke test’s
 version/source expectations without removing assertions. Remove
 the unused ledger and artifact machinery from #978, #995 and #1001, the old
 Cloud publisher and both superseded plans, as listed in the approved plan.
@@ -1827,38 +1827,6 @@ implementation or production evidence.
   limits; landing still requires every actual job record final. See the
   [investigation and qualification limits](backlog/ci-job-record-publication.md).
 
-- **Documentation-only CI audit freshness (D567).** The documentation inventory
-  was first stale after #870 changed the cost archive test without renewal after
-  #869. Required root and selected script checks now reject a stale documentation
-  inventory in the changing PR; the full-work fallback remains. Venue and cost
-  workflows share the existing audited prose selector, so qualified documentation
-  PRs omit their tests too. Review changed readers before staged renewal; the
-  [audit guide](ci-documentation-audit.md) records the boundary. Every main push
-  still runs the full standard suite; the [nightly run](ci-nightly.md) is an
-  additional backstop until D571 part 5 changes merge checks. Real prose control #923 completes all
-  three workflows with five planner/document/summary jobs and seven skipped test
-  jobs. Stale code and script controls #924/#925 refuse at the required audit
-  steps. Later test-only changes through #921 are included in the reviewed
-  combined inventory; no additional Cloud prose reader is introduced. Production
-  landing still requires every job on the current head to finish successfully.
-  D577 adds current records for each input, with docs-only routine renewal and
-  separately reviewed peer modes. The [audit guide](ci-documentation-audit.md)
-  explains staged generation, retained removal records and full-history checks.
-  Local sequential merges pass in both orders without evidence regeneration;
-  shared-source third states still require explicit renewal. Removal records use
-  reviewed target ancestry and survive squash or rebase; malformed metadata,
-  lost records, rename inference and later v1 downgrades are refused. Historical
-  v1 assertions remain intact in isolated fixture history. The complete current
-  candidate and its required workflow freshness commands have executable controls.
-  D587 gives the synthetic audit pull-request fixtures their own event and call inputs,
-  so scheduled and manually dispatched full runs retain the same selection assertions.
-  The production full-run rules and time limits stay unchanged. The
-  [history sample](backlog/ci-audit-conflicts.md) reproduces audit-only conflicts
-  in 21 of 30 repeated-head transitions. The two owned drafts #946/#947 pass on unchanged first-attempt heads;
-  both merge orders need zero audit conflicts, regeneration or reruns. The
-  history report retains exact runs and cleanup. Production current-head and
-  exact-merge CI remain required before landing; no production trend is claimed.
-
 - **CI execution budget.** You can read one summary job and the individual package
   and receipt jobs to check a candidate. The summary also checks the plan's
   package allocation against the planner's registered package names and shard
@@ -1926,19 +1894,11 @@ implementation or production evidence.
   remain the guide for the parked `feat/precise-ci-selection` branch. Rebase that
   branch over the six-partition portal allocation before resuming it. They
   define how documentation, scripts, configuration, resolved lockfile changes and
-  receipt inputs can select their actual checks. The first implementation selects
-  one Markdown check for a documentation-only change under `docs/` (excluding
-  receipts) or at the repository root when both immutable trees match the audited
-  non-document input inventory in the [current audit evidence](ci-documentation-audit.md). The check reads the
-  selected git blobs and requires valid UTF-8, no NUL and a final newline; deleted
-  regular documents are accepted. Audited regular prose no longer widens mixed
-  package changes: both saved documentation inventories must verify, and an
-  accompanying evidence renewal is ignored for package selection only when all four
-  head inventories are current. Base peer inventories may be stale after ordinary
-  prose changes; its documentation inventory must still verify. Saved consumers
-  remain selected. Pinned and
-  package Markdown, receipt data, links, unknown paths and missing or stale
-  evidence retain conservative work. D571 part 1 reuses these existing audits;
+  receipt inputs can select their actual checks. Regular prose uses its formatting job when it is regular in both saved trees;
+  package Markdown, consumed documents, receipt data and unknown inputs keep
+  their owning work. Review actual readers with the [CI guide](ci-documentation-audit.md).
+  Generated review records are inert; their deletion waits for a successful
+  scheduled nightly after disconnection and an ordinary later narrowing PR.
   the parked `feat/precise-ci-selection` branch remains untouched. D69 ended in
   #262 with full work for unresolved directory readers; its unmerged replacement
   is reference material, not the current implementation. D571 part 2 declares
@@ -1958,32 +1918,6 @@ implementation or production evidence.
   explain the declarations and remaining limits.
   Part 2b supplies the
   direct package selection below; part 5 still owns verified merge reuse.
-  Part 3 implements the [reviewed root-input design](superpowers/specs/2026-11-05-ci-root-input-ownership-design.md)
-  with [separate records and an explicit renewal procedure](ci-root-input-ownership.md).
-  Its input review admits the root-partition contract test to
-  all eight root jobs and the local health test to the entire `test:local-stack`
-  receipt command. Their union composes with existing package selection without
-  dropping mandatory receipts. The capacity verifier test remains unregistered:
-  a root selector fixture copies its live bytes, so receipt-only work would miss
-  that proved consumer. Every other unknown root input retains full work.
-  Once activated, mandatory summary independently verifies complete head review
-  even for full and legacy plans. Missing or stale records and complete metadata
-  removal fail; stale base evidence refuses narrowing. Removal anchors must
-  already exist in the trusted PR base so they survive a squash. Valid record
-  renewal preserves each separate proof decision only after both saved root reviews and
-  documentation authorities qualify. Real proof inputs and forced full/nightly
-  work remain selected. Bootstrap and registry changes themselves run full.
-  The merged-tree review also remains mandatory when main reuses a verified
-  PR run. Independent source reconstruction rejects stale root reviews, and
-  source evidence records root-only and receipt-only work without selecting
-  compiler jobs. Different-tree pushes derive ownership from their literal
-  before/after range. Integration controls retain the bounded summary lookup,
-  source recheck and original proof-selector assertions.
-  Four Kubernetes cleanup inputs have renewed root reviews: `expiry.mjs`,
-  `expiry.test.mjs`, `setup.test.mjs` and the `README.md` under
-  `deploy/kubernetes/proof/`. The guide is a reviewed root input. Their fixed
-  unit-test and generated-Lambda readers preserve the existing registered test
-  boundaries; the separate cost-input renewal remains independently owned.
   The executable output fixture gives its synthetic PR an explicit event and
   call inputs, including when its parent is a full nightly invocation. Its
   original root, compiler, package, receipt and forced-full assertions remain.
@@ -2015,8 +1949,7 @@ implementation or production evidence.
   backstop below retains both full matrices. Real-Git controls cover positive
   inputs, omissions, renames, missing history and checkout refusals. No rehearsal
   assertion, command or deadline changes. The combined controls preserve the
-  nightly full flag and v2 documentation-record renewal without requiring unused
-  peer shortcuts. No measured GitHub time saving is claimed. D571 part 5 has a
+  nightly full flag and existing proof input rules. No measured GitHub time saving is claimed. D571 part 5 has a
   [verified-merge design](superpowers/specs/2026-11-05-verified-merge-ci-design.md)
   and [implementation plan](superpowers/plans/2026-11-05-verified-merge-ci.md).
   The workflows now publish attempt-bound source plans and main decisions,
@@ -2074,9 +2007,7 @@ implementation or production evidence.
   within the nested family, refusing malformed job names before filtering.
   Configuration guards protect the full inputs, concurrency and final
   dependencies; an executed CLI control checks the configured prefix. These
-  guards do not replace hosted execution. The copied-reader CLI fixture stages
-  regenerated per-path evidence before saving its baseline; a changed-reader
-  control preserves both ordinary prose-only and forced-full assertions.
+  guards do not replace hosted execution.
   [Manual main run 42165813178](https://github.com/waitron-io/waitron-cloud/actions/runs/42165813178)
   attempt 2 qualifies exact `9237200a`: all 77 jobs final, 21,072 reported Node
   passes, 26 optional skips and 384 separately counted mocked OpenTofu cases.
@@ -2086,7 +2017,7 @@ implementation or production evidence.
   checks and two summaries, retaining 21,058 passes with identical logs and execution
   times. The first attempt's recurring native LIST shutdown refusal remains on
   D530; the passing retry is no repair. The [nightly guide](ci-nightly.md#verified-manual-run)
-  records the exact revision and limits. Scheduled delivery and comparable healthy
+  records the exact revision and limits. Comparable healthy
   aggregate usage measurements remain open. The original 4 November baseline
   overlaps published GitHub incidents and cannot support a savings claim.
   D571 part 2b adds
@@ -2106,94 +2037,17 @@ implementation or production evidence.
   directory reader in `scripts/ci-audit-fixture-dependencies.mjs` and keeps full
   package work. The local part-2 control narrows that graph to six portal jobs;
   it does not establish a hosted time saving.
-  Repeated audit reads remain: the review measured about 0.6 seconds of one
-  2.9-second local plan. No duration guarantee rests on that sample.
-  Adding, changing or removing an executable, configuration or other tracked input
-  invalidates the exemption until you audit the readers again and renew the
-  certificate. The planner now emits a prominent GitHub warning on every run when
-  that audit is unavailable or stale, including non-document changes, with the
-  [review and renewal procedure](ci-documentation-audit.md).
-  **Documentation audit renewal (D530).** The stale policy at `b1a8d7ce`
-  was last renewed in #210; #212 first changed inventoried code without renewing
-  it. A disposable renewal reproduced an existing reader gap: changing a published
-  translation vector passed the document check while its original package test
-  failed. The integration contract is now excluded from unread prose, so its
-  changes retain full work. An additive real-planner regression requires the
-  translation package and observes the unchanged vector test pass, fail on the
-  altered issuer key ID and pass after restoration. Review covers all 1,131 changed
-  non-prose paths since #210 and their document readers; the four inventories
-  are renewed together. Other exemptions, existing assertions and independent
-  receipt certificates stay unchanged. The
-  [reader review and reproduction](ci-documentation-audit.md#contract-reader-and-renewal)
-  record the review boundary. Later inventoried changes still require review
-  and renewal; this does not automate approval or establish arbitrary reader discovery.
-  The identity source map and gateway JSON reader remain covered by
-  their existing full checks. When its input audit is current, an isolated change
-  to `scripts/identity-upstream.mjs` or its behavioral test can select only syntax
-  checks and that test, without
-  package, receipt or compiler work. Both saved Git trees must match the complete
-  other-input inventory in the current per-path records (the shared policy is
-  retained only for historical v1 trees); a new reader, changed
-  installation input, missing test, symbolic link or stale audit retains full work.
-  The gateway-reconnection validator and its behavioral test have another
-  audited exemption. Their script job checks both files and the measurement
-  generator for syntax, then runs the unchanged validator tests. It does not
-  launch the measurement generator. Both saved trees must match the gateway
-  other-input digest, including the published receipt and generator. Changed
-  readers or installation inputs retain full work. Each family pins the other
-  family, so changes spanning both families also retain full work. The script
-  inventories now share one strict policy, so renewing a fixed reviewed tree no
-  longer makes peer certificates stale. Each mode keeps its existing content
-  exemptions; damaged fields, stale base or head evidence, unknown paths and mixed
-  changes retain full work. The
-  [coordinated-audit design](superpowers/specs/2026-10-16-coordinated-ci-audits.md)
-  and [implementation plan](superpowers/plans/2026-10-16-coordinated-ci-audits.md)
-  describe explicit staged generation and committed four-mode checking.
+  Root script families use regular saved targets and their owning behavioral
+  checks, without record renewal. Lock changes compare both saved manifests and
+  dependency graphs. Unknown inputs retain full work; see the
+  [selection guides](ci-documentation-audit.md).
   Historical receipt fixtures retain their independently pinned nine-manifest
   certificate and exact metadata assertions. Production validation independently
   discovers all ten current manifests, including translation and licence metadata.
   Saved dependency, execution, schema and deployment inputs are unchanged.
-  Focused reader, fixture and renewal tests cover malformed policy fields, real
-  file modes, symbolic links, submodules, missing manifests, staged/unstaged drift
-  and committed-only checking. Complete committed-tree controls qualify all four
-  inventories together, execute isolated document/script checks, and select the
-  isolated lock importer with every receipt and compiler check retained. Mixed,
-  unknown and changed-reader controls retain full work. The explicit generator
-  never stages its output or follows a live policy link. Wider path selection,
-  remaining receipt-audit renewal and job-duration work stay open. The planner
-  now runs Git directly without the unused API callback or historical tree-fetch
-  wrapper. Its public function signature stays compatible; existing CLI checks
-  retain full main runs, exact output fields and zero PR API calls. Generation
-  is a repository-root command. A real temporary Git repository reproduces a
-  subfolder invocation overwriting a nested lookalike policy. Generation now
-  requires a working tree and an empty current-directory prefix before reading
-  staged inputs or writing output, including refusal inside Git's metadata directory.
-  Regressions preserve both policies, staged inputs and the working tree on refusal;
-  normal root generation still succeeds. Read-only
-  checking of a committed audit remains available from subfolders.
-  Generation also refuses when the live `scripts` directory is itself a symbolic
-  link, before opening its output. A real temporary Git repository reproduces an outside
-  policy overwrite through that directory link. The refusal preserves the outside
-  files, staged inputs and working tree; ordinary root generation still succeeds.
-  Committed checking reads saved Git blobs and remains read-only through the same
-  linked directory. This checks the directory before writing; it does not protect
-  against another process replacing the directory during generation.
-  Generation also refuses a live policy with multiple hard links before writing.
-  A real temporary Git repository reproduces the earlier overwrite of an outside
-  alias; the regression preserves both names' contents, staged inputs and working
-  tree on refusal. Ordinary generation still succeeds, and committed checking
-  remains read-only with a hard-linked, dirty live policy. These checks inspect
-  the output before writing; concurrent replacement remains outside this guarantee.
-  An independent subprocess check corrupts only the generated audit digest after
-  valid staged inputs have passed. The final validation refuses that output without
-  changing the existing policy, staged inputs or working tree. Removing that final
-  validation in a disposable copy makes the check fail; healthy generation passes.
-  Input-schema and admission guards retain their existing coverage.
-  Mixed changes also retain the existing fallback. The script job verifies the
-  exact checkout and changed paths, and the summary requires its successful result.
-  The identity audit covers that helper's only executable consumer, its own spawned test;
-  the source-map default still takes the existing full route. Other root scripts,
-  configuration and their real controls remain open. The immutable package graph
+  Other root scripts and shared configuration still retain full work. Wider
+  selection and job-duration qualification remain open.
+  The immutable package graph
   also follows quoted references through shared JavaScript and TypeScript helpers
   outside package directories, including helper chains and cycles. It retains
   readers from both saved revisions, resolves directory index helpers and maps

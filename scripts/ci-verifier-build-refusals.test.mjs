@@ -38,6 +38,7 @@ async function fixture(t, { generatorFails = false } = {}) {
   const pin = value => writeFile(target, JSON.stringify({ runtime: { revision: value }, digest: "a".repeat(64) }));
   await pin(revision);
   // The executable records the boundary instead of invoking a Docker daemon or building an image.
+  await writeFile(join(bin, "package.json"), '{"type":"commonjs"}');
   const command = join(bin, "docker");
   await writeFile(command, `#!${process.execPath}
 const fs = require("node:fs");

@@ -29,7 +29,7 @@ function fixture(run) {
     put('docs/backlog.md', '# Backlog\n');
     put('README.md', '# Cloud\n');
     const initial = commit();
-    // The fixture has exactly one audited input. Its digest does not use planner helpers.
+    // The fixture record has one input. Its digest does not use planner helpers.
     const entry = git('ls-tree', '-rz', '--full-tree', initial).split('\0').find(row => row.endsWith('\tscripts/reader.mjs'));
     const docsInputSha256 = createHash('sha256').update(`${entry}\0`).digest('hex');
     put(policy, JSON.stringify(completeAudit({docsInputSha256})) + '\n');
@@ -39,7 +39,7 @@ function fixture(run) {
   } finally { rmSync(root, {recursive: true, force: true}); }
 }
 
-test('audited unread Markdown selects only the document check, including spaces and deletion', () => fixture(({root, put, commit, plan}) => {
+test('ordinary unread Markdown selects only the document check, including spaces and deletion', () => fixture(({root, put, commit, plan}) => {
   put('docs/a plan.md', '# Plan\n');
   unlinkSync(join(root, 'README.md'));
   const selected = plan(commit());
@@ -47,7 +47,7 @@ test('audited unread Markdown selects only the document check, including spaces 
   assert.deepEqual(selected.receipts, []);
   assert.equal(selected.typecheck, false);
   assert.deepEqual(selected.documentation.paths, ['README.md', 'docs/a plan.md']);
-  assert.match(selected.reason, /Audited unread Markdown/);
+  assert.match(selected.reason, /Regular prose/);
 }));
 
 test('the generated cost explanation cannot bypass artifact verification through a docs-only audit', () => fixture(({put, commit, plan}) => {
@@ -58,16 +58,16 @@ test('the generated cost explanation cannot bypass artifact verification through
   assert.equal(selected.typecheck, true);
 }));
 
-test('a new reader invalidates later docs-only exemptions and mixed changes', () => fixture(({put, commit, plan, base}) => {
+test('a changed reader keeps mixed work full while later prose uses ordinary review', () => fixture(({put, commit, plan, base}) => {
   put('scripts/new-reader.mjs', 'readFileSync("docs/backlog.md");\n');
   const reader = commit();
   put('docs/backlog.md', '# Updated\n');
   const head = commit();
-  assert.equal(plan(head, reader).packages.length, 29);
+  assert.equal(plan(head, reader).packages.length, 0);
   assert.equal(plan(head, base).packages.length, 29);
 }));
 
-test('changed or removed audited inputs and missing, malformed or stale audit evidence keep full work', () => {
+test('earlier code and retired record states do not invalidate later prose', () => {
   for (const change of ['changed', 'removed', 'missing', 'malformed', 'stale']) fixture(({root, put, commit, plan}) => {
     if (change === 'changed') put('scripts/reader.mjs', 'readFileSync("docs/backlog.md");\n');
     if (change === 'removed') unlinkSync(join(root, 'scripts/reader.mjs'));
@@ -76,7 +76,7 @@ test('changed or removed audited inputs and missing, malformed or stale audit ev
     if (change === 'stale') put(policy, JSON.stringify(completeAudit({docsInputSha256: '0'.repeat(64)})) + '\n');
     const changed = commit();
     put('docs/backlog.md', '# Updated\n');
-    assert.equal(plan(commit(), changed).packages.length, 29, change);
+    assert.equal(plan(commit(), changed).packages.length, 0, change);
   });
 });
 
@@ -121,7 +121,7 @@ test('document command reads exact immutable blobs and rejects invalid UTF-8, NU
   assert.equal(linked.packages.length, 29, 'linked Markdown cannot earn the exemption');
 }));
 
-test('document command accepts deletions and independently refuses a stale reader audit', () => fixture(({root, put, commit, plan}) => {
+test('document command accepts deletions and prose after a reader change', () => fixture(({root, put, commit, plan}) => {
   const run = value => spawnSync(process.execPath, [checker], {cwd: root, env: {...process.env, CI_PLAN: JSON.stringify(value)}, encoding: 'utf8'});
   unlinkSync(join(root, 'README.md'));
   assert.equal(run(plan(commit())).status, 0);
@@ -130,11 +130,10 @@ test('document command accepts deletions and independently refuses a stale reade
   put('docs/backlog.md', '# Updated\n');
   const head = commit();
   const forged = run({documentation: {base, head, paths: ['docs/backlog.md']}});
-  assert.equal(forged.status, 1);
-  assert.match(forged.stderr, /Executable inputs changed/);
+  assert.equal(forged.status, 0, forged.stderr);
 }));
 
-test('real planner command emits document output and reports unaudited fallbacks without fatal stderr', () => fixture(({root, git, put, commit}) => {
+test('real planner command emits document output and reports unknown-input fallbacks without fatal stderr', () => fixture(({root, git, put, commit}) => {
   put('package.json', JSON.stringify({name: 'fixture', private: true}));
   put('pnpm-workspace.yaml', "packages:\n  - 'packages/*'\n");
   for (const name of ['one', 'two']) put(`packages/${name}/package.json`, JSON.stringify({name, scripts: {test: 'node --test'}}));
@@ -163,12 +162,12 @@ test('real planner command emits document output and reports unaudited fallbacks
   put('docs/backlog.md', '# Another change\n');
   result = run(commit());
   assert.equal(result.status, 0);
-  assert.match(result.output, /\npackages=true\n/);
-  assert.match(result.stdout, /full suite.*docs\/backlog.md/);
+  assert.match(result.output, /\npackages=false\n/);
+  assert.match(result.output, /\ndocumentation=true\n/);
   assert.equal(result.stderr, '');
 }));
 
-test('strict summary requires the audited document job and refuses malformed empty work', () => {
+test('strict summary requires the selected document job and refuses malformed empty work', () => {
   const documentation = {base: 'a'.repeat(40), head: 'b'.repeat(40), paths: ['docs/backlog.md']};
   const plan = {packages: [], receipts: [], typecheck: false, reuse: null, documentation};
   const results = {changes: 'success', documentation: 'success', packages: 'skipped', receipts: 'skipped', typecheck: 'skipped'};
@@ -191,7 +190,7 @@ test('strict summary requires the audited document job and refuses malformed emp
   assert.throws(() => assertSummary({...plan, packages: [{package: 'one', shard: 1}]}, {...results, packages: 'success'}, [...jobs, {name: 'package (one)', status: 'completed', conclusion: 'success'}]));
 });
 
-test('planner command prominently warns about an unreviewed documentation audit for any changed path', () => {
+test('planner command selects actual inputs without demanding record renewal', () => {
   for (const path of ['docs/backlog.md', 'packages/one/change.txt', 'scripts/new-reader.mjs']) fixture(({root, git, put, commit}) => {
     put('package.json', JSON.stringify({name: 'fixture', private: true}));
     put('pnpm-workspace.yaml', "packages:\n  - 'packages/*'\n");
@@ -206,30 +205,27 @@ test('planner command prominently warns about an unreviewed documentation audit 
       env: {...process.env, GITHUB_EVENT_NAME: 'pull_request', CI_FULL: 'false', CI_CALLED: 'false',
       CI_FORCE_FULL: 'false', CI_WORKFLOW_INPUTS: '{}', CI_RECORD_EVIDENCE: 'false', GITHUB_EVENT_PATH: join(root, 'event.json'), GITHUB_OUTPUT: output, GITHUB_SHA: head}, encoding: 'utf8'});
     assert.equal(result.status, 0, result.stderr);
-    assert.match(result.stdout, /::warning title=Documentation-only CI unavailable::/);
-    assert.match(result.stdout, /review.*scripts\/ci-input-audit\.json.*docs\/ci-documentation-audit\.md/i);
+    assert.doesNotMatch(result.stdout, /::warning.*Documentation-only CI unavailable/);
     const selected = JSON.parse(readFileSync(output, 'utf8').split('\n').find(line => line.startsWith('plan=')).slice(5));
-    assert.ok(selected.packages.length > 0);
-    assert.equal(selected.typecheck, true);
-    assert.equal(selected.documentation, undefined);
+    if (path.startsWith('docs/')) {
+      assert.deepEqual(selected.packages, []); assert.equal(selected.typecheck, false);
+      assert.deepEqual(selected.documentation.paths, [path]);
+    } else {
+      assert.ok(selected.packages.length > 0); assert.equal(selected.typecheck, true);
+      assert.equal(selected.documentation, undefined);
+    }
   });
 });
 
 
-test('audit command rejects a reader change in its own revision and accepts only reviewed immutable inputs', () => fixture(({root, put, commit, base}) => {
-  const run = sha => spawnSync(process.execPath, [checker, '--audit', sha], {cwd: root, encoding: 'utf8'});
-  assert.equal(run(base).status, 0, 'a current reviewed tree passes the freshness gate');
-  put('scripts/reader.mjs', 'readFileSync("docs/backlog.md");\n');
-  assert.equal(run(base).status, 0, 'unstaged readers cannot replace immutable evidence');
-  const stale = run(commit());
-  assert.equal(stale.status, 1);
-  assert.match(stale.stderr, /Executable inputs changed/);
-  assert.match(stale.stderr, /--write-staged/);
-  assert.match(stale.stderr, /docs\/ci-documentation-audit.md/);
-  assert.equal(run('main').status, 1, 'mutable refs are refused');
+test('the retired audit command refuses instead of claiming renewal is needed', () => fixture(({root, base}) => {
+  for (const revision of [base, 'main']) {
+    const result = spawnSync(process.execPath, [checker, '--audit', revision], {cwd: root, encoding: 'utf8'});
+    assert.equal(result.status, 1); assert.match(result.stderr, /Usage: ci-docs.mjs/);
+  }
 }));
 
-test('proof planner skips only audited prose and keeps code, pinned documents, main and unavailable evidence', () => fixture(({root, git, put, commit, base}) => {
+test('proof planner skips only ordinary prose and keeps code, pinned documents, main and unavailable evidence', () => fixture(({root, git, put, commit, base}) => {
   const run = (event, expected) => {
     const scratch = mkdtempSync(join(tmpdir(), 'cloud-proof-plan-'));
     try {
@@ -265,7 +261,7 @@ test('proof planner skips only audited prose and keeps code, pinned documents, m
   put(policy, JSON.stringify(completeAudit({docsInputSha256: createHash('sha256')
     .update(inputs.map(row => row + '\0').join('')).digest('hex')})) + '\n');
   const pinnedBase = commit();
-  assert.equal(spawnSync(process.execPath, [checker, '--audit', pinnedBase], {cwd: root}).status, 0);
+  assert.equal(spawnSync(process.execPath, [checker, '--audit', pinnedBase], {cwd: root, stdio: 'pipe'}).status, 1);
   git('mv', pinned, 'docs/moved-contract.md');
   run(pr(commit(), pinnedBase), true);
 
@@ -277,11 +273,11 @@ test('proof planner skips only audited prose and keeps code, pinned documents, m
   git('reset', '--hard', base);
   put('scripts/reader.mjs', 'changed\n'); const stale = commit();
   put('docs/backlog.md', '# Later prose\n');
-  run(pr(commit(), stale), true);
+  run(pr(commit(), stale), false);
 }));
 
 // A reusable full run must ignore a narrow PR event inherited from its caller.
-test('explicit full execution overrides a real audited prose PR without changing ordinary selection', () => fixture(({put, commit, base, git, plan}) => {
+test('explicit full execution overrides a real ordinary prose PR without changing ordinary selection', () => fixture(({put, commit, base, git, plan}) => {
   put('docs/backlog.md', '# Nightly prose control\n');
   const head = commit();
   assert.equal(plan(head).documentation.paths[0], 'docs/backlog.md');
@@ -294,7 +290,7 @@ test('explicit full execution overrides a real audited prose PR without changing
   assert.deepEqual(full.receipts, ['test:two-venue-milestone-receipt', 'test:backup-capacity', 'test:public-gateway-limits', 'test:local-stack', 'test:database-recovery-receipt', 'test:cloud-cost']);
 }));
 
-test('full proof command overrides a real audited prose PR while ordinary proof stays unselected', () => fixture(({root, put, commit, base}) => {
+test('full proof command overrides a real ordinary prose PR while ordinary proof stays unselected', () => fixture(({root, put, commit, base}) => {
   put('docs/backlog.md', '# Full proof control\n');
   const head = commit();
   const event = join(root, 'event.json'), output = join(root, 'output');

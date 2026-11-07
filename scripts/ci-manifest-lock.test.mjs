@@ -71,7 +71,7 @@ test('manifest and resolved dependency additions select the importer and saved h
   for (const kind of dependencyFields) fixture(({commit, add, save, plan}) => {
     const base = commit(); add('packages/catalogue', kind); save();
     const result = plan(base, commit()); selected(result);
-    assert.match(result.reason, /audited package selection/);
+    assert.match(result.reason, /saved package selection/);
   });
 });
 
@@ -84,7 +84,7 @@ test('dependency removal retains former consumers from both manifests', () => fi
   delete manifests['packages/unrelated'].dependencies;
   lock.importers['packages/catalogue'] = {}; lock.importers['packages/unrelated'] = {}; lock.packages = {}; lock.snapshots = {};
   save(); const result = plan(base, commit()); selected(result, ['catalogue', 'page', 'unrelated']);
-  assert.match(result.reason, /audited package selection/);
+  assert.match(result.reason, /saved package selection/);
 }));
 
 test('independent manifest dependency additions combine their consumers without unrelated packages', () => fixture(({commit, add, save, plan}) => {
@@ -110,7 +110,7 @@ test('scripts, package metadata, root inputs and unrelated paths cannot bypass t
   });
 });
 
-test('missing, forged or nonregular projected manifest evidence in either saved revision keeps full work', () => fixture(({git, commit, add, save, plan}) => {
+test('real manifest refusals survive independently of retired projection records', () => fixture(({git, commit, add, save, plan}) => {
   const base = commit(); add(); save(); const head = commit();
   for (const sha of [base, head]) for (const fault of ['digest', 'missing', 'extra', 'version', 'symlink', 'blob']) {
     const read = (...args) => {
@@ -126,7 +126,7 @@ test('missing, forged or nonregular projected manifest evidence in either saved 
       if (fault === 'blob' && args[0] === 'show' && args[1] === `${sha}:packages/catalogue/package.json`) throw Error('Missing manifest');
       return git(...args);
     };
-    selected(plan(base, head, read), ['catalogue', 'page', 'unrelated']);
+    selected(plan(base, head, read), ['symlink', 'blob'].includes(fault) ? ['catalogue', 'page', 'unrelated'] : ['catalogue', 'page']);
   }
 }));
 
@@ -135,7 +135,7 @@ test('manifest owner runs even when its dependency edit leaves the resolved impo
   manifests['packages/catalogue'].dependencies = {};
   lock.packages['adapter@1.0.0'].resolution.integrity = 'sha512-Yg=='; save();
   const result = plan(base, commit()); selected(result, ['catalogue', 'page', 'unrelated']);
-  assert.match(result.reason, /audited package selection/);
+  assert.match(result.reason, /saved package selection/);
 }));
 
 for (const {directories, names, expected} of [

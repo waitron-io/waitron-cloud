@@ -21,8 +21,11 @@ const hash = text => createHash('sha256').update(text).digest('hex');
 
 function fixture(run) {
   const root = mkdtempSync(join(tmpdir(), 'cloud-input-audit-admission-'));
-  const git = (...args) => execFileSync('git', ['-c', 'maintenance.auto=false', ...args],
-    {cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe']});
+  const git = (...args) => {
+    const binary = typeof args.at(-1) === 'object' && args.pop().binary;
+    return execFileSync('git', ['-c', 'maintenance.auto=false', ...args],
+      {cwd: root, encoding: binary ? undefined : 'utf8', stdio: ['ignore', 'pipe', 'pipe']});
+  };
   const put = (path, content) => {mkdirSync(join(root, path, '..'), {recursive: true}); writeFileSync(join(root, path), content);};
   const commit = () => {git('add', '-A'); git('commit', '-sm', 'Audited input fixture'); return git('rev-parse', 'HEAD').trim();};
   const plan = (base, head, read = git) => createPlan({pull_request: {base: {sha: base}, head: {sha: head}}}, {sha: head}, workspace, read, () => {throw Error('No API');});
@@ -90,22 +93,25 @@ test('shared policy admits the four existing isolated modes', () => fixture(({ro
   }
 }));
 
-test('head renewal cannot qualify an unaudited base', () => {
+test('retired base records cannot gate the real selected work', () => {
   for (const mode of Object.keys(fields)) for (const fault of ['missing', 'stale']) fixture(({root, git, put, commit, certify, plan, change}) => {
     if (fault === 'missing') unlinkSync(join(root, policyPath));
     else {const policy = JSON.parse(readFileSync(join(root, policyPath))); policy[fields[mode]] = '0'.repeat(64); put(policyPath, JSON.stringify(policy));}
     const base = commit();
     change(mode); const head = certify();
-    assert.equal(plan(base, head).packages.length, 3, `${mode}: ${fault}`);
+    assertNarrow(mode, plan(base, head));
     assert.doesNotThrow(() => auditInputMode(mode, head, git, manifestPaths));
-    if (mode === 'docs') assert.throws(() => documentationPlan(['docs/guide.md'], base, head, git));
-    else if (mode === 'lock') assert.throws(() => lockPackageScope(base, head, workspace, git));
-    else assert.throws(() => scriptPlan([(mode === 'identity' ? identity : gateway)[0]], base, head, git));
-    // Direct checkers also revalidate the bad base when the claimed diff is exact.
-    const paths = git('diff', '--name-only', '--no-renames', '-z', base, head).split('\0').filter(Boolean);
-    if (mode === 'docs') assert.throws(() => checkDocumentation({documentation: {base, head, paths}}, git));
-    if (mode === 'identity' || mode === 'gateway') assert.throws(() => checkScripts({packages: [], receipts: [], typecheck: false,
-      scripts: {base, head, paths}}, git, () => assert.fail('Unaudited work must never execute')));
+    if (mode === 'docs') assert.ok(documentationPlan(['docs/guide.md'], base, head, git));
+    else if (mode === 'lock') assert.equal(lockPackageScope(base, head, workspace, git).scope.full, false);
+    else assert.ok(scriptPlan([(mode === 'identity' ? identity : gateway)[0]], base, head, git));
+    if (mode === 'docs') assert.equal(checkDocumentation({documentation: {base, head, paths: ['docs/guide.md']}}, git), 1);
+    if (mode === 'identity' || mode === 'gateway') {
+      const commands = [], targets = mode === 'identity' ? identity : gateway;
+      checkScripts({packages: [], receipts: [], typecheck: false, scripts: {base, head, paths: [targets[0]]}}, git,
+        args => commands.push(args));
+      assert.deepEqual(commands, [...targets.map(path => ['--check', path]),
+        ...(mode === 'gateway' ? [['--check', 'scripts/gateway-reconnection-receipt.mjs']] : []), ['--test', targets[1]]]);
+    }
   });
 });
 
@@ -132,14 +138,14 @@ test('added changed and deleted nonregular Markdown never earns document-only wo
   });
 });
 
-test('legacy certificates alone retain full work', () => {
+test('legacy certificates do not supply authority to live selectors', () => {
   for (const mode of Object.keys(fields)) fixture(({root, put, commit, plan, change}) => {
     unlinkSync(join(root, policyPath));
     put('scripts/ci-docs-audit.json', JSON.stringify({version: 1, inputSha256: '1'.repeat(64)}));
     put('scripts/ci-scripts-audit.json', JSON.stringify({version: 1, inputSha256: '2'.repeat(64), gatewayInputSha256: '3'.repeat(64)}));
     put('scripts/ci-lock-selection-audit.json', JSON.stringify({version: 2, inputSha256: '4'.repeat(64), manifests: {}}));
     const base = commit();
-    assert.equal(plan(base, change(mode)).packages.length, 3, mode);
+    assertNarrow(mode, plan(base, change(mode)));
   });
 });
 
@@ -167,12 +173,13 @@ test('real policy and target modes refuse executable links and gitlinks in eithe
     put(path, original);
     const good = change(mode);
     assertNarrow(mode, plan(base, good));
-    assert.equal(plan(bad, good).packages.length, 3, `${path}: ${kind} base`);
+    if (path === policyPath) assertNarrow(mode, plan(bad, good));
+    else assert.equal(plan(bad, good).packages.length, 3, `${path}: ${kind} base`);
     assert.doesNotThrow(() => auditInputMode(mode, good, git, manifestPaths));
   });
 });
 
-test('malformed shared peer evidence and incomplete inventories refuse every mode in either revision', () => {
+test('invalid real inventories refuse while retired peer evidence has no authority', () => {
   for (const mode of Object.keys(fields)) fixture(({git, plan, base, change}) => {
     const head = change(mode); assertNarrow(mode, plan(base, head));
     for (const side of [base, head]) for (const fault of ['missing', 'malformed', 'schema', 'peer', 'duplicate-json', 'truncated', 'duplicate-tree', 'malformed-tree', 'missing-blob']) {
@@ -194,7 +201,9 @@ test('malformed shared peer evidence and incomplete inventories refuse every mod
         }
         return git(...args);
       };
-      assert.equal(plan(base, head, read).packages.length, 3, `${mode}: ${side}: ${fault}`);
+      if (['truncated', 'duplicate-tree', 'malformed-tree'].includes(fault)) {
+        assert.equal(plan(base, head, read).packages.length, 3, `${mode}: ${side}: ${fault}`);
+      } else assertNarrow(mode, plan(base, head, read));
     }
   });
 });

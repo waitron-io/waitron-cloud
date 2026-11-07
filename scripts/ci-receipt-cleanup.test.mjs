@@ -22,14 +22,14 @@ const cases = [
   ['ci-gateway-receipt.test.mjs', 'unrelated package changes omit public gateway while retaining packages, types and other receipts'],
   ['ci-local-stack-receipt.test.mjs', 'unrelated package changes omit all audited receipts and retain actual package and type checks'],
   ['ci-cli.test.mjs', 'real squash merges run full on main for equal trees and advanced main without API access'],
-  ['ci-docs.test.mjs', 'audited unread Markdown selects only the document check, including spaces and deletion'],
-  ['ci-gateway-scripts.test.mjs', 'an audited gateway validator or its test runs only its syntax, caller syntax and behavioral checks'],
+  ['ci-docs.test.mjs', 'ordinary unread Markdown selects only the document check, including spaces and deletion'],
+  ['ci-gateway-scripts.test.mjs', 'an owned gateway validator or its test runs only its syntax, caller syntax and behavioral checks'],
   ['ci-dependency-fixtures.test.mjs', 'receipt selector fixtures retain their assertions after dependency inputs change'],
   ['ci-lock-revisions.test.mjs', 'lock diagnostics name indirect consumers from saved trees without narrowing unaudited root work'],
   ['ci-receipts.test.mjs', 'backend-only changes omit the unchanged pure milestone receipt and preserve all other work'],
   ['ci-package-revisions.test.mjs', 'a removed sibling import keeps its former transitive consumers selected'],
-  ['ci-scripts.test.mjs', 'an audited root helper or its test selects syntax and the owning behavioral check only'],
-  ['ci-lock-selection.test.mjs', 'audited lock-only changes select resolved importers and saved helper consumers despite a dirty worktree'],
+  ['ci-scripts.test.mjs', 'an owned root helper or its test selects syntax and the owning behavioral check only'],
+  ['ci-lock-selection.test.mjs', 'saved lock-only changes select resolved importers and saved helper consumers despite a dirty worktree'],
   ['ci-manifest-lock.test.mjs', 'manifest and resolved dependency additions select the importer and saved helper readers for every dependency kind'],
 ];
 for (const [file, name] of cases) {

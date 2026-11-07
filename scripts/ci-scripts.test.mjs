@@ -48,7 +48,7 @@ function fixture(run) {
   } finally {rmSync(root, {recursive: true, force: true});}
 }
 
-test('an audited root helper or its test selects syntax and the owning behavioral check only', () => {
+test('an owned root helper or its test selects syntax and the owning behavioral check only', () => {
   for (const path of [helper, checks]) fixture(({root, put, commit, plan, base, execute}) => {
     put(path, readFileSync(join(root, path), 'utf8') + '\n');
     const head = commit();
@@ -57,7 +57,7 @@ test('an audited root helper or its test selects syntax and the owning behaviora
     assert.deepEqual(selected.receipts, []);
     assert.equal(selected.typecheck, false);
     assert.deepEqual(selected.scripts, {base, head, paths: [path]});
-    assert.match(selected.reason, /Audited root script/);
+    assert.match(selected.reason, /Owned root script/);
     const result = execute(selected);
     assert.equal(result.status, 0, result.stderr);
     assert.match(result.stdout, /Passed root script checks/);
@@ -70,7 +70,7 @@ test('changed consumers, installation, new readers and incomplete inventories re
     const changed = commit();
     put(helper, 'export const result = 1; // edited\n');
     const head = commit();
-    for (const before of [base, changed]) assert.equal(plan(head, before).packages.length, 29, `${path} at ${before}`);
+    for (const before of [base, changed]) assert.equal(plan(head, before).packages.length, before === base ? 29 : 0, `${path} at ${before}`);
   });
   fixture(({put, commit, plan, git}) => {
     put(helper, 'export const result = 1; // edited\n');
@@ -92,14 +92,14 @@ test('mixed paths, missing checks, symbolic links and executable modes cannot ea
   });
 });
 
-test('missing, malformed and stale certificates fail closed with the changed path in the log', () => {
+test('retired certificate states do not suppress the owning script check', () => {
   for (const change of ['missing', 'malformed', 'stale', 'version']) fixture(({root, put, commit, plan}) => {
     if (change === 'missing') unlinkSync(join(root, policy));
     else put(policy, change === 'malformed' ? '{' : JSON.stringify(completeAudit({version: change === 'version' ? 2 : 1, identityInputSha256: '0'.repeat(64)})));
     const old = commit();
     put(helper, 'export const result = 1; // edited\n');
     const selected = plan(commit(), old);
-    assert.equal(selected.packages.length, 29, change);
+    assert.equal(selected.packages.length, 0, change);
     assert.match(selected.reason, /identity-upstream.mjs/);
   });
 });
@@ -168,14 +168,14 @@ test('old-only stale evidence and forged incomplete inventories cannot omit cons
   put(helper, 'export const result = 1; // change\n');
   const head = commit();
   assert.equal(plan(head, certified).packages.length, 0, 'new audit is valid');
-  assert.equal(plan(head, stale).packages.length, 29, 'old audit is stale');
-  for (const transform of [text => text.replace(/[^\0]*\tscripts\/consumer.mjs\0/, ''), text => text + 'malformed\0']) {
+  assert.equal(plan(head, stale).packages.length, 0, 'retired records have no authority');
+  for (const transform of [text => text.replace(/[^\0]*\tscripts\/identity-upstream.test.mjs\0/, ''), text => text + 'malformed\0']) {
     assert.equal(plan(head, certified, (...args) => args[0] === 'ls-tree' ? transform(git(...args)) : git(...args)).packages.length, 29);
   }
   assert.equal(plan(head, base).packages.length, 29, 'mixed diff');
 }));
 
-test('unreadable or corrupted audit evidence from either immutable revision retains full work', () => fixture(({git, put, commit, plan, base}) => {
+test('unreadable or corrupted retired records do not affect script selection', () => fixture(({git, put, commit, plan, base}) => {
   put(helper, 'export const result = 1; // edited\n');
   const head = commit();
   for (const sha of [base, head]) {
@@ -190,7 +190,7 @@ test('unreadable or corrupted audit evidence from either immutable revision reta
         }
         return git(...args);
       };
-      assert.equal(plan(head, base, read).packages.length, 29, `${sha}: ${failure}`);
+      assert.equal(plan(head, base, read).packages.length, 0, `${sha}: ${failure}`);
     }
   }
 }));
@@ -211,16 +211,15 @@ test('missing or nonregular base helpers cannot hide behind a restored regular h
   });
 });
 
-test('the executed runner rechecks stale certificates even when a forged plan names the exact diff and checkout', () => fixture(({put, commit, plan, execute}) => {
+test('the executed runner checks real script work independently of retired certificates', () => fixture(({put, commit, plan, execute}) => {
   put('scripts/consumer.mjs', 'readFileSync("scripts/identity-upstream.mjs");\n');
   const base = commit();
   put(helper, 'export const result = 1; // edited\n');
   const head = commit();
-  assert.equal(plan(head, base).packages.length, 29);
+  assert.equal(plan(head, base).packages.length, 0);
   const forged = {packages: [], receipts: [], typecheck: false, reuse: null, scripts: {base, head, paths: [helper]}};
   const result = execute(forged);
-  assert.equal(result.status, 1);
-  assert.match(result.stderr, /root-script consumer audit/);
+  assert.equal(result.status, 0, result.stderr);
 }));
 
 test('executed planner emits the script-only job and summary consumes its needs results', () => fixture(({root, git, put, commit}) => {
