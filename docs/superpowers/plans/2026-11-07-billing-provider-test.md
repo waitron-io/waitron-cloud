@@ -12,10 +12,10 @@ No product implementation or live funds.
    Use headless Chromium. If a prerequisite CLI is absent, install an isolated official
    binary outside the repository and verify its official checksum. Read keys only in process from
    `~/.config/waitron-billing-test/{sumup,stripe}.env`; never read
-   `~/.sumup-experiments/env`. Never print, copy, commit or log keys, tokens or signing
+   `~/.sumup-experiments/env`, which belongs to the real account. Never print, copy, commit or log keys, tokens or signing
    secrets; disable verbose request/browser logging.
 2. **Check before mutation.** Privately confirm SumUp `/v0.1/me` has `extdev: true`
-   and matches the expected merchant. Confirm a Stripe test key and `livemode: false`.
+   and matches the private expected merchant recorded in lane G’s D602 queue item. Confirm a Stripe test key and `livemode: false`.
    Stop that provider’s run on mismatch. Use only synthetic names and provider-documented
    cards/IBANs; use a synthetic, non-delivering email address where required.
 3. **Run 1, SumUp.** Follow the official
@@ -34,7 +34,9 @@ No product implementation or live funds.
    environment, never command arguments. Capture its signing secret only in memory.
    Verify event signatures and `livemode: false`;
    correlate actual provider test notifications to that run’s PaymentIntent/charge.
-   Record payment success/failure and dispute notifications, including elapsed time.
+   Pass requires signed `payment_intent.succeeded`, `payment_intent.payment_failed`,
+   or `charge.dispute.created`, respectively, matching the actual saved-method debit.
+   Confirm the matching payment/charge state by API and record elapsed time.
    Sandbox elapsed time cannot qualify production settlement timing; leave that open
    for slice G and cite Stripe’s current timing guidance.
    Never substitute `stripe trigger` events. Stop only processes this lane started.
@@ -42,5 +44,7 @@ No product implementation or live funds.
    status outputs, timestamps and direct official citations; pseudonymize test object IDs.
    Exclude real account/merchant/customer IDs, secrets, tokens and raw provider payloads
    from repository, PR and logs. Record sandbox/headless/challenge blockers without broadening access or
-   using live funds. Update only this work’s backlog sentence. Run focused documentation
-   checks and use docs-only finish/land with existing approval and the Cloud lock.
+   using live funds or enabling account capabilities. Explain the CLI environment
+   choice. Update only this work’s backlog sentence. Run focused documentation
+   checks and use docs-only finish/land under the owner’s current campaign instruction
+   authorizing both, with the Cloud lock.
