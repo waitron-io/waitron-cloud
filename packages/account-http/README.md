@@ -421,6 +421,11 @@ configuration and report requests to the venue, environment and control audience
 Renewal and revocation use the installation key directly, so an expired lease does
 not prevent either operation. Revocation refuses subsequent renewals.
 
+Signed `/api/installations/error-report` and `/api/installations/release-held` POSTs
+use separate actions and rate scopes for registered installations, including free
+ones. See the [box report contract](../../docs/box-error-reports.md) for the bounded
+fields, retry rules and synthetic-only version holds.
+
 From the account portal, you can inspect your organisation's installations. The
 account API provides GET `/api/account/installations` and POST
 `/api/account/installations/revoke` with `{"installationId":"<uuid>"}`. Both require

@@ -716,12 +716,15 @@ order. Remote access matters most because Waitron's customer-facing features wai
    Anthropic accounts, and any spending, need a separate go-ahead (its section 16). It changes
    C39 and D104 where its section 3 says: the owner is paged after an AI investigation or at
    15 minutes, by a text then a phone call; the status page updates itself; an on-prem box
-   going quiet never pages. It adds opt-in error reports from boxes, staff problem reports
+   going quiet never pages. Remaining work includes Waitron opt-in error reporting and staff problem reports
    (typed text sent by an admin), and a triage agent. D101's AI gate still has to be opened
    for the investigator's inputs before it runs in production. Waitron work it needs: the
    error-report opt-in and sender, the "report a problem" form, the "can trade" check and the
    updater honouring a held version. The [staff-report plan](superpowers/plans/2026-11-07-staff-problem-reports.md)
    covers Cloud receiving and a local grouped reader; its build waits for the shared box-error receiver.
+   Assess matched-window error shares after real reports exist: lifetime totals from
+   reporting boxes can delay young-release holds or inflate ratios when other errors
+   disappear. The [receiver contract](box-error-reports.md) has synthetic evidence only.
    D104's [owner setup checklist](incident-setup.md) now gives the Cloudflare Pages
    Free/Direct Upload steps, independent `pages.dev` fallback and two phone-provider
    options with prices checked on 4 November 2026. The incident runbook follows the

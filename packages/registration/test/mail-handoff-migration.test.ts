@@ -31,7 +31,7 @@ test('the handoff upgrade preserves the exact 49-entry ledger and never attribut
   await assert.rejects(checkConsumerSchema(f.pool,root),/schema_incompatible/);
   await Promise.all([migrate(f.pool),migrate(f.pool)]);await migrate(f.pool);
   const after=(await f.pool.query('SELECT * FROM schema_migrations ORDER BY name')).rows;
-  assert.equal(after.length,51);assert.deepEqual(after.slice(0,49),f.before);assert.equal(after[49].name,'050_mail_legacy_suppression_scopes.sql');
+  assert.equal(after.length,52);assert.deepEqual(after.slice(0,49),f.before);assert.equal(after[49].name,'050_mail_legacy_suppression_scopes.sql');
   assert.deepEqual((await f.pool.query('SELECT key_id,digest FROM relay_suppressions')).rows,f.legacy);
   assert.deepEqual((await f.pool.query('SELECT * FROM mail_legacy_suppression_scopes')).rows,[]);
   await checkConsumerSchema(f.pool,root);
@@ -48,7 +48,7 @@ test('interrupted handoff mapping creation rolls back its table and ledger witho
   assert.equal((await f.pool.query("SELECT to_regclass('mail_legacy_suppression_scopes') AS relation")).rows[0].relation,null);
   assert.deepEqual((await f.pool.query('SELECT * FROM schema_migrations ORDER BY name')).rows,f.before);
   assert.deepEqual((await f.pool.query('SELECT * FROM relay_suppressions')).rows,f.legacy);
-  await migrate(f.pool);assert.equal((await f.pool.query('SELECT count(*) FROM schema_migrations')).rows[0].count,'51');
+  await migrate(f.pool);assert.equal((await f.pool.query('SELECT count(*) FROM schema_migrations')).rows[0].count,'52');
  }finally{await held.query('ROLLBACK');held.release();await pending;await f.close();}
 });
 
