@@ -5,11 +5,11 @@ import {setTimeout as delay} from 'node:timers/promises';
 import {GithubApp} from './github-app.mjs';
 import {LocalLeases,configuredSlots} from './leases.mjs';
 import {withKernelLock} from './kernel-lock.mjs';
-import {refuseLegacy,withTemporaryState,withAvailableSlot} from './manual.mjs';
 import {CITransport,protectOutputStreams,runProcess} from './transport.mjs';
 import {validateCIConfig,routingMode,setRoutingMode,routingHead,setRoutingHead,findOrdinary,executeOrdinary,qualifyOrdinaryHosted,findAutomatic,fallbackOrdinary} from './ci-canary.mjs';
 
 export async function withOrdinaryController({state,hostGeneration,api,policy,approvedHead,runId,lane,transport,signal,wait=delay}){
+ const {refuseLegacy,withTemporaryState}=await import('./manual.mjs');
  const end=Date.now()+900000;
  while(true){
   assert.equal(await routingMode({api,policy,signal}),'server','Server routing is disabled');
@@ -48,6 +48,7 @@ export async function automaticTick({configuration,config,api,signal,runWorker})
  return {code:0,served:jobs.length};
 }
 async function automaticJob({config,api,runId,jobId,signal}){
+ const {withAvailableSlot,withTemporaryState}=await import('./manual.mjs');
  const policy=config.ci,run=await api.get(`/repos/${policy.repository}/actions/runs/${runId}`,{signal});
  const ci=await findOrdinary({api,policy,approvedHead:run.head_sha,runId,jobId,automatic:true,signal});
  if(!ci)return {code:75,reason:'job-no-longer-queued'};
@@ -57,6 +58,7 @@ async function automaticJob({config,api,runId,jobId,signal}){
 }
 
 export async function main(args){
+ const {refuseLegacy}=await import('./manual.mjs');
  const [configuration,command,...values]=args;
  assert.ok(configuration?.startsWith('/') && ['status','mode','run','job'].includes(command),
   'Usage: control.mjs CONFIG status | mode hosted --reason REASON | mode server --reason REASON --head SHA | run LANE APPROVED_HEAD RUN_ID');

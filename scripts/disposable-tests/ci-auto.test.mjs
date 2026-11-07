@@ -190,3 +190,16 @@ test('an automatic server failure requests exactly one cancellation and same-hea
  const result=await controller.fallbackOrdinary({api:f.api,policy,ci,leases,automatic:true,wait:async()=>{}});
  assert.equal(cancelled,1);assert.equal(reruns,1);assert.equal(result.retry,true);assert.equal(result.sourceSha,head);
 });
+
+test('the real CLI completes its automatic recovery import instead of exiting with unsettled await',async t=>{
+ const {mkdtempSync,writeFileSync,rmSync}=await import('node:fs'),{tmpdir}=await import('node:os'),{spawnSync}=await import('node:child_process');
+ const {LocalLeases}=await import('./leases.mjs'),{withKernelLock}=await import('./kernel-lock.mjs');
+ const directory=mkdtempSync(tmpdir()+'/auto-cli-'),state=directory+'/state';t.after(()=>rmSync(directory,{recursive:true,force:true}));
+ await withKernelLock(state,async()=>{new LocalLeases(state+'/ledger',{hostGeneration:'test',slots:6,bootstrap:true});},{bootstrap:true});
+ for(let i=0;i<6;i++)await withKernelLock(state+'/slot-'+i,async()=>({code:0}),{bootstrap:true});
+ const config=directory+'/configuration.json';writeFileSync(config,JSON.stringify({version:2,mode:'manual-slots',slots:6,state,hostGeneration:'test',host:'fixture.invalid',recipe:'/opt/waitron-disposable-fixture',repository:directory,ci:{...policy,appEnv:directory+'/app.env',appKey:directory+'/app.pem'}}));
+ const manual=new URL('./manual.mjs',import.meta.url),app=new URL('./github-app.mjs',import.meta.url);
+ const program=`import assert from 'node:assert/strict';import {GithubApp} from ${JSON.stringify(app.href)};GithubApp.prototype.get=async path=>{assert.ok(path.endsWith('DISPOSABLE_TESTS_MODE'));return {value:'hosted'}};process.argv=[process.execPath,${JSON.stringify(manual.pathname)},${JSON.stringify(config)},'--once'];await import(${JSON.stringify(manual.href)});console.log('CLI_FINISHED');`;
+ const result=spawnSync(process.execPath,['--input-type=module','-e',program],{encoding:'utf8',timeout:15000});
+ assert.equal(result.status,0,result.stderr);assert.match(result.stdout,/CLI_FINISHED/);assert.doesNotMatch(result.stderr,/unsettled top-level await/);
+});
