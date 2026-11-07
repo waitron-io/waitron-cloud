@@ -15,12 +15,21 @@ for (const phase of ["headers", "body", "status"]) {
     t.after(() => rm(root, { recursive: true, force: true }));
     const { stdout, stderr } = await execute(process.execPath, ["--input-type=module", "-e", `
 import { createServer } from "node:http";
+import { mock } from "node:test";
 import { readdir, writeFile, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { startBackupStorage } from "./scripts/backup-storage-fixture.mjs";
-const timeout = AbortSignal.timeout.bind(AbortSignal), budgets = [];
-AbortSignal.timeout = ms => { budgets.push(ms); return timeout(ms === 30000 ? ${phase === "status" ? 1000 : 75} : ms); };
+const nativeSetTimeout = setTimeout, nativeClearTimeout = clearTimeout, budgets = [];
+// The deadline and server completion share a controlled clock; socket closure stays real.
+mock.timers.enable({ apis: ["setTimeout"] });
+AbortSignal.timeout = ms => {
+  budgets.push(ms);
+  const controller = new AbortController();
+  setTimeout(() => controller.abort(new DOMException("The operation was aborted due to timeout", "TimeoutError")),
+    ms === 30000 ? ${phase === "status" ? 1000 : 75} : ms);
+  return controller.signal;
+};
 let calls = 0, completed = false, disconnected = false;
 let releaseConnection;
 const connectionClosed = new Promise(resolve => { releaseConnection = resolve; });
@@ -32,10 +41,17 @@ const server = createServer((req, res) => {
   }
   const timer = setTimeout(() => { completed = true; res.end("invalid complete archive"); }, 350);
   timers.add(timer);
+  if (${JSON.stringify(phase)} === "headers") setImmediate(() => mock.timers.tick(75));
+  if (${JSON.stringify(phase)} === "headers") Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 450);
 });
 await new Promise(resolve => server.listen(0, "127.0.0.1", resolve));
 const nativeFetch = globalThis.fetch;
-globalThis.fetch = (url, options) => { calls++; return nativeFetch("http://127.0.0.1:" + server.address().port, options); };
+globalThis.fetch = async (url, options) => {
+  calls++;
+  const response = await nativeFetch("http://127.0.0.1:" + server.address().port, options);
+  if (${JSON.stringify(phase)} === "body") setImmediate(() => mock.timers.tick(75));
+  return response;
+};
 await writeFile(join(tmpdir(), "neighbour"), "unrelated input");
 let failure;
 let releasedBeforeCleanup;
@@ -44,13 +60,14 @@ try {
   await storage.stop();
 } catch (error) { failure = error; }
 finally {
-  const observeTimer = setTimeout(() => releaseConnection(), 150);
+  const observeTimer = nativeSetTimeout(() => releaseConnection(), 150);
   await connectionClosed;
-  clearTimeout(observeTimer);
+  nativeClearTimeout(observeTimer);
   releasedBeforeCleanup = disconnected;
   for (const timer of timers) clearTimeout(timer);
   server.closeAllConnections();
   await new Promise(resolve => server.close(resolve));
+  mock.timers.reset();
 }
 console.log(JSON.stringify({ message: failure?.message, causeName: failure?.cause?.name,
   diagnostic: failure?.storageDownload, calls, budgets, completed, releasedBeforeCleanup,

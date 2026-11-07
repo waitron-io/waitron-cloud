@@ -118,7 +118,11 @@ cache publication and permission checks are unchanged. D585 adds a shared
 30-second deadline over headers and body. Run `node --test scripts/ci-backup-storage-download-budget.test.mjs`
 to hold headers or a body on a real local HTTP server and verify abort, an empty
 cache and removal of the private startup directory. Its HTTP-refusal case
-requires connection closure before the deadline can fire. Run
+requires connection closure before the deadline can fire. The test advances a
+controlled deadline after the request reaches its chosen phase, before the
+server's completion timer. A 450 ms server pause exercises the header case;
+real sockets must still close before cleanup. This fixes the test's timer order,
+while its cancellation, one-attempt, cache and directory checks stay unchanged. Run
 `node --test scripts/ci-backup-storage-download-contract.test.mjs` to check native
 body silence without a seed inactivity limit, late completion after abort,
 unavailable status, cancellation errors and a failed diagnostic sink. These
