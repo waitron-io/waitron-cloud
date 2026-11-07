@@ -136,3 +136,5 @@ The [translation worker guide](packages/translation/README.md) covers the option
 profile, direct worker command and configuration. Translation stays off while quality trials,
 joint Waitron paging proof and launch decisions remain open. Use local fake providers for
 protocol tests; the worker's US$5 monthly safety cap is not a billing policy.
+The separately scoped [owner's demo-menu trial](packages/translation/README.md#try-the-owners-demo-menu)
+is the test-box exception; the ordinary client's refusal and public release gates remain.

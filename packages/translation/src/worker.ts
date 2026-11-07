@@ -10,6 +10,8 @@ import {monthSpend,spendingPolicy,type ItemResult,type JobRow} from './job-store
 import type {ModelClient} from './openai-client.ts';
 interface StoredBatch {results:ItemResult[];failed:string[];stoppedByCap?:true}
 type StoredBatches=Record<string,StoredBatch>;
+interface TestBoxScope {installationId:string;venueId:string}
+const uuid=/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/;
 const failedRefs=(batch:readonly JobItem[])=>batch.filter(item=>item.missing.length>0).map(item=>item.ref);
 async function defaultWait(ms:number,signal:AbortSignal){try{await delay(ms,undefined,{signal});}catch{/* an abort ends the wait early */}}
 async function recordJobUsage(client:PoolClient,job:JobRow&{finished_at:Date},organisationId:string){
@@ -20,10 +22,13 @@ async function recordJobUsage(client:PoolClient,job:JobRow&{finished_at:Date},or
   await recordUsageEvent(client,{organisationId,venueId:job.venue_id,type,quantity,sourceKind:'translation_job',sourceReference:job.id,occurredAt});
 }
 export class TranslationWorker {
+ readonly #scope:TestBoxScope|undefined;
  readonly #pool:Pool;readonly #client:ModelClient;readonly #concurrency:number;readonly #leaseMs:number;readonly #maxLeases:number;readonly #wait:BatchHooks['wait'];readonly #planMode:PlanMode;readonly #allowances:AllowanceOptions|undefined;
- constructor(pool:Pool,client:ModelClient,options:{batchConcurrency?:number;leaseMs?:number;maxLeases?:number;wait?:BatchHooks['wait'];planMode?:PlanMode;allowances?:AllowanceOptions}={}){
+ constructor(pool:Pool,client:ModelClient,options:{batchConcurrency?:number;leaseMs?:number;maxLeases?:number;wait?:BatchHooks['wait'];planMode?:PlanMode;allowances?:AllowanceOptions;scope?:TestBoxScope}={}){
   this.#planMode=options.planMode===undefined?'existing':options.planMode;requireTestPlanVenue('test',this.#planMode);
   this.#allowances=validateAllowanceOptions(options.allowances,this.#planMode);
+  if(options.scope&&(this.#planMode!=='existing'||!uuid.test(options.scope.installationId)||!uuid.test(options.scope.venueId)))throw new Error('translation_worker_options_invalid');
+  this.#scope=options.scope?{...options.scope}:undefined;
   this.#pool=pool;this.#client=client;this.#concurrency=options.batchConcurrency??4;this.#leaseMs=options.leaseMs??600000;
   this.#maxLeases=options.maxLeases??3;this.#wait=options.wait??defaultWait;
   if(this.#concurrency>4||![this.#concurrency,this.#leaseMs,this.#maxLeases].every(n=>Number.isSafeInteger(n)&&n>0))throw new Error('translation_worker_options_invalid');
@@ -74,11 +79,13 @@ export class TranslationWorker {
    // Bounded cleanup can leave old rows behind; they must not receive fresh work leases.
    const projection=this.#planMode==='test-venue-levels'?'id,venue_id':'id';
    // Test-only workers leave production jobs untouched and available to their own workers.
-   const environment=this.#planMode==='test-venue-levels'?" AND venue_id IN (SELECT id FROM venues WHERE environment='test')":'';
+   const environment=this.#planMode==='test-venue-levels'?" AND venue_id IN (SELECT id FROM venues WHERE environment='test')":this.#scope?` AND installation_id=$1 AND venue_id=$2
+    AND EXISTS (SELECT 1 FROM installations i JOIN venues v ON v.id=i.venue_id WHERE i.id=translation_jobs.installation_id
+     AND i.venue_id=translation_jobs.venue_id AND i.revoked_at IS NULL AND i.superseded_by IS NULL AND v.environment='test')`:'';
    const candidate=(await client.query<{id:string;venue_id:string}>(`SELECT ${projection} FROM translation_jobs WHERE state='queued'
     AND created_at>clock_timestamp()-interval '24 hours'${environment}
     OR (state='running' AND lease_until<clock_timestamp() AND created_at>clock_timestamp()-interval '24 hours'${environment})
-    ORDER BY created_at,id LIMIT 1${this.#planMode==='test-venue-levels'?'':' FOR UPDATE SKIP LOCKED'}`)).rows[0];
+    ORDER BY created_at,id LIMIT 1${this.#planMode==='test-venue-levels'?'':' FOR UPDATE SKIP LOCKED'}`,this.#scope?[this.#scope.installationId,this.#scope.venueId]:[])).rows[0];
    if(!candidate)return undefined;
    let permissionRevision:number|undefined;
    if(this.#planMode==='test-venue-levels'){
@@ -92,6 +99,15 @@ export class TranslationWorker {
    const job=(await client.query<JobRow>(`UPDATE translation_jobs SET state='running',lease_id=$2,lease_until=clock_timestamp()+$3*interval '1 millisecond',
     lease_count=lease_count+1,started_at=COALESCE(started_at,clock_timestamp()) WHERE id=$1 RETURNING *`,[candidate.id,leaseId,this.#leaseMs])).rows[0]!;
    return {job,leaseId,permissionRevision};
+  });
+ }
+ async #inScope(job:JobRow,leaseId:string):Promise<boolean>{
+  return transaction(this.#pool,async client=>{
+   const current=await client.query(`SELECT 1 FROM translation_jobs j JOIN installations i ON i.id=j.installation_id AND i.venue_id=j.venue_id
+    JOIN venues v ON v.id=i.venue_id WHERE j.id=$1 AND j.lease_id=$2 AND j.state='running' AND j.lease_until>clock_timestamp()
+    AND j.installation_id=$3 AND j.venue_id=$4 AND i.revoked_at IS NULL AND i.superseded_by IS NULL AND v.environment='test'`,
+    [job.id,leaseId,this.#scope!.installationId,this.#scope!.venueId]);
+   return !!current.rowCount&&hasConsent(client,job.venue_id);
   });
  }
  async #permitted(job:JobRow,leaseId:string,revision:number):Promise<boolean>{
@@ -119,6 +135,7 @@ export class TranslationWorker {
   let costFailed=false;
   return {
    ...(this.#planMode==='test-venue-levels'?{stillPermitted:()=>this.#permitted(job,leaseId,revision!)}:{}),
+   ...(this.#scope?{stillPermitted:()=>this.#inScope(job,leaseId)}:{}),
    ...(this.#allowances?{beforeProvider:async()=>{
     // Concurrent batches share the first durable spend, but every later call checks its lease.
     costFailed=false;return admit();
@@ -136,7 +153,9 @@ export class TranslationWorker {
     if(!saved||!attemptStartedAt)throw new Error('translation_allowance_attempt_missing');
     await recordAllowanceAttempt(client,saved.id,attemptStartedAt);
     await client.query("UPDATE translation_jobs SET lease_until=clock_timestamp()+$2*interval '1 millisecond',allowance_open_calls=allowance_open_calls-$3 WHERE id=$1",[job.id,this.#leaseMs,costFailed?0:1]);
-   }):guarded(`UPDATE translation_jobs SET lease_until=clock_timestamp()+$3*interval '1 millisecond' WHERE id=$1 AND lease_id=$2 AND state='running'`,[job.id,leaseId,this.#leaseMs]),
+   }):this.#scope?this.#pool.query(`UPDATE translation_jobs SET lease_until=clock_timestamp()+$3*interval '1 millisecond'
+    WHERE id=$1 AND lease_id=$2 AND state='running' AND lease_until>clock_timestamp()`,[job.id,leaseId,this.#leaseMs]).then(()=>{})
+    :guarded(`UPDATE translation_jobs SET lease_until=clock_timestamp()+$3*interval '1 millisecond' WHERE id=$1 AND lease_id=$2 AND state='running'`,[job.id,leaseId,this.#leaseMs]),
    wait:this.#wait,
   };
   };

@@ -14,6 +14,51 @@ the input or charging tokens. A regional URL or enable flag cannot change that.
 Translation also stays off until the remaining quality trials, joint Waitron paging proof and
 [launch decisions](../../docs/launch-evidence.md) are complete. Local fake-provider tests
 establish protocol behavior, not translation quality or permission to send real menus.
+The [owner's one-box trial](#try-the-owners-demo-menu) is the narrow exception;
+`outbound-disabled.test.ts` continues to prove the ordinary client's refusal.
+
+## Try the owner's demo menu
+
+The owner approved one translation of the test box's demo menu in A951-S step 5.
+The [trial plan](../../docs/superpowers/plans/2026-11-07-test-box-translation.md)
+records that exception and the watcher's decisions. Public privacy, supplier and
+quality work stays open. Use the separate one-pass command only for that box;
+normal workers and deployments still refuse real AI calls.
+
+After the owner supplies the server-only key, refresh only `openai-client.ts`,
+`worker.ts` and `test-box-worker-cli.ts` under the running container's
+`/app/workspace/translation/src`. Compare its mounted registration source with
+the reviewed checkout first. Preserve `/app/src`, including its fixed-box tunnel
+option. The trial runs `node src/server-cli.ts` in `/app`, rather than the normal
+test deployment. Read that private launcher's flag handling before setting
+`process.env.CLOUD_TRANSLATION='1'` there and restarting only `d582-account`.
+The key belongs in root-owned `/root/waitron-translation/openai.env`, mode 600,
+inside a root-owned directory with mode 700. Check those permissions as operator;
+the command does not enforce them. The file supplies `CLOUD_OPENAI_API_KEY`.
+
+Use the existing Cloud owner consent and Waitron's signed Translate all caller
+to submit the synthetic menu. Then run on the rented server, with the paired
+installation and venue IDs:
+
+```sh
+docker exec -i d582-account node --env-file=/dev/stdin /app/workspace/translation/src/test-box-worker-cli.ts INSTALLATION_UUID VENUE_UUID --once < /root/waitron-translation/openai.env
+```
+
+The subprocess inherits the account's database configuration; the key enters
+only that subprocess through standard input. Before enabling submission, run
+this exact command with a synthetic key and an empty in-scope queue to check
+module loading and database access without sending a menu. The command accepts
+only the existing plan mode, rejects allowance modes, and performs no global
+cleanup. Other signed jobs may queue; it never leases them. Before each provider
+attempt it rechecks the configured installation and venue, test environment,
+revocation, current lease and consent. It uses the existing fixed OpenAI Responses
+transport, token accounting and US$5 monthly cap, including its overshoot limit.
+
+Collect every page through Waitron before release, then show the owner the
+editable result. Removing the key file prevents future invocations; withdrawing
+consent stops later calls in a running pass, while requests already sent can
+finish. Production calls remain refused. Synthetic tests do not establish real
+API compatibility, translation quality or the joint Waitron result.
 
 ## Run the worker locally
 
