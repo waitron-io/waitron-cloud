@@ -49,8 +49,12 @@ elif mode=='prepare':
 elif mode in ('execute','execute-v2'):pass
 elif mode=='result':print(json.dumps({'resourceId':rid,'code':3}))
 elif mode=='destroy':
+ if os.environ['FIXTURE_MODE']=='recovery-cancel':(root/'destroy-ready').touch();time.sleep(5)
  (root/rid).unlink(missing_ok=True);print(json.dumps({'resourceId':rid,'absent':True}))
-elif mode=='inspect':print(json.dumps({'resourceId':rid,'absent':not(root/rid).exists()}))
+elif mode=='inspect':
+ if os.environ['FIXTURE_MODE']=='stuck-cleanup':
+  stuck=root/'state/tmp/stuck';stuck.mkdir(mode=0o700,exist_ok=True);(stuck/'orphan').write_text('private')
+ print(json.dumps({'resourceId':rid,'absent':not(root/rid).exists()}))
 else:sys.exit(125)
 `,{mode:0o700});
  const env={...process.env,PATH:join(root,'bin')+':'+process.env.PATH,FIXTURE_ROOT:root,FIXTURE_MODE:mode,TMPDIR:join(root,'tmp'),XDG_CACHE_HOME:join(root,'cache')};
@@ -65,6 +69,13 @@ function assertNoTemporaries(f){
  assert.deepEqual(existsSync(temporary)?readdirSync(temporary):[],[]);
  assert.deepEqual(readdirSync(join(f.root,'tmp')).filter(name=>name.startsWith('disposable-') && name!=='disposable-unrelated'),[]);
  assert.equal(readFileSync(join(f.root,'tmp/global-sentinel'),'utf8'),'unrelated');
+}
+
+function assertControllerReleased(f){
+ assert.equal(existsSync(join(f.root,'state/mac-controller.lock')),true);
+ assert.equal(JSON.parse(readFileSync(join(f.root,'state/ledger/state.json'),'utf8')).slots[0].state,'free');
+ const result=spawnSync(process.execPath,[script,f.config,'--once'],{env:f.env,encoding:'utf8',timeout:5000});
+ assert.equal(result.status,0,result.stdout+result.stderr);assert.equal(result.stdout,'');
 }
 
 test('background recovery removes only private interrupted temporary data and preserves global files',t=>{
@@ -96,7 +107,7 @@ test('only explicit bootstrap creates fresh controller state and never reopens a
 });
 
 test('manual CLI preserves a verified nonzero result and removes all owned preparation data',t=>{
- const f=fixture(t);const r=run(f);assert.equal(r.status,3,r.stdout+r.stderr);assert.match(r.stdout,/"code":3/);assert.match(r.stdout,/"cleanup":"absent"/);assertNoTemporaries(f);assert.equal(existsSync(join(f.root,'state/manual.lock')),false);
+ const f=fixture(t);const r=run(f);assert.equal(r.status,3,r.stdout+r.stderr);assert.match(r.stdout,/"code":3/);assert.match(r.stdout,/"cleanup":"absent"/);assertNoTemporaries(f);assertControllerReleased(f);
 });
 test('an occupied recorded lease refuses before packaging or host contact',t=>{
  const f=fixture(t);const leases=new LocalLeases(join(f.root,'state/ledger'),{hostGeneration:'fixture',slots:1});
@@ -107,7 +118,7 @@ test('an unhealthy host refuses before snapshot and private package preparation'
  const f=fixture(t,'unhealthy');const r=run(f);assert.equal(r.status,75,r.stdout+r.stderr);assert.equal(existsSync(join(f.root,'packaged')),false);assertNoTemporaries(f);
 });
 test('a failed snapshot leaves no admitted work or owned temporary data',t=>{
- const f=fixture(t,'snapshot-failure');const r=run(f);assert.equal(r.status,125,r.stdout+r.stderr);assertNoTemporaries(f);assert.equal(existsSync(join(f.root,'state/manual.lock')),false);
+ const f=fixture(t,'snapshot-failure');const r=run(f);assert.equal(r.status,125,r.stdout+r.stderr);assertNoTemporaries(f);assertControllerReleased(f);
 });
 for(const signal of ['SIGTERM','SIGINT','SIGHUP'])test(`${signal} during packaging returns143 and cleans its private data`,async t=>{
  const f=fixture(t,'packaging');const child=spawn(process.execPath,f.args,{env:f.env,stdio:['ignore','pipe','pipe']});
@@ -122,7 +133,7 @@ for(const signal of ['SIGTERM','SIGINT','SIGHUP'])test(`${signal} during packagi
   assert.equal(sources.length,1);assert.equal(existsSync(join(f.root,'state/tmp',sources[0],'source.tar')),true);
   assert.deepEqual(readdirSync(join(f.root,'tmp')).filter(name=>name.startsWith('disposable-')),[]);
  }
-  child.kill(signal);const [code]=await closed;assert.equal(code,143,output);assertNoTemporaries(f);assert.equal(existsSync(join(f.root,'state/manual.lock')),false);
+  child.kill(signal);const [code]=await closed;assert.equal(code,143,output);assert.match(output,/"code":143/);assertNoTemporaries(f);assertControllerReleased(f);
  } finally {
   if(child.exitCode===null&&child.signalCode===null)child.kill('SIGKILL');
   if(existsSync(join(f.root,'packaging.pid'))){try{process.kill(-Number(readFileSync(join(f.root,'packaging.pid'),'utf8')),'SIGKILL');}catch(error){if(error.code!=='ESRCH')throw error;}}
@@ -157,7 +168,7 @@ test('closing both terminal pipes and sending SIGHUP still finishes exact cleanu
  const ready=new Promise(resolve=>child.stdout.on('data',data=>{output+=data.toString();if(output.includes('WORK-READY'))resolve();}));
  try {
   await Promise.race([ready,closed.then(()=>assert.fail('Work never started: '+output))]);child.stdout.destroy();child.stderr.destroy();child.kill('SIGHUP');
-  const [code]=await closed;assert.equal(code,143);assert.equal(JSON.parse(readFileSync(join(f.root,'state/ledger/state.json'),'utf8')).slots[0].state,'free');assertNoTemporaries(f);assert.equal(existsSync(join(f.root,'state/manual.lock')),false);
+  const [code]=await closed;assert.equal(code,143);assert.equal(JSON.parse(readFileSync(join(f.root,'state/ledger/state.json'),'utf8')).slots[0].state,'free');assertNoTemporaries(f);assertControllerReleased(f);
  } finally {
   if(child.exitCode===null&&child.signalCode===null)child.kill('SIGKILL');
   if(existsSync(join(f.root,'work.pid'))){try{process.kill(-Number(readFileSync(join(f.root,'work.pid'),'utf8')),'SIGKILL');}catch(error){if(error.code!=='ESRCH')throw error;}}
@@ -210,6 +221,7 @@ test('foreground refuses an interrupted turn until background recovery permits a
 test('direct background recovery takes its own controller lock',t=>{
  const f=fixture(t);const result=spawnSync(process.execPath,[script,f.config,'--once'],{env:f.env,encoding:'utf8',timeout:5000});
  assert.equal(result.status,0,result.stdout+result.stderr);assert.equal(existsSync(join(f.root,'calls')),false);
+ assert.equal(result.stdout,'');
 });
 
 test('the Mac entry point resolves a relative checkout before entering its safe working directory',t=>{
@@ -226,11 +238,26 @@ test('a foreign inherited descriptor cannot replace the controller lock',async t
  try {
   await withKernelLock(join(f.root,'state'),async()=>{
    const result=spawnSync(process.execPath,[script,f.config,'--once'],{
-    env:{...f.env,WAITRON_DISPOSABLE_LOCK_FD:'3'},stdio:['ignore','pipe','pipe',fd],encoding:'utf8',timeout:5000});
+    env:f.env,stdio:['ignore','pipe','pipe',fd],encoding:'utf8',timeout:5000});
    assert.equal(result.status,75,result.stdout+result.stderr);return {code:0};
   });
   assert.equal(readFileSync(foreign,'utf8'),'foreign');
  } finally {closeSync(fd);}
+});
+
+test('a substituted python3 on PATH cannot bypass a live controller lock',async t=>{
+ const f=fixture(t);const {withKernelLock}=await import('./kernel-lock.mjs');
+ const leases=new LocalLeases(join(f.root,'state/ledger'),{hostGeneration:'fixture',slots:1});
+ const lease=leases.reserveLocal({lane:'I',turn:'held',snapshot:'a'.repeat(64),argv:['false']}).lease;
+ leases.start(lease);const guest=join(f.root,lease.resourceId);writeFileSync(guest,'guest');
+ writeFileSync(join(f.root,'bin/python3'),'#!/bin/sh\nexit 0\n',{mode:0o700});
+ await withKernelLock(join(f.root,'state'),async()=>{
+  const result=spawnSync(process.execPath,[script,f.config,'--once'],{env:f.env,encoding:'utf8',timeout:5000});
+  assert.equal(result.status,75,result.stdout+result.stderr);
+  assert.match(result.stdout,/"code":75/);
+  assert.equal(existsSync(guest),true);assert.equal(leases.inspect().slots[0].state,'running');
+  return {code:0};
+ });
 });
 
 
@@ -255,6 +282,7 @@ else:
   let status;try{[status]=await closed;}finally{sub.signal.removeEventListener('abort',stop);}
   const result={status,stdout,stderr};const elapsed=performance.now()-start;
   assert.equal(result.status,75,result.stdout+result.stderr);
+  assert.match(result.stdout,/"code":75/);
   assert.ok(elapsed<10000,`Admission took ${elapsed}ms`);
   assert.equal(existsSync(join(f.root,'packaged')),false);
   assert.equal(JSON.parse(readFileSync(join(f.root,'state/ledger/state.json'),'utf8')).slots[0].state,'free');
@@ -337,6 +365,26 @@ for(const damage of ['missing','corrupt'])test(`ordinary and background calls re
  assert.equal(existsSync(join(f.root,'calls')),false);assert.equal(existsSync(join(f.root,'packaged')),false);
 });
 
+for(const damage of ['missing-turns','null-turns','array-turns','linked-state-file','public-state-file'])test(`malformed ledger ${damage} refuses before source or host work`,t=>{
+ const f=fixture(t);const path=join(f.root,'state/ledger/state.json');
+ const ledger=JSON.parse(readFileSync(path,'utf8'));
+ if(damage==='missing-turns')delete ledger.turns;
+ if(damage==='null-turns')ledger.turns=null;
+ if(damage==='array-turns')ledger.turns=[];
+ writeFileSync(path,JSON.stringify(ledger),{mode:0o600});
+ if(damage==='public-state-file')chmodSync(path,0o644);
+ const target=join(f.root,'linked-ledger');
+ if(damage==='linked-state-file'){writeFileSync(target,readFileSync(path),{mode:0o600});rmSync(path);symlinkSync(target,path);}
+ const before=readFileSync(path,'utf8');
+ for(const args of [f.args,[script,f.config,'--once']]){
+  const result=spawnSync(process.execPath,args,{env:f.env,encoding:'utf8',timeout:5000});
+  assert.equal(result.status,125,result.stdout+result.stderr);
+  assert.equal(existsSync(join(f.root,'calls')),false);assert.equal(existsSync(join(f.root,'packaged')),false);
+  assert.equal(readFileSync(path,'utf8'),before);
+ }
+ if(damage==='linked-state-file')assert.equal(readFileSync(target,'utf8'),before);
+});
+
 for(const gate of ['manual.lock','recovery.lock','ledger/lock'])test(`the CLI refuses legacy ${gate} before cleaning any unexpected state`,t=>{
  const f=fixture(t);mkdirSync(join(f.root,'state',gate),{mode:0o700});
  const temporary=join(f.root,'state/tmp');mkdirSync(temporary,{mode:0o700});writeFileSync(join(temporary,'retained'),'keep');
@@ -357,6 +405,23 @@ test('the exec launcher runs from root without the four runtime injection variab
  assert.equal(result.status,0,result.stderr);assert.equal(readFileSync(join(f.root,'context'),'utf8'),'/|absent|absent|absent|absent');
 });
 
+test('the rendered agent recovers with only its declared HOME and PATH',t=>{
+ const f=fixture(t);const leases=new LocalLeases(join(f.root,'state/ledger'),{hostGeneration:'fixture',slots:1});
+ const lease=leases.reserveLocal({lane:'I',turn:'agent',snapshot:'a'.repeat(64),argv:['false']}).lease;
+ leases.start(lease);writeFileSync(join(f.root,lease.resourceId),'guest');
+ const python=execFileSync('python3',['-I','-c','import sys;print(sys.executable)'],{encoding:'utf8'}).trim();
+ let template=readFileSync(new URL('../../deploy/disposable-tests/com.waitron.disposable-recovery.plist.in',import.meta.url),'utf8');
+ const escape=value=>value.replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;');
+ for(const [key,value] of Object.entries({PYTHON:python,CONTROLLER:new URL('../../',import.meta.url).pathname.replace(/\/$/,''),NODE:process.execPath,CONFIG:f.config,PATH:f.env.PATH,STATE:join(f.root,'state'),HOME:f.root}))template=template.replaceAll('@'+key+'@',escape(value));
+ const rendered=JSON.parse(execFileSync(python,['-I','-B','-c','import json,plistlib,sys;print(json.dumps(plistlib.loads(sys.stdin.buffer.read())))'],{input:template,encoding:'utf8'}));
+ // No shell environment supplies a hidden HOME or cache path.
+ const result=spawnSync(rendered.ProgramArguments[0],rendered.ProgramArguments.slice(1),{encoding:'utf8',timeout:5000,
+  env:{...rendered.EnvironmentVariables,FIXTURE_ROOT:f.root,FIXTURE_MODE:'unhealthy'}});
+ assert.equal(result.status,0,result.stdout+result.stderr);
+ assert.equal(leases.inspect().slots[0].state,'free');assert.equal(existsSync(join(f.root,lease.resourceId)),false);
+ assert.deepEqual(readFileSync(join(f.root,'calls'),'utf8').trim().split('\n'),['destroy','inspect']);
+});
+
 test('exec preserves the Node process identity and its operating-system signal result',async t=>{
  const f=fixture(t);const node=join(f.root,'node');
  writeFileSync(node,`#!/bin/sh\necho $$ > '${f.root}/node-pid'\nkill -KILL $$\n`,{mode:0o700});
@@ -374,6 +439,29 @@ test('a busy direct controller preserves75 after its output pipe closes',async t
  });
 });
 
+test('Ctrl-C during the lock helper returns143 for the owned process group',async t=>{
+ const f=fixture(t);const ready=join(f.root,'helper-ready');
+ const helper=`require('node:fs').writeFileSync(${JSON.stringify(ready)},String(process.pid));setTimeout(()=>{},5000);`;
+ const program=`import cp from 'node:child_process';import {syncBuiltinESMExports} from 'node:module';
+ const original=cp.spawnSync,originalAsync=cp.spawn;const isHelper=argv=>argv.includes('-c') && argv.at(-1).includes('fcntl.flock');
+ cp.spawnSync=(command,argv,options)=>isHelper(argv)?original(process.execPath,['-e',${JSON.stringify(helper)}],options):original(command,argv,options);
+ cp.spawn=(command,argv,options)=>isHelper(argv)?originalAsync(process.execPath,['-e',${JSON.stringify(helper)}],options):originalAsync(command,argv,options);
+ syncBuiltinESMExports();const {main}=await import(${JSON.stringify(new URL('./manual.mjs',import.meta.url).href)});
+ try{process.exitCode=await main(${JSON.stringify(f.args.slice(1))});}catch(error){console.error(error.message);process.exitCode=125;}`;
+ const child=spawn(process.execPath,['--input-type=module','-e',program],{detached:true,env:f.env,stdio:['ignore','pipe','pipe']});
+ const closed=once(child,'close');let output='';child.stdout.on('data',data=>output+=data);child.stderr.on('data',data=>output+=data);
+ try{
+  const end=performance.now()+5000;
+  while(!existsSync(ready) && child.exitCode===null && child.signalCode===null && performance.now()<end)await delay(10);
+  assert.equal(existsSync(ready),true,output);
+  process.kill(-child.pid,'SIGINT');const [code]=await closed;
+  assert.equal(code,143,output);assert.match(output,/"reason":"cancelled"/);assert.equal(existsSync(join(f.root,'calls')),false);assertNoTemporaries(f);
+ }finally{
+  if(child.exitCode===null && child.signalCode===null)try{process.kill(-child.pid,'SIGKILL');}catch(error){if(error.code!=='ESRCH')throw error;}
+  await closed;
+ }
+});
+
 
 test('the manual CLI refuses another repository before source preparation, host contact or ledger mutation',t=>{
  const f=fixture(t);const foreign=join(f.root,'foreign');execFileSync('git',['init','-q',foreign]);
@@ -382,4 +470,45 @@ test('the manual CLI refuses another repository before source preparation, host 
  assert.equal(result.status,125,result.stdout+result.stderr);assert.match(result.stderr,/only the configured Cloud repository/);
  assert.equal(readFileSync(join(f.root,'state/ledger/state.json'),'utf8'),before);
  assert.equal(existsSync(join(f.root,'calls')),false);assert.equal(existsSync(join(f.root,'packaged')),false);assertNoTemporaries(f);
+});
+
+
+for(const phase of ['recovery','verified-command'])test(`failed temporary deletion cannot replace ${phase}`,t=>{
+ const f=fixture(t,phase==='recovery'?'unhealthy':'stuck-cleanup');
+ const temporary=join(f.root,'state/tmp'),stuck=join(temporary,'stuck');
+ if(phase==='recovery'){
+  mkdirSync(temporary,{mode:0o700});mkdirSync(stuck,{mode:0o700});writeFileSync(join(stuck,'orphan'),'private');
+  const leases=new LocalLeases(join(f.root,'state/ledger'),{hostGeneration:'fixture',slots:1});
+  const lease=leases.reserveLocal({lane:'I',turn:'interrupted',snapshot:'a'.repeat(64),argv:['false']}).lease;
+  leases.start(lease);writeFileSync(join(f.root,lease.resourceId),'guest');
+ }
+ const args=phase==='recovery'?[f.config,'--once']:f.args.slice(1);
+ const program=`import fs from 'node:fs';import {syncBuiltinESMExports} from 'node:module';
+ const remove=fs.rmSync;fs.rmSync=(path,options)=>{if([${JSON.stringify(temporary)},${JSON.stringify(stuck)}].includes(String(path)) && fs.existsSync(${JSON.stringify(stuck)}))throw Object.assign(new Error('controlled undeletable private subtree'),{code:'ENOTEMPTY'});return remove(path,options);};
+ syncBuiltinESMExports();const {main}=await import(${JSON.stringify(new URL('./manual.mjs',import.meta.url).href)});
+ try{process.exitCode=await main(${JSON.stringify(args)});}catch(error){console.error(error.message);process.exitCode=125;}`;
+ const result=spawnSync(process.execPath,['--input-type=module','-e',program],{env:f.env,encoding:'utf8',timeout:10000});
+ assert.equal(result.status,phase==='recovery'?0:3,result.stdout+result.stderr);
+ assert.equal(JSON.parse(readFileSync(join(f.root,'state/ledger/state.json'),'utf8')).slots[0].state,'free');
+ assert.match(result.stderr,/Temporary cleanup incomplete/);
+ assert.equal(readFileSync(join(f.root,'tmp/global-sentinel'),'utf8'),'unrelated');
+ if(phase==='recovery')assert.deepEqual(readFileSync(join(f.root,'calls'),'utf8').trim().split('\n'),['destroy','inspect']);
+});
+
+
+test('SIGTERM during background destruction returns143 and retains quarantine until a clean retry',async t=>{
+ const f=fixture(t,'recovery-cancel');const leases=new LocalLeases(join(f.root,'state/ledger'),{hostGeneration:'fixture',slots:1});
+ const lease=leases.reserveLocal({lane:'I',turn:'cancel-recovery',snapshot:'a'.repeat(64),argv:['false']}).lease;
+ leases.start(lease);const guest=join(f.root,lease.resourceId);writeFileSync(guest,'guest');
+ const child=spawn(process.execPath,[script,f.config,'--once'],{env:f.env,stdio:['ignore','pipe','pipe']});
+ const closed=once(child,'close');let output='';child.stdout.on('data',data=>output+=data);child.stderr.on('data',data=>output+=data);
+ try{
+  const end=performance.now()+5000;
+  while(!existsSync(join(f.root,'destroy-ready')) && child.exitCode===null && child.signalCode===null && performance.now()<end)await delay(10);
+  assert.equal(existsSync(join(f.root,'destroy-ready')),true,output);
+  child.kill('SIGTERM');assert.equal((await closed)[0],143,output);assert.match(output,/"reason":"cancelled"/);
+  assert.equal(leases.inspect().slots[0].state,'quarantined');assert.equal(existsSync(guest),true);
+  const retried=spawnSync(process.execPath,[script,f.config,'--once'],{env:{...f.env,FIXTURE_MODE:'normal'},encoding:'utf8',timeout:5000});
+  assert.equal(retried.status,0,retried.stdout+retried.stderr);assert.equal(leases.inspect().slots[0].state,'free');assert.equal(existsSync(guest),false);assertNoTemporaries(f);
+ }finally{if(child.exitCode===null && child.signalCode===null)child.kill('SIGTERM');await closed;}
 });

@@ -18,7 +18,10 @@ async function controller(t) {
 test('one manual invocation owns preparation and work while a competing lane returns75', async t => {
   const {withKernelLock, directory} = await controller(t);
   let finish, entered = false;
-  const first = withKernelLock(directory, async () => {entered = true; return await new Promise(resolve => {finish = resolve;});});
+  let ready;
+  const started=new Promise(resolve=>ready=resolve);
+  const first = withKernelLock(directory, async () => {entered = true;ready(); return await new Promise(resolve => {finish = resolve;});});
+  await started;
   assert.equal(entered, true);
   const busy = await withKernelLock(directory, async () => assert.fail('Busy lane began packaging'));
   assert.equal(busy.code, 75);

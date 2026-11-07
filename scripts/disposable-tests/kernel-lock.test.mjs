@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
-import {mkdtempSync, rmSync, existsSync} from 'node:fs';
+import {mkdtempSync, rmSync, existsSync, readFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {spawnSync} from 'node:child_process';
@@ -44,4 +44,26 @@ test('bootstrap refuses an existing state even when its lock has gone', async t 
   rmSync(join(state, 'mac-controller.lock'));
   await assert.rejects(withKernelLock(state, async () => assert.fail('Retired state reopened'), {bootstrap:true}), /EEXIST|existing/i);
   assert.equal(existsSync(join(state, 'mac-controller.lock')), false);
+});
+
+test('a stalled lock helper returns75 within the supplied admission deadline', async t => {
+  const {root,state}=await locking(t);
+  const program=`import cp from 'node:child_process';import {syncBuiltinESMExports} from 'node:module';
+    const original=cp.spawn;cp.spawn=(command,argv,options)=>argv.includes('-c') && argv.at(-1).includes('fcntl.flock')?original(process.execPath,['-e','setTimeout(()=>{},2000)'],options):original(command,argv,options);
+    syncBuiltinESMExports();const {withKernelLock}=await import(${JSON.stringify(module.href)});
+    const result=await withKernelLock(${JSON.stringify(state)},async()=>({code:0}),{bootstrap:true,deadline:Date.now()+500});process.exitCode=result.code;`;
+  const start=performance.now();
+  const result=spawnSync(process.execPath,['--input-type=module','-e',program],{cwd:root,encoding:'utf8',timeout:5000});
+  assert.equal(result.status,75,result.stderr);assert.ok(performance.now()-start<1500);
+});
+
+test('the lock helper runs from root rather than its callers directory', async t => {
+  const {root,state}=await locking(t);const observed=join(root,'helper-cwd');
+  const helper=`require('node:fs').writeFileSync(${JSON.stringify(observed)},process.cwd());process.exit(75);`;
+  const program=`import cp from 'node:child_process';import {syncBuiltinESMExports} from 'node:module';
+    const original=cp.spawn;cp.spawn=(command,argv,options)=>argv.includes('-c') && argv.at(-1).includes('fcntl.flock')?original(process.execPath,['-e',${JSON.stringify(helper)}],options):original(command,argv,options);
+    syncBuiltinESMExports();const {withKernelLock}=await import(${JSON.stringify(module.href)});
+    const result=await withKernelLock(${JSON.stringify(state)},async()=>({code:0}),{bootstrap:true});process.exitCode=result.code;`;
+  const result=spawnSync(process.execPath,['--input-type=module','-e',program],{cwd:root,encoding:'utf8',timeout:5000});
+  assert.equal(result.status,75,result.stderr);assert.equal(readFileSync(observed,'utf8'),'/');
 });

@@ -70,6 +70,9 @@ export class SSHTransport {
     while (true) {
       signal.throwIfAborted();
       const result = await this.remote('destroy', lease, {signal, capture: true});
+      // A lost SSH channel cannot establish absence. Leave the lease closed
+      // for the next controller attempt instead of opening fresh connections.
+      assert.notEqual(result.code, 255, 'SSH cleanup channel is unavailable');
       if (result.code === 0) {
         const receipt = JSON.parse(result.stdout);
         assert.ok(receipt.resourceId === lease.resourceId && receipt.absent === true, 'Owned guest absence was not proved');

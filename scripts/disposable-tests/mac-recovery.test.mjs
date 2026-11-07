@@ -21,7 +21,7 @@ async function fixture(t) {
     destroy:async(actual,{signal})=>{signal.throwIfAborted();assert.deepEqual(actual,lease);rmSync(resource);},
     inspect:async actual=>({resourceId:actual.resourceId,absent:!existsSync(resource)})
   };
-  return {state,leases,lease,resource,transport};
+  return {state,hostGeneration:'mac',leases,lease,resource,transport};
 }
 
 test('automatic recovery destroys and independently inspects the recorded turn without replay',async t=>{

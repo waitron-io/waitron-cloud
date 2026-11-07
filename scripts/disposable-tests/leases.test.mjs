@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
-import {mkdtempSync, readFileSync, rmSync, existsSync} from 'node:fs';
+import {mkdtempSync, readFileSync, rmSync, existsSync, statSync, utimesSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 
@@ -37,6 +37,13 @@ async function setup(t, extra = {}) {
   const {LocalLeases} = await import(module);
   return {dir, leases: new LocalLeases(dir, {...config, ...extra, bootstrap:true})};
 }
+
+test('idle inspection leaves the durable ledger untouched', async t => {
+  const {leases,dir}=await setup(t);const path=join(dir,'state.json');
+  const before=readFileSync(path,'utf8');utimesSync(path,new Date(0),new Date(0));
+  assert.equal(leases.inspect().slots[0].state,'free');
+  assert.equal(statSync(path).mtimeMs,0);assert.equal(readFileSync(path,'utf8'),before);
+});
 
 test('another lane cannot claim an occupied slot, including across controller restarts', async t => {
   // Removing the persistent occupancy check would admit two owners.
@@ -103,6 +110,7 @@ test('expiry quarantines work instead of treating the deadline as proof of absen
   assert.equal(lease.deadline, 1100);
   now = 1100;
   assert.equal(leases.start(lease), false);
+  assert.equal(JSON.parse(readFileSync(join(leases.directory,'state.json'),'utf8')).slots[0].state,'quarantined');
   assert.equal(leases.reserveLocal(request('turn-2')).code, 75);
   assert.equal(leases.inspect().slots[0].state, 'quarantined');
 });

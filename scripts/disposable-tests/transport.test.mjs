@@ -1,9 +1,27 @@
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
-import {mkdtempSync, rmSync, readFileSync} from 'node:fs';
+import {mkdtempSync, mkdirSync, writeFileSync, rmSync, readFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {setTimeout as delay} from 'node:timers/promises';
+
+test('an unavailable SSH cleanup channel refuses after one request instead of reconnecting in a burst', async t => {
+  const {spawnSync} = await import('node:child_process');
+  const directory=mkdtempSync(join(tmpdir(),'disposable-ssh-unavailable-'));
+  t.after(()=>rmSync(directory,{recursive:true,force:true}));
+  mkdirSync(join(directory,'bin'));mkdirSync(join(directory,'tmp'));
+  const calls=join(directory,'calls');
+  writeFileSync(join(directory,'bin/ssh'),`#!/bin/sh\nprintf 'request\\n' >> '${calls}'\nexit 255\n`,{mode:0o700});
+  const program=`import {SSHTransport} from ${JSON.stringify(new URL('./transport.mjs',import.meta.url).href)};
+    const transport=new SSHTransport({host:'fixture.invalid',recipe:'/opt/waitron-disposable-fixture'});
+    try{await transport.destroy({resourceId:'dt-unavailable-0-1'},{signal:AbortSignal.timeout(1500)});process.exitCode=1;}
+    catch(error){console.log(error.message);}`;
+  const result=spawnSync(process.execPath,['--input-type=module','-e',program],{encoding:'utf8',timeout:5000,
+    env:{...process.env,PATH:join(directory,'bin')+':'+process.env.PATH,XDG_CACHE_HOME:join(directory,'cache'),TMPDIR:join(directory,'tmp')}});
+  assert.equal(result.status,0,result.stderr);
+  assert.equal(readFileSync(calls,'utf8').trim().split('\n').length,1);
+  assert.match(result.stdout,/SSH cleanup channel is unavailable/);
+});
 
 test('transport preserves literal arguments, stdin and exit3 without invoking a shell', async () => {
   const {runProcess} = await import('./transport.mjs');

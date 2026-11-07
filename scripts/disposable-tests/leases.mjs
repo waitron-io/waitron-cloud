@@ -34,13 +34,20 @@ export class LocalLeases {
   transaction(operation, initialize = false) {
     const path = join(this.directory, 'state.json');
     let state;
-    try { state = JSON.parse(readFileSync(path, 'utf8')); }
+    try {
+      const info=lstatSync(path);
+      assert.ok(info.isFile() && !info.isSymbolicLink() && info.uid===process.getuid() &&
+        (info.mode&0o077)===0,'Ledger state must be a private owned regular file');
+      state = JSON.parse(readFileSync(path, 'utf8'));
+    }
     catch (error) {
       if (error.code !== 'ENOENT') throw error;
       assert.ok(initialize, 'Recorded ledger is missing; initialization requires explicit bootstrap');
       state = {version: 1, hostGeneration: this.hostGeneration, slots: Array.from({length: this.capacity}, (_, id) => ({id, generation: 0, state: 'free', lease: null})), turns: {}};
     }
     assert.ok(state.version === 1 && state.hostGeneration === this.hostGeneration && state.slots.length === this.capacity, 'Ledger configuration changed; reconcile the previous host first');
+    assert.ok(state.turns && typeof state.turns==='object' && !Array.isArray(state.turns) &&
+      Object.getPrototypeOf(state.turns)===Object.prototype,'Invalid ledger turn history');
     assert.ok(state.slots.every((s, i) => s.id === i && Number.isSafeInteger(s.generation) && s.generation >= 0 &&
       ['free', 'reserved', 'running', 'quarantined'].includes(s.state) && (s.state === 'free' ? s.lease === null : s.lease?.generation === s.generation)), 'Invalid ledger slot');
     for (const slot of state.slots.filter(s => s.state !== 'free')) {
@@ -52,15 +59,18 @@ export class LocalLeases {
         Number.isSafeInteger(lease.deadline) && lease.deadline > lease.createdAt &&
         lease.deadline - lease.createdAt <= maxDuration, 'Invalid occupied lease');
     }
+    const before=initialize?undefined:JSON.stringify(state);
     const now = this.now();
     assert.ok(Number.isSafeInteger(now) && now >= 0, 'Invalid controller time');
     for (const slot of state.slots) if (slot.state !== 'free' && slot.lease.deadline <= now) slot.state = 'quarantined';
     const result = operation(state, now);
+    const serialized=JSON.stringify(state);
+    if(before===serialized) return structuredClone(result);
     const temporary = join(this.directory, `state-${randomUUID()}.tmp`);
     let fd;
     try {
       fd = openSync(temporary, 'wx', 0o600);
-      writeFileSync(fd, JSON.stringify(state) + '\n');
+      writeFileSync(fd, serialized + '\n');
       fsyncSync(fd);
       closeSync(fd); fd = undefined;
       renameSync(temporary, path);

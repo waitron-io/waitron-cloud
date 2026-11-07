@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import {mkdtempSync, mkdirSync, rmSync, readFileSync, readdirSync, realpathSync, lstatSync, unlinkSync} from 'node:fs';
+import {mkdtempSync, mkdirSync, chmodSync, rmSync, readFileSync, readdirSync, realpathSync, lstatSync, unlinkSync} from 'node:fs';
 import {join, resolve, isAbsolute} from 'node:path';
 import {tmpdir} from 'node:os';
 import {randomUUID} from 'node:crypto';
@@ -25,24 +25,42 @@ function privateDirectory(path) {
 
 async function withTemporaryState(state,work) {
   const temporary=join(state,'tmp'),ledger=join(state,'ledger');
-  try { privateDirectory(temporary);rmSync(temporary,{recursive:true}); }
-  catch(error) { if(error.code!=='ENOENT') throw error; }
-  try {
-    privateDirectory(ledger);
-    for(const name of readdirSync(ledger)) if(/^state-[a-f0-9-]{36}\.tmp$/.test(name)) {
-      const path=join(ledger,name),info=lstatSync(path);
-      assert.ok(info.isFile() && !info.isSymbolicLink() && info.uid===process.getuid() &&
-        (info.mode&0o077)===0,'Unowned ledger temporary');
-      unlinkSync(path);
-    }
-  } catch(error) { if(error.code!=='ENOENT') throw error; }
-  mkdirSync(temporary,{mode:0o700});
+  try { privateDirectory(temporary); }
+  catch(error) { if(error.code!=='ENOENT') throw error;mkdirSync(temporary,{mode:0o700}); }
+  // Only this private owned container has its owner access restored. Orphan
+  // children may retain files, but their housekeeping cannot stop guest recovery.
+  chmodSync(temporary,0o700);
+  let hasLedger=true;
+  try { privateDirectory(ledger); }
+  catch(error) { if(error.code!=='ENOENT') throw error;hasLedger=false; }
+  const sweep=()=>{
+    let incomplete=false;
+    try {
+      for(const name of readdirSync(temporary)) {
+        try { rmSync(join(temporary,name),{recursive:true,force:true}); }
+        catch { incomplete=true; }
+      }
+      if(hasLedger) {
+        privateDirectory(ledger);
+        for(const name of readdirSync(ledger)) if(/^state-[a-f0-9-]{36}\.tmp$/.test(name)) {
+          try {
+            const path=join(ledger,name),info=lstatSync(path);
+            assert.ok(info.isFile() && !info.isSymbolicLink() && info.uid===process.getuid() &&
+              (info.mode&0o077)===0,'Unowned ledger temporary');
+            unlinkSync(path);
+          } catch { incomplete=true; }
+        }
+      }
+    } catch { incomplete=true; }
+    if(incomplete) console.error('Temporary cleanup incomplete; private files retained');
+  };
+  sweep();
   const previous=process.env.TMPDIR;
   process.env.TMPDIR=temporary;
   try { return await work(); }
   finally {
     if(previous===undefined) delete process.env.TMPDIR; else process.env.TMPDIR=previous;
-    rmSync(temporary,{recursive:true,force:true});
+    sweep();
   }
 }
 
@@ -60,11 +78,16 @@ async function recoverState({leases,transport,signal=AbortSignal.timeout(120000)
   return {code:0,cleanup:'absent',resourceId:lease.resourceId};
 }
 
-export async function reconcileManual(args) {
-  return withKernelLock(args.state,async()=>{
-    refuseLegacy(args.state);
-    return withTemporaryState(args.state,()=>recoverState(args));
-  });
+export async function reconcileManual({state,hostGeneration,transport,signal,deadline}) {
+  protectOutputStreams();
+  return withKernelLock(state,async()=>{
+    refuseLegacy(state);
+    return withTemporaryState(state,()=>{
+      const leases=new LocalLeases(join(state,'ledger'),{hostGeneration,slots:1});
+      const cleanup=AbortSignal.timeout(120000);
+      return recoverState({leases,transport,signal:signal?AbortSignal.any([signal,cleanup]):cleanup});
+    });
+  },{deadline,signal});
 }
 
 export async function main(args) {
@@ -90,18 +113,16 @@ export async function main(args) {
   const admission=AbortSignal.any([cancellation.signal,budget]);
   let admitted=false;
   try {
-    const result=await withKernelLock(config.state,async()=>{
+    const result=reconciling
+      ? await reconcileManual({state:config.state,hostGeneration:config.hostGeneration,
+          transport:new SSHTransport({host:config.host,recipe:config.recipe}),signal:cancellation.signal,deadline})
+      : await withKernelLock(config.state,async()=>{
       cancellation.signal.throwIfAborted();
       refuseLegacy(config.state);
       return withTemporaryState(config.state,async()=>{
       if (bootstrap) {
         new LocalLeases(join(config.state,'ledger'),{hostGeneration:config.hostGeneration,slots:1,bootstrap:true});
         return {code:0};
-      }
-      if (reconciling) {
-        const leases=new LocalLeases(join(config.state,'ledger'),{hostGeneration:config.hostGeneration,slots:1});
-        return recoverState({leases,transport:new SSHTransport({host:config.host,recipe:config.recipe}),
-          signal:AbortSignal.any([cancellation.signal,AbortSignal.timeout(120000)])});
       }
       const commonRead=await runProcess('git',['-c','core.fsmonitor=false','-C',resolve(checkout),'rev-parse','--path-format=absolute','--git-common-dir'],{capture:true,signal:admission});
       assert.equal(commonRead.code,0,'Cloud checkout could not be inspected');
@@ -130,13 +151,15 @@ export async function main(args) {
           request: {lane, turn: 'manual-'+randomUUID(), snapshot, argv}});
       } finally { rmSync(temporary, {recursive: true, force: true}); }
       });
-    },{bootstrap,deadline});
-    console.log(JSON.stringify({code:result.code,reason:result.reason,cleanup:result.cleanup,
-      resourceId:result.lease?.resourceId ?? result.resourceId,snapshot:result.lease?.snapshot,error:result.error}));
+    },{bootstrap,deadline,signal:cancellation.signal});
+    if(!reconciling || result.code!==0 || result.resourceId)
+      console.log(JSON.stringify({code:result.code,reason:result.reason,cleanup:result.cleanup,
+        resourceId:result.lease?.resourceId ?? result.resourceId,snapshot:result.lease?.snapshot,error:result.error}));
     return result.code;
   } catch(error) {
-    if (cancellation.signal.aborted) return 143;
-    if (budget.aborted && !admitted && !reconciling && !bootstrap) return 75;
+    const refusal=cancellation.signal.aborted?{code:143,reason:'cancelled'}:
+      budget.aborted && !admitted && !reconciling && !bootstrap?{code:75,reason:'admission-budget'}:undefined;
+    if(refusal){console.log(JSON.stringify(refusal));return refusal.code;}
     throw error;
   } finally {
     for (const signal of ['SIGTERM','SIGINT','SIGHUP']) process.off(signal,cancel);
