@@ -1,6 +1,6 @@
 # Test-box translation implementation plan
 
-Prepare one test-box menu translation up to the absent provider key; no activation or provider call during implementation.
+Prepare one test-box menu translation; provider activation waits for its key.
 
 ## Recorded authority
 
@@ -26,7 +26,7 @@ The campaign instructions permit these embedded approval quotes. The required Cl
 
 ## Build after review
 
-- [x] Files: `packages/translation/src/openai-client.ts`, `packages/translation/src/worker.ts`, new `packages/translation/src/test-box-worker-cli.ts`, new `packages/translation/test/test-box-worker.test.ts`, `packages/translation/README.md`, `docs/backlog.md`, `docs/test-cloud.md` (brief trial/default distinction). No `package.json` change: the recurring-test maintenance branch owns it.
+- [x] Files: `packages/translation/src/openai-client.ts`, `packages/translation/src/worker.ts`, new `packages/translation/src/test-box-worker-cli.ts`, new `packages/translation/test/test-box-worker.test.ts`, `packages/translation/README.md`, `docs/backlog.md`, `docs/test-cloud.md` (brief trial/default distinction). No `package.json` change.
 - [x] TDD: expected failure first, then `createTestBoxTranslationWorker(pool,{installationId,venueId,apiKey}):TranslationWorker` with private transport fixed to `https://api.openai.com/v1`. Ordinary clients/default deployments stay unchanged; no service/container/default flag. Existing-mode trial only: CLI explicitly rejects non-existing plan modes/allowance settings, never silently omits spend. No global sweep. Report the selected job state or an idle pass; errors stay fixed and redacted.
 - [x] Scope BOTH queued/expired-lease arms. Use the existing permission hook before EACH provider attempt (first/review/retry), recheck installation/venue binding, revocation, test environment, lease and consent; retain old hook semantics, accounting and paid results/cost.
 - [x] Disposable PostgreSQL, synthetic signed jobs, direct fake fetch; no loopback forwarder. Test cross-installation/venue isolation and mid-wait revocation/environment/consent changes. Launcher tests cover refusal/empty queue only. Reuse cap/paging assertions. Run focused new/outbound, worker, venue-service, allowance and retention tests through `scripts/test-postgres.mjs`; `pnpm typecheck`. CI owns full package suites; no whole-package local finishing requirement.
