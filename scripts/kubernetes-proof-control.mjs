@@ -216,7 +216,8 @@ async function inspectManualOwner({ checkout, region: requestedRegion, now, aws,
   const check = (value, reason = 'clock') => checkControl(value, reason);
   check(requestedRegion === region && !environment.GITHUB_ACTIONS && !environment.GITHUB_EVENT_NAME, 'control input');
   const current = instant(now);
-  check(current < Date.parse('2027-02-28T23:59:00Z') && typeof aws?.call === 'function');
+  check(current < Date.parse('2027-02-28T23:59:00Z'));
+  check(typeof aws?.call === 'function', 'control input');
   const fresh = () => {
     const at = clock();
     check(Number.isSafeInteger(at) && at >= current && at < Date.parse('2027-02-28T23:59:00Z')
@@ -318,7 +319,10 @@ export async function inspectManualSetup(options) {
     ownerId: policy.repositoryOwnerId }, image: images.Images[0] };
   // Validate the provider image before any further discovery, using the renderer's same image contract.
   try { renderManualSetup({ ...input, s3PrefixListId: 'pl-00000000' }); }
-  catch { refuse('ec2 image'); }
+  catch (error) {
+    if (error instanceof Error && error.message === 'Unverified official ARM image') refuse('ec2 image');
+    throw error;
+  }
   const types = await read('ec2', 'describe-instance-types', { InstanceTypes: [policy.instanceType] });
   check(!types?.NextToken && Array.isArray(types?.InstanceTypes) && types.InstanceTypes.length === 1, 'ec2 capacity');
   const machine = types.InstanceTypes[0];

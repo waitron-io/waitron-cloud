@@ -55,20 +55,36 @@ test('AWS response accepts the documented nested attachment without an InstanceI
 test('AWS response rejects an explicitly conflicting attachment instance', async t => {
   const f = await readyGuestFixture(t);
   f.instance.NetworkInterfaces[0].Attachment.InstanceId = 'i-11111111111111111';
-  await assert.rejects(f.observe(), /D570 controller refused/);
+  await assert.rejects(f.observe(), { message: 'D570 controller refused: ec2 observation' });
 });
 
-for (const [label, prepare, run, reason] of [
-  ['billing', t => { const f = fixture(t); f.aws.call = async service => service === 'sts' ? identity : {}; return f; }, inspect, 'ce billing shape'],
-  ['identity', t => { const f = fixture(t); f.aws.call = async () => ({}); return f; }, inspect, 'sts identity'],
-  ['checkout', t => { const f = fixture(t); writeFileSync(join(f.root, 'controller.txt'), 'changed\n'); return f; }, inspect, 'checkout'],
-  ['parameter', t => { const f = setupFixture(t); delete f.responses['ssm/get-parameter'].Parameter; return f; }, discover, 'ssm parameter'],
-  ['image', t => { const f = setupFixture(t); f.responses['ec2/describe-images'].Images[0].Architecture = 'x86_64'; return f; }, discover, 'ec2 image'],
-  ['prefix', t => { const f = setupFixture(t); f.responses['ec2/describe-managed-prefix-lists'].PrefixLists[0].PrefixListId = 'invalid'; return f; }, discover, 'ec2 prefix'],
-  ['event rule', t => { const f = protectionFixture(t); f.responses['events/describe-rule'].EventBusName = null; return f; }, f => f.observe(), 'events rule'],
+test('safe refusal identifies a missing AWS client as control input', async t => {
+  const f = fixture(t);
+  await assert.rejects(inspect(f, { aws: {} }), { message: 'D570 controller refused: control input' });
+  assert.deepEqual(f.calls, []);
+});
+
+const identityReads = ['sts/get-caller-identity'];
+const billingReads = [...identityReads, 'ce/get-cost-and-usage'];
+const parameterReads = [...billingReads, 'ssm/get-parameter'];
+const imageReads = [...parameterReads, 'ec2/describe-images'];
+const capacityReads = [...imageReads, 'ec2/describe-instance-types'];
+for (const [label, prepare, run, reason, expectedReads] of [
+  ['billing', t => { const f = fixture(t); f.aws.call = async service => service === 'sts' ? identity : {}; return f; }, inspect, 'ce billing shape', billingReads],
+  ['identity', t => { const f = fixture(t); f.aws.call = async () => ({}); return f; }, inspect, 'sts identity', identityReads],
+  ['checkout', t => { const f = fixture(t); writeFileSync(join(f.root, 'controller.txt'), 'changed\n'); return f; }, inspect, 'checkout', []],
+  ['parameter', t => { const f = setupFixture(t); delete f.responses['ssm/get-parameter'].Parameter; return f; }, discover, 'ssm parameter', parameterReads],
+  ['image', t => { const f = setupFixture(t); f.responses['ec2/describe-images'].Images[0].Architecture = 'x86_64'; return f; }, discover, 'ec2 image', imageReads],
+  ['prefix', t => { const f = setupFixture(t); f.responses['ec2/describe-managed-prefix-lists'].PrefixLists[0].PrefixListId = 'invalid'; return f; }, discover, 'ec2 prefix', [...capacityReads, 'ec2/describe-managed-prefix-lists']],
+  ['event rule', t => { const f = protectionFixture(t); f.responses['events/describe-rule'].EventBusName = null; return f; }, f => f.observe(), 'events rule', [...billingReads, 'cloudformation/describe-stacks', 'cloudformation/describe-stack-resources', 'events/describe-rule']],
 ]) test(`safe refusal names the ${label} validator before further provider work`, async t => {
-  const f = prepare(t);
+  const f = prepare(t), prior = f.aws.call, reads = [];
+  f.aws.call = async (service, operation, input) => {
+    reads.push(`${service}/${operation}`);
+    return prior(service, operation, input);
+  };
   await assert.rejects(run(f), { message: `D570 controller refused: ${reason}` });
+  assert.deepEqual(reads, expectedReads);
   assert.equal(f.calls.some(row => ['create-stack', 'run-instances', 'put-object'].includes(row.operation)), false);
 });
 function fixture(t) {
