@@ -8,6 +8,9 @@ export function chooseLocale(saved: string | null, languages: readonly string[])
   return 'en';
 }
 const en = {
+  billingTitle:'Connected trial',billingVenue:'Venue',billingLevel:'Current plan',billingRegistered:'Registered',billingConnected:'Connected',billingHosted:'Hosted',
+  billingIntro:'Try Connected free for 30 days. No card is needed.',billingStart:'Start free trial',billingLastDay:'Last trial day',billingIneligible:'A free trial is unavailable for this venue.',billingEmpty:'No venues are available.',
+  billingChanged:'The trial choice changed. Check the current plan below.',billingUncertain:'We could not confirm the change. Check the current plan before trying again.',billingRefresh:'Check current plan',
 
   factorTitle:'Authenticator', factorIntro:'Add a code to password sign-in. Passkeys still work.',
   factorOn:'Authenticator is on.', factorOff:'Authenticator is off.', factorEnable:'Set up authenticator', factorReplace:'Replace authenticator', factorRemove:'Remove authenticator', factorRegenerate:'New recovery codes',
@@ -262,6 +265,9 @@ const en = {
 };
 export type Copy = typeof en;
 const es: Copy = {
+  billingTitle:'Prueba de Connected',billingVenue:'Local',billingLevel:'Plan actual',billingRegistered:'Registered',billingConnected:'Connected',billingHosted:'Hosted',
+  billingIntro:'Prueba Connected gratis durante 30 días. No necesitas tarjeta.',billingStart:'Iniciar prueba gratis',billingLastDay:'Último día de prueba',billingIneligible:'La prueba gratis no está disponible para este local.',billingEmpty:'No hay locales disponibles.',
+  billingChanged:'La opción de prueba ha cambiado. Revisa el plan actual.',billingUncertain:'No hemos podido confirmar el cambio. Revisa el plan actual antes de volver a intentarlo.',billingRefresh:'Consultar plan actual',
 
   factorTitle:'Autenticador', factorIntro:'Añade un código al acceso con contraseña. Las llaves de acceso siguen funcionando.',
   factorOn:'El autenticador está activo.', factorOff:'El autenticador está desactivado.', factorEnable:'Configurar autenticador', factorReplace:'Cambiar autenticador', factorRemove:'Quitar autenticador', factorRegenerate:'Nuevos códigos de recuperación',
