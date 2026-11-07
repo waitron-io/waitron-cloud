@@ -20,7 +20,7 @@ as the BuildKit `npm_token` secret; follow the existing
 [local image build instructions](local-deployment.md).
 
 Expect an unedited version-update PR to fail CI because its smoke-test
-expectations and input review records still describe the previous release.
+expectations still describe the previous release.
 Before merging:
 
 1. Verify the published version and its `waitronSource.commit`.
@@ -29,8 +29,9 @@ Before merging:
    its own package's pin.
 3. Update the smoke test's version and source expectations while retaining
    its assertions and browser checks.
-4. Renew the ordinary [root](ci-root-input-ownership.md) and
-   [documentation](ci-documentation-audit.md) records for the reviewed changes.
+4. Review the changed dependencies and their actual test owners using the
+   [root ownership](ci-root-input-ownership.md) and
+   [documentation selection](ci-documentation-audit.md) guides.
 5. Push the reviewed changes and wait for normal CI on that final commit.
 
 The configuration does not merge PRs automatically. Its [first hosted check](https://github.com/waitron-io/waitron-cloud/actions/runs/42295633741)
