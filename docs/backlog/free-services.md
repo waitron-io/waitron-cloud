@@ -159,8 +159,9 @@ venue does not subscribe to remote access or backups.
   at `0fbcde001`); actual secret exposure is unverified. The Waitron caller item must
   use bounded diagnostics and test secret-bearing exceptions before integration.
 - **Mobile notifications (candidate).** The [SMS gateway proposal](../superpowers/specs/2026-11-07-cloud-venue-sms-gateway-design.md)
-  gives dated delivery costs and proposed free/paid allowances; owner decisions,
-  sender registration, supplier qualification and implementation remain open.
+  records free sign-in and security codes with hourly/daily abuse limits, plus a
+  separate paid booking allowance included in no level by default. Provider choice,
+  paid amounts/prices, sender registration and implementation remain open.
   Push notifications still need their own cost estimate and inclusion decision.
 - **Per-user allowances.** Meter each service against the Cloud user account, enforce
   limits and show usage and remaining allowance. Define the allowance sizes, reset
