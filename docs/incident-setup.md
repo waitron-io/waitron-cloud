@@ -19,8 +19,9 @@ sets the intended automation. Account setup alone does not connect it. Use the
    You need no domain purchase, Functions or paid Workers plan for this page.
 3. Generate and review the local bundle with the command below, or ask the builder
    to hand you the folder. Its root contains `index.html`, with Spanish at
-   `es/index.html`. Keep the initial setup warning until current service health is
-   actually verified. The page must
+   `es/index.html`. This local generator always keeps the setup warning when
+   there is no incident. Verified-health wording belongs to the future publisher.
+   The page must
    work without Cloud APIs, AWS assets, login, analytics or external fonts. Review
    it for venue names, personal data and secrets before publication.
 4. In **Workers & Pages**, follow **Create application → Get started → Drag and
@@ -75,8 +76,8 @@ nothing. Extra fields and arbitrary text are rejected, so venue names, private
 notes and guessed recovery times cannot enter this fixed-text page.
 
 If generation fails, you receive a fixed error without input details. The command
-attempts to remove its own incomplete output; cleanup after a mid-write failure
-has not been exercised. Inspect that new folder before trying another destination.
+attempts to remove its own incomplete output. If a filesystem problem prevents
+cleanup, inspect that new folder before trying another destination.
 
 ## Choose your phone routes
 
@@ -118,5 +119,6 @@ bilingual status updates plus manual publishing over mobile data. Paging must
 start when investigation finishes or 15 minutes after confirmation, whichever
 comes first; the repeat is 10 minutes after the first page attempt and the
 unattended marker is at 20 minutes. Keep times and results in the private launch
-record. Account recovery, the publisher, phone adapters and these drills remain open
-until actually completed. A generated local bundle alone qualifies none of them.
+record. Account recovery, dated public incident history, verified-health wording, the
+publisher, phone adapters and these drills remain open until actually completed.
+A generated local bundle alone qualifies none of them.

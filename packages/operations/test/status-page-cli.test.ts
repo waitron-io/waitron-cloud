@@ -38,3 +38,7 @@ test('creation beneath a regular file fails without replacing the parent or prod
  const result=run([input,join(parent,'bundle')]);assert.equal(result.status,1);assert.equal(result.stderr,'Status page generation failed; check input and use a new output directory\n');assert.equal(readFileSync(parent,'utf8'),'preserved');
  assert.deepEqual(readdirSync(root).sort(),['existing-file','input.json']);
 }));
+
+test('an extra argument is rejected before creating output',()=>fixture((_root,input,output)=>{
+ const result=run([input,output,'unexpected-private-argument']);assert.equal(result.status,1);assert.equal(result.stdout,'');assert.equal(result.stderr,'Status page generation failed; check input and use a new output directory\n');assert.equal(existsSync(output),false);
+}));

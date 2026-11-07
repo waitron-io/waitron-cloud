@@ -723,8 +723,10 @@ order. Remote access matters most because Waitron's customer-facing features wai
    Free/Direct Upload steps, independent `pages.dev` fallback and two phone-provider
    options with prices checked on 4 November 2026. The incident runbook follows the
    approved automatic updates, text then call and press-1 acknowledgment. The
-   account setup, publisher, phone adapters, supplier review, spending approval
-   and outage/delivery/coverage drills remain open; the checklist
+   [local generator](incident-setup.md#generate-a-bundle-locally) produces one post.
+   Dated public incident history, verified-health wording, account setup, publisher,
+   phone adapters, supplier review, spending approval and outage/delivery/coverage
+   drills remain open; the checklist
    creates no account or operational service.
 3. **Billing — DESIGNED AND APPROVED (2026-10-29).** The
    [design](superpowers/specs/2026-10-29-cloud-billing-design.md) sets three levels
