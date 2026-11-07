@@ -3,7 +3,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { realpath, mkdtemp, writeFile, lstat, readFile, rm, mkdir, open } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { setTimeout as delay } from 'node:timers/promises';
-import { join, dirname, resolve } from 'node:path';
+import { join, dirname, basename, resolve } from 'node:path';
 import { promisify, isDeepStrictEqual } from 'node:util';
 import { fileURLToPath } from 'node:url';
 import { renderManualSetup } from '../deploy/kubernetes/proof/setup.mjs';
@@ -836,6 +836,71 @@ export async function inspectManualFirstBilling(options) {
   // Account totals include setup and other services; they are never an attributed per-run cost or a refund.
   return { ...inspection, costReport: { estimateMicroUsd: setup.upperMicroUsd, accountCostMicroUsd,
     billedAccountMicroUsd: months.some(month => month.estimated) ? null : accountCostMicroUsd, months } };
+}
+
+export async function retainManualHistory(options) {
+  const { checkout, directory, aws, now, clock = Date.now } = options;
+  check(typeof directory === 'string' && directory === resolve(directory));
+  const parent = await lstat(dirname(directory));
+  check(parent.isDirectory() && (parent.mode & 0o777) === 0o700 && parent.uid === process.getuid());
+  const root = await realpath(checkout), destination = join(await realpath(dirname(directory)), basename(directory));
+  check(destination !== root && !destination.startsWith(root + '/'));
+  const inspection = await inspectManualBudget({ ...options, store: undefined });
+  async function unchanged() {
+    const before = clock(), source = await checkedMain(checkout), after = clock();
+    check(source.head === inspection.head && source.tree === inspection.tree
+      && Number.isSafeInteger(before) && Number.isSafeInteger(after) && before >= instant(now) && after >= before
+      && after < Date.parse(policy.accessExpiry) && iso(after).slice(0, 10) === now.slice(0, 10)
+      && after - Date.parse(inspection.heartbeat.startedAt) < 120_000);
+  }
+  const guarded = { async call(...args) {
+    await unchanged();
+    const result = await aws.call(...args);
+    await unchanged();
+    return result;
+  } };
+  const store = createManualLedgerStore({ bucket: inspection.bucket, aws: guarded });
+  const keys = (await store.list()).sort(), records = new Map();
+  for (const key of keys) {
+    const row = await store.get(key); check(row);
+    records.set(key, { body: Buffer.from(row.body), etag: row.etag });
+  }
+  // Validate exactly the bytes retained locally, rather than a different set of live reads.
+  const snapshot = { async list() { return [...keys]; }, async get(key) { return records.get(key) ?? null; } };
+  const scope = { account, region, stackId: inspection.stackId };
+  const budget = await inspectBudget({ scope, now, billingMicroUsd: inspection.billing.microUsd, store: snapshot });
+  check(isDeepStrictEqual(budget, inspection.budget));
+  check(isDeepStrictEqual((await store.list()).sort(), keys));
+  for (const [key, row] of records) {
+    const current = await store.get(key);
+    check(current && current.etag === row.etag && Buffer.from(current.body).equals(row.body));
+  }
+  // An uncertain local write leaves its private partial export and all provider records intact.
+  await unchanged();
+  const latestParent = await lstat(dirname(directory));
+  check(latestParent.isDirectory() && (latestParent.mode & 0o777) === 0o700 && latestParent.uid === process.getuid());
+  await mkdir(directory, { mode: 0o700 });
+  const created = await lstat(directory);
+  check(created.isDirectory() && (created.mode & 0o777) === 0o700 && created.uid === process.getuid());
+  const files = [];
+  for (const [key, row] of records) {
+    const name = key.slice('d570/ledger/'.length), path = join(directory, name);
+    const handle = await open(path, 'wx', 0o600);
+    try {
+      await handle.writeFile(row.body);
+      await handle.sync();
+      const info = await handle.stat();
+      check(info.isFile() && (info.mode & 0o777) === 0o600 && info.uid === process.getuid()
+        && info.size === row.body.byteLength && (await readFile(path)).equals(row.body));
+    } finally { await handle.close(); }
+    files.push(name);
+  }
+  for (const path of [directory, dirname(directory)]) {
+    const handle = await open(path, 'r');
+    try { await handle.sync(); } finally { await handle.close(); }
+  }
+  await unchanged();
+  return { ...inspection, directory, files };
 }
 
 if (process.argv[1] && process.argv[1] !== '-' && await realpath(process.argv[1]) === fileURLToPath(import.meta.url)) {

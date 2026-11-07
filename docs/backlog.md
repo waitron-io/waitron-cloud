@@ -3164,7 +3164,7 @@ implementation or production evidence.
   without changing the 30-second deadline. Real public retrieval qualifies all
   four catalogues; it does not authenticate an account or reconcile billing. Qualification
   of first-machine quantity and fixed-cost assumptions, the explained opening account costs, binding itemized billing to the guest,
-  real S3 behavior and live cleanup remain open; these inputs grant no spending or
+  real S3 behavior including private ledger export, and live cleanup remain open; these inputs grant no spending or
   runnable owner setup. The manual controller preflight now checks a clean exact
   remote main, temporary staging identity, Stockholm and the current monthly
   bill before any resource action. It preserves AWS's estimate flag and rounds

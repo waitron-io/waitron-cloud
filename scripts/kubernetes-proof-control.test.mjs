@@ -1982,3 +1982,115 @@ test('first billing refuses a past month above its retained booking even when th
   await assert.rejects(f.inspect({ now: later, clock: () => Date.parse(later) }), /D570 budget refused/);
   assert.deepEqual(structuredClone([...f.objects]), before);
 });
+
+async function historyExportFixture(t) {
+  const f = await guestCleanupFixture(t), parent = mkdtempSync(join(tmpdir(), 'd570-private-export-'));
+  t.after(() => rmSync(parent, { recursive: true, force: true }));
+  const directory = join(parent, 'history');
+  const options = { ...f.options, stackId: f.setup.stackId, directory };
+  const retain = changes => {
+    assert.equal(typeof control.retainManualHistory, 'function', 'missing private retained history export');
+    return control.retainManualHistory({ ...options, ...changes });
+  };
+  return { ...f, parent, directory, options, retain };
+}
+
+// Losing bytes, exporting inconsistent history or overwriting a previous export would erase cost ownership.
+test('history export retains exact private ledger bytes and leaves the active booking and provider records intact', async t => {
+  const f = await historyExportFixture(t), before = structuredClone([...f.objects]), writes = f.writes.length;
+  const result = await f.retain();
+  assert.equal(result.directory, f.directory);
+  assert.equal(result.budget.activeUuid, f.uuid);
+  assert.deepEqual(result.files.sort(), ['2026-11.json', '2026-12.json', 'active.json']);
+  assert.equal(statSync(f.directory).mode & 0o777, 0o700);
+  for (const [key, object] of f.objects) {
+    const path = join(f.directory, key.slice('d570/ledger/'.length));
+    assert.deepEqual(readFileSync(path), object.body);
+    assert.equal(statSync(path).mode & 0o777, 0o600);
+    assert.equal(statSync(path).uid, process.getuid());
+  }
+  assert.equal(f.writes.length, writes);
+  assert.deepEqual(structuredClone([...f.objects]), before);
+  assert.equal(f.calls.some(row => ['put-object', 'delete-object', 'delete-stack', 'disable-rule', 'terminate-instances'].includes(row.operation)), false);
+});
+
+for (const stage of ['public parent', 'symbolic parent', 'relative path', 'checkout destination', 'existing directory', 'symbolic destination']) {
+  test(`history export refuses ${stage} without overwriting local or provider records`, async t => {
+    const f = await historyExportFixture(t), before = structuredClone([...f.objects]);
+    let directory = f.directory;
+    if (stage === 'public parent') chmodSync(f.parent, 0o755);
+    if (stage === 'symbolic parent') { symlinkSync(f.parent, f.parent + '-link');
+      t.after(() => rmSync(f.parent + '-link')); directory = join(f.parent + '-link', 'history'); }
+    if (stage === 'relative path') directory = 'private-history';
+    if (stage === 'checkout destination') { chmodSync(f.root, 0o700); directory = join(f.root, 'history'); }
+    if (stage === 'existing directory') { mkdirSync(f.directory, { mode: 0o700 }); writeFileSync(join(f.directory, 'active.json'), 'keep'); }
+    if (stage === 'symbolic destination') { symlinkSync(f.parent, f.directory); writeFileSync(join(f.parent, 'active.json'), 'keep'); }
+    await assert.rejects(f.retain({ directory }), /D570 controller refused|EEXIST/);
+    assert.deepEqual(structuredClone([...f.objects]), before);
+    if (stage === 'existing directory') assert.equal(readFileSync(join(f.directory, 'active.json'), 'utf8'), 'keep');
+    if (stage === 'symbolic destination') assert.equal(readFileSync(join(f.parent, 'active.json'), 'utf8'), 'keep');
+    if (stage === 'public parent' || stage === 'checkout destination') assert.equal(existsSync(directory), false);
+  });
+}
+
+for (const stage of ['missing month', 'changed month', 'unknown key', 'corrupt active']) test(`history export refuses ${stage} before creating a destination`, async t => {
+  const f = await historyExportFixture(t);
+  if (stage === 'missing month') f.objects.delete('d570/ledger/2026-11.json');
+  if (stage === 'changed month') f.objects.get('d570/ledger/2026-11.json').body = Buffer.from('{}');
+  if (stage === 'unknown key') f.objects.set('d570/ledger/foreign.json', { body: Buffer.from('{}'), etag: '"foreign"' });
+  if (stage === 'corrupt active') f.objects.get('d570/ledger/active.json').body = Buffer.from('{}');
+  const before = structuredClone([...f.objects]);
+  await assert.rejects(f.retain(), /D570 controller refused|D570 budget refused/);
+  assert.equal(existsSync(f.directory), false);
+  assert.deepEqual(structuredClone([...f.objects]), before);
+});
+
+for (const stage of ['changed source', 'stale protection', 'changed active', 'changed month bytes', 'changed month etag', 'read failure']) {
+  test(`history export refuses ${stage} during its final provider readback`, async t => {
+    const f = await historyExportFixture(t), previous = f.aws.call; let lists = 0, at = Date.parse(f.options.now);
+    f.aws.call = async (...args) => {
+      if (args[1] === 'list-objects-v2') lists++;
+      // Initial budget validation lists once; the export snapshots, validates locally, then re-reads all keys.
+      if (lists >= 3 && args[1] === 'get-object' && args[2].Key === 'd570/ledger/2026-11.json') {
+        if (stage === 'read failure') throw new Error('synthetic history read failure');
+        if (stage === 'changed source') {
+          writeFileSync(join(f.root, 'controller.txt'), 'new reviewed main during export');
+          f.git('add', 'controller.txt'); f.git('commit', '-s', '-m', 'Advance isolated main during export');
+          f.git('update-ref', 'refs/remotes/origin/main', f.git('rev-parse', 'HEAD'));
+        }
+        if (stage === 'stale protection') at += 120000;
+        const row = f.objects.get(stage === 'changed active' ? 'd570/ledger/active.json' : args[2].Key);
+        if (stage === 'changed active') row.etag = '"new-active"';
+        if (stage === 'changed month etag') row.etag = '"new-month"';
+        if (stage === 'changed month bytes') row.body = Buffer.concat([row.body, Buffer.from('\n')]);
+      }
+      return previous(...args);
+    };
+    await assert.rejects(f.retain({ clock: () => at }), /D570 controller refused|D570 budget refused|synthetic history read failure/);
+    assert.equal(existsSync(f.directory), false);
+  });
+}
+
+test('history export refuses a parent made public during provider reads', async t => {
+  const f = await historyExportFixture(t), previous = f.aws.call; let lists = 0;
+  f.aws.call = async (...args) => {
+    if (args[1] === 'list-objects-v2') lists++;
+    const result = await previous(...args);
+    if (lists >= 3 && args[1] === 'get-object' && args[2].Key === 'd570/ledger/active.json') chmodSync(f.parent, 0o755);
+    return result;
+  };
+  await assert.rejects(f.retain(), /D570 controller refused/);
+  assert.equal(existsSync(f.directory), false);
+});
+
+for (const key of ['d570/ledger/active.json', 'd570/ledger/2026-11.json']) {
+  test(`history export validates its captured ${key} after the initial live budget check`, async t => {
+    const f = await historyExportFixture(t), previous = f.aws.call; let lists = 0;
+    f.aws.call = async (...args) => {
+      if (args[1] === 'list-objects-v2' && ++lists === 2) f.objects.get(key).body = Buffer.from('{}');
+      return previous(...args);
+    };
+    await assert.rejects(f.retain(), /D570 budget refused/);
+    assert.equal(existsSync(f.directory), false);
+  });
+}

@@ -330,7 +330,23 @@ its reservation. Missing components, partial pages, stale protection and changed
 source refuse. Run
 `node --test --test-name-pattern='^first billing' scripts/kubernetes-proof-control.test.mjs`
 for synthetic checks. These checks do not read a real bill. Attributing billed usage to
-the guest, final reconciliation and private history export/removal remain open.
+the guest, final reconciliation and removal remain open.
+
+Keep a private copy of the budget history before removing its bucket. The
+`retainManualHistory` prerequisite copies the verified active record and every
+remembered month into a new directory outside the checkout. Your parent directory
+must belong to you and have mode `0700`, which allows only your account access.
+The export directory uses the same mode; each file uses `0600`, allowing only
+your account to read or write it. Existing destinations refuse so an earlier copy
+cannot be overwritten. The exporter checks the snapshot against the budget,
+rechecks live object versions and bytes, and flushes the files and directories
+to disk. A failed export leaves its partial copy and the provider records intact.
+
+Run
+`node --test --test-name-pattern='^history export' scripts/kubernetes-proof-control.test.mjs`
+for synthetic storage and real local-file checks. The exporter keeps an active
+booking active; it does not reconcile a bill or remove provider resources.
+Real S3 export and the teardown that consumes it remain unqualified.
 
 Before reusing a setup, `inspectManualBudget` checks that protection and reads
 all retained ledger months through `inspectBudget`. It compares the account bill
@@ -350,8 +366,8 @@ argument; both upload and download files are removed after success or failure.
 Only a confirmed missing key counts as absent. Access denial, partial reads
 and uncertain failures refuse, so they cannot initialize replacement history.
 Run `node --test scripts/kubernetes-proof-control.test.mjs scripts/kubernetes-proof-budget.test.mjs`
-to check these boundaries with synthetic storage. Real S3 behavior, history
-export, the complete cost bound and the owner lifecycle remain unqualified.
+to check these boundaries with synthetic storage. Real S3 behavior, the complete
+cost bound and the owner lifecycle remain unqualified.
 
 The prerequisite workflow checks both rendered templates with the same pinned
 CloudFormation validator. Its setup tests require every retained resource
