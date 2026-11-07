@@ -127,11 +127,11 @@ class CISession(unittest.TestCase):
                          int(time.time()*1000)+5000,stdin=io.BytesIO(b'synthetic-memory-input'))
   self.assertEqual(code,0);self.assertEqual(marker.read_bytes(),b'synthetic-memory-input')
  def test_waitron_measurement_jobs_use_the_same_fixed_executor_and_bound_identity(self):
-  for key in ['test-dashboard-1','test-server-24','test-heavy-3']:
+  for key in ['test-dashboard-1','test-server-24','test-heavy-3','test-till-1','test-till-7','test-ui-1']:
    ci={**CI,'workflowPath':'.github/workflows/ci.yml','jobKey':key}
    value={**request(self.resource),'ci':ci,'snapshot':hashlib.sha256(json.dumps(ci,separators=(',',':')).encode()).hexdigest()}
    self.assertEqual(session.request_identity(value,self.resource)['argv'],ARGV)
-  for key in ['publish','test-dashboard-0','test-dashboard-5','test-server-25','test-heavy-4','test-server-01','test-dashboard-1\n']:
+  for key in ['publish','test-dashboard-0','test-dashboard-5','test-server-25','test-heavy-4','test-server-01','test-dashboard-1\n','test-till-0','test-till-8','test-till-01','test-till-1\n','test-ui-0','test-ui-2','test-ui','test-setup-1']:
    ci={**CI,'workflowPath':'.github/workflows/ci.yml','jobKey':key}
    value={**request(self.resource),'ci':ci,'snapshot':hashlib.sha256(json.dumps(ci,separators=(',',':')).encode()).hexdigest()}
    with self.assertRaises(ValueError):session.request_identity(value,self.resource)

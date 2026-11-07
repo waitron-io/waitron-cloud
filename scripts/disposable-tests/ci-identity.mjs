@@ -9,7 +9,7 @@ export function ciIdentity(value) {
   for(const key of ['repositoryId','workflowId','runId','attempt','jobId'])
     assert.ok(Number.isSafeInteger(value[key]) && value[key]>0,'Invalid CI numeric identity');
   assert.ok(['.github/workflows/disposable-ci-canary.yml','.github/workflows/ci.yml'].includes(value.workflowPath) &&
-    ['workflow_dispatch','pull_request'].includes(value.event) && typeof value.jobKey==='string' && /^(typecheck|test-dashboard-[1-4]|test-server-([1-9]|1[0-9]|2[0-4])|test-heavy-[1-3])$/.test(value.jobKey),'Invalid CI workflow identity');
+    ['workflow_dispatch','pull_request'].includes(value.event) && typeof value.jobKey==='string' && /^(typecheck|test-dashboard-[1-4]|test-server-([1-9]|1[0-9]|2[0-4])|test-heavy-[1-3]|test-till-[1-7]|test-ui-1)$/.test(value.jobKey),'Invalid CI workflow identity');
   for(const key of ['workflowSha','sourceSha','sourceTree']) assert.match(value[key],/^[a-f0-9]{40}$/,'Invalid CI Git identity');
   assert.match(value.workflowDigest,/^[a-f0-9]{64}$/,'Invalid CI workflow digest');
   return Object.fromEntries(keys.map(key=>[key,value[key]]));
@@ -41,5 +41,6 @@ export function ciInvocation(value){
 
 export function jobName(value){
  const ci=ciIdentity(value);if(ci.jobKey==='typecheck')return 'typecheck';
- const match=/^(test-(?:dashboard|server|heavy))-([0-9]+)$/.exec(ci.jobKey);return `${match[1]} (${match[2]})`;
+ if(ci.jobKey==='test-ui-1')return 'test-ui';
+ const match=/^(test-(?:dashboard|server|heavy|till))-([0-9]+)$/.exec(ci.jobKey);return `${match[1]} (${match[2]})`;
 }

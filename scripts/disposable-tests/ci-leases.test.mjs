@@ -103,3 +103,19 @@ test('multi-slot CI reservation refuses a caller without a selected slot',async 
  const leases=new LocalLeases(join(root,'ledger'),{hostGeneration:'bridge-1',slots:4,bootstrap:true});
  assert.throws(()=>leases.reserveLocal(ciRequest('I',ci)),/scoped|slot/i);assert.ok(leases.inspect().slots.every(s=>s.state==='free'));
 });
+
+// A mismatched bounded key or API name would prevent the intended guest from receiving its job.
+test('the approved till and unsharded UI keys retain exact routing labels and API names',async()=>{
+ const {ciIdentity,routingLabel,jobName}=await import('./ci-identity.mjs');
+ for(const [key,name] of [['test-till-1','test-till (1)'],['test-till-7','test-till (7)'],['test-ui-1','test-ui']]){
+  const identity=ciIdentity({...ci,workflowPath:'.github/workflows/ci.yml',jobKey:key});
+  assert.equal(jobName(identity),name);assert.equal(routingLabel(identity),'dt-123-789-1-'+key);
+ }
+});
+
+// Permitting an extra shard or a trailing line break would no longer name a reviewed routing label.
+test('till and UI admission refuse unselected families, extra shards and noncanonical keys',async()=>{
+ const {ciIdentity}=await import('./ci-identity.mjs');
+ for(const jobKey of ['test-till-0','test-till-8','test-till-01','test-ui-0','test-ui-2','test-ui','test-setup-1','test-dashboard-1\n','test-server-1\r','test-till-1\n'])
+  assert.throws(()=>ciIdentity({...ci,workflowPath:'.github/workflows/ci.yml',jobKey}),/Invalid CI workflow identity/);
+});
