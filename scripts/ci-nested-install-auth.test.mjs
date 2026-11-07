@@ -45,7 +45,7 @@ for (const step of [...steps, ...receiptSteps]) {
       const checkout = join(root, 'checkout');
       await mkdir(checkout);
       const throughReceipt = command === 'node scripts/ci-run-receipts.mjs';
-      const installArgs = ['install', '--frozen-lockfile', '--ignore-scripts', '--store-dir', join(root, 'store'), '--fetch-retries=0'];
+      const installArgs = ['install', '--ignore-workspace', '--frozen-lockfile', '--ignore-scripts', '--store-dir', join(root, 'store'), '--fetch-retries=0'];
       await writeFile(join(checkout, 'package.json'), JSON.stringify({name: 'nested-install-fixture', private: true, dependencies: {'synthetic-private-package': url},
         ...(throughReceipt ? {scripts: {'test:local-stack': 'node install.cjs'}} : {})}));
       if (throughReceipt) await writeFile(join(checkout, 'install.cjs'),
