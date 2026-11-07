@@ -674,7 +674,8 @@ order. Remote access matters most because Waitron's customer-facing features wai
    diagnostic sharing and time-limited grants, chosen each time, plus bug reports with
    diagnostics from non-customers without Cloud signup. Retain watcher 22:20's audited
    verified-owner contact display and common console/CLI customer-visible history.
-   Country intake, console, grant UI, P3 adapter and history extensions remain unbuilt;
+   Cloud as the non-customer receiver needs owner approval. Intake, console, grant UI,
+   P3 adapter and history extensions remain unbuilt;
    A982 owns capture/preview, not Cloud forwarding. Asking for help is a report, not a help desk.
 
 Production email (D102: bounces and complaints) is already tracked and is not repeated here.
