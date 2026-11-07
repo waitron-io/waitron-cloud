@@ -4,7 +4,7 @@ D603 implements [monitoring §§10,11,16](../specs/2026-10-24-cloud-monitoring-a
 
 ## Contract and gate
 
-- [ ] Claude reads before build. Stack on D601/#1073 candidate `c0f96898c93b4fd1bcb53ee1e4548bc692b19886`; before publishing compare landed table/key/nullability, digest, locks, signature/body/log limits, actions, incidence readers, migration slot, test/guide paths with candidate `c0f96898c93b4fd1bcb53ee1e4548bc692b19886`. Any difference amends this plan for Claude before build.
+- [ ] Claude reads before build. Stack on D601/#1073 candidate `c0f96898c93b4fd1bcb53ee1e4548bc692b19886`; before publishing compare landed table/key/nullability, digest, locks, signature/body/log limits, actions, incidence readers, migration slot, test/guide paths with candidate `c0f96898c93b4fd1bcb53ee1e4548bc692b19886`. If #1073 changes, rebase onto it and compare again. Any difference amends this plan for a Claude read; rework affected code before publishing.
 
 Provisional builder defaults for A1047: POST `/api/installations/staff-report` and `/api/installations/staff-description`, corresponding signed actions. Follow `account-http/src/translation.ts` and `translation/src/submit-proof.ts`: external string `body`, signed `{version:1,bodySha256,bodyBytes}`. Body ≤16384 bytes; request ≤65536 bytes/5 seconds. Preserve shared envelope/automatic limits and installation-ip/key allowances. Reuse proof/lease locks/rechecks; authenticate venue/environment. Return `{received:true}` after commit.
 
