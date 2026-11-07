@@ -338,7 +338,7 @@ export class PortalApp {
     if (!success && route !== this.#route) return;
     // A confirmed anonymous session may already have routed to login.
     if (success) { if (this.path !== '/login') this.navigate('/login'); this.notice = 'signedOut'; }
-    else if (route === this.#route) this.error = 'logoutFailed';
+    else this.error = 'logoutFailed';
     this.pending = false; this.draw();
     if (this.error === 'logoutFailed') this.#focusErrors();
   }
