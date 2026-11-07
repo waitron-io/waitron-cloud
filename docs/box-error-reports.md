@@ -121,13 +121,13 @@ real HTTP routes. Each request captures and explains all eight actual reads with
 `EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON)`; `BOX_REPORT_COST` contains the full plans.
 
 On 7 November 2026, this command used PostgreSQL 18.6 in the Mac's ARM Docker
-environment, Node 26 and an 18-core host. A Debian x86 baseline also ran, but the
+environment, Node 26 and a host with 18 logical CPUs. A Debian x86 baseline also ran, but the
 shared test box was busy for the final comparison. Sizes below include table
 overhead and indexes; one MiB is 1,048,576 bytes.
 
 | Reports | Table MiB | Index MiB | Total MiB | Bulk insert seconds |
 | --- | --- | --- | --- | --- |
-| 10,000 | 4.38 | 1.77 | 6.16 | 0.134 |
+| 10,000 | 4.38 | 1.77 | 6.16 | 0.133 |
 | 100,000 | 43.45 | 16.67 | 60.12 | 1.284 |
 | 1,000,000 | 434.18 | 150.41 | 584.59 | 14.478 |
 
