@@ -60,6 +60,11 @@ test('the local reader lists unmatched reports and groups distinct staff reports
   const guarded=await command(['--environment','test'],env);assert.equal(guarded.status,1);assert.equal(guarded.stdout,'');
   assert.equal(guarded.stderr,'Staff report read failed; check environment, database and migrations\n');
   assert.equal((await db.pool.query('SELECT count(*) FROM read_write_probe')).rows[0].count,'0');
+  const writableUrl=new URL(env.DATABASE_URL!);writableUrl.searchParams.set('options',`-c search_path=${db.schema} -c default_transaction_read_only=off`);
+  const urlGuarded=await command(['--environment','test'],{...env,DATABASE_URL:writableUrl.href});
+  assert.equal(urlGuarded.status,1,'database URL options must not disable the read-only session');assert.equal(urlGuarded.stdout,'');
+  assert.equal(urlGuarded.stderr,'Staff report read failed; check environment, database and migrations\n');
+  assert.equal((await db.pool.query('SELECT count(*) FROM read_write_probe')).rows[0].count,'0');
  }finally{await db.close();}
 });
 

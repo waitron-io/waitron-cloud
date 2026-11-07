@@ -147,6 +147,12 @@ test('external staff bodies are fingerprint-bound and keep the shared signed env
   assert.equal((await f.request('staff-report',good,{origin})).status,403);
   assert.equal((await f.request('staff-description',good,{},'GET')).status,405);
   assert.equal((await f.db.pool.query('SELECT count(*) FROM installation_error_reports')).rows[0].count,'0');
+  const exactBody=good.body+' '.repeat(16384-Buffer.byteLength(good.body));
+  const accepted=await f.request('staff-report',f.signed('staff-report',{},f.box,randomUUID(),exactBody));assert.equal(accepted.status,200,await accepted.clone().text());
+  const outer=JSON.stringify(f.signed('staff-report',report())),padded=outer+' '.repeat(65536-Buffer.byteLength(outer));
+  const exactRequest=await f.app.request(origin+'/api/installations/staff-report',{method:'POST',headers:{'content-type':'application/json'},body:padded},{incoming:{socket:{remoteAddress:'203.0.113.62'}}} as HttpBindings);
+  assert.equal(exactRequest.status,200,await exactRequest.clone().text());
+  assert.equal((await f.db.pool.query('SELECT count(*) FROM installation_error_reports')).rows[0].count,'2');
  }finally{await f.db.close();}
 });
 
