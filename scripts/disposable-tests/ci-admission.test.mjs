@@ -17,10 +17,11 @@ test('admission binds current concrete API job and independent Git tree to revie
 });
 test('foreign, stale, changed-workflow, wrong-label and wrong-source requests refuse admission',async()=>{
  const {admitCI}=await import('./ci-canary.mjs');
- for(const change of [e=>e.repository.id++,e=>e.run.repository.id++,e=>e.run.head_repository.id++,e=>e.run.workflow_id++,
+ for(const change of [e=>e.repository.id++,e=>e.repository.full_name='other/cloud',
+ e=>{e.run.run_attempt=2;e.job.run_attempt=2;e.job.labels=['self-hosted','dt-123-789-2-typecheck'];},e=>e.run.repository.id++,e=>e.run.head_repository.id++,e=>e.run.workflow_id++,
  e=>e.run.run_attempt++,e=>e.run.event='pull_request_target',e=>e.run.path='other',e=>e.run.display_title='foreign',
  e=>e.job.run_attempt++,e=>e.job.run_id++,e=>e.job.head_sha='5'.repeat(40),e=>e.job.name='summary',
- e=>e.job.labels=['self-hosted'],e=>e.job.status='in_progress',e=>e.workflow+='changed',e=>e.source.sha='6'.repeat(40)]){
+ e=>e.job.labels=['self-hosted'],e=>e.job.labels=['self-hosted','foreign-label'],e=>e.job.status='in_progress',e=>e.workflow+='changed',e=>e.source.sha='6'.repeat(40)]){
  const value=evidence();change(value);assert.throws(()=>admitCI(policy,input,value));
  }
 });
