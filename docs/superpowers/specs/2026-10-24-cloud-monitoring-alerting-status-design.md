@@ -293,6 +293,16 @@ never invent a recovery time; when scope is unknown they say so. The
 investigator's words never go on the public page by themselves. The owner can add their
 own text from the incident page.
 
+**D600 correction, watcher 2026-11-07 12:37**, recorded in
+`~/waitron-campaign-d/questions.md` under “D600: resolved says what happened, with no next update”:
+
+> a resolved post uses past impact ("Some/All venues were affected" / «Algunos/Todos los locales se vieron afectados»; unknown stays explicitly unknown), shows its updatedAt as the time it was resolved, and promises no next update.
+
+For resolved input, `updatedAt` is the actual UTC resolution time, supplied from
+confirmed recovery; it is not an estimate or merely the publication time. Open
+incident posts keep their thirty-minute next update. The local setup/no-incident
+page keeps its unverified-health warning and makes no next-update promise.
+
 **(Our call)** The page stays where D104 put it, on Cloudflare Pages outside AWS, and is
 published from the outside machine (section 12) by an automated upload to the same
 project D104 describes. Whether Cloudflare's own upload tool can publish to a Direct Upload
