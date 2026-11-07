@@ -3177,7 +3177,7 @@ implementation or production evidence.
   before rendering. It rechecks main and date around each read; synthetic
   missing, contradictory, ambiguous and changing-input cases refuse. No live
   regional resource or quota claim follows from those checks. All four lifecycle
-  commands still refuse while launch, billed reconciliation and cleanup remain unbuilt.
+  commands still refuse while guest observation, billed reconciliation and cleanup remain unbuilt.
   The manual protection observer now resolves the exact stack's bucket, rule
   and expiry function, checks the enabled one-minute target and reads a fresh
   encrypted sweep heartbeat. Bounded private CLI downloads refuse partial
@@ -3192,8 +3192,9 @@ implementation or production evidence.
   foreign unit files. Signals and failed diagnostics now request poweroff; clock
   checksums and systemd loader checks reject changed deadlines and foreign
   overrides. Debian checks verify unit syntax and isolated persistent enablement.
-  It is not yet wired into a launcher: actual ARM/systemd
-  behavior, IMDSv2 identity, offline inputs and shutdown/termination remain
+  Its private first-drill launcher now books compute and disk before one fixed-template
+  request, with the earlier guest deadline and exact instance/volume ownership tags.
+  Actual ARM/systemd behavior, IMDSv2 identity, offline inputs and shutdown/termination remain
   unqualified. D570's
   [weekly proof plan](superpowers/plans/2026-11-04-kubernetes-weekly-proof.md) carries
   the first complete proof on one disposable on-demand ARM m7g.2xlarge in staging

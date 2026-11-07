@@ -1,15 +1,16 @@
 import { execFile } from 'node:child_process';
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { realpath, mkdtemp, writeFile, lstat, readFile, rm, mkdir, open } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { setTimeout as delay } from 'node:timers/promises';
 import { join, dirname, resolve } from 'node:path';
-import { promisify } from 'node:util';
+import { promisify, isDeepStrictEqual } from 'node:util';
 import { fileURLToPath } from 'node:url';
 import { renderManualSetup } from '../deploy/kubernetes/proof/setup.mjs';
 import policy from '../deploy/kubernetes/proof/policy.json' with { type: 'json' };
-import { inspectBudget, initializeLedger, createS3LedgerStore } from './kubernetes-proof-budget.mjs';
+import { inspectBudget, initializeLedger, reserveRun, createS3LedgerStore } from './kubernetes-proof-budget.mjs';
 import { calculateManualCost } from '../deploy/kubernetes/proof/prices.mjs';
+import { renderDeadlineBootstrap } from '../deploy/kubernetes/proof/bootstrap.mjs';
 
 const execute = promisify(execFile);
 const account = '462991287391', region = 'eu-north-1';
@@ -31,7 +32,35 @@ export function createManualAwsCli({ executable = 'aws' } = {}) {
       || (service === 'events' && ['describe-rule', 'list-targets-by-rule', 'enable-rule'].includes(operation))
       || (service === 's3api' && ['get-object', 'put-object', 'list-objects-v2'].includes(operation))
       || (service === 'ssm' && operation === 'get-parameter')
-      || (service === 'ec2' && ['describe-images', 'describe-instance-types', 'describe-managed-prefix-lists'].includes(operation)));
+      || (service === 'ec2' && ['describe-images', 'describe-instance-types', 'describe-managed-prefix-lists',
+        'describe-launch-template-versions', 'run-instances'].includes(operation)));
+    if (service === 'ec2' && operation === 'describe-launch-template-versions') check(input
+      && Object.keys(input).sort().join(',') === 'LaunchTemplateId,Versions'
+      && typeof input.LaunchTemplateId === 'string' && /^lt-[a-f0-9]{17}$/.test(input.LaunchTemplateId)
+      && isDeepStrictEqual(input.Versions, ['1']));
+    if (service === 'ec2' && operation === 'run-instances') {
+      check(input && Object.keys(input).sort().join(',') === 'ClientToken,LaunchTemplate,MaxCount,MinCount,TagSpecifications,UserData'
+        && typeof input.ClientToken === 'string' && /^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/.test(input.ClientToken)
+        && input.MinCount === 1 && input.MaxCount === 1 && input.LaunchTemplate
+        && Object.keys(input.LaunchTemplate).sort().join(',') === 'LaunchTemplateId,Version'
+        && /^lt-[a-f0-9]{17}$/.test(input.LaunchTemplate.LaunchTemplateId) && input.LaunchTemplate.Version === '1'
+        && typeof input.UserData === 'string' && input.UserData.length > 0 && input.UserData.length <= 21848
+        && Buffer.from(input.UserData, 'base64').toString('base64') === input.UserData
+        && Buffer.from(input.UserData, 'base64').length <= 16384
+        && Array.isArray(input.TagSpecifications) && input.TagSpecifications.length === 2);
+      const first = input.TagSpecifications[0], second = input.TagSpecifications[1];
+      check(first?.ResourceType === 'instance' && second?.ResourceType === 'volume'
+        && Object.keys(first).sort().join(',') === 'ResourceType,Tags'
+        && Object.keys(second).sort().join(',') === 'ResourceType,Tags'
+        && isDeepStrictEqual(first.Tags, second.Tags) && Array.isArray(first.Tags) && first.Tags.length === 4);
+      const tags = first.Tags;
+      check(tags.every(row => row && Object.keys(row).sort().join(',') === 'Key,Value')
+        && tags[0].Key === 'Proof' && tags[0].Value === 'D570'
+        && tags[1].Key === 'Stack' && typeof tags[1].Value === 'string'
+        && /^arn:aws:cloudformation:eu-north-1:462991287391:stack\/d570-first\/[a-f0-9-]{36}$/.test(tags[1].Value)
+        && tags[2].Key === 'Run' && tags[2].Value === input.ClientToken
+        && tags[3].Key === 'ExpiresAt' && instant(tags[3].Value) <= Date.parse(policy.accessExpiry));
+    }
     if (service === 'cloudformation' && operation === 'create-stack') {
       check(input && Object.keys(input).sort().join(',') === 'Capabilities,ClientRequestToken,OnFailure,StackName,Tags,TemplateBody,TimeoutInMinutes'
         && input.StackName === 'd570-first' && typeof input.TemplateBody === 'string'
@@ -65,7 +94,9 @@ export function createManualAwsCli({ executable = 'aws' } = {}) {
         && (!Object.hasOwn(input, 'ContinuationToken') || typeof input.ContinuationToken === 'string'
           && input.ContinuationToken.length > 0 && input.ContinuationToken.length <= 2048));
     }
-    const payload = JSON.stringify(upload ? { ...input, Body: undefined } : input);
+    // EC2's CLI encoder needs plain text; the controller retains the API's base64 representation.
+    const payload = JSON.stringify(upload ? { ...input, Body: undefined }
+      : service === 'ec2' && operation === 'run-instances' ? { ...input, UserData: Buffer.from(input.UserData, 'base64').toString('utf8') } : input);
     check(typeof payload === 'string' && Buffer.byteLength(payload) <= 64 * 1024);
     let directory;
     try {
@@ -478,6 +509,72 @@ export async function initializeManualFirstSetup(options) {
   const budget = await inspectBudget({ scope, now, billingMicroUsd: setup.billing.microUsd, store });
   await unchanged();
   return { ...setup, runEvidence, budget };
+}
+
+export async function launchManualFirstDrill(options) {
+  const { checkout, aws, now, clock = Date.now, uuid = randomUUID() } = options;
+  const setup = structuredClone(options.setup);
+  const inspection = await inspectManualBudget({ ...options, stackId: setup?.stackId, store: undefined });
+  check(setup.account === account && setup.region === region && setup.head === inspection.head && setup.tree === inspection.tree
+    && setup.bucket === inspection.bucket && inspection.budget.activeUuid === null && inspection.budget.bookedMicroUsd === 0);
+  async function unchanged() {
+    const before = clock(), source = await checkedMain(checkout), after = clock();
+    check(source.head === inspection.head && source.tree === inspection.tree
+      && Number.isSafeInteger(before) && Number.isSafeInteger(after) && before >= instant(now) && after >= before
+      && after < Date.parse(policy.accessExpiry) && iso(after).slice(0, 10) === now.slice(0, 10)
+      && after - Date.parse(inspection.heartbeat.startedAt) < 120_000);
+    return after;
+  }
+  async function call(service, operation, input) {
+    await unchanged();
+    const result = await aws.call(service, operation, input);
+    await unchanged();
+    return result;
+  }
+  const inventory = await call('cloudformation', 'describe-stack-resources', { StackName: setup.stackId });
+  check(!inventory?.NextToken && Array.isArray(inventory?.StackResources) && inventory.StackResources.length <= 100);
+  function resource(name, pattern) {
+    const rows = inventory.StackResources.filter(row => row?.LogicalResourceId === name);
+    check(rows.length === 1 && rows[0].StackId === setup.stackId && rows[0].ResourceType === 'AWS::EC2::' + name
+      && rows[0].ResourceStatus === 'CREATE_COMPLETE' && typeof rows[0].PhysicalResourceId === 'string'
+      && pattern.test(rows[0].PhysicalResourceId));
+    return rows[0].PhysicalResourceId;
+  }
+  const templateId = resource('LaunchTemplate', /^lt-[a-f0-9]{17}$/);
+  const subnetId = resource('Subnet', /^subnet-[a-f0-9]{17}$/), groupId = resource('SecurityGroup', /^sg-[a-f0-9]{17}$/);
+  const response = await call('ec2', 'describe-launch-template-versions', { LaunchTemplateId: templateId, Versions: ['1'] });
+  check(!response?.NextToken && Array.isArray(response?.LaunchTemplateVersions) && response.LaunchTemplateVersions.length === 1);
+  const version = response.LaunchTemplateVersions[0], imageId = setup.template?.Parameters?.ImageId?.Default;
+  check(typeof imageId === 'string' && /^ami-[a-f0-9]{17}$/.test(imageId)
+    && version?.LaunchTemplateId === templateId && version.VersionNumber === 1);
+  const expected = { ImageId: imageId, InstanceType: 'm7g.2xlarge', InstanceInitiatedShutdownBehavior: 'terminate',
+    MetadataOptions: { HttpEndpoint: 'enabled', HttpTokens: 'required', HttpPutResponseHopLimit: 1, InstanceMetadataTags: 'disabled' },
+    NetworkInterfaces: [{ DeviceIndex: 0, AssociatePublicIpAddress: false, DeleteOnTermination: true, SubnetId: subnetId, Groups: [groupId] }],
+    BlockDeviceMappings: [{ DeviceName: '/dev/xvda', Ebs: { Encrypted: true, DeleteOnTermination: true,
+      VolumeSize: 64, VolumeType: 'gp3', Iops: 3000, Throughput: 125 } }],
+  };
+  check(isDeepStrictEqual(version.LaunchTemplateData, expected));
+  const start = Math.floor(await unchanged() / 1000) * 1000;
+  const identity = { uuid, head: setup.head, tree: setup.tree, startedAt: iso(start), expiry: iso(start + 300_000),
+    liabilityUntil: iso(start + 300_000 + 31 * 86400_000) };
+  const scope = { account, region, stackId: setup.stackId };
+  const store = createManualLedgerStore({ bucket: setup.bucket, aws: { call } });
+  const reservation = await reserveRun({ scope, identity, evidence: setup.runEvidence, now: iso(start), store, clock });
+  const guestExpiry = iso(start + 180_000);
+  const userData = renderDeadlineBootstrap({ scope, reservation: { ...reservation, expiry: guestExpiry } });
+  const tags = [{ Key: 'Proof', Value: 'D570' }, { Key: 'Stack', Value: scope.stackId },
+    { Key: 'Run', Value: uuid }, { Key: 'ExpiresAt', Value: identity.expiry }];
+  const request = { ClientToken: uuid, MinCount: 1, MaxCount: 1, LaunchTemplate: { LaunchTemplateId: templateId, Version: '1' },
+    UserData: Buffer.from(userData).toString('base64'), TagSpecifications: ['instance', 'volume'].map(ResourceType => ({ ResourceType, Tags: tags })) };
+  check(await unchanged() < instant(guestExpiry));
+  // A lost reply keeps the reservation. A new invocation must not start another first drill.
+  const launched = await call('ec2', 'run-instances', request);
+  check(launched?.OwnerId === account && Array.isArray(launched.Instances) && launched.Instances.length === 1);
+  const instance = launched.Instances[0];
+  check(typeof instance?.InstanceId === 'string' && /^i-[a-f0-9]{17}$/.test(instance.InstanceId)
+    && instance.ClientToken === uuid && instance.ImageId === imageId && instance.InstanceType === 'm7g.2xlarge' && instance.SubnetId === subnetId
+    && ['pending', 'running'].includes(instance.State?.Name));
+  return { ...inspection, reservation, guestExpiry, instanceId: instance.InstanceId, subnetId, groupId, templateId };
 }
 
 if (process.argv[1] && process.argv[1] !== '-' && await realpath(process.argv[1]) === fileURLToPath(import.meta.url)) {

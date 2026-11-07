@@ -1332,3 +1332,189 @@ for (const stage of ['unhealthy protection', 'existing history', 'partial write'
     await assert.rejects(f.initialize({ clock })); assert.deepEqual(f.counts(), { creates: 1, enables: 1 });
   });
 }
+
+async function drillFixture(t) {
+  const f = await initializationFixture(t), setup = await f.initialize();
+  const ids = { LaunchTemplate: 'lt-0123456789abcdef0', Subnet: 'subnet-0123456789abcdef0', SecurityGroup: 'sg-0123456789abcdef0' };
+  for (const [LogicalResourceId, PhysicalResourceId] of Object.entries(ids)) f.p.resource.push({
+    LogicalResourceId, PhysicalResourceId, StackId: setup.stackId, ResourceStatus: 'CREATE_COMPLETE',
+    ResourceType: 'AWS::EC2::' + LogicalResourceId,
+  });
+  const data = { ImageId: 'ami-0123456789abcdef0', InstanceType: 'm7g.2xlarge', InstanceInitiatedShutdownBehavior: 'terminate',
+    MetadataOptions: { HttpEndpoint: 'enabled', HttpTokens: 'required', HttpPutResponseHopLimit: 1, InstanceMetadataTags: 'disabled' },
+    NetworkInterfaces: [{ DeviceIndex: 0, AssociatePublicIpAddress: false, DeleteOnTermination: true,
+      SubnetId: ids.Subnet, Groups: [ids.SecurityGroup] }],
+    BlockDeviceMappings: [{ DeviceName: '/dev/xvda', Ebs: { Encrypted: true, DeleteOnTermination: true,
+      VolumeSize: 64, VolumeType: 'gp3', Iops: 3000, Throughput: 125 } }],
+  };
+  const version = { LaunchTemplateId: ids.LaunchTemplate, VersionNumber: 1, LaunchTemplateData: data };
+  const uuid = '00000000-0000-4000-8000-000000000001', instanceId = 'i-0123456789abcdef0';
+  const launchResponse = { OwnerId: '462991287391', Instances: [{ InstanceId: instanceId, ClientToken: uuid,
+    ImageId: 'ami-0123456789abcdef0', InstanceType: 'm7g.2xlarge', SubnetId: ids.Subnet, State: { Name: 'pending', Code: 0 } }] };
+  const previous = f.aws.call;
+  f.aws.call = async (service, operation, input) => {
+    if (operation === 'put-object') {
+      const prior = f.objects.get(input.Key); assert.ok(prior); assert.equal(input.IfMatch, prior.etag);
+      const etag = '"drill-' + f.writes.length + '"';
+      f.objects.set(input.Key, { body: Buffer.from(input.Body), etag }); f.writes.push(input.Key);
+      f.calls.push({ service, operation, input }); return { ETag: etag };
+    }
+    if (operation === 'describe-launch-template-versions') {
+      f.calls.push({ service, operation, input });
+      assert.deepEqual(input, { LaunchTemplateId: ids.LaunchTemplate, Versions: ['1'] });
+      return { LaunchTemplateVersions: [structuredClone(version)] };
+    }
+    if (operation === 'run-instances') {
+      // Launching before both monthly writes and their active readback would spend unbooked money.
+      const active = JSON.parse(f.objects.get('d570/ledger/active.json').body).active;
+      assert.ok(active, 'launch requires a retained cost reservation');
+      assert.equal(active.state, 'reserved'); assert.equal(active.identity.uuid, uuid);
+      for (const month of ['2026-11', '2026-12']) assert.equal(JSON.parse(f.objects.get('d570/ledger/' + month + '.json').body).entries.length, 1);
+      f.calls.push({ service, operation, input });
+      return structuredClone(launchResponse);
+    }
+    return previous(service, operation, input);
+  };
+  const launch = changes => {
+    assert.equal(typeof control.launchManualFirstDrill, 'function', 'missing booked fixed-deadline guest launch');
+    return control.launchManualFirstDrill({ ...f.options, setup, uuid, ...changes });
+  };
+  return { ...f, setup, ids, version, uuid, instanceId, launch, launchResponse };
+}
+
+test('guest launch reserves once before one exact template launch with earlier credential-free shutdown', async t => {
+  const f = await drillFixture(t), result = await f.launch();
+  assert.equal(result.instanceId, f.instanceId);
+  assert.equal(result.reservation.expiry, '2026-11-06T12:05:00Z');
+  assert.equal(result.reservation.liabilityUntil, '2026-12-07T12:05:00Z');
+  assert.equal(result.guestExpiry, '2026-11-06T12:03:00Z');
+  assert.equal(result.reservation.upperMicroUsd, 306686);
+  const request = f.calls.find(row => row.operation === 'run-instances').input;
+  assert.deepEqual(Object.keys(request).sort(), ['ClientToken', 'LaunchTemplate', 'MaxCount', 'MinCount', 'TagSpecifications', 'UserData']);
+  assert.deepEqual(request.LaunchTemplate, { LaunchTemplateId: f.ids.LaunchTemplate, Version: '1' });
+  assert.equal(request.MinCount, 1); assert.equal(request.MaxCount, 1); assert.equal(request.ClientToken, f.uuid);
+  const tags = [{ Key: 'Proof', Value: 'D570' }, { Key: 'Stack', Value: f.setup.stackId },
+    { Key: 'Run', Value: f.uuid }, { Key: 'ExpiresAt', Value: '2026-11-06T12:05:00Z' }];
+  assert.deepEqual(request.TagSpecifications, ['instance', 'volume'].map(ResourceType => ({ ResourceType, Tags: tags })));
+  const { renderDeadlineBootstrap } = await import('../deploy/kubernetes/proof/bootstrap.mjs');
+  assert.equal(Buffer.from(request.UserData, 'base64').toString(), renderDeadlineBootstrap({
+    scope: { account: f.setup.account, region: f.setup.region, stackId: f.setup.stackId },
+    reservation: { ...result.reservation, expiry: '2026-11-06T12:03:00Z' },
+  }));
+  assert.equal(f.calls.filter(row => row.operation === 'run-instances').length, 1);
+  await assert.rejects(f.launch());
+  assert.equal(f.calls.filter(row => row.operation === 'run-instances').length, 1);
+});
+
+for (const [label, mutate] of [
+  ['public network', f => { f.version.LaunchTemplateData.NetworkInterfaces[0].AssociatePublicIpAddress = true; }],
+  ['credentials', f => { f.version.LaunchTemplateData.IamInstanceProfile = { Name: 'foreign' }; }],
+  ['missing shutdown', f => { f.version.LaunchTemplateData.InstanceInitiatedShutdownBehavior = 'stop'; }],
+  ['changed disk', f => { f.version.LaunchTemplateData.BlockDeviceMappings[0].Ebs.DeleteOnTermination = false; }],
+  ['mutable template', f => { f.version.VersionNumber = '$Latest'; }],
+  ['foreign template', f => { f.version.LaunchTemplateId = 'lt-00000000000000000'; }],
+  ['unhealthy sweep', f => { f.p.responses['events/describe-rule'].State = 'DISABLED'; }],
+  ['foreign setup', f => { f.setup.stackId = f.setup.stackId.replace('462991287391', '949687825720'); }],
+  ['another source', f => { f.setup.head = 'a'.repeat(40); }],
+  ['dirty source', f => { writeFileSync(join(f.root, 'controller.txt'), 'dirty'); }],
+]) test(`guest launch refuses ${label} without launching or spending`, async t => {
+  const f = await drillFixture(t); mutate(f); await assert.rejects(f.launch());
+  assert.equal(f.calls.some(row => row.operation === 'run-instances'), false);
+});
+
+test('guest launch keeps its reservation and never retries an uncertain launch', async t => {
+  const f = await drillFixture(t), previous = f.aws.call; let launches = 0;
+  f.aws.call = async (...args) => {
+    if (args[1] === 'run-instances') { launches++; throw new Error('synthetic lost launch reply'); }
+    return previous(...args);
+  };
+  await assert.rejects(f.launch(), /lost launch reply/);
+  assert.equal(launches, 1);
+  assert.equal(JSON.parse(f.objects.get('d570/ledger/active.json').body).active.identity.expiry, '2026-11-06T12:05:00Z');
+  await assert.rejects(f.launch()); assert.equal(launches, 1);
+});
+
+test('guest launch verifies the returned instance identity without relying on an unreturned template field', async t => {
+  const f = await drillFixture(t), previous = f.aws.call;
+  f.aws.call = async (...args) => {
+    const response = await previous(...args);
+    if (args[1] === 'run-instances') assert.equal(Object.hasOwn(response.Instances[0], 'LaunchTemplate'), false);
+    return response;
+  };
+  assert.equal((await f.launch()).instanceId, f.instanceId);
+});
+
+for (const [label, change] of [
+  ['foreign owner', x => { x.OwnerId = '949687825720'; }],
+  ['changed image', x => { x.Instances[0].ImageId = 'ami-00000000000000000'; }],
+  ['changed subnet', x => { x.Instances[0].SubnetId = 'subnet-00000000000000000'; }],
+  ['changed machine', x => { x.Instances[0].InstanceType = 'm7g.4xlarge'; }],
+  ['changed token', x => { x.Instances[0].ClientToken = '00000000-0000-4000-8000-000000000002'; }],
+  ['multiple machines', x => { x.Instances.push(structuredClone(x.Instances[0])); }],
+]) test(`guest launch refuses ${label} in the provider reply and retains its cost`, async t => {
+  const f = await drillFixture(t); change(f.launchResponse);
+  await assert.rejects(f.launch(), /D570 controller refused/);
+  assert.equal(f.calls.filter(row => row.operation === 'run-instances').length, 1);
+  assert.ok(JSON.parse(f.objects.get('d570/ledger/active.json').body).active);
+});
+
+for (const stage of ['changed source', 'stale heartbeat', 'expired guest']) test(`guest launch refuses ${stage} after reserving without clearing cost`, async t => {
+  const f = await drillFixture(t), previous = f.aws.call; let current = Date.parse(now), writes = 0;
+  f.aws.call = async (...args) => {
+    const result = await previous(...args);
+    if (args[1] === 'put-object' && ++writes === 4) {
+      if (stage === 'changed source') {
+        writeFileSync(join(f.root, 'controller.txt'), 'advance clean main');
+        f.git('add', 'controller.txt'); f.git('commit', '-s', '-m', 'Advance isolated main');
+        f.git('update-ref', 'refs/remotes/origin/main', f.git('rev-parse', 'HEAD'));
+      } else current += stage === 'expired guest' ? 180000 : 120000;
+    }
+    return result;
+  };
+  await assert.rejects(f.launch({ clock: () => current }));
+  assert.equal(f.calls.some(row => row.operation === 'run-instances'), false);
+  assert.ok(JSON.parse(f.objects.get('d570/ledger/active.json').body).active);
+});
+
+function drillCliFixture(t) {
+  const f = fixture(t), capture = join(f.root, 'drill-cli.json'), executable = join(f.root, 'aws-drill');
+  writeFileSync(executable, `#!${process.execPath}\nimport('node:fs').then(fs => {
+    fs.writeFileSync(${JSON.stringify(capture)}, JSON.stringify(process.argv.slice(2))); process.stdout.write('{"accepted":true}'); });\n`, { mode: 0o700 });
+  const stackId = 'arn:aws:cloudformation:eu-north-1:462991287391:stack/d570-first/00000000-0000-4000-8000-000000000000';
+  const tags = [{ Key: 'Proof', Value: 'D570' }, { Key: 'Stack', Value: stackId },
+    { Key: 'Run', Value: '00000000-0000-4000-8000-000000000001' }, { Key: 'ExpiresAt', Value: '2026-11-06T12:05:00Z' }];
+  const input = { ClientToken: tags[2].Value, MinCount: 1, MaxCount: 1,
+    LaunchTemplate: { LaunchTemplateId: 'lt-0123456789abcdef0', Version: '1' },
+    UserData: Buffer.from('#!/bin/bash\nexit 0\n').toString('base64'),
+    TagSpecifications: ['instance', 'volume'].map(ResourceType => ({ ResourceType, Tags: structuredClone(tags) })) };
+  return { ...f, capture, executable, input };
+}
+
+test('guest CLI gives the installed CLI plain user data so its encoder runs exactly once', async t => {
+  const f = drillCliFixture(t);
+  assert.deepEqual(await control.createManualAwsCli({ executable: f.executable }).call('ec2', 'run-instances', f.input), { accepted: true });
+  const args = JSON.parse(readFileSync(f.capture));
+  assert.deepEqual(args.slice(0, 6), ['ec2', 'run-instances', '--cli-input-json',
+    JSON.stringify({ ...f.input, UserData: '#!/bin/bash\nexit 0\n' }), '--region', 'eu-north-1']);
+  assert.equal(args.includes('--user-data'), false);
+});
+
+test('guest CLI reads version one explicitly rather than the mutable default', async t => {
+  const f = drillCliFixture(t), input = { LaunchTemplateId: 'lt-0123456789abcdef0', Versions: ['1'] };
+  assert.deepEqual(await control.createManualAwsCli({ executable: f.executable }).call('ec2', 'describe-launch-template-versions', input), { accepted: true });
+  assert.deepEqual(JSON.parse(readFileSync(f.capture)).slice(0, 4), ['ec2', 'describe-launch-template-versions', '--cli-input-json', JSON.stringify(input)]);
+});
+
+for (const [label, change] of [
+  ['two machines', x => { x.MaxCount = 2; }],
+  ['mutable version', x => { x.LaunchTemplate.Version = '$Latest'; }],
+  ['public override', x => { x.SubnetId = 'subnet-0123456789abcdef0'; }],
+  ['credential override', x => { x.IamInstanceProfile = { Name: 'other' }; }],
+  ['missing disk tags', x => { x.TagSpecifications.pop(); }],
+  ['foreign ownership', x => { x.TagSpecifications[0].Tags[1].Value = x.TagSpecifications[0].Tags[1].Value.replace('462991287391', '949687825720'); }],
+  ['mismatched run tags', x => { x.TagSpecifications[1].Tags[2].Value = '00000000-0000-4000-8000-000000000002'; }],
+]) test(`guest CLI refuses ${label} before invoking its executable`, async t => {
+  const f = drillCliFixture(t); change(f.input);
+  await assert.rejects(control.createManualAwsCli({ executable: f.executable }).call('ec2', 'run-instances', f.input), /D570 controller refused/);
+  assert.equal(existsSync(f.capture), false);
+});

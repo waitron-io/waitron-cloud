@@ -264,6 +264,22 @@ for synthetic checks of the opening, total reservation and failed initialization
 The opening comparison preserves an estimate; it does not establish final billed
 cost or qualify storage on AWS.
 
+You must book the machine before launching it, even if its reply never reaches
+you. `launchManualFirstDrill` connects the initialized setup to one fixed
+version of its stack-owned launch template. It checks the private network,
+credential-free machine and disk deletion settings, then reserves compute and
+disk in the existing ledger before sending the launch request. The instance
+and volume tags retain the same run and five-minute outer expiry. The guest
+bootstrap receives the earlier three-minute shutdown deadline. A lost reply
+keeps the reservation and prevents another first launch.
+
+Run `node --test --test-name-pattern='^guest ' scripts/kubernetes-proof-control.test.mjs`
+for the synthetic launch and refusal checks. AWS CLI encodes EC2 user data
+automatically, so the adapter gives it plain bootstrap text. An unsigned
+loopback check with the installed CLI verifies the actual request encoding;
+it does not launch a machine. Guest observation, billed reconciliation and
+removal remain unfinished, and all four owner commands still refuse.
+
 Before reusing a setup, `inspectManualBudget` checks that protection and reads
 all retained ledger months through `inspectBudget`. It compares the account bill
 with the original opening plus that month's booked upper costs. A later bill
@@ -385,7 +401,8 @@ head, tree and the original start/expiry into a self-contained Bash entry.
 It emits at most EC2's 16 KiB raw user-data limit. It does not fetch inputs,
 execute a candidate or obtain credentials. The future trusted launcher must
 bind its reconciled reservation and verified IMDSv2 launch identity before
-using this entry; the current setup still refuses execution.
+using this entry. The private first-drill launch path now passes its reserved
+identity into the entry; the owner commands still refuse execution.
 
 The entry installs a UTC systemd timer and a second trigger measured from boot,
 so moving the wall clock backwards cannot extend the first boot's interval.
