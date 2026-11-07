@@ -50,6 +50,11 @@ export class LocalLeases {
       Object.getPrototypeOf(state.turns)===Object.prototype,'Invalid ledger turn history');
     assert.ok(state.slots.every((s, i) => s.id === i && Number.isSafeInteger(s.generation) && s.generation >= 0 &&
       ['free', 'reserved', 'running', 'quarantined'].includes(s.state) && (s.state === 'free' ? s.lease === null : s.lease?.generation === s.generation)), 'Invalid ledger slot');
+    assert.ok(Object.entries(state.turns).every(([key,turn])=>/^[A-K]:[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$/.test(key) &&
+      turn && typeof turn==='object' && !Array.isArray(turn) && typeof turn.fingerprint==='string' && /^[a-f0-9]{64}$/.test(turn.fingerprint) &&
+      Number.isSafeInteger(turn.slot) && turn.slot>=0 && turn.slot<this.capacity &&
+      Number.isSafeInteger(turn.generation) && turn.generation>=1 && turn.generation<=state.slots[turn.slot].generation),
+      'Invalid retained turn history');
     for (const slot of state.slots.filter(s => s.state !== 'free')) {
       const lease = slot.lease;
       requestIdentity(lease);

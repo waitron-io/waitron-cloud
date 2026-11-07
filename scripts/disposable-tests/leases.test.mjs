@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
-import {mkdtempSync, readFileSync, rmSync, existsSync, statSync, utimesSync} from 'node:fs';
+import {mkdtempSync, readFileSync, writeFileSync, rmSync, existsSync, statSync, utimesSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 
@@ -43,6 +43,21 @@ test('idle inspection leaves the durable ledger untouched', async t => {
   const before=readFileSync(path,'utf8');utimesSync(path,new Date(0),new Date(0));
   assert.equal(leases.inspect().slots[0].state,'free');
   assert.equal(statSync(path).mtimeMs,0);assert.equal(readFileSync(path,'utf8'),before);
+});
+
+test('malformed retained turn entries cannot be accepted as an empty or valid history', async t => {
+  const valid={fingerprint:'a'.repeat(64),slot:0,generation:1};
+  for(const [key,entry] of [
+    ['I:damaged',null],['I:damaged',[]],['I:damaged',{}],
+    ['I:damaged',{...valid,fingerprint:'bad'}],['I:damaged',{...valid,slot:1}],
+    ['I:damaged',{...valid,generation:0}],['I:damaged',{...valid,generation:2}],['bad-key',valid]
+  ]){
+    const {leases,dir}=await setup(t);leases.reserveLocal(request());const path=join(dir,'state.json');
+    const state=JSON.parse(readFileSync(path,'utf8'));state.turns[key]=entry;
+    const before=JSON.stringify(state);writeFileSync(path,before);
+    assert.throws(()=>leases.inspect(),/invalid.*turn/i);
+    assert.equal(readFileSync(path,'utf8'),before);
+  }
 });
 
 test('another lane cannot claim an occupied slot, including across controller restarts', async t => {
