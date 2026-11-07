@@ -113,180 +113,6 @@ check or deadline changes. Next, reproduce this boundary in the real smoke
 without assuming that a temporary idle transport means maintenance is finished.
 
 
-The owner changed the acceptance rule on 6 November: functional rehearsal checks
-still fail, while cost-accounting problems are reported with named gaps in every
-mode. The [accounting-gap plan](superpowers/plans/2026-11-06-cost-accounting-gaps.md)
-sets out that change. It replaces the proposed retry, uncertain-read cap and
-maintenance-completion gate. Sales, uploads, stop, restore, SQLite and fiscal
-integrity, cleanup, request caps and deadlines remain required. An unknown figure
-stays unknown, and a run with gaps cannot replace a published cost figure.
-The request meter keeps independently paired billing rows when another phase or
-request class disagrees. Either unmatched hop makes its own row unknown; equal
-grand totals cannot hide different requests. A paired row also stays unknown
-when the two observations imply different billing, so matching byte counts
-cannot certify an uncertain price. Run `node --test
-scripts/cloud-cost/meter-billing-provenance.test.mjs` for these controls.
-The meter also records fixed accounting-gap labels without invalidating later
-observations. When request totals, grouped object bytes or storage-time integrals
-overflow a safe value, the affected figure becomes `null`; supported counts,
-billing rows and other storage classes
-remain available. Run `node --test
-scripts/cloud-cost/meter-accounting-gaps.test.mjs` for the numeric boundaries and
-fatal-error controls. The isolated stack copies the shared gap-label helper.
-The accounting assessor now reads original request, lifetime, mail, fiscal and
-remote records before any projection discards their billing or gap fields.
-Missing source coverage, mismatched rows and unknown billing prevent measurement
-publication; malformed records, private fields and accessors still refuse.
-Run `node --test scripts/cloud-cost/accounting-policy.test.mjs` for the original
-record checks and real loopback traffic. Worker and new-export admission use this
-assessment. Native put-only, unversioned,
-versioned and multipart storage histories
-also leave overflowing totals unknown while keeping supported object counts and
-storage-time bounds. The named overflow gap survives cleanup, so a later smaller
-total cannot erase missing accounting. Clock failures and foreign inventory still
-refuse. Run `node --test scripts/cloud-cost/storage-history-accounting.test.mjs
-scripts/cloud-cost/litestream-lifetimes.test.mjs
-scripts/cloud-cost/stream-histories.test.mjs
-scripts/cloud-cost/stream-versions.test.mjs
-scripts/cloud-cost/native-multipart.test.mjs` for the range and cleanup controls.
-These boundary tests use admitted sizes and independent loopback inventories;
-they do not upload giant objects or establish the lost-write restore proof.
-Matching partial request observations now stay unknown, with a named cutoff and
-unknown billing for the affected row. Independently supported rows keep their
-quantities. The assessor also derives that gap from original request outcomes
-when summary labels are missing. A forwarding transport without the optional
-stop ledger can collect a cutoff and continue later work; the caller still sees
-the transfer failure. Its first-event diagnostics remain available at the
-checkpoint. Deadlines, response limits, active-close refusal and malformed
-requests remain strict, including an incomplete next header while an earlier
-response is active. Run `node --test
-scripts/cloud-cost/request-cutoff-accounting.test.mjs
-scripts/cloud-cost/litestream-transfer-accounting.test.mjs` for these controls.
-Ordinary put-only, unversioned and versioned lifetime trackers now collect
-cut-off reads, writes and deletes as unknown accounting. A missing HTTP reply
-never supplies a commit time; independent inventory bounds retained bytes.
-The gap survives later inventories and prevents measurement eligibility.
-Their read-only restore views keep the same accounting policy while continuing
-to refuse mutations. Malformed completions, duplicate settlement, foreign
-inventory and invalid clocks still refuse. Run `node --test
-scripts/cloud-cost/lifetime-cutoff-accounting.test.mjs` for original-event and
-real interrupted-HTTP controls. These controls do not establish actual SQLite
-recovery or resolve missing history.
-Batch deletion and multipart lifetime trackers also collect cut-off replies as
-unknown accounting. Independent inventories determine retained objects, versions,
-markers and parts without treating a partial reply as a successful mutation.
-Multipart cutoffs use this policy even when full-reply resolution is disabled.
-The unknown label survives later verification; malformed complete replies, unsafe
-selections, foreign inventory and overlapping mutations still refuse. Run
-`node --test scripts/cloud-cost/native-unversioned-batches.test.mjs
-scripts/cloud-cost/stream-versions.test.mjs
-scripts/cloud-cost/ambiguous-multipart.test.mjs
-scripts/cloud-cost/native-multipart.test.mjs` for the bounds and real lost-reply
-controls. These controls check retained storage and owned HTTP collection; they
-do not prove SQLite recovery.
-The optional shutdown ledger now collects cut-off replies on either HTTP hop,
-before or after the stop, for every admitted storage operation. Its anonymous
-output keeps the actual observations and an unknown accounting label. The
-three-request stop bound, malformed-event refusals and explicit commit checks
-remain. Explicit upload refusals and socket errors without an active request
-also remain working failures. A ledger's presence does not prove a write
-committed: without a real commit witness, inventory supplies the earliest
-confirmed time. Run `node --test
-scripts/cloud-cost/stop-cutoff-accounting.test.mjs
-scripts/cloud-cost/lifetime-cutoff-accounting.test.mjs` for the cutoff, storage
-bounds and malformed-input controls. The retry diagnostic waits for collection;
-a separate invalid control still reports the original attempt and refuses.
-Missing shutdown issuance, admission or settlement records now keep an explicit
-unknown history gap through collection and the original meter. The shutdown
-subset retains actual observed counts, while overflowing grouped or combined
-byte totals become `null`; safe boundary values stay exact. Run `node --test
-scripts/cloud-cost/litestream-history-accounting.test.mjs` for missing-record,
-late-collection, numeric-boundary and malformed-output controls. These ledger
-controls do not prove actual SQLite recovery.
-When an admission callback is missing, the shutdown ledger now collects valid
-settlements without inventing the missing event. An observer arriving first
-also leaves a persistent history gap. Either admitted hop, or a settlement with
-no admission record, consumes the same three-request stop allowance, so missing
-telemetry cannot hide a fourth request. Conflicting phases, duplicate events,
-malformed inputs and invalid clocks still refuse. Run `node --test
-scripts/cloud-cost/litestream-event-history.test.mjs` for all ten storage
-operations and six real HTTP controls. These controls prove forwarding and
-collection, not SQLite recovery.
-The forwarding path now admits every valid late operation and retry within the
-same three-request stop bound. A missing earlier attempt leaves unknown history;
-only observed attempts are counted. A real late PUT response can still prove
-its storage commit. Repeated or decreasing attempts, changed targets or
-operations, contradictory phases and malformed controls still refuse. Run
-`node --test scripts/cloud-cost/litestream-admission-accounting.test.mjs
-scripts/cloud-cost/litestream-transport.test.mjs
-scripts/cloud-cost/litestream-pre-admission-put.test.mjs` for ledger, real
-forwarding, cap and commit controls. The writer-running stop-acknowledgement
-boundary remains covered independently of permission to admit a late PUT.
-Lifetime callbacks now collect when producer or admission records are missing.
-A real storage response can still bound a committed object, but it cannot
-invent a request event or confirm a different request's lifetime. Missing and
-unfinished history stays unknown after later callbacks. The same stop cap,
-clock, version, duplicate-completion and contradictory-response checks remain.
-Run `node --test scripts/cloud-cost/litestream-lifetime-history.test.mjs` for
-missing-callback controls and twelve real HTTP exchanges with independent
-storage inventories. These exchanges do not prove SQLite recovery.
-Unversioned single and batch mutations now forward after an earlier uncertain
-write or deletion. Inventory must still match a previously admitted possible
-size; a later successful operation excludes stale sizes. When a different
-operation hides an intermediate retained interval, the gap remains and the
-storage-time total stays `null`, even after clean cleanup. The private candidate
-set is bounded at 100,000 distinct possible sizes per key; active overlaps,
-malformed replies, duplicate completions and foreign inventory still refuse.
-Run `node --test scripts/cloud-cost/uncertain-forwarding.test.mjs` for candidate
-ownership, the memory bound and six real HTTP sequences. These controls do not
-prove SQLite recovery.
-Settled multipart uncertainty now permits later ordinary reads, writes and
-single or batch deletions. Independent inventory still checks retained objects
-and parts. A completed upload keeps its original request order when inventory
-finds it after later work; it cannot replace a newer acknowledged object.
-Unversioned completion also proceeds after an earlier uncertain ordinary write.
-Hidden intermediate storage time remains unknown, and acknowledged replacements
-release obsolete candidates. Run `node --test
-scripts/cloud-cost/multipart-ordinary-forwarding.test.mjs` for both storage modes,
-version ordering, candidate ownership and two real HTTP sequences. These checks
-do not prove SQLite recovery.
-Consecutive upload creation and part writes now continue after a lost reply.
-Each possible upload needs its own create request, and independent inventory
-checks every retained part. Repeated part writes preserve possible earlier sizes;
-an acknowledged replacement excludes them. An abort collects those parts while
-keeping hidden storage intervals unknown. The pending request journal and possible
-part records each have a 100,000-entry limit. Run `node --test
-scripts/cloud-cost/multipart-chains.test.mjs` for both storage modes, actual HTTP
-replacement and completion sequences, and the memory bounds. A completion can name
-a part whose reply was lost, including when several admitted sizes remain possible.
-Independent inventory must find an exact sum of owned part sizes; a value merely
-between those sums refuses. Distinct sums share the 100,000-entry history scale.
-A retained version also needs its own request and the original admission order;
-one ambiguous completion cannot explain two versions. Hidden storage time remains
-unknown. Multiple deferred completions for one unversioned key now keep separate
-transitions in admission order. A retained upload contributes no completed object;
-a later committed completion or ordinary mutation excludes an older current size.
-You can also continue work on the same upload after a lost completion or abort
-reply while inventory has not confirmed that the upload closed. Once independent
-inventory confirms its absence, later part writes refuse under the existing
-unknown-upload rule, just as after an acknowledged completion. Inventory treats
-repeated completions as alternatives for one object,
-and an abort leaves completion optional. A later acknowledged part or completion
-excludes obsolete terminal requests. Hidden storage time stays unknown. The same
-multipart test command checks these choices and four actual HTTP sequences that
-preserve a lost reply followed by the backend's 404 response. These controls do
-not establish SQLite recovery. The separate restore controls and original-source
-export checks below cover those boundaries.
-Independent inventory still rejects unsupported sizes and missing objects. The
-same test file includes two real HTTP completions whose replies are lost, with
-both callbacks collected. Further requests on the same upload after an uncertain
-completion or abort retain the same independent inventory checks. These HTTP
-controls do not prove SQLite recovery.
-A backend commit also survives an interrupted forwarding reply whose headers
-never arrived. The hop keeps its actual missing status and unknown accounting;
-a known status that contradicts the commit still refuses. Run `node --test
-scripts/cloud-cost/stop-cutoff-accounting.test.mjs` for the two-hop, version and
-stop-order controls.
 The real SQLite proof now runs official Litestream 0.5.17 against synthetic
 Waitron sales. After the writer and all covering writes stop, the negative
 control replaces stored objects with the captured one-sale recovery point and
@@ -297,116 +123,15 @@ both sales and passes SQLite and fiscal checks. Run the stack conformance cases
 `lostFinalWriteFailsFunctionalRestoreDespiteNonblockingAccounting` and
 `committedWriteWithCutoffReplyRestoresSuccessfully` for this controlled proof.
 The initial x86 run passes both cases; wider shared-consumer qualification remains.
-Stream checkpoints and final collection now permit settled reply loss while
-keeping unknown request and storage coverage. You can continue later owned work;
-a later successful request cannot erase an earlier accounting gap. Upload
-readiness still needs a complete successful reply, and a gap cannot hide failed
-client collection, foreign inventory, cancellation or a replaced scratch root.
-Run `node --test scripts/cloud-cost/stream-measurement.test.mjs
-scripts/cloud-cost/stream-checkpoint-diagnostics.test.mjs
-scripts/cloud-cost/replay-stream.test.mjs` for the loopback and generated-writer
-controls. The replay reaches real SQLite restore with a lost reply and still
-rejects missing sales, corruption and failed restore. These generated-writer
-checks are separate from the official-binary lost-write proof above.
-Administration cleanup now finishes with original unknown request or billing
-evidence when owned resources are independently collected. Equal grand totals
-cannot erase a disagreement between the meters. Safe individual observations
-whose retained byte-time total overflows return unknown bounds with a named gap.
-Actual delete, inventory, ownership and collection failures still refuse. Run
-`node --test scripts/cloud-cost/worker-storage-accounting.test.mjs` and the
-`worker-storage-conformance.test.mjs` matrix for the generated and real-storage
-controls. The original clean counter projection remains unchanged.
-Worker admission now carries original request, billing and storage observations
-through an explicit unknown-cost result. Separate completed-upload, SQLite
-restore and bucket-removal witnesses keep functional checks independent of the
-cost rows. The host still checks fiscal integrity, isolation and zero owned
-leftovers before returning that result; it includes no receipt. Nested getters
-and proxies refuse before their code runs. Run `node --test
-scripts/cloud-cost/stream-admission-gaps.test.mjs` for the boundary controls.
-The real Debian x86 `gappedWorkerCompletesRealReplayAndRetainsOriginalUnknownBilling`
-case restores three generated sales with fiscal verification and owned cleanup,
-retaining unknown administration billing. You can also finish the local
-`stream-receipt` stage without a receipt when original accounting is unknown.
-The stage preserves both meters and their supported rows after real replay,
-SQLite verification, fiscal checks, isolation and cleanup. Clock disagreement
-still refuses before the result returns. Run the `gappedLocalStageCompletesWithoutReceipt`
-and `localCommandRetainsUnknownBillingAndMeasuredRowsAfterOwnedCleanup` cases,
-plus `localReceiptRefusesClockJump`, in the same real-worker conformance file.
-Clean measured receipt assertions remain in `local-receipt.test.mjs`.
-Remote relay counters now keep missing observations, disagreements and aggregate
-overflow as unknown cost after successful forwarding and owned collection.
-An earlier disagreement survives equal final totals. Independent activity and
-completed socket lifecycles still enforce nonempty exchanges, traffic limits,
-deadlines and actual transport failures. API and browser journeys keep their
-action checks when those cost counts are missing. Run `node --test
-scripts/cloud-cost/remote-accounting.test.mjs
-scripts/cloud-cost/remote-journey-accounting.test.mjs
-scripts/cloud-cost/browser-accounting.test.mjs` for the loopback and caller
-controls. The genuine gateway and Chromium conformance files add missing-counter
-and mismatched-counter cases, retaining their original clean numeric and
-functional-refusal checks. These diagnostic snapshots cannot qualify as measured
-evidence in the original-record assessor.
-Mail delivery now keeps the mailer's result when its independent SMTP
-observations disagree or are absent. Unknown accounting retains both counts,
-per-action results and gap labels after owned collection; equal final totals
-cannot erase an earlier disagreement. Admission counts calls independently of
-capture telemetry, so losing an observation cannot reopen the attempt budget.
-Real SMTP refusals still reach the queue for retry, and protocol, identity,
-deadline, cancellation and cleanup failures still refuse. Run `node --test
-scripts/cloud-cost/mail.test.mjs` for these controls. The genuine Mailpit and
-PostgreSQL service-receipt case also checks three captured messages, one real
-refusal and its retry while deliberately changing one observer reply. No
-accounting disagreement adds a queue retry. The original-record assessor
-refuses measurement eligibility. Current service producers stay retired, and
-historical reconstruction stays available. The conformance result consumers use
-the closed unknown-cost result.
-The streamed-host, early timer-wake and sustained 207-sale conformance cases
-now read the closed unknown-cost result. They retain restored-sale counts,
-SQLite and fiscal validation, native-writer identity, phase timing, source
-preservation and owned cleanup. The sustained case checks both original meter
-discrepancies separately instead of relying on the former combined projection;
-unknown administration billing remains unknown. Run the two
-`isolatedHostStreamsTheCompleteGeneratedDayAndCollectsStorageBeforeReturning`
-and `isolatedHostCompletesTheIdleObservationAfterAnEarlyTimerWake` cases in
-`isolated-replay-conformance.test.mjs`, and the complete
-`paced-replay-conformance.test.mjs` case. Mail tests wait for the backend peer's
-bounded close event before asserting zero sockets, retaining that cleanup check.
-The shared native-smoke reader now accepts accounting gaps outside the after-stop
-subset and validates original restore and administration meters too. It keeps
-paired rows and actual totals intact, rejects false measured labels and hidden
-billing uncertainty, and retains the three-request stop bound. Run `node --test
-scripts/cloud-cost/litestream-smoke-checks.test.mjs
-scripts/cloud-cost/litestream-smoke-accounting-gaps.test.mjs` for those controls.
+
 Three genuine native-smoke cases each change one observer record while restoring
 both sales with SQLite and fiscal checks and removing owned resources. The
 replication case reported a byte discrepancy of 742 instead of -1 in
 [PR1050's cost job](https://github.com/waitron-io/waitron-cloud/actions/runs/42332288959/job/128281835882).
 Its cause stays in D530. Capture the synthetic proof before asserting its exact
 discrepancy; keep that assertion.
-The six surrounding native conformance cases now use the same original-record
-validation. Known byte counts and storage bounds keep their original checks;
-unknown figures require named gaps. All sale, restore, SQLite, fiscal, stop and
-owned-cleanup checks remain. The shared reader also validates original storage
-histories, refusing hidden unknown time, false measured labels and private fields.
-The three observer-perturbation cases preserve interruption details while changing
-only the selected byte observation. Storage, version, multipart and archive
-journey readers now validate both original meters without requiring every total
-to agree. Known inventory counts and time bounds keep their literal expectations;
-a missing bound needs unknown status and a named gap, while the other bound
-remains checked. The archive, unversioned and versioned multipart, and session
-administration cases each have an added observer-counter variant. They keep the
-actual storage operations, archive restore, privacy and owned-cleanup checks.
-Unverified multipart snapshots and duplicate-part inventories still refuse.
-Run the `genuineArchiveAnd`, `genuineNativeMultipartHistories`,
-`genuineVersionedNativeMultipart` and `genuineStreamMeasurement` cases in
-`stack-conformance.test.mjs` to check both ordinary and gapped observations.
-You now need original accounting records for a new `exportAggregate` call.
-The exporter checks required coverage and billing before comparing the emitted
-request rows, object rows and both counters with those records. Missing restore
-rows, omitted storage traffic, unknown billing and private accessors refuse.
-Historical `validateReceipt` readback still preserves discrepancies and unknowns.
-The local receipt producer supplies its original records; its clean fixture keeps
-all existing measured quantities. Real bucket-control billing remains unknown
+
+Real bucket-control billing remains unknown
 and cannot qualify merely because both transfer counters agree. Run `node --test
 scripts/cloud-cost/schema.test.mjs scripts/cloud-cost/local-receipt.test.mjs
 scripts/cloud-cost/meter.test.mjs scripts/cloud-cost/storage-meter.test.mjs` for
@@ -422,27 +147,8 @@ all 11 requests, the restored sale, privacy and owned cleanup.
 Your current generated stream runs also finish without a new measured receipt:
 setup and cleanup control billing stays unknown. The clean unit fixture supplies
 known billing to exercise the export contract; it does not qualify real billing.
-Historical archive and service receipt readers keep their existing contracts;
-the service reconstruction helper has no current producing command. A gapped
-result refuses each stream, service, API, browser and archive sample slot through
-joining, projection, calculator preparation and publication. All 15 public files
-retain their bytes in the disposable replacement attempts. Run `node --test
-scripts/cloud-cost/schema.test.mjs scripts/cloud-cost/local-receipt.test.mjs
-scripts/cloud-cost/archive-storage-receipt.test.mjs` and the
-`generatedArchiveStorage` conformance case for the producer boundaries.
-The saved-failure
-replay classifies three recorded interruptions as nonblocking and two older
-records as unknown; it proves no complete historical run. These results
-do not establish every historical cause or relax functional admission.
 
 ## Cloud backup box identity (D451)
-
-Cloud's backup verifier reads `WAITRON_NODE_ID`, and generated replay state writes
-only that identity with private permissions. Replay uses the matching Waitron
-release `b1b0f10952a59eb59f7358bd681a3cdc94d9b61c`, checks its bundle digest,
-and carries the pinned invoice font. Generated setup uses Waitron's ordinary
-preproduction allocation with standard, full and rectificative series. Sale totals,
-invoice counters, hashes, rollback, source identity and private-file checks remain.
 
 Generated recovery accepts only its own captured archive, drains and closes the
 source writer, authenticates with the stored node recovery key, and uses Waitron's
@@ -451,14 +157,6 @@ permissions and replaced destinations refuse. Clock observations are synthetic;
 the actual observer and admission checks still validate them, with the release's
 generated timestamp and no external clock request. This does not qualify production
 time sources.
-
-The gateway scenario reads the release's authenticated device profiles and themes.
-It requires nonempty profiles without retired canvas identifiers, a theme list and
-its `inUse` field. The private peer carries the real theme handler and its CSS token
-files. Authentication refusals, logout, reconnect, nine staff requests, six public
-requests, isolation and independent socket and byte accounting remain. Historical
-archive validation, measurements and browser qualification retain their original
-revisions and checks; current receipt builders require the matching replay release.
 
 **Still open under D79:** the genuine full-backup readback pairs both real servers,
 then ordinary native restore refuses `restore.hook_failed` for `fiscal-verifactu`
@@ -629,11 +327,13 @@ to find the original evidence before choosing a repair.
 
 ## Decisions and deliberate limits
 
-- Cost accounting estimates do not block development (owner, 2026-11-06).
-  Rehearsals still enforce functional checks, cleanup, request caps and deadlines.
-  Cut-off requests, meter disagreements, unreconciled totals and unknown billing
-  are reported as gaps in every mode. Unknown figures stay unknown and are never
-  exported as measured; a run with gaps cannot replace published cost figures.
+The owner changed the acceptance rule on 6 November: functional rehearsal checks
+still fail, while cost-accounting problems are reported with named gaps in every
+mode. The [accounting-gap plan](superpowers/plans/2026-11-06-cost-accounting-gaps.md)
+sets out that change. It replaces the proposed retry, uncertain-read cap and
+maintenance-completion gate. Sales, uploads, stop, restore, SQLite and fiscal
+integrity, cleanup, request caps and deadlines remain required. An unknown figure
+stays unknown, and a run with gaps cannot replace a published cost figure.
 
 - Email resend waits belong to each address and operation (owner, 2026-10-25).
   Correcting an address allows an immediate send; returning to it keeps its wait.
@@ -3640,28 +3340,6 @@ Production session behaviour and landed migrations are unchanged. Activity
 updates delayed by sixty seconds and changes to absolute session expiry remain
 outside this test's coverage, as they were before this repair.
 
-## Legacy remote guard fixture runtime (D530)
-
-The [PR1006 guard job](https://github.com/waitron-io/waitron-cloud/actions/runs/42195484677/job/127817764696)
-reaches all nine omission markers but exceeds its 180-second limit. The same
-wrapper failed in run 42144232244. A Debian profile identifies repeated schema
-work: 27 child runs create and drop 45 separately migrated schemas.
-
-The wrapper now prepares one database from the real migrations and gives each
-fixture its own database clone. Each clone still checks every migration digest,
-uses its own schema and data, restores schema-bound function settings after
-renaming, and drops only its owned database. Template close also reaps abandoned
-clones from its own full template identity while preserving other families. Other fixture
-callers keep the existing schema path. The real child refuses a changed migration
-digest and cleans the refused clone. All nine omissions retain their original
-before, omitted and restored assertions, along with the 180-second wrapper and
-30-second child limits. Template migration statements retain the existing eight-second
-limit. Real PostgreSQL checks verify clone isolation, migration-digest
-refusal, function resolution, removal of both clones and template, and cleanup
-after a caller exits. A scratch next migration verifies the complete manifest
-comparison without a fixed migration count. The focused Debian run completes
-the full wrapper within its unchanged deadline.
-
 ## Service-proof failure diagnostics (D530)
 
 The [first venue-proof attempt for PR381](https://github.com/waitron-io/waitron-cloud/actions/runs/41805521835/attempts/1)
@@ -3807,17 +3485,6 @@ CI interleaving, production-role behavior and mixed-version deployment remain
 unqualified.
 
 ## Registration expiry checks during lock waits (D580)
-
-The relay replay and installation session tests could expire their short-lived
-credentials before reaching the lock they needed to exercise. A controlled
-600-millisecond setup pause reproduces both CI failures on real PostgreSQL.
-Those tests now hold their authority clocks steady until they observe the real
-lock wait, then advance across the unchanged expiry boundary. Both ordinary and
-paused setup cases retain the rejection and unchanged-data assertions. The
-installation case also retains request freshness and no-revocation checks.
-Production clocks and authority checks are unchanged. This reproduces the fixture
-weakness; the original CI runners' pause durations were not captured. Current-head
-CI qualification remains required before landing.
 
 The existing lock-observation limits still apply. A separate failure-cleanup
 weakness is open: if installation lock observation times out, the test can skip
@@ -4258,34 +3925,6 @@ does not qualify production shutdown.
 
 
 ## Initial upload admitted after stop (D393)
-
-The smoke now waits for the startup snapshot, stored under level `0009`,
-before the final sale. An earlier level-zero upload can finish before that
-snapshot reaches the measuring transport. Readiness retains all forty
-half-second polls, the idle-transport check and the injected retry's completed
-reply. The stop boundary, two-second deadline and late-upload refusal remain.
-This establishes readiness for the initial snapshot; other native background
-work still relies on the existing stop refusals.
-The control socket now uses the container's temporary filesystem. On the Mac
-Docker fallback, all six genuine cases refused at control connection; an
-instrumented main control reported `ENOENT`. Moving the socket out of the
-host-shared state mount passes all six genuine cases on both the Mac and the
-Linux box. The database path and validated stop body remain the same.
-
-Run `node --test scripts/cloud-cost/litestream-smoke-commit.test.mjs` for the
-full-smoke regression. It holds the snapshot before HTTP admission while the
-earlier upload is visible. Its release timer is independent of inventory polls,
-and a paired case keeps the stored snapshot visible while holding its reply.
-Removing the snapshot barrier or the idle check fails the corresponding case.
-Removing the snapshot barrier reproduces the
-`after-stop-admission / post-stop-operation / put / initial` refusal; restoring
-it reconciles all four exchanges and restores both stand-in sales. No existing
-behavioral assertion is removed. A separate official macOS 0.5.17 run through
-the full smoke reproduces the same refusal with the old rule and restores both
-toy SQLite rows with the barrier. A stack captured while that controlled request
-is held identifies `DB.Snapshot`, called by `Store.monitorCompactionLevel`.
-This fixes startup preparation; it does not identify the historical request's
-native task or qualify production shutdown.
 
 [PR635's merge cost run](https://github.com/waitron-io/waitron-cloud/actions/runs/40634308325/job/122638015466)
 refused an initial PUT after a validated stop reply, with writer exit zero.
