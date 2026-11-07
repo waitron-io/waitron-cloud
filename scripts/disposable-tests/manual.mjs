@@ -9,7 +9,7 @@ import {withKernelLock} from './kernel-lock.mjs';
 import {runLocal} from './local.mjs';
 import {SSHTransport, runProcess, protectOutputStreams} from './transport.mjs';
 
-function refuseLegacy(state) {
+export function refuseLegacy(state) {
   for (const name of ['manual.lock','recovery.lock','ledger/lock']) {
     try { lstatSync(join(state,name)); }
     catch (error) { if (error.code==='ENOENT') continue; throw error; }
@@ -23,7 +23,7 @@ function privateDirectory(path) {
     (info.mode&0o077)===0,'Temporary state must be a private owned directory');
 }
 
-async function withTemporaryState(state,work) {
+export async function withTemporaryState(state,work) {
   const temporary=join(state,'tmp'),ledger=join(state,'ledger');
   try { privateDirectory(temporary); }
   catch(error) { if(error.code!=='ENOENT') throw error;mkdirSync(temporary,{mode:0o700}); }
@@ -64,7 +64,7 @@ async function withTemporaryState(state,work) {
   }
 }
 
-async function recoverState({leases,transport,signal=AbortSignal.timeout(120000)}) {
+export async function recoverState({leases,transport,signal=AbortSignal.timeout(120000)}) {
   const occupied=leases.inspect().slots.filter(slot=>slot.state!=='free');
   assert.ok(occupied.length<=1,'Automatic recovery supports one slot');
   const lease=occupied[0]?.lease;
@@ -78,14 +78,31 @@ async function recoverState({leases,transport,signal=AbortSignal.timeout(120000)
   return {code:0,cleanup:'absent',resourceId:lease.resourceId};
 }
 
-export async function reconcileManual({state,hostGeneration,transport,signal,deadline}) {
+export async function reconcileManual({state,hostGeneration,transport,signal,deadline,ci,api}) {
   protectOutputStreams();
   return withKernelLock(state,async()=>{
     refuseLegacy(state);
-    return withTemporaryState(state,()=>{
+    return withTemporaryState(state,async()=>{
       const leases=new LocalLeases(join(state,'ledger'),{hostGeneration,slots:1});
       const cleanup=AbortSignal.timeout(120000);
-      return recoverState({leases,transport,signal:signal?AbortSignal.any([signal,cleanup]):cleanup});
+      const result=await recoverState({leases,transport,signal:signal?AbortSignal.any([signal,cleanup]):cleanup});
+      const current=leases.inspect();
+      if(current.ciInvocation || current.orphanRunners?.length){
+        assert.ok(ci,'CI recovery requires the immutable App configuration');
+        const {GithubApp}=await import('./github-app.mjs');
+        const {cleanupRunners,recoverCanary,qualifyCanary}=await import('./ci-canary.mjs');
+        api??=new GithubApp(ci);
+        await cleanupRunners({leases,api,repository:ci.repository,signal:cleanup});
+        const invocation=await recoverCanary({api,leases,policy:ci,signal:cleanup});
+        if(invocation){
+          const run=await api.get(`/repos/${ci.repository}/actions/runs/${invocation.runId}`,{signal:cleanup});
+          if(run.status==='completed'){
+            await qualifyCanary({api,policy:ci,invocation,signal:cleanup});
+            leases.clearInvocation(invocation.nonce);
+          }
+        }
+      }
+      return result;
     });
   },{deadline,signal});
 }
@@ -102,7 +119,8 @@ export async function main(args) {
     assert.ok(argv.length>0 && argv[0] && argv.every(v=>!v.includes('\0')),'A literal command argument list is required');
   }
   const config=JSON.parse(readFileSync(configuration,'utf8'));
-  assert.deepEqual(Object.keys(config).sort(),['host','hostGeneration','mode','recipe','repository','state','version']);
+  if(config.ci!==undefined){const {validateCIConfig}=await import('./ci-canary.mjs');validateCIConfig(config);}
+  else assert.deepEqual(Object.keys(config).sort(),['host','hostGeneration','mode','recipe','repository','state','version']);
   assert.ok(config.version===2 && config.mode==='manual-one-slot','Only manual single-slot use is enabled');
   assert.ok(typeof config.state==='string' && isAbsolute(config.state),'State needs an absolute path');
   const cancellation=new AbortController();
@@ -115,7 +133,7 @@ export async function main(args) {
   try {
     const result=reconciling
       ? await reconcileManual({state:config.state,hostGeneration:config.hostGeneration,
-          transport:new SSHTransport({host:config.host,recipe:config.recipe}),signal:cancellation.signal,deadline})
+          transport:new SSHTransport({host:config.host,recipe:config.recipe}),signal:cancellation.signal,deadline,ci:config.ci})
       : await withKernelLock(config.state,async()=>{
       cancellation.signal.throwIfAborted();
       refuseLegacy(config.state);

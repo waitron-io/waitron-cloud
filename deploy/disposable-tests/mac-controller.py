@@ -15,7 +15,11 @@ def main(argv):
         args[1] = os.path.abspath(args[1])
     environment = {key: value for key, value in os.environ.items()
                    if key not in ('NODE_OPTIONS', 'NODE_PATH', 'PYTHONPATH', 'PYTHONHOME')}
-    script = Path(__file__).resolve().parents[2] / 'scripts/disposable-tests/manual.mjs'
+    entry = 'manual.mjs'
+    if args and args[0] == 'canary':
+        entry = 'ci-canary.mjs'
+        args = args[1:]
+    script = Path(__file__).resolve().parents[2] / 'scripts/disposable-tests' / entry
     os.chdir('/')
     os.execve(node, [node, str(script), configuration, *args], environment)
 

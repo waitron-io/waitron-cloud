@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import {ciIdentity,ciRequest,runnerName,orphanRunner,ciInvocation} from './ci-identity.mjs';
 import {createHash, randomUUID} from 'node:crypto';
 import {mkdirSync, lstatSync, readFileSync, openSync, writeFileSync, fsyncSync, closeSync, renameSync, unlinkSync} from 'node:fs';
 import {join, resolve} from 'node:path';
@@ -13,7 +14,13 @@ function requestIdentity(request) {
     request.argv.length > 0 && request.argv.length <= 256 &&
     request.argv.every(v => typeof v === 'string' && v.length <= 16384 && !v.includes('\0')) &&
     request.argv[0].length > 0, 'Invalid local request');
-  return {lane: request.lane, turn: request.turn, snapshot: request.snapshot, argv: [...request.argv]};
+  const identity={lane: request.lane, turn: request.turn, snapshot: request.snapshot, argv: [...request.argv]};
+  if (request.ci!==undefined) {
+    const ci=ciIdentity(request.ci),canonical=ciRequest(request.lane,ci);
+    assert.deepEqual(identity,{lane:canonical.lane,turn:canonical.turn,snapshot:canonical.snapshot,argv:canonical.argv},'CI request identity differs');
+    identity.ci=ci;
+  }
+  return identity;
 }
 
 // Callers hold the controller's kernel lock. Transactions are synchronous and
@@ -58,11 +65,18 @@ export class LocalLeases {
     for (const slot of state.slots.filter(s => s.state !== 'free')) {
       const lease = slot.lease;
       requestIdentity(lease);
+      if(lease.runnerId!==undefined) assert.ok(lease.ci && Number.isSafeInteger(lease.runnerId) && lease.runnerId>0,'Invalid bound CI runner');
       assert.ok(lease.hostGeneration === this.hostGeneration && lease.slot === slot.id &&
         lease.resourceId === `dt-${this.hostGeneration}-${slot.id}-${slot.generation}` &&
         Number.isSafeInteger(lease.createdAt) && lease.createdAt >= 0 &&
         Number.isSafeInteger(lease.deadline) && lease.deadline > lease.createdAt &&
         lease.deadline - lease.createdAt <= maxDuration, 'Invalid occupied lease');
+    }
+    if(state.ciInvocation!==undefined) ciInvocation(state.ciInvocation);
+    if(state.orphanRunners!==undefined) {
+      assert.ok(Array.isArray(state.orphanRunners) && state.orphanRunners.length<=32,'Invalid orphan runner list');
+      state.orphanRunners.forEach(orphanRunner);
+      assert.equal(new Set(state.orphanRunners.map(r=>r.runnerName)).size,state.orphanRunners.length,'Duplicate orphan runner');
     }
     const before=initialize?undefined:JSON.stringify(state);
     const now = this.now();
@@ -102,6 +116,7 @@ export class LocalLeases {
         if (slot.generation === prior.generation && ['reserved', 'running'].includes(slot.state)) return {code: 0, created: false, lease: slot.lease};
         return {code: 75, reason: 'turn-finished-or-quarantined'};
       }
+      if(identity.ci && (state.orphanRunners?.length??0)>=32) return {code:75,reason:'orphan-runners-full'};
       const slot = state.slots.find(s => s.state === 'free');
       if (!slot) return {code: 75, reason: 'capacity-busy'};
       // Retaining completed turn IDs prevents a delayed request recreating work.
@@ -134,8 +149,40 @@ export class LocalLeases {
         slot.state = 'quarantined';
         return false;
       }
+      if(lease.ci) {
+        const orphan={ci:lease.ci,runnerName:runnerName(lease.ci),runnerId:lease.runnerId??null};
+        state.orphanRunners??=[];
+        assert.ok(state.orphanRunners.length<32,'Orphan runner list full');
+        state.orphanRunners.push(orphan);
+      }
       slot.state = 'free'; slot.lease = null;
       return true;
+    });
+  }
+  bindRunner(lease,runnerId) {
+    assert.ok(lease.ci && Number.isSafeInteger(runnerId) && runnerId>0,'Invalid CI runner binding');
+    const result=this.transaction(state=>{
+      const slot=state.slots[lease.slot];
+      if(!this.owns(slot,lease))return false;
+      assert.ok(slot.lease.runnerId===undefined || slot.lease.runnerId===runnerId,'CI runner already bound');
+      slot.lease.runnerId=runnerId;return slot.lease;
+    });
+    if(result)Object.assign(lease,result);
+    return Boolean(result);
+  }
+  setInvocation(value) {
+    ciInvocation(value);
+    return this.transaction(state=>{state.ciInvocation=value;return value;});
+  }
+  clearInvocation(nonce) {
+    return this.transaction(state=>{if(state.ciInvocation?.nonce!==nonce)return false;delete state.ciInvocation;return true;});
+  }
+  forgetRunner(orphan) {
+    orphanRunner(orphan);
+    return this.transaction(state=>{
+      const index=(state.orphanRunners??[]).findIndex(value=>digest(value)===digest(orphan));
+      if(index<0) return false;
+      state.orphanRunners.splice(index,1);return true;
     });
   }
   inspect() { return this.transaction(state => state); }

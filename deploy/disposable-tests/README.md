@@ -170,3 +170,26 @@ When replacing a legacy manual release with the kernel-lock controller, follow t
 3. Write the immutable configuration with a different private state path and a new `hostGeneration`, then run `--bootstrap`. Use the same recipe in the host service and Mac configuration.
 4. Switch the shared helper to the new immutable controller/configuration. Confirm that no old helper process remains. Keep the retired state gated permanently; never point the replacement at it.
 5. Only then load the rendered launchd agent with explicit HOME and no log file. Qualify its real SSH identity, interrupted-turn cleanup and a fresh successor. For a newly enrolled host, coordinate its reboot with the watcher. Measured capacity and GitHub activation retain their later gates.
+
+## Run the first CI canary
+
+You can qualify the separate `disposable-ci-canary.yml` workflow before changing ordinary CI. Its default route is GitHub-hosted. Server routing still needs the reviewed controller and matching host recipe to be published together; checking out these files does not activate runners.
+
+Extend the immutable version-2 configuration with `ci`: `repository`, numeric `repositoryId` and `workflowId`, `workflowPath` (`.github/workflows/disposable-ci-canary.yml`), the reviewed workflow's SHA256 as `workflowDigest`, and absolute private Mac paths `appEnv` and `appKey`. The App environment file has only `GITHUB_APP_ID` and `GITHUB_APP_INSTALLATION_ID`. Keep both files owned by the controller user with mode 0600. The App key and installation tokens stay on the Mac. The supplied App needs repository administration, Actions and Actions variables write permissions.
+
+From the frozen controller, run one exact source commit:
+
+```sh
+python3 -I -B /PATH/TO/CONTROLLER/deploy/disposable-tests/mac-controller.py \
+  /ABSOLUTE/PATH/TO/node /PATH/TO/IMMUTABLE/config.json canary I SOURCE_SHA
+```
+
+Use a full 40-character commit ID. Add `--hosted` to select the identical source on GitHub explicitly. The controller checks contributor approval and the reviewed workflow definition before dispatch, persists its invocation before the request, and reconciles a lost reply by its unique run name. A server unavailable before dispatch selects hosted. An occupied slot returns 75. A failed or interrupted server job is cancelled only after its current attempt is rechecked, then the same source is dispatched to hosted. A changed attempt refuses cancellation. GitHub's run-level cancellation cannot eliminate a concurrent manual-rerun race.
+
+The final JSON names the actual route, run, attempt, source and tree, workflow commit and both jobs. Qualification requires successful typecheck and hosted summary jobs, the actual runner assignment and the source/tree line in the typecheck log. The server runs Debian 13 as root without a dependency cache; hosted runs Ubuntu. The runner archive is version 2.338.2 with a SHA256 pin in `runner-tools.sh`. Run `node --test scripts/disposable-tests/ci-admission.test.mjs scripts/disposable-tests/ci-runtime.test.mjs scripts/disposable-tests/ci-dispatch.test.mjs` for the portable admission and failure controls. These checks do not establish a real GitHub assignment or cold private-package install.
+
+CI preparation sends only the public bound request. It installs the pinned runner without a source archive or Mac package download. Just-in-time registration, which creates a runner for one job, is sent through stdin into the guest listener's environment. GitHub's listener consumes that environment value before starting job steps. Guest root and initial process environments can expose its temporary inputs until destruction. Labels route jobs; they cannot prevent another approved repository workflow from stealing a runner. Retain the accepted public-repository risk from the design.
+
+Background `--once` destroys and independently inspects the recorded guest before removing its GitHub runner. It retains unresolved runner removal in the existing ledger, separately from capacity. A GitHub outage therefore leaves a verified empty slot available for manual work. Unknown guest absence keeps the slot closed. The orphan list is bounded at 32; new CI registrations refuse when full. A lost registration response is reconciled by the saved runner name without minting again. Keep automatic recovery configured with the same immutable App paths. When the Mac is down, queued work can wait for GitHub's 24-hour limit; no separate cancellation service exists.
+
+Qualify one real server job and same-source hosted fallback, then move ordinary pull-request typechecking through the same path. Multiple slots, capacity measurements, ordinary routing and permanent-host migration remain open.

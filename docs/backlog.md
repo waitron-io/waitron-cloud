@@ -4,7 +4,7 @@
 
 The owner-approved [design](superpowers/specs/2026-11-06-disposable-test-server-design.md) and [plan](superpowers/plans/2026-11-06-disposable-test-server.md) govern the bridge work. The coupled manual slot, automatic recovery and coordinated restart checks are [qualified on the private bridge](https://github.com/waitron-io/waitron-cloud/pull/1061#issuecomment-6706129609).
 
-Build and qualify the [first Cloud CI canary and hosted fallback](superpowers/plans/2026-11-07-disposable-ci-canary.md) before multiple-slot capacity. The scoped App handoff is supplied. Recheck contributor approval and retain the accepted public-repository scheduling limits; the watcher waived a returning-contributor drill for the canary. After the server canary and hosted fallback pass, move ordinary pull-request typechecking through the same path before capacity work. Then freeze transitive guest packages, measure capacity and reproduce the permanent host. D570’s EC2 proof and D591’s selection work stay separate.
+Publish the matching controller/host recipe and qualify the implemented [first Cloud CI canary and hosted fallback](superpowers/plans/2026-11-07-disposable-ci-canary.md) before multiple-slot capacity. The scoped App handoff is supplied. Recheck contributor approval and retain the accepted public-repository scheduling limits; the watcher waived a returning-contributor drill for the canary. After the server canary and hosted fallback pass, move ordinary pull-request typechecking through the same path before capacity work. Then freeze transitive guest packages, measure capacity and reproduce the permanent host. D570’s EC2 proof and D591’s selection work stay separate.
 
 ## Keep the private shared UI release current (D579)
 

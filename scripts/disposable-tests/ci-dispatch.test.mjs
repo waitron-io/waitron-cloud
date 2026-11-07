@@ -1,0 +1,39 @@
+import assert from 'node:assert/strict';
+import {test} from 'node:test';
+import {mkdtempSync,rmSync} from 'node:fs';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
+import {createHash} from 'node:crypto';
+import {LocalLeases} from './leases.mjs';
+const workflow='reviewed bytes',sourceSha='3'.repeat(40),workflowSha='1'.repeat(40);
+const policy={repository:'fixture/cloud',repositoryId:123,workflowId:456,workflowPath:'.github/workflows/disposable-ci-canary.yml',workflowDigest:createHash('sha256').update(workflow).digest('hex')};
+function setup(t){const root=mkdtempSync(join(tmpdir(),'ci-dispatch-'));t.after(()=>rmSync(root,{recursive:true,force:true}));
+ return new LocalLeases(join(root,'ledger'),{hostGeneration:'fixture',slots:1,bootstrap:true});}
+test('lost dispatch reply is reconciled by persisted nonce without a second dispatch',async t=>{
+ const {dispatchCanary}=await import('./ci-canary.mjs');const leases=setup(t);let calls=0,record;
+ const api={post:async(path,body)=>{calls++;record=leases.inspect().ciInvocation;assert.equal(body.inputs.nonce,record.nonce);throw new Error('lost response');},
+ get:async()=>({total_count:1,workflow_runs:[{id:789,run_attempt:1,workflow_id:456,head_sha:workflowSha,event:'workflow_dispatch',display_title:'disposable-'+record.nonce}]})};
+ const result=await dispatchCanary({api,leases,policy,sourceSha,workflowSha,route:'server',wait:async()=>{}});
+ assert.equal(calls,1);assert.equal(result.runId,789);assert.equal(leases.inspect().ciInvocation.runId,789);
+});
+test('server unavailable before dispatch chooses hosted and never asks for a runner',async t=>{
+ const {startCanary}=await import('./ci-canary.mjs');const leases=setup(t);let sent;
+ const api={get:async path=>path.includes('fork-pr')?{approval_policy:'all_external_contributors'}:
+  path.includes('/commits/')?{sha:sourceSha,commit:{tree:{sha:'4'.repeat(40)}}}:
+  path.includes('/contents/')?{content:Buffer.from(workflow).toString('base64'),encoding:'base64'}:
+  {total_count:1,workflow_runs:[{id:789,run_attempt:1,workflow_id:456,head_sha:workflowSha,event:'workflow_dispatch',display_title:'disposable-'+leases.inspect().ciInvocation.nonce}]},
+ post:async(path,body)=>{sent=body;}};
+ const result=await startCanary({api,leases,policy,sourceSha,workflowSha,transport:{healthy:async()=>false},wait:async()=>{}});
+ assert.equal(sent.inputs.route,'hosted');assert.equal(result.route,'hosted');assert.equal(leases.inspect().slots[0].state,'free');
+});
+
+test('recovery of a recorded server invocation cancels that attempt and dispatches the same source hosted',async t=>{
+ const {recoverCanary}=await import('./ci-canary.mjs');const leases=setup(t);
+ const old={nonce:'a'.repeat(32),sourceSha,workflowSha,route:'server',createdAt:Date.now(),runId:789,attempt:1};leases.setInvocation(old);
+ let cancelled=false,newNonce,dispatched;
+ const api={get:async path=>path.includes('/workflows/')?{workflow_runs:[{id:790,run_attempt:1,workflow_id:456,head_sha:workflowSha,event:'workflow_dispatch',display_title:'disposable-'+newNonce}]}:
+  {id:789,run_attempt:1,workflow_id:456,display_title:'disposable-'+old.nonce,status:cancelled?'completed':'queued'},
+ post:async(path,body)=>{if(path.endsWith('/cancel'))cancelled=true;else{dispatched=body;newNonce=body.inputs.nonce;}}};
+ const result=await recoverCanary({api,leases,policy,wait:async()=>{}});
+ assert.equal(cancelled,true);assert.equal(dispatched.inputs.source_sha,sourceSha);assert.equal(dispatched.inputs.route,'hosted');assert.equal(result.runId,790);
+});
