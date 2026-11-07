@@ -131,3 +131,22 @@ test('service admission uses the enrolled level and fails closed in the wrong mo
   await assert.rejects(transaction(f.pool,c=>f.api.requireVenueService(c,f.venues[0],'continuous_backup','production')),/invalid_plan_mode/);
  }finally{await f.close();}
 });
+
+test('caller-owned permission transition keeps trial enrolment, rollback and replay on the supplied client',async()=>{
+ const f=await fixture(),client=await f.pool.connect();try{
+  const before=await snapshot(f),e=event(),command={type:'start_trial',venueId:f.venues[0],level:'connected',on:f.today};
+  await assert.rejects(f.store.transitionOn(client,f.scope,e,command),{code:'invalid_billing_input'});
+  assert.deepEqual(await snapshot(f),before);
+  await client.query('BEGIN');
+  await f.store.transitionOn(client,f.scope,e,command);
+  const trial=(await client.query('SELECT level,started_on::text,ends_on::text FROM billing_trials WHERE venue_id=$1',[f.venues[0]])).rows[0];
+  assert.deepEqual(trial,{level:'connected',started_on:f.today,ends_on:dayOffset(f.today,30)});
+  assert.equal((await client.query('SELECT count(*)::int AS count FROM billing_service_authority WHERE venue_id=$1',[f.venues[0]])).rows[0].count,1);
+  assert.equal((await f.peer.query('SELECT count(*)::int AS count FROM billing_service_authority WHERE venue_id=$1',[f.venues[0]])).rows[0].count,0);
+  await client.query('ROLLBACK');assert.deepEqual(await snapshot(f),before);
+  await client.query('BEGIN');
+  const applied=await f.store.transitionOn(client,f.scope,e,command);await client.query('COMMIT');
+  const committed=await snapshot(f);
+  assert.deepEqual(await f.store.transition(f.scope,e,command),applied);assert.deepEqual(await snapshot(f),committed);
+ }finally{await client.query('ROLLBACK');client.release();await f.close();}
+});
