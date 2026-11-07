@@ -9,6 +9,8 @@ import { DatabaseSync } from 'node:sqlite';
 import { openReplay } from '../waitron-adapter.mjs';
 import { runIsolatedReplay } from '../isolated-replay.mjs';
 import { withReplayDiagnostics } from './replay-diagnostics.mjs';
+import { REPLAY_REVISION } from '../replay-release.mjs';
+import { exportStorageObservation } from '../../ci-nightly-storage.mjs';
 
 const prepared = JSON.parse(readFileSync(process.env.COST_SYNTHETIC_CONFIG, 'utf8'));
 const stack = JSON.parse(readFileSync(process.env.COST_STACK_FIXTURE, 'utf8'));
@@ -92,4 +94,10 @@ test('pacedReplayRestoresEverySaleWithValidStructureAfterSustainedWrites', async
   assert.equal(existsSync(join(root, 'isolated-replay')), false);
   assert.equal(docker(['ps', '-aq', '--filter', 'label=io.waitron.cloud-cost.owner=' + token]), '');
   assert.equal(docker(['network', 'ls', '-q', '--filter', 'label=io.waitron.cloud-cost.owner=' + token]), '');
+  exportStorageObservation({output: process.env.CLOUD_NIGHTLY_STORAGE_OUTPUT,
+    stream: result.admission.stream,
+    settings: {workload: 'paced-207-v1', sales: 207, cadenceFactor: 100,
+      startupSeconds: 2, idleSeconds: 2, replayWindowSeconds: 120, streamWindowSeconds: 150},
+    runtime: {waitron: REPLAY_REVISION, litestream: result.admission.stream.native.version,
+      node: process.version, platform: process.platform, arch: process.arch}, diagnostic: text => t.diagnostic(text)});
 });
