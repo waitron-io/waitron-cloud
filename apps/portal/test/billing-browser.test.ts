@@ -61,7 +61,7 @@ for(const status of [403,503])test(`unavailable trial chooser ${status} adds no 
  }finally{await browser.close();}
 });
 
-for(const hint of [undefined,false,'true'])test(`ordinary or malformed discovery ${String(hint)} never requests billing, including activity`,async()=>{
+for(const hint of [undefined,false,'true'])test(`ordinary or malformed discovery ${JSON.stringify(hint)} never requests billing, including activity`,async()=>{
  const browser=await chromium.launch({headless:true});
  try{
   const page=await browser.newPage();page.setDefaultTimeout(4000);let reads=0,activities=0;
