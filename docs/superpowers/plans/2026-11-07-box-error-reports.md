@@ -1,0 +1,27 @@
+# Box error reports implementation plan
+
+D601, lane K, 2026-11-07 12:55. Implement [monitoring design §10](../specs/2026-10-24-cloud-monitoring-alerting-status-design.md#10-error-reports-from-boxes), owner-approved 2026-10-24: “Should be opt in”. Cloud receiving only; registered free installations qualify. Driver-supplied Waitron A1048 evidence says no sender exists; named-detail masking cannot protect free text. No Waitron edits, consent setting, live reports, AWS/provider operations or production deployment. Use signed synthetic fixtures.
+
+## Interfaces and comparison
+
+Add POST `/api/installations/error-report` → `{accepted:true}` and `/api/installations/release-held` → `{version,held}` using existing signed envelopes and corresponding MachineActions. Read body: `{version}`. Report body has exactly `{code,source,version,time,count,logs}`; no venue name. Count is incremental, integer 1–1,000,000; time is integer Unix milliseconds, 0 through server-now+60,000. Version is canonical stable X.Y.Z, numeric components 0–2,147,483,647 without leading zeros; reject prefixes, prereleases and build suffixes. Add prerelease support only when needed.
+
+Codes match `[A-Z][A-Z0-9_]{0,63}`. Sources, 1–160 characters, are relative slash-separated code identifiers with optional `#function`; allow ASCII letters/digits/underscore/dot/dollar/hyphen, forbid empty/dot/dot-dot segments, URLs, colons, backslashes and absolute paths. Logs: 0–8 objects, exactly `{level,code,source,text}`; level is `error|warn|info`, code/source follow those rules, text equals `[masked]`. Reject unknown fields at every depth, duplicate keys, raw strings and details. Arbitrary free-text masking is unverifiable; structural entries retain code/frame references only. Keep signed body ≤4,096 bytes and existing envelope limits.
+
+Within credential-derived environment, predecessor is the greatest observed numeric version below the requested version. First version establishes baseline; unobserved versions return false. Group by installation/error `(code,source)`/version, summing bigint counts, retaining first/last time and one bounded log sample. Let C sum error counts across installations and N count all distinct installations reporting that version. With an observed predecessor, hold if any error is absent there or satisfies C≥5 and C/N≥2×predecessor C/N. Doubling plus five avoids small-count noise. This measures reporting bias, not true fleet incidence or exposure. Compute from committed groups in one read snapshot; later predecessor reports can change held, without sticky state.
+
+## Build in three behavioral TDD steps
+
+For each step, write assertions first, observe the expected failure, implement minimally, rerun successfully. Weaken no existing checks.
+
+1. **Persistence/comparison:** add `packages/registration/src/box-error-reports.ts`, export through `src/index.ts`; append `migrations/052_box_error_reports.sql` and `src/migrate.ts` manifest (recheck slot). Create `installation_error_groups`, primary key `(installation_id,code,source,version)`. Reuse `installation_operations` identity/digest convention; atomically record acknowledgement and grouped increment under installation lock. Identical concurrent retries count once; changed body/action conflicts. Add `test/box-error-reports.test.ts`: retry/concurrency, grouping, numeric predecessor, equality, threshold boundaries, baseline, environment separation and late order. Update all dependent current-manifest/count pins, including `schema-compatibility.test.ts`, `registration.test.ts`, migration tests, translation upgrade tests and `fixtures/allowance-schema.ts`; retain historical indices/digests and old-release receipt counts.
+
+2. **Routes/security:** add `packages/account-http/src/box-error-reports.ts`, wire `app.ts` before installation fallback. Trace every MachineAction/proof consumer before extending union/parser in `installation-proof.ts`. Reuse preliminary authentication, then current key/proof/lease binding and revoked/superseded checks under installation row lock; recheck time after waits. No paid gate. Keep `request.ts` bounds and shared IP/key limits. Add `test/box-error-reports.test.ts`: real routes/PostgreSQL, step-1 hold cases, free installation, forged/expired/wrong-action/origin/lease, revocation races, retries, malicious details/extra fields/raw strings, bounds/rates, and response containing held without other installation data.
+
+3. **Verify/deliver:** update `docs/backlog.md` launch item 2 and affected guides. Focused commands: `pnpm typecheck`; `node scripts/test-postgres.mjs exec pnpm --dir packages/registration exec node --test test/box-error-reports.test.ts test/installation-proof.test.ts test/schema-compatibility.test.ts`; `node scripts/test-postgres.mjs exec pnpm --dir packages/account-http exec node --test test/box-error-reports.test.ts`. Read test counts. Before build, Claude reads this plan through `~/workspace/tools/claude-seat.sh review-branch`. Finish one signed-off PR through `finish-branch`, Claude whole-branch run-it review with one-time guard-omission probes (authentication, revocation, deduplication, privacy, threshold), no permanent self-mutation tests; inspect every current-head CI job. Land when authorised and inspect exact merge-commit CI.
+
+- Paging: out of scope.
+- Investigator: out of scope.
+- Release waves: out of scope.
+- Problem-report form: out of scope.
+- Waitron opt-in/sender/offline queue/updater: out of scope.
