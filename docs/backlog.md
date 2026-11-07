@@ -670,14 +670,14 @@ order. Remote access matters most because Waitron's customer-facing features wai
    The [revised P3 plan](superpowers/plans/2026-10-22-cloud-global-country-split.md)
    records the boundary and coordinated follow-ups; this lifecycle is not built or approved.
 6. **Support and the operator console.** The [D609 proposed draft](superpowers/specs/2026-11-07-cloud-operator-console-support-design.md)
-   awaits Claude read and owner approval. D603 #1079 supplies the received problem-report
-   receiver and grouped local list; the [customer audit](security-audit.md) and
+   has had an initial Claude read; revised choices await owner approval. D603 #1079
+   supplies the problem-report receiver and grouped local list; the [customer audit](security-audit.md) and
    [time-limited grant primitive](temporary-support-grants.md) also exist. The operator
    console, customer grant UI, action catalogue and full staff activity history remain
    unbuilt. The draft proposes country-local access and one-hour, venue-only diagnostic
-   grants, subject to independent operator authority and customer agreement. Owner
-   decisions on the defaults and exact initial diagnostic or repair actions remain
-   outstanding. Asking for help is a received report, not a help desk or tickets.
+   grants using the existing redacted diagnostic, started by the customer and subject to
+   independent operator authority. Owner decisions on the defaults and exact initial
+   diagnostic or repair actions remain outstanding. Asking for help is a received report, not a help desk or tickets.
 
 Production email (D102: bounces and complaints) is already tracked and is not repeated here.
 
