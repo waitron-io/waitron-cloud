@@ -21,3 +21,4 @@ import './disposable-tests/ci-dispatch.test.mjs';
 import './disposable-tests/ci-entry.test.mjs';
 import './disposable-tests/ci-transport.test.mjs';
 import './disposable-tests/github-app.test.mjs';
+import './disposable-tests/ci-ordinary.test.mjs';

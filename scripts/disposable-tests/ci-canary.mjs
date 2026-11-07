@@ -3,6 +3,97 @@ import {createHash} from 'node:crypto';
 import {setTimeout as delay} from 'node:timers/promises';
 import {ciIdentity,routingLabel} from './ci-identity.mjs';
 
+export function admitOrdinary(policy,approvedHead,{repository,run,job,workflow,source,pull}){
+ assert.equal(policy.workflowPath,'.github/workflows/ci.yml');
+ assert.ok(repository.id===policy.repositoryId && repository.full_name===policy.repository,'Foreign CI repository');
+ assert.ok(run.repository?.id===policy.repositoryId && run.head_repository?.id===policy.repositoryId &&
+  run.workflow_id===policy.workflowId && run.path===policy.workflowPath && run.event==='pull_request' &&
+  run.run_attempt===1 && run.head_sha===approvedHead && ['queued','in_progress'].includes(run.status),'Unapproved ordinary CI run');
+ assert.ok(run.pull_requests?.length===1 && run.pull_requests[0].number===pull.number && pull.state==='open' &&
+  pull.head?.sha===approvedHead && pull.head.repo?.id===policy.repositoryId && pull.base?.repo?.id===policy.repositoryId,'Unapproved ordinary PR head');
+ assert.equal(createHash('sha256').update(workflow).digest('hex'),policy.workflowDigest,'CI workflow definition changed');
+ assert.equal(source.sha,approvedHead,'CI source commit differs');
+ const ci=ciIdentity({repositoryId:repository.id,workflowId:run.workflow_id,workflowPath:run.path,
+  workflowSha:run.head_sha,workflowDigest:policy.workflowDigest,event:run.event,sourceSha:source.sha,sourceTree:source.commit.tree.sha,
+  runId:run.id,attempt:run.run_attempt,jobId:job.id,jobKey:'typecheck'});
+ assert.ok(job.run_id===ci.runId && job.run_attempt===ci.attempt && job.head_sha===ci.workflowSha &&
+  job.name==='typecheck' && job.status==='queued' && !job.runner_id && Array.isArray(job.labels) &&
+  job.labels.length===2 && job.labels.includes('self-hosted') && job.labels.includes(routingLabel(ci)),'Foreign or already assigned ordinary CI job');
+ return ci;
+}
+const modePath=policy=>`/repos/${policy.repository}/actions/variables/DISPOSABLE_TESTS_MODE`;
+export async function routingMode({api,policy,signal}){
+ try{return (await api.get(modePath(policy),{signal})).value==='server'?'server':'hosted';}
+ catch(error){if(error.status===404)return 'hosted';throw error;}
+}
+export async function setRoutingMode({api,policy,mode,signal}){
+ assert.ok(['server','hosted'].includes(mode),'Invalid routing mode');
+ let present=true;try{await api.get(modePath(policy),{signal});}catch(error){if(error.status!==404)throw error;present=false;}
+ if(present)await api.patch(modePath(policy),{name:'DISPOSABLE_TESTS_MODE',value:mode},{signal});
+ else await api.post(`/repos/${policy.repository}/actions/variables`,{name:'DISPOSABLE_TESTS_MODE',value:mode},{signal});
+ assert.equal((await api.get(modePath(policy),{signal})).value,mode,'Routing mode readback differs');
+ return mode;
+}
+export async function fallbackOrdinary({api,policy,ci,signal,wait=delay}){
+ const path=`/repos/${policy.repository}/actions/runs/${ci.runId}`;
+ const check=run=>assert.ok(run.id===ci.runId && run.workflow_id===ci.workflowId && run.head_sha===ci.workflowSha &&
+  run.repository?.id===ci.repositoryId && run.head_repository?.id===ci.repositoryId,'Ordinary fallback identity differs');
+ let run=await api.get(path,{signal});check(run);
+ const job=await api.get(`/repos/${policy.repository}/actions/jobs/${ci.jobId}`,{signal});
+ assert.ok(job.id===ci.jobId && job.run_id===ci.runId && job.run_attempt===ci.attempt && job.head_sha===ci.workflowSha,'Ordinary fallback job differs');
+ if(job.status==='completed')return {retry:false};
+ assert.equal(run.run_attempt,ci.attempt,'Ordinary fallback attempt differs');
+ await setRoutingMode({api,policy,mode:'hosted',signal});
+ await cancelCIJob({api,repository:policy.repository,ci,signal,wait});
+ run=await api.get(path,{signal});check(run);
+ assert.equal(run.run_attempt,ci.attempt,'Ordinary fallback attempt changed before retry');
+ assert.equal(run.status,'completed','Ordinary fallback cancellation is unfinished');
+ await api.post(path+'/rerun',undefined,{signal});
+ return {retry:true,runId:ci.runId,previousAttempt:ci.attempt,sourceSha:ci.sourceSha??ci.workflowSha};
+}
+export async function findOrdinary({api,policy,approvedHead,runId,signal}){
+ assert.match(approvedHead,/^[a-f0-9]{40}$/);
+ assert.ok(Number.isSafeInteger(runId) && runId>0,'Invalid ordinary run ID');
+ assert.equal((await api.get(`/repos/${policy.repository}/actions/permissions/fork-pr-contributor-approval`,{signal})).approval_policy,
+  'all_external_contributors','External contributor approval is not enabled');
+ const base=`/repos/${policy.repository}`,run=await api.get(`${base}/actions/runs/${runId}`,{signal});
+ assert.ok(run.id===runId && run.head_sha===approvedHead && run.run_attempt===1 && run.event==='pull_request' &&
+  run.repository?.id===policy.repositoryId && run.head_repository?.id===policy.repositoryId && run.workflow_id===policy.workflowId &&
+  run.path===policy.workflowPath && ['queued','in_progress'].includes(run.status),'Unapproved ordinary CI run');
+ assert.equal(run.pull_requests?.length,1,'Ordinary run needs one PR');
+ const inventory=await api.get(`${base}/actions/runs/${runId}/attempts/1/jobs?per_page=100`,{signal});
+ assert.ok(Number.isSafeInteger(inventory.total_count) && inventory.total_count<=100 && inventory.jobs.length===inventory.total_count,
+  'Incomplete ordinary CI job inventory');
+ const candidates=inventory.jobs.filter(job=>job.name==='typecheck');
+ assert.ok(candidates.length<=1,'Ambiguous ordinary typecheck job');
+ if(!candidates.length)return null;
+ const [repository,blob,source,pull]=await Promise.all([
+  api.get(base,{signal}),api.get(`${base}/contents/${policy.workflowPath}?ref=${run.head_sha}`,{signal}),
+  api.get(`${base}/commits/${approvedHead}`,{signal}),api.get(`${base}/pulls/${run.pull_requests[0].number}`,{signal})]);
+ assert.equal(blob.encoding,'base64','Invalid workflow blob encoding');
+ return admitOrdinary(policy,approvedHead,{repository,run,job:candidates[0],workflow:Buffer.from(blob.content,'base64').toString(),source,pull});
+}
+export async function executeOrdinary({api,policy,leases,ci,lane,transport,signal}){
+ assert.ok(!leases.inspect().ciInvocation && leases.inspect().slots.every(slot=>slot.state==='free'),'CI capacity is occupied');
+ assert.equal(await routingMode({api,policy,signal}),'server','Ordinary CI server admission is closed');
+ const {randomBytes}=await import('node:crypto');
+ const invocation={nonce:randomBytes(16).toString('hex'),sourceSha:ci.sourceSha,workflowSha:ci.workflowSha,
+  route:'server',createdAt:Date.now(),runId:ci.runId,attempt:ci.attempt,jobId:ci.jobId};
+ leases.setInvocation(invocation);
+ try{
+  const health=signal?AbortSignal.any([signal,AbortSignal.timeout(7500)]):AbortSignal.timeout(7500);
+  assert.equal(await transport.healthy({signal:health}),true,'CI server unavailable');
+  assert.equal(await routingMode({api,policy,signal}),'server','Ordinary CI server admission closed during health check');
+  const result=await runCI({api,leases,transport,repository:policy.repository,lane,ci,signal});
+  assert.ok(result.code===0 && result.cleanup==='absent' && !result.runnerCleanup,result.error??'Ordinary server job did not qualify');
+  leases.clearInvocation(invocation.nonce);return result;
+ }catch(error){
+  assert.ok(leases.inspect().slots.every(slot=>slot.state==='free'),`Ordinary CI cleanup remains uncertain: ${error.message}`);
+  const retry=await fallbackOrdinary({api,policy,ci,signal:AbortSignal.timeout(240000)});
+  leases.clearInvocation(invocation.nonce);return {code:125,error:error.message,...retry};
+ }
+}
+
 export function admitCI(policy,input,{repository,run,job,workflow,source}){
  assert.ok(repository.id===policy.repositoryId && repository.full_name===policy.repository,'Foreign CI repository');
  assert.ok(run.id===input.runId && run.run_attempt===input.attempt && run.repository?.id===policy.repositoryId &&

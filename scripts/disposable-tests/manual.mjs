@@ -91,15 +91,20 @@ export async function reconcileManual({state,hostGeneration,transport,signal,dea
       if(current.ciInvocation || current.orphanRunners?.length || recorded?.ci){
         assert.ok(ci,'CI recovery requires the immutable App configuration');
         const {GithubApp}=await import('./github-app.mjs');
-        const {cleanupRunners,recoverCanary,qualifyCanary,cancelCIJob}=await import('./ci-canary.mjs');
+        const {cleanupRunners,recoverCanary,qualifyCanary,cancelCIJob,fallbackOrdinary}=await import('./ci-canary.mjs');
         api??=new GithubApp(ci);
         await cleanupRunners({leases,api,repository:ci.repository,signal:cleanup});
         if(ci.workflowPath==='.github/workflows/ci.yml'){
           const pending=leases.inspect().ciInvocation;
           if(pending){
             assert.ok(pending.runId!==null,'Recorded ordinary CI run is missing');
-            await cancelCIJob({api,repository:ci.repository,ci:{repositoryId:ci.repositoryId,workflowId:ci.workflowId,
-              workflowSha:pending.workflowSha,runId:pending.runId,attempt:pending.attempt,jobId:pending.jobId},signal:cleanup});
+            const identity={repositoryId:ci.repositoryId,workflowId:ci.workflowId,workflowSha:pending.workflowSha,
+              runId:pending.runId,attempt:pending.attempt,jobId:pending.jobId};
+            const run=await api.get(`/repos/${ci.repository}/actions/runs/${pending.runId}`,{signal:cleanup});
+            const job=await api.get(`/repos/${ci.repository}/actions/jobs/${pending.jobId}`,{signal:cleanup});
+            if(run.event==='pull_request' && job.name==='typecheck')
+              await fallbackOrdinary({api,policy:ci,ci:identity,signal:cleanup});
+            else await cancelCIJob({api,repository:ci.repository,ci:identity,signal:cleanup});
             leases.clearInvocation(pending.nonce);
           }
           return result;

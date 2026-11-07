@@ -48,5 +48,6 @@ export class GithubApp {
  async call(path,options){return this.request(path,{...options,authorization:await this.token()});}
  get(path,options){return this.call(path,options);}
  post(path,body,options){return this.call(path,{...options,method:'POST',body});}
+ patch(path,body,options){return this.call(path,{...options,method:'PATCH',body});}
  delete(path,options){return this.call(path,{...options,method:'DELETE'});}
 }

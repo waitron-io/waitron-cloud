@@ -19,6 +19,9 @@ def main(argv):
     if args and args[0] == 'canary':
         entry = 'ci-canary.mjs'
         args = args[1:]
+    elif args and args[0] == 'control':
+        entry = 'control.mjs'
+        args = args[1:]
     script = Path(__file__).resolve().parents[2] / 'scripts/disposable-tests' / entry
     os.chdir('/')
     os.execve(node, [node, str(script), configuration, *args], environment)
