@@ -78,11 +78,14 @@ export class BoxErrorReports{
      SELECT version_major,version_minor,version_patch,count(DISTINCT installation_id)::numeric AS boxes
      FROM installation_error_reports WHERE environment=$1
       AND (version_major,version_minor,version_patch)<($2::integer,$3::integer,$4::integer)
+      AND EXISTS(SELECT 1 FROM installation_error_reports WHERE environment=$1
+       AND (version_major,version_minor,version_patch)=($2::integer,$3::integer,$4::integer))
      GROUP BY 1,2,3 HAVING count(DISTINCT installation_id)>=2
      ORDER BY version_major DESC,version_minor DESC,version_patch DESC LIMIT 1
     ), reports AS MATERIALIZED (
      SELECT installation_id,code,occurrences,version_major,version_minor,version_patch FROM installation_error_reports
      WHERE environment=$1 AND (version_major,version_minor,version_patch)=($2::integer,$3::integer,$4::integer)
+      AND EXISTS(SELECT 1 FROM predecessor)
      UNION ALL
      SELECT r.installation_id,r.code,r.occurrences,r.version_major,r.version_minor,r.version_patch
      FROM installation_error_reports r JOIN predecessor p USING(version_major,version_minor,version_patch) WHERE r.environment=$1

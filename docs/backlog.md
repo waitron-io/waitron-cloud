@@ -738,7 +738,10 @@ order. Remote access matters most because Waitron's customer-facing features wai
    error-report opt-in and sender, the "report a problem" form, the "can trade" check and the
    updater honouring a held version. The [staff-report plan](superpowers/plans/2026-11-07-staff-problem-reports.md)
    covers Cloud receiving and a local grouped reader that uses the shared box-error receiver.
-   Qualify report storage and read cost at realistic report counts per version, and assess
+   Local PostgreSQL measurement at one million synthetic reports used 586 MiB including
+   indexes; the latest hold comparison took 343 ms on the x86 test box. See the
+   [volume measurements](box-error-reports.md#measure-storage-and-reads-before-sizing-a-service)
+   for the command, fixture and limits. Assess
    matched-window error shares after real reports exist: lifetime totals from
    reporting boxes can delay young-release holds or inflate ratios when other errors
    disappear. The [receiver contract](box-error-reports.md) has synthetic evidence only.
