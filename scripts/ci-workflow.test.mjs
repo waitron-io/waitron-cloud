@@ -1,5 +1,8 @@
 import assert from 'node:assert/strict';
-import {readFileSync} from 'node:fs';
+import {readFileSync, mkdtempSync, mkdirSync, writeFileSync, rmSync} from 'node:fs';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
+import {spawnSync} from 'node:child_process';
 import test from 'node:test';
 import {loadWorkspace, scopeForPaths, workPlan, receiptSuites} from './ci-scope.mjs';
 
@@ -164,9 +167,37 @@ test('nightly final gate always receives every reusable workflow result', () => 
 test('the shared UI deadline is required before test selection', () => {
   const changes = job('changes');
   const steps = changes.split(/^      - /m).slice(1);
-  const lag = steps.findIndex(step => /run: node scripts\/ci-ui-lag\.mjs\s*$/m.test(step));
+  const lag = steps.findIndex(step => /^name: Check shared UI version lag$/m.test(step));
   const plan = steps.findIndex(step => /^id: plan$/m.test(step));
   assert(lag >= 0 && plan > lag, 'UI deadline must run before the planner');
   assert.doesNotMatch(steps[lag], /(?:^|\n)\s*(?:if|continue-on-error):/);
+  assert.match(steps[lag], /node scripts\/ci-ui-lag\.mjs/);
   assert.match(steps[lag], /NODE_AUTH_TOKEN: \$\{\{ secrets\.GITHUB_TOKEN \}\}/);
+});
+
+
+for (const [scenario, script, status, output] of [
+  ['an older head without the script', null, 0, /Skipping shared UI version lag/],
+  ['a current head within the update window', 'console.log("lag check executed");', 0, /lag check executed/],
+  ['a current head with an overdue version', 'console.error("overdue version"); process.exitCode = 1;', 1, /overdue version/],
+]) test(`the shared UI workflow handles ${scenario}`, () => {
+  const step = job('changes').split(/^      - /m).find(part => /^name: Check shared UI version lag$/m.test(part));
+  const run = /        run: (.+)\n/.exec(step);
+  assert.ok(run, 'the lag step must have a shell command');
+  const command = run[1] === '|'
+    ? /^        run: \|\n((?:          .*\n|\n)+)/m.exec(step)[1].replace(/^          /gm, '')
+    : run[1];
+  const directory = mkdtempSync(join(tmpdir(), 'cloud-ui-workflow-'));
+  try {
+    if (script !== null) {
+      mkdirSync(join(directory, 'scripts'));
+      writeFileSync(join(directory, 'scripts/ci-ui-lag.mjs'), script);
+    }
+    const result = spawnSync('bash', ['-e', '-c', command], {cwd: directory, encoding: 'utf8'});
+    assert.equal(result.status, status, result.stdout + result.stderr);
+    assert.match(result.stdout + result.stderr, output);
+    if (script !== null) assert.doesNotMatch(result.stdout, /Skipping shared UI version lag/);
+  } finally {
+    rmSync(directory, {recursive: true, force: true});
+  }
 });
