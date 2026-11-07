@@ -31,8 +31,7 @@ export class PortalApp {
   differentOrg = false;
   reveal = false;
   pending = false;
-  #cooldownUntil = 0;
-  cooldownOperation = '';
+  #serverCooldowns = new Map<string, number>();
   #emailCooldowns = new Map<string, number>();
   session: PortalSession;
   pairing: PairingController;
@@ -144,7 +143,7 @@ export class PortalApp {
     if (['/', '/account'].includes(this.path)) return Math.max(this.session.waiting, this.authenticator.waiting, this.passkeys.waiting, this.security.waiting,
       this.installations.waiting, this.backups.waiting, this.alerts.waiting, this.translationConsent.waiting, this.remote.waiting, this.usage.waiting, this.diagnostics.waiting);
     const deadline = Math.max(this.#emailCooldowns.get(`${this.operation}:${this.fields.email.trim().toLowerCase()}`) ?? 0,
-      this.cooldownOperation === this.operation ? this.#cooldownUntil : 0);
+      this.#serverCooldowns.get(this.operation) ?? 0);
     return Math.max(0, Math.ceil((deadline - performance.now()) / 1000), this.path === '/login' ? Math.max(this.authenticator.waiting, this.passkeys.waiting) : 0);
   }
   draw() {
@@ -268,7 +267,7 @@ export class PortalApp {
       if (path.endsWith('/request')) { this.requested = true; this.#emailCooldowns.set(`${this.operation}:${body.email!.trim().toLowerCase()}`, performance.now() + 60_000); }
       else { this.notice = path === '/signup/complete' ? 'signupReady' : 'resetReady'; this.link = {invalid: false}; this.fields.password = ''; }
     } else {
-      this.cooldownOperation = this.operation; this.#cooldownUntil = Math.max(this.#cooldownUntil, performance.now() + result.retryAfterMs);
+      this.#serverCooldowns.set(this.operation, Math.max(this.#serverCooldowns.get(this.operation) ?? 0, performance.now() + result.retryAfterMs));
       if (result.code === 'password_compromised') this.errors.password = 'passwordCompromised';
       else this.error = result.code === 'link_unavailable' ? 'linkUnavailable'
         : result.code === 'credentials_invalid' ? 'credentials'
