@@ -15,7 +15,9 @@ import {createInteractiveRecoveryPreparation} from './recovery-preparation.js';
 import {validateDatabaseEntries} from './restore.js';
 import {prepareStreamRestore, restoreFromStream} from './restore-stream.js';
 import {runRestore} from './restore-command.js';
-import {decodeHourIdentity} from '../../../packages/fiscal-verifactu/src/hour-identity.js';
+import * as allocationIdentity from '../../../packages/fiscal-verifactu/src/hour-identity.js';
+const decodeHourIdentity = Reflect.get(allocationIdentity, 'decodeHourIdentity');
+const currentRecovery = process.env.CLOUD_INTEGRATION_CURRENT_RECOVERY === '1';
 import {REBUILD_MARKER} from './rebuild-first-start.js';
 
 await vi.hoisted(async () => {
@@ -55,19 +57,28 @@ it('restores the native paired stream using its owner-approved kit and separate 
     };
     const originalRecords = records(prepared.databasePath);
     let operation;
+    let sourceIdentityEntries: readonly {name: string; bytes: Uint8Array}[] = [];
     try {
       const copy = await validateDatabaseEntries(prepared.entries, prepared.databasePath, restore);
       try {
+        // Identity readback needs the validated bytes after the CLI removes its staging directory.
+        sourceIdentityEntries = copy.secretEntries;
         const binding = {module: 'fiscal-verifactu', action: 'restore', eventId: randomUUID(),
           sourceId: copy.sourceId!, targetNodeId: prepared.nodeId};
         const source = await openVenueDatabase(dirname(copy.databasePath));
-        try {expect(await verifyBreakGlass(source.venue, prepared.nodeId, input.authority.secret)).toBe(true);}
+        try {expect(await verifyBreakGlass(currentRecovery ? source.node : source.venue, prepared.nodeId, input.authority.secret)).toBe(true);}
         finally {await source.close();}
         const db = new DatabaseSync(copy.databasePath, {readOnly: true});
         let installationCodes: string[];
         try {installationCodes = db.prepare('SELECT numero_instalacion FROM registro_sif WHERE node_id=?').all(prepared.nodeId).map(row => String(row.numero_instalacion));}
         finally {db.close();}
         expect(installationCodes.length).toBeGreaterThan(0);
+        if (currentRecovery) {
+          const {prepareCurrentIntegrationRecovery} = await import('./cloud-integration-current-recovery.mjs');
+          const outcome = await prepareCurrentIntegrationRecovery({copy, sourceId, binding, secret: input.authority.secret,
+            roots: {stateDir, venueDir, migrationsRoot: restore.migrationsRoot, modules: ALL_MODULES}});
+          operation = {binding, input: outcome.input};
+        } else {
         const sourceHour = Date.parse('2026-01-01T00:00:00Z') + Math.max(...installationCodes.map(decodeHourIdentity)) * 3600000;
         // Only the isolated recovery target advances; the native source and host clocks stay real.
         vi.useFakeTimers({toFake: ['Date', 'performance']});
@@ -81,6 +92,7 @@ it('restores the native paired stream using its owner-approved kit and separate 
         await prepare({action: 'compare-clocks', browser: {challengeId: challenge.id, instantMs: Date.now()}});
         const outcome = await prepare({action: 'select', answer: 'no', installationCodes}) as {input: unknown};
         expect(outcome.input).toBeDefined(); operation = {binding, input: outcome.input};
+        }
       } finally {await copy.discard();}
     } finally {await prepared.discard();}
     await expect(restoreFromStream({...restore, confirmVenue: () => true})).rejects.toMatchObject({code: 'restore.hook_failed', params: {module: 'fiscal-verifactu', code: 'sif.allocation_invalid'}});
@@ -122,11 +134,23 @@ it('restores the native paired stream using its owner-approved kit and separate 
     try {expect(db.prepare('PRAGMA integrity_check').all()).toEqual([{'integrity_check': 'ok'}]);}
     finally {db.close();}
     const trading = parseEnvFile(await readFile(join(stateDir, 'trading.env'), 'utf8'));
-    expect(trading.WAITRON_TILL_NODE_ID).toBe(input.selected.sourceNodeId);
-    expect(trading.WAITRON_TILL_LOCATION_ID).toBe(input.selected.localVenueId);
+    const restoredNodeId = trading.WAITRON_NODE_ID ?? trading.WAITRON_TILL_NODE_ID;
+    let restoredVenueId = currentRecovery ? undefined : trading.WAITRON_TILL_LOCATION_ID;
+    if (currentRecovery) {
+      const {readCopyNodeAndVenue} = await import('./restore.js');
+      const {openBackupQuery} = await import('@waitron/store');
+      const restoredQuery = await openBackupQuery(join(venueDir, 'venue.db'));
+      try {
+        const identity = await readCopyNodeAndVenue(restoredQuery.query, sourceIdentityEntries);
+        expect(identity.node.nodeId).toBe(input.selected.sourceNodeId);
+        restoredVenueId = identity.venueId;
+      } finally {await restoredQuery.close();}
+    }
+    expect(restoredNodeId).toBe(input.selected.sourceNodeId);
+    expect(restoredVenueId).toBe(input.selected.localVenueId);
     for (const name of ['cloud-connection.json', 'cloud-staff.key', 'ready.json']) await expect(stat(join(stateDir, name))).rejects.toMatchObject({code: 'ENOENT'});
-    console.log('CLOUD_PAIRED_CONTINUOUS_RECOVERY=' + JSON.stringify({exit, sourceNodeId: trading.WAITRON_TILL_NODE_ID,
-      localVenueId: trading.WAITRON_TILL_LOCATION_ID, generation: input.selected.generation, nativeRestore: true,
+    console.log('CLOUD_PAIRED_CONTINUOUS_RECOVERY=' + JSON.stringify({exit, sourceNodeId: restoredNodeId,
+      localVenueId: restoredVenueId, generation: input.selected.generation, nativeRestore: true,
       sourceAuthorityVerified: true, preparationBoundToStream: true, sourceRecordsPreserved: true,
       wrongAuthorityRefused: true, missingPreparationRefused: true, noServerStarted: true, integrity: 'ok', cloudReportedRestored: false}));
   } finally {await rm(root, {recursive: true, force: true});}

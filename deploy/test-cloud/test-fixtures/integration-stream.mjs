@@ -1,3 +1,4 @@
+import {readIntegrationSourceIdentity} from './integration-source-identity.mjs';
 import assert from 'node:assert/strict';
 import {readFile,writeFile} from 'node:fs/promises';
 import {randomUUID,createPrivateKey,sign} from 'node:crypto';
@@ -17,13 +18,14 @@ export async function startIntegrationStream(root) {
   const phase=async value=>writeFile(root+'/stream-phase.json',JSON.stringify({phase:value}),{mode:0o600});
   await phase('source-membership');
   const saved=JSON.parse(await readFile(root+'/fixture-env.json','utf8'));
+  const sourceIdentity=await readIntegrationSourceIdentity(root);
   const ready=JSON.parse(await readFile(root+'/ready.json','utf8'));
   const store=await openVenueDatabase(root+'/venue',{exclusive:false});
-  try {await seedTermZeroMembership({db:store.venue,ring:loadKeyRing(await loadBoxEnv({},root))},saved.WAITRON_TILL_NODE_ID,saved.WAITRON_MANAGEMENT_ORIGIN);}
+  try {await seedTermZeroMembership({db:store.venue,node:store.node,ring:loadKeyRing(await loadBoxEnv({},root))},sourceIdentity.nodeId,saved.WAITRON_MANAGEMENT_ORIGIN);}
   finally {await store.close();}
   const db=new DatabaseSync(root+'/venue/venue.db',{readOnly:true});
   let signer;
-  try {signer=db.prepare('SELECT public_key FROM nodes WHERE id=?').get(saved.WAITRON_TILL_NODE_ID)?.public_key;}
+  try {signer=db.prepare('SELECT public_key FROM nodes WHERE id=?').get(sourceIdentity.nodeId)?.public_key;}
   finally {db.close();}
   assert.ok(signer);
   const machine=async(action,body)=>{
@@ -39,7 +41,7 @@ export async function startIntegrationStream(root) {
   const state=JSON.parse(await readFile(root+'/cloud-connection.json','utf8'));
   await phase('cloud-configuration');
   const configured=await machine('backup-stream-configure',{revision:state.lifecycle.view.revision,localVenueId:ready.localVenueId,
-    sourceNodeId:saved.WAITRON_TILL_NODE_ID,pointerSignerPublicKey:signer});
+    sourceNodeId:sourceIdentity.nodeId,pointerSignerPublicKey:signer});
   await writeFile(root+'/backup.env','WAITRON_BACKUP_RECOVERY_KEY='+configured.recoveryKey+'\n',{mode:0o600});
   await writeFile(root+'/direct-storage.json',JSON.stringify(configured.bucket),{mode:0o600});
   const ca=await readFile(root+'/tls/ca.crt');
@@ -70,9 +72,9 @@ export async function startIntegrationStream(root) {
   const observed=await machine('backup-stream-observe',{});
   const pointer=await readPointer(createS3ObjectStore(configured.bucket),ready.localVenueId);
   assert.ok(pointer);assert.equal(verifyPointer(pointer.pointer,signer),true);
-  assert.equal(pointer.pointer.body.nodeId,saved.WAITRON_TILL_NODE_ID);
+  assert.equal(pointer.pointer.body.nodeId,sourceIdentity.nodeId);
   assert.equal(observed.recoverableAt,pointer.pointer.body.writtenAt);
   await phase('signed-pointer-confirmed');
-  return {venueId:configured.venueId,installationId:configured.installationId,sourceNodeId:saved.WAITRON_TILL_NODE_ID,
+  return {venueId:configured.venueId,installationId:configured.installationId,sourceNodeId:sourceIdentity.nodeId,
     localVenueId:ready.localVenueId,generation:pointer.pointer.body.generation,recoverableAt:observed.recoverableAt,nativeStreaming:true};
 }

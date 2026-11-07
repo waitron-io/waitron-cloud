@@ -13,6 +13,7 @@ COPY integration-paid-remote-client.mjs /proof/integration-paid-remote-client.mj
 COPY integration-venue-request.mjs /proof/integration-venue-request.mjs
 COPY integration-verification-state.mjs /proof/integration-verification-state.mjs
 COPY integration-recovery-authority.mjs /proof/integration-recovery-authority.mjs
+COPY integration-source-identity.mjs /proof/integration-source-identity.mjs
 COPY integration-stream.mjs /proof/integration-stream.mjs
 COPY integration-storage-client.mjs /proof/integration-storage-client.mjs
 COPY integration-storage-withdrawal.mjs /proof/integration-storage-withdrawal.mjs

@@ -21,6 +21,28 @@ test('verification evidence binds the independently read admission to the same p
   const result = inspect(point, attempt, expected, targetDigest, image);
   assert.deepEqual(result, {pointId: 'point-a', sha256: expected.sha256, bytes: 123, attemptId: 'attempt-a', childId: 'd'.repeat(64), controllerScope: 'controller-a', targetDigest, status: 'passed', activation: 'not_attempted', modules: 15, cleanupConfirmed: true});
 });
+
+const currentOwners = ['bookings','core','fiscal-none','fiscal-verifactu','node','payments','workforce','workforce-es'];
+const currentAttempt = () => ({...structuredClone(attempt), result: {...structuredClone(attempt.result),
+  modules: currentOwners.map(name => ({name, status: 'passed', checks: [{code: 'data', status: 'passed'}]}))}});
+test('explicit current-image evidence requires the complete validated target owner list', async () => {
+  const {inspectIntegrationVerification: inspect} = await load();
+  assert.equal(inspect(point, currentAttempt(), expected, targetDigest, image, currentOwners).modules, 8);
+  assert.throws(() => inspect(point, currentAttempt(), expected, targetDigest, image));
+});
+for (const [name, change] of [
+  ['missing node owner', a => {a.result.modules.splice(4, 1);}],
+  ['duplicate owner', a => {a.result.modules[4] = structuredClone(a.result.modules[0]);}],
+  ['additional duplicate owner', a => {a.result.modules.push(structuredClone(a.result.modules[0]));}],
+  ['unexpected owner', a => {a.result.modules.push({name: 'unexpected', status: 'passed', checks: [{code: 'data', status: 'passed'}]});}],
+  ['failed node owner', a => {a.result.modules[4].status = 'failed';}],
+  ['unchecked node owner', a => {a.result.modules[4].checks = [];}],
+  ['failed node check', a => {a.result.modules[4].checks[0].status = 'failed';}],
+]) test('current-image evidence refuses ' + name, async () => {
+  const {inspectIntegrationVerification: inspect} = await load();
+  const a = currentAttempt(); change(a);
+  assert.throws(() => inspect(point, a, expected, targetDigest, image, currentOwners));
+});
 for (const [name, change] of [
   ['point', (p) => {p.id = 'point-b';}], ['venue', (p) => {p.venue_id = 'venue-b';}],
   ['installation', (p) => {p.installation_id = 'installation-b';}], ['source', (p) => {p.source_node_id = 'node-b';}],

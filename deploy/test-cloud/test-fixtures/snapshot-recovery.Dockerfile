@@ -3,6 +3,7 @@ FROM ${VERIFIER_IMAGE}
 USER root
 COPY snapshot-recovery.mjs /waitron/apps/server/scripts/cloud-joint-proof.mjs
 COPY integration-authorised-recovery.test.ts /waitron/apps/server/src/cloud-paired-authorised-recovery.test.ts
+COPY integration-current-recovery.mjs /waitron/apps/server/src/cloud-integration-current-recovery.mjs
 COPY integration-continuous-recovery.test.ts /waitron/apps/server/src/cloud-paired-continuous-recovery.test.ts
 COPY integration-continuous-target.mjs /waitron/apps/server/scripts/cloud-continuous-target.mjs
 WORKDIR /waitron/apps/server

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 const owners = ['adjustments','bookings','catalogue','core','credentials','fiscal-none','fiscal-verifactu','identity','media','payments','scheduler','staffing','venue-service','workforce','workforce-es'];
 
 // A passed child alone is insufficient: the current catalogue must admit that same capture.
-export function inspectIntegrationVerification(point, attempt, expected, targetDigest, image) {
+export function inspectIntegrationVerification(point, attempt, expected, targetDigest, image, expectedOwners = owners) {
   for (const [column, key] of [['id','pointId'], ['venue_id','venueId'], ['installation_id','installationId'], ['source_node_id','sourceNodeId'], ['digest','sha256']]) assert.equal(point[column], expected[key]);
   assert.equal(Number(point.size), expected.bytes);
   assert.equal(point.verification, 'verified');
@@ -27,7 +27,7 @@ export function inspectIntegrationVerification(point, attempt, expected, targetD
   assert.equal(result.requestDigest, attempt.request_digest);
   assert.equal(result.targetDigest, targetDigest);
   assert.deepEqual(result.measuredArchive, {sha256: expected.sha256, bytes: expected.bytes});
-  assert.deepEqual(result.modules.map(value => value.name).sort(), owners);
+  assert.deepEqual(result.modules.map(value => value.name).sort(), [...expectedOwners].sort());
   for (const module of result.modules) {
     assert.equal(module.status, 'passed');
     assert.ok(module.checks.length > 0);

@@ -4,6 +4,7 @@ import {appendFile, readFile, writeFile, rm, chmod} from 'node:fs/promises';
 import {createServer} from 'node:http';
 import {randomUUID, createHash} from 'node:crypto';
 import {spawn} from 'node:child_process';
+import {dirname} from 'node:path';
 import {createRequire} from 'node:module';
 import {Agent} from 'node:https';
 import {lookup} from 'node:dns';
@@ -92,10 +93,11 @@ const control = createServer(async (req, res) => {
       const requestedAt = Date.now();
       const grant = await cloud.reserveCapture(randomUUID());
       const metadata = await new Promise((resolve, reject) => {
-        const child = spawn(process.execPath, ['--permission', '--allow-fs-read=*', '--allow-fs-write=' + root,
+        const scratch = dirname(root);
+        const child = spawn(process.execPath, ['--permission', '--allow-fs-read=*', '--allow-fs-write=' + scratch,
           '--allow-worker', '--allow-child-process', '--allow-addons', '--import', require.resolve('tsx'),
           '/waitron/apps/server/scripts/cloud-backup-fixture.ts'], {
-          cwd: '/waitron/apps/server', env: {...process.env, TSX_DISABLE_CACHE: '1'}, stdio: ['pipe', 'pipe', 'pipe'],
+          cwd: '/waitron/apps/server', env: {...process.env, TMPDIR: scratch, TSX_DISABLE_CACHE: '1'}, stdio: ['pipe', 'pipe', 'pipe'],
         });
         let output = '', invalid = false;
         const timer = setTimeout(() => {invalid = true; child.kill('SIGKILL');}, 30000);
@@ -109,8 +111,8 @@ const control = createServer(async (req, res) => {
         });
         child.stdin.end(JSON.stringify({command: 'capture', recoveryKey: grant.recoveryKey}));
       });
-      const saved = JSON.parse(await readFile(root + '/fixture-env.json', 'utf8'));
-      assert.equal(metadata.sourceNodeId, saved.WAITRON_TILL_NODE_ID);
+      const {readIntegrationSourceIdentity}=await import('/proof/integration-source-identity.mjs');
+      assert.equal(metadata.sourceNodeId, (await readIntegrationSourceIdentity(root)).nodeId);
       assert.equal(metadata.networkDenied, true);
       const bytes = await readFile(root + '/captured.backup.enc');
       const digest = createHash('sha256').update(bytes).digest('hex');

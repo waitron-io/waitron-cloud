@@ -18,6 +18,7 @@ import {inspectIntegrationStream} from './integration-stream-evidence.mjs';
 import {inspectIntegrationRetainedSnapshot} from './integration-retained-snapshot-evidence.mjs';
 import {ManagedStreams} from '../../../packages/backups/src/managed-streams.ts';
 import {inspectIntegrationContinuousState} from './integration-continuous-recovery-evidence.mjs';
+import {selectIntegrationVerificationTarget} from './integration-verification-target.mjs';
 const {Pool} = createRequire(new URL('../../../packages/registration/package.json', import.meta.url))('pg');
 const {S3Client, CreateBucketCommand, ListObjectsV2Command, DeleteObjectsCommand} = createRequire(new URL('../../../packages/backups/package.json', import.meta.url))('@aws-sdk/client-s3');
 let input = '';
@@ -150,7 +151,9 @@ try {
         {requestId, venueId: rows[0].venue_id, organisationId, pointId, attemptId, targetDigest, sha256, bytes}, desiredStatus)));
     } else if (phase === 'configure-verification' || phase === 'inspect-verification') {
       assert.match(image ?? '', /^sha256:[a-f0-9]{64}$/);
-      const target = JSON.parse(await readFile(new URL('../../backup-verifier/target.json', import.meta.url), 'utf8'));
+      const pinnedTarget = JSON.parse(await readFile(new URL('../../backup-verifier/target.json', import.meta.url), 'utf8'));
+      const {revision = pinnedTarget.runtime.revision, nativeTarget} = JSON.parse(input);
+      const target = selectIntegrationVerificationTarget({revision, pinnedTarget, nativeTarget});
       if (phase === 'configure-verification') {
         // Only the disposable proof database qualifies this target; deployment remains disabled.
         await transaction(pool, client => setVerificationPolicy(client, target, 'local.waitron-verifier@' + image, true));
@@ -160,7 +163,8 @@ try {
         assert.ok(point, 'integration.verification_point_missing');
         const attempt = (await pool.query('SELECT a.*,q.current_verification FROM backup_verification_attempts a JOIN backup_point_qualification q ON q.verification_id=a.id WHERE a.id=$1 AND a.point_id=$2', [point.current_evidence_id, pointId])).rows[0];
         assert.ok(attempt, 'integration.verification_admission_missing');
-        const evidence = inspectIntegrationVerification(point, attempt, {pointId, installationId, venueId: rows[0].venue_id, sourceNodeId, sha256, bytes}, target.digest, image);
+        const expectedOwners = revision !== pinnedTarget.runtime.revision ? target.modules.map(value => value.name) : undefined;
+        const evidence = inspectIntegrationVerification(point, attempt, {pointId, installationId, venueId: rows[0].venue_id, sourceNodeId, sha256, bytes}, target.digest, image, expectedOwners);
         const job = (await pool.query("SELECT status,attempts,last_success_at,last_error FROM backup_jobs WHERE kind='verify' AND target_id=$1", [pointId])).rows[0];
         assert.equal(job.status, 'pending'); assert.equal(job.attempts, 0); assert.ok(job.last_success_at); assert.equal(job.last_error, null);
         assert.equal((await pool.query('SELECT superseded_by FROM installations WHERE id=$1', [installationId])).rows[0].superseded_by, null);

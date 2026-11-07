@@ -15,10 +15,11 @@ try {
   const environment = testRuntimeEnvironment('backup', await loadRuntime('/run/local-stack'), process.env);
   const {Pool} = createRequire(new URL('../../../packages/registration/package.json', import.meta.url))('pg');
   pool = new Pool({connectionString: environment.DATABASE_URL, max: 1, connectionTimeoutMillis: 5000, statement_timeout: 10000});
-  const opened = await openTestBackupVerifier({directory: environment.CLOUD_VERIFIER_STATE_DIR, image: environment.CLOUD_VERIFIER_IMAGE});
+  const expectedRevision = process.env.CLOUD_INTEGRATION_WAITRON_REVISION;
+  const opened = await openTestBackupVerifier({directory: environment.CLOUD_VERIFIER_STATE_DIR, image: environment.CLOUD_VERIFIER_IMAGE, expectedRevision});
   console.log(JSON.stringify({controllerScope: opened.controllerScope}));
   await runUntilSelectedVerification({signal: stop.signal,
-    runOnce: () => runTestBackupWorker(environment, ['--once']),
+    runOnce: () => runTestBackupWorker(environment, ['--once'], {expectedRevision}),
     admitted: async () => (await pool.query("SELECT current_verification='verified' AS admitted FROM backup_point_qualification WHERE point_id=$1", [pointId])).rows[0]?.admitted === true});
 } catch {
   console.error('integration.verifier_worker_failed');
