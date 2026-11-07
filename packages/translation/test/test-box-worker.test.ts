@@ -80,9 +80,9 @@ test('authority lost during the first provider wait keeps paid names and stops a
  }
 });
 
-async function command(args:string[],env:NodeJS.ProcessEnv={}){
+async function command(args:string[],env:NodeJS.ProcessEnv={},nodeArgs:string[]=[]){
  const databaseUrl=new URL(process.env.TEST_DATABASE_URL!);databaseUrl.searchParams.set('options',`-c search_path=${db.schema}`);
- const child=spawn('/bin/sh',['-c','printf "CLOUD_OPENAI_API_KEY=synthetic-private-trial-key\\n" | exec "$@"','trial-pipe',process.execPath,
+ const child=spawn('/bin/sh',['-c','printf "CLOUD_OPENAI_API_KEY=synthetic-private-trial-key\\n" | exec "$@"','trial-pipe',process.execPath,...nodeArgs,
   '--env-file=/dev/stdin',new URL('../src/test-box-worker-cli.ts',import.meta.url).pathname,...args],
   {env:{...process.env,DATABASE_URL:databaseUrl.href,CLOUD_TEST_SERVICE_PLANS:'0',CLOUD_VENUE_SERVICE_LEVELS:undefined,CLOUD_TEST_ALLOWANCES:'0',CLOUD_ALLOWANCE_CALENDAR:undefined,...env},detached:true,stdio:['ignore','pipe','pipe']});
  let stdout='',stderr='';child.stdout.on('data',chunk=>{stdout+=chunk;});child.stderr.on('data',chunk=>{stderr+=chunk;});
@@ -91,6 +91,13 @@ async function command(args:string[],env:NodeJS.ProcessEnv={}){
 }
 test('one-pass launcher reads piped synthetic env and drains an empty queue without fetching',async()=>{
  assert.deepEqual(await command([randomUUID(),randomUUID(),'--once']),{code:0,signal:null,stdout:'',stderr:''});
+});
+test('a fatal idle database event refuses the one-pass launcher instead of reporting success',async()=>{
+ const preload=`import {createRequire} from 'node:module';const {Pool}=createRequire(${JSON.stringify(new URL('../package.json',import.meta.url).href)})('pg');
+ const query=Pool.prototype.query;Pool.prototype.query=async function(...args){const result=await query.apply(this,args);
+ if(String(args[0]).includes('FROM schema_migrations')){this.emit('error',new Error('synthetic-private-database'));this.emit('error',new Error('synthetic-private-database'));}return result;};`;
+ assert.deepEqual(await command([randomUUID(),randomUUID(),'--once'],{},['--import','data:text/javascript,'+encodeURIComponent(preload)]),
+  {code:1,signal:null,stdout:'',stderr:'Test-box translation worker failed; check trial scope, database and provider configuration\n'});
 });
 test('one-pass launcher refuses malformed scope and billing modes without printing private configuration',async()=>{
  for(const [args,env] of [
