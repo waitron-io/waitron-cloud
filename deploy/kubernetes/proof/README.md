@@ -146,6 +146,8 @@ deletion and resource-absence checks, and only when its history holds the setup
 booking alone. An initialized setup, a launch or any monthly ledger prevents
 release. This also covers a completed stack whose local initialization failed;
 run `down` again to qualify an earlier deletion that retained that setup booking.
+If deletion was interrupted, new initialization or launch evidence refuses the
+next removal before it requests stack deletion.
 The fresh account opening plus the new reservation must still stay
 strictly below US$20; account billing can lag actual consumption.
 

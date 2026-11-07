@@ -1297,6 +1297,7 @@ async function readCleanup(base, checkout) {
   check(record?.schema === 'd570-cleanup-v1' && record.account === account && record.region === region
     && record.head === booking.head && record.tree === booking.tree && record.upperMicroUsd === booking.upperMicroUsd
     && isDeepStrictEqual(record.billing, booking.billing) && typeof record.eligible === 'boolean'
+    && (record.noRun === undefined || typeof record.noRun === 'boolean')
     && typeof record.stackId === 'string'
     && /^arn:aws:cloudformation:eu-north-1:462991287391:stack\/d570-first\/[a-f0-9-]{36}$/.test(record.stackId)
     && (record.releasedAt === null || record.eligible && instant(record.releasedAt) > 0), 'private history');
@@ -1468,8 +1469,8 @@ export async function removeManualFirstSetup(options) {
     && isDeepStrictEqual(retained.files, ['setup.json']);
   const eligible = noRun;
   const record = priorCleanup ?? { schema: 'd570-cleanup-v1', account, region, stackId, head: setup.head, tree: setup.tree,
-    billing: setup.billing, upperMicroUsd: setup.upperMicroUsd, subnet, eligible: false, releasedAt: null };
-  check(!record.eligible || eligible, 'booking');
+    billing: setup.billing, upperMicroUsd: setup.upperMicroUsd, subnet, noRun, eligible: false, releasedAt: null };
+  check((!record.eligible && record.noRun !== true) || eligible, 'booking');
   const qualifiedRecord = { ...record, ...(ended ? { stoppedInstance: ended, ...(evidence ? { retainedEvidence: evidence } : {}) } : {}) };
   await replacePrivateJson(cleanupPath, qualifiedRecord);
   if (stack.StackStatus !== 'DELETE_COMPLETE') {

@@ -3261,6 +3261,28 @@ test('pending failed removal refuses new initialization evidence before requesti
   assert.equal(JSON.parse(readFileSync(join(f.parent, 'setup-removal.json'))).releasedAt, null);
 });
 
+for (const noRun of [null, 'true', 0, [], {}]) test(`removal refuses a malformed no-run marker: ${JSON.stringify(noRun)}`, async t => {
+  const f = await failedOwnerSetupFixture(t);
+  await ownerCommand(f, ['down', f.parent]);
+  const path = join(f.parent, 'setup-removal.json'), record = JSON.parse(readFileSync(path));
+  writeFileSync(path, JSON.stringify({ ...record, noRun }));
+  const before = f.calls.length;
+  await assert.rejects(ownerCommand(f, ['down', f.parent]), /D570 controller refused: private history/);
+  assert.equal(f.calls.slice(before).some(call => ['delete-stack', 'delete-objects', 'disable-rule', 'remove-permission'].includes(call.operation)), false);
+  assert.equal(f.deletions(), 1);
+});
+
+test('removal accepts a legacy cleanup record without a no-run marker', async t => {
+  const f = await failedOwnerSetupFixture(t);
+  await ownerCommand(f, ['down', f.parent]);
+  const path = join(f.parent, 'setup-removal.json'), record = JSON.parse(readFileSync(path));
+  delete record.noRun;
+  writeFileSync(path, JSON.stringify(record));
+  assert.equal((await ownerCommand(f, ['down', f.parent])).deleted, true);
+  assert.equal(f.deletions(), 1);
+  assert.equal((await ownerCommand(f, ['up', f.parent])).directory, join(realpathSync(f.parent), 'retry', 'setup'));
+});
+
 async function lateConsoleFixture(t){
  const f=await guestCleanupFixture(t);
  const stamp=seconds=>new Date(Date.parse(now)+seconds*1000).toISOString().replace('.000Z','Z');
