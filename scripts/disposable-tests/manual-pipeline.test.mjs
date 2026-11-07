@@ -10,7 +10,7 @@ import {LocalLeases} from './leases.mjs';
 const script=new URL('./manual.mjs',import.meta.url).pathname;
 function fixture(t,mode='normal') {
  const root=mkdtempSync(join(tmpdir(),'disposable-pipeline-'));t.after(()=>rmSync(root,{recursive:true,force:true}));
- for(const name of ['bin','tmp','repo'])mkdirSync(join(root,name),{mode:0o700});
+ for(const name of ['bin','tmp','repo','state'])mkdirSync(join(root,name),{mode:0o700});
  execFileSync('git',['init','-q',join(root,'repo')]);
  const config=join(root,'config.json');
  writeFileSync(config,JSON.stringify({version:2,mode:'manual-one-slot',host:'fixture.invalid',hostGeneration:'fixture',recipe:'/opt/waitron-disposable-fixture',repository:join(root,'repo/.git'),state:join(root,'state')}));
@@ -54,8 +54,8 @@ elif mode=='inspect':print(json.dumps({'resourceId':rid,'absent':not(root/rid).e
 else:sys.exit(125)
 `,{mode:0o700});
  const env={...process.env,PATH:join(root,'bin')+':'+process.env.PATH,FIXTURE_ROOT:root,FIXTURE_MODE:mode,TMPDIR:join(root,'tmp'),XDG_CACHE_HOME:join(root,'cache')};
- const boot=spawnSync(process.execPath,[script,config,'--bootstrap'],{env,encoding:'utf8',timeout:5000});
- assert.equal(boot.status,0,boot.stdout+boot.stderr);
+ writeFileSync(join(root,'state/mac-controller.lock'),'',{mode:0o600});
+ new LocalLeases(join(root,'state/ledger'),{hostGeneration:'fixture',slots:1,bootstrap:true});
  writeFileSync(join(root,'tmp/global-sentinel'),'unrelated');
  return {root,env,args:[script,config,'I',join(root,'repo'),'--','false'],config};
 }
@@ -63,6 +63,7 @@ function run(f){return spawnSync(process.execPath,f.args,{env:f.env,encoding:'ut
 function assertNoTemporaries(f){
  const temporary=join(f.root,'state/tmp');
  assert.deepEqual(existsSync(temporary)?readdirSync(temporary):[],[]);
+ assert.deepEqual(readdirSync(join(f.root,'tmp')).filter(name=>name.startsWith('disposable-') && name!=='disposable-unrelated'),[]);
  assert.equal(readFileSync(join(f.root,'tmp/global-sentinel'),'utf8'),'unrelated');
 }
 
@@ -90,6 +91,8 @@ test('only explicit bootstrap creates fresh controller state and never reopens a
  const again=spawnSync(process.execPath,[script,f.config,'--bootstrap'],{env:f.env,encoding:'utf8',timeout:5000});
  assert.equal(again.status,125);assert.equal(readFileSync(join(f.root,'state/ledger/state.json'),'utf8'),before);
  assert.equal(existsSync(join(f.root,'calls')),false);assert.equal(existsSync(join(f.root,'packaged')),false);
+ assert.equal(JSON.parse(before).hostGeneration,'fixture');
+ assert.equal(run(f).status,3);assertNoTemporaries(f);
 });
 
 test('manual CLI preserves a verified nonzero result and removes all owned preparation data',t=>{
@@ -114,6 +117,11 @@ for(const signal of ['SIGTERM','SIGINT','SIGHUP'])test(`${signal} during packagi
  const end=performance.now()+10000;
  while(!existsSync(join(f.root,'packaging-ready'))&&child.exitCode===null&&child.signalCode===null&&performance.now()<end)await delay(10);
  assert.equal(existsSync(join(f.root,'packaging-ready')),true,'No real packaging readiness: '+output);
+ if(signal==='SIGTERM'){
+  const sources=readdirSync(join(f.root,'state/tmp')).filter(name=>name.startsWith('disposable-manual-'));
+  assert.equal(sources.length,1);assert.equal(existsSync(join(f.root,'state/tmp',sources[0],'source.tar')),true);
+  assert.deepEqual(readdirSync(join(f.root,'tmp')).filter(name=>name.startsWith('disposable-')),[]);
+ }
   child.kill(signal);const [code]=await closed;assert.equal(code,143,output);assertNoTemporaries(f);assert.equal(existsSync(join(f.root,'state/manual.lock')),false);
  } finally {
   if(child.exitCode===null&&child.signalCode===null)child.kill('SIGKILL');
@@ -136,6 +144,7 @@ test('background recovery releases only a killed CLI turn before a successor',as
   assert.equal(recovered.status,0,recovered.stdout+recovered.stderr);assert.match(recovered.stdout,/"cleanup":"absent"/);
   assert.equal(JSON.parse(readFileSync(join(f.root,'state/ledger/state.json'),'utf8')).slots[0].state,'free');
   assert.equal(run({...f,env:{...f.env,FIXTURE_MODE:'normal'}}).status,3);
+  assertNoTemporaries(f);
  } finally {
   if(child.exitCode===null&&child.signalCode===null)child.kill('SIGKILL');
   if(existsSync(join(f.root,'work.pid'))){try{process.kill(-Number(readFileSync(join(f.root,'work.pid'),'utf8')),'SIGKILL');}catch(error){if(error.code!=='ESRCH')throw error;}}
@@ -363,4 +372,14 @@ test('a busy direct controller preserves75 after its output pipe closes',async t
   const closed=once(child,'close');child.stderr.resume();child.stdout.destroy();
   assert.equal((await closed)[0],75);return {code:0};
  });
+});
+
+
+test('the manual CLI refuses another repository before source preparation, host contact or ledger mutation',t=>{
+ const f=fixture(t);const foreign=join(f.root,'foreign');execFileSync('git',['init','-q',foreign]);
+ const before=readFileSync(join(f.root,'state/ledger/state.json'),'utf8');
+ const result=spawnSync(process.execPath,[script,f.config,'I',foreign,'--','false'],{env:f.env,encoding:'utf8',timeout:5000});
+ assert.equal(result.status,125,result.stdout+result.stderr);assert.match(result.stderr,/only the configured Cloud repository/);
+ assert.equal(readFileSync(join(f.root,'state/ledger/state.json'),'utf8'),before);
+ assert.equal(existsSync(join(f.root,'calls')),false);assert.equal(existsSync(join(f.root,'packaged')),false);assertNoTemporaries(f);
 });
