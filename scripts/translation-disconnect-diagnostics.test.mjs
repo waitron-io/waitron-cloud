@@ -15,6 +15,8 @@ function refusal(actual,name=title,options={}){
   mkdirSync(join(directory,'scripts'));
   mkdirSync(join(directory,'packages/translation/test'),{recursive:true});
   copyFileSync(new URL('./test-cloud-free-services.mjs',import.meta.url),join(directory,'scripts/test-cloud-free-services.mjs'));
+  copyFileSync(new URL('./ci-required-cases.mjs',import.meta.url),join(directory,'scripts/ci-required-cases.mjs'));
+  writeFileSync(join(directory,'scripts/ci-required-cases.json'),'{}\n');
   const file=join(directory,'packages/translation/test',options.file??'worker-cli.test.ts');
   writeFileSync(file,`import {test} from 'node:test';import assert from 'node:assert/strict';
  ${options.prior?`for(let n=0;n<${options.prior};n++)test('earlier failure '+n,()=>assert.fail());`:''}
