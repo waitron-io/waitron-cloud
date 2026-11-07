@@ -8,7 +8,7 @@ adapter is included in the local integration proof.
 
 ## Run locally
 
-You need Node.js 24+, pnpm 9.15.0, Docker for Mailpit, and a development PostgreSQL
+You need Node.js 26+, pnpm 9.15.0, Docker for Mailpit, and a development PostgreSQL
 database. Copy `.env.example` to `.env` if you do not already have one, then set:
 
 ```dotenv
@@ -597,3 +597,44 @@ the command exits with its fixed configuration failure message, so the portal is
 The continuous worker also pauses new translation jobs while cleanup is failing. It prints
 `Translation worker cleanup failed; retrying`, waits one minute and retries until cleanup
 succeeds or you stop it. Stopping interrupts that wait. A failed cleanup in `--once` exits 1.
+
+## Try Connected on a synthetic account
+
+You can start the existing 30-day Connected trial from the account portal without
+pairing an installation first. Keep this chooser limited to synthetic accounts:
+set `CLOUD_VENUE_SERVICE_LEVELS=test`, `CLOUD_TEST_SERVICE_PLANS=0`, and
+`CLOUD_BILLING_ACCOUNT_TEST_IDS` to their comma-separated account UUIDs. Leave the
+last setting unset to keep the feature off. Startup rejects it outside test mode.
+Programmatic servers pass `billingAccount: {accountIds: [...]}` with
+`planMode: 'test-venue-levels'`.
+
+The successful session and session-activity replies include
+`billingTrialAvailable: true` only for an account on that list. The portal reads
+billing only when it receives this hint, so ordinary accounts send no billing
+request. The hint grants no access: each billing route still checks the session,
+verified email, ownership and test scope. The server sends true or omits the field;
+a false or malformed value makes the portal treat the session reply as unavailable.
+Remove this temporary hint with the synthetic-account allowlist rather than
+extending it to advertise other features.
+
+Sign in as a verified owner and open **Account → Connected trial**. Choose your
+venue, then **Start free trial**. The screen shows the current plan and last trial
+day; that day is the day before the stored exclusive `endsOn` date. You need no
+card. A venue that has already trialled or paid for Connected cannot start another
+trial, and production venues cannot start one here.
+
+The browser sends same-origin, CSRF-protected POST requests to
+`/api/account/billing/read` with `{}` and `/api/account/billing/start-trial` with
+`{"venueId":"11111111-1111-4111-8111-111111111111"}`. Each returns
+`{"venues":[{"venueId":"11111111-1111-4111-8111-111111111111","level":"registered","trial":null,"canStartTrial":true}]}`
+when reading an eligible synthetic venue before starting. Reads do not create
+billing state. A refused start rolls its writes back; a conflict returns the
+current venue view. If a write reply is lost, the portal reads the current plan
+before offering another choice, because the write may have committed.
+
+Run the focused API checks with `node scripts/test-postgres.mjs exec pnpm --dir
+packages/account-http exec node --test --test-timeout=60000 test/billing-account.test.ts`.
+These checks cover real PostgreSQL lock waits, expiry, ownership changes, concurrent
+starts and rollback. This piece sets no renewal anchor and makes no charge or
+provider request. Payment methods, paid-plan changes and production billing remain
+separate work.
