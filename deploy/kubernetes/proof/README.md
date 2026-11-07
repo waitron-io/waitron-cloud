@@ -148,8 +148,8 @@ reconciliation, reserve allowance or authorize a launch.
 
 The CLI adapter uses fixed service endpoints, bounded output and a 30-second
 process deadline. Cost Explorer uses its US East endpoint while the proof's
-resource region remains Stockholm. The adapter permits only identity, billing,
-setup discovery and reads of expiry protection. The `up`, `drill`, `reconcile`
+resource region remains Stockholm. The adapter permits identity, billing,
+setup discovery, expiry reads and conditional ledger storage. The `up`, `drill`, `reconcile`
 and `down` entries still refuse
 without making a provider call, because creation and cleanup are unfinished.
 You do not need to sign in yet. Verify the preflight without credentials with
@@ -178,6 +178,8 @@ still need separate live observations to establish termination and absent disks.
 
 The [S3 read](https://docs.aws.amazon.com/cli/latest/reference/s3api/get-object.html)
 requests a bounded byte range with the staging account as expected bucket owner.
+Streaming reads use explicit CLI arguments because AWS CLI does not support
+`--cli-input-json` for an operation that writes an output file.
 The CLI writes into a private temporary directory, checks the complete returned
 range and length, and removes its own files on success or failure. The controller
 requires encrypted JSON and retains the original sweep observation. These are
@@ -191,8 +193,19 @@ does not become a second opening, and a completed run keeps its booking. Missing
 changed or unexplained history refuses without replacement records or writes.
 It checks main and heartbeat age again after reading history. It reports
 estimated billing and completed costs separately; it does not settle an estimate,
-release ownership or authorize a launch. These checks use synthetic storage;
-live storage wiring, history export and the complete cost bound remain unfinished.
+release ownership or authorize a launch.
+
+You cannot replace an existing budget record without its exact entity tag,
+the identifier S3 returns for that object's current contents. `createManualLedgerStore`
+connects the reservation core to the CLI's bounded reads, prefix listings and
+encrypted conditional writes. The budget observer uses the bucket discovered
+from the checked stack. Uploads use a private file and the CLI's `--body`
+argument; both upload and download files are removed after success or failure.
+Only a confirmed missing key counts as absent. Access denial, partial reads
+and uncertain failures refuse, so they cannot initialize replacement history.
+Run `node --test scripts/kubernetes-proof-control.test.mjs scripts/kubernetes-proof-budget.test.mjs`
+to check these boundaries with synthetic storage. Real S3 behavior, history
+export, the complete cost bound and the owner lifecycle remain unqualified.
 
 The prerequisite workflow checks both rendered templates with the same pinned
 CloudFormation validator. Its setup tests require every retained resource

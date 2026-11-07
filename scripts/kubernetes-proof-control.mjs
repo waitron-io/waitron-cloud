@@ -6,7 +6,7 @@ import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
 import { renderManualSetup } from '../deploy/kubernetes/proof/setup.mjs';
 import policy from '../deploy/kubernetes/proof/policy.json' with { type: 'json' };
-import { inspectBudget } from './kubernetes-proof-budget.mjs';
+import { inspectBudget, createS3LedgerStore } from './kubernetes-proof-budget.mjs';
 
 const execute = promisify(execFile);
 const account = '462991287391', region = 'eu-north-1';
@@ -26,26 +26,45 @@ export function createManualAwsCli({ executable = 'aws' } = {}) {
       || (service === 'ce' && operation === 'get-cost-and-usage')
       || (service === 'cloudformation' && ['describe-stacks', 'describe-stack-resources'].includes(operation))
       || (service === 'events' && ['describe-rule', 'list-targets-by-rule'].includes(operation))
-      || (service === 's3api' && operation === 'get-object')
+      || (service === 's3api' && ['get-object', 'put-object', 'list-objects-v2'].includes(operation))
       || (service === 'ssm' && operation === 'get-parameter')
       || (service === 'ec2' && ['describe-images', 'describe-instance-types', 'describe-managed-prefix-lists'].includes(operation)));
-    const download = service === 's3api';
-    if (download) check(input && Object.keys(input).sort().join(',') === 'Bucket,ExpectedBucketOwner,Key,Range'
-      && typeof input.Bucket === 'string' && /^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$/.test(input.Bucket)
-      && input.Key === 'd570/health/reaper.json' && input.ExpectedBucketOwner === account && input.Range === 'bytes=0-1048576');
-    const payload = JSON.stringify(input);
+    const download = service === 's3api' && operation === 'get-object';
+    const upload = service === 's3api' && operation === 'put-object';
+    const ledgerKey = key => typeof key === 'string'
+      && (key === 'd570/ledger/active.json' || /^d570\/ledger\/\d{4}-(0[1-9]|1[0-2])\.json$/.test(key));
+    if (service === 's3api') {
+      check(input && typeof input.Bucket === 'string' && /^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$/.test(input.Bucket)
+        && input.ExpectedBucketOwner === account);
+      const keys = names => Object.keys(input).sort().join(',') === names.sort().join(',');
+      if (download) check(keys(['Bucket', 'ExpectedBucketOwner', 'Key', 'Range'])
+        && (input.Key === 'd570/health/reaper.json' || ledgerKey(input.Key)) && input.Range === 'bytes=0-1048576');
+      else if (upload) {
+        const conditional = input.IfNoneMatch === '*' ? 'IfNoneMatch' : 'IfMatch';
+        check(keys(['Bucket', 'ExpectedBucketOwner', 'Key', 'Body', 'ContentType', 'ServerSideEncryption', conditional])
+          && ledgerKey(input.Key) && input.Body instanceof Uint8Array && input.Body.byteLength > 0 && input.Body.byteLength <= 1024 * 1024
+          && input.ContentType === 'application/json' && input.ServerSideEncryption === 'AES256'
+          && (conditional === 'IfNoneMatch' || typeof input.IfMatch === 'string' && /^"[\x21\x23-\x7e]{1,254}"$/.test(input.IfMatch)));
+      } else check(keys(['Bucket', 'ExpectedBucketOwner', 'Prefix', 'MaxKeys', ...(Object.hasOwn(input, 'ContinuationToken') ? ['ContinuationToken'] : [])])
+        && input.Prefix === 'd570/ledger/' && input.MaxKeys === 100
+        && (!Object.hasOwn(input, 'ContinuationToken') || typeof input.ContinuationToken === 'string'
+          && input.ContinuationToken.length > 0 && input.ContinuationToken.length <= 2048));
+    }
+    const payload = JSON.stringify(upload ? { ...input, Body: undefined } : input);
     check(typeof payload === 'string' && Buffer.byteLength(payload) <= 64 * 1024);
     let directory;
     try {
       let output;
-      if (download) {
-        directory = await mkdtemp(join(tmpdir(), 'd570-heartbeat-'));
-        output = join(directory, 'heartbeat.json');
-        await writeFile(output, '', { mode: 0o600, flag: 'wx' });
+      if (download || upload) {
+        directory = await mkdtemp(join(tmpdir(), 'd570-object-'));
+        output = join(directory, 'object.json');
+        await writeFile(output, upload ? input.Body : '', { mode: 0o600, flag: 'wx' });
       }
-      const { stdout } = await execute(executable, [service, operation, '--cli-input-json', payload,
+      const { stdout } = await execute(executable, [service, operation,
+        ...(download ? ['--bucket', input.Bucket, '--key', input.Key, '--expected-bucket-owner', input.ExpectedBucketOwner,
+          '--range', input.Range] : ['--cli-input-json', payload]),
         '--region', service === 'ce' ? 'us-east-1' : region, '--output', 'json', '--no-paginate', '--no-cli-pager',
-        '--cli-connect-timeout', '5', '--cli-read-timeout', '15', ...(download ? [output] : [])], {
+        '--cli-connect-timeout', '5', '--cli-read-timeout', '15', ...(download ? [output] : upload ? ['--body', output] : [])], {
         timeout: 30_000, killSignal: 'SIGKILL', maxBuffer: 1024 * 1024,
         env: { ...process.env, AWS_MAX_ATTEMPTS: '3', AWS_RETRY_MODE: 'standard',
           AWS_IGNORE_CONFIGURED_ENDPOINT_URLS: 'true', AWS_EC2_METADATA_DISABLED: 'true', AWS_PAGER: '' },
@@ -55,14 +74,25 @@ export function createManualAwsCli({ executable = 'aws' } = {}) {
       const file = await lstat(output);
       check(file.isFile() && file.size > 0 && file.size <= 1024 * 1024 && (file.mode & 0o777) === 0o600
         && Number.isSafeInteger(metadata.ContentLength) && metadata.ContentLength === file.size
-        && metadata.ContentRange === `bytes 0-${file.size - 1}/${file.size}`);
+        && metadata.ContentRange === `bytes 0-${file.size - 1}/${file.size}`
+        && (input.Key === 'd570/health/reaper.json'
+          || metadata.ServerSideEncryption === 'AES256' && metadata.ContentType === 'application/json'));
       const body = await readFile(output);
       check(body.byteLength === file.size);
       const modified = typeof metadata.LastModified === 'string' ? metadata.LastModified.replace('+00:00', 'Z') : '';
       check(/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d{3})?Z$/.test(modified)
         && Number.isFinite(Date.parse(modified)) && new Date(modified).toISOString().replace('.000Z', 'Z') === modified.replace('.000Z', 'Z'));
       return { ...metadata, LastModified: new Date(modified).toISOString().replace('.000Z', 'Z'), Body: body };
-    } catch { throw new Error(`D570 AWS ${service}/${operation} failed`); }
+    } catch (error) {
+      // Only the CLI's exact missing-key response is absence; denied and uncertain reads preserve history.
+      if (download && ledgerKey(input.Key) && error.code === 254 && !error.killed
+        && typeof error.stderr === 'string'
+        && /^\s*(?:aws: \[ERROR\]: )?An error occurred \(NoSuchKey\) when calling the GetObject operation: [^\r\n]*(?:\r?\n)?$/.test(error.stderr)) {
+        const missing = new Error('D570 ledger key is absent');
+        missing.name = 'NoSuchKey'; missing.$metadata = { httpStatusCode: 404 }; throw missing;
+      }
+      throw new Error(`D570 AWS ${service}/${operation} failed`);
+    }
     finally { if (directory) await rm(directory, { recursive: true, force: true }); }
   } };
 }
@@ -251,11 +281,21 @@ export async function inspectManualProtection(options) {
   return { ...inspection, stackId, bucket, heartbeat };
 }
 
+export function createManualLedgerStore({ bucket, aws }) {
+  check(typeof aws?.call === 'function');
+  return createS3LedgerStore({ bucket, aws: { call(operation, input) {
+    const operations = { GetObject: 'get-object', PutObject: 'put-object', ListObjectsV2: 'list-objects-v2' };
+    check(Object.hasOwn(operations, operation));
+    return aws.call('s3api', operations[operation], { ...input, ...(operation === 'GetObject' ? { Range: 'bytes=0-1048576' } : {}) });
+  } } });
+}
+
 export async function inspectManualBudget(options) {
   const inspection = await inspectManualProtection(options);
   const { now, checkout, store, clock = Date.now } = options;
   const scope = { account, region, stackId: inspection.stackId };
-  const budget = await inspectBudget({ scope, now, billingMicroUsd: inspection.billing.microUsd, store });
+  const liveStore = store ?? createManualLedgerStore({ bucket: inspection.bucket, aws: options.aws });
+  const budget = await inspectBudget({ scope, now, billingMicroUsd: inspection.billing.microUsd, store: liveStore });
   const source = await checkedMain(checkout), observed = clock();
   check(source.head === inspection.head && source.tree === inspection.tree
     && Number.isSafeInteger(observed) && observed >= instant(now) && observed < Date.parse(policy.accessExpiry)

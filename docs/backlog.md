@@ -3163,8 +3163,8 @@ implementation or production evidence.
   reviewed 320 MiB ceiling admits its current 270,696,312-byte EC2 catalogue
   without changing the 30-second deadline. Real public retrieval qualifies all
   four catalogues; it does not authenticate an account or reconcile billing. Complete service-page reconciliation, transfer/events/network,
-  taxes, quantities, billing and all-in bound construction, setup integration and
-  live S3/cleanup qualification remain open; these inputs grant no spending or
+  taxes, quantities, billing and all-in bound construction, setup integration,
+  real S3 behavior and live cleanup remain open; these inputs grant no spending or
   runnable owner setup. The manual controller preflight now checks a clean exact
   remote main, temporary staging identity, Stockholm and the current monthly
   bill before any resource action. It preserves AWS's estimate flag and rounds

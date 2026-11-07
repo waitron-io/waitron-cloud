@@ -523,7 +523,9 @@ test('CLI downloads the bounded heartbeat privately and removes its own files be
   assert.equal(result.LastModified, '2026-11-06T11:59:01Z');
   const saved = JSON.parse(readFileSync(f.capture));
   assert.equal(saved.directoryMode, 0o700); assert.equal(saved.fileMode, 0o600);
-  assert.deepEqual(saved.args.slice(0, 6), ['s3api', 'get-object', '--cli-input-json', JSON.stringify(f.input), '--region', 'eu-north-1']);
+  assert.deepEqual(saved.args.slice(0, 12), ['s3api', 'get-object', '--bucket', 'd570-first-bucket',
+    '--key', 'd570/health/reaper.json', '--expected-bucket-owner', '462991287391',
+    '--range', 'bytes=0-1048576', '--region', 'eu-north-1']);
   assert.equal(saved.args.at(-2), '15');
   assert.equal(existsSync(saved.path), false);
   assert.equal(existsSync(saved.path.slice(0, saved.path.lastIndexOf('/'))), false);
@@ -637,4 +639,170 @@ test('manual budget refuses clean main advancing while retained history is read'
     return row;
   };
   await assert.rejects(f.inspect(), /controller/i);
+});
+
+function ledgerCliFixture(t, errorCode = '', errorPrefix = '') {
+  const f = fixture(t), executable = join(f.root, 'aws-ledger'), capture = join(f.root, 'ledger-call.json');
+  writeFileSync(executable, `#!${process.execPath}
+    const fs = require('node:fs'), args = process.argv.slice(2);
+    const input = args.includes('--cli-input-json') ? JSON.parse(args[3]) : Object.fromEntries([
+      ['Bucket', '--bucket'], ['Key', '--key'], ['ExpectedBucketOwner', '--expected-bucket-owner'], ['Range', '--range']
+    ].map(([name, flag]) => [name, args[args.indexOf(flag) + 1]])), path = args.at(-1);
+    const saved = { args, input };
+    if (args[1] === 'put-object') {
+      const body = args[args.indexOf('--body') + 1];
+      saved.body = fs.readFileSync(body, 'utf8'); saved.path = body;
+      saved.mode = fs.statSync(body).mode & 511;
+      saved.directoryMode = fs.statSync(require('node:path').dirname(body)).mode & 511;
+    } else if (args[1] === 'get-object') saved.path = path;
+    fs.writeFileSync(${JSON.stringify(capture)}, JSON.stringify(saved));
+    if (${JSON.stringify(errorCode)}) {
+      process.stderr.write(${JSON.stringify(errorPrefix)} + 'An error occurred (' + ${JSON.stringify(errorCode)} + ') when calling the ' +
+        (args[1] === 'get-object' ? 'GetObject' : 'PutObject') + ' operation: private diagnostic'); process.exit(254);
+    }
+    if (args[1] === 'get-object') {
+      fs.writeFileSync(path, '{"saved":true}');
+      process.stdout.write(JSON.stringify({ ETag: '"original"', ContentLength: 14, ContentRange: 'bytes 0-13/14',
+        ServerSideEncryption: 'AES256', ContentType: 'application/json', LastModified: '2026-11-06T11:59:01Z' }));
+    } else if (args[1] === 'put-object') process.stdout.write(JSON.stringify({ ETag: '"updated"' }));
+    else process.stdout.write('{"Contents":[{"Key":"d570/ledger/active.json"}],"IsTruncated":false}');
+  `, { mode: 0o700 });
+  const cli = control.createManualAwsCli({ executable });
+  const input = { Bucket: 'd570-first-bucket', ExpectedBucketOwner: '462991287391' };
+  return { ...f, executable, capture, cli, input };
+}
+
+test('CLI reads the complete retained ledger privately with its original entity tag', async t => {
+  const f = ledgerCliFixture(t), result = await f.cli.call('s3api', 'get-object', {
+    ...f.input, Key: 'd570/ledger/active.json', Range: 'bytes=0-1048576' });
+  assert.deepEqual(result.Body, Buffer.from('{"saved":true}')); assert.equal(result.ETag, '"original"');
+  const saved = JSON.parse(readFileSync(f.capture));
+  assert.equal(existsSync(saved.path), false);
+});
+
+for (const condition of [{ IfNoneMatch: '*' }, { IfMatch: '"original"' }]) {
+  test(`CLI retains encrypted conditional ledger writes ${JSON.stringify(condition)} privately`, async t => {
+    const f = ledgerCliFixture(t), result = await f.cli.call('s3api', 'put-object', {
+      ...f.input, Key: 'd570/ledger/2026-11.json', Body: Buffer.from('{"booked":true}'),
+      ContentType: 'application/json', ServerSideEncryption: 'AES256', ...condition });
+    assert.equal(result.ETag, '"updated"');
+    const saved = JSON.parse(readFileSync(f.capture));
+    assert.equal(saved.body, '{"booked":true}'); assert.equal(saved.mode, 0o600); assert.equal(saved.directoryMode, 0o700);
+    assert.equal(saved.input.ExpectedBucketOwner, '462991287391');
+    assert.equal(saved.input.ContentType, 'application/json'); assert.equal(saved.input.ServerSideEncryption, 'AES256');
+    assert.equal(saved.input[Object.keys(condition)[0]], Object.values(condition)[0]);
+    assert.equal(Object.hasOwn(saved.input, 'Body'), false, 'streaming upload must use the CLI body argument');
+    assert.equal(saved.args[saved.args.indexOf('--body') + 1], saved.path);
+    assert.equal(existsSync(saved.path), false);
+    assert.equal(existsSync(join(saved.path, '..')), false);
+  });
+}
+
+test('CLI lists only the retained ledger prefix and preserves the pagination token', async t => {
+  const f = ledgerCliFixture(t), input = { ...f.input, Prefix: 'd570/ledger/', MaxKeys: 100, ContinuationToken: 'next-page' };
+  assert.deepEqual(await f.cli.call('s3api', 'list-objects-v2', input), {
+    Contents: [{ Key: 'd570/ledger/active.json' }], IsTruncated: false });
+  assert.deepEqual(JSON.parse(readFileSync(f.capture)).input, input);
+});
+
+test('CLI distinguishes a missing ledger key from denied or uncertain reads', async t => {
+  const missing = ledgerCliFixture(t, 'NoSuchKey');
+  await assert.rejects(missing.cli.call('s3api', 'get-object', { ...missing.input, Key: 'd570/ledger/active.json', Range: 'bytes=0-1048576' }),
+    error => error.name === 'NoSuchKey' && error.$metadata?.httpStatusCode === 404);
+  assert.equal(existsSync(JSON.parse(readFileSync(missing.capture)).path), false);
+  const denied = ledgerCliFixture(t, 'AccessDenied');
+  await assert.rejects(denied.cli.call('s3api', 'get-object', { ...denied.input, Key: 'd570/ledger/active.json', Range: 'bytes=0-1048576' }),
+    error => error.name !== 'NoSuchKey' && !error.message.includes('private diagnostic'));
+  assert.equal(existsSync(JSON.parse(readFileSync(denied.capture)).path), false);
+});
+
+test('CLI retains a rejected conditional write and removes the private upload', async t => {
+  const f = ledgerCliFixture(t, 'PreconditionFailed');
+  await assert.rejects(f.cli.call('s3api', 'put-object', { ...f.input, Key: 'd570/ledger/active.json', Body: Buffer.from('{}'),
+    ContentType: 'application/json', ServerSideEncryption: 'AES256', IfNoneMatch: '*' }),
+    error => error.message === 'D570 AWS s3api/put-object failed');
+  assert.equal(existsSync(JSON.parse(readFileSync(f.capture)).path), false);
+});
+
+test('manual budget reads the stack-discovered live ledger when no test store is supplied', async t => {
+  const f = await historyFixture(t), prior = f.aws.call;
+  f.aws.call = async (service, operation, input) => {
+    if (service === 's3api' && operation === 'list-objects-v2') {
+      assert.equal(input.Bucket, 'd570-first-bucket'); assert.equal(input.ExpectedBucketOwner, '462991287391');
+      assert.equal(input.Prefix, 'd570/ledger/'); assert.equal(input.MaxKeys, 100);
+      return { Contents: (await f.store.list()).map(Key => ({ Key })), IsTruncated: false };
+    }
+    if (service !== 's3api' || operation !== 'get-object' || input.Key === 'd570/health/reaper.json') return prior(service, operation, input);
+    assert.equal(input.Bucket, 'd570-first-bucket'); assert.equal(input.ExpectedBucketOwner, '462991287391');
+    assert.equal(input.Range, 'bytes=0-1048576');
+    const row = await f.store.get(input.Key);
+    return { Body: row.body, ETag: row.etag, ContentLength: row.body.length };
+  };
+  const result = await f.inspect({ store: undefined });
+  assert.equal(result.budget.baselineMicroUsd, 1234568); assert.equal(result.budget.activeUuid, null);
+});
+
+for (const [label, change] of [
+  ['foreign owner', { ExpectedBucketOwner: '949687825720' }],
+  ['foreign key', { Key: 'd570/health/reaper.json' }],
+  ['invalid month', { Key: 'd570/ledger/2026-13.json' }],
+  ['missing condition', { IfNoneMatch: undefined }],
+  ['wildcard update', { IfNoneMatch: undefined, IfMatch: '*' }],
+  ['contradictory conditions', { IfMatch: '"old"' }],
+  ['public ACL', { ACL: 'public-read' }],
+  ['unencrypted write', { ServerSideEncryption: undefined }],
+  ['foreign encryption', { ServerSideEncryption: 'aws:kms' }],
+  ['wrong content type', { ContentType: 'text/plain' }],
+  ['oversized upload', { Body: Buffer.alloc(1048577) }],
+  ['empty upload', { Body: Buffer.alloc(0) }],
+  ['file path upload', { Body: '/private/file' }],
+]) test(`CLI ledger ${label} refuses before starting a provider command`, async t => {
+  const f = ledgerCliFixture(t);
+  const input = { ...f.input, Key: 'd570/ledger/active.json', Body: Buffer.from('{}'),
+    IfNoneMatch: '*', ContentType: 'application/json', ServerSideEncryption: 'AES256', ...change };
+  for (const key of Object.keys(input)) if (input[key] === undefined) delete input[key];
+  await assert.rejects(f.cli.call('s3api', 'put-object', input), /D570 controller refused/);
+  assert.equal(existsSync(f.capture), false);
+});
+
+for (const change of [{ Prefix: '' }, { MaxKeys: 1000 }, { ContinuationToken: '' }, { Delimiter: '/' }]) {
+  test(`CLI ledger listing refuses a wider or partial inventory ${JSON.stringify(change)}`, async t => {
+    const f = ledgerCliFixture(t);
+    await assert.rejects(f.cli.call('s3api', 'list-objects-v2', {
+      ...f.input, Prefix: 'd570/ledger/', MaxKeys: 100, ...change }), /D570 controller refused/);
+    assert.equal(existsSync(f.capture), false);
+  });
+}
+
+test('missing live ledger remains missing and cannot initialize replacement history', async t => {
+  const f = protectionFixture(t), prior = f.aws.call;
+  f.aws.call = async (service, operation, input) => {
+    if (service === 's3api' && input.Key === 'd570/ledger/active.json') {
+      throw Object.assign(new Error('missing'), { name: 'NoSuchKey', $metadata: { httpStatusCode: 404 } });
+    }
+    return prior(service, operation, input);
+  };
+  await assert.rejects(control.inspectManualBudget({ checkout: f.root, region: 'eu-north-1', now, aws: f.aws,
+    environment: {}, clock: () => Date.parse(now), stackId: f.stackId }), /D570 budget refused/);
+  assert.equal(f.calls.some(call => call.operation === 'put-object'), false);
+});
+
+test('manual ledger storage connects the reservation core to conditional CLI writes', async t => {
+  const f = ledgerCliFixture(t);
+  assert.equal(typeof control.createManualLedgerStore, 'function', 'missing live manual ledger storage');
+  const store = control.createManualLedgerStore({ bucket: f.input.Bucket, aws: f.cli });
+  assert.deepEqual(await store.get('d570/ledger/active.json'), { body: Buffer.from('{"saved":true}'), etag: '"original"' });
+  assert.deepEqual(await store.put('d570/ledger/active.json', Buffer.from('{"reserved":true}'), { ifMatch: '"original"' }), { etag: '"updated"' });
+  const saved = JSON.parse(readFileSync(f.capture));
+  assert.equal(saved.body, '{"reserved":true}'); assert.equal(saved.input.IfMatch, '"original"');
+  assert.equal(saved.input.ExpectedBucketOwner, '462991287391'); assert.equal(saved.input.Bucket, 'd570-first-bucket');
+});
+
+test('CLI recognizes the AWS 2 error envelope without treating access denial as absence', async t => {
+  const f = ledgerCliFixture(t, 'NoSuchKey', '\naws: [ERROR]: ');
+  const store = control.createManualLedgerStore({ bucket: f.input.Bucket, aws: f.cli });
+  assert.equal(await store.get('d570/ledger/active.json'), null);
+  const denied = ledgerCliFixture(t, 'AccessDenied', '\naws: [ERROR]: ');
+  await assert.rejects(control.createManualLedgerStore({ bucket: denied.input.Bucket, aws: denied.cli }).get('d570/ledger/active.json'),
+    error => error.message === 'D570 AWS s3api/get-object failed');
 });
