@@ -10,7 +10,7 @@ const storage = await import('./ci-nightly-storage.mjs').catch(error => {
   throw error;
 });
 const settings = {workload: 'paced-207-v1', sales: 207, cadenceFactor: 100,
-  startupSeconds: 2, idleSeconds: 2, replayWindowSeconds: 120, streamWindowSeconds: 150};
+  startupSeconds: 2, idleSeconds: 2, replayWindowSeconds: 120, streamWindowSeconds: 150, controllerWindowSeconds: 200};
 const runtime = {waitron: 'a'.repeat(40), litestream: '0.5.17', node: 'v26.11.1', platform: 'linux', arch: 'x64'};
 const sample = () => ({storage: {status: 'measured', byteSeconds: {low: 5000, high: 6000}},
   retainedStorage: {status: 'measured', byteSeconds: {low: 4096, high: 8192}}});
@@ -108,6 +108,10 @@ test('different workload settings cannot silently become a comparison', () => {
   const current = observation(230, 240, {settings: {...settings, cadenceFactor: 200}});
   assert.deepEqual(storage.storageChange(current, observation(100, 110), 2), {status: 'unavailable', reason: 'workload-changed'});
 });
+test('different controller windows cannot silently become a comparison', () => {
+  const current = observation(230, 240, {settings: {...settings, controllerWindowSeconds: 201}});
+  assert.deepEqual(storage.storageChange(current, observation(100, 110), 2), {status: 'unavailable', reason: 'workload-changed'});
+});
 for (const [name, change] of [
   ['missing', value => {delete value.bounds;}],
   ['unknown', value => {value.status = 'unusable';}],
@@ -184,43 +188,66 @@ test('PR rehearsal reports its actual measurement without comparing against main
   assert.match(result.markdown, /230, 240/);
   assert.deepEqual(result.warnings, []);
 });
+test('a lower-bound warning rounds down rather than overstating the change', () => {
+  const result = report(row(20, now, 209.6, 210), [row(10, '2026-11-06T12:00:00Z', 90, 100)]);
+  assert.match(result.warnings[0], /at least 2\.09×/);
+  assert.doesNotMatch(result.warnings[0], /2\.10/);
+});
+test('retained measurements compare with earlier data while newer usable data determines freshness', () => {
+  const current = row(20, '2026-11-03T12:00:00Z', 230, 240);
+  const result = report(current, [row(30, '2026-11-07T00:00:00Z', 1, 2), row(10, '2026-11-02T12:00:00Z', 100, 110)]);
+  assert.match(result.markdown, /Previous:.*runs\/10\/attempts\/1/);
+  assert.equal(result.warnings.length, 1);
+  assert.match(result.warnings[0], /increase at least 2\.09/);
+});
 
 function runCli(options = {}) {
   const root = mkdtempSync(join(tmpdir(), 'nightly-storage-cli-'));
   try {
+    writeFileSync(join(root, 'package.json'), '{"type":"commonjs"}\n');
     const bin = join(root, 'bin'); mkdirSync(bin);
     const current = row(20, new Date(Date.now() - 1000).toISOString(), 230, 240);
     const previous = row(10, new Date(Date.now() - 86400000).toISOString(), 100, 110);
-    if (options.rerun) current.run.run_attempt = 2;
+    const gap = row(options.newerMissing ? 15 : 5,
+      new Date(Date.now() - (options.newerMissing ? 43200000 : 172800000)).toISOString(), 1, 2);
+    if (options.rerun || options.priorSuccessfulAttempt) current.run.run_attempt = 2;
+    if (options.priorSuccessfulAttempt) current.measuredAt = current.run.created_at = new Date(Date.now() - 43200000).toISOString();
+    if (options.stable) current.observation.bounds = {low: 100, high: 110};
     const fixture = join(root, 'fixture.json'), summary = join(root, 'summary.md');
-    writeFileSync(fixture, JSON.stringify({current, previous, ...options}));
+    writeFileSync(fixture, JSON.stringify({current, previous, gap, ...options}));
     writeFileSync(join(bin, 'gh'), `#!/usr/bin/env node
 const fs=require('node:fs'), path=require('node:path');
 const fixture=JSON.parse(fs.readFileSync(process.env.NIGHTLY_STORAGE_FIXTURE,'utf8'));
-const args=process.argv.slice(2), current=fixture.current, previous=fixture.previous;
+const args=process.argv.slice(2), current=fixture.current, previous=fixture.previous, gap=fixture.gap;
 if(args[0]==='api') {
  const url=args[1];
  if(url==='repos/synthetic/cloud/actions/runs/20') console.log(JSON.stringify(current.run));
  else if(url.startsWith('repos/synthetic/cloud/actions/workflows/nightly.yml/runs?')) {
   if(fixture.historyUnavailable){console.error('PRIVATE_CANARY');process.exit(17);}
-  console.log(JSON.stringify({workflow_runs:[current.run,previous.run]}));
+  const rows=fixture.newerMissing?[current.run,gap.run,previous.run]
+   :fixture.olderMissing||fixture.dontReadOlder?[current.run,previous.run,gap.run]:[current.run,previous.run];
+  console.log(JSON.stringify({workflow_runs:rows}));
  } else {
-  const match=/^repos\\/synthetic\\/cloud\\/actions\\/runs\\/(20|10)\\/artifacts\\?per_page=100$/.exec(url);
+  const match=/^repos\\/synthetic\\/cloud\\/actions\\/runs\\/(20|10|5|15)\\/artifacts\\?per_page=100$/.exec(url);
   if(!match) process.exit(18);
-  const row=match[1]==='20'?current:previous;
-  console.log(JSON.stringify({artifacts:fixture.currentMissing&&row===current?[]:[{
-   id:row.run.id+100,name:'nightly-storage-'+row.run.id+'-'+row.run.run_attempt,
+  const row=match[1]==='20'?current:match[1]==='10'?previous:gap;
+  if(fixture.dontReadOlder&&row===gap){console.error('PRIVATE_CANARY');process.exit(17);}
+  const absent=fixture.currentMissing&&row===current||(fixture.olderMissing||fixture.newerMissing)&&row===gap;
+  const attempt=fixture.priorSuccessfulAttempt&&row===current?1:row.run.run_attempt;
+  console.log(JSON.stringify({artifacts:absent?[]:[{
+   id:row.run.id+100,name:'nightly-storage-'+row.run.id+'-'+attempt,
    expired:Boolean(fixture.expired),created_at:row.measuredAt}]}));
  }
 } else if(args[0]==='run'&&args[1]==='download') {
  const row=args[2]==='20'?current:previous;
  const name=args[args.indexOf('-n')+1], dir=args[args.indexOf('-D')+1];
- if(name!=='nightly-storage-'+row.run.id+'-'+row.run.run_attempt||!dir)process.exit(19);
+ const attempt=fixture.priorSuccessfulAttempt&&row===current?1:row.run.run_attempt;
+ if(name!=='nightly-storage-'+row.run.id+'-'+attempt||!dir)process.exit(19);
  fs.writeFileSync(path.join(dir,'nightly-storage.json'),fixture.malformed?'not json':JSON.stringify(row.observation));
 } else process.exit(20);
 `, {mode: 0o700});
     const env = {...process.env, PATH: bin + ':' + process.env.PATH, NIGHTLY_STORAGE_FIXTURE: fixture,
-      GITHUB_REPOSITORY: repository, GITHUB_RUN_ID: '20', GITHUB_RUN_ATTEMPT: options.rerun ? '2' : '1', GITHUB_STEP_SUMMARY: summary};
+      GITHUB_REPOSITORY: repository, GITHUB_RUN_ID: '20', GITHUB_RUN_ATTEMPT: options.rerun || options.priorSuccessfulAttempt ? '2' : '1', GITHUB_STEP_SUMMARY: summary};
     const result = spawnSync(process.execPath, ['scripts/ci-nightly-storage.mjs'], {env, encoding: 'utf8', timeout: 10000});
     return {...result, summary: existsSync(summary) ? readFileSync(summary, 'utf8') : ''};
   } finally {rmSync(root, {recursive: true, force: true});}
@@ -246,5 +273,26 @@ for (const options of [{historyUnavailable: true}, {currentMissing: true}, {expi
     assert.match(result.summary, /unavailable/);
     assert.match(result.stdout, /::warning::/);
     assert.doesNotMatch(result.summary + result.stdout + result.stderr, /PRIVATE_CANARY/);
+    assert.doesNotMatch(result.summary, /advisory evidence unavailable/);
+    if (options.historyUnavailable) assert.match(result.summary, /history-unavailable/);
+    if (options.currentMissing) assert.match(result.summary, /Previous:.*runs\/10\/attempts\/1/);
+    if (options.expired) assert.match(result.summary, /No usable comparable baseline/);
+    if (options.malformed) assert.match(result.summary, /Skipped 1 unusable/);
   });
 }
+for (const options of [{olderMissing: true}, {newerMissing: true}, {dontReadOlder: true}]) {
+  test(`a healthy baseline is not buried by irrelevant historical warnings ${JSON.stringify(options)}`, () => {
+    const result = runCli({...options, stable: true});
+    assert.equal(result.status, 0);
+    assert.match(result.summary, /Previous:.*runs\/10\/attempts\/1/);
+    assert.doesNotMatch(result.stdout, /::warning::/);
+    if (options.newerMissing) assert.match(result.summary, /Skipped 1 unusable/);
+  });
+}
+test('partial rerun retains the last actual measurement and names its original attempt', () => {
+  const result = runCli({priorSuccessfulAttempt: true});
+  assert.equal(result.status, 0);
+  assert.match(result.summary, /runs\/20\/attempts\/1/);
+  assert.match(result.summary, /retained from attempt 1/);
+  assert.match(result.summary, /increase at least 2\.09/);
+});

@@ -4,7 +4,7 @@ import {join, resolve} from 'node:path';
 import {tmpdir} from 'node:os';
 import {fileURLToPath} from 'node:url';
 
-const settingKeys = ['workload', 'sales', 'cadenceFactor', 'startupSeconds', 'idleSeconds', 'replayWindowSeconds', 'streamWindowSeconds'];
+const settingKeys = ['workload', 'sales', 'cadenceFactor', 'startupSeconds', 'idleSeconds', 'replayWindowSeconds', 'streamWindowSeconds', 'controllerWindowSeconds'];
 const runtimeKeys = ['waitron', 'litestream', 'node', 'platform', 'arch'];
 const select = (value, keys) => Object.fromEntries(keys.map(key => [key, value[key]]));
 const bounded = value => typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= Number.MAX_SAFE_INTEGER;
@@ -17,7 +17,7 @@ export function storageObservation(stream, settings, runtime) {
     && (part.gaps === undefined || Array.isArray(part.gaps) && part.gaps.length === 0)
     && bounded(part.byteSeconds?.low) && bounded(part.byteSeconds?.high)
     && part.byteSeconds.low <= part.byteSeconds.high)) return result;
-  // Publication-ineligible replays return before the existing stream accounting sum.
+  // Cleanup storage contributes to the lifetime even after the writer stops.
   const low = parts[0].byteSeconds.low + parts[1].byteSeconds.low;
   const high = parts[0].byteSeconds.high + parts[1].byteSeconds.high;
   if (!bounded(low) || !bounded(high)) return result;
@@ -58,7 +58,7 @@ export function storageChange(current, previous, threshold) {
 }
 
 const hour = 3600000;
-const link = (repository, row) => `https://github.com/${repository}/actions/runs/${row.run.id}/attempts/${row.run.run_attempt}`;
+const link = (repository, row) => `https://github.com/${repository}/actions/runs/${row.run.id}/attempts/${row.artifactAttempt ?? row.run.run_attempt}`;
 const interval = value => `[${value.bounds.low}, ${value.bounds.high}] byte-seconds`;
 export function buildStorageReport({repository, current, history, now, threshold, issues = []}) {
   const warnings = [];
@@ -68,6 +68,8 @@ export function buildStorageReport({repository, current, history, now, threshold
   if (issues.length) warn(`Cloud cost warning: evidence unavailable (${[...new Set(issues)].join(', ')}).`);
   const available = usableObservation(current.observation);
   lines.push(available ? `Current: ${link(repository, current)} ${interval(current.observation)}` : 'Current measurement unavailable.', '');
+  if (current.artifactAttempt && current.artifactAttempt !== current.run.run_attempt)
+    lines.push(`Current measurement retained from attempt ${current.artifactAttempt}; the current attempt is ${current.run.run_attempt}.`, '');
   if (current.run.event === 'pull_request') {
     lines.push('Rehearsal: current artifact/report only; this run does not enter main history.');
     if (!available) warn('Cloud cost warning: rehearsal storage measurement unavailable.');
@@ -82,7 +84,8 @@ export function buildStorageReport({repository, current, history, now, threshold
       && Number.isFinite(age) && age >= 0 && age <= 14 * 24 * hour;
   }).sort((a, b) => Date.parse(b.measuredAt) - Date.parse(a.measuredAt));
   const usable = candidates.filter(row => usableObservation(row.observation));
-  const previous = available ? usable.find(row => settingKeys.every(key => row.observation.settings[key] === current.observation.settings[key])) : usable[0];
+  const previous = available ? usable.find(row => Date.parse(row.measuredAt) < Date.parse(current.measuredAt)
+    && settingKeys.every(key => row.observation.settings[key] === current.observation.settings[key])) : usable[0];
   const skipped = candidates.filter(row => !usableObservation(row.observation)
     || available && !settingKeys.every(key => row.observation.settings[key] === current.observation.settings[key])).length;
   if (skipped) lines.push(`Skipped ${skipped} unusable or incomparable measurements.`, '');
@@ -97,12 +100,16 @@ export function buildStorageReport({repository, current, history, now, threshold
         if (comparison.runtimeChanged) lines.push('Runtime/native pins changed: ' + runtimeKeys
           .filter(key => current.observation.runtime[key] !== previous.observation.runtime[key])
           .map(key => `${key}: ${previous.observation.runtime[key]} → ${current.observation.runtime[key]}`).join('; '), '');
-        if (comparison.change) warn(`Cloud cost warning: generated storage ${comparison.change.direction} at least ${comparison.change.ratio.toFixed(2)}×; ${link(repository, previous)} ${interval(previous.observation)} → ${link(repository, current)} ${interval(current.observation)}.`);
+        if (comparison.change) {
+          const ratio = comparison.change.ratio;
+          const lower = ratio < 1e6 ? Math.floor(ratio * 100) / 100 : Math.floor(ratio);
+          warn(`Cloud cost warning: generated storage ${comparison.change.direction} at least ${lower.toFixed(2)}×; ${link(repository, previous)} ${interval(previous.observation)} → ${link(repository, current)} ${interval(current.observation)}.`);
+        }
         else lines.push(`No change exceeds the conservative ${threshold}× threshold.`, '');
       }
     }
   }
-  const latest = available ? current : usable[0];
+  const latest = [...(available ? [current] : []), ...usable].sort((a, b) => Date.parse(b.measuredAt) - Date.parse(a.measuredAt))[0];
   if (latest && now - Date.parse(latest.measuredAt) > 72 * hour)
     warn(`Cloud cost warning: last usable generated storage measurement is older than 72 hours; ${link(repository, latest)}.`);
   return {markdown: lines.join('\n') + '\n', warnings};
@@ -123,17 +130,23 @@ function main() {
     };
     const api = path => JSON.parse(gh(['api', `repos/${repository}/${path}`]));
     const issues = [];
-    const load = run => {
+    const load = (run, historical = false) => {
       const row = {run, measuredAt: run.created_at, observation: null};
       let directory;
       try {
-        const name = `nightly-storage-${run.id}-${run.run_attempt}`;
-        const artifact = api(`actions/runs/${run.id}/artifacts?per_page=100`).artifacts
-          .find(value => value.name === name && !value.expired);
-        if (!artifact) throw Error();
+        const artifacts = api(`actions/runs/${run.id}/artifacts?per_page=100`).artifacts
+          .map(value => ({...value, attempt: Number(new RegExp(`^nightly-storage-${run.id}-([1-9][0-9]*)$`).exec(value.name)?.[1])}))
+          .filter(value => !value.expired && Number.isSafeInteger(value.attempt) && value.attempt <= run.run_attempt)
+          .sort((a, b) => b.attempt - a.attempt);
+        const artifact = artifacts[0];
+        if (!artifact) {
+          if (!historical) issues.push('current-artifact-unavailable');
+          return row;
+        }
+        row.artifactAttempt = artifact.attempt;
         row.measuredAt = artifact.created_at;
         directory = mkdtempSync(join(tmpdir(), 'cloud-nightly-storage-'));
-        gh(['run', 'download', String(run.id), '-R', repository, '-n', name, '-D', directory]);
+        gh(['run', 'download', String(run.id), '-R', repository, '-n', artifact.name, '-D', directory]);
         const file = join(directory, 'nightly-storage.json');
         if (!statSync(file).isFile() || statSync(file).size > 65536) throw Error();
         row.observation = JSON.parse(readFileSync(file, 'utf8'));
@@ -148,11 +161,16 @@ function main() {
       try {
         const since = encodeURIComponent('>=' + new Date(now - 14 * 24 * hour).toISOString());
         const runs = api(`actions/workflows/nightly.yml/runs?branch=main&per_page=100&created=${since}`).workflow_runs;
-        for (const source of runs) {
+        for (const source of runs.sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at))) {
           if (Date.now() >= deadline) {issues.push('history-unavailable'); break;}
           if (source.id !== id && source.head_repository?.full_name === repository && source.head_branch === 'main'
             && ['schedule', 'workflow_dispatch'].includes(source.event) && source.status === 'completed'
-            && Date.parse(source.created_at) >= now - 14 * 24 * hour) history.push(load(source));
+            && Date.parse(source.created_at) >= now - 14 * 24 * hour) {
+            const prior = load(source, true); history.push(prior);
+            if (usableObservation(prior.observation) && (!usableObservation(current.observation)
+              || Date.parse(prior.measuredAt) < Date.parse(current.measuredAt)
+              && settingKeys.every(key => current.observation.settings[key] === prior.observation.settings[key]))) break;
+          }
         }
       } catch {issues.push('history-unavailable');}
     }

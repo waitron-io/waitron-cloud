@@ -81,6 +81,9 @@ last usable measurement is older than 72 hours, or no usable baseline exists in
 the retained 14-day history. Pull-request rehearsals report their current
 measurement without entering main history. Read the first main nightlies before
 treating the local Debian spread as hosted-runner variation.
+When a partial rerun keeps an earlier export, the report links its original
+attempt and keeps its timestamp. Rerunning other jobs does not make that
+measurement fresh.
 
 This measures generated storage only. Requests, compute, transfer, archives and
 other service costs remain unknown; the report contains no dollar estimate.

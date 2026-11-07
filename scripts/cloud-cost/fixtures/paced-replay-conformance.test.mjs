@@ -18,6 +18,8 @@ const docker = argv => execFileSync('docker', argv, { env: { PATH: process.env.P
   encoding: 'utf8', timeout: 15000, stdio: ['ignore', 'pipe', 'pipe'] }).trim();
 const fingerprint = database => ['', '-wal', '-shm'].map(suffix => existsSync(database + suffix)
   ? createHash('sha256').update(readFileSync(database + suffix)).digest('hex') : null);
+const replaySettings = {cadence: {mode: 'accelerated', factor: 100}, replayWindowSeconds: 120,
+  windowSeconds: 200, startupSeconds: 2, idleSeconds: 2, streamWindowSeconds: 150};
 
 // Small, immediate replays miss the native stream's interaction with checkpoints and compaction.
 test('pacedReplayRestoresEverySaleWithValidStructureAfterSustainedWrites', async t => {
@@ -65,10 +67,12 @@ test('pacedReplayRestoresEverySaleWithValidStructureAfterSustainedWrites', async
   const completed = await withReplayDiagnostics(() => runIsolatedReplay({ source, root, journal, codeRoot, database, locationId, config, initial,
     expected: { sales: 208, paid: 208, tradingDays: 2, busiest: 207 },
     originalInventory: { timeZone: 'Europe/Madrid', days: 2, busiest: 207 },
-    cadence: { mode: 'accelerated', factor: 100 }, replayWindowSeconds: 120, windowSeconds: 200, image: stack.image,
+    cadence: replaySettings.cadence, replayWindowSeconds: replaySettings.replayWindowSeconds,
+    windowSeconds: replaySettings.windowSeconds, image: stack.image,
     stream: { binarySha256: createHash('sha256').update(readFileSync(join(codeRoot, 'litestream'))).digest('hex'),
       copyImage: docker(['image', 'inspect', 'node:26.11.1-slim', '--format', '{{.Id}}']),
-      startupSeconds: 2, idleSeconds: 2, windowSeconds: 150 } }), text => t.diagnostic(text));
+      startupSeconds: replaySettings.startupSeconds, idleSeconds: replaySettings.idleSeconds,
+      windowSeconds: replaySettings.streamWindowSeconds } }), text => t.diagnostic(text));
   assert.deepEqual(Object.keys(completed).sort(), ['accounting', 'costMeasured', 'evidence', 'functional', 'receipt']);
   assert.equal(completed.functional, 'passed'); assert.equal(completed.costMeasured, false); assert.equal(completed.receipt, null);
   assert.equal(completed.accounting.status, 'unknown'); assert.equal(completed.accounting.publicationEligible, false);
@@ -96,8 +100,10 @@ test('pacedReplayRestoresEverySaleWithValidStructureAfterSustainedWrites', async
   assert.equal(docker(['network', 'ls', '-q', '--filter', 'label=io.waitron.cloud-cost.owner=' + token]), '');
   exportStorageObservation({output: process.env.CLOUD_NIGHTLY_STORAGE_OUTPUT,
     stream: result.admission.stream,
-    settings: {workload: 'paced-207-v1', sales: 207, cadenceFactor: 100,
-      startupSeconds: 2, idleSeconds: 2, replayWindowSeconds: 120, streamWindowSeconds: 150},
+    settings: {workload: 'paced-207-v1', sales: result.admission.replay.counts.successful,
+      cadenceFactor: replaySettings.cadence.factor, startupSeconds: replaySettings.startupSeconds,
+      idleSeconds: replaySettings.idleSeconds, replayWindowSeconds: replaySettings.replayWindowSeconds,
+      streamWindowSeconds: replaySettings.streamWindowSeconds, controllerWindowSeconds: replaySettings.windowSeconds},
     runtime: {waitron: REPLAY_REVISION, litestream: result.admission.stream.native.version,
       node: process.version, platform: process.platform, arch: process.arch}, diagnostic: text => t.diagnostic(text)});
 });
