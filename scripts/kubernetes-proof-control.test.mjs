@@ -3275,3 +3275,50 @@ test('launched retry reuses the checked cleanup instance after EC2 forgets it',a
  await f.command('down');assert.equal(JSON.parse(readFileSync(join(f.base,'setup-removal.json'))).retryAt,f.stamp());
  assert.equal(f.calls.some(row=>row.operation==='run-instances'),false);
 });
+
+function omitTerminatedSubnet(response){const row=response.Reservations[0].Instances[0];delete row.SubnetId;row.NetworkInterfaces=[];row.BlockDeviceMappings=[];}
+test('launched retry accepts absent subnet only with matching saved removal and fresh deleted inventory',async t=>{
+ const f=await launchedRetryFixture(t),body=JSON.parse(readFileSync(f.files.instance));omitTerminatedSubnet(body);writeFileSync(f.files.instance,JSON.stringify(body));
+ await f.command('down',f.flags());const record=JSON.parse(readFileSync(join(f.base,'setup-removal.json')));assert.equal(record.retryAt,f.stamp());assert.equal(record.subnet,f.launch.subnetId);
+ assert.equal(Object.hasOwn(record,'boundSubnet'),false);
+ const child=await f.command('up');assert.equal(child.runEvidence.openings['2026-11'].overheadMicroUsd,18320296);
+});
+for(const [label,edit]of [
+ ['mismatched saved subnet',f=>{const p=join(f.base,'setup-removal.json'),r=JSON.parse(readFileSync(p));r.subnet='subnet-00000000000000000';writeFileSync(p,JSON.stringify(r));}],
+ ['null saved subnet',f=>{const p=join(f.base,'setup-removal.json'),r=JSON.parse(readFileSync(p));r.subnet=null;writeFileSync(p,JSON.stringify(r));}],
+ ['missing inventory subnet',f=>{f.p.resource.splice(f.p.resource.findIndex(x=>x.LogicalResourceId==='Subnet'),1);}],
+ ['different inventory subnet',f=>{f.p.resource.find(x=>x.LogicalResourceId==='Subnet').PhysicalResourceId='subnet-00000000000000000';}],
+ ['present different subnet',(_f,b)=>{b.Reservations[0].Instances[0].SubnetId='subnet-00000000000000000';}],
+ ['nonempty network list',(_f,b)=>{b.Reservations[0].Instances[0].NetworkInterfaces=[{}];}],
+])test(`missing-subnet retry refuses ${label} without a child`,async t=>{
+ const f=await launchedRetryFixture(t),body=JSON.parse(readFileSync(f.files.instance));omitTerminatedSubnet(body);edit(f,body);writeFileSync(f.files.instance,JSON.stringify(body));
+ await assert.rejects(f.command('down',f.flags()),/D570 controller refused/);assert.equal(existsSync(join(f.base,'retry')),false);
+ assert.equal(JSON.parse(readFileSync(join(f.base,'setup-removal.json'))).retryAt,undefined);
+});
+test('late console and cleanup accept omitted terminated subnet after their validated live capture',async t=>{
+ const f=await lateConsoleFixture(t);omitTerminatedSubnet(f.instances);
+ const ready=await f.late();const cleanup=await f.cleanup({...f.lateOptions,ready});assert.equal(cleanup.terminated,true);assert.equal(cleanup.volumesAbsent,true);
+});
+
+test('shutdown timing accepts omitted subnet only on the terminated reply after live capture',async t=>{
+ const f=await shutdownTimingFixture(t),prior=f.aws.call;
+ f.aws.call=async(...args)=>{const response=await prior(...args);if(args[1]==='describe-instances'&&response.Reservations[0].Instances[0].State.Name==='terminated')omitTerminatedSubnet(response);return response;};
+ assert.equal((await f.observe()).shutdownObservation.terminatedReceivedAt,'2026-11-06T12:03:00Z');
+});
+test('new-run retry keeps eligibility with an omitted subnet in captured cleanup evidence',async t=>{
+ const f=await launchedRetryFixture(t),prior=f.aws.call,response=structuredClone(f.instances);omitTerminatedSubnet(response);
+ writeFileSync(join(f.base,'launch.json'),JSON.stringify({...f.launch,capture:{volumeIds:f.ready.volumeIds,interfaceIds:f.ready.interfaceIds,observedAt:f.ready.observedAt}}));
+ writeFileSync(join(f.base,'cleanup.json'),JSON.stringify({...f.ready,instanceObservation:response,terminated:true,volumesAbsent:true,interfacesAbsent:true,stateReason:{Code:'Client.InstanceInitiatedShutdown'}}),{mode:0o600});
+ f.aws.call=async(...args)=>{
+  if(args[1]==='describe-instances'&&args[2].InstanceIds)throw new Error('synthetic EC2 no longer retains it');
+  if(args[1]==='describe-network-interfaces'&&args[2].Filters?.[0].Name==='network-interface-id')return {NetworkInterfaces:[]};
+  return prior(...args);
+ };
+ await f.command('down');assert.equal(JSON.parse(readFileSync(join(f.base,'setup-removal.json'))).retryAt,f.stamp());
+});
+
+test('a third full setup cannot fit after two launched reservations even with a zero account bill',async t=>{
+ const f=await creationFixture(t);
+ await assert.rejects(f.create({priorBookings:{'2026-11':18626982,'2026-12':18626982}}),/D570 controller refused: booking/);
+ assert.deepEqual(f.counts(),{creates:0,enables:0});assert.equal(existsSync(f.options.directory),false);
+});

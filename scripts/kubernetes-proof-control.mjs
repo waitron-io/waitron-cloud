@@ -738,6 +738,12 @@ function manualCapture(launch, capture) {
     && Array.isArray(capture.volumeIds) && capture.volumeIds.length === 1 && /^vol-[a-f0-9]{17}$/.test(capture.volumeIds[0])
     && Array.isArray(capture.interfaceIds) && capture.interfaceIds.length === 1 && /^eni-[a-f0-9]{17}$/.test(capture.interfaceIds[0]));
 }
+function manualInstanceSubnet(instance, launch, boundSubnet) {
+  if (instance.SubnetId !== undefined) return instance.SubnetId === launch.subnetId;
+  return instance.State?.Name === 'terminated' && boundSubnet === launch.subnetId
+    && Array.isArray(instance.NetworkInterfaces) && instance.NetworkInterfaces.length === 0
+    && Array.isArray(instance.BlockDeviceMappings) && instance.BlockDeviceMappings.length === 0;
+}
 function manualCollectionEnd(launch, capture, observation) {
   manualCapture(launch, capture);
   const check = value => checkControl(value, 'ec2 observation');
@@ -785,7 +791,7 @@ async function inspectManualGuest(options, captureOnly) {
     check(row?.OwnerId === account && Array.isArray(row.Instances) && row.Instances.length === 1);
     const instance = row.Instances[0];
     check(instance?.InstanceId === launch.instanceId && instance.ClientToken === reservation.uuid
-      && instance.SubnetId === launch.subnetId && instance.InstanceType === 'm7g.2xlarge'
+      && manualInstanceSubnet(instance, launch, late ? launch.subnetId : undefined) && instance.InstanceType === 'm7g.2xlarge'
       && !instance.PublicIpAddress && !instance.IamInstanceProfile && !instance.KeyName
       && instance.RootDeviceName === '/dev/xvda' && instance.RootDeviceType === 'ebs');
     const expectedTags = { Proof: 'D570', Stack: launch.stackId, Run: reservation.uuid, ExpiresAt: reservation.expiry };
@@ -882,7 +888,9 @@ export async function observeManualFirstShutdown(options) {
     check(!response?.NextToken && Array.isArray(response?.Reservations) && response.Reservations.length === 1);
     const row = response.Reservations[0], instance = row?.Instances?.[0];
     check(row?.OwnerId === account && Array.isArray(row.Instances) && row.Instances.length === 1
-      && instance?.InstanceId === ready.instanceId && instance.ClientToken === reservation.uuid && instance.SubnetId === ready.subnetId);
+      && instance?.InstanceId === ready.instanceId && instance.ClientToken === reservation.uuid
+      && manualInstanceSubnet(instance, ready, ready.subnetId));
+    if (instance.SubnetId === undefined) manualCapture(ready, ready.capture ?? ready);
     const tags = { Proof: 'D570', Stack: ready.stackId, Run: reservation.uuid, ExpiresAt: reservation.expiry };
     check(Array.isArray(instance.Tags) && Object.entries(tags).every(([key, value]) => {
       const matches = instance.Tags.filter(tag => tag?.Key === key);
@@ -941,8 +949,9 @@ export async function inspectManualFirstGuestCleanup(options) {
   const row = response.Reservations[0], instance = row?.Instances?.[0];
   check(row?.OwnerId === account && Array.isArray(row.Instances) && row.Instances.length === 1
     && instance?.InstanceId === ready.instanceId && instance.ClientToken === reservation.uuid
-    && instance.SubnetId === ready.subnetId && instance.State?.Name === 'terminated'
+    && manualInstanceSubnet(instance, ready, ready.subnetId) && instance.State?.Name === 'terminated'
     && instance.StateReason?.Code === 'Client.InstanceInitiatedShutdown');
+  if (instance.SubnetId === undefined) manualCapture(ready, ready.capture ?? ready);
   const tags = { Proof: 'D570', Stack: ready.stackId, Run: reservation.uuid, ExpiresAt: reservation.expiry };
   check(Array.isArray(instance.Tags) && Object.entries(tags).every(([key, value]) => {
     const matches = instance.Tags.filter(tag => tag?.Key === key);
@@ -1242,12 +1251,12 @@ async function launchedHistory(base, record) {
     return { setup, launch, months };
   } catch (error) { if (error.message?.startsWith('D570 ')) throw error; refuse('private history'); }
 }
-function stoppedInstance(response, launch) {
+function stoppedInstance(response, launch, boundSubnet) {
   check(!response?.NextToken && Array.isArray(response?.Reservations) && response.Reservations.length === 1, 'retained evidence');
   const row = response.Reservations[0], instance = row?.Instances?.[0];
   check(row.OwnerId === account && Array.isArray(row.Instances) && row.Instances.length === 1
     && instance?.InstanceId === launch.instanceId && instance.ClientToken === launch.reservation.uuid
-    && instance.SubnetId === launch.subnetId && instance.InstanceType === 'm7g.2xlarge'
+    && manualInstanceSubnet(instance, launch, boundSubnet) && instance.InstanceType === 'm7g.2xlarge'
     && instance.State?.Name === 'terminated' && instance.StateReason?.Code === 'Client.InstanceInitiatedShutdown', 'retained evidence');
   const tags = { Proof: 'D570', Stack: launch.stackId, Run: launch.reservation.uuid, ExpiresAt: launch.reservation.expiry };
   check(Array.isArray(instance.Tags) && Object.entries(tags).every(([key,value]) => {
@@ -1267,9 +1276,9 @@ async function retainedJson(reference, checkout) {
     return JSON.parse(bytes);
   } catch (error) { if (error.message?.startsWith('D570 ')) throw error; refuse('retained evidence'); }
 }
-async function retainedStop(evidence, checkout, launch) {
+async function retainedStop(evidence, checkout, launch, boundSubnet) {
   const instance = await retainedJson(evidence.instance, checkout), console = await retainedJson(evidence.console, checkout);
-  stoppedInstance(instance, launch);
+  stoppedInstance(instance, launch, boundSubnet);
   check(console.InstanceId === launch.instanceId && Number.isFinite(Date.parse(console.Timestamp))
     && Date.parse(console.Timestamp) >= instant(launch.reservation.startedAt), 'retained evidence');
   manualReadyBoot(console.Output, launch.reservation, launch.guestExpiry);
@@ -1296,8 +1305,12 @@ async function readCleanup(base, checkout) {
   }
   if (record.retryAt) {
     check(record.eligible === false && record.releasedAt === null && instant(record.retryAt) >= instant(record.deletedAt), 'private history');
-    const history = await launchedHistory(base, record); stoppedInstance(record.stoppedInstance, history.launch);
-    if (record.retainedEvidence) check(isDeepStrictEqual(await retainedStop(record.retainedEvidence, checkout, history.launch), record.stoppedInstance), 'private history');
+    const history = await launchedHistory(base, record);
+    check(record.subnet === history.launch.subnetId, 'private history');
+    if (!record.retainedEvidence && record.stoppedInstance?.Reservations?.[0]?.Instances?.[0]?.SubnetId === undefined)
+      manualCapture(history.launch, { ...history.launch, ...history.launch.capture });
+    stoppedInstance(record.stoppedInstance, history.launch, record.subnet);
+    if (record.retainedEvidence) check(isDeepStrictEqual(await retainedStop(record.retainedEvidence, checkout, history.launch, record.subnet), record.stoppedInstance), 'private history');
   }
   return record;
 }
@@ -1394,7 +1407,13 @@ export async function removeManualFirstSetup(options) {
     if (evidence) check(isDeepStrictEqual(evidence, options.retainedEvidence), 'retained evidence');
     evidence = options.retainedEvidence;
     const history = await launchedHistory(base, priorCleanup ?? { ...setup, billing: setup.billing });
-    ended = await retainedStop(evidence, checkout, history.launch);
+    const savedSubnet = priorCleanup ? priorCleanup.subnet : subnet;
+    check(savedSubnet === history.launch.subnetId, 'retained evidence');
+    const rows = inventory.StackResources.filter(row => row.LogicalResourceId === 'Subnet');
+    check(stack.StackStatus === 'DELETE_COMPLETE' && rows.length === 1 && rows[0].StackId === stackId
+      && rows[0].ResourceType === 'AWS::EC2::Subnet' && rows[0].ResourceStatus === 'DELETE_COMPLETE'
+      && rows[0].PhysicalResourceId === savedSubnet, 'retained evidence');
+    ended = await retainedStop(evidence, checkout, history.launch, savedSubnet);
   } else if (!ended && await exists(join(base, 'launch.json')) && await exists(join(base, 'history', 'active.json'))) {
     // Eligibility is optional; the independent absence checks must still permit ordinary removal.
     try {
@@ -1408,7 +1427,13 @@ export async function removeManualFirstSetup(options) {
           && cleanup.stateReason?.Code === 'Client.InstanceInitiatedShutdown', 'private history');
         candidate = cleanup.instanceObservation;
       } else candidate = await call('ec2', 'describe-instances', { InstanceIds: [history.launch.instanceId] });
-      stoppedInstance(candidate, history.launch); ended = candidate;
+      let boundSubnet;
+      if (history.launch.capture) {
+        manualCapture(history.launch, { ...history.launch, ...history.launch.capture });
+        boundSubnet = history.launch.subnetId;
+      }
+      check((priorCleanup ? priorCleanup.subnet : subnet) === history.launch.subnetId, 'retained evidence');
+      stoppedInstance(candidate, history.launch, boundSubnet); ended = candidate;
     } catch { ended = null; }
   }
   const keys = retained.files.filter(name => name === 'active.json' || /^\d{4}-(0[1-9]|1[0-2])\.json$/.test(name))
@@ -1462,7 +1487,7 @@ export async function removeManualFirstSetup(options) {
   }
   await capturedAbsent();
   const at = iso(Math.floor(clock() / 1000) * 1000), deletedAt = priorCleanup?.deletedAt ?? at;
-  if (ended) { const history = await launchedHistory(base, qualifiedRecord); stoppedInstance(ended, history.launch); }
+  if (ended) { const history = await launchedHistory(base, qualifiedRecord); stoppedInstance(ended, history.launch, qualifiedRecord.subnet); }
   await replacePrivateJson(cleanupPath, { ...qualifiedRecord, deletedAt, releasedAt: eligible ? priorCleanup?.releasedAt ?? deletedAt : null,
     ...(ended && !eligible ? { retryAt: priorCleanup?.retryAt ?? at } : {}),
     reason: priorCleanup?.reason ?? (eligible ? 'failed setup removed without a run' : 'setup removed; booking retained') });
