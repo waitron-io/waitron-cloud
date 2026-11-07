@@ -16,6 +16,7 @@ sys.path.insert(0,str(Path(__file__).resolve().parent))
 import host
 import session
 import operations
+import startup
 
 class Guards(unittest.TestCase):
  def setUp(self):
@@ -23,7 +24,8 @@ class Guards(unittest.TestCase):
   self.root=Path(self.temp.name);self.control=self.root/'control';self.control.mkdir();self.ops=self.root/'operations'
   self.resource='dt-policy-0-1';self.live=set();self.active=False;self.transferred=False;self.order=[]
   self.request={'resourceId':self.resource,'snapshot':hashlib.sha256(b'opaque source').hexdigest(),'argv':['true'],'deadline':int(time.time()*1000)+60000}
-  values=[(session,'CONTROL',self.control),(session,'OPERATIONS',self.ops),
+  boot=self.root/'boot-id';boot.write_text('11111111-1111-4111-8111-111111111111')
+  values=[(host,'ROOT',self.root),(startup,'BOOT_ID',boot),(session,'CONTROL',self.control),(session,'OPERATIONS',self.ops),
           (host,'run',self.provider_run),(host,'observation',lambda r:{'resourceId':r,'running':False,'absent':True}),
           (host,'table_present',lambda r:False),
           (host,'service_state',lambda r:{'absent':not self.active,'running':self.active}),
@@ -31,6 +33,7 @@ class Guards(unittest.TestCase):
           (session,'Path',lambda p:types.SimpleNamespace(read_text=lambda:'boot-fixture') if str(p)=='/proc/sys/kernel/random/boot_id' else Path(p))]
   for target,name,value in values:
    old=getattr(target,name);setattr(target,name,value);self.addCleanup(setattr,target,name,old)
+  startup.reconcile()
  def provider_run(self,*argv,**kwargs):
   if argv[0]=='systemd-run':self.live.add(next(a[7:] for a in argv if a.startswith('--unit='))+'.timer')
   elif argv[:2]==('systemctl','stop'):
