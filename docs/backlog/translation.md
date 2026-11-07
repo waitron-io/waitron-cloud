@@ -281,6 +281,17 @@ to force this exact assertion to fail after a real backend termination and check
 that its safe details survive the proof. This qualifies evidence capture, not the
 historical cause. Active-job failure ordering at direct pool queries remains
 separately unqualified; the reviewed idle scenario leases no job.
+
+[Main run 42395447647, job 128479291385](https://github.com/waitron-io/waitron-cloud/actions/runs/42395447647/job/128479291385)
+checks out `674eac0661687fdfe59317348b722d3f41de4700` and reports 684 passes
+and one failure among 685 tests. The same disconnect case fails earlier, at
+`worker-cli.test.ts:192`: not every selected backend reports successful termination.
+That assertion runs before the fixed-output diagnostic capture, so this log has
+no selected backend IDs or termination results. It does not establish whether
+this recurrence shares the open disconnect cause. Reproduce this earlier failure
+and retain its backend facts before changing either assertion; it remains a
+priority in this existing investigation.
+
 A later CI disconnect failure retains the reverse output: a pass-retry line before
 that fatal line. A local real PostgreSQL lease-query termination reproduces this
 ordering when the client error event arrives later. The query reports `57P01`,
