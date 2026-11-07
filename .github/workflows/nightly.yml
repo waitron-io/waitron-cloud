@@ -70,6 +70,25 @@ jobs:
       - run: node scripts/test-postgres.mjs exec node --test --test-reporter=tap --test-concurrency=1 packages/account-http/test/venue-service-direct-wait-guards.nightly.ts packages/account-http/test/venue-service-external-wait-guards.nightly.ts packages/registration/test/billing-allowance-guards.nightly.ts packages/registration/test/billing-guard-qualification.nightly.ts
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  storage-advisory:
+    needs: cost
+    if: ${{ always() }}
+    continue-on-error: true
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '26'
+          package-manager-cache: false
+      - name: Report generated storage changes
+        run: node scripts/ci-nightly-storage.mjs
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
   summary:
     name: nightly-summary
     if: ${{ always() }}

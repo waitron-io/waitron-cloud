@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
-import {mkdtempSync, readFileSync, readdirSync, rmSync} from 'node:fs';
+import {mkdtempSync, readFileSync, readdirSync, rmSync, mkdirSync, writeFileSync, existsSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
+import {spawnSync} from 'node:child_process';
 
 const storage = await import('./ci-nightly-storage.mjs').catch(error => {
   if (error.code === 'ERR_MODULE_NOT_FOUND' && error.url === new URL('./ci-nightly-storage.mjs', import.meta.url).href) return {};
@@ -80,3 +81,170 @@ test('an optional export failure reports a fixed message and does not fail the c
       diagnostic: () => {throw Error('diagnostic failure');}}));
   } finally {rmSync(root, {recursive: true, force: true});}
 });
+
+const observation = (low, high, overrides = {}) => ({status: 'measured', bounds: {low, high}, gaps: [],
+  settings: {...settings}, runtime: {...runtime}, ...overrides});
+for (const [name, current, previous, want] of [
+  ['increase', [230, 240], [100, 110], {direction: 'increase', ratio: 230 / 110}],
+  ['decrease', [100, 110], [230, 240], {direction: 'decrease', ratio: 230 / 110}],
+  ['exact boundary', [220, 230], [100, 110], null],
+  ['normal spread', [110, 120], [100, 110], null],
+  ['overlapping wide bounds', [50, 400], [100, 200], null],
+  ['zero lower bounds', [0, 300], [0, 100], null],
+]) test(`comparison uses conservative bounds for ${name}`, () => {
+  assert.equal(typeof storage.storageChange, 'function');
+  assert.deepEqual(storage.storageChange(observation(...current), observation(...previous), 2),
+    {status: 'comparable', change: want, runtimeChanged: false});
+});
+test('runtime upgrades remain comparable and are reported', () => {
+  assert.equal(typeof storage.storageChange, 'function');
+  const current = observation(230, 240, {runtime: {...runtime, waitron: 'b'.repeat(40), node: 'v26.12.0'}});
+  const result = storage.storageChange(current, observation(100, 110), 2);
+  assert.deepEqual(result.change, {direction: 'increase', ratio: 230 / 110});
+  assert.equal(result.runtimeChanged, true);
+});
+test('different workload settings cannot silently become a comparison', () => {
+  assert.equal(typeof storage.storageChange, 'function');
+  const current = observation(230, 240, {settings: {...settings, cadenceFactor: 200}});
+  assert.deepEqual(storage.storageChange(current, observation(100, 110), 2), {status: 'unavailable', reason: 'workload-changed'});
+});
+for (const [name, change] of [
+  ['missing', value => {delete value.bounds;}],
+  ['unknown', value => {value.status = 'unusable';}],
+  ['gap', value => {value.gaps.push('storage-unavailable');}],
+  ['null', value => {value.bounds.low = null;}],
+  ['reversed', value => {value.bounds.low = 300;}],
+  ['zero denominator', value => {value.bounds.low = value.bounds.high = 0;}],
+  ['nonfinite', value => {value.bounds.high = Infinity;}],
+  ['overflow', value => {value.bounds.high = Number.MAX_SAFE_INTEGER + 1;}],
+  ['missing setting', value => {delete value.settings.sales;}],
+  ['extra setting', value => {value.settings.extra = 'PRIVATE_CANARY';}],
+  ['bad runtime pin', value => {value.runtime.waitron = 'PRIVATE_CANARY';}],
+]) test(`unusable ${name} evidence cannot cause a change warning`, () => {
+  assert.equal(typeof storage.storageChange, 'function');
+  const value = observation(100, 110); change(value);
+  assert.deepEqual(storage.storageChange(observation(230, 240), value, 2), {status: 'unavailable', reason: 'measurement-unavailable'});
+});
+test('arithmetic overflow cannot become an infinite change claim', () => {
+  assert.equal(typeof storage.storageChange, 'function');
+  assert.deepEqual(storage.storageChange(observation(1, 2), observation(0, Number.MIN_VALUE), 2),
+    {status: 'unavailable', reason: 'arithmetic-unavailable'});
+});
+
+const repository = 'synthetic/cloud';
+const now = '2026-11-07T12:00:00Z';
+const row = (id, at, low, high, overrides = {}) => ({run: {id, run_attempt: 1, head_sha: 'c'.repeat(40),
+  head_branch: 'main', head_repository: {full_name: repository}, event: 'schedule', status: 'completed',
+  created_at: at, ...overrides}, measuredAt: at, observation: observation(low, high)});
+const report = (current, history) => {
+  assert.equal(typeof storage.buildStorageReport, 'function');
+  return storage.buildStorageReport({repository, current, history, now: Date.parse(now), threshold: 2});
+};
+test('history chooses the last usable comparable main measurement and prints both links', () => {
+  const current = row(20, now, 230, 240);
+  const usable = row(10, '2026-11-06T12:00:00Z', 100, 110);
+  const malformed = row(19, '2026-11-07T10:00:00Z', 1, 2); malformed.observation = null;
+  const changed = row(18, '2026-11-07T09:00:00Z', 1, 2); changed.observation.settings.cadenceFactor = 200;
+  const result = report(current, [usable, malformed, changed,
+    row(17, '2026-11-07T08:00:00Z', 1, 2, {event: 'pull_request'}),
+    row(16, '2026-11-07T07:00:00Z', 1, 2, {head_repository: {full_name: 'foreign/cloud'}}),
+    row(15, '2026-11-07T06:00:00Z', 1, 2, {head_branch: 'feature'}),
+    row(14, '2026-11-07T05:00:00Z', 1, 2, {status: 'in_progress'})]);
+  assert.match(result.markdown, /# Cloud cost advisory/);
+  assert.match(result.markdown, /actions\/runs\/10\/attempts\/1/);
+  assert.match(result.markdown, /actions\/runs\/20\/attempts\/1/);
+  assert.match(result.markdown, /230, 240/);
+  assert.match(result.markdown, /100, 110/);
+  assert.match(result.markdown, /Skipped 2 unusable or incomparable/);
+  assert.equal(result.warnings.length, 1);
+  assert.match(result.warnings[0], /increase at least 2\.09/);
+});
+test('a fresh current measurement does not become stale because its baseline is old', () => {
+  const result = report(row(20, now, 100, 110), [row(10, '2026-11-03T12:00:00Z', 100, 110)]);
+  assert.deepEqual(result.warnings, []);
+});
+for (const [at, stale] of [['2026-11-04T12:00:00Z', false], ['2026-11-04T11:59:59Z', true]]) {
+  test(`unavailable current measurement reports freshness at ${at}`, () => {
+    const current = row(20, now, 100, 110); current.observation = null;
+    const result = report(current, [row(10, at, 100, 110)]);
+    assert.match(result.markdown, /Current measurement unavailable/);
+    assert.equal(result.warnings.some(value => /older than 72 hours/.test(value)), stale);
+    if (stale) assert.match(result.warnings.join('\n'), /actions\/runs\/10/);
+  });
+}
+test('no usable retained baseline and malformed history stay visible', () => {
+  const result = report(row(20, now, 100, 110), [row(10, '2026-10-01T12:00:00Z', 1, 2)]);
+  assert.match(result.markdown, /No usable comparable baseline/);
+  assert.match(result.warnings.join('\n'), /baseline/);
+});
+test('PR rehearsal reports its actual measurement without comparing against main history', () => {
+  const result = report(row(20, now, 230, 240, {event: 'pull_request', head_branch: 'feature'}),
+    [row(10, '2026-11-06T12:00:00Z', 100, 110)]);
+  assert.match(result.markdown, /Rehearsal/);
+  assert.match(result.markdown, /230, 240/);
+  assert.deepEqual(result.warnings, []);
+});
+
+function runCli(options = {}) {
+  const root = mkdtempSync(join(tmpdir(), 'nightly-storage-cli-'));
+  try {
+    const bin = join(root, 'bin'); mkdirSync(bin);
+    const current = row(20, new Date(Date.now() - 1000).toISOString(), 230, 240);
+    const previous = row(10, new Date(Date.now() - 86400000).toISOString(), 100, 110);
+    if (options.rerun) current.run.run_attempt = 2;
+    const fixture = join(root, 'fixture.json'), summary = join(root, 'summary.md');
+    writeFileSync(fixture, JSON.stringify({current, previous, ...options}));
+    writeFileSync(join(bin, 'gh'), `#!/usr/bin/env node
+const fs=require('node:fs'), path=require('node:path');
+const fixture=JSON.parse(fs.readFileSync(process.env.NIGHTLY_STORAGE_FIXTURE,'utf8'));
+const args=process.argv.slice(2), current=fixture.current, previous=fixture.previous;
+if(args[0]==='api') {
+ const url=args[1];
+ if(url==='repos/synthetic/cloud/actions/runs/20') console.log(JSON.stringify(current.run));
+ else if(url.startsWith('repos/synthetic/cloud/actions/workflows/nightly.yml/runs?')) {
+  if(fixture.historyUnavailable){console.error('PRIVATE_CANARY');process.exit(17);}
+  console.log(JSON.stringify({workflow_runs:[current.run,previous.run]}));
+ } else {
+  const match=/^repos\\/synthetic\\/cloud\\/actions\\/runs\\/(20|10)\\/artifacts\\?per_page=100$/.exec(url);
+  if(!match) process.exit(18);
+  const row=match[1]==='20'?current:previous;
+  console.log(JSON.stringify({artifacts:fixture.currentMissing&&row===current?[]:[{
+   id:row.run.id+100,name:'nightly-storage-'+row.run.id+'-'+row.run.run_attempt,
+   expired:Boolean(fixture.expired),created_at:row.measuredAt}]}));
+ }
+} else if(args[0]==='run'&&args[1]==='download') {
+ const row=args[2]==='20'?current:previous;
+ const name=args[args.indexOf('-n')+1], dir=args[args.indexOf('-D')+1];
+ if(name!=='nightly-storage-'+row.run.id+'-'+row.run.run_attempt||!dir)process.exit(19);
+ fs.writeFileSync(path.join(dir,'nightly-storage.json'),fixture.malformed?'not json':JSON.stringify(row.observation));
+} else process.exit(20);
+`, {mode: 0o700});
+    const env = {...process.env, PATH: bin + ':' + process.env.PATH, NIGHTLY_STORAGE_FIXTURE: fixture,
+      GITHUB_REPOSITORY: repository, GITHUB_RUN_ID: '20', GITHUB_RUN_ATTEMPT: options.rerun ? '2' : '1', GITHUB_STEP_SUMMARY: summary};
+    const result = spawnSync(process.execPath, ['scripts/ci-nightly-storage.mjs'], {env, encoding: 'utf8', timeout: 10000});
+    return {...result, summary: existsSync(summary) ? readFileSync(summary, 'utf8') : ''};
+  } finally {rmSync(root, {recursive: true, force: true});}
+}
+test('real advisory command downloads observations and writes a warning and summary', () => {
+  const result = runCli();
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  assert.match(result.summary, /# Cloud cost advisory/);
+  assert.match(result.summary, /increase at least 2\.09/);
+  assert.match(result.stdout, /::warning::/);
+});
+test('advisory reads the current rerun attempt rather than borrowing an old artifact', () => {
+  const result = runCli({rerun: true});
+  assert.equal(result.status, 0);
+  assert.match(result.summary, /runs\/20\/attempts\/2/);
+  assert.match(result.summary, /increase at least 2\.09/);
+});
+for (const options of [{historyUnavailable: true}, {currentMissing: true}, {expired: true}, {malformed: true}]) {
+  test(`advisory evidence failure stays visible and exits successfully ${JSON.stringify(options)}`, () => {
+    const result = runCli(options);
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(result.summary, /# Cloud cost advisory/);
+    assert.match(result.summary, /unavailable/);
+    assert.match(result.stdout, /::warning::/);
+    assert.doesNotMatch(result.summary + result.stdout + result.stderr, /PRIVATE_CANARY/);
+  });
+}

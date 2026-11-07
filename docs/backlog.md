@@ -1057,7 +1057,8 @@ implementation or production evidence.
   [model explanation](cloud-cost-model.md). They show priced subtotals at zero,
   1, 10, 100 and 1,000 venues, with editable assumptions, English and Spanish,
   light and dark themes, and layouts for 390 and 1280 pixels. The complete bill
-  remains unknown. Blank inputs and missing billing terms stay named gaps;
+  remains unknown. The nightly generated-storage warning compares byte-seconds
+  only. Blank inputs and missing billing terms stay named gaps;
   neither a priced subtotal nor a successful verification command means the
   service has a complete or provider-validated operating budget.
   The [approved design](superpowers/specs/2026-10-14-cloud-cost-model-design.md)

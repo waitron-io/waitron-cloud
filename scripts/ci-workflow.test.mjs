@@ -197,6 +197,26 @@ test('nightly final gate always receives every workflow and mutation result', ()
   assert.match(job('summary'), /CI_JOB_PREFIX: \$\{\{ inputs.job-prefix \}\}/);
 });
 
+test('storage advisory runs after failed cost work and stays outside the nightly gate', () => {
+  const advisory = nightlyJob('storage-advisory');
+  assert.match(advisory, /needs: cost/);
+  assert.match(advisory, /if: \$\{\{ always\(\) \}\}/);
+  assert.match(advisory, /^    continue-on-error: true$/m);
+  assert.match(advisory, /run: node scripts\/ci-nightly-storage\.mjs/);
+  assert.match(advisory, /GH_TOKEN: \$\{\{ secrets.GITHUB_TOKEN \}\}/);
+  assert.doesNotMatch(nightlyJob('summary'), /storage-advisory/);
+});
+test('only the full nightly paced cell exports a successful measurement with attempt-specific optional upload', () => {
+  const cost = readFileSync(new URL('../.github/workflows/cloud-cost.yml', import.meta.url), 'utf8');
+  const upload = cost.match(/- name: Retain generated storage observation\n([\s\S]*?)(?=\n  [a-z]|$)/)?.[1] ?? '';
+  assert.match(cost, /CLOUD_NIGHTLY_STORAGE_OUTPUT:.*inputs.full.*matrix.file == 'paced-replay-conformance.test.mjs'/);
+  assert.match(upload, /inputs.full && matrix.file == 'paced-replay-conformance.test.mjs'.*steps.conformance.outcome == 'success'/);
+  assert.match(upload, /continue-on-error: true/);
+  assert.match(upload, /name: nightly-storage-\$\{\{ github.run_id \}\}-\$\{\{ github.run_attempt \}\}/);
+  assert.match(upload, /if-no-files-found: warn/);
+  assert.match(upload, /retention-days: 14/);
+});
+
 
 test('the shared UI deadline is required before test selection', () => {
   const changes = job('changes');
