@@ -45,6 +45,17 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
         return route.fulfill({status: 503, json: {error: 'unavailable'}});
       });
       await page.goto('https://portal.test/account');
+      await page.evaluate(() => {
+        const observed = window as typeof window & {sessionActivityCalls: number};
+        observed.sessionActivityCalls = 0;
+        const fetch = window.fetch.bind(window);
+        window.fetch = (...args: Parameters<typeof window.fetch>) => {
+          const input = args[0], url = input instanceof Request ? input.url : String(input);
+          if (new URL(url, location.href).pathname === '/api/account/session/activity') observed.sessionActivityCalls++;
+          return fetch(...args);
+        };
+      });
+      const activityCalls = () => page.evaluate(() => (window as typeof window & {sessionActivityCalls: number}).sessionActivityCalls);
       await page.addScriptTag({content: bundle.outputFiles[0]!.text});
       const clicked = page.waitForResponse('**/api/account/session/activity');
       await page.getByRole('button', {name: translations[locale].remoteSetup, exact: true}).click();
@@ -53,7 +64,9 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
       await input.fill('cafe.example');
       await page.clock.fastForward(60_001);
       const before = activity;
+      const callsBefore = await activityCalls();
       await input.dispatchEvent('keydown', {key: 'ArrowLeft'});
+      assert.equal(await activityCalls(), callsBefore, 'synthetic keys cannot start session activity');
       assert.equal(activity, before, 'synthetic keys cannot renew the session');
       await input.press('Enter');
       await page.getByRole('group', {name: translations[locale].remoteConfirmTitle, exact: true}).waitFor();
