@@ -682,12 +682,15 @@ order. Remote access matters most because Waitron's customer-facing features wai
    venue is recovered, how much data a failure can lose, and uptime.
 5. **Single-owner account lifecycle.** Each customer organisation has one Cloud account
    owner in its country, with no invitations, manager accounts or concurrent second owner
-   (owner, 2026-10-24). Two countries mean two accounts. The proposed
+   (owner, 2026-10-24). Two countries mean two accounts. The
    [D608 lifecycle design](superpowers/specs/2026-11-07-cloud-single-owner-lifecycle-design.md)
-   describes verified handover, immediate former-owner revocation and recovery of the same
-   owner through existing sign-in proofs. The first draft has had Claude review;
-   mailbox-takeover protection and lost-owner policy still need owner decisions.
-   The lifecycle is unbuilt and unapproved.
+   records owner direction from watcher 2026-11-07 21:29 and 21:32: strongest-factor
+   sign-in/reset, factor enrolment before box/remote/payment actions, same-owner recovery
+   through a paired-box administrator, and sole-owner replacement at recipient acceptance.
+   SMS alone counts for sign-in/reset only when it is the sole enrolled factor; reset also
+   needs the verified-mailbox link. The revised SMS, paired-box and handover draft awaits
+   Claude and owner final review; first-draft review does not approve this revision.
+   Nothing is built. Total loss without a usable paired box/administrator stays unresolved.
    The [revised P3 plan](superpowers/plans/2026-10-22-cloud-global-country-split.md)
    supplies the boundary; ownership grants no support takeover, operator, fiscal or
    activation permission.
