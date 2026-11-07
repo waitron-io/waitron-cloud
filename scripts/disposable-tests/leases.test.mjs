@@ -122,10 +122,13 @@ test('simultaneous processes admit exactly one owner', async t => {
     const program = `import {LocalLeases} from ${JSON.stringify(module.href)}; console.log(JSON.stringify(new LocalLeases(process.argv[1], ${JSON.stringify(config)}).reserveLocal(${JSON.stringify(request(`parallel-${i}`))})));`;
     const child = spawn(process.execPath, ['--input-type=module', '-e', program, dir], {stdio: ['ignore', 'pipe', 'pipe']});
     let out = '', err = '';
+    // Delay reading until exit so parsing must wait for stream closure.
+    child.stdout.pause();
+    child.once('exit', () => child.stdout.resume());
     child.stdout.on('data', b => out += b);
     child.stderr.on('data', b => err += b);
     child.on('error', reject);
-    child.on('exit', code => code ? reject(new Error(err)) : resolve(JSON.parse(out)));
+    child.on('close', (code, signal) => code === 0 ? resolve(JSON.parse(out)) : reject(new Error(err || `Lease child failed (${signal ?? code})`)));
   }));
   const results = await Promise.all(children);
   assert.equal(results.filter(r => r.code === 0).length, 1);

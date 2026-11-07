@@ -50,14 +50,14 @@ async function launch(venueRoot){
 async function stop(running){if(running.child.exitCode!==null)return;running.child.kill('SIGTERM');const timeout=setTimeout(()=>running.child.kill('SIGKILL'),5000);try{assert.equal(await running.done,0);}finally{clearTimeout(timeout);}}
 async function captureClient(dir,command,input){
  const child=spawn(process.execPath,['--import',require.resolve('tsx'),join(waitron,'apps/server/scripts/cloud-capture-client-fixture.ts')],{cwd:join(waitron,'apps/server'),env:{...process.env,CLOUD_TEST_ROOT:dir},stdio:['pipe','pipe','pipe']});
- let output='',error='';child.stdout.on('data',value=>output+=value);child.stderr.on('data',value=>error=(error+value).slice(-16000));child.stdin.end(JSON.stringify({command,...input}));const timer=setTimeout(()=>child.kill('SIGKILL'),45000);
- try{const code=await new Promise(resolve=>child.once('exit',resolve));assert.equal(code,0,'Waitron capture client failed: '+error);return JSON.parse(output.trim().split('\n').at(-1));}finally{clearTimeout(timer);}
+ let output='',error='';child.stdout.on('data',value=>output+=value);child.stderr.on('data',value=>error=(error+value).slice(-16000));child.stdin.end(JSON.stringify({command,...input}));let timedOut=false;const timer=setTimeout(()=>{timedOut=true;child.kill('SIGKILL');child.stdout.destroy();child.stderr.destroy();},45000);
+ try{const code=await new Promise(resolve=>child.once('close',resolve));if(timedOut)throw Error('Waitron capture client timed out');assert.equal(code,0,'Waitron capture client failed: '+error);return JSON.parse(output.trim().split('\n').at(-1));}finally{clearTimeout(timer);}
 }
 async function backupWorker({root:dir,scratch},input){
  scratch=await realpath(scratch);
  const child=spawn(process.execPath,['--permission','--allow-fs-read=*','--allow-fs-write='+scratch,'--allow-worker','--allow-child-process','--allow-addons','--import',require.resolve('tsx'),join(waitron,'apps/server/scripts/cloud-backup-fixture.ts')],{cwd:join(waitron,'apps/server'),env:{...process.env,TMPDIR:scratch,TMP:scratch,TEMP:scratch,TSX_DISABLE_CACHE:'1',CLOUD_TEST_ROOT:dir},stdio:['pipe','pipe','pipe']});
- let output='',error='';child.stdout.on('data',value=>output+=value);child.stderr.on('data',value=>error=(error+value).slice(-16000));child.stdin.end(JSON.stringify({command:'capture',...input}));const timer=setTimeout(()=>child.kill('SIGKILL'),30000);
- try{const code=await new Promise(resolve=>child.once('exit',resolve));assert.equal(code,0,'Waitron backup worker failed: '+error);return JSON.parse(output.trim().split('\n').at(-1));}finally{clearTimeout(timer);}
+ let output='',error='';child.stdout.on('data',value=>output+=value);child.stderr.on('data',value=>error=(error+value).slice(-16000));child.stdin.end(JSON.stringify({command:'capture',...input}));let timedOut=false;const timer=setTimeout(()=>{timedOut=true;child.kill('SIGKILL');child.stdout.destroy();child.stderr.destroy();},30000);
+ try{const code=await new Promise(resolve=>child.once('close',resolve));if(timedOut)throw Error('Waitron backup worker timed out');assert.equal(code,0,'Waitron backup worker failed: '+error);return JSON.parse(output.trim().split('\n').at(-1));}finally{clearTimeout(timer);}
 }
 function ipc(server,value){return new Promise((resolve,reject)=>{const reply=value=>{clearTimeout(timer);if(value.error)reject(Error(value.error));else resolve(value);};const timer=setTimeout(()=>{server.child.off('message',reply);reject(Error('IPC timeout'));},10000);server.child.once('message',reply);server.child.send(value);});}
 async function secret(path,value){await writeFile(path,value,{mode:0o600});}
