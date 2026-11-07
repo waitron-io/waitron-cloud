@@ -1612,13 +1612,8 @@ async function runManualCommandInContext(options) {
   const capture = await poll(() => captureManualFirstResources({ ...fresh(), launch }), 'D570_NOT_READY', instant(launch.guestExpiry));
   await replacePrivateJson(join(base, 'launch.json'), { ...launch, capture: {
     volumeIds: capture.volumeIds, interfaceIds: capture.interfaceIds, observedAt: capture.observedAt } });
-  let ready;
-  if (clock() < instant(launch.reservation.startedAt) + 170_000) {
-    try { ready = await inspectManualFirstGuest({ ...fresh(), launch }); }
-    catch (error) { if (error?.code !== 'D570_NOT_READY') throw error; }
-  }
   const stopped = await observeManualFirstShutdown({ ...fresh(), launch, capture });
-  if (!ready) ready = await poll(() => inspectManualFirstGuest({ ...fresh(), launch, capture, shutdownObservation: stopped.shutdownObservation }),
+  const ready = await poll(() => inspectManualFirstGuest({ ...fresh(), launch, capture, shutdownObservation: stopped.shutdownObservation }),
     'D570_NOT_READY', instant(stopped.shutdownObservation.terminatedReceivedAt) + 300_000);
   await save('ready.json', ready);
   const shutdown = { ...ready, shutdownObservation: stopped.shutdownObservation };

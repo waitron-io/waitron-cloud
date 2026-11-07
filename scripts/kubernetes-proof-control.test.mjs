@@ -2523,7 +2523,7 @@ for (const pending of ['volume', 'interface']) test(`owner cleanup distinguishes
   assert.deepEqual(structuredClone([...f.objects]), before);
 });
 
-for (const [latency, delayedConsole] of [[0, false], [1000, false], [0, true]]) test(`owner command drill records the original shutdown window with ${latency}ms provider latency${delayedConsole ? ' and console at T449' : ''}`, async t => {
+for (const [latency, delayedConsole, pendingUntil = 0, consoleLatency = 0] of [[0, false], [1000, false], [0, true], [0, true, 165000, 20000]]) test(`owner command drill records the original shutdown window with ${latency}ms provider latency${delayedConsole ? ' and console at T449' : ''}${pendingUntil ? ' with pending until T165 and slow console' : ''}`, async t => {
   const f = await drillFixture(t), prior = f.aws.call, base = f.parent;
   writeFileSync(join(base, 'initialized.json'), JSON.stringify(f.setup), { mode: 0o600 });
   let current = Date.parse(now), launchedAt, reservedAt, instanceReads = 0, consoleReads = 0, providerCalls = 0;
@@ -2551,19 +2551,20 @@ for (const [latency, delayedConsole] of [[0, false], [1000, false], [0, true]]) 
     if (['describe-instances', 'describe-instance-attribute', 'get-console-output', 'describe-volumes', 'describe-network-interfaces'].includes(operation)) {
       f.calls.push({ service, operation, input });
       if (operation === 'describe-instances') {
-        const state = instanceReads++ === 0 ? 'pending' : current >= reservedAt + 180000 ? 'terminated' : 'running';
+        const state = instanceReads++ === 0 || current < reservedAt + pendingUntil ? 'pending' : current >= reservedAt + 180000 ? 'terminated' : 'running';
         return { Reservations: [{ OwnerId: '462991287391', Instances: [{ ...instance, State: { Name: state },
           ...(state === 'terminated' ? { StateReason: { Code: 'Client.InstanceInitiatedShutdown' } } : {}) }] }] };
       }
       if (operation === 'describe-instance-attribute') return { InstanceId: f.instanceId, InstanceInitiatedShutdownBehavior: { Value: 'terminate' } };
-      if (operation === 'get-console-output') return { InstanceId: f.instanceId, Timestamp: new Date(current).toISOString(),
-        Output: consoleReads++ === 0 || delayedConsole && current < reservedAt + 449000 ? '' : 'D570_DEADLINE_READY ' + f.uuid + ' ' + (reservedAt + 180000) / 1000 + ' 11111111-1111-4111-8111-111111111111\n' };
+      if (operation === 'get-console-output') { current += consoleLatency; return { InstanceId: f.instanceId, Timestamp: new Date(current).toISOString(),
+        Output: consoleReads++ === 0 || delayedConsole && current < reservedAt + 449000 ? '' : 'D570_DEADLINE_READY ' + f.uuid + ' ' + (reservedAt + 180000) / 1000 + ' 11111111-1111-4111-8111-111111111111\n' }; }
       return operation === 'describe-volumes' ? { Volumes: [] } : { NetworkInterfaces: [] };
     }
     return prior(service, operation, input);
   };
   const run = () => ownerCommand(f, ['drill', base], { uuid: f.uuid, clock: () => current, sleep: async ms => {
     current += ms;
+    if (pendingUntil && reservedAt !== undefined && current < reservedAt + pendingUntil) current = reservedAt + pendingUntil;
     // The buffered wait can pass between wake-ups without changing the earlier shutdown observations.
     if (delayedConsole && consoleReads >= 2 && current >= reservedAt + 180000) current = Math.max(current, reservedAt + 450000);
   } });

@@ -159,6 +159,11 @@ node scripts/kubernetes-proof-control.mjs down "$HOME/.local/state/waitron-d570"
   /absolute/private/console.json CONSOLE_SHA256
 ```
 
+Keep the supplied instance and console files at their original paths with mode
+600 until cleanup has completed. Later commands re-read and re-hash them; moving
+or deleting one also blocks `down`. Restore the identical bytes and private
+permissions before retrying that command.
+
 Use the original folder and the hashes of the unchanged owner-only files. The
 instance, token, stack, subnet, tags and OS shutdown reason must match the retained
 launch. The console must match that instance and contain the exact run, expiry and
