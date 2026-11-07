@@ -655,6 +655,7 @@ to find the original evidence before choosing a repair.
 - Email resend waits belong to each address and operation (owner, 2026-10-25).
   Correcting an address allows an immediate send; returning to it keeps its wait.
   A server Retry-After still blocks every address for that operation.
+  This also means a refusal in another operation cannot transfer or clear that wait.
 
 
 ## Installation deployment qualification
