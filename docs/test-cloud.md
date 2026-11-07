@@ -843,7 +843,9 @@ node --test scripts/test-cloud-paid-stream.test.mjs
 Use the same explicit image inputs as the snapshot proof. To test a newer Waitron
 image, set `TEST_CLOUD_INTEGRATION_WAITRON_REVISION` to its full Git commit hash.
 The image's `cloud.waitron-revision` label must match exactly. Leave it unset to
-keep the default `ec91a9e34d2daba146f4ee61850ea4136ad5cfb7` pin. This opt-in image adds
+keep the default `ec91a9e34d2daba146f4ee61850ea4136ad5cfb7` pin. This setting applies to
+all client runners in that shell; combined evidence assembly still accepts only
+the default revision. This opt-in image adds
 the checksum-verified Linux x86-64 Litestream release named by the paired image's
 `LITESTREAM_VERSION`. The fixture supports 0.5.17 and 0.5.18; an unknown version
 refuses the build until you add its verified checksum. The disposable venue forwards

@@ -108,6 +108,12 @@ acknowledge database stop with a held LIST; signalling cancels the partial reply
 and releasing it to idle still permits a later cancelled level-1 LIST. Waiting
 through the final level passes on each release. This one comparison does not
 qualify a drain for the full smoke; the cost experiments remain pinned to 0.5.17.
+The existing native-monitor characterization also fails its unchanged
+“runtime stop must finish active snapshot-retention storage work” assertion
+on both releases, while its release-before-stop control passes both. The 0.5.18
+after-stop profile still contains `Store.EnforceSnapshotRetention` calling
+`DB.EnforceSnapshotRetention`; an upstream stop-order change does not close this
+controlled database-stop case.
 
 Completing that same held retention sequence before requesting stop passes
 three controls on each platform. Both independent counters pair every LIST,
@@ -970,6 +976,12 @@ implementation or production evidence.
   four-volume rollback. Free-service fixtures stay separate from unavailable
   Waitron relay/translation journeys. The fixed project is `waitron-cloud-test`;
   protected Waitron containers are never adopted.
+
+  Current-release paid-stream qualification remains open. Both paired-version
+  installers build, and the old-default journey passes with the direct mail-worker
+  entry at the unchanged 64 MiB cap. Current-image runs still meet a killed plan
+  helper (exit 137) and an earlier readiness 503; their causes remain unproved.
+  Keep the full current-image journey and capacity qualification open.
 
   The recorded Linux journey at `31c3f8343795d9d2ed340cd20fa7eeb2534cbcbf` passes
   both combined cases without skips in 1,083.6 seconds. Both original pairings

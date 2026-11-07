@@ -82,7 +82,7 @@ services:
       options: {max-size: "5m", max-file: "2"}
     build: !reset null
     image: ${TEST_CLOUD_IMAGE:-sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa}
-    command: ["node", "deploy/test-cloud/runtime.mjs", "email"]
+    command: ["node", "deploy/test-cloud/email-worker.mjs"]
     environment:
       CLOUD_TEST_SERVICE_PLANS: ${CLOUD_TEST_SERVICE_PLANS:-0}
   monitor-worker:
