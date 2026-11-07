@@ -61,6 +61,9 @@ it. "Nothing enforces this" means only people reading the change will catch a mi
   sending a request, even for harmless-looking menu text, until the owner accepts a privacy rule and
   supplier evidence ([translation README](packages/translation/README.md)). Enforced by
   `packages/translation/test/outbound-disabled.test.ts`. Tests use a fake server on loopback.
+  The owner's own test box and demo menu are the sole exception through the separately scoped
+  translation trial; the production refusal stays unchanged and public privacy and supplier work
+  remain open.
 - **Tax rules stay in Waitron.** Never change invoice allocation, hash chains, immutable fiscal
   records or expected fiscal results from work here, in either repository: stop and ask the owner.
   Cloud's fiscal registry is retired; migration 038 and its dormant rows stay

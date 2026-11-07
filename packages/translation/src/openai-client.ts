@@ -1,4 +1,7 @@
 import {translationModel} from './service.ts';
+import {validateHeaderValue} from 'node:http';
+import type {Pool} from 'pg';
+import {TranslationWorker} from './worker.ts';
 export interface ModelCall {instructions:string;input:string;effort:'low'|'medium'}
 export interface ModelReply {text:string;inputTokens:number;outputTokens:number}
 export interface ModelClient {readonly provider:'openai';readonly model:string;respond(call:ModelCall,signal?:AbortSignal):Promise<ModelReply>}
@@ -65,6 +68,11 @@ export function createLoopbackOpenAiClient(options:ClientOptions&{baseUrl:string
  const url=new URL(options.baseUrl);
  if(url.protocol!=='http:'||url.hostname!=='127.0.0.1'||url.username||url.password||url.search||url.hash)throw new Error('invalid_openai_base_url');
  return localTransport(options);
+}
+export function createTestBoxTranslationWorker(pool:Pool,options:{installationId:string;venueId:string;apiKey:string}):TranslationWorker{
+ if(typeof options.apiKey!=='string'||!options.apiKey.trim())throw new Error('translation_worker_options_invalid');
+ validateHeaderValue('authorization',`Bearer ${options.apiKey}`);
+ return new TranslationWorker(pool,localTransport({apiKey:options.apiKey}),{scope:{installationId:options.installationId,venueId:options.venueId}});
 }
 function localTransport(options:ClientOptions):ModelClient{
  const base=(options.baseUrl??defaultBaseUrl).replace(/\/$/,''),timeout=options.timeoutMs??120000,max=options.maxResponseBytes??4194304;

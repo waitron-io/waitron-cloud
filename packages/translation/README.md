@@ -14,6 +14,68 @@ the input or charging tokens. A regional URL or enable flag cannot change that.
 Translation also stays off until the remaining quality trials, joint Waitron paging proof and
 [launch decisions](../../docs/launch-evidence.md) are complete. Local fake-provider tests
 establish protocol behavior, not translation quality or permission to send real menus.
+The [owner's one-box trial](#try-the-owners-demo-menu) is the narrow exception;
+`outbound-disabled.test.ts` continues to prove the ordinary client's refusal.
+
+## Try the owner's demo menu
+
+The owner approved one translation of the test box's demo menu. The
+[trial plan](../../docs/superpowers/plans/2026-11-07-test-box-translation.md)
+records the narrow exception. Public privacy, supplier and quality work stays
+open; normal workers and deployments still refuse real AI calls.
+
+1. Keep translation off while preparing. Compare the mounted translation and
+   registration runtime sources, migrations and dependency versions with the
+   reviewed checkout, apart from the three translation files being replaced.
+   Resolve unexpected differences first. Refresh only `openai-client.ts`,
+   `worker.ts` and `test-box-worker-cli.ts` under `/app/workspace/translation/src`.
+   Do not replace `/app/src` from the checkout: it contains the private account
+   launcher and its fixed-box tunnel option.
+2. Before enabling submission, verify that the configured installation and venue
+   have no queued or running translation job. Create a separate mode-600 temporary
+   env file containing `CLOUD_OPENAI_API_KEY=synthetic-trial-proof`, and rehearse
+   with that file, not the owner's real key:
+
+   ```sh
+   docker exec -i d582-account env -u CLOUD_OPENAI_API_KEY node --env-file=/dev/stdin /app/workspace/translation/src/test-box-worker-cli.ts INSTALLATION_UUID VENUE_UUID --once < /opt/waitron-cloud-d582/private/translation-proof.env
+   ```
+
+   Expect `No matching translation job`. This checks module loading and database
+   access without sending a menu. Remove the temporary file after the check.
+   Clearing the inherited key in this subprocess matters: Node otherwise keeps
+   an existing environment value instead of the value in the piped file.
+3. After the owner supplies the real key, check that
+   `/root/waitron-translation/openai.env` is root-owned, mode 600, inside a
+   root-owned directory with mode 700. It supplies `CLOUD_OPENAI_API_KEY`.
+   These are operator checks; the command does not enforce file permissions.
+4. The trial runs `node src/server-cli.ts` in `/app`, rather than the normal test
+   deployment. Read that private launcher's flag handling, set
+   `process.env.CLOUD_TRANSLATION='1'` before it reads the flag, preserve its
+   tunnel option and restart only `d582-account`. Use the existing Cloud owner's
+   consent and Waitron's signed Translate all caller to submit the synthetic menu.
+5. Run one pass with the paired installation and venue IDs:
+
+   ```sh
+   docker exec -i d582-account env -u CLOUD_OPENAI_API_KEY node --env-file=/dev/stdin /app/workspace/translation/src/test-box-worker-cli.ts INSTALLATION_UUID VENUE_UUID --once < /root/waitron-translation/openai.env
+   ```
+
+   The command reports the selected job's state without printing menu text or
+   keys. `done` means it completed; a failed or unfinished job exits unsuccessfully.
+   Collect every page through Waitron before release, then show the owner the
+   editable result. A completely collected result also counts as successful.
+
+The subprocess inherits the account's database configuration; the key enters
+only that subprocess through standard input. Only the existing plan mode is
+accepted; allowance modes are refused and this command performs no global
+cleanup. Other signed jobs may queue, but this worker never leases them. Each
+provider attempt rechecks the configured installation and venue, test environment,
+revocation, current lease and consent. The fixed OpenAI Responses transport,
+accounting and US$5 monthly cap retain their existing overshoot limit.
+
+Removing the key file prevents future invocations. Withdrawing consent stops later
+calls when the worker next checks it; requests already sent can finish. Production
+calls remain refused. Synthetic tests do not establish real API compatibility,
+translation quality or the joint Waitron result.
 
 ## Run the worker locally
 

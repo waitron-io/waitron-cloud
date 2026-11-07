@@ -899,6 +899,9 @@ Keep translation off until the remaining Cloud, joint Waitron and release checks
 owner-only quality trials after 2026-11-02, and commercial and production decisions
 are complete; preserve the approved cap, admission, consent and paging rules in the
 [translation requirements and open work](backlog/translation.md).
+The separately scoped [owner's demo-menu trial](../packages/translation/README.md#try-the-owners-demo-menu)
+still needs the server-only key, its live provider result and the joint Waitron handoff;
+ordinary-client refusal and public privacy, supplier and release work remain open.
 
 ## Initial focus
 

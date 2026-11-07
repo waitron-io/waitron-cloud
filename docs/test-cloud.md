@@ -4,6 +4,9 @@ You need a separate Cloud account service to exercise your test server without t
 
 The deployment files and local HTTPS, storage, remote, backup-verifier and free-service fixture proofs are implemented. **The test box is not deployed yet.** Plan enforcement remains off until the final disposable Waitron integration and release checks pass. Address providers stay disabled. Translation stays off pending the pinned joint paging proof and owner trials after 2 November 2026. Outside-home remote access needs a separately approved domain, certificates and deployment.
 
+The separately injected [owner's demo-menu translation trial](../packages/translation/README.md#try-the-owners-demo-menu)
+does not enable this deployment; the ordinary-client refusal and public privacy and supplier work remain.
+
 ## Release-driver handoff
 
 The local proof branch supplies the journey runner and the strict pre-release

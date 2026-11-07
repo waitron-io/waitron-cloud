@@ -283,7 +283,11 @@ Two new process tests retain the real error code and force query rejection befor
 the client event at each stage. The exact query stage and
 backend identifiers from that CI failure remain unavailable; the local ordering
 proof does not establish them or classify every other connection error.
-Keep translation off until the remaining runtime and joint qualification are complete.
+Keep translation off until the remaining runtime and joint qualification are complete,
+apart from the separately scoped [owner's demo-menu trial](../../packages/translation/README.md#try-the-owners-demo-menu).
+Its real provider result still needs the server-only key and the joint Waitron run;
+the ordinary-client refusal and public privacy and supplier work remain open.
+Replace this exception through that public work, then remove the separate trial worker and command.
 
 The owner requires [bounded collect before go-live](../superpowers/plans/2026-10-16-translation-collect-pages.md).
 The [canonical contract](../waitron-integration-contract.md#translate-all-version-1) now specifies
