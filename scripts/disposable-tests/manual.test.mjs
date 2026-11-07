@@ -70,3 +70,10 @@ test('a symlink CLI path cannot silently pass without invoking the manual contro
   assert.equal(result.status, 125, 'The CLI must execute and refuse missing arguments through a symlink too');
   assert.match(result.stderr, /Usage: manual/);
 });
+
+test('importing the manual API from standard input does not invoke or reject the CLI', async t => {
+  const {spawnSync}=await import('node:child_process');
+  const result=spawnSync(process.execPath,['--input-type=module','-'],{
+    input:`await import(${JSON.stringify(new URL('./manual.mjs',import.meta.url).href)});`,encoding:'utf8',timeout:5000});
+  assert.equal(result.status,0,result.stderr);
+});

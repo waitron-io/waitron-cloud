@@ -14,7 +14,7 @@ function bootIdentity() {
 }
 function processIdentity(pid) {
   const value = execFileSync('/bin/ps', ['-p', String(pid), '-o', 'lstart=', '-o', 'uid='],
-    {cwd: '/', encoding: 'utf8', timeout: 2000, env: {PATH: '/usr/bin:/bin', LC_ALL: 'C'}}).trim();
+    {cwd: '/', encoding: 'utf8', timeout: 2000, env: {PATH: '/usr/bin:/bin', LC_ALL: 'C', TZ: 'UTC'}}).trim();
   assert.ok(value.length > 0 && value.length < 128, 'Unknown process identity');
   return value;
 }

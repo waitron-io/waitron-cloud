@@ -191,3 +191,22 @@ test('a live new-format ordinary owner survives automatic recovery unchanged', a
     assert.equal(existsSync(f.resource),true);
   });
 });
+
+test('new owner records use UTC so system time-zone formatting cannot change a live identity', async t => {
+  const f=fixture(t);
+  const {execFileSync}=await import('node:child_process');
+  await manual.withManualSlot(f.state,async()=>{
+    const owner=JSON.parse(readFileSync(join(f.state,'manual.lock/owner.json'),'utf8'));
+    const utc=execFileSync('/bin/ps',['-p',String(process.pid),'-o','lstart=','-o','uid='],{
+      encoding:'utf8',env:{PATH:'/usr/bin:/bin',LC_ALL:'C',TZ:'UTC'}}).trim();
+    assert.equal(owner.started,utc,'A live owner identity must not depend on system time-zone formatting');
+  });
+});
+
+test('a changed boot releases an interrupted owner even when PID and formatted start both match', async t => {
+  const f=fixture(t);const identity=join(f.state,'identity');let recorded;
+  await manual.withManualSlot(identity,async()=>{recorded=JSON.parse(readFileSync(join(identity,'manual.lock/owner.json'),'utf8'));});
+  mkdirSync(join(f.state,'manual.lock'),{mode:0o700});
+  writeFileSync(join(f.state,'manual.lock/owner.json'),JSON.stringify({...recorded,boot:'00000000-0000-4000-8000-000000000000'}),{mode:0o600});
+  assert.equal((await reconcile(f)).code,0);assert.equal(existsSync(f.resource),false);
+});
