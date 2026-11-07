@@ -27,7 +27,8 @@ export function orphanRunner(value) {
 }
 
 export function ciInvocation(value){
- assert.ok(value && Object.keys(value).sort().join(',')==='attempt,createdAt,nonce,route,runId,sourceSha,workflowSha','Invalid CI invocation fields');
+ assert.ok(value && Object.keys(value).filter(key=>key!=='serverRunnerId').sort().join(',')==='attempt,createdAt,nonce,route,runId,sourceSha,workflowSha','Invalid CI invocation fields');
+ if(value.serverRunnerId!==undefined)assert.ok(value.route==='server' && Number.isSafeInteger(value.serverRunnerId) && value.serverRunnerId>0,'Invalid completed CI runner');
  assert.match(value.nonce,/^[a-f0-9]{32}$/,'Invalid CI invocation nonce');
  for(const key of ['sourceSha','workflowSha'])assert.match(value[key],/^[a-f0-9]{40}$/,'Invalid CI invocation Git identity');
  assert.ok(['hosted','server'].includes(value.route) && Number.isSafeInteger(value.createdAt) && value.createdAt>=0 &&

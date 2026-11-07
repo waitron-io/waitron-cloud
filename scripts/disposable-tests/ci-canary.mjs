@@ -121,7 +121,12 @@ export async function dispatchCanary({api,leases,policy,sourceSha,workflowSha,ro
   // A lost dispatch response is ambiguous. Persist before sending, and never
   // repeat this POST: reconcile the unique run-name or leave the intent intact.
   try{await api.post(`/repos/${policy.repository}/actions/workflows/${policy.workflowId}/dispatches`,{
-   ref:policy.workflowRef??'main',inputs:{source_sha:sourceSha,nonce:invocation.nonce,route}}, {signal});}catch{signal?.throwIfAborted();}
+   ref:policy.workflowRef??'main',inputs:{source_sha:sourceSha,nonce:invocation.nonce,route}}, {signal});}catch(error){
+   if(Number.isInteger(error.status) && error.status>=400 && error.status<500 && error.status!==408){
+    leases.clearInvocation(invocation.nonce);throw error;
+   }
+   signal?.throwIfAborted();
+  }
  }else{assert.ok(invocation.sourceSha===sourceSha && invocation.workflowSha===workflowSha && invocation.route===route,'Existing CI invocation must be reconciled first');}
  if(invocation.runId!==null)return invocation;
  const end=Date.now()+120000;
@@ -130,8 +135,10 @@ export async function dispatchCanary({api,leases,policy,sourceSha,workflowSha,ro
   assert.ok(Array.isArray(data.workflow_runs) && data.workflow_runs.length<=100,'Invalid dispatch inventory');
   const matches=data.workflow_runs.filter(run=>run.display_title==='disposable-'+invocation.nonce);
   assert.ok(matches.length<=1,'Ambiguous CI dispatch response');
-  if(matches.length){const run=matches[0];assert.ok(run.workflow_id===policy.workflowId && run.head_sha===workflowSha && run.event==='workflow_dispatch','Dispatched run identity differs');
-   invocation={...invocation,runId:run.id,attempt:run.run_attempt};leases.setInvocation(invocation);return invocation;}
+  if(matches.length){const run=matches[0];assert.ok(run.workflow_id===policy.workflowId && run.event==='workflow_dispatch','Dispatched run identity differs');
+   invocation={...invocation,runId:run.id,attempt:run.run_attempt};leases.setInvocation(invocation);
+   if(run.head_sha!==workflowSha)return retireMovedDispatch({api,leases,policy,invocation,signal,wait});
+   return invocation;}
   assert.ok(Date.now()<end,'CI dispatch response remains unconfirmed; do not redispatch');await wait(15000,undefined,{signal});
  }
 }
@@ -146,12 +153,19 @@ export async function startCanary({api,leases,policy,sourceSha,workflowSha,trans
  return dispatchCanary({api,leases,policy,sourceSha,workflowSha,route:healthy?'server':'hosted',signal,wait});
 }
 
+async function retireMovedDispatch({api,leases,policy,invocation,signal,wait}){
+ return fallbackCI({api,policy,invocation,signal,wait,dispatch:async()=>{
+  leases.clearInvocation(invocation.nonce);throw new Error('Dispatched workflow commit changed; owned run retired');
+ }});
+}
 export async function recoverCanary({api,leases,policy,signal,wait=delay}){
  assert.ok(leases.inspect().slots.every(slot=>slot.state==='free'),'CI recovery waits for independent guest absence');
  let invocation=leases.inspect().ciInvocation;
  if(!invocation)return null;
  invocation=await dispatchCanary({api,leases,policy,...invocation,signal,wait});
- if(invocation.route==='hosted'){
+ const recorded=await api.get(`/repos/${policy.repository}/actions/runs/${invocation.runId}`,{signal});
+ if(recorded.head_sha!==invocation.workflowSha)return retireMovedDispatch({api,leases,policy,invocation,signal,wait});
+ if(invocation.route==='hosted' || invocation.serverRunnerId!==undefined){
   const run=await api.get(`/repos/${policy.repository}/actions/runs/${invocation.runId}`,{signal});
   assert.ok(run.id===invocation.runId && run.run_attempt===invocation.attempt && run.workflow_id===policy.workflowId &&
    run.head_sha===invocation.workflowSha && run.display_title==='disposable-'+invocation.nonce && run.event==='workflow_dispatch','Hosted recovery identity differs');
@@ -180,6 +194,7 @@ export async function qualifyCanary({api,policy,invocation,signal}){
  const label=`dt-${policy.repositoryId}-${invocation.runId}-${invocation.attempt}-typecheck`;
  assert.ok(invocation.route==='server'?job.labels.includes(label) && job.labels.includes('self-hosted'):
   job.labels.includes('ubuntu-latest') && !job.labels.includes('self-hosted'),'CI route differs');
+ if(invocation.serverRunnerId!==undefined)assert.ok(job.runner_id===invocation.serverRunnerId && job.runner_name===`dt-${policy.repositoryId}-${invocation.runId}-${invocation.attempt}-${job.id}`,'Completed CI runner assignment differs');
  assert.ok(summary.labels.includes('ubuntu-latest') && !summary.labels.includes('self-hosted'),'CI summary route differs');
  const source=await api.get(`${base}/commits/${invocation.sourceSha}`,{signal});assert.equal(source.sha,invocation.sourceSha);
  const log=await api.jobLog(`${base}/actions/jobs/${job.id}/logs`,{signal});
@@ -194,7 +209,7 @@ async function waitCanary({api,policy,invocation,signal,wait=delay}){
   if(run.status==='completed')return qualifyCanary({api,policy,invocation,signal});
   assert.ok(Date.now()<end,'CI overall deadline exceeded');await wait(15000,undefined,{signal});}
 }
-async function driveCanary({api,policy,leases,transport,lane,invocation,signal}){
+export async function executeCanary({api,policy,leases,transport,lane,invocation,signal}){
  if(invocation.route==='server'){
   try{
    const base=`/repos/${policy.repository}`;let ci;
@@ -210,40 +225,53 @@ async function driveCanary({api,policy,leases,transport,lane,invocation,signal})
     else await delay(15000,undefined,{signal});
    }
    const executed=await runCI({api,leases,policy,repository:policy.repository,ci,lane,transport,signal});
-   assert.ok(executed.code===0 && executed.cleanup==='absent' && !executed.runnerCleanup,'Server CI execution did not qualify');
+   assert.ok(executed.code===0 && executed.cleanup==='absent' && !executed.runnerCleanup,executed.error??'Server CI execution did not qualify');
+   invocation={...invocation,serverRunnerId:executed.lease.runnerId};leases.setInvocation(invocation);
   }catch(error){
    // The guest cleanup path runs before this handoff. Unknown absence retains
    // the lease, so recovery cannot register another runner for that slot.
-   const fallback=await recoverCanary({api,leases,policy,signal:AbortSignal.timeout(240000)});
+   let fallback;
+   try{fallback=await recoverCanary({api,leases,policy,signal:AbortSignal.timeout(240000)});}
+   catch(recovery){throw new AggregateError([error,recovery],`Server CI failure: ${error.message}; recovery: ${recovery.message}`);}
    console.error('Server canary did not qualify; same source dispatched on hosted.');
    if(signal?.aborted)return {code:143,runId:fallback.runId,route:'hosted'};
    invocation=fallback;
   }
  }
+ return invocation;
+}
+export async function withCanaryController({state,hostGeneration,admit,api,policy,signal}){
+ const {withKernelLock}=await import('./kernel-lock.mjs'),{LocalLeases}=await import('./leases.mjs');
+ const invocation=await withKernelLock(state,admit,{deadline:Date.now()+7500,signal});
+ if(invocation.code!==undefined)return invocation;
  const receipt=await waitCanary({api,policy,invocation,signal});
- leases.clearInvocation(invocation.nonce);return {code:0,...receipt};
+ const cleared=await withKernelLock(state,async()=>{
+  const leases=new LocalLeases(state+'/ledger',{hostGeneration,slots:1});
+  leases.clearInvocation(invocation.nonce);return {code:0};
+ },{deadline:Date.now()+7500,signal});
+ return {code:0,...receipt,...(cleared.code===75?{recordCleanup:'pending'}:{})};
 }
 export async function main(args){
  assert.ok(args.length===3 || args.length===4 && args[3]==='--hosted','Usage: ci-canary.mjs CONFIG LANE SOURCE_SHA [--hosted]');
  const [configuration,lane,sourceSha]=args;assert.match(lane,/^[A-K]$/);assert.match(sourceSha,/^[a-f0-9]{40}$/);
- const {readFileSync,realpathSync}=await import('node:fs');
- const {LocalLeases}=await import('./leases.mjs'),{withKernelLock}=await import('./kernel-lock.mjs');
+ const {readFileSync}=await import('node:fs');
+ const {LocalLeases}=await import('./leases.mjs');
  const {refuseLegacy,withTemporaryState}=await import('./manual.mjs');
  const {CITransport}=await import('./transport.mjs'),{GithubApp}=await import('./github-app.mjs');
  const config=JSON.parse(readFileSync(configuration,'utf8'));validateCIConfig(config);
  const api=new GithubApp(config.ci),policy=config.ci;
  const cancellation=new AbortController(),cancel=()=>cancellation.abort();
  for(const name of ['SIGTERM','SIGINT','SIGHUP'])process.on(name,cancel);
- try{return await withKernelLock(config.state,async()=>{
+ try{return await withCanaryController({state:config.state,hostGeneration:config.hostGeneration,api,policy,signal:cancellation.signal,admit:async()=>{
   refuseLegacy(config.state);return withTemporaryState(config.state,async()=>{
    const leases=new LocalLeases(config.state+'/ledger',{hostGeneration:config.hostGeneration,slots:1});
    if(leases.inspect().ciInvocation)return {code:75,reason:'recorded-ci-invocation-needs-recovery'};
    if(leases.inspect().slots.some(slot=>slot.state!=='free'))return {code:75,reason:'capacity-busy'};
    const transport=new CITransport(config),workflowSha=(await api.get(`/repos/${policy.repository}/git/ref/heads/main`)).object.sha;
    const invocation=await startCanary({api,policy,leases,sourceSha,workflowSha,transport:args[3]==='--hosted'?{healthy:async()=>false}:transport,signal:cancellation.signal});
-   return driveCanary({api,policy,leases,transport,lane,invocation,signal:cancellation.signal});
+   return executeCanary({api,policy,leases,transport,lane,invocation,signal:cancellation.signal});
   });
- },{deadline:Date.now()+7500,signal:cancellation.signal});}
+ }});}
  finally{for(const name of ['SIGTERM','SIGINT','SIGHUP'])process.off(name,cancel);}
 }
 export function validateCIConfig(config){

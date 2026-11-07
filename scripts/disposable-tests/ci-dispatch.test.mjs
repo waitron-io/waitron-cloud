@@ -32,7 +32,7 @@ test('recovery of a recorded server invocation cancels that attempt and dispatch
  const old={nonce:'a'.repeat(32),sourceSha,workflowSha,route:'server',createdAt:Date.now(),runId:789,attempt:1};leases.setInvocation(old);
  let cancelled=false,newNonce,dispatched;
  const api={get:async path=>path.includes('/workflows/')?{workflow_runs:[{id:790,run_attempt:1,workflow_id:456,head_sha:workflowSha,event:'workflow_dispatch',display_title:'disposable-'+newNonce}]}:
-  {id:789,run_attempt:1,workflow_id:456,display_title:'disposable-'+old.nonce,status:cancelled?'completed':'queued'},
+  {id:789,run_attempt:1,workflow_id:456,head_sha:workflowSha,display_title:'disposable-'+old.nonce,status:cancelled?'completed':'queued'},
  post:async(path,body)=>{if(path.endsWith('/cancel'))cancelled=true;else{dispatched=body;newNonce=body.inputs.nonce;}}};
  const result=await recoverCanary({api,leases,policy,wait:async()=>{}});
  assert.equal(cancelled,true);assert.equal(dispatched.inputs.source_sha,sourceSha);assert.equal(dispatched.inputs.route,'hosted');assert.equal(result.runId,790);
@@ -43,4 +43,24 @@ test('a terminal failed hosted attempt stops visibly and does not strand the nex
  const api={get:async()=>({id:789,run_attempt:1,workflow_id:456,head_sha:workflowSha,display_title:'disposable-'+invocation.nonce,event:'workflow_dispatch',status:'completed',conclusion:'failure'})};
  await assert.rejects(recoverCanary({api,leases,policy}),/789.*failure|failure.*789/);
  assert.equal(leases.inspect().ciInvocation,undefined);assert.equal(leases.inspect().slots[0].state,'free');
+});
+test('a definite dispatch refusal clears the intent without polling for a run',async t=>{
+ const {dispatchCanary}=await import('./ci-canary.mjs');const leases=setup(t);let polled=false;
+ const api={post:async()=>{const error=new Error('GitHub POST refused (422)');error.status=422;throw error;},get:async()=>{polled=true;throw new Error('Unexpected poll');}};
+ await assert.rejects(dispatchCanary({api,leases,policy,sourceSha,workflowSha,route:'server'}),/422/);
+ assert.equal(polled,false);assert.equal(leases.inspect().ciInvocation,undefined);
+});
+test('a dispatch racing main is cancelled by its owned nonce and retired without a runner',async t=>{
+ const {dispatchCanary}=await import('./ci-canary.mjs');const leases=setup(t);let nonce,cancelled=false;
+ const run=()=>({id:789,run_attempt:1,workflow_id:456,head_sha:'5'.repeat(40),event:'workflow_dispatch',display_title:'disposable-'+nonce,status:cancelled?'completed':'queued'});
+ const api={post:async(path,body)=>{if(path.endsWith('/cancel'))cancelled=true;else nonce=body.inputs.nonce;},get:async path=>path.includes('/workflows/')?{workflow_runs:[run()]}:run()};
+ await assert.rejects(dispatchCanary({api,leases,policy,sourceSha,workflowSha,route:'server',wait:async()=>{}}),/commit|identity|revision/i);
+ assert.equal(cancelled,true);assert.equal(leases.inspect().ciInvocation,undefined);assert.equal(leases.inspect().slots[0].state,'free');
+});
+test('a completed server execution awaiting only summary is not cancelled by recovery',async t=>{
+ const {recoverCanary}=await import('./ci-canary.mjs');const leases=setup(t);
+ const invocation={nonce:'a'.repeat(32),sourceSha,workflowSha,route:'server',createdAt:Date.now(),runId:789,attempt:1,serverRunnerId:1001};
+ leases.setInvocation(invocation);let cancelled=false;
+ const api={get:async()=>({id:789,run_attempt:1,workflow_id:456,head_sha:workflowSha,event:'workflow_dispatch',display_title:'disposable-'+invocation.nonce,status:'in_progress'}),post:async()=>{cancelled=true;}};
+ assert.deepEqual(await recoverCanary({api,leases,policy}),invocation);assert.equal(cancelled,false);
 });

@@ -40,7 +40,7 @@ export async function runLocal({leases, transport, request, durationMs = 3300000
     await transport.destroy(lease, {signal: cleanupDeadline});
     const observation = await transport.inspect(lease, {signal: cleanupDeadline});
     released = leases.release(lease, observation);
-  } catch (failure) { error = failure.message; }
+  } catch (failure) { error = error ? `${error}; cleanup: ${failure.message}` : failure.message; }
   if (!released) {
     leases.release(lease, undefined);
     return {code: 125, cleanup: 'quarantined', lease, error};
