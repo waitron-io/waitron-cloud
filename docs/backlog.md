@@ -669,13 +669,11 @@ order. Remote access matters most because Waitron's customer-facing features wai
    support takeover or operator, fiscal or activation permission follows from ownership.
    The [revised P3 plan](superpowers/plans/2026-10-22-cloud-global-country-split.md)
    records the boundary and coordinated follow-ups; this lifecycle is not built or approved.
-6. **Support and the operator console.** The [D609 proposed draft](superpowers/specs/2026-11-07-cloud-operator-console-support-design.md)
-   has had two Claude reads; revised choices await owner approval. Reuse D603's report receiver and
-   grouped CLI reader, the customer audit and temporary grants. The console, customer
-   approval screens and complete staff history remain unbuilt. The revised proposal
-   reads stored country data, retains the CLI and lets the operator prepare diagnostic
-   access for customer approval. Owner-contact disclosure, CLI history, duration, actions and P3 binding remain
-   open. Asking for help is a received report, not a help desk.
+6. **Support and the operator console.** Open: the [D609 proposed draft](superpowers/specs/2026-11-07-cloud-operator-console-support-design.md)
+   awaits owner review. Lane D watcher 2026-11-07 22:20 resolves verified-owner contact
+   disclosure and common console/CLI customer-visible audit. Initial diagnostic action
+   and duration need owner approval; the P3 adapter remains unresolved. The console,
+   grant UI and staff history remain unbuilt. Asking for help is a report, not a help desk.
 
 Production email (D102: bounces and complaints) is already tracked and is not repeated here.
 
