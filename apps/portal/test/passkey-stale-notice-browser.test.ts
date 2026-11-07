@@ -26,6 +26,7 @@ async function open(browser: Browser, locale: 'en' | 'es', theme: 'light' | 'dar
     if (path === '/passkeys') return route.fulfill({json: {passkeys: ids.map(id => ({id, createdAt: '2026-10-24T12:00:00Z', lastUsedAt: null}))}});
     if (path === '/authenticator') return route.fulfill({json: {active: false, version: 0, recoveryCodesRemaining: 0, available: true}});
     if (path === '/installations') return route.fulfill({json: {installations: []}});
+    if (path === '/sessions') return route.fulfill({json: {sessions: [{id: '32345678-1234-4234-8234-123456789abc', createdAt: '2026-10-24T12:00:00Z', lastUsedAt: '2026-10-24T12:00:00Z', expiresAt: '2030-01-01T00:00:00Z', current: true}]}});
     const body: unknown = request.postDataJSON();
     if (request.method() === 'POST') writes.push({path, body});
     if (path === '/passkeys/remove' && (body as {id: string}).id === first) {
@@ -67,7 +68,7 @@ for (const locale of ['en', 'es'] as const) for (const theme of ['light', 'dark'
       if (process.env.PASSKEY_NOTICE_RECEIPT_DIR) {
         await mkdir(process.env.PASSKEY_NOTICE_RECEIPT_DIR, {recursive: true});
         await section.scrollIntoViewIfNeeded();
-        await page.screenshot({path: `${process.env.PASSKEY_NOTICE_RECEIPT_DIR}/${locale}-${theme}-${width}.png`});
+        await section.screenshot({path: `${process.env.PASSKEY_NOTICE_RECEIPT_DIR}/${locale}-${theme}-${width}.png`});
       }
     } finally { await browser.close(); }
   });
