@@ -424,22 +424,30 @@ adds, per month, at the same list prices:
 
 | Service | What drives the cost | Per venue per month |
 | --- | --- | --- |
-| Backups | The box's continuous copy to S3 is mostly small listing and upload requests: about 144,000 a month if the box is idle 9 hours a day (the cost model's assumption), 382,000 if it is on all day ($0.76–2.02). Storage of a few GB costs cents. Each venue's key is Cloud's own, protected by one master key ([managed-key operations](../../managed-key-operations.md)), and the stream supplies it with each upload, so a venue adds no key-service charge; the master key costs $1 a month per country | about $1–2 |
+| Backups | The box's continuous copy to S3 is mostly small listing and upload requests: about 23,000 a month for a box that stays quiet, up to about 49,000 for one that trades 15 hours a day ($0.12–0.26). Storage of a few GB costs cents. Each venue's key is Cloud's own, protected by one master key ([managed-key operations](../../managed-key-operations.md)), and the stream supplies it with each upload, so a venue adds no key-service charge; the master key costs $1 a month per country | under $0.50 |
 | Remote access | A share of the cell's machines for its gateways (two small gateways would be about $0.52 a venue at 64 venues a cell); traffic out to browsers at $0.09 a GB. An owner's remote session measured 2.8 MB, so 30 sessions cost about a cent; customer-facing pages are unmeasured, about $0.09–0.90 at 1–10 GB | about $0.60–1.50 |
 | Translations | The [translation design](2026-10-14-translate-all-design.md)'s measured price: about $0.007 per 100 products per language, so a 358-product menu costs about $0.03 a language. Capped by design at $5 per venue a month | usually under $0.20 |
 | Rota solver | Not measured. If one weekly solve takes a minute on 2 processors and 4 GB, run only when asked, it costs about $0.002 | a few cents |
 
-So an on-prem venue adds roughly **$2–4 a month**, plus its share of the fixed platform
-(about $460 a month for the whole of Spain at launch). Inputs: the backup request counts are
-Cloud's own measurement of a replayed day of 207 sales
+So an on-prem venue adds roughly **$1–2.50 a month**, plus its share of the fixed platform
+(about $460 a month for the whole of Spain at launch). Inputs: the requests for a day's sales
+are Cloud's own measurement of a replayed day of 207 sales on Litestream 0.5.17
 ([usage projection](../../cost-model/usage-projection.json)); the owner session is the
 measured [browser journey](../../cost-model/remote-owner-browser.json); everything else is
-an assumption named in the table. About 99% of the backup requests happen while the box is
-idle: in 20 idle minutes Litestream listed the bucket 171 times and uploaded 5 times, against
-65 requests for 207 sales. Waitron sets only Litestream's daily snapshot, week of history and
-`l0-retention` (`packages/stream/src/litestream.ts` in Waitron); everything else is
-Litestream 0.5.17's default. Whether a slower idle check is safe, and what it saves, is
-unmeasured. The billing design (launch item 3) turns these into prices.
+an assumption named in the table.
+
+A quiet box makes about 0.52 listings a minute. Measured in Waitron on 6 November 2026 on
+Litestream 0.5.18 with its tidy-up check set to 5 minutes (`l0-retention-check-interval`):
+over 65 quiet minutes against a local S3 server it settled at 0.42 listings a minute, and
+four restores returned the last sale. Waitron's own read of the bucket, which runs every 10
+minutes while nothing is waiting, adds 0.1. The 49,000 is arithmetic, not a measurement: those
+quiet listings all month, Waitron's read every minute for 15 hours a day as if a change were
+always waiting, and the 65 requests measured for 207 sales. All of it is priced at $5.30 per
+million requests over a 730-hour month.
+
+This replaces $0.76–2.02, which rested on 171 listings in 20 idle minutes on Litestream 0.5.17's
+default settings and left out Waitron's read. The usage projection still holds those earlier
+counts. The billing design (launch item 3) turns these into prices.
 
 ## 12. What approving this design allows, and what is left open
 
