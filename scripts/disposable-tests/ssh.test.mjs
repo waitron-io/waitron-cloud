@@ -10,7 +10,9 @@ function fixture(t) {
   t.after(() => rmSync(base, {recursive: true, force: true}));
   const bin = join(base, 'bin'); mkdirSync(bin);
   const capture = join(base, 'argv.json');
-  writeFileSync(join(bin, 'ssh'), '#!/bin/sh\nexec python3 -c \'import json,os,sys;open(os.environ["CAPTURE_PATH"],"w").write(json.dumps(sys.argv[1:]))\' "$@"\n', {mode: 0o755});
+  // The SSH double must not import candidate Python modules itself.
+  const node = "'" + process.execPath.replaceAll("'", "'\\''") + "'";
+  writeFileSync(join(bin, 'ssh'), `#!/bin/sh\nexec ${node} -e 'require("node:fs").writeFileSync(process.env.CAPTURE_PATH,JSON.stringify(process.argv.slice(1)))' -- "$@"\n`, {mode: 0o755});
   return {base, capture, cache: join(base, 'cache'), env: {...process.env, PATH: bin + ':' + process.env.PATH, CAPTURE_PATH: capture, XDG_CACHE_HOME: join(base, 'cache')}};
 }
 test('all host commands reuse the common private socket and keep strict key verification', t => {
