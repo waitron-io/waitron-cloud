@@ -721,7 +721,7 @@ order. Remote access matters most because Waitron's customer-facing features wai
    for the investigator's inputs before it runs in production. Waitron work it needs: the
    error-report opt-in and sender, the "report a problem" form, the "can trade" check and the
    updater honouring a held version. The [staff-report plan](superpowers/plans/2026-11-07-staff-problem-reports.md)
-   covers Cloud receiving and a local grouped reader; its build waits for the shared box-error receiver.
+   covers Cloud receiving and a local grouped reader that uses the shared box-error receiver.
    Qualify report storage and read cost at realistic report counts per version, and assess
    matched-window error shares after real reports exist: lifetime totals from
    reporting boxes can delay young-release holds or inflate ratios when other errors
