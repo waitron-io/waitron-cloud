@@ -3057,7 +3057,7 @@ implementation or production evidence.
   The [first account-page plan](superpowers/plans/2026-11-07-billing-account-pages-first-piece.md)
   covers the test-account chooser for the existing Connected trial, discovered only
   for configured synthetic accounts. The [payment-method plan](superpowers/plans/2026-11-07-billing-payment-methods.md)
-  still needs provider requests, guarded account routes and portal pages. Paid-plan choices and production
+  still needs portal method controls and the complete sandbox browser journey. Paid-plan choices and production
   qualification remain open.
 - **Venue and node registration.** The agreed Waitron signup and connection journey is
   implemented locally. Planned handover, diagnostics, retention, key provisioning

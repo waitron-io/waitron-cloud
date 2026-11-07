@@ -636,5 +636,48 @@ Run the focused API checks with `node scripts/test-postgres.mjs exec pnpm --dir
 packages/account-http exec node --test --test-timeout=60000 test/billing-account.test.ts`.
 These checks cover real PostgreSQL lock waits, expiry, ownership changes, concurrent
 starts and rollback. This piece sets no renewal anchor and makes no charge or
-provider request. Payment methods, paid-plan changes and production billing remain
-separate work.
+provider request. Paid-plan changes and production billing remain separate work.
+
+## Test payment-method routes
+
+To exercise saved cards and direct-debit setup with synthetic accounts, enable the
+chooser settings above and set `CLOUD_BILLING_METHODS_MODE=test`. Supply
+`CLOUD_BILLING_STRIPE_TEST_ACCOUNT`, `CLOUD_BILLING_STRIPE_TEST_KEY`,
+`CLOUD_BILLING_SUMUP_SANDBOX_MERCHANT` and `CLOUD_BILLING_SUMUP_SANDBOX_KEY` through
+your private environment. The default is `off`. These routes require a Stripe test
+key and read both providers' account identities before writing; SumUp must report
+the configured merchant with `extdev: true`. Keep real account data out of this test.
+
+POST `/api/account/billing/method/start` with
+`{"venueId":"11111111-1111-4111-8111-111111111111","kind":"card"}` or
+`kind: "direct_debit"`, using the same origin, session cookie and CSRF header as the
+chooser. Cards return a `checkoutId` for SumUp's widget; direct debit returns a
+`url` restricted to `https://checkout.stripe.com`, which returns to `/account`.
+The SumUp setup is a €1 sandbox checkout, as recorded in the
+[provider test](../../docs/billing-provider-test.md#run-1-sumup-saved-card-and-unattended-charge).
+Portal method controls remain unfinished.
+
+POST `/api/account/billing/method/verify` with only the venue ID. The server reads
+the saved setup rather than accepting a customer, token or checkout reference from
+your browser. The response is `{"state":"pending"}`, `{"state":"failed"}` or
+`{"state":"verified"}`. The existing method stays selected until verification
+succeeds. Starting again replaces the pending setup; a late response cannot select
+the replaced method. An uncertain provider write is never automatically repeated.
+
+With methods enabled, billing/read adds `paymentMethods` to test venues, for example
+`{"selected":"card","setup":{"kind":"direct_debit","state":"pending"}}`.
+This view contains no private provider references. Read state is derived from the
+saved binding and completed method row; a provider refusal appears in the verify
+reply. Each provider request rechecks authority, and the final transaction checks it
+again before returning setup details or selecting a method. Both method routes share
+the chooser's limit of 30 requests per account per minute. They leave renewal dates
+and paid periods unchanged.
+
+Run `node scripts/test-postgres.mjs exec node --test --test-timeout=30000
+packages/account-http/test/billing-method-routes.test.ts` for the route checks with
+fake providers and real PostgreSQL. The provider client checks use local HTTP servers:
+`node --test packages/account-http/test/billing-method-client.test.ts
+packages/account-http/test/billing-method-config.test.ts
+packages/account-http/test/billing-methods.test.ts`. These checks do not call either
+provider. The portal widget, complete sandbox browser journey and live qualification
+remain separate work.

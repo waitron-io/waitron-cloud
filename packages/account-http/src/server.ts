@@ -1,3 +1,4 @@
+import type {BillingMethodsOptions} from './billing-methods.ts';
 import type {BillingAccountOptions} from './config.ts';
 import type {TunnelProvisionOptions} from './tunnel-provision.ts';
 import type {AddressLookupOptions} from './address-lookup.ts';
@@ -21,7 +22,7 @@ function unavailable(request?: Request, portal = false) {
     ...securityHeaders, 'Retry-After': '1',
   }});
 }
-export async function startAccountServer(options: {pool: Pool; outbox: EmailOutbox; config: AccountHttpConfig;factor?:FactorConfig; host?: string; port?: number; portalAssets?: PortalAssets;relay?:RelayAdmissionConfig;staffCertificates?:boolean;addressLookup?:AddressLookupOptions;tunnelProvision?:TunnelProvisionOptions;translation?:boolean;translationMachine?:TranslationMachine;leaseIssuer?:LeaseIssuer;leaseTrust?:ReadonlyMap<string,string>;captures?:CaptureOptions;planMode?:PlanMode;allowances?:AllowanceOptions;billingAccount?:BillingAccountOptions;remoteResolve?:RemoteResolver;passwordScreening?:PasswordScreeningProvider}): Promise<{server: Server; close(): Promise<void>}> {
+export async function startAccountServer(options: {pool: Pool; outbox: EmailOutbox; config: AccountHttpConfig;factor?:FactorConfig; host?: string; port?: number; portalAssets?: PortalAssets;relay?:RelayAdmissionConfig;staffCertificates?:boolean;addressLookup?:AddressLookupOptions;tunnelProvision?:TunnelProvisionOptions;translation?:boolean;translationMachine?:TranslationMachine;leaseIssuer?:LeaseIssuer;leaseTrust?:ReadonlyMap<string,string>;captures?:CaptureOptions;planMode?:PlanMode;allowances?:AllowanceOptions;billingAccount?:BillingAccountOptions;billingMethods?:BillingMethodsOptions;remoteResolve?:RemoteResolver;passwordScreening?:PasswordScreeningProvider}): Promise<{server: Server; close(): Promise<void>}> {
   const config = validateConfig(options.config);
   const app = createAccountApp({...options, config});
   let active = 0;let readinessActive=0; let stopping = false; let closing: Promise<void> | undefined;

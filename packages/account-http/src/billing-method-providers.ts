@@ -55,3 +55,96 @@ export function qualifySumupMethod(binding:Binding,value:unknown):MethodVerifica
  check(matching[0]!.active===true);
  return {state:'verified',methodId:token,mandateId:null};
 }
+
+export type MethodPresentation={checkoutId:string}|{url:string};
+export type StartedMethod={customerId:string;providerReference:string;presentation:MethodPresentation};
+export function createTestBillingMethodClient(options:{stripeKey:string;sumupKey:string;portalOrigin:string;fetcher?:typeof fetch}){
+ options={...options};
+ let returnUrl:string;
+ try{
+  const origin=new URL(options.portalOrigin);
+  if(origin.origin!==options.portalOrigin||!['http:','https:'].includes(origin.protocol)
+   ||origin.protocol==='http:'&&!['localhost','127.0.0.1','[::1]'].includes(origin.hostname)
+   ||! /^(sk|rk)_test_[A-Za-z0-9_]+$/.test(options.stripeKey)
+   ||typeof options.sumupKey!=='string'||!options.sumupKey.trim()||/[^\x20-\x7e]/.test(options.sumupKey))throw new Error();
+  returnUrl=origin.origin+'/account';
+ }catch{throw new Error('billing_methods.invalid_config');}
+ const fetcher=options.fetcher??fetch;
+ async function request(provider:'stripe'|'sumup',path:string,body?:Record<string,unknown>,authorize?:()=>Promise<void>):Promise<unknown>{
+  await authorize?.();
+  let reader:ReadableStreamDefaultReader<Uint8Array>|undefined;
+  try{
+   const response=await fetcher((provider==='stripe'?'https://api.stripe.com/v1':'https://api.sumup.com/v0.1')+path,{
+    method:body?'POST':'GET',redirect:'error',signal:AbortSignal.timeout(10000),
+    headers:{Authorization:'Bearer '+(provider==='stripe'?options.stripeKey:options.sumupKey),
+     'Content-Type':provider==='stripe'?'application/x-www-form-urlencoded':'application/json'},
+    body:body?(provider==='stripe'?new URLSearchParams(body as Record<string,string>).toString():JSON.stringify(body)):undefined,
+   });
+   if(!response.ok){void response.body?.cancel().catch(()=>{});throw new Error();}
+   reader=response.body?.getReader();if(!reader)throw new Error();
+   const chunks:Uint8Array[]=[];let size=0;
+   for(;;){const {done,value}=await reader.read();if(done)break;size+=value.byteLength;if(size>65536)throw new Error();chunks.push(value);}
+   return JSON.parse(new TextDecoder('utf-8',{fatal:true}).decode(Buffer.concat(chunks)));
+  }catch{throw new Error('billing_methods.provider_unavailable');}
+  finally{void reader?.cancel().catch(()=>{});}
+ }
+ async function preflight(setup:MethodSetup,authorize?:()=>Promise<void>){
+  const expected=parseTestBillingProviderAccount(setup.providerAccountId);
+  check(setup.kind===(expected.provider==='stripe'?'direct_debit':'card'));
+  if(expected.provider==='stripe'){
+   const account=object(await request('stripe','/account',undefined,authorize));check(account.id===expected.accountId);
+   check(object(await request('stripe','/balance',undefined,authorize)).livemode===false);return account;
+  }
+  const account=object(await request('sumup','/me',undefined,authorize)),merchant=object(account.merchant_profile);
+  check(merchant.extdev===true&&merchant.merchant_code===expected.accountId);return account;
+ }
+ function stripeUrl(value:unknown):string{
+  check(typeof value==='string');
+  let url:URL;try{url=new URL(value);}catch{check(false);}
+  check(url!.origin==='https://checkout.stripe.com'&&!url!.username&&!url!.password);
+  return value;
+ }
+ return {
+  async start(setup:MethodSetup,authorize?:()=>Promise<void>):Promise<StartedMethod>{
+   check(setup.customerId===null&&setup.providerReference===null);
+   check(/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/.test(setup.id));
+   const account=await preflight(setup,authorize);
+   if(setup.kind==='direct_debit'){
+    const customer=object(await request('stripe','/customers',{name:'Synthetic Cloud billing',email:'billing-test@example.invalid'},authorize));
+    check(customer.livemode===false);const customerId=reference(customer.id);
+    const checkout=object(await request('stripe','/checkout/sessions',{mode:'setup',currency:'eur',customer:customerId,
+     'payment_method_types[]':'sepa_debit',success_url:returnUrl,cancel_url:returnUrl},authorize));
+    check(checkout.livemode===false&&checkout.mode==='setup'&&checkout.status==='open'&&checkout.customer===customerId);
+    return {customerId,providerReference:reference(checkout.id),presentation:{url:stripeUrl(checkout.url)}};
+   }
+   const customerId='cloud-test-'+setup.id;
+   const customer=object(await request('sumup','/customers',{customer_id:customerId,
+    personal_details:{first_name:'Synthetic',last_name:'Cloud billing',email:'billing-test@example.invalid'}},authorize));
+   check(customer.customer_id===customerId);
+   const checkout=object(await request('sumup','/checkouts',{checkout_reference:setup.id,amount:1,currency:'EUR',
+    merchant_code:object(account.merchant_profile).merchant_code,description:'Synthetic Cloud card setup',customer_id:customerId,purpose:'SETUP_RECURRING_PAYMENT'},authorize));
+   check(checkout.merchant_code===object(account.merchant_profile).merchant_code&&checkout.customer_id===customerId
+    &&checkout.purpose==='SETUP_RECURRING_PAYMENT'&&checkout.status==='PENDING');
+   const providerReference=reference(checkout.id);
+   return {customerId,providerReference,presentation:{checkoutId:providerReference}};
+  },
+  async verify(setup:MethodSetup,authorize?:()=>Promise<void>):Promise<MethodVerification>{
+   const customerId=reference(setup.customerId),providerReference=reference(setup.providerReference),account=await preflight(setup,authorize);
+   if(setup.kind==='direct_debit'){
+    const checkout=object(await request('stripe','/checkout/sessions/'+encodeURIComponent(providerReference),undefined,authorize));
+    if(checkout.status!=='complete')return qualifyStripeMethod(setup,{account,checkout});
+    check(checkout.livemode===false&&checkout.id===providerReference&&checkout.mode==='setup'&&checkout.customer===customerId);
+    const intent=object(await request('stripe','/setup_intents/'+encodeURIComponent(reference(checkout.setup_intent)),undefined,authorize));
+    if(intent.status!=='succeeded')return qualifyStripeMethod(setup,{account,checkout,intent});
+    check(intent.livemode===false&&intent.id===checkout.setup_intent&&intent.customer===customerId);
+    const method=await request('stripe','/payment_methods/'+encodeURIComponent(reference(intent.payment_method)),undefined,authorize);
+    const mandate=await request('stripe','/mandates/'+encodeURIComponent(reference(intent.mandate)),undefined,authorize);
+    return qualifyStripeMethod(setup,{account,checkout,intent,method,mandate});
+   }
+   const checkout=object(await request('sumup','/checkouts/'+encodeURIComponent(providerReference),undefined,authorize));
+   if(checkout.status!=='PAID')return qualifySumupMethod(setup,{account,checkout});
+   const instruments=await request('sumup','/customers/'+encodeURIComponent(customerId)+'/payment-instruments',undefined,authorize);
+   return qualifySumupMethod(setup,{account,checkout,instruments});
+  },
+ };
+}
