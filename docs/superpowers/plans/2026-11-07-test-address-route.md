@@ -18,6 +18,11 @@ A crash can shorten one gap: state that in one sentence in the PR and stop there
 No crash test, no committed per-second counter, no extra guarantee. Build it,
 and hand E the route.”
 
+Same file, 01:47: “the stop control is removing the key file; terms and privacy
+links are for the public service, not this trial; the allowance row needed is
+whatever makes the route answer, seeded for this account only.” The watcher asks
+the owner about usage/quotas; no other trial activation gate is required.
+
 ## Build
 
 - [ ] Add `packages/account-http/src/address-lookup.ts`, optional injection in
@@ -72,6 +77,7 @@ and hand E the route.”
   Hand E the fake-provider wire for its existing screens: editable/manual fields,
   Google attribution, country-pack checks and separate whole-address confirmation.
   No Waitron edits. Live use awaits server-only key, owner usage/quotas confirmation,
-  published allowance, stop control and retained terms/privacy gates. No new table,
+  allowance configuration for this account only; removing the key file stops it.
+  Public terms/privacy links are for the public service. No new table,
   job, grant or cancellation accounting; translation remains unchanged. PR says
   Google activation is a separate reviewed change; this route reaches fakes only.

@@ -52,8 +52,9 @@ venue does not subscribe to remote access or backups.
   holds stay counted. **Remove that exception when the real service is scoped.**
   A crash can shorten one dispatch gap; no strict crash-spacing guarantee is made.
   Real Google activation is a separate reviewed change requiring the server-only
-  key, owner usage/quotas confirmation, published allowance, tested stop control
-  and retained terms/privacy gates. No live request or production enablement is
+  key, owner usage/quotas confirmation and allowance configuration for this
+  account only. Removing the key file stops this private trial; public-service
+  terms/privacy links do not gate it. No live request or production enablement is
   proved by these local checks.
   The offline evaluation client now waits a full spacing interval when created,
   including after reopening its durable journal. A controlled 150 ms reservation

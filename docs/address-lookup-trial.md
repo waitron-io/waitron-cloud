@@ -9,7 +9,9 @@ owner confirms usage and quotas. This is not the production address service.
 
 The owner approved this trial in A951-S step 5 on 6 November 2026. The watcher’s
 7 November 00:47 and 01:05 decisions choose counted abandonment and the small
-single-box limits below. The broader [scope](address-lookup-scope.md) still owns
+single-box limits below. Its 01:47 clarification keeps activation limited to the
+server-only key, the owner’s usage/quotas confirmation and allowance configuration
+for this account. Removing the key file is the trial’s stop control. The broader [scope](address-lookup-scope.md) still owns
 provider terms, permanent address storage and the eventual service.
 
 ## Sign each request through the box's existing connection
@@ -45,8 +47,9 @@ The reply contains `workflowId`, `expiresAt`, `provider` and editable `fields`:
 is Google's label; resolve it through your country pack and keep your existing
 server checks. A draft is not a saved or fiscally accepted address.
 
-Keep manual text editable, show Google Maps attribution and retain the public
-terms/privacy links. Choosing a suggestion starts validation; ask for separate
+Keep manual text editable and show Google Maps attribution. Public terms/privacy
+links belong to the public service and do not gate this private trial. Choosing a
+suggestion starts validation; ask for separate
 whole-address confirmation before saving the person's confirmed or corrected
 fields. Discard drafts on exit or expiry. Cloud saves no query, address, response
 or address-derived fingerprint and returns no coordinates, place ID or confidence.
@@ -87,5 +90,8 @@ node scripts/test-postgres.mjs exec node --test packages/account-http/test/addre
 ```
 
 The fake provider proves the wire and the limits. It does not measure Google's
-address quality or complete Waitron's screen integration, attribution review,
-provider-account checks, published allowance, stop-control or terms acceptance.
+address quality or complete Waitron’s screen integration. Before the owner tries
+Google, configure the existing allowance for this account only and receive the
+owner’s usage/quotas confirmation through the watcher. Removing the server’s key
+file stops the trial. Public-service terms/privacy work and production enablement
+remain separate.
