@@ -3777,6 +3777,10 @@ temporary probe measuring 47 applications of migration 013 at 25–30 ms. None
 reproduces or repairs the failure. Preserve the cap and assertions; capture the
 active PostgreSQL wait and failing statement on recurrence before choosing a fix.
 See [the failure and qualification limits](backlog/worker-scheduling.md#migration-setup-timeout-remains-unexplained-d530).
+PR #1042's merge additionally reports migration 024/035 setup timeouts and a
+usage-worker SIGKILL on registration shard 3. The four named cases pass on the
+exact merge on Debian; their hosted causes remain unproved and their limits stay.
+The linked D530 bundle retains this occurrence separately from migration 013.
 
 ## Passive security-audit session timestamp check (D530)
 

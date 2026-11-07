@@ -198,6 +198,33 @@ running, together with the failing statement and runner health. Do not log SQL
 parameters, credentials or row contents. D530 owns that causal investigation;
 lock contention, slow storage and runner scheduling remain unproved explanations.
 
+#### 7 November: registration shard 3 also fails setup and shutdown
+
+[PR #1042’s exact-merge run](https://github.com/waitron-io/waitron-cloud/actions/runs/42315045019/job/128228431661)
+at `9a68d881ac98427c5de618c44ea3ebda0a83b270` reports four failures among 473 cases.
+Relay-worker and venue-relay setup time out applying migration 035 under their
+5,000 ms fixture cap. A usage-reconcile setup hook times out applying migration
+024 under its 10,000 ms cap. The separate blocked-transaction shutdown case
+reaches its body and receives SIGKILL instead of the expected normal exit.
+The log has no active PostgreSQL wait or failing-statement detail, so neither a
+shared cause with migration 013 nor a common cause for these four failures is proved.
+
+The three failing test files, `src/migrate.ts` and `src/usage-reconcile-cli.ts`
+under `packages/registration` have matching Git objects at green PR head
+`2abd1b18e499708b1a103f7fe290256c015a9708` and that merge. A Debian 13 run from an
+exact-merge clone passes the four named cases with their caps and assertions intact:
+
+```sh
+node scripts/test-postgres.mjs exec pnpm --dir packages/registration exec node --test --test-concurrency=2 --test-name-pattern='expired sending claims|SIGTERM lets|blocked transaction times|venue relay messages takes' test/relay-worker.test.ts test/usage-reconcile-cli.test.ts test/venue-service-relay.test.ts
+```
+
+This does not reproduce or repair the hosted failures. An initial root-directory
+probe could not launch the usage CLI and supplies no evidence about shutdown;
+only the corrected package-directory run above counts. D530 retains the SQL-setup
+and worker-shutdown investigation. Capture active waits/blockers on recurrence;
+keep the three migration ordinals and the shutdown symptom distinct until evidence
+joins them. Do not change caps or exit assertions on the strength of a passing rerun.
+
 ### Monitoring command shutdown during an active observation (D552)
 
 Run `node scripts/test-postgres.mjs exec pnpm --dir packages/registration exec
