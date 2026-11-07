@@ -71,7 +71,7 @@ test('the real immutable portal graph selects six package jobs while retaining b
   }
 });
 
-function reviewedRevisionFixture(paths, reference, run) {
+function revisionFixture(paths, run) {
   const root = mkdtempSync(join(tmpdir(), 'cloud-real-package-plan-'));
   const git = (...args) => {
     const binary = typeof args.at(-1) === 'object' && args.pop().binary;
@@ -92,8 +92,8 @@ function reviewedRevisionFixture(paths, reference, run) {
 }
 
 test('a real mixed portal revision narrows while a new unknown reader restores every package', {timeout: 60_000}, () =>
-  reviewedRevisionFixture(['apps/portal/src/app.ts', 'apps/portal/src/unreviewed-reader.mjs'],
-    'Controlled portal whitespace or unresolved source reader', ({root, git, save, base}) => {
+  revisionFixture(['apps/portal/src/app.ts', 'apps/portal/src/unreviewed-reader.mjs'],
+    ({root, git, save, base}) => {
     const portal = join(root, 'apps/portal/src/app.ts');
     writeFileSync(portal, readFileSync(portal, 'utf8') + '\n');
     writeFileSync(join(root, 'docs/backlog.md'), '# Portal selection fixture\n');
@@ -114,12 +114,12 @@ test('a real mixed portal revision narrows while a new unknown reader restores e
   }));
 
 test('qualifying the real UI-smoke graph retains every existing receipt suite', {timeout: 60_000}, () =>
-  reviewedRevisionFixture(['packages/ui-smoke/test.mjs'], 'Controlled UI-smoke whitespace', ({root, git, save, base}) => {
+  revisionFixture(['packages/ui-smoke/test.mjs'], ({root, git, save, base}) => {
     const path = 'packages/ui-smoke/test.mjs';
     writeFileSync(join(root, path), readFileSync(join(root, path), 'utf8') + '\n');
     const sha = save(), workspace = loadWorkspace(root);
     const selected = createPlan({pull_request: {base: {sha: base}, head: {sha}}}, {sha}, workspace, git);
     assert.deepEqual(selected.packages, [{package: '@waitron-cloud/ui-smoke', shard: 1}], selected.reason);
-    assert.deepEqual(selected.receipts, ['test:backup-capacity', 'test:cloud-cost',
-      'test:database-recovery-receipt', 'test:local-stack', 'test:public-gateway-limits', 'test:two-venue-milestone-receipt']);
+    assert.deepEqual(selected.receipts, ['test:two-venue-milestone-receipt', 'test:backup-capacity',
+      'test:public-gateway-limits', 'test:local-stack', 'test:database-recovery-receipt', 'test:cloud-cost']);
   }));
