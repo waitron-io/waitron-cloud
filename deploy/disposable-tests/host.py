@@ -202,7 +202,9 @@ def budget(slots, *, memory, threads, disk_total, disk_free, allocated):
         raise ValueError('Invalid host resource measurement')
     if slots*HOST_CAP_MIB*1024**2+16*1024**3 > memory:
         raise ValueError('Insufficient memory for guest caps and host reserve')
-    # Guests share 24 execution threads; the host keeps four complete cores.
+    if slots > 10:
+        raise ValueError('Ten-slot operating limit exceeded')
+    # On the 32-thread host, guests share 24; four complete cores stay reserved.
     if min(slots*4, 24)+8 > threads:
         raise ValueError('Insufficient execution threads after host reserve')
     remaining = max(0, slots*64*1024**3-allocated)

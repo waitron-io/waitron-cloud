@@ -22,6 +22,11 @@ class Capacity(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'memory'):
             host.budget(10, memory=127744*1024**2-1, threads=32, disk_total=1800*G, disk_free=1700*G, allocated=0)
 
+    def test_more_memory_cannot_expand_the_approved_ten_slot_operating_limit(self):
+        for slots in [11, 12, 16]:
+            with self.assertRaisesRegex(ValueError, 'Ten-slot'):
+                host.budget(slots, memory=256*G, threads=32, disk_total=1800*G, disk_free=1700*G, allocated=0)
+
     def test_cpu_reserve_includes_both_siblings_of_four_physical_cores(self):
         topology = {cpu:(0,cpu%16) for cpu in range(32)}
         self.assertEqual(host.guest_cpus(topology), list(range(4,16))+list(range(20,32)))

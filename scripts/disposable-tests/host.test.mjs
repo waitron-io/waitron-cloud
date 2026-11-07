@@ -54,7 +54,7 @@ test('parallel slots use distinct loopback ports, host accounts and egress ident
  }
 });
 
-test('the tenth guest fits the ten-slot memory envelope with its own identity',()=>{
+test('the tenth-slot plan sets bounded memory and CPU with its own identity',()=>{
  const result=plan({...request(),resourceId:'dt-bridge-1-9-1'});assert.equal(result.status,0,result.stderr);
  const p=JSON.parse(result.stdout);
  assert.equal(p.qemu[p.qemu.indexOf('-m')+1],'10752');
