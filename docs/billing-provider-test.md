@@ -47,7 +47,8 @@ with `purpose=SETUP_RECURRING_PAYMENT`, a synthetic customer and the
 [documented sandbox Visa](https://developer.sumup.com/online-payments/testing/)
 `4200000000000091`. It selected consent in the widget and completed the provider's
 synthetic authentication frame using its Approve/Submit control. The setup checkout
-became `PAID` at 2026-11-07 12:37:54 UTC. A provisional token seen before authentication
+used **€1**, as recorded by `run-sumup.mjs`'s setup-checkout request, and became
+`PAID` at 2026-11-07 12:37:54 UTC. A provisional token seen before authentication
 had not qualified the setup; the completed run read an active saved instrument for
 the exact synthetic customer.
 
