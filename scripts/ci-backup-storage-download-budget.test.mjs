@@ -21,7 +21,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { startBackupStorage } from "./scripts/backup-storage-fixture.mjs";
 const nativeSetTimeout = setTimeout, nativeClearTimeout = clearTimeout, budgets = [];
-// The deadline and server completion share a controlled clock; socket closure stays real.
+// Mock child timers to order the two deadlines; connection observation uses native time.
 mock.timers.enable({ apis: ["setTimeout"] });
 AbortSignal.timeout = ms => {
   budgets.push(ms);
@@ -34,22 +34,30 @@ let calls = 0, completed = false, disconnected = false;
 let releaseConnection;
 const connectionClosed = new Promise(resolve => { releaseConnection = resolve; });
 const timers = new Set();
+let completionAdvance;
+const expireDeadline = () => {
+  mock.timers.tick(75);
+  completionAdvance = nativeSetTimeout(() => mock.timers.tick(350), 150);
+};
 const server = createServer((req, res) => {
-  req.on("close", () => { if (!completed) disconnected = true; releaseConnection(); });
+  req.on("close", () => {
+    clearTimeout(timer);
+    if (!completed) disconnected = true;
+    releaseConnection();
+  });
   if (${JSON.stringify(phase)} !== "headers") {
     res.writeHead(${phase === "status" ? 503 : 200}); res.write("partial archive");
   }
   const timer = setTimeout(() => { completed = true; res.end("invalid complete archive"); }, 350);
   timers.add(timer);
-  if (${JSON.stringify(phase)} === "headers") setImmediate(() => mock.timers.tick(75));
-  if (${JSON.stringify(phase)} === "headers") Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 450);
+  if (${JSON.stringify(phase)} === "headers") setImmediate(expireDeadline);
 });
 await new Promise(resolve => server.listen(0, "127.0.0.1", resolve));
 const nativeFetch = globalThis.fetch;
 globalThis.fetch = async (url, options) => {
   calls++;
   const response = await nativeFetch("http://127.0.0.1:" + server.address().port, options);
-  if (${JSON.stringify(phase)} === "body") setImmediate(() => mock.timers.tick(75));
+  if (${JSON.stringify(phase)} === "body") setImmediate(expireDeadline);
   return response;
 };
 await writeFile(join(tmpdir(), "neighbour"), "unrelated input");
@@ -63,6 +71,8 @@ finally {
   const observeTimer = nativeSetTimeout(() => releaseConnection(), 150);
   await connectionClosed;
   nativeClearTimeout(observeTimer);
+  nativeClearTimeout(completionAdvance);
+  mock.timers.tick(350);
   releasedBeforeCleanup = disconnected;
   for (const timer of timers) clearTimeout(timer);
   server.closeAllConnections();

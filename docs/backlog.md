@@ -19,9 +19,10 @@ The package stays private; existing authenticated install and image paths remain
 
 ## Shared storage-test seed downloads (D585)
 
-The [storage archive acquisition record](backlog/storage-cache-fixture.md#every-seaweedfs-archive-fetch-and-a-controlled-copy-proposal-d530-4)
+The [storage archive acquisition and cancellation record](backlog/storage-cache-fixture.md#every-seaweedfs-archive-fetch-and-a-controlled-copy-proposal-d530-4)
 tracks D585: native startup, ten test seed hooks and conformance share bounded
-acquisition. Conformance retains three attempts, a 120-second
+acquisition. Native startup retains one attempt, with a 30-second deadline
+covering headers and body. Conformance retains three attempts, a 120-second
 total budget and 30-second inactivity. HTTP refusals preserve each caller’s
 existing error and retry policy. The Dockerfile now invokes the shared command
 inside its existing Node image, with three temporary attempts inside 30 seconds
