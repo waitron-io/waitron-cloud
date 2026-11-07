@@ -2,6 +2,7 @@ import { execFile } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { realpath, mkdtemp, writeFile, lstat, readFile, rm, mkdir, open } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
+import { setTimeout as delay } from 'node:timers/promises';
 import { join, dirname, resolve } from 'node:path';
 import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
@@ -26,11 +27,23 @@ export function createManualAwsCli({ executable = 'aws' } = {}) {
   return { async call(service, operation, input) {
     check((service === 'sts' && operation === 'get-caller-identity')
       || (service === 'ce' && operation === 'get-cost-and-usage')
-      || (service === 'cloudformation' && ['describe-stacks', 'describe-stack-resources'].includes(operation))
-      || (service === 'events' && ['describe-rule', 'list-targets-by-rule'].includes(operation))
+      || (service === 'cloudformation' && ['describe-stacks', 'describe-stack-resources', 'create-stack'].includes(operation))
+      || (service === 'events' && ['describe-rule', 'list-targets-by-rule', 'enable-rule'].includes(operation))
       || (service === 's3api' && ['get-object', 'put-object', 'list-objects-v2'].includes(operation))
       || (service === 'ssm' && operation === 'get-parameter')
       || (service === 'ec2' && ['describe-images', 'describe-instance-types', 'describe-managed-prefix-lists'].includes(operation)));
+    if (service === 'cloudformation' && operation === 'create-stack') {
+      check(input && Object.keys(input).sort().join(',') === 'Capabilities,ClientRequestToken,OnFailure,StackName,Tags,TemplateBody,TimeoutInMinutes'
+        && input.StackName === 'd570-first' && typeof input.TemplateBody === 'string'
+        && Buffer.byteLength(input.TemplateBody) > 0 && Buffer.byteLength(input.TemplateBody) <= 51200
+        && JSON.stringify(input.Capabilities) === '["CAPABILITY_IAM"]'
+        && JSON.stringify(input.Tags) === '[{"Key":"Proof","Value":"D570"}]'
+        && input.TimeoutInMinutes === 10 && input.OnFailure === 'ROLLBACK'
+        && typeof input.ClientRequestToken === 'string' && /^d570-[a-f0-9]{64}$/.test(input.ClientRequestToken));
+    }
+    if (service === 'events' && operation === 'enable-rule') check(input
+      && Object.keys(input).sort().join(',') === 'EventBusName,Name' && input.EventBusName === 'default'
+      && typeof input.Name === 'string' && /^[A-Za-z0-9_.-]{1,64}$/.test(input.Name));
     const download = service === 's3api' && operation === 'get-object';
     const upload = service === 's3api' && operation === 'put-object';
     const ledgerKey = key => typeof key === 'string'
@@ -71,7 +84,7 @@ export function createManualAwsCli({ executable = 'aws' } = {}) {
         env: { ...process.env, AWS_MAX_ATTEMPTS: '3', AWS_RETRY_MODE: 'standard',
           AWS_IGNORE_CONFIGURED_ENDPOINT_URLS: 'true', AWS_EC2_METADATA_DISABLED: 'true', AWS_PAGER: '' },
       });
-      const metadata = JSON.parse(stdout);
+      const metadata = service === 'events' && operation === 'enable-rule' && stdout.trim() === '' ? {} : JSON.parse(stdout);
       if (!download) return metadata;
       const file = await lstat(output);
       check(file.isFile() && file.size > 0 && file.size <= 1024 * 1024 && (file.mode & 0o777) === 0o600
@@ -87,7 +100,7 @@ export function createManualAwsCli({ executable = 'aws' } = {}) {
       return { ...metadata, LastModified: new Date(modified).toISOString().replace('.000Z', 'Z'), Body: body };
     } catch (error) {
       // Only the CLI's exact missing-key response is absence; denied and uncertain reads preserve history.
-      if (download && ledgerKey(input.Key) && error.code === 254 && !error.killed
+      if (download && (ledgerKey(input.Key) || input.Key === 'd570/health/reaper.json') && error.code === 254 && !error.killed
         && typeof error.stderr === 'string'
         && /^\s*(?:aws: \[ERROR\]: )?An error occurred \(NoSuchKey\) when calling the GetObject operation: [^\r\n]*(?:\r?\n)?$/.test(error.stderr)) {
         const missing = new Error('D570 ledger key is absent');
@@ -208,6 +221,36 @@ export async function inspectManualSetup(options) {
   return { ...inspection, template: renderManualSetup({ ...input, s3PrefixListId: prefix.PrefixListId }) };
 }
 
+async function readManualProtection(read, stackId, states) {
+  const described = await read('cloudformation', 'describe-stacks', { StackName: stackId });
+  check(!described?.NextToken && Array.isArray(described?.Stacks) && described.Stacks.length === 1
+    && described.Stacks[0]?.StackId === stackId
+    && ['CREATE_COMPLETE', 'UPDATE_COMPLETE'].includes(described.Stacks[0].StackStatus));
+  const inventory = await read('cloudformation', 'describe-stack-resources', { StackName: stackId });
+  check(!inventory?.NextToken && Array.isArray(inventory?.StackResources) && inventory.StackResources.length <= 100);
+  function resource(logicalId, type, pattern) {
+    const rows = inventory.StackResources.filter(row => row?.LogicalResourceId === logicalId);
+    check(rows.length === 1 && rows[0].StackId === stackId && rows[0].ResourceType === type
+      && ['CREATE_COMPLETE', 'UPDATE_COMPLETE'].includes(rows[0].ResourceStatus)
+      && typeof rows[0].PhysicalResourceId === 'string' && pattern.test(rows[0].PhysicalResourceId));
+    return rows[0].PhysicalResourceId;
+  }
+  const bucket = resource('Bucket', 'AWS::S3::Bucket', /^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$/);
+  const ruleName = resource('ExpiryRule', 'AWS::Events::Rule', /^[A-Za-z0-9_.-]{1,64}$/);
+  const functionName = resource('ExpiryFunction', 'AWS::Lambda::Function', /^[A-Za-z0-9_-]{1,64}$/);
+  const rule = await read('events', 'describe-rule', { Name: ruleName, EventBusName: 'default' });
+  check(rule?.Name === ruleName && rule.Arn === `arn:aws:events:${region}:${account}:rule/${ruleName}`
+    && states.includes(rule.State) && rule.ScheduleExpression === 'rate(1 minute)'
+    && rule.EventBusName === 'default' && !rule.EventPattern);
+  const targets = await read('events', 'list-targets-by-rule', { Rule: ruleName, EventBusName: 'default', Limit: 100 });
+  check(!targets?.NextToken && Array.isArray(targets?.Targets) && targets.Targets.length === 1);
+  const target = targets.Targets[0];
+  check(target?.Id === 'D570Expiry' && target.Arn === `arn:aws:lambda:${region}:${account}:function:${functionName}`
+    && target.RetryPolicy?.MaximumEventAgeInSeconds === 60 && target.RetryPolicy.MaximumRetryAttempts === 0
+    && !Object.hasOwn(target, 'Input') && !Object.hasOwn(target, 'InputPath') && !Object.hasOwn(target, 'InputTransformer'));
+  return { bucket, ruleName };
+}
+
 export async function inspectManualProtection(options) {
   const { stackId, checkout, aws, now, clock = Date.now } = options;
   check(typeof stackId === 'string'
@@ -229,32 +272,7 @@ export async function inspectManualProtection(options) {
     await unchanged();
     return result;
   }
-  const described = await read('cloudformation', 'describe-stacks', { StackName: stackId });
-  check(!described?.NextToken && Array.isArray(described?.Stacks) && described.Stacks.length === 1
-    && described.Stacks[0]?.StackId === stackId
-    && ['CREATE_COMPLETE', 'UPDATE_COMPLETE'].includes(described.Stacks[0].StackStatus));
-  const inventory = await read('cloudformation', 'describe-stack-resources', { StackName: stackId });
-  check(!inventory?.NextToken && Array.isArray(inventory?.StackResources) && inventory.StackResources.length <= 100);
-  function resource(logicalId, type, pattern) {
-    const rows = inventory.StackResources.filter(row => row?.LogicalResourceId === logicalId);
-    check(rows.length === 1 && rows[0].StackId === stackId && rows[0].ResourceType === type
-      && ['CREATE_COMPLETE', 'UPDATE_COMPLETE'].includes(rows[0].ResourceStatus)
-      && typeof rows[0].PhysicalResourceId === 'string' && pattern.test(rows[0].PhysicalResourceId));
-    return rows[0].PhysicalResourceId;
-  }
-  const bucket = resource('Bucket', 'AWS::S3::Bucket', /^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$/);
-  const ruleName = resource('ExpiryRule', 'AWS::Events::Rule', /^[A-Za-z0-9_.-]{1,64}$/);
-  const functionName = resource('ExpiryFunction', 'AWS::Lambda::Function', /^[A-Za-z0-9_-]{1,64}$/);
-  const rule = await read('events', 'describe-rule', { Name: ruleName, EventBusName: 'default' });
-  check(rule?.Name === ruleName && rule.Arn === `arn:aws:events:${region}:${account}:rule/${ruleName}`
-    && rule.State === 'ENABLED' && rule.ScheduleExpression === 'rate(1 minute)'
-    && rule.EventBusName === 'default' && !rule.EventPattern);
-  const targets = await read('events', 'list-targets-by-rule', { Rule: ruleName, EventBusName: 'default', Limit: 100 });
-  check(!targets?.NextToken && Array.isArray(targets?.Targets) && targets.Targets.length === 1);
-  const target = targets.Targets[0];
-  check(target?.Id === 'D570Expiry' && target.Arn === `arn:aws:lambda:${region}:${account}:function:${functionName}`
-    && target.RetryPolicy?.MaximumEventAgeInSeconds === 60 && target.RetryPolicy.MaximumRetryAttempts === 0
-    && !Object.hasOwn(target, 'Input') && !Object.hasOwn(target, 'InputPath') && !Object.hasOwn(target, 'InputTransformer'));
+  const { bucket } = await readManualProtection(read, stackId, ['ENABLED']);
   const object = await read('s3api', 'get-object', { Bucket: bucket, Key: 'd570/health/reaper.json',
     ExpectedBucketOwner: account, Range: 'bytes=0-1048576' });
   check(object?.Body instanceof Uint8Array && object.Body.byteLength > 0 && object.Body.byteLength <= 1024 * 1024
@@ -369,6 +387,57 @@ export async function bookManualFirstSetup(options) {
   const fixed = Object.fromEntries(Object.entries(allowances).map(([name, upperMicroUsd]) => [name,
     { upperMicroUsd, source: 'https://aws.amazon.com/pricing/', digest }]));
   return bookManualSetup({ ...options, priceInputs: { catalogues: options.catalogues, quantities, fixed } });
+}
+
+export async function createManualFirstSetup(options) {
+  const { aws, checkout, now, clock = Date.now, sleep = delay } = options;
+  const booking = await bookManualFirstSetup(options);
+  // Only the approved first zero opening can start without an imported reconciled history.
+  check(booking.billing.microUsd === 0);
+  async function unchanged() {
+    const before = clock(), source = await checkedMain(checkout), after = clock();
+    check(source.head === booking.head && source.tree === booking.tree
+      && Number.isSafeInteger(before) && Number.isSafeInteger(after) && before >= instant(now) && after >= before
+      && after < Date.parse(policy.accessExpiry) && iso(after).slice(0, 10) === now.slice(0, 10));
+  }
+  async function call(service, operation, input) {
+    await unchanged();
+    const result = await aws.call(service, operation, input);
+    await unchanged();
+    return result;
+  }
+  const templateBody = JSON.stringify(booking.template);
+  check(Buffer.byteLength(templateBody) <= 51200);
+  const request = { StackName: 'd570-first', TemplateBody: templateBody, Capabilities: ['CAPABILITY_IAM'],
+    Tags: [{ Key: 'Proof', Value: 'D570' }], TimeoutInMinutes: 10, OnFailure: 'ROLLBACK',
+    ClientRequestToken: 'd570-' + createHash('sha256').update(JSON.stringify({ head: booking.head, tree: booking.tree, now })).digest('hex') };
+  const created = await call('cloudformation', 'create-stack', request), stackId = created?.StackId;
+  check(typeof stackId === 'string'
+    && /^arn:aws:cloudformation:eu-north-1:462991287391:stack\/d570-first\/[a-f0-9-]{36}$/.test(stackId));
+  for (let attempt = 0; ; attempt++) {
+    const response = await call('cloudformation', 'describe-stacks', { StackName: stackId });
+    check(!response?.NextToken && Array.isArray(response?.Stacks) && response.Stacks.length === 1
+      && response.Stacks[0]?.StackId === stackId);
+    const status = response.Stacks[0].StackStatus;
+    if (status === 'CREATE_COMPLETE') break;
+    check(status === 'CREATE_IN_PROGRESS' && attempt < 39);
+    await sleep(15000);
+  }
+  const { ruleName } = await readManualProtection(call, stackId, ['DISABLED', 'ENABLED']);
+  await call('events', 'enable-rule', { Name: ruleName, EventBusName: 'default' });
+  for (let attempt = 0; ; attempt++) {
+    await unchanged();
+    try {
+      const protection = await inspectManualProtection({ ...options, stackId });
+      await unchanged();
+      check(protection.billing.microUsd <= booking.upperMicroUsd);
+      return { ...booking, ...protection };
+    } catch (error) {
+      if (error.name !== 'NoSuchKey' || error.$metadata?.httpStatusCode !== 404) throw error;
+      check(attempt < 7);
+      await sleep(15000);
+    }
+  }
 }
 
 if (process.argv[1] && process.argv[1] !== '-' && await realpath(process.argv[1]) === fileURLToPath(import.meta.url)) {

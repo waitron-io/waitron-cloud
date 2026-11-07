@@ -3163,7 +3163,7 @@ implementation or production evidence.
   reviewed 320 MiB ceiling admits its current 270,696,312-byte EC2 catalogue
   without changing the 30-second deadline. Real public retrieval qualifies all
   four catalogues; it does not authenticate an account or reconcile billing. Qualification
-  of first-machine quantity and fixed-cost assumptions, billing reconciliation, setup integration,
+  of first-machine quantity and fixed-cost assumptions, billing reconciliation, retained-ledger initialization and setup recovery,
   real S3 behavior and live cleanup remain open; these inputs grant no spending or
   runnable owner setup. The manual controller preflight now checks a clean exact
   remote main, temporary staging identity, Stockholm and the current monthly
@@ -3177,7 +3177,7 @@ implementation or production evidence.
   before rendering. It rechecks main and date around each read; synthetic
   missing, contradictory, ambiguous and changing-input cases refuse. No live
   regional resource or quota claim follows from those checks. All four lifecycle
-  commands still refuse while creation, reservation, launch and cleanup remain unbuilt.
+  commands still refuse while retained-ledger initialization, launch and cleanup remain unbuilt.
   The manual protection observer now resolves the exact stack's bucket, rule
   and expiry function, checks the enabled one-minute target and reads a fresh
   encrypted sweep heartbeat. Bounded private CLI downloads refuse partial

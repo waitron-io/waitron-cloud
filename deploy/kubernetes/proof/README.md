@@ -149,9 +149,10 @@ reconciliation, reserve allowance or authorize a launch.
 The CLI adapter uses fixed service endpoints, bounded output and a 30-second
 process deadline. Cost Explorer uses its US East endpoint while the proof's
 resource region remains Stockholm. The adapter permits identity, billing,
-setup discovery, expiry reads and conditional ledger storage. The `up`, `drill`, `reconcile`
-and `down` entries still refuse
-without making a provider call, because creation and cleanup are unfinished.
+setup discovery, booked stack creation, expiry enablement and reads, and
+conditional ledger storage. The `up`, `drill`, `reconcile` and `down` entries
+still refuse without making a provider call because the owner lifecycle is
+unfinished.
 You do not need to sign in yet. Verify the preflight without credentials with
 `node --test scripts/kubernetes-proof-control.test.mjs`.
 
@@ -206,9 +207,9 @@ to check the booking and refusal at the exact US$10 boundary.
 
 These quantity and allowance ceilings are assumptions for the whole-branch
 review and live qualification. Recording them does not prove cleanup completes
-within a day, bound actual logs or reconcile the bill. Prior-history import,
-creation and the owner lifecycle remain unfinished, and the lifecycle entries
-still refuse, so you do not need to sign in yet.
+within a day, bound actual logs or reconcile the bill. Prior-history import and
+the owner lifecycle remain unfinished, and the lifecycle entries still refuse,
+so you do not need to sign in yet.
 AWS documents [binary storage units](https://aws.amazon.com/s3/pricing/)
 and [per-second disk charging](https://aws.amazon.com/ebs/pricing/).
 
@@ -229,8 +230,20 @@ Streaming reads use explicit CLI arguments because AWS CLI does not support
 The CLI writes into a private temporary directory, checks the complete returned
 range and length, and removes its own files on success or failure. The controller
 requires encrypted JSON and retains the original sweep observation. These are
-synthetic checks only; the lifecycle does not yet create or enable protection,
-initialize a live ledger or authorize a launch.
+synthetic checks only. The owner commands still refuse because retained ledger
+initialization, the guest drill and removal remain unfinished.
+
+You must retain the booking before asking CloudFormation to create anything.
+`createManualFirstSetup` connects the first booking to the fixed `d570-first`
+stack and refuses a nonzero opening until prior-history import exists. It waits
+for the exact staging stack to complete, checks its one-minute rule and target,
+enables that rule, and requires the sweep's own fresh heartbeat. Waiting is
+bounded, and a failure leaves the private booking and protection in place rather
+than creating another stack or launching a machine. The CLI accepts the empty
+successful output from `enable-rule`. Run
+`node --test --test-name-pattern='^(manual creation|creation CLI)' scripts/kubernetes-proof-control.test.mjs`
+for the local creation and refusal checks. Their responses are synthetic; no
+stack creation, protection activation or paid operation has been qualified on AWS.
 
 Before reusing a setup, `inspectManualBudget` checks that protection and reads
 all retained ledger months through `inspectBudget`. It compares the account bill

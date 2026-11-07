@@ -1081,3 +1081,144 @@ test('first setup snapshots catalogues before waiting for provider discovery', a
   assert.equal(saved.cost.components.compute.upperMicroUsd, 115600);
   assert.equal(saved.priceInputs.catalogues.AmazonEC2.rates.compute.usdNumerator, '3468000000');
 });
+
+// Creating before the durable cost booking, or accepting a requested sweep as health, must fail.
+async function creationFixture(t) {
+  const f = await firstSetupFixture(t), p = protectionFixture(t);
+  const previous = f.aws.call;
+  let creates = 0, enables = 0, pending = 1, missingHealth = 1;
+  const sleeps = [];
+  f.aws.call = async (service, operation, input) => {
+    if (service === 'ce') {
+      const response = await previous(service, operation, input);
+      response.ResultsByTime[0].Total.UnblendedCost.Amount = '0'; return response;
+    }
+    if (operation === 'create-stack') {
+      creates++;
+      const saved = JSON.parse(readFileSync(join(f.options.directory, 'setup.json')));
+      assert.equal(saved.upperMicroUsd, 9313491);
+      assert.equal(saved.billing.microUsd, 0);
+      assert.deepEqual(JSON.parse(input.TemplateBody), saved.template);
+      assert.equal(input.StackName, 'd570-first');
+      assert.deepEqual(input.Capabilities, ['CAPABILITY_IAM']);
+      assert.deepEqual(input.Tags, [{ Key: 'Proof', Value: 'D570' }]);
+      assert.equal(input.OnFailure, 'ROLLBACK'); assert.equal(input.TimeoutInMinutes, 10);
+      assert.match(input.ClientRequestToken, /^d570-[a-f0-9]{64}$/);
+      f.calls.push({ service, operation, input }); return { StackId: p.stackId };
+    }
+    if (operation === 'enable-rule') {
+      enables++;
+      assert.equal(p.responses['cloudformation/describe-stacks'].Stacks[0].StackStatus, 'CREATE_COMPLETE');
+      assert.deepEqual(input, { Name: 'd570-first-rule', EventBusName: 'default' });
+      f.calls.push({ service, operation, input }); return {};
+    }
+    const key = service + '/' + operation;
+    if (Object.hasOwn(p.responses, key)) {
+      f.calls.push({ service, operation, input });
+      if (operation === 'describe-stacks' && pending-- > 0) return { Stacks: [{ StackId: p.stackId, StackName: 'd570-first', StackStatus: 'CREATE_IN_PROGRESS' }] };
+      if (operation === 'get-object' && missingHealth-- > 0) throw Object.assign(new Error('not published'), { name: 'NoSuchKey', $metadata: { httpStatusCode: 404 } });
+      return structuredClone(p.responses[key]);
+    }
+    return previous(service, operation, input);
+  };
+  const options = { ...f.options, cost: undefined, catalogues: f.catalogues, sleep: async ms => { sleeps.push(ms); } };
+  const create = changes => {
+    assert.equal(typeof control.createManualFirstSetup, 'function', 'missing booked stack creation and observed expiry');
+    return control.createManualFirstSetup({ ...options, ...changes });
+  };
+  return { ...f, p, options, create, sleeps, counts: () => ({ creates, enables }) };
+}
+
+test('manual creation books once, waits for its completed stack, enables expiry and reads a real-shaped heartbeat', async t => {
+  const f = await creationFixture(t); let result;
+  await assert.doesNotReject(async () => { result = await f.create(); });
+  assert.equal(result.stackId, f.p.stackId); assert.equal(result.bucket, 'd570-first-bucket');
+  assert.equal(result.directory, f.options.directory); assert.equal(result.upperMicroUsd, 9313491);
+  assert.deepEqual(result.heartbeat, f.p.health);
+  assert.deepEqual(f.counts(), { creates: 1, enables: 1 }); assert.deepEqual(f.sleeps, [15000, 15000]);
+  assert.equal(f.calls.some(row => ['run-instances', 'put-object', 'delete-stack'].includes(row.operation)), false);
+  await assert.rejects(f.create()); assert.deepEqual(f.counts(), { creates: 1, enables: 1 });
+});
+
+for (const [label, mutate, expectedCreates, expectedEnables] of [
+  ['unknown opening', (f, response, operation) => { if (operation === 'get-cost-and-usage') response.ResultsByTime[0].Total.UnblendedCost.Amount = '0.01'; }, 0, 0],
+  ['foreign created stack', (f, response, operation) => { if (operation === 'create-stack') response.StackId = f.p.stackId.replace('462991287391', '949687825720'); }, 1, 0],
+  ['wrong created name', (f, response, operation) => { if (operation === 'create-stack') response.StackId = f.p.stackId.replace('/d570-first/', '/d570-other/'); }, 1, 0],
+  ['ambiguous created stack', (f, response, operation) => { if (operation === 'describe-stacks') response.Stacks.push(response.Stacks[0]); }, 1, 0],
+  ['rollback', (f, response, operation) => { if (operation === 'describe-stacks') response.Stacks[0].StackStatus = 'ROLLBACK_COMPLETE'; }, 1, 0],
+  ['foreign expiry resource', (f, response, operation) => { if (operation === 'describe-stack-resources') response.StackResources[1].StackId = f.p.stackId.replace('462991287391', '949687825720'); }, 1, 0],
+  ['duplicate expiry resource', (f, response, operation) => { if (operation === 'describe-stack-resources') response.StackResources.push(response.StackResources[1]); }, 1, 0],
+  ['incomplete expiry resource', (f, response, operation) => { if (operation === 'describe-stack-resources') response.StackResources[1].ResourceStatus = 'CREATE_IN_PROGRESS'; }, 1, 0],
+  ['disabled protection', (f, response, operation) => { if (operation === 'describe-rule') response.State = 'DISABLED'; }, 1, 1],
+  ['foreign heartbeat', (f, response, operation) => { if (operation === 'get-object') { const body = JSON.parse(Buffer.from(response.Body)); body.stackId += '-foreign'; response.Body = Buffer.from(JSON.stringify(body)); } }, 1, 1],
+]) test(`manual creation refuses ${label} and preserves its booked cost without launching`, async t => {
+  const f = await creationFixture(t), previous = f.aws.call;
+  f.aws.call = async (service, operation, input) => {
+    const response = await previous(service, operation, input); mutate(f, response, operation); return response;
+  };
+  await assert.rejects(f.create(), /D570 controller refused/);
+  assert.deepEqual(f.counts(), { creates: expectedCreates, enables: expectedEnables });
+  assert.equal(f.calls.some(row => ['run-instances', 'put-object', 'delete-stack'].includes(row.operation)), false);
+  if (expectedCreates) assert.equal(JSON.parse(readFileSync(join(f.options.directory, 'setup.json'))).upperMicroUsd, 9313491);
+});
+
+for (const operation of ['create-stack', 'describe-stacks', 'describe-stack-resources', 'enable-rule']) {
+  test(`manual creation retains the booking and stops after a source change during ${operation}`, async t => {
+    const f = await creationFixture(t), previous = f.aws.call;
+    f.aws.call = async (...args) => {
+      const response = await previous(...args);
+      if (args[1] === operation) writeFileSync(join(f.root, 'controller.txt'), 'changed\n');
+      return response;
+    };
+    await assert.rejects(f.create(), /D570 controller refused/);
+    assert.equal(f.calls.at(-1).operation, operation);
+    assert.equal(existsSync(join(f.options.directory, 'setup.json')), true);
+  });
+}
+
+for (const stage of ['stack', 'heartbeat']) test(`manual creation bounds a never-ready ${stage} without creating again`, async t => {
+  const f = await creationFixture(t), previous = f.aws.call;
+  f.aws.call = async (...args) => {
+    if (stage === 'heartbeat' && args[1] === 'get-object') throw Object.assign(new Error('not published'), { name: 'NoSuchKey', $metadata: { httpStatusCode: 404 } });
+    const response = await previous(...args);
+    if (stage === 'stack' && args[1] === 'describe-stacks') response.Stacks[0].StackStatus = 'CREATE_IN_PROGRESS';
+    return response;
+  };
+  await assert.rejects(f.create(), /D570 controller refused/);
+  assert.deepEqual(f.counts(), { creates: 1, enables: stage === 'stack' ? 0 : 1 });
+  assert.equal(f.sleeps.length, stage === 'stack' ? 39 : 8);
+});
+
+test('manual creation refuses a source change across the creation wait', async t => {
+  const f = await creationFixture(t);
+  await assert.rejects(f.create({ sleep: async () => writeFileSync(join(f.root, 'controller.txt'), 'changed while waiting\n') }), /D570 controller refused/);
+  assert.equal(f.calls.at(-1).operation, 'describe-stacks');
+  assert.deepEqual(f.counts(), { creates: 1, enables: 0 });
+});
+
+for (const operation of ['create-stack', 'enable-rule']) test(`creation CLI supports the actual ${operation} request and empty successful output`, async t => {
+  const f = fixture(t), executable = join(f.root, 'aws-create'), capture = join(f.root, 'create.json');
+  writeFileSync(executable, `#!${process.execPath}\nimport('node:fs').then(fs => {
+    fs.writeFileSync(${JSON.stringify(capture)}, JSON.stringify(process.argv.slice(2)));
+    if (${JSON.stringify(operation)} === 'create-stack') process.stdout.write('{"StackId":"arn:aws:cloudformation:eu-north-1:462991287391:stack/d570-first/00000000-0000-4000-8000-000000000000"}');
+  });\n`, { mode: 0o700 });
+  const input = operation === 'create-stack' ? { StackName: 'd570-first', TemplateBody: '{"Resources":{}}',
+    Capabilities: ['CAPABILITY_IAM'], Tags: [{ Key: 'Proof', Value: 'D570' }], TimeoutInMinutes: 10,
+    OnFailure: 'ROLLBACK', ClientRequestToken: 'd570-' + 'a'.repeat(64) } : { Name: 'd570-first-rule', EventBusName: 'default' };
+  const result = await control.createManualAwsCli({ executable }).call(operation === 'create-stack' ? 'cloudformation' : 'events', operation, input);
+  assert.deepEqual(result, operation === 'create-stack' ? {
+    StackId: 'arn:aws:cloudformation:eu-north-1:462991287391:stack/d570-first/00000000-0000-4000-8000-000000000000',
+  } : {});
+  const args = JSON.parse(readFileSync(capture));
+  assert.deepEqual(args.slice(0, 6), [operation === 'create-stack' ? 'cloudformation' : 'events', operation,
+    '--cli-input-json', JSON.stringify(input), '--region', 'eu-north-1']);
+});
+
+test('creation CLI recognizes only a missing heartbeat and never confuses denial with waiting', async t => {
+  const missing = ledgerCliFixture(t, 'NoSuchKey', '\naws: [ERROR]: ');
+  await assert.rejects(missing.cli.call('s3api', 'get-object', { ...missing.input, Key: 'd570/health/reaper.json', Range: 'bytes=0-1048576' }),
+    error => error.name === 'NoSuchKey' && error.$metadata?.httpStatusCode === 404);
+  const denied = ledgerCliFixture(t, 'AccessDenied', '\naws: [ERROR]: ');
+  await assert.rejects(denied.cli.call('s3api', 'get-object', { ...denied.input, Key: 'd570/health/reaper.json', Range: 'bytes=0-1048576' }),
+    error => error.message === 'D570 AWS s3api/get-object failed' && error.name !== 'NoSuchKey');
+});
