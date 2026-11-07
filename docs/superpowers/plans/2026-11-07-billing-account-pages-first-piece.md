@@ -15,9 +15,10 @@ remain open. No migration, new billing state, ledger, permission or trial rule.
   `executeOn(client:PoolClient,scope:BillingScope,event:BillingEvent,command:BillingCommand):Promise<BillingReceipt>`
   and `transitionOn` for `PermissionCommand`. Share validation and private applyOn(client,…) logic, including enrol/internal-source
   checks. Existing wrappers validate before borrowing a connection. New On methods
-  validate, run billing-trial-usage.ts’s SAVEPOINT/RELEASE guard (25P01 maps to
-  invalid_billing_input; rethrow others), then applyOn. Preserve enrol semantics.
-  Export readBillingPrice, readBillingVenue, readVenueHistory and effectiveVenueLevel;
+  validate, then applyOn after a shared billing-transaction-guard.ts helper extracts
+  trial-usage’s SAVEPOINT/RELEASE guard (25P01 maps to invalid_billing_input;
+  rethrow others). Keep trial-usage’s SET TRANSACTION local; never run it in On
+  methods. Preserve enrol semantics. Export readBillingVenue, readVenueHistory and effectiveVenueLevel;
   mayStartTrial already exists.
 
 - [ ] **HTTP:** create `packages/account-http/src/billing-account.ts`; wire
@@ -27,14 +28,14 @@ remain open. No migration, new billing state, ledger, permission or trial rule.
   `test-venue-levels` mode. Reuse consent’s origin/CSRF, bounded bodies, cookies,
   rate limits, verified credentials and owner-membership locks.
   `POST /api/account/billing/read {}` returns
-  `{price:BillingPriceVersion|null,venues:[{venueId,level,trial:TrialView|null,canStartTrial:boolean}]}`;
+  `{venues:[{venueId,level,trial:TrialView|null,canStartTrial:boolean}]}`;
   `/start-trial {venueId}` returns that view. Derive organisation/business from
   owned venues, including multiple businesses and no installation.
 
 - [ ] **Reads and writes:** read route is no writes in one ordinary transaction (not BEGIN READ ONLY): use billing venue,
-  history, eligibility and effective-level helpers with the database’s UTC date;
-  never call mutating `readVenuePermissions` or `ensure_business`. Missing prices
-  make only price display unavailable; they never block a free trial.
+  history, eligibility and effective-level helpers with the database’s UTC date.
+  READ COMMITTED results may be slightly stale; start revalidates. Never call
+  mutating readVenuePermissions or ensure_business from read.
   Read venue→organisation/business without locking. Inside existing transaction, lock
   account→session→credential→is_owner membership only; never pre-lock venue/business
   parents as consent does. executeOn(ensure_business) takes parent locks,
@@ -42,7 +43,8 @@ remain open. No migration, new billing state, ledger, permission or trial rule.
   binding/test checks. Generate a fresh random internal event key per command.
   Read `clock_timestamp()` immediately before transition; derive `on` and
   `occurredAt` from that same reading. Final session recheck covers expiry during
-  waits; held locks serialize revocation/owner removal. Any refusal leaves the
+  waits; held locks serialize revocation/owner removal. Re-read the database UTC
+  day before commit; if it differs from on, roll back and let the owner retry. Any refusal leaves the
   transaction and rolls everything back; refresh in a separate read transaction.
   Use identical touch:false/CSRF proof for the final resolveSession. Map scope-not-found
   to the same forbidden answer as non-owner; map IdentityError, BillingError and
@@ -52,19 +54,19 @@ remain open. No migration, new billing state, ledger, permission or trial rule.
 
 - [ ] **Portal:** create `apps/portal/src/billing-{types,controller,screen}.ts`;
   integrate `app.ts`, `screens.ts`, `api.ts`, `locale.ts` and shared controls.
-  Show actual effective level, active trial, eligibility and configured monthly
-  prices before VAT, with no guessed figures. Show last trial day as endsOn−1.
+  Show effective level, active trial and eligibility. Show last trial day as endsOn−1.
+  Price display joins the later paid-plan/card piece; this first choice is free.
   Fence late account/venue/sign-out replies. No new Waitron location or CSP change.
 
 - [ ] **Verify and finish:** TDD in registration `test/{billing-store,venue-service-permissions}.test.ts`,
   HTTP `test/billing-account.test.ts`, portal `test/{billing-browser,billing-account-fencing}.test.ts`
   and existing API/portal/config tests. Pin wrapper/replay/enrol parity, active
   transaction guard, real lock waits, rollback, revocation/expiry/owner/scope loss,
-  concurrency, trial/end eligibility, missing prices, foreign/production/default-off
+  concurrency, midnight crossings, trial/end eligibility, foreign/production/default-off
   refusal, no-installation reload, unchanged CSP and zero providers. Retain every
   assertion. Run named database tests via approved box’s `scripts/test-postgres.mjs`,
   build portal, inspect English/Spanish × light/dark ×390/1280, keyboard/axe/overflow,
   and typecheck; CI owns full suites. Update only own billing backlog lines and
-  stale guides, including the design header’s approval citation to docs/backlog.md:733. Claude reads this
+  stale guides, including the design header’s citation to the approved Billing backlog heading. Claude reads this
   plan before build and executes one whole-branch review before finish/land;
   inspect every current-head job. Cards get their own later plan.
