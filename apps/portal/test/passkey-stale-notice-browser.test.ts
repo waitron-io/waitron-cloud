@@ -17,6 +17,13 @@ const second = '22345678-1234-4234-8234-123456789abc';
 async function open(browser: Browser, locale: 'en' | 'es', theme: 'light' | 'dark', width: number) {
   const page = await browser.newPage({locale, colorScheme: theme, viewport: {width, height: 1000}});
   page.setDefaultTimeout(4000);
+  // The removal journey needs passkey support independent of the host's authenticators.
+  const authenticator = await page.context().newCDPSession(page);
+  await authenticator.send('WebAuthn.enable');
+  await authenticator.send('WebAuthn.addVirtualAuthenticator', {options: {
+    protocol: 'ctap2', transport: 'internal', hasResidentKey: true, hasUserVerification: true,
+    isUserVerified: true, automaticPresenceSimulation: true,
+  }});
   let ids = [first, second];
   const writes: {path: string; body: unknown}[] = [];
   await page.route('https://portal.test/account', route => route.fulfill({contentType: 'text/html', body: '<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><div id="portal" class="portal"></div>'}));
