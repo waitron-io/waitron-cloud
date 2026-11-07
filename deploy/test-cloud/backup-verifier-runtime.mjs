@@ -5,10 +5,10 @@ import {createBoundContainerWaitronVerifier} from '../../packages/backups/src/co
 import {openVerifierController} from './verifier-controller.mjs';
 const execute=promisify(execFile);
 export const verifierWaitronRevision='ec91a9e34d2daba146f4ee61850ea4136ad5cfb7';
-export async function openTestBackupVerifier({directory,image,owner='waitron-cloud-test-backup',memoryMiB=1024,scratchMiB=256}){
- if(!/^sha256:[a-f0-9]{64}$/.test(image??''))throw Error('test_cloud.verifier_configuration');
+export async function openTestBackupVerifier({directory,image,owner='waitron-cloud-test-backup',memoryMiB=1024,scratchMiB=256,expectedRevision=verifierWaitronRevision}){
+ if(!/^sha256:[a-f0-9]{64}$/.test(image??'')||!/^[a-f0-9]{40}$/.test(expectedRevision??''))throw Error('test_cloud.verifier_configuration');
  let info;try{[info]=JSON.parse((await execute('docker',['image','inspect',image],{timeout:10000,maxBuffer:65536})).stdout);}catch{throw Error('test_cloud.verifier_configuration');}
- if(info.Id!==image||info.Config.Labels?.['cloud.waitron-revision']!==verifierWaitronRevision)throw Error('test_cloud.verifier_configuration');
+ if(info.Id!==image||info.Config.Labels?.['cloud.waitron-revision']!==expectedRevision)throw Error('test_cloud.verifier_configuration');
  const controller=await openVerifierController({directory:join(directory,'verifier-controller'),owner,image});
  return {verify:await createBoundContainerWaitronVerifier({image,owner,controller,memoryMiB,scratchMiB}),controllerScope:controller.scope};
 }

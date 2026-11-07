@@ -14,7 +14,9 @@ import {createInteractiveRecoveryPreparation} from './recovery-preparation.js';
 import {validateArtifact, restoreFromArtifact} from './restore.js';
 import {createRecoveryRestoreRunner} from './recovery-module-operation.js';
 import {runRestore} from './restore-command.js';
-import {decodeHourIdentity} from '../../../packages/fiscal-verifactu/src/hour-identity.js';
+import * as allocationIdentity from '../../../packages/fiscal-verifactu/src/hour-identity.js';
+const decodeHourIdentity = Reflect.get(allocationIdentity, 'decodeHourIdentity');
+const currentRecovery = process.env.CLOUD_INTEGRATION_CURRENT_RECOVERY === '1';
 
 // Source tests receive the same generated commit stamp that the pinned release embeds at build time.
 await vi.hoisted(async () => {
@@ -64,6 +66,14 @@ it('prepares ordinary recovery for the privately delivered paired source and pre
       try {installationCodes = recorded.prepare('SELECT numero_instalacion FROM registro_sif WHERE node_id=?').all(selected.nodeId).map(row => String(row.numero_instalacion));}
       finally {recorded.close();}
       expect(installationCodes.length).toBeGreaterThan(0);
+      if (currentRecovery) {
+        const source = await openVenueDatabase(dirname(copy.databasePath));
+        try {expect(await verifyBreakGlass(source.node, selected.nodeId, input.authority.secret)).toBe(true);}
+        finally {await source.close();}
+        const {prepareCurrentIntegrationRecovery} = await import('./cloud-integration-current-recovery.mjs');
+        outcome = await prepareCurrentIntegrationRecovery({copy, sourceId: selected.sourceId, binding, secret: input.authority.secret,
+          roots: {stateDir, venueDir, migrationsRoot: restore.migrationsRoot, modules: ALL_MODULES}});
+      } else {
       const sourceHour = Date.parse('2026-01-01T00:00:00Z') + Math.max(...installationCodes.map(decodeHourIdentity)) * 3600000;
       vi.useFakeTimers({toFake: ['Date', 'performance']});
       vi.setSystemTime(new Date(sourceHour + 30 * 60 * 1000));
@@ -86,6 +96,7 @@ it('prepares ordinary recovery for the privately delivered paired source and pre
       await compare();
       outcome = await prepare({action: 'select', answer: 'no', installationCodes}) as {input: unknown};
       expect(outcome.input).toBeDefined();
+      }
     } finally {await copy.discard();}
     const artifactPath = join(root, 'delivered.enc'), operationPath = join(root, 'operation.json');
     await writeFile(artifactPath, artifact, {mode: 0o600});
@@ -114,11 +125,25 @@ it('prepares ordinary recovery for the privately delivered paired source and pre
     try {expect(db.prepare('PRAGMA integrity_check').all()).toEqual([{'integrity_check': 'ok'}]);}
     finally {db.close();}
     const trading = parseEnvFile(await readFile(join(stateDir, 'trading.env'), 'utf8'));
-    expect(trading.WAITRON_TILL_NODE_ID).toBe(input.authority.sourceNodeId);
-    expect(trading.WAITRON_TILL_LOCATION_ID).toBe(input.authority.localVenueId);
+    const restoredNodeId = trading.WAITRON_NODE_ID ?? trading.WAITRON_TILL_NODE_ID;
+    let restoredVenueId = currentRecovery ? undefined : trading.WAITRON_TILL_LOCATION_ID;
+    const readCopyIdentity = Reflect.get(await import('./restore.js'), 'readCopyNodeAndVenue');
+    if (currentRecovery) {
+      expect(typeof readCopyIdentity).toBe('function');
+      const {openBackupQuery} = await import('@waitron/store');
+      const identityArchive = await validateArtifact(restore);
+      const restoredQuery = await openBackupQuery(join(venueDir, 'venue.db'));
+      try {
+        const identity = await readCopyIdentity(restoredQuery.query, identityArchive.secretEntries);
+        expect(identity.node.nodeId).toBe(input.authority.sourceNodeId);
+        restoredVenueId = identity.venueId;
+      } finally {await restoredQuery.close(); await identityArchive.discard();}
+    }
+    expect(restoredNodeId).toBe(input.authority.sourceNodeId);
+    expect(restoredVenueId).toBe(input.authority.localVenueId);
     for (const name of ['cloud-connection.json', 'cloud-staff.key', 'ready.json']) await expect(stat(join(stateDir, name))).rejects.toMatchObject({code: 'ENOENT'});
     console.log('CLOUD_PAIRED_AUTHORISED_RECOVERY=' + JSON.stringify({exit, sha256, bytes: artifact.length,
-      sourceNodeId: trading.WAITRON_TILL_NODE_ID, localVenueId: trading.WAITRON_TILL_LOCATION_ID,
+      sourceNodeId: restoredNodeId, localVenueId: restoredVenueId,
       preparationBoundToDeliveredArchive: binding.sourceId === selected.sourceId, sourceAuthorityVerified: true,
       wrongAuthorityRefused: true, missingPreparationRefused: true, integrity: 'ok', sourceRecordsPreserved: true,
       noServerStarted: true, noCloudCredentials: true, cloudReportedRestored: false}));

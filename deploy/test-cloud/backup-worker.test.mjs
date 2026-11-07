@@ -33,6 +33,10 @@ test('test worker opens the pinned bound verifier and preserves its scope across
  const image=docker('build','-q','--label','cloud.waitron-revision='+revision,'-t',tag,'-f',join(root,'packages/backups/test/container-fixture/Bound.Dockerfile'),root);t.after(()=>docker('image','rm',tag));
  const wrongTag=tag+'-wrong',wrongImage=docker('build','-q','--label','cloud.waitron-revision=e52c997c02d2fcd66d0e7239cbfd79ced4ddd0ee','-t',wrongTag,'-f',join(root,'packages/backups/test/container-fixture/Bound.Dockerfile'),root);t.after(()=>docker('image','rm',wrongTag));
  await assert.rejects(openTestBackupVerifier({directory,image:wrongImage}),/test_cloud.verifier_configuration/);
+ const paired=await openTestBackupVerifier({directory:join(directory,'paired'),image:wrongImage,expectedRevision:'e52c997c02d2fcd66d0e7239cbfd79ced4ddd0ee'});
+ assert.equal(typeof paired.verify,'function');
+ await assert.rejects(openTestBackupVerifier({directory:join(directory,'mismatch'),image,expectedRevision:'e52c997c02d2fcd66d0e7239cbfd79ced4ddd0ee'}),/test_cloud.verifier_configuration/);
+ for(const expectedRevision of ['', 'main', 'a'.repeat(39), 'A'.repeat(40)])await assert.rejects(openTestBackupVerifier({directory:join(directory,'invalid'),image,expectedRevision}),/test_cloud.verifier_configuration/);
  for(const extra of [{owner:''},{memoryMiB:0},{scratchMiB:0}])await assert.rejects(openTestBackupVerifier({directory:join(directory,randomUUID()),image,...extra}),/verifier_configuration/);
  const settings={directory,image,owner:'runtime-'+randomUUID(),memoryMiB:192,scratchMiB:16};
  const opened=await openTestBackupVerifier(settings);assert.equal(typeof opened.verify,'function','runtime still opens the callback verifier');

@@ -63,7 +63,7 @@ services:
     networks:
       default:
         ipv4_address: 10.79.0.3
-    mem_limit: 256m
+    mem_limit: 384m
     logging:
       driver: json-file
       options: {max-size: "5m", max-file: "2"}

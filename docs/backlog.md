@@ -3293,7 +3293,8 @@ implementation or production evidence.
   implemented; paused-parent verifier checks retain diagnostic-input ordering. Production
   custody, provider qualification, isolation and lifecycle
   policies remain open. See [the complete requirements and deliberate limits](backlog/data-lifecycle.md),
-  including unresolved verifier failures and capacity qualification.
+  including unresolved verifier failures, compatibility with newer Waitron releases
+  and capacity qualification.
 
 
 ## Backup catalogue qualification

@@ -21,6 +21,7 @@ import {probeIntegrationAssets, integrationAssetSummary} from '../deploy/test-cl
 import {captureWaitronSource} from '../deploy/test-cloud/test-fixtures/integration-waitron-source.mjs';
 import {probeWaitronSource} from '../deploy/test-cloud/test-fixtures/integration-waitron-source-probe.mjs';
 import {withFixedIntegrationProject} from '../deploy/test-cloud/test-fixtures/integration-fixed-project.mjs';
+import {selectIntegrationVerificationTarget} from '../deploy/test-cloud/test-fixtures/integration-verification-target.mjs';
 import {completeCleanup, cleanupTestCloudResources, integrationOwnershipOverride} from './test-cloud-cleanup.mjs';
 export {completeCleanup};
 
@@ -165,7 +166,7 @@ async function runClients({image, waitronImage, revision, protectedContainerIds 
   const override = join(directory, 'proof.yaml'), clientTag = project + '-venue:local', recoveryTag = project + '-recovery:local';
   const owned = [], created = [], removed = [], venueCAs = new Map();
   let built = false, recoveryBuilt = false, started = false, result, cloudSource, cloudAssets, waitronAssets, waitronBaseSource, waitronClientSource;
-  let verifierWorker, verifierStarted = false, verifierScope, capacityEvidence;
+  let verifierWorker, verifierStarted = false, verifierScope, capacityEvidence, nativeTarget;
   const prefix = ['compose', '--project-name', project, '--env-file', 'deploy/test-cloud/test.env', '-f', 'compose.yaml', '-f', 'deploy/test-cloud/compose.yaml', '-f', override];
   const compose = args => docker([...prefix, ...args], '', 'compose-' + args[0]);
   let hostCapacity, startupCapacity, capacityChronology;
@@ -240,6 +241,18 @@ async function runClients({image, waitronImage, revision, protectedContainerIds 
       }
       const [base] = parseIntegrationJson(await docker(['image', 'inspect', waitronImage]));
       assert.equal(base.Config.Labels?.['cloud.waitron-revision'], revision, 'integration.waitron_revision');
+      if ((paidVerification || paidRecovery) && revision !== defaultWaitronRevision) {
+        const id = await docker(['create', '--pull=never', '--label', 'cloud.integration.owner=' + runId,
+          '--network', 'none', '--read-only', '--cap-drop', 'ALL', '--security-opt', 'no-new-privileges',
+          '--user', '1000:1000', '--memory', '256m', '--memory-swap', '256m', '--pids-limit', '32',
+          '--entrypoint', 'node', waitronImage, '--input-type=module', '-e',
+          "import {currentBackupVerificationTarget} from '/waitron/apps/server/dist/backup-verification.js';console.log(JSON.stringify(currentBackupVerificationTarget()));"], '', 'verification-target-create');
+        owned.push(id); record('container', id);
+        nativeTarget = selectIntegrationVerificationTarget({revision,
+          pinnedTarget: JSON.parse(await readFile(new URL('../deploy/backup-verifier/target.json', import.meta.url), 'utf8')),
+          nativeTarget: parseIntegrationJson(await docker(['start', '-a', id], '', 'verification-target-read'))});
+        assert.equal(await docker(['inspect', '--format', '{{.State.ExitCode}}', id]), '0');
+      }
       if (waitronSource) waitronBaseSource = await probeWaitronSource({docker, image: waitronImage, source: waitronSource, expectedHead: revision, runId,
         own: id => {owned.push(id); record('container', id);}});
       baseTag = base.RepoTags?.[0]; assert.ok(baseTag, 'integration.waitron_tag');
@@ -324,6 +337,7 @@ async function runClients({image, waitronImage, revision, protectedContainerIds 
         '--security-opt', 'no-new-privileges', '--pids-limit', '128', '--user', '1000:1000', '--tmpfs', '/tmp:rw,nosuid,nodev,size=256m,mode=1777',
         '--mount', 'type=bind,src=' + caFile + ',dst=/proof/ca.pem,readonly', '--mount', 'type=volume,src=' + stateVolume + ',dst=/tmp/cloud-integration-state',
         '--env', 'CLOUD_TEST_ROOT=' + venueRoot, '--env', 'CLOUD_TEST_ORIGIN=' + origin,
+        ...(revision !== defaultWaitronRevision ? ['--env', 'CLOUD_INTEGRATION_CURRENT_RECOVERY=1'] : []),
         ...(captureSnapshot ? ['--env', 'CLOUD_TEST_BACKUP_STATE=1'] : []),
         ...(paidStream && plan === 'paid' ? ['--env', 'CLOUD_TEST_STREAM=1', '--env', 'SSL_CERT_FILE=/proof/ca.pem'] : []),
         '--env', 'NODE_EXTRA_CA_CERTS=/proof/ca.pem', clientImage], '', 'client-create');
@@ -389,7 +403,8 @@ async function runClients({image, waitronImage, revision, protectedContainerIds 
         if (paidVerification || paidRecovery) {
           journeyStage = 'verification';
           const verify = async () => {
-          await accountPhase('configure-verification', {image: waitronImage});
+          const verification = {image: waitronImage, revision, nativeTarget};
+          await accountPhase('configure-verification', verification);
           const [accountInfo] = parseIntegrationJson(await docker(['inspect', account]));
           const configVolume = accountInfo.Mounts.find(value => value.Destination === '/run/local-stack').Name;
           const stateVolume = await docker(['volume', 'create', '--label', 'com.docker.compose.project=' + project, project + '-verifier-state']);
@@ -398,7 +413,7 @@ async function runClients({image, waitronImage, revision, protectedContainerIds 
             '--label', 'cloud.integration.owner=' + runId, '--network', network, '--memory', '128m', '--memory-swap', '128m',
             '--read-only', '--cap-drop', 'ALL', '--security-opt', 'no-new-privileges', '--pids-limit', '128',
             '--tmpfs', '/tmp:rw,nosuid,nodev,size=96m,mode=1777', '--env', 'CLOUD_TEST_SERVICE_PLANS=1', '--env', 'CLOUD_VERIFIER_IMAGE=' + waitronImage,
-            '--env', 'CLOUD_INTEGRATION_POINT_ID=' + captured.pointId,
+            '--env', 'CLOUD_INTEGRATION_POINT_ID=' + captured.pointId, '--env', 'CLOUD_INTEGRATION_WAITRON_REVISION=' + revision,
             '--mount', 'type=volume,src=' + configVolume + ',dst=/run/local-stack,readonly',
             '--mount', 'type=volume,src=' + stateVolume + ',dst=/run/backup-verifier',
             '--mount', 'type=bind,src=/var/run/docker.sock,dst=/var/run/docker.sock',
@@ -407,7 +422,7 @@ async function runClients({image, waitronImage, revision, protectedContainerIds 
           verifierStarted = true; await docker(['start', verifierWorker]);
           let admission;
           for (let attempt = 0; attempt < 90; attempt++) {
-            try {admission = parseIntegrationJson(await accountPhase('inspect-verification', {...captured, image: waitronImage})); break;}
+            try {admission = parseIntegrationJson(await accountPhase('inspect-verification', {...captured, ...verification})); break;}
             catch {
               assert.equal(await docker(['inspect', '--format', '{{.State.Running}}', verifierWorker]), 'true', 'integration.verifier_worker_exited');
               await delay(500);
@@ -466,6 +481,7 @@ async function runClients({image, waitronImage, revision, protectedContainerIds 
             '--network', network, '--memory', '1024m', '--memory-swap', '1024m', '--read-only', '--cap-drop', 'ALL',
             '--security-opt', 'no-new-privileges', '--user', '1000:1000', '--pids-limit', '128',
             '--tmpfs', '/tmp:rw,noexec,nosuid,nodev,size=256m,mode=1777',
+            ...(revision !== defaultWaitronRevision ? ['--env', 'CLOUD_INTEGRATION_CURRENT_RECOVERY=1'] : []),
             ...(paidContinuousRecovery ? ['--mount', 'type=bind,src=' + caFile + ',dst=/proof/ca.pem,readonly', '--env', 'NODE_EXTRA_CA_CERTS=/proof/ca.pem'] : []),
             ...(paidAuthorisedRecovery ? ['--tmpfs', '/waitron/apps/server/node_modules/.vite-temp:rw,nosuid,nodev,size=16m,mode=1777',
               '--tmpfs', '/waitron/apps/server/node_modules/.vite:rw,nosuid,nodev,size=32m,mode=1777'] : []),

@@ -812,10 +812,12 @@ stay inside the disposable containers.
 
 The ordinary restore fixture reads the source's installation codes from the
 delivered database and prepares recovery for those exact bytes. It uses the
-pinned source's generated release stamp and a local clock observation. It first
-proves that the source's hour is refused, then advances only the isolated test
-process's clock to the following hour. This is a simulated later-hour recovery;
-your host and the source server retain their real clocks.
+selected source's generated release stamp and a local clock observation. The default
+image keeps the source-hour refusal and later-hour recovery. For an explicitly selected
+newer image, the fixture uses Waitron's native clock comparison and minute waits,
+then checks that restarting preparation requires a fresh comparison. Only the
+isolated test process's clock advances; your host and the source server retain
+their real clocks.
 
 The wrong source recovery key and a restore without preparation must still refuse before
 placement. The prepared restore must succeed, pass SQLite's integrity check and
@@ -845,7 +847,12 @@ image, set `TEST_CLOUD_INTEGRATION_WAITRON_REVISION` to its full Git commit hash
 The image's `cloud.waitron-revision` label must match exactly. Leave it unset to
 keep the default `ec91a9e34d2daba146f4ee61850ea4136ad5cfb7` pin. This setting applies to
 all client runners in that shell; combined evidence assembly still accepts only
-the default revision. This opt-in image adds
+the default revision. For a newer selected revision, the disposable verification
+policy uses the target exported by that image's compiled verifier. Cloud checks
+its revision and recomputes its hashes before admission. The production target
+and release-readiness rules stay pinned; this test does not qualify a production
+release. The proof requires the complete owner list from the selected target;
+the default image keeps its fixed fifteen-owner check. This opt-in image adds
 the checksum-verified Linux x86-64 Litestream release named by the paired image's
 `LITESTREAM_VERSION`. The fixture supports 0.5.17 and 0.5.18; an unknown version
 refuses the build until you add its verified checksum. The disposable venue forwards
@@ -853,7 +860,7 @@ its canonical Cloud hostname to fixed API and storage services through private T
 bridges. These bridges carry TLS bytes; the clients still verify the certificate
 and hostname and sign requests for the original HTTPS destination.
 
-The fixture supplies the setup steps for the pinned source; it does not qualify
+The fixture supplies the setup steps for the selected source; it does not qualify
 an automatic managed-stream setup journey. It seeds the source's normal membership
 document, obtains managed stream
 configuration through the existing signed machine protocol and saves the bucket
