@@ -1,3 +1,4 @@
+import {TunnelProvisionMachine,tunnelProvisionResponse,type TunnelProvisionOptions} from './tunnel-provision.ts';
 import {AddressLookupMachine,addressLookupResponse,type AddressLookupOptions} from './address-lookup.ts';
 import {createBillingDisplayMachine,billingDisplayResponse,type BillingDisplayOptions} from './billing-display.ts';
 import {validateAllowanceOptions,type AllowanceOptions,type PlanMode} from '@waitron-cloud/registration';
@@ -72,9 +73,10 @@ function publicError(error: unknown): AccountHttpError {
   }
   return new AccountHttpError(503, 'temporarily_unavailable', 1);
 }
-export function createAccountApp(options: {pool: Pool; outbox: EmailOutbox; config: AccountHttpConfig;factor?:FactorConfig;relay?:RelayAdmissionConfig;staffCertificates?:boolean;translation?:boolean;translationMachine?:TranslationMachine;leaseIssuer?:LeaseIssuer;leaseTrust?:ReadonlyMap<string,string>;billingDisplay?:BillingDisplayOptions;addressLookup?:AddressLookupOptions;captures?:CaptureOptions;planMode?:PlanMode;allowances?:AllowanceOptions;remoteResolve?:RemoteResolver;passwordScreening?:PasswordScreeningProvider;passkeyAdapter?:PasskeyCeremonyAdapter;pairingCodeKeys?:PairingCodeKeys|null;recoveryCodeKeys?:RecoveryCodeKeys|null}) {
+export function createAccountApp(options: {pool: Pool; outbox: EmailOutbox; config: AccountHttpConfig;factor?:FactorConfig;relay?:RelayAdmissionConfig;staffCertificates?:boolean;translation?:boolean;translationMachine?:TranslationMachine;leaseIssuer?:LeaseIssuer;leaseTrust?:ReadonlyMap<string,string>;billingDisplay?:BillingDisplayOptions;addressLookup?:AddressLookupOptions;tunnelProvision?:TunnelProvisionOptions;captures?:CaptureOptions;planMode?:PlanMode;allowances?:AllowanceOptions;remoteResolve?:RemoteResolver;passwordScreening?:PasswordScreeningProvider;passkeyAdapter?:PasskeyCeremonyAdapter;pairingCodeKeys?:PairingCodeKeys|null;recoveryCodeKeys?:RecoveryCodeKeys|null}) {
   const allowances=validateAllowanceOptions(options.allowances,options.planMode??'existing');
   const config = validateConfig(options.config);
+  if(options.tunnelProvision&&!options.leaseIssuer)throw Error('tunnel_provision.installation_issuer_required');
   if(options.addressLookup&&!options.leaseIssuer)throw Error('address_lookup.installation_issuer_required');
   if(options.relay&&!options.leaseIssuer)throw Error('relay.installation_issuer_required');
   if(options.translation&&!options.leaseIssuer)throw Error('translation.installation_issuer_required');
@@ -95,6 +97,7 @@ export function createAccountApp(options: {pool: Pool; outbox: EmailOutbox; conf
   const billingDisplay=createBillingDisplayMachine({pool,issuer:options.leaseIssuer,origin:config.portalOrigin,display:options.billingDisplay,trusted:options.leaseTrust});
   const limiter = new AccountRateLimiter(pool, config.rateKey);
   const addressLookup=options.addressLookup&&options.leaseIssuer?new AddressLookupMachine(pool,options.leaseIssuer,config.portalOrigin,config.rateKey,options.addressLookup,options.leaseTrust):undefined;
+  const tunnelProvision=options.tunnelProvision&&options.leaseIssuer?new TunnelProvisionMachine(pool,options.leaseIssuer,config.portalOrigin,options.tunnelProvision,options.leaseTrust,options.planMode):undefined;
   const signup = new SignupStore(pool, outbox, options.passwordScreening); const recovery = new PasswordRecoveryStore(pool, outbox, options.passwordScreening);
   const passkeys = new PasskeyStore(pool, {rpName: 'Waitron Cloud', rpId: origin.hostname, origin: config.portalOrigin}, options.passkeyAdapter);
   const app = new Hono<{Bindings: HttpBindings}>();
@@ -137,6 +140,7 @@ export function createAccountApp(options: {pool: Pool; outbox: EmailOutbox; conf
       return authenticatorResponse(c,{pool,login:passwordLogin,store:authenticator,policy:factor.policy,origin:config.portalOrigin,secure,ip,consume});
     if(c.req.path.startsWith('/api/replacement/'))return replacementResponse(c,{pool,origin:config.portalOrigin,ip,captures:options.captures?{...options.captures,planMode:options.planMode}:undefined,consume});
     if(c.req.path.startsWith('/api/recovery/')||c.req.path.startsWith('/api/account/recovery/'))return recoveryResponse(c,{pool,origin:config.portalOrigin,ip,captures:options.captures?{...options.captures,planMode:options.planMode}:undefined,consume,recoveryCodeKeys});
+    if(c.req.path==='/api/installations/tunnel-provision')return tunnelProvisionResponse(c,{machine:tunnelProvision,ip,consume});
     if(c.req.path==='/api/installations/address-lookup')return addressLookupResponse(c,{machine:addressLookup,ip,consume});
     if(translationPaths.includes(c.req.path))return translationResponse(c,{machine:translation,ip,consume});
     if(['/api/installations/staff-certificate-submit','/api/installations/staff-certificate-status'].includes(c.req.path))return staffCertificateResponse(c,{exchange:staffExchange,ip,consume});
