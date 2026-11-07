@@ -80,8 +80,9 @@ version. Both numerical boundaries are inclusive. One database statement reads t
 comparison, and later predecessor reports can change the result. The query first
 chooses a qualifying predecessor, then aggregates only those two versions through
 an index that also holds the fields needed for counting. Reports within either version still contribute to read cost.
-The comparison skips history when either side is absent and computes each aggregate
-once. The numerical hold rule stays the same.
+The query skips the comparison when the requested version has no reports, and
+skips that version's reports when no earlier version qualifies. The numerical
+hold rule stays the same.
 
 These are lifetime counts from error-reporting boxes. Older versions have longer
 to accumulate errors, which can delay a hold on a young release. Fixing other
@@ -134,7 +135,8 @@ overhead and indexes; one MiB is 1,048,576 bytes.
 These are PostgreSQL execution milliseconds after `VACUUM ANALYZE`, with cached
 reads and no competing requests. Shared lookup rows show the largest observation
 across the five request probes; the hold rows show their individual comparison.
-Report deduplication includes the duplicate retry.
+Report deduplication includes the duplicate retry. Plans are replayed after the
+request commits, so even the first submission's replay finds its stored row.
 
 | Read | 10,000 | 100,000 | 1,000,000 |
 | --- | --- | --- | --- |

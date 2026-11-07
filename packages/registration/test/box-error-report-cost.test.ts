@@ -6,15 +6,14 @@ function repeatedAggregates(plan:Record<string,any>):number{
   +(plan.Plans??[]).reduce((n:number,p:Record<string,any>)=>n+repeatedAggregates(p),0);
 }
 function reportRows(plan:Record<string,any>):number{
- return (plan['Relation Name']==='installation_error_reports'?plan['Actual Rows']*plan['Actual Loops']:0)
+ return (plan['Relation Name']==='installation_error_reports'
+  ?(plan['Actual Rows']+(plan['Rows Removed by Filter']??0)+(plan['Rows Removed by Index Recheck']??0))*plan['Actual Loops']:0)
   +(plan.Plans??[]).reduce((n:number,p:Record<string,any>)=>n+reportRows(p),0);
 }
 
 test('volume measurement loads distinct boxes and releases and explains real receiver reads',async()=>{
- const runner=await import(new URL('../scripts/measure-box-error-reports.mjs',import.meta.url).href).catch((error:NodeJS.ErrnoException)=>{
-  if(error.code==='ERR_MODULE_NOT_FOUND')return undefined;throw error;
- });
- const result=await runner?.measureBoxReports({boxes:40,releases:20,volumes:[1000,2000]});
+ const {measureBoxReports}=await import(new URL('../scripts/measure-box-error-reports.mjs',import.meta.url).href);
+ const result=await measureBoxReports({boxes:40,releases:20,volumes:[1000,2000]});
  assert.equal(result?.samples.length,2,'the measurement must run both requested PostgreSQL volumes');
  for(const [i,sample] of result.samples.entries()){
   assert.equal(sample.loaded.reports,[1000,2000][i]);
