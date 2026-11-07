@@ -18,6 +18,9 @@ test('allowance release51 upgrade and recovery is qualified',{timeout:360000},as
   const release='ef230096fbc9073e4c20109dc214038491864966';
   const driver=join(scratch,'release51'),output=join(scratch,'receipt.json');
   await exec('git',['clone','--shared','--no-checkout',root,driver],{env});
+  // The proof clones its driver again, so both pinned releases must stay reachable.
+  await exec('git',['update-ref','refs/heads/receipt-old','1aae8f14c05113cc2a2c71337940ff7721ad5f5b'],{cwd:driver,env});
+  await exec('git',['update-ref','refs/heads/receipt-new',release],{cwd:driver,env});
   await exec('git',['checkout','--detach',release],{cwd:driver,env});
   await exec('pnpm',['install','--frozen-lockfile'],{cwd:driver,env,timeout:180000,maxBuffer:4*1024*1024});
   await exec(process.execPath,['scripts/schema-upgrade-receipt.mjs',output,'--mail-reconciliation','--old','1aae8f14c05113cc2a2c71337940ff7721ad5f5b','--new',release],{cwd:driver,env,timeout:330000,maxBuffer:4*1024*1024});
