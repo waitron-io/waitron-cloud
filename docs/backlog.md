@@ -170,8 +170,8 @@ immutable row, historical result or deployment authority changes here.
 
 ## Retrospective review qualification (D535)
 
-Continue the assigned application-source reviews and fix real findings on current
-main. Test-addition and maintenance pull requests are excluded by the watcher's
+Continue the remaining assigned application-source reviews and fix real findings
+on current main. Test-addition and maintenance pull requests are excluded by the watcher's
 6 November decision. Real provider behaviour remains unqualified.
 
 Child exit reports retain known operating-system signals and publish the value
