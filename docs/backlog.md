@@ -23,7 +23,8 @@ authenticated and found only `0.1.0`, so it opened no update PR. A newer-version
 update for both consumers and its private CI install remain unproved.
 Normal CI checks both exact pins against the earliest known newer stable
 publication and fails only after seven days. Heads that predate the check
-print a skip message when its script is absent. Registry failures and missing
+print a skip message when its script is absent, proved locally; a hosted
+older-head rehearsal remains open. Registry failures and missing
 metadata warn and pass; later releases do not restart the deadline. Focused
 checks cover version order, the boundary, both consumers and unknown results.
 Removal of the superseded Cloud publisher remains open in its own PR.

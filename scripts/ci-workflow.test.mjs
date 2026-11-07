@@ -170,11 +170,10 @@ test('the shared UI deadline is required before test selection', () => {
   const lag = steps.findIndex(step => /^name: Check shared UI version lag$/m.test(step));
   const plan = steps.findIndex(step => /^id: plan$/m.test(step));
   assert(lag >= 0 && plan > lag, 'UI deadline must run before the planner');
-  assert.doesNotMatch(steps[lag], /(?:^|\n)\s*(?:if|continue-on-error):/);
+  assert.doesNotMatch(steps[lag], /(?:^|\n)\s*(?:if|continue-on-error|working-directory|shell):/);
   assert.match(steps[lag], /node scripts\/ci-ui-lag\.mjs/);
   assert.match(steps[lag], /NODE_AUTH_TOKEN: \$\{\{ secrets\.GITHUB_TOKEN \}\}/);
 });
-
 
 for (const [scenario, script, status, output] of [
   ['an older head without the script', null, 0, /Skipping shared UI version lag/],
@@ -182,11 +181,9 @@ for (const [scenario, script, status, output] of [
   ['a current head with an overdue version', 'console.error("overdue version"); process.exitCode = 1;', 1, /overdue version/],
 ]) test(`the shared UI workflow handles ${scenario}`, () => {
   const step = job('changes').split(/^      - /m).find(part => /^name: Check shared UI version lag$/m.test(part));
-  const run = /        run: (.+)\n/.exec(step);
-  assert.ok(run, 'the lag step must have a shell command');
-  const command = run[1] === '|'
-    ? /^        run: \|\n((?:          .*\n|\n)+)/m.exec(step)[1].replace(/^          /gm, '')
-    : run[1];
+  const run = /^        run: \|\n((?:          .*\n|\n)+)/m.exec(step);
+  assert.ok(run, 'the lag step must have a multiline shell command');
+  const command = run[1].replace(/^          /gm, '');
   const directory = mkdtempSync(join(tmpdir(), 'cloud-ui-workflow-'));
   try {
     if (script !== null) {

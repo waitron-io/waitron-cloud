@@ -55,7 +55,7 @@ jobs:
           if [ -f scripts/ci-ui-lag.mjs ]; then
             node scripts/ci-ui-lag.mjs
           else
-            echo 'Skipping shared UI version lag: this head predates the check.'
+            echo 'Skipping shared UI version lag: scripts/ci-ui-lag.mjs is not on this head.'
           fi
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
