@@ -5,7 +5,7 @@ import {randomUUID} from 'node:crypto';
 import {setTimeout as delay} from 'node:timers/promises';
 import {after,before,beforeEach,test} from 'node:test';
 import {Pool} from 'pg';
-import {migrate} from '../src/migrate.ts';
+import {migrate} from './fixtures/setup-waits.ts';
 import {UsageReconciler,type UsageReconciliationResult} from '../src/usage-metering.ts';
 import {operationsStatus} from '../../operations/src/status.ts';
 

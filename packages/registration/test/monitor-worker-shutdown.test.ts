@@ -4,7 +4,7 @@ import {randomBytes,randomUUID} from 'node:crypto';
 import {setTimeout as delay} from 'node:timers/promises';
 import {after,before,test} from 'node:test';
 import {Pool} from 'pg';
-import {migrate} from '../src/migrate.ts';
+import {migrate} from './fixtures/setup-waits.ts';
 
 const url=process.env.TEST_DATABASE_URL;
 if(!url)throw new Error('Run through scripts/test-postgres.mjs');

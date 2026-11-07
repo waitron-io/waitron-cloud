@@ -71,8 +71,10 @@ try {
   // Acquire both images before resource ownership starts; container creation is never retried.
   await ensureTestImage('postgres:18-alpine');
   await ensureTestImage('axllent/mailpit:v1.31.1');
+  // Setup diagnostics match activity to repository SQL, including migrations longer than 1 KiB.
   docker('run', '--pull=never', '--detach', '--rm', '--name', name, '--publish', '127.0.0.1::5432',
-    '--env', `POSTGRES_PASSWORD=${password}`, '--env', 'POSTGRES_DB=cloud_test', 'postgres:18-alpine');
+    '--env', `POSTGRES_PASSWORD=${password}`, '--env', 'POSTGRES_DB=cloud_test', 'postgres:18-alpine',
+    '-c', 'track_activity_query_size=32768');
   running = true;
   let ready = false;
   for (let attempt = 0; attempt < 60; attempt++) {

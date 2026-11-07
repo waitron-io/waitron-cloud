@@ -1,5 +1,5 @@
 import type { Pool } from 'pg';
-import { migrate } from '../../src/migrate.ts';
+import { migrate } from './setup-waits.ts';
 
 // Test isolation replaces an owned disposable schema rather than erasing immutable history.
 export async function resetSchema(pool: Pool): Promise<void> {

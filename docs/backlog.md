@@ -3316,7 +3316,7 @@ precedes GitHub's published 5 November Actions incident. The same-source hosted
 rerun passes 343 cases; focused Debian runs pass four and 86 cases, with a
 temporary probe measuring 47 applications of migration 013 at 25–30 ms. None
 reproduces or repairs the failure. Preserve the cap and assertions; capture the
-active PostgreSQL wait and failing statement on recurrence before choosing a fix.
+the retained `cloud-test-setup-waits` output on recurrence before choosing a fix.
 See [the failure and qualification limits](backlog/worker-scheduling.md#migration-setup-timeout-remains-unexplained-d530).
 PR #1042's merge additionally reports migration 024/035 setup timeouts and a
 usage-worker SIGKILL on registration shard 3. The four named cases pass on the
