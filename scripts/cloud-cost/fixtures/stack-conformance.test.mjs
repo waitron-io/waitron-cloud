@@ -341,6 +341,7 @@ for (const [scope, phase, operation] of [['replication', 'workload', 'list'], ['
     assert.equal(result.accountingPerturbations, 1);
     assertSmokeAccounting(result);
     const proof = scope === 'replication' ? result.observed : scope === 'restore' ? result.transport.restore : result.administration;
+    t.diagnostic(JSON.stringify({ scope, proof, restoredSales: result.restoredSales, cleanedObjects: result.cleanedObjects }));
     assert.equal(proof.status, 'unknown'); assert.equal(proof.reconciled, false);
     assert.ok(proof.gaps.includes('accounting:unreconciled'));
     assert.equal(proof.accounting.discrepancy.bytesIn, -1);
@@ -350,7 +351,6 @@ for (const [scope, phase, operation] of [['replication', 'workload', 'list'], ['
     assert.deepEqual(result.sales, { attempted: 2, successful: 2, failed: 0 });
     assert.deepEqual(result.fiscal, { ok: true, issues: 0 });
     assert.equal(result.cleanedObjects, true); assert.equal(result.leaked, false);
-    t.diagnostic(JSON.stringify({ scope, proof, restoredSales: result.restoredSales, cleanedObjects: result.cleanedObjects }));
     await stack.close();
     assert.equal(docker('ps', '-aq', '--filter', `label=io.waitron.cloud-cost.owner=${f.journal.token}`), '');
     assert.equal(docker('network', 'ls', '-q', '--filter', `label=io.waitron.cloud-cost.owner=${f.journal.token}`), '');
