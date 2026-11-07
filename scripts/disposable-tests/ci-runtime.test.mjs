@@ -6,13 +6,13 @@ import {join,posix} from 'node:path';
 import {LocalLeases} from './leases.mjs';
 const ci={repositoryId:123,workflowId:456,workflowPath:'.github/workflows/disposable-ci-canary.yml',workflowSha:'1'.repeat(40),
  workflowDigest:'2'.repeat(64),event:'workflow_dispatch',sourceSha:'3'.repeat(40),sourceTree:'4'.repeat(40),runId:789,attempt:1,jobId:901,jobKey:'typecheck'};
-function fixture(t,{lost=false,uncertain=false,identity=ci}={}){
+function fixture(t,{lost=false,uncertain=false,identity=ci,apiJobName}={}){
  const ci=identity;
  const root=mkdtempSync(join(tmpdir(),'ci-runtime-'));t.after(()=>rmSync(root,{recursive:true,force:true}));
  const leases=new LocalLeases(join(root,'ledger'),{hostGeneration:'fixture',slots:1,bootstrap:true}),events=[];
  let registered=false;
  const api={get:async path=>{if(path.endsWith('/runs/789'))return {id:789,run_attempt:1,workflow_id:456,head_sha:ci.workflowSha,status:'in_progress',repository:{id:123},head_repository:{id:123}};if(path.includes('runners'))return {total_count:registered?1:0,runners:registered?[{id:1001,name:'dt-123-789-1-901'}]:[]};
-  return {id:901,name:ci.jobKey==='typecheck'?'typecheck':'test-dashboard (1)',run_id:789,run_attempt:1,head_sha:ci.workflowSha,status:registered?'completed':'queued',conclusion:registered?'success':null,runner_id:registered?1001:null,runner_name:registered?'dt-123-789-1-901':null};},
+  return {id:901,name:apiJobName??(ci.jobKey==='typecheck'?'typecheck':'test-dashboard (1)'),run_id:789,run_attempt:1,head_sha:ci.workflowSha,status:registered?'completed':'queued',conclusion:registered?'success':null,runner_id:registered?1001:null,runner_name:registered?'dt-123-789-1-901':null};},
  post:async()=>{events.push('register');assert.deepEqual(leases.inspect().slots[0].lease.ci,ci);registered=true;if(lost)throw new Error('lost response');
   return {runner:{id:1001,name:'dt-123-789-1-901'},encoded_jit_config:'synthetic-jit'};},delete:async()=>{events.push('deregister');registered=false;}};
  const transport={healthy:async()=>true,transfer:async()=>events.push('transfer'),prepare:async()=>events.push('prepare'),
@@ -101,4 +101,25 @@ test('a busy runner with an unassigned intended job aborts the active guest prom
  path.includes('/jobs/')&&registered?{id:901,name:'typecheck',run_id:789,run_attempt:1,head_sha:ci.workflowSha,status:'queued',runner_id:null}:get(path,options);
  const result=await runCI({...f,lane:'I',ci,repository:'fixture/cloud',signal:AbortSignal.timeout(300),wait:async()=>{await new Promise(r=>setTimeout(r,1));}});
  assert.equal(stopped,true);assert.equal(result.code,125);assert.match(result.error,/busy|assignment/i);
+});
+
+// Exact literal API names, including unsharded UI, must qualify before JIT minting.
+for(const [jobKey,apiJobName] of [['test-till-1','test-till (1)'],['test-till-7','test-till (7)'],['test-ui-1','test-ui']])test(`ordinary ${apiJobName} binds its registration and independently cleans up`,async t=>{
+ const {runCI}=await import('./ci-canary.mjs');
+ const identity={...ci,event:'pull_request',workflowPath:'.github/workflows/ci.yml',sourceSha:ci.workflowSha,jobKey};
+ const f=fixture(t,{identity,apiJobName});
+ f.leases.setInvocation({nonce:'a'.repeat(32),sourceSha:identity.sourceSha,workflowSha:identity.workflowSha,route:'server',createdAt:Date.now(),runId:789,attempt:1,jobId:901});
+ const result=await runCI({...f,lane:'I',ci:identity,repository:'fixture/cloud'});
+ assert.equal(result.code,0,result.error);assert.deepEqual(f.events,['transfer','prepare','register','execute','destroy','inspect','deregister']);
+ assert.equal(f.leases.inspect().slots[0].state,'free');assert.deepEqual(f.leases.inspect().orphanRunners,[]);
+});
+
+// Treating UI as a matrix could bind a runner to a different, unreviewed job name.
+test('UI refuses a matrix-looking API job name before registering',async t=>{
+ const {runCI}=await import('./ci-canary.mjs');
+ const identity={...ci,event:'pull_request',workflowPath:'.github/workflows/ci.yml',sourceSha:ci.workflowSha,jobKey:'test-ui-1'};
+ const f=fixture(t,{identity,apiJobName:'test-ui (1)'});
+ f.leases.setInvocation({nonce:'a'.repeat(32),sourceSha:identity.sourceSha,workflowSha:identity.workflowSha,route:'server',createdAt:Date.now(),runId:789,attempt:1,jobId:901});
+ assert.equal((await runCI({...f,lane:'I',ci:identity,repository:'fixture/cloud'})).code,125);
+ assert.equal(f.events.includes('register'),false);assert.equal(f.leases.inspect().slots[0].state,'free');
 });

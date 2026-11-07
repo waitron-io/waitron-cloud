@@ -25,7 +25,8 @@ if any(a.endswith('/snapshot.py') for a in args):
  if mode=='snapshot-failure':sys.exit(9)
  data=b'opaque source fixture';Path(args[-1]).write_bytes(data);print(json.dumps({'sha256':hashlib.sha256(data).hexdigest()}))
 elif any(a.endswith('/private-packages.py') for a in args):
- p=Path(args[-1]);p.mkdir();(p/'ui-core-0.2.1.tgz').write_bytes(b'private fixture')
+ if args[-2]=='select':print(os.environ.get('PRIVATE_SELECTED','ui-core-0.2.1.tgz'));sys.exit(0)
+ p=Path(args[-1]);p.mkdir();(p/os.environ.get('PRIVATE_SELECTED','ui-core-0.2.1.tgz')).write_bytes(b'private fixture')
  if mode=='packaging':(root/'packaging.pid').write_text(str(os.getpid()));(root/'packaging-ready').touch();time.sleep(60)
  print('{}')
 else:os.execv(${JSON.stringify(python)},[${JSON.stringify(python)},*args])
@@ -511,4 +512,27 @@ test('SIGTERM during background destruction returns143 and retains quarantine un
   const retried=spawnSync(process.execPath,[script,f.config,'--once'],{env:{...f.env,FIXTURE_MODE:'normal'},encoding:'utf8',timeout:5000});
   assert.equal(retried.status,0,retried.stdout+retried.stderr);assert.equal(leases.inspect().slots[0].state,'free');assert.equal(existsSync(guest),false);assertNoTemporaries(f);
  }finally{if(child.exitCode===null && child.signalCode===null)child.kill('SIGTERM');await closed;}
+});
+
+// The ordinary CLI, not a test adapter, must bootstrap and use its configured pool.
+for(const withCI of [false,true])test('the manual CLI bootstraps several slots and can use the next while one is quarantined',t=>{
+ const f=fixture(t);rmSync(join(f.root,'state'),{recursive:true});
+ const config=JSON.parse(readFileSync(f.config,'utf8'));config.mode='manual-slots';config.slots=4;
+ if(withCI)config.ci={repository:'fixture/cloud',repositoryId:123,workflowId:456,workflowPath:'.github/workflows/ci.yml',workflowDigest:'a'.repeat(64),appEnv:join(f.root,'app.env'),appKey:join(f.root,'app.pem')};
+ writeFileSync(f.config,JSON.stringify(config));
+ const boot=spawnSync(process.execPath,[script,f.config,'--bootstrap'],{env:f.env,encoding:'utf8',timeout:5000});
+ assert.equal(boot.status,0,boot.stdout+boot.stderr);
+ const leases=new LocalLeases(join(f.root,'state/ledger'),{hostGeneration:'fixture',slots:4});
+ const blocked=leases.reserveLocal({lane:'H',turn:'quarantine',snapshot:'a'.repeat(64),argv:['true']}).lease;
+ leases.release(blocked,undefined);
+ const result=run(f);assert.equal(result.status,3,result.stdout+result.stderr);assert.match(result.stdout,/dt-fixture-1-1/);
+ assert.equal(leases.inspect().slots[0].state,'quarantined');assert.equal(leases.inspect().slots[1].state,'free');
+ assert.equal(readFileSync(join(f.root,'tmp/global-sentinel'),'utf8'),'unrelated');
+ assert.deepEqual(readdirSync(join(f.root,'state/slot-1/tmp')),[]);
+});
+
+// The package selector owns version choice; the CLI must consume its literal filename.
+test('manual preparation sends the approved package selected for a historical checkout',t=>{
+ const f=fixture(t);f.env.PRIVATE_SELECTED='ui-core-0.1.0.tgz';
+ const result=run(f);assert.equal(result.status,3,result.stdout+result.stderr);assert.match(result.stdout,/"cleanup":"absent"/);assertNoTemporaries(f);assertControllerReleased(f);
 });

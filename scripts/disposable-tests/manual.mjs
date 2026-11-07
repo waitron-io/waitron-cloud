@@ -4,7 +4,7 @@ import {join, resolve, isAbsolute} from 'node:path';
 import {tmpdir} from 'node:os';
 import {randomUUID} from 'node:crypto';
 import {pathToFileURL} from 'node:url';
-import {LocalLeases} from './leases.mjs';
+import {LocalLeases,configuredSlots} from './leases.mjs';
 import {withKernelLock} from './kernel-lock.mjs';
 import {runLocal} from './local.mjs';
 import {SSHTransport, runProcess, protectOutputStreams} from './transport.mjs';
@@ -64,6 +64,24 @@ export async function withTemporaryState(state,work) {
   }
 }
 
+// The slot lock lives through cleanup; the shared ledger lock covers only updates.
+export async function withAvailableSlot({state,hostGeneration,slots},work,{signal}={}) {
+  assert.ok(Number.isSafeInteger(slots) && slots>1 && slots<=16,'Invalid concurrent slot budget');
+  refuseLegacy(state);
+  for(let slot=0;slot<slots;slot++){
+    let admitted=false;
+    const result=await withKernelLock(join(state,'slot-'+slot),async()=>{
+      const leases=new LocalLeases(join(state,'ledger'),{hostGeneration,slots,slot});
+      const current=leases.inspect();
+      if(current.ciInvocation || current.slots[0].state!=='free')return {code:75,reason:'recorded-slot-busy-or-quarantined'};
+      admitted=true;
+      return work({leases,slot,temporaryState:join(state,'slot-'+slot)});
+    },{signal});
+    if(admitted || result.code!==75)return result;
+  }
+  return {code:75,reason:'capacity-busy'};
+}
+
 export async function recoverState({leases,transport,signal=AbortSignal.timeout(120000)}) {
   const occupied=leases.inspect().slots.filter(slot=>slot.state!=='free');
   assert.ok(occupied.length<=1,'Automatic recovery supports one slot');
@@ -78,12 +96,22 @@ export async function recoverState({leases,transport,signal=AbortSignal.timeout(
   return {code:0,cleanup:'absent',resourceId:lease.resourceId};
 }
 
-export async function reconcileManual({state,hostGeneration,transport,signal,deadline,ci,api}) {
+export async function reconcileManual({state,hostGeneration,slots=1,slot,transport,signal,deadline,ci,api}) {
   protectOutputStreams();
-  return withKernelLock(state,async()=>{
+  if(slots>1 && slot===undefined){
+    let busy=0,pending=0;
+    for(let selected=0;selected<slots;selected++){
+      const result=await reconcileManual({state,hostGeneration,slots,slot:selected,transport,signal,deadline,ci,api});
+      if(result.code===75){if(result.reason==='controller-busy')busy++;else pending++;continue;}
+      assert.equal(result.code,0,'Slot recovery failed');
+    }
+    return {code:0,cleanup:pending?'pending':busy?'live-owners-preserved':'absent',busy,pending};
+  }
+  const ownedState=slot===undefined?state:join(state,'slot-'+slot);
+  return withKernelLock(ownedState,async()=>{
     refuseLegacy(state);
-    return withTemporaryState(state,async()=>{
-      const leases=new LocalLeases(join(state,'ledger'),{hostGeneration,slots:1});
+    return withTemporaryState(ownedState,async()=>{
+      const leases=new LocalLeases(join(state,'ledger'),{hostGeneration,slots,slot});
       const recorded=leases.inspect().slots.find(slot=>slot.state!=='free')?.lease;
       const cleanup=AbortSignal.timeout(120000);
       const result=await recoverState({leases,transport,signal:signal?AbortSignal.any([signal,cleanup]):cleanup});
@@ -93,6 +121,7 @@ export async function reconcileManual({state,hostGeneration,transport,signal,dea
         const {GithubApp}=await import('./github-app.mjs');
         const {cleanupRunners,recoverCanary,qualifyCanary,cancelCIJob,fallbackOrdinary}=await import('./ci-canary.mjs');
         api??=new GithubApp(ci);
+        const reconcileCI=async()=>{
         await cleanupRunners({leases,api,repository:ci.repository,signal:cleanup});
         if(ci.workflowPath==='.github/workflows/ci.yml'){
           const pending=leases.inspect().ciInvocation;
@@ -115,6 +144,11 @@ export async function reconcileManual({state,hostGeneration,transport,signal,dea
             leases.clearInvocation(invocation.nonce);
           }
         }
+        return result;
+        };
+        if(slots===1)return reconcileCI();
+        const outcome=await withKernelLock(state,reconcileCI,{signal:cleanup});
+        return outcome.code===75?{...outcome,reason:'ci-recovery-busy'}:outcome;
       }
       return result;
     });
@@ -134,8 +168,8 @@ export async function main(args) {
   }
   const config=JSON.parse(readFileSync(configuration,'utf8'));
   if(config.ci!==undefined){const {validateCIConfig}=await import('./ci-canary.mjs');validateCIConfig(config);}
-  else assert.deepEqual(Object.keys(config).sort(),['host','hostGeneration','mode','recipe','repository','state','version']);
-  assert.ok(config.version===2 && config.mode==='manual-one-slot','Only manual single-slot use is enabled');
+  else assert.deepEqual(Object.keys(config).sort(),['host','hostGeneration','mode','recipe','repository',...(config.mode==='manual-slots'?['slots']:[]),'state','version']);
+  const slots=configuredSlots(config);
   assert.ok(typeof config.state==='string' && isAbsolute(config.state),'State needs an absolute path');
   const cancellation=new AbortController();
   const cancel=()=>cancellation.abort();
@@ -144,22 +178,25 @@ export async function main(args) {
   const budget=AbortSignal.timeout(7500);
   const admission=AbortSignal.any([cancellation.signal,budget]);
   let admitted=false;
+  const withController=work=>!bootstrap && slots>1
+    ?withAvailableSlot({...config,slots},context=>withTemporaryState(context.temporaryState,()=>work(context.leases)),{signal:cancellation.signal})
+    :withKernelLock(config.state,()=>{refuseLegacy(config.state);return withTemporaryState(config.state,()=>work());},{bootstrap,deadline,signal:cancellation.signal});
   try {
     const result=reconciling
-      ? await reconcileManual({state:config.state,hostGeneration:config.hostGeneration,
+      ? await reconcileManual({state:config.state,hostGeneration:config.hostGeneration,slots,
           transport:new SSHTransport({host:config.host,recipe:config.recipe}),signal:cancellation.signal,deadline,ci:config.ci})
-      : await withKernelLock(config.state,async()=>{
+      : await withController(async selected=>{
       cancellation.signal.throwIfAborted();
       refuseLegacy(config.state);
-      return withTemporaryState(config.state,async()=>{
       if (bootstrap) {
-        new LocalLeases(join(config.state,'ledger'),{hostGeneration:config.hostGeneration,slots:1,bootstrap:true});
+        new LocalLeases(join(config.state,'ledger'),{hostGeneration:config.hostGeneration,slots,bootstrap:true});
+        if(slots>1)for(let slot=0;slot<slots;slot++)await withKernelLock(join(config.state,'slot-'+slot),async()=>({code:0}),{bootstrap:true,signal:cancellation.signal});
         return {code:0};
       }
       const commonRead=await runProcess('git',['-c','core.fsmonitor=false','-C',resolve(checkout),'rev-parse','--path-format=absolute','--git-common-dir'],{capture:true,signal:admission});
       assert.equal(commonRead.code,0,'Cloud checkout could not be inspected');
       assert.equal(realpathSync(commonRead.stdout.trim()),realpathSync(config.repository),'This manual helper accepts only the configured Cloud repository');
-      const leases=new LocalLeases(join(config.state,'ledger'),{hostGeneration:config.hostGeneration,slots:1});
+      const leases=selected??new LocalLeases(join(config.state,'ledger'),{hostGeneration:config.hostGeneration,slots});
       const state=leases.inspect();
       if (state.slots.some(slot=>slot.state!=='free')) return {code:75,reason:'recorded-slot-busy-or-quarantined'};
       const transport=new SSHTransport({host:config.host,recipe:config.recipe});
@@ -174,19 +211,22 @@ export async function main(args) {
         const copied = await runProcess('python3', ['-I', '-B', new URL('./snapshot.py', import.meta.url).pathname, 'create', resolve(checkout), source], {signal: cancellation.signal, capture: true});
         assert.equal(copied.code, 0, 'Source snapshot failed');
         const snapshot = JSON.parse(copied.stdout).sha256;
+        const selected=await runProcess('python3',['-I','-B',new URL('./private-packages.py',import.meta.url).pathname,'select',source],{signal:cancellation.signal,capture:true});
+        assert.equal(selected.code,0,'Captured source needs one reviewed private release');
+        const privateFile=selected.stdout.trim();assert.match(privateFile,/^ui-core-[0-9]+\.[0-9]+\.[0-9]+\.tgz$/,'Invalid selected private filename');
         const downloaded = await runProcess('python3', ['-I', '-B', new URL('./private-packages.py', import.meta.url).pathname, 'fetch', join(temporary, 'private')], {signal: cancellation.signal, capture: true});
         assert.equal(downloaded.code, 0, 'Reviewed private package preparation failed');
         transport.source = source;
-        transport.privatePackage = join(temporary, 'private', 'ui-core-0.2.1.tgz');
+        transport.privatePackage = join(temporary, 'private', privateFile);
         console.log(`Source ${snapshot}; command starts in a fresh VM, maximum 55 minutes.`);
         return await runLocal({leases, transport, signal: cancellation.signal,
           request: {lane, turn: 'manual-'+randomUUID(), snapshot, argv}});
       } finally { rmSync(temporary, {recursive: true, force: true}); }
-      });
-    },{bootstrap,deadline,signal:cancellation.signal});
-    if(!reconciling || result.code!==0 || result.resourceId)
+    });
+    if(!reconciling || result.code!==0 || result.resourceId || result.pending)
       console.log(JSON.stringify({code:result.code,reason:result.reason,cleanup:result.cleanup,
-        resourceId:result.lease?.resourceId ?? result.resourceId,snapshot:result.lease?.snapshot,error:result.error}));
+        resourceId:result.lease?.resourceId ?? result.resourceId,snapshot:result.lease?.snapshot,error:result.error,
+        ...(result.pending?{pending:result.pending,busy:result.busy}:{})}));
     return result.code;
   } catch(error) {
     const refusal=cancellation.signal.aborted?{code:143,reason:'cancelled'}:

@@ -24,7 +24,7 @@ class Startup(unittest.TestCase):
         self.root = Path(self.temporary.name)
         self.boot = self.root/'boot-id'
         self.boot.write_text('11111111-1111-4111-8111-111111111111\n')
-        for module, name, value in [(host, 'ROOT', self.root), (startup, 'BOOT_ID', self.boot),
+        for module, name, value in [(host,'capacity',lambda extra=None:{'slots':1,'cpus':list(range(4,16))}),(host, 'ROOT', self.root), (startup, 'BOOT_ID', self.boot),
                                     (session, 'CONTROL', self.root/'control'),
                                     (session, 'OPERATIONS', self.root/'operations')]:
             guard = patch.object(module, name, value)
@@ -279,6 +279,35 @@ except BlockingIOError:sys.exit(75)
                 with patch.object(startup, 'reconcile', side_effect=failure), contextlib.redirect_stderr(io.StringIO()):
                     self.assertEqual(startup.main(), code)
                 self.assertFalse(startup.ready())
+
+    def test_new_boot_reconciles_every_slot_owner_before_old_generations(self):
+        for resource in ['dt-multi-1-2','dt-multi-2-4','dt-multi-1-1']:
+            self.recorded(resource,'turns','control')
+        (self.root/'active-1.json').write_text(json.dumps({'resourceId':'dt-multi-1-2'}))
+        (self.root/'active-2.json').write_text(json.dumps({'resourceId':'dt-multi-2-4'}))
+        self.assertEqual(startup.inventory(),['dt-multi-1-2','dt-multi-2-4','dt-multi-1-1'])
+        def destroy(resource):
+            self.assertFalse(startup.ready());self.present.remove(resource)
+            self.destroyed.append(resource)
+            for name in ['turns','control']:shutil.rmtree(self.root/name/resource)
+            for name in ['active-1.json','active-2.json']:
+                path=self.root/name
+                if path.exists() and json.loads(path.read_text())['resourceId']==resource:path.unlink()
+        with patch.object(session,'destroy',side_effect=destroy),patch.object(session,'inspect',side_effect=lambda resource:{'resourceId':resource,'absent':resource not in self.present}):
+            startup.reconcile()
+        self.assertEqual(self.destroyed,['dt-multi-1-2','dt-multi-2-4','dt-multi-1-1'])
+        self.assertTrue(startup.ready())
+
+    def test_slot_owner_mismatch_in_active_filename_refuses_all_cleanup(self):
+        self.recorded('dt-multi-2-1','turns')
+        (self.root/'active-1.json').write_text(json.dumps({'resourceId':'dt-multi-2-1'}))
+        with self.assertRaisesRegex(ValueError,'slot|active'):self.reconcile()
+        self.assertEqual(self.destroyed,[]);self.assertTrue((self.root/'turns/dt-multi-2-1').exists())
+
+    def test_failed_startup_budget_keeps_admission_closed(self):
+        with patch.object(host,'capacity',create=True,side_effect=ValueError('Insufficient execution threads')):
+            with self.assertRaisesRegex(ValueError,'thread'):self.reconcile()
+        self.assertFalse(startup.ready())
 
 
 unittest.main(verbosity=2)

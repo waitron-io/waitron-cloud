@@ -22,10 +22,10 @@ def boot_id():
     return value
 
 
-def owned(path, directory=False, guest=False):
+def owned(path, directory=False, guest_uid=None):
     info = path.lstat()
     kind = stat.S_ISDIR if directory else stat.S_ISREG
-    if (not kind(info.st_mode) or info.st_uid not in ({os.geteuid(), 62000} if guest else {os.geteuid()}) or
+    if (not kind(info.st_mode) or info.st_uid not in ({os.geteuid(), guest_uid} if guest_uid is not None else {os.geteuid()}) or
             info.st_mode & 0o022 or (not directory and info.st_size > 65536)):
         raise ValueError('Unsafe startup inventory or readiness path')
 
@@ -57,15 +57,19 @@ def require_ready():
 
 
 def inventory():
-    active = None
-    path = host.ROOT/'active.json'
-    if os.path.lexists(path):
+    active = []
+    for path in sorted({host.ROOT/'active.json', *host.ROOT.glob('active-*.json')}):
+        if not os.path.lexists(path):
+            continue
         owned(path)
         value = json.loads(path.read_text())
         if not isinstance(value, dict):
             raise ValueError('Invalid active host record')
-        active = host.resource_id(value.get('resourceId'))
-    resources = {active} if active else set()
+        resource = host.resource_id(value.get('resourceId'))
+        if path != host.active_path(resource):
+            raise ValueError('Active record belongs to another slot')
+        active.append(resource)
+    resources = set(active)
     closed = set()
     for name in ('control', 'turns', 'operations'):
         directory = host.ROOT/name
@@ -74,7 +78,7 @@ def inventory():
         owned(directory, directory=True)
         for entry in directory.iterdir():
             host.resource_id(entry.name)
-            owned(entry, directory=True, guest=name == 'turns')
+            owned(entry, directory=True, guest_uid=62000+host.slot_id(entry.name) if name == 'turns' else None)
             if name == 'operations' and os.path.lexists(entry/'closed'):
                 owned(entry/'closed')
                 closed.add(entry.name)
@@ -93,7 +97,7 @@ def inventory():
                 resources.add(resource)
     # Old completed generations may still have operation fences. Clean the
     # actual slot owner first so stale destruction cannot target its successor.
-    return ([active] if active else []) + sorted(resources - {active})
+    return active + sorted(resources - set(active))
 
 
 def reconcile():
@@ -115,6 +119,7 @@ def reconcile():
             observation = session.inspect(resource)
             if observation.get('resourceId') != resource or observation.get('absent') is not True:
                 raise ValueError('Independent startup resource absence was not proved')
+        host.capacity()
         temporary = host.ROOT/('startup-'+uuid.uuid4().hex+'.tmp')
         try:
             host.write_json(temporary, current)

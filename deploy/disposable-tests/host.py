@@ -24,9 +24,18 @@ IMAGE_SHA512 = 'd25999de0770d4cde1be72c299ba3ad94eac7ea8fd4d18f8cc86c69df69337e2
 
 
 def resource_id(value):
-    if not isinstance(value, str) or not re.fullmatch(r'dt-[A-Za-z0-9][A-Za-z0-9_-]{0,63}-0-[1-9][0-9]{0,14}', value):
-        raise ValueError('Invalid local resource ID; only slot zero is qualified for development')
+    if not isinstance(value, str) or not re.fullmatch(r'dt-[A-Za-z0-9][A-Za-z0-9_-]{0,63}-(?:[0-9]|1[0-5])-[1-9][0-9]{0,14}', value):
+        raise ValueError('Invalid local resource ID or slot')
     return value
+
+
+def slot_id(resource):
+    return int(resource_id(resource).rsplit('-', 2)[1])
+
+
+def active_path(resource):
+    slot = slot_id(resource)
+    return ROOT/('active.json' if slot == 0 else f'active-{slot}.json')
 
 
 def run(*args, timeout=30, input=None, check=True):
@@ -56,7 +65,7 @@ def locked():
             raise ValueError('Unsafe host operation lock')
         # Kernel ownership survives neither process death nor reboot. Durable
         # active/history records still require verified cleanup before reuse.
-        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        fcntl.flock(fd, fcntl.LOCK_EX)
         directory(ROOT / 'base', 0o755)
         directory(ROOT / 'turns', 0o755)
         directory(ROOT / 'history')
@@ -91,15 +100,15 @@ def image_verified():
 
 def prepare_image():
     with locked():
-        try:
-            pwd.getpwuid(62000)
-        except KeyError:
-            # systemd resolves service credentials through the account database,
-            # even when User= is numeric. This account cannot log in or own keys.
-            run('useradd', '--system', '--uid', '62000', '--gid', 'kvm',
-                '--no-create-home', '--home-dir', '/nonexistent',
-                '--shell', '/usr/sbin/nologin', 'dt-slot-0')
-        guest_account()
+        for slot in range(16):
+            try:
+                pwd.getpwuid(62000+slot)
+            except KeyError:
+                # systemd resolves numeric service credentials in the account database.
+                run('useradd', '--system', '--uid', str(62000+slot), '--gid', 'kvm',
+                    '--no-create-home', '--home-dir', '/nonexistent',
+                    '--shell', '/usr/sbin/nologin', f'dt-slot-{slot}')
+            guest_account(slot)
         if not IMAGE.exists():
             fd, temporary = tempfile.mkstemp(prefix='image-', dir=ROOT / 'base')
             os.close(fd)
@@ -120,9 +129,9 @@ def prepare_image():
         return {'image': str(IMAGE), 'sha512': IMAGE_SHA512, 'url': IMAGE_URL}
 
 
-def guest_account():
-    account = pwd.getpwuid(62000)
-    if (account.pw_name != 'dt-slot-0' or account.pw_dir != '/nonexistent' or
+def guest_account(slot=0):
+    account = pwd.getpwuid(62000+slot)
+    if (account.pw_name != f'dt-slot-{slot}' or account.pw_dir != '/nonexistent' or
             account.pw_shell != '/usr/sbin/nologin'):
         raise ValueError('Reserved guest UID belongs to an unexpected host account')
 
@@ -170,15 +179,83 @@ def network_policy(resource):
               '169.254.0.0/16', '172.16.0.0/12', '192.0.0.0/24', '192.0.2.0/24',
               '192.168.0.0/16', '198.18.0.0/15', '198.51.100.0/24',
               '203.0.113.0/24', '224.0.0.0/4', '240.0.0.0/4'] + sorted(hosts)
+    uid = 62000+slot_id(resource)
     return f'''table inet {table_name(resource)} {{
  chain output {{
   type filter hook output priority -10; policy accept;
-  meta skuid 62000 ct state established,related accept
-  meta skuid 62000 meta nfproto ipv6 counter reject
-  meta skuid 62000 ip daddr {{ {', '.join(denied)} }} counter reject
+  meta skuid {uid} ct state established,related accept
+  meta skuid {uid} meta nfproto ipv6 counter reject
+  meta skuid {uid} ip daddr {{ {', '.join(denied)} }} counter reject
  }}
 }}
 '''
+
+
+def budget(slots, *, memory, threads, disk_total, disk_free, allocated):
+    if type(slots) is not int or not 1 <= slots <= 16:
+        raise ValueError('Invalid host slot budget')
+    if any(type(v) is not int or v < 0 for v in [memory, threads, disk_total, disk_free, allocated]):
+        raise ValueError('Invalid host resource measurement')
+    if slots*18*1024**3+16*1024**3 > memory:
+        raise ValueError('Insufficient memory for guest caps and host reserve')
+    if slots*4+8 > threads:
+        raise ValueError('Insufficient execution threads after host reserve')
+    remaining = max(0, slots*64*1024**3-allocated)
+    if disk_free-remaining < (disk_total+4)//5:
+        raise ValueError('Insufficient disk after guest maxima and twenty-percent reserve')
+
+
+def guest_cpus(topology):
+    if (not isinstance(topology, dict) or not topology or
+            any(type(cpu) is not int or cpu < 0 or not isinstance(core, tuple) or len(core) != 2 or
+                any(type(value) is not int or value < 0 for value in core) for cpu, core in topology.items())):
+        raise ValueError('Invalid online CPU topology')
+    cores = sorted(set(topology.values()))
+    if len(cores) <= 4:
+        raise ValueError('No guest CPU pool after reserving four physical cores')
+    reserved = set(cores[:4])
+    return sorted(cpu for cpu, core in topology.items() if core not in reserved)
+
+
+def capacity(extra=None):
+    resources = set()
+    for path in sorted({ROOT/'active.json', *ROOT.glob('active-*.json')}):
+        if not os.path.lexists(path):
+            continue
+        info = path.lstat()
+        if not stat.S_ISREG(info.st_mode) or info.st_uid != 0 or info.st_mode & 0o022:
+            raise ValueError('Unsafe active allocation record')
+        resource = resource_id(json.loads(path.read_text()).get('resourceId'))
+        if path != active_path(resource):
+            raise ValueError('Active allocation belongs to another slot')
+        resources.add(resource)
+    allocated = 0
+    turns = ROOT/'turns'
+    if turns.exists():
+        for path in turns.iterdir():
+            resource = resource_id(path.name)
+            info = path.lstat()
+            if (not stat.S_ISDIR(info.st_mode) or info.st_uid not in (0,62000+slot_id(resource)) or info.st_mode & 0o022):
+                raise ValueError('Unsafe retained guest allocation')
+            resources.add(resource)
+            for child in path.iterdir():
+                info = child.lstat()
+                if stat.S_ISLNK(info.st_mode):
+                    raise ValueError('Linked guest allocation refused')
+                if stat.S_ISREG(info.st_mode):
+                    allocated += info.st_blocks*512
+    if extra is not None:
+        resources.add(resource_id(extra))
+    slots = len(resources)+(extra is None)
+    memory = int(next(line.split()[1] for line in Path('/proc/meminfo').read_text().splitlines() if line.startswith('MemTotal:')))*1024
+    topology = {}
+    for cpu in os.sched_getaffinity(0):
+        base = Path(f'/sys/devices/system/cpu/cpu{cpu}/topology')
+        topology[cpu] = tuple(int((base/name).read_text()) for name in ['physical_package_id','core_id'])
+    allowed = guest_cpus(topology)
+    disk = shutil.disk_usage(ROOT)
+    budget(slots,memory=memory,threads=min(len(topology),len(allowed)+8),disk_total=disk.total,disk_free=disk.free,allocated=allocated)
+    return {'slots': slots, 'cpus': allowed}
 
 
 def plan(request):
@@ -196,6 +273,7 @@ def plan(request):
     if len(decoded) != 51 or decoded[:19] != b'\0\0\0\x0bssh-ed25519\0\0\0\x20':
         raise ValueError('Invalid per-turn SSH public key')
     directory = ROOT / 'turns' / resource
+    uid, port = 62000+slot_id(resource), 22000+slot_id(resource)
     qemu = ['/usr/bin/qemu-system-x86_64', '-no-user-config', '-nodefaults',
             '-machine', 'q35,accel=kvm', '-cpu', 'host', '-smp', '4', '-m', '16384',
             '-display', 'none', '-monitor', 'none',
@@ -205,18 +283,18 @@ def plan(request):
             '-qmp', f'unix:{directory}/qmp.sock,server=on,wait=off',
             '-drive', f'file={directory}/disk.qcow2,format=qcow2,if=virtio',
             '-drive', f'file={directory}/seed.img,format=raw,if=virtio,readonly=on',
-            '-netdev', 'user,id=net0,ipv6=off,hostfwd=tcp:127.0.0.1:22000-:22',
+            '-netdev', f'user,id=net0,ipv6=off,hostfwd=tcp:127.0.0.1:{port}-:22',
             '-device', 'virtio-net-pci,netdev=net0',
             '-sandbox', 'on,obsolete=deny,elevateprivileges=deny,spawn=deny,resourcecontrol=deny']
-    service = ['User=62000', 'Group=kvm', 'KillMode=control-group', 'TimeoutStopSec=30',
+    service = [f'User={uid}', 'Group=kvm', 'KillMode=control-group', 'TimeoutStopSec=30',
                f'RuntimeMaxSec={(deadline - now) // 1000}', 'MemoryMax=18G', 'CPUQuota=400%',
                'NoNewPrivileges=yes', 'ProtectSystem=strict', f'ReadWritePaths={directory}',
                'ProtectHome=yes', 'PrivateTmp=yes', 'DevicePolicy=closed', 'DeviceAllow=/dev/kvm rw']
     cloud = {'users': [{'name': 'root', 'lock_passwd': True, 'ssh_authorized_keys': [key]}],
              'disable_root': False, 'ssh_pwauth': False, 'package_update': False,
              'growpart': {'mode': 'auto', 'devices': ['/']}, 'resize_rootfs': True}
-    return {'resourceId': resource, 'directory': str(directory), 'uid': 62000,
-            'port': 22000, 'deadline': deadline, 'qemu': qemu, 'service': service,
+    return {'resourceId': resource, 'directory': str(directory), 'uid': uid,
+            'port': port, 'deadline': deadline, 'qemu': qemu, 'service': service,
             'userData': '#cloud-config\n' + json.dumps(cloud) + '\n'}
 
 
@@ -224,11 +302,12 @@ def create(request):
     initial = plan(request)
     resource = initial['resourceId']
     with locked():
-        active = ROOT / 'active.json'
+        active = active_path(resource)
         if active.exists() or (ROOT / 'history' / (resource + '.json')).exists():
             raise BlockingIOError('A slot is occupied or this resource ID is already retired')
+        admitted = capacity(resource)
         image_verified()
-        guest_account()
+        guest_account(slot_id(resource))
         if not observation(resource)['absent']:
             raise ValueError('Resource already exists without a matching active record')
         policy = network_policy(resource)
@@ -244,10 +323,11 @@ def create(request):
         run('qemu-img', 'create', '-f', 'qcow2', '-F', 'qcow2', '-b', str(IMAGE), str(turn / 'disk.qcow2'), '64G')
         for child in turn.iterdir():
             os.chmod(child, 0o600)
-            os.chown(child, 62000, -1)
-        os.chown(turn, 62000, -1)
+            os.chown(child, initial['uid'], -1)
+        os.chown(turn, initial['uid'], -1)
         run('nft', '-f', '-', input=policy)
         current = plan(request)
+        current['service'].append('AllowedCPUs='+','.join(map(str,admitted['cpus'])))
         if request['deadline'] - int(time.time() * 1000) < 1000:
             raise ValueError('Turn deadline too close to start')
         command = ['systemd-run', '--quiet', '--service-type=exec', '--unit=' + resource]
@@ -259,7 +339,7 @@ def create(request):
 
 def destroy(resource):
     with locked():
-        active = ROOT / 'active.json'
+        active = active_path(resource)
         if not active.exists():
             observed = observation(resource)
             if not observed['absent']:

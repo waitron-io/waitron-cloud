@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
 import {setTimeout as delay} from 'node:timers/promises';
 import {ciIdentity,routingLabel} from './ci-identity.mjs';
+import {configuredSlots} from './leases.mjs';
 
 export function admitOrdinary(policy,approvedHead,{repository,run,job,workflow,source,pull}){
  assert.equal(policy.workflowPath,'.github/workflows/ci.yml');
@@ -444,6 +445,7 @@ export async function main(args){
  const {refuseLegacy,withTemporaryState}=await import('./manual.mjs');
  const {CITransport}=await import('./transport.mjs'),{GithubApp}=await import('./github-app.mjs');
  const config=JSON.parse(readFileSync(configuration,'utf8'));validateCIConfig(config);
+ assert.equal(configuredSlots(config),1,'The canary entry uses its original one-slot rehearsal profile');
  assert.equal(config.ci.workflowPath,'.github/workflows/disposable-ci-canary.yml','The canary entry accepts only its reviewed canary workflow');
  const api=new GithubApp(config.ci),policy=config.ci;
  const cancellation=new AbortController(),cancel=()=>cancellation.abort();
@@ -461,8 +463,8 @@ export async function main(args){
  finally{for(const name of ['SIGTERM','SIGINT','SIGHUP'])process.off(name,cancel);}
 }
 export function validateCIConfig(config){
- assert.deepEqual(Object.keys(config).sort(),['ci','host','hostGeneration','mode','recipe','repository','state','version']);
- assert.ok(config.version===2 && config.mode==='manual-one-slot','Invalid coupled CI configuration');
+ assert.deepEqual(Object.keys(config).sort(),['ci','host','hostGeneration','mode','recipe','repository',...(config.mode==='manual-slots'?['slots']:[]),'state','version']);
+ configuredSlots(config);
  const ci=config.ci;assert.deepEqual(Object.keys(ci).sort(),['appEnv','appKey','repository','repositoryId','workflowDigest','workflowId','workflowPath']);
  assert.ok(/^[a-zA-Z0-9_-]+\/[a-zA-Z0-9_-]+$/.test(ci.repository) && ['.github/workflows/disposable-ci-canary.yml','.github/workflows/ci.yml'].includes(ci.workflowPath) &&
   [ci.repositoryId,ci.workflowId].every(v=>Number.isSafeInteger(v)&&v>0),'Invalid CI policy identity');

@@ -73,3 +73,21 @@ test('the guest entry point refuses an unbound turn before reading a command',()
   assert.notEqual(result.status,0);
   assert.match(result.stderr,/disposable guest/i);
 });
+
+// A valid nonzero slot must reach request validation; an unbound or invalid slot must not.
+test('the guest entry binds nonzero slots to its actual cloud-init identity',()=>{
+ const program=`import pathlib,runpy,sys
+original=pathlib.Path
+class Identity:
+ def is_file(self):return True
+ def read_text(self):return sys.argv[3]
+pathlib.Path=lambda value:Identity() if str(value)=='/var/lib/cloud/data/instance-id' else original(value)
+script,resource,bound=sys.argv[1:];sys.argv=[script,resource,'--ci']
+# Retain the bound string after replacing the CLI vector.
+Identity.read_text=lambda self:bound
+runpy.run_path(script,run_name='__main__')`;
+ for(const [resource,bound,want] of [['dt-fixture-5-1','dt-fixture-5-1',/Invalid CI credential input/],['dt-fixture-15-1','dt-fixture-15-1',/Invalid CI credential input/],['dt-fixture-16-1','dt-fixture-16-1',/requires a disposable guest/],['dt-fixture-5-1','dt-fixture-4-1',/requires a disposable guest/]]){
+  const result=spawnSync('python3',['-B','-c',program,script,resource,bound],{input:'{}',encoding:'utf8',timeout:5000});
+  assert.equal(result.status,125,result.stderr);assert.match(result.stderr,want);
+ }
+});

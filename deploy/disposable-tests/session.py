@@ -22,7 +22,10 @@ from host import resource_id
 
 MAX_BUNDLE = 577 * 1024 * 1024
 LIMITS = {'request.json': 65536, 'source.tar': 512 * 1024 * 1024}
-PACKAGE_SHA512 = base64.b64decode('MzgeKuubpLe6LPEL1M6hZgWDuNSBeyQNVGnzw/J29UwKeZ/6nTKD8k/H1nrSMeOx95C/3f34eNYQtbMM8P+2ng==')
+PACKAGE_SHA512 = {base64.b64decode(value) for value in [
+    'MzgeKuubpLe6LPEL1M6hZgWDuNSBeyQNVGnzw/J29UwKeZ/6nTKD8k/H1nrSMeOx95C/3f34eNYQtbMM8P+2ng==',
+    'SzF5SF/NXCVkOwVIS9XLcVr1vQ6EOF14QHqqXs4QXRwG9dWdp3HBY1JTubRA8+Ygpx0z9Y8M0RE37Dliduy59w==',
+]}
 CONTROL = host.ROOT/'control'
 OPERATIONS = host.ROOT/'operations'
 RECIPE = Path(__file__).resolve().parent
@@ -48,7 +51,7 @@ def request_identity(value, resource, now=None):
                 any(type(ci[k]) is not int or not 0 < ci[k] <= 9007199254740991 for k in ['repositoryId','workflowId','runId','attempt','jobId']) or
                 ci['workflowPath'] not in ['.github/workflows/disposable-ci-canary.yml', '.github/workflows/ci.yml'] or
                 ci['event'] not in ['workflow_dispatch', 'pull_request'] or not isinstance(ci['jobKey'],str) or
-                not re.fullmatch(r'(typecheck|test-dashboard-[1-4]|test-server-([1-9]|1[0-9]|2[0-4])|test-heavy-[1-3])',ci['jobKey']) or
+                not re.fullmatch(r'(typecheck|test-dashboard-[1-4]|test-server-([1-9]|1[0-9]|2[0-4])|test-heavy-[1-3]|test-till-[1-7]|test-ui-1)',ci['jobKey']) or
                 any(not isinstance(ci[k],str) or not re.fullmatch(r'[a-f0-9]{40}',ci[k]) for k in ['workflowSha','sourceSha','sourceTree']) or
                 not isinstance(ci['workflowDigest'],str) or not re.fullmatch(r'[a-f0-9]{64}',ci['workflowDigest'])):
             raise ValueError('Invalid CI identity')
@@ -131,7 +134,7 @@ def receive(root, resource, stream):
                 raise ValueError('Snapshot digest mismatch')
         if 'ui.tgz' in seen:
             with (target/'ui.tgz').open('rb') as source:
-                if hashlib.file_digest(source, 'sha512').digest() != PACKAGE_SHA512:
+                if hashlib.file_digest(source, 'sha512').digest() not in PACKAGE_SHA512:
                     raise ValueError('Private package integrity mismatch')
         bundle.unlink()
         return request
@@ -205,7 +208,7 @@ def guest_ssh(directory):
     return ['ssh', '-i', str(directory/'key'), '-o', 'IdentitiesOnly=yes', '-o', 'BatchMode=yes',
             '-o', 'StrictHostKeyChecking=yes', '-o', f'UserKnownHostsFile={directory}/known',
             '-o', 'ConnectTimeout=3', '-o', 'ServerAliveInterval=5', '-o', 'ServerAliveCountMax=2',
-            '-p', '22000', 'root@127.0.0.1']
+            '-p', str(22000+host.slot_id(directory.name)), 'root@127.0.0.1']
 
 
 def prepare(resource):
@@ -219,7 +222,7 @@ def prepare(resource):
     host.create({'resourceId': resource, 'deadline': deadline, 'sshPublicKey': public})
     boot_end = min(deadline, int(time.time()*1000)+120000)
     while int(time.time()*1000) < boot_end:
-        code, output = command(['ssh-keyscan', '-T', '2', '-t', 'ed25519', '-p', '22000', '127.0.0.1'],
+        code, output = command(['ssh-keyscan', '-T', '2', '-t', 'ed25519', '-p', str(22000+host.slot_id(resource)), '127.0.0.1'],
                                boot_end, capture=True, check=False)
         if code == 0 and output.strip():
             (directory/'known').write_bytes(output)
@@ -399,7 +402,14 @@ def main():
     if os.geteuid() != 0 or not Path('/dev/kvm').is_char_device():
         raise ValueError('Dedicated root KVM host required')
     if len(sys.argv) == 2 and sys.argv[1] == 'health':
-        print(json.dumps({'healthy': startup.ready() and not (host.ROOT/'active.json').exists()}))
+        healthy = startup.ready()
+        if healthy:
+            try:
+                with host.locked():
+                    host.capacity()
+            except (OSError,ValueError):
+                healthy = False
+        print(json.dumps({'healthy': healthy}))
         return 0
     if len(sys.argv) == 3 and sys.argv[1] == '_cleanup':
         resource = resource_id(sys.argv[2])

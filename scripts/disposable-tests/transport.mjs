@@ -31,7 +31,7 @@ export class SSHTransport {
   async remote(mode, lease, options = {}) {
     assert.ok(['health', 'transfer', 'transfer-ci', 'prepare', 'execute-v2', 'execute-ci', 'result', 'destroy', 'inspect'].includes(mode), 'Invalid transport operation');
     const resource = lease?.resourceId;
-    if (mode !== 'health') assert.ok(/^dt-[A-Za-z0-9][A-Za-z0-9_-]{0,63}-0-[1-9][0-9]{0,14}$/.test(resource), 'Invalid transport resource');
+    if (mode !== 'health') assert.ok(/^dt-[A-Za-z0-9][A-Za-z0-9_-]{0,63}-(?:[0-9]|1[0-5])-[1-9][0-9]{0,14}$/.test(resource), 'Invalid transport resource');
     return runProcess('bash', [sshWrapper, this.host,
       `python3 -B ${this.recipe}/session.py ${mode}${resource ? ' '+resource : ''}`], options);
   }

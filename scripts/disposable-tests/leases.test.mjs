@@ -181,3 +181,71 @@ for (const turn of [undefined, null, 12]) {
 test('a missing host generation cannot allocate an unnamed host', async t => {
   await assert.rejects(setup(t, {hostGeneration: undefined}), /invalid.*configuration/i);
 });
+
+// Without a short transaction lock, simultaneous writers lose each other's owners.
+test('separate controller processes reserve every slot without losing a neighbor',async t=>{
+ const {spawn}=await import('node:child_process');
+ const {leases,dir}=await setup(t,{slots:16});
+ const barrier=join(dir,'begin');
+ const program=`import {LocalLeases} from ${JSON.stringify(module.href)};
+ import {existsSync} from 'node:fs';
+ while(!existsSync(process.argv[3]))await new Promise(r=>setTimeout(r,1));
+ const leases=new LocalLeases(process.argv[2],{hostGeneration:'bridge-1',slots:16});
+ console.log(JSON.stringify(leases.reserveLocal({lane:'I',turn:'child-'+process.argv[4],snapshot:'a'.repeat(64),argv:['true']})));`;
+ const children=Array.from({length:16},(_,id)=>{
+  const child=spawn(process.execPath,['--input-type=module','-',dir,barrier,String(id)],{stdio:['pipe','pipe','pipe'],timeout:10000});
+  let stdout='',stderr='';child.stdout.on('data',v=>stdout+=v);child.stderr.on('data',v=>stderr+=v);child.stdin.end(program);
+  return new Promise((resolve,reject)=>{child.on('error',reject);child.on('close',code=>{try{assert.equal(code,0,stderr);resolve(JSON.parse(stdout));}catch(e){reject(e);}});});
+ });
+ // All workers use the same recorded ledger, not an in-memory simulation.
+ await new Promise(r=>setTimeout(r,250));writeFileSync(barrier,'go');
+ const completed=await Promise.allSettled(children);
+ for(const result of completed)assert.equal(result.status,'fulfilled',result.reason?.stack);
+ const results=completed.map(r=>r.value);
+ assert.ok(results.every(r=>r.code===0));
+ assert.equal(new Set(results.map(r=>r.lease.resourceId)).size,16);
+ assert.equal(leases.inspect().slots.filter(s=>s.state==='reserved').length,16);
+ assert.equal(Object.keys(leases.inspect().turns).length,16);
+});
+
+test('slot-scoped CI intent and cleanup never overwrite a running neighbor',async t=>{
+ const {leases,dir}=await setup(t,{slots:4});
+ const {LocalLeases}=await import(module);
+ const first=new LocalLeases(dir,{...config,slots:4,slot:1}),second=new LocalLeases(dir,{...config,slots:4,slot:2});
+ const invocation={nonce:'a'.repeat(32),sourceSha:'3'.repeat(40),workflowSha:'1'.repeat(40),route:'server',createdAt:1000,runId:789,attempt:1,jobId:901};
+ first.setInvocation(invocation);second.setInvocation({...invocation,nonce:'b'.repeat(32),jobId:902});
+ assert.equal(first.inspect().ciInvocation.jobId,901);assert.equal(second.inspect().ciInvocation.jobId,902);
+ const a=first.reserveLocal(request('scoped-a')).lease,b=second.reserveLocal(request('scoped-b')).lease;
+ assert.equal(a.slot,1);assert.equal(b.slot,2);assert.equal(first.start(a),true);assert.equal(second.start(b),true);
+ assert.equal(first.release(b,{resourceId:b.resourceId,absent:true}),false);
+ assert.equal(first.clearInvocation('b'.repeat(32)),false);
+ assert.equal(first.release(a,{resourceId:a.resourceId,absent:true}),true);assert.equal(first.clearInvocation(invocation.nonce),true);
+ assert.equal(second.inspect().slots[0].state,'running');assert.equal(second.inspect().ciInvocation.jobId,902);
+ assert.equal(leases.inspect().slots[2].lease.turn,'scoped-b');
+});
+
+// Shared CI metadata cannot be inherited or silently hidden by a multi-slot view.
+test('multi-slot CI metadata must be scoped and malformed shared records stay intact',async t=>{
+ const {leases,dir}=await setup(t,{slots:4});const {LocalLeases}=await import(module);
+ const slot=new LocalLeases(dir,{...config,slots:4,slot:2});
+ const invocation={nonce:'c'.repeat(32),sourceSha:'3'.repeat(40),workflowSha:'1'.repeat(40),route:'server',createdAt:1000,runId:789,attempt:1,jobId:901};
+ assert.throws(()=>leases.setInvocation(invocation),/scoped|slot/i);
+ assert.equal(slot.inspect().state,undefined);assert.equal(slot.inspect().id,undefined);
+ slot.setInvocation(invocation);assert.equal(slot.inspect().ciInvocation.jobId,901);
+ const path=join(dir,'state.json'),damaged=leases.inspect();damaged.ciInvocation={...invocation,nonce:'d'.repeat(32)};const bytes=JSON.stringify(damaged);writeFileSync(path,bytes);
+ assert.throws(()=>slot.inspect(),/shared.*CI|scoped/i);assert.throws(()=>leases.inspect(),/shared.*CI|scoped/i);
+ assert.equal(readFileSync(path,'utf8'),bytes);
+});
+
+// Only the ledger lock proves an abandoned temporary file has no live writer.
+test('multi-slot housekeeping waits for the writer before removing its interrupted temporary',async t=>{
+ const {spawn}=await import('node:child_process');const {once}=await import('node:events');
+ const {leases,dir}=await setup(t,{slots:4});const temporary=join(dir,'state-11111111-1111-4111-8111-111111111111.tmp');
+ const program=`import {withKernelLock} from ${JSON.stringify(new URL('./kernel-lock.mjs',import.meta.url).href)};import {writeFileSync,existsSync} from 'node:fs';
+ await withKernelLock(${JSON.stringify(dir)},async()=>{writeFileSync(${JSON.stringify(temporary)},'interrupted',{mode:0o600});console.log('held');await new Promise(r=>setTimeout(r,250));if(!existsSync(${JSON.stringify(temporary)}))throw new Error('Live writer temporary was deleted');});`;
+ const child=spawn(process.execPath,['--input-type=module','-e',program],{stdio:['ignore','pipe','pipe']});const closed=once(child,'close');let error='';child.stderr.on('data',b=>error+=b);
+ try{
+  await Promise.race([once(child.stdout,'data'),closed.then(()=>assert.fail('Writer never held its lock: '+error))]);
+  leases.inspect();assert.equal((await closed)[0],0,error);assert.equal(existsSync(temporary),false);
+ }finally{if(child.exitCode===null && child.signalCode===null)child.kill('SIGKILL');await closed;}
+});
