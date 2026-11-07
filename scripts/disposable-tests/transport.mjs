@@ -29,7 +29,7 @@ export class SSHTransport {
     Object.assign(this, {host, recipe, source, privatePackage});
   }
   async remote(mode, lease, options = {}) {
-    assert.ok(['health', 'transfer', 'prepare', 'execute-v2', 'result', 'destroy', 'inspect'].includes(mode), 'Invalid transport operation');
+    assert.ok(['health', 'transfer', 'transfer-ci', 'prepare', 'execute-v2', 'execute-ci', 'result', 'destroy', 'inspect'].includes(mode), 'Invalid transport operation');
     const resource = lease?.resourceId;
     if (mode !== 'health') assert.ok(/^dt-[A-Za-z0-9][A-Za-z0-9_-]{0,63}-0-[1-9][0-9]{0,14}$/.test(resource), 'Invalid transport resource');
     return runProcess('bash', [sshWrapper, this.host,
@@ -58,6 +58,9 @@ export class SSHTransport {
   async execute(lease, {signal}) {
     const executed = await this.remote('execute-v2', lease, {signal});
     assert.equal(executed.code, 0, 'Remote execution channel did not confirm completion');
+    return this.completion(lease,{signal});
+  }
+  async completion(lease,{signal}) {
     const result = await this.remote('result', lease, {signal, capture: true});
     assert.equal(result.code, 0, 'Command completion readback failed');
     const receipt = JSON.parse(result.stdout);
@@ -91,6 +94,20 @@ export class SSHTransport {
     const result = await this.remote('inspect', lease, {signal, capture: true});
     assert.equal(result.code, 0, 'Owned guest readback failed');
     return JSON.parse(result.stdout);
+  }
+}
+
+export class CITransport extends SSHTransport {
+  async transfer(lease,{signal}) {
+    const {resourceId,snapshot,argv,deadline,ci}=lease;
+    const result=await this.remote('transfer-ci',lease,{signal,capture:true,input:JSON.stringify({resourceId,snapshot,argv,deadline,ci})});
+    assert.equal(result.code,0,'Host refused the CI request');
+  }
+  async execute(lease,{signal,jitconfig}) {
+    assert.ok(typeof jitconfig==='string' && jitconfig.length>0 && jitconfig.length<=64000,'Invalid CI credential input');
+    const result=await this.remote('execute-ci',lease,{signal,input:JSON.stringify({jitconfig})});
+    assert.equal(result.code,0,'CI execution channel did not confirm completion');
+    return this.completion(lease,{signal});
   }
 }
 

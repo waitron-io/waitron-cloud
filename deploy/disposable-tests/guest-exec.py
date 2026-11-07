@@ -9,7 +9,7 @@ import subprocess
 import time
 
 
-def execute(request, directory):
+def execute(request, directory, environment=None):
     now = int(time.time()*1000)
     if not isinstance(request, dict) or set(request) != {'argv', 'deadline'}:
         raise ValueError('Unknown or missing command request field')
@@ -27,7 +27,7 @@ def execute(request, directory):
     child = None
     end = time.monotonic()+(deadline-now)/1000
     try:
-        child = subprocess.Popen(argv, cwd=directory, start_new_session=True)
+        child = subprocess.Popen(argv, cwd=directory, start_new_session=True, env=environment)
         while True:
             remaining = end-time.monotonic()
             if cancelled or remaining <= 0:
@@ -72,6 +72,21 @@ def complete(request, directory, resource, output):
     return receipt
 
 
+def complete_ci(request, directory, resource, output):
+    if (not isinstance(request,dict) or set(request)!={'deadline','nonce','jitconfig'} or
+            not isinstance(request['nonce'],str) or not re.fullmatch(r'[a-f0-9]{32}',request['nonce']) or
+            not isinstance(request['jitconfig'],str) or not 1<=len(request['jitconfig'])<=64000):
+        raise ValueError('Invalid CI credential input')
+    environment={**os.environ,'ACTIONS_RUNNER_INPUT_JITCONFIG':request['jitconfig'],
+                 'RUNNER_ALLOW_RUNASROOT':'1','ACTIONS_RUNNER_RETURN_VERSION_DEPRECATED_EXIT_CODE':'1'}
+    code=execute({'argv':['/opt/actions-runner/bin/Runner.Listener','run'],'deadline':request['deadline']},directory,environment=environment)
+    receipt={'resourceId':resource,'nonce':request['nonce'],'code':code}
+    output=Path(output);output.parent.mkdir(mode=0o700,parents=True,exist_ok=True)
+    with output.open('x') as target:
+        json.dump(receipt,target);target.flush();os.fsync(target.fileno())
+    return receipt
+
+
 if __name__ == '__main__':
     import json
     from pathlib import Path
@@ -79,14 +94,15 @@ if __name__ == '__main__':
     import sys
     try:
         identity = Path('/var/lib/cloud/data/instance-id')
-        if (len(sys.argv) != 2 or not identity.is_file() or
+        ci_mode=len(sys.argv)==3 and sys.argv[2]=='--ci'
+        if (not (len(sys.argv)==2 or ci_mode) or not identity.is_file() or
                 not re.fullmatch(r'dt-[A-Za-z0-9_-]+-0-[1-9][0-9]*', sys.argv[1]) or
                 identity.read_text().strip() != sys.argv[1]):
             raise ValueError('The command entry point requires a disposable guest')
         raw = sys.stdin.buffer.read(5*1024*1024+1)
         if len(raw) > 5*1024*1024:
             raise ValueError('Command request byte limit exceeded')
-        complete(json.loads(raw), '/work/source', sys.argv[1], '/run/waitron-disposable/result.json')
+        (complete_ci if ci_mode else complete)(json.loads(raw), '/opt/actions-runner' if ci_mode else '/work/source', sys.argv[1], '/run/waitron-disposable/result.json')
         sys.exit(0)
     except (ValueError, OSError, subprocess.SubprocessError) as error:
         print(str(error), file=sys.stderr)

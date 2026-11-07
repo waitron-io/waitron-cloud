@@ -20,3 +20,8 @@ for (const [file,count] of [['completion.test.py',6],['guards.test.py',7],['star
   assert.equal(result.status,0,result.stdout+result.stderr);
   assert.match(result.stderr,new RegExp('Ran '+count+' tests'));
 });
+
+test('CI host preparation and memory-only credentials execute all seven portable cases',()=>{
+ const result=spawnSync('python3',['-B',new URL('../../deploy/disposable-tests/ci-session.test.py',import.meta.url).pathname],{encoding:'utf8',timeout:15000});
+ assert.equal(result.status,0,result.stdout+result.stderr);assert.match(result.stderr,/Ran 7 tests/);
+});

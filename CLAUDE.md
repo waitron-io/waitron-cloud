@@ -23,8 +23,8 @@ it. "Nothing enforces this" means only people reading the change will catch a mi
    GitHub's secret scanning and push protection are on (owner, 2026-11-06), but they recognise known
    secret formats only, so a secret in any other shape goes through.
 2. **`main` protection is thin.** A ruleset requires a pull request and a check named `summary`, and
-   refuses force pushes and deletion (owner, 2026-11-06). Four workflows have a job of that name, and
-   #1036 stayed blocked until the fourth passed, but `summary` says nothing about a workflow that did
+   refuses force pushes and deletion (owner, 2026-11-06). Several workflows have a job of that name,
+   but `summary` says nothing about a workflow that did
    not run, and an administrator can bypass the ruleset, so reading every job yourself is still the
    real gate.
 3. **A provider call can spend money or reach a real person.** See the safety limits.

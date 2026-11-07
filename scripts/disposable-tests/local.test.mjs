@@ -115,3 +115,8 @@ test('an already cancelled admission never contacts the host', async t => {
   assert.equal(contacted,false);
   assert.equal(f.leases.inspect().slots[0].state,'free');
 });
+test('a cleanup refusal retains the command preparation error as well as the cleanup error',async t=>{
+ const f=await fixture(t,{prepare:async()=>{throw new Error('prepare refused');},destroy:async()=>{throw new Error('cleanup disconnected');}});
+ const result=await f.runLocal(f);assert.equal(result.code,125);assert.equal(result.cleanup,'quarantined');
+ assert.match(result.error,/prepare refused/);assert.match(result.error,/cleanup disconnected/);
+});

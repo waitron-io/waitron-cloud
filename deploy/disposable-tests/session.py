@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """Trusted per-turn staging. Candidate archives remain opaque on the host."""
 import hashlib
+import io
+import re
 import base64
 import json
 import os
@@ -28,7 +30,7 @@ RECIPE = Path(__file__).resolve().parent
 
 def request_identity(value, resource, now=None):
     now = int(time.time()*1000) if now is None else now
-    if not isinstance(value, dict) or set(value) != {'resourceId', 'snapshot', 'argv', 'deadline'}:
+    if not isinstance(value, dict) or set(value) not in ({'resourceId', 'snapshot', 'argv', 'deadline'}, {'resourceId', 'snapshot', 'argv', 'deadline', 'ci'}):
         raise ValueError('Unknown or missing turn request field')
     argv = value['argv']
     digest = value['snapshot']
@@ -38,6 +40,42 @@ def request_identity(value, resource, now=None):
             any(not isinstance(v, str) or len(v) > 16384 or '\0' in v for v in argv) or not argv[0] or
             type(value['deadline']) is not int or not now < value['deadline'] <= now+3300000):
         raise ValueError('Invalid or expired turn request')
+    if 'ci' in value:
+        ci = value['ci']
+        keys = ['repositoryId', 'workflowId', 'workflowPath', 'workflowSha', 'workflowDigest', 'event',
+                'sourceSha', 'sourceTree', 'runId', 'attempt', 'jobId', 'jobKey']
+        if (not isinstance(ci, dict) or set(ci) != set(keys) or
+                any(type(ci[k]) is not int or not 0 < ci[k] <= 9007199254740991 for k in ['repositoryId','workflowId','runId','attempt','jobId']) or
+                ci['workflowPath'] not in ['.github/workflows/disposable-ci-canary.yml', '.github/workflows/ci.yml'] or
+                ci['event'] not in ['workflow_dispatch', 'pull_request'] or not isinstance(ci['jobKey'],str) or
+                not re.fullmatch(r'(typecheck|test-dashboard-[1-4]|test-server-([1-9]|1[0-9]|2[0-4])|test-heavy-[1-3])',ci['jobKey']) or
+                any(not isinstance(ci[k],str) or not re.fullmatch(r'[a-f0-9]{40}',ci[k]) for k in ['workflowSha','sourceSha','sourceTree']) or
+                not isinstance(ci['workflowDigest'],str) or not re.fullmatch(r'[a-f0-9]{64}',ci['workflowDigest'])):
+            raise ValueError('Invalid CI identity')
+        canonical = json.dumps({k:ci[k] for k in keys},separators=(',',':')).encode()
+        if value['snapshot'] != hashlib.sha256(canonical).hexdigest() or argv != ['/opt/actions-runner/bin/Runner.Listener','run']:
+            raise ValueError('CI request identity differs')
+    return value
+
+
+def receive_ci(root, resource, stream):
+    resource_id(resource)
+    raw = stream.read(65537)
+    if len(raw)>65536:
+        raise ValueError('CI request byte limit exceeded')
+    value = request_identity(json.loads(raw), resource)
+    if 'ci' not in value:
+        raise ValueError('CI request required')
+    root.mkdir(mode=0o700,parents=True,exist_ok=True)
+    if root.is_symlink() or not root.is_dir():
+        raise ValueError('Unsafe transfer root')
+    target=root/resource
+    target.mkdir(mode=0o700)
+    try:
+        host.write_json(target/'request.json',value)
+    except BaseException:
+        shutil.rmtree(target)
+        raise
     return value
 
 
@@ -106,7 +144,10 @@ def command(argv, deadline, stdin=None, capture=False, check=True):
     remaining = (deadline-int(time.time()*1000))/1000
     if remaining <= 0:
         raise TimeoutError('Absolute turn deadline exceeded')
-    child = subprocess.Popen(argv, stdin=stdin or subprocess.DEVNULL,
+    memory_input=stdin.getvalue() if isinstance(stdin,io.BytesIO) else None
+    if memory_input is not None and (capture or len(memory_input)>65536):
+        raise ValueError('Invalid memory-only command input')
+    child = subprocess.Popen(argv, stdin=subprocess.PIPE if memory_input is not None else stdin or subprocess.DEVNULL,
                              stdout=subprocess.PIPE if capture else None,
                              stderr=subprocess.DEVNULL if capture else None,
                              start_new_session=True)
@@ -130,7 +171,7 @@ def command(argv, deadline, stdin=None, capture=False, check=True):
             child.wait(timeout=max(.001, (deadline-int(time.time()*1000))/1000))
             output = bytes(output)
         else:
-            output, _ = child.communicate(timeout=remaining)
+            output, _ = child.communicate(input=memory_input,timeout=remaining)
         if check and child.returncode:
             raise ValueError(f'Turn stage failed with status {child.returncode}')
         return child.returncode, output
@@ -171,7 +212,7 @@ def prepare(resource):
     directory = turn_directory(resource)
     request = request_identity(json.loads((directory/'request.json').read_text()), resource)
     deadline = request['deadline']
-    if not (directory/'ui.tgz').is_file():
+    if 'ci' not in request and not (directory/'ui.tgz').is_file():
         raise ValueError('Reviewed private dependency bytes are required')
     command(['ssh-keygen', '-q', '-t', 'ed25519', '-N', '', '-f', str(directory/'key')], deadline)
     public = ' '.join((directory/'key.pub').read_text().split()[:2])
@@ -191,6 +232,14 @@ def prepare(resource):
     with (RECIPE/'guest-tools.sh').open('rb') as source:
         command([*ssh, 'bash -s'], min(deadline, int(time.time()*1000)+360000), stdin=source)
     command([*ssh, 'mkdir -p /work/source /work/private /opt/waitron-disposable'], deadline)
+    if 'ci' in request:
+        for source_path, target in [(RECIPE/'runner-tools.sh','/opt/waitron-disposable/runner-tools.sh'),
+                                    (RECIPE/'guest-exec.py','/opt/waitron-disposable/guest-exec.py')]:
+            with source_path.open('rb') as source:
+                command([*ssh,'cat > '+target],deadline,stdin=source)
+        command([*ssh,'bash /opt/waitron-disposable/runner-tools.sh'],min(deadline,int(time.time()*1000)+180000))
+        (directory/'prepared').touch(exist_ok=False)
+        return
     for source_path, target in [(RECIPE/'snapshot.py', '/opt/waitron-disposable/snapshot.py'),
                                 (RECIPE/'guest-exec.py', '/opt/waitron-disposable/guest-exec.py'),
                                 (directory/'source.tar', '/work/source.tar'),
@@ -205,23 +254,39 @@ def prepare(resource):
     (directory/'prepared').touch(exist_ok=False)
 
 
-def execute(resource):
+def execute(resource, ci_stream=None):
     directory = turn_directory(resource)
     request = request_identity(json.loads((directory/'request.json').read_text()), resource)
     if not (directory/'prepared').is_file() or not host.observation(resource)['running']:
         raise ValueError('The exact turn must be prepared and running')
     if request['deadline']-10000 <= int(time.time()*1000):
         raise ValueError('Insufficient command completion readback budget')
-    with (directory/'command.json').open('x') as output:
-        nonce = secrets.token_hex(16)
-        json.dump({'argv': request['argv'], 'deadline': request['deadline']-10000, 'nonce': nonce}, output)
-    with (directory/'command.json').open('rb') as source:
-        code, _ = command([*guest_ssh(directory),
-                           'env CI=true npm_config_store_dir=/work/pnpm-store npm_config_prefer_offline=true '
-                           'python3 /opt/waitron-disposable/guest-exec.py '+shlex.quote(resource)],
-                          request['deadline'], stdin=source, check=False)
+    nonce = secrets.token_hex(16)
+    if 'ci' in request:
+        command([*guest_ssh(directory),'sha256sum --check --status /opt/waitron-tools/runner-listener.sha256'],request['deadline'])
+        if ci_stream is None:
+            raise ValueError('CI credentials require the memory-only channel')
+        raw=ci_stream.read(65537)
+        if len(raw)>65536:
+            raise ValueError('CI credential input byte limit exceeded')
+        credentials=json.loads(raw)
+        if not isinstance(credentials,dict) or set(credentials)!={'jitconfig'} or not isinstance(credentials['jitconfig'],str) or not 1<=len(credentials['jitconfig'])<=64000:
+            raise ValueError('Invalid CI credential input')
+        payload={'deadline':request['deadline']-10000,'nonce':nonce,'jitconfig':credentials['jitconfig']}
+        code,_=command([*guest_ssh(directory),'python3 /opt/waitron-disposable/guest-exec.py '+shlex.quote(resource)+' --ci'],
+                       request['deadline'],stdin=io.BytesIO(json.dumps(payload).encode()),check=False)
+    else:
+        with (directory/'command.json').open('x') as output:
+            json.dump({'argv': request['argv'], 'deadline': request['deadline']-10000, 'nonce': nonce}, output)
+        with (directory/'command.json').open('rb') as source:
+            code, _ = command([*guest_ssh(directory),
+                               'env CI=true npm_config_store_dir=/work/pnpm-store npm_config_prefer_offline=true '
+                               'python3 /opt/waitron-disposable/guest-exec.py '+shlex.quote(resource)],
+                              request['deadline'], stdin=source, check=False)
     if code != 0:
         raise ValueError('Execution channel did not confirm guest completion')
+    if 'ci' in request:
+        command([*guest_ssh(directory),'sha256sum --check --status /opt/waitron-tools/runner-listener.sha256'],request['deadline'])
     _, raw = command([*guest_ssh(directory), 'cat /run/waitron-disposable/result.json'],
                       request['deadline'], capture=True)
     receipt = json.loads(raw)
@@ -297,16 +362,16 @@ def arm_expiry(resource, deadline, suffix):
 
 
 def stage(mode, resource):
-    if mode == 'transfer':
+    if mode in ('transfer','transfer-ci'):
         arm_expiry(resource, int(time.time()*1000)+120000, 'transfer-expiry')
-        request = receive(CONTROL, resource, sys.stdin.buffer)
+        request = (receive_ci if mode=='transfer-ci' else receive)(CONTROL, resource, sys.stdin.buffer)
         arm_expiry(resource, request['deadline'], 'expiry')
         stop_timer(resource, 'transfer-expiry')
         print(json.dumps({'received': True, 'resourceId': resource, 'snapshot': request['snapshot']}))
     elif mode == 'prepare':
         prepare(resource)
-    elif mode == 'execute-v2':
-        return execute(resource)
+    elif mode in ('execute-v2','execute-ci'):
+        return execute(resource,sys.stdin.buffer if mode=='execute-ci' else None)
     else:
         raise ValueError('Unknown owned stage')
     return 0
@@ -314,7 +379,7 @@ def stage(mode, resource):
 
 def supervise(mode, resource):
     now = int(time.time()*1000)
-    if mode == 'transfer':
+    if mode in ('transfer','transfer-ci'):
         deadline = now+120000
     else:
         request = request_identity(json.loads((turn_directory(resource)/'request.json').read_text()), resource)
@@ -349,7 +414,7 @@ def main():
         raise ValueError('Usage: session.py transfer|prepare|execute-v2|result|inspect|destroy RESOURCE')
     mode, resource = sys.argv[1:]
     resource_id(resource)
-    if mode in ('transfer', 'prepare', 'execute-v2'):
+    if mode in ('transfer', 'transfer-ci', 'prepare', 'execute-v2', 'execute-ci'):
         startup.require_ready()
         return supervise(mode, resource)
     elif mode == 'destroy':

@@ -1,0 +1,72 @@
+name: Disposable CI canary
+run-name: disposable-${{ inputs.nonce }}
+on:
+  workflow_dispatch:
+    inputs:
+      source_sha:
+        description: Exact reviewed source commit
+        required: true
+        type: string
+      nonce:
+        description: Controller invocation identity
+        required: true
+        type: string
+      route:
+        description: Execution route
+        type: choice
+        options: [hosted, server]
+        default: hosted
+permissions:
+  contents: read
+  packages: read
+jobs:
+  typecheck:
+    runs-on: ${{ fromJSON(inputs.route == 'server' && format('["self-hosted","dt-{0}-{1}-{2}-typecheck"]', github.repository_id, github.run_id, github.run_attempt) || '["ubuntu-latest"]') }}
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ inputs.source_sha }}
+          persist-credentials: false
+      - name: Read exact source identity
+        env:
+          SOURCE_SHA: ${{ inputs.source_sha }}
+        run: |
+          [[ "$SOURCE_SHA" =~ ^[a-f0-9]{40}$ ]]
+          test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
+          echo "Source $(git rev-parse HEAD) tree $(git rev-parse HEAD^{tree})"
+          test -z "${ACTIONS_RUNNER_INPUT_JITCONFIG:-}"
+          if test "$RUNNER_ENVIRONMENT" = self-hosted; then
+            runner_root=$(dirname "$(dirname "$RUNNER_WORKSPACE")")
+            test "$("$runner_root/bin/Runner.Listener" --version)" = 2.338.2
+          fi
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '26'
+          package-manager-cache: false
+      - run: node scripts/ci-setup-pnpm.mjs
+        env:
+          NODE_OPTIONS: --require=${{ github.workspace }}/scripts/ci-pnpm-diagnostics.cjs
+          npm_config_fetch_timeout: '15000'
+          npm_config_fetch_retries: '1'
+          npm_config_fetch_retry_mintimeout: '1000'
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '26'
+          package-manager-cache: false
+          registry-url: https://npm.pkg.github.com
+          scope: '@waitron-io'
+      - run: pnpm install --frozen-lockfile
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - run: pnpm typecheck
+  summary:
+    if: always()
+    needs: typecheck
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Require the actual typecheck result
+        env:
+          TYPECHECK_RESULT: ${{ needs.typecheck.result }}
+        run: test "$TYPECHECK_RESULT" = success
