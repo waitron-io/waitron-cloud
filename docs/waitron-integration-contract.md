@@ -324,8 +324,8 @@ The route is disabled by default. You enable it through the account app/server
 option `tunnelProvision:{installationId,cellId}` and the existing lease issuer;
 the configured cell and destination port 443 are selected by Cloud. Only that
 installation in a test venue can call it. The chosen plan mode still applies;
-`existing` mode admits this configured test box without a paid-plan check. Lane D
-enables these options separately in the approved rented-server trial after merge.
+`existing` mode admits this configured test box without a paid-plan check. The
+trial operator supplies these options separately after this change lands.
 There is no CLI switch or production activation in this change.
 
 HTTP 200 returns the existing version-1 `InstallationView` directly, including
@@ -333,13 +333,18 @@ its three services and no new lease. Read `services` for `remote_access`:
 its `configuration` is `{version:1,...Placement}`, with the peer address,
 gateway public key and endpoint, staff/public hostnames, cell and port.
 Use the existing signed configuration read to refresh it. A 200 reply records
-`provisioning`; it does not mean the tunnel works or that the next gateway
-manifest export has happened. See `packages/account-http/test/tunnel-provision.test.ts`
-for the exact reply exercised through PostgreSQL and the native HTTP listener.
+`provisioning` on a fresh allocation; it does not mean the tunnel works or that
+the next gateway manifest export has happened. In `existing` mode, a plan change
+can leave a 200 reply with `state:"unconfigured"` and empty `configuration`:
+treat that as not provisioned and do not install a tunnel from that reply.
+See `packages/account-http/test/tunnel-provision.test.ts` for the exact
+PostgreSQL reply, plan-change case and real HTTP listener check.
 
 If you lose the reply, retry with a fresh proof and your persisted peer key.
 The same key, cell and port keep the allocation and revision, except when the
-existing paid-mode setup restoration advances it. A changed key is a terminal
+existing paid-mode setup restoration advances it. Repeating an identical valid
+envelope also keeps that allocation; operation UUID freshness is a client rule.
+A changed key is a terminal
 409 `placement_conflict`; this action does not rotate keys. This unreplaced
 one-box trial accepts that provisioning during a prepared replacement can make
 replacement completion conflict. It adds no replacement guard or protocol.
@@ -358,6 +363,9 @@ limits follow the existing machine routes. Failures return `{error:code}`:
 | 409 | `placement_conflict`: changed placement or a peer key already claimed. |
 | 429 | `rate_limited`, with `Retry-After`. |
 | 503 | `temporarily_unavailable`, with `Retry-After: 1`: disabled route, unavailable installation/cell, full cell or infrastructure failure. |
+
+In other plan modes, the [existing policy and identity checks](../packages/remote-access/src/plan-permissions.ts#L14)
+can return `permission_denied` before the later proof check runs.
 
 #### Existing staff-v1 compatibility facts
 

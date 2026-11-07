@@ -22,13 +22,12 @@ export class TunnelProvisionMachine{
   return claims;
  }
  async #authorize(client:PoolClient,envelope:SignedEnvelope,venueId?:string){
-  // Read again after allocation waits: a joined row locked earlier can retain an old venue snapshot.
+  // Installation locks do not protect the venue's environment during allocation waits.
   const row=(await client.query(`SELECT i.*,v.environment,clock_timestamp() AS now FROM installations i JOIN venues v ON v.id=i.venue_id WHERE i.id=$1`,[this.#trial.installationId])).rows[0];
   if(!row)throw new AccountHttpError(503,'temporarily_unavailable',1);
   if(venueId!==undefined&&row.venue_id!==venueId)throw new InstallationError('permission_denied');
   const claims=verifyMachine(envelope,row.public_key,this.#origin,'tunnel-provision',row.now.getTime());
   if(claims.installationId!==row.id)throw new InstallationError('invalid_proof');
-  if(row.revoked_at||row.superseded_by)throw new InstallationError('revoked');
   if(row.environment!=='test')throw new InstallationError('permission_denied');
   let lease:unknown;try{lease=JSON.parse(claims.lease);}catch{throw new InstallationError('invalid_proof');}
   if(JSON.stringify(lease)!==claims.lease)throw new InstallationError('invalid_proof');
@@ -38,16 +37,18 @@ export class TunnelProvisionMachine{
  }
  async execute(envelope:SignedEnvelope){
   const claims=readMachineClaims(envelope);
-  if(claims.installationId!==this.#trial.installationId)throw new InstallationError('permission_denied');
   let body:unknown;try{body=JSON.parse(claims.body);}catch{throw new AccountHttpError(400,'invalid_input');}
   if(!body||typeof body!=='object'||Array.isArray(body)||Object.keys(body).join(',')!=='peerPublicKey'
    ||!isPeerKey((body as {peerPublicKey:unknown}).peerPublicKey)||JSON.stringify(body)!==claims.body)throw new AccountHttpError(400,'invalid_input');
   try{return await transaction(this.#pool,async client=>{
    const initial=await this.#authorize(client,envelope);
-   await this.#store.provisionInTransaction(client,this.#trial.installationId,this.#trial.cellId,(body as {peerPublicKey:string}).peerPublicKey,443);
+   try{await this.#store.provisionInTransaction(client,this.#trial.installationId,this.#trial.cellId,(body as {peerPublicKey:string}).peerPublicKey,443);}
+   catch(error){
+    if(error instanceof Error&&error.message==='cell_unavailable')await this.#authorize(client,envelope,initial.venue_id);
+    throw error;
+   }
    const result=await installationView(client,this.#trial.installationId);
-   const current=await this.#authorize(client,envelope,initial.venue_id);
-   if(current.public_key!==initial.public_key)throw new InstallationError('invalid_proof');
+   await this.#authorize(client,envelope,initial.venue_id);
    return result;
   });}catch(error){
    if(error instanceof Error){

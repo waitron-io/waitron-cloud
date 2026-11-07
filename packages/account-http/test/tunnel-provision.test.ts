@@ -9,6 +9,7 @@ import {RemoteAccessStore} from '@waitron-cloud/remote-access/placement';
 import {connectedVenue,database} from '../../translation/test/fixtures.ts';
 import {createAccountApp} from '../src/app.ts';
 import {startAccountServer} from '../src/server.ts';
+import {TunnelProvisionMachine} from '../src/tunnel-provision.ts';
 
 const origin='https://cloud.example.test',path='/api/installations/tunnel-provision';
 const peer=()=>randomBytes(32).toString('base64');
@@ -108,13 +109,38 @@ test('invalid proofs share the installation-IP cap and disabled calls retain the
   const r=await f.request({},disabled);assert.equal(r.status,429);assert.ok(Number(r.headers.get('retry-after'))>0);await untouched(f);
  }finally{await f.db.close();}
 });
+test('a same-key existing-mode reply preserves the configuration cleared by a real plan change',async()=>{
+ const f=await fixture();try{
+  assert.equal((await f.post()).status,200);
+  const plans=new OrganisationPlanStore(f.db.pool);await plans.set(f.v.organisationId,'paid');await plans.set(f.v.organisationId,'free');
+  const r=await f.post();assert.equal(r.status,200);const reply=await r.json();assert.equal(reply.revision,3);
+  const remote=reply.services.find((s:{service:string})=>s.service==='remote_access');assert.equal(remote.state,'unconfigured');assert.deepEqual(remote.configuration,{});
+  assert.equal((await f.db.pool.query('SELECT next_address FROM remote_cells WHERE id=$1',[f.cellId])).rows[0].next_address,3);
+ }finally{await f.db.close();}
+});
+test('signed bodies and lease strings must keep their canonical JSON bytes',async()=>{
+ const f=await fixture();try{
+  const body={peerPublicKey:f.key};
+  const noncanonical=f.v.proof('tunnel-provision',body,randomUUID(),f.v.lease,undefined,Date.now(),{lease:' '+JSON.stringify(f.v.lease)});
+  assert.equal((await f.request(noncanonical)).status,401);
+  const whitespace=f.v.proof('tunnel-provision',body,randomUUID(),f.v.lease,' '+JSON.stringify(body));
+  assert.equal((await f.request(whitespace)).status,400);await untouched(f);
+ }finally{await f.db.close();}
+});
+test('execution binds the signed installation even without preliminary HTTP authentication',async()=>{
+ const f=await fixture();try{
+  const machine=new TunnelProvisionMachine(f.db.pool,f.issuer,origin,f.options.tunnelProvision);
+  const wrong=f.v.proof('tunnel-provision',{peerPublicKey:f.key},randomUUID(),f.v.lease,undefined,Date.now(),{installationId:randomUUID()});
+  await assert.rejects(()=>machine.execute(wrong),{code:'invalid_proof'});await untouched(f);
+ }finally{await f.db.close();}
+});
 async function blocked(f:Fixture,pid:number){
  const end=Date.now()+10000;while(Date.now()<end){
   if((await f.db.secondPool.query('SELECT 1 FROM pg_stat_activity WHERE application_name=$1 AND $2=ANY(pg_blocking_pids(pid))',[f.db.schema,pid])).rowCount)return;
   await delay(10);
  }assert.fail('the signed provision never reached its controlled database lock');
 }
-for(const change of ['key','venue','revoked'] as const)test(`an installation wait rejects changed ${change} without allocation`,async()=>{
+for(const change of ['key','venue','environment','revoked'] as const)test(`an installation wait rejects changed ${change} without allocation`,async()=>{
  const f=await fixture(),holder=await f.db.secondPool.connect();let pending:Promise<Response>|undefined;
  try{
   const other=change==='venue'?await connectedVenue(f.db,f.issuer,origin):undefined;
@@ -122,6 +148,7 @@ for(const change of ['key','venue','revoked'] as const)test(`an installation wai
   const pid=(await holder.query('SELECT pg_backend_pid() AS pid')).rows[0].pid;pending=f.post();await blocked(f,pid);
   if(change==='key')await holder.query('UPDATE installations SET public_key=$2 WHERE id=$1',[f.v.installationId,generateKeyPairSync('ed25519').publicKey.export({type:'spki',format:'der'}).toString('base64url')]);
   if(change==='revoked')await holder.query('UPDATE installations SET revoked_at=clock_timestamp() WHERE id=$1',[f.v.installationId]);
+  if(change==='environment')await holder.query("UPDATE venues SET environment='production' WHERE id=$1",[f.v.venueId]);
   if(other){await holder.query('UPDATE installations SET revoked_at=clock_timestamp(),superseded_by=$2 WHERE id=$1',[other.installationId,f.v.installationId]);await holder.query('UPDATE installations SET venue_id=$2 WHERE id=$1',[f.v.installationId,other.venueId]);}
   await holder.query('COMMIT');const r=await pending;assert.equal(r.status,change==='key'?401:403,await r.clone().text());await untouched(f);
  }finally{await holder.query('ROLLBACK');holder.release();await pending?.catch(()=>{});await f.db.close();}
