@@ -12,6 +12,10 @@ import {createAccountApp} from '../src/app.ts';
 import {startAccountServer} from '../src/server.ts';
 import {request as httpRequest} from 'node:http';
 import {createGoogleAddressClient} from '../src/address-lookup-google.ts';
+import {createTestBoxAddressLookup} from '../src/test-box-address-lookup.ts';
+import {mkdtemp,rm} from 'node:fs/promises';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
 
 const origin='https://cloud.example.test';
 async function fixture(configured=true){
@@ -82,6 +86,20 @@ test('trial absence, unpublished allowance and invalid authority never reach Goo
   assert.equal((await f.request(f.v.proof('address-lookup',body))).status,401);
   assert.equal(f.calls.length,0);assert.equal((await f.db.pool.query('SELECT count(*)::int AS n FROM billing_allowance_reservations')).rows[0].n,0);
  }finally{await f.db.close();}
+});
+test('a missing trial key stops dispatch while counted admission and validation remain spent',async()=>{
+ const f=await fixture(),directory=await mkdtemp(join(tmpdir(),'missing-address-key-'));let sends=0;
+ try{
+  const provider=createTestBoxAddressLookup({keyFile:join(directory,'google.env'),fetcher:async()=>{sends++;return Response.json({});}});
+  const app=createAccountApp({...f.options,addressLookup:{...f.options.addressLookup,provider}}),workflowId=randomUUID();
+  for(const body of [suggestion(workflowId),{version:1,kind:'validate',workflowId,selectedText:'PRIVATE-QUERY'}]){
+   const reply=await f.request(f.v.proof('address-lookup',body,randomUUID(),f.v.lease),app);
+   assert.equal(reply.status,503);assert.deepEqual(await reply.json(),{error:'unavailable',dispatched:false});
+   const rows=(await f.db.pool.query("SELECT state,units FROM billing_allowance_reservations WHERE service='address_lookup'")).rows;
+   assert.deepEqual(rows,[{state:body.kind==='suggest'?'held':'spent',units:'1'}]);
+  }
+  assert.equal(sends,0);
+ }finally{await f.db.close();await rm(directory,{recursive:true,force:true});}
 });
 test('unknown validation and malformed input cannot open a hold',async()=>{
  const f=await fixture();try{

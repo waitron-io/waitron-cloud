@@ -3,9 +3,9 @@
 You can test one paired box against a signed Cloud address route. Normal
 installations keep manual entry: this trial needs an explicitly injected provider
 and one configured Cloud account, venue and installation. The normal server and
-test deployment do not enable it or accept a Google key. Google activation is a
-separate reviewed change after the watcher receives the server-only key and the
-owner confirms usage and quotas. This is not the production address service.
+test deployment do not enable it or accept a Google key. The private launcher can
+inject the file-backed provider below after the watcher receives the server-only
+key and the owner confirms usage and quotas. This is not the production address service.
 
 The owner approved this trial in A951-S step 5 on 6 November 2026. The watcher’s
 7 November 00:47 and 01:05 decisions choose counted abandonment and the small
@@ -13,6 +13,26 @@ single-box limits below. Its 01:47 clarification keeps activation limited to the
 server-only key, the owner’s usage/quotas confirmation and allowance configuration
 for this account. Removing the key file is the trial’s stop control. The broader [scope](address-lookup-scope.md) still owns
 provider terms, permanent address storage and the eventual service.
+
+## Inject the private provider
+
+In the private launcher, import `createTestBoxAddressLookup` from
+`packages/account-http/src/test-box-address-lookup.ts`. Pass its result as
+`addressLookup.provider` to `startAccountServer`, alongside the single approved
+`accountId`, `venueId` and `installationId`. Use
+`{keyFile:'/trial-address/google.env',fetcher:fetch}`; mount the server's
+`/root/waitron-address` directory read-only at `/trial-address`. Mount the directory
+so removing or replacing the original file remains visible inside the server.
+
+The provider reads `GOOGLE_MAPS_SERVER_KEY` for each call. The file must be a regular
+file that is not a symbolic link, owned by the server's user, mode 600 and at most 8192 bytes. A missing
+or invalid file returns `unavailable` with `dispatched:false`. Removing the original
+key file prevents later dispatch; it cannot recall a request already sent. Run
+`node --test packages/account-http/test/test-box-address-lookup.test.ts` to check
+key removal, replacement and refusal using synthetic transport replies. Signed
+requests still consume allowance and request limits before reading the key file;
+validation closes its workflow even if the key is missing. Keep manual entry
+available and do not retry automatically while the trial is stopped.
 
 ## Sign each request through the box's existing connection
 
