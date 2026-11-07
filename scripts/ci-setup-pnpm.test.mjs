@@ -55,6 +55,8 @@ for (const [label, steps] of [
 async function run(mode, extraEnv = {}) {
   const root = mkdtempSync(join(tmpdir(), 'cloud-pnpm-attempt-'));
   const bin = join(root, 'bin');
+  // The extensionless fake npm uses CommonJS even inside an ES module workspace.
+  writeFileSync(join(root, 'package.json'), JSON.stringify({type: 'commonjs'}));
   mkdirSync(bin);
   writeFileSync(join(root, 'github-path'), '');
   writeFileSync(join(root, 'github-env'), '');
@@ -274,7 +276,7 @@ for (const mode of ['hang', 'ignore-term', 'self-update-hang', 'version-hang']) 
     const result = await run(mode, {PNPM_SETUP_ATTEMPT_MS: '750'});
     assert.equal(result.signal, null, result.stderr);
     assert.equal(result.code, 1, result.stderr);
-    assert.equal(result.attempts, mode === 'version-hang' ? 1 : 3);
+    assert.equal(result.attempts, mode === 'version-hang' ? 1 : 3, result.stderr);
     assert.equal(result.published, '');
     assert.equal(result.exported, '');
     assert.ok(result.elapsed < 12_000, `setup took ${result.elapsed}ms`);
