@@ -2189,6 +2189,25 @@ test('explained opening starts the first setup and retains the actual list befor
   assert.equal(f.calls.filter(row => row.operation === 'create-stack').length, 1);
 });
 
+for (const [label, definitions] of [
+  ['missing', undefined], ['null', null], ['empty', []],
+  ['wrong dimension', [{ Type: 'DIMENSION', Key: 'SERVICE' }, { Type: 'DIMENSION', Key: 'REGION' }]],
+  ['reversed dimensions', [{ Type: 'DIMENSION', Key: 'USAGE_TYPE' }, { Type: 'DIMENSION', Key: 'SERVICE' }]],
+]) test(`explained opening refuses ${label} grouping before booking`, async t => {
+  const f = await explainedOpeningFixture(t), prior = f.aws.call;
+  f.aws.call = async (service, operation, input) => {
+    const response = await prior(service, operation, input);
+    if (service === 'ce' && input.GroupBy) {
+      if (definitions === undefined) delete response.GroupDefinitions;
+      else response.GroupDefinitions = structuredClone(definitions);
+    }
+    return response;
+  };
+  await assert.rejects(f.create({ explanations: f.explanations }), /D570 controller refused: ce grouped shape/);
+  assert.equal(existsSync(join(f.options.directory, 'setup.json')), false);
+  assert.equal(f.calls.some(row => ['create-stack', 'put-object', 'run-instances'].includes(row.operation)), false);
+});
+
 for (const [label, change] of [
   ['missing', f => []],
   ['lower ceiling', f => [{ ...f.explanations[0], maxMicroUsd: 9999 }]],
