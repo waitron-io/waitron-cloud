@@ -2,7 +2,7 @@ import {sweepTranslationJobs} from '@waitron-cloud/translation';
 import {captureRuntime} from '@waitron-cloud/backups/capture-config';
 import { Pool } from 'pg';
 import { EmailOutbox, createLeaseIssuer, createLeaseTrust, migrationNames, parsePlanMode, allowanceOptionsFromEnv } from '@waitron-cloud/registration';
-import { accountHttpConfig, passwordScreeningFromEnv, factorConfigFromEnv } from './config.ts';
+import { billingAccountOptionsFromEnv, accountHttpConfig, passwordScreeningFromEnv, factorConfigFromEnv } from './config.ts';
 import { AccountRateLimiter } from './rate-limit.ts';
 import { loadPortalAssets } from './portal.ts';
 import { startAccountServer } from './server.ts';
@@ -27,6 +27,7 @@ try {
   if (process.argv.length !== 2 || !process.env.DATABASE_URL || !process.env.CLOUD_EMAIL_ACTIVE_KEY_ID || !process.env.CLOUD_EMAIL_KEYS) throw new Error();
   const planMode=parsePlanMode(process.env.CLOUD_TEST_SERVICE_PLANS,process.env.CLOUD_VENUE_SERVICE_LEVELS);
   const allowances=allowanceOptionsFromEnv(process.env,planMode);
+  const billingAccount=billingAccountOptionsFromEnv(process.env,planMode);
   const staffFlag=process.env.CLOUD_STAFF_CERTIFICATES??'0';if(!['0','1'].includes(staffFlag))throw new Error();
   const staffCertificates=staffFlag==='1';
   const translationFlag=process.env.CLOUD_TRANSLATION??'0';if(!['0','1'].includes(translationFlag))throw new Error();
@@ -47,7 +48,7 @@ try {
     const leaseTrust=leaseIssuer?createLeaseTrust(leaseIssuer,process.env.CLOUD_INSTALLATION_TRUSTED_KEYS):undefined;
     captures=captureRuntime(process.env);
     if (translation) await sweepTranslationJobs(pool);
-    running = await startAccountServer({planMode,allowances,staffCertificates,translation,captures:captures?.options,pool, outbox, config, factor, portalAssets, leaseIssuer, leaseTrust, passwordScreening, host: process.env.CLOUD_HTTP_HOST ?? '127.0.0.1', port: Number(portText)});
+    running = await startAccountServer({planMode,allowances,billingAccount,staffCertificates,translation,captures:captures?.options,pool, outbox, config, factor, portalAssets, leaseIssuer, leaseTrust, passwordScreening, host: process.env.CLOUD_HTTP_HOST ?? '127.0.0.1', port: Number(portText)});
     const address = running.server.address();
     if (!address || typeof address === 'string') throw new Error();
     console.log(JSON.stringify({status: 'listening', port: address.port}));
