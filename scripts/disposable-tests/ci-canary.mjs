@@ -129,7 +129,7 @@ export async function dispatchCanary({api,leases,policy,sourceSha,workflowSha,ro
   }
  }else{assert.ok(invocation.sourceSha===sourceSha && invocation.workflowSha===workflowSha && invocation.route===route,'Existing CI invocation must be reconciled first');}
  if(invocation.runId!==null)return invocation;
- const end=Date.now()+120000;
+ const end=invocation.createdAt+120000;
  while(true){
   const data=await api.get(`/repos/${policy.repository}/actions/workflows/${policy.workflowId}/runs?event=workflow_dispatch&per_page=100`,{signal});
   assert.ok(Array.isArray(data.workflow_runs) && data.workflow_runs.length<=100,'Invalid dispatch inventory');
@@ -139,7 +139,11 @@ export async function dispatchCanary({api,leases,policy,sourceSha,workflowSha,ro
    invocation={...invocation,runId:run.id,attempt:run.run_attempt};leases.setInvocation(invocation);
    if(run.head_sha!==workflowSha)return retireMovedDispatch({api,leases,policy,invocation,signal,wait});
    return invocation;}
-  assert.ok(Date.now()<end,'CI dispatch response remains unconfirmed; do not redispatch');await wait(15000,undefined,{signal});
+  if(Date.now()>=end){
+   leases.clearInvocation(invocation.nonce);
+   throw new Error('CI dispatch remains unconfirmed; intent retired without qualification or redispatch');
+  }
+  await wait(15000,undefined,{signal});
  }
 }
 export async function startCanary({api,leases,policy,sourceSha,workflowSha,transport,signal,wait=delay}){
@@ -171,7 +175,7 @@ export async function recoverCanary({api,leases,policy,signal,wait=delay}){
    run.head_sha===invocation.workflowSha && run.display_title==='disposable-'+invocation.nonce && run.event==='workflow_dispatch','Hosted recovery identity differs');
   if(run.status==='completed' && run.conclusion!=='success'){
    leases.clearInvocation(invocation.nonce);
-   throw new Error(`Hosted canary ${invocation.runId} finished ${run.conclusion}; no passing qualification`);
+   throw new Error(`Canary ${invocation.runId} finished ${run.conclusion}; no passing qualification`);
   }
   return invocation;
  }

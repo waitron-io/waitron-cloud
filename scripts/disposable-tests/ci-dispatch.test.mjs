@@ -64,3 +64,11 @@ test('a completed server execution awaiting only summary is not cancelled by rec
  const api={get:async()=>({id:789,run_attempt:1,workflow_id:456,head_sha:workflowSha,event:'workflow_dispatch',display_title:'disposable-'+invocation.nonce,status:'in_progress'}),post:async()=>{cancelled=true;}};
  assert.deepEqual(await recoverCanary({api,leases,policy}),invocation);assert.equal(cancelled,false);
 });
+test('an unresolved dispatch retires after its existing readback budget without sending another request',async t=>{
+ const {dispatchCanary}=await import('./ci-canary.mjs');const leases=setup(t);
+ const invocation={nonce:'a'.repeat(32),sourceSha,workflowSha,route:'server',createdAt:Date.now()-120001,runId:null,attempt:null};leases.setInvocation(invocation);
+ let posts=0;
+ const api={get:async()=>({workflow_runs:[]}),post:async()=>{posts++;}};
+ await assert.rejects(dispatchCanary({api,leases,policy,...invocation,wait:async()=>{throw new Error('Unexpected extra wait');}}),/ambiguous|unconfirmed/i);
+ assert.equal(posts,0);assert.equal(leases.inspect().ciInvocation,undefined);
+});
