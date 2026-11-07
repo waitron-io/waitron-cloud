@@ -330,10 +330,11 @@ def supervise(mode, resource):
 
 
 def main():
+    import startup
     if os.geteuid() != 0 or not Path('/dev/kvm').is_char_device():
         raise ValueError('Dedicated root KVM host required')
     if len(sys.argv) == 2 and sys.argv[1] == 'health':
-        print(json.dumps({'healthy': not (host.ROOT/'active.json').exists()}))
+        print(json.dumps({'healthy': startup.ready() and not (host.ROOT/'active.json').exists()}))
         return 0
     if len(sys.argv) == 3 and sys.argv[1] == '_cleanup':
         resource = resource_id(sys.argv[2])
@@ -341,6 +342,7 @@ def main():
         return 0
     if len(sys.argv) == 4 and sys.argv[1] == '_worker':
         mode, resource = sys.argv[2:]
+        startup.require_ready()
         with operations.owned(OPERATIONS, resource):
             return stage(mode, resource)
     if len(sys.argv) != 3:
@@ -348,6 +350,7 @@ def main():
     mode, resource = sys.argv[1:]
     resource_id(resource)
     if mode in ('transfer', 'prepare', 'execute-v2'):
+        startup.require_ready()
         return supervise(mode, resource)
     elif mode == 'destroy':
         argv = ['systemd-run', '--quiet', '--wait', '--pipe', '--collect', '--service-type=exec',
