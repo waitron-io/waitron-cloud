@@ -111,8 +111,9 @@ export class CITransport extends SSHTransport {
   }
 }
 
-export async function runProcess(command, argv, {input, inputPath, signal, capture = false, onOutput} = {}) {
+export async function runProcess(command, argv, {input, inputPath, signal, capture = false, onOutput, terminationGraceMs = 2000} = {}) {
   signal?.throwIfAborted();
+  assert.ok(Number.isSafeInteger(terminationGraceMs) && terminationGraceMs>=2000 && terminationGraceMs<=600000,'Invalid process termination grace');
   protectOutputStreams();
   return new Promise((resolve, reject) => {
     const directory = mkdtempSync(join(tmpdir(), 'disposable-command-'));
@@ -136,7 +137,7 @@ export async function runProcess(command, argv, {input, inputPath, signal, captu
       }
       if (!timer) {
         kill('SIGTERM');
-        timer = setTimeout(() => kill('SIGKILL'), 2000);
+        timer = setTimeout(() => kill('SIGKILL'), terminationGraceMs);
       }
     };
     const abort = () => stop(new Error('Transport aborted'));

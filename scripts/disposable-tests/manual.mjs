@@ -4,18 +4,12 @@ import {join, resolve, isAbsolute} from 'node:path';
 import {tmpdir} from 'node:os';
 import {randomUUID} from 'node:crypto';
 import {pathToFileURL} from 'node:url';
-import {LocalLeases,configuredSlots} from './leases.mjs';
+import {LocalLeases,configuredSlots,refuseLegacy,withAvailableSlot} from './leases.mjs';
+export {refuseLegacy,withAvailableSlot} from './leases.mjs';
 import {withKernelLock} from './kernel-lock.mjs';
 import {runLocal} from './local.mjs';
 import {SSHTransport, runProcess, protectOutputStreams} from './transport.mjs';
 
-export function refuseLegacy(state) {
-  for (const name of ['manual.lock','recovery.lock','ledger/lock']) {
-    try { lstatSync(join(state,name)); }
-    catch (error) { if (error.code==='ENOENT') continue; throw error; }
-    throw new Error('Legacy gate present; leave it untouched: '+name);
-  }
-}
 
 function privateDirectory(path) {
   const info=lstatSync(path);
@@ -64,23 +58,6 @@ export async function withTemporaryState(state,work) {
   }
 }
 
-// The slot lock lives through cleanup; the shared ledger lock covers only updates.
-export async function withAvailableSlot({state,hostGeneration,slots},work,{signal}={}) {
-  assert.ok(Number.isSafeInteger(slots) && slots>1 && slots<=16,'Invalid concurrent slot budget');
-  refuseLegacy(state);
-  for(let slot=0;slot<slots;slot++){
-    let admitted=false;
-    const result=await withKernelLock(join(state,'slot-'+slot),async()=>{
-      const leases=new LocalLeases(join(state,'ledger'),{hostGeneration,slots,slot});
-      const current=leases.inspect();
-      if(current.ciInvocation || current.slots[0].state!=='free')return {code:75,reason:'recorded-slot-busy-or-quarantined'};
-      admitted=true;
-      return work({leases,slot,temporaryState:join(state,'slot-'+slot)});
-    },{signal});
-    if(admitted || result.code!==75)return result;
-  }
-  return {code:75,reason:'capacity-busy'};
-}
 
 export async function recoverState({leases,transport,signal=AbortSignal.timeout(120000)}) {
   const occupied=leases.inspect().slots.filter(slot=>slot.state!=='free');
@@ -101,7 +78,9 @@ export async function reconcileManual({state,hostGeneration,slots=1,slot,transpo
   if(slots>1 && slot===undefined){
     let busy=0,pending=0;
     for(let selected=0;selected<slots;selected++){
-      const result=await reconcileManual({state,hostGeneration,slots,slot:selected,transport,signal,deadline,ci,api});
+      let result;
+      try{result=await reconcileManual({state,hostGeneration,slots,slot:selected,transport,signal,deadline,ci,api});}
+      catch(error){signal?.throwIfAborted();pending++;console.error(JSON.stringify({event:'slot-recovery-pending',slot:selected,error:error.message}));continue;}
       if(result.code===75){if(result.reason==='controller-busy')busy++;else pending++;continue;}
       assert.equal(result.code,0,'Slot recovery failed');
     }
@@ -129,8 +108,10 @@ export async function reconcileManual({state,hostGeneration,slots=1,slot,transpo
             assert.ok(pending.runId!==null,'Recorded ordinary CI run is missing');
             const identity={repositoryId:ci.repositoryId,workflowId:ci.workflowId,workflowSha:pending.workflowSha,
               runId:pending.runId,attempt:pending.attempt,jobId:pending.jobId};
-            if(pending.ordinaryStage!==undefined)
-              await fallbackOrdinary({api,policy:ci,ci:identity,leases,signal:cleanup});
+            if(pending.ordinaryStage!==undefined){
+              const outcome=await fallbackOrdinary({api,policy:ci,ci:identity,leases,automatic:slots>1,signal:cleanup});
+              if(outcome.pending)return {code:75,reason:'ci-recovery-pending'};
+            }
             else await cancelCIJob({api,repository:ci.repository,ci:identity,signal:cleanup});
             leases.clearInvocation(pending.nonce);
           }
@@ -227,6 +208,10 @@ export async function main(args) {
       console.log(JSON.stringify({code:result.code,reason:result.reason,cleanup:result.cleanup,
         resourceId:result.lease?.resourceId ?? result.resourceId,snapshot:result.lease?.snapshot,error:result.error,
         ...(result.pending?{pending:result.pending,busy:result.busy}:{})}));
+    if(reconciling && result.code===0 && slots>1 && config.ci?.workflowPath==='.github/workflows/ci.yml'){
+      const {automaticTick}=await import('./control.mjs'),{GithubApp}=await import('./github-app.mjs');
+      await automaticTick({configuration,config,api:new GithubApp(config.ci),signal:cancellation.signal});
+    }
     return result.code;
   } catch(error) {
     const refusal=cancellation.signal.aborted?{code:143,reason:'cancelled'}:
