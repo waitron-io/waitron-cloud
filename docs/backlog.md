@@ -4679,9 +4679,3 @@ job 121387722438). The cause remains unknown and belongs to D530's investigation
 Keep the ownership assertion, deadlines, resource collection and refusal to claim
 cleanup after ownership loss. Qualify any repair with the genuine runtime fixture;
 a passing remote-guidance qualification does not establish a repair.
-
-## CI mutation checks (D591)
-
-Compare healthy full runs after the approved split lands before claiming elapsed
-or aggregate job-time savings. The 38-minute assessment totals reported test-body
-work, which overlaps across jobs.
