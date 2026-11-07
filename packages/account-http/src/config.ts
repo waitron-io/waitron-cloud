@@ -73,3 +73,17 @@ export async function passwordScreeningFromEnv(env: NodeJS.ProcessEnv): Promise<
   const path = passwordCorpusPath(env);
   return path ? LocalPasswordCorpus.load(path) : undefined;
 }
+
+export interface BillingAccountOptions {accountIds:readonly string[]}
+export function validateBillingAccountOptions(value:BillingAccountOptions|undefined,mode:import('@waitron-cloud/registration').PlanMode):Readonly<BillingAccountOptions>|undefined{
+ if(value===undefined)return undefined;
+ if(mode!=='test-venue-levels')throw new Error('billing_account.test_mode_required');
+ if(!object(value)||Object.keys(value).length!==1||!Array.isArray(value.accountIds)||!value.accountIds.length
+  ||value.accountIds.some(id=>typeof id!=='string'||!/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/.test(id))
+  ||new Set(value.accountIds).size!==value.accountIds.length)throw new Error('billing_account.invalid_config');
+ return Object.freeze({accountIds:Object.freeze([...value.accountIds])});
+}
+export function billingAccountOptionsFromEnv(env:NodeJS.ProcessEnv,mode:import('@waitron-cloud/registration').PlanMode):Readonly<BillingAccountOptions>|undefined{
+ const value=env.CLOUD_BILLING_ACCOUNT_TEST_IDS;
+ return !value?.trim()?undefined:validateBillingAccountOptions({accountIds:value.split(',').map(id=>id.trim())},mode);
+}

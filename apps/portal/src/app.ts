@@ -10,6 +10,7 @@ import { PairingController } from './pairing-controller.ts';
 import {PasskeyController} from './passkey-controller.ts';
 import {AccountSecurityController} from './account-security-controller.ts';
 import {UsageController} from './usage-controller.ts';
+import {BillingController} from './billing-controller.ts';
 import {DiagnosticController} from './diagnostic-controller.ts';
 import { render } from 'lit';
 import { accountRequest } from './api.ts';
@@ -46,6 +47,7 @@ export class PortalApp {
   authenticator: AuthenticatorController;
   factorCodes: string[] = [];
   usage: UsageController;
+  billing: BillingController;
   diagnostics: DiagnosticController;
   #route = 0;
   #signOutCheck: PortalSession | undefined;
@@ -69,6 +71,7 @@ export class PortalApp {
     this.alerts = new AlertController(() => this.draw());
     this.translationConsent = new TranslationConsentController(() => this.draw());
     this.usage = new UsageController(() => this.draw());
+    this.billing = new BillingController(() => this.draw());
     this.diagnostics = new DiagnosticController(() => this.draw());
     this.remote = new RemoteController(() => this.draw());
     this.recovery = new RecoveryController(() => this.draw());
@@ -92,7 +95,7 @@ export class PortalApp {
     window.addEventListener('popstate', () => this.navigate(location.pathname, false));
     document.addEventListener('keydown', event => { if (['/account','/connect','/recover'].includes(this.path)) void this.session.activity(event); }, true);
     document.addEventListener('pointerdown', event => { if (['/account','/connect','/recover'].includes(this.path)) void this.session.activity(event); });
-    window.addEventListener('pagehide', () => { this.remote.account(undefined); this.session.dispose(); this.authenticator.account(undefined); this.authenticator.fence(); this.factorCodes = []; this.fields.password = ''; this.root.querySelectorAll('canvas').forEach(canvas => {canvas.width=0;}); this.draw(); this.pairing.account(undefined); this.installations.account(undefined); this.backups.account(undefined); this.recovery.account(undefined); this.alerts.account(undefined); this.translationConsent.account(undefined); this.usage.account(undefined); this.diagnostics.account(undefined); this.passkeys.account(undefined); this.security.account(undefined); clearTimeout(this.#timer); }, {once: true});
+    window.addEventListener('pagehide', () => { this.remote.account(undefined); this.session.dispose(); this.authenticator.account(undefined); this.authenticator.fence(); this.factorCodes = []; this.fields.password = ''; this.root.querySelectorAll('canvas').forEach(canvas => {canvas.width=0;}); this.draw(); this.pairing.account(undefined); this.installations.account(undefined); this.backups.account(undefined); this.recovery.account(undefined); this.alerts.account(undefined); this.translationConsent.account(undefined); this.usage.account(undefined); this.billing.account(undefined); this.diagnostics.account(undefined); this.passkeys.account(undefined); this.security.account(undefined); clearTimeout(this.#timer); }, {once: true});
     window.addEventListener('pageshow', event => {
       if (event.persisted) { this.session = this.#session(); void this.session.check(); }
     });
@@ -107,6 +110,8 @@ export class PortalApp {
     if (['/account','/'].includes(this.path) && state.kind === 'authenticated' && !this.authenticator.loadAttempted) void this.authenticator.load();
     this.diagnostics.account(state.kind === 'authenticated' ? state.accountId : undefined);
     this.usage.account(state.kind === 'authenticated' ? state.accountId : undefined);
+    this.billing.account(state.kind === 'authenticated' ? state.accountId : undefined);
+    if (['/account','/'].includes(this.path) && state.kind === 'authenticated' && !this.billing.loadAttempted) void this.billing.load();
     this.security.account(state.kind === 'authenticated' ? state.accountId : undefined);
     if (['/account','/'].includes(this.path) && state.kind === 'authenticated' && !this.security.loadAttempted) void this.security.load();
     this.passkeys.account(state.kind === 'authenticated' ? state.accountId : undefined);
@@ -141,7 +146,7 @@ export class PortalApp {
     if (this.path === '/recover') return Math.max(this.recovery.waiting, this.backups.waiting, this.installations.waiting, this.session.waiting);
     if (this.path === '/connect') return Math.max(this.pairing.waiting, this.session.waiting);
     if (['/', '/account'].includes(this.path)) return Math.max(this.session.waiting, this.authenticator.waiting, this.passkeys.waiting, this.security.waiting,
-      this.installations.waiting, this.backups.waiting, this.alerts.waiting, this.translationConsent.waiting, this.remote.waiting, this.usage.waiting, this.diagnostics.waiting);
+      this.installations.waiting, this.backups.waiting, this.alerts.waiting, this.translationConsent.waiting, this.remote.waiting, this.usage.waiting, this.billing.waiting, this.diagnostics.waiting);
     const deadline = Math.max(this.#emailCooldowns.get(`${this.operation}:${this.fields.email.trim().toLowerCase()}`) ?? 0,
       this.#serverCooldowns.get(this.operation) ?? 0);
     return Math.max(0, Math.ceil((deadline - performance.now()) / 1000), this.path === '/login' ? Math.max(this.authenticator.waiting, this.passkeys.waiting) : 0);
@@ -328,7 +333,7 @@ export class PortalApp {
   async revokeSession(id: string) { await this.security.revoke(id); }
   get logoutWaiting() { return this.session.waiting; }
   // Share admission with the buttons so startup reads cannot leave an enabled, ignored sign-out.
-  get logoutDisabled() { return this.pending || !!this.logoutWaiting || this.pairing.pending || this.installations.pending || this.remote.pending || this.recovery.pending || this.security.pending || this.usage.pending || this.authenticator.pending; }
+  get logoutDisabled() { return this.pending || !!this.logoutWaiting || this.pairing.pending || this.installations.pending || this.remote.pending || this.recovery.pending || this.security.pending || this.usage.pending || this.billing.pending || this.authenticator.pending; }
   async logout() {
     if (this.logoutDisabled) return;
     this.pending = true; this.error = undefined; this.draw();
