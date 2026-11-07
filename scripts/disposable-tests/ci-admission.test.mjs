@@ -52,7 +52,7 @@ test('a recorded non-canary job cannot cancel a newer workflow attempt',async()=
 
 test('recorded job cancellation refuses a different repository without cancelling',async()=>{
  const {cancelCIJob}=await import('./ci-canary.mjs');let cancelled=false;
- const api={get:async path=>path.includes('/jobs/')?{...evidence().job,status:'queued'}:{...evidence().run,repository:{id:999}},post:async()=>{cancelled=true;}};
+ const api={get:async path=>path.includes('/jobs/')?{...evidence().job,status:'queued'}:{...evidence().run,repository:{id:999},status:cancelled?'completed':'in_progress'},post:async()=>{cancelled=true;}};
  await assert.rejects(cancelCIJob({api,repository:'fixture/cloud',ci:{repositoryId:123,workflowId:456,workflowSha:'1'.repeat(40),runId:789,attempt:1,jobId:901}}),/identity/i);assert.equal(cancelled,false);
 });
 test('cancellation readback refuses a newer attempt that races the cancel request',async()=>{
