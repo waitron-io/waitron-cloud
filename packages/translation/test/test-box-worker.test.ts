@@ -6,7 +6,7 @@ import {after,before,beforeEach,test,type TestContext} from 'node:test';
 import {createLeaseIssuer} from '@waitron-cloud/registration';
 import * as provider from '../src/openai-client.ts';
 import {TranslationMachine} from '../src/index.ts';
-import {connectedVenue,database,giveConsent,readyForTranslation} from './fixtures.ts';
+import {connectedVenue,database,giveConsent} from './fixtures.ts';
 import {echoFirstPass,emptyReview,isReview,type FakeRequest} from './fake-openai.ts';
 
 let db:Awaited<ReturnType<typeof database>>;
@@ -14,7 +14,7 @@ const origin='https://cloud.example.test',issuer=createLeaseIssuer(generateKeyPa
 before(async()=>{db=await database();});after(async()=>db?.close());
 beforeEach(async()=>{await db.pool.query("UPDATE translation_jobs SET state='expired',lease_id=NULL,lease_until=NULL WHERE state IN ('queued','running')");});
 async function queued(){
- const venue=await connectedVenue(db,issuer,origin);await giveConsent(db,venue);await readyForTranslation(db,venue);
+ const venue=await connectedVenue(db,issuer,origin);await giveConsent(db,venue);
  const machine=new TranslationMachine(db.pool,issuer,origin);
  const body=JSON.stringify({version:1,country:'ES',languages:{default:'es',enabled:['es','en']},houseStyle:[],
   items:[{ref:'product:1',kind:'product',family:'product:1',category:'TAPAS',staffName:'GILDAS',existing:{},missing:['es','en']}]});
