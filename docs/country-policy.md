@@ -62,10 +62,49 @@ supplier qualification. Refusals contain only a reason:
 | `unqualified_flow` | No qualified record with usable evidence for that purpose and data class |
 | `destination_denied` | An invalid request binding or no exact destination on that qualified record |
 
-This SQL-free slice does not bind placements, jobs or credentials to durable
-policy revisions. Those checks belong to later D101 slices. The production AI
+The pure function does not read durable bindings. The production AI
 adapter still refuses every call even when a test country policy allows its
 destination. The separate input-eligibility and supplier gates remain open.
+
+## Check a stored venue binding inside a transaction
+
+When an internal caller needs a stored decision, use `authorizeFlow(client, input)`
+from registration after taking its existing service and installation locks. You
+must supply an open transaction and the exact country, destination, venue,
+policy revision, placement revision and lifecycle revision. Here `revision` is
+the lifecycle revision; it is separate from installation configuration.
+
+The check first takes a shared key lock on the venue, then shared locks on the
+current policy, lifecycle and binding before comparing their stored values. The
+venue lock keeps a cancellation from holding the venue while your transaction
+needs it for a later foreign-key insert. Concurrent admission reads can share
+these locks. Keep this transaction read-only with respect to lifecycle authority;
+do not call a lifecycle writer or upgrade its lock from this admission. Later
+integration must reconcile any writer's lock order explicitly.
+
+The stored locks keep a policy update or rebind from changing the decision
+inside your transaction. The check parses stored policies strictly and checks the
+effective end against database time after waiting for locks. Only an active
+lifecycle before its effective end can pass. Exit preparation and read-only
+recovery do not grant producer permission through this function.
+
+Run the synthetic database examples from the repository root:
+
+```sh
+node scripts/test-postgres.mjs exec pnpm --dir packages/registration exec node --test test/flow-authority.test.ts test/country-flow-migration.test.ts
+```
+
+The exact qualified fixture returns `{policyRevision:1,evidenceId:'test-evidence'}`.
+A changed stored destination or revision throws `flow_conflict`; unqualified
+evidence throws `flow_denied`. Missing or malformed stored authority throws
+`flow_unavailable`, and autocommit throws `transaction_required`. Errors contain
+only these fixed codes. The tests also exercise lock waits, lifecycle changes
+and interrupted migration recovery.
+
+This is an internal admission boundary. No product adapter calls it yet, no
+production setter is exposed, and migrations insert no policy or venue binding.
+You still need the later placement, credential and outbound integrations before
+this check enforces a service boundary. Spain's production flow list stays empty.
 
 
 ## Keep SES account sharing separate from offline policy checks
