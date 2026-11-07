@@ -68,7 +68,7 @@ async function fallbackRefused({config,api,runId,jobId,name,label,signal}){
   job.labels?.length===2 && job.labels.includes('self-hosted') && job.labels.includes(label),'Refused job identity differs');
  const ci={repositoryId:policy.repositoryId,workflowId:policy.workflowId,runId,attempt:1,jobId,sourceSha:run.head_sha,workflowSha:run.head_sha};
  return withAvailableSlot(config,async({leases})=>{
-  const invocation={nonce:randomBytes(16).toString('hex'),sourceSha:run.head_sha,workflowSha:run.head_sha,route:'server',createdAt:Date.now(),runId,attempt:1,jobId,ordinaryStage:'admitted'};
+  const invocation={nonce:randomBytes(16).toString('hex'),sourceSha:run.head_sha,workflowSha:run.head_sha,route:'server',createdAt:Date.now(),runId,attempt:1,jobId,ordinaryStage:'refused'};
   leases.setInvocation(invocation);
   const result=await withKernelLock(config.state,()=>fallbackOrdinary({api,policy,ci,leases,automatic:true,signal:AbortSignal.timeout(240000)}));
   if(!result.pending)leases.clearInvocation(invocation.nonce);

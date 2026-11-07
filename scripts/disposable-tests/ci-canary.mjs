@@ -65,6 +65,9 @@ export async function fallbackOrdinary({api,policy,ci,leases,signal,wait=delay,a
  assert.ok(job.id===ci.jobId && job.run_id===ci.runId && job.run_attempt===ci.attempt && job.head_sha===ci.workflowSha && (ci.jobKey?job.name===jobName(ci):/^(typecheck|test-server-([1-9]|1[0-9]|2[0-4])|test-heavy-[1-3]|test-till-[1-7]|test-dashboard-[1-4]|test-ui-1)$/.test(ordinaryKey(job.name)??'')),'Ordinary fallback job differs');
  const pending=leases?.inspect().ciInvocation;
  const ownedCancel=pending?.ordinaryStage==='cancel-requested' && pending.runId===ci.runId && pending.attempt===ci.attempt && pending.jobId===ci.jobId;
+ const refused=pending?.ordinaryStage==='refused' && pending.runId===ci.runId && pending.attempt===ci.attempt && pending.jobId===ci.jobId;
+ // A refusal owns no guest and cannot take over a job assigned during an API gap.
+ if(refused && (job.status!=='queued' || job.runner_id))return {retry:false,assigned:true};
  if(job.status==='completed' && (!ownedCancel || job.conclusion==='success'))return {retry:false};
  assert.ok(run.run_attempt===ci.attempt || ownedCancel && run.run_attempt===ci.attempt+1,'Ordinary fallback attempt differs');
  const currentPR=async run=>{
@@ -80,7 +83,7 @@ export async function fallbackOrdinary({api,policy,ci,leases,signal,wait=delay,a
  if(ownedCancel && run.run_attempt===ci.attempt+1)return {retry:true,runId:ci.runId,previousAttempt:ci.attempt,sourceSha:ci.sourceSha??ci.workflowSha};
  assert.equal(run.run_attempt,ci.attempt,'Ordinary fallback attempt differs');
  if(job.status!=='completed'){
-  assert.ok(pending?.ordinaryStage==='admitted' || ownedCancel,'Ordinary fallback needs its persisted intent');
+  assert.ok(pending?.ordinaryStage==='admitted' || refused || ownedCancel,'Ordinary fallback needs its persisted intent');
   if(!automatic)await setRoutingMode({api,policy,mode:'hosted',signal});
   leases.setInvocation({...pending,ordinaryStage:'cancel-requested'});
   await cancelCIJob({api,repository:policy.repository,ci,signal,wait});

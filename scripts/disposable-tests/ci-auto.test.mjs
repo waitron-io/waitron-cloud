@@ -219,19 +219,19 @@ test('an unhealthy or unreachable host selects hosted before polling or starting
  }
 });
 
-for(const race of ['none','assigned','changed-label','advanced'])test(`refused workflow fallback handles ${race} race without running unreviewed code`,async t=>{
+for(const race of ['none','assigned','assigned-later','changed-label','advanced'])test(`refused workflow fallback handles ${race} race without running unreviewed code`,async t=>{
  const {mkdtempSync,rmSync}=await import('node:fs'),{tmpdir}=await import('node:os');
  const {LocalLeases}=await import('./leases.mjs'),{withKernelLock}=await import('./kernel-lock.mjs'),{automaticTick}=await import('./control.mjs');
  const directory=mkdtempSync(tmpdir()+'/auto-refused-'),state=directory+'/state';t.after(()=>rmSync(directory,{recursive:true,force:true}));
  await withKernelLock(state,async()=>{new LocalLeases(state+'/ledger',{hostGeneration:'test',slots:6,bootstrap:true});},{bootstrap:true});
  for(let i=0;i<6;i++)await withKernelLock(state+'/slot-'+i,async()=>({code:0}),{bootstrap:true});
- const f=fixture();f.jobs.splice(1);let cancelled=false,reruns=0,jobReads=0;const get=f.api.get;
+ const f=fixture();f.jobs.splice(1);let cancelled=false,reruns=0,jobReads=0,pullReads=0;const get=f.api.get;
  f.api.get=async path=>{
   if(path.endsWith('DISPOSABLE_TESTS_MODE'))return {value:'server'};
   if(path.endsWith('DISPOSABLE_TESTS_HEAD'))return {value:''};
   if(path.includes('/contents/'))return {encoding:'base64',content:Buffer.from('unreviewed workflow').toString('base64')};
-  if(path.endsWith('/actions/jobs/901'))return {...f.jobs[0],status:cancelled?'completed':'queued',conclusion:cancelled?'cancelled':null,...(race==='assigned'?{runner_id:42}:{}),...(race==='changed-label'?{labels:['self-hosted','dt-123-789-1-test-heavy-3']}: {})};
-  if(path.endsWith('/pulls/12') && race==='advanced' && jobReads++)return {number:12,state:'open',head:{sha:'5'.repeat(40),repo:{id:123}},base:{repo:{id:123}}};
+  if(path.endsWith('/actions/jobs/901')){jobReads++;return {...f.jobs[0],status:cancelled?'completed':'queued',conclusion:cancelled?'cancelled':null,...(race==='assigned' || race==='assigned-later' && jobReads>1?{runner_id:42}:{}),...(race==='changed-label'?{labels:['self-hosted','dt-123-789-1-test-heavy-3']}: {})};}
+  if(path.endsWith('/pulls/12') && race==='advanced' && pullReads++)return {number:12,state:'open',head:{sha:'5'.repeat(40),repo:{id:123}},base:{repo:{id:123}}};
   if(path.endsWith('/actions/runs/789'))return {...f.run,status:cancelled?'completed':'in_progress'};
   return get(path);
  };
@@ -242,4 +242,18 @@ for(const race of ['none','assigned','changed-label','advanced'])test(`refused w
  assert.equal(reruns,race==='none'?1:0,'Only the unchanged refused PR retries using the existing hosted route');
  const ledger=new LocalLeases(state+'/ledger',{hostGeneration:'test',slots:6}).inspect();
  assert.ok(ledger.slots.every(s=>s.state==='free' && !s.ciInvocation));
+});
+
+test('recovery of a refused intent preserves a job assigned after its previous API failure',async t=>{
+ const {mkdtempSync,rmSync}=await import('node:fs'),{tmpdir}=await import('node:os');
+ const {LocalLeases}=await import('./leases.mjs'),{withKernelLock}=await import('./kernel-lock.mjs'),{reconcileManual}=await import('./manual.mjs');
+ const directory=mkdtempSync(tmpdir()+'/auto-refused-recovery-'),state=directory+'/state';t.after(()=>rmSync(directory,{recursive:true,force:true}));
+ await withKernelLock(state,async()=>{new LocalLeases(state+'/ledger',{hostGeneration:'test',slots:6,bootstrap:true});},{bootstrap:true});
+ for(let i=0;i<6;i++)await withKernelLock(state+'/slot-'+i,async()=>({code:0}),{bootstrap:true});
+ const leases=new LocalLeases(state+'/ledger',{hostGeneration:'test',slots:6,slot:1});
+ leases.setInvocation({nonce:'a'.repeat(32),sourceSha:head,workflowSha:head,route:'server',createdAt:Date.now(),runId:789,attempt:1,jobId:901,ordinaryStage:'refused'});
+ const f=fixture(),get=f.api.get;f.api.get=async path=>path.endsWith('/actions/jobs/901')?{...f.jobs[0],status:'in_progress',runner_id:42}:get(path);
+ f.api.post=async()=>assert.fail('An assigned job must survive recovery without cancellation or rerun');
+ const result=await reconcileManual({state,hostGeneration:'test',slots:6,slot:1,transport:{destroy:async()=>assert.fail('A refused job has no guest to remove')},ci:policy,api:f.api});
+ assert.equal(result.code,0);assert.equal(leases.inspect().ciInvocation,undefined);assert.equal(leases.inspect().slots[0].state,'free');
 });
