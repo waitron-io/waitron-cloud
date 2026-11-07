@@ -34,6 +34,17 @@ export async function fallbackCI({api,policy,invocation,dispatch,signal,wait=del
  return dispatch({sourceSha:invocation.sourceSha,route:'hosted'});
 }
 
+export async function cancelCIJob({api,repository,ci,signal,wait=delay}){
+ const path=`/repos/${repository}/actions/runs/${ci.runId}`;
+ const run=await api.get(path,{signal});
+ assert.ok(run.id===ci.runId && run.run_attempt===ci.attempt && run.workflow_id===ci.workflowId && run.head_sha===ci.workflowSha &&
+  run.repository?.id===ci.repositoryId && run.head_repository?.id===ci.repositoryId,'Recorded CI cancellation identity/attempt differs');
+ if(run.status==='completed')return;
+ await api.post(path+'/cancel',undefined,{signal});const end=Date.now()+120000;
+ while(true){const current=await api.get(path,{signal});assert.equal(current.run_attempt,ci.attempt,'CI attempt changed during cancellation');
+  if(current.status==='completed')return;
+  assert.ok(Date.now()<end,'CI cancellation readback deadline exceeded');await wait(15000,undefined,{signal});}
+}
 async function namedRunners(api,repository,name,signal){
  const found=[];
  for(let page=1;page<=10;page++){
@@ -56,7 +67,7 @@ export async function cleanupRunners({leases,api,repository,signal}){
  }
 }
 export async function runCI({leases,transport,api,repository,lane,ci,signal,wait=delay}){
- const {ciRequest,runnerName}=await import('./ci-identity.mjs');
+ const {ciRequest,runnerName,jobName}=await import('./ci-identity.mjs');
  const {runLocal}=await import('./local.mjs');
  ci=ciIdentity(ci);
  const base=`/repos/${repository}/actions`,name=runnerName(ci);
@@ -66,11 +77,12 @@ export async function runCI({leases,transport,api,repository,lane,ci,signal,wait
   execute:async(lease,options)=>{
    const run=await api.get(`${base}/runs/${ci.runId}`,options),job=await api.get(`${base}/jobs/${ci.jobId}`,options);
    assert.ok(run.id===ci.runId && run.run_attempt===ci.attempt && run.workflow_id===ci.workflowId && run.head_sha===ci.workflowSha &&
-    ['queued','in_progress'].includes(run.status) && job.id===ci.jobId && job.run_id===ci.runId && job.run_attempt===ci.attempt &&
+    ['queued','in_progress'].includes(run.status) && run.repository?.id===ci.repositoryId && run.head_repository?.id===ci.repositoryId &&
+    job.name===jobName(ci) && job.id===ci.jobId && job.run_id===ci.runId && job.run_attempt===ci.attempt &&
     job.head_sha===ci.workflowSha && job.status==='queued' && !job.runner_id,'CI identity changed before registration');
    assert.equal((await namedRunners(api,repository,name,options.signal)).length,0,'CI runner name already registered; do not remint');
    const registration=await api.post(`${base}/runners/generate-jitconfig`,{
-    name,runner_group_id:1,labels:[routingLabel(ci)],work_folder:'_work'},options);
+    name,runner_group_id:1,labels:['self-hosted',routingLabel(ci)],work_folder:'_work'},options);
    assert.ok(registration.runner?.name===name && Number.isSafeInteger(registration.runner.id) && registration.runner.id>0 &&
     typeof registration.encoded_jit_config==='string' && registration.encoded_jit_config.length>0 && registration.encoded_jit_config.length<=64000,'Invalid CI registration response');
    assert.ok(leases.bindRunner(lease,registration.runner.id),'CI runner lease changed before binding');
@@ -263,6 +275,7 @@ export async function main(args){
  const {refuseLegacy,withTemporaryState}=await import('./manual.mjs');
  const {CITransport}=await import('./transport.mjs'),{GithubApp}=await import('./github-app.mjs');
  const config=JSON.parse(readFileSync(configuration,'utf8'));validateCIConfig(config);
+ assert.equal(config.ci.workflowPath,'.github/workflows/disposable-ci-canary.yml','The canary entry accepts only its reviewed canary workflow');
  const api=new GithubApp(config.ci),policy=config.ci;
  const cancellation=new AbortController(),cancel=()=>cancellation.abort();
  for(const name of ['SIGTERM','SIGINT','SIGHUP'])process.on(name,cancel);
@@ -282,7 +295,7 @@ export function validateCIConfig(config){
  assert.deepEqual(Object.keys(config).sort(),['ci','host','hostGeneration','mode','recipe','repository','state','version']);
  assert.ok(config.version===2 && config.mode==='manual-one-slot','Invalid coupled CI configuration');
  const ci=config.ci;assert.deepEqual(Object.keys(ci).sort(),['appEnv','appKey','repository','repositoryId','workflowDigest','workflowId','workflowPath']);
- assert.ok(/^[a-zA-Z0-9_-]+\/[a-zA-Z0-9_-]+$/.test(ci.repository) && ci.workflowPath==='.github/workflows/disposable-ci-canary.yml' &&
+ assert.ok(/^[a-zA-Z0-9_-]+\/[a-zA-Z0-9_-]+$/.test(ci.repository) && ['.github/workflows/disposable-ci-canary.yml','.github/workflows/ci.yml'].includes(ci.workflowPath) &&
   [ci.repositoryId,ci.workflowId].every(v=>Number.isSafeInteger(v)&&v>0),'Invalid CI policy identity');
  assert.match(ci.workflowDigest,/^[a-f0-9]{64}$/);
  for(const path of [config.state,ci.appEnv,ci.appKey])assert.ok(typeof path==='string' && path.startsWith('/'),'CI paths must be absolute');

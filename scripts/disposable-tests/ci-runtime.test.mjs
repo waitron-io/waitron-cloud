@@ -10,8 +10,8 @@ function fixture(t,{lost=false,uncertain=false}={}){
  const root=mkdtempSync(join(tmpdir(),'ci-runtime-'));t.after(()=>rmSync(root,{recursive:true,force:true}));
  const leases=new LocalLeases(join(root,'ledger'),{hostGeneration:'fixture',slots:1,bootstrap:true}),events=[];
  let registered=false;
- const api={get:async path=>{if(path.endsWith('/runs/789'))return {id:789,run_attempt:1,workflow_id:456,head_sha:ci.workflowSha,status:'in_progress'};if(path.includes('runners'))return {total_count:registered?1:0,runners:registered?[{id:1001,name:'dt-123-789-1-901'}]:[]};
-  return {id:901,run_id:789,run_attempt:1,head_sha:ci.workflowSha,status:registered?'completed':'queued',conclusion:registered?'success':null,runner_id:registered?1001:null,runner_name:registered?'dt-123-789-1-901':null};},
+ const api={get:async path=>{if(path.endsWith('/runs/789'))return {id:789,run_attempt:1,workflow_id:456,head_sha:ci.workflowSha,status:'in_progress',repository:{id:123},head_repository:{id:123}};if(path.includes('runners'))return {total_count:registered?1:0,runners:registered?[{id:1001,name:'dt-123-789-1-901'}]:[]};
+  return {id:901,name:'typecheck',run_id:789,run_attempt:1,head_sha:ci.workflowSha,status:registered?'completed':'queued',conclusion:registered?'success':null,runner_id:registered?1001:null,runner_name:registered?'dt-123-789-1-901':null};},
  post:async()=>{events.push('register');assert.deepEqual(leases.inspect().slots[0].lease.ci,ci);registered=true;if(lost)throw new Error('lost response');
   return {runner:{id:1001,name:'dt-123-789-1-901'},encoded_jit_config:'synthetic-jit'};},delete:async()=>{events.push('deregister');registered=false;}};
  const transport={healthy:async()=>true,transfer:async()=>events.push('transfer'),prepare:async()=>events.push('prepare'),
@@ -59,4 +59,10 @@ test('uncertain cleanup preserves the original preparation failure in the report
  path.endsWith('/runs/789')?{id:789,run_attempt:1,head_sha:ci.workflowSha,workflow_id:456,path:ci.workflowPath,event:'workflow_dispatch',status:'in_progress',display_title:'disposable-'+invocation.nonce,repository:{id:123},head_repository:{id:123}}:
  {id:123,full_name:'fixture/cloud'};
  await assert.rejects(executeCanary({...f,policy,lane:'I',invocation}),error=>/original preparation refusal/.test(error.message)&&/independent guest absence/.test(error.message));
+});
+
+test('JIT registration explicitly supplies the self-hosted label required by the workflow',async t=>{
+ const {runCI}=await import('./ci-canary.mjs');const f=fixture(t),post=f.api.post;
+ f.api.post=async(path,body,options)=>{assert.deepEqual(body.labels,['self-hosted','dt-123-789-1-typecheck']);return post(path,body,options);};
+ assert.equal((await runCI({...f,lane:'I',ci,repository:'fixture/cloud'})).code,0);
 });

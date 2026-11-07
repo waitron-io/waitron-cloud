@@ -84,15 +84,17 @@ export async function reconcileManual({state,hostGeneration,transport,signal,dea
     refuseLegacy(state);
     return withTemporaryState(state,async()=>{
       const leases=new LocalLeases(join(state,'ledger'),{hostGeneration,slots:1});
+      const recorded=leases.inspect().slots.find(slot=>slot.state!=='free')?.lease;
       const cleanup=AbortSignal.timeout(120000);
       const result=await recoverState({leases,transport,signal:signal?AbortSignal.any([signal,cleanup]):cleanup});
       const current=leases.inspect();
-      if(current.ciInvocation || current.orphanRunners?.length){
+      if(current.ciInvocation || current.orphanRunners?.length || recorded?.ci){
         assert.ok(ci,'CI recovery requires the immutable App configuration');
         const {GithubApp}=await import('./github-app.mjs');
-        const {cleanupRunners,recoverCanary,qualifyCanary}=await import('./ci-canary.mjs');
+        const {cleanupRunners,recoverCanary,qualifyCanary,cancelCIJob}=await import('./ci-canary.mjs');
         api??=new GithubApp(ci);
         await cleanupRunners({leases,api,repository:ci.repository,signal:cleanup});
+        if(recorded?.ci?.workflowPath==='.github/workflows/ci.yml')await cancelCIJob({api,repository:ci.repository,ci:recorded.ci,signal:cleanup});
         const invocation=await recoverCanary({api,leases,policy:ci,signal:cleanup});
         if(invocation){
           const run=await api.get(`/repos/${ci.repository}/actions/runs/${invocation.runId}`,{signal:cleanup});

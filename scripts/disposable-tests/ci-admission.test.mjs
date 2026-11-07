@@ -43,3 +43,9 @@ test('terminal canary qualification requires both jobs, actual route and source 
  api.jobLog=async()=>`Source ${input.sourceSha} tree ${'5'.repeat(40)}\n`;
  await assert.rejects(qualifyCanary({api,policy,invocation}),/source|tree/i);
 });
+test('a recorded non-canary job cannot cancel a newer workflow attempt',async()=>{
+ const {cancelCIJob}=await import('./ci-canary.mjs');assert.equal(typeof cancelCIJob,'function');let cancelled=false;
+ const api={get:async()=>({...evidence().run,run_attempt:2}),post:async()=>{cancelled=true;}};
+ await assert.rejects(cancelCIJob({api,repository:'fixture/cloud',ci:{repositoryId:123,workflowId:456,workflowSha:'1'.repeat(40),runId:789,attempt:1}}),/attempt|identity/i);
+ assert.equal(cancelled,false);
+});

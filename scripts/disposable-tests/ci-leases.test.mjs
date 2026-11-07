@@ -63,3 +63,12 @@ test('dispatch identity is persisted before API calls and stale cleanup cannot e
  assert.equal(leases.clearInvocation(invocation.nonce),true);
  assert.equal(leases.inspect().ciInvocation,undefined);
 });
+test('the same one-job lease accepts the requested Waitron measurement shards and refuses unknown shards',async t=>{
+ const {ciRequest}=await import('./ci-identity.mjs');
+ for(const jobKey of ['test-dashboard-1','test-dashboard-4','test-server-1','test-server-24','test-heavy-1','test-heavy-3']){
+  const leases=setup(t),identity={...ci,workflowPath:'.github/workflows/ci.yml',jobKey};
+  const result=leases.reserveLocal(ciRequest('I',identity));assert.equal(result.code,0);assert.equal(result.lease.ci.jobKey,jobKey);
+ }
+ for(const jobKey of ['test-dashboard-5','test-server-25','test-heavy-4','publish','../test-dashboard-1'])
+  assert.throws(()=>ciRequest('I',{...ci,workflowPath:'.github/workflows/ci.yml',jobKey}));
+});

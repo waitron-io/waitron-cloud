@@ -70,4 +70,11 @@ class CISession(unittest.TestCase):
   code,_=session.command([sys.executable,'-c',"import sys,pathlib;pathlib.Path(sys.argv[1]).write_bytes(sys.stdin.buffer.read())",str(marker)],
                          int(time.time()*1000)+5000,stdin=io.BytesIO(b'synthetic-memory-input'))
   self.assertEqual(code,0);self.assertEqual(marker.read_bytes(),b'synthetic-memory-input')
+ def test_waitron_measurement_jobs_use_the_same_fixed_executor_and_bound_identity(self):
+  for key in ['test-dashboard-1','test-server-24','test-heavy-3']:
+   ci={**CI,'workflowPath':'.github/workflows/ci.yml','jobKey':key}
+   value={**request(self.resource),'ci':ci,'snapshot':hashlib.sha256(json.dumps(ci,separators=(',',':')).encode()).hexdigest()}
+   self.assertEqual(session.request_identity(value,self.resource)['argv'],ARGV)
+  ci={**CI,'workflowPath':'.github/workflows/ci.yml','jobKey':'publish'}
+  with self.assertRaises(ValueError):session.request_identity({**request(self.resource),'ci':ci},self.resource)
 unittest.main(verbosity=2)
