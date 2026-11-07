@@ -68,4 +68,7 @@ button:disabled { cursor: default; opacity: .6; }
 .factor-secret { display: block; }
 .factor-codes { padding-inline-start: 1.25rem; }
 .factor-codes li { margin-block: .5rem; }
+.billing-methods { border-block-start: 1px solid var(--wt-color-border); margin-block-start: 1.25rem; padding-block-start: .5rem; }
+billing-card { display: block; margin-block: 1rem; }
+billing-card iframe { max-width: 100%; }
 

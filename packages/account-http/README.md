@@ -655,7 +655,11 @@ chooser. Cards return a `checkoutId` for SumUp's widget; direct debit returns a
 `url` restricted to `https://checkout.stripe.com`, which returns to `/account`.
 The SumUp setup is a €1 sandbox checkout, as recorded in the
 [provider test](../../docs/billing-provider-test.md#run-1-sumup-saved-card-and-unattended-charge).
-Portal method controls remain unfinished.
+On `/account`, choose **Add or switch test card** or **Add or switch test direct debit**.
+Card details stay in SumUp’s widget; your bank details stay on Stripe’s page.
+After returning from Stripe, choose **Check saved method** to verify the saved setup.
+A pending or failed setup keeps your previous method selected. If a reply is lost,
+check the saved method before starting again.
 
 POST `/api/account/billing/method/verify` with only the venue ID. The server reads
 the saved setup rather than accepting a customer, token or checkout reference from
@@ -679,5 +683,19 @@ fake providers and real PostgreSQL. The provider client checks use local HTTP se
 `node --test packages/account-http/test/billing-method-client.test.ts
 packages/account-http/test/billing-method-config.test.ts
 packages/account-http/test/billing-methods.test.ts`. These checks do not call either
-provider. The portal widget, complete sandbox browser journey and live qualification
-remain separate work.
+provider. Run `node --test apps/portal/test/billing-methods.test.ts
+apps/portal/test/billing-methods-browser.test.ts
+packages/account-http/test/billing-method-csp.test.ts` for the portal and security-policy
+checks. The browser checks use fake providers. See the [provider
+receipt](../../docs/billing-provider-test.md) for the separate sandbox runs. Live
+qualification remains open.
+
+With test methods enabled, every portal document and asset, including error replies,
+uses the same policy with exact sandbox hosts. Script loading is restricted to
+`gateway.sumup.com`; frames can also use `api.sumup.com`, `eu-test.oppwa.com`,
+`test.oppwa.com` and `test.ppipe.net`. Connections can reach `api.sumup.com`,
+`gateway.sumup.com` and `js.sumup.com`; images can use `static.sumup.com` and data
+URLs. The sandbox run in the receipt observed these hosts through card confirmation.
+Forms still submit only to Cloud. When test methods are off, these exceptions are
+absent. Changing account, venue or page removes the card widget and discards its
+late replies.
