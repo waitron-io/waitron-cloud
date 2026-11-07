@@ -21,7 +21,7 @@ test('target verification release checks every applied SQL digest',async()=>{
  const {checkConsumerSchema}=await import(new URL('../../../deploy/local-stack/runtime.mjs',import.meta.url).href);
  const root=new URL('../../../',import.meta.url).pathname;
  assert.equal(migrations.migrationNames.at(45),'046_venue_service_authority.sql');
- assert.equal(migrations.migrationNames.at(46),'047_data_lifecycle.sql');assert.equal(migrations.migrationNames.at(47),'048_billing_allowances_traffic.sql');assert.equal(migrations.migrationNames.at(48),'049_ses_feedback.sql');assert.equal(migrations.migrationNames.at(49),'050_mail_legacy_suppression_scopes.sql');assert.equal(migrations.migrationNames.at(50),'051_mail_suppression_reconciliation.sql');assert.equal(migrations.migrationNames.at(51),'052_box_error_reports.sql');assert.equal(migrations.migrationNames.at(52),'053_country_flow_authority.sql');assert.equal(migrations.migrationNames.at(-1),'054_staff_problem_reports.sql');
+ assert.equal(migrations.migrationNames.at(46),'047_data_lifecycle.sql');assert.equal(migrations.migrationNames.at(47),'048_billing_allowances_traffic.sql');assert.equal(migrations.migrationNames.at(48),'049_ses_feedback.sql');assert.equal(migrations.migrationNames.at(49),'050_mail_legacy_suppression_scopes.sql');assert.equal(migrations.migrationNames.at(50),'051_mail_suppression_reconciliation.sql');assert.equal(migrations.migrationNames.at(51),'052_box_error_reports.sql');assert.equal(migrations.migrationNames.at(52),'053_country_flow_authority.sql');assert.equal(migrations.migrationNames.at(53),'054_staff_problem_reports.sql');assert.equal(migrations.migrationNames.at(-1),'055_billing_method_setups.sql');
  assert.equal(migrations.migrationNames[44],'045_billing_store.sql');assert.equal(migrations.migrationNames[43],'044_remote_forward_observations.sql');
  assert.equal(migrations.migrationNames[42],'043_backup_target_verification.sql');
  const row=(await pool.query("SELECT * FROM schema_migrations WHERE name='043_backup_target_verification.sql'")).rows[0];
@@ -63,10 +63,10 @@ test('lifecycle upgrade preserves the full previous ledger and rejects changed a
   assert.equal(hasReleaseMigrationCount('45'),false);assert.equal(hasReleaseMigrationCount('46'),false);
   await Promise.all([migrations.migrate(p),migrations.migrate(p)]);await migrations.migrate(p);
   const rows=(await p.query('SELECT * FROM schema_migrations ORDER BY name')).rows;
-  assert.equal(rows.length,54);assert.equal(rows[46].name,'047_data_lifecycle.sql');assert.equal(rows[47].name,'048_billing_allowances_traffic.sql');assert.deepEqual(rows.slice(0,46),ledger);
+  assert.equal(rows.length,55);assert.equal(rows[46].name,'047_data_lifecycle.sql');assert.equal(rows[47].name,'048_billing_allowances_traffic.sql');assert.deepEqual(rows.slice(0,46),ledger);
   assert.deepEqual((await p.query('SELECT * FROM venues')).rows,venues);
   assert.equal((await p.query('SELECT count(*) FROM data_lifecycles')).rows[0].count,'0');
-  assert.equal(hasReleaseMigrationCount('47'),false);assert.equal(hasReleaseMigrationCount('48'),false);assert.equal(hasReleaseMigrationCount('49'),false);assert.equal(hasReleaseMigrationCount('50'),false);assert.equal(hasReleaseMigrationCount('51'),false);assert.equal(hasReleaseMigrationCount('52'),false);assert.equal(hasReleaseMigrationCount('53'),false);assert.equal(hasReleaseMigrationCount('54'),true);
+  assert.equal(hasReleaseMigrationCount('47'),false);assert.equal(hasReleaseMigrationCount('48'),false);assert.equal(hasReleaseMigrationCount('49'),false);assert.equal(hasReleaseMigrationCount('50'),false);assert.equal(hasReleaseMigrationCount('51'),false);assert.equal(hasReleaseMigrationCount('52'),false);assert.equal(hasReleaseMigrationCount('53'),false);assert.equal(hasReleaseMigrationCount('54'),false);assert.equal(hasReleaseMigrationCount('55'),true);
   await assert.rejects(checkConsumerSchema(p,previous),/schema_incompatible/);
   await checkConsumerSchema(p,new URL('../../../',import.meta.url).pathname);
   const applied=rows[46]!;

@@ -37,7 +37,7 @@ test('release 51 preserves all 50 SQL digests and populated mappings while assig
  const f=await populated();try{
   await Promise.all([migrate(f.pool),migrate(f.pool)]);await migrate(f.pool);
   const ledger=(await f.pool.query('SELECT * FROM schema_migrations ORDER BY name')).rows;
-  assert.equal(ledger.length,54);assert.equal(ledger[50].name,'051_mail_suppression_reconciliation.sql');assert.equal(ledger[51].name,'052_box_error_reports.sql');assert.deepEqual(ledger.slice(0,50),f.ledger);
+  assert.equal(ledger.length,55);assert.equal(ledger[50].name,'051_mail_suppression_reconciliation.sql');assert.equal(ledger[51].name,'052_box_error_reports.sql');assert.deepEqual(ledger.slice(0,50),f.ledger);
   for(const row of f.ledger)assert.equal(createHash('sha256').update(await readFile(new URL('../migrations/'+row.name,import.meta.url))).digest('hex'),row.digest);
   assert.deepEqual((await f.pool.query('SELECT key_id,digest FROM relay_suppressions ORDER BY key_id,digest')).rows,f.legacy);
   assert.deepEqual((await f.pool.query('SELECT * FROM mail_legacy_suppression_scopes ORDER BY country')).rows,f.mappings);
