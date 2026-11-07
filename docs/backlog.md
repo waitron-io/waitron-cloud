@@ -689,7 +689,8 @@ order. Remote access matters most because Waitron's customer-facing features wai
    through a paired-box administrator, and sole-owner replacement at recipient acceptance.
    SMS alone counts for sign-in/reset only when it is the sole enrolled factor; reset also
    needs the verified-mailbox link. The revised SMS, paired-box and handover draft awaits
-   Claude and owner final review; first-draft review does not approve this revision.
+   final review. Proposed mailbox-plus-box recovery and recovery codes for all factor
+   types are explicit choices, not existing capabilities or owner approvals.
    Nothing is built. Total loss without a usable paired box/administrator stays unresolved.
    The [revised P3 plan](superpowers/plans/2026-10-22-cloud-global-country-split.md)
    supplies the boundary; ownership grants no support takeover, operator, fiscal or
