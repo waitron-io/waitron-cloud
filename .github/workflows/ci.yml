@@ -51,7 +51,12 @@ jobs:
           npm_config_fetch_retries: '1'
           npm_config_fetch_retry_mintimeout: '1000'
       - name: Check shared UI version lag
-        run: node scripts/ci-ui-lag.mjs
+        run: |
+          if [ -f scripts/ci-ui-lag.mjs ]; then
+            node scripts/ci-ui-lag.mjs
+          else
+            echo 'Skipping shared UI version lag: scripts/ci-ui-lag.mjs is not on this head.'
+          fi
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       # A main push reuses only independently verified identical-tree evidence.

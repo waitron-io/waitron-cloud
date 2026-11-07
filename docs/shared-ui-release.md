@@ -40,7 +40,8 @@ CI install remains unproved.
 
 ## Keep Cloud within seven days of a release
 
-Every normal CI run checks both consumers' exact package pins against the
+When your checked-out branch contains `scripts/ci-ui-lag.mjs`, normal CI
+checks both consumers' exact package pins against the
 GitHub package versions API before selecting tests. Its version creation dates
 supply publication times, which [GitHub omits from npm metadata](https://github.blog/changelog/2021-03-05-packages-time-has-been-dropped-from-npm-package-metadata-responses/). You can run the same check locally
 with an existing package-read token in `NODE_AUTH_TOKEN`:
@@ -57,7 +58,8 @@ days still passes; the next millisecond fails CI.
 A registry error or missing version metadata warns and passes, so an outage
 leaves the deadline unchecked. A known overdue publication still fails even
 if another publication's timestamp is missing. The check runs during ordinary
-CI, with no new schedule.
+CI, with no new schedule. Older pull request branches that lack the script
+print a skip message so they can still reach test selection.
 
 ## Earlier Cloud publication workflow
 
