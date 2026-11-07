@@ -18,7 +18,7 @@ Keep ordinary source package checks, built exports, Elastic License 2.0 and `LIC
 
 Configure daily authenticated Dependabot updates for `apps/portal`, `packages/ui-smoke` and the lockfile. Updates open PRs that run normal CI and require review, with no automerge.
 
-Cloud already has package access through Manage Actions access (owner readback, 6 November). [Dependabot can use that grant](https://docs.github.com/en/code-security/concepts/supply-chain-security/automatic-dependabot-access-to-github-registries) without another registry token. Existing Cloud `.npmrc`, `NODE_AUTH_TOKEN` and BuildKit credentials remain. Before merging an update, the reviewer renews ordinary root/docs records and updates smoke-test version/source expectations from the verified release, retaining the assertions and browser checks.
+Cloud already has package access through Manage Actions access (owner readback, 6 November). [Dependabot can use that grant](https://docs.github.com/en/code-security/concepts/supply-chain-security/automatic-dependabot-access-to-github-registries) without another registry token. Existing Cloud `.npmrc`, `NODE_AUTH_TOKEN` and BuildKit credentials remain. Before merging an update, the reviewer checks actual readers and test owners and updates smoke-test version/source expectations from the verified release, retaining the assertions and browser checks.
 
 **Accepted risk:** Daily checks may combine releases into one update, and a published version may be incompatible with the portal.
 
@@ -39,6 +39,6 @@ Delete obsolete Cloud files after the update and lag checks are in place:
 - PR995 `prepare-ui.mjs`, `ui-manifest.mjs` and their tests, once F replaces preparation.
 - PR1001 `record-ui-artifact.mjs`, `ui-artifact.mjs` and owning tests.
 
-Retain useful ordinary package and license checks in Waitron. Update incoming links before deleting `docs/shared-ui-release-ledger.md` and superseded plans `2026-11-05-public-ui-registry.md` and `2026-11-06-ui-build-evidence.md`. Update tests that read the deleted workflow and the remaining install guide in `docs/shared-ui-release.md`. Renew ordinary root/docs records during code removal.
+Retain useful ordinary package and license checks in Waitron. Update incoming links before deleting `docs/shared-ui-release-ledger.md` and superseded plans `2026-11-05-public-ui-registry.md` and `2026-11-06-ui-build-evidence.md`. Update tests that read the deleted workflow and the remaining install guide in `docs/shared-ui-release.md`. Review actual readers and test owners during code removal; do not renew generated CI review records.
 
 Verify qualifying versus unrelated merges, private publication and increasing versions, failed-publication behavior, authenticated update PRs, and CI cases covering current idle versions, multiple newer releases, the seven-day boundary, missing metadata and registry failures.

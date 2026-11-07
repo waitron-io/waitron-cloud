@@ -115,16 +115,15 @@ test('executed summary consumes needs objects and the current job API, refusing 
   } finally {rmSync(root,{recursive:true,force:true});}
 });
 
-test('executed planner forces a full reusable run even with an audited prose pull request event', () => {
+test('executed planner forces a full reusable run even with a prose pull request event', () => {
   const root = mkdtempSync(join(tmpdir(), 'cloud-nightly-cli-'));
   const git = (...args) => execFileSync('git', ['-c', 'maintenance.auto=false', ...args], {cwd: root, encoding: 'utf8', stdio: 'pipe'}).trim();
   try {
     execFileSync('git', ['clone', '--shared', '--quiet', process.cwd(), root], {stdio: 'pipe'});
     cpSync('scripts', join(root, 'scripts'), {recursive: true});
-    writeFileSync(join(root, 'scripts/ci-plan.mjs'), readFileSync(join(root, 'scripts/ci-plan.mjs'), 'utf8') + '\n// Fixture reader bytes require fresh evidence.\n');
+    writeFileSync(join(root, 'scripts/ci-plan.mjs'), readFileSync(join(root, 'scripts/ci-plan.mjs'), 'utf8') + '\n// The fixture uses the current reader before the later prose event.\n');
     git('config', 'user.name', 'CI test'); git('config', 'user.email', 'ci@example.test');
     git('add', '-A');
-    execFileSync(process.execPath, ['scripts/ci-input-audit.mjs', '--write-staged'], {cwd: root, stdio: 'pipe'});
     git('add', 'scripts'); git('commit', '--allow-empty', '-sm', 'Reviewed nightly fixture');
     const base = git('rev-parse', 'HEAD');
     writeFileSync(join(root, 'docs/nightly-control.md'), '# Nightly control\n');

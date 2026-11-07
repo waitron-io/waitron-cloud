@@ -8,31 +8,14 @@ Finish automatic Mac startup and lease reconciliation, publish the coupled servi
 
 ## Keep the private shared UI release current (D579)
 
-The owner rejected the build-evidence plan and cancelled PR #1018 on
-6 November. Its branch is preserved; do not continue that implementation.
-The [approved one-page replacement plan](superpowers/plans/2026-11-06-simple-private-ui-release.md)
-was approved on 6 November. It puts token-authenticated publication on qualifying
-Waitron merges, automatic dependency update PRs in Cloud, and a seven-day
-registry lag check in Cloud CI. Unknown registry results warn and pass; only
-a version known to be overdue fails. Lane F/A1412 owns the Waitron changes.
-
-Cloud's Dependabot configuration checks the shared UI package every day, including
-weekends, from the pnpm workspace root. It covers both consumers and the shared
-lockfile, using the existing package access grant confirmed on 6 November.
-The [first hosted check](https://github.com/waitron-io/waitron-cloud/actions/runs/42295633741)
-authenticated and found only `0.1.0`, so it opened no update PR. A newer-version
-update for both consumers and its private CI install remain unproved.
-Normal CI checks both exact pins against the earliest known newer stable
-publication and fails only after seven days. Registry failures and missing
-metadata warn and pass; later releases do not restart the deadline. Focused
-checks cover version order, the boundary, both consumers and unknown results.
-Removal of the superseded Cloud publisher remains open in its own PR.
-Dependency PR review must check actual readers and update the smoke test’s
-version/source expectations without removing assertions. Remove
-the unused ledger and artifact machinery from #978, #995 and #1001, the old
-Cloud publisher and both superseded plans, as listed in the approved plan.
-The package stays private on GitHub Packages with Elastic License 2.0 and
-`LICENSE-GRANTS.md`; existing authenticated install and image paths remain.
+The [approved release plan](superpowers/plans/2026-11-06-simple-private-ui-release.md)
+still needs its first hosted Waitron publication and a resulting Cloud dependency
+update PR. Lane F/A1412 owns [the publisher](https://github.com/clintongormley/waitron/pull/2526).
+The [first authenticated update check](https://github.com/waitron-io/waitron-cloud/actions/runs/42295633741)
+found only `0.1.0`, so it opened no PR. Verify a newer-version update for both
+consumers and its private-package CI install. Review actual readers and update
+the smoke test’s version/source expectations without removing assertions.
+The package stays private; existing authenticated install and image paths remain.
 
 ## Shared storage-test seed downloads (D585)
 

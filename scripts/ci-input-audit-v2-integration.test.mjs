@@ -27,7 +27,12 @@ function completeFixture(run) {
   try {
     execFileSync('git', ['clone', '--shared', '--quiet', process.cwd(), root], {stdio: 'pipe'});
     cpSync('scripts', join(root, 'scripts'), {recursive: true});
+    // The batching control starts from current inputs, without unrelated removal-history reads.
+    rmSync(join(root, marker), {force: true});
+    rmSync(join(root, records), {recursive: true, force: true});
     git('config', 'user.name', 'CI test'); git('config', 'user.email', 'ci@example.test');
+    git('checkout', '--orphan', 'complete-v2-fixture');
+    commit();
     git('add', '-A');
     if (!git('ls-files', marker).trim()) {ok(node('scripts/ci-input-audit.mjs', ['--init-v2-staged'])); git('add', marker, records);}
     ok(node('scripts/ci-input-audit.mjs', ['--write-staged', '--mode', 'all']));

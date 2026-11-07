@@ -82,7 +82,6 @@ The inventory below was inspected at `dbbc755706fc90198bd9bc753a32f0b27105bd03`.
 | `download-supervision-diagnostic.yml`: `changes`, `linux-contention`, `summary` | Stay hosted, 2/4/2. | `download-supervision-diagnostic.yml:21`, `:65`, `:116` |
 | `browser-reconnect-diagnostic.yml`: `socket-observation` application/application-one-cpu | Stay hosted, 12; preserve diagnostic workload meaning. | `browser-reconnect-diagnostic.yml:13` |
 | `password-derivation-diagnostic.yml`: `linux-observation`; `relay-counter-diagnostic.yml`: `linux-counter-rollover` | Stay hosted, 6 and 8 respectively. | First file `:11`; second `:15` |
-| `ui-release.yml`: `build`, `publish` | Stay hosted, 10/5; publishing has `packages: write`. | `ui-release.yml:14`, `:81` |
 | `kubernetes-proof.yml`: `setup-controls` | Stay hosted, 5. D570's narrow disposable EC2 full-proof path remains separate. | `kubernetes-proof.yml:17`; `2026-11-04-kubernetes-weekly-proof.md:5` |
 | `nightly.yml`: calls `standard`, `cost`, `venue`, `aws`; `summary` named `nightly-summary` | Calls inherit the placements above and retain full work/prefixes; parent summary stays hosted, 2. | `nightly.yml:21`, `:26`, `:31`, `:36`, `:41` |
 
