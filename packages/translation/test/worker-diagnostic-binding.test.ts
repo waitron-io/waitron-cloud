@@ -25,9 +25,14 @@ test('a real disconnect assertion retains the selected backends and termination 
  const env={...process.env};delete env.NODE_TEST_CONTEXT;
  const failed='Translation worker failed; check database, migrations and provider configuration\n';
  const retry='Translation worker pass failed; retrying\n';
- const preload=`if(process.argv[1]?.endsWith('/src/worker-cli.ts')){
+ for(const iteration of [0,1,2]){
+ const counter=join(directory,`iteration-${iteration}`);await writeFile(counter,'0');
+ const preload=`import {readFileSync,writeFileSync} from 'node:fs';
+ if(process.argv[1]?.endsWith('/src/worker-cli.ts')){
+  const index=Number(readFileSync(${JSON.stringify(counter)},'utf8'));
+  writeFileSync(${JSON.stringify(counter)},String(index+1));
   const report=console.error;
-  console.error=(...args)=>{if(args[0]===${JSON.stringify(failed.trim())})report(${JSON.stringify(retry.trim())});report(...args);};
+  console.error=(...args)=>{if(index===${iteration}&&args[0]===${JSON.stringify(failed.trim())})report(${JSON.stringify(retry.trim())});report(...args);};
  }`;
  env.NODE_OPTIONS='--import=data:text/javascript;base64,'+Buffer.from(preload).toString('base64');
  const file=fileURLToPath(new URL('./worker-cli.test.ts',import.meta.url));
@@ -46,11 +51,12 @@ test('a real disconnect assertion retains the selected backends and termination 
  assert.ok(diagnostic,result.stderr);
  assert.deepEqual(diagnostic.actual,[1,null,'',retry+failed]);
  assert.deepEqual(diagnostic.expected,[1,null,'',failed]);
- assert.equal(diagnostic.termination?.iteration,0,result.stderr);
+ assert.equal(diagnostic.termination?.iteration,iteration,result.stderr);
  assert.ok(diagnostic.termination.backends.length>0&&diagnostic.termination.backends.length<=4);
  for(const backend of diagnostic.termination.backends){
   assert.deepEqual(Object.keys(backend).sort(),['killed','pid']);
   assert.ok(Number.isInteger(backend.pid)&&backend.pid>0&&backend.pid<=2147483647);
   assert.equal(backend.killed,true);
+ }
  }
 });

@@ -58,11 +58,12 @@ test('the parent parser accepts only the exact disconnect expectation and finite
  ])assert.equal(parseServiceProofFailure('SERVICE_PROOF_FAILURE '+JSON.stringify(invalid)),undefined);
 });
 
-test('the actual receipt parent forwards the safe disconnect tuple on a failing child',()=>{
+for(const termination of [undefined,{iteration:2,backends:[{pid:2147483647,killed:true},{pid:2147483646,killed:true},{pid:2147483645,killed:true},{pid:2147483644,killed:true}]}])
+test('the actual receipt parent forwards the safe disconnect tuple on a failing child'+(termination?' with backend facts':''),()=>{
  const directory=realpathSync(mkdtempSync(join(tmpdir(),'translation-disconnect-parent-')));
  try{
   mkdirSync(join(directory,'scripts'));
-  const row={kind:'translation-disconnect',actual:[1,null,'',retry+failed],expected:[1,null,'',failed]};
+  const row={kind:'translation-disconnect',actual:[1,null,'',retry+failed],expected:[1,null,'',failed],...(termination?{termination}:{})};
   const line='SERVICE_PROOF_FAILURE '+JSON.stringify(row)+'\n';
   writeFileSync(join(directory,'scripts/test-postgres.mjs'),`process.stderr.write(${JSON.stringify(line)});process.exitCode=1;`);
   for(const args of [['init','-q'],['add','.'],['-c','user.name=Diagnostic fixture','-c','user.email=fixture@example.invalid','commit','-s','-qm','Create controlled refusal']]){

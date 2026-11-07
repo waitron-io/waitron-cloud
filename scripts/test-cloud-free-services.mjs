@@ -31,6 +31,7 @@ function validDisconnectTuple(value){
     typeof value[3]==='string'&&value[3].length<=400&&
     value[3].split(/(?<=\n)/).every(line=>line===''||workerLines.includes(line));
 }
+// This diagnostic admits the case's three iterations and worker-cli.ts's four connections.
 function validDisconnectTermination(value){
   try{
     keys(value,['iteration','backends']);
