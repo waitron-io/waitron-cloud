@@ -158,9 +158,10 @@ venue does not subscribe to remote access or backups.
   Waitron's profile-email catch logs raw exception text (`apps/server/src/me-api.ts`
   at `0fbcde001`); actual secret exposure is unverified. The Waitron caller item must
   use bounded diagnostics and test secret-bearing exceptions before integration.
-- **Mobile notifications (candidate).** Consider a free allowance for mobile phone
-  notifications. Choose the delivery channel and validate its costs before committing
-  to inclusion; push notifications and SMS need separate cost estimates.
+- **Mobile notifications (candidate).** The [SMS gateway proposal](../superpowers/specs/2026-11-07-cloud-venue-sms-gateway-design.md)
+  gives dated delivery costs and proposed free/paid allowances; owner decisions,
+  sender registration, supplier qualification and implementation remain open.
+  Push notifications still need their own cost estimate and inclusion decision.
 - **Per-user allowances.** Meter each service against the Cloud user account, enforce
   limits and show usage and remaining allowance. Define the allowance sizes, reset
   periods and behaviour at the limit, including password-reset delivery. Settle how
