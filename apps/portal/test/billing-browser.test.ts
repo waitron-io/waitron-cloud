@@ -18,7 +18,7 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
   await page.route('https://portal.test/account',route=>route.fulfill({contentType:'text/html',body:'<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><div id="portal" class="portal"></div>'}));
   await page.route('**/api/account/**',async route=>{
    const path=new URL(route.request().url()).pathname;
-   if(path.endsWith('/session')||path.endsWith('/session/activity'))return route.fulfill({json:{accountId:'owner',expiresAt:new Date(Date.now()+3600000).toISOString()}});
+   if(path.endsWith('/session')||path.endsWith('/session/activity'))return route.fulfill({json:{accountId:'owner',expiresAt:new Date(Date.now()+3600000).toISOString(),billingTrialAvailable:true}});
    if(path.endsWith('/installations'))return route.fulfill({json:{installations:[]}});
    if(path.endsWith('/billing/read')){reads++;return route.fulfill({json:{venues}});}
    if(path.endsWith('/billing/start-trial')){
@@ -44,14 +44,14 @@ for(const locale of ['en','es'] as const)for(const theme of ['light','dark'] as 
  }finally{await browser.close();}
 });
 
-for(const status of [403,503])test(`unavailable trial chooser ${status} adds no ordinary-account panel`,async()=>{
+for(const status of [403,503])test(`unavailable trial chooser ${status} adds no refused-account panel`,async()=>{
  const browser=await chromium.launch({headless:true});
  try{
   const page=await browser.newPage();page.setDefaultTimeout(4000);
   await page.route('https://portal.test/account',route=>route.fulfill({contentType:'text/html',body:'<!doctype html><div id="portal" class="portal"></div>'}));
   await page.route('**/api/account/**',route=>{
    const path=new URL(route.request().url()).pathname;
-   if(path.endsWith('/session'))return route.fulfill({json:{accountId:'ordinary',expiresAt:new Date(Date.now()+3600000).toISOString()}});
+   if(path.endsWith('/session'))return route.fulfill({json:{accountId:'ordinary',expiresAt:new Date(Date.now()+3600000).toISOString(),billingTrialAvailable:true}});
    if(path.endsWith('/installations'))return route.fulfill({json:{installations:[]}});
    return route.fulfill({status:path.endsWith('/billing/read')?status:503,json:{error:path.endsWith('/billing/read')&&status===403?'permission_denied':'temporarily_unavailable'}});
   });
@@ -59,4 +59,60 @@ for(const status of [403,503])test(`unavailable trial chooser ${status} adds no 
   await page.waitForFunction(()=>{const billing=(window as any).app.billing;return billing.loadAttempted&&!billing.pending;});
   assert.equal(await page.getByRole('region',{name:translations.en.billingTitle,exact:true}).count(),0);
  }finally{await browser.close();}
+});
+
+for(const hint of [undefined,false,'true'])test(`ordinary or malformed discovery ${String(hint)} never requests billing, including activity`,async()=>{
+ const browser=await chromium.launch({headless:true});
+ try{
+  const page=await browser.newPage();page.setDefaultTimeout(4000);let reads=0,activities=0;
+  await page.route('https://portal.test/account',route=>route.fulfill({contentType:'text/html',body:'<!doctype html><div id="portal" class="portal"></div>'}));
+  await page.route('**/api/account/**',route=>{
+   const path=new URL(route.request().url()).pathname;
+   if(path.endsWith('/session')||path.endsWith('/session/activity')){
+    if(path.endsWith('/activity'))activities++;
+    return route.fulfill({json:{accountId:'ordinary',expiresAt:new Date(Date.now()+3600000).toISOString(),...(hint===undefined?{}:{billingTrialAvailable:hint})}});
+   }
+   if(path.endsWith('/billing/read'))reads++;
+   if(path.endsWith('/installations'))return route.fulfill({json:{installations:[]}});
+   return route.fulfill({status:503,json:{error:'temporarily_unavailable'}});
+  });
+  await page.goto('https://portal.test/account');await page.addScriptTag({content:bundle.outputFiles[0]!.text});
+  await page.waitForFunction(()=>['authenticated','unavailable'].includes((window as any).app.session.state.kind));
+  if(hint===undefined){
+   await page.waitForFunction(()=>(window as any).app.installations.loaded);
+   const activity=page.waitForResponse('**/session/activity');await page.keyboard.press('Tab');await activity;
+  }
+  await page.waitForLoadState('networkidle');
+  assert.equal(reads,0);assert.equal(activities,hint===undefined?1:0);
+  assert.equal(await page.getByRole('region',{name:translations.en.billingTitle,exact:true}).count(),0);
+  assert.equal(await page.evaluate(()=>(window as any).app.session.state.kind),hint===undefined?'authenticated':'unavailable');
+ }finally{await browser.close();}
+});
+
+for(const retain of [false,true])test(`activity ${retain?'retains discovery':'fences a late billing read and allows one new read when discovery returns'}`,async()=>{
+ const browser=await chromium.launch({headless:true});let release!:()=>void;
+ const reply=new Promise<void>(resolve=>{release=resolve;});
+ try{
+  const page=await browser.newPage();page.setDefaultTimeout(4000);let reads=0,hint=true;
+  await page.route('https://portal.test/account',route=>route.fulfill({contentType:'text/html',body:'<!doctype html><div id="portal" class="portal"></div>'}));
+  await page.route('**/api/account/**',async route=>{
+   const path=new URL(route.request().url()).pathname;
+   if(path.endsWith('/session')||path.endsWith('/session/activity'))return route.fulfill({json:{accountId:'owner',expiresAt:new Date(Date.now()+3600000).toISOString(),...(hint?{billingTrialAvailable:true}:{})}});
+   if(path.endsWith('/installations'))return route.fulfill({json:{installations:[]}});
+   if(path.endsWith('/billing/read')){reads++;if(reads===1)await reply;return route.fulfill({json:{venues:[{venueId:first,level:'registered',trial:null,canStartTrial:true}]}});}
+   return route.fulfill({status:503,json:{error:'temporarily_unavailable'}});
+  });
+  await page.goto('https://portal.test/account');await page.addScriptTag({content:bundle.outputFiles[0]!.text});
+  await page.waitForFunction(()=>(window as any).app.billing.pending);
+  hint=retain;const activity=page.waitForResponse('**/session/activity');await page.keyboard.press('Tab');await activity;
+  await page.waitForFunction((expected)=>(window as any).app.session.state.billingTrialAvailable===expected,retain?true:undefined);
+  release();await page.waitForLoadState('networkidle');
+  const section=page.getByRole('region',{name:translations.en.billingTitle,exact:true});
+  assert.equal(reads,1);assert.equal(await section.count(),retain?1:0);
+  if(!retain){
+   assert.deepEqual(await page.evaluate(()=>(window as any).app.billing.venues),[]);
+   hint=true;await page.evaluate(()=>(window as any).app.session.check());await section.waitFor();
+   await page.waitForLoadState('networkidle');assert.equal(reads,2);
+  }
+ }finally{release();await browser.close();}
 });

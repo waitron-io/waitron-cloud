@@ -168,7 +168,7 @@ export function createAccountApp(options: {pool: Pool; outbox: EmailOutbox; conf
     if (c.req.method === 'POST' && c.req.header('origin') !== config.portalOrigin) throw new AccountHttpError(403, 'forbidden');
     if (path === '/session') {
       const session = await transaction(pool, client => resolveSession(client, readSessionCookie(c, secure) ?? '', {touch: false}));
-      return c.json(session);
+      return c.json({...session,...(billingAccount?.accountIds.includes(session.accountId)?{billingTrialAvailable:true}:{})});
     }
     const body = await readAccountBody(c.req.raw, fields!, ['/signup/request', '/password-reset/request', '/password-reset/complete'].includes(path) ? ['locale'] : []);
     if (body.locale !== undefined && body.locale !== 'en' && body.locale !== 'es') throw new AccountHttpError(400, 'invalid_input');
@@ -209,7 +209,10 @@ export function createAccountApp(options: {pool: Pool; outbox: EmailOutbox; conf
       }
       const token = readSessionCookie(c, secure) ?? '';
       const csrfToken = c.req.header('x-csrf-token') ?? '';
-      if (path === '/session/activity') return c.json(await transaction(pool, client => resolveSession(client, token, {csrfToken})));
+      if (path === '/session/activity') {
+        const session=await transaction(pool, client => resolveSession(client, token, {csrfToken}));
+        return c.json({...session,...(billingAccount?.accountIds.includes(session.accountId)?{billingTrialAvailable:true}:{})});
+      }
       try {
         await transaction(pool, async client => {
           await resolveSession(client, token, {csrfToken, touch: false});
