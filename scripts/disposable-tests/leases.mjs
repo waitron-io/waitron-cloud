@@ -2,7 +2,6 @@ import assert from 'node:assert/strict';
 import {createHash, randomUUID} from 'node:crypto';
 import {mkdirSync, lstatSync, readFileSync, openSync, writeFileSync, fsyncSync, closeSync, renameSync, unlinkSync} from 'node:fs';
 import {join, resolve} from 'node:path';
-import {claimGate, releaseGate} from './owners.mjs';
 
 const maxDuration = 55 * 60 * 1000;
 const word = /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$/;
@@ -17,63 +16,63 @@ function requestIdentity(request) {
   return {lane: request.lane, turn: request.turn, snapshot: request.snapshot, argv: [...request.argv]};
 }
 
-// The controller owns this directory. A lock left by its death closes admission;
-// recovery must reclaim only a proven dead transaction owner before reading the
-// committed ledger. Guest absence is required before freeing capacity.
+// Callers hold the controller's kernel lock. Transactions are synchronous and
+// durable; only independently observed guest absence can free capacity.
 export class LocalLeases {
-  constructor(directory, {hostGeneration, slots, now = Date.now}) {
+  constructor(directory, {hostGeneration, slots, now = Date.now, bootstrap = false}) {
     assert.ok(typeof hostGeneration === 'string' && word.test(hostGeneration) && Number.isSafeInteger(slots) && slots >= 1 && slots <= 16, 'Invalid host configuration');
     this.directory = resolve(directory);
     this.hostGeneration = hostGeneration;
     this.capacity = slots;
     this.now = now;
-    mkdirSync(this.directory, {recursive: true, mode: 0o700});
-    assert.ok(lstatSync(this.directory).isDirectory() && !lstatSync(this.directory).isSymbolicLink(), 'Ledger must be a private directory');
+    if (bootstrap) mkdirSync(this.directory, {mode: 0o700});
+    const info = lstatSync(this.directory);
+    assert.ok(info.isDirectory() && !info.isSymbolicLink() && info.uid === process.getuid() &&
+      (info.mode & 0o077) === 0, 'Ledger must be a private owned directory');
+    if (bootstrap) this.transaction(state => state, true);
   }
-  transaction(operation, busy = {code: 75, reason: 'ledger-locked'}) {
-    const gate = claimGate(this.directory, 'lock');
-    if (!gate) return busy;
+  transaction(operation, initialize = false) {
+    const path = join(this.directory, 'state.json');
+    let state;
+    try { state = JSON.parse(readFileSync(path, 'utf8')); }
+    catch (error) {
+      if (error.code !== 'ENOENT') throw error;
+      assert.ok(initialize, 'Recorded ledger is missing; initialization requires explicit bootstrap');
+      state = {version: 1, hostGeneration: this.hostGeneration, slots: Array.from({length: this.capacity}, (_, id) => ({id, generation: 0, state: 'free', lease: null})), turns: {}};
+    }
+    assert.ok(state.version === 1 && state.hostGeneration === this.hostGeneration && state.slots.length === this.capacity, 'Ledger configuration changed; reconcile the previous host first');
+    assert.ok(state.slots.every((s, i) => s.id === i && Number.isSafeInteger(s.generation) && s.generation >= 0 &&
+      ['free', 'reserved', 'running', 'quarantined'].includes(s.state) && (s.state === 'free' ? s.lease === null : s.lease?.generation === s.generation)), 'Invalid ledger slot');
+    for (const slot of state.slots.filter(s => s.state !== 'free')) {
+      const lease = slot.lease;
+      requestIdentity(lease);
+      assert.ok(lease.hostGeneration === this.hostGeneration && lease.slot === slot.id &&
+        lease.resourceId === `dt-${this.hostGeneration}-${slot.id}-${slot.generation}` &&
+        Number.isSafeInteger(lease.createdAt) && lease.createdAt >= 0 &&
+        Number.isSafeInteger(lease.deadline) && lease.deadline > lease.createdAt &&
+        lease.deadline - lease.createdAt <= maxDuration, 'Invalid occupied lease');
+    }
+    const now = this.now();
+    assert.ok(Number.isSafeInteger(now) && now >= 0, 'Invalid controller time');
+    for (const slot of state.slots) if (slot.state !== 'free' && slot.lease.deadline <= now) slot.state = 'quarantined';
+    const result = operation(state, now);
+    const temporary = join(this.directory, `state-${randomUUID()}.tmp`);
+    let fd;
     try {
-      const path = join(this.directory, 'state.json');
-      let state;
-      try { state = JSON.parse(readFileSync(path, 'utf8')); }
-      catch (error) {
-        if (error.code !== 'ENOENT') throw error;
-        state = {version: 1, hostGeneration: this.hostGeneration, slots: Array.from({length: this.capacity}, (_, id) => ({id, generation: 0, state: 'free', lease: null})), turns: {}};
-      }
-      assert.ok(state.version === 1 && state.hostGeneration === this.hostGeneration && state.slots.length === this.capacity, 'Ledger configuration changed; reconcile the previous host first');
-      assert.ok(state.slots.every((s, i) => s.id === i && Number.isSafeInteger(s.generation) && s.generation >= 0 &&
-        ['free', 'reserved', 'running', 'quarantined'].includes(s.state) && (s.state === 'free' ? s.lease === null : s.lease?.generation === s.generation)), 'Invalid ledger slot');
-      for (const slot of state.slots.filter(s => s.state !== 'free')) {
-        const lease = slot.lease;
-        requestIdentity(lease);
-        assert.ok(lease.hostGeneration === this.hostGeneration && lease.slot === slot.id &&
-          lease.resourceId === `dt-${this.hostGeneration}-${slot.id}-${slot.generation}` &&
-          Number.isSafeInteger(lease.createdAt) && lease.createdAt >= 0 &&
-          Number.isSafeInteger(lease.deadline) && lease.deadline > lease.createdAt &&
-          lease.deadline - lease.createdAt <= maxDuration, 'Invalid occupied lease');
-      }
-      const now = this.now();
-      assert.ok(Number.isSafeInteger(now) && now >= 0, 'Invalid controller time');
-      for (const slot of state.slots) if (slot.state !== 'free' && slot.lease.deadline <= now) slot.state = 'quarantined';
-      const result = operation(state, now);
-      const temporary = join(this.directory, `state-${randomUUID()}.tmp`);
-      let fd;
-      try {
-        fd = openSync(temporary, 'wx', 0o600);
-        writeFileSync(fd, JSON.stringify(state) + '\n');
-        fsyncSync(fd);
-        closeSync(fd); fd = undefined;
-        renameSync(temporary, path);
-        const directoryFd = openSync(this.directory, 'r');
-        try { fsyncSync(directoryFd); } finally { closeSync(directoryFd); }
-      } finally {
-        if (fd !== undefined) closeSync(fd);
-        try { unlinkSync(temporary); } catch (error) { if (error.code !== 'ENOENT') throw error; }
-      }
-      return structuredClone(result);
-    } finally { releaseGate(gate); }
+      fd = openSync(temporary, 'wx', 0o600);
+      writeFileSync(fd, JSON.stringify(state) + '\n');
+      fsyncSync(fd);
+      closeSync(fd); fd = undefined;
+      renameSync(temporary, path);
+      const directoryFd = openSync(this.directory, 'r');
+      try { fsyncSync(directoryFd); } finally { closeSync(directoryFd); }
+    } finally {
+      if (fd !== undefined) closeSync(fd);
+      try { unlinkSync(temporary); } catch (error) { if (error.code !== 'ENOENT') throw error; }
+    }
+    return structuredClone(result);
   }
+
   reserveLocal(request, {healthy = true, durationMs = maxDuration} = {}) {
     const identity = requestIdentity(request);
     assert.ok(typeof healthy === 'boolean', 'Invalid host health');
@@ -110,7 +109,7 @@ export class LocalLeases {
       if (!this.owns(slot, lease) || slot.state !== 'reserved') return false;
       slot.state = 'running';
       return true;
-    }, false);
+    });
   }
   release(lease, observation) {
     return this.transaction(state => {
@@ -122,7 +121,7 @@ export class LocalLeases {
       }
       slot.state = 'free'; slot.lease = null;
       return true;
-    }, false);
+    });
   }
   inspect() { return this.transaction(state => state); }
 }

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
-import {mkdtempSync,mkdirSync,writeFileSync,readFileSync,existsSync,readdirSync,rmSync} from 'node:fs';
+import {mkdtempSync,mkdirSync,writeFileSync,readFileSync,existsSync,readdirSync,rmSync,symlinkSync,chmodSync} from 'node:fs';
 import {join} from 'node:path';
 import {tmpdir} from 'node:os';
 import {spawnSync,spawn,execFileSync} from 'node:child_process';
@@ -10,7 +10,7 @@ import {LocalLeases} from './leases.mjs';
 const script=new URL('./manual.mjs',import.meta.url).pathname;
 function fixture(t,mode='normal') {
  const root=mkdtempSync(join(tmpdir(),'disposable-pipeline-'));t.after(()=>rmSync(root,{recursive:true,force:true}));
- for(const name of ['bin','state','tmp','repo'])mkdirSync(join(root,name),{mode:0o700});
+ for(const name of ['bin','tmp','repo'])mkdirSync(join(root,name),{mode:0o700});
  execFileSync('git',['init','-q',join(root,'repo')]);
  const config=join(root,'config.json');
  writeFileSync(config,JSON.stringify({version:2,mode:'manual-one-slot',host:'fixture.invalid',hostGeneration:'fixture',recipe:'/opt/waitron-disposable-fixture',repository:join(root,'repo/.git'),state:join(root,'state')}));
@@ -21,6 +21,7 @@ from pathlib import Path
 args=sys.argv[1:];root=Path(os.environ['FIXTURE_ROOT']);mode=os.environ['FIXTURE_MODE']
 if any(a.endswith('/snapshot.py') for a in args):
  (root/'packaged').touch()
+ if mode=='snapshot-budget':time.sleep(0.15);sys.exit(9)
  if mode=='snapshot-failure':sys.exit(9)
  data=b'opaque source fixture';Path(args[-1]).write_bytes(data);print(json.dumps({'sha256':hashlib.sha256(data).hexdigest()}))
 elif any(a.endswith('/private-packages.py') for a in args):
@@ -34,10 +35,17 @@ import sys,os,json,time
 from pathlib import Path
 root=Path(os.environ['FIXTURE_ROOT']);parts=sys.argv[-1].split();mode=parts[-1] if parts[-1]=='health' else parts[-2];rid=parts[-1]
 with (root/'calls').open('a') as f:f.write(mode+'\\n')
-if mode=='health':print(json.dumps({'healthy':os.environ['FIXTURE_MODE']!='unhealthy'}))
+if mode=='health':
+ if os.environ['FIXTURE_MODE']=='unreachable':
+  import signal
+  signal.signal(signal.SIGTERM,signal.SIG_IGN);(root/'health.pid').write_text(str(os.getpid()));time.sleep(60)
+ print(json.dumps({'healthy':os.environ['FIXTURE_MODE']!='unhealthy'}))
 elif mode=='transfer':sys.stdin.buffer.read();(root/rid).touch();print('{}')
 elif mode=='prepare':
  if os.environ['FIXTURE_MODE']=='work':(root/'work.pid').write_text(str(os.getpid()));print('WORK-READY',flush=True);time.sleep(60)
+ if os.environ['FIXTURE_MODE']=='concurrency':
+  (root/'work-ready').touch()
+  while not (root/'release').exists():time.sleep(.02)
 elif mode in ('execute','execute-v2'):pass
 elif mode=='result':print(json.dumps({'resourceId':rid,'code':3}))
 elif mode=='destroy':
@@ -46,10 +54,43 @@ elif mode=='inspect':print(json.dumps({'resourceId':rid,'absent':not(root/rid).e
 else:sys.exit(125)
 `,{mode:0o700});
  const env={...process.env,PATH:join(root,'bin')+':'+process.env.PATH,FIXTURE_ROOT:root,FIXTURE_MODE:mode,TMPDIR:join(root,'tmp'),XDG_CACHE_HOME:join(root,'cache')};
+ const boot=spawnSync(process.execPath,[script,config,'--bootstrap'],{env,encoding:'utf8',timeout:5000});
+ assert.equal(boot.status,0,boot.stdout+boot.stderr);
+ writeFileSync(join(root,'tmp/global-sentinel'),'unrelated');
  return {root,env,args:[script,config,'I',join(root,'repo'),'--','false'],config};
 }
 function run(f){return spawnSync(process.execPath,f.args,{env:f.env,encoding:'utf8',timeout:10000});}
-function assertNoTemporaries(f){assert.deepEqual(readdirSync(join(f.root,'tmp')).filter(n=>n.startsWith('disposable-')),[]);}
+function assertNoTemporaries(f){
+ const temporary=join(f.root,'state/tmp');
+ assert.deepEqual(existsSync(temporary)?readdirSync(temporary):[],[]);
+ assert.equal(readFileSync(join(f.root,'tmp/global-sentinel'),'utf8'),'unrelated');
+}
+
+test('background recovery removes only private interrupted temporary data and preserves global files',t=>{
+ const f=fixture(t);const temporary=join(f.root,'state/tmp');mkdirSync(temporary,{mode:0o700});
+ writeFileSync(join(temporary,'orphan-source'),'private source');
+ const ledgerTemporary=join(f.root,'state/ledger/state-11111111-1111-4111-8111-111111111111.tmp');
+ writeFileSync(ledgerTemporary,'uncommitted',{mode:0o600});
+ writeFileSync(join(f.root,'tmp/disposable-unrelated'),'foreign');
+ const result=spawnSync(process.execPath,[script,f.config,'--once'],{env:f.env,encoding:'utf8',timeout:5000});
+ assert.equal(result.status,0,result.stdout+result.stderr);
+ assert.equal(existsSync(join(temporary,'orphan-source')),false);
+ assert.equal(existsSync(ledgerTemporary),false);
+ assert.equal(readFileSync(join(f.root,'tmp/disposable-unrelated'),'utf8'),'foreign');
+ assertNoTemporaries(f);
+});
+
+test('only explicit bootstrap creates fresh controller state and never reopens an existing path',t=>{
+ const f=fixture(t);rmSync(join(f.root,'state'),{recursive:true});
+ const ordinary=run(f);assert.equal(ordinary.status,125,ordinary.stdout+ordinary.stderr);
+ assert.equal(existsSync(join(f.root,'state')),false);
+ const boot=spawnSync(process.execPath,[script,f.config,'--bootstrap'],{env:f.env,encoding:'utf8',timeout:5000});
+ assert.equal(boot.status,0,boot.stdout+boot.stderr);
+ const before=readFileSync(join(f.root,'state/ledger/state.json'),'utf8');
+ const again=spawnSync(process.execPath,[script,f.config,'--bootstrap'],{env:f.env,encoding:'utf8',timeout:5000});
+ assert.equal(again.status,125);assert.equal(readFileSync(join(f.root,'state/ledger/state.json'),'utf8'),before);
+ assert.equal(existsSync(join(f.root,'calls')),false);assert.equal(existsSync(join(f.root,'packaged')),false);
+});
 
 test('manual CLI preserves a verified nonzero result and removes all owned preparation data',t=>{
  const f=fixture(t);const r=run(f);assert.equal(r.status,3,r.stdout+r.stderr);assert.match(r.stdout,/"code":3/);assert.match(r.stdout,/"cleanup":"absent"/);assertNoTemporaries(f);assert.equal(existsSync(join(f.root,'state/manual.lock')),false);
@@ -82,15 +123,16 @@ for(const signal of ['SIGTERM','SIGINT','SIGHUP'])test(`${signal} during packagi
 });
 
 
-test('an explicitly recovered dead CLI owner releases only its recorded job before a successor',async t=>{
+test('background recovery releases only a killed CLI turn before a successor',async t=>{
  const f=fixture(t,'work');const child=spawn(process.execPath,f.args,{env:f.env,stdio:['ignore','pipe','pipe']});const closed=once(child,'close');let output='';child.stderr.on('data',()=>{});
  const ready=new Promise(resolve=>child.stdout.on('data',data=>{output+=data.toString();if(output.includes('WORK-READY'))resolve();}));
  try {
   await Promise.race([ready,closed.then(()=>assert.fail('Work never started: '+output))]);
   child.kill('SIGKILL');await closed;
+  process.kill(Number(readFileSync(join(f.root,'work.pid'),'utf8')),0);
   const busy=run({...f,env:{...f.env,FIXTURE_MODE:'normal'}});assert.equal(busy.status,75,busy.stdout+busy.stderr);
   const ledger=JSON.parse(readFileSync(join(f.root,'state/ledger/state.json'),'utf8'));const resource=ledger.slots[0].lease.resourceId;
-  const recovered=spawnSync(process.execPath,[script,f.config,'--recover',resource],{env:{...f.env,FIXTURE_MODE:'unhealthy'},encoding:'utf8',timeout:10000});
+  const recovered=spawnSync(process.execPath,[script,f.config,'--once'],{env:{...f.env,FIXTURE_MODE:'unhealthy'},encoding:'utf8',timeout:10000});
   assert.equal(recovered.status,0,recovered.stdout+recovered.stderr);assert.match(recovered.stdout,/"cleanup":"absent"/);
   assert.equal(JSON.parse(readFileSync(join(f.root,'state/ledger/state.json'),'utf8')).slots[0].state,'free');
   assert.equal(run({...f,env:{...f.env,FIXTURE_MODE:'normal'}}).status,3);
@@ -132,7 +174,7 @@ test('the OS-locked Mac entry point preserves the real command status and exact 
  assertNoTemporaries(f);
 });
 
-test('Mac startup discovers a killed CLI turn and admits a clean successor automatically', async t => {
+test('foreground refuses an interrupted turn until background recovery permits a clean successor', async t => {
  const f=fixture(t,'work');
  const child=spawn(process.execPath,f.args,{env:f.env,stdio:['ignore','pipe','pipe']});
  const closed=once(child,'close');let output='';child.stderr.on('data',()=>{});
@@ -141,6 +183,9 @@ test('Mac startup discovers a killed CLI turn and admits a clean successor autom
   await Promise.race([ready,closed.then(()=>assert.fail('No interrupted work readiness: '+output))]);
   child.kill('SIGKILL');await closed;
   const before=JSON.parse(readFileSync(join(f.root,'state/ledger/state.json'),'utf8')).slots[0].lease;
+  assert.equal(runMac({...f,env:{...f.env,FIXTURE_MODE:'normal'}}).status,75);
+  const recovery=runMac({...f,env:{...f.env,FIXTURE_MODE:'unhealthy'}},['--once']);
+  assert.equal(recovery.status,0,recovery.stdout+recovery.stderr);
   const successor=runMac({...f,env:{...f.env,FIXTURE_MODE:'normal'}});
   assert.equal(successor.status,3,successor.stdout+successor.stderr);
   assert.equal(existsSync(join(f.root,before.resourceId)),false);
@@ -153,12 +198,9 @@ test('Mac startup discovers a killed CLI turn and admits a clean successor autom
  }
 });
 
-test('automatic recovery refuses a direct invocation without the inherited controller lock', t => {
- const f=fixture(t);
- const result=spawnSync(process.execPath,[script,f.config,'--reconcile'],{env:f.env,encoding:'utf8',timeout:10000});
- assert.equal(result.status,125,result.stdout+result.stderr);
- assert.match(result.stderr,/controller lock/i);
- assert.equal(existsSync(join(f.root,'state/ledger')),false);
+test('direct background recovery takes its own controller lock',t=>{
+ const f=fixture(t);const result=spawnSync(process.execPath,[script,f.config,'--once'],{env:f.env,encoding:'utf8',timeout:5000});
+ assert.equal(result.status,0,result.stdout+result.stderr);assert.equal(existsSync(join(f.root,'calls')),false);
 });
 
 test('the Mac entry point resolves a relative checkout before entering its safe working directory',t=>{
@@ -168,14 +210,157 @@ test('the Mac entry point resolves a relative checkout before entering its safe 
  assert.equal(result.status,3,result.stdout+result.stderr);
 });
 
-test('automatic recovery refuses an inherited descriptor for a different private file',async t=>{
+test('a foreign inherited descriptor cannot replace the controller lock',async t=>{
  const f=fixture(t);const {openSync,closeSync}=await import('node:fs');
- writeFileSync(join(f.root,'state/mac-controller.lock'),'',{mode:0o600});
- const fd=openSync(join(f.root,'foreign-lock'),'wx',0o600);
+ const {withKernelLock}=await import('./kernel-lock.mjs');
+ const foreign=join(f.root,'foreign-lock');writeFileSync(foreign,'foreign',{mode:0o600});const fd=openSync(foreign,'r+');
  try {
-  const result=spawnSync(process.execPath,[script,f.config,'--reconcile'],{
-   env:{...f.env,WAITRON_DISPOSABLE_LOCK_FD:'3'},stdio:['ignore','pipe','pipe',fd],encoding:'utf8',timeout:10000});
-  assert.equal(result.status,125,result.stdout+result.stderr);
-  assert.match(result.stderr,/controller lock/i);assert.equal(existsSync(join(f.root,'state/ledger')),false);
+  await withKernelLock(join(f.root,'state'),async()=>{
+   const result=spawnSync(process.execPath,[script,f.config,'--once'],{
+    env:{...f.env,WAITRON_DISPOSABLE_LOCK_FD:'3'},stdio:['ignore','pipe','pipe',fd],encoding:'utf8',timeout:5000});
+   assert.equal(result.status,75,result.stdout+result.stderr);return {code:0};
+  });
+  assert.equal(readFileSync(foreign,'utf8'),'foreign');
  } finally {closeSync(fd);}
+});
+
+
+test('initial git and health share the sub-ten-second refusal budget',{concurrency:true},async t=>{
+ await Promise.all(['slow-git','slow-health'].map(mode=>t.test(mode,{timeout:15000},async sub=>{
+  const f=fixture(sub,mode==='slow-health'?'unreachable':'normal');
+  const python=execFileSync('python3',['-I','-c','import sys;print(sys.executable)'],{encoding:'utf8'}).trim();
+  const git=execFileSync('python3',['-I','-c','import shutil;print(shutil.which("git"))'],{encoding:'utf8'}).trim();
+  writeFileSync(join(f.root,'bin/git'),`#!${python}
+import os,sys,time,signal
+from pathlib import Path
+Path(${JSON.stringify(join(f.root,'git.pid'))}).write_text(str(os.getpid()))
+if ${JSON.stringify(mode)}=='slow-git':
+ signal.signal(signal.SIGTERM,signal.SIG_IGN);time.sleep(60)
+else:
+ time.sleep(3);os.execv(${JSON.stringify(git)},[${JSON.stringify(git)},*sys.argv[1:]])
+`,{mode:0o700});
+  const start=performance.now();const child=spawn(process.execPath,f.args,{env:f.env,stdio:['ignore','pipe','pipe']});
+  const closed=once(child,'close');let stdout='',stderr='';
+  child.stdout.on('data',data=>stdout+=data);child.stderr.on('data',data=>stderr+=data);
+  const stop=()=>child.kill('SIGTERM');sub.signal.addEventListener('abort',stop,{once:true});
+  let status;try{[status]=await closed;}finally{sub.signal.removeEventListener('abort',stop);}
+  const result={status,stdout,stderr};const elapsed=performance.now()-start;
+  assert.equal(result.status,75,result.stdout+result.stderr);
+  assert.ok(elapsed<10000,`Admission took ${elapsed}ms`);
+  assert.equal(existsSync(join(f.root,'packaged')),false);
+  assert.equal(JSON.parse(readFileSync(join(f.root,'state/ledger/state.json'),'utf8')).slots[0].state,'free');
+  assertNoTemporaries(f);
+ })));
+});
+
+test('an expired admission clock cannot turn a later packaging error into busy',t=>{
+ const f=fixture(t,'snapshot-budget');
+ const program=`import {existsSync} from 'node:fs';import {main} from ${JSON.stringify(new URL('./manual.mjs',import.meta.url).href)};
+ const expiry=new AbortController();const original=AbortSignal.timeout;let first=true;
+ AbortSignal.timeout=ms=>{if(first){first=false;return expiry.signal;}return original.call(AbortSignal,ms);};
+ const timer=setInterval(()=>{if(existsSync(${JSON.stringify(join(f.root,'packaged'))})){expiry.abort();clearInterval(timer);}},5);
+ try{process.exitCode=await main(${JSON.stringify(f.args.slice(1))});}catch(error){console.error(error.message);process.exitCode=125;}finally{clearInterval(timer);}`;
+ const result=spawnSync(process.execPath,['--input-type=module','-e',program],{env:f.env,encoding:'utf8',timeout:5000});
+ assert.equal(result.status,125,result.stdout+result.stderr);assert.match(result.stderr,/Source snapshot failed/);assertNoTemporaries(f);
+});
+
+
+test('eight real entry points admit one turn and refuse seven before packaging',async t=>{
+ const f=fixture(t,'concurrency');
+ const outcomes=[];
+ const children=Array.from({length:8},()=>{
+  const child=spawn(process.execPath,f.args,{env:f.env,stdio:['ignore','pipe','pipe']});let stdout='',stderr='';
+  child.stdout.pause();child.once('exit',()=>child.stdout.resume());
+  child.stdout.on('data',data=>stdout+=data);child.stderr.on('data',data=>stderr+=data);
+  const closed=once(child,'close').then(([code,signal])=>{
+   assert.equal(signal,null,stderr);const receipt=JSON.parse(stdout.trim().split('\n').at(-1));
+   const result={code,receipt};outcomes.push(result);return result;
+  });
+  return {child,closed};
+ });
+ try {
+  const end=performance.now()+10000;
+  while((outcomes.length<7 || !existsSync(join(f.root,'work-ready'))) && performance.now()<end)await delay(10);
+  assert.equal(outcomes.length,7);assert.equal(outcomes.filter(r=>r.code===75).length,7);
+  const held=JSON.parse(readFileSync(join(f.root,'state/ledger/state.json'),'utf8'));
+  assert.equal(held.slots.filter(slot=>slot.state!=='free').length,1);
+  writeFileSync(join(f.root,'release'),'finish');
+  const results=await Promise.all(children.map(c=>c.closed));
+  assert.equal(results.filter(r=>r.code===3).length,1);assert.equal(results.filter(r=>r.code===75).length,7);
+  assert.equal(results.find(r=>r.code===3).receipt.cleanup,'absent');
+  const after=JSON.parse(readFileSync(join(f.root,'state/ledger/state.json'),'utf8'));
+  assert.equal(after.slots[0].state,'free');assert.equal(after.slots[0].generation,1);assert.equal(Object.keys(after.turns).length,1);
+  assertNoTemporaries(f);
+ } finally {
+  for(const {child} of children)if(child.exitCode===null && child.signalCode===null)child.kill('SIGTERM');
+  await Promise.allSettled(children.map(c=>c.closed));
+ }
+});
+
+
+for(const unsafe of ['linked-state','public-state','linked-lock','public-lock','directory-lock','relative-state'])test(`real Node refuses ${unsafe} before preparation or host contact`,t=>{
+ const f=fixture(t);const state=join(f.root,'state');const config=JSON.parse(readFileSync(f.config,'utf8'));
+ if(unsafe==='linked-state'){symlinkSync(state,join(f.root,'linked'));config.state=join(f.root,'linked');}
+ if(unsafe==='public-state')chmodSync(state,0o755);
+ if(unsafe==='linked-lock'){rmSync(join(state,'mac-controller.lock'));writeFileSync(join(f.root,'foreign'),'foreign',{mode:0o600});symlinkSync(join(f.root,'foreign'),join(state,'mac-controller.lock'));}
+ if(unsafe==='public-lock')chmodSync(join(state,'mac-controller.lock'),0o644);
+ if(unsafe==='directory-lock'){rmSync(join(state,'mac-controller.lock'));mkdirSync(join(state,'mac-controller.lock'));}
+ if(unsafe==='relative-state')config.state='relative';
+ writeFileSync(f.config,JSON.stringify(config));const result=spawnSync(process.execPath,f.args,{cwd:f.root,env:f.env,encoding:'utf8',timeout:5000});
+ assert.equal(result.status,125,result.stdout+result.stderr);assert.equal(existsSync(join(f.root,'calls')),false);assert.equal(existsSync(join(f.root,'packaged')),false);
+ if(unsafe==='linked-lock')assert.equal(readFileSync(join(f.root,'foreign'),'utf8'),'foreign');
+ assert.equal(existsSync(join(f.root,'relative')),false);
+});
+
+for(const invalid of [[],{state:37}])test(`real Node refuses invalid configuration ${JSON.stringify(invalid)} without a traceback`,t=>{
+ const f=fixture(t);writeFileSync(f.config,JSON.stringify(invalid));const result=runMac(f,['--once']);
+ assert.equal(result.status,125,result.stderr);assert.doesNotMatch(result.stderr,/Traceback/);assert.equal(existsSync(join(f.root,'calls')),false);
+});
+
+for(const damage of ['missing','corrupt'])test(`ordinary and background calls refuse a ${damage} ledger without initializing it`,t=>{
+ const f=fixture(t);const path=join(f.root,'state/ledger/state.json');
+ if(damage==='missing')rmSync(path);else writeFileSync(path,'corrupt');
+ for(const args of [f.args,[script,f.config,'--once'],[script,f.config,'--bootstrap']]){
+  const result=spawnSync(process.execPath,args,{env:f.env,encoding:'utf8',timeout:5000});
+  assert.equal(result.status,125,result.stdout+result.stderr);
+  assert.equal(existsSync(path),damage==='corrupt');if(damage==='corrupt')assert.equal(readFileSync(path,'utf8'),'corrupt');
+ }
+ assert.equal(existsSync(join(f.root,'calls')),false);assert.equal(existsSync(join(f.root,'packaged')),false);
+});
+
+for(const gate of ['manual.lock','recovery.lock','ledger/lock'])test(`the CLI refuses legacy ${gate} before cleaning any unexpected state`,t=>{
+ const f=fixture(t);mkdirSync(join(f.root,'state',gate),{mode:0o700});
+ const temporary=join(f.root,'state/tmp');mkdirSync(temporary,{mode:0o700});writeFileSync(join(temporary,'retained'),'keep');
+ for(const args of [f.args,[script,f.config,'--once']]){
+  const result=spawnSync(process.execPath,args,{env:f.env,encoding:'utf8',timeout:5000});
+  assert.equal(result.status,125,result.stdout+result.stderr);assert.match(result.stderr,/Legacy gate/);
+  assert.equal(readFileSync(join(temporary,'retained'),'utf8'),'keep');assert.equal(existsSync(join(f.root,'state',gate)),true);
+ }
+ assert.equal(existsSync(join(f.root,'calls')),false);
+});
+
+test('the exec launcher runs from root without the four runtime injection variables',t=>{
+ const f=fixture(t);const node=join(f.root,'node');
+ const python=execFileSync('python3',['-I','-c','import sys;print(sys.executable)'],{encoding:'utf8'}).trim();
+ writeFileSync(node,`#!/bin/sh\nprintf '%s|%s|%s|%s|%s' "$PWD" "\${NODE_OPTIONS-absent}" "\${NODE_PATH-absent}" "\${PYTHONPATH-absent}" "\${PYTHONHOME-absent}" > '${f.root}/context'\n`,{mode:0o700});
+ const result=spawnSync(python,['-I','-B',macWrapper,node,f.config,'--once'],{
+  cwd:f.root,env:{...f.env,NODE_OPTIONS:'candidate-options',NODE_PATH:'candidate-node',PYTHONPATH:'candidate-python',PYTHONHOME:'candidate-home'},encoding:'utf8',timeout:5000});
+ assert.equal(result.status,0,result.stderr);assert.equal(readFileSync(join(f.root,'context'),'utf8'),'/|absent|absent|absent|absent');
+});
+
+test('exec preserves the Node process identity and its operating-system signal result',async t=>{
+ const f=fixture(t);const node=join(f.root,'node');
+ writeFileSync(node,`#!/bin/sh\necho $$ > '${f.root}/node-pid'\nkill -KILL $$\n`,{mode:0o700});
+ const child=spawn('python3',['-I','-B',macWrapper,node,f.config,'--once'],{env:f.env,stdio:['ignore','pipe','pipe']});
+ child.stdout.resume();child.stderr.resume();const [code,signal]=await once(child,'close');
+ assert.equal(code,null);assert.equal(signal,'SIGKILL');assert.equal(Number(readFileSync(join(f.root,'node-pid'),'utf8')),child.pid);
+});
+
+test('a busy direct controller preserves75 after its output pipe closes',async t=>{
+ const f=fixture(t);const {withKernelLock}=await import('./kernel-lock.mjs');
+ await withKernelLock(join(f.root,'state'),async()=>{
+  const child=spawn(process.execPath,[script,f.config,'--once'],{env:f.env,stdio:['ignore','pipe','pipe']});
+  const closed=once(child,'close');child.stderr.resume();child.stdout.destroy();
+  assert.equal((await closed)[0],75);return {code:0};
+ });
 });

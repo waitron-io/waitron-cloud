@@ -10,7 +10,7 @@ import * as transport from './transport.mjs';
 const [host, recipe, source, privatePackage, ledger] = process.argv.slice(2);
 test('the Mac controller runs actual PostgreSQL checks, preserves exit3 and releases verified absence', {timeout: 900000}, async () => {
   assert.equal(typeof transport.SSHTransport, 'function', 'The real SSH transport must exist');
-  const leases = new LocalLeases(ledger, {hostGeneration: 'controller-'+Date.now(), slots: 1});
+  const leases = new LocalLeases(ledger, {hostGeneration: 'controller-'+Date.now(), slots: 1, bootstrap:true});
   const request = {lane: 'I', turn: 'postgres-exit3', snapshot: createHash('sha256').update(readFileSync(source)).digest('hex'),
     argv: ['node','scripts/test-postgres.mjs','exec','pnpm','--dir','packages/registration','exec','node','-e',
       "const{spawnSync}=require('node:child_process');const r=spawnSync(process.execPath,['--test','test/monitoring.test.ts'],{stdio:'inherit'});if(r.status!==0)process.exit(r.status||125);console.log('LOCAL-COMMAND-COMPLETE');process.exit(3)"]};
