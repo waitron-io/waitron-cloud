@@ -176,10 +176,24 @@ place and prevent another booking, including after a failed write. Run
 `node --test --test-name-pattern='setup booking' scripts/kubernetes-proof-control.test.mjs`
 for filesystem, concurrent-call and injected write-failure checks.
 
-This step checks and retains supplied cost evidence; its URLs and digests do
-not establish the amounts. The complete calculation from acquired prices and
-reviewed quantity bounds, prior-history import and setup creation remain open.
-The lifecycle entries still refuse, so you do not need to sign in yet.
+You can give `bookManualSetup` acquired catalogues, quantity bounds and the five
+fixed allowances as `priceInputs`. `calculateManualCost` converts all nine paid
+rates into whole millionths of a dollar, rounding each charge upward. It uses a
+28-day divisor for monthly storage to reserve conservatively, and includes both
+request types, Lambda duration and requests, and log ingestion and storage. The
+private booking retains a snapshot of those inputs alongside the result, so a
+later edit cannot change the calculation that was booked. Missing quantities,
+stale catalogues, foreign sources and totals reaching US$10 refuse. Run
+`node --test --test-name-pattern='manual cost' deploy/kubernetes/proof/prices.test.mjs`
+and the setup booking checks above for the arithmetic and retained snapshot.
+
+The caller still has to supply reviewed upper quantities and fixed transfer,
+events, network, tax and contingency allowances. Source URLs and digests alone
+do not establish those bounds. This calculation has no first-machine profile
+or authenticated billing qualification yet; prior-history import and creation
+remain unfinished. The lifecycle entries still refuse, so you do not need to
+sign in yet. AWS documents [binary storage units](https://aws.amazon.com/s3/pricing/)
+and [per-second disk charging](https://aws.amazon.com/ebs/pricing/).
 
 A stack name alone does not prove its expiry protection is working.
 `inspectManualProtection` resolves the bucket, rule and function from the exact

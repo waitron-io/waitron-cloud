@@ -963,3 +963,41 @@ test('setup booking preserves cost and refuses a checkout changed while synchron
   await assert.rejects(f.book(), /D570 controller refused/);
   assert.equal(JSON.parse(readFileSync(join(f.options.directory, 'setup.json'))).upperMicroUsd, 110000);
 });
+
+// Supplied quantities and fixed allowances still need review; catalogue rates must be calculated rather than pasted.
+test('setup booking calculates paid cost from retained acquisitions before saving the original reservation', async t => {
+  const f = setupBookingFixture(t), { acquirePriceCatalogue } = await import('../deploy/kubernetes/proof/prices.mjs');
+  const docs = JSON.parse(readFileSync(new URL('../deploy/kubernetes/proof/test-fixtures/prices.json', import.meta.url)));
+  const catalogues = {};
+  for (const [service, doc] of Object.entries(docs)) catalogues[service] = await acquirePriceCatalogue(service, {
+    fetch: async () => new Response(JSON.stringify(doc), { headers: { 'content-type': 'application/json' } }),
+    clock: () => Date.parse(now), retain: async () => {},
+  });
+  const priceInputs = { catalogues, quantities: { computeSeconds: 3600, diskGiBSeconds: 2419200,
+    storageByteSeconds: 2597596220620800, putRequests: 1000, getRequests: 10000,
+    lambdaMiBSeconds: 102400, lambdaRequests: 10000, logIngestBytes: 1073741824,
+    logStoredByteSeconds: 2597596220620800 },
+    fixed: Object.fromEntries(['transfer', 'events', 'network', 'tax', 'contingency'].map(name => [name,
+      { upperMicroUsd: 10000, source: 'https://aws.amazon.com/pricing/', digest: 'c'.repeat(64) }])) };
+  const call = f.aws.call;
+  f.aws.call = async (...args) => {
+    priceInputs.quantities.computeSeconds = 1;
+    return call(...args);
+  };
+  const result = await f.book({ cost: undefined, priceInputs });
+  assert.equal(result.upperMicroUsd, 1083734);
+  const saved = JSON.parse(readFileSync(join(f.options.directory, 'setup.json')));
+  assert.equal(saved.cost.components.lambda.upperMicroUsd, 3334);
+  assert.ok(saved.priceInputs, "reservation must retain its original price and quantity inputs");
+  assert.equal(saved.priceInputs.quantities.computeSeconds, 3600);
+  assert.deepEqual(saved.priceInputs.catalogues.AmazonEC2, catalogues.AmazonEC2);
+  assert.equal(saved.cost.components.compute.source, catalogues.AmazonEC2.source);
+  assert.equal(saved.cost.components.compute.digest, catalogues.AmazonEC2.digest);
+});
+
+test('setup booking refuses ambiguous pasted and acquired cost inputs before a provider call', async t => {
+  const f = setupBookingFixture(t);
+  await assert.rejects(f.book({ priceInputs: {} }), /D570 controller refused/);
+  assert.deepEqual(f.calls, []);
+  assert.equal(existsSync(f.options.directory), false);
+});

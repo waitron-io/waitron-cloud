@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { renderManualSetup } from '../deploy/kubernetes/proof/setup.mjs';
 import policy from '../deploy/kubernetes/proof/policy.json' with { type: 'json' };
 import { inspectBudget, createS3LedgerStore } from './kubernetes-proof-budget.mjs';
+import { calculateManualCost } from '../deploy/kubernetes/proof/prices.mjs';
 
 const execute = promisify(execFile);
 const account = '462991287391', region = 'eu-north-1';
@@ -305,7 +306,11 @@ export async function inspectManualBudget(options) {
 }
 
 export async function bookManualSetup(options) {
-  const { now, directory, clock = Date.now } = options, cost = structuredClone(options.cost);
+  const { now, directory, clock = Date.now } = options;
+  check(options.priceInputs === undefined || options.cost === undefined);
+  const priceInputs = structuredClone(options.priceInputs);
+  const cost = priceInputs === undefined ? structuredClone(options.cost)
+    : calculateManualCost({ ...priceInputs, now });
   const categories = ['compute', 'disk', 'storage', 'requests', 'transfer', 'events', 'lambda', 'logs', 'network', 'tax', 'contingency'];
   check(cost && Object.keys(cost).sort().join(',') === 'components,observedAt'
     && instant(cost.observedAt) <= instant(now) && cost.observedAt.slice(0, 10) === now.slice(0, 10)
@@ -330,7 +335,11 @@ export async function bookManualSetup(options) {
   // Keep even incomplete bookings: an uncertain write must never erase setup's reserved cost.
   await mkdir(directory, { mode: 0o700 });
   const file = await open(join(directory, 'setup.json'), 'wx', 0o600);
-  try { await file.writeFile(JSON.stringify({ ...inspection, cost, upperMicroUsd }) + '\n'); await file.sync(); }
+  try {
+    await file.writeFile(JSON.stringify({ ...inspection, cost, upperMicroUsd,
+      ...(priceInputs === undefined ? {} : { priceInputs }) }) + '\n');
+    await file.sync();
+  }
   finally { await file.close(); }
   for (const path of [directory, dirname(directory)]) {
     const handle = await open(path, 'r');

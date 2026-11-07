@@ -358,3 +358,81 @@ for (const stage of ['headers', 'body', 'retention', 'cancellation', 'reader-can
     if (stage === 'body') { assert.equal(cancelled, 1); assert.equal(released, 1); }
   } finally { clearTimeout(keepAlive); replacement.mock.restore(); }
 });
+
+// A unit conversion or rounded-down fraction would silently underbook the paid bill.
+const quantityFixture = () => ({ computeSeconds: 3600, diskGiBSeconds: 2419200,
+  storageByteSeconds: 2597596220620800, putRequests: 1000, getRequests: 10000,
+  lambdaMiBSeconds: 102400, lambdaRequests: 10000, logIngestBytes: 1073741824,
+  logStoredByteSeconds: 2597596220620800 });
+const fixedFixture = () => Object.fromEntries(['transfer', 'events', 'network', 'tax', 'contingency']
+  .map(name => [name, { upperMicroUsd: 10000, source: 'https://aws.amazon.com/pricing/', digest: 'a'.repeat(64) }]));
+async function costFixture() {
+  const catalogues = {};
+  for (const service of Object.keys(fixtures)) catalogues[service] = await prices.acquirePriceCatalogue(service, {
+    fetch: async () => new Response(body(service), { headers: { 'content-type': 'application/json' } }),
+    clock: () => Date.parse(now), retain: async () => {},
+  });
+  return { catalogues, quantities: quantityFixture(), fixed: fixedFixture(), now };
+}
+function calculate(input) {
+  assert.equal(typeof prices.calculateManualCost, 'function', 'missing complete manual cost arithmetic');
+  return prices.calculateManualCost(input);
+}
+
+test('manual cost converts all nine acquired paid rates and retains five reviewed fixed bounds', async () => {
+  const input = await costFixture(), result = calculate(input);
+  assert.equal(result.observedAt, now);
+  assert.deepEqual(Object.fromEntries(Object.entries(result.components).map(([key, row]) => [key, row.upperMicroUsd])), {
+    compute: 346800, disk: 83600, storage: 23000, requests: 9000, lambda: 3334, logs: 568000,
+    transfer: 10000, events: 10000, network: 10000, tax: 10000, contingency: 10000,
+  });
+  for (const [category, service] of [['compute', 'AmazonEC2'], ['disk', 'AmazonEC2'], ['storage', 'AmazonS3'],
+    ['requests', 'AmazonS3'], ['lambda', 'AWSLambda'], ['logs', 'AmazonCloudWatch']]) {
+    assert.equal(result.components[category].source, input.catalogues[service].source);
+    assert.equal(result.components[category].digest, input.catalogues[service].digest);
+  }
+  assert.deepEqual(result.components.tax, input.fixed.tax);
+  input.fixed.tax.upperMicroUsd = 1;
+  assert.equal(result.components.tax.upperMicroUsd, 10000);
+});
+
+test('manual cost rounds each paid subcomponent upward rather than discounting tiny usage', async () => {
+  const input = await costFixture();
+  for (const key of Object.keys(input.quantities)) input.quantities[key] = 1;
+  assert.deepEqual(Object.fromEntries(Object.entries(calculate(input).components).slice(0, 6).map(([key, row]) => [key, row.upperMicroUsd])),
+    { compute: 97, disk: 1, storage: 1, requests: 6, lambda: 2, logs: 2 });
+});
+
+for (const [label, change] of [
+  ['decoded rather than acquired prices', x => x.catalogues.AmazonEC2.kind = 'd570-price-decoded-v1'],
+  ['stale price observation', x => x.catalogues.AmazonS3.observedAt = '2026-11-05T15:00:00Z'],
+  ['future price observation', x => x.catalogues.AWSLambda.observedAt = '2026-11-06T15:00:01Z'],
+  ['foreign source', x => x.catalogues.AmazonCloudWatch.source = 'https://example.invalid/prices'],
+  ['wrong unit', x => x.catalogues.AmazonEC2.rates.disk.unit = 'GB'],
+  ['missing paid rate', x => delete x.catalogues.AmazonS3.rates.put],
+  ['zero paid rate', x => x.catalogues.AWSLambda.rates.lambdaRequests.usdNumerator = '0'],
+  ['wrong denominator', x => x.catalogues.AmazonEC2.rates.compute.usdDenominator = '1'],
+  ['missing quantity', x => delete x.quantities.getRequests],
+  ['fractional quantity', x => x.quantities.computeSeconds = 0.1],
+  ['unsafe quantity', x => x.quantities.storageByteSeconds = Number.MAX_SAFE_INTEGER + 1],
+  ['missing fixed tax bound', x => delete x.fixed.tax],
+  ['zero fixed bound', x => x.fixed.network.upperMicroUsd = 0],
+  ['foreign fixed source', x => x.fixed.transfer.source = 'https://example.invalid/prices'],
+  ['malformed fixed digest', x => x.fixed.events.digest = 'unknown'],
+  ['cap reached', x => x.fixed.contingency.upperMicroUsd = 10000000],
+  ['aggregate cap reached', x => x.fixed.contingency.upperMicroUsd = 9000000],
+  ['aggregate cap exactly ten dollars', x => x.fixed.contingency.upperMicroUsd = 8926266],
+]) test(`manual cost refuses ${label}`, async () => {
+  const input = await costFixture(); change(input);
+  assert.throws(() => calculate(input), /D570 price evidence refused/);
+});
+
+test('manual cost retains fractional charges when every category is already nonzero', async () => {
+  const input = await costFixture();
+  input.quantities = { computeSeconds: 1, diskGiBSeconds: 3600,
+    storageByteSeconds: 92771293593600, putRequests: 1, getRequests: 3,
+    lambdaMiBSeconds: 102400, lambdaRequests: 3, logIngestBytes: 1073741824,
+    logStoredByteSeconds: 92771293593600 };
+  assert.deepEqual(Object.fromEntries(Object.entries(calculate(input).components).slice(0, 6).map(([key, row]) => [key, row.upperMicroUsd])),
+    { compute: 97, disk: 125, storage: 822, requests: 7, lambda: 1335, logs: 541000 });
+});

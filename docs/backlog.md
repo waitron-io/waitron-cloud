@@ -3162,8 +3162,8 @@ implementation or production evidence.
   tier conservatively. The fixed reader and scope checks use eu-north-1; the
   reviewed 320 MiB ceiling admits its current 270,696,312-byte EC2 catalogue
   without changing the 30-second deadline. Real public retrieval qualifies all
-  four catalogues; it does not authenticate an account or reconcile billing. Complete service-page reconciliation, transfer/events/network,
-  taxes, quantities, billing and all-in bound construction, setup integration,
+  four catalogues; it does not authenticate an account or reconcile billing. First-machine
+  quantity and fixed-cost bounds, billing reconciliation, setup integration,
   real S3 behavior and live cleanup remain open; these inputs grant no spending or
   runnable owner setup. The manual controller preflight now checks a clean exact
   remote main, temporary staging identity, Stockholm and the current monthly
