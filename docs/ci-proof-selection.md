@@ -56,23 +56,19 @@ nightly run exercises every suite regardless of the changed paths.
 
 ## Review and verify the boundary
 
-When you renew [root-input review](ci-root-input-ownership.md), its records alone
-do not select a proof matrix. Both saved root reviews and documentation
-authorities must qualify first, with an unchanged registry and checker. A stale,
-forged or removed record keeps proof work. Every other changed path still uses
-the rules below, so a valid renewal cannot hide a real proof input.
+Retired review records and their history no longer grant or refuse a proof
+omission. They are ignored while every real changed input keeps the rules below.
+The old root JSON registry is inert too. A record-only change does not establish
+that any product test ran. The [documentation guide](ci-documentation-audit.md)
+explains the accepted change from renewal gates to ordinary reader review.
 
 You maintain the reviewed input list in `scripts/ci-proof-inputs.mjs`. When you
 change a proof reader or add an import, helper, fixture or file read, follow that
 input and update its ownership here and in the selector. Broad directory rules
 include new files within their existing boundary. New packages, unfamiliar
 root areas and unclassified scripts keep both proofs until you review them.
-With v2, accompanying audit records count as evidence only after the saved head's
-documentation records verify. Unused identity, gateway and lock shortcuts can
-remain stale; the proof selector never uses their authority. Damaged metadata,
-a changed frozen v1 policy or stale documentation records keep full proof work.
-Historical v1 renewals still require all four inventories. This keeps required
-record renewal from waking both matrices for unrelated code PRs. Root Markdown is unrelated prose for these proof readers.
+Root Markdown is unrelated prose for these proof readers. New readers must be
+reviewed with their real ownership tests; no record regeneration discovers them.
 New directories inside known `docs/`, `deploy/`, workspace or workflow areas
 use their declared ownership rather than the unknown-root fallback. Review a new
 reader before relying on that boundary. The fallback also retains all root-script changes, including the other proof

@@ -4,15 +4,16 @@ import assert from 'node:assert/strict';
 import {execFileSync} from 'node:child_process';
 import {readFileSync, readdirSync, lstatSync} from 'node:fs';
 import {pathToFileURL} from 'node:url';
-import {checkRootReview, rootReviewProjection, rootRecordRoot, rootRegistryPath, rootReviewActivated} from './ci-root-review.mjs';
-import {auditDescriptor, auditRecordRoot} from './ci-input-audit-records.mjs';
-import {readInputAudit, unreadMarkdown} from './ci-input-audit.mjs';
+import {readInputInventory, inertCIRecord, unreadMarkdown} from './ci-input-audit.mjs';
 import {receiptSuites} from './ci-scope.mjs';
 import {packageMembers} from './ci-package-groups.mjs';
 import {readGitBlobs} from './ci-package-revisions.mjs';
 
-const candidates = new Set(['scripts/ci-root-shards.test.mjs', 'scripts/verify-backup-capacity-receipt.test.mjs',
-  'deploy/local-stack/operations-health.test.mjs']);
+const owners = [
+  {id: 'root-partition-contract', paths: ['scripts/ci-root-shards.test.mjs'], owners: {rootTests: true, receipts: []}},
+  {id: 'local-health-test', paths: ['deploy/local-stack/operations-health.test.mjs'], owners: {rootTests: false, receipts: ['test:local-stack']}},
+];
+const candidates = new Set(owners.flatMap(entry => entry.paths));
 const sha = /^[a-f0-9]{40}$/;
 const manifestPattern = /^(?:apps|packages)\/[^/\\]+\/package\.json$/;
 
@@ -41,17 +42,18 @@ function packageInventory(revision, entries, git) {
 }
 
 export function rootInputPlan(paths, base, head, git) {
-  if (!paths.some(path => candidates.has(path) || path === rootRegistryPath || path.startsWith(rootRecordRoot))) return null;
+  if (!paths.some(path => candidates.has(path) || /(?:^|\/)\.gitattributes$/.test(path))) return null;
   try {
     assert.ok(paths.length > 0 && new Set(paths).size === paths.length && paths.every(path => typeof path === 'string' && !path.includes('\0')), 'Invalid root changed paths');
     assert.ok(sha.test(base) && sha.test(head), 'Invalid root revisions');
-    // Inspect both trees even if one refuses: a fresh head cannot bless a stale
-    // base, and a missing base must not hide a separate head refusal.
     const trees = [base, head].map((revision, index) => {
       try {
-        const registry = checkRootReview(revision, git, index ? base : undefined), projection = rootReviewProjection(revision, git);
-        const {entries} = readInputAudit(revision, git);
-        return {registry, projection, entries};
+        const entries = readInputInventory(revision, git);
+        for (const path of candidates) {
+          const entry = entries.find(entry => entry.path === path);
+          assert.ok(entry?.mode === '100644' && entry.type === 'blob', `Missing regular root owner target: ${path}`);
+        }
+        return {entries};
       } catch (error) {return {error: `${index ? 'head' : 'base'}: ${error.message}`};}
     });
     const errors = trees.filter(tree => tree.error).map(tree => tree.error);
@@ -60,25 +62,22 @@ export function rootInputPlan(paths, base, head, git) {
     const actual = git('diff', '--name-only', '--no-renames', '-z', base, head).split('\0');
     assert.equal(actual.pop(), '', 'Incomplete root changed paths');
     assert.deepEqual([...paths].sort(), actual.sort(), 'Root paths differ from immutable revisions');
-    assert.equal(trees[0].projection.registryObjectId, trees[1].projection.registryObjectId, 'Root registry changed; full work required');
-    for (const path of [rootRegistryPath, 'scripts/ci-root-review.mjs', 'scripts/ci-root-inputs.mjs', 'scripts/ci-input-audit.json', auditDescriptor]) {
-      assert.equal(trees[0].entries.find(e => e.path === path)?.objectId,
-        trees[1].entries.find(e => e.path === path)?.objectId, `Shared root policy changed: ${path}`);
-    }
+    assert.equal(trees[0].entries.find(entry => entry.path === 'scripts/ci-root-inputs.mjs')?.objectId,
+      trees[1].entries.find(entry => entry.path === 'scripts/ci-root-inputs.mjs')?.objectId, 'Root ownership policy changed; full work required');
     // Checkout filters affect the bytes that jobs receive, including inside a
-    // package. A renewed path record cannot make that installation boundary local.
+    // package. Ownership cannot make that installation boundary local.
     assert.ok(!paths.some(path => /(?:^|\/)\.gitattributes$/.test(path)), 'Checkout attributes require full root work');
     const inventories = [base, head].map((revision, i) => packageInventory(revision, trees[i].entries, git));
     assert.deepEqual([...inventories[0]], [...inventories[1]], 'Root workspace identity or test commands changed');
     const inputs = new Map();
-    for (const tree of trees) for (const entry of tree.registry.entries) {
+    for (const entry of owners) {
       for (const path of entry.paths) inputs.set(path, entry);
     }
     const selected = new Map(), packagePaths = [];
     for (const path of paths) {
       const entry = inputs.get(path);
       if (entry) {selected.set(entry.id, entry); continue;}
-      if (path.startsWith(rootRecordRoot) || path.startsWith(auditRecordRoot + 'docs/')) continue;
+      if (inertCIRecord(path)) continue;
       if (unreadMarkdown(path) && trees.every(tree => {
         const row = tree.entries.find(e => e.path === path);
         return !row || row.mode === '100644' && row.type === 'blob';
@@ -102,9 +101,6 @@ export function rootInputPlan(paths, base, head, git) {
 
 export function assertRootInputWork(plan, {base, head, git}) {
   assert.ok(sha.test(head) && typeof git === 'function', 'Missing trusted root verification context');
-  // Freshness applies after historical activation even when all current metadata
-  // or every proposed ownership marker has been removed.
-  if (rootReviewActivated(head, git)) checkRootReview(head, git, base);
   if (plan.reuse) {
     assertReuseProof(plan.reuse, '.github/workflows/ci.yml');
     assert.ok(!Object.hasOwn(plan, 'rootInputs') && !Object.hasOwn(plan, 'rootTests'), 'Reuse cannot declare root work');
@@ -124,7 +120,7 @@ export function assertRootInputWork(plan, {base, head, git}) {
     assert.ok(!marked && plan.typecheck === true && !plan.scripts && !plan.documentation && !plan.reuse, 'Root refusal requires full work');
     // Unknown policy or directory membership refuses narrowing, not full work.
     // Full work still requires every saved package manifest and receipt owner.
-    const {entries} = readInputAudit(head, git), inventory = packageManifests(head, entries, git);
+    const entries = readInputInventory(head, git), inventory = packageManifests(head, entries, git);
     const selected = new Set(plan.packages.flatMap(packageMembers));
     assert.deepEqual([...selected].sort(), [...inventory.values()].map(row => row.name).sort(), 'Root fallback requires every package owner');
     assert.deepEqual([...plan.receipts].sort(), [...receiptSuites].sort(), 'Root fallback requires every receipt owner');
@@ -153,8 +149,7 @@ export function rootVerificationContext(plan, env = process.env) {
   const event = env.GITHUB_EVENT_PATH ? JSON.parse(readFileSync(env.GITHUB_EVENT_PATH, 'utf8')) : {};
   const head = event.pull_request?.head.sha ?? env.CI_HEAD_SHA ?? env.GITHUB_SHA ?? checkout;
   assert.match(head, sha, 'Invalid trusted root event head');
-  const activated = rootReviewActivated(head, git);
-  if (activated || plan.rootInputs || Object.hasOwn(plan, 'rootTests')) {
+  {
     assert.equal(checkout, head, 'Root work requires the exact head checkout');
     if (env.CI_HEAD_SHA) assert.equal(head, env.CI_HEAD_SHA, 'Root event differs from the expected head');
     assert.equal(git('diff', '--name-only', head, '--'), '', 'Root work requires a clean tracked checkout; dirty bytes refuse execution');
@@ -185,7 +180,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
     if (plan.rootInputs ? plan.rootTests : plan.typecheck) {
       const selected = path => /^scripts\/ci-[^/]+\.test\.mjs$/.test(path) ||
         ['scripts/identity-upstream.test.mjs', 'scripts/verify-gateway-reconnection-receipt.test.mjs'].includes(path);
-      const {entries} = readInputAudit(context.head, context.git), files = entries.filter(row => selected(row.path));
+      const entries = readInputInventory(context.head, context.git), files = entries.filter(row => selected(row.path));
       assert.ok(files.length >= 4 && files.some(row => row.path === 'scripts/identity-upstream.test.mjs') &&
         files.some(row => row.path === 'scripts/verify-gateway-reconnection-receipt.test.mjs'), 'Missing complete nonempty root test inventory');
       assert.ok(files.every(row => row.mode === '100644' && row.type === 'blob'), 'Nonregular root test inventory');

@@ -12,7 +12,7 @@ import {loadWorkspaceAtRevision} from './ci-workspace-snapshot.mjs';
 import {waitForSummary} from './ci-summary.mjs';
 import {createPlanEvidence} from './ci-evidence.mjs';
 import {readGitBlobs} from './ci-package-revisions.mjs';
-import {auditDocumentation} from './ci-docs.mjs';
+import {readDocumentation} from './ci-docs.mjs';
 import {conformanceMatrix} from './cloud-cost/conformance.mjs';
 import {createDecisionEvidence, readbackDecision} from './ci-decision.mjs';
 
@@ -177,8 +177,8 @@ for (const kind of ['docs', 'scoped']) {
       const squash = variantGit('commit-tree', originalTree, '-p', originalBase, '-m', 'Squash').trim();
       variantGit('checkout', '--detach', squash);
       if (kind === 'docs') {
-        auditDocumentation(originalBase, variantGit);
-        auditDocumentation(originalHead, variantGit);
+        readDocumentation(originalBase, variantGit);
+        readDocumentation(originalHead, variantGit);
       }
       const selection = selectPlan({base: originalBase, head: originalHead}, loadWorkspaceAtRevision(originalHead, variantGit), variantGit);
       const required = kind === 'docs' ? ['changes', 'documentation', 'summary']

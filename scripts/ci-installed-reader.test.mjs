@@ -73,7 +73,6 @@ test('the real immutable portal graph selects six package jobs while retaining b
 
 function reviewedRevisionFixture(paths, reference, run) {
   const root = mkdtempSync(join(tmpdir(), 'cloud-real-package-plan-'));
-  const generator = resolve('scripts/ci-input-audit.mjs');
   const git = (...args) => {
     const binary = typeof args.at(-1) === 'object' && args.pop().binary;
     return execFileSync('git', args, {cwd: root, encoding: binary ? undefined : 'utf8', maxBuffer: 64 * 1024 * 1024});
@@ -83,12 +82,6 @@ function reviewedRevisionFixture(paths, reference, run) {
     git('add', '-A');
     const inputs = git('diff', '--cached', '--name-only').trim().split('\n').filter(path => !path.startsWith('docs/'));
     assert.ok(inputs.length && inputs.every(path => paths.includes(path)));
-    execFileSync(process.execPath, [resolve('scripts/ci-root-review.mjs'), '--write-staged',
-      ...inputs.flatMap(path => ['--input', path]), '--reviewer', 'CI fixture',
-      '--reference', reference], {cwd: root, stdio: 'pipe'});
-    git('add', 'scripts/ci-root-review.d');
-    execFileSync(process.execPath, [generator, '--write-staged'], {cwd: root, stdio: 'pipe'});
-    git('add', 'scripts/ci-input-audit.json', 'scripts/ci-input-audit.d');
     git('-c', 'user.name=CI fixture', '-c', 'user.email=ci@example.test', 'commit', '-sm', 'Package selection fixture');
     return git('rev-parse', 'HEAD').trim();
   };
@@ -101,10 +94,9 @@ function reviewedRevisionFixture(paths, reference, run) {
 test('a real mixed portal revision narrows while a new unknown reader restores every package', {timeout: 60_000}, () =>
   reviewedRevisionFixture(['apps/portal/src/app.ts', 'apps/portal/src/unreviewed-reader.mjs'],
     'Controlled portal whitespace or unresolved source reader', ({root, git, save, base}) => {
-    for (const path of ['apps/portal/src/app.ts', 'docs/backlog.md']) {
-      const target = join(root, path);
-      writeFileSync(target, readFileSync(target, 'utf8') + '\n');
-    }
+    const portal = join(root, 'apps/portal/src/app.ts');
+    writeFileSync(portal, readFileSync(portal, 'utf8') + '\n');
+    writeFileSync(join(root, 'docs/backlog.md'), '# Portal selection fixture\n');
     const head = save(), workspace = loadWorkspace(root);
     const plan = sha => createPlan({pull_request: {base: {sha: base}, head: {sha}}}, {sha}, workspace, git);
     const selected = plan(head);

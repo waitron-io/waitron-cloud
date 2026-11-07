@@ -116,8 +116,6 @@ jobs:
         with:
           node-version: '26'
           package-manager-cache: false
-      - name: Verify documentation reader audit
-        run: node scripts/ci-docs.mjs --audit "$(git rev-parse HEAD)"
       - run: node scripts/ci-scripts.mjs
         env:
           CI_PLAN: ${{ needs.changes.outputs.plan }}
@@ -170,9 +168,6 @@ jobs:
       - run: pnpm install --frozen-lockfile
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      - name: Verify documentation reader audit
-        if: matrix.shard == 1
-        run: node scripts/ci-docs.mjs --audit "$(git rev-parse HEAD)"
       - name: Verify exact root input work
         run: node scripts/ci-root-inputs.mjs --check
         env:

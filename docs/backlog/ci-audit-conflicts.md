@@ -1,4 +1,8 @@
-# CI audit conflicts before D577
+# Historical CI audit conflicts before D577
+
+This is closed historical evidence. Live record renewal is retired; use the
+[current CI guide](../ci-documentation-audit.md). The figures below describe the
+earlier shared-hash implementation.
 
 Independent code PRs repeatedly conflict because each renews the same whole-tree hashes. The [D577 plan](../superpowers/plans/2026-11-05-independent-ci-audit-evidence.md) replaces routine shared-file renewal with current documentation records for each input. The implementation includes target-anchored removals, ancestry retention, explicit historical v1 fixtures and real workflow freshness controls. The controlled two-PR proof below is complete. Production current-head and merge CI remain required before landing.
 

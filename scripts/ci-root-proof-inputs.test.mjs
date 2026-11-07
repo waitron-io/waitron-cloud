@@ -43,7 +43,7 @@ test('reviewed portal renewal preserves both original proof omissions', () => fi
   for (const kind of ['cost', 'venue']) assert.equal(plan(kind).required, false, `${kind} must not execute for review metadata`);
 }));
 
-test('proof metadata refuses a removal anchored only in unlanded history', () => fixture(({root, git, write, docs, commit, base, portal, plan}) => {
+test('retired removal metadata has no proof authority', () => fixture(({root, git, write, docs, commit, base, portal, plan}) => {
   git('checkout', '-b', 'unlanded-proof-removal'); const unlanded = commit();
   const recordPath = rootRecordFilename(portal), record = JSON.parse(readFileSync(join(root, recordPath), 'utf8'));
   rmSync(join(root, portal));
@@ -51,8 +51,8 @@ test('proof metadata refuses a removal anchored only in unlanded history', () =>
     registryObjectId: record.registryObjectId, reviewer: 'Removal proof control', reference: 'review/shared-removal'});
   removal(unlanded); docs(); commit();
   for (const kind of ['cost', 'venue']) {
-    const result = plan(kind); assert.equal(result.required, true, kind);
-    assert.match(result.reason, /Root removal.*shared.*base/, kind);
+    const result = plan(kind); assert.equal(result.required, false, kind);
+    assert.match(result.reason, /No .* proof inputs/, kind);
   }
   removal(base); docs(); commit();
   for (const kind of ['cost', 'venue']) assert.equal(plan(kind).required, false, kind);
@@ -85,42 +85,39 @@ test('reviewed renewal still selects each real proof input', () => fixture(({git
   }
 }));
 
-test('stale base and head reviews independently retain both proofs', () => fixture(({git, base, change, write, docs, commit, renew, portal, plan}) => {
+test('retired base and head reviews leave real proof inputs authoritative', () => fixture(({git, base, change, write, docs, commit, renew, portal, plan}) => {
   write(portal, 'stale base\n'); docs(); const stale = commit();
   change([portal]);
   for (const kind of ['cost', 'venue']) {
-    const result = plan(kind, stale); assert.equal(result.required, true); assert.match(result.reason, /Unreviewed root input/);
+    const result = plan(kind, stale); assert.equal(result.required, false); assert.match(result.reason, /No .* proof inputs/);
   }
   git('reset', '--hard', base); change([portal]); write('scripts/reader.mjs', 'unreviewed reader\n'); docs(); commit();
   for (const kind of ['cost', 'venue']) {
-    const result = plan(kind); assert.equal(result.required, true); assert.match(result.reason, /Unreviewed root input/);
+    const result = plan(kind); assert.equal(result.required, true); assert.match(result.reason, /Selected .*proof inputs/);
   }
   renew(['scripts/reader.mjs']); docs(); commit();
   // The reader is itself a real root-script input even with renewed review.
   for (const kind of ['cost', 'venue']) assert.equal(plan(kind).required, true);
 }));
 
-test('a refused base still inspects head and its documentation authority is mandatory', () => fixture(({git, write, renew, docs, commit, change, portal, plan}) => {
+test('proof diffs inspect both saved revisions without documentation authority', () => fixture(({git, write, renew, docs, commit, change, portal, plan}) => {
   write(portal, 'changed without documentation review\n'); renew([portal]); const stale = commit();
   change([portal]);
   const head = git('rev-parse', 'HEAD').trim(), seen = new Set();
-  const registryObjectId = git('rev-parse', `${head}:scripts/ci-root-inputs.json`).trim();
-  let lastInventory;
-  const observe = (...args) => {if (args[0] === 'ls-tree') lastInventory = args[3]; return git(...args);};
-  observe.readBlobs = ids => {
-    if (ids.length === 1 && ids[0] === registryObjectId) seen.add(lastInventory);
-    return git.readBlobs(ids);
+  const observe = (...args) => {
+    if (args[0] === 'diff') {for (const saved of [stale, head]) if (args.includes(saved)) seen.add(saved);}
+    return git(...args);
   };
   for (const kind of ['cost', 'venue']) {
     const result = proofInputPlan(kind, {pull_request: {base: {sha: stale}, head: {sha: head}}}, observe);
-    assert.equal(result.required, true); assert.match(result.reason, /Unreviewed audit input/);
-    assert.ok(seen.has(stale) && seen.has(head), 'Both saved root inventories must be inspected on refusal');
+    assert.equal(result.required, false); assert.match(result.reason, /No .* proof inputs/);
+    assert.ok(seen.has(stale) && seen.has(head), 'Both saved revisions must define the proof diff');
   }
   write(portal, 'another reviewed change\n'); renew([portal]); docs(); commit();
   for (const kind of ['cost', 'venue']) assert.equal(plan(kind, head).required, false);
 }));
 
-test('root review and documentation authority each independently refuse forged metadata', () => fixture(({root, git, base, change, portal, write, docs, commit, plan}) => {
+test('forged retired root and documentation records do not affect proof work', () => fixture(({root, git, base, change, portal, write, docs, commit, plan}) => {
   for (const authority of ['root', 'docs']) {
     git('reset', '--hard', base); change([portal]);
     const path = authority === 'root' ? rootRecordFilename(portal) : recordFilename('docs', portal);
@@ -129,14 +126,13 @@ test('root review and documentation authority each independently refuse forged m
     if (authority === 'root') docs();
     commit();
     for (const kind of ['cost', 'venue']) {
-      const result = plan(kind); assert.equal(result.required, true, authority);
-      assert.match(result.reason, authority === 'root' ? /Unreviewed root input: apps\/portal\/src\/account.ts/
-        : /Unreviewed audit input: apps\/portal\/src\/account.ts/);
+      const result = plan(kind); assert.equal(result.required, false, authority);
+      assert.match(result.reason, /No .* proof inputs/);
     }
   }
 }));
 
-test('noncanonical removed and orphan review records keep both proofs', () => fixture(({root, git, base, change, portal, write, docs, commit, plan}) => {
+test('noncanonical removed and orphan retired records do not select proofs', () => fixture(({root, git, base, change, portal, write, docs, commit, plan}) => {
   for (const mode of ['renamed', 'removed', 'orphan']) {
     git('reset', '--hard', base); git('clean', '-fdq'); change([portal]);
     const path = rootRecordFilename(portal);
@@ -147,11 +143,11 @@ test('noncanonical removed and orphan review records keep both proofs', () => fi
       write(rootRecordFilename('scripts/nonexistent.mjs'), {...record, path: 'scripts/nonexistent.mjs'});
     }
     docs(); commit();
-    for (const kind of ['cost', 'venue']) assert.equal(plan(kind).required, true, mode);
+    for (const kind of ['cost', 'venue']) assert.equal(plan(kind).required, false, mode);
   }
 }));
 
-test('changed registry checker and unactivated base cannot grant a proof omission', () => fixture(({root, git, base, change, portal, write, renew, docs, commit, plan}) => {
+test('actual checker changes select proofs while inert registry and activation do not', () => fixture(({root, git, base, change, portal, write, renew, docs, commit, plan}) => {
   for (const path of ['scripts/ci-root-review.mjs', 'scripts/ci-root-inputs.json']) {
     git('reset', '--hard', base); change([portal]);
     if (path.endsWith('.json')) {
@@ -164,7 +160,7 @@ test('changed registry checker and unactivated base cannot grant a proof omissio
       renew(paths);
     } else {write(path, 'changed checker\n'); renew([path]);}
     docs(); commit();
-    for (const kind of ['cost', 'venue']) assert.equal(plan(kind).required, true, path);
+    for (const kind of ['cost', 'venue']) assert.equal(plan(kind).required, !path.endsWith('.json'), path);
   }
   git('reset', '--hard', base);
   rmSync(join(root, 'scripts/ci-root-inputs.json')); rmSync(join(root, 'scripts/ci-root-review.d'), {recursive: true});
@@ -174,5 +170,5 @@ test('changed registry checker and unactivated base cannot grant a proof omissio
   assert.equal(git('rev-parse', `${unactivated}^{tree}`).trim(), git('rev-parse', `${noMetadata}^{tree}`).trim());
   git('checkout', '--detach', base); git('reset', '--soft', unactivated); const bootstrap = commit();
   git('checkout', '--detach', bootstrap); change([portal]);
-  for (const kind of ['cost', 'venue']) assert.equal(plan(kind, unactivated).required, true);
+  for (const kind of ['cost', 'venue']) assert.equal(plan(kind, unactivated).required, false);
 }));

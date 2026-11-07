@@ -71,7 +71,7 @@ test('audited lock-only changes select resolved importers and saved helper consu
   const result = plan(base, head);
   assertSelected(result);
   assert.match(result.reason, /pnpm-lock.yaml.*packages\/catalogue/);
-  assert.match(result.reason, /audited.*package|package.*audit/i);
+  assert.match(result.reason, /saved.*package|package.*saved/i);
 }));
 
 test('removing an indirect resolution still runs its former importer and readers', () => fixture(({lock, save, commit, plan}) => {
@@ -105,7 +105,7 @@ test('a new resolved version can select one isolated package without a manifest 
   assertSelected(plan(base, commit()), ['unrelated']);
 }));
 
-test('stale, missing or malformed reader audit in either tree retains the full suite', () => fixture(({lock, save, commit, plan, git, write, audit}) => {
+test('saved lock refusals remain independent of retired reader records', () => fixture(({lock, save, commit, plan, git, write, audit}) => {
   const base = commit();
   lock.packages['leaf@1.0.0'].resolution.integrity = 'sha512-Y2hhbmdlZA=='; save();
   const head = commit();
@@ -123,7 +123,7 @@ test('stale, missing or malformed reader audit in either tree retains the full s
       }
       return git(...args);
     };
-    assertSelected(plan(base, head, read), ['catalogue', 'page', 'unrelated']);
+    assertSelected(plan(base, head, read), ['lock-symlink', 'inventory'].includes(fault) ? ['catalogue', 'page', 'unrelated'] : ['catalogue', 'page']);
   }
   // A certificate for the new reader alone cannot qualify the old revision.
   write('scripts/new-reader.mjs', "export const lock = '../pnpm-lock.yaml';\n");
@@ -151,7 +151,7 @@ test('root, unknown or removed importers and no-op locks remain full even with v
     write('pnpm-lock.yaml', '# Lock change\n' + Object.entries(lock).map(([key, value]) => `${key}: ${JSON.stringify(value)}\n`).join(''));
     const result = plan(base, commit());
     assertSelected(result, ['catalogue', 'page', 'unrelated']);
-    assert.doesNotMatch(result.reason, /audited package selection/);
+    assert.doesNotMatch(result.reason, /saved package selection/);
   });
 });
 
@@ -1434,7 +1434,7 @@ for (const name of readdirSync(${argument})) {
       {cwd: git('rev-parse', '--show-toplevel').trim(), encoding: 'utf8'}), 'unresolved lock helper loaded\n');
     const result = plan(base, head);
     assertSelected(result, uncertain ? ['catalogue', 'page', 'unrelated'] : ['catalogue', 'page']);
-    assert.match(result.reason, uncertain ? /full suite retained/ : /audited package selection/);
+    assert.match(result.reason, uncertain ? /full suite retained/ : /saved package selection/);
   }));
 });
 
@@ -1465,3 +1465,11 @@ test('audited locks retain all packages for the executed same-name reviewer prob
     assert.match(result.reason, /full suite retained/);
   }));
 });
+
+for (const saved of ['base', 'head', 'both']) test(`lock dependency selection ignores retired records in ${saved}`, () => fixture(({lock, save, write, commit, plan}) => {
+  if (saved !== 'head') write(policy, 'not JSON\n');
+  const base = commit();
+  lock.packages['leaf@1.0.0'].resolution.integrity = 'sha512-Y2hhbmdlZA=='; save();
+  if (saved !== 'base') write(policy, '{retired\n');
+  assertSelected(plan(base, commit()), ['catalogue', 'page']);
+}));

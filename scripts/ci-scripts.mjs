@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import {execFileSync} from 'node:child_process';
-import {auditInputMode} from './ci-input-audit.mjs';
+import {readInputInventory, inertCIRecord} from './ci-input-audit.mjs';
 import {readGitBlobs} from './ci-package-revisions.mjs';
 import {pathToFileURL} from 'node:url';
 
@@ -33,7 +33,13 @@ export function scriptPlan(paths, base, head, git) {
   const scripts = {base, head, paths};
   assertScriptWork({scripts, packages: [], receipts: [], typecheck: false});
   const family = familyForPaths(paths);
-  for (const sha of [base, head]) auditInputMode(family.mode, sha, git);
+  for (const sha of [base, head]) {
+    const entries = readInputInventory(sha, git);
+    for (const path of [...family.targets, ...family.callers ?? []]) {
+      const entry = entries.find(entry => entry.path === path);
+      assert.ok(entry?.mode === '100644' && entry.type === 'blob', `Missing regular script target: ${path}`);
+    }
+  }
   return scripts;
 }
 
@@ -42,7 +48,7 @@ export function checkScripts(plan, git, execute) {
   const {base, head, paths} = plan.scripts;
   const actual = git('diff', '--name-only', '--no-renames', '-z', base, head).split('\0');
   assert.equal(actual.pop(), '', 'Incomplete script diff');
-  assert.deepEqual([...paths].sort(), actual.sort(), 'Script plan omits changed inputs');
+  assert.deepEqual([...paths].sort(), actual.filter(path => !inertCIRecord(path)).sort(), 'Script plan omits changed inputs');
   scriptPlan(paths, base, head, git);
   assert.equal(git('rev-parse', 'HEAD').trim(), head, 'Root script job requires the exact head checkout');
   git('diff', '--exit-code', head, '--');
