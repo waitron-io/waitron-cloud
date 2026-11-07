@@ -1466,9 +1466,9 @@ export async function removeManualFirstSetup(options) {
   }
   const noRun = !await exists(join(base, 'initialized.json')) && !await exists(join(base, 'launch.json'))
     && isDeepStrictEqual(retained.files, ['setup.json']);
-  const eligible = noRun && (priorCleanup?.eligible ?? ['CREATE_FAILED', 'ROLLBACK_COMPLETE', 'ROLLBACK_FAILED'].includes(stack.StackStatus));
+  const eligible = noRun;
   const record = priorCleanup ?? { schema: 'd570-cleanup-v1', account, region, stackId, head: setup.head, tree: setup.tree,
-    billing: setup.billing, upperMicroUsd: setup.upperMicroUsd, subnet, eligible, releasedAt: null };
+    billing: setup.billing, upperMicroUsd: setup.upperMicroUsd, subnet, eligible: false, releasedAt: null };
   check(!record.eligible || eligible, 'booking');
   const qualifiedRecord = { ...record, ...(ended ? { stoppedInstance: ended, ...(evidence ? { retainedEvidence: evidence } : {}) } : {}) };
   await replacePrivateJson(cleanupPath, qualifiedRecord);
@@ -1493,7 +1493,7 @@ export async function removeManualFirstSetup(options) {
   await capturedAbsent();
   const at = iso(Math.floor(clock() / 1000) * 1000), deletedAt = priorCleanup?.deletedAt ?? at;
   if (ended) { const history = await launchedHistory(base, qualifiedRecord); stoppedInstance(ended, history.launch, qualifiedRecord.subnet); }
-  await replacePrivateJson(cleanupPath, { ...qualifiedRecord, deletedAt, releasedAt: eligible ? priorCleanup?.releasedAt ?? deletedAt : null,
+  await replacePrivateJson(cleanupPath, { ...qualifiedRecord, eligible, deletedAt, releasedAt: eligible ? priorCleanup?.releasedAt ?? at : null,
     ...(ended && !eligible ? { retryAt: priorCleanup?.retryAt ?? at } : {}),
     reason: priorCleanup?.reason ?? (eligible ? 'failed setup removed without a run' : 'setup removed; booking retained') });
   return { ...inspection, stackId, directory, deleted: true };

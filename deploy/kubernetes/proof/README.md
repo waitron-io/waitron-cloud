@@ -131,8 +131,8 @@ for those synthetic checks. Keep the private history after removal.
 
 ### Retry a failed setup in the same folder
 
-If setup rolls back before initialization, wait for rollback to finish, then use
-clean reviewed main and your temporary staging sign-in:
+If setup fails before initialization, use clean reviewed main and your temporary
+staging sign-in. Wait for any rollback to finish first:
 
 ```sh
 node scripts/kubernetes-proof-control.mjs down "$HOME/.local/state/waitron-d570"
@@ -144,7 +144,9 @@ Run each command only after the previous one succeeds. Keep the original folder
 and every private file. `down` releases a failed attempt only after exact stack
 deletion and resource-absence checks, and only when its history holds the setup
 booking alone. An initialized setup, a launch or any monthly ledger prevents
-release. The fresh account opening plus the new reservation must still stay
+release. This also covers a completed stack whose local initialization failed;
+run `down` again to qualify an earlier deletion that retained that setup booking.
+The fresh account opening plus the new reservation must still stay
 strictly below US$20; account billing can lag actual consumption.
 
 The controller keeps the first attempt intact and selects a `retry/` child

@@ -2961,6 +2961,91 @@ async function failedOwnerSetupFixture(t) {
   return { ...f, original, originalId, state: () => state, deletions: () => deletions };
 }
 
+async function incompleteCreatedSetupFixture(t) {
+  const f = await failedOwnerSetupFixture(t), prior = f.aws.call;
+  f.p.resource.push({ StackId: f.originalId, LogicalResourceId: 'Subnet', ResourceType: 'AWS::EC2::Subnet',
+    PhysicalResourceId: 'subnet-0123456789abcdef0', ResourceStatus: 'CREATE_COMPLETE' });
+  let current = Date.parse(now);
+  f.aws.call = async (service, operation, input) => {
+    if (operation === 'describe-stack-resources' && f.state() === 'failed') {
+      f.calls.push({ service, operation, input });
+      return { StackResources: structuredClone(f.p.resource) };
+    }
+    if (operation === 'describe-instances' && input.Filters) return { Reservations: [] };
+    if (operation === 'describe-network-interfaces') return { NetworkInterfaces: [] };
+    if (operation === 'disable-rule') {
+      f.p.responses['events/describe-rule'].State = 'DISABLED'; return {};
+    }
+    const result = await prior(service, operation, input);
+    if (operation === 'describe-stacks' && f.state() === 'failed') result.Stacks[0].StackStatus = 'CREATE_COMPLETE';
+    if (operation === 'create-stack') {
+      f.p.responses['events/describe-rule'].State = 'ENABLED';
+      const stamp = new Date(current).toISOString().replace('.000Z', 'Z');
+      f.p.health.startedAt = stamp; f.p.health.completedAt = stamp;
+      f.p.responses['s3api/get-object'].Body = Buffer.from(JSON.stringify(f.p.health));
+      f.p.responses['s3api/get-object'].LastModified = stamp;
+    }
+    return result;
+  };
+  const command = name => ownerCommand(f, [name, f.parent], {
+    clock: () => current, sleep: async ms => { current += ms; },
+  });
+  return { ...f, command, stamp: () => new Date(current).toISOString().replace('.000Z', 'Z') };
+}
+
+test('created but uninitialized setup releases only after deletion and can retry in the same folder', async t => {
+  const f = await incompleteCreatedSetupFixture(t);
+  assert.equal((await f.command('down')).deleted, true);
+  const cleanup = JSON.parse(readFileSync(join(f.parent, 'setup-removal.json')));
+  assert.equal(cleanup.eligible, true); assert.equal(cleanup.releasedAt, f.stamp());
+  const retry = await f.command('up');
+  assert.equal(retry.directory, join(realpathSync(f.parent), 'retry', 'setup'));
+  assert.equal(retry.priorBookedMicroUsd, 0);
+  assert.equal(readFileSync(join(f.parent, 'setup', 'setup.json')).equals(f.original), true);
+});
+
+test('already-deleted uninitialized setup requalifies a retained false eligibility without rewriting its history', async t => {
+  const f = await failedOwnerSetupFixture(t);
+  await ownerCommand(f, ['down', f.parent]);
+  const path = join(f.parent, 'setup-removal.json'), cleanup = JSON.parse(readFileSync(path));
+  const legacy = { ...cleanup, eligible: false, releasedAt: null, reason: 'setup removed; booking retained' };
+  writeFileSync(path, JSON.stringify(legacy));
+  const later = Date.parse(now) + 1000;
+  await ownerCommand(f, ['down', f.parent], { clock: () => later });
+  const qualified = JSON.parse(readFileSync(path));
+  assert.equal(qualified.eligible, true); assert.equal(qualified.releasedAt, '2026-11-06T12:00:01Z');
+  assert.equal(qualified.deletedAt, legacy.deletedAt); assert.equal(qualified.reason, legacy.reason);
+  assert.equal(f.deletions(), 1);
+  const retry = await ownerCommand(f, ['up', f.parent]);
+  assert.equal(retry.directory, join(realpathSync(f.parent), 'retry', 'setup'));
+  assert.equal(readFileSync(join(f.parent, 'history', 'setup.json')).equals(f.original), true);
+});
+
+test('created uninitialized setup cannot release during interrupted deletion', async t => {
+  const f = await incompleteCreatedSetupFixture(t), prior = f.aws.call;
+  f.aws.call = async (...args) => {
+    const result = await prior(...args);
+    if (args[1] === 'delete-stack') throw new Error('synthetic interrupted deletion');
+    return result;
+  };
+  await assert.rejects(f.command('down'), /synthetic interrupted deletion/);
+  const cleanup = JSON.parse(readFileSync(join(f.parent, 'setup-removal.json')));
+  assert.equal(cleanup.eligible, false); assert.equal(cleanup.releasedAt, null);
+  await assert.rejects(f.command('up'), /D570 controller refused: booking/);
+  assert.equal(existsSync(join(f.parent, 'retry')), false);
+});
+
+for (const name of ['initialized.json', 'launch.json']) test(`created setup retains its booking when ${name} exists without a monthly ledger`, async t => {
+  const f = await incompleteCreatedSetupFixture(t);
+  const setup = { ...JSON.parse(f.original), directory: join(f.parent, 'setup'), stackId: f.originalId };
+  writeFileSync(join(f.parent, name), JSON.stringify(name === 'initialized.json' ? setup : {}), { mode: 0o600 });
+  await f.command('down');
+  const cleanup = JSON.parse(readFileSync(join(f.parent, 'setup-removal.json')));
+  assert.equal(cleanup.eligible, false); assert.equal(cleanup.releasedAt, null);
+  await assert.rejects(f.command('up'), /D570 controller refused: booking/);
+  assert.equal(existsSync(join(f.parent, 'retry')), false);
+});
+
 test('failed owner setup can clean down and retry up in the same folder without erasing its booking', async t => {
   const f = await failedOwnerSetupFixture(t);
   assert.equal((await ownerCommand(f, ['down', f.parent])).deleted, true);
@@ -3050,6 +3135,15 @@ test('failed setup with any retained monthly ledger never releases its booking f
   writeFileSync(path, JSON.stringify(altered));
   await assert.rejects(ownerCommand(f, ['up', f.parent]), /D570 controller refused: private history/);
   assert.equal(existsSync(join(f.parent, 'retry')), false);
+});
+
+test('created setup with a retained monthly ledger cannot release despite missing initialized and launch files', async t => {
+  const f = await removalFixture(t, { partial: true });
+  assert.equal(f.p.responses['cloudformation/describe-stacks'].Stacks[0].StackStatus, 'CREATE_COMPLETE');
+  await f.remove();
+  const cleanup = JSON.parse(readFileSync(join(dirname(f.setup.directory), 'setup-removal.json')));
+  assert.equal(cleanup.eligible, false); assert.equal(cleanup.releasedAt, null);
+  assert.equal(existsSync(join(f.directory, '2026-11.json')), true);
 });
 
 for (const change of ['changed booking', 'public cleanup']) test(`failed setup retry refuses ${change}`, async t => {
@@ -3256,6 +3350,51 @@ test('launched retry qualifies the already-deleted attempt from hash-bound reads
  assert.equal(child.runEvidence.openings['2026-12'].overheadMicroUsd,18320296);
  assert.equal(f.calls.filter(row=>row.operation==='run-instances').length,0);
  for(const [name,bytes]of f.original)assert.equal(readFileSync(join(f.base,name)).equals(bytes),true,name);
+});
+
+test('nested retry releases only its incomplete child and counts the launched ancestor in the next setup', async t => {
+ const f = await launchedRetryFixture(t);
+ await f.command('down', f.flags());
+ const parentBytes = readFileSync(join(f.base, 'setup-removal.json')), prior = f.aws.call;
+ let failBilling = true, childCreated = false, childDeleted = false, creations = 0;
+ f.aws.call = async (service, operation, input) => {
+  if (service === 'ce' && childCreated && failBilling) throw new Error('synthetic interrupted post-create billing');
+  if (childCreated && !childDeleted && operation === 'describe-stacks' && input.StackName === 'd570-first')
+   return structuredClone(f.p.responses['cloudformation/describe-stacks']);
+  if (childCreated && operation === 'delete-stack') { childDeleted = true; return {}; }
+  if (childDeleted && operation === 'describe-stacks' && input.StackName === f.p.stackId)
+   return { Stacks: [{ StackId: f.p.stackId, StackStatus: 'DELETE_COMPLETE', Tags: [{ Key: 'Proof', Value: 'D570' }], CreationTime: f.p.responses['cloudformation/describe-stacks'].Stacks[0].CreationTime }] };
+  if (childDeleted && operation === 'describe-stack-resources' && input.StackName === f.p.stackId)
+   return { StackResources: f.p.resource.map(row => ({ ...row, ResourceStatus: 'DELETE_COMPLETE' })) };
+  const result = await prior(service, operation, input);
+  if (operation === 'create-stack') {
+   childCreated = true; childDeleted = false; creations++;
+   if (creations === 2) {
+    f.p.stackId = f.oldStack.slice(0, -1) + '2'; result.StackId = f.p.stackId;
+    f.p.responses['cloudformation/describe-stacks'].Stacks[0].StackId = f.p.stackId;
+    for (const row of f.p.resource) row.StackId = f.p.stackId;
+    f.p.health.stackId = f.p.stackId; f.p.responses['s3api/get-object'].Body = Buffer.from(JSON.stringify(f.p.health));
+   }
+  }
+  return result;
+ };
+ await assert.rejects(f.command('up'), /synthetic interrupted post-create billing/);
+ const child = join(f.base, 'retry'), original = readFileSync(join(child, 'setup', 'setup.json'));
+ assert.equal(existsSync(join(child, 'initialized.json')), false);
+ assert.equal(existsSync(join(child, 'launch.json')), false);
+ assert.equal(f.objects.size, 0);
+ failBilling = false;
+ await f.command('down');
+ const cleanup = JSON.parse(readFileSync(join(child, 'setup-removal.json')));
+ assert.equal(cleanup.eligible, true); assert.equal(cleanup.releasedAt, f.stamp());
+ const replacement = await f.command('up');
+ assert.equal(replacement.directory, join(child, 'retry', 'setup'));
+ assert.equal(replacement.priorBookedMicroUsd, 9313491);
+ assert.equal(replacement.runEvidence.openings['2026-11'].overheadMicroUsd, 18320296);
+ assert.equal(replacement.runEvidence.openings['2026-12'].overheadMicroUsd, 18320296);
+ assert.equal(readFileSync(join(f.base, 'setup-removal.json')).equals(parentBytes), true);
+ assert.equal(readFileSync(join(child, 'setup', 'setup.json')).equals(original), true);
+ for (const [name, bytes] of f.original) assert.equal(readFileSync(join(f.base, name)).equals(bytes), true, name);
 });
 for(const [label,edit]of [
  ['wrong hash',(f,flags)=>{flags[2]='0'.repeat(64);}],
