@@ -43,6 +43,7 @@ test('a complete legacy candidate keeps its record APIs separate from live selec
     copyFileSync(new URL(import.meta.url), join(root, 'scripts/ci-root-complete-review.test.mjs'));
     git('config', 'user.name', 'CI test'); git('config', 'user.email', 'ci@example.test');
     const beforeActivation = git('rev-parse', 'HEAD').trim();
+    git('update-ref', 'refs/remotes/origin/main', beforeActivation);
     // These deliberately synthetic attestations test complete-tree validation.
     // They confer no reviewed ownership on the product checkout.
     writeFileSync(join(root, 'scripts/ci-root-inputs.json'), JSON.stringify({version: 1, entries: [{
@@ -57,7 +58,7 @@ test('a complete legacy candidate keeps its record APIs separate from live selec
     const reviewDirectory = join(root, 'scripts/ci-root-review.d');
     const absences = existsSync(reviewDirectory) ? readdirSync(reviewDirectory).flatMap(name => {
       const record = JSON.parse(readFileSync(join(reviewDirectory, name), 'utf8'));
-      return record.state === 'absent' ? [record.path] : [];
+      return record.state === 'absent' || !projection.inputs.some(input => input.path === record.path) ? [record.path] : [];
     }) : [];
     const paths = [...projection.inputs.map(row => row.path), ...absences];
     const frozen = git('show', 'HEAD:scripts/ci-input-audit.json');
