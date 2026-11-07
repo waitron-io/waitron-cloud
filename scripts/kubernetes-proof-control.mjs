@@ -1,6 +1,6 @@
 import { execFile } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
-import { realpath, mkdtemp, writeFile, lstat, readFile, rm, mkdir, open } from 'node:fs/promises';
+import { realpath, mkdtemp, writeFile, lstat, readFile, rm, mkdir, open, readdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { setTimeout as delay } from 'node:timers/promises';
 import { join, dirname, basename, resolve } from 'node:path';
@@ -9,13 +9,14 @@ import { fileURLToPath } from 'node:url';
 import { renderManualSetup } from '../deploy/kubernetes/proof/setup.mjs';
 import policy from '../deploy/kubernetes/proof/policy.json' with { type: 'json' };
 import { inspectBudget, initializeLedger, reserveRun, createS3LedgerStore } from './kubernetes-proof-budget.mjs';
-import { calculateManualCost } from '../deploy/kubernetes/proof/prices.mjs';
+import { calculateManualCost, acquirePriceCatalogue } from '../deploy/kubernetes/proof/prices.mjs';
 import { renderDeadlineBootstrap } from '../deploy/kubernetes/proof/bootstrap.mjs';
 
 const execute = promisify(execFile);
 const account = '462991287391', region = 'eu-north-1';
 const refuse = () => { throw new Error('D570 controller refused'); };
 const check = value => { if (!value) refuse(); };
+const pending = code => { throw Object.assign(new Error('D570 controller refused'), { code }); };
 const iso = instant => new Date(instant).toISOString().replace('.000Z', 'Z');
 function instant(value) {
   check(typeof value === 'string' && /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ$/.test(value));
@@ -28,9 +29,9 @@ export function createManualAwsCli({ executable = 'aws' } = {}) {
   return { async call(service, operation, input) {
     check((service === 'sts' && operation === 'get-caller-identity')
       || (service === 'ce' && operation === 'get-cost-and-usage')
-      || (service === 'cloudformation' && ['describe-stacks', 'describe-stack-resources', 'create-stack'].includes(operation))
-      || (service === 'events' && ['describe-rule', 'list-targets-by-rule', 'enable-rule'].includes(operation))
-      || (service === 's3api' && ['get-object', 'put-object', 'list-objects-v2'].includes(operation))
+      || (service === 'cloudformation' && ['describe-stacks', 'describe-stack-resources', 'create-stack', 'delete-stack'].includes(operation))
+      || (service === 'events' && ['describe-rule', 'list-targets-by-rule', 'enable-rule', 'disable-rule'].includes(operation))
+      || (service === 's3api' && ['get-object', 'put-object', 'list-objects-v2', 'delete-objects'].includes(operation))
       || (service === 'ssm' && operation === 'get-parameter')
       || (service === 'ec2' && ['describe-images', 'describe-instance-types', 'describe-managed-prefix-lists',
         'describe-launch-template-versions', 'run-instances', 'describe-instances',
@@ -71,7 +72,10 @@ export function createManualAwsCli({ executable = 'aws' } = {}) {
         && input.TimeoutInMinutes === 10 && input.OnFailure === 'ROLLBACK'
         && typeof input.ClientRequestToken === 'string' && /^d570-[a-f0-9]{64}$/.test(input.ClientRequestToken));
     }
-    if (service === 'events' && operation === 'enable-rule') check(input
+    if (service === 'cloudformation' && operation === 'delete-stack') check(input
+      && Object.keys(input).join(',') === 'StackName' && typeof input.StackName === 'string'
+      && /^arn:aws:cloudformation:eu-north-1:462991287391:stack\/d570-first\/[a-f0-9-]{36}$/.test(input.StackName));
+    if (service === 'events' && ['enable-rule', 'disable-rule'].includes(operation)) check(input
       && Object.keys(input).sort().join(',') === 'EventBusName,Name' && input.EventBusName === 'default'
       && typeof input.Name === 'string' && /^[A-Za-z0-9_.-]{1,64}$/.test(input.Name));
     const download = service === 's3api' && operation === 'get-object';
@@ -90,8 +94,14 @@ export function createManualAwsCli({ executable = 'aws' } = {}) {
           && ledgerKey(input.Key) && input.Body instanceof Uint8Array && input.Body.byteLength > 0 && input.Body.byteLength <= 1024 * 1024
           && input.ContentType === 'application/json' && input.ServerSideEncryption === 'AES256'
           && (conditional === 'IfNoneMatch' || typeof input.IfMatch === 'string' && /^"[\x21\x23-\x7e]{1,254}"$/.test(input.IfMatch)));
-      } else check(keys(['Bucket', 'ExpectedBucketOwner', 'Prefix', 'MaxKeys', ...(Object.hasOwn(input, 'ContinuationToken') ? ['ContinuationToken'] : [])])
-        && input.Prefix === 'd570/ledger/' && input.MaxKeys === 100
+      } else if (operation === 'delete-objects') check(keys(['Bucket', 'ExpectedBucketOwner', 'Delete'])
+        && input.Delete && Object.keys(input.Delete).sort().join(',') === 'Objects,Quiet' && input.Delete.Quiet === false
+        && Array.isArray(input.Delete.Objects) && input.Delete.Objects.length > 0 && input.Delete.Objects.length <= 1000
+        && input.Delete.Objects.every(row => row && Object.keys(row).join(',') === 'Key'
+          && (ledgerKey(row.Key) || row.Key === 'd570/health/reaper.json'))
+        && new Set(input.Delete.Objects.map(row => row.Key)).size === input.Delete.Objects.length);
+      else check(keys(['Bucket', 'ExpectedBucketOwner', 'Prefix', 'MaxKeys', ...(Object.hasOwn(input, 'ContinuationToken') ? ['ContinuationToken'] : [])])
+        && (input.Prefix === 'd570/ledger/' && input.MaxKeys === 100 || input.Prefix === 'd570/' && input.MaxKeys === 1000)
         && (!Object.hasOwn(input, 'ContinuationToken') || typeof input.ContinuationToken === 'string'
           && input.ContinuationToken.length > 0 && input.ContinuationToken.length <= 2048));
     }
@@ -116,7 +126,9 @@ export function createManualAwsCli({ executable = 'aws' } = {}) {
         env: { ...process.env, AWS_MAX_ATTEMPTS: '3', AWS_RETRY_MODE: 'standard',
           AWS_IGNORE_CONFIGURED_ENDPOINT_URLS: 'true', AWS_EC2_METADATA_DISABLED: 'true', AWS_PAGER: '' },
       });
-      const metadata = service === 'events' && operation === 'enable-rule' && stdout.trim() === '' ? {} : JSON.parse(stdout);
+      const emptySuccess = service === 'events' && ['enable-rule', 'disable-rule'].includes(operation)
+        || service === 'cloudformation' && operation === 'delete-stack';
+      const metadata = emptySuccess && stdout.trim() === '' ? {} : JSON.parse(stdout);
       if (!download) return metadata;
       const file = await lstat(output);
       check(file.isFile() && file.size > 0 && file.size <= 1024 * 1024 && (file.mode & 0o777) === 0o600
@@ -181,7 +193,7 @@ function billingObservation(response, period, now) {
   return { observedAt: now, period, microUsd, estimated: row.Estimated };
 }
 
-export async function inspectManualControl({ checkout, region: requestedRegion, now, aws, environment = process.env, clock = Date.now }) {
+async function inspectManualOwner({ checkout, region: requestedRegion, now, aws, environment = process.env, clock = Date.now }, withBilling) {
   check(requestedRegion === region && !environment.GITHUB_ACTIONS && !environment.GITHUB_EVENT_NAME);
   const current = instant(now);
   check(current < Date.parse('2027-02-28T23:59:00Z') && typeof aws?.call === 'function');
@@ -199,6 +211,7 @@ export async function inspectManualControl({ checkout, region: requestedRegion, 
   fresh();
   check(JSON.stringify(await checkedMain(checkout)) === JSON.stringify(source));
   fresh();
+  if (!withBilling) return { account, region, ...source };
   const period = { Start: now.slice(0, 7) + '-01', End: iso(current + 86400_000).slice(0, 10) };
   const response = await aws.call('ce', 'get-cost-and-usage', { TimePeriod: period, Granularity: 'MONTHLY',
     Metrics: ['UnblendedCost'], Filter: { Dimensions: { Key: 'LINKED_ACCOUNT', Values: [account] } } });
@@ -206,6 +219,53 @@ export async function inspectManualControl({ checkout, region: requestedRegion, 
   check(JSON.stringify(await checkedMain(checkout)) === JSON.stringify(source));
   fresh();
   return { account, region, ...source, billing: billingObservation(response, period, now) };
+}
+
+export async function inspectManualControl(options) { return inspectManualOwner(options, true); }
+
+export async function inspectManualOpening(options) {
+  const inspection = await inspectManualControl(options), { aws, checkout, now, clock = Date.now } = options;
+  const explanations = structuredClone(options.explanations ?? []), items = [];
+  if (inspection.billing.microUsd > 0) {
+    const groupBy = [{ Type: 'DIMENSION', Key: 'SERVICE' }, { Type: 'DIMENSION', Key: 'USAGE_TYPE' }];
+    const response = await aws.call('ce', 'get-cost-and-usage', { TimePeriod: inspection.billing.period,
+      Granularity: 'MONTHLY', Metrics: ['UnblendedCost', 'UsageQuantity'], GroupBy: groupBy,
+      Filter: { Dimensions: { Key: 'LINKED_ACCOUNT', Values: [account] } } });
+    const source = await checkedMain(checkout), at = clock();
+    check(source.head === inspection.head && source.tree === inspection.tree && at >= instant(now)
+      && at < Date.parse(policy.accessExpiry) && iso(at).slice(0, 10) === now.slice(0, 10));
+    check(!response?.NextPageToken && isDeepStrictEqual(response?.GroupDefinitions, groupBy)
+      && Array.isArray(response.ResultsByTime) && response.ResultsByTime.length === 1);
+    const row = response.ResultsByTime[0];
+    check(isDeepStrictEqual(row?.TimePeriod, inspection.billing.period) && row.Estimated === inspection.billing.estimated
+      && Array.isArray(row.Groups) && row.Groups.length <= 1000);
+    const seen = new Set(); let total = 0n;
+    for (const group of row.Groups) {
+      const cost = group?.Metrics?.UnblendedCost;
+      check(Array.isArray(group?.Keys) && group.Keys.length === 2
+        && group.Keys.every(key => typeof key === 'string' && key.length > 0 && key.length <= 256)
+        && cost?.Unit === 'USD' && typeof cost.Amount === 'string' && /^(0|[1-9]\d{0,9})(\.\d{1,10})?$/.test(cost.Amount));
+      const key = JSON.stringify(group.Keys); check(!seen.has(key)); seen.add(key);
+      const [whole, fraction = ''] = cost.Amount.split('.'), nanos = BigInt(whole + fraction.padEnd(10, '0'));
+      total += nanos;
+      if (nanos > 0n) items.push({ service: group.Keys[0], usageType: group.Keys[1], microUsd: Number((nanos + 9999n) / 10000n) });
+    }
+    check(Number((total + 9999n) / 10000n) === inspection.billing.microUsd);
+  }
+  const opening = { billing: inspection.billing, items };
+  const refuseOpening = () => { throw Object.assign(new Error('D570 opening spend needs explanations'), { opening }); };
+  if (!Array.isArray(explanations) || explanations.length !== items.length) refuseOpening();
+  const seen = new Set(), matched = [];
+  for (const explanation of explanations) {
+    if (!explanation || Object.keys(explanation).sort().join(',') !== 'maxMicroUsd,reason,service,usageType'
+      || !Number.isSafeInteger(explanation.maxMicroUsd) || explanation.maxMicroUsd < 0 || explanation.maxMicroUsd >= 10_000_000
+      || typeof explanation.reason !== 'string' || explanation.reason.trim().length === 0 || explanation.reason.length > 1000) refuseOpening();
+    const key = JSON.stringify([explanation.service, explanation.usageType]);
+    const row = items.find(item => item.service === explanation.service && item.usageType === explanation.usageType);
+    if (seen.has(key) || !row || row.microUsd > explanation.maxMicroUsd) refuseOpening();
+    seen.add(key); matched.push({ ...row, maxMicroUsd: explanation.maxMicroUsd, reason: explanation.reason });
+  }
+  return { ...inspection, openingExplanations: matched };
 }
 
 export async function inspectManualSetup(options) {
@@ -382,12 +442,14 @@ export async function bookManualSetup(options) {
   const parent = await lstat(dirname(directory));
   check(parent.isDirectory() && (parent.mode & 0o777) === 0o700 && parent.uid === process.getuid());
   const inspection = await inspectManualSetup(options);
+  if (options.expectedOpening) check(isDeepStrictEqual(inspection.billing, options.expectedOpening));
   check(inspection.billing.microUsd + upperMicroUsd < 10_000_000);
   // Keep even incomplete bookings: an uncertain write must never erase setup's reserved cost.
   await mkdir(directory, { mode: 0o700 });
   const file = await open(join(directory, 'setup.json'), 'wx', 0o600);
   try {
     await file.writeFile(JSON.stringify({ ...inspection, cost, upperMicroUsd,
+      ...(options.openingExplanations === undefined ? {} : { openingExplanations: options.openingExplanations }),
       ...(priceInputs === undefined ? {} : { priceInputs }) }) + '\n');
     await file.sync();
   }
@@ -400,11 +462,16 @@ export async function bookManualSetup(options) {
   check(source.head === inspection.head && source.tree === inspection.tree
     && Number.isSafeInteger(observed) && observed >= instant(now) && observed < Date.parse(policy.accessExpiry)
     && iso(observed).slice(0, 10) === now.slice(0, 10));
-  return { ...inspection, directory, cost, upperMicroUsd };
+  return { ...inspection, directory, cost, upperMicroUsd,
+    ...(options.openingExplanations === undefined ? {} : { openingExplanations: options.openingExplanations }) };
 }
 
 export async function bookManualFirstSetup(options) {
   check(['cost', 'priceInputs', 'quantities', 'fixed'].every(name => options[name] === undefined));
+  return bookManualSetup({ ...options, priceInputs: firstSetupPriceInputs(options.catalogues) });
+}
+
+function firstSetupPriceInputs(catalogues) {
   const monthSeconds = 31 * 86400;
   const quantities = {
     computeSeconds: 1200, diskGiBSeconds: 64 * 86400,
@@ -418,14 +485,14 @@ export async function bookManualFirstSetup(options) {
   const digest = createHash('sha256').update(JSON.stringify({ quantities, allowances })).digest('hex');
   const fixed = Object.fromEntries(Object.entries(allowances).map(([name, upperMicroUsd]) => [name,
     { upperMicroUsd, source: 'https://aws.amazon.com/pricing/', digest }]));
-  return bookManualSetup({ ...options, priceInputs: { catalogues: options.catalogues, quantities, fixed } });
+  return { catalogues, quantities, fixed };
 }
 
 export async function createManualFirstSetup(options) {
   const { aws, checkout, now, clock = Date.now, sleep = delay } = options;
-  const booking = await bookManualFirstSetup(options);
-  // Only the approved first zero opening can start without an imported reconciled history.
-  check(booking.billing.microUsd === 0);
+  const opening = await inspectManualOpening(options);
+  const booking = await bookManualFirstSetup({ ...options, expectedOpening: opening.billing,
+    openingExplanations: opening.openingExplanations });
   async function unchanged() {
     const before = clock(), source = await checkedMain(checkout), after = clock();
     check(source.head === booking.head && source.tree === booking.tree
@@ -462,7 +529,7 @@ export async function createManualFirstSetup(options) {
     try {
       const protection = await inspectManualProtection({ ...options, stackId });
       await unchanged();
-      check(protection.billing.microUsd <= booking.upperMicroUsd);
+      check(protection.billing.microUsd <= booking.billing.microUsd + booking.upperMicroUsd);
       return { ...booking, ...protection, openingBilling: booking.billing };
     } catch (error) {
       if (error.name !== 'NoSuchKey' || error.$metadata?.httpStatusCode !== 404) throw error;
@@ -494,13 +561,15 @@ export async function initializeManualFirstSetup(options) {
   const components = Object.fromEntries(Object.entries(setup.cost.components).map(([name, row]) => [name,
     { ...row, upperMicroUsd: ['compute', 'disk'].includes(name) ? row.upperMicroUsd : 0 }]));
   const runMicroUsd = components.compute.upperMicroUsd + components.disk.upperMicroUsd;
-  const opening = { baselineMicroUsd: setup.openingBilling.microUsd, overheadMicroUsd: setup.upperMicroUsd - runMicroUsd,
-    digest: createHash('sha256').update(JSON.stringify({ billing: setup.openingBilling, cost: setup.cost })).digest('hex') };
   const openings = {}, cursor = new Date(instant(now));
   const until = instant(now) + 31 * 86400_000 + 300_000;
   cursor.setUTCDate(1); cursor.setUTCHours(0, 0, 0, 0);
   while (cursor.getTime() <= until) {
-    openings[cursor.toISOString().slice(0, 7)] = { ...opening };
+    const month = cursor.toISOString().slice(0, 7);
+    const baselineMicroUsd = month === now.slice(0, 7) ? setup.openingBilling.microUsd : 0;
+    openings[month] = { baselineMicroUsd, overheadMicroUsd: setup.upperMicroUsd - runMicroUsd,
+      digest: createHash('sha256').update(JSON.stringify({ month, baselineMicroUsd, billing: setup.openingBilling,
+        cost: setup.cost, openingExplanations: setup.openingExplanations })).digest('hex') };
     cursor.setUTCMonth(cursor.getUTCMonth() + 1);
   }
   // This reconciles the first opening to its retained booking, never the eventual final bill.
@@ -607,7 +676,7 @@ export async function inspectManualFirstGuest(options) {
     const row = response.Reservations[0];
     check(row?.OwnerId === account && Array.isArray(row.Instances) && row.Instances.length === 1);
     const instance = row.Instances[0];
-    check(instance?.InstanceId === launch.instanceId && instance.ClientToken === reservation.uuid && instance.State?.Name === 'running'
+    check(instance?.InstanceId === launch.instanceId && instance.ClientToken === reservation.uuid
       && instance.SubnetId === launch.subnetId && instance.InstanceType === 'm7g.2xlarge'
       && !instance.PublicIpAddress && !instance.IamInstanceProfile && !instance.KeyName
       && instance.RootDeviceName === '/dev/xvda' && instance.RootDeviceType === 'ebs');
@@ -616,6 +685,8 @@ export async function inspectManualFirstGuest(options) {
       const matches = instance.Tags.filter(tag => tag?.Key === key);
       return matches.length === 1 && matches[0].Value === value;
     }));
+    if (instance.State?.Name === 'pending') pending('D570_NOT_READY');
+    check(instance.State?.Name === 'running');
     check(Array.isArray(instance.BlockDeviceMappings) && instance.BlockDeviceMappings.length === 1
       && Array.isArray(instance.NetworkInterfaces) && instance.NetworkInterfaces.length === 1);
     const disk = instance.BlockDeviceMappings[0], network = instance.NetworkInterfaces[0];
@@ -635,12 +706,18 @@ export async function inspectManualFirstGuest(options) {
   // The CLI decodes console bytes; a line seen only after termination cannot establish live readiness.
   const consoleOutput = await call('get-console-output', { InstanceId: launch.instanceId, Latest: true });
   const timestamp = Date.parse(consoleOutput?.Timestamp);
-  check(consoleOutput?.InstanceId === launch.instanceId && Number.isFinite(timestamp)
+  check(consoleOutput?.InstanceId === launch.instanceId);
+  if (consoleOutput.Output === undefined || consoleOutput.Output === '') pending('D570_NOT_READY');
+  check(Number.isFinite(timestamp)
     && timestamp >= instant(reservation.startedAt) && timestamp <= clock()
     && typeof consoleOutput.Output === 'string' && Buffer.byteLength(consoleOutput.Output) <= 1024 * 1024);
   const prefix = `D570_DEADLINE_READY ${reservation.uuid} ${instant(launch.guestExpiry) / 1000} `;
   const lines = consoleOutput.Output.split(/\r?\n/).filter(line => line.startsWith(prefix));
   const boots = new Set(lines.map(line => line.slice(prefix.length)));
+  if (boots.size === 0) {
+    check(!consoleOutput.Output.split(/\r?\n/).some(line => line.startsWith('D570_DEADLINE_READY ')));
+    pending('D570_NOT_READY');
+  }
   check(boots.size === 1 && [...boots].every(boot => /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/.test(boot)));
   check(isDeepStrictEqual(await liveResources(), resources));
   return { ...launch, ...inspection, ...resources, bootId: [...boots][0], consoleOutput,
@@ -752,10 +829,19 @@ export async function inspectManualFirstGuestCleanup(options) {
     return matches.length === 1 && matches[0].Value === value;
   }));
   const volumes = await call('describe-volumes', { Filters: [{ Name: 'volume-id', Values: ready.volumeIds }], MaxResults: 100 });
-  check(!volumes?.NextToken && Array.isArray(volumes?.Volumes) && volumes.Volumes.length === 0);
+  check(!volumes?.NextToken && Array.isArray(volumes?.Volumes));
+  if (volumes.Volumes.length) {
+    check(volumes.Volumes.every(row => ready.volumeIds.includes(row?.VolumeId)));
+    pending('D570_CLEANUP_PENDING');
+  }
   // Interfaces are not tagged by the template; the owned subnet also exposes leftovers after controller loss.
   const interfaces = await call('describe-network-interfaces', { Filters: [{ Name: 'subnet-id', Values: [ready.subnetId] }], MaxResults: 100 });
-  check(!interfaces?.NextToken && Array.isArray(interfaces?.NetworkInterfaces) && interfaces.NetworkInterfaces.length === 0);
+  check(!interfaces?.NextToken && Array.isArray(interfaces?.NetworkInterfaces));
+  if (interfaces.NetworkInterfaces.length) {
+    check(interfaces.NetworkInterfaces.every(row => ready.interfaceIds.includes(row?.NetworkInterfaceId)
+      && row.SubnetId === ready.subnetId && row.OwnerId === account));
+    pending('D570_CLEANUP_PENDING');
+  }
   // An OS actor and absent resources do not establish when the guest stopped or reconcile its bill.
   return { ...ready, ...inspection, stateReason: instance.StateReason, terminated: true, volumesAbsent: true, interfacesAbsent: true,
     observedAt: iso(Math.floor(await unchanged() / 1000) * 1000) };
@@ -766,11 +852,11 @@ export async function inspectManualFirstBilling(options) {
   const setup = structuredClone(options.setup), launch = structuredClone(options.launch);
   const inspection = await inspectManualBudget({ ...options, stackId: setup?.stackId, store: undefined });
   const reservation = launch?.reservation;
-  check(setup.account === account && setup.region === region && setup.head === inspection.head && setup.tree === inspection.tree
+  check(setup.account === account && setup.region === region && setup.head === reservation?.head && setup.tree === reservation.tree
     && setup.bucket === inspection.bucket && launch.account === account && launch.region === region
     && launch.stackId === setup.stackId && launch.bucket === inspection.bucket
-    && launch.head === inspection.head && launch.tree === inspection.tree
-    && reservation?.uuid === inspection.budget.activeUuid && reservation.head === inspection.head && reservation.tree === inspection.tree
+    && launch.head === setup.head && launch.tree === setup.tree
+    && reservation?.uuid === inspection.budget.activeUuid
     && instant(reservation.startedAt) <= instant(now) && instant(reservation.expiry) === instant(reservation.startedAt) + 300_000
     && setup.upperMicroUsd === inspection.budget.overheadMicroUsd + inspection.budget.bookedMicroUsd);
   async function unchanged() {
@@ -786,6 +872,19 @@ export async function inspectManualFirstBilling(options) {
     await unchanged();
     return result;
   } };
+  const store = createManualLedgerStore({ bucket: inspection.bucket, aws: guarded });
+  const saved = await store.get('d570/ledger/active.json');
+  check(saved);
+  const retained = JSON.parse(saved.body).active;
+  check(retained && ['uuid', 'head', 'tree', 'startedAt', 'expiry', 'liabilityUntil']
+    .every(key => retained.identity[key] === reservation[key])
+    && retained.upperMicroUsd === reservation.upperMicroUsd && retained.evidenceHash === reservation.evidenceHash
+    && isDeepStrictEqual(retained.months, reservation.months));
+  const openingMonth = setup.openingBilling?.period?.Start?.slice(0, 7);
+  const baselineMicroUsd = setup.openingBilling?.microUsd;
+  check(retained.evidence.openings[openingMonth]?.digest === createHash('sha256').update(JSON.stringify({
+    month: openingMonth, baselineMicroUsd, billing: setup.openingBilling, cost: setup.cost,
+    openingExplanations: setup.openingExplanations })).digest('hex'));
   const start = setup.openingBilling?.period?.Start;
   check(typeof start === 'string' && /^\d{4}-\d\d-01$/.test(start)
     && instant(start + 'T00:00:00Z') <= instant(reservation.startedAt));
@@ -803,7 +902,6 @@ export async function inspectManualFirstBilling(options) {
     Filter: { Dimensions: { Key: 'LINKED_ACCOUNT', Values: [account] } } });
   check(!response?.NextPageToken && isDeepStrictEqual(response?.GroupDefinitions, groupBy)
     && Array.isArray(response?.ResultsByTime) && response.ResultsByTime.length === expected.length);
-  const store = createManualLedgerStore({ bucket: inspection.bucket, aws: guarded });
   const scope = { account, region, stackId: setup.stackId }, months = [];
   const decimal = value => typeof value === 'string' && /^(0|[1-9]\d{0,9})(\.\d{1,10})?$/.test(value);
   const rounded = nanos => Number((nanos + 9999n) / 10000n);
@@ -903,7 +1001,276 @@ export async function retainManualHistory(options) {
   return { ...inspection, directory, files };
 }
 
+export async function removeManualFirstSetup(options) {
+  const { checkout, aws, directory, now, clock = Date.now, sleep = delay } = options;
+  const setup = structuredClone(options.setup), inspection = await inspectManualOwner(options, false);
+  check(setup?.account === account && setup.region === region && /^[a-f0-9]{40}$/.test(setup.head)
+    && /^[a-f0-9]{40}$/.test(setup.tree) && setup.template?.Resources);
+  async function call(service, operation, input) {
+    async function unchanged() {
+      const source = await checkedMain(checkout), at = clock();
+      check(source.head === inspection.head && source.tree === inspection.tree && Number.isSafeInteger(at)
+        && at >= instant(now) && at < Date.parse(policy.accessExpiry) && iso(at).slice(0, 10) === now.slice(0, 10));
+    }
+    await unchanged();
+    const response = await aws.call(service, operation, input);
+    await unchanged();
+    return response;
+  }
+  const described = await call('cloudformation', 'describe-stacks', { StackName: setup.stackId ?? 'd570-first' });
+  check(!described?.NextToken && Array.isArray(described?.Stacks) && described.Stacks.length === 1);
+  const stack = described.Stacks[0], stackId = stack?.StackId;
+  check(typeof stackId === 'string' && /^arn:aws:cloudformation:eu-north-1:462991287391:stack\/d570-first\/[a-f0-9-]{36}$/.test(stackId)
+    && (!setup.stackId || setup.stackId === stackId)
+    && Array.isArray(stack.Tags) && stack.Tags.filter(row => row?.Key === 'Proof' && row.Value === 'D570').length === 1
+    && Date.parse(stack.CreationTime) >= instant(setup.openingBilling?.observedAt ?? setup.billing.observedAt)
+    && Date.parse(stack.CreationTime) <= clock());
+  check(['CREATE_COMPLETE', 'CREATE_FAILED', 'ROLLBACK_COMPLETE', 'ROLLBACK_FAILED', 'UPDATE_COMPLETE',
+    'DELETE_FAILED'].includes(stack.StackStatus));
+  const inventory = await call('cloudformation', 'describe-stack-resources', { StackName: stackId });
+  check(!inventory?.NextToken && Array.isArray(inventory?.StackResources) && inventory.StackResources.length <= 100);
+  const resources = new Map();
+  for (const row of inventory.StackResources) {
+    check(row?.StackId === stackId && !resources.has(row.LogicalResourceId)
+      && setup.template.Resources[row.LogicalResourceId]?.Type === row.ResourceType);
+    if (row.ResourceStatus !== 'DELETE_COMPLETE') resources.set(row.LogicalResourceId, row);
+  }
+  function resource(name, pattern) {
+    const row = resources.get(name);
+    if (!row) { check(stack.StackStatus !== 'CREATE_COMPLETE' && stack.StackStatus !== 'UPDATE_COMPLETE'); return null; }
+    check(typeof row.PhysicalResourceId === 'string' && pattern.test(row.PhysicalResourceId));
+    return row.PhysicalResourceId;
+  }
+  const bucket = resource('Bucket', /^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$/);
+  const subnet = resource('Subnet', /^subnet-[a-f0-9]{17}$/);
+  const rule = resource('ExpiryRule', /^[A-Za-z0-9_.-]{1,64}$/);
+  if (subnet) {
+    const instances = await call('ec2', 'describe-instances', { Filters: [{ Name: 'subnet-id', Values: [subnet] }], MaxResults: 100 });
+    check(!instances?.NextToken && Array.isArray(instances?.Reservations));
+    for (const row of instances.Reservations) {
+      check(row?.OwnerId === account && Array.isArray(row.Instances));
+      for (const instance of row.Instances) check(instance?.SubnetId === subnet && instance.State?.Name === 'terminated');
+    }
+    const interfaces = await call('ec2', 'describe-network-interfaces', { Filters: [{ Name: 'subnet-id', Values: [subnet] }], MaxResults: 100 });
+    check(!interfaces?.NextToken && Array.isArray(interfaces?.NetworkInterfaces) && interfaces.NetworkInterfaces.length === 0);
+  }
+  const volumes = await call('ec2', 'describe-volumes', { Filters: [
+    { Name: 'tag:Proof', Values: ['D570'] }, { Name: 'tag:Stack', Values: [stackId] }], MaxResults: 100 });
+  check(!volumes?.NextToken && Array.isArray(volumes?.Volumes) && volumes.Volumes.length === 0);
+  check(typeof directory === 'string' && directory === resolve(directory));
+  const parent = await lstat(dirname(directory)), root = await realpath(checkout);
+  check(parent.isDirectory() && parent.uid === process.getuid() && (parent.mode & 0o777) === 0o700);
+  const destination = join(await realpath(dirname(directory)), basename(directory));
+  check(destination !== root && !destination.startsWith(root + '/'));
+  let existing;
+  try { existing = await lstat(directory); } catch (error) { if (error.code !== 'ENOENT') throw error; }
+  if (existing) check(existing.isDirectory() && existing.uid === process.getuid() && (existing.mode & 0o777) === 0o700);
+  const store = bucket ? createManualLedgerStore({ bucket, aws: { call } }) : null;
+  const keys = store ? (await store.list()).sort() : [], records = new Map();
+  for (const key of keys) {
+    const row = await store.get(key); check(row);
+    const value = JSON.parse(row.body);
+    check(isDeepStrictEqual(value.scope, { account, region, stackId }));
+    if (key === 'd570/ledger/active.json' && value.active) {
+      check(value.active.identity.head === setup.head && value.active.identity.tree === setup.tree);
+    }
+    records.set(key, row);
+  }
+  // A lost delete reply may leave only part of the provider history; the original private bytes remain authoritative for retention.
+  if (existing) {
+    const names = await readdir(directory); check(names.length <= 15);
+    for (const name of names) {
+      if (name === 'setup.json') continue;
+      check(name === 'active.json' || /^\d{4}-(0[1-9]|1[0-2])\.json$/.test(name));
+      const path = join(directory, name), info = await lstat(path);
+      check(info.isFile() && info.uid === process.getuid() && (info.mode & 0o777) === 0o600 && info.size > 0 && info.size <= 1024 * 1024);
+      const body = await readFile(path), key = 'd570/ledger/' + name;
+      check(isDeepStrictEqual(JSON.parse(body).scope, { account, region, stackId }));
+      if (records.has(key)) check(Buffer.from(records.get(key).body).equals(body));
+      else records.set(key, { body, etag: '"private-export"' });
+    }
+  }
+  if (records.has('d570/ledger/active.json')) {
+    const active = JSON.parse(records.get('d570/ledger/active.json').body);
+    if (active.active) check(active.active.identity.head === setup.head && active.active.identity.tree === setup.tree);
+    if (!active.active || active.active.state === 'reserved') {
+      // Cleanup validates the retained bookings without admitting new spending from today's bill.
+      await inspectBudget({ scope: { account, region, stackId }, now, billingMicroUsd: 0,
+        store: { async list() { return [...records.keys()]; }, async get(key) { return records.get(key) ?? null; } } });
+    }
+  }
+  if (store) {
+    check(isDeepStrictEqual((await store.list()).sort(), keys));
+    for (const [key, row] of records) {
+      if (!keys.includes(key)) continue;
+      const current = await store.get(key);
+      check(current && current.etag === row.etag && Buffer.from(current.body).equals(row.body));
+    }
+  }
+  try { await mkdir(directory, { mode: 0o700 }); } catch (error) { if (error.code !== 'EEXIST') throw error; }
+  const info = await lstat(directory);
+  check(info.isDirectory() && info.uid === process.getuid() && (info.mode & 0o777) === 0o700);
+  const bookingBytes = await readFile(join(setup.directory, 'setup.json'));
+  const files = new Map([['setup.json', bookingBytes], ...[...records].map(([key, row]) => [key.split('/').at(-1), row.body])]);
+  for (const [name, body] of files) {
+    const path = join(directory, name);
+    let handle;
+    try {
+      handle = await open(path, 'wx', 0o600); await handle.writeFile(body); await handle.sync();
+    } catch (error) { if (error.code !== 'EEXIST') throw error; }
+    finally { if (handle) await handle.close(); }
+    const row = await lstat(path);
+    check(row.isFile() && row.uid === process.getuid() && (row.mode & 0o777) === 0o600 && (await readFile(path)).equals(body));
+  }
+  for (const path of [directory, dirname(directory)]) {
+    const handle = await open(path, 'r'); try { await handle.sync(); } finally { await handle.close(); }
+  }
+  if (rule) {
+    await call('events', 'disable-rule', { Name: rule, EventBusName: 'default' });
+    const disabled = await call('events', 'describe-rule', { Name: rule, EventBusName: 'default' });
+    check(disabled?.Name === rule && disabled.State === 'DISABLED');
+    const start = clock(); await sleep(120000); check(clock() >= start + 120000);
+  }
+  if (bucket) {
+    const contents = await call('s3api', 'list-objects-v2', { Bucket: bucket, ExpectedBucketOwner: account, Prefix: 'd570/', MaxKeys: 1000 });
+    check(contents?.IsTruncated === false && !contents.NextContinuationToken && Array.isArray(contents.Contents ?? []));
+    const objects = (contents.Contents ?? []).map(row => ({ Key: row?.Key }));
+    check(objects.length <= 1000 && new Set(objects.map(row => row.Key)).size === objects.length
+      && objects.every(row => typeof row.Key === 'string' && (row.Key === 'd570/health/reaper.json' || keys.includes(row.Key))));
+    if (objects.length) {
+      const removed = await call('s3api', 'delete-objects', { Bucket: bucket, ExpectedBucketOwner: account,
+        Delete: { Objects: objects, Quiet: false } });
+      check(!removed?.Errors?.length && Array.isArray(removed?.Deleted)
+        && isDeepStrictEqual(removed.Deleted.map(row => row.Key).sort(), objects.map(row => row.Key).sort()));
+    }
+    const empty = await call('s3api', 'list-objects-v2', { Bucket: bucket, ExpectedBucketOwner: account, Prefix: 'd570/', MaxKeys: 1000 });
+    check(empty?.IsTruncated === false && !empty.NextContinuationToken && (empty.Contents ?? []).length === 0);
+  }
+  await call('cloudformation', 'delete-stack', { StackName: stackId });
+  for (let attempt = 0; attempt < 40; attempt++) {
+    const result = await call('cloudformation', 'describe-stacks', { StackName: stackId });
+    check(!result?.NextToken && Array.isArray(result?.Stacks) && result.Stacks.length === 1 && result.Stacks[0].StackId === stackId);
+    if (result.Stacks[0].StackStatus === 'DELETE_COMPLETE') return { ...inspection, stackId, directory, deleted: true };
+    check(result.Stacks[0].StackStatus === 'DELETE_IN_PROGRESS'); await sleep(15000);
+  }
+  refuse();
+}
+
+async function privateWrite(path, body) {
+  const file = await open(path, 'wx', 0o600);
+  try { await file.writeFile(body); await file.sync(); } finally { await file.close(); }
+  const parent = await open(dirname(path), 'r');
+  try { await parent.sync(); } finally { await parent.close(); }
+}
+
+async function privateJson(path) {
+  const info = await lstat(path);
+  check(info.isFile() && info.uid === process.getuid() && (info.mode & 0o777) === 0o600 && info.size > 0 && info.size <= 1024 * 1024);
+  return JSON.parse(await readFile(path, 'utf8'));
+}
+
+export async function runManualCommand(options) {
+  const { args, checkout, clock = Date.now, sleep = delay } = options;
+  check(Array.isArray(args) && ['up', 'drill', 'reconcile', 'down'].includes(args[0]));
+  const [command, directory, ...flags] = args;
+  check(typeof directory === 'string' && directory === resolve(directory));
+  const info = await lstat(directory), root = await realpath(checkout), base = await realpath(directory);
+  check(info.isDirectory() && info.uid === process.getuid() && (info.mode & 0o777) === 0o700
+    && base !== root && !base.startsWith(root + '/'));
+  const explanations = [];
+  check(command === 'up' || flags.length === 0);
+  for (let index = 0; index < flags.length; index += 5) {
+    check(flags[index] === '--explain' && flags.slice(index, index + 5).length === 5
+      && /^(0|[1-9]\d{0,7})$/.test(flags[index + 3]));
+    explanations.push({ service: flags[index + 1], usageType: flags[index + 2],
+      maxMicroUsd: Number(flags[index + 3]), reason: flags[index + 4] });
+  }
+  const stamp = () => iso(Math.floor(clock() / 1000) * 1000);
+  const common = { checkout, region: options.region ?? region, environment: options.environment ?? process.env, clock, sleep };
+  const provider = options.aws ?? createManualAwsCli();
+  const initial = await inspectManualOwner({ ...common, now: stamp(), aws: provider }, false);
+  const aws = { async call(...request) {
+    async function unchanged() {
+      const source = await checkedMain(checkout);
+      check(source.head === initial.head && source.tree === initial.tree);
+    }
+    await unchanged(); const response = await provider.call(...request); await unchanged(); return response;
+  } };
+  const fresh = () => ({ ...common, aws, now: stamp() });
+  const save = (name, value) => privateWrite(join(base, name), JSON.stringify(value) + '\n');
+  if (command === 'up') {
+    try { await lstat(join(base, 'setup')); refuse(); } catch (error) { if (error.code !== 'ENOENT') throw error; }
+    const opening = await inspectManualOpening({ ...fresh(), explanations });
+    const prices = await mkdtemp(join(base, 'prices-')), catalogues = {};
+    for (const service of ['AmazonEC2', 'AmazonS3', 'AWSLambda', 'AmazonCloudWatch']) {
+      catalogues[service] = await acquirePriceCatalogue(service, { fetch: options.fetch ?? globalThis.fetch, clock,
+        retain: ({ body }) => privateWrite(join(prices, service + '.json'), body) });
+    }
+    const cost = calculateManualCost({ ...firstSetupPriceInputs(catalogues), now: stamp() });
+    const estimateMicroUsd = Object.values(cost.components).reduce((sum, row) => sum + row.upperMicroUsd, 0);
+    const headroomMicroUsd = 10_000_000 - opening.billing.microUsd - estimateMicroUsd;
+    if (headroomMicroUsd <= 0) throw Object.assign(new Error('D570 opening and reservation reach the monthly cap'), {
+      opening: { billing: opening.billing, items: opening.openingExplanations, estimateMicroUsd, headroomMicroUsd } });
+    const setup = await initializeManualFirstSetup({ ...fresh(), directory: join(base, 'setup'), catalogues, explanations });
+    await save('initialized.json', setup);
+    return setup;
+  }
+  let setup;
+  try { setup = await privateJson(join(base, 'initialized.json')); }
+  catch (error) {
+    if (command !== 'down' || error.code !== 'ENOENT') throw error;
+    setup = { ...await privateJson(join(base, 'setup', 'setup.json')), directory: join(base, 'setup') };
+  }
+  if (command === 'down') return removeManualFirstSetup({ ...fresh(), setup, directory: join(base, 'history') });
+  if (command === 'reconcile') {
+    const launch = await privateJson(join(base, 'launch.json'));
+    return inspectManualFirstBilling({ ...fresh(), setup, launch });
+  }
+  try { await lstat(join(base, 'launch.json')); refuse(); } catch (error) { if (error.code !== 'ENOENT') throw error; }
+  const launch = await launchManualFirstDrill({ ...fresh(), setup, uuid: options.uuid });
+  await save('launch.json', launch);
+  async function poll(read, code, until) {
+    while (clock() < until) {
+      try { return await read(); }
+      catch (error) { if (error?.code !== code) throw error; }
+      const remaining = until - clock(); check(remaining > 0); await sleep(Math.min(5000, remaining));
+    }
+    refuse();
+  }
+  const ready = await poll(() => inspectManualFirstGuest({ ...fresh(), launch }), 'D570_NOT_READY', instant(launch.guestExpiry));
+  await save('ready.json', ready);
+  const shutdown = await observeManualFirstShutdown({ ...fresh(), ready });
+  await save('shutdown.json', shutdown);
+  const cleanup = await poll(() => inspectManualFirstGuestCleanup({ ...fresh(), ready: shutdown }),
+    'D570_CLEANUP_PENDING', clock() + 120000);
+  const start = instant(launch.reservation.startedAt), observation = shutdown.shutdownObservation;
+  const running = Date.parse(observation.runningRequestedAt), terminated = Date.parse(observation.terminatedReceivedAt);
+  const result = { ...cleanup, runtimeObservation: { runningObservedAfterSeconds: (running - start) / 1000,
+    terminatedObservedAfterSeconds: (terminated - start) / 1000, shutdownObservedWithinSeconds: (terminated - running) / 1000,
+    exactPoweroff: false } };
+  await save('cleanup.json', result);
+  return result;
+}
+
 if (process.argv[1] && process.argv[1] !== '-' && await realpath(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  console.error('D570 manual lifecycle is not implemented. No setup, launch, reconciliation or removal was performed.');
-  process.exitCode = 1;
+  const args = process.argv.slice(2);
+  if (args.length === 1 && args[0] === '--help') {
+    console.log('node scripts/kubernetes-proof-control.mjs up|drill|reconcile|down /absolute/private-directory [--explain SERVICE USAGE_TYPE MAX_MICRO_USD REASON ...]\nUse an existing owner-only private directory outside the checkout. Amounts are millionths of USD. Run from clean reviewed main with the temporary staging sign-in.');
+  } else try {
+    check(args.length >= 2 && await realpath(process.cwd()) === await realpath(join(dirname(fileURLToPath(import.meta.url)), '..')));
+    const result = await runManualCommand({ args, checkout: process.cwd() });
+    const usd = value => Number.isSafeInteger(value) ? (value / 1_000_000).toFixed(6) : null;
+    console.log(JSON.stringify({ command: args[0], account: result.account, region: result.region, stackId: result.stackId,
+      ...(result.openingBilling ? { openingUsd: usd(result.openingBilling.microUsd), openingEstimated: result.openingBilling.estimated,
+        opening: result.openingExplanations.map(row => ({ service: row.service, usageType: row.usageType, usd: usd(row.microUsd), what: row.reason })),
+        reservedUsd: usd(result.upperMicroUsd), headroomUsd: usd(10_000_000 - result.openingBilling.microUsd - result.upperMicroUsd) } : {}),
+      ...(result.runtimeObservation ? { runtimeObservation: result.runtimeObservation } : {}),
+      ...(result.costReport ? { costReport: result.costReport } : {}),
+      ...(result.deleted ? { deleted: true, privateHistory: result.directory } : {}),
+    }, null, 2));
+  } catch (error) {
+    console.error(error?.message?.startsWith('D570 ') ? error.message : 'D570 command refused; keep the private files for removal.');
+    if (error?.opening) console.error(JSON.stringify(error.opening, null, 2));
+    process.exitCode = 1;
+  }
 }

@@ -206,12 +206,12 @@ test('CLI failure does not expose provider diagnostic contents', async t => {
     error => error.message === 'D570 AWS sts/get-caller-identity failed');
 });
 
-for (const command of ['up', 'drill', 'reconcile', 'down']) test(`unfinished ${command} entry refuses rather than reporting a successful lifecycle`, () => {
+for (const command of ['up', 'drill', 'reconcile', 'down']) test(`incomplete ${command} entry refuses rather than reporting a successful lifecycle`, () => {
   const result = spawnSync(process.execPath, [target.pathname, command], { encoding: 'utf8', timeout: 5000 });
   assert.ifError(result.error);
   assert.equal(result.status, 1);
   assert.equal(result.stdout, '');
-  assert.match(result.stderr, /D570 manual lifecycle is not implemented/);
+  assert.match(result.stderr, /D570 controller refused/);
 });
 
 // Dropping regional discovery would allow a pasted image or foreign network prefix into setup.
@@ -2094,3 +2094,457 @@ for (const key of ['d570/ledger/active.json', 'd570/ledger/2026-11.json']) {
     assert.equal(existsSync(f.directory), false);
   });
 }
+
+// An explained opening is admissible before booking; unknown rows cannot consume the only setup directory.
+async function explainedOpeningFixture(t) {
+  const f = await creationFixture(t), prior = f.aws.call;
+  const groups = [{ Keys: ['Amazon Simple Storage Service', 'EUN1-TimedStorage-ByteHrs'],
+    Metrics: { UnblendedCost: { Amount: '0.01', Unit: 'USD' }, UsageQuantity: { Amount: '0.1', Unit: 'N/A' } } }];
+  const explanations = [{ service: 'Amazon Simple Storage Service', usageType: 'EUN1-TimedStorage-ByteHrs',
+    maxMicroUsd: 10000, reason: 'Existing synthetic staging backup' }];
+  f.aws.call = async (service, operation, input) => {
+    if (service === 'ce') {
+      f.calls.push({ service, operation, input });
+      if (input.GroupBy) return { GroupDefinitions: input.GroupBy, ResultsByTime: [{ TimePeriod: input.TimePeriod,
+        Estimated: true, Groups: structuredClone(groups), Total: {} }] };
+      return { GroupDefinitions: [], ResultsByTime: [{ TimePeriod: input.TimePeriod, Estimated: true, Groups: [],
+        Total: { UnblendedCost: { Amount: '0.01', Unit: 'USD' } } }] };
+    }
+    if (operation === 'create-stack') {
+      const saved = JSON.parse(readFileSync(join(f.options.directory, 'setup.json')));
+      assert.equal(saved.billing.microUsd, 10000);
+      assert.equal(saved.upperMicroUsd, 9313491);
+      assert.equal(saved.openingExplanations[0].microUsd, 10000);
+      assert.equal(saved.openingExplanations[0].reason, 'Existing synthetic staging backup');
+      f.calls.push({ service, operation, input }); return { StackId: f.p.stackId };
+    }
+    return prior(service, operation, input);
+  };
+  return { ...f, groups, explanations };
+}
+
+test('explained opening starts the first setup and retains the actual list before creating', async t => {
+  const f = await explainedOpeningFixture(t);
+  const result = await f.create({ explanations: f.explanations });
+  assert.equal(result.openingBilling.microUsd, 10000);
+  assert.equal(result.upperMicroUsd, 9313491);
+  assert.deepEqual(result.openingExplanations, [{ service: 'Amazon Simple Storage Service',
+    usageType: 'EUN1-TimedStorage-ByteHrs', microUsd: 10000, maxMicroUsd: 10000,
+    reason: 'Existing synthetic staging backup' }]);
+  assert.equal(f.calls.filter(row => row.operation === 'create-stack').length, 1);
+});
+
+for (const [label, change] of [
+  ['missing', f => []],
+  ['lower ceiling', f => [{ ...f.explanations[0], maxMicroUsd: 9999 }]],
+  ['duplicate', f => [...f.explanations, ...f.explanations]],
+  ['unused', f => [...f.explanations, { ...f.explanations[0], usageType: 'another' }]],
+  ['empty reason', f => [{ ...f.explanations[0], reason: ' ' }]],
+]) test(`explained opening refuses ${label} before writing the booking and reports the observed spend`, async t => {
+  const f = await explainedOpeningFixture(t);
+  await assert.rejects(f.create({ explanations: change(f) }), error => {
+    assert.equal(error.message, 'D570 opening spend needs explanations');
+    assert.equal(error.opening?.billing.microUsd, 10000);
+    assert.equal(error.opening?.items[0].service, 'Amazon Simple Storage Service');
+    assert.equal(error.opening?.items[0].microUsd, 10000);
+    return true;
+  });
+  assert.equal(existsSync(f.options.directory), false);
+  assert.equal(f.calls.some(row => row.operation === 'create-stack'), false);
+});
+
+test('explained opening refuses a changed total before booking', async t => {
+  const f = await explainedOpeningFixture(t);
+  f.groups[0].Metrics.UnblendedCost.Amount = '0.02';
+  await assert.rejects(f.create({ explanations: f.explanations }));
+  assert.equal(existsSync(f.options.directory), false);
+});
+
+// Omitting the opening from a later comparison must not reject an otherwise fully booked setup.
+test('explained opening remains part of the post-create account limit', async t => {
+  const f = await explainedOpeningFixture(t), prior = f.aws.call; let created = false;
+  f.aws.call = async (...args) => {
+    const response = await prior(...args);
+    if (args[1] === 'create-stack') created = true;
+    if (args[0] === 'ce' && !args[2].GroupBy && created) response.ResultsByTime[0].Total.UnblendedCost.Amount = '9.32';
+    return response;
+  };
+  const result = await f.create({ explanations: f.explanations });
+  assert.equal(result.openingBilling.microUsd, 10000);
+  assert.equal(result.billing.microUsd, 9320000);
+});
+
+test('explained opening books only the current month baseline and binds reasons in its existing digest', async t => {
+  const f = await initializationFixture(t), opening = await explainedOpeningFixture(t), prior = f.aws.call;
+  f.aws.call = async (service, operation, input) => {
+    if (service === 'ce') return opening.aws.call(service, operation, input);
+    if (operation === 'create-stack') {
+      f.calls.push({ service, operation, input });
+      return { StackId: f.p.stackId };
+    }
+    return prior(service, operation, input);
+  };
+  const result = await f.initialize({ explanations: opening.explanations });
+  assert.equal(result.runEvidence.openings['2026-11'].baselineMicroUsd, 10000);
+  assert.equal(result.runEvidence.openings['2026-12'].baselineMicroUsd, 0);
+  assert.notEqual(result.runEvidence.openings['2026-11'].digest, result.runEvidence.openings['2026-12'].digest);
+  const { createHash } = await import('node:crypto');
+  const expected = createHash('sha256').update(JSON.stringify({ month: '2026-11', baselineMicroUsd: 10000,
+    billing: result.openingBilling, cost: result.cost, openingExplanations: result.openingExplanations })).digest('hex');
+  assert.equal(result.runEvidence.openings['2026-11'].digest, expected);
+});
+
+// A new reviewed main must not invalidate the retained run or release its cost reservation.
+test('later billing reads current clean main while matching the original run to its ledger', async t => {
+  const f = await billingFixture(t), oldHead = f.setup.head;
+  writeFileSync(join(f.root, 'controller.txt'), 'later reviewed main\n'); f.git('add', 'controller.txt');
+  f.git('-c', 'commit.gpgsign=false', 'commit', '-s', '-m', 'Move isolated reviewed main between sittings');
+  f.git('update-ref', 'refs/remotes/origin/main', f.git('rev-parse', 'HEAD'));
+  const before = structuredClone([...f.objects]);
+  const result = await f.inspect();
+  assert.equal(result.head, f.git('rev-parse', 'HEAD'));
+  assert.notEqual(result.head, oldHead);
+  assert.equal(result.costReport.accountCostMicroUsd, 12346);
+  assert.deepEqual(structuredClone([...f.objects]), before);
+});
+
+test('later billing refuses a jointly altered saved head and tree rather than trusting local files', async t => {
+  const f = await billingFixture(t), before = structuredClone([...f.objects]);
+  for (const row of [f.options.setup, f.options.launch, f.options.launch.reservation]) { row.head = 'a'.repeat(40); row.tree = 'b'.repeat(40); }
+  await assert.rejects(f.inspect(), /D570 controller refused/);
+  assert.deepEqual(structuredClone([...f.objects]), before);
+});
+
+test('later billing refuses changed opening explanations without rewriting its retained ledger', async t => {
+  const f = await billingFixture(t), before = structuredClone([...f.objects]);
+  f.options.setup.openingExplanations = [{ service: 'invented', usageType: 'invented', microUsd: 0,
+    maxMicroUsd: 0, reason: 'Edited after booking' }];
+  await assert.rejects(f.inspect(), /D570 controller refused/);
+  assert.deepEqual(structuredClone([...f.objects]), before);
+});
+
+// Removing protection or provider history before independent absence and a durable export must fail.
+async function removalFixture(t, { partial = false, deletionAttempts = 1 } = {}) {
+  const f = await historyExportFixture(t), prior = f.aws.call;
+  let current = Date.parse(f.options.now), deleted = false, healthPresent = true;
+  const sleeps = [];
+  f.p.responses['cloudformation/describe-stacks'].Stacks[0].Tags = [{ Key: 'Proof', Value: 'D570' }];
+  f.p.responses['cloudformation/describe-stacks'].Stacks[0].CreationTime = '2026-11-06T12:00:01Z';
+  f.aws.call = async (service, operation, input) => {
+    if (operation === 'describe-instances' && input.Filters) {
+      assert.deepEqual(input.Filters, [{ Name: 'subnet-id', Values: [f.ids.Subnet] }]);
+      f.calls.push({ service, operation, input }); return structuredClone(f.instances);
+    }
+    if (operation === 'describe-volumes' && input.Filters?.[0].Name === 'tag:Proof') {
+      f.calls.push({ service, operation, input }); return structuredClone(f.volumes);
+    }
+    if (operation === 'list-objects-v2' && input.Prefix === 'd570/') {
+      f.calls.push({ service, operation, input });
+      return { IsTruncated: false, Contents: [...f.objects.keys(), ...(healthPresent ? ['d570/health/reaper.json'] : [])].map(Key => ({ Key })) };
+    }
+    if (operation === 'disable-rule') {
+      assert.equal(existsSync(join(f.directory, partial ? '2026-11.json' : 'active.json')), true);
+      f.calls.push({ service, operation, input });
+      f.p.responses['events/describe-rule'].State = 'DISABLED'; return {};
+    }
+    if (operation === 'delete-objects') {
+      assert.deepEqual(sleeps, Array(deletionAttempts).fill(120000));
+      if (!partial) assert.equal(readFileSync(join(f.directory, 'active.json')).equals(f.objects.get('d570/ledger/active.json')?.body
+        ?? readFileSync(join(f.directory, 'active.json'))), true);
+      f.calls.push({ service, operation, input });
+      for (const row of input.Delete.Objects) { f.objects.delete(row.Key); if (row.Key === 'd570/health/reaper.json') healthPresent = false; }
+      return { Deleted: structuredClone(input.Delete.Objects) };
+    }
+    if (operation === 'delete-stack') {
+      assert.equal(f.objects.size, 0); assert.equal(healthPresent, false);
+      f.calls.push({ service, operation, input }); deleted = true; return {};
+    }
+    if (operation === 'describe-stacks' && deleted) {
+      f.calls.push({ service, operation, input }); return { Stacks: [{ StackId: f.setup.stackId, StackStatus: 'DELETE_COMPLETE' }] };
+    }
+    return prior(service, operation, input);
+  };
+  const options = { ...f.options, setup: f.setup, clock: () => current,
+    sleep: async ms => { sleeps.push(ms); current += ms; } };
+  const remove = changes => {
+    assert.equal(typeof control.removeManualFirstSetup, 'function', 'missing owned first-setup removal');
+    return control.removeManualFirstSetup({ ...options, ...changes });
+  };
+  f.calls.length = 0;
+  return { ...f, options, sleeps, remove };
+}
+
+test('first removal exports the full booked ledger before disabling expiry and deleting only its empty stack', async t => {
+  const f = await removalFixture(t), original = new Map([...f.objects].map(([key, value]) => [key, Buffer.from(value.body)]));
+  const result = await f.remove();
+  assert.equal(result.deleted, true); assert.equal(result.stackId, f.setup.stackId);
+  assert.equal(JSON.parse(readFileSync(join(f.directory, 'active.json'))).active.identity.uuid, f.uuid);
+  for (const [key, body] of original) assert.equal(readFileSync(join(f.directory, key.split('/').at(-1))).equals(body), true);
+  assert.equal(existsSync(join(f.setup.directory, 'setup.json')), true);
+  assert.equal(f.calls.some(row => ['terminate-instances', 'delete-volume', 'put-object', 'run-instances'].includes(row.operation)), false);
+  assert.equal(f.calls.filter(row => row.operation === 'delete-stack').length, 1);
+});
+
+for (const [label, mutate] of [
+  ['live machine', f => { f.instance.State.Name = 'running'; }],
+  ['remaining disk', f => { f.volumes.Volumes.push({ VolumeId: f.volumeId }); }],
+  ['remaining interface', f => { f.interfaces.NetworkInterfaces.push({ NetworkInterfaceId: f.interfaceId }); }],
+  ['foreign stack tag', f => { f.p.responses['cloudformation/describe-stacks'].Stacks[0].Tags[0].Value = 'other'; }],
+]) test(`first removal keeps protection and all booking bytes for ${label}`, async t => {
+  const f = await removalFixture(t), before = structuredClone([...f.objects]); mutate(f);
+  await assert.rejects(f.remove(), /D570 controller refused/);
+  assert.deepEqual(structuredClone([...f.objects]), before);
+  assert.equal(f.calls.some(row => ['disable-rule', 'delete-objects', 'delete-stack'].includes(row.operation)), false);
+});
+
+test('first removal does not require a new account bill or opening explanation to stop retained costs', async t => {
+  const f = await removalFixture(t), prior = f.aws.call;
+  f.aws.call = async (...args) => { if (args[0] === 'ce') assert.fail('cleanup must not require billing'); return prior(...args); };
+  assert.equal((await f.remove()).deleted, true);
+  assert.equal(f.calls.some(row => row.service === 'ce'), false);
+});
+
+test('first removal retains a partial initialization without inventing its missing active record', async t => {
+  const f = await removalFixture(t, { partial: true });
+  f.objects.delete('d570/ledger/active.json');
+  assert.equal((await f.remove()).deleted, true);
+  assert.equal(existsSync(join(f.directory, 'setup.json')), true);
+  assert.equal(existsSync(join(f.directory, 'active.json')), false);
+});
+
+test('first removal can retry partial object deletion using the original private export', async t => {
+  const f = await removalFixture(t, { deletionAttempts: 2 }), prior = f.aws.call; let first = true;
+  f.aws.call = async (service, operation, input) => {
+    if (operation === 'delete-objects' && first) {
+      first = false; f.objects.delete('d570/ledger/2026-11.json');
+      return { Errors: [{ Key: 'd570/ledger/active.json', Code: 'InternalError' }], Deleted: [{ Key: 'd570/ledger/2026-11.json' }] };
+    }
+    return prior(service, operation, input);
+  };
+  await assert.rejects(f.remove(), /D570 controller refused/);
+  const retained = readFileSync(join(f.directory, '2026-11.json'));
+  assert.equal(f.calls.some(row => row.operation === 'delete-stack'), false);
+  assert.equal((await f.remove()).deleted, true);
+  assert.equal(readFileSync(join(f.directory, '2026-11.json')).equals(retained), true);
+});
+
+// The real command adapter must reject broad deletion requests before starting its subprocess.
+for (const [service, operation, input, response] of [
+  ['cloudformation', 'delete-stack', { StackName: 'arn:aws:cloudformation:eu-north-1:462991287391:stack/d570-first/00000000-0000-4000-8000-000000000000' }, {}],
+  ['events', 'disable-rule', { Name: 'd570-first-rule', EventBusName: 'default' }, {}],
+  ['s3api', 'list-objects-v2', { Bucket: 'd570-first-bucket', ExpectedBucketOwner: '462991287391', Prefix: 'd570/', MaxKeys: 1000 }, { IsTruncated: false, Contents: [] }],
+  ['s3api', 'delete-objects', { Bucket: 'd570-first-bucket', ExpectedBucketOwner: '462991287391',
+    Delete: { Objects: [{ Key: 'd570/ledger/active.json' }, { Key: 'd570/health/reaper.json' }], Quiet: false } },
+    { Deleted: [{ Key: 'd570/ledger/active.json' }, { Key: 'd570/health/reaper.json' }] }],
+]) test(`removal CLI validates and sends the exact ${operation} boundary`, async t => {
+  const f = fixture(t), executable = join(f.root, 'aws-removal'), capture = join(f.root, 'request.json');
+  writeFileSync(executable, `#!${process.execPath}\nconst fs=require('node:fs');fs.writeFileSync(${JSON.stringify(capture)},JSON.stringify(process.argv.slice(2)));process.stdout.write(${JSON.stringify(Object.keys(response).length ? JSON.stringify(response) : '')});\n`, { mode: 0o700 });
+  assert.deepEqual(await control.createManualAwsCli({ executable }).call(service, operation, input), response);
+  const args = JSON.parse(readFileSync(capture));
+  assert.deepEqual(args.slice(0, 6), [service, operation, '--cli-input-json', JSON.stringify(input), '--region', 'eu-north-1']);
+});
+
+async function ownerCommand(f, args, changes = {}) {
+  assert.equal(typeof control.runManualCommand, 'function', 'missing owner command lifecycle');
+  const docs = JSON.parse(readFileSync(new URL('../deploy/kubernetes/proof/test-fixtures/prices.json', import.meta.url)));
+  const fetch = async url => {
+    const service = Object.keys(docs).find(name => new URL(url).pathname.includes('/' + name + '/'));
+    assert.ok(service, 'only the four fixed public price files are requested');
+    return new Response(JSON.stringify(docs[service]), { headers: { 'content-type': 'application/json' } });
+  };
+  return control.runManualCommand({ ...f.options, args, fetch, ...changes });
+}
+
+test('owner command up reports unexplained opening before price acquisition or a booking', async t => {
+  const f = await explainedOpeningFixture(t);
+  await assert.rejects(ownerCommand(f, ['up', f.parent], { fetch: () => assert.fail('prices before explained opening') }),
+    error => error.message === 'D570 opening spend needs explanations' && error.opening.billing.microUsd === 10000);
+  assert.equal(existsSync(join(f.parent, 'setup')), false);
+  assert.equal(existsSync(join(f.parent, 'initialized.json')), false);
+});
+
+test('owner command up acquires retained paid prices and saves one initialized setup without launching', async t => {
+  const f = await initializationFixture(t);
+  const result = await ownerCommand(f, ['up', f.parent]);
+  assert.equal(result.upperMicroUsd, 9313491);
+  assert.equal(result.openingBilling.microUsd, 0);
+  const saved = JSON.parse(readFileSync(join(f.parent, 'initialized.json')));
+  assert.equal(saved.stackId, f.p.stackId); assert.equal(saved.budget.activeUuid, null);
+  assert.equal(statSync(join(f.parent, 'initialized.json')).mode & 0o777, 0o600);
+  assert.equal(f.calls.some(row => row.operation === 'run-instances'), false);
+  await assert.rejects(ownerCommand(f, ['up', f.parent]));
+  assert.deepEqual(f.counts(), { creates: 1, enables: 1 });
+});
+
+test('owner command reconcile reports account billing and leaves the full reservation active', async t => {
+  const f = await billingFixture(t), base = f.parent;
+  writeFileSync(join(base, 'initialized.json'), JSON.stringify(f.setup), { mode: 0o600 });
+  writeFileSync(join(base, 'launch.json'), JSON.stringify(f.ready), { mode: 0o600 });
+  const before = structuredClone([...f.objects]);
+  const result = await ownerCommand(f, ['reconcile', base]);
+  assert.equal(result.costReport.accountCostMicroUsd, 12346);
+  assert.equal(result.costReport.billedAccountMicroUsd, null);
+  assert.equal(result.budget.activeUuid, f.uuid);
+  assert.deepEqual(structuredClone([...f.objects]), before);
+});
+
+test('owner command down consumes the saved setup and retains history before removal', async t => {
+  const f = await removalFixture(t);
+  writeFileSync(join(f.parent, 'initialized.json'), JSON.stringify(f.setup), { mode: 0o600 });
+  assert.equal((await ownerCommand(f, ['down', f.parent])).deleted, true);
+  assert.equal(existsSync(join(f.directory, 'active.json')), true);
+});
+
+// Only a known transient observation may be retried; it never becomes a successful readiness or absence proof.
+for (const pending of ['instance', 'console']) test(`owner readiness distinguishes a pending ${pending} from a safety refusal`, async t => {
+  const f = await readyGuestFixture(t);
+  if (pending === 'instance') f.instance.State.Name = 'pending'; else f.consoleOutput.Output = '';
+  await assert.rejects(f.observe(), error => error.message === 'D570 controller refused' && error.code === 'D570_NOT_READY');
+});
+
+for (const pending of ['volume', 'interface']) test(`owner cleanup distinguishes a remaining captured ${pending} without releasing its booking`, async t => {
+  const f = await guestCleanupFixture(t), before = structuredClone([...f.objects]);
+  if (pending === 'volume') f.volumes.Volumes.push({ VolumeId: f.volumeId });
+  else f.interfaces.NetworkInterfaces.push({ NetworkInterfaceId: f.interfaceId, SubnetId: f.ids.Subnet, OwnerId: '462991287391' });
+  await assert.rejects(f.cleanup(), error => error.message === 'D570 controller refused' && error.code === 'D570_CLEANUP_PENDING');
+  assert.deepEqual(structuredClone([...f.objects]), before);
+});
+
+for (const latency of [0, 1000]) test(`owner command drill records the original shutdown window with ${latency}ms provider latency`, async t => {
+  const f = await drillFixture(t), prior = f.aws.call, base = f.parent;
+  writeFileSync(join(base, 'initialized.json'), JSON.stringify(f.setup), { mode: 0o600 });
+  let current = Date.parse(now), launchedAt, reservedAt, instanceReads = 0, consoleReads = 0, providerCalls = 0;
+  const instance = { InstanceId: f.instanceId, ClientToken: f.uuid, InstanceType: 'm7g.2xlarge',
+    SubnetId: f.ids.Subnet, RootDeviceName: '/dev/xvda', RootDeviceType: 'ebs',
+    Tags: [{ Key: 'Proof', Value: 'D570' }, { Key: 'Stack', Value: f.setup.stackId }, { Key: 'Run', Value: f.uuid },
+      { Key: 'ExpiresAt', Value: '2026-11-06T12:05:00Z' }],
+    BlockDeviceMappings: [{ DeviceName: '/dev/xvda', Ebs: { VolumeId: 'vol-0123456789abcdef0', DeleteOnTermination: true, Status: 'attached' } }],
+    NetworkInterfaces: [{ NetworkInterfaceId: 'eni-0123456789abcdef0', OwnerId: '462991287391', SubnetId: f.ids.Subnet,
+      Status: 'in-use', Groups: [{ GroupId: f.ids.SecurityGroup }],
+      Attachment: { InstanceId: f.instanceId, DeviceIndex: 0, Status: 'attached', DeleteOnTermination: true } }],
+  };
+  f.aws.call = async (service, operation, input) => {
+    providerCalls++;
+    if (latency) { await new Promise(resolve => setTimeout(resolve, 25)); current += latency; }
+    if (operation === 'run-instances') {
+      launchedAt = current; reservedAt = Date.parse(JSON.parse(f.objects.get('d570/ledger/active.json').body).active.identity.startedAt);
+      instance.Tags = structuredClone(input.TagSpecifications[0].Tags);
+    }
+    if (operation === 'get-object' && input.Key === 'd570/health/reaper.json') {
+      f.p.health.startedAt = new Date(current - 1000).toISOString(); f.p.health.completedAt = f.p.health.startedAt;
+      f.p.responses['s3api/get-object'].Body = Buffer.from(JSON.stringify(f.p.health));
+      f.p.responses['s3api/get-object'].LastModified = f.p.health.startedAt;
+    }
+    if (['describe-instances', 'describe-instance-attribute', 'get-console-output', 'describe-volumes', 'describe-network-interfaces'].includes(operation)) {
+      f.calls.push({ service, operation, input });
+      if (operation === 'describe-instances') {
+        const state = instanceReads++ === 0 ? 'pending' : current >= reservedAt + 180000 ? 'terminated' : 'running';
+        return { Reservations: [{ OwnerId: '462991287391', Instances: [{ ...instance, State: { Name: state },
+          ...(state === 'terminated' ? { StateReason: { Code: 'Client.InstanceInitiatedShutdown' } } : {}) }] }] };
+      }
+      if (operation === 'describe-instance-attribute') return { InstanceId: f.instanceId, InstanceInitiatedShutdownBehavior: { Value: 'terminate' } };
+      if (operation === 'get-console-output') return { InstanceId: f.instanceId, Timestamp: new Date(current).toISOString(),
+        Output: consoleReads++ === 0 ? '' : 'D570_DEADLINE_READY ' + f.uuid + ' ' + (reservedAt + 180000) / 1000 + ' 11111111-1111-4111-8111-111111111111\n' };
+      return operation === 'describe-volumes' ? { Volumes: [] } : { NetworkInterfaces: [] };
+    }
+    return prior(service, operation, input);
+  };
+  const run = () => ownerCommand(f, ['drill', base], { uuid: f.uuid, clock: () => current, sleep: async ms => { current += ms; } });
+  const started = performance.now(), result = await run();
+  t.diagnostic(JSON.stringify({ providerLatencyMs: latency, realBoundaryDelayMs: latency ? 25 : 0, providerCalls, commandWallMs: performance.now() - started }));
+  assert.equal(result.terminated, true); assert.equal(result.volumesAbsent, true); assert.equal(result.interfacesAbsent, true);
+  if (latency === 0) {
+    assert.equal(result.shutdownObservation.runningRequestedAt, '2026-11-06T12:02:50Z');
+    assert.equal(result.shutdownObservation.terminatedReceivedAt, '2026-11-06T12:03:00Z');
+    assert.deepEqual(result.runtimeObservation, { runningObservedAfterSeconds: 170, terminatedObservedAfterSeconds: 180,
+      shutdownObservedWithinSeconds: 10, exactPoweroff: false });
+  } else {
+    assert.ok(result.runtimeObservation.runningObservedAfterSeconds >= 170);
+    assert.ok(result.runtimeObservation.runningObservedAfterSeconds < 180);
+    assert.ok(result.runtimeObservation.terminatedObservedAfterSeconds >= 180);
+    assert.ok(result.runtimeObservation.terminatedObservedAfterSeconds < 300);
+    assert.equal(result.runtimeObservation.exactPoweroff, false);
+  }
+  for (const name of ['launch.json', 'ready.json', 'shutdown.json', 'cleanup.json']) {
+    assert.equal(statSync(join(base, name)).mode & 0o777, 0o600);
+    assert.equal(JSON.parse(readFileSync(join(base, name))).reservation.uuid, f.uuid);
+  }
+  assert.ok(instanceReads >= 5); assert.equal(consoleReads, 2);
+  await assert.rejects(run());
+  assert.equal(f.calls.filter(row => row.operation === 'run-instances').length, 1);
+  assert.equal(JSON.parse(f.objects.get('d570/ledger/active.json').body).active.identity.uuid, f.uuid);
+});
+
+test('owner command shows the actual opening and fixed reservation headroom before a cap refusal', async t => {
+  const f = await explainedOpeningFixture(t), prior = f.aws.call;
+  f.groups[0].Metrics.UnblendedCost.Amount = '1';
+  f.aws.call = async (...args) => {
+    const response = await prior(...args);
+    if (args[0] === 'ce' && !args[2].GroupBy) response.ResultsByTime[0].Total.UnblendedCost.Amount = '1';
+    return response;
+  };
+  await assert.rejects(ownerCommand(f, ['up', f.parent, '--explain', 'Amazon Simple Storage Service',
+    'EUN1-TimedStorage-ByteHrs', '1000000', 'Existing synthetic staging backup']), error => {
+    assert.equal(error.message, 'D570 opening and reservation reach the monthly cap');
+    assert.equal(error.opening.billing.microUsd, 1000000);
+    assert.equal(error.opening.estimateMicroUsd, 9313491);
+    assert.equal(error.opening.headroomMicroUsd, -313491);
+    return true;
+  });
+  assert.equal(existsSync(f.options.directory), false);
+  assert.equal(f.calls.some(row => row.operation === 'create-stack'), false);
+});
+
+test('owner command help prints the runnable command shape without credentials or provider calls', () => {
+  const result = spawnSync(process.execPath, [target.pathname, '--help'], { encoding: 'utf8', timeout: 5000,
+    env: { ...process.env, AWS_PROFILE: 'd570-nonexistent-synthetic-profile', AWS_EC2_METADATA_DISABLED: 'true' } });
+  assert.ifError(result.error); assert.equal(result.status, 0); assert.equal(result.stderr, '');
+  assert.match(result.stdout, /up\|drill\|reconcile\|down/);
+  assert.match(result.stdout, /--explain SERVICE USAGE_TYPE MAX_MICRO_USD REASON/);
+  assert.match(result.stdout, /private directory/);
+});
+
+for (const [label, service, operation, input] of [
+  ['foreign account stack', 'cloudformation', 'delete-stack', { StackName: 'arn:aws:cloudformation:eu-north-1:111111111111:stack/d570-first/00000000-0000-4000-8000-000000000000' }],
+  ['unqualified stack name', 'cloudformation', 'delete-stack', { StackName: 'd570-first' }],
+  ['retained resources', 'cloudformation', 'delete-stack', { StackName: 'arn:aws:cloudformation:eu-north-1:462991287391:stack/d570-first/00000000-0000-4000-8000-000000000000', RetainResources: ['Bucket'] }],
+  ['foreign event bus', 'events', 'disable-rule', { Name: 'd570-first-rule', EventBusName: 'other' }],
+  ['foreign bucket owner', 's3api', 'delete-objects', { Bucket: 'd570-first-bucket', ExpectedBucketOwner: '111111111111', Delete: { Objects: [{ Key: 'd570/ledger/active.json' }], Quiet: false } }],
+  ['unknown object', 's3api', 'delete-objects', { Bucket: 'd570-first-bucket', ExpectedBucketOwner: '462991287391', Delete: { Objects: [{ Key: 'unrelated-data' }], Quiet: false } }],
+  ['duplicate objects', 's3api', 'delete-objects', { Bucket: 'd570-first-bucket', ExpectedBucketOwner: '462991287391', Delete: { Objects: [{ Key: 'd570/ledger/active.json' }, { Key: 'd570/ledger/active.json' }], Quiet: false } }],
+  ['unconfirmed deletion', 's3api', 'delete-objects', { Bucket: 'd570-first-bucket', ExpectedBucketOwner: '462991287391', Delete: { Objects: [{ Key: 'd570/ledger/active.json' }], Quiet: true } }],
+  ['version deletion', 's3api', 'delete-objects', { Bucket: 'd570-first-bucket', ExpectedBucketOwner: '462991287391', Delete: { Objects: [{ Key: 'd570/ledger/active.json', VersionId: 'another' }], Quiet: false } }],
+  ['unbounded listing', 's3api', 'list-objects-v2', { Bucket: 'd570-first-bucket', ExpectedBucketOwner: '462991287391', Prefix: '', MaxKeys: 1000 }],
+]) test(`removal CLI refuses ${label} before starting the executable`, async t => {
+  const f = fixture(t), executable = join(f.root, 'aws-invalid'), marker = join(f.root, 'called');
+  writeFileSync(executable, `#!${process.execPath}\nrequire('node:fs').writeFileSync(${JSON.stringify(marker)},'called');process.stdout.write('{}');\n`, { mode: 0o700 });
+  await assert.rejects(control.createManualAwsCli({ executable }).call(service, operation, input), /D570 controller refused/);
+  assert.equal(existsSync(marker), false);
+});
+
+test('explained opening refuses duplicate explanations even when their count matches two observed rows', async t => {
+  const f = await explainedOpeningFixture(t);
+  f.groups[0].Metrics.UnblendedCost.Amount = '0.005';
+  const second = structuredClone(f.groups[0]); second.Keys[1] = 'EUN1-AnotherUsage'; f.groups.push(second);
+  await assert.rejects(control.inspectManualOpening({ ...f.options, explanations: [...f.explanations, ...f.explanations] }),
+    error => error.message === 'D570 opening spend needs explanations');
+  assert.equal(existsSync(f.options.directory), false);
+});
+
+test('first removal refuses a clock that did not observe the full sweep drain before deleting objects', async t => {
+  const f = await removalFixture(t), before = structuredClone([...f.objects]);
+  await assert.rejects(f.remove({ sleep: async () => {} }), /D570 controller refused/);
+  assert.deepEqual(structuredClone([...f.objects]), before);
+  assert.equal(f.calls.some(row => row.operation === 'delete-objects' || row.operation === 'delete-stack'), false);
+  assert.equal(existsSync(join(f.directory, 'active.json')), true);
+});
+
+test('owner entry cannot execute a different checkout script while standing in clean main', t => {
+  const f = fixture(t), bin = mkdtempSync(join(tmpdir(), 'd570-entry-bin-')), marker = join(bin, 'called');
+  t.after(() => rmSync(bin, { recursive: true, force: true }));
+  writeFileSync(join(bin, 'aws'), `#!${process.execPath}\nrequire('node:fs').writeFileSync(${JSON.stringify(marker)},'called');process.stdout.write(${JSON.stringify(JSON.stringify(identity))});\n`, { mode: 0o700 });
+  const result = spawnSync(process.execPath, [target.pathname, 'up', bin], { cwd: f.root, encoding: 'utf8', timeout: 5000,
+    env: { ...process.env, PATH: bin + ':' + process.env.PATH, AWS_EC2_METADATA_DISABLED: 'true' } });
+  assert.ifError(result.error); assert.equal(result.status, 1); assert.equal(result.stdout, '');
+  assert.equal(existsSync(marker), false);
+});

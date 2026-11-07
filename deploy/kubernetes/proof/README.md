@@ -1,509 +1,150 @@
-# Disposable Kubernetes proof setup
+# Run the first disposable machine
 
-A vanished controller must not leave a proof machine billing indefinitely. This
-prerequisite supplies the private setup template and an independent expiry sweep.
-It does not yet supply the owner-run setup lifecycle or permission to apply the
-template. Both `node deploy/kubernetes/proof/setup.mjs up` and `down` refuse
-execution. Machine launches have an explicit deny and the sweep rule is disabled.
+You need to know that a throwaway machine ends itself before you put a proof on
+it. The manual controller runs one payload-free machine in the approved staging
+account and Stockholm region. It keeps the full cost reservation and reports the
+observed shutdown interval separately from the itemised account bill.
 
-The owner authorised D570's setup build for staging account `462991287391`, region
-`eu-north-1`, one on-demand ARM `m7g.2xlarge`, with an all-in US$10 monthly cap. The policy
-records an initial US$0 baseline; it is not an observation of the account bill.
-Temporary access expires at `2027-02-28T23:59:00Z`.
-Weekly retention was approved through that expiry. Production account
-`949687825720` remains forbidden. These approval values in `policy.json` are inputs
-to future budget enforcement; recording them does not reserve funds or establish
-current spend.
+This is the [first-machine build](../../../docs/superpowers/plans/2026-11-06-kubernetes-manual-first-run.md).
+It does not run P1, install application inputs or enable weekly automation. The
+[later weekly plan](../../../docs/superpowers/plans/2026-11-04-kubernetes-weekly-proof.md)
+still needs its own implementation and qualification. No live machine, provider
+termination or final bill is qualified by the synthetic checks below.
 
-`setup.yaml` is the single CloudFormation template. It uses JSON syntax, which is
-also valid YAML. `renderSetup` in `setup.mjs` checks observed account, region,
-repository IDs, access expiry, official ARM image metadata and the S3 prefix-list
-identifier, then embeds the actual expiry engine. Inputs must eventually come from
-the trusted setup's live discovery, rather than a pasted resource list. An image
-passing these shape checks has not passed a boot or offline-install test. A reused
-GitHub OIDC provider is referenced by a conditional parameter; only an absent
-provider gets a stack-owned resource. The template conditions suppress resources
-outside the staging account and region.
+## First sitting: setup and one drill
 
-The template contains a private VPC and subnet, no internet route or inbound
-security-group rules, S3-only HTTPS egress, private encrypted storage, separate
-launcher and expiry roles, a fixed launch template, a one-day log group and a
-disabled one-minute sweep. Its outputs carry the runtime resource identities.
-The launcher has no IAM, network, bucket or template administration permissions.
-Every launcher grant also carries the approved absolute access-expiry condition,
-so an already issued session cannot extend that deadline. Its intended launch
-permissions remain denied pending the missing safety gates;
-unit checks and CloudFormation validation do not qualify IAM behavior on AWS.
-
-The sweep selects `Proof=D570` and the exact CloudFormation stack ARN. It validates
-both bounded inventories before requesting termination or deletion. Structural
-ambiguity, such as repeated tags or invalid resource IDs, stops all mutations. A
-malformed UUIDv4 `Run` tag leaves that resource untouched and withholds healthy
-status, while independently owned resources can still be cleaned. Foreign
-resources remain untouched. Volume deletion requires a valid run tag, available
-state and no attachments.
-
-Terminating an instance can also delete its disks. Before that request, the sweep
-reads every disk marked for deletion in its block mappings, including the root.
-Each disk must match the same stack, proof, original run and expiry, with one
-confirmed attachment to that instance and device. Missing or contradictory disk
-records withhold termination and healthy status while independent cleanup
-continues. These are read-time checks; live qualification must also verify that
-runtime roles cannot change tags or attachments between the read and termination.
-
-A valid future `ExpiresAt` cannot extend a resource beyond its original lifetime.
-The sweep checks it against the earlier of the approved access expiry and 135
-minutes after the original instance launch or volume creation. For an instance,
-the primary network interface's attachment time supplies the original launch;
-`LaunchTime` is only its most recent start. A restart therefore grants no extra
-time. An excessive future expiry triggers owned cleanup and withholds healthy
-status. A missing or malformed expiry grants no grace. Missing or contradictory
-service times trigger owned instance termination only after those disk checks, and do
-not authorize direct volume deletion; the sweep reports the error after attempting independent cleanup.
-The observation clock is refreshed after both inventories so a resource created
-during a read is not treated as being from the future. A backwards or invalid
-clock prevents a healthy result. Each inventory is bounded to
-20 pages of at most 100 resources, and repeated tokens or duplicate IDs fail.
-
-A successful heartbeat at `d570/health/reaper.json` records accepted termination
-and deletion requests. It does not prove the machine stopped, its disk disappeared,
-or billing ended. Any read, mutation, response-validation or clock failure prevents
-a successful heartbeat. Once both inventories pass validation, a refused mutation
-or unconfirmed termination response allows later eligible cleanup attempts. If
-those calls finish, the sweep rethrows the first failure without publishing health.
-A stalled call can still delay later attempts until another sweep and reach the
-Lambda timeout before the first error is reported. Real SDK request timeouts
-remain unqualified; no healthy heartbeat is written during that wait. The launcher must eventually
-check heartbeat freshness, actual cleanup and the durable cost reservation
-independently.
-
-Run the focused checks with an explicit file list:
+Use your temporary staging-project sign-in. Run the command from clean reviewed
+Cloud `main`, matching GitHub's current main. The controller refuses a feature
+checkout, a GitHub job, the wrong account or region, root and permanent IAM-user
+identities. It checks the official ARM image and the approved machine's capacity
+before creating anything. You can read the command shape without signing in:
 
 ```sh
-node --test --test-reporter=tap --test-timeout=30000 deploy/kubernetes/proof/setup.test.mjs deploy/kubernetes/proof/expiry.test.mjs
-uvx --from cfn-lint==1.59.0 cfn-lint deploy/kubernetes/proof/setup.yaml
+node scripts/kubernetes-proof-control.mjs --help
 ```
 
-The unprivileged `Kubernetes proof prerequisites` workflow runs those checks on
-pull requests that change `deploy/kubernetes/proof/**` or the workflow itself,
-and on every main push. This avoids asking unrelated older PR heads to run files
-that they do not contain. It validates the fully rendered synthetic template
-with its actual inline Lambda source. It requests no AWS session and has no recurring or manual
-launch trigger. The Lambda test executes the rendered inline source with synthetic
-SDK responses, including termination and volume deletion; it makes no claim about
-a live AWS termination actor. The fixture uses made-up AMI and prefix-list IDs;
-it is test input, not a discovered or qualified machine image.
-
-
-The engine and rendered-Lambda checks exercise malformed-run isolation and both
-independent lifetime caps, including missing times, restart times and the exact
-expiry boundary. These are synthetic results. Actual EC2 time and ownership
-semantics and both termination actors still need the bounded live drills.
-
-Also qualify the launch statement's required network-interface resources, condition
-keys for each EC2 resource type, the regional official image owner and the account's
-Lambda concurrency quota. These are live/provider gates, with no current passing
-claim. The launcher deny and disabled rule remain mandatory until they are resolved.
-
-Before the owner can run setup, implement the one-entry `up`/`down` lifecycle,
-conditional all-in setup/runtime reservations, official current prices and billing
-reconciliation, protected main-only GitHub environment, immutable ARM/offline input
-closure, and integration of the fixed local-deadline entry. Complete the real OIDC refusal and
-both termination drills with exact actor and cleanup evidence. Preserve protection
-and ownership records through partial setup or uncertain cleanup. Do not remove
-the explicit launch deny, enable the rule or ask the owner to apply this template
-until those dependencies are reviewed and their required gates pass. The live
-drills must capture the SDK's actual pending/shutting-down/terminated shapes,
-original interface time versus latest launch time, clock differences and disk
-attachment state. A shutting-down row with missing origin still withholds health;
-only an observed terminated row needs no surviving interface. The full P1
-service/fault proof remains separate; see the
-[implementation plan](../../../docs/superpowers/plans/2026-11-04-kubernetes-weekly-proof.md).
-
-The template follows AWS's [conditional S3 write policy](https://docs.aws.amazon.com/AmazonS3/latest/userguide/conditional-writes-enforce.html),
-[EC2 launch-template restrictions](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/ExamplePolicies_EC2.html),
-[Lambda runtime contract](https://docs.aws.amazon.com/lambda/latest/dg/lambda-runtimes.html)
-and [CloudWatch log ARN shape](https://docs.aws.amazon.com/AWSCloudFormation/latest/TemplateReference/aws-resource-logs-loggroup.html).
-These references informed the implementation; live qualification remains open.
-
-AWS documents the [original and most recent instance launch times](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/Stop_Start.html#find-initial-launch-time)
-and the volume's [creation timestamp](https://docs.aws.amazon.com/AWSEC2/latest/APIReference/API_Volume.html).
-
-## Prepare the first manual setup
-
-For the first payload-free drills, `renderManualSetup` compiles the private setup
-without a GitHub identity provider or launcher role. The owner approved using the
-same temporary staging sign-in for those two drills on 6 November. Ordinary launch
-admission stays closed, and the independent sweep starts disabled until the
-lifecycle observes its actual health. The renderer does not apply the template or
-launch a machine; the owner lifecycle and live qualification are still unfinished.
-
-Before any manual action, you need a clean Cloud `main` checkout matching both
-recorded and freshly read remote main. The new control preflight checks that
-identity before reading the temporary staging session and current account bill.
-It rechecks the checkout and UTC date around provider waits. A GitHub job,
-foreign repository, account or region, root identity, permanent IAM user, stale
-checkout or incomplete bill refuses. Billing observations round upward to whole
-millionths of a dollar and retain AWS's estimated flag; they do not establish
-reconciliation, reserve allowance or authorize a launch.
-
-The CLI adapter uses fixed service endpoints, bounded output and a 30-second
-process deadline. Cost Explorer uses its US East endpoint while the proof's
-resource region remains Stockholm. The adapter permits identity, billing,
-setup discovery, booked stack creation, expiry enablement and reads, and
-conditional ledger storage. The `up`, `drill`, `reconcile` and `down` entries
-still refuse without making a provider call because the owner lifecycle is
-unfinished.
-You do not need to sign in yet. Verify the preflight without credentials with
-`node --test scripts/kubernetes-proof-control.test.mjs`.
-
-`inspectManualSetup` connects those checks to the manual renderer. It reads
-Amazon Linux's [public ARM image parameter](https://docs.aws.amazon.com/linux/al2023/ug/ec2.html),
-then checks the image's actual owner and shape. It requires the regional
-`m7g.2xlarge` response to report eight CPUs, 32 GiB and on-demand ARM support.
-It discovers the AWS-owned IPv4 S3 network list for Stockholm rather than
-accepting a pasted list. Missing, ambiguous or incomplete responses refuse.
-The controller rechecks main and the UTC date around every provider read.
-The resulting template still has no GitHub trust or launcher role. These checks
-use synthetic provider responses; no regional image, account quota, machine boot
-or resource creation has been qualified on AWS.
-
-Setup's reserved cost must survive a stopped controller. `bookManualSetup`
-checks the same staging identity and discovery, then writes `setup.json` in a
-new private directory under an owner-only parent. It includes all eleven cost
-categories, the actual estimated bill and the rendered template, and refuses
-when the opening plus reservation reaches US$10. It synchronizes the file and
-both directories before returning. Existing or incomplete bookings remain in
-place and prevent another booking, including after a failed write. Run
-`node --test --test-name-pattern='setup booking' scripts/kubernetes-proof-control.test.mjs`
-for filesystem, concurrent-call and injected write-failure checks.
-
-You can give `bookManualSetup` acquired catalogues, quantity bounds and the five
-fixed allowances as `priceInputs`. `calculateManualCost` converts all nine paid
-rates into whole millionths of a dollar, rounding each charge upward. It uses a
-28-day divisor for monthly storage to reserve conservatively, and includes both
-request types, Lambda duration and requests, and log ingestion and storage. The
-private booking retains a snapshot of those inputs alongside the result, so a
-later edit cannot change the calculation that was booked. Missing quantities,
-stale catalogues, foreign sources and totals reaching US$10 refuse. Run
-`node --test --test-name-pattern='manual cost' deploy/kubernetes/proof/prices.test.mjs`
-and the setup booking checks above for the arithmetic and retained snapshot.
-
-For the first machine, `bookManualFirstSetup` selects fixed quantities and
-allowances before using that same booking path. You supply the four acquired
-catalogues; caller-selected costs, quantities or allowances refuse. The profile
-reserves 20 minutes of compute, one day of 64 GiB disk, 31 days of 16 MiB storage,
-133,920 writes and Lambda requests, and 5,000 reads. Protection reserves a
-128 MiB function running continuously for 31 days, plus 1 GiB of log ingestion
-and four days of log storage. This includes three write/request attempts per
-minute rather than relying on a shared free tier. Storage covers the core's
-13 monthly records, active record and heartbeat at their 1 MiB limits.
-
-The fixed allowances are US$0.10 each for transfer, events and network, US$2
-for tax and US$1 for contingency. Their digest identifies the fixed profile;
-the pricing-page link does not mean AWS supplied those amounts. The synthetic
-catalogue fixture books US$9.313491 before the observed account opening. Run
-`node --test --test-name-pattern='^first setup' scripts/kubernetes-proof-control.test.mjs`
-to check the booking and refusal at the exact US$10 boundary.
-
-These quantity and allowance ceilings are assumptions for the whole-branch
-review and live qualification. Recording them does not prove cleanup completes
-within a day, bound actual logs or reconcile the bill. A second setup and
-the owner lifecycle remain unfinished, and the lifecycle entries still refuse,
-so you do not need to sign in yet.
-AWS documents [binary storage units](https://aws.amazon.com/s3/pricing/)
-and [per-second disk charging](https://aws.amazon.com/ebs/pricing/).
-
-A stack name alone does not prove its expiry protection is working.
-`inspectManualProtection` resolves the bucket, rule and function from the exact
-stack's [CloudFormation resource inventory](https://docs.aws.amazon.com/cli/latest/reference/cloudformation/describe-stack-resources.html).
-It requires a completed setup, an enabled one-minute rule and exactly the
-expected function target. It then reads the sweep's own heartbeat from that
-bucket. Both the sweep and object must be less than two minutes old; foreign,
-incomplete or contradictory observations refuse. Main and the UTC day are
-checked around each read. A heartbeat records accepted cleanup requests, so you
-still need separate live observations to establish termination and absent disks.
-
-The [S3 read](https://docs.aws.amazon.com/cli/latest/reference/s3api/get-object.html)
-requests a bounded byte range with the staging account as expected bucket owner.
-Streaming reads use explicit CLI arguments because AWS CLI does not support
-`--cli-input-json` for an operation that writes an output file.
-The CLI writes into a private temporary directory, checks the complete returned
-range and length, and removes its own files on success or failure. The controller
-requires encrypted JSON and retains the original sweep observation. These are
-synthetic checks only. The owner commands still refuse because the guest drill,
-billed reconciliation and removal remain unfinished.
-
-You must retain the booking before asking CloudFormation to create anything.
-`createManualFirstSetup` connects the first booking to the fixed `d570-first`
-stack and currently refuses a nonzero opening. Before the first sitting, you
-need an explained list of existing account costs that fits beside the reserved
-setup bound. A second setup remains outside this first-run build. Creation waits
-for the exact staging stack to complete, checks its one-minute rule and target,
-enables that rule, and requires the sweep's own fresh heartbeat. Waiting is
-bounded, and a failure leaves the private booking and protection in place rather
-than creating another stack or launching a machine. The CLI accepts the empty
-successful output from `enable-rule`. Run
-`node --test --test-name-pattern='^(manual creation|creation CLI)' scripts/kubernetes-proof-control.test.mjs`
-for the local creation and refusal checks. Their responses are synthetic; no
-stack creation, protection activation or paid operation has been qualified on AWS.
-
-`initializeManualFirstSetup` connects creation to the existing ledger core.
-It keeps the bill observed before creation as the opening, even when a later
-bill has risen. Setup owns protection and the fixed allowances; only compute
-and disk are reserved again for the first drill. The original private booking
-still retains the full bound. Each month through the first drill's 31-day
-retention gets its opening before the active record is created, using S3's
-create-only writes. Existing history refuses rather than being replaced.
-Source and heartbeat checks surround storage waits; failed writes leave the
-booking, partial ledger and protection in place for removal. There is no separate
-setup-recovery path in this first build. The owner commands still refuse.
-
-Run `node --test --test-name-pattern='first ledger|first drill reservation' scripts/kubernetes-proof-control.test.mjs`
-for synthetic checks of the opening, total reservation and failed initialization.
-The opening comparison preserves an estimate; it does not establish final billed
-cost or qualify storage on AWS.
-
-You must book the machine before launching it, even if its reply never reaches
-you. `launchManualFirstDrill` connects the initialized setup to one fixed
-version of its stack-owned launch template. It checks the private network,
-credential-free machine and disk deletion settings, then reserves compute and
-disk in the existing ledger before sending the launch request. The instance
-and volume tags retain the same run and five-minute outer expiry. The guest
-bootstrap receives the earlier three-minute shutdown deadline. A lost reply
-keeps the reservation and prevents another first launch.
-
-Run `node --test --test-name-pattern='^guest ' scripts/kubernetes-proof-control.test.mjs`
-for the synthetic launch and refusal checks. AWS CLI encodes EC2 user data
-automatically, so the adapter gives it plain bootstrap text. An unsigned
-loopback check with the installed CLI verifies the actual request encoding;
-it does not launch a machine.
-
-`inspectManualFirstGuest` reads the booked instance's ready message before its
-guest deadline. It checks the account, run tags, private network, disk and
-interface deletion settings, and shutdown-to-terminate behavior. It captures
-the disk and interface IDs between two EC2 reads reporting the instance as
-running, so later cleanup can check those exact resources. Conflicting boot
-messages, a missing message, changed checkout or expired deadline refuse without changing
-the booking. This captures readiness, not successful shutdown.
-
-Run `node --test --test-name-pattern='^ready guest' scripts/kubernetes-proof-control.test.mjs`
-for the synthetic readiness and refusal cases. An unsigned loopback check also
-exercises the three reads through the installed CLI, including its automatic
-console decoding. These checks do not prove guest behavior on AWS. Billed
-reconciliation and removal remain unfinished, and all four owner commands still refuse.
-
-To check what remains after the guest stops, `inspectManualFirstGuestCleanup`
-reads the booked instance's EC2 shutdown reason and requires an operating-system
-shutdown. It then checks that the captured disk and every interface in the owned
-subnet are absent. A failed or incomplete read refuses; it never treats a deletion
-request as proof that a resource disappeared. The cost booking stays intact.
-
-Run `node --test --test-name-pattern='^guest cleanup' scripts/kubernetes-proof-control.test.mjs`
-for the synthetic actor, absence and refusal checks. The two new reads also pass
-the installed AWS CLI against unsigned loopback responses. An OS shutdown reason
-and absent resources do not establish when the guest stopped.
-
-`observeManualFirstShutdown` checks timing separately. It waits until 170 seconds
-after the original reservation, records when its running request starts and
-when the reply arrives, then requires an OS-initiated termination reply before
-the original 300-second expiry. A missing running observation, API termination,
-late reply or changed checkout refuses without clearing the cost booking.
-The earlier ready observation stays intact. These are EC2 state observations;
-they do not measure the exact instant the guest powers off.
-
-Run `node --test --test-name-pattern='^shutdown timing' scripts/kubernetes-proof-control.test.mjs`
-for the synthetic timing checks. Actual guest behavior, billed reconciliation
-and removal still need qualification before you can run the owner commands.
-
-You need the account's itemized costs before you can compare the bill with the
-booking. `inspectManualFirstBilling` reads monthly costs grouped by service and
-usage type, from the original setup month through today. It checks every month
-against its retained opening and reservation, including a month boundary. Usage
-amounts stay in separate rows because their units may differ. Costs round upward;
-the current month's total and estimate flag must agree with the initial bill read.
-
-The report keeps the setup estimate separate from account costs. Any estimated
-month withholds the combined billed amount. An account total includes other
-services and setup, so it cannot establish this guest's individual cost or release
-its reservation. Missing components, partial pages, stale protection and changed
-source refuse. Run
-`node --test --test-name-pattern='^first billing' scripts/kubernetes-proof-control.test.mjs`
-for synthetic checks. These checks do not read a real bill. Attributing billed usage to
-the guest, final reconciliation and removal remain open.
-
-Keep a private copy of the budget history before removing its bucket. The
-`retainManualHistory` prerequisite copies the verified active record and every
-remembered month into a new directory outside the checkout. Your parent directory
-must belong to you and have mode `0700`, which allows only your account access.
-The export directory uses the same mode; each file uses `0600`, allowing only
-your account to read or write it. Existing destinations refuse so an earlier copy
-cannot be overwritten. The exporter checks the snapshot against the budget,
-rechecks live object versions and bytes, and flushes the files and directories
-to disk. A failed export leaves its partial copy and the provider records intact.
-
-Run
-`node --test --test-name-pattern='^history export' scripts/kubernetes-proof-control.test.mjs`
-for synthetic storage and real local-file checks. The exporter keeps an active
-booking active; it does not reconcile a bill or remove provider resources.
-Real S3 export and the teardown that consumes it remain unqualified.
-
-Before reusing a setup, `inspectManualBudget` checks that protection and reads
-all retained ledger months through `inspectBudget`. It compares the account bill
-with the original opening plus that month's booked upper costs. A later bill
-does not become a second opening, and a completed run keeps its booking. Missing,
-changed or unexplained history refuses without replacement records or writes.
-It checks main and heartbeat age again after reading history. It reports
-estimated billing and completed costs separately; it does not settle an estimate,
-release ownership or authorize a launch.
-
-You cannot replace an existing budget record without its exact entity tag,
-the identifier S3 returns for that object's current contents. `createManualLedgerStore`
-connects the reservation core to the CLI's bounded reads, prefix listings and
-encrypted conditional writes. The budget observer uses the bucket discovered
-from the checked stack. Uploads use a private file and the CLI's `--body`
-argument; both upload and download files are removed after success or failure.
-Only a confirmed missing key counts as absent. Access denial, partial reads
-and uncertain failures refuse, so they cannot initialize replacement history.
-Run `node --test scripts/kubernetes-proof-control.test.mjs scripts/kubernetes-proof-budget.test.mjs`
-to check these boundaries with synthetic storage. Real S3 behavior, the complete
-cost bound and the owner lifecycle remain unqualified.
-
-The prerequisite workflow checks both rendered templates with the same pinned
-CloudFormation validator. Its setup tests require every retained resource
-reference to resolve and preserve the private launch and expiry configuration.
-
-## Reserve cost before the next action
-
-The reservation core in `scripts/kubernetes-proof-budget.mjs` records one active
-run and each affected UTC month through the receipt-retention deadline. Every
-write uses a create-only condition or the exact previously read S3 entity tag (ETag).
-A second controller cannot take ownership. An identical retry keeps the original
-head, tree, deadline and cost; it cannot extend them. Partial writes keep ownership
-and their booked cost until an exact retry completes, so cancellation grants no
-new allowance.
-
-Amounts are integer millionths of a US dollar. Every affected month books the full
-run bound, its reconciled baseline and its reserved protection overhead. A total
-of US$10 or more refuses. This deliberately leaves a margin at the approved cap.
-New higher baseline or overhead evidence refuses until a separate reconciliation
-updates the opening; the core never silently keeps a smaller old estimate.
-
-Confirmed machine termination, absent disks and interfaces, reconciled billing
-and healthy expiry protection release the active slot. A confirmed cleanup of a
-partial reservation first completes every original monthly booking, even after
-the reservation deadline. They never refund its
-monthly reservation. Original identities, cost-source evidence and cleanup facts
-remain in the ledger. The active record carries a corruption checksum, and every
-completion and active identity must correlate to its complete monthly bookings.
-Every retry checks all remembered months. Missing, damaged, oversized or unrecognized history refuses;
-runtime cannot recreate it. Initialization is restricted to an empty ledger and
-can leave a protected, incomplete setup after a failed write.
-
-Run the synthetic checks without credentials:
+Create one private directory outside the checkout. Keep it for both sittings,
+including after removal, because it holds your original booking and observations.
 
 ```sh
-node --test scripts/kubernetes-proof-budget.test.mjs
+cd ~/workspace/repos/waitron-cloud
+git pull --ff-only
+mkdir -m 700 -p "$HOME/.local/state/waitron-d570"
+node scripts/kubernetes-proof-control.mjs up "$HOME/.local/state/waitron-d570"
 ```
 
-These checks exercise the reservation engine and the conditional S3 adapter with
-an isolated object-service substitute. They do not establish current prices,
-current bills, real S3 behavior or a runnable setup. Trusted price and billing
-acquisition must still build and verify the complete all-in bound, including
-setup, retained data, idle protection, taxes and delayed cleanup. The core accepts
-those reviewed inputs; a price URL and digest alone do not prove a price or an
-upper bound. The launch controller must still verify cleanup and budget evidence
-against AWS. Owner lifecycle, deadline-entry integration and live qualification
-remain open. Admission stays closed.
-
-The returned reservation is a ledger receipt, rather than a lasting machine-launch
-permission. A final read requires unchanged active ownership after the ledger's
-waits. The future launch controller still needs the current-owner and launch/cleanup
-protocol; an S3 read does not make an EC2 action atomic with the ledger. Checksums
-and source digests detect corruption and disagreement; they do not authenticate
-provider facts. An exact repeated cleanup acknowledgement preserves the saved
-facts and performs no further writes.
-
-## Read the paid regional prices
-
-You cannot reserve a cost from a historical quote or a shared free allowance.
-`acquirePriceCatalogue` in `prices.mjs` reads the fixed public AWS regional
-catalogue for EC2, Lambda, S3 or CloudWatch. You supply a `retain` callback that
-saves the original bytes and their SHA-256 digest before the reader returns.
-It requests no AWS session. HTTP requests refuse redirects and accept only AWS's
-JSON or octet-stream content types, followed by strict JSON decoding;
-one 30-second deadline bounds the request, body reads and retention wait.
-The owned timer keeps the process alive until the operation settles. Rejected
-cancellation and late responses cannot escape the caller's error handling.
-Synchronous JSON processing cannot be interrupted, but elapsed-time readback
-refuses evidence if that work exceeds the deadline.
-The decoded body is limited to 320 MiB. Stockholm's EC2 catalogue was
-270,696,312 bytes on 6 November. Larger bodies refuse until reviewed.
-
-The reader requires the fixed Stockholm products, including ARM Lambda matching the
-template, unrestricted paid USD terms,
-the expected units and complete price tiers. It retains the highest tier rate as
-an exact fraction, avoiding a floating-point rounding discount. It excludes
-global free-tier entries and refuses missing or ambiguous products. Observation
-must be on the same UTC day; the catalogue publication may be older.
-UTF-8 decoding refuses malformed bytes, and duplicate object keys, including
-escaped spellings of the same key, refuse rather than hiding a higher price.
-
-Run `node --test deploy/kubernetes/proof/prices.test.mjs` for synthetic checks.
-The reduced public-catalogue fixture supplies nine paid rates plus a global
-free-tier and non-ARM distractors. It is test data, not a complete retained price source.
-Decoded inputs and acquired inputs have distinct `kind` labels. Neither label is
-an authenticated spending grant. Your trusted `retain` callback must save the
-exact bytes durably; the reader's synthetic checks do not prove filesystem durability.
-Fresh public-catalogue retrieval alone does not reconcile the service pricing
-pages or your bill. Transfer, EventBridge, network, tax, contingency, request
-quantities, retained data and idle protection still need the complete all-in
-calculation and billing evidence. The lifecycle does not yet call this reader;
-setup and admission remain closed.
-
-## Fix the guest deadline before preparing inputs
-
-A proof machine must retain its original shutdown time after a retry.
-`renderDeadlineBootstrap` in `bootstrap.mjs` binds staging scope, stack, run,
-head, tree and the original start/expiry into a self-contained Bash entry.
-It emits at most EC2's 16 KiB raw user-data limit. It does not fetch inputs,
-execute a candidate or obtain credentials. The future trusted launcher must
-bind its reconciled reservation and verified IMDSv2 launch identity before
-using this entry. The private first-drill launch path now passes its reserved
-identity into the entry; the owner commands still refuse execution.
-
-The entry installs a UTC systemd timer and a second trigger measured from boot,
-so moving the wall clock backwards cannot extend the first boot's interval.
-The boot trigger is rounded down with a two-second margin. Uptime is read before
-the wall clock, so a pause between them can shorten the interval without extending it. An enabled
-reboot service requests poweroff before cloud-init on a later boot.
-An exact retry checks the original boot, identity, clock and unit checksums
-and active protection without restarting a timer. Missing or damaged state,
-a changed reservation, an elapsed deadline or a failed installation withholds
-the ready record and requests poweroff. Existing named system units and override directories are preserved; their presence refuses setup.
-These include unit-specific, shared service/timer and prefix overrides in the
-standard [unit load paths](https://www.freedesktop.org/software/systemd/man/latest/systemd.unit.html).
-The reboot service must report persistent [enablement](https://www.freedesktop.org/software/systemd/man/latest/systemctl.html), not a static or transient state.
-Interrupt, hangup and terminate signals request poweroff. Diagnostic and temporary-file
-cleanup failures cannot suppress that request.
-
-These are synthetic shell and command-boundary checks. The tests project only
-OS paths and executable boundaries into an isolated directory; they do not run
-a system service manager or terminate a machine. A ready line is an observation,
-not an atomic release permission. The controller still needs fresh live deadline,
-shutdown-to-terminate, independent sweep, budget and cleanup evidence before
-releasing any payload. A crash before protection is installed still relies on
-the independent sweep. Actual ARM boot ordering, timer behavior, suspension,
-shutdown and termination remain live qualification gates.
-
-Run the focused shell checks without root or AWS access:
+If the account already has charges this month, `up` prints each service, usage
+type and amount and refuses before writing a booking. Explain those charges and
+rerun with one `--explain` for each printed row. Amounts are integer millionths
+of a US dollar: `10000` means US$0.01. This example is synthetic; use the service,
+usage type, ceiling and reason that match your actual list:
 
 ```sh
-node --test deploy/kubernetes/proof/bootstrap.test.mjs
+node scripts/kubernetes-proof-control.mjs up "$HOME/.local/state/waitron-d570" \
+  --explain 'Amazon Simple Storage Service' 'EUN1-TimedStorage-ByteHrs' \
+  10000 'Existing staging backup'
 ```
 
-The timer follows systemd's [wall-clock and monotonic timer semantics](https://www.freedesktop.org/software/systemd/man/latest/systemd.timer.html).
-Keep the [EC2 shutdown-to-terminate setting](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/Using_ChangingInstanceInitiatedShutdownBehavior.html)
-and independent sweep; requesting guest poweroff alone proves neither termination
-nor an end to billing. Owner lifecycle, official cost evidence, complete offline
-ARM inputs and the runnable sign-in handoff remain open in D570.
+Duplicate explanations, unused rows and charges above their explained ceilings
+refuse. The cap uses observed charges, so a larger explained ceiling never grants
+more room. Save the printed service, amount and reason list for the watcher and
+the owner. The successful response also shows the opening, reserved upper cost
+and remaining headroom. Opening plus reservation must stay strictly below US$10.
+
+`up` acquires the four public AWS price files, saves their original bytes, books
+the fixed upper cost, creates `d570-first`, enables its expiry sweep, reads its
+fresh heartbeat and initializes the existing ledger. It launches no guest. Its
+source is `scripts/kubernetes-proof-control.mjs`; the synthetic checks are
+`node --test --test-name-pattern='^owner command up|^explained opening' scripts/kubernetes-proof-control.test.mjs`.
+
+Start the single drill from the same reviewed head and UTC day:
+
+```sh
+node scripts/kubernetes-proof-control.mjs drill "$HOME/.local/state/waitron-d570"
+```
+
+The command books compute and disk before the launch request. The guest has a
+three-minute shutdown deadline; the independent sweep retains the five-minute
+outer expiry. The command waits for its ready console line while running, then
+requires a running request at T+170 or later and OS termination received before
+T+300. Disk and interface absence are checked separately. The response reports
+when those observations arrived, not the exact physical poweroff time.
+
+Private `launch.json`, `ready.json`, `shutdown.json` and `cleanup.json` keep the
+observations. A lost reply or failed drill retains its booking and cannot start
+a second first drill. Use `down` after a failure; do not erase files or try another
+setup directory to regain allowance. The connected synthetic check is
+`node --test --test-name-pattern='^owner command drill' scripts/kubernetes-proof-control.test.mjs`.
+
+## Later sitting: read the account bill and remove setup
+
+Use clean current `main` and the same private directory. An unrelated main merge
+between sittings does not invalidate the retained run: the command matches its
+saved head and tree to the ledger.
+
+```sh
+node scripts/kubernetes-proof-control.mjs reconcile "$HOME/.local/state/waitron-d570"
+node scripts/kubernetes-proof-control.mjs down "$HOME/.local/state/waitron-d570"
+```
+
+`reconcile` reports the account bill by month, service and usage type. It keeps
+AWS's estimated flag; a current-month estimate is not a final bill. Account totals
+include setup and other services, so the command never labels them as this guest's
+cost or refunds the reservation. Future months were booked with a zero opening,
+rather than copying this month's previous charges. Run
+`node --test --test-name-pattern='^first billing|^later billing' scripts/kubernetes-proof-control.test.mjs`
+for the synthetic billing and saved-identity checks.
+
+`down` checks the owned subnet for live instances and interfaces and the exact
+stack's tags for disks. This check also works after missing readiness, a lost
+launch reply or an expiry-sweep termination. It does not require a new bill or
+opening explanation. It preserves available ledger bytes and the original setup
+booking privately, including an incomplete initialization. It then disables the
+sweep, waits its two-minute function timeout, empties only known proof objects
+and waits for the exact stack's deletion to complete. A partial deletion can be
+retried using the retained private export. Unknown ownership, remaining resources
+or an export failure refuses removal. Run
+`node --test --test-name-pattern='^first removal|^owner command down' scripts/kubernetes-proof-control.test.mjs`
+for those synthetic checks. Keep the private history after a successful removal;
+this first build does not implement another `up` or history import.
+
+## What remains to qualify
+
+The fixed profile reserves 20 minutes of compute, one day of 64 GiB disk,
+31 days of 16 MiB storage, 133,920 writes and Lambda requests, 5,000 reads,
+a 128 MiB function running continuously for 31 days, 1 GiB of log ingestion and
+four days of log storage. Transfer, events and network each reserve US$0.10;
+tax reserves US$2 and contingency US$1. These are reviewed conservative
+assumptions, not measured account consumption. The price reader uses paid
+Stockholm rates without shared free tiers. Its 320 MiB body limit and 30-second
+acquisition deadline remain unchanged.
+
+`setup.mjs` remains a renderer and refuses direct `up`/`down` execution. The
+ordinary template's launcher deny and disabled sweep stay in place; the manual
+renderer omits the launcher role and GitHub trust. It preserves private networking,
+no public IP or inbound internet, no guest credentials, disk deletion on shutdown
+and independent expiry. Only the controller enables its own discovered sweep.
+A heartbeat records accepted cleanup requests; it never substitutes for actual
+termination or absent resources.
+
+The installed CLI's new forms have been exercised against an unsigned loopback
+server, not AWS. Live ARM boot, systemd behavior, provider ownership and quota
+semantics, actual shutdown and deletion, the bill and complete cost assumptions
+still need the owner sitting. The independent kernel-hang drill, offline ARM
+inputs, full P1 service/fault proof and weekly access remain outside this build.
+
+The prerequisite workflow runs the named unit files and validates both rendered
+templates with pinned cfn-lint. For focused local checks, name files explicitly:
+
+```sh
+node --test scripts/kubernetes-proof-control.test.mjs scripts/kubernetes-proof-budget.test.mjs
+node --test deploy/kubernetes/proof/setup.test.mjs deploy/kubernetes/proof/expiry.test.mjs \
+  deploy/kubernetes/proof/bootstrap.test.mjs deploy/kubernetes/proof/prices.test.mjs \
+  deploy/kubernetes/proof/workflow.test.mjs
+```
+
+Provider references: [CloudFormation deletion](https://docs.aws.amazon.com/cli/latest/reference/cloudformation/delete-stack.html),
+[S3 object deletion](https://docs.aws.amazon.com/cli/latest/reference/s3api/delete-objects.html),
+[rule disablement](https://docs.aws.amazon.com/cli/latest/reference/events/disable-rule.html),
+[EC2 shutdown behavior](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/Using_ChangingInstanceInitiatedShutdownBehavior.html)
+and [systemd timers](https://www.freedesktop.org/software/systemd/man/latest/systemd.timer.html).

@@ -3151,88 +3151,18 @@ implementation or production evidence.
   [P1 country-cell plan](superpowers/plans/2026-10-22-cloud-country-cell.md)
   specifies images, repository-driven Kubernetes deployment and genuine three-node
   availability checks for sign-in, remote access and backups. Full service/fault proof
-  and the strict common verifier remain unbuilt. D570 now has a closed-admission
-  reservation core with conditional active/month ledgers, immutable exact retries,
-  full cross-month bookings through receipt retention, conservative no-refund
-  cleanup and retained original cost evidence. Synthetic checks cover competing
-  controllers, partial/lost writes, damaged history, stale evidence, deadline
-  expiry during writes and unknown cleanup. A bounded public-catalogue reader
-  now retains source-byte identity and extracts nine paid Stockholm EC2/gp3/ARM-Lambda/S3/log
-  rates as exact fractions, excluding shared free tiers and bounding every price
-  tier conservatively. The fixed reader and scope checks use eu-north-1; the
-  reviewed 320 MiB ceiling admits its current 270,696,312-byte EC2 catalogue
-  without changing the 30-second deadline. Real public retrieval qualifies all
-  four catalogues; it does not authenticate an account or reconcile billing. Qualification
-  of first-machine quantity and fixed-cost assumptions, the explained opening account costs, reporting measured runtime separately from the itemized account bill,
-  real S3 behavior including private ledger export, and live cleanup remain open; these inputs grant no spending or
-  runnable owner setup. The manual controller preflight now checks a clean exact
-  remote main, temporary staging identity, Stockholm and the current monthly
-  bill before any resource action. It preserves AWS's estimate flag and rounds
-  costs upward; unknown billing cannot become a zero baseline. Real Git fixtures
-  and isolated CLI executables check changing checkouts, stale remote main,
-  wrong scope, malformed bills and secret-free provider errors. These are
-  synthetic checks, with no authenticated AWS call. Manual setup discovery now
-  checks the public ARM image against EC2, the approved regional machine's
-  capacity and on-demand support, and AWS's Stockholm IPv4 S3 network list
-  before rendering. It rechecks main and date around each read; synthetic
-  missing, contradictory, ambiguous and changing-input cases refuse. No live
-  regional resource or quota claim follows from those checks. All four lifecycle
-  commands still refuse while billed reconciliation and cleanup remain unbuilt.
-  The manual protection observer now resolves the exact stack's bucket, rule
-  and expiry function, checks the enabled one-minute target and reads a fresh
-  encrypted sweep heartbeat. Bounded private CLI downloads refuse partial
-  objects and remove their own files. Synthetic cases cover foreign or partial
-  setup, stale or contradictory observations and checkout changes during reads.
-  Accepted cleanup requests remain separate from actual resource absence; no
-  live protection, ledger initialization or launch is qualified.
-  A new self-contained guest deadline entry binds the
-  original reservation to a fixed UTC timer, a boot-relative fallback and
-  shutdown on reboot. Synthetic shell checks cover exact retries without
-  rearming, clock rollback, partial installation, damaged state and preserved
-  foreign unit files. Signals and failed diagnostics now request poweroff; clock
-  checksums and systemd loader checks reject changed deadlines and foreign
-  overrides. Debian checks verify unit syntax and isolated persistent enablement.
-  Its private first-drill launcher now books compute and disk before one fixed-template
-  request, with the earlier guest deadline and exact instance/volume ownership tags.
-  Actual ARM/systemd behavior, IMDSv2 identity, offline inputs and shutdown/termination remain
-  unqualified. D570's
-  [weekly proof plan](superpowers/plans/2026-11-04-kubernetes-weekly-proof.md) carries
-  the first complete proof on one disposable on-demand ARM m7g.2xlarge in staging
-  462991287391/eu-north-1, within USD 10/month; production 949687825720 is forbidden.
-  The owner approved temporary setup/repository/input access through
-  2027-02-28T23:59:00Z; the existing account costs must be explained within the cap. The private setup template,
-  identity-checked renderer and bounded expiry engine now have synthetic checks
-  and an unprivileged CI gate. The first manual renderer also omits GitHub trust
-  and the launcher role while preserving private networking and closed ordinary
-  admission. Image validation also requires an Amazon Linux 2023 ARM name and
-  the template's /dev/xvda root device. Its tests and rendered-template validation do not grant a runnable
-  lifecycle or prove live termination. The engine and rendered Lambda now attempt later
-  eligible cleanup after a mutation or termination-response failure. If those calls
-  finish, the first error is rethrown without publishing healthy status; a stalled
-  call can still delay later attempts and error reporting. Structural inventory
-  validation still precedes mutations. Malformed run tags now leave their resources
-  untouched without starving independently owned cleanup or publishing health.
-  Original service times cap future expiry at 135 minutes and the approved access
-  deadline; restart times cannot extend it. Missing or contradictory service times
-  request owned instance termination only after deletion-on-termination disks match
-  exact stack/run/expiry/attachment ownership; uncertain disks withhold termination
-  while independent cleanup continues. An observation clock refreshed after the
-  inventories preserves resources created during those reads. Engine and rendered-Lambda checks exercise these guards; live EC2 time/ownership
-  and termination evidence remain open. That workflow selects proof/workflow PR
-  changes and runs on every main push, so unrelated older PR heads need no absent
-  proof files. Launches remain explicitly denied, the sweep rule disabled and CLI
-  up/down closed. The complete removable setup you run in one
-  sitting, with automatic resource setup and removal, remains unfinished. No prior
-  full Mac proof or recurring Mac probe
-  is required; the supported Mac path and every capacity floor remain unchanged.
-  Independent verifier/control prerequisites may land before live qualification.
-  Private ARM inputs, complete all-in cost calculation and setup/launch integration,
-  real termination/cleanup drills, measured
-  build/steady/fault/verifier/healing peaks and the full same-head/tree proof remain
-  open. The observed 6.10 GiB owned-memory sample is only a lower bound.
-  AWS execution and spending wait for the reviewed owner-run setup handoff; this
-  prerequisite creates no infrastructure or live access. No general AWS, production
-  or schema authority follows.
+  and the strict common verifier remain unbuilt. D570's
+  [first-machine plan](superpowers/plans/2026-11-06-kubernetes-manual-first-run.md)
+  still needs the reviewed owner-run handoff and a live payload-free ARM run,
+  explained existing account charges within the unchanged monthly cap, measured
+  shutdown and disk/interface absence, actual itemised billing and removal.
+  Provider identity, quota, bootstrap behavior and fixed quantity/cost assumptions
+  remain unqualified. The independent expiry drill, offline ARM inputs, full P1
+  service/fault proof and measured build/steady/fault/verifier/healing peaks remain
+  open. The observed 6.10 GiB owned-memory sample is only a lower bound; no capacity
+  floor or supported Mac path changes. Weekly automation still needs scoped access
+  and the later [weekly plan](superpowers/plans/2026-11-04-kubernetes-weekly-proof.md).
+  No general AWS, production or schema authority follows from this first machine.
   Global account separation and the action controller have planning entries below;
   release waves, hosted venues and regional failover remain later plans.
   Country/provider/cell registry, repeatable resource
