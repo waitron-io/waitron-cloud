@@ -45,7 +45,18 @@ test('terminal canary qualification requires both jobs, actual route and source 
 });
 test('a recorded non-canary job cannot cancel a newer workflow attempt',async()=>{
  const {cancelCIJob}=await import('./ci-canary.mjs');assert.equal(typeof cancelCIJob,'function');let cancelled=false;
- const api={get:async()=>({...evidence().run,run_attempt:2}),post:async()=>{cancelled=true;}};
- await assert.rejects(cancelCIJob({api,repository:'fixture/cloud',ci:{repositoryId:123,workflowId:456,workflowSha:'1'.repeat(40),runId:789,attempt:1}}),/attempt|identity/i);
+ const api={get:async path=>path.includes('/jobs/')?{...evidence().job,status:'queued'}:({...evidence().run,run_attempt:2}),post:async()=>{cancelled=true;}};
+ await assert.rejects(cancelCIJob({api,repository:'fixture/cloud',ci:{repositoryId:123,workflowId:456,workflowSha:'1'.repeat(40),runId:789,attempt:1,jobId:901}}),/attempt|identity/i);
  assert.equal(cancelled,false);
+});
+
+test('recorded job cancellation refuses a different repository without cancelling',async()=>{
+ const {cancelCIJob}=await import('./ci-canary.mjs');let cancelled=false;
+ const api={get:async path=>path.includes('/jobs/')?{...evidence().job,status:'queued'}:{...evidence().run,repository:{id:999}},post:async()=>{cancelled=true;}};
+ await assert.rejects(cancelCIJob({api,repository:'fixture/cloud',ci:{repositoryId:123,workflowId:456,workflowSha:'1'.repeat(40),runId:789,attempt:1,jobId:901}}),/identity/i);assert.equal(cancelled,false);
+});
+test('cancellation readback refuses a newer attempt that races the cancel request',async()=>{
+ const {cancelCIJob}=await import('./ci-canary.mjs');let posts=0;
+ const api={get:async path=>path.includes('/jobs/')?{...evidence().job,status:'queued'}:{...evidence().run,run_attempt:posts?2:1,status:posts?'completed':'in_progress'},post:async()=>{posts++;}};
+ await assert.rejects(cancelCIJob({api,repository:'fixture/cloud',ci:{repositoryId:123,workflowId:456,workflowSha:'1'.repeat(40),runId:789,attempt:1,jobId:901}}),/attempt/i);assert.equal(posts,1);
 });

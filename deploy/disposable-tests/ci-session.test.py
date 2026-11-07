@@ -75,6 +75,8 @@ class CISession(unittest.TestCase):
    ci={**CI,'workflowPath':'.github/workflows/ci.yml','jobKey':key}
    value={**request(self.resource),'ci':ci,'snapshot':hashlib.sha256(json.dumps(ci,separators=(',',':')).encode()).hexdigest()}
    self.assertEqual(session.request_identity(value,self.resource)['argv'],ARGV)
-  ci={**CI,'workflowPath':'.github/workflows/ci.yml','jobKey':'publish'}
-  with self.assertRaises(ValueError):session.request_identity({**request(self.resource),'ci':ci},self.resource)
+  for key in ['publish','test-dashboard-0','test-dashboard-5','test-server-25','test-heavy-4','test-server-01','test-dashboard-1\n']:
+   ci={**CI,'workflowPath':'.github/workflows/ci.yml','jobKey':key}
+   value={**request(self.resource),'ci':ci,'snapshot':hashlib.sha256(json.dumps(ci,separators=(',',':')).encode()).hexdigest()}
+   with self.assertRaises(ValueError):session.request_identity(value,self.resource)
 unittest.main(verbosity=2)

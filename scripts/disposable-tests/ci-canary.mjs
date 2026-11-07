@@ -35,16 +35,22 @@ export async function fallbackCI({api,policy,invocation,dispatch,signal,wait=del
 }
 
 export async function cancelCIJob({api,repository,ci,signal,wait=delay}){
+ assert.ok(Number.isSafeInteger(ci.jobId) && ci.jobId>0,'Recorded CI job identity is missing');
  const path=`/repos/${repository}/actions/runs/${ci.runId}`;
  const run=await api.get(path,{signal});
- assert.ok(run.id===ci.runId && run.run_attempt===ci.attempt && run.workflow_id===ci.workflowId && run.head_sha===ci.workflowSha &&
-  run.repository?.id===ci.repositoryId && run.head_repository?.id===ci.repositoryId,'Recorded CI cancellation identity/attempt differs');
+ assert.ok(run.id===ci.runId && run.workflow_id===ci.workflowId && run.head_sha===ci.workflowSha &&
+  run.repository?.id===ci.repositoryId && run.head_repository?.id===ci.repositoryId,'Recorded CI cancellation identity differs');
+ const job=await api.get(`/repos/${repository}/actions/jobs/${ci.jobId}`,{signal});
+ assert.ok(job.id===ci.jobId && job.run_id===ci.runId && job.run_attempt===ci.attempt && job.head_sha===ci.workflowSha,'Recorded CI job identity differs');
+ if(job.status==='completed')return;
+ assert.equal(run.run_attempt,ci.attempt,'Recorded CI cancellation attempt differs');
  if(run.status==='completed')return;
  await api.post(path+'/cancel',undefined,{signal});const end=Date.now()+120000;
  while(true){const current=await api.get(path,{signal});assert.equal(current.run_attempt,ci.attempt,'CI attempt changed during cancellation');
   if(current.status==='completed')return;
   assert.ok(Date.now()<end,'CI cancellation readback deadline exceeded');await wait(15000,undefined,{signal});}
 }
+
 async function namedRunners(api,repository,name,signal){
  const found=[];
  for(let page=1;page<=10;page++){
@@ -70,6 +76,11 @@ export async function runCI({leases,transport,api,repository,lane,ci,signal,wait
  const {ciRequest,runnerName,jobName}=await import('./ci-identity.mjs');
  const {runLocal}=await import('./local.mjs');
  ci=ciIdentity(ci);
+ if(ci.workflowPath==='.github/workflows/ci.yml'){
+  const pending=leases.inspect().ciInvocation;
+  assert.ok(pending && pending.runId===ci.runId && pending.attempt===ci.attempt && pending.jobId===ci.jobId &&
+   pending.sourceSha===ci.sourceSha && pending.workflowSha===ci.workflowSha,'Ordinary CI needs its recorded concrete Mac intent');
+ }
  const base=`/repos/${repository}/actions`,name=runnerName(ci);
  const result=await runLocal({leases,request:ciRequest(lane,ci),signal,transport:{
   healthy:options=>transport.healthy(options),transfer:(lease,options)=>transport.transfer(lease,options),
@@ -98,6 +109,11 @@ export async function runCI({leases,transport,api,repository,lane,ci,signal,wait
       assert.equal(current.run_attempt,ci.attempt,'CI attempt changed during execution');
       const job=await api.get(`${base}/jobs/${ci.jobId}`,{signal:work});
       assert.ok(!job.runner_id || job.runner_id===registration.runner.id,'CI runner assignment differs');
+      if(!job.runner_id){
+       const runner=await api.get(`${base}/runners/${registration.runner.id}`,{signal:work});
+       assert.ok(runner.id===registration.runner.id && runner.name===name,'CI runner assignment readback identity differs');
+       assert.equal(runner.busy,false,'CI runner assignment is busy elsewhere');
+      }
       if(job.status==='queued')assert.ok(Date.now()-lease.createdAt<900000,'CI queue deadline exceeded');
       const observed=await transport.inspect(lease,{signal:work});
       assert.ok(observed.running===true,'CI guest is no longer running');healthyAt=Date.now();
