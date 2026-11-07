@@ -51,9 +51,21 @@ export async function automaticTick({configuration,config,api,signal,runWorker,t
   onRefused:job=>{refused.push(job);}});
  // Guest removal, runner removal and hosted fallback have separate cleanup budgets.
  runWorker??=ci=>runProcess(process.execPath,[new URL('./control.mjs',import.meta.url).pathname,configuration,'job',String(ci.runId),String(ci.jobId)],{signal,terminationGraceMs:500000});
+ let cleanup;
+ const workers=jobs.map(async ci=>{
+  const result=await runWorker(ci);
+  if(refused.length && result.code===75){
+   await cleanup;signal?.throwIfAborted();
+   const latest=new LocalLeases(config.state+'/ledger',{hostGeneration:config.hostGeneration,slots}).inspect();
+   const recorded=latest.slots.some(slot=>slot.ciInvocation?.jobId===ci.jobId) ||
+    Object.keys(latest.turns).some(turn=>turn.endsWith(`:ci-${ci.runId}-${ci.attempt}-${ci.jobId}`));
+   if(!recorded)return runWorker(ci);
+  }
+  return result;
+ });
+ cleanup=Promise.allSettled(refused.map(job=>fallbackRefused({config,api,...job,signal})));
  const [results,fallbacks]=await Promise.all([
-  Promise.allSettled(jobs.map(ci=>runWorker(ci))),
-  Promise.allSettled(refused.map(job=>fallbackRefused({config,api,...job,signal})))
+  Promise.allSettled(workers),cleanup
  ]);
  for(let i=0;i<results.length;i++)console.log(JSON.stringify({event:'automatic-ci-job',at:new Date().toISOString(),runId:jobs[i].runId,jobId:jobs[i].jobId,
   ...(results[i].status==='fulfilled'?results[i].value:{code:125,error:results[i].reason.message})}));

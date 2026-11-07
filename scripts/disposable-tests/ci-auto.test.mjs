@@ -275,8 +275,8 @@ for(const status of [502,429])test(`a transient GitHub ${status} leaves queued w
  assert.equal(mutations,0,'A temporary API error must not restart the PR');
 });
 
-test('reviewed workers start before an unrelated refusal waits for cancellation',async t=>{
- const {automaticTick}=await import('./control.mjs');const config=await refusalPool(t),f=fixture(),get=f.api.get,otherHead='5'.repeat(40);let started=false,cancelled=false,reruns=0;
+for(const busy of ['none','busy','retired','pending'])test(`reviewed workers start before refusal cleanup with ${busy} admission`,async t=>{
+ const {automaticTick}=await import('./control.mjs');const config=await refusalPool(t),f=fixture(),get=f.api.get,otherHead='5'.repeat(40);let started=false,cancelled=false,reruns=0,tries=0;
  const good={...f.run,id:790,head_sha:otherHead,pull_requests:[{number:13}],referenced_workflows:[{path:'fixture/waitron/.github/workflows/image-smoke.yml@'+execution,ref:'refs/pull/13/merge',sha:execution}]};
  const job={...f.jobs[0],id:911,run_id:790,head_sha:otherHead,labels:['self-hosted','dt-123-790-1-test-server-24']};
  f.api.get=async path=>{
@@ -292,8 +292,16 @@ test('reviewed workers start before an unrelated refusal waits for cancellation'
   return get(path);
  };
  f.api.post=async path=>{assert.equal(started,true,'Known good work must start before refusal cleanup');if(path.endsWith('/cancel'))cancelled=true;else if(path.endsWith('/rerun'))reruns++;else assert.fail(path);};
- const result=await automaticTick({configuration:'/fixture/config.json',config,api:f.api,transport:{healthy:async()=>true},runWorker:async ci=>{assert.equal(ci.jobId,911);started=true;return {code:0};}});
- assert.equal(result.served,1);assert.equal(cancelled,true);assert.equal(reruns,1);
+ const result=await automaticTick({configuration:'/fixture/config.json',config,api:f.api,transport:{healthy:async()=>true},runWorker:async ci=>{
+  assert.equal(ci.jobId,911);started=true;tries++;
+  if(tries===1 && ['retired','pending'].includes(busy)){
+   const {LocalLeases}=await import('./leases.mjs'),{ciRequest}=await import('./ci-identity.mjs');const leases=new LocalLeases(config.state+'/ledger',{hostGeneration:'test',slots:6,slot:5});
+   if(busy==='retired'){const lease=leases.reserveLocal(ciRequest('I',ci)).lease;leases.release(lease,{resourceId:lease.resourceId,absent:true});}
+   else leases.setInvocation({nonce:'b'.repeat(32),sourceSha:otherHead,workflowSha:otherHead,route:'server',createdAt:Date.now(),runId:790,attempt:1,jobId:911,ordinaryStage:'cancel-requested'});
+  }
+  return {code:busy!=='none' && tries===1?75:0};
+ }});
+ assert.equal(result.served,1);assert.equal(cancelled,true);assert.equal(reruns,1);assert.equal(tries,busy==='busy'?2:1,'Retry only an unadmitted busy worker; preserve admitted turns and recovery intents');
 });
 
 test('a refused cancellation that is still settling retains its intent until recovery requests one hosted rerun',async t=>{
