@@ -4,12 +4,11 @@ import {renderStatusPage} from '../src/status-page.ts';
 
 const incident={state:'investigating',service:'remote_access',impact:'some',updatedAt:'2026-11-07T23:45:00Z'};
 
-test('each incident state produces its fixed bilingual public post and a UTC update thirty minutes later',()=>{
+test('each open incident state produces its fixed bilingual public post and a UTC update thirty minutes later',()=>{
  for(const [state,en,es] of [
   ['investigating','Investigating','Investigando'],
   ['fix_being_applied','Fix being applied','Aplicando una solución'],
   ['monitoring','Monitoring','En observación'],
-  ['resolved','Resolved','Resuelto'],
  ]){
   const pages=renderStatusPage({...incident,state});
   assert.deepEqual(Object.keys(pages).sort(),['es/index.html','index.html']);
@@ -83,5 +82,23 @@ test('both static pages use local language links and load without scripts or ext
   assert.ok(html.includes(`href="${href}" hreflang="${other}"`));
   assert.match(html,/<meta name="viewport" content="width=device-width, initial-scale=1">/);
   assert.doesNotMatch(html,/<script|https?:|@import|url\(|<(?:img|iframe|link)\b/i);
+ }
+});
+
+test('resolved posts report past impact and actual UTC resolution time without a next-update promise',()=>{
+ for(const [impact,enImpact,esImpact] of [
+  ['some','Some venues were affected.','Algunos locales se vieron afectados.'],
+  ['all','All venues were affected.','Todos los locales se vieron afectados.'],
+  ['unknown','The impact is not yet known.','Aún no se conoce el alcance.'],
+ ] as const){
+  const pages=renderStatusPage({...incident,state:'resolved',service:'backups',impact});
+  for(const [path,heading,label,service,impactText] of [
+   ['index.html','Resolved','Resolved at','Backups',enImpact],
+   ['es/index.html','Resuelto','Resuelto el','Copias de seguridad',esImpact],
+  ] as const){
+   const html=pages[path];assert.ok(html.includes(`<h1>${heading}</h1>`));assert.ok(html.includes(label));assert.ok(html.includes(service));assert.ok(html.includes(impactText));
+   assert.ok(html.includes('datetime="2026-11-07T23:45:00Z"'));assert.ok(html.includes('2026-11-07 23:45:00 UTC'));
+   assert.doesNotMatch(html,/Next update|Próxima actualización|2026-11-08|are affected|se ven afectados/);
+  }
  }
 });

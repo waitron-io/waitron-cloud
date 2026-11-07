@@ -16,6 +16,7 @@ const impacts={
  all:['All venues are affected.','Todos los locales se ven afectados.'],
  unknown:['The impact is not yet known.','Aún no se conoce el alcance.'],
 } as const;
+const resolvedImpacts={some:['Some venues were affected.','Algunos locales se vieron afectados.'],all:['All venues were affected.','Todos los locales se vieron afectados.'],unknown:impacts.unknown} as const;
 const css=`
 :root{color-scheme:light dark;--bg:#f4f5f2;--card:#fff;--text:#20342c;--muted:#4d6057;--line:#cbd5ce;--accent:#25634b}
 *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:18px/1.6 system-ui,sans-serif}
@@ -50,11 +51,11 @@ export function renderStatusPage(input:unknown):{'index.html':string;'es/index.h
   const heading=value.state==='no_incident'
    ?['Status updates are being set up. Current service health is unverified.','Las actualizaciones de estado están en preparación. El estado actual del servicio no está verificado.'][language]
    :states[value.state][language];
-  const update=`<p class="time">${en?'Updated':'Actualizado'}: ${time(value.updatedAt)}</p>`;
+  const update=`<p class="time">${value.state==='resolved'?(en?'Resolved at':'Resuelto el'):(en?'Updated':'Actualizado')}: ${time(value.updatedAt)}</p>`;
   // Only closed vocabulary and validated UTC timestamps may enter public HTML.
   const content=value.state==='no_incident'
    ?`<p>${en?'No incident reported.':'No hay incidencias notificadas.'}</p>${update}`
-   :`<p class="service">${services[value.service][language]}</p><p>${impacts[value.impact][language]}</p>${update}<p class="time">${en?'Next update by':'Próxima actualización antes de'}: ${time(new Date(Date.parse(value.updatedAt)+30*60_000).toISOString().replace('.000Z','Z'))}</p>`;
+   :`<p class="service">${services[value.service][language]}</p><p>${(value.state==='resolved'?resolvedImpacts:impacts)[value.impact][language]}</p>${update}${value.state==='resolved'?'':`<p class="time">${en?'Next update by':'Próxima actualización antes de'}: ${time(new Date(Date.parse(value.updatedAt)+30*60_000).toISOString().replace('.000Z','Z'))}</p>`}`;
   return `<!doctype html>\n<html lang="${en?'en':'es'}">\n<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Waitron Cloud · ${en?'Service status':'Estado del servicio'}</title><style>${css}</style></head>\n<body><main><header><span class="brand">Waitron Cloud</span><nav aria-label="${en?'Language':'Idioma'}"><a href="${en?'es/index.html':'../index.html'}" hreflang="${en?'es':'en'}" lang="${en?'es':'en'}">${en?'Español':'English'}</a></nav></header><article><h1>${heading}</h1>${content}</article></main></body>\n</html>\n`;
  };
  return {'index.html':render(0),'es/index.html':render(1)};

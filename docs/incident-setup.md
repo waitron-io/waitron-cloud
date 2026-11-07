@@ -69,10 +69,11 @@ facts you have confirmed. `resolved` describes that incident, not universal heal
 For no incident, provide only the two fields in the example. It keeps the
 setup/unverified warning and makes no next-update promise.
 
-Use a real UTC timestamp in exactly `YYYY-MM-DDTHH:mm:ssZ` form. Incident posts
-show the next update thirty minutes later, including the date when midnight
-passes. A future publisher must keep that update promise; the generator schedules
-nothing. Extra fields and arbitrary text are rejected, so venue names, private
+Use a real UTC timestamp in exactly `YYYY-MM-DDTHH:mm:ssZ` form. Open incident
+posts show the next update thirty minutes later, including the date when midnight
+passes. For `resolved`, supply the actual confirmed resolution time as `updatedAt`.
+The post uses past impact and promises no next update. A future publisher must
+keep open posts' update promises; the generator schedules nothing. Extra fields and arbitrary text are rejected, so venue names, private
 notes and guessed recovery times cannot enter this fixed-text page.
 
 If generation fails, you receive a fixed error without input details. The command

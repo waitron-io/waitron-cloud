@@ -285,7 +285,7 @@ link: no venue names, addresses or raw errors (C39's data rules).
   has started.
 - **Monitoring**, then **resolved**, once recovery is confirmed by C39's rule.
 
-**(Our call)** The automatic posts use fixed sentences, in English and Spanish. Each one
+**(Our call)** The automatic posts use fixed sentences, in English and Spanish. Each open post
 shows what D104 requires: the affected service, its state, the UTC time, the known impact
 at service level ("some venues" or "all venues", never a name), and the next update time,
 30 minutes ahead to match C39's review of an open incident. They never name a venue and
