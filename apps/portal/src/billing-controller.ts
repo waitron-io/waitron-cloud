@@ -16,7 +16,7 @@ export class BillingController{
   const result=await this.#request<BillingView>('/billing/read',{});
   if(generation!==this.#generation)return;
   this.pending=false;
-  if(result.ok)this.#apply(result.value);else this.#failure(result);
+  if(result.ok)this.#apply(result.value);else this.#failure(result,!this.loaded);
   this.#changed();
  }
  async start(){
@@ -36,10 +36,11 @@ export class BillingController{
   this.#changed();
  }
  #apply(view:BillingView){this.venues=view.venues;this.loaded=true;if(!this.venues.some(venue=>venue.venueId===this.selected))this.selected=this.venues[0]?.venueId;}
- #failure(result:Extract<ApiResult<unknown>,{ok:false}>){
+ #failure(result:Extract<ApiResult<unknown>,{ok:false}>,initialRead=false){
   this.#retryUntil=Math.max(this.#retryUntil,performance.now()+result.retryAfterMs);
   if(result.status===401||result.status===403){this.venues=[];this.selected=undefined;this.loaded=false;}
-  // The optional trial feature is absent on ordinary accounts and servers.
+  // A first policy refusal leaves the optional panel absent for ordinary accounts.
+  if(initialRead&&result.status===403&&result.code==='permission_denied')return;
   if(result.status===503&&!this.loaded&&result.code==='temporarily_unavailable')return;
   this.error=result.status===429?'limited':result.status===401?'pairSession':result.status===403?(result.code==='permission_denied'?'permissionBusiness':'forbidden'):'unavailable';
  }

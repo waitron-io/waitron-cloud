@@ -52,3 +52,35 @@ test('an uncertain billing write honors the server wait before refreshing or wri
  await c.load();await c.start();assert.equal(calls.length,2);
  now=5000;await c.load();assert.deepEqual(calls,['/billing/read','/billing/start-trial','/billing/read']);assert.equal(c.loaded,true);
 });
+
+test('ordinary accounts see no trial error panel but an established owner sees lost authority',async()=>{
+ let allowed=false;
+ const c=await controller(async<T>():Promise<ApiResult<T>>=>allowed?{ok:true,value:view as T}:{ok:false,status:403,code:'permission_denied',retryAfterMs:0});
+ c.account('ordinary');await c.load();assert.equal(c.error,undefined);assert.equal(c.loaded,false);assert.deepEqual(c.venues,[]);
+ allowed=true;c.account('synthetic');await c.load();assert.equal(c.loaded,true);
+ allowed=false;await c.load();assert.equal(c.error,'permissionBusiness');assert.equal(c.loaded,false);assert.deepEqual(c.venues,[]);
+});
+
+for(const boundary of ['account','venue','signout'] as const)for(const success of [true,false])test(`late billing read ${success?'success':'failure'} is fenced after ${boundary} changes`,async()=>{
+ let finish!:(value:ApiResult<BillingView>)=>void,count=0;
+ const c=await controller(<T>():Promise<ApiResult<T>>=>++count===1?Promise.resolve({ok:true,value:view as T}):new Promise(resolve=>{finish=resolve as typeof finish;}));
+ c.account('owner');await c.load();const pending=c.load();
+ if(boundary==='venue')c.select(second);else c.account(boundary==='account'?'other':undefined);
+ finish(success?{ok:true,value:{venues:[{...view.venues[0]!,level:'connected',canStartTrial:false}]}}:{ok:false,status:403,code:'permission_denied',retryAfterMs:90000});await pending;
+ assert.equal(c.pending,false);assert.equal(c.error,undefined);assert.equal(c.waiting,0);
+ assert.equal(c.selected,boundary==='venue'?second:undefined);assert.deepEqual(c.venues,boundary==='venue'?view.venues:[]);
+});
+
+for(const boundary of ['account','signout'] as const)for(const code of ['network_error','conflict'])test(`late billing ${code} reconciliation is fenced after ${boundary} changes`,async()=>{
+ let finish!:(value:ApiResult<BillingView>)=>void,count=0,ready!:()=>void;const reading=new Promise<void>(resolve=>{ready=resolve;});
+ const c=await controller(<T>():Promise<ApiResult<T>>=>{
+  count++;if(count===1)return Promise.resolve({ok:true,value:view as T});
+  if(count===2)return Promise.resolve({ok:false,status:code==='conflict'?409:0,code,retryAfterMs:0});
+  return new Promise(resolve=>{finish=resolve as typeof finish;ready();});
+ });
+ c.account('owner');await c.load();const pending=c.start();await reading;
+ c.account(boundary==='account'?'other':undefined);
+ finish({ok:true,value:{venues:[{...view.venues[0]!,level:'connected',canStartTrial:false}]}});await pending;
+ assert.equal(c.pending,false);assert.equal(c.error,undefined);assert.equal(c.waiting,0);
+ assert.equal(c.selected,undefined);assert.deepEqual(c.venues,[]);
+});
