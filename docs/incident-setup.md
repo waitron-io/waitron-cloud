@@ -17,10 +17,10 @@ sets the intended automation. Account setup alone does not connect it. Use the
    and save recovery codes in your approved password store outside AWS.
 2. Stay on **Pages Free**. Static asset requests are [free and unlimited](https://developers.cloudflare.com/pages/functions/pricing/#static-asset-requests).
    You need no domain purchase, Functions or paid Workers plan for this page.
-3. Get the reviewed static page bundle from the builder, with `index.html` at its
-   root and matching English/Spanish text. This checklist does not supply the
-   bundle or its generator. Until supplied, stop before uploading. Initial text
-   must say setup is in progress unless current service health is actually verified.
+3. Generate and review the local bundle with the command below, or ask the builder
+   to hand you the folder. Its root contains `index.html`, with Spanish at
+   `es/index.html`. This local generator always keeps the setup warning when
+   there is no incident. Verified-health wording belongs to the future publisher.
    The page must
    work without Cloud APIs, AWS assets, login, analytics or external fonts. Review
    it for venue names, personal data and secrets before publication.
@@ -40,6 +40,45 @@ line upload tool, in the same project. It cannot switch to Git integration later
 The builder can therefore add the approved automatic publisher while preserving
 your manual fallback. That publisher and its restricted credentials still need
 implementation and verification.
+
+## Generate a bundle locally
+
+Before you have a monitor, show the setup warning rather than an all-clear.
+Save this as `status-input.json`:
+
+```json
+{"state":"no_incident","updatedAt":"2026-11-07T10:05:00Z"}
+```
+
+From your checkout, run:
+
+```sh
+node packages/operations/src/status-page-cli.ts status-input.json /tmp/waitron-status-preview
+```
+
+Use a new output directory each time; the command refuses an existing one. Open
+`/tmp/waitron-status-preview/index.html` in your browser and follow **Español** to
+check the other language. Both pages work from the folder without a server or
+internet access. This generates files only; it does not publish them.
+
+For an incident post, provide exactly `state`, `service`, `impact` and `updatedAt`.
+Choose `investigating`, `fix_being_applied`, `monitoring` or `resolved` for the state;
+`cloud`, `remote_access`, `backups`, `email` or `hosted_servers` for the service;
+and `some`, `all` or `unknown` for impact. `cloud` means Cloud overall. Supply only
+facts you have confirmed. `resolved` describes that incident, not universal health.
+For no incident, provide only the two fields in the example. It keeps the
+setup/unverified warning and makes no next-update promise.
+
+Use a real UTC timestamp in exactly `YYYY-MM-DDTHH:mm:ssZ` form. Open incident
+posts show the next update thirty minutes later, including the date when midnight
+passes. For `resolved`, supply the actual confirmed resolution time as `updatedAt`.
+The post uses past impact and promises no next update. A future publisher must
+keep open posts' update promises; the generator schedules nothing. Extra fields and arbitrary text are rejected, so venue names, private
+notes and guessed recovery times cannot enter this fixed-text page.
+
+If generation fails, you receive a fixed error without input details. The command
+attempts to remove its own incomplete output. If a filesystem problem prevents
+cleanup, inspect that new folder before trying another destination.
 
 ## Choose your phone routes
 
@@ -81,5 +120,6 @@ bilingual status updates plus manual publishing over mobile data. Paging must
 start when investigation finishes or 15 minutes after confirmation, whichever
 comes first; the repeat is 10 minutes after the first page attempt and the
 unattended marker is at 20 minutes. Keep times and results in the private launch
-record. Account recovery, the page bundle, publisher, phone adapters and these
-drills remain open until actually completed.
+record. Account recovery, dated public incident history, verified-health wording, the
+publisher, phone adapters and these drills remain open until actually completed.
+A generated local bundle alone qualifies none of them.
