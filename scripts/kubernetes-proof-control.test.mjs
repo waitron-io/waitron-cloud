@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { mkdtempSync, writeFileSync, rmSync, readFileSync, existsSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, rmSync, readFileSync, existsSync, statSync, mkdirSync, symlinkSync, chmodSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
+import { open } from 'node:fs/promises';
 
 const target = new URL('./kubernetes-proof-control.mjs', import.meta.url);
 const control = await import(target.href).catch(error => {
@@ -805,4 +806,160 @@ test('CLI recognizes the AWS 2 error envelope without treating access denial as 
   const denied = ledgerCliFixture(t, 'AccessDenied', '\naws: [ERROR]: ');
   await assert.rejects(control.createManualLedgerStore({ bucket: denied.input.Bucket, aws: denied.cli }).get('d570/ledger/active.json'),
     error => error.message === 'D570 AWS s3api/get-object failed');
+});
+
+// Overwriting or losing the pre-creation booking would allow setup costs to be forgotten.
+function setupBookingFixture(t) {
+  const f = setupFixture(t), parent = mkdtempSync(join(tmpdir(), 'd570-booking-'));
+  chmodSync(parent, 0o700);
+  t.after(() => rmSync(parent, { recursive: true, force: true }));
+  const components = Object.fromEntries(['compute', 'disk', 'storage', 'requests', 'transfer', 'events',
+    'lambda', 'logs', 'network', 'tax', 'contingency'].map(name => [name, {
+    upperMicroUsd: 10000, source: 'https://aws.amazon.com/pricing/', digest: 'c'.repeat(64),
+  }]));
+  const options = { checkout: f.root, region: 'eu-north-1', now, aws: f.aws, environment: {},
+    clock: () => Date.parse(now), directory: join(parent, 'setup'), cost: { observedAt: now, components } };
+  async function book(changes = {}) {
+    assert.equal(typeof control.bookManualSetup, 'function', 'missing durable pre-creation setup booking');
+    return control.bookManualSetup({ ...options, ...changes });
+  }
+  return { ...f, parent, options, book };
+}
+
+test('setup booking retains the full bound and actual estimated opening privately before creation', async t => {
+  const f = setupBookingFixture(t), result = await f.book();
+  const saved = JSON.parse(readFileSync(join(f.options.directory, 'setup.json')));
+  assert.equal(statSync(f.options.directory).mode & 0o777, 0o700);
+  assert.equal(statSync(join(f.options.directory, 'setup.json')).mode & 0o777, 0o600);
+  assert.equal(saved.account, '462991287391'); assert.equal(saved.region, 'eu-north-1');
+  assert.equal(saved.head, f.head); assert.equal(saved.tree, f.tree);
+  assert.equal(saved.billing.microUsd, 1234568); assert.equal(saved.billing.estimated, true);
+  assert.equal(saved.upperMicroUsd, 110000);
+  assert.deepEqual(saved.cost, f.options.cost);
+  assert.deepEqual(saved.template, result.template);
+  assert.equal(result.directory, f.options.directory);
+  assert.deepEqual(f.calls.map(row => row.operation), ['get-caller-identity', 'get-cost-and-usage', 'get-parameter',
+    'describe-images', 'describe-instance-types', 'describe-managed-prefix-lists']);
+});
+
+for (const [label, change] of [
+  ['missing category', c => delete c.components.tax],
+  ['unexpected category', c => c.components.credits = c.components.tax],
+  ['negative category', c => c.components.tax.upperMicroUsd = -1],
+  ['fractional category', c => c.components.tax.upperMicroUsd = 0.1],
+  ['unsafe category', c => c.components.tax.upperMicroUsd = Number.MAX_SAFE_INTEGER + 1],
+  ['unexplained zero', c => c.components.tax.upperMicroUsd = 0],
+  ['missing source', c => delete c.components.tax.source],
+  ['foreign source', c => c.components.tax.source = 'https://example.invalid/pricing/'],
+  ['source credentials', c => c.components.tax.source = 'https://private@aws.amazon.com/pricing/'],
+  ['missing source digest', c => delete c.components.tax.digest],
+  ['malformed source digest', c => c.components.tax.digest = 'not-a-sha256'],
+  ['stale cost', c => c.observedAt = '2026-11-05T12:00:00Z'],
+  ['future cost', c => c.observedAt = '2026-11-06T12:00:01Z'],
+]) test(`setup booking refuses ${label} without provider reads or local booking`, async t => {
+  const f = setupBookingFixture(t), cost = structuredClone(f.options.cost); change(cost);
+  await assert.rejects(f.book({ cost }), /D570 controller refused/);
+  assert.deepEqual(f.calls, []); assert.equal(existsSync(f.options.directory), false);
+});
+
+test('setup booking includes the actual opening in the strict ten-dollar cap', async t => {
+  const f = setupBookingFixture(t);
+  f.options.cost.components.compute.upperMicroUsd = 8665432;
+  await assert.rejects(f.book(), /D570 controller refused/);
+  assert.equal(existsSync(f.options.directory), false);
+});
+
+test('repeated setup booking never replaces or refunds a retained booking', async t => {
+  const f = setupBookingFixture(t); await f.book();
+  const path = join(f.options.directory, 'setup.json'), before = readFileSync(path);
+  f.options.cost.components.compute.upperMicroUsd = 1;
+  await assert.rejects(f.book());
+  assert.deepEqual(readFileSync(path), before);
+});
+
+for (const kind of ['empty directory', 'foreign file', 'symlink']) test(`setup booking refuses an existing ${kind}`, async t => {
+  const f = setupBookingFixture(t);
+  if (kind === 'symlink') symlinkSync(f.parent, f.options.directory);
+  else if (kind === 'foreign file') writeFileSync(f.options.directory, 'preserve');
+  else mkdirSync(f.options.directory, { mode: 0o700 });
+  await assert.rejects(f.book());
+  if (kind === 'foreign file') assert.equal(readFileSync(f.options.directory, 'utf8'), 'preserve');
+});
+
+test('setup booking refuses a parent readable by other users', async t => {
+  const f = setupBookingFixture(t); chmodSync(f.parent, 0o755);
+  await assert.rejects(f.book(), /D570 controller refused/);
+  assert.equal(existsSync(f.options.directory), false);
+});
+
+test('setup booking refuses source changes before its durable write', async t => {
+  const f = setupBookingFixture(t), original = f.aws.call;
+  f.aws.call = async (...args) => {
+    const result = await original(...args);
+    if (args[1] === 'describe-managed-prefix-lists') writeFileSync(join(f.root, 'controller.txt'), 'changed');
+    return result;
+  };
+  await assert.rejects(f.book(), /D570 controller refused/);
+  assert.equal(existsSync(f.options.directory), false);
+});
+
+test('concurrent setup bookings retain one original bound without replacement', async t => {
+  const f = setupBookingFixture(t);
+  const results = await Promise.allSettled([f.book(), f.book()]);
+  assert.equal(results.filter(row => row.status === 'fulfilled').length, 1);
+  assert.equal(results.filter(row => row.status === 'rejected').length, 1);
+  assert.equal(JSON.parse(readFileSync(join(f.options.directory, 'setup.json'))).upperMicroUsd, 110000);
+});
+
+for (const stage of ['file', 'directory', 'parent']) test(`setup booking retains its cost when ${stage} synchronization fails`, async t => {
+  const f = setupBookingFixture(t), sample = await open(join(f.parent, 'sample'), 'wx', 0o600);
+  const prototype = Object.getPrototypeOf(sample); await sample.close();
+  const original = prototype.sync; let calls = 0;
+  const failAt = { file: 1, directory: 2, parent: 3 }[stage];
+  const mocked = t.mock.method(prototype, 'sync', async function () {
+    if (++calls === failAt) throw new Error('synthetic synchronization refusal');
+    return original.call(this);
+  });
+  await assert.rejects(f.book(), /synthetic synchronization refusal/);
+  mocked.mock.restore();
+  const path = join(f.options.directory, 'setup.json'), retained = readFileSync(path);
+  assert.equal(JSON.parse(retained).upperMicroUsd, 110000);
+  await assert.rejects(f.book());
+  assert.deepEqual(readFileSync(path), retained);
+});
+
+test('setup booking retains the original bound when the UTC day changes during persistence', async t => {
+  const f = setupBookingFixture(t), sample = await open(join(f.parent, 'sample'), 'wx', 0o600);
+  const prototype = Object.getPrototypeOf(sample); await sample.close();
+  const original = prototype.sync; let current = Date.parse(now);
+  t.mock.method(prototype, 'sync', async function () {
+    await original.call(this); current = Date.parse('2026-11-07T00:00:00Z');
+  });
+  await assert.rejects(f.book({ clock: () => current }), /D570 controller refused/);
+  assert.equal(JSON.parse(readFileSync(join(f.options.directory, 'setup.json'))).upperMicroUsd, 110000);
+});
+
+test('setup booking preserves incomplete bytes when writing fails', async t => {
+  const f = setupBookingFixture(t), sample = await open(join(f.parent, 'sample'), 'wx', 0o600);
+  const prototype = Object.getPrototypeOf(sample); await sample.close();
+  const original = prototype.writeFile;
+  const mocked = t.mock.method(prototype, 'writeFile', async function () {
+    await original.call(this, '{"partial":'); throw new Error('synthetic write refusal');
+  });
+  await assert.rejects(f.book(), /synthetic write refusal/); mocked.mock.restore();
+  const path = join(f.options.directory, 'setup.json');
+  assert.equal(readFileSync(path, 'utf8'), '{"partial":');
+  await assert.rejects(f.book());
+  assert.equal(readFileSync(path, 'utf8'), '{"partial":');
+});
+
+test('setup booking preserves cost and refuses a checkout changed while synchronizing', async t => {
+  const f = setupBookingFixture(t), sample = await open(join(f.parent, 'sample'), 'wx', 0o600);
+  const prototype = Object.getPrototypeOf(sample); await sample.close();
+  const original = prototype.sync;
+  t.mock.method(prototype, 'sync', async function () {
+    await original.call(this); writeFileSync(join(f.root, 'controller.txt'), 'changed while syncing');
+  });
+  await assert.rejects(f.book(), /D570 controller refused/);
+  assert.equal(JSON.parse(readFileSync(join(f.options.directory, 'setup.json'))).upperMicroUsd, 110000);
 });

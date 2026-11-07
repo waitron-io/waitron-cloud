@@ -166,6 +166,21 @@ The resulting template still has no GitHub trust or launcher role. These checks
 use synthetic provider responses; no regional image, account quota, machine boot
 or resource creation has been qualified on AWS.
 
+Setup's reserved cost must survive a stopped controller. `bookManualSetup`
+checks the same staging identity and discovery, then writes `setup.json` in a
+new private directory under an owner-only parent. It includes all eleven cost
+categories, the actual estimated bill and the rendered template, and refuses
+when the opening plus reservation reaches US$10. It synchronizes the file and
+both directories before returning. Existing or incomplete bookings remain in
+place and prevent another booking, including after a failed write. Run
+`node --test --test-name-pattern='setup booking' scripts/kubernetes-proof-control.test.mjs`
+for filesystem, concurrent-call and injected write-failure checks.
+
+This step checks and retains supplied cost evidence; its URLs and digests do
+not establish the amounts. The complete calculation from acquired prices and
+reviewed quantity bounds, prior-history import and setup creation remain open.
+The lifecycle entries still refuse, so you do not need to sign in yet.
+
 A stack name alone does not prove its expiry protection is working.
 `inspectManualProtection` resolves the bucket, rule and function from the exact
 stack's [CloudFormation resource inventory](https://docs.aws.amazon.com/cli/latest/reference/cloudformation/describe-stack-resources.html).

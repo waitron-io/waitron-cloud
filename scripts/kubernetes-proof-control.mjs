@@ -1,7 +1,7 @@
 import { execFile } from 'node:child_process';
-import { realpath, mkdtemp, writeFile, lstat, readFile, rm } from 'node:fs/promises';
+import { realpath, mkdtemp, writeFile, lstat, readFile, rm, mkdir, open } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, dirname, resolve } from 'node:path';
 import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
 import { renderManualSetup } from '../deploy/kubernetes/proof/setup.mjs';
@@ -302,6 +302,45 @@ export async function inspectManualBudget(options) {
     && iso(observed).slice(0, 10) === now.slice(0, 10)
     && observed - Date.parse(inspection.heartbeat.startedAt) < 120_000);
   return { ...inspection, budget };
+}
+
+export async function bookManualSetup(options) {
+  const { now, directory, clock = Date.now } = options, cost = structuredClone(options.cost);
+  const categories = ['compute', 'disk', 'storage', 'requests', 'transfer', 'events', 'lambda', 'logs', 'network', 'tax', 'contingency'];
+  check(cost && Object.keys(cost).sort().join(',') === 'components,observedAt'
+    && instant(cost.observedAt) <= instant(now) && cost.observedAt.slice(0, 10) === now.slice(0, 10)
+    && cost.components && Object.keys(cost.components).sort().join(',') === categories.sort().join(','));
+  let upperMicroUsd = 0;
+  for (const item of Object.values(cost.components)) {
+    check(item && Object.keys(item).sort().join(',') === 'digest,source,upperMicroUsd'
+      && Number.isSafeInteger(item.upperMicroUsd) && item.upperMicroUsd > 0
+      && typeof item.digest === 'string' && /^[a-f0-9]{64}$/.test(item.digest)
+      && typeof item.source === 'string' && item.source.length <= 2048);
+    let source; try { source = new URL(item.source); } catch { refuse(); }
+    check(source.protocol === 'https:' && ['pricing.us-east-1.amazonaws.com', 'aws.amazon.com'].includes(source.hostname)
+      && !source.username && !source.password && !source.port && !source.search && !source.hash);
+    upperMicroUsd += item.upperMicroUsd;
+    check(Number.isSafeInteger(upperMicroUsd) && upperMicroUsd < 10_000_000);
+  }
+  check(typeof directory === 'string' && directory === resolve(directory));
+  const parent = await lstat(dirname(directory));
+  check(parent.isDirectory() && (parent.mode & 0o777) === 0o700 && parent.uid === process.getuid());
+  const inspection = await inspectManualSetup(options);
+  check(inspection.billing.microUsd + upperMicroUsd < 10_000_000);
+  // Keep even incomplete bookings: an uncertain write must never erase setup's reserved cost.
+  await mkdir(directory, { mode: 0o700 });
+  const file = await open(join(directory, 'setup.json'), 'wx', 0o600);
+  try { await file.writeFile(JSON.stringify({ ...inspection, cost, upperMicroUsd }) + '\n'); await file.sync(); }
+  finally { await file.close(); }
+  for (const path of [directory, dirname(directory)]) {
+    const handle = await open(path, 'r');
+    try { await handle.sync(); } finally { await handle.close(); }
+  }
+  const source = await checkedMain(options.checkout), observed = clock();
+  check(source.head === inspection.head && source.tree === inspection.tree
+    && Number.isSafeInteger(observed) && observed >= instant(now) && observed < Date.parse(policy.accessExpiry)
+    && iso(observed).slice(0, 10) === now.slice(0, 10));
+  return { ...inspection, directory, cost, upperMicroUsd };
 }
 
 if (process.argv[1] && process.argv[1] !== '-' && await realpath(process.argv[1]) === fileURLToPath(import.meta.url)) {

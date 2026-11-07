@@ -3225,7 +3225,8 @@ implementation or production evidence.
   full Mac proof or recurring Mac probe
   is required; the supported Mac path and every capacity floor remain unchanged.
   Independent verifier/control prerequisites may land before live qualification.
-  Private ARM inputs, all-in reservations, real termination/cleanup drills, measured
+  Private ARM inputs, complete all-in cost calculation and setup/launch integration,
+  real termination/cleanup drills, measured
   build/steady/fault/verifier/healing peaks and the full same-head/tree proof remain
   open. The observed 6.10 GiB owned-memory sample is only a lower bound.
   AWS execution and spending wait for the reviewed owner-run setup handoff; this
