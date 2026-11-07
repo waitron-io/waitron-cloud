@@ -1,31 +1,5 @@
 # Monitor connected venues locally
 
-## Inspect staff problem reports
-
-To see what venue staff reported, run the owner-only reader against your local
-country database with an explicit environment:
-
-```sh
-node --env-file-if-exists=.env packages/operations/src/staff-reports-cli.ts --environment test
-```
-
-`DATABASE_URL` selects the database. The command prints JSON containing `environment`,
-`reports` and `groups`. It lists the latest 100 staff reports, newest first; ties
-use installation and report IDs. Empty attachments remain visible. Each report
-includes its venue, software version, structural error codes, installation details
-and any description sent by an administrator. Groups match code and version,
-count each staff report once and show automatic occurrence counts separately.
-Group counts cover the matching retained history, not just the latest 100 reports.
-
-Keep this output private. It is a local inspection tool, not a public status page
-or a monitoring metric. Its database session is read-only and the reader makes at
-most two queries. The JSON escapes bidirectional and control characters so a
-description cannot rearrange terminal output. A failed read prints a fixed error
-and exits with status 1. No agent runs and no message is sent. The
-[receiver contract](box-error-reports.md#receive-a-staff-problem-report) gives the
-submission format and the synthetic test command. Triage and Waitron's report form
-remain separate work.
-
 For the proposed production policy, read the
 [D103 monitoring thresholds](superpowers/specs/2026-10-22-cloud-monitoring-thresholds-design.md).
 The owner approved that design for planning only on 22 October 2026. Build authority,
@@ -455,3 +429,29 @@ sign-out and when permission is lost. It keeps no browser storage or download.
 Outside probes and installation service reports remain separate observations.
 Visitor responses, aggregate gateway status, diagnostics downloads, logs and
 backups do not carry this private Account record.
+
+## Inspect staff problem reports
+
+To see what venue staff reported, run the owner-only reader against your local
+country database with an explicit environment:
+
+```sh
+node --env-file-if-exists=.env packages/operations/src/staff-reports-cli.ts --environment test
+```
+
+`DATABASE_URL` selects the database. The command prints JSON containing `environment`,
+`reports` and `groups`. It lists the latest 100 staff reports, newest first; ties
+use installation and report IDs. Empty attachments remain visible. Each report
+includes its venue, software version, structural error codes, installation details
+and any description sent by an administrator. Groups match code and version,
+count each staff report once and show automatic occurrence counts separately.
+Group counts cover the matching retained history, not just the latest 100 reports.
+
+Keep this output private. It is a local inspection tool, not a public status page
+or a monitoring metric. Its database session is read-only and the reader makes at
+most two queries. The JSON escapes bidirectional and control characters so a
+description cannot rearrange terminal output. A failed read prints a fixed error
+and exits with status 1. No agent runs and no message is sent. The
+[receiver contract](box-error-reports.md#receive-a-staff-problem-report) gives the
+submission format and the synthetic test command. Triage and Waitron's report form
+remain separate work.
