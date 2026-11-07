@@ -15,8 +15,6 @@ export function lockPackageScope(base, head, workspace, git, changedPaths = ['pn
       assert.ok(entry?.mode === '100644' && entry.type === 'blob', `Missing regular lock input: ${path}`);
     };
     regular('pnpm-lock.yaml');
-    assert.deepEqual(entries.filter(entry => /^(apps|packages)\/[^/]+\/package\.json$/.test(entry.path)).map(entry => entry.path).sort(),
-      [...manifests].sort(), 'Incomplete lock manifest inventory');
     projected.push(manifests.map(path => {
       regular(path);
       const manifest = JSON.parse(git('show', `${sha}:${path}`));
@@ -28,13 +26,13 @@ export function lockPackageScope(base, head, workspace, git, changedPaths = ['pn
           `Invalid manifest dependencies: ${path}`);
         delete manifest[field];
       }
-      return manifest;
+      return Object.fromEntries(Object.keys(manifest).sort().map(key => [key, manifest[key]]));
     }));
     const lock = parseLock(git('show', `${sha}:pnpm-lock.yaml`));
     assert.deepEqual(Object.keys(lock.importers).sort(), ['.', ...workspace.map(pkg => pkg.directory)].sort(), 'Lock workspace membership changed');
     return lock;
   });
-  assert.deepEqual(projected[0], projected[1], 'Lock manifest metadata changed; full work required');
+  assert.equal(JSON.stringify(projected[0]), JSON.stringify(projected[1]), 'Lock manifest metadata changed; full work required');
   const {importers} = changedImporters(...locks);
   assert.ok(importers.length && !importers.includes('.'), 'Root or unchanged lock inputs require full work');
   const scope = scopeForRevisions([...new Set([...importers.map(id => `${id}/package.json`), ...changedPaths.filter(path => manifests.includes(path))])], workspace, base, head, git);

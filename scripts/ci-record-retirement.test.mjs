@@ -7,7 +7,8 @@ import test from 'node:test';
 import {createPlan} from './ci-plan.mjs';
 import {documentationPlan, checkDocumentation} from './ci-docs.mjs';
 import {rootInputPlan, rootVerificationContext} from './ci-root-inputs.mjs';
-import {scriptPlan} from './ci-scripts.mjs';
+import {scriptPlan, checkScripts} from './ci-scripts.mjs';
+import {readInputInventory} from './ci-input-audit.mjs';
 import {proofInputPlanRange} from './ci-proof-inputs.mjs';
 
 const rootTest = 'scripts/ci-root-shards.test.mjs';
@@ -85,6 +86,64 @@ test('script-only selection needs regular saved targets but no record files', ()
   const base = commit(); put('scripts/identity-upstream.mjs', 'export const value = 2;\n'); const head = commit();
   assert.deepEqual(scriptPlan(['scripts/identity-upstream.mjs'], base, head, git),
     {base, head, paths: ['scripts/identity-upstream.mjs']});
+}));
+
+test('nonrecord files in either retired folder retain full work and both proofs', () => {
+  for (const folder of ['scripts/ci-input-audit.d', 'scripts/ci-root-review.d']) {
+    for (const name of ['loader.mjs', 'new-check.test.mjs', '.gitattributes']) fixture(({git, put, commit}) => {
+      const base = commit();
+      put(`${folder}/${name}`, name === '.gitattributes' ? '* -text\n' : 'export const value = 2;\n');
+      put('docs/guide.md', '# Updated\n'); const head = commit();
+      const selected = createPlan({pull_request: {base: {sha: base}, head: {sha: head}}}, {sha: head}, workspace, git);
+      assert.deepEqual(selected.packages, [{package: '@waitron-cloud/identity', shard: 1}], `${folder}/${name}`);
+      assert.equal(selected.typecheck, true); assert.equal(selected.documentation, undefined);
+      assert.equal(selected.receipts.length, 6);
+      for (const kind of ['cost', 'venue']) assert.equal(proofInputPlanRange(kind, {base, head}, git).required, true);
+    });
+  }
+});
+
+test('the script verifier executes its actual owners alongside changed retired JSON', () => fixture(({root, git, put, commit}) => {
+  put('scripts/identity-upstream.test.mjs', "import assert from 'node:assert/strict'; import {value} from './identity-upstream.mjs'; assert.equal(value, 2);\n");
+  const base = commit(); put('scripts/identity-upstream.mjs', 'export const value = 2;\n');
+  for (const path of metadata) put(path, 'not JSON\n');
+  const head = commit();
+  const selected = createPlan({pull_request: {base: {sha: base}, head: {sha: head}}}, {sha: head}, workspace, git);
+  const commands = [];
+  checkScripts(selected, git, args => {
+    commands.push(args);
+    execFileSync(process.execPath, args, {cwd: root, stdio: 'pipe'});
+  });
+  assert.deepEqual(commands, [['--check', 'scripts/identity-upstream.mjs'],
+    ['--check', 'scripts/identity-upstream.test.mjs'], ['--test', 'scripts/identity-upstream.test.mjs']]);
+}));
+
+test('real non-UTF-8 and backslash Git paths refuse inventory narrowing', () => {
+  for (const kind of ['non-UTF-8', 'backslash']) fixture(({root, git, put, commit}) => {
+    const base = commit();
+    let head;
+    if (kind === 'backslash') {put('docs/unsafe\\name.md', '# Unsafe spelling\n'); head = commit();}
+    else {
+      // Git stores arbitrary path bytes even when the host filesystem refuses them.
+      const blob = git('rev-parse', `${base}:docs/guide.md`).trim();
+      const input = Buffer.concat([Buffer.from(`100644 ${blob}\tdocs/`), Buffer.from([0xff]), Buffer.from('.md\0')]);
+      execFileSync('git', ['update-index', '-z', '--index-info'], {cwd: root, input, stdio: 'pipe'});
+      git('commit', '-sqm', 'Save undecodable Git path'); head = git('rev-parse', 'HEAD').trim();
+    }
+    assert.doesNotThrow(() => readInputInventory(base, git));
+    assert.throws(() => readInputInventory(head, git), /Unclassified input path/);
+    const selected = createPlan({pull_request: {base: {sha: base}, head: {sha: head}}}, {sha: head}, workspace, git);
+    assert.equal(selected.typecheck, true); assert.equal(selected.documentation, undefined);
+  });
+});
+
+test('record-only changes explain why complete work remains selected', () => fixture(({git, put, commit}) => {
+  const base = commit();
+  for (const path of metadata) put(path, 'not JSON\n');
+  const head = commit();
+  const selected = createPlan({pull_request: {base: {sha: base}, head: {sha: head}}}, {sha: head}, workspace, git);
+  assert.equal(selected.typecheck, true); assert.equal(selected.packages.length, 1); assert.equal(selected.receipts.length, 6);
+  assert.equal(selected.reason, 'Only retired CI records changed: full suite');
 }));
 
 test('unmarked full work refuses wrong checkouts and dirty tracked bytes without activation', () => fixture(({root, put, commit}) => {

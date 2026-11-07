@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import {execFileSync} from 'node:child_process';
 import {createHash} from 'node:crypto';
-import {mkdtempSync, mkdirSync, writeFileSync, rmSync} from 'node:fs';
+import {chmodSync, mkdtempSync, mkdirSync, writeFileSync, rmSync, unlinkSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import test from 'node:test';
@@ -63,7 +63,42 @@ function assertSelected(plan, names = ['catalogue', 'page']) {
   assert.equal(plan.reuse, null);
 }
 
-test('audited lock-only changes select resolved importers and saved helper consumers despite a dirty worktree', () => fixture(({lock, save, commit, plan}) => {
+test('reordered nested export conditions retain full lock work', () => fixture(({lock, save, write, commit, plan}) => {
+  const manifest = {name: 'catalogue', directory: 'packages/catalogue', scripts: {test: 'node --test'},
+    exports: {'.': {node: './src/index.ts', default: './src/fallback.ts'}}};
+  write('packages/catalogue/package.json', JSON.stringify(manifest)); const base = commit();
+  lock.packages['leaf@1.0.0'].resolution.integrity = 'sha512-Y2hhbmdlZA=='; save();
+  write('packages/catalogue/package.json', JSON.stringify({exports: manifest.exports, scripts: manifest.scripts,
+    directory: manifest.directory, name: manifest.name}));
+  assertSelected(plan(base, commit()));
+  manifest.exports['.'] = {default: './src/fallback.ts', node: './src/index.ts'};
+  write('packages/catalogue/package.json', JSON.stringify(manifest));
+  assertSelected(plan(base, commit()), ['catalogue', 'page', 'unrelated']);
+}));
+
+test('executable manifests in either saved tree retain full lock work', () => {
+  for (const side of ['base', 'head']) fixture(({git, lock, save, commit, plan}) => {
+    const manifest = join(git('rev-parse', '--show-toplevel').trim(), 'packages/catalogue/package.json');
+    if (side === 'base') chmodSync(manifest, 0o755);
+    const base = commit(); lock.packages['leaf@1.0.0'].resolution.integrity = 'sha512-Y2hhbmdlZA=='; save();
+    chmodSync(manifest, side === 'head' ? 0o755 : 0o644);
+    assertSelected(plan(base, commit()), ['catalogue', 'page', 'unrelated']);
+  });
+});
+
+test('saved package discovery refuses unlisted and missing manifests in either tree', () => {
+  for (const side of ['base', 'head']) for (const fault of ['unlisted', 'missing']) fixture(({git, lock, save, write, commit, plan}) => {
+    const change = () => fault === 'unlisted'
+      ? write('packages/surprise/package.json', JSON.stringify({name: 'surprise', scripts: {test: 'node --test'}}))
+      : unlinkSync(join(git('rev-parse', '--show-toplevel').trim(), 'packages/unrelated/package.json'));
+    if (side === 'base') change();
+    const base = commit(); lock.packages['leaf@1.0.0'].resolution.integrity = 'sha512-Y2hhbmdlZA=='; save();
+    if (side === 'head') change();
+    assertSelected(plan(base, commit()), ['catalogue', 'page', 'unrelated']);
+  });
+});
+
+test('saved lock-only changes select resolved importers and saved helper consumers despite a dirty worktree', () => fixture(({lock, save, commit, plan}) => {
   const base = commit();
   lock.packages['leaf@1.0.0'].resolution.integrity = 'sha512-Y2hhbmdlZA=='; save();
   const head = commit();

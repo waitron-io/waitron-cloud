@@ -49,7 +49,7 @@ export function packageWorkForPaths(paths, workspace, base, head, git, testFiles
       reason = `Unverified package revisions: ${error.message}: full package suite (${paths.join(', ')})`;
     }
   }
-  reason ??= scope.full ? `Shared, unaudited or unknown paths: full suite (${paths.join(', ')})` : `Selected ${scope.packages.join(', ')}`;
+  reason ??= scope.full ? `Shared or unknown paths: full suite (${paths.join(', ')})` : `Selected ${scope.packages.join(', ')}`;
   if (paths.includes('pnpm-lock.yaml')) reason += `; ${lockSelection?.reason ?? describeLockChanges(base, head, git)}`;
   const work = workPlan(scope, workspace, undefined, receiptScope, testFilesByPackage);
   if (lockSelection || reviewedPackageReaders) work.receipts = [...receiptSuites];
@@ -68,6 +68,7 @@ function buildRevisionPlan(range, workspace, git, testFilesByPackage) {
     const {base, head} = range;
     const paths = git('diff', '--name-only', '--no-renames', '-z', base, head).split('\0');
     if (paths.pop() !== '' || !paths.length) throw Error('Incomplete or empty NUL path inventory');
+    if (paths.every(inertCIRecord)) return full('Only retired CI records changed: full suite');
     try {
       const documentation = documentationPlan(paths, base, head, git);
       if (documentation) return {packages: [], receipts: [], typecheck: false, reuse: null, documentation, reason: `Regular prose: ${paths.join(', ')}`};
@@ -86,7 +87,7 @@ function buildRevisionPlan(range, workspace, git, testFilesByPackage) {
     }
     const productPaths = paths.filter(path => !inertCIRecord(path));
     if (productPaths.includes('pnpm-lock.yaml') && !productPaths.every(path => path === 'pnpm-lock.yaml' || workspace.some(pkg => path === `${pkg.directory}/package.json`))) {
-      return full(`Shared, unaudited or unknown paths: full suite (${paths.join(', ')}); ${describeLockChanges(base, head, git)}`);
+      return full(`Shared or unknown paths: full suite (${paths.join(', ')}); ${describeLockChanges(base, head, git)}`);
     }
     return {...packageWorkForPaths(mixedCodePaths(paths, base, head, git), workspace, base, head, git, testFilesByPackage), reuse: null};
   } catch {

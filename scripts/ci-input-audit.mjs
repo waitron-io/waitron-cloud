@@ -103,8 +103,8 @@ function parseEntries(source) {
 }
 
 export const inertCIRecord = path => ['scripts/ci-input-audit.json', 'scripts/ci-input-audit-v2.json',
-  'scripts/ci-root-inputs.json'].includes(path) || path.startsWith('scripts/ci-input-audit.d/') ||
-  path.startsWith('scripts/ci-root-review.d/');
+  'scripts/ci-root-inputs.json'].includes(path) || path.endsWith('.json') &&
+  (path.startsWith('scripts/ci-input-audit.d/') || path.startsWith('scripts/ci-root-review.d/'));
 
 export function readInputInventory(revision, git) {
   assert.match(revision, /^[a-f0-9]{40}$/, 'Input inventory requires an immutable revision');
