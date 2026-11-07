@@ -2,7 +2,7 @@
 
 ## Disposable test slots and repository runners (D592)
 
-The owner-approved [design](superpowers/specs/2026-11-06-disposable-test-server-design.md) and [plan](superpowers/plans/2026-11-06-disposable-test-server.md) govern the bridge work. One manual slot is available. The host startup service is implemented; publication with its coupled immutable configuration remains open.
+The owner-approved [design](superpowers/specs/2026-11-06-disposable-test-server-design.md) and [plan](superpowers/plans/2026-11-06-disposable-test-server.md) govern the bridge work. One manual slot is available; its concurrent-admission check drains child output before reading the result. The host startup service is implemented; publication with its coupled immutable configuration remains open.
 
 Finish automatic Mac startup and lease reconciliation, publish the coupled service/helper, and qualify an actual server reboot in the watcher-coordinated window. Freeze transitive guest packages, measure multiple-slot capacity, then address contributor approval, the public-repository scheduling risk and outage/hosted rollback before CI activation. Reproduce and move to the permanent host under the same design. D570's EC2 proof and D591's selection work stay separate.
 
