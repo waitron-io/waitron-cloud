@@ -10,11 +10,11 @@ Qualify a real assignment and same-source hosted retry for the implemented [ordi
 
 The [approved release plan](superpowers/plans/2026-11-06-simple-private-ui-release.md)
 still needs a newer-version automatic dependency PR covering both consumers and
-its authenticated CI install. The first authenticated check ran before the
-new publication and opened no PR. GitHub refuses to rerun that dynamic workflow;
-use the native “Check for updates” control or the next daily check. Review the
-actual generated PR before claiming this path is qualified. Publication and the
-manual `0.2.1` consumer update are recorded in the [release guide](shared-ui-release.md).
+its authenticated CI install. Read the first scheduled check after publication,
+including its reason if no update is needed. With the manual `0.2.1` update
+already installed, proving a newer-version PR needs a later Waitron release.
+Review the actual generated PR before claiming that path is qualified. The
+[release guide](shared-ui-release.md) records publication and manual qualification.
 The package stays private; existing authenticated install and image paths remain.
 
 ## Shared storage-test seed downloads (D585)

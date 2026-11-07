@@ -29,10 +29,15 @@ Before merging:
    its own package's pin.
 3. Update the smoke test's version and source expectations while retaining
    its assertions and browser checks.
-4. Review the changed dependencies and their actual test owners using the
+4. Update the reviewed tarball URL and integrity in
+   `scripts/disposable-tests/private-packages.py`, and the filename selected by
+   `manual.mjs`, its pipeline fixture and the guest proof. Keep older approved
+   tarballs needed by historical checkouts. The disposable package check must
+   cover the current lockfile.
+5. Review the changed dependencies and their actual test owners using the
    [root ownership](ci-root-input-ownership.md) and
    [documentation selection](ci-documentation-audit.md) guides.
-5. Push the reviewed changes and wait for normal CI on that final commit.
+6. Push the reviewed changes and wait for normal CI on that final commit.
 
 The configuration does not merge PRs automatically. Its [first hosted check](https://github.com/waitron-io/waitron-cloud/actions/runs/42295633741)
 authenticated to the private registry and found only `0.1.0`, so it opened no
