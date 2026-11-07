@@ -29,7 +29,7 @@ function fixture(run) {
     put('docs/backlog.md', '# Backlog\n');
     put('README.md', '# Cloud\n');
     const initial = commit();
-    // The fixture has exactly one audited input. Its digest does not use planner helpers.
+    // The fixture record has one input. Its digest does not use planner helpers.
     const entry = git('ls-tree', '-rz', '--full-tree', initial).split('\0').find(row => row.endsWith('\tscripts/reader.mjs'));
     const docsInputSha256 = createHash('sha256').update(`${entry}\0`).digest('hex');
     put(policy, JSON.stringify(completeAudit({docsInputSha256})) + '\n');
@@ -39,7 +39,7 @@ function fixture(run) {
   } finally { rmSync(root, {recursive: true, force: true}); }
 }
 
-test('audited unread Markdown selects only the document check, including spaces and deletion', () => fixture(({root, put, commit, plan}) => {
+test('ordinary unread Markdown selects only the document check, including spaces and deletion', () => fixture(({root, put, commit, plan}) => {
   put('docs/a plan.md', '# Plan\n');
   unlinkSync(join(root, 'README.md'));
   const selected = plan(commit());
@@ -133,7 +133,7 @@ test('document command accepts deletions and prose after a reader change', () =>
   assert.equal(forged.status, 0, forged.stderr);
 }));
 
-test('real planner command emits document output and reports unaudited fallbacks without fatal stderr', () => fixture(({root, git, put, commit}) => {
+test('real planner command emits document output and reports unknown-input fallbacks without fatal stderr', () => fixture(({root, git, put, commit}) => {
   put('package.json', JSON.stringify({name: 'fixture', private: true}));
   put('pnpm-workspace.yaml', "packages:\n  - 'packages/*'\n");
   for (const name of ['one', 'two']) put(`packages/${name}/package.json`, JSON.stringify({name, scripts: {test: 'node --test'}}));
@@ -167,7 +167,7 @@ test('real planner command emits document output and reports unaudited fallbacks
   assert.equal(result.stderr, '');
 }));
 
-test('strict summary requires the audited document job and refuses malformed empty work', () => {
+test('strict summary requires the selected document job and refuses malformed empty work', () => {
   const documentation = {base: 'a'.repeat(40), head: 'b'.repeat(40), paths: ['docs/backlog.md']};
   const plan = {packages: [], receipts: [], typecheck: false, reuse: null, documentation};
   const results = {changes: 'success', documentation: 'success', packages: 'skipped', receipts: 'skipped', typecheck: 'skipped'};
@@ -225,7 +225,7 @@ test('the retired audit command refuses instead of claiming renewal is needed', 
   }
 }));
 
-test('proof planner skips only audited prose and keeps code, pinned documents, main and unavailable evidence', () => fixture(({root, git, put, commit, base}) => {
+test('proof planner skips only ordinary prose and keeps code, pinned documents, main and unavailable evidence', () => fixture(({root, git, put, commit, base}) => {
   const run = (event, expected) => {
     const scratch = mkdtempSync(join(tmpdir(), 'cloud-proof-plan-'));
     try {
@@ -277,7 +277,7 @@ test('proof planner skips only audited prose and keeps code, pinned documents, m
 }));
 
 // A reusable full run must ignore a narrow PR event inherited from its caller.
-test('explicit full execution overrides a real audited prose PR without changing ordinary selection', () => fixture(({put, commit, base, git, plan}) => {
+test('explicit full execution overrides a real ordinary prose PR without changing ordinary selection', () => fixture(({put, commit, base, git, plan}) => {
   put('docs/backlog.md', '# Nightly prose control\n');
   const head = commit();
   assert.equal(plan(head).documentation.paths[0], 'docs/backlog.md');
@@ -290,7 +290,7 @@ test('explicit full execution overrides a real audited prose PR without changing
   assert.deepEqual(full.receipts, ['test:two-venue-milestone-receipt', 'test:backup-capacity', 'test:public-gateway-limits', 'test:local-stack', 'test:database-recovery-receipt', 'test:cloud-cost']);
 }));
 
-test('full proof command overrides a real audited prose PR while ordinary proof stays unselected', () => fixture(({root, put, commit, base}) => {
+test('full proof command overrides a real ordinary prose PR while ordinary proof stays unselected', () => fixture(({root, put, commit, base}) => {
   put('docs/backlog.md', '# Full proof control\n');
   const head = commit();
   const event = join(root, 'event.json'), output = join(root, 'output');

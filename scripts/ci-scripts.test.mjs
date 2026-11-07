@@ -48,7 +48,7 @@ function fixture(run) {
   } finally {rmSync(root, {recursive: true, force: true});}
 }
 
-test('an audited root helper or its test selects syntax and the owning behavioral check only', () => {
+test('an owned root helper or its test selects syntax and the owning behavioral check only', () => {
   for (const path of [helper, checks]) fixture(({root, put, commit, plan, base, execute}) => {
     put(path, readFileSync(join(root, path), 'utf8') + '\n');
     const head = commit();

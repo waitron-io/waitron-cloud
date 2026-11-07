@@ -53,7 +53,7 @@ function fixture(run) {
   } finally {rmSync(root, {recursive: true, force: true});}
 }
 
-test('an audited gateway validator or its test runs only its syntax, caller syntax and behavioral checks', () => {
+test('an owned gateway validator or its test runs only its syntax, caller syntax and behavioral checks', () => {
   for (const path of [helper, checks]) fixture(({root, put, commit, plan, base, execute}) => {
     put(path, readFileSync(join(root, path), 'utf8') + '\n');
     const head = commit(), selected = plan(head);

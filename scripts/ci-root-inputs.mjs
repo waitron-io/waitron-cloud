@@ -149,12 +149,10 @@ export function rootVerificationContext(plan, env = process.env) {
   const event = env.GITHUB_EVENT_PATH ? JSON.parse(readFileSync(env.GITHUB_EVENT_PATH, 'utf8')) : {};
   const head = event.pull_request?.head.sha ?? env.CI_HEAD_SHA ?? env.GITHUB_SHA ?? checkout;
   assert.match(head, sha, 'Invalid trusted root event head');
-  {
-    assert.equal(checkout, head, 'Root work requires the exact head checkout');
-    if (env.CI_HEAD_SHA) assert.equal(head, env.CI_HEAD_SHA, 'Root event differs from the expected head');
-    assert.equal(git('diff', '--name-only', head, '--'), '', 'Root work requires a clean tracked checkout; dirty bytes refuse execution');
-    if (env.GITHUB_ACTIONS === 'true') assert.ok(env.GITHUB_EVENT_PATH, 'Root verification requires the original event');
-  }
+  assert.equal(checkout, head, 'Root work requires the exact head checkout');
+  if (env.CI_HEAD_SHA) assert.equal(head, env.CI_HEAD_SHA, 'Root event differs from the expected head');
+  assert.equal(git('diff', '--name-only', head, '--'), '', 'Root work requires a clean tracked checkout; dirty bytes refuse execution');
+  if (env.GITHUB_ACTIONS === 'true') assert.ok(env.GITHUB_EVENT_PATH, 'Root verification requires the original event');
   let base;
   if (event.pull_request) {
     assert.match(event.pull_request.base.sha, sha, 'Invalid trusted root event base');

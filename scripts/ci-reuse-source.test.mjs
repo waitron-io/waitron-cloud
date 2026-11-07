@@ -22,7 +22,7 @@ let root, git, base, head, merge, execution, tree, source, jobs, artifact, bytes
 const page = items => ({items, total_count: items.length, nextPage: null, terminal: true});
 const selected = {packages: [{package: '@waitron-cloud/operations', shard: 1}],
   receipts: ['test:two-venue-milestone-receipt', 'test:backup-capacity', 'test:public-gateway-limits', 'test:local-stack', 'test:database-recovery-receipt', 'test:cloud-cost'],
-  typecheck: true, reuse: null, reason: 'Shared, unaudited or unknown paths: full suite (unknown-input)'};
+  typecheck: true, reuse: null, reason: 'Shared or unknown paths: full suite (unknown-input)'};
 
 function archive(value) {
   const content = Buffer.from(JSON.stringify(value)), name = Buffer.from('plan.json');

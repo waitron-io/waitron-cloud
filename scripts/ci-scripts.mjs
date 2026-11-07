@@ -5,9 +5,9 @@ import {readGitBlobs} from './ci-package-revisions.mjs';
 import {pathToFileURL} from 'node:url';
 
 const families = [
-  {targets: ['scripts/identity-upstream.mjs', 'scripts/identity-upstream.test.mjs'], mode: 'identity'},
+  {targets: ['scripts/identity-upstream.mjs', 'scripts/identity-upstream.test.mjs']},
   {targets: ['scripts/verify-gateway-reconnection-receipt.mjs', 'scripts/verify-gateway-reconnection-receipt.test.mjs'],
-    mode: 'gateway', callers: ['scripts/gateway-reconnection-receipt.mjs']},
+    callers: ['scripts/gateway-reconnection-receipt.mjs']},
 ];
 
 function familyForPaths(paths) {

@@ -17,12 +17,13 @@ independently verify merge evidence or select their actual changed range; the
 
 ## Review readers instead of renewing records
 
-You no longer generate review records before pushing. The files under
+You no longer generate review records before pushing. The JSON files under
 `scripts/ci-input-audit.d/` and `scripts/ci-root-review.d/`, the two audit JSON
 files and the old `scripts/ci-root-inputs.json` are inert. They remain temporarily
 so you can review disconnection separately from deletion. Malformed, stale or
 missing records do not change selection. A metadata-only change falls back to
-full work rather than creating an empty successful plan.
+full work rather than creating an empty successful plan. Other files in those
+folders, including code and checkout attributes, keep full work.
 
 The owner accepted removing the automatic pause before changed readers inherit
 an exemption. Review imports, directory scans, file reads, generated programs,

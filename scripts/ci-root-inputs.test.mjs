@@ -71,7 +71,7 @@ test('receipt-only and mixed registered inputs deduplicate exact owners without 
   assert.deepEqual(result.packagePaths, []);
 }));
 
-test('registry edit stays full even with complete renewed evidence', () => fixture(({root, git, write, renew, docs, commit, plan}) => {
+test('changing the root ownership policy retains full work', () => fixture(({root, git, write, renew, docs, commit, plan}) => {
   const registry = JSON.parse(readFileSync(join(root, registryPath))); registry.entries[0].sites[0].site = 'reviewed replacement:2';
   write(registryPath, registry); write(rootPath, 'root change\n'); write('scripts/ci-root-inputs.mjs', 'changed ownership constant\n'); git('add', '-A');
   const paths = git('ls-tree', '-rz', '--full-tree', git('write-tree').trim()).split('\0').filter(Boolean).map(row => row.split('\t')[1])
@@ -81,7 +81,7 @@ test('registry edit stays full even with complete renewed evidence', () => fixtu
   assert.equal(result.full, true); assert.match(result.reason, /ownership policy changed/);
 }));
 
-test('new readers and directory members cannot inherit review through docs renewal', () => fixture(({write, renew, docs, commit, plan}) => {
+test('new readers and directory members retain full root work', () => fixture(({write, renew, docs, commit, plan}) => {
   write(rootPath, 'changed check\n'); renew([rootPath]);
   write('scripts/another-reader.mjs', "readFileSync('scripts/ci-root-shards.test.mjs');\n"); docs();
   const result = plan(commit()); assert.equal(result.full, true); assert.match(result.reason, /Shared or unknown root input: scripts\/another-reader.mjs/);
