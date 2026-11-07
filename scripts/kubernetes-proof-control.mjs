@@ -34,7 +34,7 @@ export function createManualAwsCli({ executable = 'aws' } = {}) {
       || (service === 'ssm' && operation === 'get-parameter')
       || (service === 'ec2' && ['describe-images', 'describe-instance-types', 'describe-managed-prefix-lists',
         'describe-launch-template-versions', 'run-instances', 'describe-instances',
-        'describe-instance-attribute', 'get-console-output'].includes(operation)));
+        'describe-instance-attribute', 'get-console-output', 'describe-volumes', 'describe-network-interfaces'].includes(operation)));
     if (service === 'ec2' && operation === 'describe-launch-template-versions') check(input
       && Object.keys(input).sort().join(',') === 'LaunchTemplateId,Versions'
       && typeof input.LaunchTemplateId === 'string' && /^lt-[a-f0-9]{17}$/.test(input.LaunchTemplateId)
@@ -644,6 +644,120 @@ export async function inspectManualFirstGuest(options) {
   check(boots.size === 1 && [...boots].every(boot => /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/.test(boot)));
   check(isDeepStrictEqual(await liveResources(), resources));
   return { ...launch, ...inspection, ...resources, bootId: [...boots][0], consoleOutput,
+    observedAt: iso(Math.floor(await unchanged() / 1000) * 1000) };
+}
+
+export async function observeManualFirstShutdown(options) {
+  const { checkout, aws, now, clock = Date.now, sleep = delay } = options, ready = structuredClone(options.ready);
+  const inspection = await inspectManualBudget({ ...options, stackId: ready?.stackId, store: undefined });
+  const reservation = ready.reservation;
+  check(ready.account === account && ready.region === region && ready.head === inspection.head && ready.tree === inspection.tree
+    && ready.bucket === inspection.bucket && reservation?.uuid === inspection.budget.activeUuid
+    && reservation.head === inspection.head && reservation.tree === inspection.tree
+    && instant(reservation.startedAt) <= instant(ready.observedAt) && instant(ready.observedAt) < instant(ready.guestExpiry)
+    && instant(ready.guestExpiry) === instant(reservation.startedAt) + 180_000
+    && instant(reservation.expiry) === instant(reservation.startedAt) + 300_000
+    && instant(ready.observedAt) <= instant(now)
+    && typeof ready.instanceId === 'string' && /^i-[a-f0-9]{17}$/.test(ready.instanceId)
+    && !inspection.heartbeat.terminationRequested.includes(ready.instanceId));
+  const earliest = instant(reservation.startedAt) + 170_000, expiry = instant(reservation.expiry);
+  let last = instant(now), running;
+  function time() {
+    const at = clock();
+    check(Number.isSafeInteger(at) && at >= last && at < Date.parse(policy.accessExpiry)
+      && iso(at).slice(0, 10) === now.slice(0, 10));
+    last = at;
+    return at;
+  }
+  async function unchanged() {
+    const source = await checkedMain(checkout);
+    check(source.head === inspection.head && source.tree === inspection.tree);
+    return time();
+  }
+  // Request time bounds the running observation; reply time bounds termination, independent of later cleanup.
+  for (let poll = 0; poll < 64; poll++) {
+    const at = await unchanged();
+    check(at < expiry);
+    if (at < earliest) { await sleep(Math.min(5000, earliest - at)); continue; }
+    const requested = time();
+    check(requested < expiry);
+    const response = await aws.call('ec2', 'describe-instances', { InstanceIds: [ready.instanceId] });
+    const received = time();
+    check(received < expiry);
+    await unchanged();
+    check(!response?.NextToken && Array.isArray(response?.Reservations) && response.Reservations.length === 1);
+    const row = response.Reservations[0], instance = row?.Instances?.[0];
+    check(row?.OwnerId === account && Array.isArray(row.Instances) && row.Instances.length === 1
+      && instance?.InstanceId === ready.instanceId && instance.ClientToken === reservation.uuid && instance.SubnetId === ready.subnetId);
+    const tags = { Proof: 'D570', Stack: ready.stackId, Run: reservation.uuid, ExpiresAt: reservation.expiry };
+    check(Array.isArray(instance.Tags) && Object.entries(tags).every(([key, value]) => {
+      const matches = instance.Tags.filter(tag => tag?.Key === key);
+      return matches.length === 1 && matches[0].Value === value;
+    }));
+    if (instance.State?.Name === 'running') {
+      running ??= { runningRequestedAt: iso(requested), runningReceivedAt: iso(received) };
+    } else {
+      check(running && ['shutting-down', 'terminated'].includes(instance.State?.Name));
+      if (instance.State.Name === 'terminated') {
+        check(instance.StateReason?.Code === 'Client.InstanceInitiatedShutdown');
+        return { ...ready, shutdownObservation: { ...running, terminatedReceivedAt: iso(received), stateReason: instance.StateReason } };
+      }
+    }
+    const remaining = expiry - time();
+    check(remaining > 0);
+    await sleep(Math.min(5000, remaining));
+  }
+  refuse();
+}
+
+export async function inspectManualFirstGuestCleanup(options) {
+  const { checkout, aws, now, clock = Date.now } = options, ready = structuredClone(options.ready);
+  const inspection = await inspectManualBudget({ ...options, stackId: ready?.stackId, store: undefined });
+  const reservation = ready.reservation;
+  check(ready.account === account && ready.region === region && ready.head === inspection.head && ready.tree === inspection.tree
+    && ready.bucket === inspection.bucket && reservation?.uuid === inspection.budget.activeUuid
+    && reservation.head === inspection.head && reservation.tree === inspection.tree
+    && instant(reservation.startedAt) <= instant(ready.observedAt) && instant(ready.observedAt) < instant(ready.guestExpiry)
+    && instant(ready.guestExpiry) === instant(reservation.startedAt) + 180_000
+    && instant(reservation.expiry) === instant(reservation.startedAt) + 300_000
+    && instant(ready.observedAt) <= instant(now)
+    && typeof ready.instanceId === 'string' && /^i-[a-f0-9]{17}$/.test(ready.instanceId)
+    && typeof ready.subnetId === 'string' && /^subnet-[a-f0-9]{17}$/.test(ready.subnetId)
+    && Array.isArray(ready.volumeIds) && ready.volumeIds.length === 1 && /^vol-[a-f0-9]{17}$/.test(ready.volumeIds[0])
+    && Array.isArray(ready.interfaceIds) && ready.interfaceIds.length === 1 && /^eni-[a-f0-9]{17}$/.test(ready.interfaceIds[0]));
+  async function unchanged() {
+    const before = clock(), source = await checkedMain(checkout), after = clock();
+    check(source.head === inspection.head && source.tree === inspection.tree
+      && Number.isSafeInteger(before) && Number.isSafeInteger(after) && before >= instant(now) && after >= before
+      && after < Date.parse(policy.accessExpiry) && iso(after).slice(0, 10) === now.slice(0, 10)
+      && after - Date.parse(inspection.heartbeat.startedAt) < 120_000);
+    return after;
+  }
+  async function call(operation, input) {
+    await unchanged();
+    const result = await aws.call('ec2', operation, input);
+    await unchanged();
+    return result;
+  }
+  const response = await call('describe-instances', { InstanceIds: [ready.instanceId] });
+  check(!response?.NextToken && Array.isArray(response?.Reservations) && response.Reservations.length === 1);
+  const row = response.Reservations[0], instance = row?.Instances?.[0];
+  check(row?.OwnerId === account && Array.isArray(row.Instances) && row.Instances.length === 1
+    && instance?.InstanceId === ready.instanceId && instance.ClientToken === reservation.uuid
+    && instance.SubnetId === ready.subnetId && instance.State?.Name === 'terminated'
+    && instance.StateReason?.Code === 'Client.InstanceInitiatedShutdown');
+  const tags = { Proof: 'D570', Stack: ready.stackId, Run: reservation.uuid, ExpiresAt: reservation.expiry };
+  check(Array.isArray(instance.Tags) && Object.entries(tags).every(([key, value]) => {
+    const matches = instance.Tags.filter(tag => tag?.Key === key);
+    return matches.length === 1 && matches[0].Value === value;
+  }));
+  const volumes = await call('describe-volumes', { Filters: [{ Name: 'volume-id', Values: ready.volumeIds }], MaxResults: 100 });
+  check(!volumes?.NextToken && Array.isArray(volumes?.Volumes) && volumes.Volumes.length === 0);
+  // Interfaces are not tagged by the template; the owned subnet also exposes leftovers after controller loss.
+  const interfaces = await call('describe-network-interfaces', { Filters: [{ Name: 'subnet-id', Values: [ready.subnetId] }], MaxResults: 100 });
+  check(!interfaces?.NextToken && Array.isArray(interfaces?.NetworkInterfaces) && interfaces.NetworkInterfaces.length === 0);
+  // An OS actor and absent resources do not establish when the guest stopped or reconcile its bill.
+  return { ...ready, ...inspection, stateReason: instance.StateReason, terminated: true, volumesAbsent: true, interfacesAbsent: true,
     observedAt: iso(Math.floor(await unchanged() / 1000) * 1000) };
 }
 

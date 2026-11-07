@@ -1643,3 +1643,187 @@ for (const [operation, input] of [
   assert.deepEqual(await control.createManualAwsCli({ executable: f.executable }).call('ec2', operation, input), { accepted: true });
   assert.deepEqual(JSON.parse(readFileSync(f.capture)).slice(0, 6), ['ec2', operation, '--cli-input-json', JSON.stringify(input), '--region', 'eu-north-1']);
 });
+
+async function guestCleanupFixture(t) {
+  const f = await readyGuestFixture(t), ready = await f.observe();
+  f.instance.State = { Name: 'terminated', Code: 48 };
+  f.instance.StateReason = { Code: 'Client.InstanceInitiatedShutdown', Message: 'Client.InstanceInitiatedShutdown: Instance initiated shutdown' };
+  f.instance.StateTransitionReason = '';
+  f.instance.BlockDeviceMappings = []; f.instance.NetworkInterfaces = [];
+  f.p.health.startedAt = '2026-11-06T12:03:00.000Z'; f.p.health.completedAt = '2026-11-06T12:03:01.000Z';
+  f.p.responses['s3api/get-object'].Body = Buffer.from(JSON.stringify(f.p.health));
+  f.p.responses['s3api/get-object'].LastModified = '2026-11-06T12:03:01Z';
+  const volumes = { Volumes: [] }, interfaces = { NetworkInterfaces: [] }, previous = f.aws.call;
+  f.aws.call = async (service, operation, input) => {
+    if (operation === 'describe-volumes' || operation === 'describe-network-interfaces') {
+      f.calls.push({ service, operation, input }); assert.equal(service, 'ec2');
+      assert.deepEqual(input, operation === 'describe-volumes'
+        ? { Filters: [{ Name: 'volume-id', Values: ['vol-0123456789abcdef0'] }], MaxResults: 100 }
+        : { Filters: [{ Name: 'subnet-id', Values: ['subnet-0123456789abcdef0'] }], MaxResults: 100 });
+      return structuredClone(operation === 'describe-volumes' ? volumes : interfaces);
+    }
+    return previous(service, operation, input);
+  };
+  f.calls.length = 0;
+  const options = { ...f.options, ready, now: '2026-11-06T12:03:30Z', clock: () => Date.parse('2026-11-06T12:03:30Z') };
+  const cleanup = changes => {
+    assert.equal(typeof control.inspectManualFirstGuestCleanup, 'function', 'missing guest actor and resource-absence observation');
+    return control.inspectManualFirstGuestCleanup({ ...options, ...changes });
+  };
+  return { ...f, ready, volumes, interfaces, options, cleanup };
+}
+
+test('guest cleanup reads OS termination and absence of captured disk and all subnet interfaces without releasing costs', async t => {
+  const f = await guestCleanupFixture(t), before = structuredClone([...f.objects]), writes = f.writes.length;
+  const result = await f.cleanup();
+  assert.equal(result.instanceId, 'i-0123456789abcdef0');
+  assert.equal(result.terminated, true); assert.equal(result.volumesAbsent, true); assert.equal(result.interfacesAbsent, true);
+  assert.deepEqual(result.stateReason, { Code: 'Client.InstanceInitiatedShutdown', Message: 'Client.InstanceInitiatedShutdown: Instance initiated shutdown' });
+  assert.equal(result.observedAt, '2026-11-06T12:03:30Z');
+  assert.deepEqual(f.calls.filter(row => row.service === 'ec2').map(row => row.operation),
+    ['describe-instances', 'describe-volumes', 'describe-network-interfaces']);
+  assert.equal(Object.hasOwn(result, 'shutdownAt'), false);
+  assert.equal(Object.hasOwn(result, 'billingReconciled'), false);
+  assert.equal(f.writes.length, writes); assert.deepEqual(structuredClone([...f.objects]), before);
+});
+
+for (const [label, mutate] of [
+  ['still running', f => { f.instance.State = { Name: 'running', Code: 16 }; }],
+  ['API termination', f => { f.instance.StateReason.Code = 'Client.UserInitiatedShutdown'; }],
+  ['missing actor', f => { delete f.instance.StateReason; }],
+  ['foreign account', f => { f.instances.Reservations[0].OwnerId = '949687825720'; }],
+  ['other instance', f => { f.instance.InstanceId = 'i-00000000000000000'; }],
+  ['other run', f => { f.instance.ClientToken = '00000000-0000-4000-8000-000000000002'; }],
+  ['changed tags', f => { f.instance.Tags[3].Value = '2026-11-06T12:06:00Z'; }],
+  ['changed source', f => { f.ready.head = 'a'.repeat(40); }],
+  ['unbooked run', f => {
+    f.ready.reservation.uuid = '00000000-0000-4000-8000-000000000002';
+    f.instance.ClientToken = f.ready.reservation.uuid; f.instance.Tags[2].Value = f.ready.reservation.uuid;
+  }],
+  ['no captured disk', f => { f.ready.volumeIds = []; }],
+  ['invalid captured interface', f => { f.ready.interfaceIds = ['foreign']; }],
+  ['no live ready observation', f => { f.ready.observedAt = '2026-11-06T12:03:00Z'; }],
+  ['partial instance inventory', f => { f.instances.NextToken = 'more'; }],
+  ['retained disk', f => { f.volumes.Volumes = [{ VolumeId: f.volumeId, State: 'available' }]; }],
+  ['incomplete disk inventory', f => { f.volumes.NextToken = 'more'; }],
+  ['missing disk inventory', f => { delete f.volumes.Volumes; }],
+  ['retained interface', f => { f.interfaces.NetworkInterfaces = [{ NetworkInterfaceId: f.interfaceId }]; }],
+  ['foreign subnet interface', f => { f.interfaces.NetworkInterfaces = [{ NetworkInterfaceId: 'eni-00000000000000000' }]; }],
+  ['incomplete interface inventory', f => { f.interfaces.NextToken = 'more'; }],
+  ['missing interface inventory', f => { delete f.interfaces.NetworkInterfaces; }],
+  ['stale protection', f => { f.p.responses['s3api/get-object'].LastModified = '2026-11-06T12:00:00Z'; }],
+]) test(`guest cleanup refuses ${label} without releasing the booking`, async t => {
+  const f = await guestCleanupFixture(t); mutate(f); const before = structuredClone([...f.objects]);
+  await assert.rejects(f.cleanup(), /D570 controller refused/);
+  assert.deepEqual(structuredClone([...f.objects]), before);
+});
+
+for (const stage of ['source changes', 'protection ages', 'read fails']) test(`guest cleanup refuses when ${stage} during the final inventory`, async t => {
+  const f = await guestCleanupFixture(t), previous = f.aws.call; let at = Date.parse(f.options.now);
+  f.aws.call = async (...args) => {
+    if (args[1] !== 'describe-network-interfaces') return previous(...args);
+    if (stage === 'read fails') throw new Error('synthetic unavailable inventory');
+    const result = await previous(...args);
+    if (stage === 'source changes') {
+      writeFileSync(join(f.root, 'controller.txt'), 'new clean main');
+      f.git('add', 'controller.txt'); f.git('commit', '-s', '-m', 'Advance isolated main');
+      f.git('update-ref', 'refs/remotes/origin/main', f.git('rev-parse', 'HEAD'));
+    } else at = Date.parse('2026-11-06T12:05:00Z');
+    return result;
+  };
+  const before = structuredClone([...f.objects]);
+  await assert.rejects(f.cleanup({ clock: () => at }), stage === 'read fails' ? /synthetic unavailable inventory/ : /D570 controller refused/);
+  assert.deepEqual(structuredClone([...f.objects]), before);
+});
+
+for (const [operation, input] of [
+  ['describe-volumes', { Filters: [{ Name: 'volume-id', Values: ['vol-0123456789abcdef0'] }], MaxResults: 100 }],
+  ['describe-network-interfaces', { Filters: [{ Name: 'subnet-id', Values: ['subnet-0123456789abcdef0'] }], MaxResults: 100 }],
+]) test(`guest cleanup CLI sends the bounded ${operation} read`, async t => {
+  const f = drillCliFixture(t);
+  assert.deepEqual(await control.createManualAwsCli({ executable: f.executable }).call('ec2', operation, input), { accepted: true });
+  assert.deepEqual(JSON.parse(readFileSync(f.capture)).slice(0, 6), ['ec2', operation, '--cli-input-json', JSON.stringify(input), '--region', 'eu-north-1']);
+});
+
+async function shutdownTimingFixture(t) {
+  const f = await guestCleanupFixture(t), states = ['running', 'shutting-down', 'terminated'];
+  let current = Date.parse('2026-11-06T12:02:50Z'), reads = 0;
+  const previous = f.aws.call, sleeps = [];
+  f.p.health.startedAt = '2026-11-06T12:02:00.000Z'; f.p.health.completedAt = '2026-11-06T12:02:01.000Z';
+  f.p.responses['s3api/get-object'].Body = Buffer.from(JSON.stringify(f.p.health));
+  f.p.responses['s3api/get-object'].LastModified = '2026-11-06T12:02:01Z';
+  f.aws.call = async (...args) => {
+    if (args[1] === 'describe-instances') {
+      const name = states[Math.min(reads++, states.length - 1)];
+      f.instance.State = { Name: name, Code: { running: 16, 'shutting-down': 32, terminated: 48 }[name] };
+    }
+    return previous(...args);
+  };
+  const options = { ...f.options, ready: f.ready, now: '2026-11-06T12:02:50Z', clock: () => current,
+    sleep: async milliseconds => { sleeps.push(milliseconds); current += milliseconds; } };
+  const observe = changes => {
+    assert.equal(typeof control.observeManualFirstShutdown, 'function', 'missing bounded guest shutdown timing');
+    return control.observeManualFirstShutdown({ ...options, ...changes });
+  };
+  return { ...f, options, states, sleeps, observe, setTime: value => { current = Date.parse(value); } };
+}
+
+test('shutdown timing retains a running request at 170 seconds and an OS termination reply before outer expiry', async t => {
+  const f = await shutdownTimingFixture(t), before = structuredClone([...f.objects]);
+  const result = await f.observe();
+  assert.deepEqual(result.shutdownObservation, { runningRequestedAt: '2026-11-06T12:02:50Z',
+    runningReceivedAt: '2026-11-06T12:02:50Z', terminatedReceivedAt: '2026-11-06T12:03:00Z',
+    stateReason: { Code: 'Client.InstanceInitiatedShutdown', Message: 'Client.InstanceInitiatedShutdown: Instance initiated shutdown' } });
+  assert.equal(result.observedAt, '2026-11-06T12:00:45Z');
+  assert.equal(Object.hasOwn(result, 'volumesAbsent'), false);
+  assert.equal(Object.hasOwn(result, 'billingReconciled'), false);
+  assert.deepEqual(f.sleeps, [5000, 5000]);
+  assert.deepEqual(structuredClone([...f.objects]), before);
+  assert.equal(f.calls.some(row => ['describe-volumes', 'describe-network-interfaces', 'put-object', 'run-instances'].includes(row.operation)), false);
+});
+
+for (const [label, mutate] of [
+  ['already terminated', f => { f.states.splice(0, 3, 'terminated'); }],
+  ['already shutting down', f => { f.states.splice(0, 3, 'shutting-down', 'terminated'); }],
+  ['API rescue', f => { f.instance.StateReason.Code = 'Client.UserInitiatedShutdown'; }],
+  ['missing actor', f => { delete f.instance.StateReason; }],
+  ['other run', f => { f.instance.ClientToken = '00000000-0000-4000-8000-000000000002'; }],
+  ['partial inventory', f => { f.instances.NextToken = 'more'; }],
+  ['changed reviewed source', f => { f.ready.head = 'a'.repeat(40); }],
+  ['never terminates', f => { f.states.splice(0, 3, 'running'); }],
+]) test(`shutdown timing refuses ${label} without clearing cost`, async t => {
+  const f = await shutdownTimingFixture(t); mutate(f); const before = structuredClone([...f.objects]);
+  await assert.rejects(f.observe(), /D570 controller refused/);
+  assert.deepEqual(structuredClone([...f.objects]), before);
+});
+
+test('shutdown timing waits for the running window rather than relabeling an earlier read', async t => {
+  const f = await shutdownTimingFixture(t); f.setTime('2026-11-06T12:02:49Z');
+  const result = await f.observe({ now: '2026-11-06T12:02:49Z' });
+  assert.equal(result.shutdownObservation.runningRequestedAt, '2026-11-06T12:02:50Z');
+  assert.equal(f.sleeps[0], 1000);
+});
+
+test('shutdown timing refuses a termination reply at the original outer expiry', async t => {
+  const f = await shutdownTimingFixture(t), previous = f.aws.call;
+  f.aws.call = async (...args) => {
+    const result = await previous(...args);
+    if (args[1] === 'describe-instances' && result.Reservations[0].Instances[0].State.Name === 'terminated') f.setTime('2026-11-06T12:05:00Z');
+    return result;
+  };
+  await assert.rejects(f.observe(), /D570 controller refused/);
+});
+
+for (const state of ['running', 'terminated']) test(`shutdown timing refuses clean main advancing during a ${state} read`, async t => {
+  const f = await shutdownTimingFixture(t), previous = f.aws.call;
+  f.aws.call = async (...args) => {
+    const result = await previous(...args);
+    if (args[1] === 'describe-instances' && result.Reservations[0].Instances[0].State.Name === state) {
+      writeFileSync(join(f.root, 'controller.txt'), 'advance main during timing');
+      f.git('add', 'controller.txt'); f.git('commit', '-s', '-m', 'Advance isolated main');
+      f.git('update-ref', 'refs/remotes/origin/main', f.git('rev-parse', 'HEAD'));
+    }
+    return result;
+  };
+  await assert.rejects(f.observe(), /D570 controller refused/);
+});

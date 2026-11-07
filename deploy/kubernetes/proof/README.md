@@ -290,9 +290,31 @@ the booking. This captures readiness, not successful shutdown.
 Run `node --test --test-name-pattern='^ready guest' scripts/kubernetes-proof-control.test.mjs`
 for the synthetic readiness and refusal cases. An unsigned loopback check also
 exercises the three reads through the installed CLI, including its automatic
-console decoding. These checks do not prove guest behavior on AWS. Shutdown
-observation, billed reconciliation and removal remain unfinished, and all four
-owner commands still refuse.
+console decoding. These checks do not prove guest behavior on AWS. Billed
+reconciliation and removal remain unfinished, and all four owner commands still refuse.
+
+To check what remains after the guest stops, `inspectManualFirstGuestCleanup`
+reads the booked instance's EC2 shutdown reason and requires an operating-system
+shutdown. It then checks that the captured disk and every interface in the owned
+subnet are absent. A failed or incomplete read refuses; it never treats a deletion
+request as proof that a resource disappeared. The cost booking stays intact.
+
+Run `node --test --test-name-pattern='^guest cleanup' scripts/kubernetes-proof-control.test.mjs`
+for the synthetic actor, absence and refusal checks. The two new reads also pass
+the installed AWS CLI against unsigned loopback responses. An OS shutdown reason
+and absent resources do not establish when the guest stopped.
+
+`observeManualFirstShutdown` checks timing separately. It waits until 170 seconds
+after the original reservation, records when its running request starts and
+when the reply arrives, then requires an OS-initiated termination reply before
+the original 300-second expiry. A missing running observation, API termination,
+late reply or changed checkout refuses without clearing the cost booking.
+The earlier ready observation stays intact. These are EC2 state observations;
+they do not measure the exact instant the guest powers off.
+
+Run `node --test --test-name-pattern='^shutdown timing' scripts/kubernetes-proof-control.test.mjs`
+for the synthetic timing checks. Actual guest behavior, billed reconciliation
+and removal still need qualification before you can run the owner commands.
 
 Before reusing a setup, `inspectManualBudget` checks that protection and reads
 all retained ledger months through `inspectBudget`. It compares the account bill
