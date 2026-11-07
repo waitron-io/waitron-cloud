@@ -673,10 +673,11 @@ order. Remote access matters most because Waitron's customer-facing features wai
    awaits owner review. Owner via lane D watcher 2026-11-07 23:08 chose both one-off
    diagnostic sharing and time-limited grants, chosen each time, plus bug reports with
    diagnostics from non-customers without Cloud signup. Retain watcher 22:20's audited
-   verified-owner contact display and common console/CLI customer-visible history.
-   Cloud as the non-customer receiver needs owner approval. Intake, console, grant UI,
-   P3 adapter and history extensions remain unbuilt;
-   A982 owns capture/preview, not Cloud forwarding. Asking for help is a report, not a help desk.
+   display of the verified owner's contact details; console and command-line report reads
+   share customer-visible history. Cloud as the non-customer receiver needs owner approval.
+   Intake, console, access-approval screens, country checks for staff eligibility and history
+   extensions remain unbuilt. Waitron's Report a problem work (A982) owns capture and preview;
+   Cloud forwarding is later work. Asking for help is a report, not a help desk.
 
 Production email (D102: bounces and complaints) is already tracked and is not repeated here.
 
